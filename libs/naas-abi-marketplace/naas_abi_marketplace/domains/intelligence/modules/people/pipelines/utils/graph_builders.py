@@ -107,6 +107,7 @@ class PeopleGraphContext:
     creator: str = "people_pipeline"
     people: dict[str, Person] = field(default_factory=dict)
     orgs: dict[str, Organization] = field(default_factory=dict)
+    orgs_by_uri: dict[str, Organization] = field(default_factory=dict)
     sites: dict[str, Site] = field(default_factory=dict)
     skills: dict[str, Skill] = field(default_factory=dict)
     portraits: dict[str, Portrait] = field(default_factory=dict)
@@ -149,8 +150,15 @@ class PeopleGraphContext:
     def ensure_org(self, label: str, *, educational: bool = False) -> Organization:
         if label in self.orgs:
             return self.orgs[label]
+        uri = individual_uri(str(ABI), "Organization", slug(label))
+        # "Mazars" and "MAZARS" are one IRI: the first spelling is its label,
+        # and the second is an alias of the same node, not a second label.
+        known = self.orgs_by_uri.get(uri)
+        if known is not None:
+            self.orgs[label] = known
+            return known
         org = Organization(
-            _uri=individual_uri(str(ABI), "Organization", slug(label)),
+            _uri=uri,
             label=label,
             created=utc_now(),
             creator=self.creator,
@@ -159,6 +167,7 @@ class PeopleGraphContext:
         if educational:
             self.graph.add((URIRef(org._uri), RDF.type, CCO.ont00000564))
         self.orgs[label] = org
+        self.orgs_by_uri[uri] = org
         return org
 
     def ensure_site(self, label: str) -> Site:
@@ -279,6 +288,7 @@ class PeopleGraphContext:
         quote: str | None = None,
         years_of_experience: int | None = None,
         profile: ProfileDocument | None = None,
+        key: str | None = None,
     ) -> ProfileSummary | None:
         """How the person is presented in general, traceable to where it was published.
 
@@ -290,7 +300,8 @@ class PeopleGraphContext:
         # published: keep the summary so the source stays traceable.
         if not any((headline, about, quote, years_of_experience)) and profile is None:
             return None
-        key = person.label or ""
+        # key stands in for the label when the label is not unique.
+        key = key or person.label or ""
         if key in self.profile_summaries:
             return self.profile_summaries[key]
         summary = ProfileSummary(

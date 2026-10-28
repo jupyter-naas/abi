@@ -233,7 +233,9 @@ def _validate_app_navigation(
             ws = _mapping(entry, f"app.workspace_defaults[{ws_key}]")
             override: dict[str, Any] = {}
             if "default_page" in ws:
-                page = _text(ws["default_page"], f"app.workspace_defaults[{ws_key}].default_page")
+                page = _text(
+                    ws["default_page"], f"app.workspace_defaults[{ws_key}].default_page"
+                )
                 if page not in page_ids:
                     raise ConfigError(
                         f"app.workspace_defaults[{ws_key}].default_page "
@@ -414,6 +416,10 @@ def _validate_search(search: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+# Logical table -> default physical name, for tables an instance may leave out.
+OPTIONAL_TABLES = {"connections": "people_connections"}
+
+
 def _validate_data(data: dict[str, Any], app_root: Path) -> dict[str, Any]:
     namespace = _text(data.get("namespace"), "data.namespace")
     if not IDENTIFIER.match(namespace):
@@ -468,6 +474,11 @@ def _validate_data(data: dict[str, Any], app_root: Path) -> dict[str, Any]:
         # Also keep graphs whose IRI ends with one of these (workspace people
         # graphs are ``http://ontology.naas.ai/graph/<workspace_id>/people``).
         "include_suffixes": [],
+        # Graphs that only supplement the others, kept too but read after
+        # them, so a person they share is listed from the richer source.
+        # ``/linkedin``: ``http://ontology.naas.ai/graph/<user_id>/linkedin``,
+        # a user's LinkedIn connections.
+        "supplementary_suffixes": [],
     }
     graph = data.get("graph")
     if graph not in (None, {}):
@@ -505,6 +516,14 @@ def _validate_data(data: dict[str, Any], app_root: Path) -> dict[str, Any]:
                 _text(item, f"data.graph.include_suffixes[{index}]")
                 for index, item in enumerate(suffixes)
             ]
+        supplementary = graph_map.get("supplementary_suffixes")
+        if supplementary not in (None, []):
+            if not isinstance(supplementary, list):
+                raise ConfigError("data.graph.supplementary_suffixes must be a list")
+            graph_out["supplementary_suffixes"] = [
+                _text(item, f"data.graph.supplementary_suffixes[{index}]")
+                for index, item in enumerate(supplementary)
+            ]
 
     # Portraits are stated in the source relative to the module that owns them.
     # This prefix is what comes off the front so the browser is left with a path
@@ -539,10 +558,14 @@ def _validate_data(data: dict[str, Any], app_root: Path) -> dict[str, Any]:
     else:
         logo_url_prefix = None
 
+    # Optional tables: an instance that predates them gets the default name,
+    # so its exports and reads never meet a missing key.
+    tables = {**OPTIONAL_TABLES, **dict(tables)}
+
     return {
         "backend": backend,
         "namespace": namespace,
-        "tables": dict(tables),
+        "tables": tables,
         "graph": graph_out,
         "portrait_prefix": portrait_prefix,
         "organization_logos": organization_logos,

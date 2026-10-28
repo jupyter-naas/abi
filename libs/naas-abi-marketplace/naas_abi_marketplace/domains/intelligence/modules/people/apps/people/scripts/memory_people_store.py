@@ -12,6 +12,8 @@ from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.script
 from rdflib import Graph
 
 _SLUG_EQ = re.compile(r"^slug\s*=\s*(?P<lit>'(?:''|[^'])*')\s*$", re.IGNORECASE)
+_SLUG_IN = re.compile(r"^slug\s+IN\s*\((?P<lits>.*)\)\s*$", re.IGNORECASE | re.DOTALL)
+_SQL_LITERAL = re.compile(r"'(?:''|[^'])*'")
 _FACET_NE = re.compile(
     r"^(?P<field>[a-z_]+)\s*=\s*(?P<lit>'(?:''|[^'])*')\s*AND\s*slug\s*<>\s*(?P<slug>'(?:''|[^'])*')\s*$",
     re.IGNORECASE,
@@ -64,6 +66,13 @@ class MemoryPeopleStore:
         rows = self._people_rows()
         if not clause:
             return rows
+        in_match = _SLUG_IN.match(clause)
+        if in_match:
+            wanted = {
+                _unquote_sql_literal(literal)
+                for literal in _SQL_LITERAL.findall(in_match.group("lits"))
+            }
+            return [row for row in rows if row.get("slug") in wanted]
         slug_match = _SLUG_EQ.match(clause)
         if slug_match:
             slug = _unquote_sql_literal(slug_match.group("lit"))
@@ -86,9 +95,7 @@ class MemoryPeopleStore:
                 slug = str(row.get("slug") or "")
                 if slug in seen:
                     continue
-                if any(
-                    self._match_like_literals(row, p1, p2) for p1, p2 in groups
-                ):
+                if any(self._match_like_literals(row, p1, p2) for p1, p2 in groups):
                     hits.append(row)
                     seen.add(slug)
             return hits

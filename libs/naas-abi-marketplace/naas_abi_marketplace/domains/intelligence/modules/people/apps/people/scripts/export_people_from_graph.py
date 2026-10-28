@@ -59,6 +59,9 @@ URL_RE = re.compile(r"^https?://", re.IGNORECASE)
 CONTACT_COLUMNS = ("email", "phone", "linkedin_url")
 # Built from fields that are gated themselves; see ``gate_rows``.
 DERIVED_COLUMNS = {("people", "search_text")}
+# Keys, not statements: a LinkedIn vanity name can carry a long number
+# (li_jane_doe_123456789), which is not a phone number anyone published.
+IDENTIFIER_COLUMNS = frozenset({"slug", "peer_slug"})
 CONTACT_SHAPES = {
     "email": re.compile(r"^[\w.+-]+@[\w-]+(?:\.[\w-]+)+$"),
     "phone": re.compile(r"^\+?[\d][\d\s().-]{5,}$"),
@@ -198,7 +201,7 @@ def organization_logos(graph: Graph, config: dict[str, Any]) -> dict[str, str]:
     for label, url in graph.query(LOGOS_QUERY):
         address = str(url)
         if prefix and address.startswith(f"{GRAPH_LOGO_URL_PREFIX}/"):
-            address = f"{prefix.rstrip('/')}{address[len(GRAPH_LOGO_URL_PREFIX):]}"
+            address = f"{prefix.rstrip('/')}{address[len(GRAPH_LOGO_URL_PREFIX) :]}"
         logos.setdefault(str(label), address)
     return logos
 
@@ -233,16 +236,29 @@ def build_rows(graph: Graph, config: dict[str, Any]) -> dict[str, list[dict[str,
 
     working = run_query(graph, queries["find_working_experiences"], limit=ROW_LIMIT)
     studying = run_query(graph, queries["find_educations"], limit=ROW_LIMIT)
+    # Joined on the person's IRI: two LinkedIn connections can share a name,
+    # and joining on the label would hand one of them the other's career. The
+    # label is the fallback for a row that carries no IRI.
+    by_person_iri = {
+        str(row["person"]): slug
+        for slug, row in people_by_slug.items()
+        if row.get("person")
+    }
     by_label = {row["personLabel"]: slug for slug, row in people_by_slug.items()}
+
+    def person_slug(row: dict[str, Any]) -> str | None:
+        if row.get("person"):
+            return by_person_iri.get(str(row["person"]))
+        return by_label.get(row.get("personLabel"))
 
     experience: dict[str, list[dict[str, Any]]] = {}
     for row in working:
-        slug = by_label.get(row.get("personLabel"))
+        slug = person_slug(row)
         if slug:
             experience.setdefault(slug, []).append(row)
     education: dict[str, list[dict[str, Any]]] = {}
     for row in studying:
-        slug = by_label.get(row.get("personLabel"))
+        slug = person_slug(row)
         if slug:
             education.setdefault(slug, []).append(row)
 
@@ -455,8 +471,36 @@ def build_rows(graph: Graph, config: dict[str, Any]) -> dict[str, list[dict[str,
             }
         )
 
+    tables["connections"] = connection_rows(
+        run_query(graph, queries["find_connections"], limit=ROW_LIMIT)
+    )
+
     gate_rows(tables, config)
     return tables
+
+
+def connection_rows(acts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Both directions of every act of connection, one row per pair.
+
+    A pair connected twice (an export re-imported under another owner IRI,
+    say) keeps its earliest date: that is when they first connected.
+    """
+    pairs: dict[tuple[str, str], str | None] = {}
+    for act in acts:
+        owner, person = act.get("ownerSlug"), act.get("slug")
+        if not owner or not person or owner == person:
+            continue
+        connected_on = _date(act.get("connectedOn"))
+        for key in ((owner, person), (person, owner)):
+            known = pairs.get(key)
+            if key not in pairs or (
+                connected_on and (known is None or connected_on < known)
+            ):
+                pairs[key] = connected_on
+    return [
+        {"slug": slug, "peer_slug": peer, "connected_on": connected_on}
+        for (slug, peer), connected_on in sorted(pairs.items())
+    ]
 
 
 def gate_rows(tables: dict[str, list[dict[str, Any]]], config: dict[str, Any]) -> None:
@@ -475,7 +519,10 @@ def gate_rows(tables: dict[str, list[dict[str, Any]]], config: dict[str, Any]) -
                     table_row[column] = check_contact(
                         column, value, where=where, config=config
                     )
-                elif (table_name, column) not in DERIVED_COLUMNS:
+                elif (
+                    table_name,
+                    column,
+                ) not in DERIVED_COLUMNS and column not in IDENTIFIER_COLUMNS:
                     check_privacy(value, where=where, config=config)
 
 

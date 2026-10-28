@@ -104,24 +104,41 @@ class NoPeopleGraphError(LookupError):
         )
 
 
+def is_supplementary_graph(config: dict[str, Any], iri: str) -> bool:
+    """Whether *iri* only supplements the people graphs (a user's LinkedIn graph)."""
+    suffixes = config["data"]["graph"].get("supplementary_suffixes") or []
+    return any(str(iri).rstrip("/").endswith(suffix) for suffix in suffixes)
+
+
 def filter_graph_iris(readable: frozenset[str], config: dict[str, Any]) -> list[str]:
-    """The readable graphs this instance lists people from.
+    """The readable graphs this instance lists people from, in reading order.
 
     ``data.graph.iri`` (the instance's own directory) counts when Nexus lets the
     workspace read it: the policy grants it, the config never does.
+
+    Graphs matching ``data.graph.supplementary_suffixes`` (a user's LinkedIn
+    connections) come last: a person they share with a people graph is then
+    listed from the people graph (``graph_datasets.merge_tables``, first wins).
     """
     graph = config["data"]["graph"]
     prefixes = graph.get("include_prefixes") or []
     suffixes = graph.get("include_suffixes") or []
+
+    def is_supplementary(iri: str) -> bool:
+        return is_supplementary_graph(config, iri)
+
     if not prefixes and not suffixes:
-        return sorted(readable)
-    return sorted(
-        iri
-        for iri in readable
-        if iri == graph.get("iri")
-        or any(str(iri).startswith(prefix) for prefix in prefixes)
-        or any(str(iri).rstrip("/").endswith(suffix) for suffix in suffixes)
-    )
+        kept = list(readable)
+    else:
+        kept = [
+            iri
+            for iri in readable
+            if iri == graph.get("iri")
+            or any(str(iri).startswith(prefix) for prefix in prefixes)
+            or any(str(iri).rstrip("/").endswith(suffix) for suffix in suffixes)
+            or is_supplementary(iri)
+        ]
+    return sorted(kept, key=lambda iri: (is_supplementary(iri), iri))
 
 
 def _triple_store() -> Any:

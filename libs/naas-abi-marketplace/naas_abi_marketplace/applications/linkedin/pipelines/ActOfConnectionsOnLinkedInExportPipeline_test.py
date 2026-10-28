@@ -128,6 +128,7 @@ def test_one_act_of_connection_per_profile_between_owner_and_connection():
         "matched": 0,
         "skipped": 2,
         "skipped_reasons": None,
+        "redacted": 0,
     }
     assert stats.skipped_reasons == {"no_linkedin_url": 1, "duplicate_row": 1}
 
@@ -284,3 +285,36 @@ def test_the_pipeline_output_only_uses_declared_linkedin_terms():
         and str(term).count("/") == str(LINKEDIN).count("/")
     }
     assert used and used <= declared
+
+
+def test_a_value_the_privacy_gate_refuses_is_left_out_not_fatal():
+    rows = read_connections_csv(
+        b"First Name,Last Name,URL,Email Address,Company,Position,Connected On\n"
+        b"Jane,Doe,https://www.linkedin.com/in/jane,,ACME,Call +33 6 12 34 56 78,01 Jan 2024\n"
+    )
+    pipeline = ActOfConnectionsOnLinkedInExportPipeline(
+        ActOfConnectionsOnLinkedInExportPipelineConfiguration()
+    )
+    graph, stats = pipeline.build(
+        ActOfConnectionsOnLinkedInExportPipelineParameters(
+            owner_uri="http://ontology.naas.ai/abi/Person/alice",
+            owner_name="Alice Owner",
+            rows=rows,
+            source_path="x",
+        )
+    )
+    assert stats.redacted == 1 and stats.created == 1
+    assert not set(graph.subjects(RDF.type, WORKING))
+    assert not any("56 78" in str(o) for o in graph.objects())
+
+
+def test_a_new_person_gets_their_position_as_headline_and_company_as_employer():
+    graph, _ = _build()
+    jane = URIRef(linkedin_person_uri("https://www.linkedin.com/in/jane-doe"))
+    assert (jane, URIRef(f"{ABI}worksFor"), URIRef(f"{ABI}Organization/axa")) in graph
+    summary = graph.value(jane, URIRef(f"{ABI}hasProfileSummary"))
+    assert (
+        str(graph.value(summary, URIRef(f"{ABI}headline_text"))) == "Chief Risk Officer"
+    )
+    other = URIRef(linkedin_person_uri("https://www.linkedin.com/in/jane-doe-2"))
+    assert graph.value(other, URIRef(f"{ABI}hasProfileSummary")) is None

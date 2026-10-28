@@ -1,6 +1,6 @@
 """Dataset definitions and access for the People Search app.
 
-One profile is nine tables rather than one nested document, because the dataset
+One profile is nine tables (plus who they are connected to) rather than one nested document, because the dataset
 service is tabular and typed: a wrong column fails at write time instead of
 rendering as a blank section. ``profile_payload`` puts a person back together
 for the profile page; ``search_payload`` queries across the tables for results.
@@ -157,7 +157,23 @@ TABLES: dict[str, tuple[tuple[str, ...], tuple[tuple[str, str], ...]]] = {
             ("source_label", "string"),
         ),
     ),
+    # One row per person and connection, in both directions, so "the
+    # connections of X" is a filter on slug. peer_slug may name someone listed
+    # by another dataset: connections are merged across datasets, not owned
+    # by one (graph_datasets.merge_tables).
+    "connections": (
+        ("slug", "peer_slug"),
+        (
+            ("slug", "string"),
+            ("peer_slug", "string"),
+            ("connected_on", "date"),
+        ),
+    ),
 }
+
+# Tables merged across datasets rather than taken from the one that lists the
+# person: a connection is stated by whichever export holds it.
+SHARED_TABLES = {"connections": ("slug", "peer_slug")}
 
 
 class DatasetsMissingError(RuntimeError):

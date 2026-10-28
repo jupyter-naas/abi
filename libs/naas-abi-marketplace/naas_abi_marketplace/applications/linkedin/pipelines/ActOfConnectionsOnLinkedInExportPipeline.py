@@ -33,6 +33,10 @@ from naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnecti
     ActOfConnection,
     ConnectionRole,
 )
+from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.export_people_from_graph import (
+    PrivacyError,
+    check_privacy,
+)
 from naas_abi_marketplace.domains.intelligence.modules.people.ontologies.modules.PeopleOntology import (
     ProfileDocument,
 )
@@ -54,6 +58,9 @@ CREATOR = "linkedin_connections_export"
 # ^[a-z0-9][a-z0-9_-]{0,63}$ (people app, scripts/profile_payload.py).
 _SLUG_MAX = 64
 _VANITY = re.compile(r"^/(?:in|pub)/([^/?#]+)", re.IGNORECASE)
+# The shape the People app holds person.email to (export_people_from_graph,
+# CONTACT_SHAPES): an address it would refuse is left out here instead.
+_EMAIL = re.compile(r"^[\w.+-]+@[\w-]+(?:\.[\w-]+)+$")
 _DATE_FORMATS = ("%d %b %Y", "%Y-%m-%d", "%d/%m/%Y", "%m/%d/%y")
 
 
@@ -110,7 +117,9 @@ def linkedin_person_uri(normalized_url: str) -> str:
 
 
 def linkedin_profile_slug(normalized_url: str) -> str:
-    return f"li-{linkedin_key(normalized_url)}"
+    # Underscores, not hyphens: the profile query runner takes a person_slug
+    # of [a-z][a-z0-9_]*. The key has no underscore, so this stays unique.
+    return f"li_{linkedin_key(normalized_url).replace('-', '_')}"
 
 
 def parse_connected_on(value: str | None) -> date | None:
@@ -122,6 +131,24 @@ def parse_connected_on(value: str | None) -> date | None:
         except ValueError:
             continue
     return None
+
+
+def _publishable(value: str | None, stats: ConnectionsImportStats | None = None) -> str:
+    """*value*, or "" when the People app's privacy gate would refuse it.
+
+    The gate refuses a whole dataset for one bad value, so a position that
+    reads like a phone number costs that position, not the import.
+    """
+    text = (value or "").strip()
+    if not text:
+        return ""
+    try:
+        check_privacy(text, where="Connections.csv", config={})
+    except PrivacyError:
+        if stats is not None:
+            stats.redacted += 1
+        return ""
+    return text
 
 
 class KnownPerson(BaseModel):
@@ -138,6 +165,8 @@ class ConnectionsImportStats:
     matched: int = 0
     skipped: int = 0
     skipped_reasons: dict[str, int] = field(default_factory=dict)
+    # Values left out because they read as contact details (privacy gate).
+    redacted: int = 0
 
     def skip(self, reason: str) -> None:
         self.skipped += 1
@@ -150,6 +179,7 @@ class ConnectionsImportStats:
             "matched": self.matched,
             "skipped": self.skipped,
             "skipped_reasons": dict(self.skipped_reasons),
+            "redacted": self.redacted,
         }
 
 
@@ -240,8 +270,8 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
             if url in seen:
                 stats.skip("duplicate_row")
                 continue
-            given = (row.get("First Name") or "").strip()
-            family = (row.get("Last Name") or "").strip()
+            given = _publishable(row.get("First Name"))
+            family = _publishable(row.get("Last Name"))
             if not (given or family):
                 stats.skip("no_name")
                 continue
@@ -261,9 +291,10 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
             else:
                 stats.created += 1
                 context.set_profile_slug(person, linkedin_profile_slug(url))
+            email = (row.get("Email Address") or "").strip()
             context.set_contact_details(
                 person,
-                email=(row.get("Email Address") or "").strip() or None,
+                email=email if _EMAIL.match(email) else None,
                 linkedin_url=url,
             )
 
@@ -277,12 +308,28 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
                 export_file=export_file,
             )
 
-            company = (row.get("Company") or "").strip()
-            position = (row.get("Position") or "").strip()
-            if company and position:
+            company = _publishable(row.get("Company"), stats)
+            position = _publishable(row.get("Position"), stats)
+            org = context.ensure_org(company) if company else None
+            if not known:
+                # What the export says about someone the graphs did not know:
+                # their current position as the headline, their company as
+                # where they work. A known person keeps what their own
+                # source says.
+                if position:
+                    # Not sourced from the export file: the profile page would
+                    # offer the export's path as the person's published profile.
+                    context.add_profile_summary(
+                        person, headline=position, key=person_key
+                    )
+                if org is not None:
+                    context.graph.add(
+                        (URIRef(person._uri), ABI.worksFor, URIRef(org._uri))
+                    )
+            if org is not None and position:
                 context.add_working(
                     person=person,
-                    org=context.ensure_org(company),
+                    org=org,
                     site=None,
                     skills=[],
                     profile=export_file,

@@ -259,6 +259,7 @@ def _result(
     hits: int = 0,
     *,
     contact: bool = False,
+    connections_count: int = 0,
 ) -> dict[str, Any]:
     place = [person.get("country"), person.get("office") or person.get("city")]
     return {
@@ -275,6 +276,8 @@ def _result(
         "country_code": person.get("country_code"),
         "place": [value for value in place if value],
         "snippet": snippet_value,
+        # How many listed people they are connected to (connections_payload).
+        "connections_count": connections_count,
     }
 
 
@@ -418,6 +421,15 @@ def search(
     page = min(max(1, int(page)), pages)
     start = (page - 1) * page_size
     window = hits[start : start + page_size]
+    # Imported here: connections_payload draws its network with
+    # network_payload, which imports this module.
+    from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.connections_payload import (
+        connection_counts,
+    )
+
+    counts = connection_counts(
+        service, config, [hit["person"]["slug"] for hit in window]
+    )
 
     return {
         "query": query,
@@ -441,6 +453,7 @@ def search(
                 ),
                 hit["hits"],
                 contact=bool(config["privacy"].get("publish_contact_details")),
+                connections_count=counts.get(hit["person"]["slug"], 0),
             )
             for hit in window
         ],

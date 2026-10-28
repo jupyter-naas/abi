@@ -125,15 +125,30 @@ def merge_tables(
     """One store over *sources*, in that order.
 
     A person found in two of them is kept from the first, with that source's
-    sections only, so a profile never mixes two sources.
+    sections only, so a profile never mixes two sources. Shared tables
+    (``ds.SHARED_TABLES``: connections) are the exception: each source states
+    its own, so they are united, one row per key, the first source's kept.
     """
     merged: dict[str, list[dict[str, Any]]] = {
         logical: [] for logical in config["data"]["tables"]
     }
     seen: set[str] = set()
+    shared_keys: dict[str, set[tuple[Any, ...]]] = {
+        logical: set() for logical in ds.SHARED_TABLES
+    }
     for tables in sources:
         own = {row["slug"] for row in tables.get("people", [])} - seen
         for logical, rows in tables.items():
+            if logical not in merged:
+                continue
+            if logical in ds.SHARED_TABLES:
+                key_columns = ds.SHARED_TABLES[logical]
+                for row in rows:
+                    key = tuple(row.get(column) for column in key_columns)
+                    if key not in shared_keys[logical]:
+                        shared_keys[logical].add(key)
+                        merged[logical].append(row)
+                continue
             merged[logical].extend(row for row in rows if row.get("slug") in own)
         seen |= own
     return MemoryPeopleStore(merged, config)
