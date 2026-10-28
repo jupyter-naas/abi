@@ -229,3 +229,71 @@ def test_a_tool_response_keeps_its_chat_source_opt_out() -> None:
         "event": "tool_usage",
         "tool": "search",
     }
+
+
+def _agents():
+    """A lead with a helper (that has a hidden sub-agent) and a hidden
+    sub-agent, each of its own class: the runtime keeps agents by class."""
+    from langgraph.checkpoint.memory import MemorySaver
+    from naas_abi_core.services.agent.Agent import Agent, AgentConfiguration, AgentSharedState
+    from naas_abi_core.services.agent.Agent_keep_subagents_test import _Model, lookup
+
+    class Lead(Agent):
+        pass
+
+    class Helper(Agent):
+        pass
+
+    class Hidden(Agent):
+        pass
+
+    def make(cls, name, agents=()):
+        return cls(
+            name=name,
+            description=name,
+            chat_model=_Model(),
+            tools=[lookup],
+            agents=list(agents),
+            memory=MemorySaver(),
+            state=AgentSharedState(thread_id="t"),
+            configuration=AgentConfiguration(system_prompt=name),
+            enable_default_tools=False,
+        )
+
+    helper = make(Helper, "Helper", [make(Hidden, "DeepHidden")])
+    return make(Lead, "Lead", [helper, make(Hidden, "Hidden")]), helper
+
+
+def test_a_turn_runs_only_the_agents_its_caller_may_use() -> None:
+    """The route binds the caller's usable agents; the in-process runtime runs
+    no other, and its copy of the agent leaves the rest out at every depth:
+    no handoff tool, no bound tool, no graph node."""
+    from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
+        _inprocess_agent_class_name,
+        _turn_copy,
+    )
+    from naas_abi_core.services.agent.context import agent_workspace_enabled_class_names
+
+    lead, helper = _agents()
+    hidden = lead._original_agents[1]
+    allowed = frozenset(_inprocess_agent_class_name(a) for a in (lead, helper))
+
+    token = agent_workspace_enabled_class_names.set(allowed)
+    try:
+        copy = _turn_copy(lead, "t-1")
+        assert copy is not None and copy is not lead
+        assert [a.name for a in copy._agents] == ["Helper"]
+        assert "transfer_to_Hidden" not in copy._tools_by_name
+        assert "transfer_to_Hidden" not in copy._chat_model_with_tools.bound
+        assert "Hidden" not in set(copy.graph.get_graph().nodes)
+        (helper_copy,) = copy._agents
+        assert (
+            helper_copy._agents == [] and "transfer_to_DeepHidden" not in helper_copy._tools_by_name
+        )
+        assert _turn_copy(hidden, "t-1") is None
+        agent_workspace_enabled_class_names.set(frozenset())
+        assert _turn_copy(lead, "t-1") is None
+    finally:
+        agent_workspace_enabled_class_names.reset(token)
+    # A caller outside Nexus's routes: nothing is narrowed.
+    assert [a.name for a in _turn_copy(lead, "t-1")._agents] == ["Helper", "Hidden"]

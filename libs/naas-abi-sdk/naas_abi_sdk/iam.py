@@ -13,6 +13,13 @@ class IamClient:
             "abi.iam.v1.authorize", request, pb.AuthorizeResponse
         )
 
+    async def authorize_declared(
+        self, request: pb.AuthorizeDeclaredRequest
+    ) -> pb.AuthorizeDeclaredResponse:
+        return await self._transport.call(
+            "abi.iam.v1.authorize_declared", request, pb.AuthorizeDeclaredResponse
+        )
+
     async def filter(self, request: pb.FilterRequest) -> pb.FilterResponse:
         return await self._transport.call(
             "abi.iam.v1.filter", request, pb.FilterResponse
@@ -21,6 +28,11 @@ class IamClient:
     async def explain(self, request: pb.ExplainRequest) -> pb.ExplainResponse:
         return await self._transport.call(
             "abi.iam.v1.explain", request, pb.ExplainResponse
+        )
+
+    async def grantable(self, request: pb.GrantableRequest) -> pb.GrantableResponse:
+        return await self._transport.call(
+            "abi.iam.v1.grantable", request, pb.GrantableResponse
         )
 
     async def ensure_user(self, request: pb.EnsureUserRequest) -> pb.EnsureUserResponse:
@@ -225,6 +237,28 @@ class IamClient:
     ) -> pb.DeleteScopeResponse:
         return await self._transport.call(
             "abi.iam.v1.delete_scope", request, pb.DeleteScopeResponse
+        )
+
+    async def get_set(self, request: pb.GetSetRequest) -> pb.GetSetResponse:
+        return await self._transport.call(
+            "abi.iam.v1.get_set", request, pb.GetSetResponse
+        )
+
+    async def effective_set(
+        self, request: pb.EffectiveSetRequest
+    ) -> pb.EffectiveSetResponse:
+        return await self._transport.call(
+            "abi.iam.v1.effective_set", request, pb.EffectiveSetResponse
+        )
+
+    async def list_sets(self, request: pb.ListSetsRequest) -> pb.ListSetsResponse:
+        return await self._transport.call(
+            "abi.iam.v1.list_sets", request, pb.ListSetsResponse
+        )
+
+    async def put_set(self, request: pb.PutSetRequest) -> pb.PutSetResponse:
+        return await self._transport.call(
+            "abi.iam.v1.put_set", request, pb.PutSetResponse
         )
 
     async def register_catalog(

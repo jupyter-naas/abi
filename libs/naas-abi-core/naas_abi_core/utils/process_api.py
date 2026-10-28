@@ -29,7 +29,12 @@ _CAMEL_BOUNDARY = re.compile(r"([a-z0-9])([A-Z])")
 
 
 def process_route_slug(instance: Any) -> str:
-    name = instance.__class__.__name__
+    return process_class_slug(instance.__class__)
+
+
+def process_class_slug(cls: type) -> str:
+    """``process_route_slug`` of an instance of ``cls``."""
+    name = cls.__name__
     stepped = _CAMEL_ACRONYM.sub(r"\1_\2", name)
     stepped = _CAMEL_BOUNDARY.sub(r"\1_\2", stepped)
     return stepped.replace(" ", "_").replace("-", "_").lower()
@@ -204,6 +209,17 @@ def _run_parameters_type(instance: Any) -> type[BaseModel] | None:
         if isinstance(candidate, type) and issubclass(candidate, BaseModel):
             return candidate
     return None
+
+
+def process_parameters_type(instance: Any) -> type[BaseModel] | None:
+    """The parameters model of an instance with a live typed ``run()``, or None.
+
+    The condition for ``register_run_route`` to mount ``POST /<slug>``; the NATS
+    workflow bridge publishes the same instances.
+    """
+    if not _run_is_live(instance):
+        return None
+    return _run_parameters_type(instance)
 
 
 def serialize_process_result(result: Any) -> Any:

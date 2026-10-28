@@ -170,6 +170,47 @@ modules:
 
 The `{{ secret.X }}` syntax is resolved by the `secret` service (see [services/secret/AGENTS.md](../naas-abi-core/naas_abi_core/services/secret/AGENTS.md)). `dependencies.modules` are auto-loaded; you don't need to list a module's deps in `config.yaml`.
 
+## Module scopes: who may use what a module exposes
+
+Each agent, app, workflow and pipeline of a module is a **module scope**, granted per
+workspace one item at a time: `module:<type>/<module>/<name>`, where `<module>` is the
+module's configured key (`naas_abi_marketplace.applications.github`), `<name>` the
+agent's `NAME`, the app's folder, or the workflow's name (`workflow.<slug>`,
+`pipeline.<slug>` for a `Workflow` or `Pipeline` class). Workspace admins and owners
+hold every one; viewers and members hold none until a policy grants it, for example
+`module:UseAgent` on `${scope}:module:agent/naas_abi_marketplace.applications.github/GitHub`
+attached at the workspace. Nexus checks it in chat, `/v1`, the agent pickers, the Apps
+page, app links and workspace workflows; an agent's sub-agents and its tools from a
+module's workflows and pipelines are bounded by the user's scopes too. A module has
+nothing to declare for these, but renaming its key, an agent's `NAME` or a workflow
+class changes the scope that grants it. Reference: core
+[`services/iam/AGENTS.md`](../naas-abi-core/naas_abi_core/services/iam/AGENTS.md),
+"Module scopes".
+
+A module may also **declare actions of its own**, for what its tools and apps do (export
+a report, approve a payment): `iam_catalog.yaml` beside its `__init__.py`, under its own
+service name, the module key with `_` for every other character
+(`naas_abi_marketplace.applications.github` is `naas_abi_marketplace_applications_github`;
+leave `service` out and it is filled in). The engine registers it when the module loads;
+a catalog naming a kernel service, `nexus`, `module` or another module's is refused.
+
+```yaml
+# naas_abi_marketplace/applications/acme/iam_catalog.yaml
+version: 1
+resource_types:
+  - {name: report, id: path, description: "A report of the module."}
+actions:
+  - {name: ExportReport, level: read, resource_types: [report], description: "Export one."}
+```
+
+```python
+# In the module's code, for the user the call is made for (raises PermissionDeniedError):
+ABIModule.get_instance().require_action("ExportReport", "report", ["q3"])
+```
+
+The resource is placed in the workspace of the call (`abi:<org>:<ws>:<service>:report/q3`):
+a user needs `<service>:ExportReport` on `${scope}:<service>:report/*` there.
+
 ## Discovery cheat sheet
 
 | I want to … | Look here |

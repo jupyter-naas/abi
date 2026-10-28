@@ -14,6 +14,8 @@
 // caller the server verifies from the request's credentials, never about a
 // request field. Every other operation is authorized with IAM's own iam:*
 // catalog. Errors: PERMISSION_DENIED (the caller can see the resource),
+// GRANT_NOT_HELD (a change would give more than the caller holds; the message
+// names the statement, action and resource),
 // NOT_FOUND (it cannot, or the record does not exist), CONFLICT (a taken
 // identity or name, an attached policy, a managed one), REVISION_CONFLICT,
 // INVALID_ARGUMENT (a policy's message lists every error).
@@ -43,6 +45,9 @@ message Principal {
   optional string owner_id = 12;
   google.protobuf.Timestamp created_at = 13;
   google.protobuf.Timestamp updated_at = 14;
+  // Groups: the scope that owns them and names them, abi:-:- (the platform),
+  // abi:<org>:- or abi:<org>:<ws>. Empty from an older engine: the platform.
+  string owner_scope = 15;
 }
 
 // A stored policy; the document is the JSON policy document.
@@ -55,6 +60,9 @@ message Policy {
   int32 revision = 6;
   google.protobuf.Timestamp created_at = 7;
   google.protobuf.Timestamp updated_at = 8;
+  // The scope that owns the policy and names it, abi:-:- (the platform),
+  // abi:<org>:- or abi:<org>:<ws>. Empty from an older engine: the platform.
+  string owner_scope = 9;
 }
 
 message Attachment {
@@ -109,6 +117,21 @@ message Scope {
   string workspace = 2;
 }
 
+// Items of one part of a set. A part with no list is everything (nothing
+// recorded); an empty list is nothing.
+message SetItems {
+  repeated string items = 1;
+}
+
+// What an org (workspace "-") or a workspace may use: module items
+// (<module>, <type>/<module>/<name>, <service>:<Action>) and Nexus features.
+message ScopeSet {
+  string org = 1;
+  string workspace = 2;
+  SetItems modules = 3;
+  SetItems features = 4;
+}
+
 // The catalog format of a service's actions (services/iam/AGENTS.md).
 message ResourceType {
   string name = 1;
@@ -119,6 +142,9 @@ message ResourceType {
   bool container = 4;
   bool personal = 5;
   string description = 6;
+  // A module scope: what a module exposes, never reached by the viewer and
+  // member roles (services/iam/module_scopes.py).
+  bool module_scope = 7;
 }
 
 message ActionSpec {
@@ -136,6 +162,8 @@ message ActionCatalog {
   int32 version = 2;
   repeated ResourceType resource_types = 3;
   repeated ActionSpec actions = 4;
+  // The module that declared this catalog; empty for a kernel service's.
+  string module = 5;
 }
 
 // reason: allow | explicit_deny | implicit_deny | suspended | sealed.
@@ -220,6 +248,22 @@ message AuthorizeResponse {
   Decision decision = 2;
 }
 
+// A decision on an action a module declares (services/iam/module_scopes.py):
+// IAM names the resource, <type>/<parts> of the action's catalog, in
+// workspace_id or else the call's workspace, platform-level without one.
+message AuthorizeDeclaredRequest {
+  abi.common.v1.CallContext context = 1;
+  string action = 2;
+  string resource_type = 3;
+  repeated string parts = 4;
+  string workspace_id = 5;
+}
+message AuthorizeDeclaredResponse {
+  abi.common.v1.CallError error = 1;
+  Decision decision = 2;
+  string resource = 3;
+}
+
 message FilterRequest {
   abi.common.v1.CallContext context = 1;
   string action = 2;
@@ -241,6 +285,28 @@ message ExplainRequest {
 message ExplainResponse {
   abi.common.v1.CallError error = 1;
   Explanation explanation = 2;
+}
+
+// What the caller may grant at a scope: per catalog, the actions they hold
+// there and the resource patterns (${scope}:...) they hold them on, minus
+// their Denies. About the caller, so it needs no iam: action.
+message GrantableAction {
+  string action = 1;
+  repeated string resources = 2;
+  // What a Deny of the caller takes back from resources.
+  repeated string excluded = 3;
+}
+message GrantableCatalog {
+  string service = 1;
+  repeated GrantableAction actions = 2;
+}
+message GrantableRequest {
+  abi.common.v1.CallContext context = 1;
+  string scope = 2;
+}
+message GrantableResponse {
+  abi.common.v1.CallError error = 1;
+  repeated GrantableCatalog catalogs = 2;
 }
 
 // -- principals ------------------------------------------------------------------
@@ -322,7 +388,10 @@ message DeletePrincipalResponse {
 message CreateGroupRequest {
   abi.common.v1.CallContext context = 1;
   string name = 2;
+  // Alone: the group belongs to the org, abi:<org>:-.
   optional string org = 3;
+  // The owner: abi:-:- (the default), abi:<org>:- or abi:<org>:<ws>.
+  optional string scope = 4;
 }
 message CreateGroupResponse {
   abi.common.v1.CallError error = 1;
@@ -342,6 +411,9 @@ message ListGroupsRequest {
   abi.common.v1.CallContext context = 1;
   int32 limit = 2;
   optional string after = 3;
+  // The groups this scope owns (and, at a workspace, its org's the caller
+  // attaches to there); absent: every group the caller may list.
+  optional string scope = 4;
 }
 message ListGroupsResponse {
   abi.common.v1.CallError error = 1;
@@ -425,6 +497,8 @@ message CreatePolicyRequest {
   // A policy document as JSON (or YAML) text.
   string document_json = 3;
   string description = 4;
+  // The owner: abi:-:- (the default), abi:<org>:- or abi:<org>:<ws>.
+  optional string scope = 5;
 }
 message CreatePolicyResponse {
   abi.common.v1.CallError error = 1;
@@ -444,6 +518,9 @@ message ListPoliciesRequest {
   abi.common.v1.CallContext context = 1;
   int32 limit = 2;
   optional string after = 3;
+  // The policies this scope owns, and those above it the caller may attach
+  // there; absent: every policy the caller may list.
+  optional string scope = 4;
 }
 message ListPoliciesResponse {
   abi.common.v1.CallError error = 1;
@@ -552,6 +629,51 @@ message DeleteScopeRequest {
 message DeleteScopeResponse {
   abi.common.v1.CallError error = 1;
   bool deleted = 2;
+}
+
+// Sets: GetSet on the set at its own scope; PutSet on abi:%2A:%2A:iam:set/<org>
+// for an org's, abi:<org>:%2A:iam:set/<ws> for a workspace's. A workspace's
+// set wider than its org's is INVALID_ARGUMENT, the message naming the extras.
+message GetSetRequest {
+  abi.common.v1.CallContext context = 1;
+  string org = 2;
+  string workspace = 3;
+}
+message GetSetResponse {
+  abi.common.v1.CallError error = 1;
+  ScopeSet scope_set = 2;
+}
+
+// A workspace's set within its org's (or an org's own).
+message EffectiveSetRequest {
+  abi.common.v1.CallContext context = 1;
+  string org = 2;
+  string workspace = 3;
+}
+message EffectiveSetResponse {
+  abi.common.v1.CallError error = 1;
+  ScopeSet scope_set = 2;
+}
+
+message ListSetsRequest {
+  abi.common.v1.CallContext context = 1;
+  optional string org = 2;
+}
+message ListSetsResponse {
+  abi.common.v1.CallError error = 1;
+  repeated ScopeSet sets = 2;
+}
+
+message PutSetRequest {
+  abi.common.v1.CallContext context = 1;
+  string org = 2;
+  string workspace = 3;
+  SetItems modules = 4;
+  SetItems features = 5;
+}
+message PutSetResponse {
+  abi.common.v1.CallError error = 1;
+  ScopeSet scope_set = 2;
 }
 
 message RegisterCatalogRequest {

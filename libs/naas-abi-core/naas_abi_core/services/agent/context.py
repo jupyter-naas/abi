@@ -24,6 +24,7 @@ handles the thread copy.
 
 from __future__ import annotations
 
+import weakref
 from contextvars import ContextVar
 
 from naas_abi_core.services.event.context import (
@@ -50,6 +51,69 @@ agent_workspace_id: CallContextField = event_actor_workspace_id
 agent_workspace_enabled_class_names: ContextVar[frozenset[str] | None] = ContextVar(
     "agent_workspace_enabled_class_names", default=None
 )
+# The module scopes (``(type, module, name)``, IAM ``module_scopes``) of the
+# workflows and pipelines the caller may run where the turn runs. An agent's tool
+# that one of them exposes answers a refusal for any other (``tool_scope_refused``).
+# None: the turn is not bound (a caller outside Nexus's routes).
+agent_usable_module_scopes: ContextVar[frozenset[tuple[str, str, str]] | None] = (
+    ContextVar("agent_usable_module_scopes", default=None)
+)
+# A tool's metadata key naming the object that exposed it (``Expose.as_tools``):
+# a string, so tracing serializes it; ``exposer`` finds the object.
+EXPOSED_BY = "abi_exposed_by"
+_exposers: weakref.WeakValueDictionary[str, object] = weakref.WeakValueDictionary()
+# The module scope of each module's workflow and pipeline classes, ``(type, module,
+# name)``: an instance an agent builds itself is bounded like the module's own.
+_scopes_by_class: dict[type, tuple[str, str, str]] = {}
+
+
+def register_process_scope(cls: type, scope: tuple[str, str, str]) -> bool:
+    """Record ``cls``'s module scope; False (kept as it was) when another module
+    already declared the class under another scope."""
+    known = _scopes_by_class.setdefault(cls, scope)
+    return known == scope
+
+
+def process_scopes() -> list[tuple[str, str, str]]:
+    """Every registered workflow and pipeline scope."""
+    return sorted(set(_scopes_by_class.values()))
+
+
+def process_scope_of(owner: object) -> tuple[str, str, str] | None:
+    """The module scope of a workflow or pipeline instance: its class's, or the
+    nearest registered base class's (a subclass of a module's workflow)."""
+    for cls in type(owner).__mro__:
+        scope = _scopes_by_class.get(cls)
+        if scope is not None:
+            return scope
+    return None
+
+
+def remember_exposer(owner: object) -> str | None:
+    """The key a tool of ``owner`` carries in its metadata; None for an object
+    that cannot be referenced weakly."""
+    key = f"{type(owner).__qualname__}:{id(owner)}"
+    try:
+        _exposers[key] = owner
+    except TypeError:
+        return None
+    return key
+
+
+def tool_scope_refused(tool: object) -> tuple[str, str, str] | None:
+    """The module scope of a workflow or pipeline ``tool`` exposes, when the turn
+    is bound and the caller may not run it there; else None."""
+    usable = agent_usable_module_scopes.get()
+    if usable is None:
+        return None
+    metadata = getattr(tool, "metadata", None) or {}
+    key = metadata.get(EXPOSED_BY)
+    owner = _exposers.get(key) if isinstance(key, str) else None
+    scope = process_scope_of(owner) if owner is not None else None
+    if scope is None or scope in usable:
+        return None
+    return scope
+
 
 # Coding-workspace bridge: base URL + bearer secret of the exec sidecar running
 # inside the caller's Coder coding workspace. Set at the request boundary (the

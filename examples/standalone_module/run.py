@@ -212,6 +212,12 @@ def main():
                 report["remote_models"] = json.loads(model_report.read_text())
                 report["ergonomic_module"] = json.loads(ergonomic_path.read_text())
                 report["discovery"] = json.loads((root / "discovery.json").read_text())
+                # The provider's declared catalog, registered at its approval:
+                # the consumer's manifest grants one action, not the other.
+                assert report["discovery"]["agent_proxy"]["declared_actions"] == {
+                    "ExportBrief": "allowed",
+                    "DeleteBrief": "refused",
+                }
                 report.update(json.loads((root / "ready.json").read_text()))
                 assert report["engine_pid"] != report["worker_pid"]
                 email_files = list((root / "email").rglob("*.eml"))

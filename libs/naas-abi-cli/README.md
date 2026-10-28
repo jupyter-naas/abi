@@ -82,7 +82,7 @@ holds no signing secret.
   registers itself through discovery, and Nexus lists its agent once the
   module logs `READY`.
 - **`--standalone`** (the default outside a project) creates a repository of
-  its own: `pyproject.toml` (`naas-abi-sdk[agent,otel]` and `naas-abi-proto`
+  its own: `pyproject.toml` (`naas-abi-sdk[agent,otel,workflows,rdf]` and `naas-abi-proto`
   from git at `--abi-ref`, by default this CLI's release tag
   `naas-abi-cli-v<version>`, so they match the CLI and never move),
   `Dockerfile`, `README.md`, `AGENTS.md`, ready for `git init`.
@@ -95,9 +95,13 @@ holds no signing secret.
 
 Inside a remote module, `abi new agent` writes an SDK agent and `abi new app`
 adds an app the module serves through Nexus, with an optional backend
-(`self.expose_app(name, asgi_app)`); `abi new workflow`,
-`pipeline`, `integration` and `orchestration` scaffold core code, so they
-refuse and say what to use instead.
+(`self.expose_app(name, asgi_app)`). `abi new workflow`, `abi new pipeline`
+and `abi new integration` write `naas-abi-sdk` classes (`Workflow`, `Pipeline`,
+`Integration`, no `naas_abi_core`) with a test beside them: put them in the
+module's `workflows/`, `pipelines/` and `integrations/` folders, and the module
+finds and builds the workflows and pipelines, whose agents call them with
+`as_tools()`. `abi new orchestration` scaffolds core code, so it refuses and says
+to declare a `@job` instead.
 
 **Example:**
 ```bash

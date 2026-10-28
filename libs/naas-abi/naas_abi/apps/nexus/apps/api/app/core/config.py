@@ -260,6 +260,7 @@ FeatureKey = Literal[
     "slides",
     "documents",
     "sheets",
+    "tasks",
 ]
 
 
@@ -285,6 +286,7 @@ class FeatureFlagsConfig(BaseModel):
             "slides",
             "documents",
             "sheets",
+            "tasks",
         ]
     )
     role_baseline: dict[str, list[FeatureKey]] = Field(
@@ -305,6 +307,7 @@ class FeatureFlagsConfig(BaseModel):
                 "slides",
                 "documents",
                 "sheets",
+                "tasks",
             ],
             "admin": [
                 "maps",
@@ -322,6 +325,7 @@ class FeatureFlagsConfig(BaseModel):
                 "slides",
                 "documents",
                 "sheets",
+                "tasks",
             ],
             "member": [
                 "maps",
@@ -345,9 +349,10 @@ class FeatureFlagsConfig(BaseModel):
             ],
         }
     )
-    # Deprecated: workspace feature overrides are managed in Organization
-    # Settings > Workspaces (workspaces.feature_overrides). Still read as a
-    # fallback for workspaces that never saved any.
+    # Deprecated: read once, when Nexus moves the per-workspace overrides into
+    # the workspaces' feature sets (IAM's; services/iam/sets.py). A feature
+    # turned off leaves the set; one turned on is kept for whoever held a role
+    # there then. Edit sets on the modules × workspaces page.
     workspace_overrides: dict[str, dict[FeatureKey, bool]] = Field(default_factory=dict)
     # Per-organization role_baseline overlays. Does not replace deployment
     # role_baseline; keyed by organization id.

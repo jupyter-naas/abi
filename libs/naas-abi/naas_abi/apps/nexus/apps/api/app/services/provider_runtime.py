@@ -4,6 +4,7 @@ Supports: Anthropic (Claude), OpenAI, Ollama, Cloudflare Workers AI, and custom 
 """
 
 import importlib
+import inspect
 import logging
 import pkgutil
 import threading
@@ -702,9 +703,11 @@ async def complete_chat(
     *,
     thread_id: str | None = None,
     injection_preamble: str | None,
+    workspace_id: str | None = None,
 ) -> str:
     """
-    Route chat completion to the appropriate provider.
+    Route chat completion to the appropriate provider. ``workspace_id``: the
+    turn's workspace, which a remote agent's run is placed in.
     """
     if not config.enabled:
         raise ValueError(f"Provider '{config.name}' is not enabled")
@@ -729,7 +732,11 @@ async def complete_chat(
         )
     elif config.type == "remote":
         return await complete_with_remote_agent(
-            messages, config, thread_id=thread_id, injection_preamble=injection_preamble
+            messages,
+            config,
+            thread_id=thread_id,
+            injection_preamble=injection_preamble,
+            workspace_id=workspace_id,
         )
     else:
         raise ValueError(f"Unknown provider type: {config.type}")
@@ -741,6 +748,7 @@ async def complete_with_remote_agent(
     *,
     thread_id: str | None,
     injection_preamble: str | None,
+    workspace_id: str | None = None,
 ) -> str:
     """The streamed answer of an agent published by a remote module, whole:
     its text chunks joined, its step events left out. Raises when the agent is
@@ -758,6 +766,7 @@ async def complete_with_remote_agent(
         thread_id,
         user_context_preamble=injection_preamble,
         invocation_id=None,
+        workspace_id=workspace_id,
     ):
         if isinstance(chunk, str):
             parts.append(chunk)
@@ -794,7 +803,9 @@ async def complete_with_abi(
         )
         import asyncio
 
-        agent = await asyncio.to_thread(_duplicate_inprocess_agent, template_agent, thread_id)
+        agent = await asyncio.to_thread(_turn_copy, template_agent, thread_id)
+        if agent is None:
+            raise PermissionError(f"You may not use the agent {config.model} here")
         if llm_model:
             _retarget_inprocess_chat_model(agent, llm_model)
 
@@ -1460,6 +1471,33 @@ def _inprocess_agent_class_name(agent: Any) -> str:
     return f"{cls.__module__}/{cls.__name__}"
 
 
+def _turn_copy(template_agent: Any, thread_id: str | None) -> Any | None:
+    """This turn's copy of ``template_agent``, with only the sub-agents the
+    caller may use; None when the caller may not run it.
+
+    A route sets the agents the caller may use where the turn runs (the roster,
+    the features and the module scopes it holds: ``agent_workspace_enabled_class_names``):
+    no other agent answers, whatever name the request gave. The others are left
+    out before the copy is built (``Agent.duplicate(keep=)``): no handoff tool,
+    graph node or intent leads to them. Pruning after the copy stays as a
+    backstop for a sub-agent whose ``duplicate`` takes no ``keep``. Unset (a
+    caller outside Nexus's routes), nothing is narrowed."""
+    from naas_abi_core.services.agent.context import agent_workspace_enabled_class_names
+
+    allowed = agent_workspace_enabled_class_names.get()
+    if allowed is None:
+        return _duplicate_inprocess_agent(template_agent, thread_id)
+    if _inprocess_agent_class_name(template_agent) not in allowed:
+        return None
+    agent = _duplicate_inprocess_agent(
+        template_agent,
+        thread_id,
+        keep=lambda sub: _inprocess_agent_class_name(sub) in allowed,
+    )
+    _prune_inprocess_subagents_for_roster(agent, allowed)
+    return agent
+
+
 def _prune_inprocess_subagents_for_roster(agent: Any, allowed: frozenset[str]) -> None:
     """Drop sub-agents absent from the caller's enabled workspace roster."""
     from naas_abi.agents.feature.registry import spec_for_class_name
@@ -1475,32 +1513,24 @@ def _prune_inprocess_subagents_for_roster(agent: Any, allowed: frozenset[str]) -
         return class_name in allowed
 
     pruned = [sub for sub in subagents if keep(sub)]
+    for sub in pruned:
+        _prune_inprocess_subagents_for_roster(sub, allowed)
     if len(pruned) == len(subagents):
         return
 
     agent._agents = pruned
-    for sub in pruned:
-        _prune_inprocess_subagents_for_roster(sub, allowed)
 
     if type(agent).__name__ == "AbiAgent":
         from naas_abi.agents.AbiAgent import AbiAgent
 
         agent._intents = AbiAgent.get_intents(agents=pruned)
-        configuration = getattr(agent, "configuration", None)
-        agents_section = "\n".join(f"- {sub.name}: {sub.description}" for sub in pruned) or ""
-        if configuration is not None and hasattr(configuration, "system_prompt"):
-            import re
-
-            configuration.system_prompt = re.sub(
-                r"(<agents>)(.*?)(</agents>)",
-                rf"\1\n{agents_section}\n\3",
-                configuration.system_prompt,
-                count=1,
-                flags=re.DOTALL,
-            )
+        # The copy's own configuration: the template's is shared by every turn.
+        agent._configuration = AbiAgent.with_agents_section(agent._configuration, pruned)
 
 
-def _duplicate_inprocess_agent(template: Any, thread_id: str | None) -> Any:
+def _duplicate_inprocess_agent(
+    template: Any, thread_id: str | None, keep: Callable[[Any], bool] | None = None
+) -> Any:
     """Return a per-request copy of the cached template agent.
 
     The resolver caches a single shared instance per factory. Running requests
@@ -1529,6 +1559,8 @@ def _duplicate_inprocess_agent(template: Any, thread_id: str | None) -> Any:
         # current_active_agent=current_active_agent,
     )
     fresh_queue: Queue = Queue()
+    if keep is not None and "keep" in inspect.signature(template.duplicate).parameters:
+        return template.duplicate(queue=fresh_queue, agent_shared_state=fresh_state, keep=keep)
     return template.duplicate(queue=fresh_queue, agent_shared_state=fresh_state)
 
 
@@ -1686,12 +1718,10 @@ async def stream_with_abi_inprocess(
     # (the previous behaviour) caused cross-conversation response leakage when
     # two requests overlapped — see jupyter-naas/abi#991.
     assert thread_id is not None, "thread_id is required"
-    agent = await asyncio.to_thread(_duplicate_inprocess_agent, template_agent, thread_id)
-    from naas_abi_core.services.agent.context import agent_workspace_enabled_class_names
-
-    allowed = agent_workspace_enabled_class_names.get()
-    if allowed:
-        _prune_inprocess_subagents_for_roster(agent, allowed)
+    agent = await asyncio.to_thread(_turn_copy, template_agent, thread_id)
+    if agent is None:
+        yield f"\n\n**Error:** You may not use the agent {agent_name} here."
+        return
     if llm_model:
         try:
             _retarget_inprocess_chat_model(agent, llm_model)

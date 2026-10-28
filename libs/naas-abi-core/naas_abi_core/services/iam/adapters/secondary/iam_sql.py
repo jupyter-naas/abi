@@ -14,6 +14,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import Any
 
+from naas_abi_core import logger
 from naas_abi_core.services.iam.catalog import ActionCatalog
 from naas_abi_core.services.iam.IAMPorts import (
     Attachment,
@@ -32,7 +33,16 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalRecord,
     RevisionConflictError,
     ScopeRecord,
+    ScopeSet,
     SigningKeyRecord,
+)
+from naas_abi_core.services.iam.names import (
+    ALL_ORGS,
+    ALL_WORKSPACES,
+    PLATFORM_SCOPE,
+    matches,
+    resource_name,
+    scope_fields,
 )
 from naas_abi_core.services.iam.policy import PolicyDocument
 from sqlalchemy import (
@@ -49,15 +59,21 @@ from sqlalchemy import (
     UniqueConstraint,
     and_,
     delete,
+    exists,
     func,
     insert,
+    inspect,
+    literal,
     select,
+    text,
     update,
 )
 from sqlalchemy.engine import Connection, Engine, Row
 from sqlalchemy.exc import IntegrityError
 
-SCHEMA_VERSION = 1
+# 2: the owner scope of policies and groups (``owner_scope``).
+# 3: the sets of orgs and workspaces (``iam_scope_sets``, made by create_all).
+SCHEMA_VERSION = 3
 
 metadata = MetaData()
 
@@ -80,6 +96,7 @@ principals = Table(
     Column("owner_id", String(64)),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
+    Column("owner_scope", Text, nullable=False, default=PLATFORM_SCOPE),
     UniqueConstraint("issuer", "subject", name="iam_principals_user_identity"),
 )
 
@@ -139,6 +156,7 @@ policies = Table(
     Column("revision", Integer, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
+    Column("owner_scope", Text, nullable=False, default=PLATFORM_SCOPE),
 )
 
 attachments = Table(
@@ -183,6 +201,16 @@ scopes = Table(
     metadata,
     Column("org", String(64), primary_key=True),
     Column("workspace", String(64), primary_key=True),
+)
+
+# A set's parts are JSON lists; NULL is "nothing recorded", everything.
+scope_sets = Table(
+    "iam_scope_sets",
+    metadata,
+    Column("org", String(64), primary_key=True),
+    Column("workspace", String(64), primary_key=True),
+    Column("modules", Text, nullable=True),
+    Column("features", Text, nullable=True),
 )
 
 catalogs = Table(
@@ -299,6 +327,7 @@ def _principal(row: Row) -> PrincipalRecord:
         owner_id=row.owner_id,
         created_at=_aware(row.created_at),
         updated_at=_aware(row.updated_at),
+        owner_scope=row.owner_scope,
     )
 
 
@@ -328,6 +357,7 @@ def _policy(row: Row) -> Policy:
         revision=row.revision,
         created_at=_aware(row.created_at),
         updated_at=_aware(row.updated_at),
+        owner_scope=row.owner_scope,
     )
 
 
@@ -396,6 +426,16 @@ def _signing_key(row: Row) -> SigningKeyRecord:
     )
 
 
+def _json_list(items: tuple[str, ...] | None) -> str | None:
+    return json.dumps(list(items)) if items is not None else None
+
+
+def _list_json(raw: str | None) -> tuple[str, ...] | None:
+    if raw is None:
+        return None
+    return tuple(str(item) for item in json.loads(raw))
+
+
 def _check_limit(limit: int) -> None:
     if not 1 <= limit <= 1000:
         raise ValueError("limit must be between 1 and 1000")
@@ -406,10 +446,19 @@ class IAMStoreSQL(IAMStore):
 
     _write_options: dict[str, Any] = {}
 
-    def __init__(self, engine: Engine) -> None:
+    def __init__(self, engine: Engine, *, schema: str | None = None) -> None:
         self._engine = engine
+        self._schema = schema
         self._closed = False
-        metadata.create_all(engine)
+        with engine.begin() as conn:
+            if conn.dialect.name == "postgresql":
+                # Two processes opening one store (the engine and the API): the
+                # second waits here while the first creates a missing table.
+                conn.execute(
+                    text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
+                    {"key": f"abi_iam_schema:{schema or ''}"},
+                )
+            metadata.create_all(conn)
         with self._write() as conn:
             if conn.execute(select(state.c.id)).first() is None:
                 conn.execute(
@@ -419,6 +468,124 @@ class IAMStoreSQL(IAMStore):
                         install_id=uuid.uuid4().hex,
                         schema_version=SCHEMA_VERSION,
                     )
+                )
+            else:
+                self._migrate(conn)
+
+    # -- migrations ---------------------------------------------------------------
+
+    def _migrate(self, conn: Connection) -> None:
+        """Bring a store of an earlier schema version up to ``SCHEMA_VERSION``."""
+        version = int(conn.execute(select(state.c.schema_version)).scalar() or 1)
+        if version < 2:
+            self._migrate_owner_scopes(conn)
+        if version < SCHEMA_VERSION:
+            conn.execute(update(state).values(schema_version=SCHEMA_VERSION))
+
+    def _migrate_owner_scopes(self, conn: Connection) -> None:
+        """2: every policy and group is owned by the platform, except the groups
+        IdP bindings made (``idp:<provider>:<claim value>``, mapped from that
+        claim) whose attachments are all in the org they were made for, which
+        belong to that org. A binding group also bound elsewhere (another org,
+        the platform, unscoped) stays the platform's: an org's admins could
+        otherwise hand those grants to their users."""
+        postgres = conn.dialect.name == "postgresql"
+        for table in (principals, policies):
+            name = f'"{self._schema}".{table.name}' if self._schema else table.name
+            if postgres:
+                # Two processes opening a version 1 store together: the second
+                # finds the column the first added.
+                add = "ADD COLUMN IF NOT EXISTS"
+            else:
+                columns = {
+                    c["name"]
+                    for c in inspect(conn).get_columns(table.name, schema=self._schema)
+                }
+                if "owner_scope" in columns:
+                    continue
+                add = "ADD COLUMN"
+            conn.execute(
+                text(
+                    f"ALTER TABLE {name} {add} owner_scope TEXT NOT NULL "
+                    f"DEFAULT '{PLATFORM_SCOPE}'"
+                )
+            )
+        made_by_binding = exists().where(
+            group_mappings.c.group_id == principals.c.id,
+            literal("idp:")
+            + group_mappings.c.provider
+            + literal(":")
+            + group_mappings.c.claim_value
+            == principals.c.name,
+        )
+        in_org = literal("abi:") + principals.c.org + literal(":")
+        held_elsewhere = exists().where(
+            attachments.c.principal_id == principals.c.id,
+            func.substr(attachments.c.scope, 1, func.length(in_org)) != in_org,
+        )
+        conn.execute(
+            update(principals)
+            .where(
+                principals.c.kind == "group",
+                principals.c.org.is_not(None),
+                made_by_binding,
+                ~held_elsewhere,
+            )
+            .values(owner_scope=literal("abi:") + principals.c.org + literal(":-"))
+        )
+        self._warn_old_platform_names(conn)
+
+    def _warn_old_platform_names(self, conn: Connection) -> None:
+        """Schema 2 names the platform's policies and groups
+        ``abi:%2A:%2A:iam:<type>/<id>``: a stored customer policy that reached
+        them as ``abi:-:-:iam:…`` (or ``${scope}:iam:…`` attached at
+        ``abi:-:-``) matches nothing of them any more."""
+
+        def names(type_name: str, item_id: str, owner: str) -> tuple[str, str]:
+            org, workspace = scope_fields(owner)
+            if owner == PLATFORM_SCOPE:
+                org, workspace = ALL_ORGS, ALL_WORKSPACES
+            return (
+                resource_name("iam", type_name, item_id),
+                resource_name("iam", type_name, item_id, org=org, workspace=workspace),
+            )
+
+        renamed = [
+            names("policy", row.id, row.owner_scope)
+            for row in conn.execute(select(policies.c.id, policies.c.owner_scope))
+        ] + [
+            names("group", row.id, row.owner_scope)
+            for row in conn.execute(
+                select(principals.c.id, principals.c.owner_scope).where(
+                    principals.c.kind == "group"
+                )
+            )
+        ]
+        for row in conn.execute(
+            select(policies.c.id, policies.c.document).where(
+                policies.c.managed.is_(False)
+            )
+        ):
+            document = PolicyDocument.from_dict(json.loads(row.document))
+            stale = sorted(
+                {
+                    pattern
+                    for statement in document.statements
+                    for pattern in statement.resources
+                    if any(
+                        matches(probe, old) and not matches(probe, new)
+                        for probe in [pattern.replace("${scope}", PLATFORM_SCOPE)]
+                        for old, new in renamed
+                    )
+                }
+            )
+            if stale:
+                logger.warning(
+                    f"IAM policy {row.id} names the platform's policies or groups "
+                    f"as {', '.join(stale)}: the platform's are named "
+                    "abi:%2A:%2A:iam:<type>/<id> now (an org's or a workspace's "
+                    "abi:<org>:<ws>:iam:...), so these patterns no longer match "
+                    "them. Write abi:*:*:iam:policy/... or ...:iam:group/..."
                 )
 
     # -- transactions -------------------------------------------------------------
@@ -463,6 +630,7 @@ class IAMStoreSQL(IAMStore):
                     kind=record.kind,
                     issuer=record.issuer,
                     subject=record.subject,
+                    owner_scope=record.owner_scope,
                     created_at=now,
                     updated_at=now,
                     **_principal_values(record),
@@ -547,11 +715,14 @@ class IAMStoreSQL(IAMStore):
         *,
         limit: int = 100,
         after: str | None = None,
+        owner_scopes: Sequence[str] | None = None,
     ) -> Page:
         _check_limit(limit)
         query = select(principals).order_by(principals.c.id).limit(limit + 1)
         if kind is not None:
             query = query.where(principals.c.kind == kind)
+        if owner_scopes is not None:
+            query = query.where(principals.c.owner_scope.in_(list(owner_scopes)))
         if after is not None:
             query = query.where(principals.c.id > after)
         with self._read() as conn:
@@ -701,6 +872,7 @@ class IAMStoreSQL(IAMStore):
                     document=policy.document.to_json(),
                     managed=policy.managed,
                     revision=1,
+                    owner_scope=policy.owner_scope,
                     created_at=now,
                     updated_at=now,
                 )
@@ -716,9 +888,17 @@ class IAMStoreSQL(IAMStore):
             raise IAMNotFoundError(f"Policy {policy_id} not found")
         return _policy(row)
 
-    def list_policies(self, *, limit: int = 100, after: str | None = None) -> Page:
+    def list_policies(
+        self,
+        *,
+        limit: int = 100,
+        after: str | None = None,
+        owner_scopes: Sequence[str] | None = None,
+    ) -> Page:
         _check_limit(limit)
         query = select(policies).order_by(policies.c.id).limit(limit + 1)
+        if owner_scopes is not None:
+            query = query.where(policies.c.owner_scope.in_(list(owner_scopes)))
         if after is not None:
             query = query.where(policies.c.id > after)
         with self._read() as conn:
@@ -776,6 +956,7 @@ class IAMStoreSQL(IAMStore):
                         document=document,
                         managed=True,
                         revision=1,
+                        owner_scope=policy.owner_scope,
                         created_at=now,
                         updated_at=now,
                     )
@@ -1042,6 +1223,46 @@ class IAMStoreSQL(IAMStore):
             query = query.where(scopes.c.org == org)
         with self._read() as conn:
             return [ScopeRecord(row.org, row.workspace) for row in conn.execute(query)]
+
+    # -- sets -------------------------------------------------------------------
+
+    def put_scope_set(self, scope_set: ScopeSet) -> None:
+        key = (
+            scope_sets.c.org == scope_set.org,
+            scope_sets.c.workspace == scope_set.workspace,
+        )
+        with self._change() as conn:
+            conn.execute(delete(scope_sets).where(*key))
+            if scope_set.recorded:
+                conn.execute(
+                    insert(scope_sets).values(
+                        org=scope_set.org,
+                        workspace=scope_set.workspace,
+                        modules=_json_list(scope_set.modules),
+                        features=_json_list(scope_set.features),
+                    )
+                )
+
+    def delete_scope_sets(self, org: str, workspace: str = "-") -> bool:
+        query = delete(scope_sets).where(scope_sets.c.org == org)
+        if workspace != "-":
+            query = query.where(scope_sets.c.workspace == workspace)
+        return self._delete(query)
+
+    def list_scope_sets(self, org: str | None = None) -> list[ScopeSet]:
+        query = select(scope_sets).order_by(scope_sets.c.org, scope_sets.c.workspace)
+        if org is not None:
+            query = query.where(scope_sets.c.org == org)
+        with self._read() as conn:
+            return [
+                ScopeSet(
+                    row.org,
+                    row.workspace,
+                    _list_json(row.modules),
+                    _list_json(row.features),
+                )
+                for row in conn.execute(query)
+            ]
 
     # -- catalogs -----------------------------------------------------------------
 

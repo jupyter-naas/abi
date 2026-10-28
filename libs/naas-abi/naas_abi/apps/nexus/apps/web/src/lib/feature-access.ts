@@ -14,6 +14,7 @@ export type FeatureKey =
   | 'slides'
   | 'documents'
   | 'sheets'
+  | 'tasks'
   | 'settings'
   | 'settings.workspace'
   | 'settings.organization';
@@ -36,6 +37,7 @@ export const FEATURE_KEYS: FeatureKey[] = [
   'slides',
   'documents',
   'sheets',
+  'tasks',
   'settings',
   'settings.workspace',
   'settings.organization',
@@ -69,6 +71,7 @@ const FEATURE_FALLBACK_ROUTE: Record<FeatureKey, string> = {
   slides: '/slides',
   documents: '/documents',
   sheets: '/sheets',
+  tasks: '/tasks',
   settings: '/settings',
   'settings.workspace': '/settings',
   'settings.organization': '/organization',
@@ -106,14 +109,6 @@ export function isFeatureEnabled(params: {
 
 function pathWithoutQuery(pathname: string): string {
   return pathname.split(/[?#]/)[0];
-}
-
-/** Superadmin Events page: left column shows an events feed, not Chat. */
-export function isWorkspaceAdminEventsPath(pathname: string | null | undefined): boolean {
-  const parts = pathWithoutQuery(pathname || '').split('/').filter(Boolean);
-  const workspaceIndex = parts.indexOf('workspace');
-  if (workspaceIndex < 0) return false;
-  return parts[workspaceIndex + 2] === 'admin' && parts[workspaceIndex + 3] === 'events';
 }
 
 export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null {
@@ -157,6 +152,9 @@ export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null 
   if (firstSegment === 'sheets') {
     return 'sheets';
   }
+  if (firstSegment === 'tasks') {
+    return 'tasks';
+  }
   if (firstSegment === 'apps') {
     return 'apps';
   }
@@ -198,12 +196,31 @@ export function pathNeedsGraphExport(pathname: string | null | undefined): boole
   return getFeatureForWorkspacePath(pathname || '') === 'graph';
 }
 
+/**
+ * The feature a route needs to be opened: its section's, except the Apps page.
+ * Opening an app is that app's module scope, which the API checks (the page lists
+ * only the apps the caller may open); the "apps" feature is the app projects
+ * (`/apps/p/<slug>`) and the settings. Settings › Roles & permissions is IAM's: the
+ * page shows each section from the caller's `iam:` rights (`GET /access`), so a member
+ * an admin gave one of them opens it without the settings feature.
+ */
+export function getGatingFeatureForWorkspacePath(pathname: string): FeatureKey | null {
+  const feature = getFeatureForWorkspacePath(pathname);
+  const parts = pathWithoutQuery(pathname).split('/').filter(Boolean);
+  const workspaceIndex = parts.indexOf('workspace');
+  if (feature === 'settings.workspace') {
+    return parts[workspaceIndex + 3] === 'permissions' ? null : feature;
+  }
+  if (feature !== 'apps') return feature;
+  return parts[workspaceIndex + 3] === 'p' ? 'apps' : null;
+}
+
 export function isWorkspacePathAllowed(params: {
   pathname: string;
   role?: string;
   workspaceFlags?: WorkspaceFeatureFlags;
 }): boolean {
-  const feature = getFeatureForWorkspacePath(params.pathname);
+  const feature = getGatingFeatureForWorkspacePath(params.pathname);
   if (!feature) {
     return true;
   }
@@ -251,7 +268,7 @@ export function getWorkspaceSwitchPath(params: {
   role?: string;
   workspaceFlags?: WorkspaceFeatureFlags;
 }): string {
-  const feature = getFeatureForWorkspacePath(params.pathname);
+  const feature = getGatingFeatureForWorkspacePath(params.pathname);
   if (feature) {
     if (
       isFeatureEnabled({

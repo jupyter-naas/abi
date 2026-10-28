@@ -32,7 +32,15 @@ def test_defaults_reach_the_modules_own_namespaces_and_declared_services():
         "abi:-:-:secret:secret/${module.id}%2F*"
     ]
     assert statements["UseKeyvalue"]["actions"] == ["keyvalue:*"]
-    assert statements["UseTripleStore"]["resources"] == ["abi:*:*:triple_store:*"]
+    assert statements["UseTripleStore"]["resources"] == [
+        "abi:*:*:triple_store:graph/*",
+        "abi:*:*:triple_store:view/*",
+    ]
+    # Its own ontologies only: a source names the module that loads it.
+    assert statements["OwnOntologies"]["actions"] == ["triple_store:LoadSchema"]
+    assert statements["OwnOntologies"]["resources"] == [
+        "abi:-:-:triple_store:schema/module/${module.id}/*"
+    ]
     # Bus topics are declared, never defaulted.
     assert not any("bus:" in a for s in manifest["statements"] for a in s["actions"])
 
@@ -115,3 +123,37 @@ def test_depending_on_the_identity_provider_never_asks_for_its_admin_app():
     assert deny["resources"] == ["abi:-:-:discovery:app/${module.project}/idp/admin"]
     other = default_manifest(ModuleDependencies(modules=("people",)))
     assert all(s["sid"] != "NoIdentityProviderAdmin" for s in other["statements"])
+
+
+REPORTS = {
+    "resource_types": [{"name": "report", "id": "path"}],
+    "actions": [{"name": "ExportReport", "level": "read", "resource_types": ["report"]}],
+}
+
+
+def test_a_declared_catalog_travels_with_the_manifest_under_the_module_s_name():
+    class Reports(BaseModule):
+        module_id = "acme.reports"
+        dependencies = ModuleDependencies(services=("document",))
+        iam_catalog = REPORTS
+
+    manifest = module_manifest(Reports)
+    assert manifest["catalog"]["service"] == "acme_reports"
+    assert manifest["catalog"]["version"] == 1
+    assert manifest["catalog"]["actions"] == REPORTS["actions"]
+    assert manifest["statements"]
+
+
+def test_a_module_without_a_catalog_sends_none():
+    class Plain(BaseModule):
+        module_id = "plain"
+
+    assert "catalog" not in module_manifest(Plain)
+
+
+def test_catalog_names_follow_the_engine_s_rule():
+    from naas_abi_sdk.permissions import catalog_service
+
+    assert catalog_service("acme.people") == "acme_people"
+    assert catalog_service("Acme-People") == "acme_people"
+    assert catalog_service("9lives") == "m_9lives"

@@ -1,6 +1,6 @@
 [project]
 name = "naas-abi"
-version = "3.3.0"
+version = "3.5.0"
 description = "Multi-agent orchestrator and knowledge graph management system for AI orchestration, providing comprehensive coordination of specialized AI agents and semantic data management capabilities"
 readme = "README.md"
 authors = [{ name = "Grace Lambert", email = "maxime@naas.ai" },{ name = "Alice Dupont", email = "florent@naas.ai" }, { name = "Emma Petit", email = "jeremy@naas.ai" }]
@@ -50,6 +50,12 @@ dependencies = [
     # an extra: a default install would advertise a tool it cannot run.
     "ddgs>=9.0.0",
     "openpyxl>=3.1.5,<4",
+    # Checks a workflow's input against its JSON Schema (Nexus /api/workflows).
+    # 4.18+: references resolve through `referencing`. The version alone does not stop
+    # retrieval (without a registry jsonschema fetches http(s) and file refs): the
+    # schema validator passes an empty `referencing.Registry` (schemas come from
+    # remote modules).
+    "jsonschema>=4.18",
 ]
 
 license = { text = "MIT License" }

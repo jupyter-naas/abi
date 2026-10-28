@@ -104,10 +104,38 @@ def normalize_ontology_ref(raw: str) -> str:
     return text
 
 
+# The id of an ontology a remote module pushed: ``module/<module_id>/<path>``
+# (services/ontology/ontology_source.py; not imported here, as that package
+# imports this module).
+_REMOTE_PREFIX = "module/"
+
+
+def _remote_module_id(path: str) -> str | None:
+    """The module id of a remote ontology id, else None for an in-engine path."""
+    posix = _posix(path)
+    if not posix.startswith(_REMOTE_PREFIX):
+        return None
+    module_id, _, rest = posix[len(_REMOTE_PREFIX) :].partition("/")
+    return module_id if module_id and rest else None
+
+
 def ontology_catalog_aliases(path: str, module_name: str) -> set[str]:
-    """Ids that may appear in ``WorkspaceSeedConfig.ontologies`` for this file."""
+    """Ids that may appear in ``WorkspaceSeedConfig.ontologies`` for this file.
+
+    A remote ontology answers only to its full id and to ``<module_id>:<file>``,
+    both scoped to the module that pushed it. Its bare file name, and a suffix of
+    its path, are not aliases: a workspace that enabled ``Foo.ttl`` of one module
+    must not list ``Foo.ttl`` of a remote module that merely pushed the same name.
+    """
     posix = _posix(path)
     filename = Path(posix).name
+    remote_module = _remote_module_id(path)
+    if remote_module is not None:
+        return {
+            path,
+            posix,
+            f"{_module_key(remote_module)}:{filename.lower()}",
+        }
     module_key = _module_key(module_name)
     return {
         path,
@@ -123,6 +151,7 @@ def ontology_matches_seed(path: str, module_name: str, seed_refs: Sequence[str])
     aliases = ontology_catalog_aliases(path, module_name)
     normalized_aliases = {normalize_ontology_ref(alias) for alias in aliases}
     posix = _posix(path)
+    is_remote = _remote_module_id(path) is not None
     for raw in seed_refs:
         ref = (raw or "").strip()
         if not ref:
@@ -130,7 +159,12 @@ def ontology_matches_seed(path: str, module_name: str, seed_refs: Sequence[str])
         normalized = normalize_ontology_ref(ref)
         if normalized in aliases or normalized in normalized_aliases:
             return True
-        if "/" in _posix(ref) and not _posix(ref).startswith("/") and posix.endswith("/" + _posix(ref)):
+        if (
+            not is_remote
+            and "/" in _posix(ref)
+            and not _posix(ref).startswith("/")
+            and posix.endswith("/" + _posix(ref))
+        ):
             return True
     return False
 

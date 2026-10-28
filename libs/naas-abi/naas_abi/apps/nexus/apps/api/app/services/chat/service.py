@@ -57,6 +57,9 @@ class ResolvedProvider:
     account_id: str | None
     model: str
     llm_model: str | None = None
+    # A remote agent's run is placed in its agent row's workspace, the one
+    # ``authorize_agent_use`` cleared it in: never the workspace a request names.
+    run_workspace_id: str | None = None
 
 
 # Metadata keys tracking "refresh" (regenerate) lineage on messages.
@@ -1221,6 +1224,7 @@ class ChatService:
                     system_prompt=system_prompt,
                     thread_id=conversation_id,
                     injection_preamble=injection_preamble,
+                    workspace_id=provider.run_workspace_id,
                 )
                 response_content = self._unwrap_json_content(response_content)
                 provider_used = f"{provider.name} ({provider.model})"
@@ -1384,6 +1388,7 @@ class ChatService:
                             account_id=None,
                             model=agent.class_name,
                             llm_model=None,
+                            run_workspace_id=agent.workspace_id,
                         )
                     if agent.provider == "abi":
                         inprocess_agent_ref = (

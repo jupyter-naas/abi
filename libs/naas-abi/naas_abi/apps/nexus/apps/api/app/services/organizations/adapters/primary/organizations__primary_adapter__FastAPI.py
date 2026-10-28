@@ -14,11 +14,8 @@ from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
     BASELINE_ROLES,
     KNOWN_FEATURE_KEYS,
     PINNED_FEATURES,
-    InvalidFeatureOverridesError,
-    effective_workspace_overrides,
     enabled_feature_catalog,
     resolve_role_baseline,
-    validate_workspace_feature_overrides,
     workspace_features,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth import avatar_store, user_drive_profile
@@ -29,6 +26,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
     _get_object_storage,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam import sets as scope_sets
 from naas_abi.apps.nexus.apps.api.app.services.iam.bootstrap import refresh_feature_policies
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MembershipDenied
@@ -323,11 +321,6 @@ class OrganizationWorkspacesBulkUpdate(BaseModel):
     workspace_ids: list[str] = Field(..., min_length=1, max_length=500)
     # Blank clears the group (the workspaces list under "Others").
     workspace_group: str = Field(..., max_length=100)
-
-
-class WorkspaceFeatureOverridesUpdate(BaseModel):
-    # None drops the saved overrides: the deployment config applies again.
-    overrides: dict[FeatureKey, bool] | None = None
 
 
 class OrganizationDomain(BaseModel):
@@ -627,14 +620,9 @@ def _workspace_payload(
     org_logo_url: str | None,
     org_logo_rect_url: str | None,
     organization_override: dict[str, list[str]] | None = None,
+    feature_set: tuple[str, ...] | None = None,
 ) -> dict:
     flags = settings.feature_flags
-    overrides, overrides_source = effective_workspace_overrides(
-        flags,
-        workspace_slug=ws.slug,
-        workspace_id=ws.id,
-        workspace_override=ws.feature_overrides,
-    )
     return {
         "id": ws.id,
         "name": ws.name,
@@ -648,18 +636,14 @@ def _workspace_payload(
         "workspace_group": ws.workspace_group,
         "organization_logo_url": resolve_stored_asset_url(org_logo_url),
         "organization_logo_rectangle_url": resolve_stored_asset_url(org_logo_rect_url),
-        # Features on for at least one role, after the overrides.
+        # Features on for at least one role, within the workspace's set.
         "features": workspace_features(
             roles=BASELINE_ROLES,
             feature_flags_config=flags,
-            workspace_slug=ws.slug,
-            workspace_id=ws.id,
             organization_id=ws.organization_id,
             organization_override=organization_override,
-            workspace_override=ws.feature_overrides,
+            feature_set=feature_set,
         ),
-        "feature_overrides": overrides,
-        "feature_overrides_source": overrides_source,
     }
 
 
@@ -683,6 +667,7 @@ async def _org_workspace_payloads(
             org_logo_url=org.logo_url if org else None,
             org_logo_rect_url=org.logo_rectangle_url if org else None,
             organization_override=organization_override,
+            feature_set=await scope_sets.effective_features_async(org_id, ws.id),
         )
         for ws in workspaces
     ]
@@ -787,7 +772,9 @@ async def get_org_workspace_features(
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
 ) -> dict:
-    """What the workspace features modal needs: the catalog and the role defaults."""
+    """What the workspace create form needs: the catalog, the role defaults and the
+    features the organization's set has (``available``), a new workspace's
+    feature set being within it."""
     flags = settings.feature_flags
     role_baseline = resolve_role_baseline(
         flags,
@@ -795,8 +782,10 @@ async def get_org_workspace_features(
         organization_override=await _org_role_override(org_id, service),
     )
     catalog = enabled_feature_catalog(flags)
+    org_features = await scope_sets.effective_features_async(org_id)
     return {
         "catalog": catalog,
+        "available": [key for key in catalog if org_features is None or key in org_features],
         "pinned": [key for key in PINNED_FEATURES if key in catalog],
         "roles": list(BASELINE_ROLES),
         "role_baseline": {
@@ -804,46 +793,6 @@ async def get_org_workspace_features(
             for role_name in BASELINE_ROLES
         },
     }
-
-
-@router.put(
-    "/{org_id}/workspaces/{workspace_id}/features",
-    dependencies=[
-        guard(
-            "UpdateOrganization",
-            workspace=None,
-            org="org_id",
-            denied="Only admins can edit workspace features",
-        )
-    ],
-)
-async def update_org_workspace_features(
-    org_id: str,
-    workspace_id: str,
-    body: WorkspaceFeatureOverridesUpdate,
-    current_user: User = Depends(get_current_user_required),
-    service: OrganizationService = Depends(get_organization_service),
-    workspace_service: WorkspaceService = Depends(get_workspace_service_for_org_invite),
-) -> dict:
-    """Save a workspace's feature overrides; ``overrides: null`` restores the config ones."""
-    org_workspaces = {ws.id: ws for ws in await service.list_all_workspaces(org_id=org_id)}
-    if workspace_id not in org_workspaces:
-        raise HTTPException(status_code=404, detail="Workspace not found in this organization")
-    overrides = None
-    if body.overrides is not None:
-        try:
-            overrides = validate_workspace_feature_overrides(settings.feature_flags, body.overrides)
-        except InvalidFeatureOverridesError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-    await workspace_service.set_workspace_feature_overrides(
-        workspace_id=workspace_id, overrides=overrides
-    )
-    # The API enforces features through IAM: the saved overrides become policies.
-    await refresh_feature_policies(service.adapter.db)
-    refreshed = [
-        ws for ws in await service.list_all_workspaces(org_id=org_id) if ws.id == workspace_id
-    ]
-    return (await _org_workspace_payloads(org_id, service, refreshed))[0]
 
 
 @router.get(
@@ -917,28 +866,51 @@ async def sync_org_member_workspaces(
     removed: list[str] = []
     skipped_owner: list[str] = []
 
-    # An org owner or admin assigns people to any workspace of the organization
-    # (they manage its catalog, whether or not they belong to a workspace), so
-    # these changes are made by ``api`` for no user, after the org-level check
-    # above. The owner protection IAM gives a workspace is kept here: the role
-    # granted is never ``owner`` (the schema), and a workspace owner is never
-    # taken out.
-    for workspace_id in sorted(desired_ids - current_ids):
-        await workspace_service.memberships.grant(
-            user_id, body.workspace_role, workspace_scope(org_id, workspace_id)
-        )
-        added.append(workspace_id)
-
-    held = await workspace_service.memberships.roles_of(user_id)
+    # Each change is the caller's, checked by IAM at the workspace it touches:
+    # an org owner or admin reaches every workspace of the organization through
+    # their org-wide role, and gives there no role that grants more than they
+    # hold. The role granted is never ``owner`` (the schema), and a workspace
+    # owner is never taken out.
+    iam_memberships = workspace_service.memberships
+    held = await iam_memberships.roles_of(user_id)
+    to_add = sorted(desired_ids - current_ids)
+    to_remove: list[str] = []
     for workspace_id in sorted(current_ids - desired_ids):
         if held.get(workspace_scope(org_id, workspace_id)) == "owner":
             skipped_owner.append(workspace_id)
-            continue
-        removed_ok = await workspace_service.memberships.revoke(
-            user_id, workspace_scope(org_id, workspace_id)
-        )
-        if removed_ok:
-            removed.append(workspace_id)
+        else:
+            to_remove.append(workspace_id)
+    try:
+        # Every right is checked before the first change, so a refusal of one
+        # leaves the member's workspaces as they were.
+        for workspace_id in to_add:
+            await iam_memberships.check(
+                user_id,
+                body.workspace_role,
+                workspace_scope(org_id, workspace_id),
+                by=current_user,
+            )
+        for workspace_id in to_remove:
+            await iam_memberships.check(
+                user_id, None, workspace_scope(org_id, workspace_id), by=current_user
+            )
+        # IAM's GrantNotHeldError (what the role grants beyond what the caller
+        # holds) is a 403 that names it, through the service handlers.
+        for workspace_id in to_add:
+            await iam_memberships.grant(
+                user_id,
+                body.workspace_role,
+                workspace_scope(org_id, workspace_id),
+                by=current_user,
+            )
+            added.append(workspace_id)
+        for workspace_id in to_remove:
+            if await iam_memberships.revoke(
+                user_id, workspace_scope(org_id, workspace_id), by=current_user
+            ):
+                removed.append(workspace_id)
+    except MembershipDenied as exc:
+        raise _member_denied(str(exc)) from exc
 
     refreshed = [
         {

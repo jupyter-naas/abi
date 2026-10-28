@@ -1,13 +1,49 @@
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, Table2 } from 'lucide-react';
-import { PLATFORM_TABLE_LABELS, PLATFORM_TABLE_SECTIONS, platformTableSlug } from './tables';
+import {
+  Activity,
+  Blocks,
+  Bot,
+  Database,
+  Gauge,
+  KeyRound,
+  LayoutGrid,
+  Network,
+  Radio,
+  Server,
+  Table2,
+  Waypoints,
+  Workflow,
+} from 'lucide-react';
+import {
+  MODULE_SETS_PATH,
+  ROLES_PATH,
+  SYSTEM_VIEWS,
+  systemViewPath,
+  type SystemView,
+} from '../system/system-tabs';
+import { PLATFORM_TABLES_PATH } from './tables';
+import { safeDecode } from './page-helpers';
 
-/** Platform Settings (superadmins only), outside any organization or workspace. */
+/**
+ * Platform Settings, outside any organization or workspace. Each item names what
+ * opening it takes; the shell shows the items the caller holds (asked of IAM with
+ * `GET /api/iam/admin/access`) and a 403 page when there are none. The API checks
+ * every call itself: this only decides what is shown.
+ */
+
+/** What an item needs: one action, or any platform-level `iam:` action. */
+export type PlatformSettingsNeed = { action: string } | { anyOf: 'iam' };
+
+export const READ_SYSTEM: PlatformSettingsNeed = { action: 'nexus:ReadSystem' };
+export const ANY_IAM_ACTION: PlatformSettingsNeed = { anyOf: 'iam' };
+export const GET_SET: PlatformSettingsNeed = { action: 'iam:GetSet' };
+
 export type PlatformSettingsNavItem = {
-  /** Path under /settings; '' is the dashboard at /settings. */
-  slug: string;
+  id: string;
   label: string;
+  href: string;
   icon: LucideIcon;
+  needs: PlatformSettingsNeed;
 };
 
 export type PlatformSettingsNavGroup = {
@@ -16,71 +52,129 @@ export type PlatformSettingsNavGroup = {
   items: PlatformSettingsNavItem[];
 };
 
+/** The caller's actions, as `GET /api/iam/admin/access` answers them. */
+export type PlatformActions = Record<string, boolean>;
+
 export const PLATFORM_SETTINGS_INDEX = '/settings';
 
+const SYSTEM_ICONS: Record<SystemView, LucideIcon> = {
+  overview: Gauge,
+  services: Server,
+  data: Database,
+  jobs: Workflow,
+  agents: Bot,
+  modules: Blocks,
+  nats: Network,
+  traffic: Radio,
+  traces: Waypoints,
+  events: Activity,
+};
+
+export const NEXUS_TABLES_ITEM: PlatformSettingsNavItem = {
+  id: 'tables',
+  label: 'Nexus tables',
+  href: PLATFORM_TABLES_PATH,
+  icon: Table2,
+  needs: READ_SYSTEM,
+};
+
+export const ROLES_ITEM: PlatformSettingsNavItem = {
+  id: 'roles',
+  label: 'Roles & permissions',
+  href: ROLES_PATH,
+  icon: KeyRound,
+  needs: ANY_IAM_ACTION,
+};
+
+export const MODULE_SETS_ITEM: PlatformSettingsNavItem = {
+  id: 'modules',
+  label: 'Modules & features',
+  href: MODULE_SETS_PATH,
+  icon: LayoutGrid,
+  needs: GET_SET,
+};
+
 export const platformSettingsGroups: PlatformSettingsNavGroup[] = [
-  { label: null, items: [{ slug: '', label: 'Dashboard', icon: LayoutDashboard }] },
-  ...PLATFORM_TABLE_SECTIONS.map((section) => ({
-    label: section.label,
-    items: section.tables.map((table) => ({
-      slug: platformTableSlug(table),
-      label: PLATFORM_TABLE_LABELS[table],
-      icon: Table2,
+  { label: null, items: [NEXUS_TABLES_ITEM] },
+  {
+    label: 'System',
+    items: SYSTEM_VIEWS.map((view) => ({
+      id: `system-${view.id}`,
+      label: view.label,
+      href: systemViewPath(view.id),
+      icon: SYSTEM_ICONS[view.id],
+      needs: READ_SYSTEM,
     })),
-  })),
+  },
+  { label: 'Access', items: [ROLES_ITEM, MODULE_SETS_ITEM] },
 ];
 
 export const platformSettingsNav: PlatformSettingsNavItem[] = platformSettingsGroups.flatMap(
   (group) => group.items
 );
 
-export function platformSettingsSectionPath(slug: string): string {
-  return slug ? `${PLATFORM_SETTINGS_INDEX}/${slug}` : PLATFORM_SETTINGS_INDEX;
+export function holds(needs: PlatformSettingsNeed, actions: PlatformActions | null): boolean {
+  if (!actions) return false;
+  if ('action' in needs) return actions[needs.action] === true;
+  return Object.entries(actions).some(([action, allowed]) => allowed && action.startsWith('iam:'));
+}
+
+/** The groups the caller may open, empty groups left out. */
+export function visiblePlatformSettingsGroups(
+  actions: PlatformActions | null
+): PlatformSettingsNavGroup[] {
+  return platformSettingsGroups
+    .map((group) => ({ ...group, items: group.items.filter((item) => holds(item.needs, actions)) }))
+    .filter((group) => group.items.length > 0);
+}
+
+/** Where `/settings` lands: the first item the caller may open, or null (403). */
+export function firstPlatformSettingsPath(actions: PlatformActions | null): string | null {
+  return platformSettingsNav.find((item) => holds(item.needs, actions))?.href ?? null;
+}
+
+/** The item a path belongs to: the longest href it is, or is under. */
+export function platformSettingsItemFor(pathname: string): PlatformSettingsNavItem | null {
+  const path = pathname.replace(/[?#].*$/, '').replace(/\/+$/, '') || '/';
+  let best: PlatformSettingsNavItem | null = null;
+  for (const item of platformSettingsNav) {
+    if (path === item.href || path.startsWith(`${item.href}/`)) {
+      if (!best || item.href.length > best.href.length) best = item;
+    }
+  }
+  return best;
 }
 
 export interface PlatformSettingsRoute {
   isPlatformSettingsRoute: boolean;
-  /** A table or row page is open (as opposed to the dashboard). */
+  /** An item's page is open (as opposed to the index, which lists them on a phone). */
   isDetail: boolean;
-  /** Table slug, the first path segment after /settings. */
-  section: string | null;
-  sectionLabel: string | null;
-  /** Row id on a row page (`/settings/<table>/<row id>`), decoded. */
+  item: PlatformSettingsNavItem | null;
+  /** The table on `/settings/tables/<name>[/<row id>]`, decoded. */
+  table: string | null;
+  /** The row on `/settings/tables/<name>/<row id>`, decoded. */
   rowId: string | null;
 }
 
-const navBySlug = Object.fromEntries(platformSettingsNav.map((item) => [item.slug, item.label]));
-
 const PLATFORM_SETTINGS_PATH = /^\/settings(?:\/([^?#]*?))?\/?(?:[?#]|$)/;
-
-function safeDecode(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
 
 export function parsePlatformSettingsRoute(
   pathname: string | null | undefined
 ): PlatformSettingsRoute {
   const match = pathname ? PLATFORM_SETTINGS_PATH.exec(pathname) : null;
   if (!match) {
-    return {
-      isPlatformSettingsRoute: false,
-      isDetail: false,
-      section: null,
-      sectionLabel: null,
-      rowId: null,
-    };
+    return { isPlatformSettingsRoute: false, isDetail: false, item: null, table: null, rowId: null };
   }
-  const [section = null, ...rest] = (match[1] || '').split('/').filter(Boolean);
-  const encodedRowId = rest.join('/');
+  const segments = (match[1] || '').split('/').filter(Boolean);
+  const item = platformSettingsItemFor(`/settings/${segments.join('/')}`);
+  const [section, table, ...rest] = segments;
+  const isTables = section === 'tables';
+  const encodedRowId = isTables ? rest.join('/') : '';
   return {
     isPlatformSettingsRoute: true,
-    isDetail: section !== null,
-    section,
-    sectionLabel: section ? navBySlug[section] ?? null : null,
+    isDetail: segments.length > 0,
+    item,
+    table: isTables && table ? safeDecode(table) : null,
     rowId: encodedRowId ? safeDecode(encodedRowId) : null,
   };
 }

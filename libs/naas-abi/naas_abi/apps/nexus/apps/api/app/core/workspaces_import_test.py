@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime
 
 import pytest
@@ -8,6 +7,7 @@ import pytest_asyncio
 from naas_abi.apps.nexus.apps.api.app.core.workspaces_import import (
     import_workspaces,
     load_entries,
+    record_feature_sets,
 )
 from naas_abi.apps.nexus.apps.api.app.models import (
     OrganizationModel,
@@ -15,6 +15,7 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     WorkspaceModel,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+from naas_abi_core.engine.call_context import as_service_account
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
@@ -123,7 +124,7 @@ async def _ws(db: AsyncSession, slug: str) -> WorkspaceModel | None:
 
 @pytest.mark.asyncio
 async def test_fills_a_slug_named_workspace_with_the_snapshot_values(db) -> None:
-    await import_workspaces(db, ENTRIES)
+    report = await import_workspaces(db, ENTRIES)
 
     axa = await _ws(db, "axa")
     assert (axa.name, axa.workspace_group, axa.logo_url) == (
@@ -131,7 +132,9 @@ async def test_fills_a_slug_named_workspace_with_the_snapshot_values(db) -> None
         "Key Accounts",
         "src/external/axa/assets/public/axa-logo.png",
     )
-    assert json.loads(axa.feature_overrides) == {"graph": True, "maps": False}
+    # Maps turned off: the workspace's feature set is every other feature.
+    org_id, features = report.feature_sets[axa.id]
+    assert org_id == "org-1" and "maps" not in features and "graph" in features
 
 
 @pytest.mark.asyncio
@@ -140,7 +143,6 @@ async def test_keeps_values_changed_in_the_app(db) -> None:
 
     edf = await _ws(db, "edf")
     assert (edf.name, edf.workspace_group) == ("EDF (renamed)", "Energy")
-    assert json.loads(edf.feature_overrides) == {"maps": True}
 
 
 @pytest.mark.asyncio
@@ -167,7 +169,7 @@ async def test_a_dry_run_leaves_iam_alone(db) -> None:
     created = (await _ws(db, "new-one")).id
     await db.rollback()
 
-    assert report.created_ids == [created] and report.overrides_saved
+    assert report.created_ids == [created] and "ws-axa" in report.feature_sets
     assert await MEMBERSHIPS.role_at("lead", f"abi:org-1:{created}") is None
 
 
@@ -185,3 +187,26 @@ def test_load_entries_reads_the_workspaces_list(tmp_path) -> None:
     path.write_text("workspaces:\n  - slug: axa\n    name: AXA\n")
 
     assert load_entries(path) == [{"slug": "axa", "name": "AXA"}]
+
+
+def test_feature_sets_are_recorded_within_the_orgs_set(iam) -> None:
+    """A platform admin narrowed the org before the import: each workspace's
+    feature set is recorded within it, and every workspace is recorded."""
+    iam.workspace("org-1", "ws-a")
+    iam.workspace("org-1", "ws-b")
+    with as_service_account("engine"):
+        iam.iam.put_set("org-1", modules=["acme.people"], features=["chat", "settings"])
+        iam.iam.put_set("org-1", "ws-b", modules=["agent/acme.people/A"])
+
+    recorded = record_feature_sets(
+        {
+            "ws-a": ("org-1", ["chat", "files", "settings"]),
+            "ws-b": ("org-1", ["files", "settings"]),
+        }
+    )
+
+    assert recorded == ["ws-a", "ws-b"]
+    with as_service_account("engine"):
+        assert iam.iam.get_set("org-1", "ws-a").features == ("chat", "settings")
+        found = iam.iam.get_set("org-1", "ws-b")
+    assert (found.modules, found.features) == (("agent/acme.people/A",), ("settings",))

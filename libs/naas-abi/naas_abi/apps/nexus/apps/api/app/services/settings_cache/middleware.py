@@ -56,6 +56,8 @@ SETTINGS_PATH_PREFIXES: tuple[str, ...] = (
     "/api/apps",
     "/api/search/topics",
     "/api/graph/list",
+    # The workspaces' sets: a change narrows what their settings pages list.
+    "/api/iam/admin/sets",
 )
 
 _WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})

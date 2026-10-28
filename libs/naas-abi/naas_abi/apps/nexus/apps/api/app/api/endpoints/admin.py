@@ -205,6 +205,8 @@ async def admin_update_user(
 
 class AdminTableSummary(BaseModel):
     name: str
+    label: str
+    section: str
     description: str
     rows: int | None = None
     columns: int | None = None
@@ -228,6 +230,7 @@ class AdminTableSchema(BaseModel):
 
 class AdminTable(BaseModel):
     name: str
+    label: str
     description: str
     columns: list[str]
     rows: list[dict[str, Any]]
@@ -238,6 +241,7 @@ class AdminTable(BaseModel):
 
 class AdminTableRow(BaseModel):
     name: str
+    label: str
     description: str
     id: str
     primary_key: list[str]
@@ -250,7 +254,8 @@ async def admin_list_tables(
     _: User = Depends(require_superadmin),
     db: AsyncSession = Depends(get_db),
 ) -> list[AdminTableSummary]:
-    """People & access tables for the Platform Settings dashboard, with row and column counts."""
+    """Every registered table, in section order, with its label, section, row and column
+    counts: the Nexus tables page and the export read this list, never a copy of it."""
     return [AdminTableSummary(**s.__dict__) for s in await list_platform_tables(db)]
 
 
@@ -295,7 +300,7 @@ async def admin_read_table(
     _: User = Depends(require_superadmin),
     db: AsyncSession = Depends(get_db),
 ) -> AdminTable:
-    """Every column and row of one people & access table (secrets masked)."""
+    """Every column and row of one registered table (secrets masked)."""
     try:
         table = await read_platform_table(db, name)
     except UnknownPlatformTableError as exc:

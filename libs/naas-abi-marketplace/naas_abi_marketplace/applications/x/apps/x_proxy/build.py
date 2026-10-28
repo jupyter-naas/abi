@@ -24,7 +24,7 @@ import os
 
 
 def _followed_queries_from_config(module) -> list[dict]:
-    from naas_abi_marketplace.applications.x.orchestrations.utils import (
+    from naas_abi_marketplace.applications.x.flows.common import (
         followed_count_entries,
     )
 

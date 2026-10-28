@@ -57,6 +57,9 @@ ACCOUNT_ROUTES: dict[tuple[str, str], str] = {
     ): "the identity providers an invitation can go through: no tenant data",
     ("GET", "/api/platform/cli"): "the abi-platform CLI script, the same text for everyone",
     ("GET", "/api/iam/admin/access"): "what the caller may do, decided by IAM for the caller only",
+    ("GET", "/api/iam/admin/grantable"): (
+        "what the caller may grant, decided by IAM for the caller only"
+    ),
     (
         "GET",
         "/api/websocket/websocket/presence/user/{user_id}",

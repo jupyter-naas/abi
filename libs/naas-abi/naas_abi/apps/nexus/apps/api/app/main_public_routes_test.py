@@ -141,6 +141,22 @@ def test_sysadmin_routes_are_superadmin_only(routes) -> None:
         assert require_superadmin in routes[key], key
 
 
+def test_workflow_routes_are_superadmin_only(routes) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
+        require_superadmin,
+    )
+
+    workflows = [key for key in routes if key[1].startswith("/api/workflows")]
+    assert sorted(workflows) == [
+        ("GET", "/api/workflows"),
+        ("GET", "/api/workflows/{module_id}/runs/{run_id}"),
+        ("POST", "/api/workflows/{module_id}/runs/{run_id}/cancel"),
+        ("POST", "/api/workflows/{module_id}/{name}/runs"),
+    ]
+    for key in workflows:
+        assert require_superadmin in routes[key], key
+
+
 def test_the_trace_viewer_is_mounted_under_sysadmin(routes) -> None:
     for path in ("", "/services", "/operations", "/{trace_id}"):
         assert ("GET", f"/api/admin/system/traces{path}") in routes, path

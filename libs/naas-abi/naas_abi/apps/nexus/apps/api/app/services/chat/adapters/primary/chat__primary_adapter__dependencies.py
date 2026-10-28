@@ -10,6 +10,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import User
 from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.core.postgres_session_registry import PostgresSessionRegistry
+from naas_abi.apps.nexus.apps.api.app.services.agents.scopes import scope_resolver
 from naas_abi.apps.nexus.apps.api.app.services.chat import ChatService
 from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__primary_adapter__schemas import (
     ChatRequest,
@@ -120,21 +121,38 @@ async def conversation_for_file(
 async def authorize_agent_use(
     chat_service: ChatService, current_user: User, agent_id: str | None
 ) -> None:
-    """``UseAgent`` on a workspace agent, in the workspace that agent belongs to.
+    """Using a workspace agent, in the workspace that agent belongs to: its
+    module scope (``module:UseAgent``) for a module's agent, ``nexus:UseAgent``
+    for one the workspace built.
 
     A chat turn runs the agent with its workspace's provider settings, so the
-    agent's own workspace decides, not the workspace the client names. An id
-    that is no workspace agent (an in-process agent) has no workspace to ask.
+    agent's own workspace decides, not the workspace the client names. One its
+    workspace turned off is refused to everyone: a module's agent by the rule of
+    its scope (``authz.require_scope``: hidden when none of the workspace's rows
+    of it is on, as the roster shows it), one the workspace built by its row. An id
+    that is no workspace agent (an in-process agent named directly) has no row
+    to ask about: the in-process runtime runs only the agents the caller may
+    use where the turn is stored (``caller_usable_agents``).
     """
     agent = await chat_service.get_agent(agent_id) if agent_id else None
-    if agent is not None:
-        await authz.require(
-            "UseAgent",
-            user=current_user,
-            workspace=agent.workspace_id,
-            id=agent.id,
-            feature="chat",
+    if agent is None:
+        return
+    scope = scope_resolver()(agent)
+    if scope is not None:
+        await authz.require_scope(
+            scope, user=current_user, workspace=agent.workspace_id, feature="chat"
         )
+        return
+    await authz.require(
+        "UseAgent",
+        user=current_user,
+        workspace=agent.workspace_id,
+        id=agent.id,
+        feature="chat",
+    )
+    if not agent.enabled:
+        # Turned off in its workspace, by its admins: for everyone.
+        raise HTTPException(status_code=403, detail="This agent is turned off in this workspace")
 
 
 async def authorize_turn(
@@ -172,6 +190,30 @@ async def authorize_turn(
                 action, user=current_user, workspace=request.workspace_id, id=target
             )
     await authorize_agent_use(chat_service, current_user, request.agent)
+
+
+async def bind_turn_agents(registry: Any, request: ChatRequest, current_user: User) -> None:
+    """The agents an in-process turn may run and reach as sub-agents: those the
+    caller may use in the workspace the turn is stored in (none without one)."""
+    from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import bind_usable_agents
+    from naas_abi_core.services.agent.context import (
+        agent_usable_module_scopes,
+        agent_workspace_enabled_class_names,
+    )
+
+    conversation = (
+        await registry.chat.get_conversation_for_user(
+            user_id=current_user.id, conversation_id=request.conversation_id
+        )
+        if request.conversation_id
+        else None
+    )
+    workspace = conversation.workspace_id if conversation is not None else request.workspace_id
+    if workspace is None:
+        agent_workspace_enabled_class_names.set(frozenset())
+        agent_usable_module_scopes.set(frozenset())
+        return
+    await bind_usable_agents(registry.agents, current_user, workspace)
 
 
 async def authorize_turn_standalone(request: ChatRequest, current_user: User) -> None:
@@ -302,7 +344,7 @@ async def resolve_provider(
             account_id=resolved.account_id,
             model=resolved.model,
             llm_model=resolved.llm_model,
-        )
+        ).placed_in(resolved.run_workspace_id)
 
 
 async def get_or_create_conversation(

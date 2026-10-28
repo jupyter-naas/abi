@@ -12,6 +12,7 @@ import type {
   AuditEntry,
   CatalogsView,
   CreatedKey,
+  GrantableView,
   GroupView,
   KeyCreate,
   KeyView,
@@ -19,17 +20,22 @@ import type {
   ManifestReject,
   ManifestStatus,
   ManifestView,
+  ModuleScopesView,
+  OrganizationSetView,
   Page,
   PolicyCreate,
-  PolicyUpdate,
   PolicySource,
+  PolicyUpdate,
   PolicyValidation,
   PolicyView,
   PrincipalKind,
   PrincipalView,
   ServiceAccountView,
+  SetParts,
+  SetsView,
   Simulation,
   SimulationRequest,
+  WorkspaceSetView,
 } from './types';
 
 export const IAM_ADMIN_API = '/api/iam/admin';
@@ -119,14 +125,31 @@ export function createIamAdminApi(fetcher: Fetcher = authFetch) {
      *  (`abi:<org>:<workspace>`, `-` for the org itself) when one is given. */
     access: (scope?: string) =>
       read<AccessView>(fetcher, path('access') + query({ scope }), 'Could not read your access.'),
-    catalogs: () => read<CatalogsView>(fetcher, path('catalogs'), 'Could not load the action catalogs.'),
+    catalogs: (scope?: string) =>
+      read<CatalogsView>(fetcher, path('catalogs') + query({ scope }), 'Could not load the action catalogs.'),
+    /** What the caller may grant at `scope` (`abi:-:-` for the platform): the policy builder's items. */
+    grantable: (scope: string) =>
+      read<GrantableView>(fetcher, path('grantable') + query({ scope }), 'Could not read what you may grant.'),
+    /** Every module with its agents, apps, workflows, pipelines and declared actions, for
+     *  the admins of the workspace or organization named. */
+    moduleScopes: (where: { workspace_id?: string; organization_id?: string }) =>
+      read<ModuleScopesView>(fetcher, '/api/modules/scopes' + query(where), 'Could not load the module scopes.'),
 
     // policies
-    listPolicies: (after?: string) =>
-      read<Page<PolicyView>>(fetcher, path('policies') + query({ after }), 'Could not load the policies.'),
+    /** Every policy the caller may list; with `scope`, that level's own and those above it the
+     *  caller may attach there. */
+    listPolicies: (after?: string, scope?: string) =>
+      read<Page<PolicyView>>(fetcher, path('policies') + query({ after, scope }), 'Could not load the policies.'),
     getPolicy: (id: string) => read<PolicyView>(fetcher, path('policies', id), 'Could not load the policy.'),
-    validatePolicy: (source: PolicySource) =>
-      send<PolicyValidation>(fetcher, path('policies', 'validate'), 'POST', source, 'Could not validate the policy.'),
+    /** With `scope` (an org or a workspace), checked as a policy that level owns. */
+    validatePolicy: (source: PolicySource, scope?: string) =>
+      send<PolicyValidation>(
+        fetcher,
+        path('policies', 'validate') + query({ scope }),
+        'POST',
+        source,
+        'Could not validate the policy.',
+      ),
     createPolicy: (input: PolicyCreate) =>
       send<PolicyView>(fetcher, path('policies'), 'POST', input, 'Could not create the policy.'),
     updatePolicy: (id: string, input: PolicyUpdate) =>
@@ -173,9 +196,13 @@ export function createIamAdminApi(fetcher: Fetcher = authFetch) {
       send<PrincipalView>(fetcher, path('principals', id, 'resume'), 'POST', undefined, 'Could not resume.'),
 
     // groups
-    listGroups: () => read<{ items: PrincipalView[] }>(fetcher, path('groups'), 'Could not load the groups.'),
+    /** Every group the caller may list; with `scope`, that level's own (and, at a workspace,
+     *  its org's the caller attaches to there). */
+    listGroups: (scope?: string) =>
+      read<{ items: PrincipalView[] }>(fetcher, path('groups') + query({ scope }), 'Could not load the groups.'),
     getGroup: (id: string) => read<GroupView>(fetcher, path('groups', id), 'Could not load the group.'),
-    createGroup: (input: { name: string; org?: string | null }) =>
+    /** `scope`: the owner (`abi:<org>:-`, `abi:<org>:<ws>`); none: the platform. */
+    createGroup: (input: { name: string; org?: string | null; scope?: string | null }) =>
       send<PrincipalView>(fetcher, path('groups'), 'POST', input, 'Could not create the group.'),
     deleteGroup: (id: string) =>
       send<void>(fetcher, path('groups', id), 'DELETE', undefined, 'Could not delete the group.'),
@@ -266,6 +293,31 @@ export function createIamAdminApi(fetcher: Fetcher = authFetch) {
         'POST',
         input,
         'Could not reject the manifest.',
+      ),
+
+    // sets: the module scopes and features of organizations and their workspaces
+    /** Every organization the caller may read the set of (the platform), or one. */
+    sets: (organizationId?: string) =>
+      read<SetsView>(
+        fetcher,
+        path('sets') + query({ organization_id: organizationId }),
+        'Could not load the modules and features.',
+      ),
+    putOrganizationSet: (organizationId: string, set: SetParts) =>
+      send<OrganizationSetView>(
+        fetcher,
+        path('sets', organizationId),
+        'PUT',
+        set,
+        'Could not save the organization’s modules and features.',
+      ),
+    putWorkspaceSet: (organizationId: string, workspaceId: string, set: SetParts) =>
+      send<WorkspaceSetView>(
+        fetcher,
+        path('sets', organizationId, 'workspaces', workspaceId),
+        'PUT',
+        set,
+        'Could not save the workspace’s modules and features.',
       ),
 
     // the simulator and the audit

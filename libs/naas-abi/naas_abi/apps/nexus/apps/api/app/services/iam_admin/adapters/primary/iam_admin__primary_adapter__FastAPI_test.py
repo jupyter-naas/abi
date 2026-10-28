@@ -32,7 +32,7 @@ from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER
 READ_POLICIES = {
     "version": "2026-10-13",
     "statements": [
-        {"effect": "Allow", "actions": ["iam:ListPolicies"], "resources": ["abi:-:-:iam:policy/*"]}
+        {"effect": "Allow", "actions": ["iam:ListPolicies"], "resources": ["abi:*:*:iam:policy/*"]}
     ],
 }
 GRAPH_POLICY = {
@@ -155,6 +155,9 @@ def test_access_says_what_the_caller_may_do(world):
     lister = get(world, "/access", "lister").json()["actions"]
     assert lister["iam:ListPolicies"]
     assert not lister["iam:CreatePolicy"] and not lister["iam:ListGroups"]
+    # A delegated IAM admin: Platform settings shows them Roles & permissions and nothing of
+    # System or the tables, which need nexus:ReadSystem.
+    assert root["nexus:ReadSystem"] and not lister["nexus:ReadSystem"]
     assert not any(get(world, "/access", "stranger").json()["actions"].values())
 
 
@@ -165,6 +168,45 @@ def test_access_at_a_scope_follows_the_attachment_rules(world):
     other = get(world, f"/access?scope={org_scope('org-2')}", "admin").json()["actions"]
     assert not other["iam:ListAttachments"] and not other["iam:AttachPolicy"]
     assert get(world, "/access?scope=nonsense", "admin").status_code == 422
+
+
+PLATFORM_ONLY = (
+    "iam:ListPrincipals",
+    "iam:CreateServiceAccount",
+    "iam:Explain",
+    "iam:ListManifests",
+    "iam:ApproveManifest",
+    "iam:MapIdpGroup",
+    "iam:UnmapIdpGroup",
+    "iam:ListKeys",
+    "iam:CreateKey",
+    "nexus:ReadSystem",
+)
+
+
+def test_access_at_a_scope_answers_for_that_level_alone(world):
+    """Service accounts, keys, approvals, the simulator, IdP mappings and the audit are the
+    platform's: the Roles & permissions page of an org or a workspace never offers them,
+    not even to the platform admin."""
+    platform = get(world, "/access").json()["actions"]
+    assert all(platform[action] for action in PLATFORM_ONLY)
+    for scope in (org_scope("org-1"), "abi:org-1:*", workspace_scope("org-1", "ws-1")):
+        root = get(world, f"/access?scope={scope}").json()["actions"]
+        assert not any(root[action] for action in PLATFORM_ONLY), scope
+        assert root["iam:ListPolicies"] and root["iam:CreateGroup"] and root["iam:AttachPolicy"]
+
+
+def test_access_at_an_org_says_who_edits_its_roles_feature_defaults(world):
+    scope = org_scope("org-1")
+    for user in ("owner", "admin"):
+        actions = get(world, f"/access?scope={scope}", user).json()["actions"]
+        assert actions["nexus:GetRoleFeatures"] and actions["nexus:UpdateRoleFeatures"], user
+    member = get(world, f"/access?scope={scope}", "member").json()["actions"]
+    assert not member["nexus:GetRoleFeatures"] and not member["nexus:UpdateRoleFeatures"]
+    # They are the organization's: neither a workspace nor the platform has them.
+    workspace = get(world, f"/access?scope={workspace_scope('org-1', 'ws-1')}", "admin").json()
+    assert not workspace["actions"]["nexus:GetRoleFeatures"]
+    assert not get(world, "/access").json()["actions"]["nexus:GetRoleFeatures"]
 
 
 # -- policies --------------------------------------------------------------------------------
@@ -303,8 +345,9 @@ def test_a_member_attaches_nothing(world):
         scope=workspace_scope("org-1", "ws-1"),
     )
     assert response.status_code in (403, 404)
-    # IAM lets any role list who holds roles at its scope: that, and nothing more.
-    assert get(world, f"/attachments?scope={org_scope('org-1')}", "member").status_code == 200
+    # IAM administration is the admins' and owners': a member lists no attachment,
+    # at its own scope or another's.
+    assert get(world, f"/attachments?scope={org_scope('org-1')}", "member").status_code == 403
     assert get(world, f"/attachments?scope={org_scope('org-2')}", "member").status_code == 403
 
 
@@ -532,6 +575,60 @@ def test_widening_or_dropping_a_deny_is_refused(world, pending):
     assert world.audit.phases("approve_manifest") == ["requested", "failed", "requested", "failed"]
 
 
+CATALOG = {
+    "version": 1,
+    "resource_types": [{"name": "report", "id": "path"}],
+    "actions": [{"name": "ExportReport", "level": "read", "resource_types": ["report"]}],
+}
+
+
+@pytest.fixture
+def declaring(world):
+    """A module whose manifest declares a catalog of its own."""
+    from naas_abi_core.services.iam import module_scopes
+
+    world.nexus.iam._register_catalog(module_scopes.CATALOG)
+    with as_service_account("engine"):
+        account = world.nexus.iam.create_service_account("module/acme/reports")
+    context = CallContext(
+        principal=Principal(id=account.id, kind="service_account", name=account.name)
+    )
+    with use_call_context(context):
+        submitted = world.nexus.iam.submit_manifest(
+            "reports", "acme", {**MANIFEST, "catalog": CATALOG}
+        )
+    return SimpleNamespace(account=account, sha=submitted.manifest.sha256)
+
+
+def test_a_manifest_declaring_a_catalog_is_shown_split_and_narrowed(world, declaring):
+    (listed,) = [
+        m
+        for m in get(world, "/manifests?status=pending").json()["items"]
+        if m["module_id"] == "reports"
+    ]
+    assert "catalog" not in listed["document"]
+    assert listed["catalog"]["service"] == "reports"
+    assert listed["catalog"]["actions"][0]["name"] == "ExportReport"
+
+    path = f"/manifests/{declaring.account.id}/{declaring.sha}/approve"
+    # The UI may echo the catalog back; a changed one is refused.
+    changed = {**MANIFEST, "catalog": {**CATALOG, "actions": []}}
+    refused = post(world, path, document=changed)
+    assert refused.status_code == 422
+    assert "approved as submitted" in " ".join(refused.json()["detail"]["errors"])
+
+    narrowed = {
+        "version": MANIFEST["version"],
+        "statements": [
+            {**MANIFEST["statements"][0], "actions": MANIFEST["statements"][0]["actions"][:1]},
+            MANIFEST["statements"][1],
+        ],
+    }
+    ok = post(world, path, document={**narrowed, "catalog": listed["catalog"]})
+    assert ok.status_code == 200, ok.text
+    assert world.nexus.iam.catalogs.get("reports").module == "reports"
+
+
 def test_a_manifest_can_be_rejected_with_a_reason(world, pending):
     rejected = post(
         world, f"/manifests/{pending.account.id}/{pending.sha}/reject", reason="too broad"
@@ -724,3 +821,355 @@ def test_the_history_is_for_platform_admins(world):
     assert get(world, "/audit?operation=nothing").json()["items"] == []
     for user in ("admin", "lister", "stranger"):
         assert get(world, "/audit", user).status_code == 403
+
+
+# -- policies and groups of an org or a workspace ---------------------------------------------
+
+SCOPED_READER = {
+    "version": "2026-10-13",
+    "statements": [
+        {
+            "effect": "Allow",
+            "actions": ["triple_store:Query"],
+            "resources": ["${scope}:triple_store:graph/*"],
+        }
+    ],
+}
+
+
+def put(world, path, user="root"):
+    return world.client.put(f"/api/iam/admin{path}", headers=as_(user))
+
+
+@pytest.fixture
+def ws2(world):
+    """``ws-2`` of ``org-1`` with its own admin and a member (``colleague``), and a
+    member of another org (``outsider``)."""
+    scope = world.nexus.workspace("org-1", "ws-2")
+    world.nexus.grant("ws2admin", "admin", scope)
+    world.nexus.grant("colleague", "member", scope)
+    world.nexus.grant("outsider", "member", world.nexus.workspace("org-9", "ws-9"))
+    return scope
+
+
+def test_a_workspace_admin_manages_its_own_policies_and_groups(world, ws2):
+    ws1 = workspace_scope("org-1", "ws-1")
+    created = post(
+        world, "/policies", "ws2admin", name="readers", document=SCOPED_READER, scope=ws2
+    )
+    assert created.status_code == 201, created.text
+    policy = created.json()
+    assert policy["owner_scope"] == ws2
+    group = post(world, "/groups", "ws2admin", name="analysts", scope=ws2).json()
+    assert group["owner_scope"] == ws2 and group["org"] == "org-1"
+    attached = post(
+        world,
+        "/attachments",
+        "ws2admin",
+        policy_id=policy["id"],
+        principal_id=group["id"],
+        scope=ws2,
+    )
+    assert attached.status_code < 300, attached.text
+    colleague = _principal_id(world, "colleague")
+    added = put(world, f"/groups/{group['id']}/members/{colleague}", "ws2admin")
+    assert added.status_code == 200, added.text
+    assert [m["id"] for m in added.json()["members"]] == [colleague]
+
+    # Users of another org and service accounts never join.
+    outsider = _principal_id(world, "outsider")
+    assert put(world, f"/groups/{group['id']}/members/{outsider}", "ws2admin").status_code == 422
+    with as_service_account("engine"):
+        account = world.nexus.iam.create_service_account("ci/nightly")
+    assert put(world, f"/groups/{group['id']}/members/{account.id}", "ws2admin").status_code == 422
+
+    # Its lists: its own, plus what it may attach from above (the roles below owner).
+    listed = {p["id"] for p in get(world, f"/policies?scope={ws2}", "ws2admin").json()["items"]}
+    assert policy["id"] in listed and "builtin.member" in listed
+    assert "builtin.owner" not in listed
+    groups = get(world, f"/groups?scope={ws2}", "ws2admin").json()["items"]
+    assert [g["id"] for g in groups] == [group["id"]]
+    assert get(world, f"/access?scope={ws2}", "ws2admin").json()["actions"]["iam:CreatePolicy"]
+
+    # Nothing of ws-1's.
+    assert get(world, f"/policies?scope={ws1}", "ws2admin").status_code == 403
+    assert get(world, f"/groups?scope={ws1}", "ws2admin").status_code == 403
+    ws1_policy = post(world, "/policies", "admin", name="ws-1", document=SCOPED_READER, scope=ws1)
+    assert ws1_policy.status_code == 201, ws1_policy.text
+    assert get(world, f"/policies/{ws1_policy.json()['id']}", "ws2admin").status_code == 404
+    refused = post(world, "/policies", "ws2admin", name="x", document=SCOPED_READER, scope=ws1)
+    assert refused.status_code in (403, 404)
+    # A ws-2 policy goes at ws-2 only.
+    member = _principal_id(world, "member")
+    elsewhere = post(
+        world, "/attachments", "ws2admin", policy_id=policy["id"], principal_id=member, scope=ws1
+    )
+    assert elsewhere.status_code in (403, 404)
+    assert world.audit.phases("create_policy")[-1] == "failed"
+
+
+def test_an_org_admin_manages_its_workspaces_policies_and_groups(world, ws2):
+    policy = post(
+        world, "/policies", "ws2admin", name="readers", document=SCOPED_READER, scope=ws2
+    ).json()
+    # ``admin`` is an admin of org-1, mirrored org-wide.
+    seen = {p["id"] for p in get(world, f"/policies?scope={ws2}", "admin").json()["items"]}
+    assert policy["id"] in seen
+    org_group = post(world, "/groups", "admin", name="org team", scope=org_scope("org-1"))
+    assert org_group.status_code == 201, org_group.text
+    assert org_group.json()["owner_scope"] == org_scope("org-1")
+    attached = post(
+        world,
+        "/attachments",
+        "admin",
+        policy_id=policy["id"],
+        principal_id=org_group.json()["id"],
+        scope=ws2,
+    )
+    assert attached.status_code < 300, attached.text
+    # The org's groups are offered at its workspaces, to whoever attaches there.
+    groups = {g["id"] for g in get(world, f"/groups?scope={ws2}", "ws2admin").json()["items"]}
+    assert org_group.json()["id"] in groups
+    deleted = world.client.delete(f"/api/iam/admin/policies/{policy['id']}", headers=as_("admin"))
+    assert deleted.status_code == 409  # still attached: IAM's rule
+
+
+def test_members_and_viewers_see_nothing_of_iam_administration(world):
+    ws1 = workspace_scope("org-1", "ws-1")
+    for user in ("member", "viewer"):
+        for page in (
+            f"/policies?scope={ws1}",
+            f"/groups?scope={ws1}",
+            f"/attachments?scope={ws1}",
+            f"/catalogs?scope={ws1}",
+            "/policies",
+            "/groups",
+        ):
+            assert get(world, page, user).status_code == 403, (user, page)
+        assert post(
+            world, "/policies", user, name="x", document=SCOPED_READER, scope=ws1
+        ).status_code in (403, 404)
+        assert post(world, "/groups", user, name="x", scope=ws1).status_code in (403, 404)
+        assert not any(get(world, f"/access?scope={ws1}", user).json()["actions"].values())
+
+
+def test_validating_at_a_scope_checks_what_creating_there_does(world, ws2):
+    def statement(effect, resource):
+        return {
+            "version": "2026-10-13",
+            "statements": [
+                {"effect": effect, "actions": ["triple_store:Query"], "resources": [resource]}
+            ],
+        }
+
+    at_ws2 = f"/policies/validate?scope={ws2}"
+    for document in (statement("Deny", "*"), statement("Allow", f"{ws2}:triple_store:graph/*")):
+        checked = post(world, at_ws2, "ws2admin", document=document).json()
+        assert checked["valid"] is False and "${scope}" in checked["errors"][0], checked
+        refused = post(world, "/policies", "ws2admin", name="x", document=document, scope=ws2)
+        assert refused.status_code == 422, refused.text
+    assert post(world, at_ws2, "ws2admin", document=SCOPED_READER).json()["valid"] is True
+    # The platform's policies name what they like.
+    assert post(world, "/policies/validate", document=statement("Deny", "*")).json()["valid"]
+
+
+def test_an_org_wide_scope_lists_its_orgs_policies_and_groups(world, ws2):
+    org = org_scope("org-1")
+    policy = post(world, "/policies", "admin", name="org", document=SCOPED_READER, scope=org)
+    group = post(world, "/groups", "admin", name="org team", scope=org)
+    assert policy.status_code == 201 and group.status_code == 201
+    wide = "abi:org-1:*"
+    policies = get(world, f"/policies?scope={wide}", "admin")
+    groups = get(world, f"/groups?scope={wide}", "admin")
+    assert policies.status_code == 200 and groups.status_code == 200, policies.text
+    assert policy.json()["id"] in {p["id"] for p in policies.json()["items"]}
+    assert group.json()["id"] in {g["id"] for g in groups.json()["items"]}
+    # Answered as for the org: a workspace's admin holds nothing there.
+    for path in ("/policies", "/groups"):
+        assert get(world, f"{path}?scope={wide}", "ws2admin").status_code == 403
+        assert get(world, f"{path}?scope={org}", "ws2admin").status_code == 403
+
+
+def test_a_platform_deny_is_attached_at_a_scope_by_the_platform_admin_only(world):
+    guard = post(
+        world,
+        "/policies",
+        name="guardrail",
+        document={
+            "version": "2026-10-13",
+            "statements": [
+                {
+                    "effect": "Allow",
+                    "actions": ["triple_store:Query"],
+                    "resources": ["${scope}:triple_store:graph/*"],
+                },
+                {"effect": "Deny", "actions": ["iam:*"], "resources": ["*"]},
+            ],
+        },
+    ).json()
+    shared = post(world, "/policies", name="shared", document=SCOPED_READER).json()
+    scope = workspace_scope("org-1", "ws-1")
+    member = _principal_id(world, "member")
+    for user in ("admin", "owner"):
+        offered = {
+            p["id"] for p in get(world, f"/attachable-policies?scope={scope}", user).json()["items"]
+        }
+        assert guard["id"] not in offered and shared["id"] in offered, user
+        refused = post(
+            world, "/attachments", user, policy_id=guard["id"], principal_id=member, scope=scope
+        )
+        assert refused.status_code == 403, refused.text
+    offered = {p["id"] for p in get(world, f"/attachable-policies?scope={scope}").json()["items"]}
+    assert guard["id"] in offered
+    attached = post(world, "/attachments", policy_id=guard["id"], principal_id=member, scope=scope)
+    assert attached.status_code == 201, attached.text
+
+
+# -- grant only what you hold ------------------------------------------------------------------
+
+
+def _holding(world, user: str, *statements: dict, scope: str | None = None) -> str:
+    """``user`` holds one custom policy (at ``scope``, with a viewer's role there)."""
+    principal = _principal_id(world, user)
+    with as_service_account("engine"):
+        policy = world.nexus.iam.create_policy(
+            user, {"version": "2026-10-13", "statements": list(statements)}
+        )
+        world.nexus.iam.attach_policy(policy.id, principal, scope)
+        if scope is not None:
+            world.nexus.iam.attach_policy("builtin.viewer", principal, scope)
+    return principal
+
+
+def _refused(response, *named: str) -> None:
+    assert response.status_code == 403, response.text
+    detail = response.json()["detail"]
+    assert "You cannot grant what you do not hold" in detail, detail
+    for part in named:
+        assert part in detail, detail
+
+
+def test_an_admin_holding_a_narrower_role_writes_no_wider_policy(world):
+    ws1 = workspace_scope("org-1", "ws-1")
+    _holding(
+        world,
+        "editor",
+        {
+            "effect": "Allow",
+            "actions": ["iam:CreatePolicy", "iam:UpdatePolicy", "iam:GetPolicy"],
+            "resources": ["${scope}:iam:policy/*"],
+        },
+        {
+            "effect": "Allow",
+            "actions": ["triple_store:Query"],
+            "resources": ["${scope}:triple_store:graph/*"],
+        },
+        scope=ws1,
+    )
+    made = post(world, "/policies", "editor", name="readers", document=SCOPED_READER, scope=ws1)
+    assert made.status_code == 201, made.text
+    wider = {
+        "version": "2026-10-13",
+        "statements": [
+            {
+                **SCOPED_READER["statements"][0],
+                "actions": ["triple_store:Query", "triple_store:Insert"],
+            }
+        ],
+    }
+    _refused(
+        post(world, "/policies", "editor", name="writers", document=wider, scope=ws1),
+        "triple_store:Insert",
+        "abi:org-1:ws-1:triple_store:graph/*",
+    )
+    edited = world.client.put(
+        f"/api/iam/admin/policies/{made.json()['id']}",
+        json={"expected_revision": 1, "document": wider},
+        headers=as_("editor"),
+    )
+    _refused(edited, "triple_store:Insert")
+    assert world.audit.phases("create_policy")[-1] == "failed"
+
+
+def test_an_owner_grants_no_feature_it_does_not_hold(world):
+    ws1 = workspace_scope("org-1", "ws-1")
+    every = {
+        "version": "2026-10-13",
+        "statements": [
+            {
+                "effect": "Allow",
+                "actions": ["nexus:UseFeature"],
+                "resources": ["${scope}:nexus:feature/*"],
+            }
+        ],
+    }
+    _refused(
+        post(world, "/policies", "owner", name="every feature", document=every, scope=ws1),
+        "nexus:UseFeature",
+        "abi:org-1:ws-1:nexus:feature/*",
+    )
+    with as_service_account("engine"):
+        held = world.nexus.iam.get_policy("builtin.features.owner").document.statements[0]
+    one = held.resources[0]
+    assert one.startswith("${scope}:nexus:feature/")
+    some = {"version": "2026-10-13", "statements": [{**every["statements"][0], "resources": [one]}]}
+    made = post(world, "/policies", "owner", name="one feature", document=some, scope=ws1)
+    assert made.status_code == 201, made.text
+
+
+def test_nobody_joins_a_group_that_holds_more_than_the_one_adding(world):
+    ws1 = workspace_scope("org-1", "ws-1")
+    admin = _principal_id(world, "admin")
+    with as_service_account("engine"):
+        owners = world.nexus.iam.create_group("owners", scope=ws1)
+        world.nexus.iam.attach_policy("builtin.owner", owners.id, ws1)
+    _refused(put(world, f"/groups/{owners.id}/members/{admin}", "admin"), "builtin.owner")
+    assert put(world, f"/groups/{owners.id}/members/{admin}", "owner").status_code == 200
+
+
+def test_a_delegated_approver_approves_no_more_than_it_holds(world, pending):
+    _holding(
+        world,
+        "approver",
+        {
+            "effect": "Allow",
+            "actions": ["iam:ApproveManifest", "iam:GetManifest", "iam:ListManifests"],
+            "resources": ["abi:-:-:iam:manifest/*"],
+        },
+        {
+            "effect": "Allow",
+            "actions": ["triple_store:Query", "triple_store:ListGraphs"],
+            "resources": ["abi:-:-:triple_store:graph/*"],
+        },
+    )
+    path = f"/manifests/{pending.account.id}/{pending.sha}/approve"
+    _refused(post(world, path, "approver"), "triple_store:Insert")
+    narrowed = {
+        "version": "2026-10-13",
+        "statements": [
+            {**MANIFEST["statements"][0], "actions": ["triple_store:Query"]},
+            MANIFEST["statements"][1],
+        ],
+    }
+    approved = post(world, path, "approver", document=narrowed)
+    assert approved.status_code == 200, approved.text
+
+
+def _grantable(world, user: str, scope: str) -> dict[str, list[str]]:
+    found = get(world, f"/grantable?scope={scope}", user)
+    assert found.status_code == 200, found.text
+    return {a["action"]: a["resources"] for c in found.json()["catalogs"] for a in c["actions"]}
+
+
+def test_what_the_caller_may_grant(world):
+    ws1 = workspace_scope("org-1", "ws-1")
+    root = _grantable(world, "root", ws1)
+    assert root["triple_store:Insert"] == ["${scope}:*"]
+    assert root["nexus:UseFeature"] == ["${scope}:*"]
+    admin = _grantable(world, "admin", ws1)
+    assert admin["triple_store:Insert"] == ["${scope}:triple_store:graph/*"]
+    assert "${scope}:iam:attachment/builtin.owner/*" not in admin["iam:AttachPolicy"]
+    assert "${scope}:nexus:feature/*" not in admin.get("nexus:UseFeature", [])
+    assert _grantable(world, "lister", ws1) == {"iam:ListPolicies": ["${scope}:iam:policy/*"]}
+    assert _grantable(world, "stranger", ws1) == {}
+    assert get(world, "/grantable?scope=nonsense", "admin").status_code == 422

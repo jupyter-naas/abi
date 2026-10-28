@@ -33,6 +33,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.port import (
     ChatConversationRecord,
     ChatMessageRecord,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 
 NOW = datetime(2026, 1, 1, 12, 0, 0)
@@ -116,6 +117,11 @@ class FakeChat:
         )
 
 
+class FakeAgents:
+    async def list_workspace_agents(self, workspace_id):
+        return []
+
+
 class FakeDb:
     async def commit(self) -> None:
         return None
@@ -163,7 +169,7 @@ def world(team: NexusIam, monkeypatch: pytest.MonkeyPatch):
 
     @contextmanager
     def bind(db):
-        yield SimpleNamespace(chat=chat)
+        yield SimpleNamespace(chat=chat, agents=FakeAgents())
 
     class Session:
         async def __aenter__(self):
@@ -487,6 +493,92 @@ def test_an_agent_of_another_workspace_cannot_be_run(world) -> None:
     assert foreign_stream.status_code == 403
     assert own.status_code == 200
     assert world.chat.completed == [("member", "conv-m")]
+
+
+def test_a_module_agent_needs_its_module_scope(world) -> None:
+    """Zero trust: a member runs a module's agent (remote or in-process) only
+    once a policy grants that agent; another agent of the module stays refused."""
+    for agent_id, class_name, provider in (
+        ("remote-a", "acme.p/A", "remote"),
+        ("remote-b", "acme.p/B", "remote"),
+        ("abi", "naas_abi.agents.AbiAgent/AbiAgent", "abi"),
+    ):
+        world.chat.agents[agent_id] = ChatAgentRecord(
+            id=agent_id,
+            workspace_id="ws-1",
+            name=agent_id,
+            class_name=class_name,
+            model_id=None,
+            provider=provider,
+        )
+    world.chat.add("member", "conv-m")
+    turn = {"message": "hi", "conversation_id": "conv-m"}
+
+    def run(agent: str, user: str = "member"):
+        return call(world, user, "POST", "/api/chat/complete", json={**turn, "agent": agent})
+
+    assert run("remote-a").status_code == 403
+    world.iam.allow_scope("member", ModuleScope("agent", "acme.p", "A"), "abi:org-1:ws-1")
+    assert run("remote-a").status_code == 200
+    assert run("remote-b").status_code == 403
+    assert run("abi").status_code == 403
+
+
+def test_an_agent_turned_off_in_its_workspace_is_refused_to_everyone(world) -> None:
+    """Hidden by the workspace's admins: refused for every role, a module's agent
+    and one the workspace built alike, not only left out of the pickers."""
+    from naas_abi.apps.nexus.apps.api.app.services.agents.visibility import AgentsVisibility
+    from naas_abi.apps.nexus.apps.api.app.services.visibility.testing import (
+        visibility_installed,
+    )
+
+    for agent_id, class_name, provider in (
+        ("remote-a", "acme.p/A", "remote"),
+        ("built", None, "openai"),
+    ):
+        world.chat.agents[agent_id] = ChatAgentRecord(
+            id=agent_id,
+            workspace_id="ws-1",
+            name=agent_id,
+            class_name=class_name,
+            model_id="gpt",
+            provider=provider,
+            enabled=False,
+        )
+
+    async def rows(workspace_id):
+        return [a for a in world.chat.agents.values() if a.workspace_id == workspace_id]
+
+    def turn(user: str, agent: str):
+        return call(
+            world,
+            user,
+            "POST",
+            "/api/chat/complete",
+            json={"message": "hi", "conversation_id": f"conv-{user}", "agent": agent},
+        )
+
+    world.iam.allow_scope("member", ModuleScope("agent", "acme.p", "A"), "abi:org-1:ws-1")
+    with visibility_installed({"agent": AgentsVisibility(rows)}):
+        for user in ("member", "owner"):
+            world.chat.add(user, f"conv-{user}")
+            for agent in ("remote-a", "built"):
+                refused = turn(user, agent)
+                assert refused.status_code == 403, (user, agent)
+                assert refused.json()["detail"] == "This agent is turned off in this workspace"
+        assert world.chat.completed == []
+        # The module's agent is one scope: a second row of it, on, shows it in the
+        # roster, and every row of it is usable, the one turned off included.
+        world.chat.agents["remote-a2"] = ChatAgentRecord(
+            id="remote-a2",
+            workspace_id="ws-1",
+            name="remote-a2",
+            class_name="acme.p/A",
+            model_id="gpt",
+            provider="remote",
+        )
+        assert turn("member", "remote-a").status_code == 200
+        assert turn("member", "built").status_code == 403
 
 
 # -- file ingestion ------------------------------------------------------------

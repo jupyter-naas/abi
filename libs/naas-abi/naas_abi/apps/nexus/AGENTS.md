@@ -111,6 +111,7 @@ Where each part of the permission system lives (read the one you touch):
 | Nexus authorization on IAM: the `nexus` catalog, roles, features, memberships, placements | `apps/api/app/services/iam/AGENTS.md` |
 | Sign-in, sessions, CSRF, credential kinds, API keys, links, the old login's accounts | `apps/api/app/services/oidc/AGENTS.md` |
 | The IAM admin pages (policies, attachments, groups, service accounts, approvals, simulator, audit) | `apps/api/app/services/iam_admin/AGENTS.md` |
+| What a workspace turned off: agents, apps, workflows and pipelines refused to everyone in it | `apps/api/app/services/visibility/AGENTS.md` |
 | Invitations and IdP group bindings | `apps/api/app/services/invites/AGENTS.md` |
 | Graph access (placements and shared graphs as IAM policies) | `apps/api/app/services/graph/AGENTS.md` |
 | The built-in identity provider and its trusted `/idp` route | `libs/naas-abi-idp/AGENTS.md` |
@@ -309,6 +310,19 @@ Route CSS holds page-specific layout and elements not covered by shared componen
 
 Pilot reference for a fully migrated route: `apps/web/src/app/account/api-keys/`.
 
+## Workspace settings
+
+`/workspace/<id>/settings/...` (`apps/web/src/app/workspace/[workspaceId]/settings/`): what the workspace has, and on or off for everyone in it. Nothing is added to a workspace here.
+
+- **Sidebar** (`components/shell/settings-nav.tsx`, `SETTINGS_GROUPS`): General (General, Members, Secrets, Data Export) and Features (Agents, Apps, Drives, Graphs, Maps, Models, Ontologies, Search, Skills, Workflows). A Features entry names the Nexus `feature` it manages and the module resources it lists (`kinds`); `visibleSettingsGroups` keeps those the workspace's set has (`settingsItemShown`, pure, tested in `settings-nav.test.ts`). Apps needs the `apps` feature and an app in the set, Workflows a workflow or a pipeline, Agents the `agents` feature only (agents the workspace builds need no module), Models no feature. The set comes from `GET /api/workspaces/{id}/resources` (`hooks/use-workspace-resources.ts`; admins only), read again each time the settings open and on Reload (a set changed on Modules & features shows without a page reload); a failed read is never kept (the last answer stays). Until it answers, or for a caller who may not read it, the caller's own feature flags decide the features and module resources are assumed; so are the kinds the API names `unavailable` (discovery or the jobs did not answer), so a short count never hides a page or gates it. A page of an entry outside the set (`settingsItemFor`) shows `not-in-workspace.tsx` instead, with a link to the organization's Modules & features for who may change the set (`can_edit_set`).
+- **Agents, Apps, Workflows** list only the agents, apps, workflows and pipelines of the set (the API filters them, for everyone, the platform admin included) and turn each on or off for everyone in the workspace: today's flags, `agent_configs.enabled` (`PATCH /api/agents/{id}`), `app_configs.enabled` (`PATCH /api/apps/{ws}/{app_id}`), and `workflow_visibility` (`GET|PUT /api/workspaces/{ws}/workflows/settings`, `workflows/workflows-model.ts`, tested in `workflows.test.ts`). One turned off is refused when used (its runs already started stay readable), and listed only to who may turn that one back on. The agents a workspace builds itself (a model and a prompt) are still created and edited in Agents.
+- **General** shows the set read-only: the features (`/configuration`) and each module with what it has in the set (`/resources`, `describeModuleResources`), with a link to Modules & features for who may edit it. Who may use what is on Roles & permissions.
+
+Decisions:
+
+- **Workspace settings show the set and manage visibility only.** Decision: the Features pages list what the workspace's set holds, and its admins turn each item on or off for the whole workspace; what the set holds is chosen on the organization's Modules & features page, and who may use each item on Roles & permissions. Consequences: no workspace settings page adds a module or a feature (the API refuses turning on an app, a module agent or a workflow outside the set, 403); a set change on Modules & features invalidates the settings pages' 24h cache (`/api/iam/admin/sets` is a settings prefix of `services/settings_cache`).
+- **Hidden means refused.** Decision: a resource turned off is refused to everyone in the workspace when used (chat, `/v1`, app links and grants, a workflow start, an agent's tools), not only left out of lists; the check is `services/visibility`, which `authz` asks after IAM allows a module scope (`services/iam/AGENTS.md`, "Visibility"). Consequences: an app link minted before the app was turned off works until it expires (eight hours at most), since a link names no workspace.
+
 ## Organization settings UI module
 
 Organization **admin** settings (not the tenant portal at `/org/[orgSlug]`) live under `apps/web/src/app/organizations/`. The org picker stays at `/organizations`. Per-org settings are a self-contained module at `organizations/[orgId]/settings/`, structured like Account: semantic layout shell, shared components, route parser, and per-section `{segment}.tsx` + `{segment}.css`.
@@ -332,7 +346,9 @@ src/app/organizations/
     │   ├── org-settings-page-header.tsx
     │   └── org-settings-section-card.tsx
     ├── general/                          # page.tsx + general.tsx + general.css (pilot)
-    ├── workspaces/
+    ├── workspaces/                       # list (links each workspace to its modules column), new/ (create)
+    ├── modules/                          # Modules & features: this org's sets matrix (see Platform Settings)
+    ├── roles/                            # Roles & permissions: the shared UI at the org and its workspaces
     ├── branding/
     ├── users/                            # people access (Admin is a role, not the section)
     ├── domains/
@@ -388,6 +404,8 @@ Notes:
 - **Agents:** `invite_organization_member` / `invite_workspace_member` in `naas_abi/tools/nexus_admin_tools.py` use the same create-on-invite path in-process.
 
 Web entry points: `organizations/[orgId]/settings/users/`, workspace `organization/users/`, workspace `settings/members/`. Store: `stores/organization.ts`.
+
+A role change, on these pages as in Roles & permissions › People & roles, is `changeMemberRole` (`components/access/roles/role-change.ts`): the membership route of its level, the roles a page may give (`assignableRoles`) and the ones it never changes (`roleChangeable`: an owner's, one inherited from the organization, one's own). The pages keep invitations.
 
 ## Maps UI module
 
@@ -605,37 +623,108 @@ The optional catch-all `[[...slug]]/page.tsx` re-exports the thread module so al
 
 - Migrate `chat-interface.tsx` to semantic CSS
 
-## System app (platform super admins)
+## Platform Settings
 
-`/workspace/[id]/admin/system` (dock entry "System", visible when `is_superadmin`). Tabs: Overview, Services, Data, Jobs, Agents, Modules, Access, NATS, Live traffic, Traces; the tab is the `?tab=` query. Live traffic is an SSE stream read with raw `fetch` and `getAuthHeader()` (like chat), started and stopped by the user.
+`/settings` (account menu → Platform Settings), outside any organization or workspace: `apps/web/src/app/settings/`, on the shared settings shell (`components/settings/`).
 
+- **Sidebar** (`lib/nav.ts`): Nexus tables; a System group (Overview, Services, Data, Jobs, Agents, Modules, NATS, Live traffic, Traces, Events); an Access group (Roles & permissions, Modules & features). Each item declares what it needs: `nexus:ReadSystem` for the tables and System, any platform-level `iam:` action for Roles & permissions, `iam:GetSet` for Modules & features. The shell reads the caller's actions from `GET /api/iam/admin/access` (`hooks/use-platform-settings-access.ts`), shows the items they hold and a 403 page when there are none or for a page they do not hold. Callers at the same time share one request; a failed one keeps the user's last answer, and with none shows an error with Try again (the account menu asks again when it next opens). The account menu shows Platform Settings whenever an item is available. The API checks every call itself (`require_superadmin`: `ReadSystem` to read, `ManageSystem` to change; IAM's own `iam:*` checks).
+- **Nexus tables** (`tables/`): the table of tables (sections, counts, search, facets, inline schema, Export all as JSON or xlsx), then `/settings/tables/<name>` (grid, Export CSV/xlsx, a close button beside it that returns to Nexus tables as it was left: `lib/tables-view.ts`), then `/settings/tables/<name>/<row id>` (back link; on `users`, the superadmin toggle for whoever holds `ManageSystem`). The list, labels and sections come from the API (`GET /api/admin/tables`, the registry `api/app/core/platform_tables.py`); the web app keeps no copy.
+- **Old links** redirect in `middleware.ts` (`lib/redirects.ts`): `/settings/<table>[/<row>]` (and `<name>_table`) to `/settings/tables/...`, `/workspace/<id>/admin/system?tab=<tab>` to the System page (Access to `/settings/roles`, other query parameters kept), `/settings/system/access` to `/settings/roles`, `/workspace/<id>/admin/events` to `/settings/system/events`; Organization settings' Access (`/organizations/<org>/settings/access`) to its Roles & permissions (`organizations/[orgId]/settings/lib/redirects.ts`). The legacy workspace links (`/settings/members`, `/settings/permissions`, ...) still go to the workspace.
+- **Phone**: `/settings` lists the items, an item opens full screen with back to the list; a table's back (and close) goes to Nexus tables, a row's to its table.
+- **Modules & features** (`/settings/modules`, and Organization settings › Modules & features at `/organizations/<org>/settings/modules[?workspace=<id>]`): the IAM sets, what each organization and workspace may use. One matrix per organization (`settings/modules/sets-matrix.tsx`): columns are the organization then its workspaces, rows each module (expandable to its agents, apps, workflows, pipelines and declared actions), then the features. A cell shows the recorded set; a workspace's entry its organization lacks is struck through ("not in the organization's set"), and a workspace that records nothing shows its organization's set. Columns the API marks `editable` have checkboxes, a draft each, Save / Discard and Reset to everything (`null` parts); a workspace is offered only what its organization has. The wildcards of every module a seeded workspace may record (`<type>/*/*`, `<service>:*`, `*:*`) read as covering their kind; editing a column lists them per module (`expandGlobals`), as a `null` part is listed when first edited. The set logic (contains, toggle, materialise, the organization as bound, what lies outside it) is pure: `settings/modules/sets-model.ts`, tested in `sets-model.test.ts`. The platform page (`modules.tsx`) lists every organization, each expandable to its matrix; the organization's page (`organizations/[orgId]/settings/modules/`) opens its own, highlights the `?workspace=` column, and says so on a 403. API: `GET /api/iam/admin/sets[?organization_id=]`, `PUT /api/iam/admin/sets/{org}` and `PUT /api/iam/admin/sets/{org}/workspaces/{ws}` (`sets`, `putOrganizationSet`, `putWorkspaceSet` in `src/lib/iam-admin/api.ts`); a 422 (wider than the organization) shows the API's words under the column.
+
+Decisions:
+
+- **One table list, the API's.** Decision: Platform Settings reads the tables from `GET /api/admin/tables`; `core/platform_tables.py` holds each table's label, section and description, and `EXCLUDED_TABLES` every table it never serves, with the reason. Consequences: adding a table to nexus.db fails `platform_tables_test.py` until it is listed or excluded; the web app needs no change for a new table. Credential columns are masked by name (`SECRET_COLUMN`, `REDACTED_COLUMNS`), a test lists every column that looks like one and has it masked or named as harmless, and a table keyed by a credential has no row pages.
+- **The sidebar follows permissions, not a role.** Decision: each item names the action it needs and the shell asks IAM (`GET /api/iam/admin/access`) once per visit. Consequences: a delegated IAM admin without `nexus:ReadSystem` sees Roles & permissions alone; a stranger gets the 403 page; Nexus adds no role check, and hiding an item never replaces the API's.
+- **The modules × workspaces page edits the sets.** Decision: an organization's and a workspace's modules and features are their IAM sets, edited on one page, the same component (`SetsMatrix`) at both levels: Platform Settings › Modules & features for every organization, Organization settings › Modules & features for one. Consequences: the old per-workspace features modal of Organization settings › Workspaces and the override editor of Workspace settings › General are gone; both link to the organization's page at that workspace's column (`orgModulesPath`), General shows the workspace's features read-only. Creating a workspace sends its `features` set (`null` when every feature the organization offers is kept). Which column may change is the API's `editable`, never a role name; the API checks every `PUT` itself.
+- **System lives in Platform Settings.** Decision: the System app's views are Platform Settings pages, and the dock and mobile More sheet no longer offer System or Events. Consequences: its code moved from `app/workspace/[workspaceId]/admin/system/` to `app/settings/system/` (Events to `system/events/`, with its feed beside the graph instead of in the workspace's second sidebar); its Access tab became Roles & permissions (`/settings/roles`), now the shared Roles & permissions UI at platform scope ("Roles & permissions UI module").
+
+## System (platform super admins)
+
+Platform Settings › System: `/settings/system` (Overview) and `/settings/system/<view>` (Services, Data, Jobs, Agents, Modules, NATS, Live traffic, Traces, Events), shown to whoever holds `nexus:ReadSystem`. Live traffic is an SSE stream read with raw `fetch` and `getAuthHeader()` (like chat), started and stopped by the user.
+
+- Workflows REST: `apps/api/app/services/workflows/` (see its `AGENTS.md`), mounted at `/api/workflows`, for platform admins, signed in or with their personal API key (`require_superadmin`, decided by IAM).
 - API: `apps/api/app/services/sysadmin/` (hexagonal, see its `AGENTS.md`), mounted at `/api/admin/system/*` behind `require_superadmin` on the router. `main_public_routes_test.py` fails if a route there loses it.
-- Web: `apps/web/src/app/workspace/[workspaceId]/admin/system/`, the three-file route convention plus colocated modules (`system-api.ts`, `system-model.ts`, one component per tab) and jsdom render tests. Views poll every 10 s while visible; the footer Refresh reloads the active tab.
-- Data tab: `admin/system/data/`, a three-pane explorer (service rail, browser, inspector) over `/api/admin/system/resources`.
+- Web: `apps/web/src/app/settings/system/`: one `page.tsx` per view rendering `SystemPage` (`system.tsx`: the page title, Refresh, the view), colocated modules (`system-api.ts`, `system-model.ts`, `system-tabs.ts` for the views and their paths, one component per view) and jsdom render tests. Views poll every 10 s while visible; Refresh reloads the open view.
+- Data: `settings/system/data/`, a three-pane explorer (service rail, browser, inspector) over `/api/admin/system/resources`.
   - The shell owns layout, state (`use-explorer.ts`), URL deep links (`?service=&in=&item=`), keyboard shortcuts (`?` lists them), dialogs (typed-confirmation delete, Monaco editor, custom create), toasts, history and recent changes. Do not fork it per service.
   - Each service is one `ServiceView` in `data/services/<service>.tsx` (contract in `services/types.ts`, registered in `services/registry.ts`). It sets per-depth columns or cards, icons, nouns, badges, summaries, facts, a custom preview, an editor spec or a custom create form, and the delete copy. Its styles live in `services/<service>.css` (`data-<service>-*`).
   - Shared renderers live in `data/viewers/`: JSON tree, Monaco code, data grid, RDF triples, vector, email, message, status, binary (hex dump and images), and LangGraph checkpoints (`checkpoint-view.tsx`: transcript with tool calls, models and tokens; state, pending writes, metadata; "The step before" opens the parent through `PreviewContext.open`). In Documents, the saver collections list as "Step N · source" rows grouped by thread (`title` hook on `ServiceView` for entries whose name is an opaque id). Adapters send a structured `view` (shapes in the API's `resources.py`) and the generic preview picks the renderer.
   - Secrets stay masked until Reveal (shown for a while, then hidden again). Replace and Delete need the id typed back. The API audits every change and reveal before it runs. Never use browser `confirm()` dialogs here.
   - Tests: `data/*.test.ts` (shell flows with an in-memory API), `data/viewers/*.test.ts`, `data/services/*.test.ts(x)`.
-- Jobs tab: `admin/system/jobs/` over `/api/admin/system/jobs`, a Dagster-like view of module jobs (engine and remote).
+- Jobs: `settings/system/jobs/` over `/api/admin/system/jobs`, a Dagster-like view of module jobs (engine and remote).
   - Jobs list: failing and running first, schedules in plain words with a live next tick, a strip of the last 20 runs, and queue depth.
-  - Job page: triggers, health (success rate, average duration), queue, settings, its runs.
+  - Job page: triggers (with a schedule's input), health (success rate, average duration), queue, settings, its runs; a workflow's input and output schemas.
+  - Workflows (`kind: "workflow"`) show a "workflow" badge and, once any exists, an All / Jobs / Workflows filter (`?kind=`). Plain jobs render as before.
+  - Run now and Re-run on a workflow open a form generated from its input schema (`schema-form.ts` builds the fields and validates, `schema-fields.tsx` renders): strings, numbers, integers, booleans, enums, lists of those and nested objects, with `$ref` to the schema's `$defs` and pydantic's optional wrappers followed. A schema with anything else (unions, lists of objects, free-form objects) gets the JSON editor only; the editor is also a tab beside the form. The input is checked in the browser before sending, and the API's own 422 faults show under their fields.
   - Run feed with status filters.
-  - Run inspector: a trigger → start → finish timeline with the wait before start, the error, logs (`ctx.log`), payload, result, and the run's trace (the Traces waterfall, embedded).
+  - Run inspector: a trigger → start → finish timeline with the wait before start, the error, logs (`ctx.log`), payload, result, and the run's trace (the Traces waterfall, embedded). A workflow run opens on a **Steps** tab (`run-steps.tsx`): each step's status, attempt, start offset and duration on one time axis, its error, and a link to the child run a `call` step started. A result the API cut for display says so.
   - Run now, Re-run and Cancel are audited by the API. It reuses the Data tab's atoms, viewers, modal and toasts (`../data/`) and polls only while visible: 5 s, or 1.5 s for a live run.
-- Access tab: `admin/system/access/` over `/api/iam/admin` (API: `apps/api/app/services/iam_admin/`, see its `AGENTS.md`), the platform's permissions as IAM decides them for the signed-in user.
-  - Sub-views, shown only when `GET /access` says the caller may list them: Policies (list; visual statement editor with action and resource autocomplete from the catalogs; YAML/JSON view; IAM's validation errors as the user types), Attachments, Groups (members, IdP group-claim mapping), Service accounts (keys created, revoked and rotated; a key's value is shown once, in component state only), Module approvals (approve as submitted, narrow or reject: `approvals/narrow-model.ts`), Simulator (`iam:Explain`, names the deciding statement) and Audit.
-  - The client is `src/lib/iam-admin/` (`types.ts` is the contract, `api.ts` one function per route, `use-access.ts`). Each view takes `AccessViewProps` (`api`, `can`, `nonce`); gate buttons with `can('iam:...')`, never with a role name.
-  - Org scope: Organization settings → Access (`organizations/[orgId]/settings/access/`) reuses `AttachmentsPanel` at the org and each workspace scope.
-  - Tests: jsdom render tests beside each view (`system-render.ts` helpers) and pure model tests.
-- Traces tab: `admin/system/traces/` over `/api/admin/system/traces`, so nobody needs the Jaeger UI. The API reads the tracing backend's query API (Jaeger `/api/v3`, `telemetry.query_url`, else `telemetry.ui_url`); the browser never talks to Jaeger.
+- Roles & permissions (`/settings/roles`, the former Access tab) is the shared Roles & permissions UI at platform scope: see "Roles & permissions UI module".
+- Tests: jsdom render tests beside each view (`system-render.ts`, which re-exports `src/lib/testing/mount.ts`) and pure model tests.
+- Traces: `settings/system/traces/` over `/api/admin/system/traces`, so nobody needs the Jaeger UI. The API reads the tracing backend's query API (Jaeger `/api/v3`, `telemetry.query_url`, else `telemetry.ui_url`); the browser never talks to Jaeger.
   - Search by service, operation, time window, minimum duration and errors only, or jump to a trace id. Results are a duration-over-time scatter plus a list.
   - Trace: a waterfall (`waterfall.tsx`) in span-tree order with service colors, self time, events as ticks, a minimap to drag-zoom (double-click a span to zoom to it), a span filter that keeps ancestors, collapse and expand, and ↑/↓/←/→. Above 300 visible rows it renders only the rows on screen.
   - Repeated calls fold: 5 or more siblings with the same service and operation (polling, saves) become one row with the count, total time, cadence (`every …`) and a tick per call, placed where the first starts. Unfolding lists one collapsed row per call. A toolbar toggle shows every call; filtering always lists matches flat; a selected or linked span opens the groups and spans above it (`layoutRows`, `pathTo` in `traces-model.ts`).
   - Span detail: timing, parent and children, attributes grouped by namespace (`abi.`, `messaging.`, `rpc.`, `http.`…), events, resource and links to other traces.
-  - Deep links: `?tab=traces&trace=<id>&span=<id>`. Live traffic trace ids and the Jobs run inspector open here (`TraceView` is embeddable with `compact`); Jaeger stays a secondary link when `ui_url` is set.
+  - Deep links: `/settings/system/traces?trace=<id>&span=<id>` (`systemTracePath`). Live traffic trace ids and the Jobs run inspector open here (`TraceView` is embeddable with `compact`); Jaeger stays a secondary link when `ui_url` is set.
   - Pure helpers (tree, self time, ticks, placement, filters) live in `traces-model.ts`; tests in `traces/*.test.ts` with `traces-fixtures.ts`.
 - A source that is down (NATS mode off, discovery not configured, `nats.monitoring_url` unset or unreachable) never fails a whole view: the API returns the others plus a reason, or a 503 `{source, reason}` for NATS-only views, and the page shows that reason.
+
+## Roles & permissions UI module
+
+One set of components manages access at every level: `apps/web/src/components/access/`, over `/api/iam/admin` (API: `apps/api/app/services/iam_admin/`, see its `AGENTS.md`). The scope is its one parameter; what the caller may do there, as IAM answers `GET /api/iam/admin/access?scope=`, is the only thing that decides the sections and buttons.
+
+| Mounted at | Scope | Shown to |
+|---|---|---|
+| Platform Settings › Roles & permissions (`app/settings/roles/`) | the platform (`PLATFORM_ACCESS_SCOPE`) | any platform-level `iam:` action (`settings/lib/nav.ts`) |
+| Organization settings › Roles & permissions (`organizations/[orgId]/settings/roles/`) | the organization, its workspaces one pick away | whoever would see a section at `abi:<org>:-` (`needs: 'iam'` in `lib/nav.ts`, `opensRolesAndPermissions`) |
+| Workspace settings › Roles & permissions (`workspace/[workspaceId]/settings/permissions/`) | the workspace (`abi:<org>:<ws>`, `_none` for a personal one) | whoever would see a section at the workspace (`needs: 'iam'` in `components/shell/settings-nav.tsx`) |
+
+```
+src/components/access/
+├── roles-and-permissions.tsx   # RolesAndPermissions({ scopes }): scope picker, section tabs, the open section
+├── access-scope.ts             # AccessScope (level, value, org, workspace); ownerOf, ownedHere
+├── access-sections.ts          # each section and the action it needs; opensRolesAndPermissions (the menus)
+├── access-directory.ts         # the people of a scope (workspace or org members), for People and groups
+├── access-props.ts             # AccessViewProps: api, can, scope, directory, nonce
+├── access-base.css, access.css # the module's own base styles (tables, buttons, inputs) and shell
+├── people/                     # People & roles: role, direct policies, through groups (people-model.ts)
+├── groups/                     # the scope's groups: create, members, policies here; IdP claims where offered
+├── policies/                   # list (owned here, or attachable from above, read-only), editor
+│   └── builder/                # the policy builder (builder-model.ts: grantable → checkboxes → statements)
+├── roles/                      # role-change.ts (memberships), Built-in roles (the org's feature defaults)
+├── attachments/                # AttachForm, AttachmentTable, scopeLabel
+├── service-accounts/, approvals/, simulator/, audit/   # what the platform administers
+└── roles-and-permissions.test.ts   # permission profiles: every kind of caller at the three scopes
+```
+
+- **Sections** (`access-sections.ts`): People & roles (`iam:ListAttachments`), Groups (`iam:ListGroups`), Policies (`iam:ListPolicies`), Built-in roles (`nexus:GetRoleFeatures`), Service accounts (`iam:ListPrincipals`), Module approvals (`iam:ListManifests`), Simulator (`iam:Explain`), Audit (`nexus:ReadSystem`). A caller who holds none sees "You cannot manage roles or permissions here."; the settings menus show the page on the same rule (`opensRolesAndPermissions`), and Organization settings waits for the access read before sending anyone off it (`orgSectionRedirect`). The page's Refresh reads the access again (`useIamAccess(..., { reload })`).
+- **People & roles**: who holds what at the scope: each person's built-in role (from the directory; the organization's owners and admins read-only "from organization" at a workspace), the policies attached to them there, and what reaches them through a group holding policies there. At the platform, the unscoped attachments. A role changes through `changeMemberRole` (the Members pages' code); what IAM attaches with it (`builtin.features.*`, `builtin.platform.member|viewer`: `isRoleCompanion`) is shown with the role, never detached or offered; other policies attach and detach here (`AttachForm`, which never offers a person a built-in role: that is a membership; a typed id's kind comes from its prefix, `grp_`, `sa_`). What could not be read (the members, a group's members) is said above the table, the rest shown.
+- **Groups**: the scope's own (created with `scope`), with their members (picked from the scope's people) and their policies at the scope; a group owned above is attached to, never changed. IdP group claims show where `access` offers `iam:MapIdpGroup` (the platform).
+- **Policies**: the scope's own and those of higher levels it may attach (`listPolicies(after, scope)`), the latter read-only. A new one is owned by the scope (`createPolicy({ scope })`) and validated as such (`validatePolicy(source, scope)`).
+- **The policy builder** (`policies/builder/`): from `GET /grantable?scope=` (already within the scope's sets) and the module listing (`GET /api/modules/scopes`), checkboxes per module (agents, apps, workflows, pipelines, declared actions, with names and icons) and for Nexus features; only an item's actions the caller holds, nothing a Deny of theirs touches. Choices are one Allow per set of actions on `${scope}:` resources, each with its own sid (the actions with their services, `ModuleUseAgent`, never one a kept statement has); a document reads back into choices, and what the builder cannot show stays as statements ("N other statements stay as written"). A new policy can start from a built-in role the caller's policy list holds; back to Nothing empties it. The statement editor and the YAML/JSON view are the advanced modes. IAM's refusal at save ("You cannot grant what you do not hold: … allows <action> on <resource> …", beyond the caller or outside the set) is shown beside the item it names (`refusedItems`) as well as above.
+- **Built-in roles** (an organization): the role × feature defaults (`GET|PUT /api/organizations/{org}/roles/features`), edited by whoever holds `nexus:UpdateRoleFeatures`; the owner's column is the deployment's.
+- The client is `src/lib/iam-admin/` (`types.ts` is the contract, `api.ts` one function per route, `use-access.ts`). Gate a button with `can('iam:...')`, never a role name or a level.
+- Tests: jsdom render tests beside each view (`@/lib/testing/mount`), pure model tests, and `roles-and-permissions.test.ts`, which renders the module at the three scopes for a platform admin (everything), an organization admin (organization and workspace sections, no service accounts), a workspace admin (their workspace only), a delegated lister holding only `iam:ListPolicies` (exactly that) and a viewer and a stranger (nothing).
+
+Decisions:
+
+- **One UI, the scope a parameter.** Decision: Platform, Organization and Workspace settings mount the same `RolesAndPermissions`, given their scopes; it asks `GET /access?scope=` and shows a section for each action held. Consequences: no section or button is chosen by level; what only the platform administers is absent at an organization or a workspace because the API answers those actions false there (`iam_admin/AGENTS.md`), and the Built-in roles section is an organization's because `nexus:GetRoleFeatures` is decided on one. System › Access, Organization settings › Access and Organization settings › Roles are gone (Access redirects to Roles & permissions), and the old per-level copies (`AttachmentsPanel`, the attachments browser) with them.
+- **A role is a membership, other policies are attachments.** Decision: People & roles and the Members pages change a person's built-in role through the membership routes (`changeMemberRole`); the attach form never offers a person `builtin.<role>`, a group or a service account any policy. Consequences: the org-wide mirror of an org owner or admin, the platform companions and owner protection follow a role changed here as from Members (`services/iam/AGENTS.md`, "Memberships change through `MEMBERSHIPS` only").
+- **The builder offers what the caller may grant.** Decision: the builder is `grantable(scope)` named with the module listing, never the catalogs. Consequences: it may offer less than IAM would take (a pattern `grantable` cannot read as an item stays writable in the Statements view), never more, and a refusal is IAM's words beside the item.
+- **The workspace page is `settings/permissions`.** Decision: `/settings/roles` is Platform Settings' page, so the workspace's is `/workspace/<id>/settings/permissions`. Consequences: its bare legacy link (`/settings/permissions`) goes to the workspace like the other workspace settings links (`LEGACY_WORKSPACE_SETTINGS_SLUGS`).
+
+## Ontology catalog: in-engine and remote ontologies
+
+`apps/api/app/services/ontology/` lists an ontology by its `path`, one opaque string the web app passes back on every call. It is either a file on disk (in-engine modules, from `module.ontologies`) or a **remote id** `module/<module_id>/<path relative to ontologies/>`, the key a remote module's file has in the engine's schema graph (`http://ontology.naas.ai/graph/schema`, an `internal:Schema` with base64 `internal:content`).
+
+- `ontology_source.py` owns the remote side: `parse_remote_id` (rejects `..`, `.`, empty segments, backslashes, control characters), `RemoteOntologyReader` (reads the schema graph through the engine's triple store service; `files()` reads every remote text in one query for the listing, and each text is cached 30 s, at most 64 texts) and `load_remote_graph`. `_load_ontology_graph` and the import resolver (`ontology_imports.py`) dispatch on it: a `module/` path is **never opened as a file**, so a remote id cannot read the disk. An in-engine path that starts with `module/` is skipped.
+- `list_ontology_files` adds the remote files with the in-engine filters (`owl:Ontology` required, `sandbox` and `processes` skipped); `module_name` is the remote module id, so a catalog ref `acme.reports:ReportsOntology.ttl` matches. A remote id matches a workspace allowlist only by its full id or `<module_id>:<file>` (`ontology_catalog_aliases`): never by the bare file name or a path suffix, which any module could reproduce and so enter a workspace that enabled another module's file. The listing runs off the event loop (`asyncio.to_thread`) and keeps each file's row per content version, so an unchanged file is not parsed again. An unreachable schema graph never hides the in-engine files.
+- Export: `export_ontology` returns a file (in-engine) or the stored text (remote); the `/export` route answers either as an attachment. `process_slices` is empty for a remote file (its slice files stay in the module).
+- A change a module pushes shows within the cache TTL (or at once after `POST /cache/clear`). Files a module later removes stay listed: nothing unloads them.
+- Tests: `ontology_remote_test.py` (fake schema graph, listing, stats, export, traversal, cache bounds).
 
 ## Mobile list-detail pattern
 
@@ -652,6 +741,7 @@ Several NEXUS surfaces use the same mobile UX: a **list screen first**, then a *
 | Account | `/account` | `/account/{section}` | Settings nav (`lib/nav.ts`) | Section page |
 | Files | `/workspace/{id}/files` | `/workspace/{id}/files/browse` | `FilesSection` (drives, starred) | File browser page |
 | Org settings | `/organizations/{orgId}/settings` | `/organizations/{orgId}/settings/{section}` | Settings nav (`lib/nav.ts`) | Section page |
+| Platform settings | `/settings` | `/settings/{tables,system,roles}/...` | Settings nav (`settings/lib/nav.ts`), the items the caller holds | Item page; a table closes to Nexus tables |
 
 **URL is the source of truth.** Each module exposes a small route parser:
 

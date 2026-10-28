@@ -156,6 +156,19 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
         decision = self._iam.authorize(req.action, req.resource)
         return pb.AuthorizeResponse(decision=codec.decision_to_pb(decision))
 
+    def _call_authorize_declared(
+        self, req: pb.AuthorizeDeclaredRequest
+    ) -> pb.AuthorizeDeclaredResponse:
+        decision, resource = self._iam.authorize_declared(
+            req.action,
+            req.resource_type,
+            list(req.parts),
+            workspace=req.workspace_id or None,
+        )
+        return pb.AuthorizeDeclaredResponse(
+            decision=codec.decision_to_pb(decision), resource=resource
+        )
+
     def _call_filter(self, req: pb.FilterRequest) -> pb.FilterResponse:
         result = self._iam.filter(req.action, list(req.resources))
         return pb.FilterResponse(
@@ -167,6 +180,11 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
             req.action, req.resource, principal_id=_opt(req, "principal_id")
         )
         return pb.ExplainResponse(explanation=codec.explanation_to_pb(explanation))
+
+    def _call_grantable(self, req: pb.GrantableRequest) -> pb.GrantableResponse:
+        return pb.GrantableResponse(
+            catalogs=[codec.grantable_to_pb(c) for c in self._iam.grantable(req.scope)]
+        )
 
     # -- principals ---------------------------------------------------------------
 
@@ -227,7 +245,9 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
     # -- groups ---------------------------------------------------------------------
 
     def _call_create_group(self, req: pb.CreateGroupRequest) -> pb.CreateGroupResponse:
-        record = self._iam.create_group(req.name, org=_opt(req, "org"))
+        record = self._iam.create_group(
+            req.name, org=_opt(req, "org"), scope=_opt(req, "scope")
+        )
         return pb.CreateGroupResponse(group=codec.principal_to_pb(record))
 
     def _call_get_group(self, req: pb.GetGroupRequest) -> pb.GetGroupResponse:
@@ -236,7 +256,9 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
         )
 
     def _call_list_groups(self, req: pb.ListGroupsRequest) -> pb.ListGroupsResponse:
-        page = self._iam.list_groups(limit=req.limit or 100, after=_opt(req, "after"))
+        page = self._iam.list_groups(
+            limit=req.limit or 100, after=_opt(req, "after"), scope=_opt(req, "scope")
+        )
         return pb.ListGroupsResponse(
             groups=[codec.principal_to_pb(g) for g in page.items],
             next_after=page.next_after,
@@ -290,7 +312,10 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
         self, req: pb.CreatePolicyRequest
     ) -> pb.CreatePolicyResponse:
         policy = self._iam.create_policy(
-            req.name, req.document_json, description=req.description
+            req.name,
+            req.document_json,
+            description=req.description,
+            scope=_opt(req, "scope"),
         )
         return pb.CreatePolicyResponse(policy=codec.policy_to_pb(policy))
 
@@ -302,7 +327,9 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
     def _call_list_policies(
         self, req: pb.ListPoliciesRequest
     ) -> pb.ListPoliciesResponse:
-        page = self._iam.list_policies(limit=req.limit or 100, after=_opt(req, "after"))
+        page = self._iam.list_policies(
+            limit=req.limit or 100, after=_opt(req, "after"), scope=_opt(req, "scope")
+        )
         return pb.ListPoliciesResponse(
             policies=[codec.policy_to_pb(p) for p in page.items],
             next_after=page.next_after,
@@ -448,6 +475,29 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
     def _call_delete_scope(self, req: pb.DeleteScopeRequest) -> pb.DeleteScopeResponse:
         deleted = self._iam.delete_scope(req.org, req.workspace or "-")
         return pb.DeleteScopeResponse(deleted=deleted)
+
+    def _call_get_set(self, req: pb.GetSetRequest) -> pb.GetSetResponse:
+        found = self._iam.get_set(req.org, req.workspace or "-")
+        return pb.GetSetResponse(scope_set=codec.scope_set_to_pb(found))
+
+    def _call_effective_set(
+        self, req: pb.EffectiveSetRequest
+    ) -> pb.EffectiveSetResponse:
+        found = self._iam.effective_set(req.org, req.workspace or "-")
+        return pb.EffectiveSetResponse(scope_set=codec.scope_set_to_pb(found))
+
+    def _call_list_sets(self, req: pb.ListSetsRequest) -> pb.ListSetsResponse:
+        found = self._iam.list_sets(_opt(req, "org"))
+        return pb.ListSetsResponse(sets=[codec.scope_set_to_pb(s) for s in found])
+
+    def _call_put_set(self, req: pb.PutSetRequest) -> pb.PutSetResponse:
+        recorded = self._iam.put_set(
+            req.org,
+            req.workspace or "-",
+            modules=codec.set_items_from_pb(req, "modules"),
+            features=codec.set_items_from_pb(req, "features"),
+        )
+        return pb.PutSetResponse(scope_set=codec.scope_set_to_pb(recorded))
 
     def _call_register_catalog(
         self, req: pb.RegisterCatalogRequest

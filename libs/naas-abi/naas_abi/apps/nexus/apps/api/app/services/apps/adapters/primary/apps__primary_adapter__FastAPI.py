@@ -7,7 +7,7 @@ configuration over HTTP.
 
 Routes
 ------
-* ``GET    /api/apps/?workspace_id=…``         — catalog (with enable state)
+* ``GET    /api/apps/?workspace_id=…``         — catalog of the workspace's set (with enable state)
 * ``POST   /api/apps/access-token``            — scoped JWT for ``/app-html/``
 * ``POST   /api/apps/sso-token``               — HMAC handshake for a Pages portal
 * ``GET    /api/apps/{ws}``                    — list configs for workspace
@@ -66,11 +66,14 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import (
     APP_NAME_PATTERN,
     MODULE_ID_PATTERN,
 )
+from naas_abi.apps.nexus.apps.api.app.services.apps.scopes import app_scope
 from naas_abi.apps.nexus.apps.api.app.services.apps.service import (
     AppAlreadyConfiguredError,
     AppsService,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam import sets as scope_sets
+from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi.apps.nexus.apps.api.app.services.registry import (
     ServiceRegistry,
@@ -79,6 +82,7 @@ from naas_abi.apps.nexus.apps.api.app.services.registry import (
 from naas_abi.apps.nexus.apps.api.app.utils.public_urls import (
     resolve_public_module_asset_url,
 )
+from naas_abi_core.services.iam.module_scopes import APP
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -316,6 +320,28 @@ _APP_ASSET_SUFFIXES = {
 
 @lru_cache(maxsize=1)
 def _scan_apps_html_paths() -> dict[str, str]:
+    """``_scan_apps_html_assets``: each asset's file."""
+    return {key: file for key, (file, _root) in _scan_apps_html_assets().items()}
+
+
+def app_html_root_of(path: str) -> str | None:
+    """The folder, ``/app-html/<module/path>/<app>/``, of the app whose file
+    ``/app-html/`` serves at ``path``; None for a path no engine app serves.
+
+    Module paths nest (``a.b`` app ``c`` and module ``a.b.c`` share the prefix
+    ``/app-html/a/b/c/``): a link locked to one app's folder opens that app's
+    files, never another app's below it."""
+    key = path.removeprefix(links.APP_HTML_ROOT)
+    try:
+        found = _scan_apps_html_assets().get(key)
+    except Exception:  # noqa: BLE001 - no engine loaded: /app-html/ serves nothing
+        _log.debug("No app assets to resolve %s", path, exc_info=True)
+        return None
+    return found[1] if found is not None else None
+
+
+@lru_cache(maxsize=1)
+def _scan_apps_html_assets() -> dict[str, tuple[str, str]]:
     """Build a URL map for safe browser assets under app directories.
 
     HTML entry points commonly import colocated scripts, styles, fonts,
@@ -323,7 +349,7 @@ def _scan_apps_html_paths() -> dict[str, str]:
     the same authenticated ``/app-html/`` namespace while excluding source
     and other non-browser files.
     """
-    html_map: dict[str, str] = {}
+    html_map: dict[str, tuple[str, str]] = {}
     for module in _iter_loaded_modules():
         module_root = getattr(module, "module_root_path", None)
         if not module_root:
@@ -344,12 +370,16 @@ def _scan_apps_html_paths() -> dict[str, str]:
                     continue
                 rel = asset_file.relative_to(app_dir).as_posix()
                 url_key = f"{module_path_url}/{app_dir.name}/{rel}"
-                html_map[url_key] = str(asset_file.resolve())
+                html_map[url_key] = (
+                    str(asset_file.resolve()),
+                    f"{links.APP_HTML_ROOT}{module_path_url}/{app_dir.name}/",
+                )
     _log.info("Apps browser asset map built: %d entries", len(html_map))
     return html_map
 
 
 def _remote_app_info(app: Any) -> AppInfo:
+    """An app of a READY remote module: served, so installed."""
     return AppInfo(
         module_path=app.module_path,
         module_name=app.module_id,
@@ -360,12 +390,14 @@ def _remote_app_info(app: Any) -> AppInfo:
         description=app.description,
         url=app.url,
         icon_emoji=app.icon_emoji or None,
+        installed=True,
     )
 
 
-async def _remote_apps_catalog() -> tuple[AppInfo, ...]:
+async def _remote_apps_catalog(*, strict: bool = False) -> tuple[AppInfo, ...]:
     """Apps of READY remote modules (NATS discovery); none when it is off or
-    unreachable, so the loaded modules' apps are always listed."""
+    unreachable, so the loaded modules' apps are always listed. ``strict``
+    raises instead, for a caller that says what it could not read."""
     from naas_abi.apps.nexus.apps.api.app.services.apps.remote.factory import (
         get_remote_app_directory,
     )
@@ -373,6 +405,8 @@ async def _remote_apps_catalog() -> tuple[AppInfo, ...]:
     try:
         apps = await get_remote_app_directory().list_apps()
     except Exception:  # noqa: BLE001 - discovery down: list the local apps
+        if strict:
+            raise
         _log.warning("Could not list remote module apps", exc_info=True)
         return ()
     return tuple(_remote_app_info(app) for app in apps)
@@ -451,6 +485,43 @@ def _existing_config(
     return partial(apps_service.get_app_config, workspace_id, app_id)
 
 
+async def _may_switch(current_user: User, workspace_id: str, app_id: str) -> bool:
+    """Whether the caller turns this app on and off in the workspace (``UpdateApp``
+    on it, as the toggle asks): they alone list it while it is off, to turn it
+    back on."""
+    return await authz.allowed("UpdateApp", user=current_user, workspace=workspace_id, id=app_id)
+
+
+async def _switchable(
+    current_user: User, workspace_id: str, app_ids: list[str]
+) -> Callable[[Any], Awaitable[bool]]:
+    """``filter_scopes``'s ``include_hidden`` for a listing: an app turned off is
+    listed to who may turn that one back on (``UpdateApp`` on it), all asked in
+    one call, made only when an app is turned off."""
+    may: set[str] | None = None
+
+    async def switchable(app_id: str) -> bool:
+        nonlocal may
+        if may is None:
+            may = await authz.allowed_ids(
+                "UpdateApp", user=current_user, workspace=workspace_id, ids=app_ids
+            )
+        return app_id in may
+
+    return switchable
+
+
+async def _ensure_in_set(workspace_id: str, app_id: str) -> None:
+    """403 for an app outside the workspace's set: what a workspace has is chosen
+    on the organization's Modules & features page, never here."""
+    if not await scope_sets.within_set([app_id], workspace=workspace_id, scope_of=app_scope):
+        raise HTTPException(
+            status_code=403,
+            detail="This app is not in the workspace's set: its organization adds it "
+            "on the Modules & features page",
+        )
+
+
 class AppsFastAPIPrimaryAdapter:
     def __init__(self) -> None:
         self.router = router
@@ -472,9 +543,15 @@ class AppHtmlAccessTokenRequest(BaseModel):
         description="Lifetime, eight hours at most; defaults to "
         "app_html_access_token_expire_minutes",
     )
+    app_id: str | None = Field(
+        default=None,
+        max_length=512,
+        description="The catalog app the link opens (<module_path>:<app>): its path lock "
+        "is the app's own folder",
+    )
     path_prefix: str | None = Field(
         default=None,
-        description="Optional path lock, e.g. /app-html/axi/devops/",
+        description="The app's path lock, /app-html/<module/path>/<app>/, when no app_id is given",
     )
 
 
@@ -485,40 +562,63 @@ class AppHtmlAccessTokenResponse(BaseModel):
     path_prefix: str | None = None
 
 
+def _app_html_root(app: AppInfo) -> str:
+    """An engine app's folder under ``/app-html/``: its link's path lock."""
+    return f"/app-html/{app.module_path.replace('.', '/')}/{app.app_name}/"
+
+
 def _app_id_of_prefix(path_prefix: str | None) -> str:
-    """The catalog app an ``/app-html/<module>/<app>/`` path lock names; ``-``
-    (any app) when there is no lock or it names none."""
+    """The catalog app an ``/app-html/<module/path>/<app>/`` path lock names;
+    ``-`` when there is no lock or it names none (a link to no app is refused)."""
     if path_prefix:
         locked = path_prefix.strip().rstrip("/") + "/"
         for app in _scan_apps_catalog():
-            if locked == f"/app-html/{app.module_path.replace('.', '/')}/{app.app_name}/":
+            if locked == _app_html_root(app):
                 return app.app_id
     return "-"
+
+
+def _link_target(body: AppHtmlAccessTokenRequest) -> tuple[str, str]:
+    """The app a link opens and its path lock: the app ``app_id`` names (the
+    lock, if given too, must be its folder), else the one ``path_prefix`` names.
+    400 for a link that opens no catalog app."""
+    if body.app_id:
+        app = next((a for a in _scan_apps_catalog() if a.app_id == body.app_id), None)
+        if app is None:
+            raise HTTPException(status_code=400, detail="app_id names no app")
+        root = _app_html_root(app)
+        if body.path_prefix and body.path_prefix.strip().rstrip("/") + "/" != root:
+            raise HTTPException(status_code=400, detail="path_prefix is not the app's folder")
+        return app.app_id, root
+    app_id = _app_id_of_prefix(body.path_prefix)
+    if app_id == "-":
+        raise HTTPException(status_code=400, detail="Name the app: app_id or its path_prefix")
+    return app_id, str(body.path_prefix).strip().rstrip("/") + "/"
 
 
 @router.post(
     "/access-token",
     response_model=AppHtmlAccessTokenResponse,
-    dependencies=[declares("UseApp")],
+    dependencies=[declares("module:OpenApp")],
 )
 async def create_app_html_access_token(
     body: AppHtmlAccessTokenRequest,
     current_user: User = Depends(get_current_user_required),
 ) -> AppHtmlAccessTokenResponse:
     """Issue a time-limited link accepted by ``/app-html/`` (alongside ABI_API_KEY):
-    a revocable IAM grant for this user, never a session."""
-    await authz.require(
-        "UseApp",
-        user=current_user,
-        workspace=body.workspace_id,
-        id=_app_id_of_prefix(body.path_prefix),
-    )
+    a revocable IAM grant for this user, never a session. It is locked to one
+    app (``path_prefix``), which the user may open in the workspace."""
+    app_id, path_prefix = _link_target(body)
+    scope = app_scope(app_id)
+    if scope is None:
+        raise HTTPException(status_code=400, detail="Name the app: app_id or its path_prefix")
+    await authz.require_scope(scope, user=current_user, workspace=body.workspace_id)
     try:
         token, expires_in = await asyncio.to_thread(
             mint_app_html_access_token,
             user_id=current_user.id,
             expires_minutes=body.expires_minutes,
-            path_prefix=body.path_prefix,
+            path_prefix=path_prefix,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -527,7 +627,7 @@ async def create_app_html_access_token(
     return AppHtmlAccessTokenResponse(
         access_token=token,
         expires_in=expires_in,
-        path_prefix=body.path_prefix,
+        path_prefix=path_prefix,
     )
 
 
@@ -547,7 +647,7 @@ class RemoteAppGrantResponse(BaseModel):
 @router.post(
     "/remote-grant",
     response_model=RemoteAppGrantResponse,
-    dependencies=[declares("UseApp")],
+    dependencies=[declares("module:OpenApp")],
 )
 async def create_remote_app_grant(
     body: RemoteAppGrantRequest,
@@ -561,11 +661,10 @@ async def create_remote_app_grant(
     not as long as the access token it was asked with (minutes, refreshed in the
     background): it is an IAM grant, bound to its user. A logout or
     ``/remote-grant/revoke`` ends it."""
-    await authz.require(
-        "UseApp",
+    await authz.require_scope(
+        ModuleScope(APP, body.module_id, body.app),
         user=current_user,
         workspace=body.workspace_id,
-        id=f"remote/{body.module_id}:{body.app}",
     )
     from naas_abi.apps.nexus.apps.api.app.services.apps.remote import access
     from naas_abi.apps.nexus.apps.api.app.services.apps.remote.http_routes import (
@@ -663,11 +762,14 @@ async def list_apps(
     request: Request,
     workspace_id: str,
     apps_service: AppsService = Depends(get_apps_service),
+    current_user: User = Depends(get_current_user_required),
 ) -> AppsResponse:
-    """Return every app of the loaded modules and of READY remote modules.
+    """Return the apps of the loaded modules and of READY remote modules in the
+    workspace's set that the caller may open there (``module:OpenApp``).
 
     Results carry the workspace's enable state. Apps without a stored record
-    default to ``enabled=False``.
+    default to ``enabled=False``. One turned off is refused to everyone and
+    listed only to who may turn it back on (``UpdateApp``).
     """
     try:
         from naas_abi import ABIModule
@@ -676,7 +778,16 @@ async def list_apps(
     except Exception:
         loaded_modules = {}
 
-    catalog = (*_scan_apps_catalog(), *await _remote_apps_catalog())
+    found = (*_scan_apps_catalog(), *await _remote_apps_catalog())
+    switchable = await _switchable(current_user, workspace_id, [a.app_id for a in found])
+    catalog = await authz.filter_scopes(
+        found,
+        user=current_user,
+        workspace=workspace_id,
+        scope_of=lambda app: app_scope(app.app_id),
+        include_hidden=lambda app: switchable(app.app_id),
+        within_set=True,
+    )
     workspace_slug = await _workspace_slug(workspace_id)
 
     enabled_by_app_id = await apps_service.get_enabled_states(workspace_id)
@@ -717,9 +828,20 @@ async def list_apps(
 async def list_app_configs(
     workspace_id: str,
     apps_service: AppsService = Depends(get_apps_service),
+    current_user: User = Depends(get_current_user_required),
 ) -> list[dict]:
-    """List every stored app config for a workspace."""
-    records = await apps_service.list_app_configs(workspace_id)
+    """List the stored app configs of a workspace, for the apps of its set the
+    caller may open (those turned off, for who may turn them on)."""
+    found = await apps_service.list_app_configs(workspace_id)
+    switchable = await _switchable(current_user, workspace_id, [r.app_id for r in found])
+    records = await authz.filter_scopes(
+        found,
+        user=current_user,
+        workspace=workspace_id,
+        scope_of=lambda record: app_scope(record.app_id),
+        include_hidden=lambda record: switchable(record.app_id),
+        within_set=True,
+    )
     return [_serialize_record(r) for r in records]
 
 
@@ -730,9 +852,12 @@ async def create_app_config(
     current_user: User = Depends(get_current_user_required),
     apps_service: AppsService = Depends(get_apps_service),
 ) -> dict:
-    """Create a new app config row (errors if one already exists)."""
+    """Create a new app config row (errors if one already exists), for an app of
+    the workspace's set."""
     await authz.require("InstallApp", user=current_user, workspace=workspace_id, id=body.app_id)
     await _ensure_app_exists(body.app_id)
+    if body.enabled:
+        await _ensure_in_set(workspace_id, body.app_id)
     try:
         record = await apps_service.create_app_config(
             AppConfigCreateInput(
@@ -751,8 +876,18 @@ async def get_app_config(
     workspace_id: str,
     app_id: str,
     apps_service: AppsService = Depends(get_apps_service),
+    current_user: User = Depends(get_current_user_required),
 ) -> dict:
-    """Get a single app config row."""
+    """Get a single app config row, of an app the caller may open (one turned
+    off, for who may turn it on)."""
+    scope = app_scope(app_id)
+    if scope is not None and not await authz.allowed_scope(
+        scope,
+        user=current_user,
+        workspace=workspace_id,
+        include_hidden=await _may_switch(current_user, workspace_id, app_id),
+    ):
+        raise HTTPException(status_code=404, detail="App config not found")
     await _ensure_app_exists(app_id, _existing_config(apps_service, workspace_id, app_id))
     record = await apps_service.get_app_config(workspace_id, app_id)
     if record is None:
@@ -771,11 +906,14 @@ async def update_app_config(
 
     Idempotent: if no row exists yet, one is created with the supplied
     values. This lets the UI toggle simply call PATCH without a prior POST.
+    Turning one on needs it in the workspace's set; off, any.
     """
     await _ensure_app_exists(
         app_id,
         None if updates.enabled else _existing_config(apps_service, workspace_id, app_id),
     )
+    if updates.enabled:
+        await _ensure_in_set(workspace_id, app_id)
 
     record = await apps_service.upsert_app_config(
         workspace_id=workspace_id,

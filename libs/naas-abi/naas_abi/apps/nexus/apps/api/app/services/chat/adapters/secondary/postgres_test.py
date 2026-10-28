@@ -88,6 +88,7 @@ async def test_get_agent_by_id_maps_record() -> None:
         class_name="MyAgent",
         model_id="model-1",
         provider="openai",
+        enabled=False,
     )
     db = AsyncMock()
     db.execute = AsyncMock(return_value=_scalar_result(single=row))
@@ -98,6 +99,7 @@ async def test_get_agent_by_id_maps_record() -> None:
     assert agent is not None
     assert agent.id == "agent-1"
     assert agent.provider == "openai"
+    assert agent.enabled is False
 
 
 @pytest.mark.asyncio

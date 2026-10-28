@@ -100,7 +100,7 @@ export default function AppsSettingsPage() {
       <SettingsPageHeader
         title="Apps"
         badge={`${enabledCount} enabled`}
-        description="Enable or disable the marketplace apps available in this workspace"
+        description="Turn the apps of this workspace on or off for everyone in it"
       />
 
       {loading && installedApps.length === 0 ? (
@@ -108,8 +108,8 @@ export default function AppsSettingsPage() {
       ) : installedApps.length === 0 ? (
         <SettingsEmpty
           icon={<AppWindow size={40} className="opacity-40" />}
-          title="No apps installed"
-          description="Install modules from the Marketplace to see their apps here."
+          title="No apps in this workspace"
+          description="The modules of this workspace's set have no app. Organization owners and admins choose them on Modules & features."
         />
       ) : (
         <div className="space-y-4">

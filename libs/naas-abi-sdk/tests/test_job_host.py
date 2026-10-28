@@ -82,15 +82,24 @@ class _Connection:
 
     max_payload = 1024 * 1024
 
+    def __init__(self):
+        self.published = []
+
+    async def publish(self, subject, data=b"", **kwargs):
+        self.published.append((subject, data))
+
 
 class _Transport:
     timeout = 1.0
+
+    def __init__(self):
+        self.connection = _Connection()
 
     async def access_token(self):
         return "token"
 
     async def connect(self):
-        return _Connection()
+        return self.connection
 
 
 def _host(documents=None, **kwargs):
@@ -1819,15 +1828,18 @@ def test_a_long_completion_outage_is_logged_as_an_error(caplog):
 
 
 class _Authorizer:
-    """Discovery's answer for a caller: refuse, or fail, as told."""
+    """Discovery's answer for a caller: refuse, or fail, as told; ``run_as``:
+    the context an allowed trigger's run executes in."""
 
-    def __init__(self, error=None, only=None):
+    def __init__(self, error=None, only=None, run_as=None):
         self.error, self.only, self.calls = error, only, []
+        self.run_as = run_as
 
     async def __call__(self, operation, job, run_id, headers, stored_at):
         self.calls.append((operation, job, run_id, dict(headers)))
         if self.error is not None and self.only in (None, operation):
             raise self.error
+        return self.run_as if operation == "trigger" else None
 
 
 def test_a_manual_trigger_runs_once_its_caller_is_authorized():
@@ -1876,6 +1888,75 @@ def test_a_trigger_discovery_could_not_answer_for_is_retried_later():
     _run(host, JobDescriptor("ingest"), handler, msg)
     assert msg.calls[0][0] == "nak"
     assert (runs_collection(PROJECT), "ingest:7") not in docs.data
+
+
+def test_a_trigger_stored_for_a_user_runs_for_them_on_every_attempt():
+    from naas_abi_sdk.call_context import (
+        CallContext,
+        current_call_context,
+        service_account,
+        user,
+    )
+
+    for_bob = CallContext(
+        principal=service_account("sa_module"), on_behalf_of=user("bob")
+    )
+    docs, authorize = Documents(), _Authorizer(run_as=for_bob)
+    seen = []
+
+    async def handler(ctx):
+        seen.append(current_call_context())
+        if len(seen) == 1:
+            raise RuntimeError("upstream 503")
+        return "done"
+
+    host, descriptor = (
+        _host(docs, authorize=authorize),
+        JobDescriptor("ingest", max_attempts=2),
+    )
+    for attempt in (1, 2):
+        _run(host, descriptor, handler, Msg(attempt=attempt))
+
+    assert docs.run("ingest:7")["status"] == "SUCCEEDED"
+    # Asked again on the retry: a right revoked since would stop it.
+    assert [call[0] for call in authorize.calls] == ["trigger", "trigger"]
+    assert [(c.principal.id, c.user) for c in seen] == [("sa_module", user("bob"))] * 2
+    # Outside the run, nothing changed.
+    assert current_call_context().user is None
+
+
+def test_a_trigger_refused_on_a_retry_keeps_its_history_and_tells_waiters():
+    from naas_abi_sdk.transport import RPCError
+
+    docs, authorize = Documents(), _Authorizer()
+
+    async def handler(ctx):
+        ctx.log("tried once")
+        raise RuntimeError("upstream 503")
+
+    host, descriptor = (
+        _host(docs, authorize=authorize),
+        JobDescriptor("ingest", max_attempts=3),
+    )
+    _run(host, descriptor, handler, Msg(attempt=1, payload={"since": "monday"}))
+    first = dict(docs.run("ingest:7"))
+    assert first["status"] == "RETRYING"
+
+    # The right is revoked before the retry.
+    authorize.error = RPCError("PERMISSION_DENIED", "no longer")
+    msg = Msg(attempt=2, payload={"since": "monday"})
+    _run(host, descriptor, handler, msg)
+
+    run = docs.run("ingest:7")
+    assert run["status"] == "FAILED" and "PERMISSION_DENIED" in run["error"]
+    assert run["finished_at"]
+    # What attempt 1 recorded stays.
+    for kept in ("attempt", "payload", "started_at", "logs", "retry_at"):
+        assert run[kept] == first[kept], kept
+    assert msg.calls == [("term",)]
+    subject, body = host.transport.connection.published[-1]
+    assert subject == job_subjects(PROJECT, MODULE, "ingest").done
+    assert json.loads(body) == {"run_id": "ingest:7", "status": "FAILED"}
 
 
 def test_scheduled_triggers_are_the_hosts_own():

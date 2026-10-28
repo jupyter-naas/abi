@@ -37,13 +37,20 @@ def _action(
 
 CATALOG = ActionCatalog(
     service=SERVICE,
-    version=1,
+    version=2,
     resource_types=(
         ResourceType("module", id="path", placement="platform"),
         ResourceType("agent", id="path", placement="platform"),
         ResourceType("model", id="path", placement="platform"),
         ResourceType("app", id="path", placement="platform"),
         ResourceType("job", id="path", placement="platform"),
+        ResourceType(
+            "workflow",
+            id="path",
+            placement="platform",
+            description="workflow/<project>/<module id>/<name>: a job of kind workflow, "
+            "by a second name; TriggerJob on either starts it.",
+        ),
         ResourceType(
             "run",
             id="path",
@@ -85,7 +92,7 @@ CATALOG = ActionCatalog(
         _action("ListApps", "list", ("app",)),
         _action("OpenApp", "read", ("app",), "abi.mod.*.*.*.app.*.http"),
         _action("ListJobs", "list", ("job",)),
-        _action("TriggerJob", "write", ("job",), "abi.jobs.*.trigger.>"),
+        _action("TriggerJob", "write", ("job", "workflow"), "abi.jobs.*.trigger.>"),
         _action("ScheduleJob", "write", ("job",), "abi.jobs.*.schedule.>"),
         _action("ListJobRuns", "list", ("job_run",)),
         _action("GetJobRun", "read", ("job_run",)),

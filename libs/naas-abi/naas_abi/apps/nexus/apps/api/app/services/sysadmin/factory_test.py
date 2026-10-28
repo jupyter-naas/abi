@@ -298,3 +298,87 @@ def test_agents_in_nats_mode_read_the_engine_documents_and_discovery():
     assert isinstance(admin._runs, DocumentAgentRunStore)
     assert admin._runs.runs_collection == agent_runs_collection("zen")
     assert isinstance(admin._control, NatsAgentControl) and admin._control.project == "zen"
+
+
+def test_workflows_are_wired_over_the_jobs_adapters_in_nats_mode(tmp_path):
+    """An engine module's workflow is listed with its schema, and a run read through
+    the factory's adapters has its steps (document root: ``engine.services.document_admin``)."""
+    from naas_abi.apps.nexus.apps.api.app.services.sysadmin.adapters.secondary.json_schema_validator import (
+        JsonSchemaValidator,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.sysadmin.factory import build_jobs_admin
+    from naas_abi.apps.nexus.apps.api.app.services.workflows.service import WorkflowsService
+    from naas_abi_core.services.document.adapters.secondary.DocumentSecondaryAdapterSQLite import (
+        DocumentSecondaryAdapterSQLite,
+    )
+    from naas_abi_core.services.document.DocumentPort import CollectionSpec, FieldSpec
+    from naas_abi_core.services.document.DocumentService import DocumentService
+    from naas_abi_sdk.jobs import JobDescriptor, runs_collection
+    from naas_abi_sdk.workflows import steps_collection
+
+    documents = DocumentService._for_engine(
+        DocumentSecondaryAdapterSQLite(str(tmp_path / "documents.sqlite"))
+    )
+    view = documents.for_namespace("acme.flows")
+    view.ensure_collection(CollectionSpec(name=runs_collection("zen")))
+    view.ensure_collection(
+        CollectionSpec(
+            name=steps_collection("zen"),
+            fields=(FieldSpec(name="run_id", type="string", indexed=True),),
+        )
+    )
+    view.put(
+        runs_collection("zen"),
+        "ingest:1",
+        {"job": "ingest", "status": "SUCCEEDED", "result": {"count": 1}, "fired_at": "t0"},
+    )
+    view.put(
+        steps_collection("zen"),
+        "ingest:1#fetch",
+        {
+            "run_id": "ingest:1",
+            "key": "fetch",
+            "kind": "step",
+            "status": "SUCCEEDED",
+            "fired_at": "t0",
+        },
+    )
+    schema = '{"type": "object", "properties": {"n": {"type": "integer"}}, "required": ["n"]}'
+    module = NS(jobs=(JobDescriptor("ingest", kind="workflow", input_schema=schema),))
+    engine = NS(
+        modules={"acme.flows": module},
+        configuration=NS(
+            nats=NS(discovery=NS(project="zen"), nats_url="nats://127.0.0.1:1"),
+            telemetry=None,
+        ),
+        services=NS(dataset_available=lambda: False, document_admin=documents),
+    )
+    admin = build_jobs_admin(engine, audit_engine=lambda: None)
+    service = WorkflowsService(admin)
+
+    listed = asyncio.run(service.list()).workflows
+    view_ = asyncio.run(service.status("acme.flows", "ingest:1"))
+
+    assert [(w.key, w.input_schema["required"]) for w in listed] == [("acme.flows/ingest", ["n"])]
+    assert isinstance(admin._validator, JsonSchemaValidator)
+    assert (view_.run.status, view_.run.result) == ("SUCCEEDED", {"count": 1})
+    assert [s.key for s in view_.workflow.steps] == ["fetch"]
+
+
+def test_workflows_without_nats_are_listed_but_have_no_runs_to_read():
+    from naas_abi.apps.nexus.apps.api.app.services.sysadmin.factory import build_jobs_admin
+    from naas_abi.apps.nexus.apps.api.app.services.workflows.service import WorkflowsService
+    from naas_abi_sdk.jobs import JobDescriptor
+
+    module = NS(jobs=(JobDescriptor("ingest", kind="workflow"),))
+    engine = NS(
+        modules={"acme.flows": module},
+        configuration=NS(nats=None, telemetry=None),
+        services=NS(dataset_available=lambda: False),
+    )
+    service = WorkflowsService(build_jobs_admin(engine, audit_engine=lambda: None))
+
+    assert [w.key for w in asyncio.run(service.list()).workflows] == ["acme.flows/ingest"]
+    with pytest.raises(SourceUnavailable) as exc:
+        asyncio.run(service.status("acme.flows", "ingest:1"))
+    assert exc.value.source == "runs"

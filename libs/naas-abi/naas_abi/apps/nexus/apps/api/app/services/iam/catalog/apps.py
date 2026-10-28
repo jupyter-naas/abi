@@ -5,10 +5,13 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.catalog.dsl import action, rt
 TYPES = (rtype("app"), rtype("app_project"), rtype("module"))
 
 ACTIONS = (
-    action("ListApps", "list", "app", feature="apps"),
-    action("GetApp", "read", "app", feature="apps"),
-    # Open, link or grant: the sandboxed iframe of an app.
-    action("UseApp", "read", "app", feature="apps"),
+    # Listing and opening a module's app is its module scope
+    # (``module:OpenApp``, ``services/apps/scopes.py``), not the "apps"
+    # section: the section is the settings page and the app projects.
+    action("ListApps", "list", "app"),
+    action("GetApp", "read", "app"),
+    # A link that is no module's app: a Pages portal's sign-in.
+    action("UseApp", "read", "app"),
     # Turning an app on, off or back to its default in the workspace.
     action("InstallApp", "admin", "app", feature="apps"),
     action("UpdateApp", "admin", "app", feature="apps"),
@@ -25,4 +28,7 @@ ACTIONS = (
     # The marketplace of modules and its pricing.
     action("ListModules", "list", "module", feature="marketplace"),
     action("GetMarketplaceConfig", "read", "module", feature="marketplace"),
+    # Every module's agents, apps, workflows, pipelines and declared actions:
+    # what the policy builder grants.
+    action("ListModuleScopes", "admin", "module"),
 )

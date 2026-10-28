@@ -125,16 +125,30 @@ async def test_create_saves_the_description_and_a_trimmed_group(db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_feature_overrides_are_saved_and_none_restores_the_config(db) -> None:
+async def test_a_workspace_abandoned_after_a_failed_flush_leaves_nothing(db) -> None:
+    """A create that fails at the flush that follows it: the session refuses
+    everything until rolled back, so the row goes with the rollback and the IAM
+    scope is dropped directly, never through a delete it would refuse."""
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import WorkspaceCreateInput
+    from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import WorkspaceService
+    from sqlalchemy import select
+    from sqlalchemy.exc import IntegrityError
+
     adapter = WorkspaceSecondaryAdapterPostgres(db=db)
+    memberships = SimpleNamespace(drop_scope=AsyncMock())
+    service = WorkspaceService(adapter=adapter, memberships=memberships)
+    created = await adapter.create_workspace(
+        WorkspaceCreateInput(name="Two", slug="two", owner_id="founder", organization_id="org-1")
+    )
+    db.add(WorkspaceModel(id=created.id, name="Dup", slug="dup", created_at=NOW, updated_at=NOW))
+    with pytest.raises(IntegrityError):
+        await db.flush()
 
-    saved = await adapter.set_workspace_feature_overrides("ws-1", {"maps": False, "graph": True})
-    assert saved.feature_overrides == {"graph": True, "maps": False}
-    assert (await adapter.get_workspace_by_id("ws-1")).feature_overrides == {
-        "graph": True,
-        "maps": False,
-    }
+    await service.abandon_workspace(created)
 
-    cleared = await adapter.set_workspace_feature_overrides("ws-1", None)
-    assert cleared.feature_overrides is None
-    assert await adapter.set_workspace_feature_overrides("ws-missing", {}) is None
+    memberships.drop_scope.assert_awaited_once_with("org-1", created.id)
+    ids = (await db.execute(select(WorkspaceModel.id))).scalars().all()
+    assert ids == ["ws-1"]

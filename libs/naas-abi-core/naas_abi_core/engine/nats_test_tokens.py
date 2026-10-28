@@ -12,7 +12,8 @@ tokens fail ``TEST_TOKENS.verifier``.
 from __future__ import annotations
 
 import time
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Any
 
 from naas_abi_core.engine.nats_auth import (
     AGENT_AUDIENCE,
@@ -57,6 +58,7 @@ class TestTokens:
         actor: str | None = None,
         actor_name: str | None = None,
         groups: tuple[str, ...] = (),
+        scope: Sequence[Mapping[str, Any]] | None = None,
     ) -> IssuedToken:
         now = int(time.time()) if issued_at is None else issued_at
         claims = TokenClaims(
@@ -71,6 +73,7 @@ class TestTokens:
             actor=actor,
             actor_name=actor_name,
             groups=groups,
+            scope=tuple(scope) if scope is not None else None,
         )
         return IssuedToken(
             sign_token(self.key, claims), float(now + ttl), claims.subject, name

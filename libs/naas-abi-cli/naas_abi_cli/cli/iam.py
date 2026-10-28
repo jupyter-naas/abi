@@ -623,7 +623,8 @@ def group_bind(
 ) -> None:
     """Give the members of PROVIDER's group GROUP a role in an org or a workspace.
 
-    Without --workspace the role is the organization's own (--org).
+    Without --workspace the role is the organization's own (--org). The ABI group
+    that carries it belongs to that organization (``idp:<provider>:<group>``).
     """
     with _services(ctx) as services:
         binding = services.iam.bind_idp_group(

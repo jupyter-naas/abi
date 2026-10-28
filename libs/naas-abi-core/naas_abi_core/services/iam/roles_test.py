@@ -75,19 +75,17 @@ def test_personal_types_are_reached_through_their_owner():
 
 def test_admins_grant_roles_below_owner_only():
     admin = roles.role_policy(roles.ADMIN, registry())
-    grants = [
-        s for s in admin.document.statements if s.sid == "AdminGrantsRolesBelowOwner"
-    ]
-    assert len(grants) == 1
-    assert set(grants[0].resources) == {
+    sids = ("AdminGrantsRolesBelowOwner", "AdminAttachesCustomerPolicies")
+    grants = {s.sid: s for s in admin.document.statements if s.sid in sids}
+    assert set(grants[sids[0]].resources) == {
         "${scope}:iam:attachment/builtin.admin/*",
         "${scope}:iam:attachment/builtin.member/*",
         "${scope}:iam:attachment/builtin.viewer/*",
     }
+    # Customer policies (pol_…), never another managed one (owner, features).
+    assert grants[sids[1]].resources == ("${scope}:iam:attachment/pol_*/*",)
     # Nothing else of admin's names the attachment type with an admin action.
-    others = [
-        s for s in admin.document.statements if s.sid != "AdminGrantsRolesBelowOwner"
-    ]
+    others = [s for s in admin.document.statements if s.sid not in sids]
     assert not any(
         "iam:AttachPolicy" in s.actions or "iam:DetachPolicy" in s.actions
         for s in others

@@ -18,11 +18,9 @@ from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
     BASELINE_ROLES,
     PINNED_FEATURES,
-    InvalidFeatureOverridesError,
     build_feature_flags,
-    effective_workspace_overrides,
     enabled_feature_catalog,
-    validate_workspace_feature_overrides,
+    with_pinned,
     workspace_features,
 )
 from naas_abi.apps.nexus.apps.api.app.core.workspace_config_seeds import workspace_seed_rows
@@ -41,13 +39,15 @@ from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.drive_roots im
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.service import FilesService
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz, placements
-from naas_abi.apps.nexus.apps.api.app.services.iam.bootstrap import refresh_feature_policies
+from naas_abi.apps.nexus.apps.api.app.services.iam import runtime as iam_runtime
+from naas_abi.apps.nexus.apps.api.app.services.iam import sets as scope_sets
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
     ROLE_NAMES,
     MembershipDenied,
     UnknownUserError,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam_admin.runtime import get_iam_admin_service
 from naas_abi.apps.nexus.apps.api.app.services.invites import runtime as invites_runtime
 from naas_abi.apps.nexus.apps.api.app.services.invites.mail import send_added_notice
 from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
@@ -106,7 +106,9 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
 from naas_abi.apps.nexus.apps.api.app.utils.public_urls import (
     resolve_stored_asset_url,
 )
+from naas_abi_core import logger
 from naas_abi_core.services.email.EmailService import EmailService
+from naas_abi_core.services.iam.sets import SetValidationError
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -196,9 +198,9 @@ class WorkspaceCreate(BaseModel):
     font_family: str | None = None
     description: str | None = Field(default=None, max_length=200)
     workspace_group: str | None = Field(default=None, max_length=100)
-    # Feature overrides of the role defaults, chosen on the create page. None
-    # (the default) keeps the deployment config, like "Use config".
-    feature_overrides: dict[FeatureKey, bool] | None = None
+    # The new workspace's feature set, chosen on the create page, within its
+    # organization's. None (the default) keeps the organization's.
+    features: list[FeatureKey] | None = None
 
 
 class WorkspaceUpdate(BaseModel):
@@ -307,11 +309,24 @@ def _workspace_public_asset_url(raw: str | None) -> str | None:
     return resolve_stored_asset_url(raw)
 
 
+async def _feature_flags(
+    user: Any, records: list[WorkspaceRecord]
+) -> dict[str, dict[str, bool]] | None:
+    """What the user may use in each workspace: IAM's ``UseFeature`` (role
+    defaults, the sets, policies granting features); None without IAM."""
+    return await scope_sets.user_feature_flags(
+        user,
+        [(r.organization_id, r.id) for r in records],
+        enabled_feature_catalog(settings.feature_flags),
+    )
+
+
 def _to_schema(
     record: WorkspaceRecord,
     current_user_role: str | None,
     *,
     organization_override: dict[str, list[str]] | None = None,
+    feature_flags: dict[str, bool] | None = None,
 ) -> Workspace:
     role = current_user_role or "member"
     return Workspace(
@@ -337,14 +352,14 @@ def _to_schema(
         organization_logo_url=record.organization_logo_url,
         organization_logo_rectangle_url=record.organization_logo_rectangle_url,
         current_user_role=current_user_role,
-        feature_flags=build_feature_flags(
+        feature_flags=feature_flags
+        if feature_flags is not None
+        else build_feature_flags(
             role=role,
             feature_flags_config=settings.feature_flags,
-            workspace_slug=record.slug,
-            workspace_id=record.id,
             organization_id=record.organization_id,
             organization_override=organization_override,
-            workspace_override=record.feature_overrides,
+            feature_set=scope_sets.effective_features(record.organization_id, record.id),
         ),
     )
 
@@ -358,11 +373,13 @@ async def list_workspaces(
     rows = await service.list_workspaces(user_id=current_user.id)
     roles = await service.effective_roles(current_user.id, rows)
     overrides = await _load_org_role_overrides([row.organization_id for row in rows], org_service)
+    flags = await _feature_flags(current_user, list(rows)) or {}
     return [
         _to_schema(
             row,
             role,
             organization_override=overrides.get(row.organization_id or ""),
+            feature_flags=flags.get(row.id),
         )
         for row, role in zip(rows, roles, strict=False)
     ]
@@ -379,10 +396,12 @@ async def get_workspace(
     row = await service.get_workspace(workspace_id=workspace_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
+    flags = await _feature_flags(current_user, [row]) or {}
     return _to_schema(
         row,
         role,
         organization_override=await _load_org_role_override(row.organization_id, org_service),
+        feature_flags=flags.get(row.id),
     )
 
 
@@ -399,11 +418,26 @@ async def get_workspace_by_slug(
     # The slug names the workspace: a caller who cannot see it learns nothing of it.
     await authz.require("GetWorkspace", user=current_user, workspace=row.id)
     role = await service.get_workspace_role(current_user.id, row.id)
+    flags = await _feature_flags(current_user, [row]) or {}
     return _to_schema(
         row,
         role,
         organization_override=await _load_org_role_override(row.organization_id, org_service),
+        feature_flags=flags.get(row.id),
     )
+
+
+async def _undo_create(service: WorkspaceService, record: WorkspaceRecord) -> None:
+    """Remove a workspace whose creation failed half-way: its placements, then
+    its uncommitted row and its IAM scope (and so its set and attachments)."""
+    try:
+        await placements.forget_workspace(record.id)
+    except Exception:  # noqa: BLE001 - the original failure is what is raised
+        logger.exception(f"Could not forget the placements of workspace {record.id}")
+    try:
+        await service.abandon_workspace(record)
+    except Exception:  # noqa: BLE001 - the original failure is what is raised
+        logger.exception(f"Could not remove workspace {record.id} after a failed create")
 
 
 @router.post("", dependencies=[declares("CreateWorkspace")])
@@ -427,22 +461,10 @@ async def create_workspace(
         )
     else:
         await authz.require("CreateOrganization", user=current_user)
-    feature_overrides = None
-    if workspace.feature_overrides is not None:
-        # Overrides are an org admin's call (like the org Features modal), which
-        # CreateWorkspace already required; a personal workspace follows the
-        # role defaults.
-        if not workspace.organization_id:
-            raise HTTPException(
-                status_code=400,
-                detail="Feature overrides need an organization workspace",
-            )
-        try:
-            feature_overrides = validate_workspace_feature_overrides(
-                settings.feature_flags, workspace.feature_overrides
-            )
-        except InvalidFeatureOverridesError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if workspace.features is not None and not workspace.organization_id:
+        # A set is an org admin's call, which CreateWorkspace already required
+        # for an org's workspace; a personal workspace follows the role defaults.
+        raise HTTPException(status_code=400, detail="A feature set needs an organization workspace")
     owner_id = workspace.owner_id or current_user.id
     if not workspace.organization_id and owner_id != current_user.id:
         raise HTTPException(
@@ -462,6 +484,18 @@ async def create_workspace(
         if workspace.catalog_seed is not None
         else None
     )
+    # Its set, decided before anything exists: its organization's, narrowed by
+    # the features and the catalog seed chosen here (``services/iam/sets.py``).
+    planned = None
+    if workspace.organization_id:
+        try:
+            planned = await scope_sets.plan_workspace_set(
+                workspace.organization_id,
+                features=with_pinned(workspace.features),
+                catalog_seed=catalog_seed,
+            )
+        except iam_runtime.IAMUnavailableError as exc:
+            raise HTTPException(status_code=503, detail="Access control is unavailable") from exc
     try:
         record = await service.create_workspace(
             WorkspaceCreateInput(
@@ -486,28 +520,33 @@ async def create_workspace(
         raise HTTPException(status_code=400, detail="Slug already exists") from exc
     except UnknownUserError as exc:
         raise HTTPException(status_code=400, detail="Workspace owner is not a known user") from exc
-    if feature_overrides is not None:
-        record = (
-            await service.set_workspace_feature_overrides(
-                workspace_id=record.id, overrides=feature_overrides
-            )
-            or record
-        )
     # What IAM derives from the new workspace: the kernel resources its roles
-    # reach (drives, caches, drafts) and the feature overrides its slug names.
-    await service.adapter.db.flush()
-    await placements.place_new_workspace(service.adapter.db, record.id)
-    if settings.feature_flags.workspace_overrides:
-        await refresh_feature_policies(service.adapter.db)
+    # reach (drives, caches, drafts), and its set. Either failing undoes the
+    # workspace: never a workspace without its set, nor placements without it.
+    try:
+        await service.adapter.db.flush()
+        await placements.place_new_workspace(service.adapter.db, record.id)
+        if planned is not None:
+            await scope_sets.record_workspace_set(record.id, planned)
+    except Exception as exc:
+        await _undo_create(service, record)
+        if isinstance(exc, SetValidationError):
+            # The organization's set narrowed since the set was planned.
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        if isinstance(exc, iam_runtime.IAMUnavailableError):
+            raise HTTPException(status_code=503, detail="Access control is unavailable") from exc
+        raise
     await seed_workspace_agents(
         workspace_id=record.id,
         current_user=current_user,
         agent_service=registry.agents,
     )
+    flags = await _feature_flags(current_user, [record]) or {}
     return _to_schema(
         record,
         "owner",
         organization_override=await _load_org_role_override(record.organization_id, org_service),
+        feature_flags=flags.get(record.id),
     )
 
 
@@ -579,10 +618,12 @@ async def update_workspace(
         raise HTTPException(status_code=400, detail="Workspace owner is not a known user") from exc
     if record is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
+    flags = await _feature_flags(current_user, [record]) or {}
     return _to_schema(
         record,
         role,
         organization_override=await _load_org_role_override(record.organization_id, org_service),
+        feature_flags=flags.get(record.id),
     )
 
 
@@ -605,47 +646,94 @@ async def get_workspace_configuration(
 
     ``seeds`` lists what ``nexus_config.organizations[].workspaces[]`` preloads
     for this workspace slug, read from the loaded config on each call.
-    ``can_edit_features`` is true for the organization's owners and admins,
-    who save the overrides through ``PUT /organizations/{org_id}/workspaces/
-    {workspace_id}/features`` (same rule as Organization Settings).
+    ``features`` are those the workspace offers its roles, within its set (its
+    own within its organization's, IAM's); ``can_edit_features`` is whether the
+    caller may change that set (``iam:PutSet``: the organization's owners and
+    admins), on the modules × workspaces page of the organization's settings.
     """
     record = await service.get_workspace(workspace_id=workspace_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
     flags = settings.feature_flags
-    overrides, overrides_source = effective_workspace_overrides(
-        flags,
-        workspace_slug=record.slug,
-        workspace_id=record.id,
-        workspace_override=record.feature_overrides,
-    )
-    org_role = (
-        await org_service.get_organization_role(
-            user_id=current_user.id, org_id=record.organization_id
-        )
+    can_edit = (
+        await get_iam_admin_service().may_edit_set(current_user, record.organization_id, record.id)
         if record.organization_id
-        else None
+        else False
     )
     return {
         "organization_id": record.organization_id,
-        "can_edit_features": org_role in ("owner", "admin"),
-        # Features on for at least one role, after the overrides.
+        "can_edit_features": can_edit,
+        # Features on for at least one role, within the workspace's set.
         "features": workspace_features(
             roles=BASELINE_ROLES,
             feature_flags_config=flags,
-            workspace_slug=record.slug,
-            workspace_id=record.id,
             organization_id=record.organization_id,
             organization_override=await _load_org_role_override(
                 record.organization_id, org_service
             ),
-            workspace_override=record.feature_overrides,
+            feature_set=await scope_sets.effective_features_async(
+                record.organization_id, record.id
+            ),
         ),
         "pinned": [key for key in PINNED_FEATURES if key in enabled_feature_catalog(flags)],
-        "feature_overrides": overrides,
-        "feature_overrides_source": overrides_source,
         "seeds": catalog_seed_rows(record.catalog_seed)
         + workspace_seed_rows(settings.organizations, record.slug),
+    }
+
+
+@router.get(
+    "/{workspace_id}/resources",
+    dependencies=[
+        guard(
+            "GetWorkspaceConfiguration",
+            denied="Only admins can view what the workspace has",
+        )
+    ],
+)
+async def get_workspace_resources(
+    workspace_id: str,
+    current_user: User = Depends(get_current_user_required),
+    service: WorkspaceService = Depends(get_workspace_service),
+) -> dict:
+    """What the workspace has: its effective set (its own within its
+    organization's, IAM's), read-only, for workspace settings (which pages it
+    shows, General).
+
+    ``features`` are the deployment's enabled features in the set; ``modules``
+    each module with something in the set, with how many of its agents, apps,
+    workflows and pipelines are; ``totals`` add them up, and ``unavailable``
+    names the kinds a source did not answer for (discovery, the jobs), whose
+    totals may be short; ``can_edit_set`` is
+    whether the caller may change the set (``iam:PutSet``), on the organization's
+    Modules & features page."""
+    from naas_abi.apps.nexus.apps.api.app.services.modules import scopes as module_scopes
+
+    record = await service.get_workspace(workspace_id=workspace_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    scope_set = await scope_sets.workspace_set(workspace_id)
+    unavailable: set[str] = set()
+    modules = module_scopes.in_set(await module_scopes.gather(unavailable), scope_set)
+    can_edit = (
+        await get_iam_admin_service().may_edit_set(current_user, record.organization_id, record.id)
+        if record.organization_id
+        else False
+    )
+    return {
+        "organization_id": record.organization_id,
+        "can_edit_set": can_edit,
+        "features": [
+            key
+            for key in enabled_feature_catalog(settings.feature_flags)
+            if scope_set.features is None or key in scope_set.features
+        ],
+        "modules": modules,
+        "totals": {
+            plural: sum(entry[plural] for entry in modules)
+            for plural in module_scopes.PLURAL.values()
+        },
+        # Kinds a source did not answer for: their totals may be short.
+        "unavailable": sorted(unavailable),
     }
 
 

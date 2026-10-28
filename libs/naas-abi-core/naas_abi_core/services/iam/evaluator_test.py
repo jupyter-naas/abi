@@ -14,7 +14,11 @@ from naas_abi_core.services.iam.IAMPorts import (
     PermissionDeniedError,
     ResourceNotFoundError,
 )
-from naas_abi_core.services.iam.IAMService import IAMService
+from naas_abi_core.services.iam.IAMService import (
+    IAMService,
+    group_resource,
+    policy_resource,
+)
 from naas_abi_core.services.iam.tests.iam_harness import document, graph, statement
 
 QUERY = "triple_store:Query"
@@ -569,7 +573,9 @@ def test_a_module_account_never_opens_the_idp_admin_app_on_its_own(h, platform):
     for module in ("sales/crm", "evil/idp"):
         account = h.service_account(f"module/{module}")
         assert not h.allowed("discovery:OpenApp", IDP_ADMIN_APP, account)
-        assert not h.allowed("discovery:OpenApp", "abi:-:-:discovery:app/evil/idp/admin", account)
+        assert not h.allowed(
+            "discovery:OpenApp", "abi:-:-:discovery:app/evil/idp/admin", account
+        )
 
 
 def test_the_engine_still_opens_the_idp_admin_app(h, platform):
@@ -599,7 +605,9 @@ def test_engine_and_api_hold_enumerated_statements_not_a_wildcard(h):
         assert explanation.statement.sid == sid
         assert explanation.statement.policy_id == f"builtin.{actor}"
     # What neither names, neither reaches: Nexus's own catalog is not the engine's.
-    assert not h.allowed("nexus:GetWorkspace", "abi:o:w:nexus:workspace/-", actor="engine")
+    assert not h.allowed(
+        "nexus:GetWorkspace", "abi:o:w:nexus:workspace/-", actor="engine"
+    )
     assert h.allowed("nexus:GetWorkspace", "abi:o:w:nexus:workspace/-", actor="api")
     assert not h.allowed("iam:DeletePrincipal", "abi:-:-:iam:principal/x", actor="api")
 
@@ -843,7 +851,10 @@ def test_an_owner_at_the_platform_scope_cannot_attach_unscoped(h):
     for policy_id in ("builtin.platform_admin", "builtin.engine", "builtin.api"):
         with h.as_(owner), pytest.raises((IAMNotFoundError, PermissionDeniedError)):
             h.iam.attach_policy(policy_id, owner.id)
-    assert not h.allowed("iam:CreatePolicy", "abi:-:-:iam:policy/p", owner)
+    # Nor the platform's policies and groups: they are the platform admin's.
+    assert not h.allowed("iam:CreatePolicy", policy_resource("p"), owner)
+    assert not h.allowed("iam:UpdatePolicy", policy_resource("p"), owner)
+    assert not h.allowed("iam:AddGroupMember", group_resource("g"), owner)
     assert not h.allowed("triple_store:DropGraph", graph("g"), owner)
     # Within its scope it still manages platform-scope attachments.
     bob = h.user("bob")
@@ -882,7 +893,9 @@ def test_acting_for_a_user_never_opens_a_sealed_resource(h):
     seals = h.iam.seals()
     assert any(s.owner == "engine" and matches_seal(s.pattern, secret) for s in seals)
     assert h.allowed("secret:Get", secret, actor="engine")
-    on_behalf = CallContext(principal=service_account("engine"), on_behalf_of=user("u-1"))
+    on_behalf = CallContext(
+        principal=service_account("engine"), on_behalf_of=user("u-1")
+    )
     with use_call_context(on_behalf):
         decision = h.iam.authorize("secret:Get", secret)
     assert not decision.allowed

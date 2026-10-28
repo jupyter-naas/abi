@@ -69,6 +69,51 @@ class IAMService(ServiceProxy):
             not_found() if not_found else NotFound("NOT_FOUND", f"{resource} not found")
         )
 
+    async def authorize_declared(
+        self,
+        action: str,
+        resource_type: str,
+        parts: Iterable[str],
+        *,
+        workspace: str | None = None,
+    ) -> tuple[Decision, str]:
+        """The decision on an action a module declares, and the resource IAM
+        named for it: ``<type>/<parts>`` of the action's catalog, in
+        ``workspace`` or else the workspace of the call, platform-level with
+        none. The module never builds the name."""
+        found = await self._request(
+            "authorize_declared",
+            action=action,
+            resource_type=resource_type,
+            parts=list(parts),
+            workspace_id=workspace or "",
+        )
+        decision = found["decision"]
+        return (
+            Decision(decision["allowed"], decision["visible"], decision["reason"]),
+            found["resource"],
+        )
+
+    async def require_declared(
+        self,
+        action: str,
+        resource_type: str,
+        parts: Iterable[str],
+        *,
+        workspace: str | None = None,
+    ) -> None:
+        """``require`` for an action a module declares."""
+        decision, resource = await self.authorize_declared(
+            action, resource_type, parts, workspace=workspace
+        )
+        if decision.allowed:
+            return
+        if decision.visible:
+            raise PermissionDenied(
+                "PERMISSION_DENIED", f"{action} is not allowed on {resource}"
+            )
+        raise NotFound("NOT_FOUND", f"{resource} not found")
+
     async def filter(self, action: str, resources: Iterable[str]) -> FilterResult:
         result = await self._request("filter", action=action, resources=list(resources))
         return FilterResult(list(result["allowed"]), list(result["prefix_hints"]))
@@ -79,6 +124,13 @@ class IAMService(ServiceProxy):
         return await self._request(
             "explain", action=action, resource=resource, principal_id=principal_id
         )
+
+    async def grantable(self, scope: str) -> list[dict[str, Any]]:
+        """What the caller may grant at ``scope`` (about the caller: no permission
+        needed): ``[{"service", "actions": [{"action", "resources", "excluded"}]}]``,
+        resources written ``${scope}:...``. A change that gives more than the
+        caller holds raises ``GrantNotHeld``."""
+        return await self._request("grantable", scope=scope)
 
     # -- principals --------------------------------------------------------------
 
@@ -132,17 +184,19 @@ class IAMService(ServiceProxy):
     # -- groups ---------------------------------------------------------------------
 
     async def create_group(
-        self, name: str, *, org: str | None = None
+        self, name: str, *, org: str | None = None, scope: str | None = None
     ) -> dict[str, Any]:
-        return await self._request("create_group", name=name, org=org)
+        """A group owned by ``scope``: ``abi:-:-`` (the default), ``abi:<org>:-``
+        (also what ``org`` alone means) or ``abi:<org>:<ws>``."""
+        return await self._request("create_group", name=name, org=org, scope=scope)
 
     async def get_group(self, group_id: str) -> dict[str, Any]:
         return await self._request("get_group", group_id=group_id)
 
     async def list_groups(
-        self, *, limit: int = 100, after: str | None = None
+        self, *, limit: int = 100, after: str | None = None, scope: str | None = None
     ) -> dict[str, Any]:
-        return await self._request("list_groups", limit=limit, after=after)
+        return await self._request("list_groups", limit=limit, after=after, scope=scope)
 
     async def delete_group(self, group_id: str) -> dict[str, Any]:
         return await self._request("delete_group", group_id=group_id)
@@ -184,14 +238,22 @@ class IAMService(ServiceProxy):
     # -- policies and attachments ------------------------------------------------------
 
     async def create_policy(
-        self, name: str, document: Mapping[str, Any] | str, *, description: str = ""
+        self,
+        name: str,
+        document: Mapping[str, Any] | str,
+        *,
+        description: str = "",
+        scope: str | None = None,
     ) -> dict[str, Any]:
+        """A policy owned by ``scope`` (the platform when None); an org's or a
+        workspace's names only ``${scope}:`` resources."""
         return _policy(
             await self._request(
                 "create_policy",
                 name=name,
                 document_json=_document(document),
                 description=description,
+                scope=scope,
             )
         )
 
@@ -199,9 +261,11 @@ class IAMService(ServiceProxy):
         return _policy(await self._request("get_policy", policy_id=policy_id))
 
     async def list_policies(
-        self, *, limit: int = 100, after: str | None = None
+        self, *, limit: int = 100, after: str | None = None, scope: str | None = None
     ) -> dict[str, Any]:
-        page = await self._request("list_policies", limit=limit, after=after)
+        page = await self._request(
+            "list_policies", limit=limit, after=after, scope=scope
+        )
         return {**page, "policies": [_policy(p) for p in page["policies"]]}
 
     async def update_policy(
@@ -337,6 +401,39 @@ class IAMService(ServiceProxy):
 
     async def delete_scope(self, org: str, workspace: str = "-") -> bool:
         return await self._request("delete_scope", org=org, workspace=workspace)
+
+    # -- sets: what an org or a workspace may use ----------------------------
+    # A set is {"org", "workspace", "modules", "features"}; a part that is None
+    # is everything (nothing recorded), a list the items.
+
+    async def get_set(self, org: str, workspace: str = "-") -> dict[str, Any]:
+        return await self._request("get_set", org=org, workspace=workspace)
+
+    async def effective_set(self, org: str, workspace: str = "-") -> dict[str, Any]:
+        """A workspace's set within its org's (an org's own for ``-``)."""
+        return await self._request("effective_set", org=org, workspace=workspace)
+
+    async def list_sets(self, org: str | None = None) -> list[dict[str, Any]]:
+        return await self._request("list_sets", org=org)
+
+    async def put_set(
+        self,
+        org: str,
+        workspace: str = "-",
+        *,
+        modules: Iterable[str] | None = None,
+        features: Iterable[str] | None = None,
+    ) -> dict[str, Any]:
+        """Record a set: an org's needs the platform admin, a workspace's the
+        org's owners or admins; a workspace's set wider than its org's is
+        refused (``InvalidArgument``) naming the extra items."""
+        return await self._request(
+            "put_set",
+            org=org,
+            workspace=workspace,
+            modules=None if modules is None else {"items": list(modules)},
+            features=None if features is None else {"items": list(features)},
+        )
 
     async def register_catalog(self, catalog: Mapping[str, Any]) -> bool:
         """Register a service's action catalog (a catalog document, as a mapping)."""

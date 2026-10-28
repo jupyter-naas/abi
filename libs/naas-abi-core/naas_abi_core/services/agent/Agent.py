@@ -3,6 +3,7 @@ from __future__ import annotations
 # Standard library imports for type hints
 import atexit
 import concurrent.futures
+import inspect
 import json
 import os
 import re
@@ -72,6 +73,7 @@ from naas_abi_core.services.agent.context import (
     documents_turn_active,
     slides_step_limit_message,
     slides_turn_active,
+    tool_scope_refused,
 )
 from naas_abi_core.services.agent.ontologies.modules.AgentEventOntology import (
     AgentAIMessageEmitted,
@@ -906,33 +908,7 @@ class Agent(Expose):
         if hasattr(base_chat_model, "output_version"):
             self._chat_model_output_version = base_chat_model.output_version
 
-        self._chat_model_with_tools = base_chat_model
-        # Variant bound WITHOUT context-gated tools (e.g. coding-workspace tools),
-        # used when the current request is not tied to a workspace so the model
-        # never sees tools it cannot use. Falls back to the full model when there
-        # are no gated tools to strip.
-        self._chat_model_without_workspace_tools = base_chat_model
-        if self._tools or self._native_tools:
-            tools_to_bind: list[Tool | BaseTool | dict] = []
-            tools_to_bind.extend(self._structured_tools)
-            tools_to_bind.extend(self._native_tools)
-
-            # Test if the chat model can bind tools by trying with a default tool first
-            if can_bind_tools(base_chat_model):
-                self._chat_model_with_tools = base_chat_model.bind_tools(tools_to_bind)
-                gated = [t for t in tools_to_bind if not Agent._requires_workspace(t)]
-                self._chat_model_without_workspace_tools = (
-                    base_chat_model.bind_tools(gated)
-                    if len(gated) != len(tools_to_bind)
-                    else self._chat_model_with_tools
-                )
-            else:
-                logger.warning(
-                    f"Chat model {type(base_chat_model).__name__} does not support tool calling. Tools will not be available for agent '{self._name}'."
-                )
-                # Keep the original model without tools
-                self._chat_model_with_tools = base_chat_model
-                self._chat_model_without_workspace_tools = base_chat_model
+        self._bind_chat_models()
 
         # Use provided memory or create based on environment
         if memory is None:
@@ -1052,6 +1028,38 @@ class Agent(Expose):
 
     def as_tools(self, parent_graph: bool = False) -> list[BaseTool]:
         return [make_handoff_tool(agent=self, parent_graph=parent_graph)]
+
+    def _bind_chat_models(self) -> None:
+        """Bind the chat model to this agent's tools (its structured tools, its
+        sub-agents' handoffs, its native tools), with and without the tools a
+        coding workspace gates."""
+        self._chat_model_with_tools = self._chat_model
+        # Variant bound WITHOUT context-gated tools (e.g. coding-workspace tools),
+        # used when the current request is not tied to a workspace so the model
+        # never sees tools it cannot use. Falls back to the full model when there
+        # are no gated tools to strip.
+        self._chat_model_without_workspace_tools = self._chat_model
+        if self._tools or self._native_tools:
+            tools_to_bind: list[Tool | BaseTool | dict] = []
+            tools_to_bind.extend(self._structured_tools)
+            tools_to_bind.extend(self._native_tools)
+
+            # Test if the chat model can bind tools by trying with a default tool first
+            if can_bind_tools(self._chat_model):
+                self._chat_model_with_tools = self._chat_model.bind_tools(tools_to_bind)
+                gated = [t for t in tools_to_bind if not Agent._requires_workspace(t)]
+                self._chat_model_without_workspace_tools = (
+                    self._chat_model.bind_tools(gated)
+                    if len(gated) != len(tools_to_bind)
+                    else self._chat_model_with_tools
+                )
+            else:
+                logger.warning(
+                    f"Chat model {type(self._chat_model).__name__} does not support tool calling. Tools will not be available for agent '{self._name}'."
+                )
+                # Keep the original model without tools
+                self._chat_model_with_tools = self._chat_model
+                self._chat_model_without_workspace_tools = self._chat_model
 
     def build_graph(self, patcher: Callable | None = None):
         graph = StateGraph(ABIAgentState)
@@ -2267,6 +2275,47 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                     continue
                 args = {"state": state, "tool_call": {**tool_call, "role": "tool_call"}}
 
+            # A handoff to an agent that is not (or no longer) a sub-agent of this
+            # one: the agents a caller may not use are left out of its turn.
+            if tool_name.startswith("transfer_to_") and tool_name.removeprefix(
+                "transfer_to_"
+            ) not in {Agent.validate_name(a.name) for a in self._agents}:
+                had_tool_error = True
+                results.append(
+                    Command(
+                        update={
+                            "messages": [
+                                ToolMessage(
+                                    content=f"Tool '{tool_name}' is not available to agent '{self._name}'.",
+                                    name=tool_name,
+                                    tool_call_id=tool_call["id"],
+                                )
+                            ]
+                        },
+                    )
+                )
+                continue
+
+            # A module's workflow or pipeline the caller may not run here.
+            refused = tool_scope_refused(tool_)
+            if refused is not None:
+                kind, module, name = refused
+                had_tool_error = True
+                results.append(
+                    Command(
+                        update={
+                            "messages": [
+                                ToolMessage(
+                                    content=f"You may not run the {kind} {name} of {module} here.",
+                                    name=tool_name,
+                                    tool_call_id=tool_call["id"],
+                                )
+                            ]
+                        },
+                    )
+                )
+                continue
+
             # Try to invoke the tool.
             try:
                 logger.debug(f"🔧 Tool arguments: {args.get('args')}")
@@ -2936,8 +2985,13 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         queue: Queue,
         shared_state: AgentSharedState,
         duplicated_children: list[Agent],
+        *,
+        narrowed: bool = False,
     ) -> Agent:
-        """Fast per-request clone: reuse wired tools/models, only rebuild graphs."""
+        """Fast per-request clone: reuse wired tools/models, only rebuild graphs.
+
+        ``narrowed``: some sub-agents were left out, so the template's models,
+        bound with their handoff tools, are rebound to the clone's own tools."""
         clone = object.__new__(type(self))
 
         clone._name = self._name
@@ -2974,6 +3028,8 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         clone._structured_tools = structured_tools
         clone._agents = runtime_agents
         clone._tools_by_name = {tool.name: tool for tool in structured_tools}
+        if narrowed:
+            clone._bind_chat_models()
 
         if getattr(clone, "sequential_supervisor", False):
             for sub_agent in clone._agents:
@@ -2989,12 +3045,18 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         self,
         queue: Queue | None = None,
         agent_shared_state: AgentSharedState | None = None,
+        *,
+        keep: Callable[[Agent], bool] | None = None,
     ) -> Agent:
         """Create a new instance of the agent with the same configuration.
 
         This method creates a deep copy of the agent with the same configuration
         but with its own independent state. This is useful when you need to run
         multiple instances of the same agent concurrently.
+
+        ``keep``: the sub-agents the copy may have, at every depth (the agents a
+        caller may use). A sub-agent it refuses is left out before the copy is
+        built: no handoff tool, no graph node, no intent routes to it.
 
         Returns:
             Agent: A new Agent instance with the same configuration
@@ -3004,11 +3066,17 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         if queue is None:
             queue = Queue()
 
+        children = [a for a in self._original_agents if keep is None or keep(a)]
         duplicated_children: list[Agent] = [
-            agent.duplicate(queue, shared_state) for agent in self._original_agents
+            duplicate_sub_agent(agent, queue, shared_state, keep) for agent in children
         ]
 
-        new_agent = self._duplicate_shell(queue, shared_state, duplicated_children)
+        new_agent = self._duplicate_shell(
+            queue,
+            shared_state,
+            duplicated_children,
+            narrowed=len(children) != len(self._original_agents),
+        )
 
         own_limit = getattr(self, "recursion_limit", None)
         if isinstance(own_limit, int) and own_limit > 0:
@@ -3245,6 +3313,20 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
 
     def hello(self) -> str:
         return "Hello"
+
+
+def duplicate_sub_agent(
+    agent: Agent,
+    queue: Queue,
+    shared_state: AgentSharedState,
+    keep: Callable[[Agent], bool] | None,
+) -> Agent:
+    """``agent.duplicate``, handing ``keep`` down to a sub-agent whose
+    ``duplicate`` takes it (a subclass overriding it may not: its own sub-agents
+    are then left to the caller's pruning and the run-time checks)."""
+    if keep is not None and "keep" in inspect.signature(agent.duplicate).parameters:
+        return agent.duplicate(queue, shared_state, keep=keep)
+    return agent.duplicate(queue, shared_state)
 
 
 def make_handoff_tool(*, agent: Agent, parent_graph: bool = False) -> BaseTool:

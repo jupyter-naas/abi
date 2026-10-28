@@ -22,7 +22,7 @@ class _Directory:
     async def list_agents(self):
         return [RESEARCHER]
 
-    async def stream(self, key, prompt, *, thread_id, invocation_id=None):
+    async def stream(self, key, prompt, *, thread_id, invocation_id=None, workspace_id=None):
         self.calls.append((key, prompt, thread_id, invocation_id))
         if self.error:
             raise self.error
@@ -161,7 +161,7 @@ def test_the_stream_reads_on_to_the_runs_end_after_done():
     finished = []
 
     class _Draining(_Directory):
-        async def stream(self, key, prompt, *, thread_id, invocation_id=None):
+        async def stream(self, key, prompt, *, thread_id, invocation_id=None, workspace_id=None):
             async for event in super().stream(
                 key, prompt, thread_id=thread_id, invocation_id=invocation_id
             ):
@@ -208,7 +208,7 @@ def test_a_chat_completion_without_a_user_message_raises(monkeypatch):
 class _FailsAfterDone(_Directory):
     """A run whose answer is done, then ends FAILED while the module saves it."""
 
-    async def stream(self, key, prompt, *, thread_id, invocation_id=None):
+    async def stream(self, key, prompt, *, thread_id, invocation_id=None, workspace_id=None):
         yield {"event": "ai_message", "data": "JetStream"}
         yield {"event": "done", "data": "[DONE]"}
         raise RemoteAgentUnavailable(key, "AGENT_FAILED")
@@ -222,7 +222,7 @@ def test_a_failure_after_done_leaves_the_answer_as_it_was(monkeypatch, caplog):
 
 def test_a_failure_before_done_still_ends_the_stream_with_an_error():
     class _FailsMidway(_Directory):
-        async def stream(self, key, prompt, *, thread_id, invocation_id=None):
+        async def stream(self, key, prompt, *, thread_id, invocation_id=None, workspace_id=None):
             yield {"event": "ai_message", "data": "Jet"}
             raise RemoteAgentUnavailable(key, "WAIT_TIMEOUT")
 

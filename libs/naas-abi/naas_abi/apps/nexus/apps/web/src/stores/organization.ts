@@ -182,7 +182,6 @@ interface OrganizationState {
     orgId: string,
     invite: OrganizationInvite,
   ) => Promise<{ member: OrganizationMember | null; answer: InviteAnswer }>;
-  updateMemberRole: (orgId: string, userId: string, role: 'owner' | 'admin' | 'member') => Promise<OrganizationMember | null>;
   updateMemberProfile: (
     orgId: string,
     userId: string,
@@ -497,28 +496,6 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
       return { member, answer };
     } catch (error) {
       console.error('Failed to invite member:', error);
-      throw error;
-    }
-  },
-
-  updateMemberRole: async (orgId: string, userId: string, role: 'owner' | 'admin' | 'member'): Promise<OrganizationMember | null> => {
-    try {
-      const response = await authFetch(`/api/organizations/${orgId}/members/${userId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role }),
-      });
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || 'Failed to update member role');
-      }
-      const data = await response.json();
-
-      const member = mapMember(data);
-      cacheMember(set, orgId, userId, member);
-      return member;
-    } catch (error) {
-      console.error('Failed to update member role:', error);
       throw error;
     }
   },

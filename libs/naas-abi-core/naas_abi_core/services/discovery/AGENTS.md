@@ -28,9 +28,12 @@ platform-level: `module/<project>/<module_id>`, `agent|model|app|job/<project>/<
   principal cannot register it while live instances of it exist (so nobody can
   join a running module and take its requests). A module account
   (`module/<project>/<module_id>`) registers only its own module.
-- **Listing**: `list_modules` and `get_module` show the modules the caller may
-  list (`ListModules`, `GetModule`, not found otherwise), each with only the
-  agents, apps and jobs it may list (`ListAgents`, `ListApps`, `ListJobs`).
+- **Listing**: `list_modules` shows the modules the caller may list
+  (`ListModules`); `get_module` needs `GetModule` on the module it names (not
+  found otherwise) and shows its instances, so a module looking itself up (its
+  bootstrap allows `GetModule`, not `ListModules`) sees them. Each instance shows
+  only the agents, apps and jobs the caller may list (`ListAgents`, `ListApps`,
+  `ListJobs`).
 - **Use**: `authorize_agent`, `authorize_model`, `authorize_app` and
   `authorize_job` are a lease check by the hosting module and the check of its
   **caller**. The host forwards the token it received (`caller_token`; the
@@ -58,7 +61,30 @@ platform-level: `module/<project>/<module_id>`, `agent|model|app|job/<project>/<
   recorded FAILED and the message terminated) or honours a cancel. Engine-hosted
   jobs have no lease: `EngineJobLoader.job_authorizer` runs the same check
   (`require_job`) in process. Scheduled and event triggers are the host's own and
-  are not asked about: the host drops any trigger the engine did not seal.
+  are not asked about: the host drops any trigger the engine did not seal. A
+  workflow is a job (`kind`): starting one is `TriggerJob`, its runs are job runs.
+  Every attempt of a manual trigger is asked about, and a trigger `api` or
+  `engine` stored for a user runs as the module for that user (engine
+  `AGENTS.md`, "Who a run runs as"): `caller_identity` names the user the
+  stored delegation must be for.
+- **Module scopes.** Discovery's grants are the broker-side check of using a
+  module's agent, app or workflow, platform-wide: `builtin.platform.member` holds
+  `InvokeAgent` on `agent/*`, `OpenApp` on `app/*` and `TriggerJob` on
+  `workflow/*`. A job of kind `workflow` has that second name
+  (`workflow/<project>/<module_id>/<name>`, `require_job(workflow=True)`): `TriggerJob`
+  on either name starts it, so a module's manifest naming its jobs still covers its
+  workflows, and no role reaches a plain job. An explicit Deny on either name
+  refuses (`trigger_decision`, one rule for discovery, the engine's job host and the
+  broker control): a Deny written on `job/…` before workflows had a second name
+  holds. The broker control refuses a trigger `api` or `engine` stores for a user
+  who may not start the job (`PERMISSION_DENIED`) rather than storing one that
+  would run as the module alone. Which agent, app, workflow or pipeline a user uses in a
+  workspace is its module scope (`module:<type>/<module>/<name>`, core
+  `services/iam/AGENTS.md`, "Module scopes"), which viewers and members do not
+  hold by default. Nexus checks it first, in the workspace of the request, so no
+  user reaches a module's resource in a workspace without it; discovery does not
+  check it (it has no workspace). A remote module's identifier in a scope is its
+  `module_id`, the same as in these names, without the project.
 
 ## Eviction (platform administration)
 `evict` removes a registration whatever its lease: `discovery:Evict` on its
@@ -69,6 +95,14 @@ with a fresh lease token, so eviction clears crashed or stuck registrations;
 stopping a module means stopping its process. Registering an instance id whose
 record expired or was evicted is a new registration (STARTING until its next
 initialized renewal).
+
+## Job descriptors
+A job's `kind` is `job` or `workflow` (empty, from a module written before
+workflows, is a job). Its `input_schema` and `output_schema` are JSON objects of
+at most 16 KiB each, a trigger's `input` a JSON object of at most 4 KiB, and a
+whole job descriptor at most 64 KiB (`INVALID_ARGUMENT` otherwise): descriptors
+travel in the registry snapshot, which holds every module. These are the SDK's
+bounds (`naas_abi_sdk.jobs`). Replica equality covers the new fields.
 
 ## Generations
 Replicas of one generation (the same rollout id, or none on both) must declare

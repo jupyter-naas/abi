@@ -65,13 +65,21 @@ class _Thread:
 
 class SyncJobRunner:
     def __init__(
-        self, handler: Callable[[Any], Any], *, interrupt_grace_seconds: float | None
+        self,
+        handler: Callable[[Any], Any],
+        *,
+        interrupt_grace_seconds: float | None,
+        context_factory: Callable[[Any, asyncio.AbstractEventLoop], Any] | None = None,
     ) -> None:
         self.handler = handler
         self.interrupt_grace_seconds = interrupt_grace_seconds
+        # What the handler receives for the run's context, built where the loop is
+        # known: a workflow's ``SyncFlowContext`` blocks on this loop.
+        self.context_factory = context_factory
 
     async def __call__(self, ctx: Any) -> Any:
         loop = asyncio.get_running_loop()
+        argument = self.context_factory(ctx, loop) if self.context_factory else ctx
         done: asyncio.Future[Any] = loop.create_future()
         state = _Thread()
 
@@ -90,7 +98,7 @@ class SyncJobRunner:
                 try:
                     with state.lock:
                         state.ident = threading.get_ident()
-                    outcome = (True, self.handler(ctx))
+                    outcome = (True, self.handler(argument))
                 except BaseException as exc:  # noqa: BLE001 - handed to the awaiting task
                     outcome = (False, exc)
                 finally:

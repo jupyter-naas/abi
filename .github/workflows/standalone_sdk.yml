@@ -27,6 +27,9 @@ jobs:
           uv run --project libs/naas-abi-idp --python '${{ matrix.python }}' pytest libs/naas-abi-idp/tests -q
       - name: Test optional LangGraph integration imports
         run: uv run --project libs/naas-abi-sdk --extra langgraph --python '${{ matrix.python }}' pytest libs/naas-abi-sdk/tests -q
+      # The Workflow/Pipeline class, process workflow and ontology tests skip without these extras.
+      - name: Test workflows, pipelines and ontologies
+        run: uv run --project libs/naas-abi-sdk --extra workflows --extra rdf --extra agents --python '${{ matrix.python }}' pytest libs/naas-abi-sdk/tests -q
       - name: Test optional model proxies
         run: uv run --project libs/naas-abi-sdk --extra models --python '${{ matrix.python }}' pytest libs/naas-abi-sdk/tests/test_models.py -q
       - name: Test LangChain 0.3 compatibility
@@ -98,6 +101,7 @@ jobs:
         run: |
           uv run --project libs/naas-abi-core --no-sync pytest -q \
             libs/naas-abi-sdk/tests/test_jobs_integration.py \
+            libs/naas-abi-sdk/tests/test_workflows_integration.py \
             libs/naas-abi-sdk/tests/test_claim_check.py \
             libs/naas-abi-sdk/tests/test_no_responders.py
       - name: Kernel services and their NATS clients over a real broker

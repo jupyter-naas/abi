@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
@@ -120,6 +121,18 @@ async def _require_catalog_path(
     files = await ontology_service.list_ontology_files(catalog_refs=catalog_refs)
     if ontology_path not in {item.path for item in files}:
         raise OntologyPathNotFoundError(f"Ontology path not found: {ontology_path}")
+
+
+def _attachment(filename: str) -> str:
+    """A ``Content-Disposition`` for ``filename``, as ``FileResponse`` writes it."""
+    fallback = "".join(
+        char if char.isascii() and char.isprintable() and char not in '"\\' else "_"
+        for char in filename
+    )
+    header = f'attachment; filename="{fallback}"'
+    if fallback != filename:
+        header += f"; filename*=utf-8''{quote(filename)}"
+    return header
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -503,19 +516,28 @@ async def export_ontology_file(
     ontology_path: str = Query(..., alias="ontology_path", min_length=1),
     ontology_service: OntologyService = Depends(get_ontology_service),
     catalog_refs: list[str] = Depends(ontology_catalog_scope),
-) -> FileResponse:
+) -> Response:
     """Export a selected ontology file as attachment."""
     try:
         await _require_catalog_path(ontology_path, catalog_refs, ontology_service)
-        path = await ontology_service.export_ontology_file(ontology_path=ontology_path)
+        export = await ontology_service.export_ontology(ontology_path=ontology_path)
     except OntologyPathNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except OntologyFileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Ontology file does not exist") from exc
-    return FileResponse(
-        path=str(path),
-        filename=path.name,
+    except OntologyServiceUnavailableError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    if export.path is not None:
+        return FileResponse(
+            path=str(export.path),
+            filename=export.filename,
+            media_type="application/octet-stream",
+        )
+    # A remote module's ontology has no file: its stored text is the download.
+    return Response(
+        content=export.content or b"",
         media_type="application/octet-stream",
+        headers={"Content-Disposition": _attachment(export.filename)},
     )
 
 

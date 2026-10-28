@@ -143,6 +143,7 @@ def test_superadmin_reads_a_table_and_unknown_tables_404(monkeypatch) -> None:
             raise UnknownPlatformTableError(name=name)
         return PlatformTable(
             name="users",
+            label="Users",
             description="Accounts",
             columns=["id", "hashed_password"],
             rows=[{"id": "user-2", "hashed_password": "••••••"}],
@@ -157,6 +158,7 @@ def test_superadmin_reads_a_table_and_unknown_tables_404(monkeypatch) -> None:
     assert resp.status_code == 200
     assert resp.json() == {
         "name": "users",
+        "label": "Users",
         "description": "Accounts",
         "columns": ["id", "hashed_password"],
         "rows": [{"id": "user-2", "hashed_password": "••••••"}],
@@ -165,6 +167,42 @@ def test_superadmin_reads_a_table_and_unknown_tables_404(monkeypatch) -> None:
         "primary_key": [],
     }
     assert client.get("/api/admin/tables/alembic_version").status_code == 404
+
+
+def test_the_table_list_carries_labels_and_sections(monkeypatch) -> None:
+    """The web app reads the tables from here, never from a copy of its own."""
+    from naas_abi.apps.nexus.apps.api.app.api.endpoints import admin
+    from naas_abi.apps.nexus.apps.api.app.core.database import get_db
+    from naas_abi.apps.nexus.apps.api.app.core.platform_tables import PlatformTableSummary
+
+    async def fake_list(_db):
+        return [
+            PlatformTableSummary(
+                name="users",
+                label="Users",
+                section="People & access",
+                description="Accounts",
+                rows=2,
+                columns=14,
+            )
+        ]
+
+    monkeypatch.setattr(admin, "list_platform_tables", fake_list)
+    client = _client(superadmin=True, auth_service=AsyncMock())
+    client.app.dependency_overrides[get_db] = lambda: None
+
+    resp = client.get("/api/admin/tables")
+    assert resp.status_code == 200
+    assert resp.json() == [
+        {
+            "name": "users",
+            "label": "Users",
+            "section": "People & access",
+            "description": "Accounts",
+            "rows": 2,
+            "columns": 14,
+        }
+    ]
 
 
 def test_superadmin_reads_a_table_schema(monkeypatch) -> None:
@@ -231,6 +269,7 @@ def test_superadmin_reads_one_row_and_missing_rows_404(monkeypatch) -> None:
             raise UnknownPlatformRowError(table=name, row_id=row_id)
         return PlatformTableRow(
             name="users",
+            label="Users",
             description="Accounts",
             id="user-2",
             primary_key=["id"],
@@ -245,5 +284,6 @@ def test_superadmin_reads_one_row_and_missing_rows_404(monkeypatch) -> None:
     resp = client.get("/api/admin/tables/users/rows/user-2")
     assert resp.status_code == 200
     assert resp.json()["row"] == {"id": "user-2", "hashed_password": "••••••"}
+    assert resp.json()["label"] == "Users"
     assert client.get("/api/admin/tables/users/rows/nobody").json()["detail"] == "Row not found"
     assert client.get("/api/admin/tables/alembic_version/rows/x").status_code == 404

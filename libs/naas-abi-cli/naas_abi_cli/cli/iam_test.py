@@ -12,7 +12,7 @@ from naas_abi_core.engine.call_context import (
 from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import (
     IAMStoreMemory,
 )
-from naas_abi_core.services.iam.IAMPorts import KeyRefusedError
+from naas_abi_core.services.iam.IAMPorts import GrantNotHeldError, KeyRefusedError
 from naas_abi_core.services.iam.IAMService import IAMService
 
 from naas_abi_cli.cli.iam import iam, provision_dev_modules
@@ -139,6 +139,32 @@ def test_errors_are_reported_not_raised(service):
         obj={"iam_opener": lambda: (service, lambda: None)},
     )
     assert result.exit_code != 0 and "not found" in result.output
+
+
+def test_a_grant_beyond_what_the_caller_holds_is_printed(service, monkeypatch):
+    """IAM names the statement, action and resource the caller does not hold."""
+    with as_service_account("engine"):
+        service.create_service_account("module/acme/people")
+    refusal = GrantNotHeldError(
+        "triple_store:Insert",
+        "abi:-:-:triple_store:graph/people-*",
+        policy_id="module.acme.people",
+        statement=0,
+        reason="you do not hold it there",
+    )
+
+    def refuse(*_args, **_kwargs):
+        raise refusal
+
+    monkeypatch.setattr(service, "approve_manifest", refuse)
+    result = CliRunner().invoke(
+        iam,
+        ["module", "approve", "module/acme/people"],
+        obj={"iam_opener": lambda: (service, lambda: None)},
+    )
+    assert result.exit_code != 0
+    assert "You cannot grant what you do not hold" in result.output
+    assert "triple_store:Insert" in result.output
 
 
 def test_dev_up_hands_each_module_a_fresh_key(service):

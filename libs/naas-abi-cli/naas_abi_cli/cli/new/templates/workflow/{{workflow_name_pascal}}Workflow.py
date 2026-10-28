@@ -59,3 +59,6 @@ class {{workflow_name_pascal}}Workflow(Workflow[{{workflow_name_pascal}}Workflow
 
     # as_api is inherited from Expose: POST /{slug} calls run() when this
     # method is not overridden. Override only for a custom HTTP surface.
+    # In NATS mode the engine also publishes a live typed run() as a one-step
+    # durable workflow named workflow.<slug> (nats.workflows.bridge), so it can be
+    # launched and watched like any workflow. Nothing to do here for that.

@@ -12,7 +12,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 COPY --from=abi_proto . /build/naas-abi-proto
 COPY --from=abi_sdk . /build/naas-abi-sdk
-RUN pip install /build/naas-abi-proto "/build/naas-abi-sdk[agent,otel]" \
+RUN pip install /build/naas-abi-proto "/build/naas-abi-sdk[agent,otel,workflows,rdf]" \
     && rm -rf /build
 
 COPY . /app/{{module_name_snake}}

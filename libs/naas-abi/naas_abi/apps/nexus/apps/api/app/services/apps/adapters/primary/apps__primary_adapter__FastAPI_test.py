@@ -61,6 +61,9 @@ def test_remote_module_apps_join_the_catalog(monkeypatch: pytest.MonkeyPatch) ->
     assert info.module_path == "remote/acme.research"
     assert info.url == "/app-html/remote/acme.research/console/index.html"
     assert (info.name, info.category, info.icon_emoji) == ("Console", "operations", "🛰")
+    # A READY module serves it: installed, as a loaded module's app is, so the
+    # Apps pages and the workspace settings list it.
+    assert info.installed is True
 
 
 def test_a_discovery_outage_still_lists_the_local_apps(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -205,6 +208,7 @@ def test_a_loaded_module_named_remote_does_not_take_remote_app_urls(
     modules = [module_at("remote", tmp_path / "a"), module_at("acme.ops", tmp_path / "b")]
     monkeypatch.setattr(adapter, "_iter_loaded_modules", lambda: iter(modules))
     adapter._scan_apps_catalog.cache_clear()
+    adapter._scan_apps_html_assets.cache_clear()
     adapter._scan_apps_html_paths.cache_clear()
     try:
         with caplog.at_level(logging.WARNING):
@@ -212,6 +216,7 @@ def test_a_loaded_module_named_remote_does_not_take_remote_app_urls(
             paths = adapter._scan_apps_html_paths()
     finally:
         adapter._scan_apps_catalog.cache_clear()
+        adapter._scan_apps_html_assets.cache_clear()
         adapter._scan_apps_html_paths.cache_clear()
 
     assert [app.module_path for app in catalog] == ["acme.ops"]
@@ -295,6 +300,13 @@ def test_a_configured_remote_app_stays_manageable_while_its_module_is_down(
     monkeypatch.setattr(adapter, "_scan_apps_catalog", lambda: ())
     monkeypatch.setattr(factory, "get_remote_app_directory", InMemoryRemoteAppDirectory)
     configs = Configs()
+
+    async def may_open(scope, **_):
+        return True
+
+    monkeypatch.setattr(adapter.authz, "allowed_scope", may_open)
+    # The caller turns apps on and off (``UpdateApp``).
+    monkeypatch.setattr(adapter.authz, "allowed", may_open)
 
     def status(call) -> int:
         try:

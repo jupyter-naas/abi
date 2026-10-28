@@ -4,18 +4,20 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 from naas_abi_core.engine import nats_runtime
 from naas_abi_core.engine.call_context import CallContext, Principal, use_call_context
+from naas_abi_core.engine.nats_auth import RenewingTokenSource
 from naas_abi_core.engine.nats_rpc_integration_test import (  # noqa: F401 - pytest fixture
     SECRET,
     broker,
 )
 from naas_abi_core.engine.nats_test_tokens import OTHER_TOKENS, TEST_TOKENS
-from naas_abi_core.services.iam import roles
+from naas_abi_core.services.iam import module_scopes, roles
 from naas_abi_core.services.iam.adapters.primary.iam__primary_adapter__NATS import (
     IAMPrimaryAdapterNATS,
 )
@@ -30,6 +32,8 @@ from naas_abi_core.services.iam.IAMPorts import (
     RevisionConflictError,
 )
 from naas_abi_core.services.iam.IAMService import IAMService
+from naas_abi_core.services.iam.tests import grant_contract as grants
+from naas_abi_core.services.iam.tests import owned_scope_contract as owned
 from naas_abi_core.services.iam.tests.iam_harness import (
     TRIPLE_STORE,
     document,
@@ -127,7 +131,7 @@ def test_administration_round_trip(iam_host):
     assert bob.created_at is not None
     assert engine.get_principal(bob.id) == bob
 
-    sales = engine.create_group("sales", org="org-1")
+    sales = engine.create_group("sales")
     engine.add_group_member(sales.id, bob.id)
     assert engine.list_group_members(sales.id) == [bob.id]
     mapping = engine.map_idp_group("acme", "Sales", sales.id)
@@ -255,6 +259,46 @@ def test_api_calls_on_behalf_of_the_current_user(iam_host):
                 graph("b", workspace="ws-2"),
                 not_found=GraphNotFound,
             )
+
+
+@BROKER
+def test_a_declared_action_is_named_by_iam_in_the_workspace_of_the_call(iam_host):
+    iam_host.service._register_catalog(module_scopes.CATALOG)
+    iam_host.service._register_catalog(
+        module_scopes.module_catalog(
+            {
+                "version": 1,
+                "resource_types": [{"name": "report", "id": "path"}],
+                "actions": [
+                    {"name": "Export", "level": "read", "resource_types": ["report"]}
+                ],
+            },
+            "acme.reports",
+        )
+    )
+    engine = iam_host.client("engine")
+    engine.put_scope("org-1")
+    engine.put_scope("org-1", "ws-1")
+    bob = engine.ensure_user("https://idp.example", "bob")
+    engine.attach_policy(roles.ADMIN, bob.id, "abi:org-1:ws-1")
+    api = iam_host.client("api")
+    on_behalf = CallContext(
+        principal=Principal(id="api", kind="service_account", name="api"),
+        on_behalf_of=Principal(id=bob.id, kind="user"),
+        workspace_id="ws-1",
+    )
+    with use_call_context(on_behalf):
+        decision, resource = api.authorize_declared(
+            "acme_reports:Export", "report", ["q3"]
+        )
+        assert decision.allowed
+        assert resource == "abi:org-1:ws-1:acme_reports:report/q3"
+        refused, elsewhere = api.authorize_declared(
+            "acme_reports:Export", "report", ["q3"], workspace="ws-2"
+        )
+        assert not refused.allowed and elsewhere.startswith("abi:-:-:")
+        with pytest.raises(IAMNotFoundError):
+            api.authorize_declared("triple_store:Query", "graph", ["a"])
 
 
 @BROKER
@@ -425,3 +469,112 @@ def test_malformed_requests_never_reach_the_service():
         service.authorize.assert_not_called()
     finally:
         primary._dispatch.close()
+
+
+@BROKER
+@pytest.mark.parametrize("scenario", owned.SCENARIOS, ids=lambda s: s.__name__)
+def test_owned_scenarios_over_nats(iam_host, scenario):
+    """The same policies and groups of an org or a workspace, each call made over
+    NATS as the user (a user's own token, as Nexus acts as its signed-in user)."""
+
+    @contextmanager
+    def as_user(record):
+        source = RenewingTokenSource(
+            record.id,
+            lambda: TEST_TOKENS.issue(record.id, subject=record.id, kind="user"),
+        )
+        client = IAMSecondaryAdapterNATSClient(iam_host.url, source)
+        try:
+            yield client
+        finally:
+            client.close()
+
+    scenario(iam_host.service, as_user)
+
+
+@BROKER
+@pytest.mark.parametrize("scenario", grants.SCENARIOS, ids=lambda s: s.__name__)
+def test_grant_scenarios_over_nats(iam_host, scenario):
+    """Grant only what you hold, each call made over NATS as the user, its
+    token narrowed when the scenario says: the same refusals, by their code."""
+
+    @contextmanager
+    def as_user(record, scope=None):
+        source = RenewingTokenSource(
+            record.id,
+            lambda: TEST_TOKENS.issue(
+                record.id, subject=record.id, kind="user", scope=scope
+            ),
+        )
+        client = IAMSecondaryAdapterNATSClient(iam_host.url, source)
+        try:
+            yield client
+        finally:
+            client.close()
+
+    scenario(iam_host.service, as_user)
+
+
+@BROKER
+def test_sets_over_nats_narrow_at_once(iam_host):
+    """A set recorded over NATS bounds the next decision for a user, on the
+    serving engine and in another process that hears the change event."""
+    import nats
+    from naas_abi_core.services.iam.IAMPorts import ScopeSet
+
+    iam_host.service._register_catalog(module_scopes.CATALOG)
+    engine = iam_host.client("engine")
+    engine.put_scope("org-1")
+    engine.put_scope("org-1", "ws-1")
+    bob = engine.ensure_user("https://idp.example", "bob")
+    engine.attach_policy(roles.ADMIN, bob.id, "abi:org-1:ws-1")
+    agent = module_scopes.scope_resource(
+        "agent", "people", "A", org="org-1", workspace="ws-1"
+    )
+    api = iam_host.client("api")
+    for_bob = CallContext(
+        principal=Principal(id="api", kind="service_account", name="api"),
+        on_behalf_of=Principal(id=bob.id, kind="user"),
+    )
+    # Another process on the same store, which hears the change event.
+    other = IAMService(iam_host.service.store)
+    heard = threading.Event()
+
+    async def listen():
+        nc = await nats.connect(iam_host.url)
+
+        async def on_change(_msg):
+            other.refresh_if_changed()
+            heard.set()
+
+        await nc.subscribe("abi.iam.v1.changed", cb=on_change)
+        await nc.flush()
+        return nc
+
+    nc = nats_runtime.run_coro(listen())
+    try:
+        with use_call_context(for_bob):
+            assert api.authorize("module:UseAgent", agent).allowed
+            assert other.authorize("module:UseAgent", agent).allowed
+        heard.clear()
+        recorded = engine.put_set("org-1", modules=["market"], features=["chat"])
+        assert recorded == ScopeSet("org-1", modules=("market",), features=("chat",))
+        assert heard.wait(5)
+        with use_call_context(for_bob):
+            decision = api.authorize("module:UseAgent", agent)
+            assert (decision.allowed, decision.reason) == (False, "outside_set")
+            assert not other.authorize("module:UseAgent", agent).allowed
+        assert engine.get_set("org-1") == recorded
+        assert engine.effective_set("org-1", "ws-1").modules == ("market",)
+        assert engine.list_sets() == [recorded]
+        with pytest.raises(ValueError) as refused:
+            engine.put_set("org-1", "ws-1", modules=["people"])
+        assert "people" in str(refused.value)
+        # A module granted nothing may not record one.
+        with pytest.raises(PermissionDeniedError):
+            iam_host.client("module").put_set("org-1", modules=[])
+        # Everything again: no part recorded.
+        assert engine.put_set("org-1") == ScopeSet("org-1")
+        assert engine.list_sets() == []
+    finally:
+        nats_runtime.run_coro(nc.close())

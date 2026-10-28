@@ -313,6 +313,7 @@ class ChatSecondaryAdapterPostgres(ChatPersistencePort):
             class_name=row.class_name,
             model_id=row.model_id,
             provider=row.provider,
+            enabled=bool(row.enabled),
         )
 
     async def list_agent_names_by_ids(self, agent_ids: set[str]) -> dict[str, str]:

@@ -2,6 +2,40 @@
 
 <!-- version list -->
 
+## v3.62.0 (2026-10-26)
+
+### Bug Fixes
+
+- Review findings of the durable workflows task
+  ([`f2d12d8`](https://github.com/jupyter-naas/abi/commit/f2d12d8a8e61352e4f06eea466a48ac643a24a3c))
+
+- **x**: A failing stage no longer stops the rest of a search or reprocess run
+  ([`00ad9f1`](https://github.com/jupyter-naas/abi/commit/00ad9f1cc237965f75e3cec4e3f4c96898118d57))
+
+- **x**: Give a poller a spare slot so an overlapping tick skips instead of queueing
+  ([`12088a6`](https://github.com/jupyter-naas/abi/commit/12088a60d798bf3ec2a4e80c3ee6b18d83fe8759))
+
+### Documentation
+
+- Decisions in AGENTS.md instead of the removed ADR tree
+  ([`07369f6`](https://github.com/jupyter-naas/abi/commit/07369f6ade0083273ef6101c832e1b58bafb600f))
+
+### Features
+
+- **x**: Run the recent-tweets flow as durable NATS workflows and jobs
+  ([`d63145c`](https://github.com/jupyter-naas/abi/commit/d63145cbfc49bdb374ca054c54e2968bdf347455))
+
+### Refactoring
+
+- Commit staged changes for various libs and apps
+  ([`3c52466`](https://github.com/jupyter-naas/abi/commit/3c5246681dfe4a341e18c43897439f1e8989e676))
+
+### Testing
+
+- **x**: A skipped mapping run is awaited by the search run and not synced
+  ([`3bdda86`](https://github.com/jupyter-naas/abi/commit/3bdda867a585ea32c021265e450fae8eef1c646d))
+
+
 ## v3.61.1 (2026-10-21)
 
 ### Bug Fixes

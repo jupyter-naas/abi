@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+from uuid import uuid4
+
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal, get_db
+from naas_abi.apps.nexus.apps.api.app.core.postgres_session_registry import (
+    PostgresSessionRegistry,
+)
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__schemas import (
     User,
 )
@@ -18,6 +23,8 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthUserRecord
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import AuthService
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz as authz_module
 from naas_abi.apps.nexus.apps.api.app.services.iam.runtime import IAMUnavailableError
+from naas_abi.apps.nexus.apps.api.app.services.registry import ServiceRegistry
+from naas_abi.apps.nexus.apps.api.app.services.workspaces import WorkspacePermissionError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 _bearer = HTTPBearer(
@@ -163,6 +170,45 @@ async def is_platform_admin(user_id: str) -> bool:
         return False  # no IAM, no platform admin; any other failure surfaces
 
 
+async def get_workspace_role(user_id: str, workspace_id: str) -> str | None:
+    async with AsyncSessionLocal() as db:
+        registry = ServiceRegistry.instance()
+        session_registry = PostgresSessionRegistry.instance()
+        session_id = f"sess-{uuid4().hex}"
+        session_registry.bind(session_id=session_id, db=db)
+        token = session_registry.set_current_session(session_id)
+        try:
+            return await registry.workspaces.get_workspace_role(
+                user_id=user_id,
+                workspace_id=workspace_id,
+            )
+        finally:
+            session_registry.reset_current_session(token)
+            session_registry.unbind(session_id)
+
+
+async def require_workspace_access(user_id: str, workspace_id: str) -> str:
+    async with AsyncSessionLocal() as db:
+        registry = ServiceRegistry.instance()
+        session_registry = PostgresSessionRegistry.instance()
+        session_id = f"sess-{uuid4().hex}"
+        session_registry.bind(session_id=session_id, db=db)
+        token = session_registry.set_current_session(session_id)
+        try:
+            return await registry.workspaces.require_workspace_access(
+                user_id=user_id,
+                workspace_id=workspace_id,
+            )
+        except WorkspacePermissionError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this workspace",
+            ) from exc
+        finally:
+            session_registry.reset_current_session(token)
+            session_registry.unbind(session_id)
+
+
 async def require_superadmin(
     request: Request,
     current_user: User = Depends(get_current_user_required),
@@ -187,8 +233,10 @@ async def require_superadmin(
 
 __all__ = [
     "bearer_token",
+    "get_workspace_role",
     "is_platform_admin",
     "require_superadmin",
+    "require_workspace_access",
     "get_auth_service",
     "get_current_user",
     "get_current_user_required",

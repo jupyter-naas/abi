@@ -8,7 +8,7 @@ from naas_abi_proto.iam.v1 import iam_pb2 as pb
 
 from naas_abi_sdk.module import ModuleDependencies, ServicesProxy
 from naas_abi_sdk.services import IAMService
-from naas_abi_sdk.services.errors import NotFound, PermissionDenied
+from naas_abi_sdk.services.errors import GrantNotHeld, NotFound, PermissionDenied
 from naas_abi_sdk.transport import RPCError
 
 
@@ -142,3 +142,105 @@ def test_listing_mappings_and_placements_and_deleting_scopes():
     ]
     assert run(iam.list_placements("document"))[0]["id_key"] == "n/*"
     assert run(iam.delete_scope("o", "w")) is True
+
+
+def test_a_declared_action_is_named_by_iam_and_required():
+    client = AsyncMock()
+    client.authorize_declared.return_value = pb.AuthorizeDeclaredResponse(
+        decision=pb.Decision(allowed=False, visible=False, reason="implicit_deny"),
+        resource="abi:org-1:ws-1:acme_reports:report/q3",
+    )
+    iam = IAMService(client)
+    decision, resource = run(
+        iam.authorize_declared("acme_reports:ExportReport", "report", ["q3"])
+    )
+    assert not decision.allowed
+    assert resource == "abi:org-1:ws-1:acme_reports:report/q3"
+    request = client.authorize_declared.call_args.args[0]
+    assert (request.action, request.resource_type, list(request.parts)) == (
+        "acme_reports:ExportReport",
+        "report",
+        ["q3"],
+    )
+    assert request.workspace_id == ""
+    with pytest.raises(NotFound):
+        run(iam.require_declared("acme_reports:ExportReport", "report", ["q3"]))
+    client.authorize_declared.return_value = pb.AuthorizeDeclaredResponse(
+        decision=pb.Decision(allowed=True, visible=True, reason="allow")
+    )
+    run(
+        iam.require_declared(
+            "acme_reports:ExportReport", "report", ["q3"], workspace="ws-1"
+        )
+    )
+    assert client.authorize_declared.call_args.args[0].workspace_id == "ws-1"
+
+
+def test_a_module_requires_its_own_actions_by_name():
+    from naas_abi_sdk.module import BaseModule
+
+    class Reports(BaseModule):
+        module_id = "acme.reports"
+        iam_catalog = {
+            "resource_types": [{"name": "report"}],
+            "actions": [
+                {"name": "ExportReport", "level": "read", "resource_types": ["report"]}
+            ],
+        }
+
+    module = Reports.__new__(Reports)
+    iam = AsyncMock()
+
+    class Engine:
+        class services:
+            pass
+
+    Engine.services.iam = iam
+    module._engine = Engine
+    run(module.require_action("ExportReport", "report", "q3"))
+    iam.require_declared.assert_awaited_once_with(
+        "acme_reports:ExportReport", "report", ["q3"], workspace=None
+    )
+
+
+def test_what_may_be_granted_and_its_refusal():
+    client = AsyncMock()
+    client.grantable.return_value = pb.GrantableResponse(
+        catalogs=[
+            pb.GrantableCatalog(
+                service="triple_store",
+                actions=[
+                    pb.GrantableAction(
+                        action="triple_store:Query",
+                        resources=["${scope}:triple_store:graph/*"],
+                        excluded=["${scope}:triple_store:graph/hr*"],
+                    )
+                ],
+            )
+        ]
+    )
+    found = run(IAMService(client).grantable("abi:org-1:ws-1"))
+    assert found == [
+        {
+            "service": "triple_store",
+            "actions": [
+                {
+                    "action": "triple_store:Query",
+                    "resources": ["${scope}:triple_store:graph/*"],
+                    "excluded": ["${scope}:triple_store:graph/hr*"],
+                }
+            ],
+        }
+    ]
+    assert client.grantable.call_args.args[0].scope == "abi:org-1:ws-1"
+    client.attach_policy.side_effect = RPCError(
+        "GRANT_NOT_HELD", "You cannot grant what you do not hold: ..."
+    )
+    with pytest.raises(GrantNotHeld) as refused:
+        run(IAMService(client).attach_policy("builtin.owner", "usr_x", "abi:o:w"))
+    assert isinstance(refused.value, PermissionDenied)
+    assert "do not hold" in str(refused.value)
+    # The code is said once.
+    assert str(refused.value) == (
+        "GRANT_NOT_HELD: You cannot grant what you do not hold: ..."
+    )

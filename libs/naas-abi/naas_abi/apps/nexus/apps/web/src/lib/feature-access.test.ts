@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   getFeatureForWorkspacePath,
+  getGatingFeatureForWorkspacePath,
   getFirstAllowedWorkspacePath,
   getWorkspaceHomePath,
   getWorkspaceSwitchPath,
-  isWorkspaceAdminEventsPath,
   isWorkspacePathAllowed,
   mergeFeatureFlags,
   pathNeedsAgentCatalog,
@@ -66,6 +66,14 @@ describe('getFeatureForWorkspacePath', () => {
     expect(getFeatureForWorkspacePath('/workspace/ws1/organization')).toBe('settings.organization');
     expect(getFeatureForWorkspacePath('/workspace/ws1/organization/billing')).toBe('settings.organization');
     expect(getFeatureForWorkspacePath('/workspace/ws1/apps')).toBe('apps');
+    expect(getGatingFeatureForWorkspacePath('/workspace/ws1/apps')).toBe(null);
+    expect(getGatingFeatureForWorkspacePath('/workspace/ws1/apps?open=x')).toBe(null);
+    expect(getGatingFeatureForWorkspacePath('/workspace/ws1/apps/p/my-app')).toBe('apps');
+    expect(getGatingFeatureForWorkspacePath('/workspace/ws1/chat')).toBe('chat');
+    // Roles & permissions is IAM's to open (GET /access), not a feature's: a member
+    // holding only iam:ListPolicies there opens it without the settings feature.
+    expect(getGatingFeatureForWorkspacePath('/workspace/ws1/settings/permissions')).toBe(null);
+    expect(getGatingFeatureForWorkspacePath('/workspace/ws1/settings/general')).toBe('settings.workspace');
     expect(getFeatureForWorkspacePath('/workspace/ws1/marketplace')).toBe('marketplace');
     expect(getFeatureForWorkspacePath('/workspace/ws1/help')).toBe('settings');
   });
@@ -198,7 +206,7 @@ describe('getWorkspaceSwitchPath', () => {
   it('falls back when the target workspace lacks the section', () => {
     expect(
       getWorkspaceSwitchPath({
-        pathname: '/workspace/ws-next-gen/apps',
+        pathname: '/workspace/ws-next-gen/marketplace',
         targetWorkspaceId: 'ws-member',
         role: 'member',
       }),
@@ -247,14 +255,5 @@ describe('pathNeedsGraphExport', () => {
   it('is true only on graph routes', () => {
     expect(pathNeedsGraphExport('/workspace/ws1/graph/network')).toBe(true);
     expect(pathNeedsGraphExport('/workspace/ws1/apps')).toBe(false);
-  });
-});
-
-describe('isWorkspaceAdminEventsPath', () => {
-  it('matches only the Events admin route', () => {
-    expect(isWorkspaceAdminEventsPath('/workspace/ws1/admin/events')).toBe(true);
-    expect(isWorkspaceAdminEventsPath('/org/acme/workspace/ws1/admin/events')).toBe(true);
-    expect(isWorkspaceAdminEventsPath('/workspace/ws1/admin/services')).toBe(false);
-    expect(isWorkspaceAdminEventsPath('/workspace/ws1/chat')).toBe(false);
   });
 });

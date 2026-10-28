@@ -17,6 +17,7 @@ this service adds is
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -27,7 +28,12 @@ from naas_abi.apps.nexus.apps.api.app.services.iam_admin.narrowing import (
     is_unchanged,
     narrowing_errors,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam_admin.port import IamGateway
+from naas_abi.apps.nexus.apps.api.app.services.iam_admin.port import (
+    IamGateway,
+    IamUnavailableError,
+    OrganizationScopes,
+    ScopeDirectory,
+)
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import (
     AdminAction,
     AdminAuditLog,
@@ -41,23 +47,35 @@ from naas_abi_core.services.iam.IAMPorts import (
     IIAMService,
     PermissionDeniedError,
     PrincipalKind,
+    ScopeSet,
 )
 from naas_abi_core.services.iam.IAMService import (
     attachment_resource,
+    group_resource,
     key_resource,
     manifest_resource,
+    policy_resource,
 )
+from naas_abi_core.services.iam.modules import split_manifest
 from naas_abi_core.services.iam.names import (
+    NONE,
+    PLATFORM_SCOPE,
     parse_resource_name,
     resource_name,
+    scope_fields,
+    scope_name,
     split_action,
+    validate_owner_scope,
     validate_scope,
+    within_owner,
 )
 from naas_abi_core.services.iam.policy import (
     PolicyDocument,
     PolicyValidationError,
+    check_owned_document,
     parse_policy_document,
 )
+from naas_abi_core.services.iam.sets import intersect, read_resource, write_resource
 from starlette.concurrency import run_in_threadpool
 
 T = TypeVar("T")
@@ -91,9 +109,24 @@ _WILDCARD_TYPE = {
     "iam:ListManifests": "manifest",
     "iam:ApproveManifest": "manifest",
     "iam:RejectManifest": "manifest",
+    "iam:GetSet": "set",
+    "iam:PutSet": "set",
 }
 _ATTACHMENT_ACTIONS = ("iam:ListAttachments", "iam:AttachPolicy", "iam:DetachPolicy")
 _KEY_ACTIONS = ("iam:ListKeys", "iam:CreateKey", "iam:RevokeKey")
+# Administered at platform level only: service accounts and their keys, module approvals,
+# the simulator and IdP mappings. ``access`` at a scope answers them False, as it does
+# ``nexus:ReadSystem`` (the audit), so an org's or a workspace's page never offers them.
+_PLATFORM_ONLY = frozenset(
+    {
+        *(action for action, kind in _WILDCARD_TYPE.items() if kind in ("principal", "manifest")),
+        "iam:MapIdpGroup",
+        "iam:UnmapIdpGroup",
+        *_KEY_ACTIONS,
+    }
+)
+# The built-in roles' feature defaults of an organization (Nexus `organization_role_features`).
+_ROLE_FEATURE_ACTIONS = ("GetRoleFeatures", "UpdateRoleFeatures")
 ACCESS_ACTIONS: tuple[str, ...] = (*_WILDCARD_TYPE, *_ATTACHMENT_ACTIONS, *_KEY_ACTIONS)
 
 
@@ -104,10 +137,12 @@ class IamAdminService:
         audit: AdminAuditLog,
         *,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        directory: ScopeDirectory | None = None,
     ) -> None:
         self._gateway = gateway
         self._audit = audit
         self._clock = clock
+        self._directory = directory
 
     # -- plumbing ---------------------------------------------------------------------
 
@@ -133,7 +168,12 @@ class IamAdminService:
         return await run_audited(self._audit, action, lambda: run_in_threadpool(call, session))
 
     @staticmethod
-    def _wildcard(kind: str) -> str:
+    def _wildcard(kind: str, owner: str = PLATFORM_SCOPE) -> str:
+        """Any resource of ``kind``: policies and groups as named at ``owner``."""
+        if kind == "policy":
+            return policy_resource("*", owner)
+        if kind == "group":
+            return group_resource("*", owner)
         return resource_name("iam", kind, "*")
 
     @staticmethod
@@ -151,15 +191,23 @@ class IamAdminService:
 
     async def access(self, user: Any, scope: str | None = None) -> dict[str, Any]:
         """Which actions the caller may perform: on the platform, or (the attachment
-        actions) at ``scope``. Decided by IAM, as for any call; ``nexus:ReadSystem``
-        for the audit."""
+        actions, and the policies and groups of that level) at ``scope``. Decided by
+        IAM, as for any call; ``nexus:ReadSystem`` for the audit. What is administered at
+        platform level only is False at a scope; at an org (or org-wide) scope,
+        ``nexus:GetRoleFeatures`` and ``nexus:UpdateRoleFeatures`` say who reads and edits
+        its built-in roles' feature defaults."""
         if scope is not None:
             validate_scope(scope)
+        owner = _owner_of(scope)
 
         def decide(session: IIAMService) -> dict[str, bool]:
-            result: dict[str, bool] = {}
+            # At a scope, what only the platform administers is not asked: it is False there.
+            result: dict[str, bool] = (
+                dict.fromkeys(_PLATFORM_ONLY, False) if scope is not None else {}
+            )
             for action, kind in _WILDCARD_TYPE.items():
-                result[action] = session.authorize(action, self._wildcard(kind)).allowed
+                if action not in result:
+                    result[action] = session.authorize(action, self._wildcard(kind, owner)).allowed
             for action in _ATTACHMENT_ACTIONS:
                 # Any policy, or at least one of the roles an admin grants below owner.
                 result[action] = any(
@@ -167,29 +215,55 @@ class IamAdminService:
                     for policy in ("*", *roles.ROLES)
                 )
             for action in _KEY_ACTIONS:
-                result[action] = session.authorize(action, key_resource("*", "*")).allowed
+                if action not in result:
+                    result[action] = session.authorize(action, key_resource("*", "*")).allowed
             return result
 
-        actions = await self._read(user, decide)
-        actions["nexus:ReadSystem"] = await self._reads_system(user)
+        org = _organization_of(scope)
+        actions, reads_system, *role_features = await asyncio.gather(
+            self._read(user, decide),
+            self._reads_system(user) if scope is None else _false(),
+            *(
+                self._may(user, action, org) if org is not None else _false()
+                for action in _ROLE_FEATURE_ACTIONS
+            ),
+        )
+        actions["nexus:ReadSystem"] = reads_system
+        for action, allowed in zip(_ROLE_FEATURE_ACTIONS, role_features, strict=True):
+            actions[f"nexus:{action}"] = allowed
         return {"actions": actions}
+
+    async def grantable(self, user: Any, scope: str) -> dict[str, Any]:
+        """What the caller may grant at ``scope``, for the policy builder: per catalog
+        (a kernel service or a module), the actions they hold there and the resource
+        patterns (``${scope}:...``) they hold them on, minus their Denies. IAM's
+        ``grantable``, about the caller only, like ``access``: IAM validates the scope."""
+        found = await self._read(user, lambda session: session.grantable(scope))
+        return {"scope": scope, "catalogs": [views.grantable_view(c) for c in found]}
 
     async def _reads_system(self, user: Any) -> bool:
         from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 
         return await AUTHZ.allowed("ReadSystem", user=user)
 
+    async def _may(self, user: Any, action: str, org: str) -> bool:
+        """A Nexus action on an organization, as its route decides it."""
+        from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+
+        return await AUTHZ.allowed(action, user=user, org=org)
+
     # -- catalogs and validation ------------------------------------------------------
 
-    async def catalogs(self, user: Any) -> dict[str, Any]:
+    async def catalogs(self, user: Any, scope: str | None = None) -> dict[str, Any]:
         """The action catalogs a policy names, for the editor's autocomplete.
-        For whoever may write policies or read them."""
+        For whoever may write policies or read them (at ``scope``'s level)."""
+        owner = _owner_of(scope)
 
         def read(session: IIAMService) -> dict[str, Any]:
             self._require_any(
                 session,
                 ("iam:ListPolicies", "iam:CreatePolicy", "iam:UpdatePolicy"),
-                self._wildcard("policy"),
+                self._wildcard("policy", owner),
             )
             return views.catalogs_view(self._gateway.catalogs().all())
 
@@ -200,15 +274,23 @@ class IamAdminService:
         if not any(session.authorize(a, resource).allowed for a in actions):
             raise PermissionDeniedError(actions[0], resource)
 
-    async def validate_policy(self, user: Any, source: Mapping[str, Any]) -> dict[str, Any]:
-        """What IAM says of a document (its object or its YAML/JSON text), saving nothing."""
+    async def validate_policy(
+        self, user: Any, source: Mapping[str, Any], scope: str | None = None
+    ) -> dict[str, Any]:
+        """What IAM says of a document (its object or its YAML/JSON text), saving
+        nothing; at an org or a workspace, as a policy that level owns
+        (``check_owned_document``), so what passes here ``create_policy`` takes."""
+        owner = _owner_of(scope)
 
         def check(session: IIAMService) -> dict[str, Any]:
             self._require_any(
-                session, ("iam:CreatePolicy", "iam:UpdatePolicy"), self._wildcard("policy")
+                session,
+                ("iam:CreatePolicy", "iam:UpdatePolicy"),
+                self._wildcard("policy", owner),
             )
             try:
                 document = self._parse(source)
+                check_owned_document(document, owner)
             except PolicyValidationError as exc:
                 return {"valid": False, "errors": list(exc.errors), "document": None}
             except ValueError as exc:
@@ -225,10 +307,19 @@ class IamAdminService:
 
     # -- policies ---------------------------------------------------------------------
 
-    async def list_policies(self, user: Any, after: str | None = None) -> dict[str, Any]:
+    async def list_policies(
+        self, user: Any, after: str | None = None, scope: str | None = None
+    ) -> dict[str, Any]:
+        """The policies the caller may list; with ``scope``, that level's own and
+        those above it the caller may attach there (IAM's ``list_policies``). An
+        org-wide scope lists its org's."""
+        owner = validate_owner_scope(_owner_of(scope)) if scope is not None else None
+
         def read(session: IIAMService) -> dict[str, Any]:
-            page = session.list_policies(after=after)
-            self._listing(session, "iam:ListPolicies", self._wildcard("policy"))(page.items)
+            page = session.list_policies(after=after, scope=owner)
+            self._listing(session, "iam:ListPolicies", self._wildcard("policy", _owner_of(owner)))(
+                page.items
+            )
             return {
                 "items": [views.policy_view(p) for p in page.items],
                 "next_after": page.next_after,
@@ -240,13 +331,24 @@ class IamAdminService:
         return await self._read(user, lambda s: views.policy_view(s.get_policy(policy_id)))
 
     async def create_policy(
-        self, user: Any, name: str, source: Mapping[str, Any], description: str = ""
+        self,
+        user: Any,
+        name: str,
+        source: Mapping[str, Any],
+        description: str = "",
+        scope: str | None = None,
     ) -> dict[str, Any]:
+        """A policy owned by ``scope`` (the platform when None)."""
+
         def create(session: IIAMService) -> dict[str, Any]:
             document = self._parse(source)
-            return views.policy_view(session.create_policy(name, document, description=description))
+            return views.policy_view(
+                session.create_policy(name, document, description=description, scope=scope)
+            )
 
-        return await self._change(user, "create_policy", name, create, detail=name)
+        return await self._change(
+            user, "create_policy", name, create, detail=f"{name}, {scope or PLATFORM_SCOPE}"
+        )
 
     async def update_policy(
         self,
@@ -323,7 +425,9 @@ class IamAdminService:
         self, user: Any, scope: str | None, principal_id: str | None = None
     ) -> dict[str, Any]:
         """The policies the caller may attach at ``scope``: IAM's rule for a scope
-        (every Allow starts with ``${scope}:``) and the caller's own right to attach."""
+        (every Allow starts with ``${scope}:``) and the caller's own right to attach.
+        A policy not wholly within ``${scope}:`` (a Deny naming anything) is offered
+        at a scope only to whoever may attach it unscoped, as IAM decides."""
         if scope is not None:
             validate_scope(scope)
 
@@ -331,12 +435,21 @@ class IamAdminService:
             candidates = [
                 p
                 for p in self._gateway.policies()[:MAX_ATTACHABLE_SCAN]
-                if (
+                if within_owner(p.owner_scope, scope)
+                and (
                     p.document.confined_to_scope if scope is not None else not p.document.uses_scope
                 )
             ]
             names = {attachment_resource(p.id, principal_id or "*", scope): p for p in candidates}
-            allowed = session.filter("iam:AttachPolicy", names).allowed
+            allowed = set(session.filter("iam:AttachPolicy", names).allowed)
+            if scope is not None:
+                unscoped = {
+                    attachment_resource(p.id, principal_id or "*", None): name
+                    for name, p in names.items()
+                    if name in allowed and not p.document.wholly_within_scope
+                }
+                reach = set(session.filter("iam:AttachPolicy", unscoped).allowed)
+                allowed -= {name for u, name in unscoped.items() if u not in reach}
             return {
                 "items": [
                     {
@@ -344,8 +457,10 @@ class IamAdminService:
                         "name": names[name].name,
                         "description": names[name].description,
                         "managed": names[name].managed,
+                        "owner_scope": names[name].owner_scope,
                     }
-                    for name in allowed
+                    for name in names
+                    if name in allowed
                 ]
             }
 
@@ -426,10 +541,17 @@ class IamAdminService:
 
     # -- groups -----------------------------------------------------------------------
 
-    async def list_groups(self, user: Any) -> dict[str, Any]:
+    async def list_groups(self, user: Any, scope: str | None = None) -> dict[str, Any]:
+        """The groups the caller may list; with ``scope``, that level's own (and,
+        at a workspace, its org's the caller attaches to there). An org-wide scope
+        lists its org's."""
+        owner = validate_owner_scope(_owner_of(scope)) if scope is not None else None
+
         def read(session: IIAMService) -> dict[str, Any]:
-            page = session.list_groups()
-            self._listing(session, "iam:ListGroups", self._wildcard("group"))(page.items)
+            page = session.list_groups(scope=owner)
+            self._listing(session, "iam:ListGroups", self._wildcard("group", _owner_of(owner)))(
+                page.items
+            )
             return {"items": [views.principal_view(g) for g in page.items if g.status != "deleted"]}
 
         return await self._read(user, read)
@@ -450,13 +572,16 @@ class IamAdminService:
     async def get_group(self, user: Any, group_id: str) -> dict[str, Any]:
         return await self._read(user, lambda s: self._group_view(s, group_id))
 
-    async def create_group(self, user: Any, name: str, org: str | None) -> dict[str, Any]:
+    async def create_group(
+        self, user: Any, name: str, org: str | None, scope: str | None = None
+    ) -> dict[str, Any]:
+        """A group owned by ``scope`` (or, with only ``org``, by that org)."""
         return await self._change(
             user,
             "create_group",
             name,
-            lambda s: views.principal_view(s.create_group(name, org=org)),
-            detail=f"org {org}" if org else "platform group",
+            lambda s: views.principal_view(s.create_group(name, org=org, scope=scope)),
+            detail=scope or (f"org {org}" if org else "platform group"),
         )
 
     async def delete_group(self, user: Any, group_id: str) -> None:
@@ -620,10 +745,18 @@ class IamAdminService:
         def approve(session: IIAMService) -> dict[str, Any]:
             narrowed = None
             if document is not None:
-                submitted = parse_policy_document(
+                # The policy is what an admin narrows; the catalog the module
+                # declares is approved as submitted (``views.manifest_view``).
+                submitted_policy, catalog = split_manifest(
                     session.get_manifest(principal_id, sha256).document
                 )
-                candidate = parse_policy_document(document)
+                candidate_policy, echoed = split_manifest(document)
+                if echoed is not None and dict(echoed) != dict(catalog or {}):
+                    raise PolicyValidationError(
+                        ["catalog: a module's declared catalog is approved as submitted"]
+                    )
+                submitted = parse_policy_document(submitted_policy)
+                candidate = parse_policy_document(candidate_policy)
                 problems = narrowing_errors(submitted, candidate)
                 if problems:
                     raise PolicyValidationError(problems)
@@ -714,6 +847,181 @@ class IamAdminService:
                 if operation is None or e.operation == operation
             ]
         }
+
+    # -- sets: what each organization and workspace may use ------------------------
+
+    def _directory_or_fail(self) -> ScopeDirectory:
+        if self._directory is None:
+            raise IamUnavailableError("No organizations to show sets for")
+        return self._directory
+
+    @staticmethod
+    def _set_rows(
+        session: IIAMService, organizations: list[OrganizationScopes]
+    ) -> list[dict[str, Any]]:
+        """The page's rows for ``organizations``: every column whose set the caller
+        may read, what it records, what it has within its org's, and whether the
+        caller may change it. Three calls whatever the size (two ``filter``, one
+        ``list_sets``), and for each org whose set the caller may not read one
+        ``effective_set``: of a workspace of it that records no set of its own,
+        which is the org's (IAM bounds it by the org's), then within it for its
+        siblings. Only a workspace of such an org whose siblings all record a set
+        of their own has its effective set asked of IAM each."""
+        columns = [(o.id, NONE) for o in organizations] + [
+            (o.id, w.id) for o in organizations for w in o.workspaces
+        ]
+        read_of = {c: read_resource(*c) for c in columns}
+        write_of = {c: write_resource(*c) for c in columns}
+        readable = set(session.filter("iam:GetSet", list(read_of.values())).allowed)
+        writable = set(session.filter("iam:PutSet", list(write_of.values())).allowed)
+        only = organizations[0].id if len(organizations) == 1 else None
+        recorded = {(s.org, s.workspace): s for s in session.list_sets(only)}
+        # The set of an org the caller may not read, as one of its workspaces
+        # with no set of its own has it.
+        org_sets: dict[str, ScopeSet] = {}
+        for org in organizations:
+            if read_of[(org.id, NONE)] in readable:
+                continue
+            plain = next(
+                (
+                    ws.id
+                    for ws in org.workspaces
+                    if read_of[(org.id, ws.id)] in readable and (org.id, ws.id) not in recorded
+                ),
+                None,
+            )
+            if plain is not None:
+                org_sets[org.id] = session.effective_set(org.id, plain)
+
+        def column(org: str, workspace: str, name: str) -> dict[str, Any] | None:
+            if read_of[(org, workspace)] not in readable:
+                return None
+            own = recorded.get((org, workspace)) or ScopeSet(org, workspace)
+            if workspace == NONE:
+                effective = own
+            elif read_of[(org, NONE)] in readable:
+                effective = intersect(recorded.get((org, NONE)), own)
+            elif org in org_sets:
+                effective = intersect(org_sets[org], own)
+            else:
+                effective = session.effective_set(org, workspace)
+            return {
+                "id": workspace if workspace != NONE else org,
+                "name": name,
+                "set": views.scope_set(own),
+                "effective": views.scope_set(effective),
+                "editable": write_of[(org, workspace)] in writable,
+            }
+
+        rows: list[dict[str, Any]] = []
+        for org in organizations:
+            workspaces = [
+                found
+                for ws in org.workspaces
+                if (found := column(org.id, ws.id, ws.name)) is not None
+            ]
+            entry = column(org.id, NONE, org.name)
+            if entry is None and not workspaces:
+                continue
+            if entry is None:
+                # Its workspaces are the caller's to see, not the org's own set.
+                entry = {
+                    "id": org.id,
+                    "name": org.name,
+                    "set": None,
+                    "effective": None,
+                    "editable": False,
+                }
+            rows.append({**entry, "workspaces": workspaces})
+        return rows
+
+    async def sets(self, user: Any, org_id: str | None = None) -> list[dict[str, Any]]:
+        """The sets of every organization (or the one named) and its workspaces
+        that the caller may read, each with what it has once bounded by its org's
+        and whether the caller may change it. Read as the user: a refusal of
+        everything is a 403 (``iam:GetSet``)."""
+        organizations = await self._directory_or_fail().organizations(org_id)
+
+        def read(session: IIAMService) -> list[dict[str, Any]]:
+            found = self._set_rows(session, organizations) if organizations else []
+            if not found:
+                target = read_resource(org_id) if org_id else self._wildcard("set")
+                raise PermissionDeniedError("iam:GetSet", target)
+            return found
+
+        return await self._read(user, read)
+
+    async def may_edit_set(self, user: Any, org_id: str, workspace_id: str = NONE) -> bool:
+        """Whether the caller may change that set (``iam:PutSet``)."""
+
+        def decide(session: IIAMService) -> bool:
+            return session.authorize("iam:PutSet", write_resource(org_id, workspace_id)).allowed
+
+        try:
+            return await self._read(user, decide)
+        except (PermissionDeniedError, IamUnavailableError):
+            return False
+
+    async def put_set(
+        self,
+        user: Any,
+        org_id: str,
+        workspace_id: str = NONE,
+        *,
+        modules: list[str] | None,
+        features: list[str] | None,
+    ) -> dict[str, Any]:
+        """Record a set as the user, audited first; the page's entry for it after."""
+        organizations = await self._directory_or_fail().organizations(org_id)
+        org = next((o for o in organizations if o.id == org_id), None)
+        if org is None or (
+            workspace_id != NONE and all(w.id != workspace_id for w in org.workspaces)
+        ):
+            raise IAMNotFoundError("No such organization or workspace")
+        where = f"{org_id}/{workspace_id}" if workspace_id != NONE else org_id
+        detail = (
+            f"modules={'everything' if modules is None else len(modules)} "
+            f"features={'everything' if features is None else len(features)}"
+        )
+
+        def put(session: IIAMService) -> ScopeSet:
+            return session.put_set(org_id, workspace_id, modules=modules, features=features)
+
+        await self._change(user, "put_set", where, put, detail=detail)
+
+        def read(session: IIAMService) -> dict[str, Any]:
+            rows = self._set_rows(session, [org])
+            entry: dict[str, Any] | None = rows[0] if rows else None
+            if entry is not None and workspace_id != NONE:
+                entry = next((w for w in entry["workspaces"] if w["id"] == workspace_id), None)
+            if entry is None or (workspace_id == NONE and entry["set"] is None):
+                raise PermissionDeniedError("iam:GetSet", read_resource(org_id, workspace_id))
+            return entry
+
+        return await self._read(user, read)
+
+
+def _owner_of(scope: str | None) -> str:
+    """The level whose policies and groups a scope's page shows: the scope itself,
+    an org-wide scope's org, or the platform."""
+    if scope is None:
+        return PLATFORM_SCOPE
+    org, workspace = scope_fields(scope)
+    if workspace == "*":
+        return scope_name(org, NONE)
+    return scope
+
+
+async def _false() -> bool:
+    return False
+
+
+def _organization_of(scope: str | None) -> str | None:
+    """The organization an org-level scope (``abi:<org>:-`` or ``abi:<org>:*``) names."""
+    if scope is None:
+        return None
+    org, workspace = scope_fields(scope)
+    return org if workspace in (NONE, "*") and org not in (NONE, "*") else None
 
 
 def _actor_id(user: Any) -> str:

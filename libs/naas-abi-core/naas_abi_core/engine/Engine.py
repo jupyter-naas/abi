@@ -31,6 +31,10 @@ from naas_abi_core.engine.engine_loaders.EngineModuleLoader import EngineModuleL
 from naas_abi_core.engine.engine_loaders.EngineOntologyLoader import (
     EngineOntologyLoader,
 )
+from naas_abi_core.engine.engine_loaders.EngineProcessBridge import (
+    bridge_processes,
+    tag_process_scopes,
+)
 from naas_abi_core.engine.engine_loaders.EngineServiceLoader import EngineServiceLoader
 from naas_abi_core.engine.IEngine import IEngine
 from naas_abi_core.engine.ownership.ownership_service import Claim
@@ -59,6 +63,7 @@ class Engine(IEngine):
     __ownership: EngineOwnershipLoader | None
     # Serving starts and stops from the lease's callbacks as well as load/shutdown.
     __serving_lock: threading.RLock
+    __job_loader_lock: threading.Lock
     # Memory of agents built with memory=None, bound by load() (see context.py).
     __agent_checkpointer: BaseCheckpointSaver | None = None
     # NATS mode: the engine's own tokens (see __engine_credentials).
@@ -105,6 +110,7 @@ class Engine(IEngine):
         self.__job_loader = None
         self.__ownership = None
         self.__serving_lock = threading.RLock()
+        self.__job_loader_lock = threading.Lock()
 
     def load(self, module_names: list[str] | None = None):
         try:
@@ -193,6 +199,7 @@ class Engine(IEngine):
         logger.debug("Loading engine modules")
         self.__modules = self.__engine_module_loader.load_modules(self, module_names)
         logger.debug("Engine modules loaded")
+        self.__register_module_catalogs()
 
         if self.__services.model_registry_available():
             # Modules registered their models during on_load; now hard-fail if
@@ -233,6 +240,11 @@ class Engine(IEngine):
         logger.debug("Initializing engine")
         self.on_initialized()
         logger.debug("Engine initialized")
+
+        # Workflow/Pipeline instances exist now; their jobs go to a host below. Done
+        # in every NATS engine, hosting or not, so job_owners() lists the same jobs.
+        tag_process_scopes(self.__modules)
+        bridge_processes(self.__modules, self.__configuration.nats)
 
         # Module jobs start last: their handlers may use anything initialized above.
         # A standby or client engine hosts none: the serving engine does.
@@ -557,16 +569,25 @@ class Engine(IEngine):
             )
 
     def __start_jobs(self) -> None:
-        self.__job_loader = EngineJobLoader(
-            self.__configuration.nats,
-            iam=self.__services.iam if self.__services.iam_available() else None,
-            credentials=self.__engine_credentials()
-            if self.__configuration.nats is not None
-            else None,
-        )
-        self.__job_loader.start(
+        self.__ensure_job_loader().start(
             self.job_owners(), document_available=self.__services.document_available()
         )
+
+    def __ensure_job_loader(self) -> EngineJobLoader:
+        """The one loader, made on first use: jobs start on the engine's own (or a
+        take-over) thread while request threads may already ask for workflows."""
+        with self.__job_loader_lock:
+            if self.__job_loader is None:
+                self.__job_loader = EngineJobLoader(
+                    self.__configuration.nats,
+                    iam=self.__services.iam
+                    if self.__services.iam_available()
+                    else None,
+                    credentials=self.__engine_credentials()
+                    if self.__configuration.nats is not None
+                    else None,
+                )
+            return self.__job_loader
 
     def __serve_after_handover(self) -> None:
         """A standby took the lease: serve, then host the jobs."""
@@ -614,6 +635,22 @@ class Engine(IEngine):
         nats = self.__configuration.nats
         return nats is not None and nats.jobs.enabled
 
+    def workflow(
+        self,
+        module_id: str,
+        name: str,
+        *,
+        input_type: Any = None,
+        output_type: Any = None,
+    ) -> Any:
+        """The workflow ``name`` of any module, engine or remote, on this engine's
+        NATS connection: ``start(input)`` returns a run, ``run(input)`` its output.
+        NATS mode only (``JobsNotHosted`` otherwise). Works on any engine, also one
+        that hosts no jobs (a client, a CLI), which then only starts and watches runs."""
+        return self.__ensure_job_loader().workflow(
+            module_id, name, input_type=input_type, output_type=output_type
+        )
+
     def job_owners(self) -> dict[str, object]:
         """Modules plus kernel job owners (NATS mode only), keyed by owner id.
 
@@ -656,6 +693,17 @@ class Engine(IEngine):
         for module in self.__modules.values():
             module.on_initialized()
 
+    def __register_module_catalogs(self) -> None:
+        """The actions engine modules declare (``iam_catalog.yaml``), registered
+        with IAM as the engine once the modules are loaded: in process on the
+        serving engine, over NATS on a client one."""
+        if self.__services.iam_available():
+            from naas_abi_core.services.iam.module_scopes import (
+                register_module_catalogs,
+            )
+
+            register_module_catalogs(self.__services.iam, self.__modules.values())
+
     def shutdown(self) -> None:
         """Gracefully tear down everything ``load()`` started over NATS.
 
@@ -674,7 +722,8 @@ class Engine(IEngine):
         actually clean, it's not required for correctness.
         """
         # Jobs first: running ones still save their run records over NATS.
-        job_loader, self.__job_loader = self.__job_loader, None
+        with self.__job_loader_lock:
+            job_loader, self.__job_loader = self.__job_loader, None
         if job_loader is not None:
             job_loader.stop()
         # Agents built from now on must not reach storage this engine releases.

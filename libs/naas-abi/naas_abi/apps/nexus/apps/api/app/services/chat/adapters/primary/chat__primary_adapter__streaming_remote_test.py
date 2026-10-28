@@ -31,7 +31,9 @@ def _install_fakes(monkeypatch, calls: list[dict[str, Any]]) -> None:
     )
 
     async def fake_resolve_provider(*_args, **_kwargs):
-        return provider
+        # The agent row's workspace, which the turn (a conversation id only)
+        # does not name.
+        return SimpleNamespace(**vars(provider), run_workspace_id="ws-agent")
 
     @asynccontextmanager
     async def fake_session():
@@ -53,6 +55,9 @@ def _install_fakes(monkeypatch, calls: list[dict[str, Any]]) -> None:
         async def build_remote_agent_preamble(self, **_kwargs) -> str:
             return "USER PROFILE"
 
+        async def get_conversation_for_user(self, **_kwargs):
+            return None
+
         async def create_streaming_message_pair(self, **_kwargs):
             return None, "assistant-msg-1"
 
@@ -69,10 +74,13 @@ def _install_fakes(monkeypatch, calls: list[dict[str, Any]]) -> None:
     async def noop(**_kwargs) -> None:
         return None
 
-    async def fake_remote(messages, config, *, thread_id, user_context_preamble, invocation_id):
+    async def fake_remote(
+        messages, config, *, thread_id, user_context_preamble, invocation_id, workspace_id
+    ):
         calls.append(
             {
                 "model": config.model,
+                "workspace_id": workspace_id,
                 "thread_id": thread_id,
                 "invocation_id": invocation_id,
                 "preamble": user_context_preamble,
@@ -115,6 +123,8 @@ def test_remote_turn_streams_through_the_remote_agent(monkeypatch) -> None:
     assert calls == [
         {
             "model": "acme.research/Researcher",
+            # The agent's workspace, not the request's (none named here).
+            "workspace_id": "ws-agent",
             "thread_id": "conv-1",
             "invocation_id": "assistant-msg-1",
             "preamble": "USER PROFILE",

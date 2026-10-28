@@ -2,6 +2,50 @@
 
 <!-- version list -->
 
+## v3.2.0 (2026-10-26)
+
+
+## v3.1.0 (2026-10-26)
+
+### Bug Fixes
+
+- **cli**: Keep rdflib out of the remote module template's own test
+  ([`ada1ac6`](https://github.com/jupyter-naas/abi/commit/ada1ac6c1bbc04ec9debb7291095ffd7f23ab601))
+
+- **core**: Bridge results, lazy loader creation and sync flow cancellation
+  ([`3bf7f14`](https://github.com/jupyter-naas/abi/commit/3bf7f146989c275e77cc251fc94b57ac22c8ce3c))
+
+- **remote-modules**: Close review findings on processes and ontologies
+  ([`b5312b0`](https://github.com/jupyter-naas/abi/commit/b5312b0ea30719c8a1075c499b98f0ed3efe0548))
+
+### Documentation
+
+- **sdk**: Record remote workflows, pipelines and ontologies, and smoke them
+  ([`c4816c4`](https://github.com/jupyter-naas/abi/commit/c4816c486390102ed118dffab3c3c97b0144ef6a))
+
+### Features
+
+- **cli**: SDK workflow, pipeline and integration scaffolds in remote modules
+  ([`f970c2e`](https://github.com/jupyter-naas/abi/commit/f970c2e9331d6691953d37d4bed8e0ae2048e9e6))
+
+- **cli**: Workflow example in the remote module template
+  ([`0de301b`](https://github.com/jupyter-naas/abi/commit/0de301b5455106ca54554a731beee0deb6e87940))
+
+- **core**: Durable workflows for engine modules and the Workflow/Pipeline bridge
+  ([`605fc99`](https://github.com/jupyter-naas/abi/commit/605fc99c2a777d6af291c23aef2e4e22705d62da))
+
+- **sdk**: Build_processes() so an agent built in on_initialized gets workflow and pipeline tools
+  ([`01c8d74`](https://github.com/jupyter-naas/abi/commit/01c8d744b6b2c04e96fec8c290755b945233747e))
+
+- **triple-store**: Load remote module ontologies into the schema graph
+  ([`90b1795`](https://github.com/jupyter-naas/abi/commit/90b179511f642035796cc36a4aea3ef16bcc6466))
+
+### Testing
+
+- **cli**: The scaffold test's discovery stand-in has a task
+  ([`954fd4b`](https://github.com/jupyter-naas/abi/commit/954fd4bbb03c6a74aa60e9b2c4d28fad08a92d0c))
+
+
 ## v3.0.1 (2026-10-21)
 
 ### Bug Fixes

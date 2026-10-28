@@ -6,6 +6,11 @@
   policy ``module.<project>.<module_id>``, attached to the account.
 * Until then the account holds ``builtin.module_bootstrap`` only, which it
   keeps: its own discovery record and its own manifest.
+* A manifest may also carry the module's own catalog under ``catalog``
+  (``module_scopes.module_catalog``): part of what the admin approves, so a
+  changed catalog is a new version. Approving registers it, and the approved
+  policy lets the module act on its own catalog's resources (``OWN_CATALOG``),
+  the user it acts for still bounding each call.
 """
 
 from __future__ import annotations
@@ -16,10 +21,15 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
+import yaml
+
+from naas_abi_core.services.iam.catalog import ActionCatalog
 from naas_abi_core.services.iam.names import encode_segment
 from naas_abi_core.services.iam.policy import (
     MODULE_VARIABLES,
     PolicyDocument,
+    PolicyValidationError,
+    Statement,
     bind_variables,
 )
 
@@ -82,6 +92,53 @@ def manifest_sha256(document: Mapping[str, Any]) -> str:
     """The version of a manifest: SHA-256 of its canonical JSON."""
     canonical = json.dumps(document, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+# The key of a manifest that holds the module's own catalog, and the ``sid`` of
+# the statement an approval adds for it.
+MANIFEST_CATALOG = "catalog"
+OWN_CATALOG = "OwnCatalog"
+
+
+def split_manifest(
+    document: Mapping[str, Any] | str | PolicyDocument,
+) -> tuple[Mapping[str, Any] | PolicyDocument, Mapping[str, Any] | None]:
+    """A manifest's policy document, and its catalog when it declares one."""
+    if isinstance(document, PolicyDocument):
+        return document, None
+    if isinstance(document, str):
+        try:
+            document = yaml.safe_load(document)
+        except yaml.YAMLError as exc:
+            raise PolicyValidationError([f"unreadable document: {exc}"]) from exc
+    if not isinstance(document, Mapping):
+        raise PolicyValidationError(["a manifest is a mapping"])
+    catalog = document.get(MANIFEST_CATALOG)
+    if catalog is not None and not isinstance(catalog, Mapping):
+        raise PolicyValidationError([f"{MANIFEST_CATALOG}: a catalog is a mapping"])
+    policy = {k: v for k, v in document.items() if k != MANIFEST_CATALOG}
+    return policy, catalog
+
+
+def manifest_document(
+    policy: PolicyDocument, catalog: ActionCatalog | None
+) -> dict[str, Any]:
+    """What a manifest version stores and hashes: the policy, and the catalog."""
+    raw = policy.to_dict()
+    if catalog is not None:
+        raw[MANIFEST_CATALOG] = catalog.to_dict()
+    return raw
+
+
+def own_catalog_statement(catalog: ActionCatalog) -> Statement:
+    """The module's side of its own declared actions, wherever placed: the user
+    a call acts for decides as well."""
+    return Statement(
+        effect="Allow",
+        actions=(f"{catalog.service}:*",),
+        resources=(f"abi:*:*:{catalog.service}:*",),
+        sid=OWN_CATALOG,
+    )
 
 
 def bind(document: PolicyDocument, project: str, module_id: str) -> PolicyDocument:

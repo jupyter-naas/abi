@@ -2,6 +2,8 @@
 
 Views of a running deployment for platform super admins: kernel services (configuration plus NATS micro-service stats), engine modules, remote modules in NATS discovery, the broker (server, connections, JetStream), and live NATS traffic. Super admins can also browse and change the data kernel services hold (Data tab).
 
+The web pages are Platform Settings › System (`/settings/system[/<view>]`, `apps/web/src/app/settings/system/`), one sidebar item per view; this document still calls each view a tab.
+
 ## Layout
 
 - `port.py`: domain values and ports (`ServiceConfigurationSource`, `EngineModuleSource`, `MicroServiceMonitor`, `ModuleRegistry`, `NatsServerMonitor`). Adapters raise `SourceUnavailable(source, reason)`; nothing else crosses a port.
@@ -40,11 +42,12 @@ Views of a running deployment for platform super admins: kernel services (config
 
 ## Jobs (Jobs tab)
 
-- `jobs.py`: values (`JobDefinition` with structured `TriggerSpec`, `JobRun`, views) and ports: `JobCatalog` (engine owners, discovery), `JobRunStore` (run records), `JobControl` (trigger, cancel), `JobQueue` (consumer depth). Errors: `JobNotFound`, `RunNotFound`, `RunNotCancellable`.
+- `jobs.py`: values (`JobDefinition` with structured `TriggerSpec`, `JobRun`, views) and ports: `JobCatalog` (engine owners, discovery), `JobRunStore` (run records), `StepStore` (a workflow run's journal), `InputValidator` (a workflow input against its schema), `JobControl` (trigger with an optional idempotency key, cancel), `JobQueue` (consumer depth). Errors: `JobNotFound` (`WorkflowNotFound`: the name is a plain job or unknown), `RunNotFound`, `RunNotCancellable`, `InvalidInput` (the schema issues).
+- Workflows are jobs. `JobDefinition.kind` is `job` or `workflow`; a workflow has `input_schema` / `output_schema` (JSON Schema objects, None when it declares none) and its Cron / Every triggers may carry an `input`. Both catalogs fill them from the descriptor (`job_catalogs.json_object` reads a schema or input given as an object or as JSON text). A descriptor without these fields is a plain job.
 - `jobs_service.py`: `JobsAdminService`.
   - Builds the overview: next ticks, recent runs, running counts and queue depth per job.
-  - Pages runs across job modules (newest first; `before` is the last `started_at`) and returns one run with its trace link (`telemetry.ui_url`).
-  - Triggers and cancels are audited with `run_audited` (service `jobs`, operations `trigger` / `cancel`).
+  - Pages runs across job modules (newest first; `before` is the last `started_at`) and returns one run (`RunView`) with its trace link (`telemetry.ui_url`) and, when it is a workflow's, its steps (`WorkflowDetail`: `RunStep` with a `ChildRun` link, never results) and its result cut to `RESULT_PREVIEW_BYTES` as `{truncated, bytes, preview}` (`preview=False` keeps it whole: the REST API). A run is a workflow's by its job's definition (remembered `KIND_TTL_SECONDS`, an open run is polled every second or so), else by having a journal. An unreadable journal leaves the steps empty, never an error.
+  - Triggers and cancels are audited with `run_audited` (service `jobs`, operations `trigger` / `cancel`, `AdminAction.via` = `user` or `api_key`). `trigger(..., workflow_only=True, idempotency_key=...)`: a workflow's payload is checked against its input schema first (`InvalidInput`: nothing sent, nothing audited), then the trigger is audited and sent. `cancel(..., workflow_only=True)` treats a plain job's run as not found.
   - The overview degrades per source (`engine`, `discovery`, `runs`, `queue`).
   - SKIPPED runs (a handler's `ctx.skip`, nothing to do) are left out of runs pages without a status filter (unless `include_skipped`), of each job's recent runs and health, and of failures; the overview gives each job's `last_skipped`.
 - `jobs_schedule.py`: pure helpers.
@@ -54,19 +57,23 @@ Views of a running deployment for platform super admins: kernel services (config
 - Adapters:
   - `job_catalogs.py`: engine owners from `factory.job_owners` and discovery descriptors. `factory.job_owners` is `Engine.job_owners` through the platform proxy (`EngineProxy.job_owners`, unlocked only) plus `naas_abi`: engine modules and kernel owners (dataset maintenance, agent memory, and the jobs service adapters offer, such as the activity log copy and the event archive).
   - `document_job_runs.py`: run records in each module's document namespace, collection `runs_collection(project)`, through `document_admin`.
-  - `nats_job_control.py`: SDK `JobProxy` / `JobRun`.
+  - `document_workflow_steps.py`: a run's step summaries from `workflow_steps_<h>` in the module's namespace (`naas_abi_sdk.workflows.steps_collection`), one page of `MAX_STEPS` (`truncated` after that), without the steps another trigger of a reused run id wrote (`fired_at`).
+  - `json_schema_validator.py`: `jsonschema`, local `$ref` only. A schema it cannot use (invalid, remote or unresolvable `$ref`) accepts everything: the module validates its own input anyway.
+  - `nats_job_control.py`: SDK `JobProxy` / `JobRun`; a trigger takes an idempotency key (JetStream message id, two minutes).
   - `nats_job_queue.py`: JetStream consumer info.
   - `in_memory_jobs.py`: fakes.
-- Contracts: `JobCatalogContract`, `JobRunStoreContract`, seeded from `tests/fixtures.py`.
-- `jobs_integration_test.py` runs an SDK job host on a real `nats-server -js`: trigger, record, queue depth, cancel.
+- Contracts: `JobCatalogContract`, `JobRunStoreContract`, seeded from `tests/fixtures.py` (`workflow_definitions`, `workflow_runs` and `workflow_steps` for workflows: separate lists, so the jobs numbers stay).
+- `jobs_integration_test.py` runs an SDK job host on a real `nats-server -js`: trigger, record, queue depth, cancel; and a workflow through `WorkflowsService` (start with and without `wait`, steps with child runs, a refused input, a cancel).
 - HTTP lives in `adapters/primary/sysadmin__primary_adapter__jobs.py`, mounted at `/api/admin/system/jobs`:
   - `GET ""`
   - `GET /runs`
   - `GET /runs/{module}/{run}`
-  - `POST /{module}/{job}/trigger`
+  - `POST /{module}/{job}/trigger` (422 `{source, reason, errors: [{path, message}]}` for a workflow input that does not match its schema)
   - `POST /runs/{module}/{run}/cancel`
+- The overview carries `kind`, `input_schema`, `output_schema` and each trigger's `input` for every job; a run's detail carries `workflow` (`{steps, truncated}`, null for a plain job's run). Scripts use [`/api/workflows`](../workflows/AGENTS.md) instead.
+- `AdminAuditLog` records name their user; one who called with their personal API key has `details.via` = `api_key`. Records an older release wrote for the deployment's `ABI_API_KEY` have no user (`audit_logs.user_id` NULL): history shows that actor as "ABI API key".
 - Job hosts record `fired_at` (when JetStream stored the trigger) and `trace_id` (the run's CONSUMER span) on every run.
-- `GET /failures?since=` lists runs FAILED or TIMED_OUT since a time (default: the last day; at most `MAX_FAILURES` read, `more` when capped): the web polls it every minute for a badge on the Jobs tab and a banner in it, counted since the admin last marked them seen (kept per browser).
+- `GET /failures?since=` lists runs FAILED or TIMED_OUT since a time (default: the last day; at most `MAX_FAILURES` read, `more` when capped): the Platform Settings shell polls it every minute for a badge on the Jobs item of its sidebar and a banner in the page, counted since the admin last marked them seen (kept per browser).
 
 ## Agent runs (Agents tab)
 

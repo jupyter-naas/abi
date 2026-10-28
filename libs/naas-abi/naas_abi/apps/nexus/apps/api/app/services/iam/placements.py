@@ -129,6 +129,21 @@ async def forget(placement: Placement) -> None:
     await run_in_threadpool(work)
 
 
+async def forget_workspace(workspace_id: str) -> int:
+    """Drop every placement in a workspace whose creation was undone; returns
+    how many."""
+
+    def work() -> int:
+        iam = runtime.iam()
+        with as_service_account("api"):
+            found = [p for p in iam.list_placements() if p.workspace == workspace_id]
+            for placement in found:
+                iam.delete_placement(placement.service, placement.id_key)
+        return len(found)
+
+    return await run_in_threadpool(work)
+
+
 async def place_existing(db: AsyncSession) -> int:
     """Apply every registered source; errors of one source never stop the others."""
     found: list[Placement] = []
