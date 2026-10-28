@@ -149,8 +149,8 @@ export default function PlatformSettingsLayout({ children }: { children: React.R
     <SettingsLayoutNav title="Platform Settings" resizable={!showMobileList}>
       {ready &&
         groups.map((group) => (
-          <div key={group.label ?? 'general'} className="platform-settings-nav-group">
-            {group.label && <h3 className="platform-settings-nav-group-title">{group.label}</h3>}
+          <div key={group.label} className="platform-settings-nav-group">
+            <h3 className="platform-settings-nav-group-title">{group.label}</h3>
             <ul className="settings-layout-nav-list">
               {group.items.map((navItem) => (
                 <NavItem

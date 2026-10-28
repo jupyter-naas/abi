@@ -47,8 +47,8 @@ export type PlatformSettingsNavItem = {
 };
 
 export type PlatformSettingsNavGroup = {
-  /** Shown above the items; the first group has no heading. */
-  label: string | null;
+  /** Shown above the items; every group has one. */
+  label: string;
   items: PlatformSettingsNavItem[];
 };
 
@@ -95,7 +95,7 @@ export const MODULE_SETS_ITEM: PlatformSettingsNavItem = {
 };
 
 export const platformSettingsGroups: PlatformSettingsNavGroup[] = [
-  { label: null, items: [NEXUS_TABLES_ITEM] },
+  { label: 'Database', items: [NEXUS_TABLES_ITEM] },
   {
     label: 'System',
     items: SYSTEM_VIEWS.map((view) => ({

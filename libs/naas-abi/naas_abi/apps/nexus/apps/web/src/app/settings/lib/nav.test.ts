@@ -34,8 +34,8 @@ const ids = (actions: PlatformActions | null) =>
   visiblePlatformSettingsGroups(actions).flatMap((group) => group.items.map((item) => item.id));
 
 describe('platformSettingsGroups', () => {
-  it('is Nexus tables, then System, then Roles & permissions and Modules & features', () => {
-    expect(platformSettingsGroups.map((group) => group.label)).toEqual([null, 'System', 'Access']);
+  it('is Database (Nexus tables), then System, then Access (Roles & permissions, Modules & features)', () => {
+    expect(platformSettingsGroups.map((group) => group.label)).toEqual(['Database', 'System', 'Access']);
     expect(platformSettingsGroups[0].items.map((item) => [item.label, item.href])).toEqual([
       ['Nexus tables', '/settings/tables'],
     ]);
@@ -69,6 +69,11 @@ describe('platformSettingsGroups', () => {
 describe('what the caller sees', () => {
   it('shows a platform admin everything', () => {
     expect(ids(platformAdmin)).toHaveLength(13);
+    expect(visiblePlatformSettingsGroups(platformAdmin).map((group) => group.label)).toEqual([
+      'Database',
+      'System',
+      'Access',
+    ]);
     expect(firstPlatformSettingsPath(platformAdmin)).toBe('/settings/tables');
   });
 
@@ -89,12 +94,16 @@ describe('what the caller sees', () => {
     expect(ids(systemReader)).not.toContain('roles');
     expect(ids(systemReader)).toContain('tables');
     expect(ids(systemReader)).toContain('system-events');
+    const groups = visiblePlatformSettingsGroups(systemReader);
+    expect(groups.map((group) => group.label)).toEqual(['Database', 'System']);
+    expect(groups[0].items.map((item) => item.label)).toEqual(['Nexus tables']);
   });
 
   it('shows a stranger nothing: the 403', () => {
     expect(ids(stranger)).toEqual([]);
     expect(ids({})).toEqual([]);
     expect(ids(null)).toEqual([]);
+    expect(visiblePlatformSettingsGroups(stranger)).toEqual([]);
     expect(firstPlatformSettingsPath(stranger)).toBeNull();
   });
 
