@@ -328,7 +328,21 @@ class IamAdminService:
         return await self._read(user, read)
 
     async def get_policy(self, user: Any, policy_id: str) -> dict[str, Any]:
-        return await self._read(user, lambda s: views.policy_view(s.get_policy(policy_id)))
+        """A policy, with its parent (named for whoever sees its id) and the
+        sub-policies below it the caller may list."""
+
+        def read(session: IIAMService) -> dict[str, Any]:
+            policy = session.get_policy(policy_id)
+            parent = self._gateway.policy(policy.parent_id) if policy.parent_id else None
+            return {
+                **views.policy_view(policy),
+                "parent": views.policy_ref(policy.parent_id, parent),
+                "sub_policies": [
+                    views.policy_ref(p.id, p) for p in session.list_sub_policies(policy_id)
+                ],
+            }
+
+        return await self._read(user, read)
 
     async def create_policy(
         self,
@@ -337,18 +351,23 @@ class IamAdminService:
         source: Mapping[str, Any],
         description: str = "",
         scope: str | None = None,
+        parent: str | None = None,
     ) -> dict[str, Any]:
-        """A policy owned by ``scope`` (the platform when None)."""
+        """A policy owned by ``scope`` (the platform when None), a sub-policy of
+        ``parent`` when given: IAM refuses a parent the caller does not hold."""
 
         def create(session: IIAMService) -> dict[str, Any]:
             document = self._parse(source)
             return views.policy_view(
-                session.create_policy(name, document, description=description, scope=scope)
+                session.create_policy(
+                    name, document, description=description, scope=scope, parent=parent
+                )
             )
 
-        return await self._change(
-            user, "create_policy", name, create, detail=f"{name}, {scope or PLATFORM_SCOPE}"
-        )
+        detail = f"{name}, {scope or PLATFORM_SCOPE}"
+        if parent:
+            detail += f", sub-policy of {parent}"
+        return await self._change(user, "create_policy", name, create, detail=detail)
 
     async def update_policy(
         self,
@@ -359,7 +378,10 @@ class IamAdminService:
         source: Mapping[str, Any] | None,
         name: str | None,
         description: str | None,
+        parent: str | None = None,
     ) -> dict[str, Any]:
+        """``parent``: None keeps it, ``""`` removes it, an id sets it."""
+
         def update(session: IIAMService) -> dict[str, Any]:
             document = self._parse(source) if source else None
             return views.policy_view(
@@ -369,12 +391,14 @@ class IamAdminService:
                     document=document,
                     name=name,
                     description=description,
+                    parent=parent,
                 )
             )
 
-        return await self._change(
-            user, "update_policy", policy_id, update, detail=f"revision {expected_revision}"
-        )
+        detail = f"revision {expected_revision}"
+        if parent is not None:
+            detail += f", parent {parent}" if parent else ", no parent"
+        return await self._change(user, "update_policy", policy_id, update, detail=detail)
 
     async def delete_policy(self, user: Any, policy_id: str) -> None:
         await self._change(user, "delete_policy", policy_id, lambda s: s.delete_policy(policy_id))

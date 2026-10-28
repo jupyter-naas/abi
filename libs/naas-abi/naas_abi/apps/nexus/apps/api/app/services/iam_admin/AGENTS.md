@@ -33,8 +33,12 @@ Nexus adds no role check of its own.
 - `GET /grantable?scope=` what the caller may grant at `scope` (IAM's `grantable`: per catalog, the actions and
   `${scope}:…` resource patterns they hold there, minus their Denies), for the policy builder; any caller, about
   themselves, like `/access`
-- `GET|POST /policies` (`?scope=`; the body's `scope` is the owner), `GET|PUT|DELETE /policies/{id}`,
-  `POST /policies/validate?scope=` (`document` or YAML/JSON `text`)
+- `GET|POST /policies` (`?scope=`; the body's `scope` is the owner, its `parent` the policy it is a sub-policy
+  of), `GET|PUT|DELETE /policies/{id}`, `POST /policies/validate?scope=` (`document` or YAML/JSON `text`).
+  A policy carries `parent_id`; `GET /policies/{id}` adds `parent` (`{id, name, owner_scope, managed}`, the
+  name read as `api` for the id the caller sees, null fields when it cannot be) and `sub_policies` (those below
+  it the caller may list, IAM's `list_sub_policies`). `PUT` takes `parent`: absent keeps it, `null` or `""`
+  removes it, an id sets it. Deleting a parent that has sub-policies is a 409 naming them
 - `GET|POST|DELETE /attachments` (`?scope=`, `?principal_id=`, `?policy_id=`), `GET /attachable-policies?scope=`
 - `GET /principals`, `GET /principals/{id}`, `POST /principals/{id}/suspend|resume`
 - `GET|POST /groups` (`?scope=`; the body's `scope`, or `org` alone, is the owner), `GET|DELETE /groups/{id}`, `PUT|DELETE /groups/{id}/members/{member}`,
@@ -132,7 +136,16 @@ Nexus adds no role check of its own.
   here (`sets.intersect`); only a workspace whose org's set the caller may not read asks IAM its effective set.
 - **The simulator is `explain`.** "Can X do Y on Z" is IAM's `explain` on the principal (`iam:Explain`): the answer
   names the deciding side, policy, statement, attachment, scope and group, and shows the statement when the
-  caller may read its policy.
+  caller may read its policy; for a sub-policy, `bounded_by` (each parent's statement that allowed it too) and
+  `through` (the sub-policies a parent's Deny was reached by).
+- **Sub-policies are IAM's, passed through.** Decision: `POST` and `PUT /policies` hand `parent` to IAM's
+  `create_policy` / `update_policy` as the user, through `_change` (the audit detail says `sub-policy of <id>`,
+  `parent <id>` or `no parent`); every rule (one parent, a cycle, a chain deeper than 8, a missing parent, an owner
+  outside the parent's, derive only from what you hold, grant only what you hold within the chain, no deleting a
+  parent) is IAM's, so its refusals come back as they do over NATS and through the SDK: 403 (`PERMISSION_DENIED`,
+  `GRANT_NOT_HELD`), 404, 409, 422 with IAM's message. Consequences: the editor shows a policy's parent and keeps it
+  on save (it leaves `parent` out of the `PUT`); choosing a parent and the tree of policies are the builder's
+  (a later change).
 - **The routes take a session only** (the `/api/iam/` prefix): an API key cannot administer permissions.
 - A user holding a custom role with only `iam:ListPolicies` gets exactly that page; a stranger gets 403 on all of
   them. Group and service-account deletion keep the id (IAM's rule); the lists hide deleted ones.

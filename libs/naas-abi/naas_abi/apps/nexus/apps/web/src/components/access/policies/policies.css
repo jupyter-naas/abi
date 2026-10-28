@@ -156,6 +156,15 @@
   color: var(--muted-foreground-hex);
 }
 
+.access-policy-parent {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+  color: var(--muted-foreground-hex);
+}
+
 .access-policy-muted {
   font-size: var(--font-size-sm);
   color: var(--muted-foreground-hex);

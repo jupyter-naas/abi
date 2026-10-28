@@ -24,6 +24,12 @@ type Mode = 'builder' | 'visual' | 'text';
 
 type SaveError = { message: string; errors: string[]; conflict: boolean; refused: string[] };
 
+/** The parent of ``policy``: named when the API read it with the policy, else by its id. */
+function parentOf(policy: PolicyView | null): { id: string; name: string | null } | null {
+  if (!policy?.parent_id) return null;
+  return { id: policy.parent_id, name: policy.parent?.id === policy.parent_id ? policy.parent.name : null };
+}
+
 /**
  * Creates a policy (``policy`` null) owned by ``scope``, or edits one. With ``builder`` (what
  * the caller may grant there), the policy is chosen as checkboxes, and a new one may start
@@ -74,6 +80,8 @@ export function PolicyEditor({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<SaveError | null>(null);
   const [revision, setRevision] = useState(policy?.revision ?? 0);
+  // The parent stays as it is on save (the update leaves it out); a reload shows the newer one.
+  const [parent, setParent] = useState(() => parentOf(policy));
   const [starting, setStarting] = useState('');
   const owner = scope.value ?? undefined;
 
@@ -193,6 +201,7 @@ export function PolicyEditor({
       setVersion(fresh.document.version);
       setStatements(fromDocument(fresh.document));
       setRevision(fresh.revision);
+      setParent(parentOf(fresh));
       setMode(builder ? 'builder' : 'visual');
       setSaveError(null);
     } catch (error) {
@@ -225,6 +234,13 @@ export function PolicyEditor({
           </span>
         )}
       </header>
+      {parent && (
+        <p className="access-policy-parent" aria-label="Parent policy">
+          Sub-policy of <strong>{parent.name ?? parent.id}</strong>
+          {parent.name && <code className="access-policy-id">{parent.id}</code>}: it never grants more than its
+          parent does.
+        </p>
+      )}
 
       <div className="access-policy-row">
         <label className="access-policy-field access-policy-field-grow">

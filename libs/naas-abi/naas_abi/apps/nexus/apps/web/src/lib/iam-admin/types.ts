@@ -129,9 +129,23 @@ export type PolicyView = {
   revision: number;
   /** Who owns it: `abi:-:-` (the platform), `abi:<org>:-` or `abi:<org>:<ws>`. */
   owner_scope?: string;
+  /** The policy it is a sub-policy of: it never grants more than that one, read live. */
+  parent_id?: string | null;
+  /** Read one by one (`GET /policies/{id}`): its parent, named when the caller can see it. */
+  parent?: PolicyRef | null;
+  /** Read one by one: the sub-policies below it the caller may list. */
+  sub_policies?: PolicyRef[];
   document: PolicyDocument;
   created_at: string | null;
   updated_at: string | null;
+};
+
+/** A policy named by its id; its name and owner are null when they cannot be read. */
+export type PolicyRef = {
+  id: string;
+  name: string | null;
+  owner_scope: string | null;
+  managed: boolean | null;
 };
 
 export type Page<T> = { items: T[]; next_after: string | null };
@@ -140,11 +154,19 @@ export type Page<T> = { items: T[]; next_after: string | null };
 export type PolicySource = { document: PolicyDocument } | { text: string };
 
 /** `scope`: the owner, `abi:<org>:-` or `abi:<org>:<ws>`; none: the platform. */
-export type PolicyCreate = PolicySource & { name: string; description?: string; scope?: string | null };
+export type PolicyCreate = PolicySource & {
+  name: string;
+  description?: string;
+  scope?: string | null;
+  /** A sub-policy of this one. */
+  parent?: string;
+};
 export type PolicyUpdate = Partial<PolicySource> & {
   expected_revision: number;
   name?: string;
   description?: string;
+  /** Absent keeps the parent; null removes it; an id sets it. */
+  parent?: string | null;
 };
 
 /** What IAM says of a document, without saving it. `errors` lists every failure. */

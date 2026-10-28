@@ -1173,3 +1173,85 @@ def test_what_the_caller_may_grant(world):
     assert _grantable(world, "lister", ws1) == {"iam:ListPolicies": ["${scope}:iam:policy/*"]}
     assert _grantable(world, "stranger", ws1) == {}
     assert get(world, "/grantable?scope=nonsense", "admin").status_code == 422
+
+
+# -- sub-policies ----------------------------------------------------------------------------
+
+
+def test_a_sub_policy_names_its_parent_and_the_parent_its_sub_policies(world, ws2):
+    parent = post(world, "/policies", name="graphs", document=SCOPED_READER).json()
+    created = post(
+        world,
+        "/policies",
+        name="ws-2 graphs",
+        document=SCOPED_READER,
+        scope=ws2,
+        parent=parent["id"],
+    )
+    assert created.status_code == 201, created.text
+    child = created.json()
+    assert child["parent_id"] == parent["id"]
+    read = get(world, f"/policies/{child['id']}").json()
+    assert read["parent"] == {
+        "id": parent["id"],
+        "name": "graphs",
+        "owner_scope": "abi:-:-",
+        "managed": False,
+    }
+    assert read["sub_policies"] == []
+    assert [s["id"] for s in get(world, f"/policies/{parent['id']}").json()["sub_policies"]] == [
+        child["id"]
+    ]
+    assert world.audit.records[-1].action.detail.endswith(f"sub-policy of {parent['id']}")
+
+    # A parent with sub-policies is not deleted: the refusal names them.
+    refused = world.client.delete(f"/api/iam/admin/policies/{parent['id']}", headers=as_("root"))
+    assert refused.status_code == 409 and child["id"] in refused.json()["detail"]
+
+    # Saving without the parent keeps it; null removes it.
+    renamed = world.client.put(
+        f"/api/iam/admin/policies/{child['id']}",
+        json={"expected_revision": 1, "name": "renamed"},
+        headers=as_("root"),
+    )
+    assert renamed.status_code == 200 and renamed.json()["parent_id"] == parent["id"]
+    freed = world.client.put(
+        f"/api/iam/admin/policies/{child['id']}",
+        json={"expected_revision": 2, "parent": None},
+        headers=as_("root"),
+    )
+    assert freed.status_code == 200 and freed.json()["parent_id"] is None
+    assert world.audit.records[-1].action.detail.endswith("no parent")
+    assert get(world, f"/policies/{child['id']}").json()["parent"] is None
+
+
+def test_a_sub_policy_is_refused_as_iam_refuses_it(world, ws2):
+    parent = post(world, "/policies", name="graphs", document=SCOPED_READER).json()
+    # Ws-2's admin does not hold it: deriving is refused, naming it.
+    refused = post(
+        world,
+        "/policies",
+        "ws2admin",
+        name="mine",
+        document=SCOPED_READER,
+        scope=ws2,
+        parent=parent["id"],
+    )
+    assert refused.status_code == 403, refused.text
+    assert parent["id"] in refused.json()["detail"]
+    assert "derive only from a policy attached to you" in refused.json()["detail"]
+    assert world.audit.phases("create_policy")[-1] == "failed"
+    # A parent that does not exist, a cycle, an owner above the parent's.
+    missing = post(
+        world, "/policies", name="x", document=SCOPED_READER, parent="pol_" + "0" * 26
+    )
+    assert missing.status_code == 404
+    cycle = world.client.put(
+        f"/api/iam/admin/policies/{parent['id']}",
+        json={"expected_revision": 1, "parent": parent["id"]},
+        headers=as_("root"),
+    )
+    assert cycle.status_code == 422 and "cycle" in cycle.json()["detail"]
+    ws_policy = post(world, "/policies", name="w", document=SCOPED_READER, scope=ws2).json()
+    above = post(world, "/policies", name="x", document=SCOPED_READER, parent=ws_policy["id"])
+    assert above.status_code == 422 and "or below it" in above.json()["detail"]

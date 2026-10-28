@@ -73,9 +73,22 @@ def policy_view(policy: Policy) -> dict[str, Any]:
         "managed": policy.managed,
         "revision": policy.revision,
         "owner_scope": policy.owner_scope,
+        "parent_id": policy.parent_id,
         "document": policy.document.to_dict(),
         "created_at": iso(policy.created_at),
         "updated_at": iso(policy.updated_at),
+    }
+
+
+def policy_ref(policy_id: str | None, policy: Policy | None) -> dict[str, Any] | None:
+    """A policy named by its id: its name and owner when they can be read."""
+    if policy_id is None:
+        return None
+    return {
+        "id": policy_id,
+        "name": policy.name if policy is not None else None,
+        "owner_scope": policy.owner_scope if policy is not None else None,
+        "managed": policy.managed if policy is not None else None,
     }
 
 
@@ -193,6 +206,13 @@ def simulation_view(
             "scope": deciding.scope,
             "via_group": deciding.via_group,
             "statement": written,
+            # The chain: the parents that allowed it too, or the sub-policies a
+            # parent's statement was reached through.
+            "bounded_by": [
+                {"policy_id": b.policy_id, "statement_index": b.statement_index, "sid": b.sid}
+                for b in deciding.bounded_by
+            ],
+            "through": list(deciding.through),
         }
     return {
         "allowed": explanation.allowed,

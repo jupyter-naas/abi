@@ -96,12 +96,22 @@ class PolicyCreateBody(PolicySourceBody):
     description: str = Field(default="", max_length=1000)
     # The owner: abi:-:- (the default), abi:<org>:- or abi:<org>:<ws>.
     scope: str | None = None
+    # The policy it is a sub-policy of: it never grants more than it.
+    parent: str | None = Field(default=None, min_length=1, max_length=255)
 
 
 class PolicyUpdateBody(PolicySourceBody):
     expected_revision: int
     name: str | None = Field(default=None, min_length=1, max_length=128)
     description: str | None = Field(default=None, max_length=1000)
+    # Absent keeps the parent; null or "" removes it; an id sets it.
+    parent: str | None = Field(default=None, max_length=255)
+
+    def parent_change(self) -> str | None:
+        """IAM's ``parent``: None keeps it, ``""`` removes it, an id sets it."""
+        if "parent" not in self.model_fields_set:
+            return None
+        return self.parent or ""
 
 
 class AttachBody(BaseModel):
@@ -223,7 +233,9 @@ async def create_policy(
     body: PolicyCreateBody, user: User = Signed, service: IamAdminService = Service
 ) -> dict[str, Any]:
     return await _call(
-        service.create_policy(user, body.name, body.source(), body.description, body.scope)
+        service.create_policy(
+            user, body.name, body.source(), body.description, body.scope, body.parent
+        )
     )
 
 
@@ -243,6 +255,7 @@ async def update_policy(
             source=body.source() if has_source else None,
             name=body.name,
             description=body.description,
+            parent=body.parent_change(),
         )
     )
 

@@ -234,6 +234,50 @@ describe('PolicyEditor text view', () => {
   });
 });
 
+describe('PolicyEditor sub-policies', () => {
+  const subPolicy = {
+    ...readerPolicy,
+    parent_id: 'pol_parent',
+    parent: { id: 'pol_parent', name: 'Org access', owner_scope: 'abi:-:-', managed: false },
+  };
+
+  it('shows the parent of a sub-policy and keeps it on save', async () => {
+    const updatePolicy = vi.fn((_id: string, input: { name?: string }) => Promise.resolve({ ...subPolicy, ...input }));
+    const { onSaved } = await open({ api: api({ updatePolicy }), policy: subPolicy });
+
+    expect(field('Parent policy')?.textContent).toContain('Sub-policy of Org access');
+    expect(field('Parent policy')?.textContent).toContain('pol_parent');
+    await mounted!.type(field('Policy name'), 'Analysts');
+    await mounted!.click(button('Save changes') ?? null);
+    await mounted!.flush();
+
+    expect(updatePolicy).toHaveBeenCalledWith('pol_1', expect.objectContaining({ name: 'Analysts', expected_revision: 3 }));
+    expect(updatePolicy.mock.calls[0][1]).not.toHaveProperty('parent');
+    expect(onSaved).toHaveBeenCalled();
+  });
+
+  it('names a parent it could not read by its id, and none for a policy without one', async () => {
+    await open({ policy: { ...readerPolicy, parent_id: 'pol_hidden' } });
+    expect(field('Parent policy')?.textContent).toContain('Sub-policy of pol_hidden');
+    await mounted!.unmount();
+    mounted = null;
+    await open({ policy: readerPolicy });
+    expect(field('Parent policy')).toBeNull();
+  });
+
+  it('shows the parent of the newer version after a reload', async () => {
+    const updatePolicy = vi.fn().mockRejectedValue(new IamAdminError('Revision conflict', 409));
+    const getPolicy = vi.fn().mockResolvedValue({ ...subPolicy, revision: 4, parent_id: null, parent: null });
+    await open({ api: api({ updatePolicy, getPolicy }), policy: subPolicy });
+    await mounted!.click(button('Save changes') ?? null);
+    await mounted!.flush();
+    await mounted!.click(button('Reload their version') ?? null);
+    await mounted!.flush();
+
+    expect(field('Parent policy')).toBeNull();
+  });
+});
+
 describe('PolicyEditor read-only', () => {
   it('shows a managed policy without any way to change it', async () => {
     const validatePolicy = vi.fn();
