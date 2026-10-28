@@ -1563,3 +1563,25 @@ def test_the_same_version_without_a_format_never_replaces_one_with(h):
         .resource_types[0]
         .policy_only
     )
+
+
+def test_a_retired_policy_that_is_a_parent_is_detached_but_kept(h):
+    """Sub-policies stay bounded by their parent: a retired policy someone
+    derived from is detached (it grants nothing any more) but stays until its
+    sub-policies get another parent."""
+    from naas_abi_core.services.iam.IAMPorts import Attachment
+
+    old = _old_feature_policy()
+    h.iam.store.put_managed_policy(old)
+    bob = h.user("bob")
+    h.iam.store.attach(Attachment("att_old", old.id, bob.id, "abi:org-1:ws-1"))
+    with as_service_account("engine"):
+        child = h.iam.create_policy(
+            "narrower",
+            document(statement("Allow", [QUERY], ["${scope}:triple_store:graph/a"])),
+            parent=old.id,
+        )
+        assert h.iam.retire_policies([old.id]) == []
+    assert h.iam.store.get_policy(old.id)
+    assert h.iam.store.list_attachments(policy_id=old.id) == []
+    assert child.id
