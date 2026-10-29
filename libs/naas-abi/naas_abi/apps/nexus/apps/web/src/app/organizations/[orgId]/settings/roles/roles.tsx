@@ -47,7 +47,7 @@ export default function OrgRolesPage() {
     <div className="org-settings-roles-page">
       <OrgSettingsPageHeader
         title="Roles & permissions"
-        subtitle="Who holds which role or policy in this organization and its workspaces, its groups and policies, and what each built-in role gets"
+        subtitle="Who holds which role or policy in this organization and its workspaces, and its groups and policies"
       />
       <RolesAndPermissions scopes={scopes} />
     </div>
