@@ -13,10 +13,11 @@ The agents answer without a model. ``Recruiter`` acts for the user it runs for:
 * ``project <id>`` registers a project in the workspace of the chat (a create
   on its name as placed: the user and this module both need
   ``dev_people:CreateProject`` there);
-* ``policy <scope> <type>/<module>/<name>`` creates, over NATS, a policy owned
-  by ``scope`` letting its holders use that item: IAM refuses it as it refuses
-  the user over REST when the user could not grant it ("Grant only what you
-  hold"), so the scenario shows the same refusal on both.
+* ``policy <scope> <type>/<module>/<name> [under <parent>]`` creates, over
+  NATS, a policy owned by ``scope`` letting its holders use that item, a
+  sub-policy of ``parent`` if named: IAM refuses it as it refuses the user over
+  REST when the user could not grant it or derive from the parent ("Grant only
+  what you hold"), so the scenario shows the same refusal on both.
 """
 
 from __future__ import annotations
@@ -102,11 +103,15 @@ class EchoAgent:
             return await self.export(report, project)
         if self.name == "Recruiter" and request.lower().startswith("policy "):
             parts = request.split()
+            parent = None
+            if len(parts) == 5 and parts[3] == "under":
+                parent = parts[4]
+                parts = parts[:3]
             kind = parts[2].split("/")[0] if len(parts) == 3 else ""
             if kind not in USE:
                 return (
-                    f"{self.name}: say policy <scope> <type>/<module>/<name>, "
-                    f"<type> one of {', '.join(USE)}"
+                    f"{self.name}: say policy <scope> <type>/<module>/<name> "
+                    f"[under <parent policy id>], <type> one of {', '.join(USE)}"
                 )
             _, scope, item = parts
             document = {
@@ -121,7 +126,7 @@ class EchoAgent:
             }
             try:
                 created = await self.module.engine.services.iam.create_policy(
-                    f"Use {item}", document, scope=scope
+                    f"Use {item}", document, scope=scope, parent=parent
                 )
             except ServiceError as exc:
                 return f"{self.name}: policy refused ({type(exc).__name__}: {exc})"
