@@ -153,9 +153,10 @@ below a container, `<container>/*`. Nexus builds them with `services/iam/names.p
   still reads every registered catalog, so a document naming what the caller may not grant is refused for that
   (`GRANT_NOT_HELD`), not as unknown. `/publishers` and `/resources` need no permission, like `/grantable`: they
   say only what the caller already holds or may list (the route matrix lists them with the caller-only routes).
-- **The policy builder offers what the caller may grant.** `GET /grantable?scope=` is IAM's `grantable`, so the
-  builder and IAM's refusal agree: what it lists is what the caller holds at that scope (it may list less, never
-  more). It needs no permission: it says only what the caller holds.
+- **The policy builder offers what the caller may grant.** `GET /publishers?scope=&parent=` is IAM's `grantable`
+  by publisher (within a sub-policy's parent), so the builder and IAM's refusal agree: what it lists is what the
+  caller holds at that scope (it may list less, never more). It needs no permission: it says only what the caller
+  holds, and of a parent only what the caller may derive from or read.
 - **No modules × workspaces page.** Decision: the sets are gone (core `services/iam/AGENTS.md`, "Policies are
   the one place access is decided"), so is the page that edited them, its routes and the directory port that named
   its rows. Consequences: what an organization or a workspace uses is its access policy ("<O> access", "<W>

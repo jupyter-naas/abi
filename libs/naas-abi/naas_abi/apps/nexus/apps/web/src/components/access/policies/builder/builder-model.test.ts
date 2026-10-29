@@ -1,257 +1,232 @@
 import { describe, expect, it } from 'vitest';
-import type { GrantableView, ModuleScopesEntry } from '@/lib/iam-admin/types';
+import type { PolicyStatement, PublishersView } from '@/lib/iam-admin/types';
+import { ORG, WS, adminPublishers, publishedType } from '../../access-fixtures';
 import {
   atScope,
-  builderGroups,
+  belongsTo,
+  builderPublishers,
   builderStatements,
   globMatches,
-  refusedItems,
+  refusedTypes,
+  scopedName,
   splitStatements,
+  wildcardProblem,
+  type Choices,
 } from './builder-model';
 
-/** The workspace w of the organization o, as IAM names it. */
-const W = 'abi:nexus:organization/o/nexus:workspace/w';
+const keys = (view: PublishersView) => builderPublishers(view).flatMap((p) => p.types.map((t) => t.key));
 
-const people: ModuleScopesEntry = {
-  module: 'acme.people',
-  agents: [
-    { name: 'Recruiter', display_name: 'Recruiter', description: 'Finds people', icon: null, resource: '${scope}/module:agent/acme.people/Recruiter', actions: ['module:UseAgent'] },
-    { name: 'Coach', display_name: 'Coach', description: '', icon: null, resource: '${scope}/module:agent/acme.people/Coach', actions: ['module:UseAgent'] },
-  ],
-  apps: [],
-  workflows: [
-    {
-      name: 'workflow.sync',
-      display_name: 'Sync',
-      description: '',
-      icon: null,
-      resource: '${scope}/module:workflow/acme.people/workflow.sync',
-      actions: ['module:RunWorkflow', 'module:ReadWorkflowRuns'],
-    },
-  ],
-  pipelines: [],
-  declared: {
-    service: 'acme_people',
-    version: 1,
-    resource_types: [{ name: 'profile', description: 'A profile', resource: '${scope}/acme_people:profile/*' }],
-    actions: [{ action: 'acme_people:Export', level: 'read', resource_types: ['profile'], description: 'Export profiles' }],
-  },
-};
-
-const market: ModuleScopesEntry = {
-  module: 'acme.market',
-  agents: [{ name: 'Analyst', display_name: 'Analyst', description: '', icon: null, resource: '${scope}/module:agent/acme.market/Analyst', actions: ['module:UseAgent'] }],
-  apps: [],
-  workflows: [],
-  pipelines: [],
-  declared: null,
-};
-
-/** A workspace admin whose workspace's set has acme.people only. */
-const admin: GrantableView = {
-  scope: W,
-  catalogs: [
-    {
-      service: 'module',
-      actions: [
-        { action: 'module:UseAgent', resources: ['${scope}/module:agent/acme.people/*'], excluded: [] },
-        { action: 'module:RunWorkflow', resources: ['${scope}/module:workflow/acme.people/*'], excluded: [] },
-        { action: 'module:ReadWorkflowRuns', resources: ['${scope}/module:workflow/acme.people/*'], excluded: [] },
-      ],
-    },
-    { service: 'acme_people', actions: [{ action: 'acme_people:Export', resources: ['${scope}/acme_people:*'], excluded: [] }] },
-    {
-      service: 'nexus',
-      actions: [{ action: 'nexus:UseFeature', resources: ['${scope}/nexus:feature/chat', '${scope}/nexus:feature/files'], excluded: [] }],
-    },
-  ],
-};
-
-const keys = (groups: ReturnType<typeof builderGroups>) =>
-  groups.flatMap((g) => g.sections.flatMap((s) => s.items.map((i) => i.key)));
-
-describe('globMatches', () => {
-  it('reads IAM patterns: * any run, ? one character, the rest literally', () => {
-    expect(globMatches('${scope}/module:agent/*', '${scope}/module:agent/acme.people/Recruiter')).toBe(true);
-    expect(globMatches('${scope}/module:agent/acme.?eople/*', '${scope}/module:agent/acme.people/Coach')).toBe(true);
-    expect(globMatches('${scope}/module:app/*', '${scope}/module:agent/acme.people/Coach')).toBe(false);
-    expect(globMatches('*', 'anything')).toBe(true);
-  });
-});
-
-describe('builderGroups', () => {
-  it('offers, per module and for Nexus features, only what the caller may grant', () => {
-    const groups = builderGroups(admin, [people, market], ['chat', 'files', 'apps']);
-    expect(groups.map((g) => g.label)).toEqual(['acme.people', 'Nexus features']);
-    expect(keys(groups)).toEqual([
-      'module:agent/acme.people/Coach',
-      'module:agent/acme.people/Recruiter',
-      'module:workflow/acme.people/workflow.sync',
-      'declared:acme_people:Export@${scope}/acme_people:profile/*',
-      'feature:chat',
-      'feature:files',
-    ]);
-    const sync = groups[0].sections.find((s) => s.id === 'workflows')?.items[0];
-    expect(sync?.actions).toEqual(['module:RunWorkflow', 'module:ReadWorkflowRuns']);
-  });
-
-  it('grants only the actions of an item the caller holds', () => {
-    const runsOnly: GrantableView = {
-      scope: W,
-      catalogs: [{ service: 'module', actions: [{ action: 'module:ReadWorkflowRuns', resources: ['${scope}/module:workflow/*'], excluded: [] }] }],
+describe('builderPublishers', () => {
+  it('groups by publisher: the engine, naas_abi, then the modules by name', () => {
+    const shuffled: PublishersView = {
+      scope: WS,
+      publishers: [...adminPublishers.publishers].reverse(),
     };
-    const [group] = builderGroups(runsOnly, [people], []);
-    expect(group.sections.map((s) => s.id)).toEqual(['workflows']);
-    expect(group.sections[0].items[0].actions).toEqual(['module:ReadWorkflowRuns']);
+    const publishers = builderPublishers(shuffled);
+    expect(publishers.map((p) => [p.id, p.label])).toEqual([
+      ['engine', 'Engine'],
+      ['naas_abi', 'naas_abi'],
+      ['acme.market', 'acme.market'],
+      ['acme.people', 'acme.people'],
+    ]);
   });
 
-  it('leaves out what a Deny takes back', () => {
-    const denied: GrantableView = {
-      scope: W,
-      catalogs: [
+  it('names each type and offers its grantable actions', () => {
+    const [engine, naasAbi, , people] = builderPublishers(adminPublishers);
+    const graph = engine.types.find((t) => t.key === 'triple_store:graph')!;
+    expect(graph.label).toBe('Graphs');
+    expect(graph.actions.map((a) => a.action)).toEqual(['triple_store:ListGraphs', 'triple_store:Query']);
+    expect(graph.patterns).toEqual(['${scope}/triple_store:graph/*']);
+    expect(naasAbi.types.map((t) => t.label)).toEqual(['Organizations', 'Workspaces', 'Features']);
+    // A module's agents are the `module` catalog's type under that module.
+    expect(people.types.map((t) => [t.key, t.label, t.marker])).toEqual([
+      ['module:agent@acme.people', 'Agents', 'module:agent/acme.people/'],
+    ]);
+  });
+
+  it('offers nothing the caller may not grant', () => {
+    expect(keys({ scope: WS, publishers: [] })).toEqual([]);
+    const onlyA: PublishersView = {
+      scope: WS,
+      publishers: [
         {
-          service: 'module',
-          actions: [{ action: 'module:UseAgent', resources: ['${scope}/module:agent/*'], excluded: ['${scope}/module:agent/acme.people/Coach'] }],
+          id: 'acme.people',
+          kind: 'module',
+          types: [publishedType('module', 'agent', [['module:UseAgent', ['${scope}/module:agent/acme.people/A']]], { module: 'acme.people' })],
         },
       ],
     };
-    expect(keys(builderGroups(denied, [people, market], []))).toEqual([
-      'module:agent/acme.people/Recruiter',
-      'module:agent/acme.market/Analyst',
-    ]);
+    expect(keys(onlyA)).toEqual(['module:agent@acme.people']);
+  });
+});
+
+describe('resources', () => {
+  const [engine, naasAbi, , people] = builderPublishers(adminPublishers);
+  const graph = engine.types.find((t) => t.key === 'triple_store:graph')!;
+  const workspace = naasAbi.types.find((t) => t.type === 'workspace')!;
+  const agents = people.types[0];
+
+  it('writes a listed resource at the scope', () => {
+    expect(scopedName(`${WS}/triple_store:graph/sales`, WS)).toBe('${scope}/triple_store:graph/sales');
+    expect(scopedName(`${ORG}/nexus:workspace/ws-1`, ORG)).toBe('${scope}/nexus:workspace/ws-1');
+    expect(scopedName(WS, WS)).toBe('${scope}');
+    expect(scopedName('abi:model_registry:model/gpt', 'abi:')).toBe('${scope}/model_registry:model/gpt');
+    // Not under the scope: as named.
+    expect(scopedName('abi:nexus:organization/other', ORG)).toBe('abi:nexus:organization/other');
   });
 
-  it('offers every known feature to whoever holds them all, and nothing to a stranger', () => {
-    const everything: GrantableView = { scope: 'abi:', catalogs: [{ service: 'nexus', actions: [{ action: 'nexus:UseFeature', resources: ['${scope}/*'], excluded: [] }] }] };
-    expect(keys(builderGroups(everything, [], ['chat', 'apps']))).toEqual(['feature:apps', 'feature:chat']);
-    expect(builderGroups({ scope: W, catalogs: [] }, [people, market], ['chat'])).toEqual([]);
+  it('tells which type a resource names', () => {
+    expect(belongsTo(graph, '${scope}/triple_store:graph/sales')).toBe(true);
+    expect(belongsTo(graph, '${scope}/triple_store:graph/sales-*')).toBe(true);
+    expect(belongsTo(graph, '${scope}/nexus:workspace/ws-1/triple_store:graph/x')).toBe(true);
+    expect(belongsTo(graph, '${scope}/triple_store:graph/x/nexus:feature/chat')).toBe(false);
+    expect(belongsTo(graph, '${scope}/nexus:feature/chat')).toBe(false);
+    expect(belongsTo(agents, '${scope}/module:agent/acme.people/Coach')).toBe(true);
+    expect(belongsTo(agents, '${scope}/module:agent/acme.market/Analyst')).toBe(false);
+    // What the caller may grant of a type is the type's, whatever it names.
+    expect(belongsTo(workspace, '${scope}')).toBe(true);
+  });
+
+  it('accepts a wildcard under ${scope}/ that names the type', () => {
+    expect(wildcardProblem(graph, 'triple_store:graph/sales-*')).toBeNull();
+    expect(wildcardProblem(graph, '*/triple_store:graph/*')).toBeNull();
+    expect(wildcardProblem(graph, '')).toMatch(/Write a pattern/);
+    expect(wildcardProblem(graph, 'nexus:feature/*')).toMatch(/triple_store:graph\//);
+    expect(wildcardProblem(agents, 'module:agent/acme.people/*')).toBeNull();
+    expect(wildcardProblem(agents, 'module:agent/*')).toMatch(/module:agent\/acme.people\//);
   });
 });
 
 describe('statements', () => {
-  const groups = builderGroups(admin, [people, market], ['chat', 'files']);
+  const publishers = builderPublishers(adminPublishers);
 
-  it('writes one Allow per set of actions, and reads it back', () => {
-    const selected = new Set(['module:agent/acme.people/Recruiter', 'module:workflow/acme.people/workflow.sync', 'feature:chat']);
-    const statements = builderStatements(groups, selected);
+  it('writes one Allow per choice of actions and resources, and reads it back', () => {
+    const choices: Choices = {
+      'triple_store:graph': { actions: ['triple_store:Query', 'triple_store:ListGraphs'], resources: ['${scope}/triple_store:graph/sales', '${scope}/triple_store:graph/hr-*'] },
+      'nexus:feature': { actions: ['nexus:UseFeature'], resources: ['${scope}/nexus:feature/chat'] },
+      'module:agent@acme.people': { actions: ['module:UseAgent'], resources: ['${scope}/module:agent/acme.people/Coach'] },
+    };
+    const statements = builderStatements(publishers, choices);
     expect(statements).toEqual([
-      { sid: 'ModuleUseAgent', effect: 'Allow', actions: ['module:UseAgent'], resources: ['${scope}/module:agent/acme.people/Recruiter'] },
       {
-        sid: 'ModuleRunWorkflowModuleReadWorkflowRuns',
+        sid: 'TripleStoreListGraphsTripleStoreQuery',
         effect: 'Allow',
-        actions: ['module:RunWorkflow', 'module:ReadWorkflowRuns'],
-        resources: ['${scope}/module:workflow/acme.people/workflow.sync'],
+        // In the type's order of actions.
+        actions: ['triple_store:ListGraphs', 'triple_store:Query'],
+        resources: ['${scope}/triple_store:graph/sales', '${scope}/triple_store:graph/hr-*'],
       },
       { sid: 'NexusUseFeature', effect: 'Allow', actions: ['nexus:UseFeature'], resources: ['${scope}/nexus:feature/chat'] },
+      { sid: 'ModuleUseAgent', effect: 'Allow', actions: ['module:UseAgent'], resources: ['${scope}/module:agent/acme.people/Coach'] },
     ]);
-    const back = splitStatements(groups, statements);
-    expect([...back.selected].sort()).toEqual([...selected].sort());
+    const back = splitStatements(publishers, statements);
     expect(back.rest).toEqual([]);
+    expect(back.choices).toEqual({
+      'triple_store:graph': { actions: ['triple_store:ListGraphs', 'triple_store:Query'], resources: choices['triple_store:graph'].resources },
+      'nexus:feature': choices['nexus:feature'],
+      'module:agent@acme.people': choices['module:agent@acme.people'],
+    });
+    // Written again, the same document.
+    expect(builderStatements(publishers, back.choices)).toEqual(statements);
+  });
+
+  it('writes nothing for a choice without actions or without resources', () => {
+    expect(
+      builderStatements(publishers, {
+        'triple_store:graph': { actions: ['triple_store:Query'], resources: [] },
+        'nexus:feature': { actions: [], resources: ['${scope}/nexus:feature/chat'] },
+      }),
+    ).toEqual([]);
   });
 
   it('gives every statement its own sid, never one a kept statement has', () => {
-    const crm: ModuleScopesEntry = {
-      ...market,
-      module: 'crm',
-      agents: [],
-      declared: {
-        service: 'crm',
-        version: 1,
-        resource_types: [{ name: 'record', description: '', resource: '${scope}/crm:record/*' }],
-        actions: [{ action: 'crm:Query', level: 'read', resource_types: ['record'], description: '' }],
-      },
-    };
-    const erp: ModuleScopesEntry = {
-      ...crm,
-      module: 'erp',
-      declared: { ...crm.declared!, service: 'erp', resource_types: [{ name: 'record', description: '', resource: '${scope}/erp:record/*' }], actions: [{ action: 'erp:Query', level: 'read', resource_types: ['record'], description: '' }] },
-    };
-    const both: GrantableView = {
-      scope: W,
-      catalogs: [
-        { service: 'crm', actions: [{ action: 'crm:Query', resources: ['${scope}/crm:*'], excluded: [] }] },
-        { service: 'erp', actions: [{ action: 'erp:Query', resources: ['${scope}/erp:*'], excluded: [] }] },
-        ...admin.catalogs,
-      ],
-    };
-    const offered = builderGroups(both, [people, crm, erp], []);
-    const kept = [{ sid: 'ModuleUseAgent', effect: 'Allow' as const, actions: ['nexus:ListFiles'], resources: ['${scope}/nexus:file/*'] }];
+    const market = publishers.find((p) => p.id === 'acme.market')!.types[0];
+    const kept: PolicyStatement[] = [{ sid: 'ModuleUseAgent', effect: 'Allow', actions: ['nexus:ListFiles'], resources: ['${scope}/nexus:file/*'] }];
     const statements = builderStatements(
-      offered,
-      new Set(['declared:crm:Query@${scope}/crm:record/*', 'declared:erp:Query@${scope}/erp:record/*', 'module:agent/acme.people/Coach']),
+      publishers,
+      {
+        [market.key]: { actions: ['module:UseAgent'], resources: ['${scope}/module:agent/acme.market/Analyst'] },
+        'module:agent@acme.people': { actions: ['module:UseAgent'], resources: ['${scope}/module:agent/acme.people/Coach'] },
+      },
       kept,
     );
-    expect(statements.map((s) => s.sid)).toEqual(['ModuleUseAgent2', 'CrmQuery', 'ErpQuery']);
+    expect(statements.map((s) => s.sid)).toEqual(['ModuleUseAgent2', 'ModuleUseAgent3']);
     for (const sid of statements.map((s) => s.sid!)) expect(sid).toMatch(/^[A-Za-z0-9]{1,64}$/);
   });
 
   it('keeps what the builder cannot show as statements of their own', () => {
-    const other = { effect: 'Allow' as const, actions: ['triple_store:Query'], resources: ['${scope}/triple_store:graph/*'] };
-    const deny = { effect: 'Deny' as const, actions: ['module:UseAgent'], resources: ['${scope}/module:agent/acme.people/Coach'] };
-    const partial = { effect: 'Allow' as const, actions: ['module:RunWorkflow'], resources: ['${scope}/module:workflow/acme.people/workflow.sync'] };
-    const agent = { effect: 'Allow' as const, actions: ['module:UseAgent'], resources: ['${scope}/module:agent/acme.people/Coach'] };
-    const back = splitStatements(groups, [other, deny, partial, agent]);
-    expect([...back.selected]).toEqual(['module:agent/acme.people/Coach']);
-    expect(back.rest).toEqual([other, deny, partial]);
+    const deny: PolicyStatement = { effect: 'Deny', actions: ['triple_store:Query'], resources: ['${scope}/triple_store:graph/hr'] };
+    const notGrantable: PolicyStatement = { effect: 'Allow', actions: ['triple_store:DropGraph'], resources: ['${scope}/triple_store:graph/*'] };
+    const twoTypes: PolicyStatement = {
+      effect: 'Allow',
+      actions: ['triple_store:Query', 'nexus:UseFeature'],
+      resources: ['${scope}/triple_store:graph/*', '${scope}/nexus:feature/chat'],
+    };
+    const wildcardAction: PolicyStatement = { effect: 'Allow', actions: ['triple_store:*'], resources: ['${scope}/triple_store:graph/*'] };
+    const otherType: PolicyStatement = { effect: 'Allow', actions: ['triple_store:Query'], resources: ['${scope}/nexus:feature/chat'] };
+    const query: PolicyStatement = { sid: 'Q', effect: 'Allow', actions: ['triple_store:Query'], resources: ['${scope}/triple_store:graph/a'] };
+    // A second choice of the same type: kept as written.
+    const again: PolicyStatement = { effect: 'Allow', actions: ['triple_store:ListGraphs'], resources: ['${scope}/triple_store:graph/b'] };
+    const back = splitStatements(publishers, [deny, notGrantable, twoTypes, wildcardAction, otherType, query, again]);
+    expect(back.choices).toEqual({ 'triple_store:graph': { actions: ['triple_store:Query'], resources: ['${scope}/triple_store:graph/a'] } });
+    expect(back.rest).toEqual([deny, notGrantable, twoTypes, wildcardAction, otherType, again]);
+  });
+
+  it('reads a pattern the caller may grant back into its type', () => {
+    const everything = builderPublishers({
+      scope: WS,
+      publishers: [{ id: 'engine', kind: 'engine', types: [publishedType('triple_store', 'graph', [['triple_store:Query', ['${scope}/*']]])] }],
+    });
+    const back = splitStatements(everything, [{ effect: 'Allow', actions: ['triple_store:Query'], resources: ['${scope}/*'] }]);
+    expect(back.choices['triple_store:graph']?.resources).toEqual(['${scope}/*']);
   });
 });
 
-describe('refusedItems', () => {
-  const groups = builderGroups(admin, [people, market], ['chat']);
-
-  it('names the item IAM refused, as written in the policy or at the scope', () => {
-    const asWritten = `You cannot grant what you do not hold: statement 0 (UseAgent) of a new policy allows module:UseAgent on \${scope}/module:agent/acme.people/Recruiter at ${W}, and the set of workspace w does not include it`;
-    expect(refusedItems(groups, asWritten, W)).toEqual(['module:agent/acme.people/Recruiter']);
-    const placed = `You cannot grant what you do not hold: statement 1 allows nexus:UseFeature on ${W}/nexus:feature/chat at ${W}, and you do not hold it there`;
-    expect(refusedItems(groups, placed, W)).toEqual(['feature:chat']);
-    const below = `You cannot grant what you do not hold: statement 1 allows nexus:UseFeature on ${W}/nexus:feature/chat at ${W}/*, and you do not hold it there`;
-    expect(refusedItems(groups, below, W)).toEqual(['feature:chat']);
-    const platform = 'You cannot grant what you do not hold: statement 1 allows nexus:UseFeature on abi:nexus:feature/chat at abi:, and you do not hold it there';
-    expect(refusedItems(groups, platform, 'abi:')).toEqual(['feature:chat']);
-    expect(refusedItems(groups, 'You do not have permission to do this.', W)).toEqual([]);
+describe('sub-policies', () => {
+  it('offers within a parent what the API returns for it, and keeps the rest as statements', () => {
+    // `/publishers?parent=` of "O access" (agents of acme.people, chat): nothing of the engine.
+    const within: PublishersView = {
+      scope: WS,
+      publishers: adminPublishers.publishers
+        .filter((p) => p.id !== 'engine' && p.id !== 'acme.market')
+        .map((p) => (p.id === 'naas_abi' ? { ...p, types: p.types.filter((t) => t.type === 'feature') } : p)),
+    };
+    const publishers = builderPublishers(within);
+    expect(publishers.map((p) => p.id)).toEqual(['naas_abi', 'acme.people']);
+    const graphs: PolicyStatement = { effect: 'Allow', actions: ['triple_store:Query'], resources: ['${scope}/triple_store:graph/*'] };
+    const chat: PolicyStatement = { effect: 'Allow', actions: ['nexus:UseFeature'], resources: ['${scope}/nexus:feature/chat'] };
+    const back = splitStatements(publishers, [graphs, chat]);
+    expect(Object.keys(back.choices)).toEqual(['nexus:feature']);
+    expect(back.rest).toEqual([graphs]);
   });
 });
 
-describe('atScope', () => {
+describe('refusedTypes', () => {
+  const publishers = builderPublishers(adminPublishers);
+  const choices: Choices = {
+    'module:agent@acme.people': { actions: ['module:UseAgent'], resources: ['${scope}/module:agent/acme.people/Coach'] },
+    'nexus:feature': { actions: ['nexus:UseFeature'], resources: ['${scope}/nexus:feature/chat'] },
+  };
+
+  it('names the type IAM refused, as written in the policy or at the scope', () => {
+    const asWritten = `You cannot grant what you do not hold: statement 0 (ModuleUseAgent) of a new policy allows module:UseAgent on \${scope}/module:agent/acme.people/Coach at ${WS}, and you do not hold it there`;
+    expect(refusedTypes(publishers, choices, asWritten, WS)).toEqual(['module:agent@acme.people']);
+    const placed = `You cannot grant what you do not hold: statement 1 allows nexus:UseFeature on ${WS}/nexus:feature/chat at ${WS}, and you do not hold it there`;
+    expect(refusedTypes(publishers, choices, placed, WS)).toEqual(['nexus:feature']);
+    expect(refusedTypes(publishers, choices, 'You do not have permission to do this.', WS)).toEqual([]);
+  });
+});
+
+describe('patterns', () => {
+  it('reads IAM patterns: * any run, ? one character, the rest literally', () => {
+    expect(globMatches('${scope}/module:agent/*', '${scope}/module:agent/acme.people/Recruiter')).toBe(true);
+    expect(globMatches('${scope}/module:agent/acme.?eople/*', '${scope}/module:agent/acme.people/Coach')).toBe(true);
+    expect(globMatches('${scope}/module:app/*', '${scope}/module:agent/acme.people/Coach')).toBe(false);
+  });
+
   it('reads a pattern written at a scope where it is attached', () => {
-    expect(atScope('${scope}/module:agent/acme.people/*', W)).toBe(`${W}/module:agent/acme.people/*`);
-    expect(atScope('${scope}', W)).toBe(W);
-    expect(atScope('${scope}/triple_store:graph/*', 'abi:nexus:organization/o/*')).toBe(
-      'abi:nexus:organization/o/triple_store:graph/*',
-    );
-    // At the platform `${scope}/` reads `abi:`.
+    expect(atScope('${scope}/module:agent/acme.people/*', WS)).toBe(`${WS}/module:agent/acme.people/*`);
+    expect(atScope('${scope}', WS)).toBe(WS);
+    expect(atScope('${scope}/triple_store:graph/*', `${ORG}/*`)).toBe(`${ORG}/triple_store:graph/*`);
     expect(atScope('${scope}/nexus:feature/chat', 'abi:')).toBe('abi:nexus:feature/chat');
-    expect(atScope('abi:triple_store:graph/x', W)).toBe('abi:triple_store:graph/x');
-  });
-});
-
-describe('the new grammar', () => {
-  it('writes the builder choices as `${scope}/` patterns, never `${scope}:`', () => {
-    const groups = builderGroups(admin, [people, market], ['chat']);
-    const statements = builderStatements(groups, new Set(keys(groups)));
-    const resources = statements.flatMap((s) => s.resources);
-    expect(resources.length).toBeGreaterThan(0);
-    expect(resources.every((r) => r.startsWith('${scope}/'))).toBe(true);
-    expect(resources).toContain('${scope}/acme_people:profile/*');
-    expect(resources).toContain('${scope}/nexus:feature/files');
-  });
-
-  it('falls back to `${scope}/<service>:<type>/*` for a declared type without a pattern', () => {
-    const bare: ModuleScopesEntry = {
-      ...market,
-      module: 'acme.bare',
-      agents: [],
-      declared: {
-        service: 'acme_bare',
-        version: 1,
-        resource_types: [],
-        actions: [{ action: 'acme_bare:Read', level: 'read', resource_types: ['thing'], description: '' }],
-      },
-    };
-    const grantable: GrantableView = {
-      scope: W,
-      catalogs: [{ service: 'acme_bare', actions: [{ action: 'acme_bare:Read', resources: ['${scope}/acme_bare:*'], excluded: [] }] }],
-    };
-    expect(keys(builderGroups(grantable, [bare], []))).toEqual(['declared:acme_bare:Read@${scope}/acme_bare:thing/*']);
   });
 });

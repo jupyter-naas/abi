@@ -1,159 +1,146 @@
 /**
  * The policy builder's logic, apart from the screen. It starts from what the caller may grant
- * at the scope (`GET /grantable?scope=`, already within the scope's sets) and offers it as
- * checkboxes: per module its agents, apps, workflows, pipelines and declared actions, and the
- * Nexus features. A choice is written as Allow statements on `${scope}/` resources, and a
- * document is read back into choices, what the builder cannot show kept as statements.
+ * at the scope, by publisher (`GET /publishers?scope=&parent=`: the engine, naas_abi, then the
+ * modules, each with only what the caller may grant there, within the parent of a sub-policy)
+ * and offers, per resource type, its actions and then its resources: picked from the listing
+ * (`GET /resources`) or written as a wildcard under `${scope}/`. Each type's choice is written
+ * as one Allow statement, and a document is read back into choices, what the builder cannot
+ * show kept as statements.
  */
-import type { GrantableView, ModuleScopeItem, ModuleScopesEntry, PolicyStatement } from '@/lib/iam-admin/types';
-import { featureLabel, sortFeaturesByName } from '@/lib/feature-labels';
+import type { PolicyStatement, PublishedAction, PublishedType, Publisher, PublishersView } from '@/lib/iam-admin/types';
 
-export type BuilderItem = {
+/** One resource type of a publisher, as the builder offers it. */
+export type BuilderType = {
+  /** `<service>:<type>`, or `module:<type>@<module>` for a module's agents, apps, ... */
   key: string;
+  service: string;
+  type: string;
+  /** The `module` catalog under a module: that module. */
+  module: string | null;
   label: string;
   description: string;
-  icon: string | null;
-  /** What choosing it grants: the item's actions the caller holds on its resource. */
-  actions: string[];
-  resource: string;
+  container: boolean;
+  /** Its existing resources are listed; false: written as wildcards only. */
+  listed: boolean;
+  /** The actions the caller may grant of it, in the catalog's order. */
+  actions: PublishedAction[];
+  /** The last step of a name of this type: `<service>:<type>/`, a module's
+   *  `module:<type>/<module>/`. */
+  marker: string;
+  /** What the caller may grant of it, every action together (`${scope}/...`). */
+  patterns: string[];
 };
 
-export type BuilderSectionId = 'agents' | 'apps' | 'workflows' | 'pipelines' | 'actions' | 'features';
+export type BuilderPublisher = { id: string; kind: Publisher['kind']; label: string; types: BuilderType[] };
 
-export type BuilderSection = { id: BuilderSectionId; label: string; items: BuilderItem[] };
+/** What the builder has chosen for one type: the actions, and the resources they are on. */
+export type Choice = { actions: string[]; resources: string[] };
 
-export type BuilderGroup = { id: string; label: string; kind: 'module' | 'nexus'; sections: BuilderSection[] };
+/** The choices by type key. */
+export type Choices = Record<string, Choice>;
 
 /** What a pattern written at the scope starts with: what the scope's container holds. */
 const SCOPE_PREFIX = '${scope}/';
+const SCOPE = '${scope}';
 
-const FEATURE_PREFIX = `${SCOPE_PREFIX}nexus:feature/`;
+const PUBLISHER_RANK: Record<string, number> = { engine: 0, naas_abi: 1 };
+const PUBLISHER_LABELS: Record<string, string> = { engine: 'Engine', naas_abi: 'naas_abi' };
 
-/** A pattern written at a scope (`${scope}` or `${scope}/...`) as it reads at ``scope``: a
- *  container's name, the platform `abi:` (where `${scope}/` reads `abi:`), or below a
- *  container (`<container>/*`), read at the container itself. */
-export function atScope(pattern: string, scope: string): string {
+/** What a module exposes, by its `module` catalog type. */
+const MODULE_LABELS: Record<string, string> = { agent: 'Agents', app: 'Apps', workflow: 'Workflows', pipeline: 'Pipelines' };
+
+function plural(word: string): string {
+  if (/[^aeiou]y$/.test(word)) return `${word.slice(0, -1)}ies`;
+  if (/(s|x|ch|sh)$/.test(word)) return `${word}es`;
+  return `${word}s`;
+}
+
+/** A type's name in the builder: a module's items by kind, the rest its type in the plural
+ *  (`graph` → Graphs, `policy` → Policies). */
+export function typeLabel(service: string, type: string): string {
+  if (service === 'module' && MODULE_LABELS[type]) return MODULE_LABELS[type];
+  const words = plural(type).replace(/_/g, ' ');
+  return words[0].toUpperCase() + words.slice(1);
+}
+
+export function typeKey(type: Pick<PublishedType, 'service' | 'type' | 'module'>): string {
+  return type.module ? `${type.service}:${type.type}@${type.module}` : `${type.service}:${type.type}`;
+}
+
+/** An id as one segment of a name, as IAM encodes it (`names.encode_segment`). */
+function encodeSegment(value: string): string {
+  return encodeURIComponent(value).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+function builderType(type: PublishedType): BuilderType {
+  const step = `${type.service}:${type.type}/`;
+  return {
+    key: typeKey(type),
+    service: type.service,
+    type: type.type,
+    module: type.module,
+    label: typeLabel(type.service, type.type),
+    description: type.description,
+    container: type.container,
+    listed: type.listed,
+    actions: type.actions,
+    marker: type.module ? `${step}${encodeSegment(type.module)}/` : step,
+    patterns: [...new Set(type.actions.flatMap((a) => a.resources))],
+  };
+}
+
+/** What the builder offers: the publishers in their order (the engine, naas_abi, then the
+ *  modules by key), each with its types the caller may grant something of. */
+export function builderPublishers(view: PublishersView): BuilderPublisher[] {
+  return view.publishers
+    .map((publisher) => ({
+      id: publisher.id,
+      kind: publisher.kind,
+      label: PUBLISHER_LABELS[publisher.id] ?? publisher.id,
+      types: publisher.types.filter((t) => t.actions.length > 0).map(builderType),
+    }))
+    .filter((publisher) => publisher.types.length > 0)
+    .sort((a, b) => (PUBLISHER_RANK[a.id] ?? 2) - (PUBLISHER_RANK[b.id] ?? 2) || a.id.localeCompare(b.id));
+}
+
+export function allTypes(publishers: BuilderPublisher[]): BuilderType[] {
+  return publishers.flatMap((p) => p.types);
+}
+
+// -- resources -----------------------------------------------------------------------------
+
+/** A resource named canonically (`<container>/<service>:<type>/<id>`, as the listing names it)
+ *  written at ``scope``: `${scope}/...` under it, `${scope}` the container itself, else as is. */
+export function scopedName(name: string, scope: string): string {
   const container = scope.endsWith('/*') ? scope.slice(0, -2) : scope;
-  if (pattern.startsWith(SCOPE_PREFIX)) {
-    const rest = pattern.slice(SCOPE_PREFIX.length);
-    return container === 'abi:' ? `abi:${rest}` : `${container}/${rest}`;
-  }
-  return pattern === '${scope}' ? container : pattern;
+  if (name === container) return SCOPE;
+  const under = container === 'abi:' ? 'abi:' : `${container}/`;
+  return name.startsWith(under) ? SCOPE_PREFIX + name.slice(under.length) : name;
 }
 
-/** IAM's glob (core `names.matches`): `*` any run of characters, `?` one, the rest as is. */
-export function globMatches(pattern: string, value: string): boolean {
-  if (pattern === '*') return true;
-  if (!pattern.includes('*') && !pattern.includes('?')) return pattern === value;
-  const regex = pattern
-    .split('')
-    .map((char) => (char === '*' ? '.*' : char === '?' ? '.' : char.replace(/[.+^${}()|[\]\\]/g, '\\$&')))
-    .join('');
-  return new RegExp(`^${regex}$`, 's').test(value);
+/** Whether ``resource`` (written at the scope) names resources of ``type``: its last step is the
+ *  type's, or it is one of the patterns the caller may grant of it. */
+export function belongsTo(type: BuilderType, resource: string): boolean {
+  if (type.patterns.includes(resource)) return true;
+  if (!resource.startsWith(SCOPE_PREFIX)) return false;
+  const at = resource.lastIndexOf(type.marker);
+  if (at < 0) return false;
+  // The step must be at the start of what the scope holds or after a `/`.
+  if (at !== SCOPE_PREFIX.length && resource[at - 1] !== '/') return false;
+  // Nothing of another type after it: an id holds no `:` (IAM encodes it).
+  return !resource.slice(at + type.marker.length).includes(':');
 }
 
-type Holdings = Map<string, { resources: string[]; excluded: string[] }>;
-
-function holdings(grantable: GrantableView): Holdings {
-  const held: Holdings = new Map();
-  for (const catalog of grantable.catalogs) {
-    for (const a of catalog.actions) held.set(a.action, { resources: a.resources, excluded: a.excluded });
-  }
-  return held;
+/** Why a wildcard typed after `${scope}/` is not one of ``type``'s, or null. */
+export function wildcardProblem(type: BuilderType, typed: string): string | null {
+  const text = typed.trim();
+  if (!text) return `Write a pattern after \${scope}/, such as ${type.marker}*`;
+  if (/\s/.test(text)) return 'A pattern has no spaces.';
+  if (!belongsTo(type, SCOPE_PREFIX + text)) return `A pattern of ${type.label.toLowerCase()} ends with ${type.marker}<id>, such as ${type.marker}*`;
+  return null;
 }
 
-/** The actions of ``actions`` the caller may grant on ``resource``: held on a pattern that
- *  covers it, and no Deny of theirs touching it. */
-function heldOf(held: Holdings, actions: string[], resource: string): string[] {
-  return actions.filter((action) => {
-    const found = held.get(action);
-    if (!found || !found.resources.some((p) => globMatches(p, resource))) return false;
-    return !found.excluded.some((d) => globMatches(d, resource) || globMatches(resource, d));
-  });
-}
-
-const byLabel = (a: BuilderItem, b: BuilderItem) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' });
-
-function itemsOf(held: Holdings, items: ModuleScopeItem[]): BuilderItem[] {
-  return items
-    .flatMap((item) => {
-      const actions = heldOf(held, item.actions, item.resource);
-      if (!actions.length) return [];
-      return [
-        {
-          key: item.resource.startsWith(SCOPE_PREFIX) ? item.resource.slice(SCOPE_PREFIX.length) : item.resource,
-          label: item.display_name || item.name,
-          description: item.description,
-          icon: item.icon,
-          actions,
-          resource: item.resource,
-        },
-      ];
-    })
-    .sort(byLabel);
-}
-
-function declaredItems(held: Holdings, declared: NonNullable<ModuleScopesEntry['declared']>): BuilderItem[] {
-  return declared.actions
-    .flatMap((spec) =>
-      spec.resource_types.flatMap((type) => {
-        const resource =
-          declared.resource_types.find((t) => t.name === type)?.resource ?? `${SCOPE_PREFIX}${declared.service}:${type}/*`;
-        if (!heldOf(held, [spec.action], resource).length) return [];
-        const name = spec.action.split(':')[1] ?? spec.action;
-        return [
-          {
-            key: `declared:${spec.action}@${resource}`,
-            label: spec.resource_types.length > 1 ? `${name} (${type})` : name,
-            description: spec.description,
-            icon: null,
-            actions: [spec.action],
-            resource,
-          },
-        ];
-      }),
-    )
-    .sort(byLabel);
-}
-
-/** The features to offer: the known ones, and any a grantable pattern names. */
-function featureKeys(held: Holdings, known: string[]): string[] {
-  const named = (held.get('nexus:UseFeature')?.resources ?? [])
-    .filter((p) => p.startsWith(FEATURE_PREFIX) && !/[*?]/.test(p))
-    .map((p) => p.slice(FEATURE_PREFIX.length));
-  return sortFeaturesByName([...new Set([...known, ...named])]);
-}
-
-/** What the builder offers: one group per module with something grantable, then Nexus features. */
-export function builderGroups(grantable: GrantableView, modules: ModuleScopesEntry[], features: string[]): BuilderGroup[] {
-  const held = holdings(grantable);
-  const groups: BuilderGroup[] = [];
-  for (const entry of modules) {
-    const sections: BuilderSection[] = [
-      { id: 'agents' as const, label: 'Agents', items: itemsOf(held, entry.agents) },
-      { id: 'apps' as const, label: 'Apps', items: itemsOf(held, entry.apps) },
-      { id: 'workflows' as const, label: 'Workflows', items: itemsOf(held, entry.workflows) },
-      { id: 'pipelines' as const, label: 'Pipelines', items: itemsOf(held, entry.pipelines) },
-      { id: 'actions' as const, label: 'Actions', items: entry.declared ? declaredItems(held, entry.declared) : [] },
-    ].filter((section) => section.items.length > 0);
-    if (sections.length) groups.push({ id: entry.module, label: entry.module, kind: 'module', sections });
-  }
-  const featureItems = featureKeys(held, features).flatMap((key) => {
-    const resource = `${FEATURE_PREFIX}${key}`;
-    const actions = heldOf(held, ['nexus:UseFeature'], resource);
-    return actions.length ? [{ key: `feature:${key}`, label: featureLabel(key), description: '', icon: null, actions, resource }] : [];
-  });
-  if (featureItems.length) {
-    groups.push({ id: 'nexus', label: 'Nexus features', kind: 'nexus', sections: [{ id: 'features', label: 'Features', items: featureItems }] });
-  }
-  return groups;
-}
-
-function allItems(groups: BuilderGroup[]): BuilderItem[] {
-  return groups.flatMap((g) => g.sections.flatMap((s) => s.items));
-}
-
-const actionsKey = (actions: string[]) => [...actions].sort().join(',');
+// -- statements ------------------------------------------------------------------------------
 
 const SID_MAX = 64;
 
@@ -177,68 +164,108 @@ function uniqueSid(base: string, taken: Set<string>): string {
 }
 
 /**
- * The choices as statements: one Allow per set of actions, in the order they are offered.
- * Each sid names its actions with their services and is unique, among these and the sids of
- * ``kept`` (the statements the builder cannot show, which stay in the policy).
+ * The choices as statements: one Allow per type with actions and resources chosen, in the order
+ * the types are offered, its actions in the type's order. Each sid names its actions with their
+ * services and is unique, among these and the sids of ``kept`` (the statements the builder cannot
+ * show, which stay in the policy).
  */
 export function builderStatements(
-  groups: BuilderGroup[],
-  selected: ReadonlySet<string>,
+  publishers: BuilderPublisher[],
+  choices: Choices,
   kept: PolicyStatement[] = [],
 ): PolicyStatement[] {
-  const statements = new Map<string, PolicyStatement>();
   const taken = new Set(kept.flatMap((s) => (s.sid ? [s.sid] : [])));
-  for (const item of allItems(groups)) {
-    if (!selected.has(item.key)) continue;
-    const key = actionsKey(item.actions);
-    const found = statements.get(key);
-    if (found) found.resources.push(item.resource);
-    else {
-      const sid = uniqueSid(sidOf(item.actions), taken);
-      statements.set(key, { sid, effect: 'Allow', actions: [...item.actions], resources: [item.resource] });
-    }
+  const statements: PolicyStatement[] = [];
+  for (const type of allTypes(publishers)) {
+    const choice = choices[type.key];
+    if (!choice || choice.actions.length === 0 || choice.resources.length === 0) continue;
+    const actions = type.actions.map((a) => a.action).filter((a) => choice.actions.includes(a));
+    if (actions.length === 0) continue;
+    statements.push({ sid: uniqueSid(sidOf(actions), taken), effect: 'Allow', actions, resources: [...choice.resources] });
   }
-  return [...statements.values()];
+  return statements;
+}
+
+/** The type a statement is a choice of: an Allow of actions the caller may grant of one type,
+ *  on resources of that type; the type whose own step every resource names first. */
+function typeOf(types: BuilderType[], statement: PolicyStatement): BuilderType | null {
+  if (statement.effect !== 'Allow' || statement.actions.length === 0 || statement.resources.length === 0) return null;
+  const fits = types.filter(
+    (type) =>
+      statement.actions.every((action) => type.actions.some((a) => a.action === action)) &&
+      statement.resources.every((resource) => belongsTo(type, resource)),
+  );
+  return (
+    fits.find((type) => statement.resources.every((r) => r.includes(type.marker))) ?? fits[0] ?? null
+  );
 }
 
 /**
- * A document read back into choices: an Allow whose every resource is an item granted with
- * exactly that item's actions is chosen; any other statement (a Deny, other actions, part of
- * an item's actions, a resource the builder does not offer) is kept as it is, in ``rest``.
+ * A document read back into choices: an Allow whose actions the caller may grant of one type,
+ * on that type's resources, is that type's choice (the first such statement of a type); any
+ * other statement (a Deny, actions of several types or that the caller may not grant, a
+ * wildcard action, a second statement of a type) is kept as it is, in ``rest``.
  */
 export function splitStatements(
-  groups: BuilderGroup[],
+  publishers: BuilderPublisher[],
   statements: PolicyStatement[],
-): { selected: Set<string>; rest: PolicyStatement[] } {
-  const items = new Map(allItems(groups).map((item) => [`${actionsKey(item.actions)} ${item.resource}`, item]));
-  const selected = new Set<string>();
+): { choices: Choices; rest: PolicyStatement[] } {
+  const types = allTypes(publishers);
+  const choices: Choices = {};
   const rest: PolicyStatement[] = [];
   for (const statement of statements) {
-    const key = actionsKey(statement.actions);
-    const found = statement.resources.map((r) => items.get(`${key} ${r}`));
-    if (statement.effect === 'Allow' && found.length > 0 && found.every(Boolean)) {
-      for (const item of found) selected.add(item!.key);
+    const type = typeOf(types, statement);
+    if (type && !choices[type.key]) {
+      choices[type.key] = { actions: [...statement.actions], resources: [...statement.resources] };
     } else {
       rest.push(statement);
     }
   }
-  return { selected, rest };
+  return { choices, rest };
+}
+
+// -- IAM's words ---------------------------------------------------------------------------
+
+/** A pattern written at a scope (`${scope}` or `${scope}/...`) as it reads at ``scope``: a
+ *  container's name, the platform `abi:` (where `${scope}/` reads `abi:`), or below a
+ *  container (`<container>/*`), read at the container itself. */
+export function atScope(pattern: string, scope: string): string {
+  const container = scope.endsWith('/*') ? scope.slice(0, -2) : scope;
+  if (pattern.startsWith(SCOPE_PREFIX)) {
+    const rest = pattern.slice(SCOPE_PREFIX.length);
+    return container === 'abi:' ? `abi:${rest}` : `${container}/${rest}`;
+  }
+  return pattern === SCOPE ? container : pattern;
+}
+
+/** IAM's glob (core `names.matches`): `*` any run of characters, `?` one, the rest as is. */
+export function globMatches(pattern: string, value: string): boolean {
+  if (pattern === '*') return true;
+  if (!pattern.includes('*') && !pattern.includes('?')) return pattern === value;
+  const regex = pattern
+    .split('')
+    .map((char) => (char === '*' ? '.*' : char === '?' ? '.' : char.replace(/[.+^${}()|[\]\\]/g, '\\$&')))
+    .join('');
+  return new RegExp(`^${regex}$`, 's').test(value);
 }
 
 const REFUSAL = /allows (\S+) on (\S+?)(?: at (\S+))?, and /;
 
-/** The items an IAM refusal names ("You cannot grant what you do not hold: … allows <action>
- *  on <resource> at <scope>, and …"), whether the resource is written `${scope}/` or placed. */
-export function refusedItems(groups: BuilderGroup[], message: string, scope: string): string[] {
+/** The types whose choice an IAM refusal names ("You cannot grant what you do not hold: …
+ *  allows <action> on <resource> at <scope>, and …"), the resource written `${scope}/` or placed. */
+export function refusedTypes(publishers: BuilderPublisher[], choices: Choices, message: string, scope: string): string[] {
   const match = REFUSAL.exec(message);
   if (!match) return [];
   const [, action, resource, at] = match;
   const placedAt = at ?? scope;
-  return allItems(groups)
-    .filter(
-      (item) =>
-        item.actions.includes(action) &&
-        (item.resource === resource || atScope(item.resource, placedAt) === resource),
-    )
-    .map((item) => item.key);
+  return allTypes(publishers)
+    .filter((type) => {
+      const choice = choices[type.key];
+      return (
+        !!choice &&
+        choice.actions.includes(action) &&
+        choice.resources.some((r) => r === resource || atScope(r, placedAt) === resource)
+      );
+    })
+    .map((type) => type.key);
 }

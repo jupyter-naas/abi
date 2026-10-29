@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { IamAdminError } from '@/lib/iam-admin/api';
 import type { PolicyDocument, PolicyValidation } from '@/lib/iam-admin/types';
 import { mount, type Mounted } from '@/lib/testing/mount';
-import { WS, catalogsView, fakeApi, managedPolicy, readerPolicy } from '../access-fixtures';
+import { WS, catalogsView, fakeApi, managedPolicy, publishersOf, readerPolicy } from '../access-fixtures';
 import { PolicyEditor } from './policy-editor';
 
 let mounted: Mounted | null = null;
@@ -32,23 +32,28 @@ function api(over: Record<string, unknown> = {}) {
         return Promise.resolve(valid(readerPolicy.document));
       }
     }),
+    publishers: vi.fn().mockResolvedValue(publishersOf(catalogsView)),
     ...over,
   });
 }
 
-async function open(props: Partial<Parameters<typeof PolicyEditor>[0]> = {}) {
+const tab = (label: string) => [...document.querySelectorAll('[role="tab"]')].find((t) => t.textContent === label) ?? null;
+
+/** The editor, in the Statements view unless ``builder``: a new policy opens in the builder. */
+async function open(props: Partial<Parameters<typeof PolicyEditor>[0]> = {}, { builder = false } = {}) {
   const onSaved = vi.fn();
   const onCancel = vi.fn();
   mounted = await mount(PolicyEditor, {
     api: api(),
     policy: null,
-    catalogs: catalogsView,
     onSaved,
     onCancel,
     validationDelayMs: 0,
     ...props,
   });
   await mounted.flush();
+  const statements = tab('Statements');
+  if (!builder && statements?.getAttribute('aria-selected') === 'false') await mounted.click(statements);
   return { onSaved, onCancel };
 }
 
@@ -193,7 +198,7 @@ describe('PolicyEditor validation', () => {
 describe('PolicyEditor text view', () => {
   it('round-trips the document through the text view', async () => {
     await open({ policy: readerPolicy });
-    await mounted!.click([...document.querySelectorAll('[role="tab"]')][1]);
+    await mounted!.click(tab('YAML / JSON'));
     const text = (field('Policy document') as HTMLTextAreaElement).value;
     expect(JSON.parse(text)).toEqual(readerPolicy.document);
 
@@ -202,7 +207,7 @@ describe('PolicyEditor text view', () => {
       statements: [{ effect: 'Deny', actions: ['triple_store:DropGraph'], resources: ['*'] }],
     });
     await mounted!.type(field('Policy document'), edited);
-    await mounted!.click([...document.querySelectorAll('[role="tab"]')][0]);
+    await mounted!.click(tab('Statements'));
     await mounted!.flush();
 
     expect((field('Effect of statement 1') as HTMLSelectElement).value).toBe('Deny');
@@ -212,10 +217,10 @@ describe('PolicyEditor text view', () => {
   it('keeps a document IAM refuses in the text view, with its errors', async () => {
     const validatePolicy = vi.fn().mockResolvedValue({ valid: false, errors: ['not a policy'], document: null });
     await open({ api: api({ validatePolicy }), policy: readerPolicy });
-    await mounted!.click([...document.querySelectorAll('[role="tab"]')][1]);
+    await mounted!.click(tab('YAML / JSON'));
     await mounted!.type(field('Policy document'), '{ nope');
     await mounted!.flush();
-    await mounted!.click([...document.querySelectorAll('[role="tab"]')][0]);
+    await mounted!.click(tab('Statements'));
     await mounted!.flush();
 
     expect(field('Policy document')).not.toBeNull();
@@ -225,7 +230,7 @@ describe('PolicyEditor text view', () => {
 
   it('writes YAML on request', async () => {
     await open({ policy: readerPolicy });
-    await mounted!.click([...document.querySelectorAll('[role="tab"]')][1]);
+    await mounted!.click(tab('YAML / JSON'));
     (field('Text format') as HTMLSelectElement).value = 'yaml';
     field('Text format')?.dispatchEvent(new Event('change', { bubbles: true }));
     await mounted!.flush();

@@ -49,33 +49,69 @@ export type CatalogsView = {
   variables: string[];
 };
 
-/** One agent, app, workflow or pipeline of a module: a module scope (`GET /api/modules/scopes`). */
-export type ModuleScopeItem = {
+// -- publishers and resource listing (the policy builder) ---------------------------------
+
+/** Who publishes a catalog: the engine (its kernel services and `iam`), naas_abi (`nexus`), or a
+ *  module (its declared catalog, and its agents, apps, workflows and pipelines). */
+export type PublisherKind = 'engine' | 'naas_abi' | 'module';
+
+/** An action of a type, with what the caller may grant of it at the scope: the resource
+ *  patterns (`${scope}` or `${scope}/...`) and those a Deny of theirs takes back. */
+export type PublishedAction = {
+  /** `<service>:<Action>`. */
+  action: string;
   name: string;
-  display_name: string;
+  level: Level;
   description: string;
-  icon: string | null;
-  /** The pattern a policy names: `${scope}/module:<type>/<module>/<name>`. */
-  resource: string;
-  actions: string[];
+  resources: string[];
+  excluded: string[];
 };
 
-export type ModuleScopesEntry = {
-  module: string;
-  agents: ModuleScopeItem[];
-  apps: ModuleScopeItem[];
-  workflows: ModuleScopeItem[];
-  pipelines: ModuleScopeItem[];
-  /** The catalog the module declares (its own service), if any. */
-  declared: {
-    service: string;
-    version: number;
-    resource_types: { name: string; description: string; resource: string }[];
-    actions: { action: string; level: string; resource_types: string[]; description: string }[];
-  } | null;
+export type PublishedType = {
+  service: string;
+  type: string;
+  description: string;
+  id: 'opaque' | 'path' | 'singleton';
+  placement: 'placed' | 'platform';
+  container: boolean;
+  /** Its existing resources are listed (`GET /resources`); false: offered as wildcards only. */
+  listed: boolean;
+  /** The `module` catalog under a module: that module's key, its items only. */
+  module: string | null;
+  actions: PublishedAction[];
 };
 
-export type ModuleScopesView = { modules: ModuleScopesEntry[] };
+export type Publisher = { id: string; kind: PublisherKind; types: PublishedType[] };
+
+/** `GET /api/iam/admin/publishers?scope=&parent=`: the engine, naas_abi, then the modules by key,
+ *  each with only what the caller may grant at the scope (within ``parent``). */
+export type PublishersView = { scope: string; publishers: Publisher[] };
+
+/** An existing resource: its canonical name (`<container>/<service>:<type>/<id>`). */
+export type ListedResource = { name: string; id: string; label: string; description: string };
+
+/** `GET /api/iam/admin/resources`: a page of what the caller may list of a type at the scope. */
+export type ResourcePage = {
+  scope: string;
+  service: string;
+  type: string;
+  items: ListedResource[];
+  next_cursor: string | null;
+  /** False: the type has no lister (or it failed): offer it as wildcards. */
+  listed: boolean;
+};
+
+export type ResourceQuery = {
+  scope: string;
+  service: string;
+  type: string;
+  /** A search text. */
+  q?: string;
+  cursor?: string | null;
+  /** For `service=module`: one module's items. */
+  module?: string | null;
+  limit?: number;
+};
 
 // -- policies -------------------------------------------------------------------------
 
@@ -280,7 +316,7 @@ export type GrantableAction = { action: string; resources: string[]; excluded: s
  *  module's own service), what the caller may grant there. */
 export type GrantableView = {
   scope: string;
-  catalogs: { service: string; actions: GrantableAction[] }[];
+  catalogs: { service: string; publisher?: string | null; actions: GrantableAction[] }[];
 };
 
 // -- the access simulator ---------------------------------------------------------------

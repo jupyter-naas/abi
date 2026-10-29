@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { catalogsView } from '../access-fixtures';
+import type { Publisher } from '@/lib/iam-admin/types';
+import { WS, catalogsView, publishedType } from '../access-fixtures';
 import {
   emptyStatement,
   fromDocument,
+  grantableCatalogs,
+  grantablePatterns,
   matchPattern,
   matchingActions,
   moveStatement,
@@ -12,6 +15,7 @@ import {
   toDocument,
   toText,
   toYaml,
+  typedStep,
   typesOfActions,
 } from './policy-editor-model';
 
@@ -56,7 +60,7 @@ describe('action suggestions', () => {
 });
 
 describe('resource suggestions', () => {
-  const context = (actions: string[]) => ({ catalogs: catalogsView, actions });
+  const context = (actions: string[]) => ({ catalogs, variables: catalogsView.variables, actions });
 
   it('starts with the prefix and the variables', () => {
     expect(suggestResources('', context([])).map((s) => s.value)).toEqual([
@@ -65,7 +69,6 @@ describe('resource suggestions', () => {
       '${scope}',
       '${principal.id}',
       '${user.id}',
-      '*',
     ]);
     expect(suggestResources('${s', context([])).map((s) => s.value)).toEqual(['${scope}/', '${scope}']);
   });
@@ -185,40 +188,20 @@ describe('module scope ids', () => {
   const moduleCatalog = {
     service: 'module',
     version: 1,
-    actions: [{ name: 'UseAgent', level: 'write', resource_types: ['agent'], description: '' }],
-    resource_types: [{ name: 'agent', id: 'path', description: 'An agent of a module.' }],
+    actions: [{ name: 'UseAgent', qualified: 'module:UseAgent', level: 'write', resource_types: ['agent'], creates: false, description: '' }],
+    resource_types: [{ name: 'agent', id: 'path', placement: 'placed', container: false, personal: false, description: 'An agent of a module.' }],
   };
   const withModules = {
-    catalogs: { ...catalogsView, catalogs: [...catalogsView.catalogs, moduleCatalog] },
+    catalogs: [...catalogs, moduleCatalog],
     actions: ['module:UseAgent'],
-    modules: {
-      modules: [
-        {
-          module: 'acme.people',
-          agents: [
-            {
-              name: 'Recruiter',
-              display_name: 'Recruiter',
-              description: 'Finds people.',
-              icon: null,
-              resource: '${scope}/module:agent/acme.people/Recruiter',
-              actions: ['module:UseAgent'],
-            },
-          ],
-          apps: [],
-          workflows: [],
-          pipelines: [],
-          declared: null,
-        },
-      ],
-    },
+    modules: ['acme.people'],
+    listed: { service: 'module', type: 'agent', module: 'acme.people', ids: [{ id: 'Recruiter', detail: 'Recruiter: Finds people.' }] },
   } as Parameters<typeof suggestResources>[1];
 
-  it('suggests each module and each of its agents from the listing', () => {
+  it('suggests each module, then its agents from the listing', () => {
     expect(suggestResources('${scope}/module:agent/', withModules).map((s) => s.value)).toEqual([
       '${scope}/module:agent/*',
-      '${scope}/module:agent/acme.people/*',
-      '${scope}/module:agent/acme.people/Recruiter',
+      '${scope}/module:agent/acme.people/',
     ]);
     const typed = suggestResources('${scope}/module:agent/acme.people/R', withModules);
     expect(typed).toEqual([
@@ -226,10 +209,61 @@ describe('module scope ids', () => {
     ]);
   });
 
-  it('suggests only `*` without the listing', () => {
-    const context = { ...withModules, modules: null };
+  it('suggests only `*` without the listing of that step', () => {
+    const context = { ...withModules, listed: { ...withModules.listed!, module: 'acme.market' } };
+    expect(suggestResources('${scope}/module:agent/acme.people/', context).map((s) => s.value)).toEqual([
+      '${scope}/module:agent/acme.people/*',
+    ]);
+  });
+
+  it('knows which step is typed, for the listing', () => {
+    expect(typedStep('${scope}/triple_store:graph/sa')).toEqual({ service: 'triple_store', type: 'graph', module: null, text: 'sa' });
+    expect(typedStep(`${WS}/triple_store:graph/`)).toEqual({ service: 'triple_store', type: 'graph', module: null, text: '' });
+    expect(typedStep('${scope}/module:agent/acme.people/R')).toEqual({ service: 'module', type: 'agent', module: 'acme.people', text: 'R' });
+    expect(typedStep('${scope}/module:agent/acme')).toBeNull();
+    expect(typedStep('${scope}/triple_store:')).toBeNull();
+  });
+});
+
+describe('only what the caller may grant', () => {
+  /** A user holding only agent A of acme.people and iam:CreatePolicy. */
+  const onlyA: Publisher[] = [
+    { id: 'engine', kind: 'engine', types: [publishedType('iam', 'policy', [['iam:CreatePolicy', ['${scope}/iam:policy/*']]])] },
+    {
+      id: 'acme.people',
+      kind: 'module',
+      types: [publishedType('module', 'agent', [['module:UseAgent', ['${scope}/module:agent/acme.people/A']]], { module: 'acme.people' })],
+    },
+  ];
+
+  it('suggests the actions they may grant and the patterns they may grant them on, nothing else', () => {
+    const granted = grantableCatalogs(onlyA);
+    expect(suggestActions('', granted).map((s) => s.value)).toEqual(['iam:CreatePolicy', 'module:UseAgent']);
+    expect(suggestActions('triple_store:', granted)).toEqual([]);
+    const context = {
+      catalogs: granted,
+      actions: ['module:UseAgent'],
+      grantable: grantablePatterns(onlyA, ['module:UseAgent']),
+      modules: ['acme.people'],
+    };
+    expect(suggestResources('', context).map((s) => s.value)).toEqual([
+      '${scope}/module:agent/acme.people/A',
+      'abi:',
+      '${scope}/',
+      '${scope}',
+      '${principal.id}',
+      '${user.id}',
+      '${module.id}',
+      '${module.project}',
+    ]);
+    expect(suggestResources('${scope}/', context).map((s) => s.value)).toEqual([
+      '${scope}/module:agent/acme.people/A',
+      '${scope}/module:',
+    ]);
     expect(suggestResources('${scope}/module:agent/', context).map((s) => s.value)).toEqual([
+      '${scope}/module:agent/acme.people/A',
       '${scope}/module:agent/*',
+      '${scope}/module:agent/acme.people/',
     ]);
   });
 });

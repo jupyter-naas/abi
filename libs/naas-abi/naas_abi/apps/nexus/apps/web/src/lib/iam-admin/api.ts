@@ -20,7 +20,6 @@ import type {
   ManifestReject,
   ManifestStatus,
   ManifestView,
-  ModuleScopesView,
   Page,
   PolicyCreate,
   PolicySource,
@@ -29,6 +28,9 @@ import type {
   PolicyView,
   PrincipalKind,
   PrincipalView,
+  PublishersView,
+  ResourcePage,
+  ResourceQuery,
   ServiceAccountView,
   Simulation,
   SimulationRequest,
@@ -121,15 +123,35 @@ export function createIamAdminApi(fetcher: Fetcher = authFetch) {
      *  (an organization's or a workspace's container) when one is given. */
     access: (scope?: string) =>
       read<AccessView>(fetcher, path('access') + query({ scope }), 'Could not read your access.'),
-    catalogs: (scope?: string) =>
-      read<CatalogsView>(fetcher, path('catalogs') + query({ scope }), 'Could not load the action catalogs.'),
-    /** What the caller may grant at `scope` (`abi:` for the platform): the policy builder's items. */
-    grantable: (scope: string) =>
-      read<GrantableView>(fetcher, path('grantable') + query({ scope }), 'Could not read what you may grant.'),
-    /** Every module with its agents, apps, workflows, pipelines and declared actions, for
-     *  the admins of the workspace or organization named. */
-    moduleScopes: (where: { workspace_id?: string; organization_id?: string }) =>
-      read<ModuleScopesView>(fetcher, '/api/modules/scopes' + query(where), 'Could not load the module scopes.'),
+    /** The actions the caller may grant at `scope` (within `parent`, for a sub-policy of it). */
+    catalogs: (scope?: string, parent?: string | null) =>
+      read<CatalogsView>(fetcher, path('catalogs') + query({ scope, parent }), 'Could not load the action catalogs.'),
+    /** What the caller may grant at `scope` (`abi:` for the platform), within `parent`. */
+    grantable: (scope: string, parent?: string | null) =>
+      read<GrantableView>(fetcher, path('grantable') + query({ scope, parent }), 'Could not read what you may grant.'),
+    /** The same by publisher and resource type: the policy builder's groups. */
+    publishers: (scope: string, parent?: string | null) =>
+      read<PublishersView>(
+        fetcher,
+        path('publishers') + query({ scope, parent }),
+        'Could not read what you may grant.',
+      ),
+    /** The existing resources of a type the caller may list at the scope, a page at a time. */
+    resources: (input: ResourceQuery) =>
+      read<ResourcePage>(
+        fetcher,
+        path('resources') +
+          query({
+            scope: input.scope,
+            service: input.service,
+            type: input.type,
+            q: input.q,
+            cursor: input.cursor,
+            module: input.module,
+            limit: input.limit,
+          }),
+        'Could not list the resources.',
+      ),
 
     // policies
     /** Every policy the caller may list; with `scope`, that level's own and those above it the

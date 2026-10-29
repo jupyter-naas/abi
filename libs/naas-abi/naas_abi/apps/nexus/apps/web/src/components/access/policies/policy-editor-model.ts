@@ -6,11 +6,73 @@
  * `abi:<service>:<type>/<id>/.../<service>:<type>/<id>` (`abi:nexus:organization/<org>/
  * nexus:workspace/<ws>/triple_store:graph/<id>`; a platform-level one `abi:<service>:<type>/<id>`),
  * or `${scope}` and `${scope}/<service>:<type>/<id>` at the scope a policy is attached at, with
- * the wildcards `*` and `?` and the variables of `CatalogsView.variables`.
+ * the wildcards `*` and `?` and the variables of ``POLICY_VARIABLES``.
+ *
+ * What is suggested is only what the caller may grant at the scope: the actions and types of
+ * `GET /publishers` (within the parent of a sub-policy), the patterns they may grant, and the
+ * ids `GET /resources` lists; never every catalog.
  */
-import type { Catalog, CatalogsView, Effect, Level, ModuleScopesView, PolicyDocument, PolicyStatement } from '@/lib/iam-admin/types';
+import type { Catalog, Effect, Level, PolicyDocument, PolicyStatement, Publisher } from '@/lib/iam-admin/types';
 
 export const POLICY_VERSION = '2026-10-13';
+
+/** The `${...}` variables a stored policy may use in its resources (core `POLICY_VARIABLES`). */
+export const POLICY_VARIABLES = ['scope', 'principal.id', 'user.id', 'module.id', 'module.project'];
+
+/** What the caller may grant, by publisher, as catalogs for the suggestions: per service its
+ *  grantable actions and the types they act on (a module's items under the `module` service). */
+export function grantableCatalogs(publishers: Publisher[]): Catalog[] {
+  const byService = new Map<string, Catalog>();
+  for (const publisher of publishers) {
+    for (const type of publisher.types) {
+      let catalog = byService.get(type.service);
+      if (!catalog) {
+        catalog = { service: type.service, version: 0, actions: [], resource_types: [] };
+        byService.set(type.service, catalog);
+      }
+      if (!catalog.resource_types.some((t) => t.name === type.type)) {
+        catalog.resource_types.push({
+          name: type.type,
+          id: type.id,
+          placement: type.placement,
+          container: type.container,
+          personal: false,
+          description: type.description,
+        });
+      }
+      for (const action of type.actions) {
+        const found = catalog.actions.find((a) => a.qualified === action.action);
+        if (found) {
+          if (!found.resource_types.includes(type.type)) found.resource_types.push(type.type);
+        } else {
+          catalog.actions.push({
+            name: action.name,
+            qualified: action.action,
+            level: action.level,
+            resource_types: [type.type],
+            creates: false,
+            description: action.description,
+          });
+        }
+      }
+    }
+  }
+  return [...byService.values()];
+}
+
+/** The resource patterns the caller may grant ``actions`` on (each action's, every one when none
+ *  is chosen yet): the first resources to suggest. */
+export function grantablePatterns(publishers: Publisher[], actions: string[]): string[] {
+  const found = new Set<string>();
+  for (const type of publishers.flatMap((p) => p.types)) {
+    for (const action of type.actions) {
+      if (actions.length === 0 || actions.some((pattern) => matchPattern(pattern, action.action))) {
+        for (const resource of action.resources) found.add(resource);
+      }
+    }
+  }
+  return [...found];
+}
 
 export type EditorStatement = {
   /** Stable across edits and moves, for React. */
@@ -196,40 +258,34 @@ export function typesOfActions(
   return out;
 }
 
+/** The ids the listing found for the step being typed (`GET /resources`). */
+export type ListedIds = {
+  service: string;
+  type: string;
+  module: string | null;
+  ids: { id: string; detail: string }[];
+};
+
 export type ResourceContext = {
-  catalogs: CatalogsView | null;
+  /** What the caller may grant (``grantableCatalogs``). */
+  catalogs: Catalog[];
+  variables?: string[];
   /** The statement's actions: they narrow the services and types suggested. */
   actions: string[];
-  /** What the modules expose (`GET /api/modules/scopes`): ids of the `module` service. */
-  modules?: ModuleScopesView | null;
+  /** The patterns the caller may grant those actions on (``grantablePatterns``). */
+  grantable?: string[];
+  /** The modules whose items the caller may grant (the `module` service's ids start with one). */
+  modules?: string[];
+  /** The listing of the step being typed (``typedStep`` says which). */
+  listed?: ListedIds | null;
 };
 
 const MODULE_SCOPES = 'module';
-const MODULE_SCOPE_LISTS = {
-  agent: 'agents',
-  app: 'apps',
-  workflow: 'workflows',
-  pipeline: 'pipelines',
-} as const;
 
-/** The ids of a module scope type: each module (`<module>/*`) and each of its items
- *  (`<module>/<name>`), from the listing. */
-function moduleScopeIds(type: string, modules: ModuleScopesView): Suggestion[] {
-  const list = MODULE_SCOPE_LISTS[type as keyof typeof MODULE_SCOPE_LISTS];
-  if (!list) return [];
-  const marker = `${MODULE_SCOPES}:${type}/`;
-  const out: Suggestion[] = [];
-  for (const entry of modules.modules) {
-    const items = entry[list];
-    if (items.length === 0) continue;
-    out.push({ value: `${entry.module}/*`, detail: `every ${type} of ${entry.module}` });
-    for (const item of items) {
-      const id = item.resource.split(marker)[1];
-      if (!id) continue;
-      out.push({ value: id, detail: item.description ? `${item.display_name}: ${item.description}` : item.display_name });
-    }
-  }
-  return out;
+/** Each suggestion once: a pattern the caller may grant may be an id the listing finds too. */
+function unique(suggestions: Suggestion[]): Suggestion[] {
+  const seen = new Set<string>();
+  return suggestions.filter((s) => !seen.has(s.value) && seen.add(s.value));
 }
 
 function variableSuggestions(name: string): Suggestion[] {
@@ -247,6 +303,34 @@ const SCOPE_PREFIX = '${scope}/';
 /** A step of a name being typed: its service and type, and the id segments after it. */
 type TypedStep = { service: string; type: string; container: boolean; ids: string[] };
 
+/** The step whose id is being typed in ``input``, for the listing: its service and type, the
+ *  module of a `module` catalog id (once `<module>/` is typed) and the id typed so far. */
+export function typedStep(input: string): { service: string; type: string; module: string | null; text: string } | null {
+  const text = input.trim();
+  const prefix = text.startsWith('abi:') ? 'abi:' : text.startsWith(SCOPE_PREFIX) ? SCOPE_PREFIX : null;
+  if (!prefix) return null;
+  const tokens = text.slice(prefix.length).split('/');
+  let at = -1;
+  tokens.forEach((token, index) => {
+    if (/^[a-z][a-z0-9_]*:[a-z][a-z0-9_]*$/.test(token) && index < tokens.length - 1) at = index;
+  });
+  if (at < 0) return null;
+  const [service, type] = tokens[at].split(':');
+  const ids = tokens.slice(at + 1);
+  if (ids.some((id) => id.includes(':'))) return null;
+  if (service === MODULE_SCOPES) {
+    if (ids.length < 2) return null;
+    let key: string;
+    try {
+      key = decodeURIComponent(ids[0]);
+    } catch {
+      key = ids[0];
+    }
+    return { service, type, module: key, text: ids.slice(1).join('/') };
+  }
+  return { service, type, module: null, text: ids.join('/') };
+}
+
 /**
  * Resource names for what was typed, one step at a time: the prefix (`abi:` or a variable),
  * then steps `<service>:<type>/<id>` joined by `/`: the services and types of the chosen
@@ -261,9 +345,14 @@ export function suggestResources(
   limit: number = MAX_SUGGESTIONS,
 ): Suggestion[] {
   const text = input.trim();
-  const catalogs = context.catalogs?.catalogs ?? [];
-  const variables = context.catalogs?.variables ?? [];
+  const catalogs = context.catalogs;
+  const variables = context.variables ?? POLICY_VARIABLES;
   const chosen = typesOfActions(context.actions, catalogs);
+  // What the caller may grant the actions on, as patterns, first: whole suggestions.
+  const granted = (typed: string): Suggestion[] =>
+    (context.grantable ?? [])
+      .filter((pattern) => pattern.toLowerCase().startsWith(typed.toLowerCase()) && pattern !== typed)
+      .map((pattern) => ({ value: pattern, badge: 'grantable', detail: 'what you may grant it on' }));
   const offered = (catalog: Catalog) =>
     chosen.size === 0 || chosen.has(catalog.service) || catalog.resource_types.some((t) => t.container);
 
@@ -273,9 +362,9 @@ export function suggestResources(
     if (text.includes(':') || text.includes('/')) return [];
     const wants = text.toLowerCase();
     const candidates: Suggestion[] = [
+      ...granted(''),
       { value: 'abi:', detail: 'a resource name: abi:<service>:<type>/<id>, in its containers' },
       ...variables.flatMap(variableSuggestions),
-      { value: '*', detail: 'every resource' },
     ];
     return candidates.filter((c) => c.value.toLowerCase().startsWith(wants)).slice(0, limit);
   }
@@ -290,7 +379,9 @@ export function suggestResources(
       if (step && (!step.container || step.ids.length !== 1)) return [];
       const [service, type] = token.split(':');
       const known = catalogs.find((c) => c.service === service)?.resource_types.find((t) => t.name === type);
-      step = { service, type, container: Boolean(known?.container), ids: [] };
+      // A type the caller may grant nothing of is walked through as a container: the name
+      // names what it holds, and nothing of it is suggested.
+      step = { service, type, container: known ? known.container : true, ids: [] };
     } else if (token === '*' && index === 0 && prefix === 'abi:') {
       continue;
     } else if (step) {
@@ -321,14 +412,27 @@ export function suggestResources(
         : type?.id === 'singleton'
           ? 'the only one'
           : 'an id';
-    const every: Suggestion[] = starts('*', idTyped)
-      ? [{ value: `${base}*`, detail: `every ${current.type}: ${idHint}` }]
+    // `*` for the last segment: every one, or every one under what the id's path names so far.
+    const paths = type?.id === 'path' || current.service === MODULE_SCOPES;
+    const dir = paths ? idTyped.slice(0, idTyped.lastIndexOf('/') + 1) : '';
+    const every: Suggestion[] = starts('*', idTyped.slice(dir.length))
+      ? [{ value: `${base}${dir}*`, detail: dir ? `every ${current.type} under ${dir}` : `every ${current.type}: ${idHint}` }]
       : [];
-    if (current.service !== MODULE_SCOPES || !context.modules) return every.slice(0, limit);
-    const ids = moduleScopeIds(current.type, context.modules)
-      .filter((s) => starts(s.value, idTyped))
-      .map((s) => ({ ...s, value: base + s.value }));
-    return [...every, ...ids].slice(0, limit);
+    const step = typedStep(text);
+    const listed = context.listed;
+    let ids: Suggestion[] = [];
+    if (current.service === MODULE_SCOPES && current.ids.length === 0) {
+      // A module's items: its key first, `<module>/`.
+      ids = (context.modules ?? [])
+        .map((module) => ({ value: `${base}${module}/`, detail: `the ${current.type}s of ${module}` }))
+        .filter((s) => starts(s.value.slice(base.length), idTyped));
+    } else if (step && listed && listed.service === step.service && listed.type === step.type && listed.module === step.module) {
+      const head = current.service === MODULE_SCOPES ? `${current.ids[0]}/` : '';
+      ids = listed.ids
+        .map(({ id, detail }) => ({ value: `${base}${head}${id}`, detail }))
+        .filter((s) => starts(s.value.slice(base.length), idTyped));
+    }
+    return unique([...granted(text), ...every, ...ids]).slice(0, limit);
   }
 
   // A step: its service, then its type.
@@ -347,6 +451,7 @@ export function suggestResources(
   if (current) below.push(make('*', 'everything in it'));
   else if (head === 'abi:') below.push(make('*/', 'in any container'));
   return [
+    ...granted(text),
     ...below.filter((s) => starts(s.value.slice(head.length))),
     ...catalogs
       .filter((catalog) => offered(catalog) && starts(catalog.service))

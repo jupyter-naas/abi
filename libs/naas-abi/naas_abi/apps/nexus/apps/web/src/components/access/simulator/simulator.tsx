@@ -40,7 +40,12 @@ export function SimulatorView({ api }: PlatformViewProps) {
     [action, catalogs],
   );
   const resourceSuggestions = useMemo(
-    () => suggestResources(resource, { catalogs, actions: action.trim() ? [action.trim()] : [] }),
+    () =>
+      suggestResources(resource, {
+        catalogs: catalogs?.catalogs ?? [],
+        variables: catalogs?.variables,
+        actions: action.trim() ? [action.trim()] : [],
+      }),
     [resource, catalogs, action],
   );
 

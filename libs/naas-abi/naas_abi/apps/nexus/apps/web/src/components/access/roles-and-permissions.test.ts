@@ -8,7 +8,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AccessView } from '@/lib/iam-admin/types';
 import { mount, type Mounted } from '@/lib/testing/mount';
-import { catalogsView, fakeApi, fakeDirectory, orgScope, wsScope } from './access-fixtures';
+import { fakeApi, fakeDirectory, orgScope, wsScope } from './access-fixtures';
 import { PLATFORM_ACCESS_SCOPE, type AccessScope } from './access-scope';
 import { ACCESS_SECTIONS, opensRolesAndPermissions, parseAccessSection } from './access-sections';
 import { RolesAndPermissions } from './roles-and-permissions';
@@ -56,6 +56,8 @@ const CALLERS: Record<string, (level: Level) => string[]> = {
   'organization admin': (level) => (level === 'org' || level === 'ws' ? LEVEL : []),
   'workspace admin': (level) => (level === 'ws' ? LEVEL : []),
   'delegated lister': () => ['iam:ListPolicies'],
+  // May create policies, not list them: builds one from what it holds.
+  'policy builder': () => ['iam:CreatePolicy'],
   viewer: () => [],
   stranger: () => [],
 };
@@ -72,9 +74,7 @@ function apiFor(caller: string) {
     attachable: vi.fn().mockResolvedValue({ items: [] }),
     listGroups: vi.fn().mockResolvedValue({ items: [] }),
     listPolicies: vi.fn().mockResolvedValue({ items: [], next_after: null }),
-    catalogs: vi.fn().mockResolvedValue(catalogsView),
-    grantable: vi.fn().mockResolvedValue({ scope: '', catalogs: [] }),
-    moduleScopes: vi.fn().mockResolvedValue({ modules: [] }),
+    publishers: vi.fn().mockResolvedValue({ scope: '', publishers: [] }),
   });
 }
 
@@ -110,6 +110,7 @@ const EXPECTED: Record<string, Record<string, string[]>> = {
   },
   'workspace admin': { 'the platform': [], 'an organization': [], 'a workspace': ['people', 'groups', 'policies'] },
   'delegated lister': { 'the platform': ['policies'], 'an organization': ['policies'], 'a workspace': ['policies'] },
+  'policy builder': { 'the platform': ['policies'], 'an organization': ['policies'], 'a workspace': ['policies'] },
   viewer: { 'the platform': [], 'an organization': [], 'a workspace': [] },
   stranger: { 'the platform': [], 'an organization': [], 'a workspace': [] },
 };
@@ -145,7 +146,14 @@ describe('Roles & permissions, one UI for every level', () => {
     const api = await render('delegated lister', wsScope);
     expect(api.listPolicies).toHaveBeenCalledWith(undefined, 'abi:nexus:organization/acme/nexus:workspace/ws-1');
     expect(button('New policy')).toBeUndefined();
-    expect(api.grantable).not.toHaveBeenCalled();
+    expect(api.publishers).not.toHaveBeenCalled();
+  });
+
+  it('lets whoever may only create policies build one, without the list', async () => {
+    const api = await render('policy builder', wsScope);
+    expect(api.listPolicies).not.toHaveBeenCalled();
+    expect(mounted!.host.textContent).toContain('You may create policies here, not list them.');
+    expect(button('New policy')).toBeDefined();
   });
 
   it('lets a workspace admin create groups and policies in their workspace, and nothing of the platform', async () => {

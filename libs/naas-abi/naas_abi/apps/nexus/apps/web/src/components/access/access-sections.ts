@@ -11,18 +11,19 @@ export type AccessSection =
 
 /**
  * A section opens with the action that lists what it shows, as `GET /access?scope=` answers
- * it; the API refuses the section's calls otherwise. Nothing here depends on the level: the
+ * it (any of ``needs``); the API refuses the section's calls otherwise. Policies open to whoever
+ * may create one too: they build it without the list. Nothing here depends on the level: the
  * API answers the platform-only actions (service accounts, approvals, the simulator, the
  * audit) false at an org or a workspace.
  */
-export const ACCESS_SECTIONS: { id: AccessSection; label: string; needs: string }[] = [
-  { id: 'people', label: 'People & roles', needs: 'iam:ListAttachments' },
-  { id: 'groups', label: 'Groups', needs: 'iam:ListGroups' },
-  { id: 'policies', label: 'Policies', needs: 'iam:ListPolicies' },
-  { id: 'service-accounts', label: 'Service accounts', needs: 'iam:ListPrincipals' },
-  { id: 'approvals', label: 'Module approvals', needs: 'iam:ListManifests' },
-  { id: 'simulator', label: 'Simulator', needs: 'iam:Explain' },
-  { id: 'audit', label: 'Audit', needs: 'nexus:ReadSystem' },
+export const ACCESS_SECTIONS: { id: AccessSection; label: string; needs: string[] }[] = [
+  { id: 'people', label: 'People & roles', needs: ['iam:ListAttachments'] },
+  { id: 'groups', label: 'Groups', needs: ['iam:ListGroups'] },
+  { id: 'policies', label: 'Policies', needs: ['iam:ListPolicies', 'iam:CreatePolicy'] },
+  { id: 'service-accounts', label: 'Service accounts', needs: ['iam:ListPrincipals'] },
+  { id: 'approvals', label: 'Module approvals', needs: ['iam:ListManifests'] },
+  { id: 'simulator', label: 'Simulator', needs: ['iam:Explain'] },
+  { id: 'audit', label: 'Audit', needs: ['nexus:ReadSystem'] },
 ];
 
 export function canDo(access: AccessView | null, action: string): boolean {
@@ -31,7 +32,7 @@ export function canDo(access: AccessView | null, action: string): boolean {
 
 /** The sections the caller may open, in order. */
 export function visibleSections(access: AccessView | null) {
-  return ACCESS_SECTIONS.filter((section) => canDo(access, section.needs));
+  return ACCESS_SECTIONS.filter((section) => section.needs.some((action) => canDo(access, action)));
 }
 
 export function parseAccessSection(
