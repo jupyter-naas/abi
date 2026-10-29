@@ -110,8 +110,8 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
     def grantable(
         self, scope: str, *, parent: str | None = None
     ) -> list[GrantableCatalog]:
-        fields = {"parent": parent} if parent else {}
-        response = self._request("grantable", scope=scope, **fields)
+        # An empty parent is none, as the server reads it.
+        response = self._request("grantable", scope=scope, parent=parent or "")
         return [codec.grantable_from_pb(c) for c in response.catalogs]
 
     def list_resources(
