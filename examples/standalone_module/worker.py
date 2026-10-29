@@ -802,6 +802,16 @@ class ABIModule(BaseModule):
             )
         assert note.resource == f"{name}/standalone_demo:note/n-1", note.resource
         assert note.decision.allowed
+        # IAM lists a container type from its registry, as the caller: the
+        # project it holds; a type with no lister is offered as wildcards.
+        projects = await self.call(
+            "iam", "list_resources", service="standalone_demo", type="project"
+        )
+        assert projects.listed and [i.name for i in projects.items] == [name], projects
+        notes = await self.call(
+            "iam", "list_resources", service="standalone_demo", type="note", scope=name
+        )
+        assert not notes.listed and not notes.items, notes
         try:
             await self.call(
                 "iam",

@@ -41,9 +41,7 @@ def _graphs(*names: str) -> FunctionLister:
         found = []
         for entry in names:
             ws, _, iri = entry.partition(":")
-            name = resource_name(
-                "triple_store", "graph", iri, container=workspace(ws)
-            )
+            name = resource_name("triple_store", "graph", iri, container=workspace(ws))
             found.append(ListedResource(name=name, id=iri, label=iri.upper()))
         return found
 
@@ -109,13 +107,15 @@ def test_a_listing_pages_by_name_and_searches(h, team):
         assert _names(
             h.iam.list_resources("triple_store", "graph", scope=WS1, text="D")
         ) == [graph("dd")]
-        assert h.iam.list_resources(
-            "triple_store", "graph", scope=WS1, text="zz"
-        ).items == ()
+        assert (
+            h.iam.list_resources("triple_store", "graph", scope=WS1, text="zz").items
+            == ()
+        )
         # Below a container: that container.
-        assert len(
-            h.iam.list_resources("triple_store", "graph", scope=WS1 + "/*").items
-        ) == 3
+        assert (
+            len(h.iam.list_resources("triple_store", "graph", scope=WS1 + "/*").items)
+            == 3
+        )
 
 
 def test_what_a_lister_returns_outside_the_query_is_dropped(h):
@@ -190,7 +190,10 @@ def test_a_type_with_no_list_action_is_listed_to_whoever_holds_any_of_its_action
     h.iam._register_catalog(reports)
     h.register("ws-1")
     reader, other = h.user("reader"), h.user("other")
-    h.grant(reader.id, statement("Allow", ["reports:Export"], [name_in(WS1, "reports:report/r1")]))
+    h.grant(
+        reader.id,
+        statement("Allow", ["reports:Export"], [name_in(WS1, "reports:report/r1")]),
+    )
 
     def items(query: ListingQuery) -> list[ListedResource]:
         return [
@@ -218,7 +221,9 @@ def test_iam_lists_containers_from_its_registry(h):
         assert _names(page) == [WS1, WS2]
         assert [i.id for i in page.items] == ["ws-1", "ws-2"]
         # Not another organisation's.
-        assert h.iam.list_resources("nexus", "workspace", scope=org("org-2")).items == ()
+        assert (
+            h.iam.list_resources("nexus", "workspace", scope=org("org-2")).items == ()
+        )
     assert h.iam.has_lister("nexus", "workspace")
 
 
@@ -293,7 +298,9 @@ def test_the_module_catalog_lists_one_module_when_asked(h):
     def items(query: ListingQuery) -> list[ListedResource]:
         return [
             ListedResource(
-                module_scopes.scope_resource("agent", module, name, container=query.container),
+                module_scopes.scope_resource(
+                    "agent", module, name, container=query.container
+                ),
                 f"{module}/{name}",
                 label=name,
             )
@@ -370,3 +377,23 @@ def test_page_of_pages_an_in_memory_list():
     )
     assert [i.id for i in page.items] == ["c"] and not page.more
     assert page_of(items, ListingQuery("triple_store", "graph", WS2)).items == ()
+
+
+def test_listers_an_owner_offers_are_registered_and_bad_ones_left_out(h):
+    from naas_abi_core.services.iam.kernel_catalogs import register_listers
+
+    class Store:
+        def iam_listers(self):
+            return {
+                ("triple_store", "graph"): _graphs("ws-1:a"),
+                ("triple_store", "nope"): _graphs(),
+            }
+
+    class Broken:
+        def iam_listers(self):
+            raise RuntimeError("cannot say")
+
+    registered = register_listers(h.iam, [None, object(), Broken(), Store()])
+    assert registered == [("triple_store", "graph")]
+    assert h.iam.has_lister("triple_store", "graph")
+    assert not h.iam.has_lister("triple_store", "nope")

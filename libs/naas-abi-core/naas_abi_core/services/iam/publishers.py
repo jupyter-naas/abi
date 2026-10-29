@@ -67,7 +67,9 @@ def _order(publisher: Publisher) -> tuple[int, str]:
     return (rank.get(publisher.id, 2), publisher.id)
 
 
-def _of_module(action: GrantableAction, type_name: str, module: str) -> GrantableAction | None:
+def _of_module(
+    action: GrantableAction, type_name: str, module: str
+) -> GrantableAction | None:
     """What of ``action`` (a ``module`` catalog action) can name ``module``'s
     items of ``type_name``: the patterns that overlap them, None when none does."""
     step = f"{module_scopes.SERVICE}:{type_name}/{encode_segment(module)}/*"
@@ -142,7 +144,9 @@ def by_publisher(
                     _types(catalog, granted, listable, module=module, only=exposed)
                 )
             continue
-        types.setdefault(catalog.publisher, []).extend(_types(catalog, granted, listable))
+        types.setdefault(catalog.publisher, []).extend(
+            _types(catalog, granted, listable)
+        )
     publishers = [
         Publisher(publisher, _kind(publisher), tuple(found))
         for publisher, found in types.items()

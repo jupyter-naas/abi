@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import glob
 import os
-from typing import Generic, Self, cast
+from typing import Any, Generic, Self, cast
 
 from fastapi import FastAPI
 from naas_abi_core import logger
@@ -194,6 +194,14 @@ class BaseModule(JobsMixin, Generic[TConfig]):
         """The actions this module declares (``iam_catalog.yaml`` beside its
         module class), registered by the engine once the module is loaded."""
         return self.__iam_catalog
+
+    def iam_listers(self) -> dict[tuple[str, str], Any]:
+        """The listers of this module's own types (its declared catalog), by
+        ``(service, type)``: ``listing.ResourceLister`` each, registered by the
+        engine once the module is loaded (``AGENTS.md`` of ``services/iam``,
+        "Publishers and listing"). None by default: its types are offered as
+        wildcards."""
+        return {}
 
     def require_action(
         self,

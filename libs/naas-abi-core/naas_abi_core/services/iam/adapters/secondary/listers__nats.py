@@ -79,7 +79,9 @@ class NATSModuleListers(ListerDirectory):
 
     def lister(self, module: str, service: str, type: str) -> ResourceLister | None:
         found = [
-            i for i in self._run_sync(self._ready()) if i.module_id == module and type in i.listers
+            i
+            for i in self._run_sync(self._ready())
+            if i.module_id == module and type in i.listers
         ]
         if not found:
             return None
@@ -127,7 +129,9 @@ class NATSModuleListers(ListerDirectory):
         found: list[ListerInstance] = []
         after = ""
         while True:
-            page, after = await discovery.list_modules(limit=100, after_instance_id=after)
+            page, after = await discovery.list_modules(
+                limit=100, after_instance_id=after
+            )
             for instance in page:
                 listers = frozenset(getattr(instance, "listers", ()) or ())
                 if instance.status == "READY" and listers:
@@ -174,9 +178,8 @@ class NATSModuleListers(ListerDirectory):
         """One instance's answer, another's when it does not answer."""
 
         async def first() -> ListedPage:
-            from nats.errors import NoRespondersError
-
             from naas_abi_sdk.transport import RPCError
+            from nats.errors import NoRespondersError
 
             last = "no instance answered"
             for instance in random.sample(instances, min(len(instances), 2)):
@@ -191,7 +194,9 @@ class NATSModuleListers(ListerDirectory):
 
 
 class _RemoteLister(ResourceLister):
-    def __init__(self, directory: NATSModuleListers, instances: list[ListerInstance]) -> None:
+    def __init__(
+        self, directory: NATSModuleListers, instances: list[ListerInstance]
+    ) -> None:
         self._directory, self._instances = directory, instances
 
     def list_resources(self, query: ListingQuery) -> ListedPage:

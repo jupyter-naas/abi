@@ -9,6 +9,7 @@ from pathlib import Path
 
 from naas_abi_sdk import BaseModule, ModuleDependencies, run_module
 from naas_abi_sdk.discovery import AgentDescriptor, DiscoveryConfiguration
+from naas_abi_sdk.listers import Listed, ListerQuery, lister
 from naas_abi_sdk.permissions import default_manifest
 from naas_abi_sdk.services.errors import NotFound, PermissionDenied
 from naas_abi_sdk.transport import RPCError
@@ -60,6 +61,15 @@ class Provider(BaseModule):
 
     async def on_initialized(self):
         self.expose_agent("Researcher", ResearchAgent())
+
+    @lister("brief")
+    async def briefs(self, query: ListerQuery):
+        """Its briefs, for the policy builder: IAM asks over NATS and keeps
+        what the caller may list."""
+        return [
+            Listed(f"abi:demo_research:brief/{name}", name, label=f"Brief {name}")
+            for name in ("q1", "q2", "q3")
+        ]
 
     async def run(self):
         # Its own actions, for itself: the approval let it act on its catalog.
@@ -124,6 +134,14 @@ class Consumer(BaseModule):
         assert (await handle.status()).status == "CANCELLED"
         declared = await self.declared_actions()
         assert declared == {"ExportBrief": "allowed", "DeleteBrief": "refused"}
+        # The provider's lister, asked by IAM over NATS: the briefs this module
+        # may act on (ExportBrief on every brief; the type has no list action).
+        listed = await self.engine.services.iam.list_resources(
+            "demo_research", "brief", text="q"
+        )
+        assert listed["listed"], listed
+        assert [i["id"] for i in listed["items"]] == ["q1", "q2", "q3"], listed
+        assert listed["items"][0]["label"] == "Brief q1"
         (ROOT / "agent-proxy.json").write_text(
             json.dumps(
                 {
@@ -132,6 +150,7 @@ class Consumer(BaseModule):
                     "deduplicated": True,
                     "cancelled": True,
                     "declared_actions": declared,
+                    "listed_briefs": [i["id"] for i in listed["items"]],
                 }
             )
         )

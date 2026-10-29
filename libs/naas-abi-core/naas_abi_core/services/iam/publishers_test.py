@@ -37,7 +37,10 @@ def test_a_catalog_names_its_publisher():
     published = ActionCatalog.from_dict({**NEXUS.to_dict(), "publisher": NAAS_ABI})
     assert published.publisher == NAAS_ABI
     assert published.to_dict()["publisher"] == NAAS_ABI
-    assert ActionCatalog.from_dict(published.to_dict(stored=True), stored=True).publisher == NAAS_ABI
+    assert (
+        ActionCatalog.from_dict(published.to_dict(stored=True), stored=True).publisher
+        == NAAS_ABI
+    )
     # The engine's is not written: nothing changes in what was stored before.
     assert "publisher" not in NEXUS.to_dict()
     # A module's catalog is its module's, whatever it says, and its form (what a
@@ -49,7 +52,10 @@ def test_a_catalog_names_its_publisher():
 
 
 def test_a_catalog_publisher_is_never_empty():
-    assert ActionCatalog.from_dict({**NEXUS.to_dict(), "publisher": ""}).publisher == ENGINE
+    assert (
+        ActionCatalog.from_dict({**NEXUS.to_dict(), "publisher": ""}).publisher
+        == ENGINE
+    )
     with pytest.raises(CatalogError):
         ActionCatalog(service="Bad", version=1, publisher=NAAS_ABI)
 

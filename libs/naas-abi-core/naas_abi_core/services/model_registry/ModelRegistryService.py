@@ -33,6 +33,7 @@ from naas_abi_core.models.Model import (
     ModelType,
 )
 from naas_abi_core.services.iam.guard import ServiceGuard
+from naas_abi_core.services.iam.listing import ResourceLister, named_lister
 from naas_abi_core.services.model_registry.iam_catalog import CATALOG
 from naas_abi_core.services.model_registry.ModelRegistryPort import (
     ChatProviderFactory,
@@ -482,6 +483,16 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
 
     def list_models(self) -> list[Model]:
         return [model for _, model in self.list_registered_models()]
+
+    def iam_listers(self) -> dict[tuple[str, str], ResourceLister]:
+        """What IAM lists of this service for the policy builder: its models."""
+        return {
+            (CATALOG.service, "model"): named_lister(
+                lambda query: self.list_canonical_ids(),
+                lambda canonical_id: self._guard.name("model", canonical_id),
+                str,
+            )
+        }
 
     def list_canonical_ids(self) -> list[str]:
         return self._guard.filter(

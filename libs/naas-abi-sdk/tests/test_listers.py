@@ -138,3 +138,16 @@ def test_the_host_answers_on_its_instance_subject():
         await host.close()
 
     run(scenario())
+
+
+def test_a_discovered_instance_says_what_it_lists():
+    from naas_abi_sdk.discovery import _instance
+
+    instance = _instance(
+        pb.Instance(
+            descriptor=pb.ModuleDescriptor(module_id="demo.research", listers=["brief"]),
+            instance_id="i-1",
+            status="READY",
+        )
+    )
+    assert instance.listers == ("brief",)

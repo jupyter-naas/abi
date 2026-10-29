@@ -25,6 +25,7 @@ from naas_abi_core.services.document.iam_catalog import (
     NAMESPACE,
 )
 from naas_abi_core.services.iam.enforcement import ResourceGuard
+from naas_abi_core.services.iam.listing import ResourceLister, named_lister
 from naas_abi_core.services.ServiceBase import ServiceBase
 
 
@@ -128,6 +129,17 @@ class DocumentService(ServiceBase):
     def _for_namespace(self, namespace: str) -> "DocumentService":
         """Composition-root hook kept for existing callers; see ``for_namespace``."""
         return self.for_namespace(namespace)
+
+    def iam_listers(self) -> dict[tuple[str, str], ResourceLister]:
+        """What IAM lists of this service for the policy builder: its namespaces
+        (the engine's root service only)."""
+        return {
+            (CATALOG.service, "namespace"): named_lister(
+                lambda query: self.namespaces(),
+                lambda namespace: self._guard.name("namespace", [namespace]),
+                str,
+            )
+        }
 
     def namespaces(self) -> list[str]:
         """Namespaces holding at least one collection that the caller may list;

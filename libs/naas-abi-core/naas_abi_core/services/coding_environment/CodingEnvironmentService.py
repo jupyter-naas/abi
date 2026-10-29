@@ -32,6 +32,7 @@ from naas_abi_core.services.coding_environment.ontologies.modules.CodingEnvironm
     WorkspaceStopped,
 )
 from naas_abi_core.services.iam.guard import ServiceGuard
+from naas_abi_core.services.iam.listing import ResourceLister, named_lister
 from naas_abi_core.services.ServiceBase import ServiceBase
 
 # The owner segment of an environment whose owner this service does not know:
@@ -149,6 +150,17 @@ class CodingEnvironmentService(ServiceBase):
             # existing orchestrator user.
             vouched_email=vouched_by_first_party(),
         )
+
+    def iam_listers(self) -> dict[tuple[str, str], ResourceLister]:
+        """What IAM lists of this service for the policy builder: its templates."""
+        return {
+            (CATALOG.service, "template"): named_lister(
+                lambda query: self.list_templates(),
+                lambda template: self._guard.name("template", template.id),
+                lambda template: template.id,
+                lambda template: getattr(template, "name", "") or "",
+            )
+        }
 
     def list_templates(self) -> list[WorkspaceTemplate]:
         return self._guard.filter(

@@ -5,6 +5,11 @@ from typing import BinaryIO
 
 from naas_abi_core import logger
 from naas_abi_core.services.iam.enforcement import ResourceGuard
+from naas_abi_core.services.iam.listing import (
+    ListingQuery,
+    ResourceLister,
+    named_lister,
+)
 from naas_abi_core.services.iam.names import path_parts
 from naas_abi_core.services.object_storage.iam_catalog import (
     CATALOG,
@@ -199,6 +204,23 @@ class ObjectStorageService(ServiceBase, IObjectStorageDomain):
         self.__require("DeleteObject", prefix, key)
         self.adapter.delete_object(prefix, key)
         self.__publish_event(ObjectDeleted(prefix=prefix, key=key))
+
+    def iam_listers(self) -> dict[tuple[str, str], ResourceLister]:
+        """What IAM lists of this service for the policy builder: the objects
+        and folders at the top, or under the prefix searched (a text ending
+        with ``/``)."""
+
+        def entries(query: ListingQuery) -> list[str]:
+            prefix = query.text if query.text.endswith("/") else ""
+            return self.list_objects(prefix)
+
+        return {
+            (CATALOG.service, "object"): named_lister(
+                entries,
+                lambda path: self._guard.name("object", path_parts(path)),
+                lambda path: path.strip("/"),
+            )
+        }
 
     def list_objects(self, prefix: str = "", queue: Queue | None = None) -> list[str]:
         prefix = self.__remove_storage_prefix(prefix)

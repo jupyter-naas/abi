@@ -9,6 +9,7 @@ from naas_abi_core.engine.call_context import (
     vouched_by_first_party,
 )
 from naas_abi_core.services.iam.guard import PLACEMENT_WRITER, ServiceGuard
+from naas_abi_core.services.iam.listing import ResourceLister, named_lister
 from naas_abi_core.services.ServiceBase import ServiceBase
 from naas_abi_core.services.source_control.iam_catalog import CATALOG
 from naas_abi_core.services.source_control.ontologies.modules.SourceControlEventOntology import (
@@ -277,6 +278,18 @@ class SourceControlService(ServiceBase):
         except RepoNotFoundError:
             return False
         return True
+
+    def iam_listers(self) -> dict[tuple[str, str], ResourceLister]:
+        """What IAM lists of this service for the policy builder: its repositories."""
+        return {
+            (CATALOG.service, "repo"): named_lister(
+                lambda query: self.list_repos(),
+                lambda repo: self._guard.name(
+                    "repo", repo_key(f"{repo.owner}/{repo.name}")
+                ),
+                lambda repo: f"{repo.owner}/{repo.name}",
+            )
+        }
 
     def list_repos(self) -> list[Repo]:
         return self._guard.filter(

@@ -35,6 +35,7 @@ from naas_abi_core.services.event.EventPort import (
 from naas_abi_core.services.event.iam_catalog import CATALOG
 from naas_abi_core.services.event.ontologies.modules.EventOntology import LogProcess
 from naas_abi_core.services.iam.guard import ServiceGuard
+from naas_abi_core.services.iam.listing import ResourceLister, named_lister
 from naas_abi_core.services.ServiceBase import ServiceBase
 
 
@@ -260,6 +261,16 @@ class EventService(ServiceBase, IEventService):
             search=search,
         ) as rows:
             yield (self._reconstruct(row, event_class) for row in rows)
+
+    def iam_listers(self) -> dict[tuple[str, str], ResourceLister]:
+        """What IAM lists of this service for the policy builder: its event types."""
+        return {
+            (CATALOG.service, "event_type"): named_lister(
+                lambda query: self.event_types(),
+                lambda summary: self._guard.name("event_type", summary.event_type),
+                lambda summary: summary.event_type,
+            )
+        }
 
     def event_types(self) -> list[EventTypeSummary]:
         """The event types present that the caller may list."""

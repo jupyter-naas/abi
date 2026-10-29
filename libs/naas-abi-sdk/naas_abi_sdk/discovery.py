@@ -55,6 +55,8 @@ class ModuleInstance:
     # The registering service account as one subject token, set by discovery:
     # every hosting subject of the instance carries it (agent_subject, ...).
     service_account: str = ""
+    # The types of its catalog it lists (naas_abi_sdk.listers).
+    listers: tuple[str, ...] = ()
 
 
 def _instance(value: pb.Instance) -> ModuleInstance:
@@ -77,6 +79,7 @@ def _instance(value: pb.Instance) -> ModuleInstance:
         tuple(ModelDescriptor(m.name, m.description, m.kind) for m in d.models),
         _apps(d),
         value.service_account,
+        tuple(d.listers),
     )
 
 

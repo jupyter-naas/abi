@@ -14,6 +14,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
+from typing import TypeVar
 
 from naas_abi_core import logger
 from naas_abi_core.services.iam.names import (
@@ -86,11 +87,32 @@ class FunctionLister(ResourceLister):
     """A lister over a function returning every candidate of a query (filtered
     by container and text here), for listers that read a whole list at once."""
 
-    def __init__(self, items: Callable[[ListingQuery], Iterable[ListedResource]]) -> None:
+    def __init__(
+        self, items: Callable[[ListingQuery], Iterable[ListedResource]]
+    ) -> None:
         self._items = items
 
     def list_resources(self, query: ListingQuery) -> ListedPage:
         return page_of(self._items(query), query)
+
+
+T = TypeVar("T")
+
+
+def named_lister(
+    items: Callable[[ListingQuery], Iterable[T]],
+    name: Callable[[T], str],
+    id: Callable[[T], str],
+    label: Callable[[T], str] = lambda _item: "",
+) -> ResourceLister:
+    """A kernel service's lister: its own list call (made as the caller), each
+    item named where IAM places it (``name``, the service's guard)."""
+    return FunctionLister(
+        lambda query: [
+            ListedResource(name=name(item), id=id(item), label=label(item))
+            for item in items(query)
+        ]
+    )
 
 
 class ListerDirectory(ABC):
@@ -142,7 +164,9 @@ def page_of(items: Iterable[ListedResource], query: ListingQuery) -> ListedPage:
         ),
         key=lambda item: item.name,
     )
-    unique = [item for i, item in enumerate(found) if i == 0 or found[i - 1].name != item.name]
+    unique = [
+        item for i, item in enumerate(found) if i == 0 or found[i - 1].name != item.name
+    ]
     limit = max(query.limit, 1)
     return ListedPage(tuple(unique[:limit]), more=len(unique) > limit)
 

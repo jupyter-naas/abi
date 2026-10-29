@@ -30,6 +30,7 @@ from naas_abi_core.services.dataset.ontologies.classes.ontology_naas_ai.abi.data
 )
 from naas_abi_core.services.dataset.sql_references import referenced_datasets
 from naas_abi_core.services.iam.enforcement import ResourceGuard
+from naas_abi_core.services.iam.listing import ResourceLister, named_lister
 from naas_abi_core.services.ServiceBase import ServiceBase
 
 
@@ -142,6 +143,17 @@ class DatasetService(ServiceBase, IDatasetPort):
     def describe(self, name: str, *, namespace: str = "default") -> DatasetInfo:
         self.__dataset("Describe", name, namespace)
         return self.__adapter.describe(name, namespace=namespace)
+
+    def iam_listers(self) -> dict[tuple[str, str], ResourceLister]:
+        """What IAM lists of this service for the policy builder: its datasets."""
+        return {
+            (CATALOG.service, DATASET): named_lister(
+                lambda query: self.list(),
+                lambda info: self._guard.name(DATASET, [info.namespace, info.name]),
+                lambda info: f"{info.namespace}/{info.name}",
+                lambda info: info.name,
+            )
+        }
 
     def list(self, *, namespace: str | None = None) -> list[DatasetInfo]:
         """The datasets the caller may list; never fails for that."""

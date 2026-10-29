@@ -1,13 +1,19 @@
-"""The kernel services' action catalogs, registered with IAM at engine boot.
+"""The kernel services' action catalogs, registered with IAM at engine boot,
+and the listers of the services loaded.
 
 Each catalog lives next to its domain code (``services/<name>/iam_catalog.py``).
 They are registered whether or not the service is loaded, so a
 policy can name any kernel action and the built-in roles cover every kernel
-resource type.
+resource type. A loaded service that can list its resources says so with
+``iam_listers()`` (``AGENTS.md``, "Publishers and listing").
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+from typing import Any
+
+from naas_abi_core import logger
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.catalog import ActionCatalog
 from naas_abi_core.services.iam.IAMPorts import IIAMService
@@ -75,3 +81,36 @@ def register_kernel_catalogs(iam: IIAMService) -> None:
     with as_service_account("engine"):
         for catalog in kernel_catalogs():
             iam.register_catalog(catalog)
+
+
+def register_listers(iam: Any, owners: Iterable[Any]) -> list[tuple[str, str]]:
+    """Register the listers each of ``owners`` offers (``iam_listers()``: a
+    loaded kernel service, an engine module), in process: the types listed. One
+    that IAM refuses (a type no registered catalog declares) is logged and left
+    out: its type is offered as wildcards."""
+    registered: list[tuple[str, str]] = []
+    register = getattr(iam, "register_lister", None)
+    if register is None:
+        return registered  # IAM over NATS: the serving engine lists
+    for owner in owners:
+        offer = getattr(owner, "iam_listers", None)
+        if owner is None or not callable(offer):
+            continue
+        try:
+            listers = dict(offer() or {})
+        except Exception as exc:  # noqa: BLE001 - one owner never stops the engine
+            logger.error(f"{type(owner).__name__}: its listers are not used: {exc}")
+            continue
+        for (service, type_name), lister in listers.items():
+            try:
+                register(service, type_name, lister)
+            except Exception as exc:  # noqa: BLE001 - offered as wildcards instead
+                logger.error(f"Lister of {service}:{type_name} not registered: {exc}")
+                continue
+            registered.append((service, type_name))
+    return registered
+
+
+def register_kernel_listers(iam: Any, services: Iterable[Any]) -> list[tuple[str, str]]:
+    """The listers of the kernel services loaded (``Engine.Services.all``)."""
+    return register_listers(iam, services)

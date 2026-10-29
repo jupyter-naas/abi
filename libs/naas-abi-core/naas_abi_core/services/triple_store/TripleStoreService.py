@@ -18,6 +18,7 @@ from naas_abi_core import logger
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.enforcement import ResourceGuard
 from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
+from naas_abi_core.services.iam.listing import ResourceLister, named_lister
 from naas_abi_core.services.iam.names import path_parts
 from naas_abi_core.services.ServiceBase import ServiceBase
 from naas_abi_core.services.triple_store import sparql_access as sparql
@@ -745,6 +746,16 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
 
         self._guard.forget(GRAPH, str(graph_name))
         self.__publish_event(GraphDropped(graph_name=str(graph_name)))
+
+    def iam_listers(self) -> dict[tuple[str, str], ResourceLister]:
+        """What IAM lists of this service for the policy builder: its graphs."""
+        return {
+            (CATALOG.service, "graph"): named_lister(
+                lambda query: self.list_graphs(),
+                lambda graph: self._guard.name("graph", str(graph)),
+                str,
+            )
+        }
 
     def list_graphs(self) -> list[URIRef]:
         """The graphs the caller may list; never fails for that."""

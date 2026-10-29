@@ -6,7 +6,6 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-
 from naas_abi_core.engine import nats_runtime
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.engine.nats_rpc_integration_test import (  # noqa: F401 - pytest fixture
@@ -46,7 +45,9 @@ RESEARCH = ActionCatalog(
 def _brief(where: str, name: str):
     from naas_abi_sdk.listers import Listed
 
-    return Listed(name_in(where, f"demo_research:brief/{name}"), name, label=name.upper())
+    return Listed(
+        name_in(where, f"demo_research:brief/{name}"), name, label=name.upper()
+    )
 
 
 @pytest.fixture
@@ -73,7 +74,8 @@ def world(broker):  # noqa: F811 - imported pytest fixture
     connection = nats_runtime.get_connection(url)
     session = SimpleNamespace(
         client=SimpleNamespace(
-            project="acme", transport=SimpleNamespace(connect=AsyncMock(return_value=connection))
+            project="acme",
+            transport=SimpleNamespace(connect=AsyncMock(return_value=connection)),
         ),
         service_account="01SA",
         instance_id="i-1",
