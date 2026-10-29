@@ -227,6 +227,18 @@ def test_iam_lists_containers_from_its_registry(h):
     assert h.iam.has_lister("nexus", "workspace")
 
 
+def test_a_container_lists_itself_at_its_own_scope(h):
+    """At a workspace, its Workspaces are the workspace itself (what
+    ``${scope}`` names there), and nothing of a type it is not."""
+    h.register("ws-1")
+    h.register("ws-2")
+    admin = h.user("ws-admin")
+    h.attach(roles.ADMIN, admin.id, WS1)
+    with h.as_(admin):
+        assert _names(h.iam.list_resources("nexus", "workspace", scope=WS1)) == [WS1]
+        assert h.iam.list_resources("nexus", "organization", scope=WS1).items == ()
+
+
 def test_a_container_lister_labels_the_registry_and_never_adds_to_it(h, warnings):
     h.register("ws-1")
     admin = h.user("admin")

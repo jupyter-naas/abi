@@ -229,7 +229,9 @@ class IamAdminService:
         actions["nexus:ReadSystem"] = reads_system
         return {"actions": actions}
 
-    async def grantable(self, user: Any, scope: str, parent: str | None = None) -> dict[str, Any]:
+    async def grantable(
+        self, user: Any, scope: str, parent: str | None = None, *, derive: bool = False
+    ) -> dict[str, Any]:
         """What the caller may grant at ``scope``, for the policy builder: per catalog
         (a kernel service or a module), its publisher, the actions they hold there,
         the types each acts on and the resource patterns (``${scope}/...``) they
@@ -238,7 +240,9 @@ class IamAdminService:
         same by publisher and type. With ``parent``, what a sub-policy of it may
         grant there: within its chain (IAM refuses a parent the caller may not
         derive from or read)."""
-        found = await self._read(user, lambda session: session.grantable(scope, parent=parent))
+        found = await self._read(
+            user, lambda session: session.grantable(scope, parent=parent, derive=derive)
+        )
         registry = self._gateway.catalogs()
         return {
             "scope": scope,
@@ -261,7 +265,9 @@ class IamAdminService:
         except PermissionDeniedError:
             return False
 
-    async def publishers(self, user: Any, scope: str, parent: str | None = None) -> dict[str, Any]:
+    async def publishers(
+        self, user: Any, scope: str, parent: str | None = None, *, derive: bool = False
+    ) -> dict[str, Any]:
         """Each publisher (the engine, naas_abi, then the modules), its resource
         types, their actions and what the caller may grant of each at ``scope``,
         and whether a type's resources are listed (``GET /resources``). Only what
@@ -272,9 +278,10 @@ class IamAdminService:
         def read(session: IIAMService) -> dict[str, Any]:
             found = by_publisher(
                 self._gateway.catalogs().all(),
-                session.grantable(scope, parent=parent),
+                session.grantable(scope, parent=parent, derive=derive),
                 modules=modules,
                 listable=self._gateway.listable,
+                scope=scope,
             )
             return {"scope": scope, "publishers": [views.publisher_view(p) for p in found]}
 
@@ -324,7 +331,12 @@ class IamAdminService:
     # -- catalogs and validation ------------------------------------------------------
 
     async def catalogs(
-        self, user: Any, scope: str | None = None, parent: str | None = None
+        self,
+        user: Any,
+        scope: str | None = None,
+        parent: str | None = None,
+        *,
+        derive: bool = False,
     ) -> dict[str, Any]:
         """The action catalogs a policy names, for the editor's autocomplete:
         only the actions the caller may grant at ``scope`` (the platform by
@@ -342,7 +354,7 @@ class IamAdminService:
             # someone who may grant less.
             return views.catalogs_view(
                 self._gateway.catalogs().all(),
-                granted=session.grantable(owner, parent=parent),
+                granted=session.grantable(owner, parent=parent, derive=derive),
             )
 
         return await self._read(user, read)

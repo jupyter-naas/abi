@@ -949,8 +949,10 @@ below before anyone sees it. `listing.page_of` pages an in-memory list for one.
 cursor=, limit=, module=)` returns a `ResourcePage`:
 
 - **Scoped.** `scope` is a container or the platform (`abi:`); below a container
-  (`<container>/*`), that container. Only what sits in it or below it is returned: what a
-  policy attached there can name (a platform resource is listed at the platform only).
+  (`<container>/*`), that container. Only what sits in it or below it is returned, and the
+  container itself when it is of the type asked (what `${scope}` names there: a workspace's
+  Workspaces are that workspace): what a policy attached there can name (a platform resource
+  is listed at the platform only; `listing.at_container`).
 - **Only what the caller may list**: a resource is kept when one of the type's `list`
   actions allows it, or, for a type with no `list` action, any action of the type, as
   `filter` decides for the current caller (`listing.listing_actions`). A stranger gets
@@ -974,9 +976,13 @@ What a caller may grant at a container (`grantable`) is per catalog; by publishe
 `publishers.by_publisher(catalogs, grantable, modules=, listable=)` groups it: the engine
 first, then naas_abi, then the modules by key, each with the types the caller may grant
 something of, each type with its actions, what the caller may grant of each, and whether
-it is listed. A `module` catalog action goes under a module when one of its granted
-patterns can name that module's items (`grants.overlaps`). Nothing appears that the caller
-may not grant.
+it is listed. Under a type, an action keeps only its granted patterns that can name one of
+that type's resources at the scope (`by_publisher(scope=)`, `grants.overlaps` within the
+type's names: `grants.universe(..., nesting=)`, where each container sits only in its
+parents, so no organisation is in a workspace); a `module` catalog action goes under a
+module when one of them can name that module's items. The nesting is for showing what a
+pattern names only: IAM decides within the names without it. Nothing appears that the
+caller may not grant.
 
 ## Sealed resources
 
@@ -1469,12 +1475,16 @@ action, and a module's connection may always ask (`broker.IAM_ALWAYS`).
 parents=)`): per policy of the chain, its Allows naming the action, restricted to the scope,
 met with what the caller holds (`grants._meet`: the patterns of either side the other embeds,
 so it may say less than the chain lets through, never more; a pattern naming a variable other
-than `${scope}` is left out). It answers only for a parent the caller may derive from at
-`scope` (`_require_derivable`, whose refusal it keeps) or may read (`iam:GetPolicy`, so whoever
-edits an existing sub-policy sees what it may hold): what a parent allows is said to no one
-else. A parent that does not exist is not found, as one the caller may not read; a chain that
-cannot be read whole is `IAMConflictError`. It is what the policy builder offers a sub-policy;
-`create_policy` and `update_policy` still decide (`_require_held` with the chain).
+than `${scope}` is left out), each then checked as the caller's own are (a Deny of theirs that
+covers it drops it). The parent is checked first. It answers only for a parent the caller may
+derive from at `scope` (`_require_derivable`, whose refusal it keeps) or may read
+(`iam:GetPolicy`, so whoever edits an existing sub-policy sees what it may hold): what a parent
+allows is said to no one else. With `derive=True` (`GrantableRequest.derive`, for a new
+sub-policy), reading is not enough: `_new_chain`'s verdict, as `create_policy` gives it (the
+derive rule, the owner within the parent's, the depth). A parent that does not exist is not
+found, as one the caller may not read; a chain that cannot be read whole is
+`IAMConflictError`. It is what the policy builder offers a sub-policy; `create_policy` and
+`update_policy` still decide (`_require_held` with the chain).
 
 **Writes made for no user.** A first-party account (`engine`, `api`) writing for no user is
 not checked: each such write sits behind a route or a boot step that authorized what it
@@ -1511,6 +1521,7 @@ iam.allows_every(action, "triple_store", "graph")  # a safe shortcut: False when
 iam.explain(action, resource, principal_id=...)  # needs iam:Explain on the principal
 iam.grantable(scope)  # what the caller may grant there (needs no permission)
 iam.grantable(scope, parent=policy_id)  # ... in a sub-policy of policy_id
+iam.grantable(scope, parent=policy_id, derive=True)  # ... in a new one (refused as create)
 iam.list_resources(
     "triple_store", "graph", scope=container, text="sales", cursor=None
 )  # ResourcePage: what the caller may list there (needs no permission)

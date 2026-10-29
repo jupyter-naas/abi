@@ -22,7 +22,11 @@ from naas_abi_core.services.iam.catalog import (
     ResourceType,
 )
 from naas_abi_core.services.iam.IAMPorts import GrantableAction, GrantableCatalog
-from naas_abi_core.services.iam.names import encode_segment
+from naas_abi_core.services.iam.names import (
+    PLATFORM_SCOPE,
+    container_of_scope,
+    encode_segment,
+)
 
 SCOPE = "${scope}"
 
@@ -67,32 +71,41 @@ def _order(publisher: Publisher) -> tuple[int, str]:
     return (rank.get(publisher.id, 2), publisher.id)
 
 
-def _at_platform(pattern: str) -> str:
-    """A pattern written at ``${scope}`` read at the platform, where what a
-    container holds is named after ``abi:``: compared within a type's names,
-    which start there."""
+def _at(pattern: str, scope: str) -> str:
+    """A pattern written at ``${scope}`` read at ``scope`` (a container, below
+    one, or the platform, where what it holds is named after ``abi:``)."""
+    container = container_of_scope(scope)
     prefix = f"{SCOPE}/"
-    return "abi:" + pattern[len(prefix) :] if pattern.startswith(prefix) else pattern
+    if pattern.startswith(prefix):
+        under = "abi:" if container == PLATFORM_SCOPE else f"{container}/"
+        return under + pattern[len(prefix) :]
+    return container if pattern == SCOPE else pattern
 
 
-def _of_module(
+def _of_type(
     action: GrantableAction,
+    scope: str,
+    within: grants.Universe,
+    *,
     type_name: str,
-    module: str,
-    within: grants.Universe = grants.EVERYTHING,
+    module: str = "",
 ) -> GrantableAction | None:
-    """What of ``action`` (a ``module`` catalog action) can name ``module``'s
-    items of ``type_name``: the patterns that overlap them among the type's
-    names (``within``: an id holds no step, so ``.../p/*`` never reaches
-    another module's items), None when none does."""
-    step = f"{module_scopes.SERVICE}:{type_name}/{encode_segment(module)}/*"
-    items = (f"abi:{step}", f"abi:*/{step}")
+    """What of ``action`` can name resources of one type: its patterns that
+    overlap a name of the type (``within``, the type's names: an id holds no
+    step, so ``.../graph/*`` names no workspace, and a module's ``.../p/*``
+    none of another module's items), read at ``scope``; for a module, its own
+    items only. None when none does."""
+    if module:
+        step = f"{module_scopes.SERVICE}:{type_name}/{encode_segment(module)}/*"
+        names: tuple[str, ...] = (f"abi:*{step}",)
+    else:
+        names = ("*",)
     with grants.budget():
         try:
             kept = tuple(
                 r
                 for r in action.resources
-                if grants.overlaps(_at_platform(r), items, within)
+                if grants.overlaps(_at(r, scope), names, within)
             )
         except grants.Exhausted:
             # Unsure: shown, as the patterns are what the caller holds anyway.
@@ -107,14 +120,23 @@ def _types(
     granted: Mapping[str, GrantableAction],
     listable: Callable[[str, str], bool],
     *,
+    scope: str,
+    containers: frozenset[tuple[str, str]],
+    nesting: frozenset[tuple[str, tuple[str, ...]]] = frozenset(),
     module: str = "",
     only: Collection[str] | None = None,
-    containers: frozenset[tuple[str, str]] = frozenset(),
 ) -> list[PublishedType]:
     found: list[PublishedType] = []
     for resource_type in catalog.resource_types:
         if only is not None and resource_type.name not in only:
             continue
+        within = grants.universe(
+            catalog.service,
+            resource_type.name,
+            containers,
+            resource_type.parents,
+            nesting,
+        )
         actions: list[PublishedAction] = []
         for spec in catalog.actions:
             if resource_type.name not in spec.resource_types:
@@ -122,16 +144,12 @@ def _types(
             held = granted.get(catalog.qualified(spec.name))
             if held is None:
                 continue
-            if module:
-                held = _of_module(
-                    held,
-                    resource_type.name,
-                    module,
-                    grants.universe(catalog.service, resource_type.name, containers),
-                )
-                if held is None:
-                    continue
-            actions.append(PublishedAction(spec, held))
+            of_type = _of_type(
+                held, scope, within, type_name=resource_type.name, module=module
+            )
+            if of_type is None:
+                continue
+            actions.append(PublishedAction(spec, of_type))
         if actions:
             found.append(
                 PublishedType(
@@ -151,17 +169,27 @@ def by_publisher(
     *,
     modules: Mapping[str, Collection[str]] | None = None,
     listable: Callable[[str, str], bool] = lambda _service, _type: False,
+    scope: str = PLATFORM_SCOPE,
 ) -> list[Publisher]:
     """Each publisher with the types the caller may grant something of: the
     engine, then naas_abi, then the modules by key. ``modules``: each module's
     key and the ``module`` catalog types it exposes (its agents, apps, ...);
-    ``listable``: whether a type is listed."""
+    ``listable``: whether a type is listed; ``scope``: where ``grantable`` was
+    read. Under a type, only its patterns that can name its resources there."""
     granted: dict[str, GrantableAction] = {
         action.action: action for found in grantable for action in found.actions
     }
     catalogs = list(catalogs)
     containers = frozenset(
         (c.service, t.name) for c in catalogs for t in c.resource_types if t.container
+    )
+    # Where each container may sit: a pattern listed under a type names one of
+    # its resources that can exist (no organisation in a workspace).
+    nesting = frozenset(
+        (f"{c.service}:{t.name}", tuple(t.parents))
+        for c in catalogs
+        for t in c.resource_types
+        if t.container and t.parents
     )
     types: dict[str, list[PublishedType]] = {}
     for catalog in catalogs:
@@ -172,14 +200,23 @@ def by_publisher(
                         catalog,
                         granted,
                         listable,
+                        scope=scope,
+                        containers=containers,
+                        nesting=nesting,
                         module=module,
                         only=exposed,
-                        containers=containers,
                     )
                 )
             continue
         types.setdefault(catalog.publisher, []).extend(
-            _types(catalog, granted, listable)
+            _types(
+                catalog,
+                granted,
+                listable,
+                scope=scope,
+                containers=containers,
+                nesting=nesting,
+            )
         )
     publishers = [
         Publisher(publisher, _kind(publisher), tuple(found))

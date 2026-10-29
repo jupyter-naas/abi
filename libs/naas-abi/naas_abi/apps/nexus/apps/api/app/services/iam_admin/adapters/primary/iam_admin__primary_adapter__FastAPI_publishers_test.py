@@ -262,3 +262,31 @@ def test_within_a_parent_only_what_it_has_is_offered(listed):
     refused = get(listed, f"/publishers?scope={at}&parent={o_access.id}", "wsadmin")
     assert refused.status_code == 403
     assert o_access.id in refused.json()["detail"]
+    # Reading it is enough to edit a sub-policy of it, not to make a new one.
+    _hold(
+        listed,
+        "wsadmin",
+        None,
+        {"effect": "Allow", "actions": ["iam:GetPolicy"], "resources": ["abi:iam:policy/*"]},
+    )
+    read = get(listed, f"/publishers?scope={at}&parent={o_access.id}", "wsadmin")
+    assert read.status_code == 200, read.text
+    new = get(listed, f"/publishers?scope={at}&parent={o_access.id}&derive=true", "wsadmin")
+    assert new.status_code == 403
+    assert o_access.id in new.json()["detail"]
+    assert "attached to you or to one of your groups" in new.json()["detail"]
+    # The O admin derives from it.
+    derived = get(listed, f"/publishers?scope={at}&parent={o_access.id}&derive=true", "admin")
+    assert derived.status_code == 200, derived.text
+
+
+def test_a_type_lists_only_patterns_that_name_its_resources(listed):
+    """At a workspace: no Organizations type (none sits in a workspace), and
+    Workspaces lists none of the organisation's forms."""
+    listed.nexus.grant("wsadmin", "admin", WS1)
+    found = get(listed, f"/publishers?scope={quote(WS1, safe='')}", "wsadmin").json()
+    naas_abi = next(p for p in found["publishers"] if p["id"] == "naas_abi")
+    types = {t["type"]: t for t in naas_abi["types"]}
+    assert "organization" not in types
+    for action in types["workspace"]["actions"]:
+        assert all("nexus:organization" not in r for r in action["resources"]), action["resources"]

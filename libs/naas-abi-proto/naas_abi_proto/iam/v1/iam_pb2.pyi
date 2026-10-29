@@ -443,14 +443,16 @@ class GrantableCatalog(_message.Message):
     def __init__(self, service: _Optional[str] = ..., actions: _Optional[_Iterable[_Union[GrantableAction, _Mapping]]] = ...) -> None: ...
 
 class GrantableRequest(_message.Message):
-    __slots__ = ("context", "scope", "parent")
+    __slots__ = ("context", "scope", "parent", "derive")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     SCOPE_FIELD_NUMBER: _ClassVar[int]
     PARENT_FIELD_NUMBER: _ClassVar[int]
+    DERIVE_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
     scope: str
     parent: str
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., scope: _Optional[str] = ..., parent: _Optional[str] = ...) -> None: ...
+    derive: bool
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., scope: _Optional[str] = ..., parent: _Optional[str] = ..., derive: bool = ...) -> None: ...
 
 class GrantableResponse(_message.Message):
     __slots__ = ("error", "catalogs")

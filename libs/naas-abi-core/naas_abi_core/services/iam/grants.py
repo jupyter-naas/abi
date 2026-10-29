@@ -256,6 +256,9 @@ class Universe:
     # The containers (indexes in ``containers``, -1 for the platform) the final
     # step may follow; None for any.
     after: frozenset[int] | None = None
+    # Per container (as ``containers``), those its own step may follow, as
+    # ``after``; empty: any container in any (what IAM decides within).
+    nested: tuple[frozenset[int] | None, ...] = ()
 
     def start(self) -> frozenset[object]:
         if self.final:
@@ -301,13 +304,33 @@ class Universe:
 
     def _steps(self, previous: int) -> set[object]:
         """The steps that may follow container ``previous`` (-1: the platform)."""
-        first = 0 if self.after is None or previous in self.after else 1
-        return {("l", which, 0) for which in range(first, len(self.containers) + 1)}
+        steps: set[object] = set()
+        if self.after is None or previous in self.after:
+            steps.add(("l", 0, 0))
+        for index in range(len(self.containers)):
+            allowed = self.nested[index] if self.nested else None
+            if allowed is None or previous in allowed:
+                steps.add(("l", index + 1, 0))
+        return steps
 
     def accepts(self, states: frozenset[object]) -> bool:
         if not self.final:
             return _accepts(self.tokens, states)  # type: ignore[arg-type]
         return ("id",) in states
+
+
+def _parent_indexes(
+    parents: tuple[str, ...], ordered: tuple[str, ...]
+) -> frozenset[int] | None:
+    """``parents`` (``<service>:<type>``, ``-`` for the platform) as indexes in
+    ``ordered``; None for none named (any)."""
+    if not parents:
+        return None
+    return frozenset(
+        -1 if parent == "-" else ordered.index(f"{parent}/")
+        for parent in parents
+        if parent == "-" or f"{parent}/" in ordered
+    )
 
 
 @lru_cache(maxsize=1024)
@@ -316,22 +339,26 @@ def universe(
     resource_type: str,
     containers: frozenset[tuple[str, str]] = frozenset(),
     parents: tuple[str, ...] = (),
+    nesting: frozenset[tuple[str, tuple[str, ...]]] = frozenset(),
 ) -> Universe:
     """The canonical names of a resource type: at the platform or in containers
     of ``containers`` (``(service, type)``, the registered container types); for
-    a container type that names ``parents``, only in those."""
+    a container type that names ``parents``, only in those. With ``nesting``
+    (``("<service>:<type>", parents)`` of the containers that name theirs), each
+    container's step only right after one of its parents too: the names that can
+    exist, for showing what a pattern names (``publishers``), never deciding."""
     ordered = tuple(sorted(f"{s}:{t}/" for s, t in containers))
-    after = (
-        frozenset(
-            -1 if parent == "-" else ordered.index(f"{parent}/")
-            for parent in parents
-            if parent == "-" or f"{parent}/" in ordered
-        )
-        if parents
-        else None
+    named = dict(nesting)
+    nested = (
+        tuple(_parent_indexes(named.get(c[:-1], ()), ordered) for c in ordered)
+        if named
+        else ()
     )
     return Universe(
-        final=f"{service}:{resource_type}/", containers=ordered, after=after
+        final=f"{service}:{resource_type}/",
+        containers=ordered,
+        after=_parent_indexes(parents, ordered),
+        nested=nested,
     )
 
 
@@ -967,32 +994,39 @@ class Holdings:
         denies = [
             d for i in range(len(self.sides)) for d, _policy in self._denied(i, action)
         ]
-        kept: list[str] = []
-        excluded: set[str] = set()
         on_containers = self._on_containers(action)
-        for restricted in (
-            r for pattern in self._allowed(0, action) for r in _restrict(pattern, scope)
-        ):
-            if restricted in kept:
-                continue
+
+        def keeps(restricted: str) -> bool:
             if (restricted == scope or on_containers) and not any(
                 overlaps(restricted, ("*",), u) for u in universes
             ):
                 # It names no name of the action's types there: the container
                 # itself for an action on no container type, or a container type
                 # that does not sit in this one (its ``parents``).
-                continue
+                return False
             if not all(
                 covered(restricted, self._allowed(i, action), u)
                 for i in range(1, len(self.sides))
                 for u in universes
             ):
-                continue
-            if denies and all(covered(restricted, denies, u) for u in universes):
-                continue
-            kept.append(restricted)
+                return False
+            return not (
+                denies and all(covered(restricted, denies, u) for u in universes)
+            )
+
+        kept: list[str] = []
+        excluded: set[str] = set()
+        for restricted in (
+            r for pattern in self._allowed(0, action) for r in _restrict(pattern, scope)
+        ):
+            if restricted not in kept and keeps(restricted):
+                kept.append(restricted)
         if parents:
-            kept = _within_parents(kept, parents, action, scope)
+            # What the chain brings back (a narrower pattern of a parent) is
+            # checked as the caller's own are: a Deny that covers it drops it.
+            kept = [
+                r for r in _within_parents(kept, parents, action, scope) if keeps(r)
+            ]
         for restricted in kept:
             excluded.update(
                 d

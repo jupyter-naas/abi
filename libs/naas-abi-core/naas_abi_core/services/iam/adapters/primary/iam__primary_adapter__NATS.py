@@ -186,7 +186,9 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
         return pb.GrantableResponse(
             catalogs=[
                 codec.grantable_to_pb(c)
-                for c in self._iam.grantable(req.scope, parent=req.parent or None)
+                for c in self._iam.grantable(
+                    req.scope, parent=req.parent or None, derive=req.derive
+                )
             ]
         )
 

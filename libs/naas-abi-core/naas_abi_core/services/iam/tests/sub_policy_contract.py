@@ -610,6 +610,65 @@ def run_grantable_within_a_parent(iam: IAMService, as_user: AsUser):
         }
 
 
+def run_grantable_within_a_parent_keeps_the_callers_denies(
+    iam: IAMService, as_user: AsUser
+):
+    """A parent's narrower pattern is checked as the caller's own: one their Deny
+    covers whole is not offered, though the parent allows it."""
+    team(iam)
+    query = "triple_store:Query"
+    graphs = "${scope}/triple_store:graph/"
+    with as_service_account("engine"):
+        parent = iam.create_policy(
+            "secret and open",
+            allow([f"{graphs}secret", f"{graphs}open"], [query]),
+        )
+    editor = custom(
+        iam,
+        "deny-editor",
+        statement("Allow", [query], [f"{graphs}*"]),
+        statement("Deny", [query], [f"{graphs}secret"]),
+    )
+    with as_service_account("engine"):
+        iam.attach_policy(parent.id, editor.id, WS1)
+    with as_user(editor) as session:
+        within = _granted(session.grantable(WS1, parent=parent.id))
+        assert within.get(query) == (f"{graphs}open",)
+
+
+def run_grantable_for_a_new_sub_policy_is_refused_as_create_is(
+    iam: IAMService, as_user: AsUser
+):
+    """Reading a parent is enough to see what an existing sub-policy of it may
+    grant; a new one asks ``create_policy``'s verdict: derive, owner, depth."""
+    t = team(iam)
+    s = tree(iam)
+    reader = custom(
+        iam,
+        "parent-reader",
+        statement("Allow", ["iam:GetPolicy", "iam:ListPolicies"], ["abi:iam:policy/*"]),
+        scope=None,
+    )
+    with as_service_account("engine"):
+        iam.attach_policy(roles.ADMIN, reader.id, WS1)
+        held = iam.create_policy("agents", allow([AGENTS]), scope=WS1)
+        iam.attach_policy(held.id, reader.id, WS1)
+    with as_user(reader) as session:
+        # Editing a sub-policy of P: they read P, so they see within it.
+        assert _granted(session.grantable(WS1, parent=s.parent.id))[USE]
+        # A new one: they do not hold P, as create_policy says.
+        with pytest.raises(PermissionDeniedError, match=s.parent.id) as refused:
+            session.grantable(WS1, parent=s.parent.id, derive=True)
+        assert f"attached to you or to one of your groups at {WS1} " in str(
+            refused.value
+        )
+    # The owner within the parent's: S is ws-1's, so none of ws-2's derives from it.
+    with as_user(t.root) as session:
+        with pytest.raises(ValueError, match="owned by"):
+            session.grantable(WS2, parent=s.child.id, derive=True)
+        assert session.grantable(WS1, parent=s.child.id, derive=True)
+
+
 def _granted(catalogs) -> dict[str, tuple[str, ...]]:
     return {a.action: a.resources for c in catalogs for a in c.actions}
 
@@ -629,4 +688,6 @@ SCENARIOS = (
     run_a_refusal_names_only_what_the_caller_may_see,
     run_lifting_a_parent_s_deny_is_checked_below_it,
     run_grantable_within_a_parent,
+    run_grantable_within_a_parent_keeps_the_callers_denies,
+    run_grantable_for_a_new_sub_policy_is_refused_as_create_is,
 )

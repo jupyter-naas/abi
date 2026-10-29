@@ -35,7 +35,8 @@ Nexus adds no role check of its own.
   the actions, the `resource_types` each acts on and the resource patterns they hold there, `${scope}` or
   `${scope}/…`, minus their Denies), for the policy builder; any caller, about themselves, like `/access`.
   `&parent=<policy>`: what a sub-policy of it may grant there, within its chain (IAM's `grantable(parent=)`: 403
-  for a parent the caller may neither derive from nor read). `/publishers` and `/catalogs` take it too
+  for a parent the caller may neither derive from nor read); `&derive=true` for a new sub-policy, the parent
+  refused as creating it would (403 not derivable, 422 owner or depth). `/publishers` and `/catalogs` take both
 - `GET /publishers?scope=` the same by publisher (core's `publishers.by_publisher`): the engine, then naas_abi,
   then the modules by key (`{id, kind, types: [{service, type, description, id, placement, container, listed,
   module, actions: [{action, name, level, description, resources, excluded}]}]}`); a type appears only with an

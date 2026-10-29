@@ -129,17 +129,20 @@ class IAMService(ServiceProxy):
         )
 
     async def grantable(
-        self, scope: str, *, parent: str | None = None
+        self, scope: str, *, parent: str | None = None, derive: bool = False
     ) -> list[dict[str, Any]]:
         """What the caller may grant at ``scope`` (about the caller: no permission
         needed): ``[{"service", "actions": [{"action", "resources", "excluded"}]}]``,
         resources written ``${scope}/...``. ``scope`` is a container's name or
         ``abi:`` (the platform). With ``parent``, what a sub-policy of that
         policy may grant there: within its chain (only of a parent the caller
-        may derive from or read). A change that gives more than the caller
+        may derive from or read; with ``derive``, for a new one, refused as
+        ``create_policy`` would). A change that gives more than the caller
         holds raises ``GrantNotHeld``."""
         if parent:
-            return await self._request("grantable", scope=scope, parent=parent)
+            return await self._request(
+                "grantable", scope=scope, parent=parent, derive=derive
+            )
         return await self._request("grantable", scope=scope)
 
     async def list_resources(

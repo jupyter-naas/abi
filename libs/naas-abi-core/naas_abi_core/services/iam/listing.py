@@ -150,6 +150,12 @@ def matches_text(item: ListedResource, text: str) -> bool:
     return needle in item.id.casefold() or needle in item.label.casefold()
 
 
+def at_container(name: str, container: str) -> bool:
+    """Whether a listing at ``container`` lists ``name``: what sits in it or
+    below it, and the container itself (what ``${scope}`` names there)."""
+    return name == container or in_container(name, container)
+
+
 def in_container(name: str, container: str) -> bool:
     """Whether the resource ``name`` sits in ``container`` or below it."""
     if container == PLATFORM:
@@ -168,7 +174,7 @@ def page_of(items: Iterable[ListedResource], query: ListingQuery) -> ListedPage:
             item
             for item in items
             if item.name > query.after
-            and in_container(item.name, query.container)
+            and at_container(item.name, query.container)
             and matches_text(item, query.text)
         ),
         key=lambda item: item.name,
@@ -231,7 +237,7 @@ def run_listing(
             item
             for item in ordered
             if _type_of(item.name, query.service, query.type)
-            and in_container(item.name, query.container)
+            and at_container(item.name, query.container)
             and matches_text(item, query.text)
             and keep(item)
         ]

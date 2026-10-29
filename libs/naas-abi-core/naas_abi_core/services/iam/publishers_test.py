@@ -83,6 +83,7 @@ def _view(h, user):
         grantable,
         modules=MODULES,
         listable=h.iam.has_lister,
+        scope=WS1,
     )
 
 
@@ -186,3 +187,36 @@ def test_a_module_s_pattern_names_no_other_module_s_items(world):
         modules={"p": ("agent",), "q": ("agent",)},
     )
     assert [p.id for p in view] == ["p"]
+
+
+def test_a_type_lists_only_patterns_that_can_name_its_resources(world):
+    """Under a type, only the patterns that can name one of its resources at
+    the scope: a graph's pattern names no workspace, a workspace's no graph."""
+    from naas_abi_core.services.iam.IAMPorts import GrantableAction, GrantableCatalog
+
+    h = world
+    held = (
+        "${scope}",
+        "${scope}/nexus:workspace/*",
+        "${scope}/triple_store:graph/*",
+    )
+    grantable = [
+        GrantableCatalog(
+            "nexus", (GrantableAction("nexus:CreateWorkspace", held, ()),)
+        ),
+        GrantableCatalog(
+            "triple_store", (GrantableAction("triple_store:Query", held, ()),)
+        ),
+    ]
+    view = {p.id: p for p in by_publisher(h.iam.catalogs.all(), grantable, scope=WS1)}
+    workspace = next(t for t in view["naas_abi"].types if t.type.name == "workspace")
+    assert workspace.actions[0].grantable.resources == (
+        "${scope}",
+        "${scope}/nexus:workspace/*",
+    )
+    graph = next(t for t in view["engine"].types if t.type.name == "graph")
+    # ``${scope}/nexus:workspace/*`` may hold graphs; ``${scope}`` is no graph.
+    assert graph.actions[0].grantable.resources == (
+        "${scope}/nexus:workspace/*",
+        "${scope}/triple_store:graph/*",
+    )

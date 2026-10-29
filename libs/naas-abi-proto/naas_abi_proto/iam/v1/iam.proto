@@ -350,6 +350,8 @@ message GrantableRequest {
   string scope = 2;
   // What a sub-policy of this policy may grant: within its chain. Empty: none.
   string parent = 3;
+  // For a new sub-policy: refused as create_policy would refuse the parent.
+  bool derive = 4;
 }
 message GrantableResponse {
   abi.common.v1.CallError error = 1;

@@ -935,3 +935,28 @@ def test_grantable_below_an_org_lists_at_each_workspace():
         "${scope}/triple_store:graph/*",
         "${scope}/*/triple_store:graph/*",
     }
+
+
+def test_a_universe_with_nesting_has_only_names_that_can_exist():
+    """With each container's parents (``nesting``), no organisation sits in a
+    workspace: what a pattern can name, for the builder; without, any container
+    in any, as IAM decides."""
+    parents = (
+        ("nexus", "organization", ("-",)),
+        ("nexus", "workspace", ("nexus:organization", "-")),
+    )
+    nesting = frozenset((f"{s}:{t}", p) for s, t, p in parents)
+    workspaces = universe("nexus", "workspace", CONTAINERS, ("nexus:organization", "-"))
+    nested = universe(
+        "nexus", "workspace", CONTAINERS, ("nexus:organization", "-"), nesting
+    )
+    through_an_org = f"{W}/nexus:organization/*"
+    assert overlaps(through_an_org, ("*",), workspaces)
+    assert not overlaps(through_an_org, ("*",), nested)
+    # What can exist is still named: a workspace of an organisation.
+    assert overlaps(f"{O}/nexus:workspace/*", ("*",), nested)
+    graphs = universe("triple_store", "graph", CONTAINERS, (), nesting)
+    assert overlaps(f"{W}/triple_store:graph/*", ("*",), graphs)
+    assert not overlaps(
+        f"{W}/nexus:organization/*/triple_store:graph/*", ("*",), graphs
+    )

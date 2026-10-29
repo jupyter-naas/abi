@@ -2415,39 +2415,52 @@ class IAMService(IIAMService, PolicySource):
     # =========================================================================
 
     def grantable(
-        self, scope: str, *, parent: str | None = None
+        self, scope: str, *, parent: str | None = None, derive: bool = False
     ) -> list[GrantableCatalog]:
         """What the caller may grant at ``scope``: per catalog, the actions they
         hold there and the resource patterns they hold them on, minus their
         Denies. About the caller only, like ``explain`` of oneself, it needs no
         ``iam:*`` action. With ``parent``, what a sub-policy of it owned at
-        ``scope`` may grant: within the parent's chain (``_grantable_chain``)."""
+        ``scope`` may grant: within the parent's chain (``_grantable_chain``);
+        with ``derive``, for a new one, refused as ``create_policy`` would."""
         validate_scope(scope)
+        # The parent first: a refused one costs no holdings.
+        chain = self._grantable_chain(parent, scope, derive=derive) if parent else None
         holdings = self._holdings(current_call_context(), scope)
-        if not parent:
+        if chain is None:
             return holdings.grantable(scope)
-        return holdings.grantable(scope, parents=self._grantable_chain(parent, scope))
+        return holdings.grantable(scope, parents=chain)
 
     def _grantable_chain(
-        self, parent_id: str, scope: str
+        self, parent_id: str, scope: str, *, derive: bool
     ) -> list[tuple[Statement, ...]]:
         """The statements of the chain a sub-policy of ``parent_id`` owned at
-        ``scope`` would have, nearest first. Only of a parent the caller may
-        derive from there (``_require_derivable``, whose refusal is kept) or may
-        read (``iam:GetPolicy``): what it allows is not said to anyone else. One
-        that does not exist is not found, as one the caller may not read."""
+        ``scope`` would have, nearest first.
+
+        With ``derive`` (a new sub-policy), ``_new_chain``'s verdict: a parent
+        the caller may derive from there, the owner within the parent's, the
+        chain not too deep; its refusal is kept. Without (an existing one being
+        edited), a parent the caller may derive from or read (``iam:GetPolicy``):
+        what it allows is said to no one else. One that does not exist is not
+        found, as one the caller may not read."""
         owner = as_container(container_of_scope(scope))
+        if derive:
+            # No policy is being made yet: its id is none of the chain's.
+            return [
+                p.document.statements
+                for p in self._new_chain("", owner, parent_id, height=1)
+            ]
         parent = self._load_policy(parent_id)
         if parent is None:
-            self._require_policy("iam:GetPolicy", parent_id)
+            self._require_policy("iam:GetPolicy", parent_id)  # refused, or not found
             raise IAMNotFoundError(f"Policy {parent_id} not found")
         try:
             self._require_derivable(parent, owner)
-        except PermissionDeniedError as refused:
-            try:
-                self._require_policy("iam:GetPolicy", parent.id)
-            except (PermissionDeniedError, IAMNotFoundError):
-                raise refused from None
+        except PermissionDeniedError:
+            if not self.authorize(
+                "iam:GetPolicy", policy_resource(parent.id, parent.owner_scope)
+            ).allowed:
+                raise
         above, whole = self._chain(parent, fresh=True)
         if not whole:
             raise IAMConflictError(

@@ -166,30 +166,35 @@ async def access(
 
 # A sub-policy's parent: what is offered is within it.
 Parent = Query(None, min_length=1, max_length=255)
+# For a new sub-policy: the parent refused as creating it would refuse it.
+Derive = Query(False)
 
 
 @router.get("/grantable")
 async def grantable(
     scope: str = Query(..., min_length=1),
     parent: str | None = Parent,
+    derive: bool = Derive,
     user: User = Signed,
     service: IamAdminService = Service,
 ) -> dict[str, Any]:
     """What the caller may grant at ``scope``, within ``parent`` for a sub-policy
-    of it: the policy builder offers only this."""
-    return await _call(service.grantable(user, scope, parent))
+    of it (``derive``: a new one): the policy builder offers only this."""
+    return await _call(service.grantable(user, scope, parent, derive=derive))
 
 
 @router.get("/publishers")
 async def publishers(
     scope: str = Query(..., min_length=1),
     parent: str | None = Parent,
+    derive: bool = Derive,
     user: User = Signed,
     service: IamAdminService = Service,
 ) -> dict[str, Any]:
     """Each publisher, its resource types, their actions and what the caller may
-    grant of each at ``scope`` (within ``parent``): only what they may grant."""
-    return await _call(service.publishers(user, scope, parent))
+    grant of each at ``scope`` (within ``parent``; ``derive``: for a new
+    sub-policy, refused as creating it would be): only what they may grant."""
+    return await _call(service.publishers(user, scope, parent, derive=derive))
 
 
 @router.get("/resources")
@@ -224,10 +229,11 @@ async def resources(
 async def catalogs(
     scope: str | None = None,
     parent: str | None = Parent,
+    derive: bool = Derive,
     user: User = Signed,
     service: IamAdminService = Service,
 ) -> dict[str, Any]:
-    return await _call(service.catalogs(user, scope, parent))
+    return await _call(service.catalogs(user, scope, parent, derive=derive))
 
 
 # -- policies -----------------------------------------------------------------------------
