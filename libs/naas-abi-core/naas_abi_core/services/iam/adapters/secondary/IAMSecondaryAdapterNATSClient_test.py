@@ -179,6 +179,52 @@ def test_containers_round_trip(iam_host):
 
 
 @BROKER
+def test_a_listing_over_nats_is_the_callers(iam_host):
+    from naas_abi_core.services.iam.listing import FunctionLister, ListedResource
+    from naas_abi_core.services.iam.names import resource_name
+
+    engine = iam_host.client("engine")
+    ws1, ws2 = _register(iam_host, "ws-1"), _register(iam_host, "ws-2")
+    bob = engine.ensure_user("https://idp.example", "bob")
+    engine.attach_policy(roles.ADMIN, bob.id, ws1)
+
+    def graphs(query):
+        return [
+            ListedResource(
+                resource_name("triple_store", "graph", iri, container=where),
+                iri,
+                label=iri.upper(),
+            )
+            for where, iri in ((ws1, "a"), (ws1, "b"), (ws2, "c"))
+        ]
+
+    iam_host.service.register_lister("triple_store", "graph", FunctionLister(graphs))
+    user = iam_host.client("api")
+    with use_call_context(
+        CallContext(
+            principal=Principal(id="api", kind="service_account", name="api"),
+            on_behalf_of=Principal(id=bob.id, kind="user"),
+        )
+    ):
+        page = user.list_resources("triple_store", "graph", scope=ws1, limit=1)
+        assert [(i.name, i.id, i.label) for i in page.items] == [
+            (graph("a"), "a", "A")
+        ]
+        assert page.listed and page.next_cursor == graph("a")
+        rest = user.list_resources(
+            "triple_store", "graph", scope=ws1, cursor=page.next_cursor
+        )
+        assert [i.name for i in rest.items] == [graph("b")] and rest.next_cursor is None
+        assert user.list_resources("triple_store", "graph", scope=ws2).items == ()
+    stranger = iam_host.client("module")
+    assert stranger.list_resources("triple_store", "graph", scope=ws1).items == ()
+    # A type with no lister: offered as wildcards.
+    assert engine.list_resources("triple_store", "view").listed is False
+    with pytest.raises(IAMNotFoundError):
+        engine.list_resources("nope", "graph")
+
+
+@BROKER
 def test_administration_round_trip(iam_host):
     engine = iam_host.client("engine")
     bob = engine.ensure_user("https://idp.example", "bob", email="bob@example.com")

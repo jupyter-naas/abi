@@ -70,6 +70,10 @@ message ModuleDescriptor {
   repeated JobDescriptor jobs = 6;
   repeated ModelDescriptor models = 7;
   repeated AppDescriptor apps = 8;
+  // The resource types of its declared catalog it lists, served on
+  // abi.mod.<project>.<sa>.<instance>.iam.list (core services/iam/AGENTS.md,
+  // "Publishers and listing").
+  repeated string listers = 9;
 }
 message Instance {
   ModuleDescriptor descriptor = 1;
@@ -224,4 +228,29 @@ message AuthorizeJobRequest {
 message AuthorizeJobResponse {
   abi.common.v1.CallError error = 1;
   string caller_identity = 2;
+}
+
+// What IAM asks a module's lister, on abi.mod.<project>.<sa>.<instance>.iam.list:
+// the resources of one type of the module's catalog in a container (in it or
+// below it), sorted by name, after `after`, at most `limit`. Candidates only:
+// IAM keeps what the caller may list.
+message ListedResource {
+  string name = 1;
+  string id = 2;
+  string label = 3;
+  string description = 4;
+}
+message ListerQuery {
+  abi.common.v1.CallContext context = 1;
+  string service = 2;
+  string type = 3;
+  string container = 4;
+  string text = 5;
+  string after = 6;
+  uint32 limit = 7;
+}
+message ListerPage {
+  abi.common.v1.CallError error = 1;
+  repeated ListedResource items = 2;
+  bool more = 3;
 }

@@ -32,6 +32,11 @@ LEVELS: tuple[Level, ...] = ("list", "read", "write", "admin")
 CATALOG_FORMAT = 3
 FLAGS_FORMAT = 2
 _ID_KINDS = ("opaque", "path", "singleton")
+# Who publishes a catalog (``AGENTS.md``, "Publishers and listing"): the engine
+# (kernel services, ``iam``, ``module``), naas_abi (``nexus``) or a module, by
+# its key.
+ENGINE = "engine"
+NAAS_ABI = "naas_abi"
 _PLACEMENTS = ("placed", "platform")
 
 
@@ -112,6 +117,9 @@ class ActionCatalog:
     # (stored before the flags existed) holds nothing for the built-in roles
     # until it is registered again (``roles.py``): its flags are unknown.
     format: int = CATALOG_FORMAT
+    # Who publishes it: ``ENGINE`` by default, ``NAAS_ABI`` for Nexus's; a
+    # module's catalog is its module's, whatever it says.
+    publisher: str = ENGINE
 
     @property
     def flags_known(self) -> bool:
@@ -120,6 +128,10 @@ class ActionCatalog:
         return bool(self.module) or self.format >= FLAGS_FORMAT
 
     def __post_init__(self) -> None:
+        if self.module and self.publisher != self.module:
+            object.__setattr__(self, "publisher", self.module)
+        if not self.publisher:
+            object.__setattr__(self, "publisher", ENGINE)
         errors = _catalog_errors(self)
         if errors:
             raise CatalogError("; ".join(errors))
@@ -183,6 +195,10 @@ class ActionCatalog:
         }
         if self.module:
             found["module"] = self.module
+        elif self.publisher != ENGINE:
+            # Written only when it says something: a module's is its module, and
+            # what a module manifest hashes never changes.
+            found["publisher"] = self.publisher
         if stored:
             found["format"] = self.format
         if self.platform_access:
@@ -255,6 +271,7 @@ class ActionCatalog:
                 ),
                 # Stored before the flags: no "format" key.
                 format=format_,
+                publisher=str(data.get("publisher", "") or ENGINE),
             )
         except (KeyError, TypeError) as exc:
             raise CatalogError(f"Malformed catalog: {exc!r}") from exc
@@ -404,6 +421,16 @@ class CatalogRegistry:
             for t in c.resource_types
             if t.container
         )
+
+    def listing_actions(self, service: str, resource_type: str) -> list[str]:
+        """What lets a caller list a resource of the type (``AGENTS.md``,
+        "Publishers and listing"): its ``list`` actions, else any of its actions."""
+        catalog = self.get(service)
+        if catalog is None:
+            return []
+        on = [a for a in catalog.actions if resource_type in a.resource_types]
+        listed = [a for a in on if a.level == "list"]
+        return [catalog.qualified(a.name) for a in (listed or on)]
 
     def actions_on(self, service: str, resource_type: str) -> list[str]:
         """The actions of ``service`` whose catalog lists ``resource_type``.

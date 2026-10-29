@@ -65,6 +65,7 @@ OPERATIONS = {
         "filter",
         "explain",
         "grantable",
+        "list_resources",
         "ensure_user",
         "create_service_account",
         "get_principal",

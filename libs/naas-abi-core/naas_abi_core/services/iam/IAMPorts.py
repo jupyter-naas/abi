@@ -26,6 +26,7 @@ from typing import Any, Literal
 from naas_abi_core.engine.call_context import CallContext
 from naas_abi_core.engine.nats_auth import IssuedToken
 from naas_abi_core.services.iam.catalog import ActionCatalog, CatalogRegistry
+from naas_abi_core.services.iam.listing import ResourcePage
 from naas_abi_core.services.iam.names import PLATFORM_SCOPE, container_name
 from naas_abi_core.services.iam.policy import PolicyDocument, Statement
 
@@ -1115,6 +1116,25 @@ class IIAMService(ABC):
         """What the caller may grant at ``scope``: per catalog, the actions they
         hold there and the resource patterns (``${scope}:…``) they hold them on,
         minus their Denies. About the caller only, so it needs no permission."""
+
+    @abstractmethod
+    def list_resources(
+        self,
+        service: str,
+        type: str,
+        *,
+        scope: str = "abi:",
+        text: str = "",
+        cursor: str | None = None,
+        limit: int | None = None,
+        module: str = "",
+    ) -> ResourcePage:
+        """The existing resources of ``service:type`` in ``scope`` (a container,
+        below one, or the platform) that the caller may list, matching ``text``,
+        a page after ``cursor`` (``AGENTS.md``, "Publishers and listing"). A type
+        with no lister, or whose lister failed, comes back ``listed`` False: it
+        is offered as wildcards. About the caller only, so it needs no permission.
+        ``IAMNotFoundError`` for an unknown service or type."""
 
     # -- principals -------------------------------------------------------------
 

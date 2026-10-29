@@ -191,6 +191,9 @@ message ActionCatalog {
   // The catalog format (services/iam/catalog.py CATALOG_FORMAT); 0 or 1: written
   // before the flags existed, so a first-party catalog holds nothing for roles.
   int32 format = 7;
+  // Who publishes it (services/iam/AGENTS.md, "Publishers and listing"):
+  // empty is the engine, "naas_abi" Nexus's; a module's catalog is its module's.
+  string publisher = 8;
 }
 
 // reason: allow | explicit_deny | implicit_deny | suspended | sealed.
@@ -349,6 +352,41 @@ message GrantableRequest {
 message GrantableResponse {
   abi.common.v1.CallError error = 1;
   repeated GrantableCatalog catalogs = 2;
+}
+
+// The existing resources of a type that the caller may list, in a container
+// (services/iam/AGENTS.md, "Publishers and listing"). About the caller, so it
+// needs no iam: action.
+message ListedResource {
+  // The canonical name.
+  string name = 1;
+  // The decoded id within its type.
+  string id = 2;
+  string label = 3;
+  string description = 4;
+}
+message ListResourcesRequest {
+  abi.common.v1.CallContext context = 1;
+  string service = 2;
+  string type = 3;
+  // A container, below one (<container>/*) or abi: (the platform, the default).
+  string scope = 4;
+  // Kept: the resources whose id or label contains it, case folded.
+  string text = 5;
+  // The last name of the previous page; empty: the first page.
+  string cursor = 6;
+  // At most this many; 0: the default (50); at most 200.
+  uint32 limit = 7;
+  // The module catalog's: that module's items only.
+  string module = 8;
+}
+message ListResourcesResponse {
+  abi.common.v1.CallError error = 1;
+  repeated ListedResource items = 2;
+  // Empty at the end.
+  string next_cursor = 3;
+  // False: the type has no lister, or its lister failed: offered as wildcards.
+  bool listed = 4;
 }
 
 // -- principals ------------------------------------------------------------------

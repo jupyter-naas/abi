@@ -36,6 +36,7 @@ from naas_abi_sdk.discovery import (
 )
 from naas_abi_sdk.health import HealthServer
 from naas_abi_sdk.jobs import JobsMixin
+from naas_abi_sdk.listers import ListerHost, check_listers, declared_listers
 from naas_abi_sdk.ontologies import (
     OntologyFile,
     OntologyLoader,
@@ -279,6 +280,16 @@ class BaseModule(JobsMixin, Generic[Config]):
         if not inspect.iscoroutinefunction(handler.invoke):
             raise TypeError("Model handler.invoke must be async")
         self._model_handlers[name] = handler
+
+    def expose_lister(self, type_name: str, handler) -> None:
+        """List ``type_name``, a type of this module's catalog, with ``handler``
+        (``(query: ListerQuery) -> Iterable[Listed]``, sync or async), before
+        ``on_load`` returns; ``@lister`` does the same on a method
+        (``naas_abi_sdk.listers``)."""
+        handlers = self.__dict__.setdefault("_lister_handlers", {})
+        if type_name in handlers:
+            raise ValueError(f"Lister already registered: {type_name}")
+        handlers[type_name] = handler
 
     async def require_action(
         self,
@@ -793,6 +804,7 @@ async def run_module(
         agent_host = None
         model_host = None
         app_host = None
+        lister_host = None
         job_host = None
         jobs_after_cutover: asyncio.Task | None = None
         ontologies_task: asyncio.Task | None = None
@@ -845,6 +857,18 @@ async def run_module(
 
                 model_host = ModelHost(registration, module._model_handlers)
                 await model_host.start()
+            listers = declared_listers(module)
+            if listers:
+                if registration is None:
+                    raise ValueError("Listers require discovery")
+                from naas_abi_sdk.permissions import module_catalog
+
+                catalog = module_catalog(module_type)
+                check_listers(listers, catalog)
+                lister_host = ListerHost(
+                    registration, str((catalog or {}).get("service", "")), listers
+                )
+                await lister_host.start()
             apps = module_type.get_apps()
             if apps:
                 if registration is None:
@@ -1026,6 +1050,8 @@ async def run_module(
                     await model_host.close()
                 if app_host:
                     await app_host.close()
+                if lister_host:
+                    await lister_host.close()
                 if agent_host:
                     await agent_host.close()
                 await _invoke(module.on_unloaded)

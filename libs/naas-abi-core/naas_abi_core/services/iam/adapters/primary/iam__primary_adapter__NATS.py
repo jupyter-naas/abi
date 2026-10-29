@@ -187,6 +187,20 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
             catalogs=[codec.grantable_to_pb(c) for c in self._iam.grantable(req.scope)]
         )
 
+    def _call_list_resources(
+        self, req: pb.ListResourcesRequest
+    ) -> pb.ListResourcesResponse:
+        page = self._iam.list_resources(
+            req.service,
+            req.type,
+            scope=req.scope or PLATFORM_SCOPE,
+            text=req.text,
+            cursor=req.cursor or None,
+            limit=req.limit or None,
+            module=req.module,
+        )
+        return codec.resource_page_to_pb(page)
+
     # -- principals ---------------------------------------------------------------
 
     def _call_ensure_user(self, req: pb.EnsureUserRequest) -> pb.EnsureUserResponse:

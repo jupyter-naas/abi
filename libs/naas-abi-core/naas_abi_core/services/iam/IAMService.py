@@ -49,6 +49,7 @@ from naas_abi_core.services.iam import (
     broker,
     grants,
     keys,
+    listing,
     module_scopes,
     modules,
     roles,
@@ -59,6 +60,7 @@ from naas_abi_core.services.iam.adapters.secondary.authorizer__policy import (
 from naas_abi_core.services.iam.catalog import (
     ActionCatalog,
     CatalogRegistry,
+    ResourceType,
     removed_actions,
 )
 from naas_abi_core.services.iam.evaluator import token_statements
@@ -117,6 +119,7 @@ from naas_abi_core.services.iam.names import (
     is_old_scope,
     owner_ancestors,
     parse_container,
+    parse_resource_name,
     resource_name,
     top_container,
     validate_owner_scope,
@@ -341,6 +344,10 @@ class IAMService(IIAMService, PolicySource):
         # What reads an identity provider's token, for the exchange to a session
         # (set by the engine once the identity service is loaded).
         self.identity_authenticator: IdentityAuthenticator | None = None
+        # The listers registered in process, by (service, type), and those remote
+        # modules serve (set by a serving engine on NATS): "Publishers and listing".
+        self._listers: dict[tuple[str, str], listing.ResourceLister] = {}
+        self.remote_listers: listing.ListerDirectory | None = None
         self._exchanger = TokenExchanger(self)
         # Whatever a token exchange accepts as its subject: a session or any
         # delegated token, and tokens a revocation cut off are refused.
@@ -870,9 +877,173 @@ class IAMService(IIAMService, PolicySource):
         )
 
     def list_containers(self) -> list[ContainerRecord]:
-        """Every registered container (in process: what the module listing
-        builds on, ``AGENTS.md``)."""
+        """Every registered container, unchecked (in process: what the services
+        that own a resource read). A caller's listing is ``list_resources``."""
         return self.store.list_containers()
+
+    # =========================================================================
+    # Listing (AGENTS.md, "Publishers and listing")
+    # =========================================================================
+
+    def register_lister(
+        self, service: str, type: str, lister: listing.ResourceLister
+    ) -> None:
+        """List ``service:type`` with ``lister`` (in process only). The catalog
+        must be registered and declare the type; a later one replaces it."""
+        if not isinstance(lister, listing.ResourceLister):
+            raise TypeError("A lister is a ResourceLister")
+        if self._registry.resource_type(service, type) is None:
+            raise IAMNotFoundError(f"No registered catalog declares {service}:{type}")
+        self._listers[(service, type)] = lister
+
+    def has_lister(self, service: str, type: str) -> bool:
+        """Whether ``service:type`` is listed, not offered as wildcards only: a
+        lister in process, a container or singleton type IAM lists itself, or a
+        module's catalog with a remote directory to ask."""
+        declared = self._registry.resource_type(service, type)
+        if declared is None:
+            return False
+        catalog = self._registry.get(service)
+        return (
+            (service, type) in self._listers
+            or declared.container
+            or declared.id == "singleton"
+            or (
+                catalog is not None
+                and bool(catalog.module)
+                and self.remote_listers is not None
+            )
+        )
+
+    def list_resources(
+        self,
+        service: str,
+        type: str,
+        *,
+        scope: str = PLATFORM_SCOPE,
+        text: str = "",
+        cursor: str | None = None,
+        limit: int | None = None,
+        module: str = "",
+    ) -> listing.ResourcePage:
+        catalog = self._registry.get(service)
+        declared = catalog.resource_type(type) if catalog is not None else None
+        if catalog is None or declared is None:
+            raise IAMNotFoundError(f"No registered catalog declares {service}:{type}")
+        container = listing.listing_scope(scope)
+        if len(text) > listing.MAX_TEXT:
+            raise ValueError(f"A search text is at most {listing.MAX_TEXT} characters")
+        query = listing.ListingQuery(
+            service=service,
+            type=type,
+            container=container,
+            text=text,
+            after=cursor or "",
+            module=module,
+        )
+        actions = self._registry.listing_actions(service, type)
+
+        def allowed(names: Sequence[str]) -> set[str]:
+            found: set[str] = set()
+            left = list(names)
+            for action in actions:
+                if not left:
+                    break
+                found.update(self.filter(action, left).allowed)
+                left = [name for name in left if name not in found]
+            return found
+
+        def keep(item: listing.ListedResource) -> bool:
+            """The ``module`` catalog asked for one module: its items only."""
+            if not module or service != module_scopes.SERVICE:
+                return True
+            segments = parse_resource_name(item.name).segments
+            return bool(segments) and segments[0] == module
+
+        lister = self._lister_of(catalog, declared)
+        if declared.container:
+            lister, keep = self._container_listing(service, type, lister, keep)
+        if lister is None:
+            return listing.ResourcePage(listed=False)
+        return listing.run_listing(
+            lister,
+            query,
+            limit=listing.clamp_limit(limit),
+            allowed=allowed,
+            keep=keep,
+        )
+
+    def _lister_of(
+        self, catalog: ActionCatalog, declared: ResourceType
+    ) -> listing.ResourceLister | None:
+        found = self._listers.get((catalog.service, declared.name))
+        if found is not None:
+            return found
+        if declared.id == "singleton":
+            return listing.FunctionLister(
+                lambda query: self._singleton(catalog.service, declared, query)
+            )
+        if catalog.module and self.remote_listers is not None and not declared.container:
+            try:
+                return self.remote_listers.lister(
+                    catalog.module, catalog.service, declared.name
+                )
+            except Exception as exc:  # noqa: BLE001 - offered as wildcards instead
+                logger.warning(
+                    f"Listing {catalog.service}:{declared.name}: "
+                    f"module {catalog.module} cannot be asked: {exc}"
+                )
+        return None
+
+    @staticmethod
+    def _singleton(
+        service: str, declared: ResourceType, query: listing.ListingQuery
+    ) -> list[listing.ListedResource]:
+        """The one resource of a singleton type at the container asked: a placed
+        one there (none at the platform), a platform one at the platform."""
+        platform = declared.placement == "platform"
+        if platform != (query.container == PLATFORM_SCOPE):
+            return []
+        name = resource_name(
+            service, declared.name, (), kind="singleton", container=query.container
+        )
+        return [listing.ListedResource(name=name, id="-", label=declared.name)]
+
+    def _container_listing(
+        self,
+        service: str,
+        type: str,
+        lister: listing.ResourceLister | None,
+        keep: Callable[[listing.ListedResource], bool],
+    ) -> tuple[listing.ResourceLister, Callable[[listing.ListedResource], bool]]:
+        """A container type: the registry's, labelled by ``lister`` when it has
+        one (an item the registry does not hold under that name is dropped);
+        the registry alone when it fails."""
+
+        def registry(query: listing.ListingQuery) -> list[listing.ListedResource]:
+            return [
+                listing.ListedResource(name=c.name, id=c.id)
+                for c in self.store.list_containers()
+                if c.service == service and c.type == type
+            ]
+
+        from_registry = listing.FunctionLister(registry)
+        if lister is None:
+            return from_registry, keep
+
+        def registered(item: listing.ListedResource) -> bool:
+            try:
+                parsed = parse_container(item.name)
+            except ValueError:
+                return False
+            last = parsed[-1]
+            return (
+                (last.service, last.type) == (service, type)
+                and self.container(service, type, last.value) == item.name
+                and keep(item)
+            )
+
+        return _Fallback(lister, from_registry), registered
 
     # =========================================================================
     # The names before container paths: rewritten once by the module that
@@ -3999,3 +4170,22 @@ def _refuse_reserved_topics(document: PolicyDocument) -> None:
     ]
     if errors:
         raise PolicyValidationError(errors)
+
+
+class _Fallback(listing.ResourceLister):
+    """``primary``, else ``fallback`` when it fails (logged)."""
+
+    def __init__(
+        self, primary: listing.ResourceLister, fallback: listing.ResourceLister
+    ) -> None:
+        self._primary, self._fallback = primary, fallback
+
+    def list_resources(self, query: listing.ListingQuery) -> listing.ListedPage:
+        try:
+            return self._primary.list_resources(query)
+        except Exception as exc:  # noqa: BLE001 - the registry answers instead
+            logger.warning(
+                f"Listing {query.service}:{query.type}: its lister failed, "
+                f"the registry answers: {exc}"
+            )
+            return self._fallback.list_resources(query)

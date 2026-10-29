@@ -19,7 +19,7 @@ answers there only, ``naas_abi_sdk.messages.reply_allowed``).
 * **Always**: IAM's read-only and self-service request subjects
   (``IAM_ALWAYS``: ``token``, ``exchange_token``, ``jwks``, ``submit_manifest``, ``get_manifest``,
   ``find_service_account``, ``authorize``, ``authorize_declared``, ``filter``, ``grantable``,
-  and the containers' ``register_container``, ``delete_container``, ``get_container``,
+  ``list_resources`` (about the caller, filtered to what it may list), and the containers' ``register_container``, ``delete_container``, ``get_container``,
   which IAM decides with the container type's own actions (any of them for a read);
   never another mutation, never
   ``abi.iam.v1.changed``); the others only for an ``iam:`` action the policy
@@ -125,6 +125,7 @@ IAM_OPERATIONS = (
     "list_placements",
     "list_policies",
     "list_principals",
+    "list_resources",
     "list_sub_policies",
     "map_idp_group",
     "put_placement",
@@ -173,6 +174,8 @@ IAM_ALWAYS = (
     "authorize_declared",
     "filter",
     "grantable",
+    # What the caller may list of a type: filtered as the caller, like grantable.
+    "list_resources",
     # Containers: IAM decides each with the type's own actions (a module's own
     # catalog): create, delete, and any action of the type for a read.
     "register_container",

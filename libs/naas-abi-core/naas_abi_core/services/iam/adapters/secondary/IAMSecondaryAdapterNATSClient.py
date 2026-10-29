@@ -43,6 +43,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalRecord,
     TokenExchange,
 )
+from naas_abi_core.services.iam.listing import ResourcePage
 from naas_abi_core.services.iam.names import PLATFORM_SCOPE
 from naas_abi_core.services.iam.policy import PolicyDocument
 from naas_abi_proto.iam.v1 import iam_pb2 as pb
@@ -109,6 +110,29 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
     def grantable(self, scope: str) -> list[GrantableCatalog]:
         response = self._request("grantable", scope=scope)
         return [codec.grantable_from_pb(c) for c in response.catalogs]
+
+    def list_resources(
+        self,
+        service: str,
+        type: str,
+        *,
+        scope: str = PLATFORM_SCOPE,
+        text: str = "",
+        cursor: str | None = None,
+        limit: int | None = None,
+        module: str = "",
+    ) -> ResourcePage:
+        response = self._request(
+            "list_resources",
+            service=service,
+            type=type,
+            scope=scope,
+            text=text,
+            cursor=cursor or "",
+            limit=limit or 0,
+            module=module,
+        )
+        return codec.resource_page_from_pb(response)
 
     # -- principals ---------------------------------------------------------------------
 

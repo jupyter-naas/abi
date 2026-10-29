@@ -207,7 +207,7 @@ class PlatformAccess(_message.Message):
     def __init__(self_, resources: _Optional[_Iterable[str]] = ..., viewer: _Optional[_Iterable[str]] = ..., member: _Optional[_Iterable[str]] = ..., self: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class ActionCatalog(_message.Message):
-    __slots__ = ("service", "version", "resource_types", "actions", "module", "platform_access", "format")
+    __slots__ = ("service", "version", "resource_types", "actions", "module", "platform_access", "format", "publisher")
     SERVICE_FIELD_NUMBER: _ClassVar[int]
     VERSION_FIELD_NUMBER: _ClassVar[int]
     RESOURCE_TYPES_FIELD_NUMBER: _ClassVar[int]
@@ -215,6 +215,7 @@ class ActionCatalog(_message.Message):
     MODULE_FIELD_NUMBER: _ClassVar[int]
     PLATFORM_ACCESS_FIELD_NUMBER: _ClassVar[int]
     FORMAT_FIELD_NUMBER: _ClassVar[int]
+    PUBLISHER_FIELD_NUMBER: _ClassVar[int]
     service: str
     version: int
     resource_types: _containers.RepeatedCompositeFieldContainer[ResourceType]
@@ -222,7 +223,8 @@ class ActionCatalog(_message.Message):
     module: str
     platform_access: _containers.RepeatedCompositeFieldContainer[PlatformAccess]
     format: int
-    def __init__(self, service: _Optional[str] = ..., version: _Optional[int] = ..., resource_types: _Optional[_Iterable[_Union[ResourceType, _Mapping]]] = ..., actions: _Optional[_Iterable[_Union[ActionSpec, _Mapping]]] = ..., module: _Optional[str] = ..., platform_access: _Optional[_Iterable[_Union[PlatformAccess, _Mapping]]] = ..., format: _Optional[int] = ...) -> None: ...
+    publisher: str
+    def __init__(self, service: _Optional[str] = ..., version: _Optional[int] = ..., resource_types: _Optional[_Iterable[_Union[ResourceType, _Mapping]]] = ..., actions: _Optional[_Iterable[_Union[ActionSpec, _Mapping]]] = ..., module: _Optional[str] = ..., platform_access: _Optional[_Iterable[_Union[PlatformAccess, _Mapping]]] = ..., format: _Optional[int] = ..., publisher: _Optional[str] = ...) -> None: ...
 
 class Decision(_message.Message):
     __slots__ = ("allowed", "visible", "reason")
@@ -455,6 +457,50 @@ class GrantableResponse(_message.Message):
     error: _common_pb2.CallError
     catalogs: _containers.RepeatedCompositeFieldContainer[GrantableCatalog]
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., catalogs: _Optional[_Iterable[_Union[GrantableCatalog, _Mapping]]] = ...) -> None: ...
+
+class ListedResource(_message.Message):
+    __slots__ = ("name", "id", "label", "description")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    ID_FIELD_NUMBER: _ClassVar[int]
+    LABEL_FIELD_NUMBER: _ClassVar[int]
+    DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    id: str
+    label: str
+    description: str
+    def __init__(self, name: _Optional[str] = ..., id: _Optional[str] = ..., label: _Optional[str] = ..., description: _Optional[str] = ...) -> None: ...
+
+class ListResourcesRequest(_message.Message):
+    __slots__ = ("context", "service", "type", "scope", "text", "cursor", "limit", "module")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    SERVICE_FIELD_NUMBER: _ClassVar[int]
+    TYPE_FIELD_NUMBER: _ClassVar[int]
+    SCOPE_FIELD_NUMBER: _ClassVar[int]
+    TEXT_FIELD_NUMBER: _ClassVar[int]
+    CURSOR_FIELD_NUMBER: _ClassVar[int]
+    LIMIT_FIELD_NUMBER: _ClassVar[int]
+    MODULE_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    service: str
+    type: str
+    scope: str
+    text: str
+    cursor: str
+    limit: int
+    module: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., service: _Optional[str] = ..., type: _Optional[str] = ..., scope: _Optional[str] = ..., text: _Optional[str] = ..., cursor: _Optional[str] = ..., limit: _Optional[int] = ..., module: _Optional[str] = ...) -> None: ...
+
+class ListResourcesResponse(_message.Message):
+    __slots__ = ("error", "items", "next_cursor", "listed")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    ITEMS_FIELD_NUMBER: _ClassVar[int]
+    NEXT_CURSOR_FIELD_NUMBER: _ClassVar[int]
+    LISTED_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    items: _containers.RepeatedCompositeFieldContainer[ListedResource]
+    next_cursor: str
+    listed: bool
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., items: _Optional[_Iterable[_Union[ListedResource, _Mapping]]] = ..., next_cursor: _Optional[str] = ..., listed: bool = ...) -> None: ...
 
 class EnsureUserRequest(_message.Message):
     __slots__ = ("context", "issuer", "subject", "provider", "email", "email_verified", "display_name")

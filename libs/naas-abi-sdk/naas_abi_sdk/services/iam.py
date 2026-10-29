@@ -136,6 +136,36 @@ class IAMService(ServiceProxy):
         caller holds raises ``GrantNotHeld``."""
         return await self._request("grantable", scope=scope)
 
+    async def list_resources(
+        self,
+        service: str,
+        type: str,
+        *,
+        scope: str = "abi:",
+        text: str = "",
+        cursor: str | None = None,
+        limit: int | None = None,
+        module: str = "",
+    ) -> dict[str, Any]:
+        """The existing resources of ``service:type`` in ``scope`` (a container's
+        name, below one, or ``abi:``) that the caller may list, matching ``text``,
+        a page after ``cursor`` (about the caller: no permission needed):
+        ``{"items": [{"name", "id", "label", "description"}], "next_cursor",
+        "listed"}``. ``listed`` False: the type has no lister, or its lister
+        failed; offer it as wildcards. ``NotFound`` for an unknown type."""
+        page = await self._request(
+            "list_resources",
+            service=service,
+            type=type,
+            scope=scope,
+            text=text,
+            cursor=cursor or "",
+            limit=limit or 0,
+            module=module,
+        )
+        page["next_cursor"] = page.get("next_cursor") or None
+        return page
+
     # -- principals --------------------------------------------------------------
 
     async def ensure_user(

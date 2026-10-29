@@ -17,6 +17,7 @@ from uuid import uuid4
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 from nats.errors import Error as NATSError
 
+from naas_abi_sdk.listers import declared_listers
 from naas_abi_sdk.transport import RPCError, Transport
 
 
@@ -538,6 +539,7 @@ def module_descriptor(
                 module_type.get_apps() if hasattr(module_type, "get_apps") else ()
             )
         ],
+        listers=sorted(declared_listers(module_type)),
     )
 
 

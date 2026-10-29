@@ -35,6 +35,13 @@ class IamClient:
             "abi.iam.v1.grantable", request, pb.GrantableResponse
         )
 
+    async def list_resources(
+        self, request: pb.ListResourcesRequest
+    ) -> pb.ListResourcesResponse:
+        return await self._transport.call(
+            "abi.iam.v1.list_resources", request, pb.ListResourcesResponse
+        )
+
     async def ensure_user(self, request: pb.EnsureUserRequest) -> pb.EnsureUserResponse:
         return await self._transport.call(
             "abi.iam.v1.ensure_user", request, pb.EnsureUserResponse

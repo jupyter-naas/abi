@@ -34,7 +34,8 @@ model_registry, discovery, source_control, coding_environment) use
 - The model: [Vocabulary](#vocabulary), [Principals](#principals),
   [Policy language](#policy-language), [Resource names](#resource-names),
   [Placements](#placements), [Evaluation](#evaluation),
-  [Action catalogs](#action-catalogs), [Sealed resources](#sealed-resources),
+  [Action catalogs](#action-catalogs), [Publishers and listing](#publishers-and-listing),
+  [Sealed resources](#sealed-resources),
   [Built-in policies](#built-in-policies), [Module scopes](#module-scopes),
   [Sub-policies](#sub-policies),
   [Grant only what you hold](#grant-only-what-you-hold)
@@ -56,7 +57,9 @@ model_registry, discovery, source_control, coding_environment) use
 | File | Role |
 |---|---|
 | `names.py` | Canonical names, paths of containers `abi:<service>:<type>/<id>/…/<service>:<type>/<id>`, id encoding, scopes and owners, `*`/`?` matching, variables |
-| `catalog.py` | `ActionCatalog`, `ResourceType`, `ActionSpec`, `CatalogRegistry` (catalog format) |
+| `catalog.py` | `ActionCatalog` (with its `publisher`), `ResourceType`, `ActionSpec`, `CatalogRegistry` (catalog format) |
+| `listing.py` | The lister port (`ResourceLister`, `ListingQuery`, `ListedPage`, `ListerDirectory`) and the listing as the caller (`run_listing`, `ResourcePage`) |
+| `publishers.py` | Catalogs and what the caller may grant, grouped by publisher (`by_publisher`) |
 | `policy.py` | Policy documents: schema, validation (every error listed), `Statement` |
 | `evaluator.py` | The evaluation algorithm: `check`, `filter`, `explain` over a `PolicySource` |
 | `grants.py` | Grant only what you hold: glob containment of resource patterns, within a sub-policy's chain too, `Holdings` (what a caller holds, side by side), `grantable`, `within_chain` |
@@ -64,7 +67,7 @@ model_registry, discovery, source_control, coding_environment) use
 | `iam_catalog.py` | IAM's own `iam:*` catalog and the code-declared seals |
 | `guard.py` | `ServiceGuard`: how a runtime service checks (names, require, filter, create rule, placements) and the shared wire codes |
 | `enforcement.py` | `ResourceGuard`, what a data service enforces with; `scan_allowed`, `own_storage`, `internal_call`, wire codes |
-| `kernel_catalogs.py` | The kernel services' catalogs (`services/<name>/iam_catalog.py`), registered at boot |
+| `kernel_catalogs.py` | The kernel services' catalogs (`services/<name>/iam_catalog.py`), registered at boot, and their listers (`register_kernel_listers`) |
 | `module_scopes.py` | The `module` catalog (what modules expose, per workspace) and the checks of a catalog a module declares |
 | `keys.py` | Keys `abi_sk_` (service accounts), `abi_pk_` (personal), `abi_gk_` (link grants): generation, parsing, hashing |
 | `exchange.py` | `TokenExchanger`: RFC 8693 token exchange: subjects, audiences, actors, scopes, renewal |
@@ -79,6 +82,7 @@ model_registry, discovery, source_control, coding_environment) use
 | `adapters/secondary/authorizer__policy.py`, `authorizer__allow_all.py` | Authorizer adapters |
 | `adapters/secondary/IAMSecretsSecretService.py`, `IAMSecretsMemory.py` | `IAMSecrets`: signing keys and the engine's key, under `iam/` |
 | `adapters/secondary/IAMSecondaryAdapterNATSClient.py` | `IIAMService` over NATS, for client-role engines |
+| `adapters/secondary/listers__nats.py` | `NATSModuleListers`: the listers remote modules serve, found through discovery |
 | `adapters/primary/iam__primary_adapter__NATS.py` | `abi.iam.v1.*` endpoints and `abi.iam.v1.changed` |
 | `adapters/iam_nats_codec.py` | Records and errors on the wire, shared by both NATS sides |
 | `tests/iam__secondary_adapter__generic_test.py` | The `IAMStore` contract every adapter passes |
@@ -868,6 +872,91 @@ Rules that cut across services and are easy to get wrong:
 - **Coding environment, source control.** The owner and the user are read from
   `CallContext` and the service's own records, never `request.user_id`.
 - **Secrets.** `secret/iam%2F*` is sealed to `engine` and `secret/idp%2F*` to `idp`.
+
+## Publishers and listing
+
+What the policy builder shows: each publisher, its resource types, their actions, and the
+existing resources of each type that the caller may list.
+
+**Publishers.** Every catalog names who publishes it (`ActionCatalog.publisher`):
+
+| Publisher | Catalogs |
+|---|---|
+| `engine` (the default) | the kernel services' (`kernel_catalogs.py`), `iam`, and the `module` catalog itself |
+| `naas_abi` | `nexus`, registered by Nexus |
+| a module, by its key | its declared catalog (its publisher is its `module`, whatever it writes), and its agents, apps, workflows and pipelines of the `module` catalog |
+
+A module's key is a remote module's id, an engine module's configured key (`module_key`).
+The `module` catalog is the engine's, but each of its resources is one module's:
+`<container>/module:<type>/<module>/<name>` belongs to `<module>`, so a view by publisher
+shows the `module` types under each module that exposes some (`publishers.by_publisher`).
+`publisher` is in the stored form and on the wire (`ActionCatalog.publisher`), written only
+when it is neither `engine` nor the catalog's own module, so no module manifest changes hash.
+
+**Listers.** A resource type may have a lister (`listing.ResourceLister`): given a
+`ListingQuery` (service, type, container, search text, the name to start after, a page
+size) it returns the type's existing resources in that container (in it or below it), by
+canonical name, sorted by name, after the name given, at most a page, and whether there are
+more (`ListedPage`). It finds candidates and decides nothing: what it returns is filtered as
+below before anyone sees it. `listing.page_of` pages an in-memory list for one.
+
+- **In process**, for the engine's services and engine modules:
+  `iam.register_lister(service, type, lister)` (`IAMService`, not over NATS; the catalog must
+  be registered and declare the type; a later registration replaces an earlier one). The
+  engine registers its kernel services' once they are loaded (each service's
+  `iam_catalog.listers(service)`, `kernel_catalogs.register_kernel_listers`) and its modules'
+  (`BaseModule.iam_listers()`, for its declared catalog); naas_abi registers its own at start.
+  A kernel lister is the service's own list call (`list_graphs`, `list_collections`,
+  `namespaces`, `list_objects`, `list_canonical_ids`, ...), made as the caller, its items
+  named where IAM places them (`ResourceGuard.name`).
+- **Over NATS**, for a remote module: the SDK serves the listers a module registers
+  (`Module.listers`, `@lister`) on `abi.mod.<project>.<sa>.<instance>.iam.list`
+  (`ListerRequest` / `ListerResponse`) and names their types in its discovery descriptor
+  (`ModuleDescriptor.listers`). A serving engine on NATS gives IAM a directory of them
+  (`IAMService.remote_listers`, `adapters/secondary/listers__nats.py`): for a type of a
+  module's catalog with no lister in process, IAM asks a ready instance of that module that
+  names the type. No action names that subject, so the broker lets only the engine's own
+  connections publish there; the module answers as itself, and its answer is filtered here.
+- **Containers**: IAM lists a container type itself, from its registry. A lister registered
+  for one only adds labels: an item it returns that the registry does not hold under that
+  name is dropped, and the registry alone answers when it has none or it fails.
+- **Singletons**: IAM lists the one resource of a singleton type itself:
+  `<container>/<service>:<type>/-` for a placed one at a container, `abi:<service>:<type>/-`
+  for a platform one at the platform.
+- **A type with none of these is offered as wildcards only** (`ResourcePage.listed` false).
+
+**A listing runs as the caller.** `iam.list_resources(service, type, scope=, text=,
+cursor=, limit=, module=)` returns a `ResourcePage`:
+
+- **Scoped.** `scope` is a container or the platform (`abi:`); below a container
+  (`<container>/*`), that container. Only what sits in it or below it is returned: what a
+  policy attached there can name (a platform resource is listed at the platform only).
+- **Only what the caller may list**: a resource is kept when one of the type's `list`
+  actions allows it, or, for a type with no `list` action, any action of the type, as
+  `filter` decides for the current caller (`listing.listing_actions`). A stranger gets
+  nothing. It needs no `iam:*` action: like `grantable`, it says only what the caller could
+  already list.
+- **Searched.** `text` keeps the resources whose id or label contains it, case folded.
+  `module` keeps the `module` catalog's resources of that module only.
+- **Paged by name.** `cursor` is the last name of the previous page; `next_cursor` is None at
+  the end. IAM reads the lister page by page until its own page is full, examining at most
+  `listing.MAX_EXAMINED` candidates per call (a page may then be short, with a
+  `next_cursor`). What a lister returns outside the scope, after-cursor order or type is
+  dropped.
+- **A lister that fails** (raises, times out, answers what cannot be read): the type is
+  offered as wildcards (`listed` false) and the failure is logged at warning level with the
+  service and the type. It never fails the call.
+- An unknown service or type is `IAMNotFoundError`; a malformed scope `ValueError`.
+- Over NATS: `list_resources` (`ListResourcesRequest` / `ListResourcesResponse`), the same
+  answer; in the SDK, `engine.services.iam.list_resources`.
+
+What a caller may grant at a container (`grantable`) is per catalog; by publisher and type,
+`publishers.by_publisher(catalogs, grantable, modules=, listable=)` groups it: the engine
+first, then naas_abi, then the modules by key, each with the types the caller may grant
+something of, each type with its actions, what the caller may grant of each, and whether
+it is listed. A `module` catalog action goes under a module when one of its granted
+patterns can name that module's items (`grants.overlaps`). Nothing appears that the caller
+may not grant.
 
 ## Sealed resources
 

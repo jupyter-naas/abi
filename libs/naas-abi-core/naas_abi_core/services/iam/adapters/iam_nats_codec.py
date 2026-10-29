@@ -11,6 +11,7 @@ from typing import Any
 
 from naas_abi_core.engine.nats_auth import InvalidServiceTokenError
 from naas_abi_core.services.iam.catalog import (
+    ENGINE,
     ActionCatalog,
     ActionSpec,
     CatalogError,
@@ -41,6 +42,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalRecord,
     RevisionConflictError,
 )
+from naas_abi_core.services.iam.listing import ListedResource, ResourcePage
 from naas_abi_core.services.iam.names import PLATFORM_SCOPE
 from naas_abi_core.services.iam.policy import PolicyDocument
 from naas_abi_proto.iam.v1 import iam_pb2 as pb
@@ -57,6 +59,7 @@ OPERATIONS = {
     "filter": "Filter",
     "explain": "Explain",
     "grantable": "Grantable",
+    "list_resources": "ListResources",
     "ensure_user": "EnsureUser",
     "create_service_account": "CreateServiceAccount",
     "get_principal": "GetPrincipal",
@@ -402,6 +405,7 @@ def catalog_to_pb(catalog: ActionCatalog) -> pb.ActionCatalog:
         ],
         module=catalog.module,
         format=catalog.format,
+        publisher="" if catalog.publisher == ENGINE else catalog.publisher,
         platform_access=[
             pb.PlatformAccess(
                 resources=list(row.resources),
@@ -451,6 +455,7 @@ def catalog_from_pb(message: pb.ActionCatalog) -> ActionCatalog:
         ),
         module=message.module,
         format=message.format or 1,
+        publisher=message.publisher or ENGINE,
         platform_access=tuple(
             PlatformAccess(
                 resources=tuple(row.resources),
@@ -623,6 +628,38 @@ def grantable_to_pb(catalog: GrantableCatalog) -> pb.GrantableCatalog:
             )
             for a in catalog.actions
         ],
+    )
+
+
+def listed_to_pb(item: ListedResource) -> pb.ListedResource:
+    return pb.ListedResource(
+        name=item.name, id=item.id, label=item.label, description=item.description
+    )
+
+
+def listed_from_pb(message: Any) -> ListedResource:
+    """A ``ListedResource`` of IAM's proto, or of discovery's (a module's lister)."""
+    return ListedResource(
+        name=message.name,
+        id=message.id,
+        label=message.label,
+        description=message.description,
+    )
+
+
+def resource_page_to_pb(page: ResourcePage) -> pb.ListResourcesResponse:
+    return pb.ListResourcesResponse(
+        items=[listed_to_pb(item) for item in page.items],
+        next_cursor=page.next_cursor or "",
+        listed=page.listed,
+    )
+
+
+def resource_page_from_pb(message: pb.ListResourcesResponse) -> ResourcePage:
+    return ResourcePage(
+        items=tuple(listed_from_pb(item) for item in message.items),
+        next_cursor=message.next_cursor or None,
+        listed=message.listed,
     )
 
 

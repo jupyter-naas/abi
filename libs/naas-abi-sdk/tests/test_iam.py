@@ -322,3 +322,41 @@ def test_what_may_be_granted_and_its_refusal():
     assert str(refused.value) == (
         "GRANT_NOT_HELD: You cannot grant what you do not hold: ..."
     )
+
+
+def test_a_listing_of_what_the_caller_may_list():
+    client = AsyncMock()
+    client.list_resources.return_value = pb.ListResourcesResponse(
+        items=[
+            pb.ListedResource(
+                name=f"{WORKSPACE}/triple_store:graph/g1", id="g1", label="Sales"
+            )
+        ],
+        next_cursor="",
+        listed=True,
+    )
+    found = run(
+        IAMService(client).list_resources(
+            "triple_store", "graph", scope=WORKSPACE, text="sa", limit=10
+        )
+    )
+    assert found == {
+        "items": [
+            {
+                "name": f"{WORKSPACE}/triple_store:graph/g1",
+                "id": "g1",
+                "label": "Sales",
+                "description": "",
+            }
+        ],
+        "next_cursor": None,
+        "listed": True,
+    }
+    request = client.list_resources.call_args.args[0]
+    assert (request.service, request.type, request.scope, request.text, request.limit) == (
+        "triple_store",
+        "graph",
+        WORKSPACE,
+        "sa",
+        10,
+    )
