@@ -2,13 +2,14 @@
 (``ENV=scenario``): the steps of ``AGENTS.md``, over REST as each person, and
 over NATS through ``Recruiter`` where the step names it.
 
-    python examples/permission_scenario/runner.py legacy    --api URL --mail DIR --out before.json
+    python examples/permission_scenario/runner.py legacy    --api URL --mail DIR --database DB --out before.json
     python examples/permission_scenario/runner.py decisions --api URL --mail DIR --out after.json
     python examples/permission_scenario/runner.py compare   before.json after.json --out upgrade.json
     python examples/permission_scenario/runner.py run       --api URL --mail DIR --out results.json
 
 * ``legacy`` runs on the previous version (sets and on/off toggles): it builds
-  #360's scenario in organisation "Acme", then records every decision.
+  #360's scenario in organisation "Acme", then records every decision; its
+  toggles are read from its Nexus database (``--database``, ``storage/nexus.db``).
 * ``decisions`` records them on either version: for every member of "Acme" and
   the platform admin, every workspace of it, every module item (its use action,
   IAM's simulator, and what the previous version turned off) and every feature

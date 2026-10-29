@@ -38,35 +38,43 @@ user is checked on both sides).
 
 ```bash
 ENV=scenario uv run abi dev up -d     # every abi dev command takes ENV=scenario
-API=http://localhost:$(...)           # the api port of `abi dev ports`
-uv run python examples/permission_scenario/runner.py run --api $API --mail storage/email --out results.json
+API=http://localhost:<api port>       # abi dev ports
+.venv/bin/python examples/permission_scenario/runner.py run --api $API --mail storage/email --out results.json
 ```
 
 `abi dev up` approves the modules' manifests (dev only). `run` makes a new organisation each
 time, so it may run again on the same database. It writes every check with its evidence (the
 API's answers) and exits non-zero when one fails. The invitation routes are rate limited (five
-a window per inviting user): the runner waits the window out.
+a window per inviting user): the runner waits the window out. Call the venv's Python, not
+`uv run`: the dev API reloads on any change under the worktree, and `uv run` reinstalls the
+editable packages into `.venv`.
 
 ### Step 1, the upgrade
 
-A database the previous version (`feat/permission-system` before container paths, with sets
-and on/off toggles) ran #360's scenario on upgrades at the next start, and every person's
-decisions stay the same:
+A database the previous version (`feat/permission-system` before this job, with sets and
+on/off toggles) ran #360's scenario on upgrades at the next start, and every person's decisions
+stay the same:
 
 ```bash
 # on the previous version's checkout, with these modules (ENV=scenario abi dev up -d):
-runner.py legacy    --api $OLD --mail <old>/storage/email --out before.json
-# stop it, start this version on the same storage/ and .env, then:
+runner.py legacy --api $OLD --mail <old>/storage/email --database <old>/storage/nexus.db --out before.json
+# stop it; give this checkout its storage/, its .env and its ports (.abi/dev/instance.json,
+# project_root set to this checkout), start this version, then:
 runner.py decisions --api $API --mail storage/email --out after.json
 runner.py compare before.json after.json --out upgrade.json
 ```
+
+The ports matter: a person is linked to their account by the identity provider's issuer, whose
+URL holds the port, so the same database behind another port signs nobody in
+(`sso_error=email_in_use`). An install keeps its URL across an upgrade.
 
 `legacy` builds organisation "Acme": its set {P, M} with six features, Alpha's set {P, M} with
 chat, files and settings, Beta's {M}; members of Acme lose `files` (the role features page);
 Alpha's admin makes group G and a policy for `Recruiter`, with Bob in G; `prices` turned on in
 Alpha and off in Beta. `legacy` and `decisions` record, for every member of Acme and the
 platform admin, in each workspace: every module item's use (IAM's simulator, and on the
-previous version what the toggles turned off), and every feature (the simulator, and the flags
+previous version what the toggles turned off, read from its database by its readers' rules:
+its routes list only a workspace's set, to the platform admin too), and every feature (the simulator, and the flags
 the person's own workspace list shows). `compare` lists each change; the one the upgrade makes
 on purpose is the platform admin reaching what a workspace had turned off
 (Nexus `services/iam/AGENTS.md`, "The upgrade: sets and toggles become policies").

@@ -42,7 +42,8 @@ Nexus adds no role check of its own.
   module, actions: [{action, name, level, description, resources, excluded}]}]}`); a type appears only with an
   action the caller may grant, a publisher only with such a type; `listed` says whether `/resources` lists it
   (false: offered as wildcards). A module's agents, apps, workflows and pipelines come from the module listing
-  (`modules/scopes.exposed_types`). Any caller, about themselves
+  (`modules/scopes.exposed_types`, read as Nexus, then narrowed to what the caller may grant). Any caller,
+  about themselves
 - `GET /resources?scope=&service=&type=&q=&cursor=&module=&limit=` the existing resources of a type at `scope`
   that the caller may list (IAM's `list_resources`, as the caller): `{scope, service, type, items: [{name, id,
   label, description}], next_cursor, listed}`. A stranger gets an empty page, not a 403; an unknown type is a 404,

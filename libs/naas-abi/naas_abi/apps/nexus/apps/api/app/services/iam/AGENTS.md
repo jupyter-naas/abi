@@ -109,7 +109,9 @@ of one at a workspace is `${scope}/module:<type>/<module>/<name>`. One source of
   **narrowed to what the caller may grant there** (`scopes.granted`, from IAM's `grantable` as the caller): an item
   none of whose actions the caller may grant on it, a declared action they may not grant, and a module left with
   nothing are left out. An admin who holds no module scope gets an empty list. The policy editor suggests ids
-  from it.
+  from it. What exists is read as Nexus's own account (`api`), whoever asks (`scopes.gather`): someone holding
+  policies but no role (so no discovery listing) still sees what they may grant, and the listers' cache of it is
+  everyone's; each caller is narrowed afterwards.
 - **Discovery's grants** stay the broker-side check (a member holds `InvokeAgent`, `OpenApp`, `TriggerJob`
   platform-wide); the module scope is checked here first, and a turn that names no workspace runs no module agent
   or workflow.

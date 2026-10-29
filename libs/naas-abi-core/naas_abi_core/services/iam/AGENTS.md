@@ -981,7 +981,11 @@ that type's resources at the scope (`by_publisher(scope=)`, `grants.overlaps` wi
 type's names: `grants.universe(..., nesting=)`, where each container sits only in its
 parents, so no organisation is in a workspace); a `module` catalog action goes under a
 module when one of them can name that module's items. The nesting is for showing what a
-pattern names only: IAM decides within the names without it. Nothing appears that the
+pattern names only: IAM decides within the names without it. A pattern holding a literal
+step of a type that is no container and not the type itself (`.../nexus:agent/*` under
+graphs) names none of the type's resources, since a name is its containers' steps, then
+its own: it is left out before the search, which would leave it out too, slowly (an owner
+who is also the platform admin holds every type's pattern). Nothing appears that the
 caller may not grant.
 
 ## Sealed resources
