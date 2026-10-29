@@ -487,13 +487,13 @@ async def test_what_cannot_move_is_named_and_the_rest_waits(nexus_db, monkeypatc
             await _previous_database(db, nexus)
             assert await role_features.migrate_role_features(db, FLAGS) is None
             assert f"builtin.member of {bob} at abi:org-1:ws-a" in caplog.text
-            assert not await role_features._recorded(db, role_features.MIGRATION_NAME)
+            assert not await role_features.recorded(db, role_features.MIGRATION_NAME)
             assert _old_ids(nexus)
             nexus.iam.invalidate()
             assert _decisions(nexus) == before
             monkeypatch.setattr(nexus.iam, "attach_policy", real)
             assert await role_features.migrate_role_features(db, FLAGS)
-            assert await role_features._recorded(db, role_features.RETIRED_NAME)
+            assert await role_features.recorded(db, role_features.RETIRED_NAME)
             # Retired and recorded: later starts look no more.
             monkeypatch.setattr(nexus.iam, "retired_policies", lambda: pytest.fail("looked again"))
             assert await role_features.migrate_role_features(db, FLAGS) is None

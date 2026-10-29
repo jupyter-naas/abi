@@ -183,13 +183,20 @@ a catalog, run the route matrix.
 Before, three things decided whether a user used a module's item or a feature in a workspace: the policies (and
 `builtin.admin` / `builtin.owner`, which held every module scope at their scope), core IAM's sets of the org and
 the workspace (the Modules & features pages), and what the workspace turned off (`services/visibility`, workspace
-settings › Agents, Apps, Workflows). `policy_tree.migrate_sets` (at start, after the overrides' and the role
-features' moves, recorded in `iam_migrations` as `policy_tree_v1`) keeps every decision, then they are gone:
+settings › Agents, Apps, Workflows, and a workspace-built agent's own switch). `policy_tree.migrate_sets` (at
+start, after the overrides' move and the role features' move, `role_features_v1`: an old feature policy kept as a
+sub-policy's parent is detached, so its retirement is not waited for; recorded in `iam_migrations` as
+`policy_tree_v1`) keeps every decision, then they are gone:
 
 - **The tree.** Each org O gets "<O> access", platform-owned: its set's module items and features (everything
   with no set). Each workspace W gets "<W> access", O-owned, a sub-policy of it: W's own set's items and features,
   the apps it had turned on one by one (an app was off until turned on or seeded), and a Deny of the agents,
-  workflows and pipelines it had turned off (use only: a workflow's runs stay readable).
+  workflows and pipelines it had turned off (use only: a workflow's runs stay readable). A set of nothing is an
+  Allow no name matches (`Nothing`), never a Deny. A turned-off engine agent whose class the engine did not load
+  stops the move (its scope would be guessed): load the module or delete the row.
+- **Agents a workspace built** (no module) and had turned off: "Agents turned off in <W>", W-owned, a Deny of
+  `nexus:UseAgent` on each, attached at W to whoever held a role there (directly, through a group, org-wide,
+  invited). The roster lists a built agent only to who may use it (`agents/.../_visible_to_caller`).
 - **Roles.** Who held `builtin.admin` or `builtin.owner` (at W, org-wide, at `abi:O:-`; a group like a person; a
   pending invitation as a pending grant listed on its Nexus invitation, an org owner's or admin's for every
   workspace, as the org-wide mirror will) gets, at each place the role reached, "<W> modules (admins and owners)":
@@ -201,8 +208,14 @@ features' moves, recorded in `iam_migrations` as `policy_tree_v1`) keeps every d
   attachment the owner's access would not bound as the sets did (an org's policy attached in a workspace or
   org-wide, a platform policy attached anywhere) becomes, at each place it reached, one of a sub-policy of that
   place's access holding the same statements (`statements_at`: glob patterns cut to the place, exactly). A
-  platform policy's unscoped reach of the platform's own names (`abi:-:-:`) stays unbounded, as it was. A service
-  account, never bounded by a set, gets the same grants with no parent.
+  platform policy's unscoped reach of the platform's own names (`abi:-:-:`) stays unbounded, as it was. A split
+  spells out the actions a wildcard reached beyond module scopes and features, `MAX_PATTERNS` per statement.
+- **Service accounts.** Never bounded by a set, but Nexus refused them what a workspace had turned off, like
+  everyone: at each place a grant reached, they get a copy cut to it, in a workspace a sub-policy of its "<W>
+  toggles (service accounts)" (every module scope and feature but what it had turned off), else with no parent.
+- **Named, not silent** (the report's `notes`, logged): a grant attached org-wide or with no scope that moved to
+  the workspaces of today (naming the policy and the principal: a workspace made later gets nothing from it), and
+  a wildcard of every service spelled out (the bus and services registered later are no longer in it).
 - **Exact or stopped.** A sub-policy made before with module grants, a managed policy granting them to users, an
   action acting on module scopes and other types: the move stops, names it in the log, records nothing. Until it
   is recorded, `authz.upgrading()` refuses every module scope and feature (and the flags show none): never wider
@@ -211,12 +224,15 @@ features' moves, recorded in `iam_migrations` as `policy_tree_v1`) keeps every d
 - **Then** IAM's legacy sets (`drop_legacy_scope_sets`) and `workflow_visibility` go. `app_configs.enabled` and
   `agent_configs.enabled` stay in their tables, unread (no ORM column).
 - **What changes** (`policy_tree.NOTES`, in the report): the platform admin reaches what a workspace had turned off;
-  an org's admins and owners reach a workspace made later only through a policy attached there or org-wide; a
-  module installed later is in no access policy until someone adds it.
+  an org's admins and owners reach a workspace made later only through a policy attached there (or org-wide after
+  the upgrade); a module installed later is in no access policy until someone adds it; someone given a role later in
+  a workspace uses the agents it had built and turned off. Calls that skip Nexus (a module's `require_action`,
+  discovery's `OpenApp`) are not gated while the move is pending.
 
-Tested on a database at the previous state (`policy_tree_test.py`: every user, workspace, module item, declared
-action and feature compared before and after, on the memory, SQLite and PostgreSQL stores; once; interrupted;
-stopped; pending invitations; narrowing "<O> access" narrows below at once; an admin with no policy uses nothing).
+Tested on a database at the previous state (`policy_tree_test.py`: every user and a service account, workspace,
+module item, declared action, built agent and feature compared before and after, on the memory, SQLite and
+PostgreSQL stores; once; interrupted; stopped; pending invitations; `*` and `nexus:*` policies split; the notes;
+narrowing "<O> access" narrows below at once; an admin with no policy uses nothing).
 
 ## Platform-level types and the flags shown
 

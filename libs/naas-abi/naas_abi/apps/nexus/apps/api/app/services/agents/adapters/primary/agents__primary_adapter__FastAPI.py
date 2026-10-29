@@ -185,20 +185,26 @@ async def _visible_to_caller(
     agents: list[AgentRecord], current_user: User, workspace_id: str
 ) -> list[AgentRecord]:
     """The agents of ``workspace_id`` the caller may use: a module's agent needs
-    its module scope (``module:UseAgent``), an office agent its feature too. IAM
-    alone decides: there is no set and no on/off switch."""
+    its module scope (``module:UseAgent``), an office agent its feature too, an
+    agent the workspace built ``nexus:UseAgent`` on it (one turned off before
+    is denied there). IAM alone decides: there is no set and no on/off switch."""
     flags = await caller_feature_flags(current_user, workspace_id, feature_keys_of(agents))
     classes = _get_agent_class_registry()
 
     def scope_of(agent: AgentRecord) -> ModuleScope | None:
         return agent_scope(agent, classes, _agent_class_modules)
 
-    return await authz.filter_scopes(
+    usable = await authz.filter_scopes(
         filter_feature_agents(agents, flags),
         user=current_user,
         workspace=workspace_id,
         scope_of=scope_of,
     )
+    built = [agent.id for agent in usable if scope_of(agent) is None]
+    if not built:
+        return usable
+    may = await authz.allowed_ids("UseAgent", user=current_user, workspace=workspace_id, ids=built)
+    return [agent for agent in usable if scope_of(agent) is not None or agent.id in may]
 
 
 async def _served(agents: list[AgentRecord]) -> list[AgentRecord]:

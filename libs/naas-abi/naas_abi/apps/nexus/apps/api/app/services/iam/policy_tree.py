@@ -54,6 +54,7 @@ from typing import Any
 
 from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import NO_ORG
+from naas_abi.apps.nexus.apps.api.app.services.iam.role_features import recorded
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam import module_scopes, roles
 from naas_abi_core.services.iam.catalog import CatalogRegistry
@@ -73,8 +74,8 @@ _log = logging.getLogger(__name__)
 MIGRATION_NAME = "policy_tree_v1"
 # The moves that come first: the workspace feature overrides (their features
 # are part of the sets read here) and the role features (their old policies
-# were bounded by the sets too, and are gone once retired).
-AFTER = ("workspace_feature_sets_v1", "role_features_v1", "role_features_retired_v1")
+# were bounded by the sets too; once moved they are detached, kept or not).
+AFTER = ("workspace_feature_sets_v1", "role_features_v1")
 OVERRIDES_MOVE = "workspace_feature_sets_v1"
 
 FEATURE = ("nexus", "feature")
@@ -87,7 +88,11 @@ NOTES = (
     "The platform admin now reaches what a workspace had turned off (the toggles "
     "refused it to everyone, the platform admin included).",
     "Admins and owners of an organization no longer reach a workspace made after "
-    "the upgrade by their role: a policy attached there, or org-wide, gives it.",
+    "the upgrade by their role: a policy attached there, or attached org-wide after "
+    "the upgrade, gives it.",
+    "An agent a workspace built and had turned off is denied to whoever held a role "
+    "there at the upgrade; someone given a role there later uses it: delete the "
+    "agent, or deny it to them.",
     "A module installed after the upgrade is in no access policy: whoever "
     "administers the policies adds it.",
 )
@@ -176,6 +181,8 @@ class TurnedOff:
     apps_on: frozenset[tuple[str, str]] = frozenset()
     agents_off: frozenset[tuple[str, str]] = frozenset()
     processes_off: frozenset[tuple[str, str, str]] = frozenset()
+    # Agents the workspace built itself (no module) and had turned off.
+    custom_off: frozenset[str] = frozenset()
 
 
 # -- the statements of an access policy ---------------------------------------------
@@ -314,19 +321,29 @@ def _turned_off(turned_off: TurnedOff) -> list[Statement]:
 
 
 def _nothing(declared: Mapping[str, str]) -> Statement:
+    """An Allow no name matches (a module id holds no NUL): what a set of
+    nothing lets through, as a parent. Not a Deny, which would refuse a
+    service account holding such a grant through a group too."""
     return Statement(
-        "Deny",
-        ("module:*", USE_FEATURE, *(f"{service}:*" for service in sorted(declared))),
-        (
-            "${scope}:module:*",
-            "${scope}:nexus:feature/*",
-            *(f"${{scope}}:{service}:*" for service in sorted(declared)),
-        ),
+        "Allow",
+        ("module:UseAgent",),
+        ("${scope}:module:agent/%00",),
         sid="Nothing",
     )
 
 
 # -- which statements the sets bounded ---------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Split:
+    """An Allow statement split: ``bounded`` what the sets bounded (None: none),
+    ``rest`` what they did not, and ``every_service`` when a wildcard of every
+    service was spelled out in it (the bus and later services are left out)."""
+
+    bounded: Statement | None
+    rest: tuple[Statement, ...]
+    every_service: bool = False
 
 
 @dataclass(frozen=True)
@@ -364,13 +381,15 @@ class Bounds:
             services[catalog.service] = frozenset(names)
         return cls(frozenset(bounded), frozenset(other), services)
 
-    def split(self, statement: Statement) -> tuple[Statement | None, Statement | None]:
-        """An Allow statement as ``(what the sets bounded, the rest)``: the first
+    def split(self, statement: Statement) -> Split:
+        """An Allow statement as what the sets bounded and the rest: the first
         keeps the patterns that reach a bounded action (as written: the parent it
-        moves under bounds it), the second the actions that are not, a pattern
-        that reaches both spelled out action by action."""
+        moves under bounds it), the rest the actions that are not, a pattern that
+        reaches both spelled out action by action (in as many statements as the
+        patterns need, ``MAX_PATTERNS`` each)."""
         bounded_patterns: list[str] = []
         other_patterns: list[str] = []
+        every_service = False
         for pattern in statement.actions:
             reached_bounded = sorted(a for a in self.bounded if matches(pattern, a))
             reached_other = sorted(a for a in self.other if matches(pattern, a))
@@ -378,6 +397,9 @@ class Bounds:
                 bounded_patterns.append(pattern)
                 if reached_other:
                     other_patterns += self._spelled(pattern, reached_other)
+                # A wildcard of the service reached the bus and the services
+                # registered later too: spelled out, it no longer does.
+                every_service |= any(c in pattern.partition(":")[0] for c in "*?")
             else:
                 # Other actions, or a service no catalog registers: never bounded.
                 other_patterns.append(pattern)
@@ -386,17 +408,17 @@ class Bounds:
             if bounded_patterns
             else None
         )
-        other = (
+        actions = list(dict.fromkeys(other_patterns))
+        rest = [
             Statement(
                 "Allow",
-                tuple(dict.fromkeys(other_patterns)),
+                chunk,
                 statement.resources,
-                sid=statement.sid,
+                sid=statement.sid if i == 0 or not statement.sid else f"{statement.sid}{i + 1}",
             )
-            if other_patterns
-            else None
-        )
-        return bounded, other
+            for i, chunk in enumerate(_chunks(actions))
+        ]
+        return Split(bounded, tuple(rest), every_service and bool(rest))
 
     def _spelled(self, pattern: str, reached: Sequence[str]) -> list[str]:
         """``reached`` as patterns: ``<service>:*`` for a service it reaches whole."""
@@ -559,6 +581,12 @@ class Plan:
     documents: dict[str, tuple[Statement, ...]] = field(default_factory=dict)
     grants: list[Grant] = field(default_factory=list)
     removed: list[Grant] = field(default_factory=list)  # attachments and pending grants
+    # What cannot be kept exactly and changes for someone: the owner reads it.
+    notes: list[str] = field(default_factory=list)
+
+    def note(self, text: str) -> None:
+        if text not in self.notes:
+            self.notes.append(text)
 
     def add(self, policy: NewPolicy) -> str:
         self.policies.setdefault(policy.key, policy)
@@ -620,6 +648,7 @@ def plan(world: World) -> Plan:
             )
     _roles(world, result)
     _customer_policies(world, result, bounds)
+    _custom_agents(world, result)
     _prune(result)
     return result
 
@@ -692,8 +721,8 @@ def _roles(world: World, result: Plan) -> None:
     role reached, the module scopes of that place's access policy: a sub-policy
     of it granting every module scope, so within it (the role never brought a
     feature, so the access policy itself, which bounds features too, is not
-    theirs). A service account, never bounded, gets every module scope there."""
-    unbounded: NewPolicy | None = None
+    theirs). A service account, never bounded by a set, gets every module scope
+    there, within what the workspace had turned off (``_for_accounts``)."""
     held: dict[str, str] = {}
 
     def of_roles(place: Place) -> str:
@@ -725,23 +754,17 @@ def _roles(world: World, result: Plan) -> None:
             for place in _places(world, reached):
                 if _known(world, place):
                     result.grant(of_roles(place), principal, place.scope)
-        accounts = [a for a in _service_accounts(world, principal) if a != principal]
-        if world.kinds.get(principal) == "service_account":
-            accounts.append(principal)
-        for account in accounts:
-            if unbounded is None:
-                unbounded = NewPolicy(
-                    "role-module-scopes",
-                    "Module scopes of an admin or owner role",
-                    "Every module scope at the scope it is attached at: what the admin "
-                    "and owner roles held before no role held one, kept for the "
-                    "service accounts that held such a role." + MADE,
-                    PLATFORM_SCOPE,
-                    None,
-                    tuple(_every_module_scope(world)),
-                )
-                result.add(unbounded)
-            result.grant(unbounded.key, account, scope)
+        accounts = _service_accounts(world, principal)
+        if accounts:
+            _for_accounts(
+                world,
+                result,
+                "roles",
+                "Module scopes of an admin or owner role",
+                _every_module_scope(world),
+                reached,
+                accounts,
+            )
 
 
 def _every_module_scope(world: World) -> list[Statement]:
@@ -772,16 +795,22 @@ def _customer_policies(world: World, result: Plan, bounds: Bounds) -> None:
         allows = [s for s in policy.document.statements if s.effect == "Allow"]
         denies = [s for s in policy.document.statements if s.effect == "Deny"]
         parts = [bounds.split(s) for s in allows]
-        bounded = [b for b, _ in parts if b is not None]
+        bounded = [part.bounded for part in parts if part.bounded is not None]
         if not bounded:
             continue  # the sets never bounded it
         if policy.parent_id and policy.parent_id not in tree:
             raise UpgradeStop(
                 f"Policy {policy.id} ({policy.name}) is a sub-policy granting module "
-                "scopes or features: move it by hand (give it no parent, or move its "
-                "parent first)"
+                "scopes or features: give it no parent (or delete it) and start again"
             )
-        rest = [o for _, o in parts if o is not None] + denies
+        rest = [o for part in parts for o in part.rest] + denies
+        if any(part.every_service for part in parts):
+            result.note(
+                f"{policy.name} ({policy.id}): its wildcard of every service now names "
+                "each action of the services registered at the upgrade (its modules and "
+                "features moved beside it): the bus, and a service registered later, "
+                "are not in it any more."
+            )
         whole = not rest  # it grants module scopes and features alone
         owner = policy.owner_scope
         owner_place = _owner_place(owner)
@@ -839,20 +868,7 @@ def _move_grant(
     whole = not rest
     accounts = _service_accounts(world, principal)
     if accounts:
-        # Never bounded by a set: the same grant, with no parent.
-        copy = result.add(
-            NewPolicy(
-                f"unbounded:{policy.id}",
-                f"{policy.name} (service accounts)",
-                f"The modules and features {policy.id} grants, with no parent: the "
-                "service accounts holding it were never bounded by a set." + MADE,
-                policy.owner_scope,
-                None,
-                tuple(bounded),
-            )
-        )
-        for account in accounts:
-            result.grant(copy, account, scope)
+        _for_accounts(world, result, policy.id, policy.name, bounded, scope, accounts)
         if world.kinds.get(principal) == "service_account":
             if whole:
                 result.removed.append(Grant(policy.id, principal, scope))
@@ -878,6 +894,14 @@ def _move_grant(
             )
         )
         result.grant(platform, principal, None)
+    if scope is None or scope.endswith(":*"):
+        result.note(
+            f"{policy.name} ({policy.id}), attached "
+            + (f"org-wide ({scope})" if scope else "with no scope")
+            + f" to {principal}, now reaches the module scopes and features of the "
+            "workspaces that existed at the upgrade only: attach it again for a "
+            "workspace made later."
+        )
     for place in _places(world, scope):
         if not _known(world, place):
             continue
@@ -900,6 +924,124 @@ def _move_grant(
         result.removed.append(Grant(policy.id, principal, scope))
 
 
+def _for_accounts(
+    world: World,
+    result: Plan,
+    source: str,
+    name: str,
+    statements: Sequence[Statement],
+    scope: str | None,
+    accounts: Sequence[str],
+) -> None:
+    """``statements``, granted at ``scope``, for service accounts: never bounded
+    by a set, but refused, as everyone was, what a workspace had turned off. So
+    at each place the grant reached, a copy cut to that place: in a workspace a
+    sub-policy of its "turned off" policy (``_turned_off_parent``), at the
+    organization's own scope or the platform's one with no parent."""
+    if scope == PLATFORM_SCOPE or (scope is None and _reaches_platform(statements)):
+        own = list(statements) if scope == PLATFORM_SCOPE else _platform_level(statements)
+        key = result.add(
+            NewPolicy(
+                f"sa:{source}:{scope}:platform",
+                f"{name} (service accounts)",
+                f"What {source}, attached at {scope or 'no scope'}, granted service "
+                "accounts at the platform level, which no set bounded." + MADE,
+                PLATFORM_SCOPE,
+                None,
+                tuple(own),
+            )
+        )
+        for account in accounts:
+            result.grant(key, account, scope)
+    for place in _places(world, scope):
+        if not _known(world, place):
+            continue
+        cut = statements_at(statements, scope, place.org, place.workspace)
+        if not cut:
+            continue
+        parent = _turned_off_parent(world, result, place) if place.workspace != "-" else None
+        key = result.add(
+            NewPolicy(
+                f"sa:{source}:{scope}:{place.scope}",
+                f"{name} (service accounts)",
+                f"What {source}, attached at {scope or 'no scope'}, granted service "
+                f"accounts in {place.scope}: no set bounded them, what the workspace "
+                "had turned off did." + MADE,
+                f"abi:{place.org}:-",
+                parent,
+                tuple(cut),
+            )
+        )
+        for account in accounts:
+            result.grant(key, account, place.scope)
+
+
+def _turned_off_parent(world: World, result: Plan, place: Place) -> str:
+    """A workspace's toggles alone, as a parent: every module scope and feature,
+    the apps it had turned on, none of what it had turned off."""
+    return result.add(
+        NewPolicy(
+            f"off:{place.org}:{place.workspace}",
+            f"{world.workspace_names.get(place.workspace) or place.workspace} toggles "
+            "(service accounts)",
+            f"What workspace {place.workspace} had not turned off, for the service "
+            "accounts that use it: no set bounded them." + MADE,
+            f"abi:{place.org}:-",
+            None,
+            tuple(
+                access_statements(
+                    Legacy(),
+                    world.declared(),
+                    turned_off=world.turned_off.get(place.workspace, TurnedOff()),
+                )
+            ),
+        )
+    )
+
+
+def _custom_agents(world: World, result: Plan) -> None:
+    """The agents a workspace built itself and had turned off (``nexus:UseAgent``
+    on ``nexus:agent/<id>``): a Deny attached at the workspace to whoever held a
+    role there (directly, through a group, org-wide, invited): the toggle
+    refused them to everyone."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.names import nexus_resource
+
+    for workspace, off in sorted(world.turned_off.items()):
+        if not off.custom_off:
+            continue
+        org = world.workspaces[workspace]
+        scope = f"abi:{org}:{workspace}"
+        resources = [
+            "${scope}:"
+            + nexus_resource("agent", org=org, workspace=workspace, id=agent).removeprefix(
+                f"{scope}:"
+            )
+            for agent in sorted(off.custom_off)
+        ]
+        key = result.add(
+            NewPolicy(
+                f"custom:{org}:{workspace}",
+                f"Agents turned off in {world.workspace_names.get(workspace) or workspace}",
+                f"The agents workspace {workspace} built itself and had turned off, "
+                "denied to who held a role there." + MADE,
+                scope,
+                None,
+                tuple(
+                    Statement("Deny", ("nexus:UseAgent",), chunk, sid="TurnedOffAgents")
+                    for chunk in _chunks(resources)
+                ),
+            )
+        )
+        for policy_id, held_at, principal in _grantees(world):
+            if policy_id not in roles.ROLES or held_at is None:
+                continue
+            org_level = held_at == f"abi:{org}:-" and principal.startswith("pending:")
+            if held_at in (scope, f"abi:{org}:*") or (
+                org_level and policy_id in ROLES_WITH_MODULES
+            ):
+                result.grant(key, principal, scope)
+
+
 def _check_managed(
     world: World, policy: Any, bounds: Bounds, held: Sequence[tuple[str | None, str]]
 ) -> None:
@@ -915,7 +1057,9 @@ def _check_managed(
     if policy.id == roles.SELF:
         users = ["everyone"]
     if users and any(
-        bounds.split(s)[0] is not None for s in policy.document.statements if s.effect == "Allow"
+        bounds.split(s).bounded is not None
+        for s in policy.document.statements
+        if s.effect == "Allow"
     ):
         raise UpgradeStop(
             f"Managed policy {policy.id} grants module scopes or features to users: "
@@ -976,7 +1120,7 @@ def apply(iam: Any, world: World, steps: Plan) -> Report:
     """Make the plan true; every step may run again (policies are found by
     owner, name, description and statements before they are made; attaching
     what is attached grants nothing new). Run as the engine."""
-    report = Report()
+    report = Report(notes=(*NOTES, *steps.notes))
     made: dict[str, str] = {}
     existing = {(p.owner_scope, p.name, p.description): p for p in world.policies}
     for key in _ordered(steps.policies):
@@ -1065,13 +1209,6 @@ def _pending_grant(iam: Any, old: Any, policy_id: str, scope: str | None) -> str
 # -- reading what is in force ------------------------------------------------------------
 
 
-async def _recorded(db: AsyncSession, name: str) -> bool:
-    found = (
-        await db.execute(text("SELECT 1 FROM iam_migrations WHERE name = :n"), {"n": name})
-    ).first()
-    return found is not None
-
-
 async def _has_table(db: AsyncSession, name: str) -> bool:
     connection = await db.connection()
     return await connection.run_sync(lambda sync: inspect(sync).has_table(name))
@@ -1148,15 +1285,18 @@ async def _turned_off_rows(
         ).all():
             states.setdefault(str(workspace_id), {})[str(app_id)] = bool(enabled)
     agent_rows: dict[str, list[tuple[str, str | None, bool]]] = {}
+    custom_off: dict[str, set[str]] = {}
     if await _has_column(db, "agent_configs", "enabled"):
-        for workspace_id, class_name, provider, enabled in (
+        for agent_id, workspace_id, class_name, provider, enabled in (
             await db.execute(
-                text(
-                    "SELECT workspace_id, class_name, provider, enabled FROM agent_configs "
-                    "WHERE class_name IS NOT NULL"
-                )
+                text("SELECT id, workspace_id, class_name, provider, enabled FROM agent_configs")
             )
         ).all():
+            if class_name is None:
+                # An agent the workspace built itself: turned off, refused to all.
+                if not enabled:
+                    custom_off.setdefault(str(workspace_id), set()).add(str(agent_id))
+                continue
             agent_rows.setdefault(str(workspace_id), []).append(
                 (str(class_name), provider, bool(enabled))
             )
@@ -1186,7 +1326,9 @@ async def _turned_off_rows(
         }
         shown: dict[tuple[str, str], bool] = {}
         for class_name, provider, enabled in agent_rows.get(workspace_id, []):
-            scope = resolve(class_name, provider) if resolve is not None else None
+            scope = (
+                resolve(class_name, provider, strict=not enabled) if resolve is not None else None
+            )
             if scope is not None:
                 key = (scope.module, scope.name)
                 shown[key] = shown.get(key, False) or enabled
@@ -1194,6 +1336,7 @@ async def _turned_off_rows(
             frozenset(apps_on),
             frozenset(key for key, on in shown.items() if not on),
             frozenset(processes.get(workspace_id, set())),
+            frozenset(custom_off.get(workspace_id, set())),
         )
     return found
 
@@ -1201,18 +1344,28 @@ async def _turned_off_rows(
 def _agent_resolver() -> Any:
     """``(class_name, provider)`` to the agent's module scope, as the roster
     resolved it; raises when the engine's agents cannot be read (the move waits:
-    an agent turned off must stay off)."""
+    an agent turned off must stay off). A turned-off engine agent whose class the
+    engine did not load (``strict``) stops the move: its scope would be guessed
+    from its Python path, and a Deny under a wrong name refuses nothing once its
+    module loads again."""
     from types import SimpleNamespace
 
     from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary import (
         agents__primary_adapter__FastAPI as agents_api,
     )
+    from naas_abi.apps.nexus.apps.api.app.services.agents.remote.port import REMOTE_PROVIDER
     from naas_abi.apps.nexus.apps.api.app.services.agents.scopes import agent_scope
 
     classes = agents_api._get_agent_class_registry()
     module_of = agents_api.agent_class_modules()
 
-    def resolve(class_name: str, provider: str | None) -> Any:
+    def resolve(class_name: str, provider: str | None, *, strict: bool = False) -> Any:
+        if strict and provider != REMOTE_PROVIDER and class_name not in classes:
+            raise UpgradeStop(
+                f"The agent {class_name}, turned off in a workspace, is of a module the "
+                "engine did not load: load the module, or delete the agent's row, and "
+                "start again"
+            )
         return agent_scope(
             SimpleNamespace(class_name=class_name, provider=provider), classes, module_of
         )
@@ -1290,29 +1443,28 @@ async def migrate_sets(db: AsyncSession) -> Report | None:
     """Turn the sets and the toggles into policies, once (see the module).
     Returns the report, None when it did not run (done already, or waiting for
     the moves before it). ``pending()`` stays true until it is recorded."""
-    if await _recorded(db, MIGRATION_NAME):
+    if await recorded(db, MIGRATION_NAME):
         set_pending(False)
         await _drop_what_was_read(db)
         return None
     set_pending(True)
     for before in AFTER:
-        if not await _recorded(db, before):
+        if not await recorded(db, before):
             _log.warning(
                 "The sets wait for %s: module scopes and features are refused until "
                 "a start moves them",
                 before,
             )
             return None
-    nexus = await read_nexus(db)
 
-    def work() -> Report:
+    def work(nexus: Mapping[str, Any]) -> Report:
         iam = runtime.iam()
         with as_service_account("engine"):
             world = build_world(nexus, read_iam(iam))
             return apply(iam, world, plan(world))
 
     try:
-        report = await run_in_threadpool(work)
+        report = await run_in_threadpool(work, await read_nexus(db))
     except UpgradeStop as stop:
         _log.error(
             "The sets were not moved into policies: %s. Module scopes and features are "
@@ -1381,17 +1533,23 @@ async def _drop_what_was_read(db: AsyncSession) -> None:
 
 async def _carry_into_invitations(db: AsyncSession, carried: Mapping[str, Sequence[str]]) -> int:
     """List each new pending grant on the Nexus invitation of the one it came
-    with, so revoking or renewing the invitation withdraws it too; a pending
-    grant the move revoked leaves it."""
-    if not carried or not await _has_table(db, "invitations"):
+    with, so revoking or renewing the invitation withdraws it too, and take off
+    one the move revoked (no longer pending in IAM)."""
+    if not await _has_table(db, "invitations"):
         return 0
+
+    def still_pending() -> set[str]:
+        with as_service_account("engine"):
+            return {str(g.id) for g in runtime.iam().list_pending_grants()}
+
+    pending_now = await run_in_threadpool(still_pending)
     changed = 0
     rows = (
         await db.execute(text("SELECT id, grant_ids FROM invitations WHERE status = 'pending'"))
     ).all()
     for invitation_id, raw in rows:
         grants = [str(g) for g in json.loads(raw or "[]")]
-        kept = list(grants)
+        kept = [g for g in grants if g in pending_now]
         for old in grants:
             for new in carried.get(old, ()):
                 if new not in kept:

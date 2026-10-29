@@ -356,7 +356,8 @@ async def _has_overlay_table(db: AsyncSession) -> bool:
     return await connection.run_sync(lambda sync: inspect(sync).has_table(OVERLAY_TABLE))
 
 
-async def _recorded(db: AsyncSession, name: str) -> bool:
+async def recorded(db: AsyncSession, name: str) -> bool:
+    """Whether ``iam_migrations`` records ``name`` (a start-up move done)."""
     found = (
         await db.execute(text("SELECT 1 FROM iam_migrations WHERE name = :n"), {"n": name})
     ).first()
@@ -452,13 +453,13 @@ async def migrate_role_features(db: AsyncSession, flags: FeatureFlagsConfig) -> 
     """Move the features roles brought into policies, once (see the module).
     Returns the number of attachments made, None when it did not run: done
     already, or waiting for the move of the workspace feature overrides."""
-    if await _recorded(db, MIGRATION_NAME):
+    if await recorded(db, MIGRATION_NAME):
         warn_deprecated_settings(flags)
         # A start that recorded the move but failed to retire finishes here.
-        if not await _recorded(db, RETIRED_NAME):
+        if not await recorded(db, RETIRED_NAME):
             await _retire_and_record(db)
         return None
-    if not await _recorded(db, AFTER):
+    if not await recorded(db, AFTER):
         _log.warning(
             "The role features wait for the workspace feature overrides to move: "
             "the next start tries again (the old ones stay in force meanwhile)"
@@ -534,6 +535,7 @@ __all__ = [
     "policy_document",
     "policy_name",
     "read_overlays",
+    "recorded",
     "resolve_role_baseline",
     "stored_features",
     "warn_deprecated_settings",

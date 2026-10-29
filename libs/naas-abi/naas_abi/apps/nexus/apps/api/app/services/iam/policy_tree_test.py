@@ -36,6 +36,7 @@ from naas_abi_core.engine.call_context import (
 from naas_abi_core.services.iam import module_scopes, roles
 from naas_abi_core.services.iam.IAMPorts import LegacyScopeSet
 from naas_abi_core.services.iam.module_scopes import module_catalog
+from naas_abi_core.services.iam.names import matches
 from naas_abi_core.services.iam.policy import PolicyDocument, Statement
 from sqlalchemy import text
 
@@ -68,7 +69,9 @@ SETS = {
     ("org-1", "-"): Legacy(
         ("acme.people", "app/acme.market/*", "workflow/*/*"), ("chat", "files", "settings")
     ),
-    ("org-1", "ws-a"): Legacy(("agent/acme.people/A", "agent/acme.people/B", "app/acme.market/*"), None),
+    ("org-1", "ws-a"): Legacy(
+        ("agent/acme.people/A", "agent/acme.people/B", "app/acme.market/*"), None
+    ),
     ("org-2", "ws-c"): Legacy(None, ("chat", "settings")),
 }
 # What each workspace turned off: apps were off unless turned on.
@@ -76,6 +79,7 @@ TOGGLES = {
     "ws-a": TurnedOff(
         apps_on=frozenset({("acme.market", "prices")}),
         agents_off=frozenset({("acme.people", "B")}),
+        custom_off=frozenset({"custom-off"}),
     ),
     "ws-b": TurnedOff(
         apps_on=frozenset({("acme.market", "prices"), ("acme.market", "charts")}),
@@ -94,8 +98,12 @@ USERS = (
     "gina",  # admin of org-2 (org-wide too)
     "henry",  # owner of ws-d, a workspace with no organization
     "ivan",  # member of ws-b and nothing else
+    "jack",  # member of ws-b, ws-b's policy "Full access": * on everything there
+    "kate",  # member of ws-a, ws-a's policy: nexus:* there
     "root",  # the platform admin
 )
+# Agents ws-a built itself (no module): one turned off, one on.
+CUSTOM_AGENTS = {"custom-off": False, "custom-on": True}
 ACTION_OF = {
     "agent": "module:UseAgent",
     "app": "module:OpenApp",
@@ -156,6 +164,8 @@ def _world(store=None) -> NexusIam:
     nexus.grant("gina", "admin", nexus.org("org-2"))
     nexus.grant("henry", "owner", scopes["ws-d"])
     nexus.grant("ivan", "member", scopes["ws-b"])
+    nexus.grant("jack", "member", scopes["ws-b"])
+    nexus.grant("kate", "member", scopes["ws-a"])
     nexus.grant("frank", "viewer", scopes["ws-b"])
     nexus.platform_admin("root")
     with as_service_account("engine"):
@@ -215,9 +225,27 @@ def _world(store=None) -> NexusIam:
         org_group = iam.create_group("org analysts", scope="abi:org-1:-")
         iam.attach_policy(analysts.id, org_group.id, "abi:org-1:*")
         iam.add_group_member(org_group.id, nexus.principal("frank"))
-        # A service account: admin of ws-a, never bounded by a set.
+        # A service account: admin of ws-a, never bounded by a set, and in a
+        # platform group holding Analysts org-wide.
         bot = iam.create_service_account("ci/bot")
         iam.attach_policy(roles.ADMIN, bot.id, scopes["ws-a"])
+        ops = iam.create_group("ops")  # a platform group: service accounts may join
+        iam.attach_policy(analysts.id, ops.id, "abi:org-1:*")
+        iam.add_group_member(ops.id, bot.id)
+        # "Full access" in ws-b (every action of every service) and nexus:* in ws-a:
+        # split, what is not a module scope or a feature spelled out.
+        full = iam.create_policy(
+            "Full access",
+            _policy("", [Statement("Allow", ("*",), ("${scope}:*",), sid="All")]),
+            scope=scopes["ws-b"],
+        )
+        iam.attach_policy(full.id, nexus.principal("jack"), scopes["ws-b"])
+        everything_nexus = iam.create_policy(
+            "Nexus",
+            _policy("", [Statement("Allow", ("nexus:*",), ("${scope}:nexus:*",))]),
+            scope=scopes["ws-a"],
+        )
+        iam.attach_policy(everything_nexus.id, nexus.principal("kate"), scopes["ws-a"])
         # Invitations pending: an admin of ws-a, an owner of org-1.
         iam.create_pending_grant("builtin", "zoe@example.com", roles.ADMIN, scopes["ws-a"])
         iam.create_pending_grant("builtin", "olga@example.com", roles.OWNER, "abi:org-1:-")
@@ -325,6 +353,14 @@ async def _previous_database(db) -> None:
                 text("INSERT INTO workflow_visibility VALUES (:ws, :t, :m, :n, 0, :at)"),
                 {"ws": ws, "t": kind, "m": module, "n": name, "at": NOW},
             )
+    for agent_id, on in CUSTOM_AGENTS.items():
+        await db.execute(
+            text(
+                "INSERT INTO agent_configs (id, workspace_id, name, is_default, enabled, "
+                "created_at, updated_at) VALUES (:id, 'ws-a', :id, 0, :on, :at, :at)"
+            ),
+            {"id": agent_id, "on": int(on), "at": NOW},
+        )
     # A row turned on hides nothing.
     await db.execute(
         text(
@@ -337,13 +373,16 @@ async def _previous_database(db) -> None:
     await db.commit()
 
 
+REAL_RESOLVER = policy_tree._agent_resolver
+
+
 @pytest.fixture(autouse=True)
 def _remote_agents(monkeypatch):
     """Agent rows name remote agents (``<module>/<name>``): no engine registry."""
     from naas_abi.apps.nexus.apps.api.app.services.agents.remote.port import split_key
 
     def resolver():
-        def resolve(class_name, provider):
+        def resolve(class_name, provider, *, strict=False):
             module, name = split_key(class_name)
             return ModuleScope("agent", module, name)
 
@@ -374,6 +413,11 @@ def _names() -> dict[tuple[str, str, str], tuple[str, str]]:
                 "nexus:UseFeature",
                 nexus_resource("feature", org=org, workspace=ws, id=key),
             )
+    for agent_id in CUSTOM_AGENTS:
+        found[("ws-a", "custom", agent_id)] = (
+            "nexus:UseAgent",
+            nexus_resource("agent", org="org-1", workspace="ws-a", id=agent_id),
+        )
     return found
 
 
@@ -423,6 +467,8 @@ def _sets_allow(ws: str, kind: str, item: str, action: str) -> bool:
 
 def _turned_off(ws: str, kind: str, item: str) -> bool:
     toggles = TOGGLES.get(ws, TurnedOff())
+    if kind == "custom":
+        return item in toggles.custom_off
     if kind in ("feature", "declared") or kind.endswith("-runs"):
         return False
     module, name = item.split("/", 1)
@@ -440,10 +486,13 @@ def _before(nexus: NexusIam, subjects) -> dict[tuple, bool]:
         subject, ws, kind, item = key
         action = _names()[(ws, kind, item)][0]
         unbounded = subject == "root" or subject.startswith("sa:")
-        if allowed and not unbounded and not _sets_allow(ws, kind, item, action):
+        bounded_kind = kind != "custom"  # the sets bounded module scopes and features
+        if allowed and bounded_kind and not unbounded and not _sets_allow(ws, kind, item, action):
             allowed = False
-        if allowed and not subject.startswith("sa:") and _turned_off(ws, kind, item):
-            allowed = False  # the toggles refused everyone, the platform admin included
+        if allowed and _turned_off(ws, kind, item):
+            # Nexus refused what a workspace turned off to every caller: users, the
+            # platform admin, service accounts.
+            allowed = False
         found[key] = allowed
     return found
 
@@ -759,10 +808,15 @@ def test_an_access_policy_says_what_the_set_said():
     assert by_sid["TurnedOffAgents"].effect == "Deny"
 
 
-def test_a_set_of_nothing_refuses_everything_it_bounded():
+def test_a_set_of_nothing_lets_nothing_through():
+    """An Allow no name matches: a parent bounding its sub-policies to nothing,
+    and no Deny that would refuse a service account through a group."""
     statements = policy_tree.access_statements(Legacy((), ()), {})
-    assert [s.sid for s in statements] == ["Nothing"]
-    assert statements[0].effect == "Deny"
+    assert [(s.sid, s.effect) for s in statements] == [("Nothing", "Allow")]
+    agent = module_scopes.scope_resource("agent", "m", "a", org="o", workspace="w")
+    assert not any(
+        matches(r.replace("${scope}", "abi:o:w"), agent) for r in statements[0].resources
+    )
 
 
 @pytest.mark.asyncio
@@ -791,3 +845,87 @@ async def test_module_scopes_and_features_are_refused_until_the_move(nexus_db):
             policy_tree.set_pending(False)
         await _upgrade(nexus, nexus_db)
         assert await AUTHZ.allowed_scope(scope, user="bob", workspace="ws-a")
+
+
+@pytest.mark.asyncio
+async def test_what_is_not_a_module_scope_or_a_feature_stays_as_it_was(nexus_db):
+    """A "Full access" (``*``) and a ``nexus:*`` policy are split: what they
+    grant beyond module scopes and features is spelled out, past 100 patterns
+    in several statements, and still granted; the report names the wildcard."""
+    nexus = _world()
+    with nexus.installed():
+        report = await _upgrade(nexus, nexus_db)
+        assert report is not None
+        with use_call_context(NexusIam.context("jack")):
+            assert nexus.iam.authorize(
+                "triple_store:Query", "abi:org-1:ws-b:triple_store:graph/g1"
+            ).allowed
+            assert nexus.iam.authorize(
+                "nexus:UpdateWorkspace", "abi:org-1:ws-b:nexus:workspace/ws-b"
+            ).allowed
+        with use_call_context(NexusIam.context("kate")):
+            assert nexus.iam.authorize(
+                "nexus:UpdateWorkspace", "abi:org-1:ws-a:nexus:workspace/ws-a"
+            ).allowed
+        with as_service_account("engine"):
+            full = next(p for p in nexus.iam._all_policies() if p.name == "Nexus")
+        assert len(full.document.statements) > 1
+        assert all(len(st.actions) <= 100 for st in full.document.statements)
+        assert not any("nexus:UseFeature" in st.actions for st in full.document.statements)
+    assert any("Full access" in n and "the bus" in n for n in report.notes)
+
+
+@pytest.mark.asyncio
+async def test_an_org_wide_grant_that_moved_is_named_in_the_report(nexus_db):
+    """An org's policy attached org-wide is cut to the workspaces that exist:
+    a workspace made later gets nothing from it, and the report says so."""
+    nexus = _world()
+    with nexus.installed():
+        report = await _upgrade(nexus, nexus_db)
+    assert any("Analysts" in n and "org-wide (abi:org-1:*)" in n for n in report.notes)
+    async with nexus_db() as db:
+        recorded = (
+            await db.execute(
+                text("SELECT report FROM iam_migrations WHERE name = :n"),
+                {"n": policy_tree.MIGRATION_NAME},
+            )
+        ).scalar()
+    assert any("Analysts" in n for n in json.loads(recorded)["notes"])
+
+
+@pytest.mark.asyncio
+async def test_a_turned_off_agent_the_workspace_built_stays_off(nexus_db):
+    """Its row's switch refused it to everyone: after the upgrade a Deny does,
+    for who held a role there; the one turned on is still used."""
+    nexus = _world()
+    with nexus.installed():
+        await _upgrade(nexus, nexus_db)
+        off = nexus_resource("agent", org="org-1", workspace="ws-a", id="custom-off")
+        on = nexus_resource("agent", org="org-1", workspace="ws-a", id="custom-on")
+        for user in ("bob", "carol", "alice", "frank"):
+            with use_call_context(NexusIam.context(user)):
+                assert not nexus.iam.authorize("nexus:UseAgent", off).allowed, user
+                assert nexus.iam.authorize("nexus:UseAgent", on).allowed, user
+
+
+def test_the_upgrade_waits_for_the_role_features_move_only():
+    """Old feature policies kept as a sub-policy's parent are detached: their
+    retirement is no reason to wait (it would wait for good)."""
+    assert "role_features_retired_v1" not in policy_tree.AFTER
+    assert "role_features_v1" in policy_tree.AFTER
+
+
+def test_a_turned_off_agent_of_a_module_not_loaded_stops_the_move(monkeypatch):
+    from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary import (
+        agents__primary_adapter__FastAPI as agents_api,
+    )
+
+    monkeypatch.setattr(agents_api, "_get_agent_class_registry", lambda: {})
+    monkeypatch.setattr(agents_api, "agent_class_modules", lambda: {})
+    resolve = REAL_RESOLVER()
+    # Turned on: guessed as before, it denies nothing.
+    assert resolve("acme.people.agents/Scout", None) is not None
+    with pytest.raises(policy_tree.UpgradeStop, match="did not load"):
+        resolve("acme.people.agents/Scout", None, strict=True)
+    # A remote agent's name is its own: never guessed.
+    assert resolve("acme.people/Scout", "remote", strict=True) is not None
