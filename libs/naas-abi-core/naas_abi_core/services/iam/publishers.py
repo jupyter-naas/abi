@@ -67,16 +67,33 @@ def _order(publisher: Publisher) -> tuple[int, str]:
     return (rank.get(publisher.id, 2), publisher.id)
 
 
+def _at_platform(pattern: str) -> str:
+    """A pattern written at ``${scope}`` read at the platform, where what a
+    container holds is named after ``abi:``: compared within a type's names,
+    which start there."""
+    prefix = f"{SCOPE}/"
+    return "abi:" + pattern[len(prefix) :] if pattern.startswith(prefix) else pattern
+
+
 def _of_module(
-    action: GrantableAction, type_name: str, module: str
+    action: GrantableAction,
+    type_name: str,
+    module: str,
+    within: grants.Universe = grants.EVERYTHING,
 ) -> GrantableAction | None:
     """What of ``action`` (a ``module`` catalog action) can name ``module``'s
-    items of ``type_name``: the patterns that overlap them, None when none does."""
+    items of ``type_name``: the patterns that overlap them among the type's
+    names (``within``: an id holds no step, so ``.../p/*`` never reaches
+    another module's items), None when none does."""
     step = f"{module_scopes.SERVICE}:{type_name}/{encode_segment(module)}/*"
-    items = (f"{SCOPE}/{step}", f"{SCOPE}/*/{step}")
+    items = (f"abi:{step}", f"abi:*/{step}")
     with grants.budget():
         try:
-            kept = tuple(r for r in action.resources if grants.overlaps(r, items))
+            kept = tuple(
+                r
+                for r in action.resources
+                if grants.overlaps(_at_platform(r), items, within)
+            )
         except grants.Exhausted:
             # Unsure: shown, as the patterns are what the caller holds anyway.
             kept = action.resources
@@ -92,6 +109,7 @@ def _types(
     *,
     module: str = "",
     only: Collection[str] | None = None,
+    containers: frozenset[tuple[str, str]] = frozenset(),
 ) -> list[PublishedType]:
     found: list[PublishedType] = []
     for resource_type in catalog.resource_types:
@@ -105,7 +123,12 @@ def _types(
             if held is None:
                 continue
             if module:
-                held = _of_module(held, resource_type.name, module)
+                held = _of_module(
+                    held,
+                    resource_type.name,
+                    module,
+                    grants.universe(catalog.service, resource_type.name, containers),
+                )
                 if held is None:
                     continue
             actions.append(PublishedAction(spec, held))
@@ -136,12 +159,23 @@ def by_publisher(
     granted: dict[str, GrantableAction] = {
         action.action: action for found in grantable for action in found.actions
     }
+    catalogs = list(catalogs)
+    containers = frozenset(
+        (c.service, t.name) for c in catalogs for t in c.resource_types if t.container
+    )
     types: dict[str, list[PublishedType]] = {}
     for catalog in catalogs:
         if catalog.service == module_scopes.SERVICE:
             for module, exposed in sorted((modules or {}).items()):
                 types.setdefault(module, []).extend(
-                    _types(catalog, granted, listable, module=module, only=exposed)
+                    _types(
+                        catalog,
+                        granted,
+                        listable,
+                        module=module,
+                        only=exposed,
+                        containers=containers,
+                    )
                 )
             continue
         types.setdefault(catalog.publisher, []).extend(

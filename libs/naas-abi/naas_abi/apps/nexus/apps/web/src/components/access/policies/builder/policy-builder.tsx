@@ -22,6 +22,13 @@ function message(error: unknown): string {
   return error instanceof IamAdminError || error instanceof Error ? error.message : String(error);
 }
 
+/** What a pattern the caller may grant stands for: the container the policy is attached at
+ *  (`${scope}`), or what it holds that they may grant. */
+function patternNote(pattern: string, type: BuilderType): string {
+  if (pattern === '${scope}') return type.container ? `this ${type.type.replace(/_/g, ' ')} itself` : 'the scope itself';
+  return 'all you may grant';
+}
+
 type Listing = { items: ListedResource[]; next: string | null; listed: boolean; loading: boolean; error: string | null };
 
 /** The existing resources of ``type`` the caller may list at ``scope``, searched and paged. */
@@ -273,7 +280,7 @@ function TypeSection({
                       onChange={(e) => toggleResource(pattern, e.target.checked)}
                     />
                     <code>{pattern}</code>
-                    <span className="access-policy-muted">all you may grant</span>
+                    <span className="access-policy-muted">{patternNote(pattern, type)}</span>
                   </label>
                 </li>
               ))}

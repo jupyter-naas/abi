@@ -151,3 +151,38 @@ def test_publishers_come_engine_first_then_naas_abi_then_modules(world):
 def test_a_stranger_gets_no_publisher(world):
     h = world
     assert _view(h, h.user("stranger")) == []
+
+
+def test_a_module_s_pattern_names_no_other_module_s_items(world):
+    """``${scope}/module:agent/p/*`` reaches P's agents only: an id holds no
+    step, so its ``*`` never reaches Q's (the type's names, not any glob)."""
+    h = world
+    user = h.user("bob")
+    h.grant(
+        user.id,
+        statement("Allow", ["module:UseAgent"], ["${scope}/module:agent/p/*"]),
+        scope=WS1,
+    )
+    with h.as_(user):
+        grantable = h.iam.grantable(WS1)
+    view = by_publisher(
+        h.iam.catalogs.all(),
+        grantable,
+        modules={"p": ("agent",), "q": ("agent",)},
+        listable=h.iam.has_lister,
+    )
+    assert [p.id for p in view] == ["p"]
+    # Written for any container below the scope, it is still P's only.
+    h.grant(
+        user.id,
+        statement("Allow", ["module:UseAgent"], ["${scope}/*/module:agent/p/*"]),
+        scope=WS1,
+    )
+    with h.as_(user):
+        grantable = h.iam.grantable(WS1)
+    view = by_publisher(
+        h.iam.catalogs.all(),
+        grantable,
+        modules={"p": ("agent",), "q": ("agent",)},
+    )
+    assert [p.id for p in view] == ["p"]
