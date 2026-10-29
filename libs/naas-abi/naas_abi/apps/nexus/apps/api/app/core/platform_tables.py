@@ -138,11 +138,6 @@ _ENTRIES: list[PlatformTableEntry] = [
             "Workflow runs",
             "Who started each workflow or pipeline run, from which workspace.",
         ),
-        (
-            "workflow_visibility",
-            "Workflows on or off",
-            "Workflows and pipelines turned on or off in each workspace.",
-        ),
     ),
     *_section(
         "Code",

@@ -18,11 +18,6 @@ from collections.abc import Awaitable
 from typing import Any, Literal, TypeVar
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from naas_abi.apps.nexus.apps.api.app.core.config import settings
-from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
-    enabled_feature_catalog,
-    with_pinned,
-)
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
     get_current_user_required,
     require_superadmin,
@@ -147,19 +142,6 @@ class ApproveBody(BaseModel):
 
 class RejectBody(BaseModel):
     reason: str = Field(default="", max_length=500)
-
-
-class SetBody(BaseModel):
-    """A set: each part a list of items, or None for everything (core
-    ``services/iam/sets.py``: ``<module>``, ``<type>/<module>/<name>``,
-    ``<service>:<Action>``; feature keys)."""
-
-    modules: list[str] | None = Field(default=None, max_length=2000)
-    features: list[str] | None = Field(default=None, max_length=200)
-
-    def pinned_features(self) -> list[str] | None:
-        """The features, with those that always stay reachable (settings)."""
-        return with_pinned(self.features)
 
 
 class SimulateBody(BaseModel):
@@ -535,70 +517,6 @@ async def reject_manifest(
 ) -> dict[str, Any]:
     reason = body.reason if body is not None else ""
     return await _call(service.reject_manifest(user, principal_id, sha256, reason))
-
-
-# -- sets: the modules × workspaces page ------------------------------------------------------
-
-
-@router.get("/sets", dependencies=[declares("iam:GetSet")])
-async def list_sets(
-    organization_id: str | None = None,
-    user: User = Signed,
-    service: IamAdminService = Service,
-) -> dict[str, Any]:
-    """The sets of the organizations (or the one named) and their workspaces the
-    caller may read, with every module's scopes and the deployment's features: the
-    rows of the page."""
-    from naas_abi.apps.nexus.apps.api.app.services.modules import scopes
-
-    organizations = await _call(service.sets(user, organization_id))
-    return {
-        "modules": await scopes.gather(),
-        "features": enabled_feature_catalog(settings.feature_flags),
-        "organizations": organizations,
-    }
-
-
-@router.put("/sets/{organization_id}", dependencies=[declares("iam:PutSet")])
-async def put_organization_set(
-    organization_id: str,
-    body: SetBody,
-    user: User = Signed,
-    service: IamAdminService = Service,
-) -> dict[str, Any]:
-    """An organization's set: the platform admin's to change."""
-    return await _call(
-        service.put_set(
-            user,
-            organization_id,
-            modules=body.modules,
-            features=body.pinned_features(),
-        )
-    )
-
-
-@router.put(
-    "/sets/{organization_id}/workspaces/{workspace_id}",
-    dependencies=[declares("iam:PutSet")],
-)
-async def put_workspace_set(
-    organization_id: str,
-    workspace_id: str,
-    body: SetBody,
-    user: User = Signed,
-    service: IamAdminService = Service,
-) -> dict[str, Any]:
-    """A workspace's set, within its organization's: the organization's owners'
-    and admins' to change."""
-    return await _call(
-        service.put_set(
-            user,
-            organization_id,
-            workspace_id,
-            modules=body.modules,
-            features=body.pinned_features(),
-        )
-    )
 
 
 # -- the simulator and the audit --------------------------------------------------------------

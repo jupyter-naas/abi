@@ -21,7 +21,6 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
     OrganizationService,
 )
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import WorkspaceService
-from naas_abi_core.engine.call_context import as_service_account
 
 
 @pytest.fixture(autouse=True)
@@ -105,15 +104,15 @@ def test_bulk_update_refuses_members_and_foreign_workspaces() -> None:
     assert store["ws-1"].workspace_group is None
 
 
-def test_the_listing_shows_each_workspaces_features_within_its_set(team) -> None:
-    with as_service_account("engine"):
-        team.iam.put_set("org-1", "ws-1", features=["chat", "graph", "settings"])
+def test_the_listing_shows_the_deployments_features_for_each_workspace(team) -> None:
+    from naas_abi.apps.nexus.apps.api.app.core.config import settings
+    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import enabled_feature_catalog
 
     resp = _client(role="admin", store=_store()).get("/organizations/org-1/workspaces")
 
     features = {ws["id"]: ws["features"] for ws in resp.json()}
-    assert features["ws-1"] == ["chat", "graph", "settings"]
-    assert "maps" in features["ws-2"]
+    # No set narrows a workspace's: who uses each is a policy's.
+    assert features["ws-1"] == features["ws-2"] == enabled_feature_catalog(settings.feature_flags)
     assert all("feature_overrides" not in ws for ws in resp.json())
 
 

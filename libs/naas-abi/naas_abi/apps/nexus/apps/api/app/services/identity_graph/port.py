@@ -67,7 +67,6 @@ class IdentityMembership:
 class IdentityAppConfig:
     workspace_id: str
     app_id: str
-    enabled: bool
 
 
 @dataclass(frozen=True)
@@ -79,7 +78,6 @@ class IdentityAgentConfig:
     module_path: str | None = None
     model_id: str | None = None
     provider: str | None = None
-    enabled: bool = False
     is_default: bool = False
 
 

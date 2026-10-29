@@ -19,7 +19,6 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
     _get_object_storage,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
-from naas_abi.apps.nexus.apps.api.app.services.iam import sets as scope_sets
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MembershipDenied
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_scope
@@ -610,7 +609,6 @@ def _workspace_payload(
     *,
     org_logo_url: str | None,
     org_logo_rect_url: str | None,
-    feature_set: tuple[str, ...] | None = None,
 ) -> dict:
     return {
         "id": ws.id,
@@ -625,8 +623,8 @@ def _workspace_payload(
         "workspace_group": ws.workspace_group,
         "organization_logo_url": resolve_stored_asset_url(org_logo_url),
         "organization_logo_rectangle_url": resolve_stored_asset_url(org_logo_rect_url),
-        # The enabled features within the workspace's set: a policy gives them.
-        "features": offered_features(settings.feature_flags, feature_set),
+        # The deployment's enabled features: a policy gives each.
+        "features": offered_features(settings.feature_flags),
     }
 
 
@@ -641,7 +639,6 @@ async def _org_workspace_payloads(
             ws,
             org_logo_url=org.logo_url if org else None,
             org_logo_rect_url=org.logo_rectangle_url if org else None,
-            feature_set=await scope_sets.effective_features_async(org_id, ws.id),
         )
         for ws in workspaces
     ]

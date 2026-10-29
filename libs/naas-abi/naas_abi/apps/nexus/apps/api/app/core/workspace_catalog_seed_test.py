@@ -6,7 +6,6 @@ from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
     parse_agent_ref,
     resolve_agent_ref,
     resolve_agent_refs,
-    resolve_app_enabled,
 )
 
 
@@ -41,15 +40,6 @@ def test_resolve_agent_refs_skips_unknown() -> None:
     assert resolve_agent_refs(
         ["naas_abi AbiAgent", "nope NopeAgent"], registry
     ) == {"naas_abi.agents.AbiAgent/AbiAgent"}
-
-
-def test_resolve_app_enabled_prefers_db_then_seed() -> None:
-    seed = {"example.module:dashboard"}
-    stored = {"example.module:dashboard": False, "example.module:other": True}
-    assert resolve_app_enabled("example.module:dashboard", stored, seed) is False
-    assert resolve_app_enabled("example.module:other", stored, seed) is True
-    assert resolve_app_enabled("example.module:dashboard", {}, seed) is True
-    assert resolve_app_enabled("example.module:unknown", {}, seed) is False
 
 
 def test_ontology_matches_seed_module_filename() -> None:

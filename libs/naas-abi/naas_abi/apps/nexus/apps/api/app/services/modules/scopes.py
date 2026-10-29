@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
@@ -294,12 +294,24 @@ async def gather(unavailable: set[str] | None = None) -> list[dict[str, Any]]:
     return build(exposed, catalogs, engine_modules())
 
 
-def in_set(modules: Iterable[dict[str, Any]], scope_set: Any) -> list[dict[str, Any]]:
-    """What ``gather`` lists, narrowed to a set (core ``ScopeSet``): each module
-    with something in it and how many agents, apps, workflows and pipelines,
-    for a workspace's settings (what the workspace has)."""
+def item_scopes(modules: Iterable[dict[str, Any]]) -> list[Any]:
+    """The module scope of every agent, app, workflow and pipeline ``gather``
+    lists, to ask IAM which of them a caller may use."""
     from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
-    from naas_abi.apps.nexus.apps.api.app.services.iam.sets import in_set as scope_in_set
+
+    return [
+        ModuleScope(type_name, entry["module"], item["name"])
+        for entry in modules
+        for type_name, plural in PLURAL.items()
+        for item in entry.get(plural) or ()
+    ]
+
+
+def counted(modules: Iterable[dict[str, Any]], usable: Collection[Any]) -> list[dict[str, Any]]:
+    """What ``gather`` lists, counted within ``usable`` (module scopes): each
+    module with something in it and how many agents, apps, workflows and
+    pipelines, for a workspace's settings (what the caller may use there)."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
 
     found: list[dict[str, Any]] = []
     for entry in modules:
@@ -307,7 +319,7 @@ def in_set(modules: Iterable[dict[str, Any]], scope_set: Any) -> list[dict[str, 
             plural: sum(
                 1
                 for item in entry.get(plural) or ()
-                if scope_in_set(scope_set, ModuleScope(type_name, entry["module"], item["name"]))
+                if ModuleScope(type_name, entry["module"], item["name"]) in usable
             )
             for type_name, plural in PLURAL.items()
         }

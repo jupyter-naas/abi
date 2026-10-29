@@ -246,9 +246,7 @@ async def test_app_and_agent_configuration(env) -> None:
     await _seed_user(maker)
     async with maker() as session:
         session.add(WorkspaceModel(id="ws-1", name="Acme", slug="acme", owner_id="usr-1"))
-        session.add(
-            AppConfigModel(id="a-1", workspace_id="ws-1", app_id="external.acme:web", enabled=True)
-        )
+        session.add(AppConfigModel(id="a-1", workspace_id="ws-1", app_id="external.acme:web"))
         session.add(
             AgentConfigModel(
                 id="g-1",

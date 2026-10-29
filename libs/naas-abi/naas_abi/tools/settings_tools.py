@@ -42,7 +42,7 @@ def settings_tools() -> list[BaseTool]:
             from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
                 enabled_feature_catalog,
             )
-            from naas_abi.apps.nexus.apps.api.app.services.iam.sets import (
+            from naas_abi.apps.nexus.apps.api.app.services.iam.user_features import (
                 user_feature_flags,
             )
             from naas_abi.tools.nexus_admin_tools import _workspace_service

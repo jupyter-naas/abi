@@ -9,7 +9,7 @@ offered nowhere and usable by nobody, the platform admin included
 from __future__ import annotations
 
 import json
-from collections.abc import Collection, Iterable, Mapping
+from collections.abc import Mapping
 
 from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig
 
@@ -39,31 +39,15 @@ KNOWN_FEATURE_KEYS: tuple[str, ...] = (
     "tasks",
 )
 
-# Settings always stays reachable: a set never leaves it out (Nexus adds it to
-# every feature set it records).
+# Settings always stayed reachable: the workspace feature sets an override made
+# kept it (``feature_set_from_overrides``).
 PINNED_FEATURES: tuple[str, ...] = ("settings",)
 
 
-def with_pinned(features: Iterable[str] | None) -> list[str] | None:
-    """A feature set with the features that always stay reachable; None stays None
-    (every feature)."""
-    if features is None:
-        return None
-    return sorted({*features, *PINNED_FEATURES})
-
-
-def offered_features(
-    feature_flags_config: FeatureFlagsConfig, feature_set: Collection[str] | None = None
-) -> list[str]:
+def offered_features(feature_flags_config: FeatureFlagsConfig) -> list[str]:
     """The features a workspace offers, in catalog order: the deployment's enabled
-    ones within the workspace's ``feature_set`` (its set within its org's, IAM's:
-    ``services/iam/sets.py``; None for every feature), the pinned ones always.
-    Who uses one is a policy's: ``services/iam/sets.user_feature_flags``."""
-    catalog = enabled_feature_catalog(feature_flags_config)
-    if feature_set is None:
-        return catalog
-    kept = {*feature_set, *PINNED_FEATURES}
-    return [key for key in catalog if key in kept]
+    ones. Who uses one is a policy's: ``services/iam/user_features``."""
+    return enabled_feature_catalog(feature_flags_config)
 
 
 def feature_enabled(feature_flags_config: FeatureFlagsConfig, key: str) -> bool:
@@ -80,8 +64,7 @@ def enabled_feature_catalog(feature_flags_config: FeatureFlagsConfig) -> list[st
 def parse_feature_overrides(raw: str | None) -> dict[str, bool] | None:
     """``workspaces.feature_overrides`` (JSON text) to a dict; ``None`` when unset.
 
-    Read once, by the move of the overrides into the workspaces' feature sets
-    (``services/iam/sets.migrate_feature_overrides``)."""
+    Read once, by the move of the overrides (``services/iam/feature_overrides``)."""
     if raw is None:
         return None
     try:
@@ -100,8 +83,8 @@ def parse_feature_overrides(raw: str | None) -> dict[str, bool] | None:
 def feature_set_from_overrides(overrides: Mapping[str, bool] | None) -> list[str] | None:
     """The feature set per-workspace overrides stand for: every known feature
     but those turned off (a feature the deployment enables later included), and
-    always the pinned ones; None when none is off (nothing narrows). The one rule
-    of the start-up move (``services/iam/sets.py``) and the snapshot import."""
+    always the pinned ones; None when none is off (nothing narrows). The rule of
+    the start-up move (``services/iam/feature_overrides``)."""
     off = {key for key, on in (overrides or {}).items() if not on}
     if not off:
         return None

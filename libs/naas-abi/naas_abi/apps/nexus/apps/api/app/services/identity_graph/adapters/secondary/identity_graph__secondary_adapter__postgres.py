@@ -162,10 +162,7 @@ class IdentitySourceSecondaryAdapterPostgres(IdentitySourcePort):
                 for w, m in members
             ],
             app_configs=[
-                IdentityAppConfig(
-                    workspace_id=a.workspace_id, app_id=a.app_id, enabled=bool(a.enabled)
-                )
-                for a in apps
+                IdentityAppConfig(workspace_id=a.workspace_id, app_id=a.app_id) for a in apps
             ],
             agent_configs=[
                 IdentityAgentConfig(
@@ -176,7 +173,6 @@ class IdentitySourceSecondaryAdapterPostgres(IdentitySourcePort):
                     module_path=a.module_path,
                     model_id=a.model_id,
                     provider=a.provider,
-                    enabled=bool(a.enabled),
                     is_default=bool(a.is_default),
                 )
                 for a in agents

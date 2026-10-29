@@ -31,18 +31,10 @@ class TestEnabledFeatures:
 
 
 class TestOfferedFeatures:
-    def test_a_workspace_offers_the_enabled_features_within_its_set(self) -> None:
-        config = FeatureFlagsConfig()
+    def test_a_workspace_offers_the_deployment_s_enabled_features(self) -> None:
+        config = FeatureFlagsConfig(enabled_features=["chat", "graph"])
 
-        assert offered_features(config, ("chat", "graph", "code")) == [
-            "chat",
-            "graph",
-            "settings",
-        ]
-        assert offered_features(config) == enabled_feature_catalog(config)
-
-    def test_settings_stays_offered_with_an_empty_set(self) -> None:
-        assert offered_features(FeatureFlagsConfig(), ()) == ["settings"]
+        assert offered_features(config) == enabled_feature_catalog(config) == ["chat", "graph"]
 
     def test_saved_overrides_parse_for_the_move_and_drop_unknown_keys(self) -> None:
         assert parse_feature_overrides('{"maps": false, "graph": true}') == {

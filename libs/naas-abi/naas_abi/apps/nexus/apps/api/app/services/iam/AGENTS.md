@@ -14,14 +14,16 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
 | File | Role |
 |---|---|
 | `catalog/` | The `nexus` action catalog: one module per router family (`dsl.py` builds types and actions with a **level**), aggregated by `__init__.py` into `NEXUS_CATALOG`, `FEATURE_OF`, `TYPE_OF`, `LEVEL_OF` |
-| `authz.py` | `AUTHZ.require / allowed / decide / filter / name`: builds the resource name, checks `UseFeature` first, maps a refusal to `AuthzDenied` (an `HTTPException`: 403, or 404 for another user's personal resource). `ModuleScope` and `require_scope / allowed_scope / decide_scope / filter_scopes / scope_allowed_in_any` decide module scopes |
+| `authz.py` | `AUTHZ.require / allowed / decide / filter / name`: builds the resource name, checks `UseFeature` first, maps a refusal to `AuthzDenied` (an `HTTPException`: 403, or 404 for another user's personal resource). `ModuleScope` and `require_scope / allowed_scope / decide_scope / filter_scopes / scope_allowed_in_any` decide module scopes; `upgrading()` refuses every module scope and feature until the sets are policies |
 | `guards.py` | `guard(action, ...)`, a route dependency that decides before the body is read; `declares(action)` for routes that authorize inline. The matrix test reads both |
 | `memberships.py` | `MEMBERSHIPS`: roles are `builtin.<role>` attachments at `abi:<org>:-` (org) and `abi:<org>:<ws>` (workspace); reads as `api`, changes as `api` on behalf of the caller |
 | `names.py` | Scopes and resource names; `NO_ORG` (`_none`) is the org of a workspace that has none |
 | `placements.py` | Which workspace owns the kernel resources Nexus keeps (`placement_source`, `place`, `place_existing`) |
 | `bootstrap.py` | Startup: register the catalog, move the old membership rows into IAM once (`iam_migrations`) |
 | `role_features.py` | Startup, once: what each role brought in each workspace becomes that workspace's policy "Features of <role>" (`migrate_role_features`, `iam_migrations` `role_features_v1`); then warns while a configuration still sets `role_baseline`, `organization_overrides` or `workspace_overrides` |
-| `sets.py` | The organisation and workspace sets from Nexus's side: what a workspace lists (`within_set`, `in_set`, `workspace_set`), effective features of a workspace, a user's feature flags from IAM (`user_feature_flags`), a new workspace's set (`plan_workspace_set` then `record_workspace_set`, narrowed by its catalog seed), the one-time move of the feature overrides (`migrate_feature_overrides`) |
+| `user_features.py` | A user's feature flags from IAM (`user_feature_flags`: `UseFeature` per workspace, in one `filter`), what `/api/workspaces` shows |
+| `feature_overrides.py` | Startup, once: the per-workspace feature overrides of earlier versions (`migrate_feature_overrides`, `iam_migrations` `workspace_feature_sets_v1`) |
+| `policy_tree.py` | Startup, once: the sets and the workspace toggles become access policies and their sub-policies (`migrate_sets`, `iam_migrations` `policy_tree_v1`); `pending()` until it is recorded |
 | `runtime.py` | Where Nexus gets IAM (the engine's); tests install their own with `configure` |
 | `testing.py`, `../../conftest.py` | `NexusIam` (a real IAM on the memory store) and the `nexus_iam` / `team` / `nexus_db` fixtures |
 | `route_matrix_test.py` | Every route declares its action; write methods never authorize only a read; every `guard` is decided by level for viewer, member, admin, owner, stranger |
@@ -35,9 +37,9 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
   Where the workspace is in the body or the resource is named only after loading it, call `await authz.require(...)`
   and add `declares(...)`. Kernel-bound routes declare the kernel action (`declares("triple_store:Query")`): the kernel
   decides as the same user.
-- **Features** (`UseFeature`) come from policies only, never from a role, within the sets of the workspace and
-  its org ("Sets"). An action of a flagged section carries its `feature=` in the catalog; the API refuses it
-  where the user lacks the feature. A feature outside `enabled_features` is usable by nobody.
+- **Features** (`UseFeature`) come from policies only, never from a role. An action of a flagged section carries
+  its `feature=` in the catalog; the API refuses it where the user lacks the feature. A feature outside
+  `enabled_features` is usable by nobody.
 - **Memberships change through `MEMBERSHIPS`** only: an admin cannot grant, demote or remove an owner, and the last
   owner stays (IAM answers, whichever API is used). An org owner or admin also holds their role organization-wide
   (`abi:<org>:*`, kept by `Memberships.mirror_org_wide` and `sync_org_wide_roles` at start): that is how they reach
@@ -56,10 +58,9 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
   `discovery:OpenApp` on `app/*/idp/admin`. Do not widen `OpenApp` for a role without it.
 - **A create that fails after the row exists removes it** (and the IAM scope): see `OrganizationService.create_organization`
   and `WorkspaceService.create_workspace`. A new workspace places its own resources with `on_workspace_created`, never
-  `place_existing`. Its set is decided before anything exists (`sets.plan_workspace_set`, within its org's); placing
-  or recording it failing removes the workspace and its placements (`placements.forget_workspace`): 409 when the org's
-  set narrowed meanwhile, 503 without IAM. An import or the feature-override move records a workspace's features
-  within its org's set (`sets.put_features`).
+  `place_existing`; placing failing removes the workspace and its placements (`placements.forget_workspace`). Its
+  catalog seed (agents, apps, ontologies, maps) only installs: a new workspace grants nothing, a snapshot import
+  neither.
 - **`-`, `*` and `_none` are not workspaces.** Never build a workspace scope or resource name from a path value
   without `Authz.org_of`/`name` (they refuse those ids): `abi:<org>:-` is the organization's own scope.
 - **A change that widens what a workspace holds is checked beyond the catalog** (`read_all` is a platform
@@ -85,29 +86,16 @@ workspace the request names, after the user's membership there. One source of tr
 - **The `apps` and `agents` features** no longer gate using a module's apps and agents: they are the settings
   sections (`InstallApp`, `UpdateApp`, `UninstallApp`, agent edits) and the app projects. `nexus:UseApp` is left for a
   link that is no module's app (a Pages portal's sign-in).
-- **Listed within the set, for everyone.** What a workspace lists of a module (`GET /apps`, its app configs, the agents
-  roster, the workflows) is in its effective set (`sets.within_set`), the platform admin included: IAM bounds the
-  others with the set already, never the platform admin, who still reaches an item outside it by name. Turning on an
-  app, a module agent or a workflow outside the set from workspace settings is refused (403).
+- **Listed as IAM decides.** What a workspace lists of a module (`GET /apps`, the agents roster, the workflows and
+  workspace settings › Agents, Apps, Workflows) is what the caller may use there, IAM's `filter` alone
+  (`filter_scopes`): no set, no switch. A workspace that should not offer a module denies it in a policy (its
+  access policy's Denies, "The upgrade").
 - **The listing** `GET /api/modules/scopes?workspace_id=|organization_id=` (`nexus:ListModuleScopes`, admin) is every
   module with its agents, apps, workflows, pipelines and declared catalog, with display data and the `resource` and
   `actions` a policy names (`services/modules/scopes.py`). The policy editor suggests ids from it.
 - **Discovery's grants** stay the broker-side check (a member holds `InvokeAgent`, `OpenApp`, `TriggerJob`
   platform-wide); the module scope is checked here first, and a turn that names no workspace runs no module agent
   or workflow.
-
-## Visibility
-
-A workspace's admins turn each agent, app, workflow and pipeline of its set on or off for everyone in it
-(`services/visibility`, workspace settings › Agents, Apps, Workflows). `authz` asks it after IAM allows the
-use of a module scope (its use action; reading one's own runs is not a use): one turned off is refused
-(`decide_scope` reason `hidden`, 403 "This <type> is turned off in this workspace"), left out of `filter_scopes`
-and skipped by `scope_allowed_in_any`, for every role, the platform admin included. A listing still shows it to
-who may turn that one back on: `filter_scopes(include_hidden=<predicate>)` with `authz.allowed_ids` (`UpdateApp`
-/ `UpdateAgent` on each resource, in one `filter`). `filter_scopes(within_set=True)` is a listing of the
-workspace: its set first. The settings actions are `nexus`'s
-(`InstallApp`, `UpdateApp`, `UninstallApp`, `UpdateAgent`; `ListWorkflowSettings` and `UpdateWorkflow`,
-`catalog/workflows.py`, admin, feature `settings`); IAM never sees the state itself.
 
 ## The `nexus` catalog
 
@@ -122,7 +110,7 @@ the caller's own id. One module per router family:
 | `organizations.py` | `organization`, `member`, `domain`, `billing` (org level); `CreateWorkspace` is an org action; `DeleteOrganization` is `owner_only`; every user's `CreateOrganization` is a `PLATFORM_ACCESS` row |
 | `workspaces.py` | `workspace`, `member`, `server`, `resource_access` |
 | `features.py` | `feature/<key>` (`UseFeature`), `policy_only`: no role holds it |
-| `chat.py`, `agents.py`, `apps.py`, `workflows.py` | `conversation`; `agent`, `skill`; `app`, `app_project`, `module` (`ListModuleScopes`); `workflow` (on or off in a workspace) |
+| `chat.py`, `agents.py`, `apps.py`, `workflows.py` | `conversation`; `agent`, `skill`; `app`, `app_project`, `module` (`ListModuleScopes`); `workflow` (its settings: listed, deprecated switch) |
 | `files.py`, `datasets.py`, `office.py` | `file` (drive + path), `my_file`, `user_storage`, `root_storage`; `dataset`; `project` (slides, documents, sheets) |
 | `knowledge.py`, `search.py` | `view`, `graph_cache`, `ontology`, `icon`, `layout`, `layer`, `feed_layer`, `basemap`, `maps_catalog`, `maps_access`; `search`, `topic`, `search_scope` |
 | `code.py`, `settings.py`, `platform.py`, `realtime.py` | `code`, `code_settings`; `secret`, `provider_model`, `abi_server`; `analytics`, `system`; `presence`, `speech` |
@@ -156,7 +144,7 @@ a catalog, run the route matrix.
   (`services/invites`). Each workspace has, after the move below, a policy "Features of <role>" for each role
   that had features there, to attach to newcomers. A feature outside `enabled_features` exists nowhere: it is
   offered nowhere and refused to everyone, the platform admin included, before IAM is asked
-  (`authz.feature_exists`). What a workspace (and its org) has is its feature set ("Sets").
+  (`authz.feature_exists`).
 - **The move of the role features** (`role_features.migrate_role_features`, at start after the overrides' move
   and the org-wide roles, recorded in `iam_migrations` as `role_features_v1`). It reads what IAM has in force,
   never the configuration: the stored `builtin.features.<key>` an older version made (from `role_baseline`,
@@ -190,47 +178,48 @@ a catalog, run the route matrix.
   policy still names, which would stop Nexus's start, so they are kept, deprecated. `GET /access` reports
   neither.
 
-## Sets
+## The upgrade: sets and toggles become policies
 
-Core IAM keeps each org's and workspace's set (module items and features) and bounds every user's decision
-with them (core `services/iam/AGENTS.md`, "Sets"). Nexus:
+Before, three things decided whether a user used a module's item or a feature in a workspace: the policies (and
+`builtin.admin` / `builtin.owner`, which held every module scope at their scope), core IAM's sets of the org and
+the workspace (the Modules & features pages), and what the workspace turned off (`services/visibility`, workspace
+settings › Agents, Apps, Workflows). `policy_tree.migrate_sets` (at start, after the overrides' and the role
+features' moves, recorded in `iam_migrations` as `policy_tree_v1`) keeps every decision, then they are gone:
 
-- **Shows the user what IAM decides.** The `feature_flags` of a workspace in `/api/workspaces` are IAM's
-  `UseFeature` for the user, one `filter` per workspace (`sets.user_feature_flags`), within `enabled_features`:
-  the policies granting a feature within the sets, the platform admin's `*` included, in one `filter` for every
-  workspace listed. Without an IAM every feature is shown off. **What is only shown fails closed:** when IAM fails to answer (a NATS
-  timeout), the flags are all off and a workspace's set reads as empty (`effective_set`), logged at warning
-  level, never a 500 and never wider than IAM would say; only an absent IAM (a route tested alone) reads as
-  everything. The features a
-  workspace offers (`features` of the org's workspace list and of `/configuration`, the agents a workspace
-  syncs) are the enabled features within its effective set (`feature_flags.offered_features`).
-- **Edits sets as the user** through `services/iam_admin` (`/api/iam/admin/sets`, audited): the modules ×
-  workspaces page. `settings` is added to every feature set it records (`PINNED_FEATURES`): a set never takes
-  a workspace's settings away.
-- **Records a new workspace's set** (`plan_workspace_set` before the row exists, `record_workspace_set` after, as `engine`, part of the creation the route authorized),
-  a part only where something narrows it, so the rest follows its org's set, now and after the org's set
-  changes:
-  - `modules`, when its **catalog seed** names agents or apps. The seed (`catalog_seed`: agents, apps,
-    ontologies, maps) still says what the workspace is created with; its `agents` and `apps` also narrow the
-    set: those types become the seeded items the org has (through a whole module, `<type>/<m>/*` or
-    `<type>/*/*`), every other type and the declared actions stay as the org has them (`<type>/<m>/*`,
-    `<service>:*` for a whole module). In an org with no set, the rest is every module's, installed now or
-    later (`workflow/*/*`, `pipeline/*/*`, `*:*`, and the type the seed leaves out): no snapshot of the
-    modules running at creation. A seed with no `agents` (or `apps`) key narrows nothing of that type.
-  A new org records none: everything.
-- **Moved the feature overrides once** (`migrate_feature_overrides`, at start after the role data, recorded in
-  `iam_migrations` as `workspace_feature_sets_v1`): `workspaces.feature_overrides`, else the deprecated
-  `feature_flags.workspace_overrides`. An override turning a feature off leaves it out of the workspace's
-  feature set, which is every other known feature (one the deployment enables later included) and always
-  `settings` (`feature_set_from_overrides`, the snapshot import's rule too); one turning it on keeps it there
-  and, for each role whose defaults lack it, a workspace policy (`Features kept from the workspace's
-  overrides`, enabled features only) attached to the people holding that role there, at the workspace or
-  org-wide (the org's owners and admins), keeps it for them. Nobody's features change; the column is
-  cleared. Every step may run again (the set is put, the policy found by name and document before it is
-  made, attaching is idempotent): a workspace that fails is logged and the move is not recorded, so the next
-  start finishes it, and a failure never keeps the rest of startup's authorization (`sync_org_wide_roles`)
-  from running. Snapshot imports (`core/workspaces_import.py`)
-  record a feature set from a snapshot's overrides likewise, where the workspace has none.
+- **The tree.** Each org O gets "<O> access", platform-owned: its set's module items and features (everything
+  with no set). Each workspace W gets "<W> access", O-owned, a sub-policy of it: W's own set's items and features,
+  the apps it had turned on one by one (an app was off until turned on or seeded), and a Deny of the agents,
+  workflows and pipelines it had turned off (use only: a workflow's runs stay readable).
+- **Roles.** Who held `builtin.admin` or `builtin.owner` (at W, org-wide, at `abi:O:-`; a group like a person; a
+  pending invitation as a pending grant listed on its Nexus invitation, an org owner's or admin's for every
+  workspace, as the org-wide mirror will) gets, at each place the role reached, "<W> modules (admins and owners)":
+  a sub-policy of that place's access granting every module scope. Not the access policy itself: it bounds
+  features too, and no role brought a feature.
+- **Customer policies.** One that grants module scopes or features moves under the access policy of its owner (a
+  workspace's under "<W> access", an org's under "<O> access", the "Features of <role>" included), split from what
+  else it grants (files, graphs, Denies stay in it, its modules and features move to a sub-policy beside it). An
+  attachment the owner's access would not bound as the sets did (an org's policy attached in a workspace or
+  org-wide, a platform policy attached anywhere) becomes, at each place it reached, one of a sub-policy of that
+  place's access holding the same statements (`statements_at`: glob patterns cut to the place, exactly). A
+  platform policy's unscoped reach of the platform's own names (`abi:-:-:`) stays unbounded, as it was. A service
+  account, never bounded by a set, gets the same grants with no parent.
+- **Exact or stopped.** A sub-policy made before with module grants, a managed policy granting them to users, an
+  action acting on module scopes and other types: the move stops, names it in the log, records nothing. Until it
+  is recorded, `authz.upgrading()` refuses every module scope and feature (and the flags show none): never wider
+  than before. Every step may run again (policies found by owner, name and description; a policy's document is
+  rewritten last).
+- **Then** IAM's legacy sets (`drop_legacy_scope_sets`) and `workflow_visibility` go. `app_configs.enabled` and
+  `agent_configs.enabled` stay in their tables, unread (no ORM column).
+- **What changes** (`policy_tree.NOTES`, in the report): the platform admin reaches what a workspace had turned off;
+  an org's admins and owners reach a workspace made later only through a policy attached there or org-wide; a
+  module installed later is in no access policy until someone adds it.
+
+Tested on a database at the previous state (`policy_tree_test.py`: every user, workspace, module item, declared
+action and feature compared before and after, on the memory, SQLite and PostgreSQL stores; once; interrupted;
+stopped; pending invitations; narrowing "<O> access" narrows below at once; an admin with no policy uses nothing).
+
+## Platform-level types and the flags shown
+
 - **Platform-level types.** A workspace role never reaches a platform-level resource. IAM keeps two
   managed policies in step with attachments: `builtin.platform.member` (held while the principal has a
   `member`, `admin` or `owner` attachment at a workspace or org-wide scope) and `builtin.platform.viewer`
@@ -240,6 +229,10 @@ with them (core `services/iam/AGENTS.md`, "Sets"). Nexus:
   models or open apps. Because Nexus calls as `api` on behalf of the user, the user must hold these too.
   Which agents, apps and workflows a user may use in a workspace is the module scope, checked by Nexus
   before the kernel call ("Module scopes").
+- **The flags shown** (`feature_flags` of `/api/workspaces`) are IAM's `UseFeature` for the user
+  (`user_features.user_feature_flags`), one `filter` for every workspace listed, within `enabled_features`;
+  without an IAM every feature is shown off, and when IAM fails to answer too (logged). The features a workspace
+  offers (`features` of `/configuration` and of the org's workspace list) are the deployment's enabled ones.
 
 ## Decisions
 
@@ -295,9 +288,9 @@ with them (core `services/iam/AGENTS.md`, "Sets"). Nexus:
   workspace (speech, the OpenAI gateway) ask IAM once for all the caller's workspaces. A new personal
   workspace (public signup) is registered with IAM, owned by its user and placed at once. The feature
   agents' tools and the admin tools decide through IAM like the routes do.
-- **Module scopes, zero trust.** Viewers and members hold no module scope, on upgrade too (no migration
-  grant): after the upgrade they use no module's agent (Abi included), app, workflow or pipeline until a policy
-  grants it in their workspace; admins and owners hold them all. Nexus adds no role check of its own: IAM decides
+- **Module scopes, zero trust.** No role holds a module scope, admins and owners included: a user uses no module's
+  agent (Abi included), app, workflow, pipeline or declared action until a policy grants it in their workspace
+  (the upgrade gave each what the roles and sets let them use). Nexus adds no role check of its own: IAM decides
   `module:*` like any action, as `api` for the user (`builtin.api` holds `module:*` and every module's declared
   catalog).
 - **A workflow run's owner is Nexus's record.** Job runs carry no owner, so a start from a workspace is recorded
@@ -312,11 +305,12 @@ with them (core `services/iam/AGENTS.md`, "Sets"). Nexus:
   "Features of member"); a workspace's creator holds none in it either, unless a policy above it grants them;
   `enabled_features` alone decides which features exist. The tasks routes declare `ListTasks`, `UpdateTasks`
   and `ManageTasks` (feature `tasks`) instead of checking roles.
-- **The workspace's feature set replaces its feature overrides.** An override could add a feature to every
-  role; a set only bounds, so a feature beyond what a role had is given with a policy (the move made one for
-  who held it). `PUT /organizations/{org}/workspaces/{ws}/features` is gone; Org settings › Workspaces and
-  workspace settings › General link to the modules × workspaces page. The UI's flags are IAM's, so a policy
-  granting a feature shows in the UI as it is enforced.
+- **Policies are the one place access is decided.** *Decision:* the sets (core IAM's, and the Modules & features
+  pages, `/api/iam/admin/sets`), the workspace on/off toggles (`services/visibility`) and the catalog seed's
+  narrowing go; what a user lists and uses is IAM's decision alone. *Consequences:* an org's access is its
+  "<O> access" policy, a workspace's its sub-policy; narrowing one narrows everything below at the next decision.
+  A workspace that should not offer something denies it there. The feature overrides' route
+  (`PUT /organizations/{org}/workspaces/{ws}/features`) stays gone; the UI's flags are IAM's.
 - **Known limits.** A member with no feature policy gets 403 on every flagged section (what the flags say,
   enforced). `read_all` shares the graphs
   that exist when applied (`services/graph/AGENTS.md`). Per-object sharing beyond personal resources is an

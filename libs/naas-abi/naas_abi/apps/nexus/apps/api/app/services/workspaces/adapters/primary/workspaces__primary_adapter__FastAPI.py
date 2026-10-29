@@ -16,7 +16,6 @@ from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
     KNOWN_FEATURE_KEYS,
-    PINNED_FEATURES,
     enabled_feature_catalog,
     offered_features,
 )
@@ -35,16 +34,14 @@ from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.drive_roots im
     is_safe_drive_id,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.service import FilesService
-from naas_abi.apps.nexus.apps.api.app.services.iam import authz, placements
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz, placements, user_features
 from naas_abi.apps.nexus.apps.api.app.services.iam import runtime as iam_runtime
-from naas_abi.apps.nexus.apps.api.app.services.iam import sets as scope_sets
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
     ROLE_NAMES,
     MembershipDenied,
     UnknownUserError,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam_admin.runtime import get_iam_admin_service
 from naas_abi.apps.nexus.apps.api.app.services.invites import runtime as invites_runtime
 from naas_abi.apps.nexus.apps.api.app.services.invites.mail import send_added_notice
 from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
@@ -105,7 +102,6 @@ from naas_abi.apps.nexus.apps.api.app.utils.public_urls import (
 )
 from naas_abi_core import logger
 from naas_abi_core.services.email.EmailService import EmailService
-from naas_abi_core.services.iam.sets import SetValidationError
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -282,8 +278,8 @@ async def _feature_flags(
     user: Any, records: list[WorkspaceRecord]
 ) -> dict[str, dict[str, bool]] | None:
     """What the user may use in each workspace: IAM's ``UseFeature`` (the
-    policies granting features, within the sets); None without IAM."""
-    return await scope_sets.user_feature_flags(
+    policies granting features); None without IAM."""
+    return await user_features.user_feature_flags(
         user,
         [(r.organization_id, r.id) for r in records],
         enabled_feature_catalog(settings.feature_flags),
@@ -438,17 +434,6 @@ async def create_workspace(
         if workspace.catalog_seed is not None
         else None
     )
-    # Its set, decided before anything exists: its organization's, narrowed by
-    # the catalog seed chosen here (``services/iam/sets.py``). It grants nothing.
-    planned = None
-    if workspace.organization_id:
-        try:
-            planned = await scope_sets.plan_workspace_set(
-                workspace.organization_id,
-                catalog_seed=catalog_seed,
-            )
-        except iam_runtime.IAMUnavailableError as exc:
-            raise HTTPException(status_code=503, detail="Access control is unavailable") from exc
     try:
         record = await service.create_workspace(
             WorkspaceCreateInput(
@@ -474,18 +459,13 @@ async def create_workspace(
     except UnknownUserError as exc:
         raise HTTPException(status_code=400, detail="Workspace owner is not a known user") from exc
     # What IAM derives from the new workspace: the kernel resources its roles
-    # reach (drives, caches, drafts), and its set. Either failing undoes the
-    # workspace: never a workspace without its set, nor placements without it.
+    # reach (drives, caches, drafts). Failing undoes the workspace: never
+    # placements without it. Its catalog seed installs; it grants nothing.
     try:
         await service.adapter.db.flush()
         await placements.place_new_workspace(service.adapter.db, record.id)
-        if planned is not None:
-            await scope_sets.record_workspace_set(record.id, planned)
     except Exception as exc:
         await _undo_create(service, record)
-        if isinstance(exc, SetValidationError):
-            # The organization's set narrowed since the set was planned.
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
         if isinstance(exc, iam_runtime.IAMUnavailableError):
             raise HTTPException(status_code=503, detail="Access control is unavailable") from exc
         raise
@@ -597,29 +577,15 @@ async def get_workspace_configuration(
 
     ``seeds`` lists what ``nexus_config.organizations[].workspaces[]`` preloads
     for this workspace slug, read from the loaded config on each call.
-    ``features`` are those the workspace offers, the deployment's enabled ones
-    within its set (its own within its organization's, IAM's; a policy gives
-    each to whoever uses it); ``can_edit_features`` is whether the
-    caller may change that set (``iam:PutSet``: the organization's owners and
-    admins), on the modules × workspaces page of the organization's settings.
+    ``features`` are the deployment's enabled ones; who uses each is a policy's
+    (Roles & permissions).
     """
     record = await service.get_workspace(workspace_id=workspace_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    flags = settings.feature_flags
-    can_edit = (
-        await get_iam_admin_service().may_edit_set(current_user, record.organization_id, record.id)
-        if record.organization_id
-        else False
-    )
     return {
         "organization_id": record.organization_id,
-        "can_edit_features": can_edit,
-        "features": offered_features(
-            flags,
-            await scope_sets.effective_features_async(record.organization_id, record.id),
-        ),
-        "pinned": [key for key in PINNED_FEATURES if key in enabled_feature_catalog(flags)],
+        "features": offered_features(settings.feature_flags),
         "seeds": catalog_seed_rows(record.catalog_seed)
         + workspace_seed_rows(settings.organizations, record.slug),
     }
@@ -639,37 +605,36 @@ async def get_workspace_resources(
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
 ) -> dict:
-    """What the workspace has: its effective set (its own within its
-    organization's, IAM's), read-only, for workspace settings (which pages it
-    shows, General).
+    """What the caller may use in the workspace, as IAM decides it, for
+    workspace settings (which pages it shows, General).
 
-    ``features`` are the deployment's enabled features in the set; ``modules``
-    each module with something in the set, with how many of its agents, apps,
-    workflows and pipelines are; ``totals`` add them up, and ``unavailable``
-    names the kinds a source did not answer for (discovery, the jobs), whose
-    totals may be short; ``can_edit_set`` is
-    whether the caller may change the set (``iam:PutSet``), on the organization's
-    Modules & features page."""
+    ``features`` are the deployment's enabled features the caller holds there
+    (``nexus:UseFeature``); ``modules`` each module with something the caller
+    may use there, with how many of its agents, apps, workflows and pipelines
+    (``authz.filter_scopes``); ``totals`` add them up, and ``unavailable`` names
+    the kinds a source did not answer for (discovery, the jobs), whose totals
+    may be short."""
     from naas_abi.apps.nexus.apps.api.app.services.modules import scopes as module_scopes
 
     record = await service.get_workspace(workspace_id=workspace_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    scope_set = await scope_sets.workspace_set(workspace_id)
     unavailable: set[str] = set()
-    modules = module_scopes.in_set(await module_scopes.gather(unavailable), scope_set)
-    can_edit = (
-        await get_iam_admin_service().may_edit_set(current_user, record.organization_id, record.id)
-        if record.organization_id
-        else False
+    gathered = await module_scopes.gather(unavailable)
+    usable = set(
+        await authz.filter_scopes(
+            module_scopes.item_scopes(gathered),
+            user=current_user,
+            workspace=workspace_id,
+            scope_of=lambda scope: scope,
+        )
     )
+    modules = module_scopes.counted(gathered, usable)
+    flags = (await _feature_flags(current_user, [record]) or {}).get(record.id, {})
     return {
         "organization_id": record.organization_id,
-        "can_edit_set": can_edit,
         "features": [
-            key
-            for key in enabled_feature_catalog(settings.feature_flags)
-            if scope_set.features is None or key in scope_set.features
+            key for key in enabled_feature_catalog(settings.feature_flags) if flags.get(key)
         ],
         "modules": modules,
         "totals": {

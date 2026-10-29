@@ -50,12 +50,14 @@ class NexusIam:
         *,
         org_overlays: Mapping[str, Mapping[str, list[str]]] | None = None,
         features_with_roles: bool = True,
+        store: Any | None = None,
     ) -> None:
         self.flags = flags or FeatureFlagsConfig()
         self.org_overlays = dict(org_overlays or {})
         self.features_with_roles = features_with_roles
         self._feature_policies: dict[tuple[str, ...], str] = {}
-        self.iam = IAMService(IAMStoreMemory())
+        # ``store``: an IAM store of another adapter (SQLite, PostgreSQL); memory by default.
+        self.iam = IAMService(store if store is not None else IAMStoreMemory())
         self.iam.bootstrap()
         register_kernel_catalogs(self.iam)
         with as_service_account("engine"):
@@ -158,18 +160,6 @@ class NexusIam:
         """Grant a user one module scope (``authz.ModuleScope``) at a workspace."""
         resource = scope.resource("o", "w").removeprefix("abi:o:w:")
         return self.allow(user_id, [scope.action()], [f"${{scope}}:{resource}"], workspace_scope)
-
-    def put_set(
-        self,
-        org: str,
-        workspace: str = "-",
-        *,
-        modules: Sequence[str] | None = None,
-        features: Sequence[str] | None = None,
-    ) -> None:
-        """Record the set of an org (or of a workspace in it), as the platform's."""
-        with as_service_account("engine"):
-            self.iam.put_set(org, workspace, modules=modules, features=features)
 
     def platform_admin(self, user_id: str) -> None:
         with as_service_account("api"):

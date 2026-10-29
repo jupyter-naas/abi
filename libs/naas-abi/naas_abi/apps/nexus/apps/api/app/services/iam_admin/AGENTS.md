@@ -12,15 +12,14 @@ Nexus adds no role check of its own.
 
 | File | Role |
 |---|---|
-| `port.py` | `IamGateway`: IAM bound to a user (`bind`), the catalogs, and the engine's own name lookups; `ScopeDirectory`: the organizations and workspaces the sets page names |
+| `port.py` | `IamGateway`: IAM bound to a user (`bind`), the catalogs, and the engine's own name lookups |
 | `service.py` | `IamAdminService`: the use cases, audit (`run_audited`), the `access` view, the empty-list-is-a-refusal rule |
 | `narrowing.py` | What narrowing a manifest means: Allow patterns may be removed, never added; Deny stays |
 | `views.py` | IAM records as the JSON the pages read; a key's value only in `created_key` |
 | `runtime.py` | Builds the service (engine IAM + `SqlAdminAuditLog(prefix="iam.")`); tests `configure` another |
 | `adapters/secondary/engine.py` | `EngineIamGateway`: the engine's IAM in process, acting as the user from the verified session |
-| `adapters/secondary/sql_directory.py` | `SqlScopeDirectory`: organizations and their workspaces, by name, from Nexus's database |
 | `adapters/primary/iam_admin__primary_adapter__FastAPI.py` | `/api/iam/admin/*`; each route `declares` the `iam:*` action it performs |
-| `testing.py` | `MemoryAudit` (remembers records; `broken` makes every write fail), `MemoryDirectory` |
+| `testing.py` | `MemoryAudit` (remembers records; `broken` makes every write fail) |
 
 ## Routes
 
@@ -47,14 +46,8 @@ Nexus adds no role check of its own.
   `DELETE …/keys/{key}`, `POST …/keys/{key}/rotate`
 - `GET /manifests?status=`, `POST /manifests/{principal}/{sha256}/approve` (optional narrowed `document`) and `/reject`
 - `POST /simulate` (`principal_id`, `action`, `resource`); `GET /audit` (`require_superadmin`)
-- `GET /sets?organization_id=` the modules × workspaces page: every module's scopes (`modules/scopes.gather`), the
-  deployment's features, and each organization (all, or the one named) with its workspaces whose set the caller
-  may read (`iam:GetSet`), each `{id, name, set, effective, editable}` (`set` and `effective`:
-  `{modules, features}`, a part `null` for everything; `editable`: `iam:PutSet`); 403 when there is none. An org
-  whose own set the caller may not read but some workspace's they may is listed with `set: null`.
-  `PUT /sets/{org}` and `PUT /sets/{org}/workspaces/{ws}` (`{modules, features}`) record a set: 403 when not the
-  caller's, 422 with IAM's message naming what a workspace's set has beyond its org's, 404 for an unknown
-  organization or workspace
+- No set route: `/sets` and `/sets/{org}[/workspaces/{ws}]` are gone with the sets (what an org or a workspace
+  uses is its access policy, edited as any policy here)
 
 ## Rules
 
@@ -124,14 +117,11 @@ Nexus adds no role check of its own.
 - **The policy builder offers what the caller may grant.** `GET /grantable?scope=` is IAM's `grantable`, so the
   builder and IAM's refusal agree: what it lists is what the caller holds at that scope (it may list less, never
   more). It needs no permission: it says only what the caller holds.
-- **The modules × workspaces page edits the sets as the user.** Decision: `GET/PUT /sets` call IAM's
-  `get_set`, `effective_set` and `put_set` bound to the user, every change through `_change` (`iam.put_set`,
-  resource `<org>` or `<org>/<ws>`, the parts' sizes as detail), and `editable` is IAM's `iam:PutSet` decision.
-  Consequences: the platform admin edits organizations' sets, an org's owners and admins its workspaces' (their
-  org-wide role), a workspace admin reads their workspace's; nobody else sees the page. Names come from Nexus's
-  database (`ScopeDirectory`), which of them the caller sees from IAM. The rows take three IAM calls whatever
-  the number of columns (`filter` for `GetSet`, `filter` for `PutSet`, one `list_sets`) and are intersected
-  here (`sets.intersect`); only a workspace whose org's set the caller may not read asks IAM its effective set.
+- **No modules × workspaces page.** Decision: the sets are gone (core `services/iam/AGENTS.md`, "Policies are
+  the one place access is decided"), so is the page that edited them, its routes and the directory port that named
+  its rows. Consequences: what an organization or a workspace uses is its access policy ("<O> access", "<W>
+  access", made by the upgrade: `../iam/AGENTS.md`, "The upgrade"), edited, narrowed and derived from here like
+  any policy; `GET /access` reports no `iam:GetSet` or `iam:PutSet`.
 - **The simulator is `explain`.** "Can X do Y on Z" is IAM's `explain` on the principal (`iam:Explain`): the answer
   names the deciding side, policy, statement, attachment, scope and group, and shows the statement when the
   caller may read its policy; for a sub-policy, `bounded_by` (each parent's statement that allowed it too) and

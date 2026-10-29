@@ -109,9 +109,7 @@ def _snapshot(**overrides) -> IdentitySnapshot:
         "memberships": [BOB_IN_ACME, ALICE_OWNS_ACME],
         "organizations": [ORG],
         "organization_memberships": [BOB_IN_ORG],
-        "app_configs": [
-            IdentityAppConfig(workspace_id="ws-1", app_id="external.acme:web", enabled=True)
-        ],
+        "app_configs": [IdentityAppConfig(workspace_id="ws-1", app_id="external.acme:web")],
         "agent_configs": [
             IdentityAgentConfig(
                 id="agc-1",
@@ -119,7 +117,6 @@ def _snapshot(**overrides) -> IdentitySnapshot:
                 name="Bob",
                 class_name="BobAgent",
                 module_path="bob",
-                enabled=True,
                 is_default=True,
             )
         ],
@@ -267,7 +264,8 @@ def test_app_and_agent_configurations_are_parts_of_the_workspace() -> None:
 
     app, agent = workspace_app_iri("ws-1", "external.acme:web"), workspace_agent_iri("agc-1")
     assert (app, NEXUS.isPartOf, workspace_iri("ws-1")) in graph
-    assert (app, NEXUS.app_enabled, Literal(True)) in graph
+    # The old on/off is no fact of the graph: policies decide who uses it.
+    assert not list(graph.triples((app, NEXUS.app_enabled, None)))
     assert (agent, NEXUS.isPartOf, workspace_iri("ws-1")) in graph
     assert (agent, NEXUS.class_name, Literal("BobAgent")) in graph
     assert (agent, NEXUS.is_default_agent, Literal(True)) in graph

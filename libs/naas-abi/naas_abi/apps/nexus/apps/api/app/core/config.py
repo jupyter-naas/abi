@@ -353,10 +353,10 @@ class FeatureFlagsConfig(BaseModel):
             ],
         }
     )
-    # Deprecated: read once, when Nexus moves the per-workspace overrides into
-    # the workspaces' feature sets (IAM's; services/iam/sets.py). A feature
-    # turned off leaves the set; one turned on is kept for whoever held a role
-    # there then. Edit sets on the modules × workspaces page.
+    # Deprecated: read once, when Nexus moves the per-workspace overrides
+    # (services/iam/feature_overrides.py, then policy_tree.py). A feature turned
+    # off leaves the workspace's access policy; one turned on is kept for whoever
+    # held a role there then. Edit policies in Roles & permissions.
     workspace_overrides: dict[str, dict[FeatureKey, bool]] = Field(default_factory=dict)
     # Deprecated, with role_baseline: per-organization role_baseline overlays,
     # keyed by organization id. Read once, by the move of the role features.

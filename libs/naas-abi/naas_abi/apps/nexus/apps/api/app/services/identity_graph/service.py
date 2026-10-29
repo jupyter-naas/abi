@@ -166,7 +166,6 @@ class _Builder:
                     _uri=str(iris.workspace_app_iri(app.workspace_id, app.app_id)),
                     label=app.app_id,
                     app_id=app.app_id,
-                    app_enabled=app.enabled,
                     is_part_of=[iris.workspace_iri(app.workspace_id)],
                 )
             )
@@ -182,7 +181,6 @@ class _Builder:
                     _uri=str(iris.workspace_agent_iri(agent.id)),
                     label=agent.name,
                     agent_name=agent.name,
-                    agent_enabled=agent.enabled,
                     is_default_agent=agent.is_default,
                     is_part_of=[iris.workspace_iri(agent.workspace_id)],
                     **{k: v for k, v in fields.items() if v},

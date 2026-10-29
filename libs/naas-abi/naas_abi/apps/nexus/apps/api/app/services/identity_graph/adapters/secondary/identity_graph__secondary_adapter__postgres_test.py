@@ -67,16 +67,13 @@ async def test_load_snapshot_reads_every_identity_table(tmp_path, nexus_iam) -> 
                 background_image_url="bg.webp",
                 created_at=T0,
             ),
-            AppConfigModel(
-                id="app-1", workspace_id="ws-1", app_id="external.acme:web", enabled=True
-            ),
+            AppConfigModel(id="app-1", workspace_id="ws-1", app_id="external.acme:web"),
             AgentConfigModel(
                 id="agc-1",
                 workspace_id="ws-1",
                 name="Bob",
                 class_name="BobAgent",
                 module_path="bob",
-                enabled=True,
                 is_default=1,
             ),
         ]
@@ -114,13 +111,8 @@ async def test_load_snapshot_reads_every_identity_table(tmp_path, nexus_iam) -> 
     assert [(m.workspace_id, m.user_id, m.role) for m in snapshot.memberships] == [
         ("ws-1", "usr-2", "admin")
     ]
-    assert [(a.workspace_id, a.app_id, a.enabled) for a in snapshot.app_configs] == [
-        ("ws-1", "external.acme:web", True)
+    assert [(a.workspace_id, a.app_id) for a in snapshot.app_configs] == [
+        ("ws-1", "external.acme:web")
     ]
     [agent] = snapshot.agent_configs
-    assert (agent.id, agent.class_name, agent.enabled, agent.is_default) == (
-        "agc-1",
-        "BobAgent",
-        True,
-        True,
-    )
+    assert (agent.id, agent.class_name, agent.is_default) == ("agc-1", "BobAgent", True)

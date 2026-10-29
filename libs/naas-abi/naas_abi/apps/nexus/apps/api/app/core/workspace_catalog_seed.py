@@ -70,17 +70,6 @@ def resolve_agent_refs(refs: list[str] | None, registry: Mapping[str, Any]) -> s
     return resolved
 
 
-def resolve_app_enabled(
-    app_id: str,
-    enabled_by_app_id: Mapping[str, bool],
-    seed_apps: set[str],
-) -> bool:
-    """DB row wins; otherwise the seed list; otherwise off."""
-    if app_id in enabled_by_app_id:
-        return enabled_by_app_id[app_id]
-    return app_id in seed_apps
-
-
 def _posix(path: str) -> str:
     return path.replace("\\", "/")
 

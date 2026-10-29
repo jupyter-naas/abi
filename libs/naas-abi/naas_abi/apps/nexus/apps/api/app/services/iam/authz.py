@@ -23,18 +23,18 @@ IAM and no scope list.
   pipeline: ``ModuleScope``) is decided with the ``module`` catalog, in the
   workspace where it is used (``require_scope``, ``filter_scopes``): one
   source of truth for module resources, whoever hosts them. Agents a workspace
-  builds itself stay ``nexus:UseAgent``.
-* **Hidden in the workspace.** One its admins turned off there
-  (``services/visibility``) is refused to everyone after IAM allows using it
-  (its use action; reading one's own runs of it is not a use: reason
-  ``hidden``), and left out of ``filter_scopes``; the settings pages that turn
-  it back on pass ``include_hidden``.
+  builds itself stay ``nexus:UseAgent``. IAM's decision is the whole answer:
+  there is no workspace on/off switch and no set narrowing what a listing
+  shows (a workspace that should not offer a module denies it in a policy).
+* **Until the sets are policies** (``policy_tree.pending``: a start that has not
+  moved them yet), every module scope and feature is refused: never wider than
+  before the upgrade.
 """
 
 from __future__ import annotations
 
 import time
-from collections.abc import Awaitable, Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
 from typing import Any, TypeVar
 
@@ -62,13 +62,23 @@ from naas_abi_core.services.iam import module_scopes
 from starlette.concurrency import run_in_threadpool
 
 
+def upgrading() -> bool:
+    """Whether the sets and the workspace toggles still wait to become policies
+    (``policy_tree``): module scopes and features are refused meanwhile."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import policy_tree
+
+    return policy_tree.pending()
+
+
 def feature_exists(key: str) -> bool:
     """Whether the deployment enables ``key`` (``enabled_features``): a feature
-    it does not is usable by nobody, whatever a policy says."""
+    it does not is usable by nobody, whatever a policy says (nor any while the
+    sets wait to become policies)."""
     from naas_abi.apps.nexus.apps.api.app.core.feature_flags import feature_enabled
     from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
 
-    return feature_enabled(live_settings().feature_flags, key)
+    return not upgrading() and feature_enabled(live_settings().feature_flags, key)
+
 
 NEXUS_IDENTITY = "api"
 _T = TypeVar("_T")
@@ -95,11 +105,6 @@ class ModuleScope:
         """The qualified action: the type's use action by default."""
         return f"{module_scopes.SERVICE}:{action or module_scopes.USE_ACTION[self.type]}"
 
-    def is_use(self, action: str | None = None) -> bool:
-        """Whether ``action`` uses it (its use action), which turning it off in a
-        workspace refuses; reading one's own runs of it is not a use."""
-        return self.action(action) == self.action()
-
     def resource(self, org: str, workspace: str) -> str:
         return module_scopes.scope_resource(
             self.type, self.module, self.name, org=org, workspace=workspace
@@ -113,16 +118,6 @@ class Decision:
     allowed: bool
     visible: bool
     reason: str
-
-
-async def _hidden(workspace: str, scopes: Sequence[ModuleScope]) -> set[ModuleScope]:
-    """The ``scopes`` the workspace turned off (``services/visibility``)."""
-    from naas_abi.apps.nexus.apps.api.app.services.visibility import runtime as visibility
-
-    found = visibility.current()
-    if found is None or not scopes:
-        return set()
-    return await found.hidden(workspace, list(scopes))
 
 
 class Authz:
@@ -406,11 +401,11 @@ class Authz:
         workspace: str,
         action: str | None = None,
         feature: str | None = None,
-        include_hidden: bool = False,
     ) -> Decision:
         """The decision on a module scope in ``workspace`` (its use action by
-        default); ``feature`` is a Nexus section the use also needs. One the
-        workspace turned off is refused (``hidden``) unless ``include_hidden``."""
+        default); ``feature`` is a Nexus section the use also needs."""
+        if upgrading():
+            return Decision(False, False, "implicit_deny")
         org = await self.org_of(workspace)
         if org is None:
             return Decision(False, False, "implicit_deny")
@@ -422,15 +417,7 @@ class Authz:
                 or not (await self._decide(ctx, "nexus:UseFeature", switch)).allowed
             ):
                 return Decision(False, False, "feature_disabled")
-        decision = await self._decide(ctx, scope.action(action), scope.resource(org, workspace))
-        if (
-            decision.allowed
-            and not include_hidden
-            and scope.is_use(action)
-            and await _hidden(workspace, [scope])
-        ):
-            return Decision(False, True, "hidden")
-        return decision
+        return await self._decide(ctx, scope.action(action), scope.resource(org, workspace))
 
     async def allowed_scope(self, scope: ModuleScope, **target: Any) -> bool:
         return (await self.decide_scope(scope, **target)).allowed
@@ -451,8 +438,6 @@ class Authz:
         )
         if decision.allowed:
             return
-        if decision.reason == "hidden":
-            raise AuthzDenied(403, detail=f"This {scope.type} is turned off in this workspace")
         raise await self._refusal(
             scope.action(action),
             decision,
@@ -470,24 +455,15 @@ class Authz:
         workspace: str,
         scope_of: Callable[[_T], ModuleScope | None],
         action: str | None = None,
-        include_hidden: bool | Callable[[_T], Awaitable[bool]] = False,
-        within_set: bool = False,
     ) -> list[_T]:
         """The items the user may use in ``workspace``, in order; an item with no
         module scope (``scope_of`` answers None) is kept: another check owns it.
-        One the workspace turned off is left out unless ``include_hidden``: True
-        for all, or a predicate asked of each hidden item (whether the caller may
-        turn that one back on). ``within_set``: a listing of the workspace, which
-        keeps only what its set holds, for everyone (``sets.within_set``)."""
+        IAM's ``filter`` alone decides: no set, no workspace switch."""
         found = list(items)
-        if within_set:
-            from naas_abi.apps.nexus.apps.api.app.services.iam import sets
-
-            found = await sets.within_set(found, workspace=workspace, scope_of=scope_of)
         scopes = [scope_of(item) for item in found]
         if not any(scopes):
             return found
-        org = await self.org_of(workspace)
+        org = None if upgrading() else await self.org_of(workspace)
         if org is None:
             return [item for item, scope in zip(found, scopes, strict=True) if scope is None]
         ctx = self.context(user)
@@ -508,23 +484,11 @@ class Authz:
             return allowed
 
         allowed = await run_in_threadpool(run)
-        kept = [
-            (item, scope)
+        return [
+            item
             for item, scope in zip(found, scopes, strict=True)
             if scope is None or (scope.action(action), scope.resource(org, workspace)) in allowed
         ]
-        if include_hidden is True:
-            return [item for item, _ in kept]
-        hidden = await _hidden(
-            workspace, [s for _, s in kept if s is not None and s.is_use(action)]
-        )
-        shown: list[_T] = []
-        for item, scope in kept:
-            if scope is None or scope not in hidden:
-                shown.append(item)
-            elif callable(include_hidden) and await include_hidden(item):
-                shown.append(item)
-        return shown
 
     async def scope_allowed_in_any(
         self,
@@ -535,9 +499,9 @@ class Authz:
         feature: str | None = None,
     ) -> str | None:
         """The first of ``workspaces`` (``(org, workspace)`` pairs) where the user
-        may use ``scope`` and it is not turned off, else None."""
+        may use ``scope``, else None."""
         ctx = self.context(user)
-        if feature is not None and not feature_exists(feature):
+        if upgrading() or (feature is not None and not feature_exists(feature)):
             return None
 
         def allows(org: str, workspace: str) -> bool:
@@ -553,11 +517,8 @@ class Authz:
                     return False
                 return iam.authorize(scope.action(), scope.resource(org, workspace)).allowed
 
-        # Visibility is read only where IAM allows, until one answers.
         for org, workspace in workspaces:
-            if await run_in_threadpool(allows, org, workspace) and not await _hidden(
-                workspace, [scope]
-            ):
+            if await run_in_threadpool(allows, org, workspace):
                 return workspace
         return None
 
@@ -576,6 +537,7 @@ filter_scopes = AUTHZ.filter_scopes
 __all__ = [
     "AUTHZ",
     "feature_exists",
+    "upgrading",
     "ModuleScope",
     "NO_ORG",
     "TYPES_BY_NAME",

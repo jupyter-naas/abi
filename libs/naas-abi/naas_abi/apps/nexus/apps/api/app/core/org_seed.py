@@ -302,7 +302,8 @@ async def _seed_workspace_apps(
     workspace_id: str,
     app_ids: list[str] | None,
 ) -> None:
-    """Insert missing enabled rows for seeded catalog apps. Existing rows win."""
+    """Insert the missing rows of seeded catalog apps (installed in the
+    workspace; who opens one is a policy's). Existing rows win."""
     if not app_ids:
         return
     now = datetime.now(UTC).replace(tzinfo=None)
@@ -323,13 +324,12 @@ async def _seed_workspace_apps(
                 id=f"app-{uuid4().hex[:12]}",
                 workspace_id=workspace_id,
                 app_id=app_id,
-                enabled=True,
                 created_at=now,
                 updated_at=now,
             )
         )
         logger.info(
-            "Seeded app_id=%s enabled on workspace_id=%s",
+            "Seeded app_id=%s on workspace_id=%s",
             app_id,
             workspace_id,
         )

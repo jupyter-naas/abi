@@ -56,7 +56,7 @@ MIGRATION_NAME = "role_features_v1"
 # Recorded once the old policies are gone: later starts look no more.
 RETIRED_NAME = "role_features_retired_v1"
 # The move of the workspace feature overrides reads the role features and the
-# overlay table this move drops: it runs first (``sets.migrate_feature_overrides``).
+# overlay table this move drops: it runs first (``feature_overrides``).
 AFTER = "workspace_feature_sets_v1"
 OVERLAY_TABLE = "organization_role_features"
 # The policies the older version generated: ``builtin.features.<key>``.
