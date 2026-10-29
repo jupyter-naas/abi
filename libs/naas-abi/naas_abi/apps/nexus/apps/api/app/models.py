@@ -167,6 +167,8 @@ class UserModel(Base):
     organization = Column(String, nullable=True)  # was company (migration 0053)
     job_title = Column(String, nullable=True)  # was role (migration 0054)
     bio = Column(String, nullable=True)
+    linkedin_url = Column(String, nullable=True)  # migration 0063
+    github_handle = Column(String, nullable=True)  # migration 0063
     is_superadmin = Column(Boolean, nullable=False, default=False, server_default="false")
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)

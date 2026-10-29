@@ -52,6 +52,8 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
             organization=model.organization,
             job_title=model.job_title,
             bio=model.bio,
+            linkedin_url=model.linkedin_url,
+            github_handle=model.github_handle,
             is_superadmin=bool(model.is_superadmin),
             created_at=model.created_at,
         )
@@ -166,6 +168,8 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
         organization: str | None,
         job_title: str | None,
         bio: str | None,
+        linkedin_url: str | None = None,
+        github_handle: str | None = None,
     ) -> AuthUserRecord | None:
         result = await self.db.execute(select(UserModel).where(UserModel.id == user_id))
         user = result.scalar_one_or_none()
@@ -182,6 +186,10 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
             user.job_title = job_title
         if bio is not None:
             user.bio = bio
+        if linkedin_url is not None:
+            user.linkedin_url = linkedin_url or None
+        if github_handle is not None:
+            user.github_handle = github_handle or None
 
         await self.db.flush()
         await self.db.refresh(user)

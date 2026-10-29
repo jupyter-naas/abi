@@ -133,6 +133,10 @@ def read_namespace(
     return tables
 
 
+# People columns a later source may fill when the first left them empty.
+FILLED_COLUMNS = ("linkedin_url",)
+
+
 def merge_tables(
     config: dict[str, Any], sources: list[dict[str, list[dict[str, Any]]]]
 ) -> MemoryPeopleStore:
@@ -142,6 +146,10 @@ def merge_tables(
     sections only, so a profile never mixes two sources. Shared tables
     (``ds.SHARED_TABLES``: connections) are the exception: each source states
     its own, so they are united, one row per key, the first source's kept.
+
+    A person's LinkedIn URL is the other exception: kept from the first source
+    that states it (``FILLED_COLUMNS``). A people graph that never knew it
+    (a curated directory) still gets it from the person's own LinkedIn import.
     """
     merged: dict[str, list[dict[str, Any]]] = {
         logical: [] for logical in config["data"]["tables"]
@@ -150,8 +158,16 @@ def merge_tables(
     shared_keys: dict[str, set[tuple[Any, ...]]] = {
         logical: set() for logical in ds.SHARED_TABLES
     }
+    kept: dict[str, dict[str, Any]] = {}
     for tables in sources:
         own = {row["slug"] for row in tables.get("people", [])} - seen
+        for row in tables.get("people", []):
+            first = kept.get(row["slug"])
+            if first is None:
+                continue
+            for column in FILLED_COLUMNS:
+                if not first.get(column) and row.get(column):
+                    first[column] = row[column]
         for logical, rows in tables.items():
             if logical not in merged:
                 continue
@@ -163,7 +179,14 @@ def merge_tables(
                         shared_keys[logical].add(key)
                         merged[logical].append(row)
                 continue
-            merged[logical].extend(row for row in rows if row.get("slug") in own)
+            taken = [
+                dict(row) if logical == "people" else row
+                for row in rows
+                if row.get("slug") in own
+            ]
+            merged[logical].extend(taken)
+            if logical == "people":
+                kept.update((row["slug"], row) for row in taken)
         seen |= own
     return MemoryPeopleStore(merged, config)
 

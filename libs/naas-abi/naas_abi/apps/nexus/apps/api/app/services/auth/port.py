@@ -16,6 +16,8 @@ class AuthUserRecord:
     organization: str | None = None
     job_title: str | None = None
     bio: str | None = None
+    linkedin_url: str | None = None
+    github_handle: str | None = None
     is_superadmin: bool = False
 
 
@@ -87,7 +89,10 @@ class AuthPersistencePort(ABC):
         organization: str | None,
         job_title: str | None,
         bio: str | None,
+        linkedin_url: str | None = None,
+        github_handle: str | None = None,
     ) -> AuthUserRecord | None:
+        """None leaves a field as it is; an empty string clears it."""
         raise NotImplementedError
 
     @abstractmethod

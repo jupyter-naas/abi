@@ -16,7 +16,7 @@ from naas_abi_marketplace.applications.linkedin.pipelines.ActOfConnectionsOnLink
     normalize_linkedin_url,
 )
 from rdflib import Graph, Literal, URIRef
-from rdflib.namespace import OWL, RDF, RDFS
+from rdflib.namespace import OWL, RDF, RDFS, XSD
 
 ABI = "http://ontology.naas.ai/abi/"
 PERSON = URIRef(f"{ABI}Person")
@@ -318,3 +318,17 @@ def test_a_new_person_gets_their_position_as_headline_and_company_as_employer():
     )
     other = URIRef(linkedin_person_uri("https://www.linkedin.com/in/jane-doe-2"))
     assert graph.value(other, URIRef(f"{ABI}hasProfileSummary")) is None
+
+
+def test_the_owners_own_linkedin_url_is_stated_on_the_owner():
+    graph, _ = _build(owner_linkedin_url="https://fr.linkedin.com/in/Alice-Owner/")
+    owner = URIRef(f"{ABI}Person/alice")
+    assert list(graph.objects(owner, URIRef(f"{ABI}linkedin_url"))) == [
+        Literal("https://www.linkedin.com/in/alice-owner", datatype=XSD.anyURI)
+    ]
+
+
+def test_the_owner_listed_among_their_own_connections_is_not_connected_to_themselves():
+    graph, stats = _build(owner_linkedin_url="https://www.linkedin.com/in/john-smith")
+    assert URIRef(f"{ABI}Person/linkedin-john-smith") not in _people(graph)
+    assert stats.skipped_reasons.get("owner") == 1

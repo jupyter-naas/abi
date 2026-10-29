@@ -35,6 +35,8 @@ def to_user_schema(user: AuthUserRecord) -> User:
         organization=user.organization,
         job_title=user.job_title,
         bio=user.bio,
+        linkedin_url=user.linkedin_url,
+        github_handle=user.github_handle,
         is_superadmin=user.is_superadmin,
         created_at=user.created_at,
     )

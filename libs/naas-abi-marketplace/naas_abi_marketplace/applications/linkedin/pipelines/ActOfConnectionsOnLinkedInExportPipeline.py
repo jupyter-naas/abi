@@ -206,6 +206,10 @@ class ActOfConnectionsOnLinkedInExportPipelineParameters(PipelineParameters):
         str | None,
         Field(description="profile_slug of the owner, when they have one already"),
     ] = None
+    owner_linkedin_url: Annotated[
+        str | None,
+        Field(description="The owner's own LinkedIn profile URL, when known"),
+    ] = None
     rows: Annotated[
         list[dict[str, str]],
         Field(
@@ -244,6 +248,9 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
         if parameters.owner_slug:
             context.set_profile_slug(owner, parameters.owner_slug)
         owner_key = parameters.owner_uri.rstrip("/").rsplit("/", 1)[-1]
+        owner_url = normalize_linkedin_url(parameters.owner_linkedin_url)
+        if owner_url:
+            context.set_contact_details(owner, linkedin_url=owner_url)
 
         export_file = ProfileDocument(
             _uri=individual_uri(str(LINKEDIN), "ConnectionsExportFile", owner_key),
@@ -278,7 +285,7 @@ class ActOfConnectionsOnLinkedInExportPipeline(Pipeline):
             seen.add(url)
 
             known = parameters.known_people.get(url)
-            if known is not None and known.uri == owner._uri:
+            if url == owner_url or (known is not None and known.uri == owner._uri):
                 stats.skip("owner")
                 continue
             uri = known.uri if known else linkedin_person_uri(url)

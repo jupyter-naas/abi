@@ -17,6 +17,8 @@ export interface User {
   organization?: string;
   job_title?: string;
   bio?: string;
+  linkedin_url?: string;
+  github_handle?: string;
   is_superadmin?: boolean;
   createdAt: Date;
 }

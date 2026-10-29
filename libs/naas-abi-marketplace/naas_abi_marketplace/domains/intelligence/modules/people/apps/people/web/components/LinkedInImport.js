@@ -54,6 +54,11 @@ function dialogHtml(label) {
             </label>
           </div>
           <p class="linkedin-import-chosen stats"></p>
+          <label class="linkedin-import-url" hidden>
+            <span class="linkedin-import-url-why"></span>
+            <input type="url" name="owner_linkedin_url"
+              placeholder="https://www.linkedin.com/in/their-name" />
+          </label>
           <div class="actions">
             <button type="submit" class="button" disabled>Import</button>
           </div>
@@ -82,7 +87,13 @@ function summaryHtml(run) {
     ${line(result.matched, "people matched to existing ones")}
     ${line(result.skipped, "rows skipped (no LinkedIn profile URL, or repeated)")}
   </ul>
-  <p class="stats">Imported for ${escapeHtml(run.owner_name)}.</p>`;
+  <p class="stats">Imported for ${escapeHtml(run.owner_name)}${
+    result.owner_linkedin_url
+      ? ` (<a href="${escapeHtml(result.owner_linkedin_url)}" target="_blank" rel="noopener">${escapeHtml(
+          result.owner_linkedin_url.replace(/^https:\/\/www\./, ""),
+        )}</a>)`
+      : ""
+  }.</p>`;
 }
 
 let openDialog = null;
@@ -111,6 +122,9 @@ function wireDialog(label) {
   const zipInput = form.querySelector('input[name="zip"]');
   const folderInput = form.querySelector('input[name="folder"]');
   const chosen = form.querySelector(".linkedin-import-chosen");
+  const urlField = form.querySelector(".linkedin-import-url");
+  const urlWhy = urlField.querySelector(".linkedin-import-url-why");
+  const urlInput = urlField.querySelector("input");
   const submit = form.querySelector('button[type="submit"]');
   const progress = modal.querySelector(".linkedin-import-progress");
   const stage = progress.querySelector(".linkedin-import-stage");
@@ -126,6 +140,7 @@ function wireDialog(label) {
     finished = false;
     form.reset();
     form.hidden = false;
+    urlField.hidden = true;
     progress.hidden = true;
     doneActions.hidden = true;
     result.innerHTML = "";
@@ -146,6 +161,12 @@ function wireDialog(label) {
     chosen.textContent = files.length ? describe(files) : "";
     submit.disabled = !files.length;
   };
+
+  // Another owner may have their URL on their account: ask again only if needed.
+  select.addEventListener("change", () => {
+    urlField.hidden = true;
+    urlInput.value = "";
+  });
 
   zipInput.addEventListener("change", () => {
     folderInput.value = "";
@@ -186,6 +207,7 @@ function wireDialog(label) {
     if (!files.length) return;
     const body = new FormData();
     if (!owner.hidden && select.value) body.set("owner_id", select.value);
+    if (!urlField.hidden) body.set("owner_linkedin_url", urlInput.value.trim());
     for (const [file, path] of files) body.append("files", file, path);
     submit.disabled = true;
     form.hidden = true;
@@ -196,7 +218,19 @@ function wireDialog(label) {
       const run = await startLinkedInImport(body);
       await follow(run.run_id);
     } catch (error) {
-      const detail = typeof error.detail === "string" ? error.detail : error.message;
+      if (error.detail?.code === "linkedin_url_required") {
+        // Neither the account nor the export names the owner's LinkedIn
+        // profile: ask for it, keep the files chosen, and let them retry.
+        progress.hidden = true;
+        form.hidden = false;
+        urlField.hidden = false;
+        urlWhy.textContent = error.detail.message;
+        submit.disabled = false;
+        urlInput.focus();
+        return;
+      }
+      const detail =
+        typeof error.detail === "string" ? error.detail : error.detail?.message || error.message;
       stage.textContent = "Not imported";
       result.innerHTML = `<p class="error-block">${escapeHtml(detail)}</p>`;
       doneActions.hidden = false;

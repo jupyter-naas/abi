@@ -2447,7 +2447,8 @@ body.is-ontology-view main > .ontology-page {
   font-size: 14px;
 }
 
-.linkedin-import-owner {
+.linkedin-import-owner,
+.linkedin-import-url {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -2455,11 +2456,13 @@ body.is-ontology-view main > .ontology-page {
   font-size: 14px;
 }
 
-.linkedin-import-owner[hidden] {
+.linkedin-import-owner[hidden],
+.linkedin-import-url[hidden] {
   display: none;
 }
 
-.linkedin-import-owner select {
+.linkedin-import-owner select,
+.linkedin-import-url input {
   font: inherit;
   padding: 6px 8px;
 }

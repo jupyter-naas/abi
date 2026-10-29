@@ -153,3 +153,29 @@ def test_a_section_table_a_sync_left_unwritten_reads_as_empty(
     assert tables is not None
     assert tables["education"] == []
     assert len(tables["people"]) == written["people"]
+
+
+def test_a_linkedin_url_only_a_later_source_states_is_kept(
+    config: dict[str, Any],
+) -> None:
+    def source(**person: Any) -> dict[str, list[dict[str, Any]]]:
+        return {
+            "people": [{"slug": "jane", "full_name": "Jane Doe", **person}],
+            "experience": [{"slug": "jane", "seq": 0, "title": person.get("title")}],
+        }
+
+    store = gd.merge_tables(
+        config,
+        [
+            source(linkedin_url=None, title="Partner"),
+            source(linkedin_url="https://www.linkedin.com/in/jane", title="CEO"),
+            source(linkedin_url="https://www.linkedin.com/in/other", title="CTO"),
+        ],
+    )
+    tables = store._tables
+    people = tables["people"]
+    assert [row["linkedin_url"] for row in people] == [
+        "https://www.linkedin.com/in/jane"
+    ]
+    # Everything else is the first source's.
+    assert [row["title"] for row in tables["experience"]] == ["Partner"]
