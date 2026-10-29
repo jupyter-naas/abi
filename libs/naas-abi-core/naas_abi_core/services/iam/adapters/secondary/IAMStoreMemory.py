@@ -31,7 +31,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     RevisionConflictError,
     SigningKeyRecord,
 )
-from naas_abi_core.services.iam.names import UNRESOLVED, within
+from naas_abi_core.services.iam.names import UNRESOLVED, as_container, within
 from naas_abi_core.services.iam.policy import PolicyDocument
 
 
@@ -606,12 +606,13 @@ class IAMStoreMemory(IAMStore):
                 if placement.container != UNRESOLVED:
                     continue
                 legacy = self._legacy_placements.get(key, "abi:-:-")
-                self._placements[key] = replace(
-                    placement,
-                    container=rewriter.placement(
-                        LegacyPlacement(placement.service, placement.id_key, legacy)
-                    ),
+                placed_in = rewriter.placement(
+                    LegacyPlacement(placement.service, placement.id_key, legacy)
                 )
+                if as_container(placed_in) == UNRESOLVED:
+                    continue  # no container to name: kept, read as UNRESOLVED
+                self._placements[key] = replace(placement, container=placed_in)
+                self._legacy_placements.pop(key, None)
                 counts["placements"] += 1
             for key_id, key_record in list(self._keys.items()):
                 narrowing = (

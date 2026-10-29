@@ -218,6 +218,18 @@ def _merge_source_urls(*groups: list[str]) -> list[str]:
     return merged
 
 
+async def turn_container(workspace_id: str) -> str | None:
+    """The container of a turn's workspace; None when IAM cannot say (it is not
+    there): the turn then fails closed in IAM, never mid-stream here."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+    from naas_abi.apps.nexus.apps.api.app.services.iam.runtime import IAMUnavailableError
+
+    try:
+        return await AUTHZ.container_of(workspace_id)
+    except IAMUnavailableError:
+        return None
+
+
 async def stream_chat_response(
     request: ChatRequest,
     current_user: User,
@@ -380,10 +392,9 @@ async def stream_chat_response(
                 if turn_workspace is not None:
                     # The turn's workspace, as its container (``CallContext.container``):
                     # what the feature tools read, and where IAM places what the turn
-                    # creates. A workspace IAM does not know names none.
-                    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
-
-                    agent_container.set(await AUTHZ.container_of(str(turn_workspace)))
+                    # creates. A workspace IAM does not know names none; without IAM
+                    # the turn goes on in no container and IAM refuses what it asks.
+                    agent_container.set(await turn_container(str(turn_workspace)))
                     if agent_workspace_enabled_class_names.get() is None:
                         from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
                             bind_usable_agents,

@@ -56,6 +56,12 @@ REPORTS = {
             "description": "Export a people report.",
         },
         {
+            "name": "GetProject",
+            "level": "read",
+            "resource_types": ["project"],
+            "description": "Read a project: who may, finds it by its id.",
+        },
+        {
             "name": "CreateProject",
             "level": "write",
             "resource_types": ["project"],

@@ -1372,7 +1372,10 @@ class IIAMService(ABC):
 
     @abstractmethod
     def container(self, service: str, type: str, id: str) -> str | None:
-        """The name of a registered container (its path), or None."""
+        """The name of a registered container (its path), or None. In process it
+        is read for the service owning the resource; over NATS
+        (``get_container``) only for a caller allowed an action of the type on
+        it (``IAMService.read_container``), None for anyone else."""
 
     def call_container(self) -> str | None:
         """The container of the call (``CallContext.container``) once IAM checked

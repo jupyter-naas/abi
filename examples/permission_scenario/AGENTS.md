@@ -7,7 +7,7 @@ without Docker and without a model.
 
 | Module | Package | What it exposes |
 |---|---|---|
-| P, `dev.people` | `scenario_people` | agents `Recruiter` (A) and `Scout` (B); its own catalog `dev_people` with `ExportReport` on `report`, and a container type, `project` (`CreateProject`, `DeleteProject`) |
+| P, `dev.people` | `scenario_people` | agents `Recruiter` (A) and `Scout` (B); its own catalog `dev_people` with `ExportReport` on `report`, and a container type, `project` (`GetProject`, `CreateProject`, `DeleteProject`) |
 | M, `dev.market` | `scenario_market` | app `prices` (`apps/prices`) |
 
 The agents answer without a model. `Recruiter` acts for the user it runs for:
@@ -55,8 +55,9 @@ permission work:
    workspace that should not offer `prices` denies it in a policy.
 8. A project in W: a user holding `dev_people:CreateProject` in W asks `Recruiter` for
    `project p1` (registered as `<W>/dev_people:project/p1`). An admin attaches at that
-   project a policy allowing `dev_people:ExportReport` on `${scope}/dev_people:report/*`
-   to Carol. Carol's `export q3 in p1` is exported; her `export q3` (in W itself) is
+   project a policy allowing `dev_people:GetProject` on `${scope}` (finding the project
+   by its id needs an action on it) and `dev_people:ExportReport` on
+   `${scope}/dev_people:report/*` to Carol. Carol's `export q3 in p1` is exported; her `export q3` (in W itself) is
    refused: the policy reaches what the project holds, nothing else of W.
 
 A database the previous version ran this scenario on (sets, an app turned off, a

@@ -612,14 +612,24 @@ class IAMStoreContract(ABC):
         store.seed_legacy_placement(  # type: ignore[attr-defined]
             Placement("document", "nexus-ws-1"), "abi:org-1:ws-1"
         )
+        store.seed_legacy_placement(  # type: ignore[attr-defined]
+            Placement("document", "nexus-ws-gone"), "abi:org-1:ws-gone"
+        )
         assert store.list_placements() == [
-            Placement("document", "nexus-ws-1", UNRESOLVED)
+            Placement("document", "nexus-ws-1", UNRESOLVED),
+            Placement("document", "nexus-ws-gone", UNRESOLVED),
         ]
         rewriter = _Rewriter()
         assert store.rewrite_names(rewriter)["placements"] == 1
-        assert store.list_placements() == [Placement("document", "nexus-ws-1", WS)]
+        # One the rewriter names no container for stays UNRESOLVED, never the
+        # old scope as a container: every name made from it still parses.
+        assert store.list_placements() == [
+            Placement("document", "nexus-ws-1", WS),
+            Placement("document", "nexus-ws-gone", UNRESOLVED),
+        ]
         assert rewriter.seen == [
-            LegacyPlacement("document", "nexus-ws-1", "abi:org-1:ws-1")
+            LegacyPlacement("document", "nexus-ws-1", "abi:org-1:ws-1"),
+            LegacyPlacement("document", "nexus-ws-gone", "abi:org-1:ws-gone"),
         ]
         assert store.rewrite_names(rewriter)["placements"] == 0
 
@@ -847,6 +857,8 @@ class _Rewriter(NameRewriter):
 
     def _container(self, old: str) -> str:
         _, org, workspace = old.split(":")
+        if workspace == "ws-gone":
+            return old  # a workspace Nexus no longer knows: named nowhere
         if org == "-":
             return PLATFORM
         org_name = container_name("nexus", "organization", org)

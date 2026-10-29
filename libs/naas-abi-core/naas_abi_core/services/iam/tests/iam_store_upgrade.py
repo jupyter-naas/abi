@@ -22,7 +22,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalRecord,
     new_id,
 )
-from naas_abi_core.services.iam.names import PLATFORM, UNRESOLVED
+from naas_abi_core.services.iam.names import PLATFORM, UNRESOLVED, resource_name
 from naas_abi_core.services.iam.policy import PolicyDocument, Statement
 from naas_abi_core.services.iam.tests.iam__secondary_adapter__generic_test import (
     WS,
@@ -287,6 +287,8 @@ def check_upgrade_from_5(
         ("nexus-ws-1", "org-1", "ws-1"),
         ("nexus-ws-1/*", "org-1", "ws-1"),
         ("module", "-", "-"),
+        # A workspace deleted since: Nexus names no container for it.
+        ("nexus-ws-gone", "org-1", "ws-gone"),
     ):
         execute(
             "INSERT INTO {schema}iam_placements (service, id_key, org, workspace) "  # nosec B608
@@ -298,6 +300,7 @@ def check_upgrade_from_5(
             Placement("document", "module", PLATFORM),
             Placement("document", "nexus-ws-1", UNRESOLVED),
             Placement("document", "nexus-ws-1/*", UNRESOLVED),
+            Placement("document", "nexus-ws-gone", UNRESOLVED),
         ]
         assert upgraded.list_containers() == []
         assert upgraded.get_policy(platform_policy.id).owner_scope == PLATFORM
@@ -316,7 +319,10 @@ def check_upgrade_from_5(
             Placement("document", "module", PLATFORM),
             Placement("document", "nexus-ws-1", WS),
             Placement("document", "nexus-ws-1/*", WS),
+            # Kept in the old form: it reads as UNRESOLVED, a name it can make.
+            Placement("document", "nexus-ws-gone", UNRESOLVED),
         ]
+        resource_name("document", "namespace", "nexus-ws-gone", container=UNRESOLVED)
         assert upgraded.get_policy(workspace_policy.id).owner_scope == WS
     finally:
         upgraded.close()

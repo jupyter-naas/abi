@@ -274,9 +274,12 @@ register them as containers and rewrite every stored name in one transaction (`i
 - Until it is recorded, module scopes and features are refused (`authz.upgrading`); IAM itself narrows, never
   widens (old names match nothing new). Start-up order (`main._prepare_iam`): the catalog, the moves that write
   the old grammar (feature overrides, role features, sets), this move, then `migrate_role_data` and
-  `sync_org_wide_roles` in the new grammar. An install from before Nexus moved its role data into IAM (before
-  #360) upgrades through a version that did first: its role attachments would be made after the moves that read
-  them.
+  `sync_org_wide_roles` in the new grammar (`container_names.before_names`). The moves before it read the
+  roles IAM holds, so first an organization owner's or admin's missing org-wide mirror is made in the old
+  grammar (`mirror_old_org_wide`); and while Nexus still keeps memberships IAM does not hold (the move of the
+  role data, `iam_roles_v1`, not recorded: an install from before #360), nothing moves and nothing is recorded,
+  an error says so, and every module scope and feature stays refused (`role_data_pending`): such an install
+  upgrades through a version that moved its role data first, never by recording moves that moved nothing.
 
 Tested on a store the code before container paths made (`container_names_test.py`,
 `tests/artifacts/names_v1`: 1872 decisions of platform, org, org-wide, workspace and orgless roles, an org's

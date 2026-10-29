@@ -42,6 +42,7 @@ from naas_abi_core.services.iam.IAMPorts import (
 from naas_abi_core.services.iam.names import (
     PLATFORM_SCOPE,
     UNRESOLVED,
+    as_container,
     matches,
     within,
 )
@@ -383,7 +384,8 @@ def _placed_in(row: Row) -> str:
     """A placement's container; one of the old form waits for the rewrite of the
     names in ``names.UNRESOLVED`` (the platform's reads as the platform)."""
     if row.container is not None:
-        return row.container
+        # Anything but a container's name (written by no IAM of today) names nothing.
+        return as_container(row.container)
     if (row.org, row.workspace) == ("-", "-"):
         return PLATFORM_SCOPE
     return UNRESOLVED
@@ -1536,13 +1538,17 @@ class IAMStoreSQL(IAMStore):
                         )
                         counts[name] += 1
             for row in conn.execute(select(placements)).all():
-                if row.container is not None and row.container != UNRESOLVED:
-                    continue
+                if row.container is not None:
+                    continue  # a placement of today
                 container = rewriter.placement(
                     LegacyPlacement(
                         row.service, row.id_key, f"abi:{row.org}:{row.workspace}"
                     )
                 )
+                if as_container(container) == UNRESOLVED:
+                    # No container to name (a workspace that is gone): kept in the
+                    # old form, read as UNRESOLVED, tried again by a later rewrite.
+                    continue
                 conn.execute(
                     update(placements)
                     .where(

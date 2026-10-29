@@ -360,11 +360,16 @@ async def _prepare_iam() -> None:
     try:
         async with AsyncSessionLocal() as db:
             await bootstrap.register_catalog()
-            if not await container_names.recorded(db, container_names.MIGRATION_NAME):
-                # The moves of the grammar before container paths: they read and
-                # write it, so they run before the names are rewritten (IAM takes
-                # it from them, as the engine or the API acting for nobody).
-                await _move_before_container_paths(db, log)
+            # The moves of the grammar before container paths: they read and write
+            # it, so they run before the names are rewritten (IAM takes it from
+            # them, as the engine or the API acting for nobody). They read the
+            # roles IAM holds: while Nexus keeps memberships IAM does not, nothing
+            # moves, nothing is recorded, and every module scope and feature stays
+            # refused (logged).
+            if not await container_names.before_names(
+                db, lambda: _move_before_container_paths(db, log)
+            ):
+                return
             # IAM's names become container paths, once, organizations and
             # workspaces registered as containers (after the moves above).
             await container_names.migrate_names(db)
@@ -789,7 +794,14 @@ def _configure_middleware(app: FastAPI) -> None:
         "allow_credentials": True,
         "allow_methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         # X-CSRF-Token: a cookie session's requests that change state (services/oidc).
-        "allow_headers": ["Authorization", "Content-Type", "Accept", "X-Requested-With", "X-Nexus-Cache", "X-CSRF-Token"],
+        "allow_headers": [
+            "Authorization",
+            "Content-Type",
+            "Accept",
+            "X-Requested-With",
+            "X-Nexus-Cache",
+            "X-CSRF-Token",
+        ],
         "expose_headers": ["Content-Length", "Content-Range", "X-Nexus-Cache"],
     }
     # In local development the web dev server can bind any free port (the allocator bumps
@@ -797,7 +809,9 @@ def _configure_middleware(app: FastAPI) -> None:
     # localhost origin to avoid CORS breakage on every restart. Never enabled outside local/dev.
     if settings.nexus_env == "local" or settings.environment == "development":
         cors_kwargs["allow_origin_regex"] = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
-    logger.info(f"[CORS] Configured origins: {cors_origins} (regex: {cors_kwargs.get('allow_origin_regex')})")
+    logger.info(
+        f"[CORS] Configured origins: {cors_origins} (regex: {cors_kwargs.get('allow_origin_regex')})"
+    )
     # Settings pages' 24h API cache. Added before CORS so it sits inside it: cached
     # answers still go out through CORS and get its headers.
     from naas_abi.apps.nexus.apps.api.app.services.settings_cache.middleware import (
@@ -876,9 +890,7 @@ async def serve_provider_logo(provider_id: str) -> FileResponse:
 
     file_path = resolve_provider_logo_for_id(provider_id)
     if file_path is None:
-        raise HTTPException(
-            status_code=404, detail=f"No logo for provider {provider_id!r}"
-        )
+        raise HTTPException(status_code=404, detail=f"No logo for provider {provider_id!r}")
     return FileResponse(file_path)
 
 
@@ -1041,7 +1053,6 @@ def _mount_static_assets(app: FastAPI) -> None:
     uploads_path = Path(__file__).parent.parent / "uploads"
     uploads_path.mkdir(parents=True, exist_ok=True)
     app.mount("/uploads", StaticFiles(directory=str(uploads_path)), name="uploads")
-
 
 
 def create_app(app: FastAPI | None = None):

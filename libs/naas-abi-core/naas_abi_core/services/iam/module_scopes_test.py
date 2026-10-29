@@ -443,3 +443,10 @@ def test_a_declared_container_type_s_own_resource_is_the_registered_container(
         )
     assert resource == WS + "/acme_crm:project/p-10"
     assert (decision.allowed, decision.visible) == (False, False)
+    # A container's id is one value: several parts name no container, denied.
+    with _inside(h, bob, WS):
+        decision, resource = iam.authorize_declared(
+            "acme_crm:OpenProject", "project", ["p-9", "x"]
+        )
+    assert resource == WS + "/acme_crm:project/p-9%2Fx"
+    assert (decision.allowed, decision.visible) == (False, False)

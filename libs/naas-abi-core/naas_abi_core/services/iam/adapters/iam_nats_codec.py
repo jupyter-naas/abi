@@ -423,9 +423,9 @@ def catalog_from_pb(message: pb.ActionCatalog) -> ActionCatalog:
                 name=t.name,
                 id=t.id or "opaque",  # type: ignore[arg-type]
                 placement=t.placement or "placed",  # type: ignore[arg-type]
-                # A writer before container paths sent id_prefix as "container"
-                # (the same field number): read as id_prefix, never a container.
-                container=t.container and (message.format or 1) >= 3,
+                # A writer before container paths sent id_prefix in field 4 (then
+                # "container"), read as id_prefix; it never sets field 9.
+                container=t.container,
                 id_prefix=t.id_prefix,
                 personal=t.personal,
                 description=t.description,

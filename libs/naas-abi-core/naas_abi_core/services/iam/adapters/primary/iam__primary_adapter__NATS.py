@@ -496,8 +496,9 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
     def _call_get_container(
         self, req: pb.GetContainerRequest
     ) -> pb.GetContainerResponse:
+        # Only to a caller allowed an action of its type on it (not found else).
         return pb.GetContainerResponse(
-            name=self._iam.container(req.service, req.type, req.id) or ""
+            name=self._iam.read_container(req.service, req.type, req.id) or ""
         )
 
     def _call_register_catalog(

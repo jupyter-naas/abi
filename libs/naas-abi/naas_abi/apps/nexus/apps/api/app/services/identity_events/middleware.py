@@ -39,6 +39,7 @@ themselves — a view of the same context.
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import replace
 from urllib.parse import parse_qs
@@ -56,9 +57,11 @@ from naas_abi_core.engine.call_context import (
     service_account,
     use_call_context,
 )
+from naas_abi_core.services.iam.names import UNRESOLVED
 from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+_log = logging.getLogger(__name__)
 _WORKSPACE_PATH = re.compile(r"/workspaces/([^/?#]+)")
 # The service account Nexus serves its requests as.
 NEXUS_IDENTITY = "api"
@@ -113,16 +116,27 @@ class RequestIdentityMiddleware:
 
 async def _workspace_container(workspace_id: str | None) -> str | None:
     """The container of the workspace a request names, as IAM registered it: the
-    call is made in it. None for none, an unknown one, or no IAM (request data,
-    never identity: IAM checks it again before it names anything)."""
-    if not workspace_id:
+    call is made in it. None for no workspace, or no IAM; ``names.UNRESOLVED``
+    for a workspace IAM does not know (a deleted one), so what the call creates
+    is not found rather than placed on the platform (request data, never
+    identity: IAM checks it again before it names anything)."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
+        RESERVED_WORKSPACE_IDS,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.iam.runtime import IAMUnavailableError
+
+    if not workspace_id or workspace_id in RESERVED_WORKSPACE_IDS:
         return None
     from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 
     try:
-        return await AUTHZ.container_of(workspace_id)
-    except Exception:  # noqa: BLE001 - no IAM: the call is made in no container
-        return None
+        found = await AUTHZ.container_of(workspace_id)
+    except IAMUnavailableError:
+        return None  # no IAM: the call is made in no container, and decides nothing
+    except Exception:  # noqa: BLE001 - unreadable: named nowhere, never wider
+        _log.warning("The container of workspace %s could not be read", workspace_id)
+        return UNRESOLVED
+    return found or UNRESOLVED
 
 
 async def request_call_context(scope: Scope) -> CallContext:

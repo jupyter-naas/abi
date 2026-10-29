@@ -1,6 +1,7 @@
 import inspect
 
 import pytest
+from naas_abi_proto.iam.v1 import iam_pb2 as pb
 
 from naas_abi_core.services.iam import roles
 from naas_abi_core.services.iam.catalog import (
@@ -254,6 +255,30 @@ def test_a_stored_catalog_before_container_paths_reads_its_container_as_an_id_pr
         {**stored, "format": 3, "resource_types": types}, stored=True
     )
     assert fresh.resource_types[0] == namespace
+
+
+def test_a_catalog_over_nats_keeps_its_container_flag_whatever_its_format():
+    """Field 9 is set by writers of today only, whatever the ``format`` they
+    send (none, from a module's SDK); an older writer's field 4, then
+    ``container``, is read as ``id_prefix``."""
+    from naas_abi_core.services.iam.adapters import iam_nats_codec as codec
+
+    message = codec.catalog_to_pb(NEXUS)
+    message.format = 0
+    read = codec.catalog_from_pb(message)
+    assert [t.container for t in read.resource_types] == [
+        t.container for t in NEXUS.resource_types
+    ]
+    old = pb.ActionCatalog(
+        service="document",
+        version=1,
+        resource_types=[pb.ResourceType(name="namespace", id="path", id_prefix=True)],
+        actions=[
+            pb.ActionSpec(name="Find", level="read", resource_types=["namespace"])
+        ],
+    )
+    namespace = codec.catalog_from_pb(old).resource_types[0]
+    assert (namespace.id_prefix, namespace.container) == (True, False)
 
 
 def test_core_roles_name_no_nexus_action_or_type():

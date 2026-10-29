@@ -13,6 +13,7 @@ from naas_abi_core.services.event.context import (
     event_actor_user_id,
     event_triggered_via,
 )
+from naas_abi_core.services.iam.names import UNRESOLVED
 
 
 def _app() -> FastAPI:
@@ -151,3 +152,18 @@ def test_a_scope_narrows_the_context(monkeypatch) -> None:
 
     TestClient(app).get("/api/narrowed", headers={"Authorization": "Bearer k"})
     assert seen["scope"] == scope
+
+
+def test_a_workspace_iam_does_not_know_is_a_container_nobody_registered(
+    monkeypatch, nexus_iam
+) -> None:
+    """A deleted (or unknown) workspace: the call is made in ``UNRESOLVED``, so
+    what it creates is not found, never placed on the platform. No workspace in
+    the path: no container."""
+    _credentials(monkeypatch, {"good": _session()})
+    client = TestClient(_app())
+    headers = {"Authorization": "Bearer good"}
+
+    gone = client.get("/api/workspaces/ws-gone/members", headers=headers).json()
+    assert gone["workspace"] == UNRESOLVED
+    assert client.get("/api/files", headers=headers).json()["workspace"] is None

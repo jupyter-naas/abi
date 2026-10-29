@@ -20,7 +20,8 @@ answers there only, ``naas_abi_sdk.messages.reply_allowed``).
   (``IAM_ALWAYS``: ``token``, ``exchange_token``, ``jwks``, ``submit_manifest``, ``get_manifest``,
   ``find_service_account``, ``authorize``, ``authorize_declared``, ``filter``, ``grantable``,
   and the containers' ``register_container``, ``delete_container``, ``get_container``,
-  which IAM decides with the container type's own actions; never another mutation, never
+  which IAM decides with the container type's own actions (any of them for a read);
+  never another mutation, never
   ``abi.iam.v1.changed``); the others only for an ``iam:`` action the policy
   allows; the engine's broker
   control (``abi.broker.v1.<operation>``: it checks each request against the
@@ -172,8 +173,8 @@ IAM_ALWAYS = (
     "authorize_declared",
     "filter",
     "grantable",
-    # Containers: IAM decides each with the type's own create or delete action
-    # (a module's own catalog), and reading a path needs no permission.
+    # Containers: IAM decides each with the type's own actions (a module's own
+    # catalog): create, delete, and any action of the type for a read.
     "register_container",
     "delete_container",
     "get_container",
@@ -616,26 +617,29 @@ def _subjects(service: str, action: str | None, catalogs: CatalogRegistry) -> li
 def _segments(resource: str, service: str) -> tuple[str, list[str]] | None:
     """``(type, id segments)`` of a resource pattern of ``service``; ``("*",
     ["*"])`` for one that reaches every resource of it; None for another
-    service's."""
+    service's. The service is the last step's (``<service>:`` after ``abi:`` or
+    a "/"): ``abi:keyvalue:*`` names keyvalue only. Only a pattern whose service
+    field is a wildcard (``*``, ``abi:*``, ``abi:*:graph/x``...) reaches any."""
     if resource == "*":
         return "*", ["*"]
     if not resource.startswith("abi:"):
         return None
-    steps = list(_STEP.finditer(resource))
-    if not steps:
-        # No literal step: a wildcard may reach any of the service's resources.
+    heads = list(_HEAD.finditer(resource))
+    if not heads:
+        # No service field written: a wildcard there may be any service.
         return ("*", ["*"]) if "*" in resource or "?" in resource else None
-    last = steps[-1]
+    last = heads[-1]
     if not matches(last.group(1), service):
         return None
-    type_, id_ = last.group(2), resource[last.end() :]
-    if "*" in type_ or "?" in type_:
+    type_, slash, id_ = resource[last.end() :].partition("/")
+    if not slash or "*" in type_ or "?" in type_:
         return "*", ["*"]
     return type_, [unquote(part) for part in id_.split("/")] if id_ else ["*"]
 
 
-# A step of a name or a pattern, ``<service>:<type>/``: after ``abi:`` or a "/".
-_STEP = re.compile(r"(?:(?<=^abi:)|(?<=/))([a-z0-9_*?]+):([a-z0-9_*?]+)/")
+# The service field of a step, ``<service>:``: after ``abi:`` or a "/" (ids hold
+# no raw ":", so a ":" is only ever a step's).
+_HEAD = re.compile(r"(?:(?<=^abi:)|(?<=/))([a-z0-9_*?]+):")
 
 
 def _concrete(value: str) -> bool:

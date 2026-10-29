@@ -310,7 +310,8 @@ class IAMService(IIAMService, PolicySource):
         self._seals = tuple(seals)
         self._subjects = _TTLCache(cache_ttl_seconds, cache_size)
         self._policies = _TTLCache(cache_ttl_seconds, cache_size)
-        self._placements = _TTLCache(cache_ttl_seconds, 2)
+        # Every placement, their index, and the registry of containers.
+        self._placements = _TTLCache(cache_ttl_seconds, 3)
         self._platform_grants: tuple[roles.PlatformGrant, ...] = ()
         self._floors = _TTLCache(cache_ttl_seconds, 1)
         self._pending_index: tuple[int, frozenset[tuple[str, str]]] | None = None
@@ -391,10 +392,12 @@ class IAMService(IIAMService, PolicySource):
                 else None
             )
             if found is None:
+                # No such container (or not one id): denied, named as it would be,
+                # its parts as one id, so the name never fails.
                 return Decision(False, False, "implicit_deny"), resource_name(
                     service,
                     resource_type,
-                    values or ["-"],
+                    "/".join(values) or "-",
                     container=where or PLATFORM_SCOPE,
                 )
             return self.authorize(action, found), found
@@ -831,6 +834,16 @@ class IAMService(IIAMService, PolicySource):
 
     def container(self, service: str, type: str, id: str) -> str | None:
         return self._container_index().get((service, type, id))
+
+    def read_container(self, service: str, type: str, id: str) -> str | None:
+        """A container's name for a caller allowed some action of its type on it
+        (its catalog's), as ``get_container`` answers over NATS; None otherwise,
+        as for an unknown one, so nobody else learns that it exists or where."""
+        name = self.container(service, type, id)
+        if name is None:
+            return None
+        actions = self._registry.actions_on(service, type)
+        return name if any(self.authorize(a, name).allowed for a in actions) else None
 
     def _container_index(self) -> dict[tuple[str, str, str], str]:
         def build() -> dict[tuple[str, str, str], str]:

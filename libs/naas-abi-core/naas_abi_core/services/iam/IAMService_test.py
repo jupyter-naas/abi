@@ -1770,3 +1770,29 @@ def test_a_retired_policy_that_is_a_parent_is_detached_but_kept(h):
     assert h.iam.store.get_policy(old.id)
     assert h.iam.store.list_attachments(policy_id=old.id) == []
     assert child.id
+
+
+def test_placements_and_containers_are_read_from_the_store_once(h):
+    """The placements, their index and the containers are cached side by side:
+    resolving names and checking the container of a call read the store once."""
+    h.register("ws-1", "org-1")
+    h.admin("put_placement", "triple_store", "g", WS)
+    reads = {"placements": 0, "containers": 0}
+    store = h.iam.store
+    list_placements, list_containers = store.list_placements, store.list_containers
+
+    def counted_placements(*args, **kwargs):
+        reads["placements"] += 1
+        return list_placements(*args, **kwargs)
+
+    def counted_containers(*args, **kwargs):
+        reads["containers"] += 1
+        return list_containers(*args, **kwargs)
+
+    store.list_placements = counted_placements  # type: ignore[method-assign]
+    store.list_containers = counted_containers  # type: ignore[method-assign]
+    for _ in range(3):
+        assert h.iam.container("nexus", "workspace", "ws-1") == WS
+        assert h.iam.resolve_placement("triple_store", "g") == WS
+        assert h.iam.placement_of("triple_store", "other") is None
+    assert reads == {"placements": 1, "containers": 1}

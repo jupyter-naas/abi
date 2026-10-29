@@ -17,6 +17,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
+from naas_abi.apps.nexus.apps.api.app import models  # noqa: F401 - the Nexus tables
 from naas_abi.apps.nexus.apps.api.app.services.iam import container_names
 from naas_abi.apps.nexus.apps.api.app.services.iam.bootstrap import shared_repo_grants
 from naas_abi.apps.nexus.apps.api.app.services.iam.catalog import NEXUS_CATALOG
@@ -24,6 +25,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.container_names import (
     LegacyNames,
     derive,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.testing import LegacyNexusIam
 from naas_abi_core.engine.call_context import (
     CallContext,
     Principal,
@@ -38,13 +40,18 @@ from naas_abi_core.services.iam.catalog import (
     CatalogRegistry,
     ResourceType,
 )
-from naas_abi_core.services.iam.IAMService import IAMService
+from naas_abi_core.services.iam.guard import ServiceGuard
+from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER, IAMService
 from naas_abi_core.services.iam.kernel_catalogs import register_kernel_catalogs
 from naas_abi_core.services.iam.names import (
     UNRESOLVED,
     container_name,
     parse_resource_name,
 )
+from naas_abi_core.services.triple_store.iam_catalog import (
+    CATALOG as TRIPLE_STORE_CATALOG,
+)
+from sqlalchemy import text
 
 ARTIFACTS = Path(__file__).parent / "tests" / "artifacts" / "names_v1"
 O1, O2 = "org-aaaaaaaaaaa1", "org-bbbbbbbbbbb2"
@@ -105,10 +112,13 @@ def new_name(action: str, old: str) -> str:
     return f"{_workspace(workspace)}/{rest}"
 
 
-def _open(tmp_path: Path) -> IAMService:
+def _open(tmp_path: Path, *extra: str) -> IAMService:
     path = tmp_path / "iam.sqlite"
     connection = sqlite3.connect(path)
     connection.executescript((ARTIFACTS / "iam.sql").read_text())
+    for statement in extra:
+        connection.execute(statement)
+    connection.commit()
     connection.close()
     iam = IAMService(IAMStoreSQLite(str(path)))
     iam.bootstrap()
@@ -252,3 +262,83 @@ def test_a_glob_derivative():
     assert {"x", "*:-:x"} <= derive("abi:*:-:x", "abi:o:-:")
     assert derive("abi:o:w:*", "abi:o:w:") == {"*"}
     assert derive("abi:o:w:x", "abi:p:w:") == set()
+
+
+def test_a_placement_of_a_workspace_gone_names_nothing_and_never_fails(tmp_path):
+    """A placement of a workspace Nexus no longer knows has no container: it is
+    kept as it was and reads as UNRESOLVED, so a create there is not found
+    rather than a name that cannot be built."""
+    iam = _open(
+        tmp_path,
+        "INSERT INTO iam_placements (service, id_key, org, workspace) "
+        f"VALUES ('triple_store', 'gone', '{O1}', 'ws-gone9999999')",
+    )
+    report = container_names.rewrite(iam, ORGS, WORKSPACES)
+    assert any("ws-gone9999999" in note for note in report.notes)
+    assert iam.resolve_placement("triple_store", "gone") == UNRESOLVED
+    guard = ServiceGuard(TRIPLE_STORE_CATALOG, lambda: iam)
+    assert guard.name("graph", "gone") == f"{UNRESOLVED}/triple_store:graph/gone"
+    container_names.rewrite(iam, ORGS, WORKSPACES)  # again: still kept, still read
+    assert iam.resolve_placement("triple_store", "gone") == UNRESOLVED
+
+
+@pytest.mark.asyncio
+async def test_the_moves_wait_while_nexus_keeps_memberships_iam_does_not(nexus_db):
+    """The moves before container paths read the roles IAM holds: with role data
+    not moved yet, nothing runs and nothing is recorded (and it is said)."""
+    ran: list[str] = []
+
+    async def moves() -> None:
+        ran.append("moves")
+
+    async with nexus_db() as db:
+        # The table Nexus's SQL migrations make (``0059_iam_role_data.sql``).
+        await db.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS iam_migrations (name VARCHAR(128) PRIMARY KEY, "
+                "applied_at TIMESTAMP NOT NULL, report TEXT)"
+            )
+        )
+        await db.execute(
+            text(
+                "INSERT INTO workspace_members (id, workspace_id, user_id, role, created_at) "
+                "VALUES ('m-1', 'ws-1', 'u-1', 'admin', CURRENT_TIMESTAMP)"
+            )
+        )
+        await db.commit()
+        assert await container_names.role_data_pending(db)
+        assert await container_names.before_names(db, moves) is False
+        assert ran == []
+        assert not await container_names.recorded(db, container_names.MIGRATION_NAME)
+        # Once the role data is in IAM, the moves run.
+        await db.execute(
+            text(
+                "INSERT INTO iam_migrations (name, applied_at, report) "
+                "VALUES ('iam_roles_v1', CURRENT_TIMESTAMP, '{}')"
+            )
+        )
+        await db.commit()
+        assert not await container_names.role_data_pending(db)
+        world = LegacyNexusIam()
+        with world.installed():
+            assert await container_names.before_names(db, moves) is True
+        assert ran == ["moves"]
+
+
+def test_an_org_wide_mirror_missing_is_made_before_the_moves():
+    """An organization's admin held only at its own level (no ``abi:O:*``): the
+    old grammar's mirror is made, so the moves see the workspaces it reaches."""
+    world = LegacyNexusIam()
+    org_scope = world.org("org-1")
+    world.workspace("org-1", "ws-1")
+    with as_service_account("api"):
+        admin = world.iam.ensure_user(LEGACY_NEXUS_ISSUER, "ann", provider="nexus")
+        world.iam.attach_policy("builtin.admin", admin.id, org_scope)
+        member = world.iam.ensure_user(LEGACY_NEXUS_ISSUER, "max", provider="nexus")
+        world.iam.attach_policy("builtin.member", member.id, org_scope)
+    assert container_names.mirror_old_org_wide(world.iam) == 1
+    with as_service_account("api"):
+        scopes = {(a.policy_id, a.scope) for a in world.iam.list_attachments(principal_id=admin.id)}
+        assert ("builtin.admin", "abi:org-1:*") in scopes
+        assert {a.scope for a in world.iam.list_attachments(principal_id=member.id)} == {org_scope}
+    assert container_names.mirror_old_org_wide(world.iam) == 0

@@ -92,6 +92,28 @@ def test_another_account_reaches_the_projects_its_resources_name():
     assert "abi.discovery.*.v1.>" in anywhere.publish
 
 
+def test_a_pattern_of_another_service_opens_no_discovery_subject():
+    """``abi:keyvalue:*`` (and its every-container form) names keyvalue only: a
+    discovery action granted on it opens no discovery, agent or module subject.
+    Only a wildcard where the service is written reaches every service."""
+
+    def discovery_subjects(*resources):
+        permissions = derive(allow(["discovery:*"], resources), module=None)
+        return [
+            s
+            for s in permissions.publish
+            if s.startswith(("abi.discovery.", "abi.agent.", "abi.mod."))
+        ]
+
+    assert discovery_subjects("abi:keyvalue:*", "abi:*/keyvalue:*") == []
+    assert discovery_subjects("abi:keyvalue:key/x") == []
+    for reaching in ("*", "abi:*", "abi:*:agent/*", "abi:disc*:*"):
+        assert "abi.discovery.*.v1.>" in discovery_subjects(reaching), reaching
+    assert "abi.discovery.beta.v1.>" in discovery_subjects(
+        "abi:*/discovery:agent/beta/*"
+    )
+
+
 def test_a_service_wildcard_reaches_the_service_and_its_live_subjects():
     permissions = derive(allow(["event:*"]))
     assert "abi.svc.event.v1.>" in permissions.publish

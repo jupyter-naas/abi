@@ -155,10 +155,12 @@ def test_containers_round_trip(iam_host):
         api.register_container("nexus", "workspace", "ws-1")
     with pytest.raises(IAMNotFoundError):
         api.register_container("nexus", "workspace", "ws-2", parent=org("org-9"))
-    # Reading a path needs no permission.
+    # Reading a path needs an action of the type on it: the module holds none, so
+    # a workspace that exists reads as one that does not; api holds nexus:*.
     module = iam_host.client("module")
-    assert module.container("nexus", "workspace", "ws-1") == workspace("ws-1")
+    assert module.container("nexus", "workspace", "ws-1") is None
     assert module.container("nexus", "workspace", "ws-9") is None
+    assert api.container("nexus", "workspace", "ws-1") == workspace("ws-1")
     # A module holds no create or delete action on the type.
     with pytest.raises((PermissionDeniedError, IAMNotFoundError)):
         module.register_container("nexus", "workspace", "ws-3", parent=org())

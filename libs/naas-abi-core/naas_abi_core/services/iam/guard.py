@@ -207,9 +207,10 @@ class ServiceGuard:
 
         A name an existing placement covers takes that placement, and the
         container of the call must be empty or match it. Otherwise the container
-        of the call places the new resource (the platform when empty, or when IAM
-        does not know it). The create action must be allowed on the name as
-        placed. Call ``record()`` on the result once the create succeeded.
+        of the call places the new resource (the platform when empty); one IAM
+        does not know makes the create not found, whoever asks. The create action
+        must be allowed on the name as placed. Call ``record()`` on the result
+        once the create succeeded.
         """
         resource_type = self._type(type)
         canonical = encode_id(parts, resource_type.id)

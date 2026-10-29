@@ -49,7 +49,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -604,6 +604,76 @@ def rewrite(iam: Any, orgs: Sequence[str], workspaces: Mapping[str, str | None])
         rewriter = LegacyNames(list(orgs), dict(workspaces), iam.catalogs)
         counts = iam.rewrite_names(rewriter)
     return Report(counts, list(dict.fromkeys(rewriter.notes)))
+
+
+# The roles an organization's own role is held below it too (Nexus mirrors them).
+_MIRRORED = ("builtin.owner", "builtin.admin")
+
+
+async def role_data_pending(db: AsyncSession) -> bool:
+    """Whether Nexus still keeps memberships IAM does not hold: the move of the
+    role data (``bootstrap.migrate_role_data``) is not recorded, and there is
+    something for it to move. The moves before container paths read the roles
+    IAM holds, so they wait for it."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import bootstrap
+
+    if await recorded(db, bootstrap.MIGRATION_NAME):
+        return False
+    for query in (
+        "SELECT 1 FROM organizations WHERE owner_id IS NOT NULL",
+        "SELECT 1 FROM workspaces WHERE owner_id IS NOT NULL",
+        "SELECT 1 FROM organization_members",
+        "SELECT 1 FROM workspace_members",
+    ):
+        if (await db.execute(text(query + " LIMIT 1"))).first() is not None:
+            return True
+    return False
+
+
+def mirror_old_org_wide(iam: Any) -> int:
+    """Hold, in the grammar before container paths, the org-wide role
+    (``abi:<org>:*``) each organization owner's and admin's own one
+    (``abi:<org>:-``) brings: what the moves below read as reaching the
+    organization's workspaces, as Nexus kept it before. Made as ``api`` for no
+    user, which IAM takes the old grammar from. How many were missing."""
+    made = 0
+    with as_service_account("api"):
+        held = {(a.policy_id, a.principal_id, a.scope) for a in iam.list_attachments()}
+        for policy_id, principal_id, scope in sorted(held, key=lambda h: (h[0], h[1], h[2] or "")):
+            if policy_id not in _MIRRORED or not is_old_scope(scope):
+                continue
+            org, workspace = (scope or "")[len("abi:") :].split(":")
+            if workspace != "-" or org in ("-", NO_ORG):
+                continue
+            wide = f"abi:{org}:*"
+            if (policy_id, principal_id, wide) not in held:
+                iam.attach_policy(policy_id, principal_id, wide)
+                made += 1
+    return made
+
+
+async def before_names(db: AsyncSession, moves: Callable[[], Awaitable[None]]) -> bool:
+    """Run the moves written for the grammar before container paths (``moves``),
+    unless the names are rewritten already. They read the roles IAM holds: while
+    Nexus still keeps memberships IAM does not (``role_data_pending``), nothing
+    runs and nothing is recorded, and False says so (an install that old upgrades
+    through a version that moved them first). Org-wide mirrors missing are made
+    first."""
+    if await recorded(db, MIGRATION_NAME):
+        return True
+    if await role_data_pending(db):
+        _log.error(
+            "Nexus still keeps memberships IAM does not hold (the move of the role "
+            "data, iam_roles_v1, is not recorded): the moves to container paths wait, "
+            "and module scopes and features are refused. Upgrade through a version "
+            "that moved the role data into IAM first (feat/permission-system)."
+        )
+        return False
+    made = await run_in_threadpool(mirror_old_org_wide, runtime.iam())
+    if made:
+        _log.info("Org-wide roles of the old grammar given to %d owner(s) and admin(s)", made)
+    await moves()
+    return True
 
 
 async def migrate_names(db: AsyncSession) -> Report | None:
