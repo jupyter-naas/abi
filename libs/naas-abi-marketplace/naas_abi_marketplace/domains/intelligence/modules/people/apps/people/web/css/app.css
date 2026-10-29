@@ -2498,3 +2498,15 @@ body.is-ontology-view main > .ontology-page {
 .linkedin-import-progress .actions[hidden] {
   display: none;
 }
+
+/* The Connections tab before a person is chosen: say what to do, and make the
+   way into someone's connections the card's main link. */
+.connections-intro {
+  margin: 0 0 12px;
+  color: var(--muted);
+}
+
+.result-connections.result-connections-cta {
+  font-weight: 600;
+  color: var(--accent);
+}

@@ -294,3 +294,24 @@ def test_colleagues_meet_at_their_organization_through_their_acts_of_working(
     assert for_org == {act: "organization:axa" for act in workings}
     # No shortcut from a person straight to the organization.
     assert not _relations(view, "abi:worksFor")
+
+
+def test_the_most_connected_network_ties_them_under_the_search(store, config) -> None:
+    view = cp.most_connected_network(store, config)
+    drawn = {person["slug"] for person in view["data"]["people"]}
+    # Only people with connections, most connected first.
+    assert "alice_dupont" in drawn and "emma_petit" not in drawn
+    assert view["shown"] == len(drawn) == view["total"]
+    results = {
+        relation["to"]
+        for relation in _relations(view, "abi:hasSearchResult")
+        if relation["from"] == view["root"]
+    }
+    assert len(results) == len(drawn)
+    # Jane is connected to Alice and to Carol: two acts, both drawn.
+    jane = [
+        act
+        for act in _entities(view, cp.CONNECTION_CLASS).values()
+        if "Jane Doe" in str(act["properties"])
+    ]
+    assert len(jane) == 2

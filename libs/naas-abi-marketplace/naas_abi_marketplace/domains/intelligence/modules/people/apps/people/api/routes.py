@@ -268,6 +268,25 @@ def build_router(config_path: Path | None = None) -> APIRouter:
         except DatasetsMissingError as exc:
             raise HTTPException(status_code=404, detail=exc.as_detail()) from exc
 
+    @router.get("/connections/network")
+    async def get_most_connected_network(
+        q: str = Query("", max_length=200),
+        facet: str = Query("", max_length=120),
+        ctx: PeopleRequestContext = Depends(_people_context),
+    ) -> dict:
+        """The Connections tab's network before a person is chosen: the
+        search's most connected people and what ties them."""
+        try:
+            return await asyncio.to_thread(
+                connections_payload.most_connected_network,
+                ctx.store,
+                config(),
+                query=q,
+                facet=facet,
+            )
+        except DatasetsMissingError as exc:
+            raise HTTPException(status_code=404, detail=exc.as_detail()) from exc
+
     @router.get("/people/{slug}/connections/network")
     async def get_person_connections_network(
         slug: str,

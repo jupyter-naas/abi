@@ -1,6 +1,7 @@
 import {
   fetchConnections,
   fetchConnectionsNetwork,
+  fetchMostConnectedNetwork,
   fetchSearch,
   fetchSearchNetwork,
 } from "../../../lib/api.js";
@@ -17,10 +18,12 @@ import {
 } from "../../../lib/results-state.js";
 import { overflowTabs } from "../../../lib/tab-overflow.js";
 
-function resultHtml(config, hit, tokens, query, facet = "", display = "") {
+function resultHtml(config, hit, tokens, query, facet = "", display = "", { connectionsCta = false } = {}) {
   const place = [hit.organization, ...(hit.place || [])].filter(Boolean);
   const snippet = hit.snippet || {};
-  const connections = connectionsLabel(hit.connections_count);
+  const count = connectionsLabel(hit.connections_count);
+  // On the Connections tab the count is the way in: "See their 12 connections".
+  const connections = count && connectionsCta ? `See their ${count} →` : count;
   return `
     <article class="result">
       <div class="result-body">
@@ -61,7 +64,9 @@ function resultHtml(config, hit, tokens, query, facet = "", display = "") {
                   : ""
               }${
                 connections
-                  ? `<a class="result-connections" href="${searchHref(config, {
+                  ? `<a class="result-connections${
+                      connectionsCta ? " result-connections-cta" : ""
+                    }" href="${searchHref(config, {
                       query,
                       facet,
                       view: "connections",
@@ -190,13 +195,20 @@ function pagerHtml(config, payload, query, view = "") {
   </nav>`;
 }
 
+// Past this, the exact total is noise: "of +10000 people".
+const TOTAL_CAP = 10000;
+
+function totalText(total) {
+  return total > TOTAL_CAP ? `+${TOTAL_CAP}` : `${total}`;
+}
+
 function statsText(payload) {
   const noun = payload.total === 1 ? "person" : "people";
   const shown = (payload.results || []).length;
   // "101–200 of 847 people" once there is more than one page; otherwise the plain count.
-  if ((payload.pages || 1) < 2 || !shown) return `${payload.total} ${noun}`;
+  if ((payload.pages || 1) < 2 || !shown) return `${totalText(payload.total)} ${noun}`;
   const first = (payload.page - 1) * payload.page_size + 1;
-  return `${first}–${first + shown - 1} of ${payload.total} ${noun}`;
+  return `${first}–${first + shown - 1} of ${totalText(payload.total)} ${noun}`;
 }
 
 function emptyHtml(config, query) {
@@ -372,12 +384,57 @@ async function mountMostConnected(config, state, stats, body) {
     body.innerHTML = connectionsEmptyHtml(null);
     return;
   }
-  stats.innerHTML = `${statsText(payload)} with connections${
+  stats.innerHTML = `Most connected first · ${statsText(payload)} with connections${
     query ? ` for “${escapeHtml(query)}”` : ""
   }${payload.facet ? ` in ${escapeHtml(payload.facet)}` : ""}`;
-  body.innerHTML = `${results
-    .map((hit) => resultHtml(config, hit, payload.tokens || [], query, payload.facet, display))
+  body.innerHTML = `<p class="connections-intro">Choose someone to see who they know.</p>${results
+    .map((hit) =>
+      resultHtml(config, hit, payload.tokens || [], query, payload.facet, display, {
+        connectionsCta: true,
+      }),
+    )
     .join("")}${pagerHtml(config, payload, query, "connections")}`;
+}
+
+/** The most connected people of the search, drawn with what ties them. */
+async function mountMostConnectedNetwork(config, state, stats, body) {
+  const { query, facet } = state;
+  body.className = "profile-graph search-graph";
+  try {
+    return await mountGraphView(
+      body,
+      async () => {
+        const network = structuredClone(await fetchMostConnectedNetwork({ query, facet }));
+        stats.innerHTML = network.total
+          ? `The ${network.shown} most connected of ${network.total} people with connections${
+              query ? ` for “${escapeHtml(query)}”` : ""
+            } · choose someone to see who they know`
+          : "";
+        if (!network.total) throw Object.assign(new Error("empty"), { empty: true });
+        for (const person of network.data.people || []) {
+          if (person.slug) {
+            person.href = searchHref(config, {
+              query,
+              facet,
+              view: "connections",
+              display: "network",
+              person: person.slug,
+            });
+          }
+        }
+        for (const entity of network.data.entities || []) {
+          if (entity.image) entity.image = apiUrl(entity.image);
+        }
+        return network;
+      },
+      { distance: 4 },
+    );
+  } catch (error) {
+    if (!body.isConnected) return null;
+    body.className = "connections-body";
+    body.innerHTML = error.empty ? connectionsEmptyHtml(null) : errorHtml(error);
+    return null;
+  }
 }
 
 /** The Connections tab: the most connected people, or one person's connections. */
@@ -400,6 +457,7 @@ async function mountConnections(host, { config, state }) {
     return null;
   }
   if (!slug) {
+    if (display === "network") return mountMostConnectedNetwork(config, state, stats, body);
     await mountMostConnected(config, state, stats, body);
     return null;
   }
@@ -419,7 +477,7 @@ async function mountConnections(host, { config, state }) {
           const network = structuredClone(await fetchConnectionsNetwork(slug));
           stats.innerHTML =
             network.shown < network.total
-              ? `${whose(network)} · the ${network.shown} most recent drawn`
+              ? `${whose(network)} · the ${network.shown} most connected drawn`
               : whose(network);
           if (!network.total) throw Object.assign(new Error("empty"), { person: network.person });
           for (const person of network.data.people || []) {

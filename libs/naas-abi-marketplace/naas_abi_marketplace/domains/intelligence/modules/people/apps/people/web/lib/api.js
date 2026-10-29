@@ -98,6 +98,15 @@ export function fetchLinkedInOwners() {
 }
 
 /** Start an import: ``form`` holds ``owner_id`` and the export's ``files``. */
+/** The Connections tab's network before a person is chosen: the most connected. */
+export function fetchMostConnectedNetwork({ query = "", facet = "" } = {}) {
+  const params = new URLSearchParams();
+  if (query) params.set("q", query);
+  if (facet) params.set("facet", facet);
+  const suffix = params.toString();
+  return getJson(`/connections/network${suffix ? `?${suffix}` : ""}`);
+}
+
 export function startLinkedInImport(form) {
   return postForm("/linkedin/imports", form);
 }

@@ -30,6 +30,7 @@ from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.script
     _relation,
     network_view_config,
     organization_id,
+    search_root_id,
 )
 
 # The Connections network draws the person and this many of their connections,
@@ -218,18 +219,14 @@ def _working_act(act_id: str, worker: str, position: dict[str, Any]) -> dict[str
     )
 
 
-def connections_network(
-    store: PeopleStore, config: dict[str, Any], *, slug: str
-) -> dict[str, Any]:
-    """The graph page payload of one person and their connections, drawn as the
-    processes that tie them: each act of connection between two drawn people
-    (the person's own, and those among their connections), and each person's
-    current act of working with the organization it is for. Two people working
-    at the same organization meet at its node, through their own acts."""
-    found = connections(store, config, slug=slug)
-    person = found["person"]
-    shown = found["results"][:NETWORK_SIZE]
-    everyone = [person, *shown]
+def _draw(
+    store: PeopleStore, config: dict[str, Any], everyone: list[dict[str, Any]]
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """The graph page data of *everyone* (``_connection`` rows), drawn as the
+    processes that tie them: each act of connection between two of them, and
+    each one's current act of working with the organization it is for. Two
+    people working at the same organization meet at its node, through their
+    own acts. Returns the data and each slug's canvas label."""
     labels = _network_labels(everyone)
     payload = build_graph_page_payload(
         [{"personLabel": labels[item["slug"]]} for item in everyone]
@@ -304,22 +301,96 @@ def connections_network(
             _relation(act_id, org_id, "abi:forOrganization", "for organization")
         )
 
+    data = {
+        **payload,
+        "entities": sorted(entities.values(), key=lambda entity: entity["label"]),
+        "relations": relations,
+        "allRelations": relations,
+    }
+    return data, labels
+
+
+def _view_config(config: dict[str, Any]) -> dict[str, Any]:
     view_config = network_view_config(config)
     view_config["graph"].update(
         default_distance=4,
         max_distance=4,
         params_session_key="people-connections-graph-params-v2",
     )
+    return view_config
+
+
+def connections_network(
+    store: PeopleStore, config: dict[str, Any], *, slug: str
+) -> dict[str, Any]:
+    """The graph page payload of one person and their connections (``_draw``),
+    most connected first, ``NETWORK_SIZE`` of them at most."""
+    found = connections(store, config, slug=slug)
+    person = found["person"]
+    shown = found["results"][:NETWORK_SIZE]
+    data, labels = _draw(store, config, [person, *shown])
     return {
         "person": person,
         "total": found["total"],
         "shown": len(shown),
         "root": labels[person["slug"]],
-        "data": {
-            **payload,
-            "entities": sorted(entities.values(), key=lambda entity: entity["label"]),
-            "relations": relations,
-            "allRelations": relations,
-        },
-        "config": view_config,
+        "data": data,
+        "config": _view_config(config),
+    }
+
+
+# The Connections tab's network before a person is chosen: the most
+# connected people of the search, and what ties them.
+MOST_CONNECTED_SIZE = 40
+
+
+def most_connected_network(
+    store: PeopleStore, config: dict[str, Any], *, query: str = "", facet: str = ""
+) -> dict[str, Any]:
+    """The graph page payload of the search's most connected people (``_draw``),
+    gathered under the act of searching that found them."""
+    from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts import (
+        search_payload,
+    )
+
+    found = search_payload.search(
+        store, config, query=query, facet=facet, page=1, sort="connections"
+    )
+    people = found["results"][:MOST_CONNECTED_SIZE]
+    positions = _current_position(store, config, [hit["slug"] for hit in people])
+    everyone = [_connection(hit, positions.get(hit["slug"]), None) for hit in people]
+    data, labels = _draw(store, config, everyone)
+    root = search_root_id(query)
+    data["entities"].insert(
+        0,
+        _entity_node(
+            root,
+            label=f"Most connected: {query.strip()}"
+            if query.strip()
+            else "Most connected",
+            class_uri="abi:ActOfSearching",
+            class_label="Act of Searching",
+            bfo_bucket="Process",
+            properties=_props(
+                ("abi:query_text", "query", query.strip() or "(everyone)"),
+                ("abi:result_count", "people with connections", str(found["total"])),
+                ("abi:result_shown", "people drawn", str(len(everyone))),
+            ),
+        ),
+    )
+    for item in everyone:
+        data["relations"].append(
+            _relation(
+                root,
+                labels[item["slug"]],
+                "abi:hasSearchResult",
+                "has search result",
+            )
+        )
+    return {
+        "total": found["total"],
+        "shown": len(everyone),
+        "root": root,
+        "data": data,
+        "config": _view_config(config),
     }
