@@ -36,8 +36,8 @@ from naas_abi_core.services.event.adapters.secondary.EventSQLiteAdapter import (
     EventSQLiteAdapter,
 )
 from naas_abi_core.services.event.context import (
+    event_actor_container,
     event_actor_user_id,
-    event_actor_workspace_id,
     event_triggered_via,
 )
 from naas_abi_core.services.event.EventService import EventService
@@ -295,15 +295,15 @@ async def test_touching_only_bookkeeping_columns_logs_nothing(env) -> None:
 async def test_workspace_context_is_stamped(env) -> None:
     maker, events, _ = env
     await _seed_user(maker)
-    token = event_actor_workspace_id.set("ws-ctx")
+    token = event_actor_container.set("abi:nexus:workspace/ws-ctx")
     try:
         async with maker() as session:
             (await session.get(UserModel, "usr-1")).organization = "Acme"
             await session.commit()
     finally:
-        event_actor_workspace_id.reset(token)
+        event_actor_container.reset(token)
 
-    assert _payloads(events)[-1]["actor_workspace_id"] == "ws-ctx"
+    assert _payloads(events)[-1]["actor_container"] == "abi:nexus:workspace/ws-ctx"
 
 
 @pytest.mark.asyncio

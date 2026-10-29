@@ -1,7 +1,9 @@
 """The ``nexus`` action catalog, registered with IAM at startup.
 
 Every Nexus authorization decision is an action of this catalog on a resource
-``abi:<org>:<workspace>:nexus:<type>/<id>``. The built-in roles are generated
+in a container (``<container>/nexus:<type>/<id>``: an organization's or a
+workspace's, both containers of this catalog), on a container itself, or at the
+platform (``abi:nexus:<type>/<id>``). The built-in roles are generated
 from it by level (``naas_abi_core.services.iam.roles``): viewers get ``list``
 and ``read``, members ``write``, admins ``admin``. What they leave out is
 flagged here: no role holds a feature (``policy_only``), and only owners
@@ -35,7 +37,7 @@ from naas_abi_core.services.iam.catalog import ActionCatalog, PlatformAccess, Re
 
 SERVICE = "nexus"
 # Raise when the catalog changes; IAM keeps the highest version it has seen.
-VERSION = 7
+VERSION = 8
 
 _MODULES = (
     organizations,

@@ -1,8 +1,11 @@
 """Memberships are IAM's role attachments: the only record of who
 holds which role in an organization or a workspace.
 
-A role is ``builtin.<role>`` attached to the user's principal at the scope of
-the organization (``abi:<org>:-``) or the workspace (``abi:<org>:<workspace>``).
+A role is ``builtin.<role>`` attached to the user's principal at the container of
+the organization (``abi:nexus:organization/<org>``) or of the workspace
+(``…/nexus:workspace/<workspace>``); an organization's owners and admins also hold
+theirs below it (``abi:nexus:organization/<org>/*``), which reaches each of its
+workspaces.
 A Nexus user the built-in login created holds IAM's user of issuer
 ``urn:abi:nexus`` (subject: its Nexus id); a user of an identity provider is its
 principal id (``usr_…``) itself.
@@ -25,8 +28,16 @@ from typing import Any, TypeVar
 from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ, Authz
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
-    org_scope,
-    workspace_scope,
+    ORGANIZATION,
+    PLATFORM,
+    SERVICE,
+    WORKSPACE,
+    is_org_container,
+    is_workspace_container,
+    org_below,
+    org_of,
+    workspace_container,
+    workspace_of,
 )
 from naas_abi_core import logger
 from naas_abi_core.engine.call_context import as_service_account, use_call_context
@@ -37,7 +48,6 @@ from naas_abi_core.services.iam.IAMPorts import (
     ResourceNotFoundError,
 )
 from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER, attachment_resource
-from naas_abi_core.services.iam.names import scope_fields
 from starlette.concurrency import run_in_threadpool
 
 _T = TypeVar("_T")
@@ -45,9 +55,10 @@ _PRINCIPAL_ID = re.compile(r"^usr_[0-9a-z]{26}$")
 
 ROLE_NAMES = ("owner", "admin", "member", "viewer")
 # Organization owners and admins reach every workspace of their organization
-# (``services/iam/AGENTS.md``, "Org owners and admins reach every workspace"): the org role is also held
-# organization-wide (``abi:<org>:*``), which IAM reaches into every workspace.
-# Members and viewers of an organization inherit nothing.
+# (``services/iam/AGENTS.md``, "Org owners and admins reach every workspace"): the
+# org role is also held below the organization (``<org container>/*``), which IAM
+# reaches into every workspace. Members and viewers of an organization inherit
+# nothing.
 INHERITING_ROLES = ("owner", "admin")
 _RANK = {name: len(ROLE_NAMES) - index for index, name in enumerate(ROLE_NAMES)}
 _POLICY_OF = {name: f"builtin.{name}" for name in ROLE_NAMES}
@@ -66,10 +77,10 @@ class Member:
 
 
 def wide_scope(scope: str) -> str | None:
-    """The organization-wide scope (``abi:<org>:*``) of an organization's own scope
-    (``abi:<org>:-``); None for any other scope."""
-    org, workspace = scope_fields(scope)
-    return f"abi:{org}:*" if workspace == "-" and org != "-" else None
+    """The scope below an organization (``<org container>/*``) of the
+    organization's own container; None for any other scope."""
+    org = org_of(scope)
+    return org_below(org) if org is not None and is_org_container(scope) else None
 
 
 def role_of_policy(policy_id: str) -> str | None:
@@ -113,8 +124,8 @@ class Memberships:
         await self._notify(scope)
 
     async def _notify(self, scope: str, *, dropped: bool = False) -> None:
-        org, workspace = scope_fields(scope)
-        if workspace in ("-", "*") or org == "-":
+        workspace = workspace_of(scope) if is_workspace_container(scope) else None
+        if workspace is None:
             return
         for listener in list(self._listeners):
             try:
@@ -253,15 +264,15 @@ class Memberships:
     async def inherited_role(self, user_id: str, org_id: str) -> str | None:
         """The role the user holds in every workspace of ``org_id`` through their
         organization role (an owner or admin of the organization), if any."""
-        return (await self.roles_of(user_id)).get(f"abi:{org_id}:*")
+        return (await self.roles_of(user_id)).get(org_below(org_id))
 
     async def org_wide_orgs_of(self, user_id: str) -> list[str]:
         """The orgs whose every workspace the user reaches (they hold a role
-        organization-wide there: an org owner or admin)."""
+        below the organization: an org owner or admin)."""
         found = []
         for scope in await self.roles_of(user_id):
-            org, workspace = scope_fields(scope)
-            if workspace == "*" and org != "-":
+            org = org_of(scope)
+            if org is not None and scope == org_below(org):
                 found.append(org)
         return sorted(found)
 
@@ -309,25 +320,25 @@ class Memberships:
 
         return await self._run(work)
 
-    async def workspaces_of(self, user_id: str) -> list[tuple[str, str]]:
-        """``(org, workspace)`` of every workspace the user holds a role in directly."""
+    async def workspaces_of(self, user_id: str) -> list[tuple[str | None, str]]:
+        """``(org, workspace)`` of every workspace the user holds a role in directly
+        (``None`` for a workspace in no organization)."""
         found = []
         for scope in await self.roles_of(user_id):
-            org, workspace = scope_fields(scope)
-            if workspace not in ("-", "*") and org != "-":
-                found.append((org, workspace))
-        return sorted(found)
+            workspace = workspace_of(scope) if is_workspace_container(scope) else None
+            if workspace is not None:
+                found.append((org_of(scope), workspace))
+        return sorted(found, key=lambda pair: (pair[0] or "", pair[1]))
 
     async def scopes_of(self, user_id: str, *, level: str) -> dict[str, str]:
-        """The user's roles at ``level``: ``"org"`` (``abi:<org>:-``) or
-        ``"workspace"`` (``abi:<org>:<ws>``), keyed by the org or workspace id."""
+        """The user's roles at ``level``: ``"org"`` (an organization's container) or
+        ``"workspace"`` (a workspace's), keyed by the org or workspace id."""
         found: dict[str, str] = {}
         for scope, role in (await self.roles_of(user_id)).items():
-            org, workspace = scope_fields(scope)
-            if level == "org" and workspace == "-" and org != "-":
-                found[org] = role
-            elif level == "workspace" and workspace not in ("-", "*") and org != "-":
-                found[workspace] = role
+            if level == "org" and is_org_container(scope):
+                found[org_of(scope) or ""] = role
+            elif level == "workspace" and is_workspace_container(scope):
+                found[workspace_of(scope) or ""] = role
         return found
 
     # -- changes -----------------------------------------------------------------
@@ -345,10 +356,10 @@ class Memberships:
 
     @staticmethod
     def mirror_org_wide(iam: Any, principal_id: str, scope: str, role: str | None) -> None:
-        """Hold the organization-wide role an organization ``role`` (``None``: no
-        role) carries, and no other. Made as ``api`` for no user: IAM keeps
-        organization-wide attachments from an org admin, so the change that
-        asked for ``role`` was authorized at the organization's own scope first."""
+        """Hold the role below the organization an organization ``role`` (``None``:
+        no role) carries, and no other. Made as ``api`` for no user: an org admin
+        holds nothing below the organization to grant there, so the change that
+        asked for ``role`` was authorized at the organization's container first."""
         wide = wide_scope(scope)
         if wide is None:
             return
@@ -478,44 +489,41 @@ class Memberships:
         await self._notify(scope)
         return revoked
 
-    # -- scopes -------------------------------------------------------------------
+    # -- containers -----------------------------------------------------------------
 
     async def register_workspace(self, org_id: str | None, workspace_id: str) -> str:
-        """Tell IAM a workspace exists in its org (``iam:PutScope``); returns its scope."""
-        scope = workspace_scope(org_id, workspace_id)
-        org, _ = scope_fields(scope)
+        """Register a workspace with IAM as a container, in its organization's (both
+        registered here) or at the platform for one in none; returns its name."""
 
-        def work(iam: Any) -> None:
-            iam.put_scope(org)
-            iam.put_scope(org, workspace_id)
+        def work(iam: Any) -> str:
+            parent = PLATFORM
+            if org_id:
+                parent = iam.register_container(SERVICE, ORGANIZATION, org_id).name
+            return iam.register_container(SERVICE, WORKSPACE, workspace_id, parent=parent).name
 
-        await self._run(work)
+        container = await self._run(work)
         self._authz.forget_workspace(workspace_id)
-        return scope
-
-    async def drop_scope(self, org_id: str | None, workspace_id: str | None) -> None:
-        """Forget a deleted workspace (or, with no workspace, organization): its
-        role attachments, then its scope."""
-        scope = workspace_scope(org_id, workspace_id) if workspace_id else org_scope(org_id or "")
-        org, _ = scope_fields(scope)
-
-        def work(iam: Any) -> None:
-            held_policies = list(_POLICY_OF.values())
-            scopes = {scope, wide_scope(scope)} - {None}
-            for policy_id in held_policies:
-                for attachment in iam.list_attachments(policy_id=policy_id):
-                    if attachment.scope in scopes:
-                        iam.detach_policy(policy_id, attachment.principal_id, attachment.scope)
-            iam.delete_scope(org, workspace_id or "-")
-
-        await self._run(work)
-        if workspace_id:
-            self._authz.forget_workspace(workspace_id)
-            await self._notify(scope, dropped=True)
+        return container
 
     async def register_org(self, org_id: str) -> str:
-        await self._run(lambda iam: iam.put_scope(org_id))
-        return org_scope(org_id)
+        """Register an organization with IAM as a container; returns its name."""
+        return await self._run(
+            lambda iam: iam.register_container(SERVICE, ORGANIZATION, org_id).name
+        )
+
+    async def drop_scope(self, org_id: str | None, workspace_id: str | None) -> None:
+        """Forget a deleted workspace (or, with no workspace, organization): IAM
+        deletes its container, with what it owns, every attachment at it and
+        below it, and every container below it."""
+        if workspace_id:
+            scope = workspace_container(org_id, workspace_id)
+            await self._run(lambda iam: iam.delete_container(SERVICE, WORKSPACE, workspace_id))
+            self._authz.forget_workspace(workspace_id)
+            await self._notify(scope, dropped=True)
+            return
+        if org_id:
+            await self._run(lambda iam: iam.delete_container(SERVICE, ORGANIZATION, org_id))
+            self._authz.forget_workspaces()  # its workspaces went with it
 
 
 MEMBERSHIPS = Memberships()

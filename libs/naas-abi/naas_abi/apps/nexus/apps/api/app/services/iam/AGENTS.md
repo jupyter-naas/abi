@@ -14,16 +14,18 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
 | File | Role |
 |---|---|
 | `catalog/` | The `nexus` action catalog: one module per router family (`dsl.py` builds types and actions with a **level**), aggregated by `__init__.py` into `NEXUS_CATALOG`, `FEATURE_OF`, `TYPE_OF`, `LEVEL_OF` |
-| `authz.py` | `AUTHZ.require / allowed / decide / filter / name`: builds the resource name, checks `UseFeature` first, maps a refusal to `AuthzDenied` (an `HTTPException`: 403, or 404 for another user's personal resource). `ModuleScope` and `require_scope / allowed_scope / decide_scope / filter_scopes / scope_allowed_in_any` decide module scopes; `upgrading()` refuses every module scope and feature until the sets are policies |
+| `authz.py` | `AUTHZ.require / allowed / decide / filter / name`: builds the resource name in its container (`where`, `container_of`: a workspace's container as IAM registered it, cached), checks `UseFeature` first, maps a refusal to `AuthzDenied` (an `HTTPException`: 403, or 404 for another user's personal resource). `ModuleScope` and `require_scope / allowed_scope / decide_scope / filter_scopes / scope_allowed_in_any` decide module scopes; `upgrading()` refuses every module scope and feature until the sets are policies |
 | `guards.py` | `guard(action, ...)`, a route dependency that decides before the body is read; `declares(action)` for routes that authorize inline. The matrix test reads both |
-| `memberships.py` | `MEMBERSHIPS`: roles are `builtin.<role>` attachments at `abi:<org>:-` (org) and `abi:<org>:<ws>` (workspace); reads as `api`, changes as `api` on behalf of the caller |
-| `names.py` | Scopes and resource names; `NO_ORG` (`_none`) is the org of a workspace that has none |
+| `memberships.py` | `MEMBERSHIPS`: roles are `builtin.<role>` attachments at the organization's container and the workspace's; registers and deletes the containers (`register_org`, `register_workspace`, `drop_scope`); reads as `api`, changes as `api` on behalf of the caller |
+| `names.py` | Every name Nexus builds, through core's `names`: `org_container`, `workspace_container`, `org_below`, `nexus_resource(type, container=, id=)`, and their readers `org_of`, `workspace_of` |
+| `legacy_names.py` | The old grammar's `NO_ORG`, `org_scope`, `workspace_scope`: only for the start-up moves that predate container paths |
 | `placements.py` | Which workspace owns the kernel resources Nexus keeps (`placement_source`, `place`, `place_existing`) |
 | `bootstrap.py` | Startup: register the catalog, move the old membership rows into IAM once (`iam_migrations`) |
 | `role_features.py` | Startup, once: what each role brought in each workspace becomes that workspace's policy "Features of <role>" (`migrate_role_features`, `iam_migrations` `role_features_v1`); then warns while a configuration still sets `role_baseline`, `organization_overrides` or `workspace_overrides` |
 | `user_features.py` | A user's feature flags from IAM (`user_feature_flags`: `UseFeature` per workspace, in one `filter`), what `/api/workspaces` shows |
 | `feature_overrides.py` | Startup, once: the per-workspace feature overrides of earlier versions (`migrate_feature_overrides`, `iam_migrations` `workspace_feature_sets_v1`) |
 | `policy_tree.py` | Startup, once: the sets and the workspace toggles become access policies and their sub-policies (`migrate_sets`, `iam_migrations` `policy_tree_v1`); `pending()` until it is recorded |
+| `container_names.py` | Startup, once, after `policy_tree_v1`: organizations and workspaces registered as IAM containers, and every name IAM stored in the old grammar rewritten to container paths (`LegacyNames`, `migrate_names`, `iam_migrations` `container_names_v1`); `pending()` until it is recorded |
 | `runtime.py` | Where Nexus gets IAM (the engine's); tests install their own with `configure` |
 | `testing.py`, `../../conftest.py` | `NexusIam` (a real IAM on the memory store) and the `nexus_iam` / `team` / `nexus_db` fixtures |
 | `route_matrix_test.py` | Every route declares its action; write methods never authorize only a read; every `guard` is decided by level for viewer, member, admin, owner, stranger |
@@ -41,11 +43,16 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
   its `feature=` in the catalog; the API refuses it where the user lacks the feature. A feature outside
   `enabled_features` is usable by nobody.
 - **Memberships change through `MEMBERSHIPS`** only: an admin cannot grant, demote or remove an owner, and the last
-  owner stays (IAM answers, whichever API is used). An org owner or admin also holds their role organization-wide
-  (`abi:<org>:*`, kept by `Memberships.mirror_org_wide` and `sync_org_wide_roles` at start): that is how they reach
-  every workspace of the org; org members and viewers inherit nothing. Creating a workspace needs `CreateWorkspace`
-  on its organization (an owner's or an admin's), never a request field; one with no organization is a personal
-  workspace (`CreateOrganization`, which every user holds; its scope is the reserved org `_none`).
+  owner stays (IAM answers, whichever API is used). An org owner or admin also holds their role below the
+  organization (`<org container>/*`, kept by `Memberships.mirror_org_wide` and `sync_org_wide_roles` at start): that
+  is how they reach every workspace of the org; org members and viewers inherit nothing. Creating a workspace needs
+  `CreateWorkspace` on the new workspace's name as placed, `<org container>/nexus:workspace/<new id>` (an org owner's
+  or admin's), never a request field; one with no organization is a personal workspace at the platform,
+  `abi:nexus:workspace/<new id>`, which every user may create (`builtin.self`).
+- **Names are built by `names.py` alone.** No f-string makes a name, a scope or a `${scope}` pattern elsewhere: an
+  organization is `org_container(org)`, a workspace `workspace_container(org, ws)` (or `AUTHZ.container_of(ws)`
+  when only its id is known), a resource `nexus_resource(type, container=, id=)`, a module scope
+  `ModuleScope.resource(container)`. A policy Nexus writes at a scope uses `${scope}` and `${scope}/...` patterns.
 - **Kernel resources need a placement.** A workspace's role reaches a kernel resource only once IAM placed it in the
   workspace. Place what you create (`placements.place`), register what exists (`@placement_source`).
 - **Roles are for users Nexus knows.** `MEMBERSHIPS` reads (`roles_of`, `check`, `revoke`) never create an IAM
@@ -56,13 +63,17 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
   decision of `AUTHZ`; never rebuild a context for the same user without it.
 - **The IdP admin app is not a role's:** the platform viewer and member policies and a module's bootstrap Deny
   `discovery:OpenApp` on `app/*/idp/admin`. Do not widen `OpenApp` for a role without it.
-- **A create that fails after the row exists removes it** (and the IAM scope): see `OrganizationService.create_organization`
+- **A create that fails after the row exists removes it** (and its IAM container): see `OrganizationService.create_organization`
   and `WorkspaceService.create_workspace`. A new workspace places its own resources with `on_workspace_created`, never
   `place_existing`; placing failing removes the workspace and its placements (`placements.forget_workspace`). Its
   catalog seed (agents, apps, ontologies, maps) only installs: a new workspace grants nothing, a snapshot import
   neither.
-- **`-`, `*` and `_none` are not workspaces.** Never build a workspace scope or resource name from a path value
-  without `Authz.org_of`/`name` (they refuse those ids): `abi:<org>:-` is the organization's own scope.
+- **`-` and `*` are not workspaces.** Never build a workspace's container or a resource name from a path value
+  without `Authz.container_of`/`name` (they refuse those ids, and a workspace IAM does not know).
+- **The call is made in the workspace's container.** Where Nexus names the workspace of a call (the request
+  middleware from `/workspaces/{id}` or `?workspace_id=`, a chat turn, a graph or a repository it creates), it sets
+  `CallContext.container` to the workspace's container as IAM registered it (`AUTHZ.container_of`), never to a
+  value of the request: IAM places what the call creates there and names module scopes there.
 - **A change that widens what a workspace holds is checked beyond the catalog** (`read_all` is a platform
   administrator's, a graph read→write needs the right to drop it); strings that reach SPARQL are escaped.
 - **Work as `api` for no user** only after the route authorized its caller, and only around the one call that needs it
@@ -71,8 +82,9 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
 ## Module scopes
 
 What modules expose is decided with core's `module` catalog, not `nexus` (core `services/iam/AGENTS.md`,
-"Module scopes"): `ModuleScope(type, module, name)` is `abi:<org>:<ws>:module:<type>/<module>/<name>` in the
-workspace the request names, after the user's membership there. One source of truth: the old `nexus:UseAgent` and
+"Module scopes"): `ModuleScope(type, module, name)` is `<workspace container>/module:<type>/<module>/<name>` in
+the workspace the request names (`ModuleScope.resource(container)`), after the user's membership there. A grant
+of one at a workspace is `${scope}/module:<type>/<module>/<name>`. One source of truth: the old `nexus:UseAgent` and
 `UseApp` checks on a module's agents and apps are these.
 
 | What | Scope (helper) | Where Nexus checks it |
@@ -100,15 +112,18 @@ workspace the request names, after the user's membership there. One source of tr
 ## The `nexus` catalog
 
 Nexus registers the `nexus` action catalog with IAM at startup (`catalog/__init__.py`, `VERSION`: raise it
-when the catalog changes; IAM keeps the highest it has seen). Resources are
-`abi:<org>:<ws>:nexus:<type>/<id>`, org-level ones `abi:<org>:-:nexus:...`, platform-level
-`abi:-:-:nexus:...` (`rtype(..., platform=True)`); a personal type (`my_file`, `user_storage`) covers only
-the caller's own id. One module per router family:
+when the catalog changes; IAM keeps the highest it has seen). `organization` and `workspace` are its
+containers (`rtype(..., container=True)`): an organization is `abi:nexus:organization/<org>`, a workspace
+`abi:nexus:organization/<org>/nexus:workspace/<ws>` (`abi:nexus:workspace/<ws>` for one in no organization),
+and actions on them are decided on those names. What a workspace holds is `<workspace>/nexus:<type>/<id>`,
+what an organization holds `<organization>/nexus:<type>/<id>`, platform-level resources `abi:nexus:<type>/<id>`
+(`rtype(..., platform=True)`); a personal type (`my_file`, `user_storage`) covers only the caller's own id. One
+module per router family:
 
 | Module | Resource types |
 |---|---|
-| `organizations.py` | `organization`, `member`, `domain`, `billing` (org level); `CreateWorkspace` is an org action; `DeleteOrganization` is `owner_only`; every user's `CreateOrganization` is a `PLATFORM_ACCESS` row |
-| `workspaces.py` | `workspace`, `member`, `server`, `resource_access` |
+| `organizations.py` | `organization` (a container: `CreateOrganization` `creates`, `DeleteOrganization` `deletes` and `owner_only`), `member`, `domain`, `billing`; every user's `CreateOrganization` is a `PLATFORM_ACCESS` row (`organization/*`) |
+| `workspaces.py` | `workspace` (a container with `platform_companions`: `CreateWorkspace` `creates`, `DeleteWorkspace` `deletes` and `owner_only`), `member`, `server`, `resource_access`; every user's personal `CreateWorkspace` is a `PLATFORM_ACCESS` row (`workspace/*`) |
 | `features.py` | `feature/<key>` (`UseFeature`), `policy_only`: no role holds it |
 | `chat.py`, `agents.py`, `apps.py`, `workflows.py` | `conversation`; `agent`, `skill`; `app`, `app_project`, `module` (`ListModuleScopes`); `workflow` (its settings: listed, deprecated switch) |
 | `files.py`, `datasets.py`, `office.py` | `file` (drive + path), `my_file`, `user_storage`, `root_storage`; `dataset`; `project` (slides, documents, sheets) |
@@ -126,14 +141,14 @@ a catalog, run the route matrix.
 ### Roles, features and platform types
 
 - **Built-in roles** `builtin.viewer ⊆ member ⊆ admin ⊆ owner` are generated by IAM from the registered
-  catalogs by level (core's `roles.py`) and attached at a scope: `builtin.viewer` at `abi:<org>:<ws>` is the
-  read-only policy on that workspace's resources. `builtin.platform_admin` (`*` on `*`, no scope, never
+  catalogs by level (core's `roles.py`) and attached at a container: `builtin.viewer` at a workspace's container
+  is the read-only policy on that workspace and what it holds. `builtin.platform_admin` (`*` on `*`, no scope, never
   over sealed resources) is `users.is_superadmin`. `builtin.self` is held by every user.
 - **IAM administration by level.** Owners and admins of an org or a workspace manage that level's own policies
   and groups (`services/iam_admin`); members and viewers hold nothing of the `iam` catalog, not even the list of
   their scope's attachments (Nexus reads members as `api`). Deleting a workspace or an org
-  (`Memberships.drop_scope`, then IAM's `delete_scope`) deletes the policies and groups it owns, with their
-  attachments.
+  (`Memberships.drop_scope`, IAM's `delete_container`) deletes the policies and groups it owns, every
+  attachment and placement at it, and everything below it (an org's workspaces).
 - **What the roles leave out is the catalog's to say** (core's `services/iam/AGENTS.md`, "Action catalogs"):
   the `feature` type is `policy_only`, `DeleteWorkspace` and `DeleteOrganization` are `owner_only`, and the
   platform rows the roles' platform companions reach of Nexus (creating an organization, provider models, a
@@ -234,14 +249,51 @@ module item, declared action, built agent and feature compared before and after,
 PostgreSQL stores; once; interrupted; stopped; pending invitations; `*` and `nexus:*` policies split; the notes;
 narrowing "<O> access" narrows below at once; an admin with no policy uses nothing).
 
+## The upgrade: names become container paths
+
+Names were `abi:<org>:<ws>:<service>:<type>/<id>`; core IAM now names paths of containers and knows no
+organization (core `services/iam/AGENTS.md`, "Resource names", "Migrating an existing install"). The org and
+workspace fields were Nexus's, so the move is: `container_names.migrate_names` (at start, once, after
+`policy_tree_v1`, recorded as `container_names_v1`) reads Nexus's organizations and workspaces, and has IAM
+register them as containers and rewrite every stored name in one transaction (`iam.rewrite_names(LegacyNames)`):
+
+- **Scopes and owners.** `abi:O:W` is the workspace's container, `abi:O:-` the organization's, `abi:O:*` below
+  the organization's, `abi:-:-` the platform `abi:`; an owner `abi:_none:-` (what the sets' move made for the
+  workspaces in no organization) the platform, which nobody's role reached either. A scope or an owner naming
+  what Nexus does not know any more is left as it was: in core's `UNRESOLVED`, it decides nothing.
+- **Patterns** become the patterns that name, in the new grammar, exactly what they named: `abi:*:*:R` is
+  `names.anywhere(R)`, `abi:O:*:R` `<O>/R` and `<O>/*/R`, a field with another wildcard each organization or
+  workspace it matched; the singletons `nexus:organization/-` and `nexus:workspace/-` the containers themselves,
+  for the actions on those types (a statement split by type of action where needed); `CreateWorkspace`, decided
+  on the organization before, on `<O>/nexus:workspace/*`, `CreateOrganization` on `abi:nexus:organization/*`;
+  a pattern of the platform's or an organization's own level cut to the types that are no container there (a
+  `*` crosses into containers now), only those its statement's actions are on. What is spelled out for the
+  organizations, workspaces or services of today is named in the report's notes.
+- Placements, keys' narrowing, manifests, invitations and bindings likewise. What is already a path is kept,
+  so the move may run again; a statement whose rewrite names nothing is kept as written (it named nothing).
+- Until it is recorded, module scopes and features are refused (`authz.upgrading`); IAM itself narrows, never
+  widens (old names match nothing new). Start-up order (`main._prepare_iam`): the catalog, the moves that write
+  the old grammar (feature overrides, role features, sets), this move, then `migrate_role_data` and
+  `sync_org_wide_roles` in the new grammar. An install from before Nexus moved its role data into IAM (before
+  #360) upgrades through a version that did first: its role attachments would be made after the moves that read
+  them.
+
+Tested on a store the code before container paths made (`container_names_test.py`,
+`tests/artifacts/names_v1`: 1872 decisions of platform, org, org-wide, workspace and orgless roles, an org's
+group, a platform policy attached org-wide, a sub-policy, a Deny, absolute patterns of every shape, a service
+account, invitations, a binding, placements, a narrowed key): every one is the same after, but one rule change
+(an admin of an organization's own level may attach below it, what it grants there still checked); once and
+again changes nothing. `policy_tree_test.py`, `role_features_test.py` and `feature_overrides_test.py` run the
+chain from an old-grammar world (`testing.LegacyNexusIam`) through their move and this one.
+
 ## Platform-level types and the flags shown
 
 - **Platform-level types.** A workspace role never reaches a platform-level resource. IAM keeps two
   managed policies in step with attachments: `builtin.platform.member` (held while the principal has a
-  `member`, `admin` or `owner` attachment at a workspace or org-wide scope) and `builtin.platform.viewer`
+  `member`, `admin` or `owner` attachment at a workspace or below an organization) and `builtin.platform.viewer`
   (only `viewer` attachments): the platform's models (`model_registry`), the apps, agents and modules it
-  may open or invoke (`discovery`), views, templates, its own runs, its own keys and so on. Org-level
-  attachments (`abi:<org>:-`) bring neither: an org member who belongs to no workspace cannot chat with
+  may open or invoke (`discovery`), views, templates, its own runs, its own keys and so on (the `workspace` type's
+  `platform_companions`). Attachments at an organization's own container bring neither: an org member who belongs to no workspace cannot chat with
   models or open apps. Because Nexus calls as `api` on behalf of the user, the user must hold these too.
   Which agents, apps and workflows a user may use in a workspace is the module scope, checked by Nexus
   before the kernel call ("Module scopes").
@@ -258,20 +310,20 @@ narrowing "<O> access" narrows below at once; an admin with no policy uses nothi
   the boot migration ran; a role changed through the API is never undone by an old row.
 - **Owner protection.** An admin cannot attach or detach `builtin.owner` (IAM answers, whichever API is
   used), so an admin cannot grant, demote or remove an owner, and the last owner stays. Creating a
-  workspace is `CreateWorkspace` on its organization (`admin` level: org owners and admins), never a field
-  of the request.
+  workspace is `CreateWorkspace` on its name in its organization (`admin` level: org owners and admins),
+  never a field of the request.
 - **Org owners and admins reach every workspace of their organization, through IAM.** Whoever holds
-  `builtin.owner` or `builtin.admin` at `abi:<org>:-` also holds the same role at `abi:<org>:*`, which IAM
-  reaches into every workspace. `Memberships.mirror_org_wide` keeps the two together in `grant`, `seed` and
+  `builtin.owner` or `builtin.admin` at the organization's container also holds the same role below it
+  (`<org container>/*`), which IAM reaches into every workspace. `Memberships.mirror_org_wide` keeps the two together in `grant`, `seed` and
   `revoke`; `sync_org_wide_roles` makes the missing ones at start (and, for one person, after the sign-in
-  that claims their invitation). IAM refuses an org admin an organization-wide attachment, so the mirror is
-  written as `api` for no user, after the change that asked for the org role was authorized at the
-  organization's own scope. The sync only adds: an organization-wide role someone attached on purpose is
+  that claims their invitation). An org admin holds nothing below the organization to grant there, so the
+  mirror is written as `api` for no user, after the change that asked for the org role was authorized at the
+  organization's container. The sync only adds: a role below the organization someone attached on purpose is
   never removed by it. Members and viewers of an organization inherit nothing. Reads follow IAM: a
-  workspace's effective role is the highest of the role held there and the organization-wide one
+  workspace's effective role is the highest of the role held there and the one below its organization
   (`WorkspaceService.get_workspace_role`, `effective_roles`); the members list shows organization-wide
   holders as `source: "organization"`, read-only. Demoting or removing an org owner or admin detaches the
-  organization-wide attachment too; deleting an organization detaches both. There is no Nexus resolution of
+  attachment below the organization too; deleting an organization drops both with its container. There is no Nexus resolution of
   inherited roles (it would be a second source of roles).
 - **No implicit access.** `builtin.api` and `builtin.engine` are enumerated statements, each with a `sid`
   that says what needs it (core's `roles.py`): `api` holds `nexus:*`, the kernel services it calls for its
@@ -331,6 +383,23 @@ narrowing "<O> access" narrows below at once; an admin with no policy uses nothi
   enforced). `read_all` shares the graphs
   that exist when applied (`services/graph/AGENTS.md`). Per-object sharing beyond personal resources is an
   explicit statement naming the object.
+
+- **Organizations and workspaces are IAM containers.** *Decision:* Nexus declares `organization` and
+  `workspace` as container types of its catalog (ids opaque, the Nexus ids) and registers each one with IAM
+  as it creates it, with its own account (`api`): an organization at the platform, a workspace in its
+  organization's container, or at the platform when it belongs to none (no reserved org: `_none` is gone from
+  every name). The organization resource is the organization's container, the workspace resource the
+  workspace's; `CreateOrganization` and `CreateWorkspace` are checked on the new one's name as placed (the
+  route picks its id first, `new_org_id`, `new_workspace_id`), and deleting either deletes its container
+  (`iam.delete_container`). An organization's owners and admins are mirrored below it. *Consequences:* every
+  scope Nexus attaches at, owns a policy or a group with, invites or binds at is a container name (`abi:`,
+  `<org container>`, `<workspace container>`, `<org container>/*`); a workspace's container is read from IAM
+  (`Authz.container_of`, cached, forgotten on a change made here), never from a request; a role at a workspace
+  brings the platform companions, one at an organization's own level does not (`platform_companions`);
+  deleting an organization removes what its workspaces owned in IAM with it. The start-up moves that predate
+  container paths (`feature_overrides`, `role_features`, `policy_tree`) still read and write the old grammar
+  (`legacy_names`) until the move of the names (`container_names`) rewrites it; `migrate_role_data` and
+  `sync_org_wide_roles` run after that move, in the new grammar.
 
 ## Tests
 

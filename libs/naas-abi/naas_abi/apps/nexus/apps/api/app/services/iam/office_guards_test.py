@@ -26,7 +26,7 @@ from naas_abi.apps.nexus.apps.api.app.services.documents.adapters.primary import
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AuthzDenied
 from naas_abi.apps.nexus.apps.api.app.services.iam.catalog import LEVEL_OF
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import Declared
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_scope
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from naas_abi.apps.nexus.apps.api.app.services.iam.office_guards import ProjectGuard
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 from naas_abi.apps.nexus.apps.api.app.services.sheets.adapters.primary import (
@@ -197,7 +197,7 @@ def _attach_deny(team: NexusIam, user: str, resource: str) -> None:
     with as_service_account("engine"):
         policy = team.iam.create_policy(f"deny-{user}", deny)
         principal = team.iam.ensure_user(LEGACY_NEXUS_ISSUER, user, provider="nexus")
-        team.iam.attach_policy(policy.id, principal.id, workspace_scope("org-1", WORKSPACE))
+        team.iam.attach_policy(policy.id, principal.id, workspace_container("org-1", WORKSPACE))
 
 
 @pytest.fixture
@@ -342,7 +342,7 @@ def test_a_policy_can_deny_one_project_and_the_list_leaves_it_out(
         created = client.call("member", kind, "POST", "/projects", {"title": slug, "slug": slug})
         assert created.status_code == 200, created.text
     _attach_deny(
-        team, "viewer", f"{workspace_scope('org-1', WORKSPACE)}:nexus:project/slides/secret"
+        team, "viewer", f"{workspace_container('org-1', WORKSPACE)}/nexus:project/slides/secret"
     )
     listed = client.call("viewer", kind, "GET", "/projects").json()
     assert [p["slug"] for p in listed] == ["open"]
@@ -355,7 +355,7 @@ def test_a_policy_names_a_kind_of_project_by_its_first_id_part(
 ) -> None:
     for kind in KINDS:
         client.create(kind)
-    resource = f"{workspace_scope('org-1', WORKSPACE)}:nexus:project/documents/*"
+    resource = f"{workspace_container('org-1', WORKSPACE)}/nexus:project/documents/*"
     _attach_deny(team, "viewer", resource)
     assert client.call("viewer", BY_NAME["slides"], "GET", PROJECT).status_code == 200
     assert client.call("viewer", BY_NAME["sheets"], "GET", PROJECT).status_code == 200

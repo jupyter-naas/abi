@@ -55,12 +55,10 @@ from naas_abi_core.services.iam.IAMService import (
 )
 from naas_abi_core.services.iam.modules import split_manifest
 from naas_abi_core.services.iam.names import (
-    NONE,
-    PLATFORM_SCOPE,
+    PLATFORM,
+    container_of_scope,
     parse_resource_name,
     resource_name,
-    scope_fields,
-    scope_name,
     split_action,
     validate_owner_scope,
     validate_scope,
@@ -160,7 +158,7 @@ class IamAdminService:
         return await run_audited(self._audit, action, lambda: run_in_threadpool(call, session))
 
     @staticmethod
-    def _wildcard(kind: str, owner: str = PLATFORM_SCOPE) -> str:
+    def _wildcard(kind: str, owner: str = PLATFORM) -> str:
         """Any resource of ``kind``: policies and groups as named at ``owner``."""
         if kind == "policy":
             return policy_resource("*", owner)
@@ -219,7 +217,7 @@ class IamAdminService:
     async def grantable(self, user: Any, scope: str) -> dict[str, Any]:
         """What the caller may grant at ``scope``, for the policy builder: per catalog
         (a kernel service or a module), the actions they hold there and the resource
-        patterns (``${scope}:...``) they hold them on, minus their Denies. IAM's
+        patterns (``${scope}/...``) they hold them on, minus their Denies. IAM's
         ``grantable``, about the caller only, like ``access``: IAM validates the scope."""
         found = await self._read(user, lambda session: session.grantable(scope))
         return {"scope": scope, "catalogs": [views.grantable_view(c) for c in found]}
@@ -288,8 +286,8 @@ class IamAdminService:
         self, user: Any, after: str | None = None, scope: str | None = None
     ) -> dict[str, Any]:
         """The policies the caller may list; with ``scope``, that level's own and
-        those above it the caller may attach there (IAM's ``list_policies``). An
-        org-wide scope lists its org's."""
+        those above it the caller may attach there (IAM's ``list_policies``). A
+        scope below a container (``<container>/*``) lists that container's."""
         owner = validate_owner_scope(_owner_of(scope)) if scope is not None else None
 
         def read(session: IIAMService) -> dict[str, Any]:
@@ -341,7 +339,7 @@ class IamAdminService:
                 )
             )
 
-        detail = f"{name}, {scope or PLATFORM_SCOPE}"
+        detail = f"{name}, {scope or PLATFORM}"
         if parent:
             detail += f", sub-policy of {parent}"
         return await self._change(user, "create_policy", name, create, detail=detail)
@@ -426,8 +424,8 @@ class IamAdminService:
         self, user: Any, scope: str | None, principal_id: str | None = None
     ) -> dict[str, Any]:
         """The policies the caller may attach at ``scope``: IAM's rule for a scope
-        (every Allow starts with ``${scope}:``) and the caller's own right to attach.
-        A policy with a Deny beyond ``${scope}:``, its own or its chain's, is offered
+        (every Allow is ``${scope}`` or starts with ``${scope}/``) and the caller's own
+        right to attach. A policy with a Deny beyond ``${scope}``, its own or its chain's, is offered
         at a scope only to whoever may attach it unscoped, as IAM decides; one whose
         chain names ``${scope}`` is never offered unscoped."""
         if scope is not None:
@@ -549,8 +547,8 @@ class IamAdminService:
 
     async def list_groups(self, user: Any, scope: str | None = None) -> dict[str, Any]:
         """The groups the caller may list; with ``scope``, that level's own (and,
-        at a workspace, its org's the caller attaches to there). An org-wide scope
-        lists its org's."""
+        at a workspace, its org's the caller attaches to there). A scope below a
+        container lists that container's."""
         owner = validate_owner_scope(_owner_of(scope)) if scope is not None else None
 
         def read(session: IIAMService) -> dict[str, Any]:
@@ -578,16 +576,15 @@ class IamAdminService:
     async def get_group(self, user: Any, group_id: str) -> dict[str, Any]:
         return await self._read(user, lambda s: self._group_view(s, group_id))
 
-    async def create_group(
-        self, user: Any, name: str, org: str | None, scope: str | None = None
-    ) -> dict[str, Any]:
-        """A group owned by ``scope`` (or, with only ``org``, by that org)."""
+    async def create_group(self, user: Any, name: str, scope: str | None = None) -> dict[str, Any]:
+        """A group owned by ``scope`` (a container's name; the platform without one)."""
+        owner = scope
         return await self._change(
             user,
             "create_group",
             name,
-            lambda s: views.principal_view(s.create_group(name, org=org, scope=scope)),
-            detail=scope or (f"org {org}" if org else "platform group"),
+            lambda s: views.principal_view(s.create_group(name, scope=owner)),
+            detail=owner or "platform group",
         )
 
     async def delete_group(self, user: Any, group_id: str) -> None:
@@ -854,15 +851,14 @@ class IamAdminService:
             ]
         }
 
+
 def _owner_of(scope: str | None) -> str:
-    """The level whose policies and groups a scope's page shows: the scope itself,
-    an org-wide scope's org, or the platform."""
+    """The level whose policies and groups a scope's page shows: the scope's
+    container (a scope below a container, ``<container>/*``, shows that
+    container's), or the platform."""
     if scope is None:
-        return PLATFORM_SCOPE
-    org, workspace = scope_fields(scope)
-    if workspace == "*":
-        return scope_name(org, NONE)
-    return scope
+        return PLATFORM
+    return container_of_scope(scope)
 
 
 async def _false() -> bool:

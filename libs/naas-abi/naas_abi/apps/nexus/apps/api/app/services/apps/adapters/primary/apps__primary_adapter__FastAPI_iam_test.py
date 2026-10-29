@@ -20,6 +20,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 from naas_abi_core.engine.call_context import as_service_account
+from naas_abi_core.services.iam.names import PLATFORM
 
 APP = "acme.ops:map"
 
@@ -245,9 +246,9 @@ async def test_the_listing_is_exactly_what_iam_allows(world, monkeypatch) -> Non
         assert [a["app_id"] for a in listed.json()["apps"]] == ["acme.market:prices"]
     # Admins and owners granted every app of the module.
     for role in ("admin", "owner"):
-        world.iam.allow(role, ["module:OpenApp"], ["${scope}:app/*"], world.scope)
+        world.iam.allow(role, ["module:OpenApp"], ["${scope}/module:app/*"], world.scope)
     # A Deny in a policy is how a workspace stops offering an app.
-    map_resource = ModuleScope("app", "acme.ops", "map").resource("o", "w").removeprefix("abi:o:w:")
+    map_resource = ModuleScope("app", "acme.ops", "map").resource(PLATFORM).removeprefix(PLATFORM)
     with as_service_account("engine"):
         deny = world.iam.iam.create_policy(
             "no-map",
@@ -257,7 +258,7 @@ async def test_the_listing_is_exactly_what_iam_allows(world, monkeypatch) -> Non
                     {
                         "effect": "Deny",
                         "actions": ["module:OpenApp"],
-                        "resources": [f"${{scope}}:{map_resource}"],
+                        "resources": [f"${{scope}}/{map_resource}"],
                     }
                 ],
             },

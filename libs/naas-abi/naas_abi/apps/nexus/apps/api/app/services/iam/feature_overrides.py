@@ -212,8 +212,6 @@ async def migrate_feature_overrides(db: AsyncSession, flags: Any) -> int:
         with as_service_account("engine"):
             for move in moves:
                 try:
-                    iam.put_scope(move.org)
-                    iam.put_scope(move.org, move.workspace)
                     _apply_move(iam, move)
                 except Exception:  # noqa: BLE001 - one workspace never stops the others
                     _log.warning(

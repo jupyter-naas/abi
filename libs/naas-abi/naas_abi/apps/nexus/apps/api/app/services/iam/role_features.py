@@ -196,7 +196,13 @@ class _Policies:
             after: str | None = None
             while True:
                 page = self._iam.list_policies(scope=owner, limit=200, after=after)
-                found += [p for p in page.items if p.owner_scope == (owner or "abi:-:-")]
+                # The platform: abi:-:- before container paths, abi: once made today.
+                found += [
+                    p
+                    for p in page.items
+                    if p.owner_scope == owner
+                    or (owner is None and p.owner_scope in ("abi:-:-", "abi:"))
+                ]
                 after = page.next_after
                 if after is None:
                     break
@@ -256,9 +262,9 @@ def move(
         org = org_id or NO_ORG
         scope = f"abi:{org}:{workspace}"
 
-        def own(org: str = org, workspace: str = workspace, scope: str = scope) -> None:
-            iam.put_scope(org)
-            iam.put_scope(org, workspace)
+        def own(scope: str = scope) -> None:
+            # Containers are registered when the names are rewritten
+            # (``container_names``); IAM takes these owners from the engine.
             for role in ROLE_NAMES:
                 features = _features(role, scope, keys)
                 if features:
@@ -284,8 +290,6 @@ def move(
                 principal_id: str = attachment.principal_id,
                 scope: str = scope,
             ) -> bool:
-                if owner is not None:
-                    iam.put_scope(_fields(owner)[0])
                 policy = policies.get(owner, role, features)
                 iam.attach_policy(policy.id, principal_id, scope)
                 return True

@@ -11,7 +11,7 @@ to SQLAlchemy ORM sessions rather than instrumenting each endpoint:
 - ``after_rollback``: they are dropped, so nothing that did not happen is logged.
 
 The actor (``created_by``) comes from the request-scoped identity ContextVars;
-``EventService.publish()`` stamps ``actor_user_id`` / ``actor_workspace_id`` /
+``EventService.publish()`` stamps ``actor_user_id`` / ``actor_container`` /
 ``triggered_via`` from the same ContextVars.
 
 Bulk ``update()`` / ``delete()`` statements bypass the ORM, so they cannot be

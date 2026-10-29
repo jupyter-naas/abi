@@ -6,7 +6,13 @@ after the move (the oracle below is the previous version's rule: the policies,
 within the sets of the org and the workspace unless the user is a platform
 admin, minus what the workspace turned off), on the memory, SQLite and
 PostgreSQL stores; the only change is the platform admin reaching what a
-workspace had turned off (``policy_tree.NOTES``)."""
+workspace had turned off (``policy_tree.NOTES``).
+
+The previous state is in the grammar before container paths
+(``testing.LegacyNexusIam``), which this move reads and writes. An upgrade runs
+it, then the move of the names (``container_names``), as a start does: the
+decisions before are asked on the old names, those after on the same resources
+named as paths."""
 
 from __future__ import annotations
 
@@ -18,15 +24,24 @@ from uuid import uuid4
 import pytest
 from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig
 from naas_abi.apps.nexus.apps.api.app.models import OrganizationModel, WorkspaceModel
-from naas_abi.apps.nexus.apps.api.app.services.iam import policy_tree
+from naas_abi.apps.nexus.apps.api.app.services.iam import container_names, policy_tree
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import NO_ORG, nexus_resource
+from naas_abi.apps.nexus.apps.api.app.services.iam.legacy_names import NO_ORG
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
+    nexus_resource,
+    org_container,
+    workspace_container,
+)
 from naas_abi.apps.nexus.apps.api.app.services.iam.policy_tree import (
     Legacy,
     TurnedOff,
     scope_within,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
+from naas_abi.apps.nexus.apps.api.app.services.iam.testing import (
+    LegacyNexusIam,
+    NexusIam,
+    store_old_roles,
+)
 from naas_abi_core.engine.call_context import (
     CallContext,
     Principal,
@@ -36,7 +51,7 @@ from naas_abi_core.engine.call_context import (
 from naas_abi_core.services.iam import module_scopes, roles
 from naas_abi_core.services.iam.IAMPorts import LegacyScopeSet
 from naas_abi_core.services.iam.module_scopes import module_catalog
-from naas_abi_core.services.iam.names import matches
+from naas_abi_core.services.iam.names import PLATFORM, is_old_scope, matches
 from naas_abi_core.services.iam.policy import PolicyDocument, Statement
 from sqlalchemy import text
 
@@ -115,9 +130,11 @@ ACTION_OF = {
 # -- the previous state ----------------------------------------------------------------
 
 
-def _old_roles(nexus: NexusIam) -> None:
+def _old_roles(nexus: LegacyNexusIam) -> None:
     """What the previous roles held beside the rest: admins and owners every
-    module scope at their scope."""
+    module scope at their scope. On the old roles: registering the catalogs
+    above regenerated them in the grammar of today."""
+    store_old_roles(nexus.iam)
     store = nexus.iam.store
     extra = [
         Statement(
@@ -147,8 +164,8 @@ def _policy(name: str, statements: list[Statement]) -> PolicyDocument:
     return PolicyDocument(statements=tuple(statements))
 
 
-def _world(store=None) -> NexusIam:
-    nexus = NexusIam(FLAGS, features_with_roles=False, store=store)
+def _world(store=None) -> LegacyNexusIam:
+    nexus = LegacyNexusIam(FLAGS, store=store)
     iam = nexus.iam
     with as_service_account("engine"):
         iam.register_catalog(module_scopes.CATALOG)
@@ -219,19 +236,19 @@ def _world(store=None) -> NexusIam:
         )
         iam.attach_policy(people.id, nexus.principal("erin"))
         # Groups: ws-a's holding the admin role, org-1's holding Analysts org-wide.
-        admins = iam.create_group("ws-a admins", scope=scopes["ws-a"])
-        iam.attach_policy(roles.ADMIN, admins.id, scopes["ws-a"])
-        iam.add_group_member(admins.id, nexus.principal("frank"))
-        org_group = iam.create_group("org analysts", scope="abi:org-1:-")
-        iam.attach_policy(analysts.id, org_group.id, "abi:org-1:*")
-        iam.add_group_member(org_group.id, nexus.principal("frank"))
+        admins = nexus.group("ws-a admins", scopes["ws-a"])
+        iam.attach_policy(roles.ADMIN, admins, scopes["ws-a"])
+        nexus.add_member(admins, nexus.principal("frank"))
+        org_group = nexus.group("org analysts", "abi:org-1:-")
+        iam.attach_policy(analysts.id, org_group, "abi:org-1:*")
+        nexus.add_member(org_group, nexus.principal("frank"))
         # A service account: admin of ws-a, never bounded by a set, and in a
         # platform group holding Analysts org-wide.
         bot = iam.create_service_account("ci/bot")
         iam.attach_policy(roles.ADMIN, bot.id, scopes["ws-a"])
-        ops = iam.create_group("ops")  # a platform group: service accounts may join
-        iam.attach_policy(analysts.id, ops.id, "abi:org-1:*")
-        iam.add_group_member(ops.id, bot.id)
+        ops = nexus.group("ops")  # a platform group: service accounts may join
+        iam.attach_policy(analysts.id, ops, "abi:org-1:*")
+        nexus.add_member(ops, bot.id)
         # "Full access" in ws-b (every action of every service) and nexus:* in ws-a:
         # split, what is not a module scope or a feature spelled out.
         full = iam.create_policy(
@@ -254,7 +271,7 @@ def _world(store=None) -> NexusIam:
     return nexus
 
 
-def _seed_legacy_sets(nexus: NexusIam) -> None:
+def _seed_legacy_sets(nexus: LegacyNexusIam) -> None:
     rows = [LegacyScopeSet(org, ws, s.modules, s.features) for (org, ws), s in SETS.items()]
     store = nexus.iam.store
     if hasattr(store, "seed_legacy_scope_sets"):
@@ -394,42 +411,63 @@ def _remote_agents(monkeypatch):
 # -- decisions -----------------------------------------------------------------------------
 
 
-def _names() -> dict[tuple[str, str, str], tuple[str, str]]:
+def _old(ws: str, rest: str) -> str:
+    """A name in a workspace, in the grammar before container paths."""
+    return f"abi:{WORKSPACES[ws] or NO_ORG}:{ws}:{rest}"
+
+
+def _new(ws: str, rest: str) -> str:
+    """The same name as a path: in the workspace's container."""
+    return f"{workspace_container(WORKSPACES[ws], ws)}/{rest}"
+
+
+def _names(named=_old) -> dict[tuple[str, str, str], tuple[str, str]]:
     """``(workspace, kind, item) -> (action, resource)`` for every module item,
-    declared action and feature, in every workspace."""
+    declared action and feature, in every workspace; named with ``named`` (``_old``
+    before the upgrade, ``_new`` after)."""
     found: dict[tuple[str, str, str], tuple[str, str]] = {}
-    for ws, org in WORKSPACES.items():
-        org = org or NO_ORG
+    for ws in WORKSPACES:
         for type_name, module, name in ITEMS:
-            resource = module_scopes.scope_resource(type_name, module, name, org=org, workspace=ws)
+            resource = named(ws, f"module:{type_name}/{module}/{name}")
             found[(ws, type_name, f"{module}/{name}")] = (ACTION_OF[type_name], resource)
             if type_name in module_scopes.RUNS_ACTION:
                 action = f"module:{module_scopes.RUNS_ACTION[type_name]}"
                 found[(ws, f"{type_name}-runs", f"{module}/{name}")] = (action, resource)
         for action in ("acme_people:ExportReport", "acme_people:DeleteReport"):
-            found[(ws, "declared", action)] = (action, f"abi:{org}:{ws}:acme_people:report/q3")
+            found[(ws, "declared", action)] = (action, named(ws, "acme_people:report/q3"))
         for key in FEATURES:
-            found[(ws, "feature", key)] = (
-                "nexus:UseFeature",
-                nexus_resource("feature", org=org, workspace=ws, id=key),
-            )
+            found[(ws, "feature", key)] = ("nexus:UseFeature", named(ws, f"nexus:feature/{key}"))
     for agent_id in CUSTOM_AGENTS:
         found[("ws-a", "custom", agent_id)] = (
             "nexus:UseAgent",
-            nexus_resource("agent", org="org-1", workspace="ws-a", id=agent_id),
+            named("ws-a", f"nexus:agent/{agent_id}"),
         )
     return found
 
 
-def _context(subject: str, nexus: NexusIam) -> CallContext:
+def test_the_names_after_are_the_names_of_today():
+    """``_new`` names what Nexus and core name today."""
+    w = workspace_container("org-1", "ws-a")
+    assert _new("ws-a", "module:agent/acme.people/A") == module_scopes.scope_resource(
+        "agent", "acme.people", "A", container=w
+    )
+    assert _new("ws-a", "nexus:feature/chat") == nexus_resource("feature", container=w, id="chat")
+    assert _new("ws-a", "nexus:agent/custom-on") == nexus_resource(
+        "agent", container=w, id="custom-on"
+    )
+    assert _new("ws-d", "nexus:feature/chat").startswith("abi:nexus:workspace/ws-d/")
+
+
+def _context(subject: str, nexus: LegacyNexusIam) -> CallContext:
     if subject.startswith("sa:"):
         return CallContext(principal=Principal(id=subject[3:], kind="service_account"))
     return NexusIam.context(subject)
 
 
-def _iam_decisions(nexus: NexusIam, subjects) -> dict[tuple, bool]:
+def _iam_decisions(nexus: LegacyNexusIam, subjects) -> dict[tuple, bool]:
+    """IAM's decisions on the names of the grammar the world is in."""
     found: dict[tuple, bool] = {}
-    names = _names()
+    names = _names(_new if nexus.rewritten else _old)
     for subject in subjects:
         with use_call_context(_context(subject, nexus)):
             for key, (action, resource) in names.items():
@@ -479,7 +517,7 @@ def _turned_off(ws: str, kind: str, item: str) -> bool:
     return (kind, module, name) in toggles.processes_off
 
 
-def _before(nexus: NexusIam, subjects) -> dict[tuple, bool]:
+def _before(nexus: LegacyNexusIam, subjects) -> dict[tuple, bool]:
     raw = _iam_decisions(nexus, subjects)
     found: dict[tuple, bool] = {}
     for key, allowed in raw.items():
@@ -497,21 +535,37 @@ def _before(nexus: NexusIam, subjects) -> dict[tuple, bool]:
     return found
 
 
-def _subjects(nexus: NexusIam) -> list[str]:
+def _subjects(nexus: LegacyNexusIam) -> list[str]:
     with as_service_account("engine"):
         bot = nexus.iam.find_service_account("ci/bot").id
     return [*USERS, f"sa:{bot}"]
 
 
-async def _upgrade(nexus: NexusIam, nexus_db) -> policy_tree.Report | None:
-    # The engine starts on this version: the roles hold no module scope any more.
+async def _upgrade(
+    nexus: LegacyNexusIam, nexus_db, *, names: bool = True
+) -> policy_tree.Report | None:
+    """A start on this version: the engine's (the roles are regenerated, in the
+    grammar of today, and hold no module scope), then Nexus's moves, the sets'
+    and (``names``) the move of the names, which waits for it."""
     with as_service_account("engine"):
         nexus.iam._refresh_builtin_policies()
     nexus.iam.invalidate()
     async with nexus_db() as db:
         await _previous_database(db)
         report = await policy_tree.migrate_sets(db)
+        if names:
+            await _rewrite(nexus, db)
     nexus.iam.invalidate()
+    return report
+
+
+async def _rewrite(nexus: LegacyNexusIam, db) -> container_names.Report | None:
+    """The move of the names, as a start makes it (Nexus's organizations and
+    workspaces read from its tables); None while it waits."""
+    report = await container_names.migrate_names(db)
+    if report is not None:
+        nexus.rewritten = True
+        nexus.iam.invalidate()
     return report
 
 
@@ -528,7 +582,7 @@ def _expected_changes(before: dict[tuple, bool]) -> dict[tuple, bool]:
 # -- the tests ---------------------------------------------------------------------------------
 
 
-async def _check_upgrade(nexus: NexusIam, nexus_db) -> None:
+async def _check_upgrade(nexus: LegacyNexusIam, nexus_db) -> None:
     subjects = _subjects(nexus)
     before = _before(nexus, subjects)
     # The previous state is not empty: the move has something to keep.
@@ -558,19 +612,26 @@ async def _check_upgrade(nexus: NexusIam, nexus_db) -> None:
     report = await _upgrade(nexus, nexus_db)
 
     assert report is not None and not policy_tree.pending()
+    assert nexus.rewritten and not container_names.pending()
     after = _iam_decisions(nexus, subjects)
     changed = {k: v for k, v in after.items() if before[k] != v}
     assert changed == _expected_changes(before)
     # Non-module grants are kept: dave still queries ws-b's graphs.
     with use_call_context(NexusIam.context("dave")):
         assert nexus.iam.authorize(
-            "triple_store:Query", "abi:org-1:ws-b:triple_store:graph/g1"
+            "triple_store:Query", _new("ws-b", "triple_store:graph/g1")
         ).allowed
     # What the sets were is policies now, and IAM's sets are gone.
     with as_service_account("engine"):
         assert nexus.iam.legacy_scope_sets() == []
         names = {p.name for p in nexus.iam._all_policies()}
     assert {"ORG-1 access", "ORG-2 access", "Workspace ws-a access"} <= names
+    # Every policy is owned by a container of today, those made for the
+    # workspace in no organization by the platform.
+    with as_service_account("engine"):
+        owners = {p.name: p.owner_scope for p in nexus.iam._all_policies()}
+    assert not [o for o in owners.values() if is_old_scope(o)]
+    assert owners["Workspace ws-d access"] == PLATFORM
 
 
 @pytest.mark.asyncio
@@ -625,6 +686,7 @@ async def test_once_and_again_changes_nothing(nexus_db):
             attachments = {a.id for a in nexus.iam.list_attachments()}
         async with nexus_db() as db:
             assert await policy_tree.migrate_sets(db) is None
+            assert await container_names.migrate_names(db) is None
         with as_service_account("engine"):
             assert {(p.id, p.revision) for p in nexus.iam._all_policies()} == policies
             assert {a.id for a in nexus.iam.list_attachments()} == attachments
@@ -649,10 +711,13 @@ async def test_an_interrupted_move_plans_the_same_again(nexus_db, monkeypatch):
 
         monkeypatch.setattr(nexus.iam, "attach_policy", flaky)
         assert await _upgrade(nexus, nexus_db) is None
-        assert policy_tree.pending()
+        # The names wait for the sets: nothing rewritten, both still refused.
+        assert policy_tree.pending() and container_names.pending()
+        assert not nexus.rewritten
         monkeypatch.setattr(nexus.iam, "attach_policy", real)
         async with nexus_db() as db:
             assert await policy_tree.migrate_sets(db) is not None
+            assert await _rewrite(nexus, db) is not None
         nexus.iam.invalidate()
         after = _iam_decisions(nexus, subjects)
         assert {k: v for k, v in after.items() if before[k] != v} == _expected_changes(before)
@@ -680,7 +745,7 @@ async def test_a_case_it_cannot_keep_stops_the_move(nexus_db, caplog):
                 parent=parent.id,
             )
         assert await _upgrade(nexus, nexus_db) is None
-        assert policy_tree.pending()
+        assert policy_tree.pending() and container_names.pending()
         assert "Child" in caplog.text and "sub-policy" in caplog.text
         async with nexus_db() as db:
             recorded = (
@@ -691,6 +756,7 @@ async def test_a_case_it_cannot_keep_stops_the_move(nexus_db, caplog):
             ).first()
         assert recorded is None
     policy_tree.set_pending(False)
+    container_names.set_pending(False)
 
 
 @pytest.mark.asyncio
@@ -707,14 +773,18 @@ async def test_pending_invitations_get_the_access_of_their_role(nexus_db):
     assert (
         "zoe@example.com",
         "Workspace ws-a modules (admins and owners)",
-        "abi:org-1:ws-a",
+        workspace_container("org-1", "ws-a"),
     ) in pending
     # An org owner holds the role org-wide once signed in: every workspace too.
-    assert ("olga@example.com", "ORG-1 modules (admins and owners)", "abi:org-1:-") in pending
+    assert (
+        "olga@example.com",
+        "ORG-1 modules (admins and owners)",
+        org_container("org-1"),
+    ) in pending
     assert (
         "olga@example.com",
         "Workspace ws-b modules (admins and owners)",
-        "abi:org-1:ws-b",
+        workspace_container("org-1", "ws-b"),
     ) in pending
 
 
@@ -723,9 +793,7 @@ async def test_removing_an_agent_from_an_org_access_removes_it_below_at_once(nex
     nexus = _world()
     with nexus.installed():
         await _upgrade(nexus, nexus_db)
-        agent = module_scopes.scope_resource(
-            "agent", "acme.people", "A", org="org-1", workspace="ws-a"
-        )
+        agent = _new("ws-a", "module:agent/acme.people/A")
         for user in ("bob", "carol"):
             with use_call_context(NexusIam.context(user)):
                 assert nexus.iam.authorize("module:UseAgent", agent).allowed, user
@@ -736,7 +804,7 @@ async def test_removing_an_agent_from_an_org_access_removes_it_below_at_once(nex
                     s.effect,
                     s.actions,
                     tuple(r for r in s.resources if "acme.people" not in r)
-                    + (("${scope}:module:agent/acme.crm/*",) if s.sid == "Modules" else ()),
+                    + (("${scope}/module:agent/acme.crm/*",) if s.sid == "Modules" else ()),
                     sid=s.sid,
                 )
                 for s in org_access.document.statements
@@ -766,14 +834,14 @@ async def test_an_admin_of_a_workspace_with_no_policy_uses_nothing(nexus_db):
             with use_call_context(NexusIam.context(user)):
                 for type_name, module, name in ITEMS:
                     resource = module_scopes.scope_resource(
-                        type_name, module, name, org="org-1", workspace="ws-new"
+                        type_name, module, name, container=scope
                     )
                     assert not nexus.iam.authorize(ACTION_OF[type_name], resource).allowed
                 assert not nexus.iam.authorize(
-                    "acme_people:ExportReport", "abi:org-1:ws-new:acme_people:report/q3"
+                    "acme_people:ExportReport", f"{scope}/acme_people:report/q3"
                 ).allowed
                 for key in FEATURES:
-                    feature = nexus_resource("feature", org="org-1", workspace="ws-new", id=key)
+                    feature = nexus_resource("feature", container=scope, id=key)
                     assert not nexus.iam.authorize("nexus:UseFeature", feature).allowed
 
 
@@ -813,7 +881,7 @@ def test_a_set_of_nothing_lets_nothing_through():
     and no Deny that would refuse a service account through a group."""
     statements = policy_tree.access_statements(Legacy((), ()), {})
     assert [(s.sid, s.effect) for s in statements] == [("Nothing", "Allow")]
-    agent = module_scopes.scope_resource("agent", "m", "a", org="o", workspace="w")
+    agent = "abi:o:w:module:agent/m/a"
     assert not any(
         matches(r.replace("${scope}", "abi:o:w"), agent) for r in statements[0].resources
     )
@@ -827,23 +895,36 @@ async def test_module_scopes_and_features_are_refused_until_the_move(nexus_db):
     from naas_abi.apps.nexus.apps.api.app.services.iam.user_features import user_feature_flags
 
     nexus = _world()
+
+    async def refused() -> None:
+        for user in ("bob", "root"):
+            assert not await AUTHZ.allowed_scope(scope, user=user, workspace="ws-a")
+            assert (
+                await AUTHZ.filter_scopes(
+                    [scope], user=user, workspace="ws-a", scope_of=lambda s: s
+                )
+                == []
+            )
+        flags = await user_feature_flags("root", [("org-1", "ws-a")], FEATURES)
+        assert not any(flags["ws-a"].values())
+
     with nexus.installed():
         scope = ModuleScope("agent", "acme.people", "A")
+        # As a start sets them before its moves.
         policy_tree.set_pending(True)
+        container_names.set_pending(True)
         try:
-            for user in ("bob", "root"):
-                assert not await AUTHZ.allowed_scope(scope, user=user, workspace="ws-a")
-                assert (
-                    await AUTHZ.filter_scopes(
-                        [scope], user=user, workspace="ws-a", scope_of=lambda s: s
-                    )
-                    == []
-                )
-            flags = await user_feature_flags("root", [("org-1", "ws-a")], FEATURES)
-            assert not any(flags["ws-a"].values())
+            await refused()
+            # The sets moved, the names not yet: still refused.
+            await _upgrade(nexus, nexus_db, names=False)
+            assert not policy_tree.pending() and container_names.pending()
+            await refused()
+            async with nexus_db() as db:
+                assert await _rewrite(nexus, db) is not None
+            assert not container_names.pending()
         finally:
             policy_tree.set_pending(False)
-        await _upgrade(nexus, nexus_db)
+            container_names.set_pending(False)
         assert await AUTHZ.allowed_scope(scope, user="bob", workspace="ws-a")
 
 
@@ -858,14 +939,14 @@ async def test_what_is_not_a_module_scope_or_a_feature_stays_as_it_was(nexus_db)
         assert report is not None
         with use_call_context(NexusIam.context("jack")):
             assert nexus.iam.authorize(
-                "triple_store:Query", "abi:org-1:ws-b:triple_store:graph/g1"
+                "triple_store:Query", _new("ws-b", "triple_store:graph/g1")
             ).allowed
             assert nexus.iam.authorize(
-                "nexus:UpdateWorkspace", "abi:org-1:ws-b:nexus:workspace/ws-b"
+                "nexus:UpdateWorkspace", workspace_container("org-1", "ws-b")
             ).allowed
         with use_call_context(NexusIam.context("kate")):
             assert nexus.iam.authorize(
-                "nexus:UpdateWorkspace", "abi:org-1:ws-a:nexus:workspace/ws-a"
+                "nexus:UpdateWorkspace", workspace_container("org-1", "ws-a")
             ).allowed
         with as_service_account("engine"):
             full = next(p for p in nexus.iam._all_policies() if p.name == "Nexus")
@@ -900,8 +981,8 @@ async def test_a_turned_off_agent_the_workspace_built_stays_off(nexus_db):
     nexus = _world()
     with nexus.installed():
         await _upgrade(nexus, nexus_db)
-        off = nexus_resource("agent", org="org-1", workspace="ws-a", id="custom-off")
-        on = nexus_resource("agent", org="org-1", workspace="ws-a", id="custom-on")
+        off = _new("ws-a", "nexus:agent/custom-off")
+        on = _new("ws-a", "nexus:agent/custom-on")
         for user in ("bob", "carol", "alice", "frank"):
             with use_call_context(NexusIam.context(user)):
                 assert not nexus.iam.authorize("nexus:UseAgent", off).allowed, user

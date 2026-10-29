@@ -88,6 +88,8 @@ class AppRequest:
     user_id: str = ""
     # The workspace the user opened the app from (its grant names it).
     workspace_id: str = ""
+    # The workspace's container name: the container the app's calls are made in.
+    container: str = ""
     # A large body, read as the module pulls it (after ``body``).
     body_stream: AsyncIterator[bytes] | None = None
     max_body_bytes: int = 0

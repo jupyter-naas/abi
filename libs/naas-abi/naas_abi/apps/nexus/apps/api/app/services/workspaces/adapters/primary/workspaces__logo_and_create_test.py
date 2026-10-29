@@ -13,6 +13,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
 )
 from naas_abi.apps.nexus.apps.api.app.core.config import OrganizationSeedConfig
 from naas_abi.apps.nexus.apps.api.app.services.auth.avatar_store_test import MemoryStorage
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary import (
     workspaces__primary_adapter__FastAPI as ws_api,
 )
@@ -120,13 +121,14 @@ def test_create_is_undone_when_placing_fails(monkeypatch, team) -> None:
 async def test_placements_of_an_undone_workspace_are_forgotten(team) -> None:
     from naas_abi.apps.nexus.apps.api.app.services.iam import placements
 
+    ws2 = team.workspace("org-1", "ws-2")
     with as_service_account("engine"):
-        team.iam.put_placement("files", "drive/ws-1/*", "org-1", "ws-1")
-        team.iam.put_placement("files", "drive/ws-2/*", "org-1", "ws-2")
+        team.iam.put_placement("files", "drive/ws-1/*", workspace_container("org-1", "ws-1"))
+        team.iam.put_placement("files", "drive/ws-2/*", ws2)
 
     assert await placements.forget_workspace("ws-1") == 1
     with as_service_account("engine"):
-        assert [p.workspace for p in team.iam.list_placements("files")] == ["ws-2"]
+        assert [p.container for p in team.iam.list_placements("files")] == [ws2]
 
 
 def test_configuration_lists_features_and_config_seeds(monkeypatch, team) -> None:
@@ -269,10 +271,12 @@ def test_resources_are_what_the_caller_may_use_there(monkeypatch, team) -> None:
     team.allow(
         "admin",
         ["module:UseAgent", "module:OpenApp"],
-        ["${scope}:module:agent/acme.people/A", "${scope}:module:app/acme.market/*"],
-        "abi:org-1:ws-1",
+        ["${scope}/module:agent/acme.people/A", "${scope}/module:app/acme.market/*"],
+        "abi:nexus:organization/org-1/nexus:workspace/ws-1",
     )
-    team.give_features(team.principal("admin"), ["chat"], "abi:org-1:ws-1")
+    team.give_features(
+        team.principal("admin"), ["chat"], "abi:nexus:organization/org-1/nexus:workspace/ws-1"
+    )
     body = client.get("/api/workspaces/ws-1/resources").json()
 
     assert "chat" in body["features"]

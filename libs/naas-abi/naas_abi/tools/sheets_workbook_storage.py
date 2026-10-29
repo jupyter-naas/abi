@@ -17,7 +17,6 @@ from naas_abi_core.services.agent.context import (
     agent_user_email,
     agent_user_id,
     agent_user_name,
-    agent_workspace_id,
     coder_workspace_base,
     sheets_active_slug,
     sheets_active_title,
@@ -29,6 +28,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     SourceControlError,
 )
 
+from naas_abi.agents.feature.context import turn_workspace_id
 from naas_abi.agents.sheets import (
     derive_workbook_title,
     is_placeholder_workbook_title,
@@ -55,7 +55,7 @@ def require_agent_access(*, write: bool = False) -> dict[str, str] | None:
     from naas_abi.agents.feature.runtime import check_member
 
     user = agent_user_id.get()
-    workspace = agent_workspace_id.get()
+    workspace = turn_workspace_id()
     if not user or not workspace:
         return {"error": "An authenticated workspace session is required."}
     role = check_member(user, workspace)
@@ -176,7 +176,7 @@ def seed_workbook_with_title(html: str, title: str) -> str:
 
 
 def _workspace_id() -> str | None:
-    value = (agent_workspace_id.get() or "").strip()
+    value = turn_workspace_id()
     return value or None
 
 

@@ -12,7 +12,11 @@ def test_parses_rename_column_statements() -> None:
         "company",
         "organization",
     )
-    assert parse_rename_column('alter table "users" rename column "a" to "b";') == ("users", "a", "b")
+    assert parse_rename_column('alter table "users" rename column "a" to "b";') == (
+        "users",
+        "a",
+        "b",
+    )
     assert parse_rename_column("ALTER TABLE users ADD COLUMN x TEXT") is None
 
 

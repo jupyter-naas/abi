@@ -5,8 +5,9 @@
 Admins give access to people who do not exist yet. An invitation to an
 email, through one identity provider, does three things:
 
-1. **IAM keeps the roles** as pending grants (`builtin.<role>` at `abi:<org>:-` for the
-   org's own role, `abi:<org>:<workspace>` for a workspace's) that attach to whoever first
+1. **IAM keeps the roles** as pending grants (`builtin.<role>` at the organization's container,
+   `abi:nexus:organization/<org>`, for the org's own role, at the workspace's,
+   `…/nexus:workspace/<workspace>`, for a workspace's) that attach to whoever first
    signs in through that provider with the email verified (core's `services/iam/AGENTS.md`),
    and the **policies the invitation carries** (`policy_ids`: customer policies, `pol_…`)
    beside them, at its workspace, else its organization. No role brings a feature, so this
@@ -27,7 +28,7 @@ IdP group bindings are the same idea for a whole group of a provider: the member
 |---|---|
 | `port.py` | Records (`Invitation`, `ProviderChoice`, `Directory`), `InvitationPersistencePort`, `DirectoryGateway` (providers, provisioning), `GrantsGateway` (IAM), `InvitationMailer` |
 | `service.py` | `InvitationService`: `choose` a provider, `invite`, `resend`, `revoke`, `claim`, group bindings |
-| `names.py` | Scopes of orgs and workspaces (`_none` for a workspace with no org) |
+| `names.py` | Scopes of orgs and workspaces: their container names (`services/iam/names.py`; a workspace with no org at the platform, `abi:nexus:workspace/<ws>`) |
 | `invitation_email.py` | The invitation mail's text |
 | `views.py` | The answers of the routes (no service behind them, so the org and workspace routers can import them) |
 | `runtime.py` | `RUNTIME`: builds the service from the engine's, `claimer` (the sign-in hook), `get_invitation_service` (the route dependency); tests `configure` another |

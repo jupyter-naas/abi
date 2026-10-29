@@ -36,7 +36,7 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     WorkspaceModel,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS, Memberships
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_scope, workspace_scope
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container, workspace_container
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -136,7 +136,7 @@ async def import_users(
                 report.missing.add(f"organization {membership['slug']}")
                 continue
             role = str(membership.get("role", "member"))
-            scope = org_scope(org_id)
+            scope = org_container(org_id)
             scopes.add((org_id, None))
             if await wanted(user.id, created, scope):
                 org_roles.append((user.id, role, scope))
@@ -148,7 +148,7 @@ async def import_users(
                 continue
             workspace_id, org_id = found
             role = str(membership.get("role", "member"))
-            scope = workspace_scope(org_id, workspace_id)
+            scope = workspace_container(org_id, workspace_id)
             scopes.add((org_id, workspace_id))
             if await wanted(user.id, created, scope):
                 workspace_roles.append((user.id, role, scope))

@@ -9,7 +9,7 @@ as individuals, so an event published at runtime and the graph agree on what a
 Two differences from the graph classes, both from ``LogProcess``:
 - WHEN is ``abi:createdAt`` (an xsd:dateTime stamped by EventService), not
   ``nexus:createdAt`` → ``abi:TemporalInstant``.
-- The actor is ``actor_user_id`` / ``actor_workspace_id`` / ``triggered_via``,
+- The actor is ``actor_user_id`` / ``actor_container`` / ``triggered_via``,
   stamped from the request; ``created_by`` carries the actor's person IRI.
 
 Payloads hold ids and IRIs only. Names and emails stay in Postgres and the

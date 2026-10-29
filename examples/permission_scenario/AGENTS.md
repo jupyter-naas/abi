@@ -7,12 +7,14 @@ without Docker and without a model.
 
 | Module | Package | What it exposes |
 |---|---|---|
-| P, `dev.people` | `scenario_people` | agents `Recruiter` (A) and `Scout` (B); its own catalog `dev_people` with `ExportReport` on `report` |
+| P, `dev.people` | `scenario_people` | agents `Recruiter` (A) and `Scout` (B); its own catalog `dev_people` with `ExportReport` on `report`, and a container type, `project` (`CreateProject`, `DeleteProject`) |
 | M, `dev.market` | `scenario_market` | app `prices` (`apps/prices`) |
 
 The agents answer without a model. `Recruiter` acts for the user it runs for:
 `export <report>` enforces `dev_people:ExportReport` (`require_action`), and
-`policy <scope> <type>/<module>/<name>` creates, over NATS, a policy owned by `scope`
+`project <id>` registers a project inside the workspace of the chat (a container of P's
+own: core `services/iam/AGENTS.md`, "Containers"), `export <report> in <project>` makes
+the call inside it, and `policy <scope> <type>/<module>/<name>` creates, over NATS, a policy owned by `scope`
 letting its holders use that item, which IAM refuses as it refuses that user over REST
 when they could not grant it. P's manifest therefore asks for `iam:CreatePolicy` and
 `module:UseAgent` (a grant made for a user must be held on both sides).
@@ -36,7 +38,7 @@ ENV=scenario uv run abi dev code --email bob@example.com
 permission work:
 
 1. The platform admin creates the policy "O access" allowing P and M under organisation O
-   (Platform settings › Roles & permissions) and attaches it org-wide to O's admins.
+   (Platform settings › Roles & permissions) and attaches it below O (`<O>/*`) to O's admins.
 2. An admin of O uses P and M in W at once; a member of W with no policy uses nothing,
    and neither does an admin or owner of a workspace with no policy (no role holds a
    module scope).
@@ -45,11 +47,17 @@ permission work:
 4. Bob lists and uses `Recruiter` only; `Scout` and `prices` are refused and not listed.
 5. W's admin, not an admin of O, deriving from "O access" or granting what they do not
    hold (`agent/naas_abi/AbiAgent`) is refused with the item named: over REST, and over
-   NATS by asking `Recruiter` for `policy abi:<O>:<W> agent/naas_abi/AbiAgent`.
+   NATS by asking `Recruiter` for
+   `policy abi:nexus:organization/<O>/nexus:workspace/<W> agent/naas_abi/AbiAgent`.
 6. The platform admin removes P from "O access": Bob and the O admin lose it at once,
    "W analysts" grants nothing of P, the platform admin still uses it.
 7. Settings › Apps lists what the caller may open; there is no on/off switch: a
    workspace that should not offer `prices` denies it in a policy.
+8. A project in W: a user holding `dev_people:CreateProject` in W asks `Recruiter` for
+   `project p1` (registered as `<W>/dev_people:project/p1`). An admin attaches at that
+   project a policy allowing `dev_people:ExportReport` on `${scope}/dev_people:report/*`
+   to Carol. Carol's `export q3 in p1` is exported; her `export q3` (in W itself) is
+   refused: the policy reaches what the project holds, nothing else of W.
 
 A database the previous version ran this scenario on (sets, an app turned off, a
 group's policy) upgrades at the next start: the sets and the switches become "<O>
@@ -57,8 +65,8 @@ access" and "<W> access" policies, and every decision stays the same
 (`libs/naas-abi/.../services/iam/policy_tree.py`).
 
 The declared action: Bob asks `Recruiter` for `export q3` (refused, naming
-`abi:<O>:<W>:dev_people:report/q3`), W's admin grants `ExportReport` to G in the builder,
-Bob asks again (exported).
+`abi:nexus:organization/<O>/nexus:workspace/<W>/dev_people:report/q3`), W's admin grants
+`ExportReport` to G in the builder, Bob asks again (exported).
 
 People sign in with the code the built-in provider mails (`abi dev code --email`);
 invite them first (`POST /api/organizations/<O>/members/invite`, or the Users page).

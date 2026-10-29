@@ -74,7 +74,14 @@ PRIORITY = (
     "size_bytes",
     "chat_id",
 )
-LAST = ("actor_user_id", "user_id", "workspace_id", "actor_workspace_id", "target_workspace_id")
+LAST = (
+    "actor_user_id",
+    "user_id",
+    "workspace_id",
+    "actor_container",
+    "actor_workspace_id",
+    "target_workspace_id",
+)
 QUIET = frozenset(
     {"triggered_via", "session_id", "event_id", "timestamp", "payload_json", "changes_json"}
 )

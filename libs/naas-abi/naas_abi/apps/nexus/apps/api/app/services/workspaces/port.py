@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
+from uuid import uuid4
 
 
 @dataclass
@@ -49,6 +50,13 @@ class WorkspaceCreateInput:
     description: str | None = None
     workspace_group: str | None = None
     catalog_seed: dict[str, object] | None = None
+    # Decided before the row exists, so the create is checked on the new
+    # workspace's own name (``new_workspace_id``); made by the adapter when None.
+    id: str | None = None
+
+
+def new_workspace_id() -> str:
+    return f"ws-{uuid4().hex[:12]}"
 
 
 @dataclass

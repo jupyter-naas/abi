@@ -4,10 +4,11 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from naas_abi_core.services.agent.context import agent_user_id, agent_workspace_id
+from naas_abi_core.services.agent.context import agent_container, agent_user_id
 
 from naas_abi.agents.feature.context import nexus_feature_context
 from naas_abi.apps.nexus.apps.api.app.services.apps.port import AppInfo
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from naas_abi.tools import apps_tools as tools_module
 
 WSR = "acme.module:wsr"
@@ -50,12 +51,12 @@ def apps(monkeypatch) -> dict[str, Any]:
 
     tokens = [
         agent_user_id.set("user-1"),
-        agent_workspace_id.set("ws-1"),
+        agent_container.set(workspace_container(None, "ws-1")),
         nexus_feature_context.set(None),
     ]
     yield {"allowed": allowed, "tools": {t.name: t for t in tools_module.apps_tools()}}
     agent_user_id.reset(tokens[0])
-    agent_workspace_id.reset(tokens[1])
+    agent_container.reset(tokens[1])
     nexus_feature_context.reset(tokens[2])
 
 

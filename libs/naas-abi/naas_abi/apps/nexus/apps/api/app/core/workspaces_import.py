@@ -37,7 +37,7 @@ from naas_abi.apps.nexus.apps.api.app.core.users_import import _in_engine
 from naas_abi.apps.nexus.apps.api.app.models import OrganizationModel, WorkspaceModel
 from naas_abi.apps.nexus.apps.api.app.services.iam import placements
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS, Memberships
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_scope
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -135,7 +135,7 @@ async def import_workspaces(
                 # The owner is IAM's attachment; the workspace's scope exists first.
                 scope = await memberships.register_workspace(org.id, workspace.id)
                 await memberships.grant(owner_id, "owner", scope)
-                assert scope == workspace_scope(org.id, workspace.id)
+                assert scope == workspace_container(org.id, workspace.id)
             report.workspaces_created += 1
             report.created_ids.append(workspace.id)
             continue

@@ -30,8 +30,8 @@ Nexus adds no role check of its own.
   report: no role brings a feature, a policy does);
   `GET /catalogs?scope=`
 - `GET /grantable?scope=` what the caller may grant at `scope` (IAM's `grantable`: per catalog, the actions and
-  `${scope}:…` resource patterns they hold there, minus their Denies), for the policy builder; any caller, about
-  themselves, like `/access`
+  resource patterns they hold there, `${scope}` or `${scope}/…`, minus their Denies), for the policy builder;
+  any caller, about themselves, like `/access`
 - `GET|POST /policies` (`?scope=`; the body's `scope` is the owner, its `parent` the policy it is a sub-policy
   of), `GET|PUT|DELETE /policies/{id}`, `POST /policies/validate?scope=` (`document` or YAML/JSON `text`).
   A policy carries `parent_id`; `GET /policies/{id}` adds `parent` (`{id, name, owner_scope, managed}`, the
@@ -40,7 +40,7 @@ Nexus adds no role check of its own.
   removes it, an id sets it. Deleting a parent that has sub-policies is a 409 naming them
 - `GET|POST|DELETE /attachments` (`?scope=`, `?principal_id=`, `?policy_id=`), `GET /attachable-policies?scope=`
 - `GET /principals`, `GET /principals/{id}`, `POST /principals/{id}/suspend|resume`
-- `GET|POST /groups` (`?scope=`; the body's `scope`, or `org` alone, is the owner), `GET|DELETE /groups/{id}`, `PUT|DELETE /groups/{id}/members/{member}`,
+- `GET|POST /groups` (`?scope=`; the body's `scope`, or `org` alone, which names that organization's container, is the owner), `GET|DELETE /groups/{id}`, `PUT|DELETE /groups/{id}/members/{member}`,
   `PUT|DELETE /groups/{id}/idp-mappings`
 - `GET|POST /service-accounts`, `DELETE /service-accounts/{id}`, `GET|POST /service-accounts/{id}/keys`,
   `DELETE …/keys/{key}`, `POST …/keys/{key}/rotate`
@@ -48,6 +48,12 @@ Nexus adds no role check of its own.
 - `POST /simulate` (`principal_id`, `action`, `resource`); `GET /audit` (`require_superadmin`)
 - No set route: `/sets` and `/sets/{org}[/workspaces/{ws}]` are gone with the sets (what an org or a workspace
   uses is its access policy, edited as any policy here)
+
+Every `scope` (a query parameter or a body field) is a container's name or the platform's, as core names them
+(core `services/iam/AGENTS.md`, "Resource names", "Attachments and scope"): `abi:` for the platform,
+`abi:nexus:organization/<org>` for an organization, `abi:nexus:organization/<org>/nexus:workspace/<ws>` (or
+`abi:nexus:workspace/<ws>` for a workspace in no organization) for a workspace, and an attachment's scope may be
+below a container, `<container>/*`. Nexus builds them with `services/iam/names.py`; IAM validates them (422).
 
 ## Rules
 
@@ -65,6 +71,8 @@ Nexus adds no role check of its own.
   `services/iam/AGENTS.md`) is a 403 whose detail is IAM's message: the statement, action and resource the caller
   does not hold. Creating or editing a policy, attaching one, adding a group member and approving a manifest all
   answer it.
+- **Never format a scope.** A scope, an owner and a resource are built by `services/iam/names.py` (or core's
+  `names`) and parsed by them: a group's `org` in its view is `names.org_of(owner_scope)`.
 - Names of principals and policies in a list are read as `api` (`gateway.principal`, `gateway.policy`) for ids the
   caller already sees through a list IAM let them read.
 
@@ -75,16 +83,25 @@ Nexus adds no role check of its own.
   page and button; Nexus adds no role check and no list of "who is an admin". `GET /access` asks IAM which actions
   the caller holds, so the pages show only what will answer. `api` keeps its enumerated statements: acting as the
   user is what keeps `api` out of IAM's administration.
+- **Scopes are container names.** Decision: the pages take and show the scopes and owners IAM stores, container
+  names (an organization's, a workspace's, `abi:` for the platform; an attachment may be below a container,
+  `<container>/*`), never fields of an `abi:<org>:<ws>` scope: the grammar before container paths is gone from
+  every route. A scope below a container answers, in `access`, `catalogs`, `validate` and the lists of policies
+  and groups, for that container (`_owner_of`, `names.container_of_scope`); a group is created with IAM's
+  `create_group(name, scope=)`, the body's `org` read as that organization's container. Consequences: an
+  organization's page passes `abi:nexus:organization/<org>`, an organization's owners and admins attach below it
+  with `abi:nexus:organization/<org>/*`, and a policy written for a scope says `${scope}` (the container itself)
+  or `${scope}/<service>:<type>/…` (what it holds). A page that still sends `abi:<org>:-` is refused (422).
 - **One UI, one API, the scope a parameter.** Decision: attachments, policies and groups are the IAM types
-  placed in an org and workspace (attachments at their scope, policies and groups at the scope that owns them:
+  named in an org's and a workspace's container (attachments at their scope, policies and groups at the scope that owns them:
   core `services/iam/AGENTS.md`, "Owner scopes"), and every route takes the scope as a parameter: `POST
   /policies` and `POST /groups` create at the body's `scope`, `GET /policies?scope=` and `GET /groups?scope=`
   list that level's own plus what the caller may attach there from above (IAM's `list_policies` /
   `list_groups`), `GET /attachable-policies?scope=` the policies the caller may attach there (leaving out a
-  policy owned by another org or workspace and, at a scope, a platform policy with a Deny outside `${scope}:`
+  policy owned by another org or workspace and, at a scope, a platform policy with a Deny outside `${scope}`
   for anyone but the platform admin, as IAM refuses it), and `GET /access?scope=`, `/catalogs?scope=`,
-  `/grantable?scope=` and `/policies/validate?scope=` answer for that level (an org-wide scope, in these and in
-  the lists, answers for its org). One web module serves every level (Nexus `AGENTS.md`, "Roles & permissions
+  `/grantable?scope=` and `/policies/validate?scope=` answer for that level (a scope below a container, in these
+  and in the lists, answers for that container). One web module serves every level (Nexus `AGENTS.md`, "Roles & permissions
   UI module"): Platform settings, Organization settings and Workspace settings › Roles & permissions mount it
   with their scope, and `GET /access?scope=` alone decides its sections and buttons. Consequences: an org or
   workspace admin holds, at their scope, the attachment actions and that level's policies and groups, and
@@ -105,7 +122,7 @@ Nexus adds no role check of its own.
   registered catalogs and resources from the name grammar; the text view takes YAML or JSON. `POST
   /policies/validate` returns every error IAM lists (and the normalized document), so the editor shows them as the
   user types and a save refused for them says the same. With `?scope=` at an org or a workspace it also applies the
-  rule of a policy that level owns (core's `check_owned_document`: every pattern under `${scope}:`), so a document
+  rule of a policy that level owns (core's `check_owned_document`: every pattern `${scope}` or `${scope}/…`), so a document
   it calls valid there is one `POST /policies` with that `scope` takes.
 - **Keys are shown once.** Creating or rotating a service account's key returns its value in that one answer
   (`Cache-Control: no-store`); IAM keeps a hash, the audit and every list never carry it, and the page holds it in
@@ -146,6 +163,6 @@ uv run pytest libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/iam_admin 
 
 The route tests run a real IAM on the memory store (`team` fixture: `owner`, `admin`, `member`, `viewer`,
 `stranger`; plus `root`, a platform admin, and `lister`, who holds only `iam:ListPolicies` on
-`abi:*:*:iam:policy/*`, every policy wherever it is owned). The `ws2` fixture adds `ws-2` of `org-1` with
+`abi:iam:policy/*` and `abi:*/iam:policy/*`, every policy wherever it is owned). The `ws2` fixture adds `ws-2` of `org-1` with
 `ws2admin` and `colleague`, and `outsider` in another org: a workspace admin's and an org admin's policies
 and groups.

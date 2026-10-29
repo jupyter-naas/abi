@@ -45,6 +45,8 @@ def test_quotes_backslashes_and_line_breaks_cannot_escape_the_header(name: str) 
 )
 def test_header_is_accepted_by_starlette(name: str) -> None:
     # Starlette encodes header values as latin-1; this used to raise.
-    response = Response(content=b"x", headers={"Content-Disposition": content_disposition("inline", name)})
+    response = Response(
+        content=b"x", headers={"Content-Disposition": content_disposition("inline", name)}
+    )
 
     assert response.headers["content-disposition"].startswith("inline; filename=")

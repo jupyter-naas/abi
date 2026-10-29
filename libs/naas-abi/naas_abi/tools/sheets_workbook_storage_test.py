@@ -12,13 +12,14 @@ def test_workbook_paths_are_namespaced_under_sheets() -> None:
 
 
 def test_viewer_agent_cannot_persist(monkeypatch):
-    from naas_abi_core.services.agent.context import agent_user_id, agent_workspace_id
+    from naas_abi_core.services.agent.context import agent_container, agent_user_id
 
     from naas_abi.agents.feature import runtime
+    from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
     from naas_abi.tools import sheets_workbook_storage as store
 
     user = agent_user_id.set("viewer")
-    workspace = agent_workspace_id.set("ws-test")
+    workspace = agent_container.set(workspace_container(None, "ws-test"))
     monkeypatch.setattr(runtime, "check_member", lambda *args: "viewer")
 
     def unexpected(*args, **kwargs):
@@ -26,10 +27,8 @@ def test_viewer_agent_cannot_persist(monkeypatch):
 
     monkeypatch.setattr(store, "get_source_control", unexpected)
     try:
-        result = store.persist_workbook(
-            "demo", "changed", "edit"
-        )
+        result = store.persist_workbook("demo", "changed", "edit")
         assert "writer role" in result["error"]
     finally:
         agent_user_id.reset(user)
-        agent_workspace_id.reset(workspace)
+        agent_container.reset(workspace)

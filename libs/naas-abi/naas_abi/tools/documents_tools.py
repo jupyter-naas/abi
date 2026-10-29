@@ -31,7 +31,6 @@ from naas_abi_core.services.agent.context import (
     agent_user_email,
     agent_user_id,
     agent_user_name,
-    agent_workspace_id,
     coder_workspace_base,
     documents_active_mode,
     documents_active_slug,
@@ -65,6 +64,7 @@ from naas_abi.agents.documents import (
     reject_unresearched_documents_write,
     resolve_document_title,
 )
+from naas_abi.agents.feature.context import turn_workspace_id
 from naas_abi.tools.documents_html import DocumentHTML, template_fields
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -392,7 +392,7 @@ def _seed_document_with_title(html: str, title: str) -> str:
 
 
 def _workspace_id() -> str | None:
-    value = (agent_workspace_id.get() or "").strip()
+    value = turn_workspace_id()
     return value or None
 
 

@@ -1,6 +1,6 @@
 """Materialise Nexus identity and access as a BFO 7-bucket graph.
 
-Event logs only carry ids (``actor_user_id``, ``actor_workspace_id``, ...).
+Event logs only carry ids (``actor_user_id``, ``actor_container``, ...).
 This graph is how an id gets back to a person, a workspace and a role:
 
 - WHO: ``abi:Person`` carries its ``nexus:User`` account; ``nexus:Organization``

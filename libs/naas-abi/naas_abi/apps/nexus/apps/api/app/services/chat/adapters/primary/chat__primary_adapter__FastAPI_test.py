@@ -34,9 +34,11 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.port import (
     ChatMessageRecord,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 
 NOW = datetime(2026, 1, 1, 12, 0, 0)
+WS1 = workspace_container("org-1", "ws-1")
 
 
 class FakeChat:
@@ -518,7 +520,7 @@ def test_a_module_agent_needs_its_module_scope(world) -> None:
         return call(world, user, "POST", "/api/chat/complete", json={**turn, "agent": agent})
 
     assert run("remote-a").status_code == 403
-    world.iam.allow_scope("member", ModuleScope("agent", "acme.p", "A"), "abi:org-1:ws-1")
+    world.iam.allow_scope("member", ModuleScope("agent", "acme.p", "A"), WS1)
     assert run("remote-a").status_code == 200
     assert run("remote-b").status_code == 403
     assert run("abi").status_code == 403
@@ -555,7 +557,7 @@ def test_iam_alone_decides_an_agent_and_no_role_holds_a_module_agent(world) -> N
         world.chat.add(user, f"conv-{user}")
         assert turn(user, "remote-a").status_code == 403, user
         assert turn(user, "built").status_code == 200, user
-    world.iam.allow_scope("owner", ModuleScope("agent", "acme.p", "A"), "abi:org-1:ws-1")
+    world.iam.allow_scope("owner", ModuleScope("agent", "acme.p", "A"), WS1)
     assert turn("owner", "remote-a").status_code == 200
     assert turn("member", "remote-a").status_code == 403
 

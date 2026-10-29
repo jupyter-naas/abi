@@ -11,7 +11,11 @@ from fastapi.testclient import TestClient
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
     get_current_user_required,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_scope, workspace_scope
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
+    org_below,
+    org_container,
+    workspace_container,
+)
 from naas_abi.apps.nexus.apps.api.app.services.iam_admin import runtime
 from naas_abi.apps.nexus.apps.api.app.services.iam_admin.adapters.primary.iam_admin__primary_adapter__FastAPI import (  # noqa: E501
     router,
@@ -32,7 +36,11 @@ from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER
 READ_POLICIES = {
     "version": "2026-10-13",
     "statements": [
-        {"effect": "Allow", "actions": ["iam:ListPolicies"], "resources": ["abi:*:*:iam:policy/*"]}
+        {
+            "effect": "Allow",
+            "actions": ["iam:ListPolicies"],
+            "resources": ["abi:iam:policy/*", "abi:*/iam:policy/*"],
+        }
     ],
 }
 GRAPH_POLICY = {
@@ -42,13 +50,13 @@ GRAPH_POLICY = {
             "sid": "Read",
             "effect": "Allow",
             "actions": ["triple_store:Query", "triple_store:ListGraphs"],
-            "resources": ["abi:-:-:triple_store:graph/*"],
+            "resources": ["abi:triple_store:graph/*"],
         },
         {
             "sid": "NoSecret",
             "effect": "Deny",
             "actions": ["triple_store:Query"],
-            "resources": ["abi:-:-:triple_store:graph/secret"],
+            "resources": ["abi:triple_store:graph/secret"],
         },
     ],
 }
@@ -162,10 +170,10 @@ def test_access_says_what_the_caller_may_do(world):
 
 
 def test_access_at_a_scope_follows_the_attachment_rules(world):
-    scope = org_scope("org-1")
+    scope = org_container("org-1")
     admin = get(world, f"/access?scope={scope}", "admin").json()["actions"]
     assert admin["iam:ListAttachments"] and admin["iam:AttachPolicy"]
-    other = get(world, f"/access?scope={org_scope('org-2')}", "admin").json()["actions"]
+    other = get(world, f"/access?scope={org_container('org-2')}", "admin").json()["actions"]
     assert not other["iam:ListAttachments"] and not other["iam:AttachPolicy"]
     assert get(world, "/access?scope=nonsense", "admin").status_code == 422
 
@@ -190,7 +198,7 @@ def test_access_at_a_scope_answers_for_that_level_alone(world):
     not even to the platform admin."""
     platform = get(world, "/access").json()["actions"]
     assert all(platform[action] for action in PLATFORM_ONLY)
-    for scope in (org_scope("org-1"), "abi:org-1:*", workspace_scope("org-1", "ws-1")):
+    for scope in (org_container("org-1"), org_below("org-1"), workspace_container("org-1", "ws-1")):
         root = get(world, f"/access?scope={scope}").json()["actions"]
         assert not any(root[action] for action in PLATFORM_ONLY), scope
         assert root["iam:ListPolicies"] and root["iam:CreateGroup"] and root["iam:AttachPolicy"]
@@ -198,7 +206,7 @@ def test_access_at_a_scope_answers_for_that_level_alone(world):
 
 def test_access_reports_no_role_feature_defaults(world):
     """No role brings a feature: there are no defaults to read or edit anywhere."""
-    for scope in (org_scope("org-1"), workspace_scope("org-1", "ws-1"), None):
+    for scope in (org_container("org-1"), workspace_container("org-1", "ws-1"), None):
         query = f"?scope={scope}" if scope else ""
         actions = get(world, f"/access{query}", "owner").json()["actions"]
         assert not any("RoleFeatures" in action for action in actions), scope
@@ -214,7 +222,7 @@ def test_a_policy_is_validated_created_edited_and_deleted(world):
         document={
             "version": "2026-10-13",
             "statements": [
-                {"effect": "Allow", "actions": ["nope:Nothing"], "resources": ["abi:-:-:nope:x/1"]},
+                {"effect": "Allow", "actions": ["nope:Nothing"], "resources": ["abi:nope:x/1"]},
                 {"effect": "Maybe", "actions": [], "resources": []},
             ],
         },
@@ -222,7 +230,7 @@ def test_a_policy_is_validated_created_edited_and_deleted(world):
     assert bad.status_code == 200 and bad.json()["valid"] is False
     assert len(bad.json()["errors"]) >= 2
 
-    text = "version: '2026-10-13'\nstatements:\n  - effect: Allow\n    actions: [triple_store:Query]\n    resources: ['abi:-:-:triple_store:graph/*']\n"
+    text = "version: '2026-10-13'\nstatements:\n  - effect: Allow\n    actions: [triple_store:Query]\n    resources: ['abi:triple_store:graph/*']\n"
     good = post(world, "/policies/validate", text=text).json()
     assert good["valid"] and good["document"]["statements"][0]["actions"] == ["triple_store:Query"]
 
@@ -286,7 +294,7 @@ def _principal_id(world, user: str) -> str:
 
 def test_an_org_admin_attaches_roles_in_their_org_only(world):
     member = _principal_id(world, "stranger")
-    scope = org_scope("org-1")
+    scope = org_container("org-1")
     attached = post(
         world, "/attachments", "admin", policy_id="builtin.viewer", principal_id=member, scope=scope
     )
@@ -305,7 +313,7 @@ def test_an_org_admin_attaches_roles_in_their_org_only(world):
         "admin",
         policy_id="builtin.viewer",
         principal_id=member,
-        scope=org_scope("org-2"),
+        scope=org_container("org-2"),
     )
     assert elsewhere.status_code in (403, 404)
     owner_role = post(
@@ -337,17 +345,17 @@ def test_a_member_attaches_nothing(world):
         "member",
         policy_id="builtin.viewer",
         principal_id=victim,
-        scope=workspace_scope("org-1", "ws-1"),
+        scope=workspace_container("org-1", "ws-1"),
     )
     assert response.status_code in (403, 404)
     # IAM administration is the admins' and owners': a member lists no attachment,
     # at its own scope or another's.
-    assert get(world, f"/attachments?scope={org_scope('org-1')}", "member").status_code == 403
-    assert get(world, f"/attachments?scope={org_scope('org-2')}", "member").status_code == 403
+    assert get(world, f"/attachments?scope={org_container('org-1')}", "member").status_code == 403
+    assert get(world, f"/attachments?scope={org_container('org-2')}", "member").status_code == 403
 
 
 def test_attachable_policies_are_those_the_caller_may_attach_at_the_scope(world):
-    scope = org_scope("org-1")
+    scope = org_container("org-1")
     seen = {
         p["id"] for p in get(world, f"/attachable-policies?scope={scope}", "admin").json()["items"]
     }
@@ -489,15 +497,15 @@ MANIFEST = {
             "effect": "Allow",
             "actions": ["triple_store:Query", "triple_store:ListGraphs", "triple_store:Insert"],
             "resources": [
-                "abi:-:-:triple_store:graph/${module.id}-*",
-                "abi:-:-:triple_store:graph/shared",
+                "abi:triple_store:graph/${module.id}-*",
+                "abi:triple_store:graph/shared",
             ],
         },
         {
             "sid": "NoAdmin",
             "effect": "Deny",
             "actions": ["triple_store:DropGraph"],
-            "resources": ["abi:-:-:triple_store:graph/*"],
+            "resources": ["abi:triple_store:graph/*"],
         },
     ],
 }
@@ -532,7 +540,7 @@ def test_a_manifest_can_be_narrowed_never_widened(world, pending):
                 "sid": "OwnGraphs",
                 "effect": "Allow",
                 "actions": ["triple_store:Query"],
-                "resources": ["abi:-:-:triple_store:graph/${module.id}-*"],
+                "resources": ["abi:triple_store:graph/${module.id}-*"],
             },
             MANIFEST["statements"][1],
         ],
@@ -655,7 +663,7 @@ def test_the_simulator_names_the_deciding_statement(world):
         "/simulate",
         principal_id=user,
         action="triple_store:Query",
-        resource="abi:-:-:triple_store:graph/sales",
+        resource="abi:triple_store:graph/sales",
     ).json()
     assert allowed["allowed"] and allowed["reason"] == "allow"
     assert allowed["statement"]["policy_name"] == "graphs"
@@ -672,7 +680,7 @@ def test_the_simulator_names_the_deciding_statement(world):
         "/simulate",
         principal_id=user,
         action="triple_store:Query",
-        resource="abi:-:-:triple_store:graph/secret",
+        resource="abi:triple_store:graph/secret",
     ).json()
     assert not denied["allowed"] and denied["reason"] == "explicit_deny"
     assert denied["statement"]["sid"] == "NoSecret" and denied["statement"]["effect"] == "Deny"
@@ -682,7 +690,7 @@ def test_the_simulator_names_the_deciding_statement(world):
         "/simulate",
         principal_id=user,
         action="triple_store:DropGraph",
-        resource="abi:-:-:triple_store:graph/sales",
+        resource="abi:triple_store:graph/sales",
     ).json()
     assert not nothing["allowed"] and nothing["reason"] == "implicit_deny"
     assert nothing["statement"] is None and nothing["principal"]["id"] == user
@@ -693,7 +701,7 @@ def test_the_simulator_needs_iam_explain(world):
     body = {
         "principal_id": user,
         "action": "triple_store:Query",
-        "resource": "abi:-:-:triple_store:graph/a",
+        "resource": "abi:triple_store:graph/a",
     }
     for caller in ("admin", "lister", "stranger"):
         assert post(world, "/simulate", caller, **body).status_code in (403, 404), caller
@@ -826,7 +834,7 @@ SCOPED_READER = {
         {
             "effect": "Allow",
             "actions": ["triple_store:Query"],
-            "resources": ["${scope}:triple_store:graph/*"],
+            "resources": ["${scope}/triple_store:graph/*"],
         }
     ],
 }
@@ -848,7 +856,7 @@ def ws2(world):
 
 
 def test_a_workspace_admin_manages_its_own_policies_and_groups(world, ws2):
-    ws1 = workspace_scope("org-1", "ws-1")
+    ws1 = workspace_container("org-1", "ws-1")
     created = post(
         world, "/policies", "ws2admin", name="readers", document=SCOPED_READER, scope=ws2
     )
@@ -910,9 +918,9 @@ def test_an_org_admin_manages_its_workspaces_policies_and_groups(world, ws2):
     # ``admin`` is an admin of org-1, mirrored org-wide.
     seen = {p["id"] for p in get(world, f"/policies?scope={ws2}", "admin").json()["items"]}
     assert policy["id"] in seen
-    org_group = post(world, "/groups", "admin", name="org team", scope=org_scope("org-1"))
+    org_group = post(world, "/groups", "admin", name="org team", scope=org_container("org-1"))
     assert org_group.status_code == 201, org_group.text
-    assert org_group.json()["owner_scope"] == org_scope("org-1")
+    assert org_group.json()["owner_scope"] == org_container("org-1")
     attached = post(
         world,
         "/attachments",
@@ -930,7 +938,7 @@ def test_an_org_admin_manages_its_workspaces_policies_and_groups(world, ws2):
 
 
 def test_members_and_viewers_see_nothing_of_iam_administration(world):
-    ws1 = workspace_scope("org-1", "ws-1")
+    ws1 = workspace_container("org-1", "ws-1")
     for user in ("member", "viewer"):
         for page in (
             f"/policies?scope={ws1}",
@@ -969,11 +977,11 @@ def test_validating_at_a_scope_checks_what_creating_there_does(world, ws2):
 
 
 def test_an_org_wide_scope_lists_its_orgs_policies_and_groups(world, ws2):
-    org = org_scope("org-1")
+    org = org_container("org-1")
     policy = post(world, "/policies", "admin", name="org", document=SCOPED_READER, scope=org)
     group = post(world, "/groups", "admin", name="org team", scope=org)
     assert policy.status_code == 201 and group.status_code == 201
-    wide = "abi:org-1:*"
+    wide = org_below("org-1")
     policies = get(world, f"/policies?scope={wide}", "admin")
     groups = get(world, f"/groups?scope={wide}", "admin")
     assert policies.status_code == 200 and groups.status_code == 200, policies.text
@@ -996,14 +1004,14 @@ def test_a_platform_deny_is_attached_at_a_scope_by_the_platform_admin_only(world
                 {
                     "effect": "Allow",
                     "actions": ["triple_store:Query"],
-                    "resources": ["${scope}:triple_store:graph/*"],
+                    "resources": ["${scope}/triple_store:graph/*"],
                 },
                 {"effect": "Deny", "actions": ["iam:*"], "resources": ["*"]},
             ],
         },
     ).json()
     shared = post(world, "/policies", name="shared", document=SCOPED_READER).json()
-    scope = workspace_scope("org-1", "ws-1")
+    scope = workspace_container("org-1", "ws-1")
     member = _principal_id(world, "member")
     for user in ("admin", "owner"):
         offered = {
@@ -1045,19 +1053,19 @@ def _refused(response, *named: str) -> None:
 
 
 def test_an_admin_holding_a_narrower_role_writes_no_wider_policy(world):
-    ws1 = workspace_scope("org-1", "ws-1")
+    ws1 = workspace_container("org-1", "ws-1")
     _holding(
         world,
         "editor",
         {
             "effect": "Allow",
             "actions": ["iam:CreatePolicy", "iam:UpdatePolicy", "iam:GetPolicy"],
-            "resources": ["${scope}:iam:policy/*"],
+            "resources": ["${scope}/iam:policy/*"],
         },
         {
             "effect": "Allow",
             "actions": ["triple_store:Query"],
-            "resources": ["${scope}:triple_store:graph/*"],
+            "resources": ["${scope}/triple_store:graph/*"],
         },
         scope=ws1,
     )
@@ -1075,7 +1083,7 @@ def test_an_admin_holding_a_narrower_role_writes_no_wider_policy(world):
     _refused(
         post(world, "/policies", "editor", name="writers", document=wider, scope=ws1),
         "triple_store:Insert",
-        "abi:org-1:ws-1:triple_store:graph/*",
+        f"{ws1}/triple_store:graph/*",
     )
     edited = world.client.put(
         f"/api/iam/admin/policies/{made.json()['id']}",
@@ -1087,31 +1095,31 @@ def test_an_admin_holding_a_narrower_role_writes_no_wider_policy(world):
 
 
 def test_an_owner_grants_no_feature_it_does_not_hold(world):
-    ws1 = workspace_scope("org-1", "ws-1")
+    ws1 = workspace_container("org-1", "ws-1")
     every = {
         "version": "2026-10-13",
         "statements": [
             {
                 "effect": "Allow",
                 "actions": ["nexus:UseFeature"],
-                "resources": ["${scope}:nexus:feature/*"],
+                "resources": ["${scope}/nexus:feature/*"],
             }
         ],
     }
     _refused(
         post(world, "/policies", "owner", name="every feature", document=every, scope=ws1),
         "nexus:UseFeature",
-        "abi:org-1:ws-1:nexus:feature/*",
+        f"{ws1}/nexus:feature/*",
     )
     # The owner holds chat through a policy (no role brings a feature): it gives that.
-    one = "${scope}:nexus:feature/chat"
+    one = "${scope}/nexus:feature/chat"
     some = {"version": "2026-10-13", "statements": [{**every["statements"][0], "resources": [one]}]}
     made = post(world, "/policies", "owner", name="one feature", document=some, scope=ws1)
     assert made.status_code == 201, made.text
 
 
 def test_nobody_joins_a_group_that_holds_more_than_the_one_adding(world):
-    ws1 = workspace_scope("org-1", "ws-1")
+    ws1 = workspace_container("org-1", "ws-1")
     admin = _principal_id(world, "admin")
     with as_service_account("engine"):
         owners = world.nexus.iam.create_group("owners", scope=ws1)
@@ -1127,12 +1135,12 @@ def test_a_delegated_approver_approves_no_more_than_it_holds(world, pending):
         {
             "effect": "Allow",
             "actions": ["iam:ApproveManifest", "iam:GetManifest", "iam:ListManifests"],
-            "resources": ["abi:-:-:iam:manifest/*"],
+            "resources": ["abi:iam:manifest/*"],
         },
         {
             "effect": "Allow",
             "actions": ["triple_store:Query", "triple_store:ListGraphs"],
-            "resources": ["abi:-:-:triple_store:graph/*"],
+            "resources": ["abi:triple_store:graph/*"],
         },
     )
     path = f"/manifests/{pending.account.id}/{pending.sha}/approve"
@@ -1155,15 +1163,24 @@ def _grantable(world, user: str, scope: str) -> dict[str, list[str]]:
 
 
 def test_what_the_caller_may_grant(world):
-    ws1 = workspace_scope("org-1", "ws-1")
+    ws1 = workspace_container("org-1", "ws-1")
     root = _grantable(world, "root", ws1)
-    assert root["triple_store:Insert"] == ["${scope}:*"]
-    assert root["nexus:UseFeature"] == ["${scope}:*"]
+    assert root["triple_store:Insert"] == ["${scope}/*"]
+    assert root["nexus:UseFeature"] == ["${scope}/*"]
     admin = _grantable(world, "admin", ws1)
-    assert admin["triple_store:Insert"] == ["${scope}:triple_store:graph/*"]
-    assert "${scope}:iam:attachment/builtin.owner/*" not in admin["iam:AttachPolicy"]
-    assert "${scope}:nexus:feature/*" not in admin.get("nexus:UseFeature", [])
-    assert _grantable(world, "lister", ws1) == {"iam:ListPolicies": ["${scope}:iam:policy/*"]}
+    # An admin of the organization holds it below the organization: the graphs of
+    # the workspace, and of every container inside it.
+    assert admin["triple_store:Insert"] == [
+        "${scope}/triple_store:graph/*",
+        "${scope}/*/triple_store:graph/*",
+    ]
+    assert "${scope}/iam:attachment/builtin.owner/*" not in admin["iam:AttachPolicy"]
+    assert "${scope}/nexus:feature/*" not in admin.get("nexus:UseFeature", [])
+    # Written for every container: at the workspace, its policies and those of the
+    # containers inside it.
+    assert _grantable(world, "lister", ws1) == {
+        "iam:ListPolicies": ["${scope}/iam:policy/*", "${scope}/*/iam:policy/*"]
+    }
     assert _grantable(world, "stranger", ws1) == {}
     assert get(world, "/grantable?scope=nonsense", "admin").status_code == 422
 
@@ -1188,7 +1205,7 @@ def test_a_sub_policy_names_its_parent_and_the_parent_its_sub_policies(world, ws
     assert read["parent"] == {
         "id": parent["id"],
         "name": "graphs",
-        "owner_scope": "abi:-:-",
+        "owner_scope": "abi:",
         "managed": False,
     }
     assert read["sub_policies"] == []
@@ -1249,7 +1266,7 @@ def test_a_sub_policy_is_refused_as_iam_refuses_it(world, ws2):
 
 
 def test_a_sub_policy_is_offered_where_iam_lets_it_be_attached(world, ws2):
-    """Its parent's Deny beyond ``${scope}:`` is its own: offered at a scope to the
+    """Its parent's Deny beyond ``${scope}`` is its own: offered at a scope to the
     platform admin only; its parent's ``${scope}`` keeps it from being offered
     unscoped."""
     parent = post(
@@ -1263,7 +1280,7 @@ def test_a_sub_policy_is_offered_where_iam_lets_it_be_attached(world, ws2):
                 {
                     "effect": "Deny",
                     "actions": ["triple_store:Query"],
-                    "resources": ["abi:*:*:triple_store:graph/hr"],
+                    "resources": ["abi:triple_store:graph/hr", "abi:*/triple_store:graph/hr"],
                 },
             ],
         },

@@ -5,8 +5,9 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from naas_abi_core.services.agent.context import agent_user_id, agent_workspace_id
+from naas_abi_core.services.agent.context import agent_container, agent_user_id
 
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from naas_abi.tools import nexus_admin_tools as mod
 
 
@@ -45,7 +46,7 @@ def test_create_workspace_rejects_bad_slug() -> None:
 
 def test_invite_workspace_member_requires_admin() -> None:
     user_token = agent_user_id.set("user-member")
-    ws_token = agent_workspace_id.set("ws-1")
+    ws_token = agent_container.set(workspace_container(None, "ws-1"))
     tools = _tools_by_name()
 
     mock_ws = MagicMock()
@@ -65,7 +66,7 @@ def test_invite_workspace_member_requires_admin() -> None:
             )
     finally:
         agent_user_id.reset(user_token)
-        agent_workspace_id.reset(ws_token)
+        agent_container.reset(ws_token)
 
     assert result["error"]
     assert "owners/admins" in result["error"].lower()

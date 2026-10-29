@@ -25,7 +25,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
 from naas_abi.apps.nexus.apps.api.app.services.exceptions import (
     register_service_exception_handlers,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_scope
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from naas_abi.apps.nexus.apps.api.app.services.invites import runtime as invites_runtime
 from naas_abi.apps.nexus.apps.api.app.services.invites.adapters.primary.invites__primary_adapter__FastAPI import (  # noqa: E501
     idp_groups_router,
@@ -47,7 +47,7 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary impor
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER
 
-WS1 = workspace_scope("org-1", "ws-1")
+WS1 = workspace_container("org-1", "ws-1")
 REFUSAL = "You cannot grant what you do not hold"
 
 
@@ -64,14 +64,14 @@ def _inviter(team) -> None:
                     {
                         "effect": "Allow",
                         "actions": ["nexus:InviteWorkspaceMember"],
-                        "resources": ["${scope}:nexus:member/*"],
+                        "resources": ["${scope}/nexus:member/*"],
                     },
                     {
                         "effect": "Allow",
                         "actions": ["iam:AttachPolicy"],
                         "resources": [
-                            "${scope}:iam:attachment/builtin.member/*",
-                            "${scope}:iam:attachment/builtin.viewer/*",
+                            "${scope}/iam:attachment/builtin.member/*",
+                            "${scope}/iam:attachment/builtin.viewer/*",
                         ],
                     },
                 ],
@@ -161,7 +161,8 @@ def _refused(response, policy_id: str) -> None:
     detail = response.json()["detail"]
     assert detail.startswith(REFUSAL), detail
     assert f"of {policy_id} allows" in detail, detail
-    assert re.search(r"allows \w+:\w+ on abi:org-1:ws-1:\S+ at abi:org-1:ws-1,", detail), detail
+    where = re.escape(WS1)
+    assert re.search(rf"allows \w+:\w+ on {where}/\S+ at {where},", detail), detail
     assert detail.endswith("you do not hold it there"), detail
 
 

@@ -28,9 +28,10 @@ from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
     get_current_user_required,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 from naas_abi_core.engine.call_context import current_call_context
-from naas_abi_core.services.iam.names import encode_id
+from naas_abi_core.services.iam.names import PLATFORM, encode_id
 from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import (
     ObjectStorageSecondaryAdapterFS,
 )
@@ -196,9 +197,11 @@ async def test_the_apps_section_must_be_on_for_the_role(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_creating_a_project_places_its_drafts_in_the_workspace(world) -> None:
     key = encode_id(["nexus", "app-projects", "ws-1", "x", "files", "a.css"], "path")
-    assert world.nexus.iam.resolve_placement("object_storage", key) == ("-", "-")
+    assert world.nexus.iam.resolve_placement("object_storage", key) == PLATFORM
     await _create(world)
-    assert world.nexus.iam.resolve_placement("object_storage", key) == ("org-1", "ws-1")
+    assert world.nexus.iam.resolve_placement("object_storage", key) == workspace_container(
+        "org-1", "ws-1"
+    )
     assert draft_placement("ws-1").id_key() == "nexus/app-projects/ws-1/*"
 
 

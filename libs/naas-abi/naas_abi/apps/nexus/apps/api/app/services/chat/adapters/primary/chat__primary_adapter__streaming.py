@@ -342,11 +342,11 @@ async def stream_chat_response(
                 # (which uses copy_context) inherit them.
                 from naas_abi_core.services.agent.context import (
                     agent_chat_id,
+                    agent_container,
                     agent_user_email,
                     agent_user_id,
                     agent_user_name,
                     agent_workspace_enabled_class_names,
-                    agent_workspace_id,
                     coder_workspace_base,
                     coder_workspace_secret,
                     documents_active_mode,
@@ -378,7 +378,12 @@ async def stream_chat_response(
                     )
                     turn_workspace = stored.workspace_id if stored is not None else None
                 if turn_workspace is not None:
-                    agent_workspace_id.set(str(turn_workspace))
+                    # The turn's workspace, as its container (``CallContext.container``):
+                    # what the feature tools read, and where IAM places what the turn
+                    # creates. A workspace IAM does not know names none.
+                    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+
+                    agent_container.set(await AUTHZ.container_of(str(turn_workspace)))
                     if agent_workspace_enabled_class_names.get() is None:
                         from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
                             bind_usable_agents,

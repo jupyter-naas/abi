@@ -14,6 +14,7 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     WorkspaceModel,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
@@ -152,8 +153,8 @@ async def test_creates_missing_workspaces_and_reports_unknown_organizations(db) 
         "lead",
         "#3b82f6",
     )
-    # The owner role is IAM's attachment, at the new workspace's scope.
-    assert await MEMBERSHIPS.role_at("lead", f"abi:org-1:{created.id}") == "owner"
+    # The owner role is IAM's attachment, at the new workspace's container.
+    assert await MEMBERSHIPS.role_at("lead", workspace_container("org-1", created.id)) == "owner"
     assert await _ws(db, "orphan") is None
     # EDF has nothing empty to fill: only AXA counts as updated.
     assert (report.workspaces_created, report.workspaces_updated) == (1, 1)
@@ -167,7 +168,10 @@ async def test_a_dry_run_leaves_iam_alone(db) -> None:
     await db.rollback()
 
     assert report.created_ids == [created]
-    assert await MEMBERSHIPS.role_at("lead", f"abi:org-1:{created}") is None
+    assert (
+        await MEMBERSHIPS.role_at("lead", f"abi:nexus:organization/org-1/nexus:workspace/{created}")
+        is None
+    )
 
 
 @pytest.mark.asyncio

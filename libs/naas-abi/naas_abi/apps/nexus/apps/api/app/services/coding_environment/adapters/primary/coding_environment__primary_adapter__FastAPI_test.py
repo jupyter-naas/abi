@@ -33,6 +33,7 @@ from naas_abi.apps.nexus.apps.api.app.services.coding_environment.testing import
     place_repo,
     principal_of,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER
@@ -42,6 +43,7 @@ from sqlalchemy import Delete
 pytestmark = pytest.mark.usefixtures("engine_iam")
 
 WS = "ws-1"
+WS_CONTAINER = workspace_container("org-1", WS)
 MONOREPO = "abi/monorepo"
 
 
@@ -455,7 +457,9 @@ def test_a_different_case_name_never_hands_over_another_workspaces_repository(
     resp = client.post("/repos", json={"workspace_id": WS, "name": name})
     assert resp.status_code == 409, resp.text
     assert client.collaborators("abi/Secret") == {}
-    assert client.iam.resolve_placement("source_control", "abi%2Fsecret") == ("org-1", "ws-2")
+    assert client.iam.resolve_placement("source_control", "abi%2Fsecret") == workspace_container(
+        "org-1", "ws-2"
+    )
     resp = client.post("/git-token", json={"workspace_id": WS, "repo_id": f"abi/{name}"})
     assert resp.status_code == 404, resp.text
     assert client.collaborators("abi/Secret") == {}
@@ -491,7 +495,7 @@ def test_a_member_iam_denies_writing_gets_no_write_access(client: Client) -> Non
         statement(
             "Deny",
             ["source_control:UpsertFile"],
-            ["abi:org-1:ws-1:source_control:repo/abi%2Fmonorepo"],
+            [f"{WS_CONTAINER}/source_control:repo/abi%2Fmonorepo"],
         ),
     )
     resp = client.post("/git-token", json={"workspace_id": WS, "repo_id": MONOREPO})
@@ -502,7 +506,7 @@ def test_a_member_iam_denies_writing_gets_no_write_access(client: Client) -> Non
 def test_a_member_gets_write_access_to_a_repository_of_the_workspace(client: Client) -> None:
     resp = client.post("/repos", json={"workspace_id": WS, "name": "ours"})
     assert resp.status_code == 200, resp.text
-    assert client.iam.resolve_placement("source_control", "abi%2Fours") == ("org-1", "ws-1")
+    assert client.iam.resolve_placement("source_control", "abi%2Fours") == WS_CONTAINER
     resp = client.post("/git-token", json={"workspace_id": WS, "repo_id": "abi/ours"})
     assert resp.status_code == 200, resp.text
     assert client.collaborators("abi/ours") == {resp.json()["username"]: "write"}
@@ -518,10 +522,7 @@ def test_a_workspace_role_creates_a_repository_without_a_platform_grant(
     client.as_user(user)
     resp = client.post("/repos", json={"workspace_id": WS, "name": f"by-{user}"})
     assert resp.status_code == 200, resp.text
-    assert client.iam.resolve_placement("source_control", f"abi%2Fby-{user}") == (
-        "org-1",
-        "ws-1",
-    )
+    assert client.iam.resolve_placement("source_control", f"abi%2Fby-{user}") == WS_CONTAINER
 
 
 def test_a_refusal_of_iam_on_create_is_not_reported_as_a_taken_name(client: Client) -> None:
@@ -529,7 +530,7 @@ def test_a_refusal_of_iam_on_create_is_not_reported_as_a_taken_name(client: Clie
     record = h.admin("ensure_user", LEGACY_NEXUS_ISSUER, "member")
     h.grant(
         record.id,
-        statement("Deny", ["source_control:EnsureRepo"], ["abi:org-1:ws-1:source_control:repo/*"]),
+        statement("Deny", ["source_control:EnsureRepo"], [f"{WS_CONTAINER}/source_control:repo/*"]),
     )
     resp = client.post("/repos", json={"workspace_id": WS, "name": "denied"})
     assert resp.status_code == 403, resp.text
@@ -580,10 +581,7 @@ def test_an_environment_is_found_only_by_its_owner(
 def test_an_environment_is_placed_in_the_workspace_it_was_provisioned_for(client: Client) -> None:
     env_id = client.provision()["id"]
     owner = principal_of(client.nexus, "member")
-    assert client.iam.resolve_placement("coding_environment", f"{owner}/{env_id}") == (
-        "org-1",
-        "ws-1",
-    )
+    assert client.iam.resolve_placement("coding_environment", f"{owner}/{env_id}") == WS_CONTAINER
 
 
 @pytest.mark.parametrize(("method", "suffix"), ENVIRONMENT_ROUTES)

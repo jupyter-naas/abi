@@ -10,6 +10,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_of
 from naas_abi_core.services.iam.catalog import ActionCatalog
 from naas_abi_core.services.iam.IAMPorts import (
     Attachment,
@@ -45,7 +46,8 @@ def principal_view(record: PrincipalRecord) -> dict[str, Any]:
         "email": record.email,
         "display_name": record.display_name,
         "provider": record.provider,
-        "org": record.org,
+        # The organization its owner is or sits in (a group's), from its owner.
+        "org": org_of(record.owner_scope) if record.owner_scope else None,
         "owner_id": record.owner_id,
         "owner_scope": record.owner_scope,
         "created_at": iso(record.created_at),
@@ -222,5 +224,3 @@ def simulation_view(
         "principal": principal_view(principal),
         "statement": statement,
     }
-
-

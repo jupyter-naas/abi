@@ -89,7 +89,8 @@ class PolicySourceBody(BaseModel):
 class PolicyCreateBody(PolicySourceBody):
     name: str = Field(min_length=1, max_length=128)
     description: str = Field(default="", max_length=1000)
-    # The owner: abi:-:- (the default), abi:<org>:- or abi:<org>:<ws>.
+    # The owner: the platform, abi: (the default), or a container's name
+    # (abi:nexus:organization/<org>, …/nexus:workspace/<ws>).
     scope: str | None = None
     # The policy it is a sub-policy of: it never grants more than it.
     parent: str | None = Field(default=None, min_length=1, max_length=255)
@@ -117,8 +118,8 @@ class AttachBody(BaseModel):
 
 class GroupCreateBody(BaseModel):
     name: str = Field(min_length=1, max_length=128)
-    org: str | None = None
-    # The owner: abi:-:- (the default), abi:<org>:- or abi:<org>:<ws>.
+    # The owner: the platform, abi: (the default), or a container's name
+    # (abi:nexus:organization/<org>, …/nexus:workspace/<ws>).
     scope: str | None = None
 
 
@@ -352,7 +353,7 @@ async def get_group(
 async def create_group(
     body: GroupCreateBody, user: User = Signed, service: IamAdminService = Service
 ) -> dict[str, Any]:
-    return await _call(service.create_group(user, body.name, body.org, body.scope))
+    return await _call(service.create_group(user, body.name, body.scope))
 
 
 @router.delete("/groups/{group_id}", status_code=204, dependencies=[declares("iam:DeleteGroup")])

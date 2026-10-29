@@ -7,6 +7,7 @@ import pytest
 from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import bind_usable_processes
 from naas_abi.apps.nexus.apps.api.app.services.agents import scopes
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from naas_abi_core.services.agent.context import agent_usable_module_scopes
 
 EXPORT = ModuleScope("workflow", "acme.reports", "workflow.export")
@@ -22,8 +23,8 @@ def _grant_every_process(team, user: str) -> None:
     team.allow(
         user,
         ["module:RunWorkflow", "module:RunPipeline"],
-        ["${scope}:module:workflow/*", "${scope}:module:pipeline/*"],
-        "abi:org-1:ws-1",
+        ["${scope}/module:workflow/*", "${scope}/module:pipeline/*"],
+        workspace_container("org-1", "ws-1"),
     )
 
 
@@ -37,7 +38,7 @@ async def test_a_turn_binds_the_workflows_the_caller_may_run(team) -> None:
         ("workflow", "acme.reports", "workflow.export"),
         ("pipeline", "acme.reports", "pipeline.daily"),
     }
-    team.allow_scope("member", EXPORT, "abi:org-1:ws-1")
+    team.allow_scope("member", EXPORT, workspace_container("org-1", "ws-1"))
     assert await scopes.usable_process_scopes("member", "ws-1") == {
         ("workflow", "acme.reports", "workflow.export")
     }

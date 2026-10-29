@@ -27,13 +27,14 @@ state without the session's CSRF token names nobody, and is marked so
 Pure ASGI, so the context is set in the request's own context: async
 endpoints, sync endpoints (Starlette copies the context into the threadpool)
 and everything they await see it. ``EventService.publish()`` stamps the user
-and workspace on every event, and identity event capture uses the user for
-``created_by``.
+and the container (the workspace's) on every event, and identity event capture
+uses the user for ``created_by``.
 
 The workspace is the ``/workspaces/{id}`` path segment, else a
-``workspace_id`` query parameter.
-Handlers that learn the workspace from the body (chat) set
-``agent_workspace_id`` themselves — a view of the same context.
+``workspace_id`` query parameter; the call is made in its container
+(``CallContext.container``, ``abi:nexus:organization/<org>/nexus:workspace/<ws>``).
+Handlers that learn the workspace from the body (chat) set ``agent_container``
+themselves — a view of the same context.
 """
 
 from __future__ import annotations
@@ -110,6 +111,20 @@ class RequestIdentityMiddleware:
             await self.app(scope, receive, send)
 
 
+async def _workspace_container(workspace_id: str | None) -> str | None:
+    """The container of the workspace a request names, as IAM registered it: the
+    call is made in it. None for none, an unknown one, or no IAM (request data,
+    never identity: IAM checks it again before it names anything)."""
+    if not workspace_id:
+        return None
+    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+
+    try:
+        return await AUTHZ.container_of(workspace_id)
+    except Exception:  # noqa: BLE001 - no IAM: the call is made in no container
+        return None
+
+
 async def request_call_context(scope: Scope) -> CallContext:
     """``api`` on behalf of the request's verified user, narrowed by the scope of
     the credential that proved them; without one, ``ANONYMOUS`` (with the
@@ -148,8 +163,8 @@ async def request_call_context(scope: Scope) -> CallContext:
         principal=service_account(NEXUS_IDENTITY) if named else ANONYMOUS.principal,
         on_behalf_of=named,
         scope=credential.scope if credential is not None else None,
-        workspace_id=workspace_id_from_request(
-            scope.get("path", ""), scope.get("query_string", b"")
+        container=await _workspace_container(
+            workspace_id_from_request(scope.get("path", ""), scope.get("query_string", b""))
         ),
         triggered_via="api",
     )

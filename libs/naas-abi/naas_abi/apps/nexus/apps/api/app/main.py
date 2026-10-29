@@ -7,6 +7,7 @@ import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
@@ -334,61 +335,79 @@ class _NoStore:
 
 
 async def _prepare_iam() -> None:
-    """Register the ``nexus`` catalog, then move the role data and the workspace
-    feature overrides Nexus kept itself into IAM, give org owners and admins
-    their organization-wide role, move the features roles brought into each
-    workspace's policies, and turn the sets and the workspace toggles into
-    policies. Without an IAM service every Nexus decision is a refusal, so the
-    failure is logged loudly and boot goes on. Until the sets are moved, module
-    scopes and features are refused (``policy_tree.pending``)."""
+    """Register the ``nexus`` catalog; once, move the workspace feature
+    overrides, the role features and the sets into policies, then rewrite IAM's
+    names to container paths (organizations and workspaces become containers);
+    move the role data Nexus kept itself into IAM and give org owners and admins
+    their role below their organization. Without an IAM service every Nexus
+    decision is a refusal, so the failure is logged loudly and boot goes on.
+    Until the sets are moved and the names rewritten, module scopes and features
+    are refused (``authz.upgrading``)."""
     from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
-    from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
     from naas_abi.apps.nexus.apps.api.app.services.iam import (
         bootstrap,
-        feature_overrides,
+        container_names,
         policy_tree,
-        role_features,
     )
     from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
 
     log = logging.getLogger(__name__)
     MEMBERSHIPS.known_user = bootstrap.nexus_user_exists
-    # Refused until the move below says the sets are policies: never wider.
+    # Refused until the moves below say the sets are policies and the names
+    # container paths: never wider.
     policy_tree.set_pending(True)
+    container_names.set_pending(True)
     try:
         async with AsyncSessionLocal() as db:
             await bootstrap.register_catalog()
+            if not await container_names.recorded(db, container_names.MIGRATION_NAME):
+                # The moves of the grammar before container paths: they read and
+                # write it, so they run before the names are rewritten (IAM takes
+                # it from them, as the engine or the API acting for nobody).
+                await _move_before_container_paths(db, log)
+            # IAM's names become container paths, once, organizations and
+            # workspaces registered as containers (after the moves above).
+            await container_names.migrate_names(db)
             report = await bootstrap.migrate_role_data(db)
             if report.applied:
                 log.info("Role data moved into IAM: %s", report)
-            # The per-workspace feature overrides of earlier versions move once:
-            # policies for the roles they gave a feature, and the features they
-            # left out, for the move of the sets below. A failure is retried at the
-            # next start and never keeps the rest of authorization from being set up.
-            try:
-                await feature_overrides.migrate_feature_overrides(
-                    db, live_settings().feature_flags
-                )
-            except Exception:
-                await db.rollback()
-                log.exception("The workspace feature overrides were not moved")
             # Org owners and admins reach every workspace of their organization.
             made = await MEMBERSHIPS.sync_org_wide_roles()
             if made:
                 log.info("Organization-wide roles given to %d owner(s) and admin(s)", made)
-            # No role brings a feature: what each role had in each workspace
-            # becomes that workspace's policy, once, for who holds the role there
-            # (after the org-wide roles above, which brought them too).
-            try:
-                await role_features.migrate_role_features(db, live_settings().feature_flags)
-            except Exception:
-                await db.rollback()
-                log.exception("The role features were not moved into workspace policies")
-            # The sets and the workspace toggles become a tree of policies, once,
-            # nobody gaining or losing access (after the moves above).
+            # Nothing left to move: say so to a start that skipped the moves.
             await policy_tree.migrate_sets(db)
     except Exception:
         log.exception("Nexus could not set up its authorization in IAM: every request is refused")
+
+
+async def _move_before_container_paths(db: Any, log: logging.Logger) -> None:
+    """The start-up moves written for the grammar before container paths: the
+    per-workspace feature overrides, the role features and the sets. Each is
+    recorded once done; a failure is retried at the next start and never keeps
+    the rest of authorization from being set up."""
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+    from naas_abi.apps.nexus.apps.api.app.services.iam import (
+        feature_overrides,
+        policy_tree,
+        role_features,
+    )
+
+    try:
+        await feature_overrides.migrate_feature_overrides(db, live_settings().feature_flags)
+    except Exception:
+        await db.rollback()
+        log.exception("The workspace feature overrides were not moved")
+    # No role brings a feature: what each role had in each workspace becomes that
+    # workspace's policy, once, for who holds the role there.
+    try:
+        await role_features.migrate_role_features(db, live_settings().feature_flags)
+    except Exception:
+        await db.rollback()
+        log.exception("The role features were not moved into workspace policies")
+    # The sets and the workspace toggles become a tree of policies, once, nobody
+    # gaining or losing access (after the moves above).
+    await policy_tree.migrate_sets(db)
 
 
 async def _hint_unlinked_users() -> None:

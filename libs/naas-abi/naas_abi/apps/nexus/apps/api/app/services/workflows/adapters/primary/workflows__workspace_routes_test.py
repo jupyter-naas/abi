@@ -131,7 +131,7 @@ def _grant_every_process(world, user: str) -> None:
     world.iam.allow(
         user,
         ["module:RunWorkflow", "module:RunPipeline"],
-        ["${scope}:module:workflow/*", "${scope}:module:pipeline/*"],
+        ["${scope}/module:workflow/*", "${scope}/module:pipeline/*"],
         world.scope,
     )
 
@@ -192,7 +192,7 @@ def test_a_user_reads_their_own_runs_with_the_runs_scope(world) -> None:
     world.iam.allow(
         "member",
         ["module:ReadWorkflowRuns"],
-        ["${scope}:module:workflow/acme.flows/ingest"],
+        ["${scope}/module:workflow/acme.flows/ingest"],
         world.scope,
     )
     assert member.get(path).json()["result"] == {"ok": True}
@@ -202,7 +202,7 @@ def test_a_user_reads_their_own_runs_with_the_runs_scope(world) -> None:
     world.iam.allow(
         "other",
         ["module:ReadWorkflowRuns"],
-        ["${scope}:module:workflow/acme.flows/ingest"],
+        ["${scope}/module:workflow/acme.flows/ingest"],
         world.scope,
     )
     assert world.client("other").get(path).status_code == 404
@@ -244,7 +244,7 @@ def test_the_listing_is_exactly_what_iam_allows(world) -> None:
     """A Deny is how a workspace stops offering a workflow: gone from the listing
     and the settings, refused when started, for the admin who holds the rest."""
     _grant_every_process(world, "admin")
-    _deny(world, "admin", "module:RunPipeline", "${scope}:module:pipeline/acme.flows/*")
+    _deny(world, "admin", "module:RunPipeline", "${scope}/module:pipeline/acme.flows/*")
     admin = world.client("admin")
     assert _listed(admin) == {"ingest", "map_item"}
     assert _listed(admin, f"{WS}/settings") == {"ingest", "map_item"}

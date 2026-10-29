@@ -16,7 +16,12 @@ from urllib.parse import parse_qs
 
 from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig
 from naas_abi.apps.nexus.apps.api.app.core.feature_flags import KNOWN_FEATURE_KEYS
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_scope
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
+    SERVICE,
+    WORKSPACE,
+    org_container,
+    workspace_container,
+)
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 from naas_abi_core.engine.call_context import (
     CallContext,
@@ -60,7 +65,7 @@ def code_iam(*, without_code: tuple[str, ...] = ()) -> Iterator[NexusIam]:
     nexus = NexusIam(code_flags(without_code=without_code))
     one = nexus.workspace("org-1", "ws-1")
     two = nexus.workspace("org-1", "ws-2")
-    organization = org_scope("org-1")
+    organization = org_container("org-1")
     for name in ROLES:
         nexus.grant(name, name, one)
         nexus.grant(name, name, organization)
@@ -90,10 +95,13 @@ class AsUser:
             await self.app(scope, receive, send)
             return
         query = parse_qs(scope.get("query_string", b"").decode())
+        workspace = (query.get("workspace_id") or [None])[0]
         context = CallContext(
             principal=service_account("api"),
             on_behalf_of=user(principal_of(self.nexus, self.holder["user"])),
-            workspace_id=(query.get("workspace_id") or [None])[0],
+            container=self.nexus.iam.container(SERVICE, WORKSPACE, workspace)
+            if workspace
+            else None,
         )
         with use_call_context(context):
             await self.app(scope, receive, send)
@@ -125,5 +133,6 @@ def place_repo(
     with as_service_account("engine"):
         repos.ensure_repo(owner=owner, name=name)
         if workspace is not None:
-            nexus.iam.put_placement("source_control", key, org, workspace)
-            nexus.iam.put_placement("source_control", f"{key}/*", org, workspace)
+            container = workspace_container(org, workspace)
+            nexus.iam.put_placement("source_control", key, container)
+            nexus.iam.put_placement("source_control", f"{key}/*", container)

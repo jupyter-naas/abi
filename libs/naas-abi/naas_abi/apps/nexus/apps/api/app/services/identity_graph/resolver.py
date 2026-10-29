@@ -195,8 +195,15 @@ def _actor_id(event: dict[str, Any]) -> str | None:
 
 
 def _workspace_id(event: dict[str, Any]) -> str | None:
+    """The workspace an event is about or happened in: its container's
+    (``actor_container``), or the id an event recorded before container paths
+    carried (``actor_workspace_id``)."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_of
+
+    container = event.get("actor_container")
     return (
         event.get("target_workspace_id")
+        or (workspace_of(container) if container else None)
         or event.get("actor_workspace_id")
         or event.get("workspace_id")
     )

@@ -47,7 +47,7 @@ import json
 import logging
 import re
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from functools import cache
 from typing import Any
@@ -58,7 +58,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.role_features import recorded
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam import module_scopes, roles
 from naas_abi_core.services.iam.catalog import CatalogRegistry
-from naas_abi_core.services.iam.names import PLATFORM_SCOPE, encode_segment, matches
+from naas_abi_core.services.iam.names import PLATFORM, encode_segment, matches
 from naas_abi_core.services.iam.policy import (
     MAX_PATTERNS,
     MAX_STATEMENTS,
@@ -72,6 +72,9 @@ from starlette.concurrency import run_in_threadpool
 _log = logging.getLogger(__name__)
 
 MIGRATION_NAME = "policy_tree_v1"
+# The platform in the grammar before container paths, which this move reads and
+# writes (``container_names`` rewrites what it made afterwards).
+PLATFORM_SCOPE = "abi:-:-"
 # The moves that come first: the workspace feature overrides (their features
 # are part of the sets read here) and the role features (their old policies
 # were bounded by the sets too; once moved they are detached, kept or not).
@@ -1011,11 +1014,9 @@ def _custom_agents(world: World, result: Plan) -> None:
             continue
         org = world.workspaces[workspace]
         scope = f"abi:{org}:{workspace}"
+        # ``nexus:agent/<id>``, encoded as names of today encode it.
         resources = [
-            "${scope}:"
-            + nexus_resource("agent", org=org, workspace=workspace, id=agent).removeprefix(
-                f"{scope}:"
-            )
+            "${scope}:" + nexus_resource("agent", id=agent).removeprefix(PLATFORM)
             for agent in sorted(off.custom_off)
         ]
         key = result.add(
@@ -1373,18 +1374,24 @@ def _agent_resolver() -> Any:
     return resolve
 
 
+def _old_platform(value: str | None) -> str | None:
+    """The platform as the grammar before container paths writes it: what IAM
+    of today made (its built-in policies) reads ``abi:``."""
+    return PLATFORM_SCOPE if value == PLATFORM else value
+
+
 def read_iam(iam: Any) -> dict[str, Any]:
-    """What IAM holds, read as the engine."""
+    """What IAM holds, read as the engine, in the grammar before container paths."""
     policies: list[Any] = []
     after: str | None = None
     while True:
         page = iam.list_policies(limit=500, after=after)
-        policies += page.items
+        policies += [replace(p, owner_scope=_old_platform(p.owner_scope)) for p in page.items]
         after = page.next_after
         if after is None:
             break
-    attachments = iam.list_attachments()
-    pending = iam.list_pending_grants()
+    attachments = [replace(a, scope=_old_platform(a.scope)) for a in iam.list_attachments()]
+    pending = [replace(g, scope=_old_platform(g.scope)) for g in iam.list_pending_grants()]
     principals = {a.principal_id for a in attachments}
     kinds: dict[str, str] = {}
     members: dict[str, list[str]] = {}

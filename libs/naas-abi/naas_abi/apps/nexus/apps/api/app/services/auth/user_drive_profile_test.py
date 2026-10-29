@@ -28,11 +28,11 @@ USER_DIR = f"{ROOT}/.settings/user"
 @pytest.fixture(autouse=True)
 def iam(nexus_iam):
     """Alice is an admin of ``org-fm`` in IAM, where roles live."""
-    from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_scope
+    from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container
 
     scope = nexus_iam.org("org-fm")
     nexus_iam.grant("alice", "admin", scope)
-    assert scope == org_scope("org-fm")
+    assert scope == org_container("org-fm")
     return nexus_iam
 
 

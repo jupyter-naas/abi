@@ -23,7 +23,7 @@ def iam(nexus_iam):
     after the snapshot was taken, and ``admin`` of nothing else."""
     nexus_iam.org("org-1")
     nexus_iam.workspace("org-1", "ws-1")
-    nexus_iam.grant("u-existing", "member", "abi:org-1:-")
+    nexus_iam.grant("u-existing", "member", "abi:nexus:organization/org-1")
     return nexus_iam
 
 
@@ -110,10 +110,16 @@ async def test_import_creates_missing_accounts_and_roles_and_never_overwrites(db
 
     # Roles are IAM's. A role held stays (the snapshot says admin, it is member); a
     # person who held none gets what the snapshot names.
-    assert await MEMBERSHIPS.role_at("u-existing", "abi:org-1:-") == "member"
-    assert await MEMBERSHIPS.role_at(new.id, "abi:org-1:-") == "member"
-    assert await MEMBERSHIPS.role_at("u-existing", "abi:org-1:ws-1") == "admin"
-    assert await MEMBERSHIPS.role_at(new.id, "abi:org-1:ws-1") == "viewer"
+    assert await MEMBERSHIPS.role_at("u-existing", "abi:nexus:organization/org-1") == "member"
+    assert await MEMBERSHIPS.role_at(new.id, "abi:nexus:organization/org-1") == "member"
+    assert (
+        await MEMBERSHIPS.role_at("u-existing", "abi:nexus:organization/org-1/nexus:workspace/ws-1")
+        == "admin"
+    )
+    assert (
+        await MEMBERSHIPS.role_at(new.id, "abi:nexus:organization/org-1/nexus:workspace/ws-1")
+        == "viewer"
+    )
 
     assert report.users_created == 1
     assert report.organization_memberships_created == 1
@@ -140,7 +146,10 @@ async def test_a_dry_run_gives_no_role(db) -> None:
     await db.rollback()
 
     assert report.workspace_memberships_created == 2
-    assert await MEMBERSHIPS.role_at("u-existing", "abi:org-1:ws-1") is None
+    assert (
+        await MEMBERSHIPS.role_at("u-existing", "abi:nexus:organization/org-1/nexus:workspace/ws-1")
+        is None
+    )
 
 
 @pytest.mark.asyncio

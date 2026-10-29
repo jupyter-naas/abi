@@ -44,6 +44,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.authz import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_of
 from naas_abi_core.services.agent.context import (
     agent_usable_module_scopes,
     agent_workspace_enabled_class_names,
@@ -229,13 +230,14 @@ def _model_scopes() -> dict[str, ModuleScope]:
     return found
 
 
-async def _chat_workspaces(user: User, workspace: str | None) -> list[tuple[str, str]]:
-    """The workspaces, as ``(org, workspace)``, whose chat the caller may hold: the
-    one it names, else its own. ``AuthzDenied`` when there is none."""
+async def _chat_workspaces(user: User, workspace: str | None) -> list[tuple[str | None, str]]:
+    """The workspaces, as ``(org, workspace)`` (``None`` for a workspace in no
+    organization), whose chat the caller may hold: the one it names, else its
+    own. ``AuthzDenied`` when there is none."""
     await require_in_any_workspace("UseFeature", user=user, workspace=workspace, id="chat")
     if workspace:
-        org = await AUTHZ.org_of(workspace)
-        return [(org, workspace)] if org is not None else []
+        container = await AUTHZ.container_of(workspace)
+        return [(org_of(container), workspace)] if container is not None else []
     return list(await MEMBERSHIPS.workspaces_of(user.id))
 
 

@@ -8,7 +8,10 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     WorkspaceModel,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import NO_ORG, nexus_resource
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
+    nexus_resource,
+    workspace_container,
+)
 from naas_abi.apps.nexus.apps.api.app.services.maps.permissions.permissions__schema import (
     MapsGrant,
 )
@@ -84,7 +87,7 @@ class PostgresWorkspaceDirectory(WorkspaceDirectoryPort):
                 rows,
                 user=user_id,
                 resource_of=lambda row: nexus_resource(
-                    "workspace", org=row.organization_id or NO_ORG, workspace=str(row.id)
+                    "workspace", container=workspace_container(row.organization_id, str(row.id))
                 ),
             )
         return [WorkspaceRef(str(row.id), str(row.name)) for row in rows]

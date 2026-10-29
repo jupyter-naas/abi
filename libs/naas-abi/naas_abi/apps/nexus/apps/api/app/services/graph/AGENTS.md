@@ -37,7 +37,7 @@ rule of its own.
   create, admins clear and drop (the levels of the `triple_store` catalog). New
   graphs write no ownership triple.
 - **Sharing is a statement for the receiving workspace.** A policy attached at a
-  scope may only allow `${scope}:` resources, so a grant onto another workspace's
+  scope may only allow `${scope}/` resources, so a grant onto another workspace's
   graph cannot be a scoped attachment. For each workspace `GRANTS` keeps two
   policies, `workspace.<ws>.graphs.read` and `workspace.<ws>.graphs.write`:
   - `read` Allows the list and read actions on the graphs the workspace reads or
@@ -45,7 +45,8 @@ rule of its own.
     graphs when `allow_create` or `include_owned` is off (`NoNewGraphs`), and its
     own graphs it excludes (`OwnGraphsClosed`);
   - `write` Allows `Insert` and `Remove` on the graphs it may write.
-  They name graphs wherever placed (`abi:*:*:triple_store:graph/<iri>`, so a graph
+  They name graphs wherever placed (`abi:triple_store:graph/<iri>` and
+  `abi:*/triple_store:graph/<iri>`, core's `names.anywhere`, so a graph
   keeps its identity if it moves) and are attached **without scope** to the members
   who hold a role in the workspace: `read` to every role, `write` to member and
   above. `ClearGraph` and `DropGraph` are never shared: lifecycle stays with the
@@ -76,7 +77,7 @@ rule of its own.
 - `read_all` shares the graphs that exist when the assignment is applied (a graph
   created later joins at the next sync), and only those of the workspace's own
   organization and the platform's (`graph_iam.within`): never another organization's,
-  nor another personal workspace's (the shared `_none` organization).
+  nor another personal workspace's (one in no organization, at the platform).
 - Dropping or clearing a graph shared for writing is the owning workspace's alone.
 - Strings that reach SPARQL are escaped (`query/sparql_safe.py`): Nexus reads every
   graph as itself when it consults its application graph.

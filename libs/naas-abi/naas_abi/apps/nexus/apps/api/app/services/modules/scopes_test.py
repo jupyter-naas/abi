@@ -58,11 +58,11 @@ def test_a_listing_groups_each_module_s_scopes_with_their_display_data() -> None
             "display_name": "Recruiter",
             "description": "Finds people.",
             "icon": "https://i/r.png",
-            "resource": "${scope}:module:agent/acme.people/Recruiter",
+            "resource": "${scope}/module:agent/acme.people/Recruiter",
             "actions": ["module:UseAgent"],
         }
     ]
-    assert people["apps"][0]["resource"] == "${scope}:module:app/acme.people/directory"
+    assert people["apps"][0]["resource"] == "${scope}/module:app/acme.people/directory"
     assert people["apps"][0]["actions"] == ["module:OpenApp"]
     assert people["workflows"][0]["actions"] == ["module:RunWorkflow", "module:ReadWorkflowRuns"]
     assert people["pipelines"][0]["actions"] == ["module:RunPipeline", "module:ReadPipelineRuns"]
@@ -75,7 +75,7 @@ def test_a_listing_groups_each_module_s_scopes_with_their_display_data() -> None
             "description": "Export one.",
         }
     ]
-    assert people["declared"]["resource_types"][0]["resource"] == "${scope}:acme_people:report/*"
+    assert people["declared"]["resource_types"][0]["resource"] == "${scope}/acme_people:report/*"
 
     # naas_abi's own agents are module scopes too; a module with nothing is listed.
     assert [a["name"] for a in by_module["naas_abi"]["agents"]] == ["Abi"]

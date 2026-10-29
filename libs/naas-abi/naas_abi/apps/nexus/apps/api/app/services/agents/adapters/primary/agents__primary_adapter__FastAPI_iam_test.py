@@ -16,13 +16,14 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
     get_current_user_required,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 
 APPS = "naas_abi.agents.AppsAgent/AppsAgent"
 FILES = "naas_abi.agents.FilesAgent/FilesAgent"
 # Two agents of one module, P: ``agent/acme.p/A`` and ``agent/acme.p/B``.
 AGENT_A = "acme.p.agents.A/AAgent"
 AGENT_B = "acme.p.agents.B/BAgent"
-WS = "abi:org-1:ws-1"
+WS = workspace_container("org-1", "ws-1")
 
 
 def _agent(agent_id: str, workspace: str = "ws-1", class_name: str | None = None) -> AgentRecord:
@@ -276,7 +277,7 @@ async def test_the_roster_is_exactly_what_iam_allows(world) -> None:
     world.team.allow(
         "admin",
         ["module:UseAgent"],
-        ["${scope}:module:agent/acme.p/*", "${scope}:module:agent/naas_abi/*"],
+        ["${scope}/module:agent/acme.p/*", "${scope}/module:agent/naas_abi/*"],
         WS,
     )
     async with world.as_("admin") as http:
@@ -291,7 +292,7 @@ async def test_the_roster_is_exactly_what_iam_allows(world) -> None:
                     {
                         "effect": "Deny",
                         "actions": ["module:UseAgent"],
-                        "resources": ["${scope}:module:agent/acme.p/BAgent"],
+                        "resources": ["${scope}/module:agent/acme.p/BAgent"],
                     }
                 ],
             },

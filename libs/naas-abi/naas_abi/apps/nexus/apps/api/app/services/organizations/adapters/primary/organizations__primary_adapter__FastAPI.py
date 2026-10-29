@@ -21,7 +21,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MembershipDenied
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_scope
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from naas_abi.apps.nexus.apps.api.app.services.invites import runtime as invites_runtime
 from naas_abi.apps.nexus.apps.api.app.services.invites.mail import send_added_notice
 from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
@@ -49,6 +49,7 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
     OrganizationMemberAlreadyExistsError,
     OrganizationService,
     OrganizationSlugAlreadyExistsError,
+    new_org_id,
 )
 from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
     check_rate_limit,
@@ -439,9 +440,12 @@ async def create_organization(
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
 ) -> Organization:
-    await authz.require("CreateOrganization", user=current_user)
+    # Checked on the new organization's own name.
+    org_id = new_org_id()
+    await authz.require("CreateOrganization", user=current_user, id=org_id)
     try:
         row = await service.create_organization(
+            org_id=org_id,
             name=org.name,
             slug=org.slug,
             owner_id=current_user.id,
@@ -808,7 +812,7 @@ async def sync_org_member_workspaces(
     to_add = sorted(desired_ids - current_ids)
     to_remove: list[str] = []
     for workspace_id in sorted(current_ids - desired_ids):
-        if held.get(workspace_scope(org_id, workspace_id)) == "owner":
+        if held.get(workspace_container(org_id, workspace_id)) == "owner":
             skipped_owner.append(workspace_id)
         else:
             to_remove.append(workspace_id)
@@ -819,12 +823,12 @@ async def sync_org_member_workspaces(
             await iam_memberships.check(
                 user_id,
                 body.workspace_role,
-                workspace_scope(org_id, workspace_id),
+                workspace_container(org_id, workspace_id),
                 by=current_user,
             )
         for workspace_id in to_remove:
             await iam_memberships.check(
-                user_id, None, workspace_scope(org_id, workspace_id), by=current_user
+                user_id, None, workspace_container(org_id, workspace_id), by=current_user
             )
         # IAM's GrantNotHeldError (what the role grants beyond what the caller
         # holds) is a 403 that names it, through the service handlers.
@@ -832,13 +836,13 @@ async def sync_org_member_workspaces(
             await iam_memberships.grant(
                 user_id,
                 body.workspace_role,
-                workspace_scope(org_id, workspace_id),
+                workspace_container(org_id, workspace_id),
                 by=current_user,
             )
             added.append(workspace_id)
         for workspace_id in to_remove:
             if await iam_memberships.revoke(
-                user_id, workspace_scope(org_id, workspace_id), by=current_user
+                user_id, workspace_container(org_id, workspace_id), by=current_user
             ):
                 removed.append(workspace_id)
     except MembershipDenied as exc:

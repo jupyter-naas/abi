@@ -46,9 +46,13 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.catalog import (
     TYPES_BY_NAME,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
-    NO_ORG,
+    PLATFORM,
     RESERVED_WORKSPACE_IDS,
+    SERVICE,
+    WORKSPACE,
     nexus_resource,
+    org_container,
+    workspace_container,
 )
 from naas_abi_core.engine.call_context import (
     ANONYMOUS,
@@ -64,10 +68,14 @@ from starlette.concurrency import run_in_threadpool
 
 def upgrading() -> bool:
     """Whether the sets and the workspace toggles still wait to become policies
-    (``policy_tree``): module scopes and features are refused meanwhile."""
-    from naas_abi.apps.nexus.apps.api.app.services.iam import policy_tree
+    (``policy_tree``), or IAM's names to become container paths
+    (``container_names``): module scopes and features are refused meanwhile."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import (
+        container_names,
+        policy_tree,
+    )
 
-    return policy_tree.pending()
+    return policy_tree.pending() or container_names.pending()
 
 
 def feature_exists(key: str) -> bool:
@@ -82,9 +90,10 @@ def feature_exists(key: str) -> bool:
 
 NEXUS_IDENTITY = "api"
 _T = TypeVar("_T")
-# How long a workspace's org is remembered by this process: a change made here
-# forgets it at once (``forget_workspace``); one made elsewhere is seen in this time.
-_ORG_CACHE_SECONDS = 30.0
+# How long a workspace's container is remembered by this process: a change made
+# here forgets it at once (``forget_workspace``); one made elsewhere is seen in this
+# time.
+_CONTAINER_CACHE_SECONDS = 30.0
 
 
 class AuthzDenied(HTTPException):
@@ -105,10 +114,9 @@ class ModuleScope:
         """The qualified action: the type's use action by default."""
         return f"{module_scopes.SERVICE}:{action or module_scopes.USE_ACTION[self.type]}"
 
-    def resource(self, org: str, workspace: str) -> str:
-        return module_scopes.scope_resource(
-            self.type, self.module, self.name, org=org, workspace=workspace
-        )
+    def resource(self, container: str) -> str:
+        """Its name in ``container``, the container it is used in (a workspace's)."""
+        return module_scopes.scope_resource(self.type, self.module, self.name, container=container)
 
 
 @dataclass(frozen=True)
@@ -122,7 +130,7 @@ class Decision:
 
 class Authz:
     def __init__(self) -> None:
-        self._orgs: dict[str, tuple[str, float]] = {}
+        self._containers: dict[str, tuple[str, float]] = {}
 
     # -- identity ------------------------------------------------------------
 
@@ -143,28 +151,44 @@ class Authz:
             ANONYMOUS,
             principal=service_account(NEXUS_IDENTITY),
             on_behalf_of=Principal(id=user_id, kind="user"),
-            workspace_id=ambient.workspace_id,
+            container=ambient.container,
             triggered_via=ambient.triggered_via,
         )
 
     # -- names ---------------------------------------------------------------
 
-    async def org_of(self, workspace: str) -> str | None:
-        """The org a workspace sits in (``_none`` for none), as IAM registered it;
-        None for an unknown workspace and for ids that name none (``-``, ``*``)."""
+    async def container_of(self, workspace: str) -> str | None:
+        """A workspace's container name, as IAM registered it (in its organization,
+        or at the platform for one in none); None for an unknown workspace and for
+        ids that name none (``-``, ``*``)."""
         if workspace in RESERVED_WORKSPACE_IDS:
             return None
-        found = self._orgs.get(workspace)
+        found = self._containers.get(workspace)
         now = time.monotonic()
         if found is not None and found[1] > now:
             return found[0]
-        org = await run_in_threadpool(runtime.iam().workspace_org, workspace)
-        if org is not None:
-            self._orgs[workspace] = (org, now + _ORG_CACHE_SECONDS)
-        return org
+        container = await run_in_threadpool(runtime.iam().container, SERVICE, WORKSPACE, workspace)
+        if container is not None:
+            self._containers[workspace] = (container, now + _CONTAINER_CACHE_SECONDS)
+        return container
 
     def forget_workspace(self, workspace: str) -> None:
-        self._orgs.pop(workspace, None)
+        self._containers.pop(workspace, None)
+
+    def forget_workspaces(self) -> None:
+        self._containers.clear()
+
+    async def where(self, *, workspace: str | None = None, org: str | None = None) -> str | None:
+        """The container a decision is made in: the workspace's (looked up, unless
+        ``org`` says where it is), else the organization's, else the platform;
+        None for a workspace IAM does not know."""
+        if workspace is not None:
+            if workspace in RESERVED_WORKSPACE_IDS:
+                return None
+            if org is not None:
+                return workspace_container(org, workspace)
+            return await self.container_of(workspace)
+        return org_container(org) if org is not None else PLATFORM
 
     async def name(
         self,
@@ -177,13 +201,10 @@ class Authz:
         """The resource name of an action's (or a type's) resource; None when the
         workspace is unknown to IAM."""
         type_name = TYPE_OF.get(action_or_type, action_or_type)
-        if workspace in RESERVED_WORKSPACE_IDS and workspace is not None:
+        container = await self.where(workspace=workspace, org=org)
+        if container is None:
             return None
-        if workspace is not None and org is None:
-            org = await self.org_of(workspace)
-            if org is None:
-                return None
-        return nexus_resource(type_name, org=org, workspace=workspace, id=id)
+        return nexus_resource(type_name, container=container, id=id)
 
     # -- decisions -----------------------------------------------------------
 
@@ -238,36 +259,37 @@ class Authz:
         action: str,
         *,
         user: Any,
-        workspaces: Sequence[tuple[str, str]],
+        workspaces: Sequence[tuple[str | None, str]],
         id: str | Sequence[str] = (),
         feature: str | None = None,
     ) -> bool:
         """Whether any of ``workspaces`` (``(org, workspace)`` pairs) lets the user
         perform ``action``: two ``filter`` calls over all of them (the feature
-        switch, then the action), in one worker thread."""
+        switch, then the action), in one worker thread. A workspace in no
+        organization is ``(None, workspace)``."""
         ctx = self.context(user)
         flag = self._feature_of(action, id, feature)
         type_name = TYPE_OF[action]
-        pairs = list(workspaces)
-        if not pairs or (flag is not None and not feature_exists(flag)):
+        containers = [workspace_container(org, workspace) for org, workspace in workspaces]
+        if not containers or (flag is not None and not feature_exists(flag)):
             return False
 
         def run() -> bool:
             iam = runtime.iam()
-            candidates = pairs
+            candidates = containers
             with use_call_context(ctx):
                 if flag is not None:
                     switches = {
-                        pair: nexus_resource("feature", org=pair[0], workspace=pair[1], id=flag)
-                        for pair in candidates
+                        container: nexus_resource("feature", container=container, id=flag)
+                        for container in candidates
                     }
                     usable = set(iam.filter("nexus:UseFeature", list(switches.values())).allowed)
-                    candidates = [pair for pair in candidates if switches[pair] in usable]
+                    candidates = [c for c in candidates if switches[c] in usable]
                     if not candidates:
                         return False
                 resources = [
-                    nexus_resource(type_name, org=org, workspace=workspace, id=id)
-                    for org, workspace in candidates
+                    nexus_resource(type_name, container=container, id=id)
+                    for container in candidates
                 ]
                 return bool(iam.filter(f"nexus:{action}", resources).allowed)
 
@@ -280,20 +302,19 @@ class Authz:
         the action's feature once, then one ``filter`` (a listing asks each row's
         own right without a call per row)."""
         wanted = list(dict.fromkeys(ids))
-        org = await self.org_of(workspace) if wanted else None
-        if org is None:
+        container = await self.container_of(workspace) if wanted else None
+        if container is None:
             return set()
         ctx = self.context(user)
         flag = FEATURE_OF.get(action)
         if flag is not None:
             if not feature_exists(flag):
                 return set()
-            switch = nexus_resource("feature", org=org, workspace=workspace, id=flag)
+            switch = nexus_resource("feature", container=container, id=flag)
             if not (await self._decide(ctx, "nexus:UseFeature", switch)).allowed:
                 return set()
         names = {
-            nexus_resource(TYPE_OF[action], org=org, workspace=workspace, id=one): one
-            for one in wanted
+            nexus_resource(TYPE_OF[action], container=container, id=one): one for one in wanted
         }
 
         def run() -> set[str]:
@@ -361,7 +382,7 @@ class Authz:
                 return AuthzDenied(403, detail=denied or "You do not have permission to do this")
             return AuthzDenied(403, detail="You do not have access to this workspace")
         if org is not None:
-            where = nexus_resource("organization", org=org)
+            where = org_container(org)
             if (await self._decide(ctx, "nexus:GetOrganization", where)).allowed:
                 return AuthzDenied(403, detail=denied or "You do not have permission to do this")
             return AuthzDenied(403, detail="You do not have access to this organization")
@@ -378,7 +399,7 @@ class Authz:
         """The items the user may perform ``action`` on, in order.
 
         ``resource_of`` names each item (``authz.name`` is async, so build names
-        with ``nexus_resource`` where the org is known).
+        with ``nexus_resource`` where the container is known).
         """
         found = list(items)
         ctx = self.context(user)
@@ -406,18 +427,18 @@ class Authz:
         default); ``feature`` is a Nexus section the use also needs."""
         if upgrading():
             return Decision(False, False, "implicit_deny")
-        org = await self.org_of(workspace)
-        if org is None:
+        container = await self.container_of(workspace)
+        if container is None:
             return Decision(False, False, "implicit_deny")
         ctx = self.context(user)
         if feature is not None:
-            switch = nexus_resource("feature", org=org, workspace=workspace, id=feature)
+            switch = nexus_resource("feature", container=container, id=feature)
             if (
                 not feature_exists(feature)
                 or not (await self._decide(ctx, "nexus:UseFeature", switch)).allowed
             ):
                 return Decision(False, False, "feature_disabled")
-        return await self._decide(ctx, scope.action(action), scope.resource(org, workspace))
+        return await self._decide(ctx, scope.action(action), scope.resource(container))
 
     async def allowed_scope(self, scope: ModuleScope, **target: Any) -> bool:
         return (await self.decide_scope(scope, **target)).allowed
@@ -463,16 +484,14 @@ class Authz:
         scopes = [scope_of(item) for item in found]
         if not any(scopes):
             return found
-        org = None if upgrading() else await self.org_of(workspace)
-        if org is None:
+        container = None if upgrading() else await self.container_of(workspace)
+        if container is None:
             return [item for item, scope in zip(found, scopes, strict=True) if scope is None]
         ctx = self.context(user)
         by_action: dict[str, list[str]] = {}
         for scope in scopes:
             if scope is not None:
-                by_action.setdefault(scope.action(action), []).append(
-                    scope.resource(org, workspace)
-                )
+                by_action.setdefault(scope.action(action), []).append(scope.resource(container))
 
         def run() -> set[tuple[str, str]]:
             allowed: set[tuple[str, str]] = set()
@@ -487,7 +506,7 @@ class Authz:
         return [
             item
             for item, scope in zip(found, scopes, strict=True)
-            if scope is None or (scope.action(action), scope.resource(org, workspace)) in allowed
+            if scope is None or (scope.action(action), scope.resource(container)) in allowed
         ]
 
     async def scope_allowed_in_any(
@@ -495,30 +514,30 @@ class Authz:
         scope: ModuleScope,
         *,
         user: Any,
-        workspaces: Sequence[tuple[str, str]],
+        workspaces: Sequence[tuple[str | None, str]],
         feature: str | None = None,
     ) -> str | None:
-        """The first of ``workspaces`` (``(org, workspace)`` pairs) where the user
-        may use ``scope``, else None."""
+        """The first of ``workspaces`` (``(org, workspace)`` pairs, ``None`` for a
+        workspace in no organization) where the user may use ``scope``, else None."""
         ctx = self.context(user)
         if upgrading() or (feature is not None and not feature_exists(feature)):
             return None
 
-        def allows(org: str, workspace: str) -> bool:
+        def allows(container: str) -> bool:
             iam = runtime.iam()
             with use_call_context(ctx):
                 if (
                     feature is not None
                     and not iam.authorize(
                         "nexus:UseFeature",
-                        nexus_resource("feature", org=org, workspace=workspace, id=feature),
+                        nexus_resource("feature", container=container, id=feature),
                     ).allowed
                 ):
                     return False
-                return iam.authorize(scope.action(), scope.resource(org, workspace)).allowed
+                return iam.authorize(scope.action(), scope.resource(container)).allowed
 
         for org, workspace in workspaces:
-            if await run_in_threadpool(allows, org, workspace):
+            if await run_in_threadpool(allows, workspace_container(org, workspace)):
                 return workspace
         return None
 
@@ -539,7 +558,6 @@ __all__ = [
     "feature_exists",
     "upgrading",
     "ModuleScope",
-    "NO_ORG",
     "TYPES_BY_NAME",
     "Authz",
     "AuthzDenied",

@@ -3,10 +3,10 @@ and the module × workspace page.
 
 Each module (an engine module by its configured path, a remote one by its id)
 lists its agents, apps, workflows and pipelines (core ``module_scopes``: the
-``module`` catalog, ``abi:<org>:<ws>:module:<type>/<module>/<name>``) with
+``module`` catalog, ``<container>/module:<type>/<module>/<name>``) with
 their display name, description and icon, and the catalog it declares (its
 own service, resource types and actions). ``resource`` is the pattern a policy
-names, placed at the scope it is attached to (``${scope}``).
+names, written for the container it is attached at (``${scope}/...``).
 
 ``build`` is the pure part; ``gather`` reads the engine, discovery, the jobs
 and IAM, each source on its own: one that fails leaves its part out.
@@ -23,6 +23,7 @@ from typing import Any
 
 from naas_abi_core.services.iam import module_scopes
 from naas_abi_core.services.iam.catalog import ActionCatalog
+from naas_abi_core.services.iam.names import PLATFORM
 
 _log = logging.getLogger(__name__)
 
@@ -72,13 +73,14 @@ def _actions(type_name: str) -> list[str]:
 
 
 def _item_view(item: Exposed) -> dict[str, Any]:
+    # Named at the platform, then written for the container the policy is attached at.
     resource = module_scopes.scope_resource(item.type, item.module, item.name)
     return {
         "name": item.name,
         "display_name": item.display_name or item.name,
         "description": item.description,
         "icon": item.icon,
-        "resource": "${scope}:" + resource.split(":", 3)[3],
+        "resource": "${scope}/" + resource.removeprefix(PLATFORM),
         "actions": _actions(item.type),
     }
 
@@ -91,7 +93,7 @@ def _catalog_view(catalog: ActionCatalog) -> dict[str, Any]:
             {
                 "name": t.name,
                 "description": t.description,
-                "resource": f"${{scope}}:{catalog.service}:{t.name}/*",
+                "resource": f"${{scope}}/{catalog.service}:{t.name}/*",
             }
             for t in catalog.resource_types
         ],

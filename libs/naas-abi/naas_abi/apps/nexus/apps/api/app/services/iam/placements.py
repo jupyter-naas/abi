@@ -1,7 +1,7 @@
 """Which workspace owns the kernel resources Nexus keeps for it.
 
-A kernel service names a resource inside the org and workspace IAM *placed* it
-in. Nexus places what it creates for a workspace (its files' prefix, its
+A kernel service names a resource inside the container IAM *placed* it in (a
+workspace's, ``abi:nexus:organization/<org>/nexus:workspace/<ws>``). Nexus places what it creates for a workspace (its files' prefix, its
 graphs, its datasets, its repositories) the moment it creates it, and a domain
 registers a ``placement_source`` for what already exists, which ``place_existing``
 applies at every startup (it only writes what differs).
@@ -22,7 +22,7 @@ from typing import Any
 
 from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import NO_ORG
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container, workspace_of
 from naas_abi_core import logger
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.names import IdKind, encode_id
@@ -86,33 +86,40 @@ async def place(placement: Placement, *, org: str | None = None) -> None:
 
 
 async def place_many(placements: Sequence[Placement], *, org: str | None = None) -> int:
-    """Place resources in their workspaces; returns how many were written.
-    A placement that already says the same is left alone."""
-    orgs: dict[str, str] = {}
+    """Place resources in their workspaces' containers; returns how many were
+    written. ``org``: the organization of every workspace named (skips the
+    lookup). A placement that already says the same is left alone, and one of a
+    workspace IAM does not know is skipped (logged)."""
+    containers: dict[str, str | None] = {}
     entries = []
     for placement in placements:
-        found = org or orgs.get(placement.workspace)
-        if found is None:
-            found = await AUTHZ.org_of(placement.workspace) or NO_ORG
-            orgs[placement.workspace] = found
-        entries.append((placement, found))
+        if placement.workspace not in containers:
+            containers[placement.workspace] = (
+                workspace_container(org, placement.workspace)
+                if org is not None
+                else await AUTHZ.container_of(placement.workspace)
+            )
+        container = containers[placement.workspace]
+        if container is None:
+            logger.warning(f"Not placed: workspace {placement.workspace} is unknown to IAM")
+            continue
+        entries.append((placement, container))
 
     def work() -> int:
         iam = runtime.iam()
         written = 0
         with as_service_account("api"):
-            known: dict[str, dict[str, tuple[str, str]]] = {}
-            for placement, found_org in entries:
+            known: dict[str, dict[str, str]] = {}
+            for placement, container in entries:
                 if placement.service not in known:
                     known[placement.service] = {
-                        p.id_key: (p.org, p.workspace)
-                        for p in iam.list_placements(placement.service)
+                        p.id_key: p.container for p in iam.list_placements(placement.service)
                     }
                 key = placement.id_key()
-                if known[placement.service].get(key) == (found_org, placement.workspace):
+                if known[placement.service].get(key) == container:
                     continue
-                iam.put_placement(placement.service, key, found_org, placement.workspace)
-                known[placement.service][key] = (found_org, placement.workspace)
+                iam.put_placement(placement.service, key, container)
+                known[placement.service][key] = container
                 written += 1
         return written
 
@@ -136,7 +143,7 @@ async def forget_workspace(workspace_id: str) -> int:
     def work() -> int:
         iam = runtime.iam()
         with as_service_account("api"):
-            found = [p for p in iam.list_placements() if p.workspace == workspace_id]
+            found = [p for p in iam.list_placements() if workspace_of(p.container) == workspace_id]
             for placement in found:
                 iam.delete_placement(placement.service, placement.id_key)
         return len(found)

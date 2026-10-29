@@ -229,7 +229,7 @@ def test_the_catalog_url_redirects_to_a_fresh_grant(monkeypatch, forwarded, work
     # It opens this app and does nothing else at the kernel.
     scope = granted.scope
     assert scope is not None and scope[0]["actions"] == ["discovery:OpenApp"]
-    assert scope[0]["resources"] == ["abi:-:-:discovery:app/*/acme.research/console"]
+    assert scope[0]["resources"] == ["abi:discovery:app/*/acme.research/console"]
     # IAM keeps it hashed: eight hours at most.
     assert claims["key"].kind == "grant" and claims["key"].audience == "abi:delegated:app"
     assert claims["exp"] <= (datetime.now(UTC) + timedelta(hours=8)).timestamp() + 1

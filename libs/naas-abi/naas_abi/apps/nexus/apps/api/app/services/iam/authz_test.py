@@ -13,7 +13,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.catalog import (
     TYPE_OF,
     TYPES_BY_NAME,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_scope, workspace_scope
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container, workspace_container
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 
 
@@ -75,7 +75,16 @@ async def test_roles_are_cumulative_by_the_level_of_the_action(world) -> None:
             "UpdateRoleFeatures",
         }:
             continue  # org- and platform-level: checked below
-        resource_id = "x" if kind.id == "opaque" else ("a", "b") if kind.id == "path" else ()
+        # A container type's actions are decided on the container itself.
+        resource_id = (
+            ()
+            if kind.container
+            else "x"
+            if kind.id == "opaque"
+            else ("a", "b")
+            if kind.id == "path"
+            else ()
+        )
         if kind.personal:
             continue
         no_feature = {"feature": "chat"} if action in FEATURE_OF else {}
@@ -170,10 +179,10 @@ async def test_any_of_the_callers_workspaces_may_allow_with_two_filters_in_all()
     pairs = [("org-1", "ws-1"), ("org-1", "ws-2"), ("org-2", "ws-3")]
     for org, workspace in pairs:
         nexus.workspace(org, workspace)
-    nexus.grant("bob", "viewer", workspace_scope("org-1", "ws-1"))
-    nexus.grant("bob", "member", workspace_scope("org-1", "ws-2"))
-    nexus.grant("cleo", "viewer", workspace_scope("org-1", "ws-1"))
-    nexus.grant("cleo", "admin", workspace_scope("org-2", "ws-3"))
+    nexus.grant("bob", "viewer", workspace_container("org-1", "ws-1"))
+    nexus.grant("bob", "member", workspace_container("org-1", "ws-2"))
+    nexus.grant("cleo", "viewer", workspace_container("org-1", "ws-1"))
+    nexus.grant("cleo", "admin", workspace_container("org-2", "ws-3"))
     agents, agent = of_feature("agents", "write")
     calls: list[str] = []
     with nexus.installed():
@@ -232,11 +241,12 @@ async def test_a_workspace_registered_again_in_another_org_is_seen_at_once() -> 
     nexus = NexusIam()
     nexus.workspace("org-1", "ws-1")
     with nexus.installed():
-        assert await AUTHZ.org_of("ws-1") == "org-1"  # now cached
-        # Deleted and registered again elsewhere: the cached org must not outlive it.
+        assert await AUTHZ.container_of("ws-1") == workspace_container("org-1", "ws-1")
+        # Deleted and registered again elsewhere: the cached container must not
+        # outlive it.
         await m.MEMBERSHIPS.drop_scope("org-1", "ws-1")
         await m.MEMBERSHIPS.register_workspace("org-2", "ws-1")
-        assert await AUTHZ.org_of("ws-1") == "org-2"
+        assert await AUTHZ.container_of("ws-1") == workspace_container("org-2", "ws-1")
 
 
 @pytest.mark.asyncio
@@ -244,9 +254,9 @@ async def test_a_deleted_workspace_is_not_remembered() -> None:
     nexus = NexusIam()
     nexus.workspace("org-1", "ws-1")
     with nexus.installed():
-        assert await AUTHZ.org_of("ws-1") == "org-1"
+        assert await AUTHZ.container_of("ws-1") == workspace_container("org-1", "ws-1")
         await m.MEMBERSHIPS.drop_scope("org-1", "ws-1")
-        assert await AUTHZ.org_of("ws-1") is None
+        assert await AUTHZ.container_of("ws-1") is None
 
 
 @pytest.mark.asyncio
@@ -259,7 +269,7 @@ async def test_filter_keeps_what_the_caller_may_see(world) -> None:
     ids = ["ws-1", "ws-2", "ws-3"]
     nexus.workspace("org-2", "ws-3")
     names = {
-        i: nexus_resource("workspace", org=o, workspace=i)
+        i: nexus_resource("workspace", container=workspace_container(o, i))
         for i, o in zip(ids, ["org-1", "org-1", "org-2"], strict=True)
     }
     seen = await AUTHZ.filter("ListWorkspaces", ids, user="member", resource_of=lambda i: names[i])
@@ -273,10 +283,10 @@ async def test_filter_keeps_what_the_caller_may_see(world) -> None:
 @pytest.mark.asyncio
 async def test_member_directory_and_billing_are_for_owners_and_admins(world) -> None:
     nexus = world
-    nexus.grant("owner", "owner", org_scope("org-1"))
-    nexus.grant("admin", "admin", org_scope("org-1"))
-    nexus.grant("member", "member", org_scope("org-1"))
-    nexus.grant("viewer", "viewer", org_scope("org-1"))
+    nexus.grant("owner", "owner", org_container("org-1"))
+    nexus.grant("admin", "admin", org_container("org-1"))
+    nexus.grant("member", "member", org_container("org-1"))
+    nexus.grant("viewer", "viewer", org_container("org-1"))
     for action, id_ in (
         ("ListOrganizationMembers", "-"),
         ("ListOrganizationDomains", "-"),
@@ -302,7 +312,7 @@ async def test_only_owners_delete_a_workspace(world) -> None:
 
 @pytest.mark.asyncio
 async def test_an_admin_cannot_grant_demote_or_remove_an_owner(world) -> None:
-    scope = workspace_scope("org-1", "ws-1")
+    scope = workspace_container("org-1", "ws-1")
     members = m.MEMBERSHIPS
     # Promoting anyone to owner is the owner's.
     with pytest.raises(m.MembershipDenied):
@@ -326,7 +336,7 @@ async def test_an_admin_cannot_grant_demote_or_remove_an_owner(world) -> None:
 
 @pytest.mark.asyncio
 async def test_listing_members_reads_the_attachments(world) -> None:
-    scope = workspace_scope("org-1", "ws-1")
+    scope = workspace_container("org-1", "ws-1")
     found = await m.MEMBERSHIPS.members(scope)
     assert [(x.user_id, x.role) for x in found] == [
         ("owner", "owner"),

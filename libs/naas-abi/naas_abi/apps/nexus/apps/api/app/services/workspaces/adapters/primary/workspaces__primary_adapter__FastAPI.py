@@ -90,6 +90,7 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
     WorkspaceMemberRecord,
     WorkspaceRecord,
     WorkspaceUpdateInput,
+    new_workspace_id,
 )
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
     LastOwnerError,
@@ -383,7 +384,7 @@ async def get_workspace_by_slug(
 
 async def _undo_create(service: WorkspaceService, record: WorkspaceRecord) -> None:
     """Remove a workspace whose creation failed half-way: its placements, then
-    its uncommitted row and its IAM scope (and so its set and attachments)."""
+    its uncommitted row and its IAM container (and so its attachments)."""
     try:
         await placements.forget_workspace(record.id)
     except Exception:  # noqa: BLE001 - the original failure is what is raised
@@ -402,19 +403,18 @@ async def create_workspace(
     org_service: OrganizationService = Depends(get_organization_service),
     registry: ServiceRegistry = Depends(get_service_registry),
 ) -> Workspace:
-    # The organization is checked for the caller, never taken from the
-    # body. Only the organization's owners and admins add workspaces to it. A
-    # workspace without one is the caller's personal workspace, which needs the
-    # right every user has to create their own organization.
-    if workspace.organization_id:
-        await authz.require(
-            "CreateWorkspace",
-            user=current_user,
-            org=workspace.organization_id,
-            denied="Only organization owners and admins can create workspaces",
-        )
-    else:
-        await authz.require("CreateOrganization", user=current_user)
+    # The create is checked on the new workspace's own name, in the organization
+    # the body names (never taken on its say-so): only the organization's owners
+    # and admins add workspaces to it. A workspace without one is the caller's
+    # personal workspace, at the platform, which every user may create.
+    workspace_id = new_workspace_id()
+    await authz.require(
+        "CreateWorkspace",
+        user=current_user,
+        org=workspace.organization_id or None,
+        id=workspace_id,
+        denied="Only organization owners and admins can create workspaces",
+    )
     owner_id = workspace.owner_id or current_user.id
     if not workspace.organization_id and owner_id != current_user.id:
         raise HTTPException(
@@ -452,6 +452,7 @@ async def create_workspace(
                 description=workspace.description,
                 workspace_group=workspace.workspace_group,
                 catalog_seed=catalog_seed,
+                id=workspace_id,
             )
         )
     except WorkspaceSlugAlreadyExistsError as exc:

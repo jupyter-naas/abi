@@ -1,7 +1,7 @@
 """Authorization of a route that is about the caller, not a workspace.
 
 Speech and the OpenAI-compatible gateway take no workspace: a client calls them
-as a user. IAM's actions are still a workspace's (``abi:<org>:<ws>:nexus:...``),
+as a user. IAM's actions are still a workspace's (``<workspace container>/nexus:...``),
 so the call is allowed when the workspace the client names allows the action
 (``?workspace_id=``), or, when it names none, when any workspace the caller holds
 a role in does. The decision is IAM's either way, and a caller with no

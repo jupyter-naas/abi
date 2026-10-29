@@ -4,7 +4,7 @@ of the inviting person, so IAM refuses a role that grants more than they hold.""
 from __future__ import annotations
 
 import pytest
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_scope
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from naas_abi.apps.nexus.apps.api.app.services.invites.adapters.secondary.engine import (
     EngineGrantsGateway,
 )
@@ -20,7 +20,7 @@ from naas_abi_core.engine.call_context import as_service_account, use_call_conte
 from naas_abi_core.services.iam.IAMPorts import GrantNotHeldError, IAMNotFoundError
 from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER
 
-WS1 = workspace_scope("org-1", "ws-1")
+WS1 = workspace_container("org-1", "ws-1")
 
 
 @pytest.fixture
@@ -46,8 +46,8 @@ def invites(team):
                         "effect": "Allow",
                         "actions": ["iam:AttachPolicy", "iam:DetachPolicy"],
                         "resources": [
-                            "${scope}:iam:attachment/builtin.member/*",
-                            "${scope}:iam:attachment/builtin.viewer/*",
+                            "${scope}/iam:attachment/builtin.member/*",
+                            "${scope}/iam:attachment/builtin.viewer/*",
                         ],
                     }
                 ],
@@ -111,11 +111,11 @@ async def test_an_idp_binding_grants_no_more_than_the_one_binding(team, invites)
 async def test_an_invitation_carrying_features_of_member_gives_them_at_sign_in(team, invites):
     """No role brings a feature: the workspace's "Features of member" travels with
     the invitation, checked as the inviting person, and attaches at the sign-in."""
-    from naas_abi.apps.nexus.apps.api.app.services.iam import role_features
+    from naas_abi.apps.nexus.apps.api.app.services.iam.testing import features_document
 
     with as_service_account("engine"):
         features = team.iam.create_policy(
-            "Features of member", role_features.policy_document(["chat", "files"]), scope=WS1
+            "Features of member", features_document(["chat", "files"]), scope=WS1
         )
     # The inviter may attach the role, not this policy: IAM refuses it (as a policy
     # they cannot see) and nothing is made.
@@ -155,5 +155,5 @@ async def test_an_invitation_carrying_features_of_member_gives_them_at_sign_in(t
         team.iam.claim_pending_grants(bob.id)
     with use_call_context(team.context(bob.id)):
         for key, allowed in (("chat", True), ("files", True), ("graph", False)):
-            name = f"abi:org-1:ws-1:nexus:feature/{key}"
+            name = f"{WS1}/nexus:feature/{key}"
             assert team.iam.authorize("nexus:UseFeature", name).allowed is allowed, key

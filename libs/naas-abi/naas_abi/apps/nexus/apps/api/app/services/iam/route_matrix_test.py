@@ -33,7 +33,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.catalog import (
     TYPES_BY_NAME,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import Declared, Guard
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_scope
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 
 # Signed-in routes about the caller's own account or the platform's login: no
@@ -245,7 +245,7 @@ def world():
     )
     nexus = NexusIam(flags)
     workspace = nexus.workspace("org-1", "ws-1")
-    organization = org_scope("org-1")
+    organization = org_container("org-1")
     for role in ROLES:
         nexus.grant(role, role, workspace)
         nexus.grant(role, role, organization)

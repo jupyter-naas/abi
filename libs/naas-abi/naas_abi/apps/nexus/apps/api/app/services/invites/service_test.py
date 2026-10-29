@@ -270,8 +270,13 @@ async def test_an_invitation_grants_provisions_records_and_mails():
         "pending",
     )
     assert set(h.grants.live.values()) == {
-        ("builtin", "bob@example.com", "builtin.member", "abi:org-1:-"),
-        ("builtin", "bob@example.com", "builtin.member", "abi:org-1:ws-1"),
+        ("builtin", "bob@example.com", "builtin.member", "abi:nexus:organization/org-1"),
+        (
+            "builtin",
+            "bob@example.com",
+            "builtin.member",
+            "abi:nexus:organization/org-1/nexus:workspace/ws-1",
+        ),
     }
     assert set(invitation.grant_ids) == set(h.grants.live)
     assert h.directory.provisioned == [("builtin", "bob@example.com", "Bob B")]
@@ -290,15 +295,15 @@ async def test_a_workspace_only_invitation_grants_the_workspace_role_only():
     h = Harness()
     await h.invite(org_role=None, workspace_role="viewer")
     assert {(p, s) for _, _, p, s in h.grants.live.values()} == {
-        ("builtin.viewer", "abi:org-1:ws-1")
+        ("builtin.viewer", "abi:nexus:organization/org-1/nexus:workspace/ws-1")
     }
 
 
 @pytest.mark.asyncio
-async def test_a_workspace_without_an_organization_sits_in_the_reserved_org():
+async def test_a_workspace_without_an_organization_sits_at_the_platform():
     h = Harness()
     await h.invite(organization_id=None, org_role=None, workspace_role="member")
-    assert {s for *_, s in h.grants.live.values()} == {"abi:_none:ws-1"}
+    assert {s for *_, s in h.grants.live.values()} == {"abi:nexus:workspace/ws-1"}
 
 
 @pytest.mark.asyncio
@@ -373,8 +378,8 @@ async def test_inviting_again_renews_the_invitation_and_replaces_its_grants():
     assert again.renewed and again.invitation.id == first.id
     assert again.invitation.workspace_role == "admin" and again.invitation.invited_by == "usr-carol"
     assert {(p, s) for _, _, p, s in h.grants.live.values()} == {
-        ("builtin.member", "abi:org-1:-"),
-        ("builtin.admin", "abi:org-1:ws-1"),
+        ("builtin.member", "abi:nexus:organization/org-1"),
+        ("builtin.admin", "abi:nexus:organization/org-1/nexus:workspace/ws-1"),
     }
     assert set(again.invitation.grant_ids) == set(h.grants.live)
     assert len(h.store.rows) == 1 and len(h.mailer.sent) == 2
@@ -461,20 +466,40 @@ async def test_two_sign_ins_race_for_an_invitation_and_one_wins():
 async def test_group_bindings_go_to_iam_as_builtin_roles_at_their_scope():
     h = Harness()
     await h.service.bind_group(
-        provider="builtin", group=" Data readers ", role="viewer", scope="abi:org-1:ws-1"
+        provider="builtin",
+        group=" Data readers ",
+        role="viewer",
+        scope="abi:nexus:organization/org-1/nexus:workspace/ws-1",
     )
-    assert h.grants.bound == {("builtin", "Data readers", "builtin.viewer", "abi:org-1:ws-1")}
-    found = await h.service.bindings(["abi:org-1:ws-1", "abi:org-1:-"])
+    assert h.grants.bound == {
+        (
+            "builtin",
+            "Data readers",
+            "builtin.viewer",
+            "abi:nexus:organization/org-1/nexus:workspace/ws-1",
+        )
+    }
+    found = await h.service.bindings(
+        ["abi:nexus:organization/org-1/nexus:workspace/ws-1", "abi:nexus:organization/org-1"]
+    )
     assert [(b.provider, b.claim_value, b.role) for b in found] == [
         ("builtin", "Data readers", "viewer")
     ]
-    assert await h.service.bindings(["abi:org-1:ws-2"]) == []
+    assert await h.service.bindings(["abi:nexus:organization/org-1/nexus:workspace/ws-2"]) == []
     assert await h.service.unbind_group(
-        provider="builtin", group="Data readers", role="viewer", scope="abi:org-1:ws-1"
+        provider="builtin",
+        group="Data readers",
+        role="viewer",
+        scope="abi:nexus:organization/org-1/nexus:workspace/ws-1",
     )
     assert h.grants.bound == set()
     with pytest.raises(NoProviderError):
-        await h.service.bind_group(provider="nope", group="g", role="viewer", scope="abi:o:w")
+        await h.service.bind_group(
+            provider="nope",
+            group="g",
+            role="viewer",
+            scope="abi:nexus:organization/o/nexus:workspace/w",
+        )
 
 
 @pytest.mark.asyncio
@@ -493,11 +518,14 @@ async def test_two_invitations_share_the_org_grant_and_one_revoke_keeps_it():
     h = Harness()
     first = (await h.invite(workspace_id="ws-1")).invitation
     second = (await h.invite(workspace_id="ws-2")).invitation
-    org_grant = next(i for i, v in h.grants.live.items() if v[3] == "abi:org-1:-")
+    org_grant = next(i for i, v in h.grants.live.items() if v[3] == "abi:nexus:organization/org-1")
     assert org_grant in first.grant_ids and org_grant in second.grant_ids
     await h.service.revoke(first.id)
     # The workspace grant of the first goes; the org one the second relies on stays.
-    assert {v[3] for v in h.grants.live.values()} == {"abi:org-1:-", "abi:org-1:ws-2"}
+    assert {v[3] for v in h.grants.live.values()} == {
+        "abi:nexus:organization/org-1",
+        "abi:nexus:organization/org-1/nexus:workspace/ws-2",
+    }
     await h.service.revoke(second.id)
     assert h.grants.live == {}
 
@@ -540,7 +568,12 @@ async def test_renewing_does_not_withdraw_what_another_invitation_holds():
     await h.invite(workspace_id="ws-2")
     await h.invite(workspace_id="ws-1", workspace_role="admin", org_role="admin")
     # The first invitation now holds an admin org grant; the member one stays for ws-2.
-    assert ("builtin", "bob@example.com", "builtin.member", "abi:org-1:-") in h.grants.live.values()
+    assert (
+        "builtin",
+        "bob@example.com",
+        "builtin.member",
+        "abi:nexus:organization/org-1",
+    ) in h.grants.live.values()
     assert h.store.rows[first.id].org_role == "admin"
 
 
@@ -620,8 +653,8 @@ async def test_an_organization_admin_renewing_through_the_workspace_keeps_the_or
     assert renewed.renewed and renewed.invitation.id == first.id
     assert (renewed.invitation.org_role, renewed.invitation.workspace_role) == ("admin", "viewer")
     assert {(p, s) for _, _, p, s in h.grants.live.values()} == {
-        ("builtin.admin", "abi:org-1:-"),
-        ("builtin.viewer", "abi:org-1:ws-1"),
+        ("builtin.admin", "abi:nexus:organization/org-1"),
+        ("builtin.viewer", "abi:nexus:organization/org-1/nexus:workspace/ws-1"),
     }
 
 
@@ -631,25 +664,40 @@ async def test_an_invitation_carries_policies_at_its_workspace():
     outcome = await h.invite(policy_ids=["pol_features_member", "pol_features_member"])
     assert outcome.invitation.policy_ids == ("pol_features_member",)
     assert set(h.grants.live.values()) == {
-        ("builtin", "bob@example.com", "builtin.member", "abi:org-1:-"),
-        ("builtin", "bob@example.com", "builtin.member", "abi:org-1:ws-1"),
-        ("builtin", "bob@example.com", "pol_features_member", "abi:org-1:ws-1"),
+        ("builtin", "bob@example.com", "builtin.member", "abi:nexus:organization/org-1"),
+        (
+            "builtin",
+            "bob@example.com",
+            "builtin.member",
+            "abi:nexus:organization/org-1/nexus:workspace/ws-1",
+        ),
+        (
+            "builtin",
+            "bob@example.com",
+            "pol_features_member",
+            "abi:nexus:organization/org-1/nexus:workspace/ws-1",
+        ),
     }
     # As the inviting person: IAM checks they may attach it and hold it.
     assert set(h.grants.granted_by) == {"usr-alice"}
     # Renewed without it, the policy's grant is withdrawn.
     again = await h.invite()
     assert again.invitation.policy_ids == ()
-    assert ("builtin", "bob@example.com", "pol_features_member", "abi:org-1:ws-1") not in set(
-        h.grants.live.values()
-    )
+    assert (
+        "builtin",
+        "bob@example.com",
+        "pol_features_member",
+        "abi:nexus:organization/org-1/nexus:workspace/ws-1",
+    ) not in set(h.grants.live.values())
 
 
 @pytest.mark.asyncio
 async def test_an_organization_invitation_carries_policies_at_the_organization():
     h = Harness()
     await h.invite(workspace_id=None, workspace_role=None, policy_ids=["pol_x"])
-    assert ("builtin", "bob@example.com", "pol_x", "abi:org-1:-") in set(h.grants.live.values())
+    assert ("builtin", "bob@example.com", "pol_x", "abi:nexus:organization/org-1") in set(
+        h.grants.live.values()
+    )
 
 
 @pytest.mark.asyncio
@@ -671,7 +719,9 @@ async def test_someone_with_an_account_gets_the_policies_attached_as_the_inviter
         by="usr-alice",
     )
     assert attached == ("pol_a",)
-    assert h.grants.attached == [("usr-bob", "pol_a", "abi:org-1:ws-1", "usr-alice")]
+    assert h.grants.attached == [
+        ("usr-bob", "pol_a", "abi:nexus:organization/org-1/nexus:workspace/ws-1", "usr-alice")
+    ]
 
 
 @pytest.mark.asyncio
@@ -702,8 +752,13 @@ async def test_renewing_keeps_a_carried_policy_at_its_own_scope():
             workspace_id=None, workspace_role=None, org_role="owner", may_grant_owner=True
         )
     ).invitation
-    # As the move does: a pending grant at abi:org-1:* listed on the invitation.
-    h.grants.live["g-wide"] = ("builtin", "bob@example.com", "pol_org_features", "abi:org-1:*")
+    # As the move does: a pending grant at abi:nexus:organization/org-1/* listed on the invitation.
+    h.grants.live["g-wide"] = (
+        "builtin",
+        "bob@example.com",
+        "pol_org_features",
+        "abi:nexus:organization/org-1/*",
+    )
     h.store.rows[first.id] = replace(
         first,
         grant_ids=(*first.grant_ids, "g-wide"),
@@ -717,7 +772,8 @@ async def test_renewing_keeps_a_carried_policy_at_its_own_scope():
         policy_ids=["pol_org_features"],
     )
     assert "g-wide" in again.invitation.grant_ids
-    assert h.grants.live["g-wide"][3] == "abi:org-1:*"
+    assert h.grants.live["g-wide"][3] == "abi:nexus:organization/org-1/*"
     assert not any(
-        v[2] == "pol_org_features" and v[3] == "abi:org-1:-" for v in h.grants.live.values()
+        v[2] == "pol_org_features" and v[3] == "abi:nexus:organization/org-1"
+        for v in h.grants.live.values()
     )

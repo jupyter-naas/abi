@@ -11,7 +11,7 @@ from naas_abi.apps.nexus.apps.api.app.models import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_scope, workspace_scope
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container, workspace_container
 from naas_abi.apps.nexus.apps.api.app.services.identity_graph.port import (
     IdentityAgentConfig,
     IdentityAppConfig,
@@ -92,13 +92,13 @@ class IdentitySourceSecondaryAdapterPostgres(IdentitySourcePort):
         organization_members = [
             (org, member)
             for org in organizations
-            for member in await MEMBERSHIPS.members(org_scope(org.id))
+            for member in await MEMBERSHIPS.members(org_container(org.id))
         ]
         members = [
             (workspace, member)
             for workspace in workspaces
             for member in await MEMBERSHIPS.members(
-                workspace_scope(workspace.organization_id, workspace.id)
+                workspace_container(workspace.organization_id, workspace.id)
             )
         ]
         platform_admins = {u.id for u in users if await AUTHZ.allowed("ManageSystem", user=u.id)}
