@@ -563,7 +563,8 @@ describe('PoliciesView, no leak', () => {
     await mounted!.click(document.querySelector('[role="option"] button'));
     await mounted!.type(field('Add to resources of statement 1'), '${scope}/module:agent/acme.people/');
     await validated();
-    expect(suggestions()).toEqual(['${scope}/module:agent/acme.people/A', '${scope}/module:agent/acme.people/*']);
+    // Not `.../acme.people/*`: every agent of the module, which they may not grant.
+    expect(suggestions()).toEqual(['${scope}/module:agent/acme.people/A']);
     expect(resources).toHaveBeenLastCalledWith(expect.objectContaining({ service: 'module', type: 'agent', module: 'acme.people', q: '' }));
   });
 });

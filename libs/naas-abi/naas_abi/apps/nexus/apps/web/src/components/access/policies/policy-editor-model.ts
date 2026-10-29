@@ -355,6 +355,10 @@ export function suggestResources(
       .map((pattern) => ({ value: pattern, badge: 'grantable', detail: 'what you may grant it on' }));
   const offered = (catalog: Catalog) =>
     chosen.size === 0 || chosen.has(catalog.service) || catalog.resource_types.some((t) => t.container);
+  // A whole wildcard is suggested only when a pattern the caller may grant covers it (none
+  // given, as in the simulator: any); IAM refuses at save what it does not.
+  const mayGrant = (wildcard: string) =>
+    context.grantable === undefined || context.grantable.some((pattern) => matchPattern(pattern, wildcard));
 
   // First segment: `abi:`, or a variable such as `${scope}`.
   const prefix = text.startsWith('abi:') ? 'abi:' : text.startsWith(SCOPE_PREFIX) ? SCOPE_PREFIX : null;
@@ -415,9 +419,10 @@ export function suggestResources(
     // `*` for the last segment: every one, or every one under what the id's path names so far.
     const paths = type?.id === 'path' || current.service === MODULE_SCOPES;
     const dir = paths ? idTyped.slice(0, idTyped.lastIndexOf('/') + 1) : '';
-    const every: Suggestion[] = starts('*', idTyped.slice(dir.length))
-      ? [{ value: `${base}${dir}*`, detail: dir ? `every ${current.type} under ${dir}` : `every ${current.type}: ${idHint}` }]
-      : [];
+    const every: Suggestion[] =
+      starts('*', idTyped.slice(dir.length)) && mayGrant(`${base}${dir}*`)
+        ? [{ value: `${base}${dir}*`, detail: dir ? `every ${current.type} under ${dir}` : `every ${current.type}: ${idHint}` }]
+        : [];
     const step = typedStep(text);
     const listed = context.listed;
     let ids: Suggestion[] = [];
@@ -448,7 +453,7 @@ export function suggestResources(
       .slice(0, limit);
   }
   const below: Suggestion[] = [];
-  if (current) below.push(make('*', 'everything in it'));
+  if (current && mayGrant(head + '*')) below.push(make('*', 'everything in it'));
   else if (head === 'abi:') below.push(make('*/', 'in any container'));
   return [
     ...granted(text),

@@ -260,10 +260,32 @@ describe('only what the caller may grant', () => {
       '${scope}/module:agent/acme.people/A',
       '${scope}/module:',
     ]);
+    // No wildcard they may not grant: `*` here would be every agent, B included.
     expect(suggestResources('${scope}/module:agent/', context).map((s) => s.value)).toEqual([
       '${scope}/module:agent/acme.people/A',
-      '${scope}/module:agent/*',
       '${scope}/module:agent/acme.people/',
+    ]);
+    expect(suggestResources('${scope}/module:agent/acme.people/', context).map((s) => s.value)).toEqual([
+      '${scope}/module:agent/acme.people/A',
+    ]);
+  });
+
+  it('suggests a wildcard they may grant', () => {
+    const allOfIt: Publisher[] = [
+      {
+        id: 'acme.people',
+        kind: 'module',
+        types: [publishedType('module', 'agent', [['module:UseAgent', ['${scope}/module:agent/acme.people/*']]], { module: 'acme.people' })],
+      },
+    ];
+    const context = {
+      catalogs: grantableCatalogs(allOfIt),
+      actions: ['module:UseAgent'],
+      grantable: grantablePatterns(allOfIt, ['module:UseAgent']),
+      modules: ['acme.people'],
+    };
+    expect(suggestResources('${scope}/module:agent/acme.people/', context).map((s) => s.value)).toEqual([
+      '${scope}/module:agent/acme.people/*',
     ]);
   });
 });
