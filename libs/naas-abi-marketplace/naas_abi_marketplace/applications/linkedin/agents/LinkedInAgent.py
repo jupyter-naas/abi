@@ -107,10 +107,6 @@ Would you like to filter the results on their current organization [organization
             LinkedInIntegrationConfiguration,
             as_tools,
         )
-        from naas_abi_marketplace.applications.naas import ABIModule as NaasABIModule
-        from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
-            NaasIntegrationConfiguration,
-        )
 
         abi_module = ABIModule.get_instance()
 
@@ -132,11 +128,6 @@ Would you like to filter the results on their current organization [organization
             google_search_module.configuration.google_custom_search_engine_id
         )
 
-        naas_api_key = NaasABIModule.get_instance().configuration.naas_api_key
-        naas_integration_config = NaasIntegrationConfiguration(
-            api_key=naas_api_key,
-        )
-
         tools: list = []
 
         # The LinkedIn and Google tools call those services: without their
@@ -146,7 +137,6 @@ Would you like to filter the results on their current organization [organization
                 li_at=li_at,
                 JSESSIONID=JSESSIONID,
                 linkedin_url=linkedin_profile_url,
-                naas_integration_config=naas_integration_config,
             )
             tools += as_tools(linkedin_integration_config)
 
