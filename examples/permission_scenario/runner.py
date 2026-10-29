@@ -58,6 +58,8 @@ SCOUT = "dev.people/Scout"
 PRICES = ("dev.market", "prices")
 # The policy language a document is written in.
 VERSION = "2026-10-13"
+# The longest wait for a rate limited route: twice Nexus's default window (300 s).
+RATE_LIMIT_WAIT = 600
 
 
 class Refused(Exception):
@@ -81,6 +83,7 @@ class Api:
         return self.sessions[email]
 
     def call(self, email: str, method: str, path: str, body: Any = None) -> Any:
+        deadline = time.monotonic() + RATE_LIMIT_WAIT
         while True:
             status, payload, _ = self.session(email).open(
                 f"{self.base}{path}", method=method, body=body
@@ -88,7 +91,11 @@ class Api:
             if status != 429:
                 break
             # The invitation routes are rate limited (``rate_limit_attempts`` a
-            # window): wait for the window to pass.
+            # window): wait for the window to pass, not longer.
+            if time.monotonic() >= deadline:
+                raise Refused(
+                    429, f"{method} {path}: still rate limited after {RATE_LIMIT_WAIT}s"
+                )
             print(f"rate limited on {path}: waiting", flush=True)
             time.sleep(30)
         try:
@@ -153,9 +160,17 @@ class Grammar:
 
 def grammar_of(api: Api) -> Grammar:
     """The previous version has no publishers route (asked without its scope:
-    422 here, 404 there)."""
+    422 here, 404 there). Any other answer says nothing of the version: the
+    run stops rather than record decisions in the wrong grammar."""
     found = api.attempt(ADMIN, "GET", "/api/iam/admin/publishers")
-    return Grammar(legacy=found["status"] == 404)
+    if found["status"] == 404:
+        return Grammar(legacy=True)
+    if found["status"] in (200, 422):
+        return Grammar(legacy=False)
+    raise SystemExit(
+        f"cannot tell the version: GET /api/iam/admin/publishers answered "
+        f"{found['status']} {found.get('detail')!r}"
+    )
 
 
 # -- people and places -------------------------------------------------------------------
@@ -309,13 +324,14 @@ def turned_off(
     }
     db.close()
 
-    def app_ids(module: str, name: str) -> set[str]:
-        return {f"remote/{module}:{name}", f"{module}:{name}"}
-
     def app_on(module: str, name: str) -> bool:
-        ids = {i for i in apps_on | apps_off | seeded if i.endswith(f":{name}")}
+        # An app id is ``<module>:<app>`` (an engine module's key) or
+        # ``remote/<module id>:<app>``: its module is all before the last ``:``,
+        # exactly (Nexus ``services/apps/scopes.app_scope``).
         ids = {
-            i for i in ids if i.removeprefix("remote/").split(":")[0].startswith(module)
+            i
+            for i in apps_on | apps_off | seeded
+            if i.removeprefix("remote/").rpartition(":")[::2] == (module, name)
         }
         return bool(ids & apps_on) or bool(ids & seeded and not ids & apps_off)
 

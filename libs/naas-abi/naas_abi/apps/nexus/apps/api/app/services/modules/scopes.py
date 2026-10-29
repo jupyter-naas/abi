@@ -290,15 +290,17 @@ async def gather(unavailable: set[str] | None = None) -> list[dict[str, Any]]:
 
     # The engine's sources read in process; discovery and the jobs are NATS calls,
     # which run at once.
-    with as_service_account("api"):
-        *parts, catalogs = await asyncio.gather(
-            collect("engine agents", engine_agents),
-            collect("remote agents", remote_agents),
-            collect("apps", apps),
-            collect("workflows", workflows),
-            collect("declared catalogs", declared_catalogs),
-        )
-    _unavailable.reset(token)
+    try:
+        with as_service_account("api"):
+            *parts, catalogs = await asyncio.gather(
+                collect("engine agents", engine_agents),
+                collect("remote agents", remote_agents),
+                collect("apps", apps),
+                collect("workflows", workflows),
+                collect("declared catalogs", declared_catalogs),
+            )
+    finally:
+        _unavailable.reset(token)
     for part in parts:
         exposed.extend(part)
     return build(exposed, catalogs, engine_modules())
