@@ -83,7 +83,7 @@ def test_invoking_agents_reaches_their_subjects_in_the_project():
 
 def test_another_account_reaches_the_projects_its_resources_name():
     permissions = derive(
-        allow(["discovery:InvokeAgent"], ["abi:-:-:discovery:agent/beta/research/*"]),
+        allow(["discovery:InvokeAgent"], ["abi:discovery:agent/beta/research/*"]),
         module=None,
     )
     assert "abi.discovery.beta.v1.>" in permissions.publish
@@ -150,7 +150,7 @@ def _consumes(permissions, topic):
 
 def test_publishing_a_topic_neither_subscribes_nor_fetches():
     topic = "demo.inbox"
-    permissions = derive(allow(["bus:Publish"], [f"abi:-:-:bus:topic/{topic}"]))
+    permissions = derive(allow(["bus:Publish"], [f"abi:bus:topic/{topic}"]))
     assert topic in permissions.publish and f"{topic}.>" in permissions.publish
     assert broker.topic_claim_subjects(topic) in permissions.publish  # claim checks
     assert not any(s.startswith(topic) for s in permissions.subscribe)
@@ -160,7 +160,7 @@ def test_publishing_a_topic_neither_subscribes_nor_fetches():
 
 def test_consuming_a_topic_neither_publishes_nor_writes_claim_checks():
     topic = "demo.inbox"
-    permissions = derive(allow(["bus:Consume"], [f"abi:-:-:bus:topic/{topic}"]))
+    permissions = derive(allow(["bus:Consume"], [f"abi:bus:topic/{topic}"]))
     assert topic in permissions.subscribe and f"{topic}.>" in permissions.subscribe
     assert _consumes(permissions, topic)
     assert topic not in permissions.publish
@@ -170,15 +170,15 @@ def test_consuming_a_topic_neither_publishes_nor_writes_claim_checks():
 
 
 def test_an_unknown_bus_action_reaches_nothing():
-    permissions = derive(allow(["bus:Admin"], ["abi:-:-:bus:topic/demo.inbox"]))
+    permissions = derive(allow(["bus:Admin"], ["abi:bus:topic/demo.inbox"]))
     assert permissions.bus_topics == ()
     assert "demo.inbox" not in permissions.publish + permissions.subscribe
 
 
 def test_a_deny_on_one_topic_keeps_it_from_that_action_only():
     permissions = derive(
-        allow(["bus:*"], ["abi:-:-:bus:topic/a", "abi:-:-:bus:topic/b"]),
-        Statement("Deny", ("bus:Consume",), ("abi:-:-:bus:topic/b",)),
+        allow(["bus:*"], ["abi:bus:topic/a", "abi:bus:topic/b"]),
+        Statement("Deny", ("bus:Consume",), ("abi:bus:topic/b",)),
     )
     assert permissions.bus_consume == ("a",)
     assert set(permissions.bus_publish) == {"a", "b"}  # still publishes on b
@@ -203,7 +203,7 @@ def test_live_events_follow_the_specific_action():
 
 def test_bus_topics_are_named_never_wildcarded():
     permissions = derive(
-        allow(["bus:*"], ["abi:-:-:bus:topic/demo.inbox", "abi:-:-:bus:topic/*"])
+        allow(["bus:*"], ["abi:bus:topic/demo.inbox", "abi:bus:topic/*"])
     )
     assert "demo.inbox.>" in permissions.subscribe
     assert ">" not in permissions.subscribe and "*.>" not in permissions.subscribe
@@ -211,7 +211,7 @@ def test_bus_topics_are_named_never_wildcarded():
 
 
 def test_a_topic_queue_is_consumed_never_created_or_changed():
-    permissions = derive(allow(["bus:*"], ["abi:-:-:bus:topic/demo.inbox"]))
+    permissions = derive(allow(["bus:*"], ["abi:bus:topic/demo.inbox"]))
     stream = broker.bus_stream("demo.inbox")
     api = js_api(permissions)
     assert f"$JS.API.CONSUMER.MSG.NEXT.{stream}.>" in api
@@ -241,15 +241,15 @@ def test_a_topic_queue_is_consumed_never_created_or_changed():
     ],
 )
 def test_a_topic_under_a_platform_root_grants_nothing(topic):
-    permissions = derive(allow(["bus:*"], [f"abi:-:-:bus:topic/{topic}"]))
+    permissions = derive(allow(["bus:*"], [f"abi:bus:topic/{topic}"]))
     assert topic not in permissions.subscribe
     assert f"{topic}.>" not in permissions.subscribe
     assert permissions.bus_topics == ()
-    assert broker.reserved_topic_problems([f"abi:-:-:bus:topic/{topic}"])
+    assert broker.reserved_topic_problems([f"abi:bus:topic/{topic}"])
 
 
 def test_a_topic_claim_check_is_written_never_read_by_direct_get():
-    permissions = derive(allow(["bus:*"], ["abi:-:-:bus:topic/demo.inbox"]))
+    permissions = derive(allow(["bus:*"], ["abi:bus:topic/demo.inbox"]))
     claims = broker.topic_claim_subjects("demo.inbox")
     assert claims in permissions.publish
     # JetStream answers a direct get on the reply subject the module chose,
@@ -270,8 +270,8 @@ OWN_JOBS = allow(
         "discovery:CancelJobRun",
     ],
     [
-        "abi:-:-:discovery:job/acme/people/nightly",
-        "abi:-:-:discovery:job_run/acme/people/*",
+        "abi:discovery:job/acme/people/nightly",
+        "abi:discovery:job_run/acme/people/*",
     ],
 )
 
@@ -302,14 +302,14 @@ def test_a_host_announces_its_runs_and_a_reader_of_runs_hears_them():
     assert f"abi.jobdone.acme.{mh}.{jh}" in permissions.publish
     assert f"abi.jobdone.acme.{mh}.*" in permissions.subscribe
     reader = derive(
-        allow(["discovery:GetJobRun"], ["abi:-:-:discovery:job_run/acme/billing/*"]),
+        allow(["discovery:GetJobRun"], ["abi:discovery:job_run/acme/billing/*"]),
         module=None,
     )
     assert reader.subscribe[-1] == broker.job_done_subject("acme", "billing")
     assert not any(s.startswith("abi.jobdone.") for s in reader.publish)
     # Triggering a job is not reading its runs.
     trigger_only = derive(
-        allow(["discovery:TriggerJob"], ["abi:-:-:discovery:job/acme/billing/*"])
+        allow(["discovery:TriggerJob"], ["abi:discovery:job/acme/billing/*"])
     )
     assert not any(".jobdone." in s for s in trigger_only.subscribe)
 
@@ -331,7 +331,7 @@ def test_job_subjects_stay_within_the_modules_own():
 
 def test_jobs_of_a_named_module_are_triggered_never_hosted():
     permissions = derive(
-        allow(["discovery:TriggerJob"], ["abi:-:-:discovery:job/acme/billing/*"])
+        allow(["discovery:TriggerJob"], ["abi:discovery:job/acme/billing/*"])
     )
     mh = broker.module_hash("billing")
     assert permissions.may_trigger(f"abi.jobs.acme.trigger.{mh}.{'a' * 32}")
@@ -344,7 +344,7 @@ def test_jobs_of_a_named_module_are_triggered_never_hosted():
 
 
 def test_a_job_resource_without_a_module_grants_no_job_subject():
-    for resources in (["*"], ["abi:-:-:discovery:job/acme/*/*"]):
+    for resources in (["*"], ["abi:discovery:job/acme/*/*"]):
         permissions = derive(allow(["discovery:TriggerJob"], resources))
         assert not any(s.startswith("abi.jobs.") for s in permissions.publish)
         assert permissions.job_triggers == ()
@@ -465,8 +465,8 @@ def kernel_with_iam() -> CatalogRegistry:
 def test_a_deny_of_a_topic_holds_whatever_the_allow_spells_it():
     # ``or%64ers`` decodes to ``orders``: the subjects follow the decoded name.
     permissions = derive(
-        allow(["bus:*"], ["abi:-:-:bus:topic/or%64ers"]),
-        Statement("Deny", ("bus:Consume",), ("abi:-:-:bus:topic/orders",)),
+        allow(["bus:*"], ["abi:bus:topic/or%64ers"]),
+        Statement("Deny", ("bus:Consume",), ("abi:bus:topic/orders",)),
     )
     assert permissions.bus_consume == ()
     assert permissions.bus_publish == ("orders",)
@@ -478,7 +478,7 @@ def test_a_deny_of_a_topic_holds_whatever_the_allow_spells_it():
 )
 def test_a_topic_naming_a_variable_grants_nothing(topic):
     """Nothing substitutes a variable here: the topic would be granted as written."""
-    permissions = derive(allow(["bus:*"], [f"abi:-:-:bus:topic/{topic}"]))
+    permissions = derive(allow(["bus:*"], [f"abi:bus:topic/{topic}"]))
     assert permissions.bus_topics == ()
     assert permissions.bus_publish == ()
-    assert broker.reserved_topic_problems([f"abi:-:-:bus:topic/{topic}"])
+    assert broker.reserved_topic_problems([f"abi:bus:topic/{topic}"])

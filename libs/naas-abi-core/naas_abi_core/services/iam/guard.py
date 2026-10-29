@@ -17,8 +17,8 @@ An owner is always wired with IAM. A facade calling the owner over NATS (the
 dependency container, a client engine) is not, and checks nothing itself: the
 owner it calls checks, once, with the caller the request's credentials name.
 
-Names are canonical (``names.resource_name``); the org and workspace come from
-IAM's placements, never from the request.
+Names are canonical (``names.resource_name``); the container comes from IAM's
+placements, never from the request.
 """
 
 from __future__ import annotations
@@ -27,14 +27,19 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, TypeVar
 
-from naas_abi_core.engine.call_context import as_service_account, current_call_context
+from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.catalog import ActionCatalog, ResourceType
 from naas_abi_core.services.iam.IAMPorts import (
     IIAMService,
     PermissionDeniedError,
     ResourceNotFoundError,
 )
-from naas_abi_core.services.iam.names import NONE, encode_id, resource_name
+from naas_abi_core.services.iam.names import (
+    PLATFORM,
+    UNRESOLVED,
+    encode_id,
+    resource_name,
+)
 
 if TYPE_CHECKING:
     from naas_abi_core.services.ServiceBase import ServiceBase
@@ -67,8 +72,7 @@ class Creation:
     name: str
     service: str
     canonical_id: str
-    org: str
-    workspace: str
+    container: str
     record_exact: bool
     record_prefix: bool
     iam: IIAMService | None
@@ -79,12 +83,10 @@ class Creation:
             return
         with as_service_account(PLACEMENT_WRITER):
             if self.record_exact:
-                self.iam.put_placement(
-                    self.service, self.canonical_id, self.org, self.workspace
-                )
+                self.iam.put_placement(self.service, self.canonical_id, self.container)
             if self.record_prefix:
                 self.iam.put_placement(
-                    self.service, f"{self.canonical_id}/*", self.org, self.workspace
+                    self.service, f"{self.canonical_id}/*", self.container
                 )
 
 
@@ -133,21 +135,22 @@ class ServiceGuard:
     # -- naming -----------------------------------------------------------------
 
     def name(self, type: str, parts: Parts = ()) -> str:
-        """The resource's canonical name, in the org and workspace that own it."""
+        """The resource's canonical name, in the container it sits in (a
+        container's own from IAM's registry)."""
         resource_type = self._type(type)
-        org = workspace = NONE
+        container = PLATFORM
         iam = self.iam
-        if iam is not None and resource_type.placement == "placed":
-            org, workspace = iam.resolve_placement(
+        if iam is not None and resource_type.container:
+            values = [parts] if isinstance(parts, str) else list(parts)
+            found = iam.container(self.service, type, values[0]) if values else None
+            if found is not None:
+                return found
+        elif iam is not None and resource_type.placement == "placed":
+            container = iam.resolve_placement(
                 self.service, encode_id(parts, resource_type.id)
             )
         return resource_name(
-            self.service,
-            type,
-            parts,
-            kind=resource_type.id,
-            org=org,
-            workspace=workspace,
+            self.service, type, parts, kind=resource_type.id, container=container
         )
 
     # -- checks -----------------------------------------------------------------
@@ -202,11 +205,11 @@ class ServiceGuard:
     ) -> Creation:
         """The create rule (``AGENTS.md``, "Placements") for a resource that may not exist yet.
 
-        A name an existing placement covers takes that placement, and the call's
-        target workspace must be empty or match it. Otherwise the target
-        workspace places the new resource (the platform when empty). The create
-        action must be allowed on the name as placed. Call ``record()`` on the
-        result once the create succeeded.
+        A name an existing placement covers takes that placement, and the
+        container of the call must be empty or match it. Otherwise the container
+        of the call places the new resource (the platform when empty, or when IAM
+        does not know it). The create action must be allowed on the name as
+        placed. Call ``record()`` on the result once the create succeeded.
         """
         resource_type = self._type(type)
         canonical = encode_id(parts, resource_type.id)
@@ -216,89 +219,71 @@ class ServiceGuard:
                 resource_name(self.service, type, parts, kind=resource_type.id),
                 self.service,
                 canonical,
-                NONE,
-                NONE,
+                PLATFORM,
                 False,
                 False,
                 None,
             )
         qualified = self.action(action)
-        target = current_call_context().workspace_id or None
+        target = iam.call_container()
         if resource_type.placement == "platform":
             name = resource_name(self.service, type, parts, kind=resource_type.id)
             iam.require(qualified, name, not_found=not_found)
-            return Creation(
-                name, self.service, canonical, NONE, NONE, False, False, iam
-            )
+            return Creation(name, self.service, canonical, PLATFORM, False, False, iam)
         covering = iam.placement_of(self.service, canonical)
         if covering is not None:
-            # A child of an existing container, or a placed name: as placed.
+            # A child of an existing id prefix, or a placed name: as placed.
             name = resource_name(
                 self.service,
                 type,
                 parts,
                 kind=resource_type.id,
-                org=covering.org,
-                workspace=covering.workspace,
+                container=covering.container,
             )
-            mismatch = target is not None and target != covering.workspace
-            if mismatch:
+            if target is not None and target != covering.container:
                 self._deny(iam, qualified, name, not_found)
             iam.require(qualified, name, not_found=not_found)
-            return Creation(
-                name, self.service, canonical, NONE, NONE, False, False, iam
-            )
-        org = workspace = NONE
-        if target is not None:
-            registered = iam.workspace_org(target)
-            # A target workspace IAM has no scope for (Nexus registers its orgs
-            # and workspaces with iam:PutScope) places the new resource on the
-            # platform, where no workspace role reaches it.
-            if registered is not None:
-                org, workspace = registered, target
+            return Creation(name, self.service, canonical, PLATFORM, False, False, iam)
+        if target == UNRESOLVED:
+            # A container IAM does not know (or named under another path): the
+            # create is not found, whoever asks.
+            raise _not_found(not_found, None)
+        container = PLATFORM if target is None else target
         name = resource_name(
-            self.service,
-            type,
-            parts,
-            kind=resource_type.id,
-            org=org,
-            workspace=workspace,
+            self.service, type, parts, kind=resource_type.id, container=container
         )
         iam.require(qualified, name, not_found=not_found)
-        container = resource_type.container
+        prefix = resource_type.id_prefix
         return Creation(
             name,
             self.service,
             canonical,
-            org,
-            workspace,
+            container,
             # Nothing can be created inside a platform-level top-level resource.
-            record_exact=container or workspace != NONE,
-            record_prefix=container,
+            record_exact=prefix or container != PLATFORM,
+            record_prefix=prefix,
             iam=iam,
         )
 
     def place_new(self, type: str, parts: Parts) -> None:
         """Place a resource the backend just created under an id it chose (a sent
-        message), in the call's target workspace. The create was
-        authorized on what names it (the sender); nothing is recorded for the
-        platform or for a workspace IAM does not know."""
+        message), in the container of the call. The create was authorized on
+        what names it (the sender); nothing is recorded for the platform or for a
+        container IAM does not know."""
         iam = self.iam
-        target = current_call_context().workspace_id or None
-        if iam is None or target is None:
+        if iam is None:
             return
-        org = iam.workspace_org(target)
-        if org is None:
+        target = iam.call_container()
+        if target is None or target == UNRESOLVED:
             return
         resource_type = self._type(type)
         Creation(
             self.name(type, parts),
             self.service,
             encode_id(parts, resource_type.id),
-            org,
             target,
             record_exact=True,
-            record_prefix=resource_type.container,
+            record_prefix=resource_type.id_prefix,
             iam=iam,
         ).record()
 
@@ -311,7 +296,7 @@ class ServiceGuard:
         canonical = encode_id(parts, resource_type.id)
         with as_service_account(PLACEMENT_WRITER):
             iam.delete_placement(self.service, canonical)
-            if resource_type.container:
+            if resource_type.id_prefix:
                 iam.delete_placement(self.service, f"{canonical}/*")
 
     @staticmethod

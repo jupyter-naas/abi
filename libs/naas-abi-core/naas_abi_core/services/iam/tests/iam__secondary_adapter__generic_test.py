@@ -9,27 +9,38 @@ import pytest
 from naas_abi_core.services.iam.catalog import ActionCatalog, ActionSpec, ResourceType
 from naas_abi_core.services.iam.IAMPorts import (
     Attachment,
+    ContainerRecord,
     GroupMapping,
     IAMConflictError,
     IAMNotFoundError,
     IAMStore,
     KeyRecord,
+    LegacyPlacement,
     ManifestRecord,
+    NameRewriter,
     PendingGrant,
     Placement,
     Policy,
     PrincipalRecord,
     RevisionConflictError,
-    ScopeRecord,
     SigningKeyRecord,
     new_id,
 )
+from naas_abi_core.services.iam.names import (
+    PLATFORM,
+    UNRESOLVED,
+    container_name,
+)
 from naas_abi_core.services.iam.policy import PolicyDocument, Statement
+
+ORG = container_name("nexus", "organization", "org-1")
+WS = container_name("nexus", "workspace", "ws-1", parent=ORG)
+WS_2 = container_name("nexus", "workspace", "ws-2", parent=ORG)
 
 DOCUMENT = PolicyDocument(
     statements=(
         Statement(
-            "Allow", ("triple_store:Query",), ("abi:-:-:triple_store:graph/*",), "Read"
+            "Allow", ("triple_store:Query",), ("abi:triple_store:graph/*",), "Read"
         ),
         Statement("Deny", ("*",), ("*",)),
     )
@@ -51,8 +62,8 @@ def service_account(name: str = "module/acme/people") -> PrincipalRecord:
     return PrincipalRecord(id=new_id("sa"), kind="service_account", name=name)
 
 
-def group(name: str = "sales", org: str | None = "org-1") -> PrincipalRecord:
-    return PrincipalRecord(id=new_id("grp"), kind="group", name=name, org=org)
+def group(name: str = "sales") -> PrincipalRecord:
+    return PrincipalRecord(id=new_id("grp"), kind="group", name=name)
 
 
 def policy(policy_id: str | None = None, name: str = "read") -> Policy:
@@ -261,24 +272,24 @@ class IAMStoreContract(ABC):
         from dataclasses import replace
 
         platform = store.create_policy(policy())
-        mine = store.create_policy(replace(policy(), owner_scope="abi:org-1:ws-1"))
-        org = store.create_policy(replace(policy(), owner_scope="abi:org-1:-"))
-        assert platform.owner_scope == "abi:-:-"
-        assert store.get_policy(mine.id).owner_scope == "abi:org-1:ws-1"
-        listed = store.list_policies(owner_scopes=["abi:org-1:ws-1", "abi:org-1:-"])
+        mine = store.create_policy(replace(policy(), owner_scope=WS))
+        org = store.create_policy(replace(policy(), owner_scope=ORG))
+        assert platform.owner_scope == PLATFORM
+        assert store.get_policy(mine.id).owner_scope == WS
+        listed = store.list_policies(owner_scopes=[WS, ORG])
         assert [p.id for p in listed.items] == sorted([mine.id, org.id])
         assert store.list_policies(owner_scopes=[]).items == []
         updated = store.update_policy(replace(mine, name="renamed"), 1)
-        assert updated.owner_scope == "abi:org-1:ws-1"
+        assert updated.owner_scope == WS
 
-        team = store.create_principal(replace(group(), owner_scope="abi:org-1:ws-1"))
-        everyone = store.create_principal(group("everyone", org=None))
-        assert everyone.owner_scope == "abi:-:-"
-        assert store.get_principal(team.id).owner_scope == "abi:org-1:ws-1"
-        owned = store.list_principals("group", owner_scopes=["abi:org-1:ws-1"])
+        team = store.create_principal(replace(group(), owner_scope=WS))
+        everyone = store.create_principal(group("everyone"))
+        assert everyone.owner_scope == PLATFORM
+        assert store.get_principal(team.id).owner_scope == WS
+        owned = store.list_principals("group", owner_scopes=[WS])
         assert [g.id for g in owned.items] == [team.id]
         kept = store.update_principal(replace(team, name="analysts"))
-        assert (kept.name, kept.owner_scope) == ("analysts", "abi:org-1:ws-1")
+        assert (kept.name, kept.owner_scope) == ("analysts", WS)
 
     def test_attached_policy_cannot_be_deleted(self, store: IAMStore):
         read = store.create_policy(policy())
@@ -352,14 +363,12 @@ class IAMStoreContract(ABC):
         bob = store.create_principal(user())
         sales = store.create_principal(group())
         plain = store.attach(Attachment(new_id("att"), read.id, bob.id))
-        scoped = store.attach(
-            Attachment(new_id("att"), read.id, bob.id, "abi:org-1:ws-1")
-        )
+        scoped = store.attach(Attachment(new_id("att"), read.id, bob.id, WS))
         via_group = store.attach(Attachment(new_id("att"), read.id, sales.id))
-        assert plain.scope is None and scoped.scope == "abi:org-1:ws-1"
+        assert plain.scope is None and scoped.scope == WS
         assert plain.created_at is not None
         with pytest.raises(IAMConflictError):
-            store.attach(Attachment(new_id("att"), read.id, bob.id, "abi:org-1:ws-1"))
+            store.attach(Attachment(new_id("att"), read.id, bob.id, WS))
         assert {a.id for a in store.list_attachments(principal_id=bob.id)} == {
             plain.id,
             scoped.id,
@@ -371,8 +380,8 @@ class IAMStoreContract(ABC):
             via_group.id,
         }
         assert store.attachments_for([]) == []
-        assert store.detach(read.id, bob.id, "abi:org-1:ws-1") is True
-        assert store.detach(read.id, bob.id, "abi:org-1:ws-1") is False
+        assert store.detach(read.id, bob.id, WS) is True
+        assert store.detach(read.id, bob.id, WS) is False
         assert store.list_attachments(principal_id=bob.id) == [plain]
 
     def test_attach_needs_the_policy_and_the_principal(self, store: IAMStore):
@@ -387,7 +396,7 @@ class IAMStoreContract(ABC):
 
     def test_pending_grants_round_trip(self, store: IAMStore):
         read = store.create_policy(policy())
-        scope = "abi:org-1:ws-1"
+        scope = WS
         first = store.add_pending_grant(
             PendingGrant(new_id("pgr"), "builtin", "bob@example.com", read.id, scope)
         )
@@ -431,7 +440,7 @@ class IAMStoreContract(ABC):
     def test_claiming_a_pending_grant_attaches_it_once(self, store: IAMStore):
         read = store.create_policy(policy())
         bob = store.create_principal(user())
-        scope = "abi:org-1:ws-1"
+        scope = WS
         grant = store.add_pending_grant(
             PendingGrant(new_id("pgr"), "builtin", "bob@example.com", read.id, scope)
         )
@@ -452,11 +461,9 @@ class IAMStoreContract(ABC):
     def test_claiming_keeps_an_attachment_that_exists(self, store: IAMStore):
         read = store.create_policy(policy())
         bob = store.create_principal(user())
-        held = store.attach(Attachment(new_id("att"), read.id, bob.id, "abi:o:w"))
+        held = store.attach(Attachment(new_id("att"), read.id, bob.id, WS))
         grant = store.add_pending_grant(
-            PendingGrant(
-                new_id("pgr"), "builtin", "bob@example.com", read.id, "abi:o:w"
-            )
+            PendingGrant(new_id("pgr"), "builtin", "bob@example.com", read.id, WS)
         )
         assert store.claim_pending_grant(grant.id, bob.id, new_id("att")) == held
         assert store.list_attachments(principal_id=bob.id) == [held]
@@ -471,37 +478,150 @@ class IAMStoreContract(ABC):
             store.claim_pending_grant(grant.id, new_id("usr"), new_id("att"))
         assert store.list_pending_grants() == [grant]
 
-    # -- placements and scopes ----------------------------------------------------
+    # -- placements and containers ----------------------------------------------
 
     def test_placements(self, store: IAMStore):
-        store.put_placement(Placement("document", "nexus-ws-1", "org-1", "ws-1"))
-        store.put_placement(Placement("document", "nexus-ws-1/*", "org-1", "ws-1"))
-        store.put_placement(
-            Placement("triple_store", "http%3A%2F%2Fx", "org-1", "ws-2")
-        )
-        store.put_placement(Placement("document", "nexus-ws-1", "org-1", "ws-9"))
+        store.put_placement(Placement("document", "nexus-ws-1", WS))
+        store.put_placement(Placement("document", "nexus-ws-1/*", WS))
+        store.put_placement(Placement("triple_store", "http%3A%2F%2Fx", WS_2))
+        store.put_placement(Placement("document", "nexus-ws-1", ORG))
+        store.put_placement(Placement("document", "module", PLATFORM))
         assert store.list_placements("document") == [
-            Placement("document", "nexus-ws-1", "org-1", "ws-9"),
-            Placement("document", "nexus-ws-1/*", "org-1", "ws-1"),
+            Placement("document", "module", PLATFORM),
+            Placement("document", "nexus-ws-1", ORG),
+            Placement("document", "nexus-ws-1/*", WS),
         ]
-        assert len(store.list_placements()) == 3
+        assert len(store.list_placements()) == 4
         assert store.delete_placement("document", "nexus-ws-1/*") is True
         assert store.delete_placement("document", "nexus-ws-1/*") is False
 
-    def test_scopes(self, store: IAMStore):
-        store.put_scope(ScopeRecord("org-1"))
-        store.put_scope(ScopeRecord("org-1", "ws-1"))
-        store.put_scope(ScopeRecord("org-1", "ws-1"))  # idempotent
-        store.put_scope(ScopeRecord("org-2", "ws-2"))
-        with pytest.raises(IAMConflictError):
-            store.put_scope(ScopeRecord("org-2", "ws-1"))
-        assert store.list_scopes("org-1") == [
-            ScopeRecord("org-1", "-"),
-            ScopeRecord("org-1", "ws-1"),
+    def test_containers(self, store: IAMStore):
+        org = ContainerRecord("nexus", "organization", "org-1")
+        ws = ContainerRecord("nexus", "workspace", "ws-1", ORG)
+        store.put_container(org)
+        store.put_container(ws)
+        before = store.revision()
+        store.put_container(ws)  # idempotent
+        assert store.revision() == before
+        with pytest.raises(IAMConflictError):  # a container never moves
+            store.put_container(ContainerRecord("nexus", "workspace", "ws-1"))
+        found = store.get_container("nexus", "workspace", "ws-1")
+        assert found == ws and found is not None and found.name == WS
+        assert store.get_container("nexus", "workspace", "ws-9") is None
+        assert store.list_containers() == [org, ws]
+
+    def test_deleting_containers_drops_the_placements_in_them(self, store: IAMStore):
+        org = ContainerRecord("nexus", "organization", "org-1")
+        ws = ContainerRecord("nexus", "workspace", "ws-1", ORG)
+        other = ContainerRecord("nexus", "workspace", "ws-2", ORG)
+        for record in (org, ws, other):
+            store.put_container(record)
+        project = container_name("crm", "project", "p-1", parent=WS)
+        store.put_placement(Placement("document", "nexus-ws-1", WS))
+        store.put_placement(Placement("crm", "deal-1", project))
+        store.put_placement(Placement("document", "nexus-ws-2", WS_2))
+        store.put_placement(Placement("document", "module", PLATFORM))
+        before = store.revision()
+        assert store.delete_containers([ws]) == 1
+        assert store.revision() > before
+        assert store.delete_containers([]) == 0
+        assert store.list_containers() == [org, other]
+        # What sat in it or below it goes; the rest stays.
+        assert store.list_placements() == [
+            Placement("document", "module", PLATFORM),
+            Placement("document", "nexus-ws-2", WS_2),
         ]
-        assert len(store.list_scopes()) == 3
-        assert store.delete_scope("org-1", "ws-1") is True
-        assert store.delete_scope("org-1", "ws-1") is False
+
+    def test_rewriting_the_names(self, store: IAMStore):
+        from dataclasses import replace
+
+        old = PolicyDocument(
+            statements=(
+                Statement(
+                    "Allow", ("triple_store:Query",), ("${scope}:triple_store:*",)
+                ),
+            )
+        )
+        written = store.create_policy(
+            replace(policy(), document=old, owner_scope="abi:org-1:ws-1")
+        )
+        kept = store.create_policy(policy())
+        team = store.create_principal(replace(group(), owner_scope="abi:org-1:-"))
+        bob = store.create_principal(user())
+        attached = store.attach(
+            Attachment(new_id("att"), written.id, bob.id, "abi:org-1:ws-1")
+        )
+        unscoped = store.attach(Attachment(new_id("att"), kept.id, bob.id))
+        invited = store.add_pending_grant(
+            PendingGrant(
+                new_id("pgr"), "builtin", "ann@example.com", kept.id, "abi:org-1:*"
+            )
+        )
+        store.create_key(
+            KeyRecord(
+                "abcdefghijklmnop",
+                bob.id,
+                "a" * 64,
+                kind="personal",
+                scope=(
+                    {
+                        "effect": "Allow",
+                        "actions": ["triple_store:Query"],
+                        "resources": ["abi:org-1:ws-1:triple_store:graph/*"],
+                    },
+                ),
+            )
+        )
+        store.put_placement(Placement("document", "today", WS_2))
+
+        rewriter = _Rewriter()
+        counts = store.rewrite_names(rewriter)
+        assert counts["containers"] == 2
+        assert (counts["policies"], counts["groups"]) == (1, 1)
+        assert (counts["attachments"], counts["pending_grants"]) == (1, 1)
+        assert counts["keys"] == 1
+        assert store.list_containers() == list(rewriter.containers())
+        rewritten = store.get_policy(written.id)
+        assert rewritten.owner_scope == WS
+        assert rewritten.revision == written.revision + 1
+        assert rewritten.document.statements[0].resources == (
+            "${scope}/triple_store:*",
+        )
+        assert store.get_policy(kept.id).revision == kept.revision
+        assert store.get_principal(team.id).owner_scope == ORG
+        assert {a.id: a.scope for a in store.list_attachments(principal_id=bob.id)} == {
+            attached.id: WS,
+            unscoped.id: None,
+        }
+        grant = store.get_pending_grant(invited.id)
+        assert grant is not None and grant.scope == ORG + "/*"
+        key = store.get_key("abcdefghijklmnop")
+        assert key is not None and key.scope is not None
+        assert key.scope[0]["resources"] == [WS + "/triple_store:graph/*"]
+        assert Placement("document", "today", WS_2) in store.list_placements()
+
+        # Again: what is a path already is kept.
+        assert set(store.rewrite_names(rewriter).values()) == {0}
+        assert store.get_policy(written.id).revision == written.revision + 1
+
+    def test_a_placement_of_the_old_form_is_rewritten(self, store: IAMStore):
+        """Only an upgraded store holds one: its SQL test seeds the row, the
+        memory store ``seed_legacy_placement``."""
+        if not hasattr(store, "seed_legacy_placement"):
+            pytest.skip("seeded by the SQL upgrade tests")
+        store.seed_legacy_placement(  # type: ignore[attr-defined]
+            Placement("document", "nexus-ws-1"), "abi:org-1:ws-1"
+        )
+        assert store.list_placements() == [
+            Placement("document", "nexus-ws-1", UNRESOLVED)
+        ]
+        rewriter = _Rewriter()
+        assert store.rewrite_names(rewriter)["placements"] == 1
+        assert store.list_placements() == [Placement("document", "nexus-ws-1", WS)]
+        assert rewriter.seen == [
+            LegacyPlacement("document", "nexus-ws-1", "abi:org-1:ws-1")
+        ]
+        assert store.rewrite_names(rewriter)["placements"] == 0
 
     def test_no_legacy_scope_sets_on_a_new_store(self, store: IAMStore):
         assert store.legacy_scope_sets() == []
@@ -710,3 +830,63 @@ class IAMStoreContract(ABC):
         store.retire_signing_key(record.kid, retired)
         store.retire_signing_key(record.kid, retired + timedelta(days=1))
         assert store.list_signing_keys()[0].retires_at == retired
+
+
+class _Rewriter(NameRewriter):
+    """The names of org-1 and its workspaces, as Nexus rewrites them: ``abi:O:W``
+    to its workspace, ``abi:O:-`` to the org, ``abi:O:*`` below it."""
+
+    def __init__(self) -> None:
+        self.seen: list[LegacyPlacement] = []
+
+    def containers(self) -> list[ContainerRecord]:
+        return [
+            ContainerRecord("nexus", "organization", "org-1"),
+            ContainerRecord("nexus", "workspace", "ws-1", ORG),
+        ]
+
+    def _container(self, old: str) -> str:
+        _, org, workspace = old.split(":")
+        if org == "-":
+            return PLATFORM
+        org_name = container_name("nexus", "organization", org)
+        if workspace == "-":
+            return org_name
+        if workspace == "*":
+            return org_name + "/*"
+        return container_name("nexus", "workspace", workspace, parent=org_name)
+
+    def _old(self, value: str) -> bool:
+        return value.startswith("abi:") and value.count(":") == 2 and "/" not in value
+
+    def scope(self, scope: str | None) -> str | None:
+        return self._container(scope) if scope and self._old(scope) else scope
+
+    def owner(self, owner: str) -> str:
+        return self._container(owner) if self._old(owner) else owner
+
+    def _pattern(self, pattern: str) -> str:
+        if pattern.startswith("${scope}:"):
+            return "${scope}/" + pattern[len("${scope}:") :]
+        parts = pattern.split(":", 3)
+        if len(parts) == 4 and parts[0] == "abi" and "/" not in parts[1] + parts[2]:
+            container = self._container(":".join(parts[:3]))
+            return (
+                f"{container}/{parts[3]}"
+                if container != PLATFORM
+                else f"abi:{parts[3]}"
+            )
+        return pattern
+
+    def statements(self, statements):
+        return [
+            {**s, "resources": [self._pattern(r) for r in s["resources"]]}
+            for s in statements
+        ]
+
+    def document(self, document):
+        return {**document, "statements": self.statements(document["statements"])}
+
+    def placement(self, placement: LegacyPlacement) -> str:
+        self.seen.append(placement)
+        return self._container(placement.scope)

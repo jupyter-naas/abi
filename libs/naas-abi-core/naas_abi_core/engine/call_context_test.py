@@ -11,6 +11,9 @@ from naas_abi_core.engine.call_context import (
     user,
 )
 
+# The container a call is made in: request data, carried as is.
+WS = "abi:nexus:organization/org-1/nexus:workspace/ws-1"
+
 
 def test_the_engine_and_the_sdk_share_one_context():
     caller = CallContext(principal=service_account("api"), on_behalf_of=user("usr-ada"))
@@ -27,7 +30,7 @@ def test_as_service_account_acts_for_nobody_and_keeps_the_target():
         audience="abi:nats",
         token_id="jti-1",
         scope=({"effect": "Allow"},),
-        workspace_id="ws-1",
+        container=WS,
         trace_id="trace-1",
     )
     with use_call_context(caller), as_service_account("engine") as engine:
@@ -35,7 +38,7 @@ def test_as_service_account_acts_for_nobody_and_keeps_the_target():
         assert engine.principal == service_account("engine")
         assert engine.user is None
         assert (engine.audience, engine.token_id, engine.scope) == (None, None, None)
-        assert (engine.workspace_id, engine.trace_id) == ("ws-1", "trace-1")
+        assert (engine.container, engine.trace_id) == (WS, "trace-1")
         assert current_call_context() is engine
     assert current_call_context() == sdk.ANONYMOUS
 

@@ -21,6 +21,7 @@ from naas_abi_core.services.iam.catalog import ActionCatalog
 from naas_abi_core.services.iam.IAMPorts import (
     GRANT_TYPE_TOKEN_EXCHANGE,
     Attachment,
+    ContainerRecord,
     CreatedKey,
     Decision,
     Explanation,
@@ -40,9 +41,9 @@ from naas_abi_core.services.iam.IAMPorts import (
     Policy,
     PrincipalKind,
     PrincipalRecord,
-    ScopeRecord,
     TokenExchange,
 )
+from naas_abi_core.services.iam.names import PLATFORM_SCOPE
 from naas_abi_core.services.iam.policy import PolicyDocument
 from naas_abi_proto.iam.v1 import iam_pb2 as pb
 
@@ -82,14 +83,14 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
         resource_type: str,
         parts: Sequence[str],
         *,
-        workspace: str | None = None,
+        container: str | None = None,
     ) -> tuple[Decision, str]:
         response = self._request(
             "authorize_declared",
             action=action,
             resource_type=resource_type,
             parts=list(parts),
-            workspace_id=workspace or "",
+            container=container or "",
         )
         return codec.decision_from_pb(response.decision), response.resource
 
@@ -169,11 +170,9 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
 
     # -- groups -------------------------------------------------------------------------
 
-    def create_group(
-        self, name: str, *, org: str | None = None, scope: str | None = None
-    ) -> PrincipalRecord:
+    def create_group(self, name: str, *, scope: str | None = None) -> PrincipalRecord:
         return codec.principal_from_pb(
-            self._request("create_group", name=name, org=org, scope=scope).group
+            self._request("create_group", name=name, scope=scope).group
         )
 
     def get_group(self, group_id: str) -> PrincipalRecord:
@@ -382,11 +381,11 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
     # -- placements, scopes, catalogs -----------------------------------------------------
 
     def put_placement(
-        self, service: str, id_key: str, org: str = "-", workspace: str = "-"
+        self, service: str, id_key: str, container: str = PLATFORM_SCOPE
     ) -> Placement:
         response = self._request(
             "put_placement",
-            placement=codec.placement_to_pb(Placement(service, id_key, org, workspace)),
+            placement=codec.placement_to_pb(Placement(service, id_key, container)),
         )
         return codec.placement_from_pb(response.placement)
 
@@ -403,18 +402,24 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
             "serving engine, never through a NATS facade"
         )
 
-    def put_scope(self, org: str, workspace: str = "-") -> ScopeRecord:
-        response = self._request("put_scope", org=org, workspace=workspace)
-        return codec.scope_from_pb(response.scope)
-
-    def workspace_org(self, workspace: str) -> str | None:
-        raise NotImplementedError(
-            "Scopes are read by the service owning the resource, on the serving "
-            "engine, never through a NATS facade"
+    def register_container(
+        self, service: str, type: str, id: str, *, parent: str = PLATFORM_SCOPE
+    ) -> ContainerRecord:
+        response = self._request(
+            "register_container", service=service, type=type, id=id, parent=parent
         )
+        return codec.container_from_pb(response.container)
 
-    def delete_scope(self, org: str, workspace: str = "-") -> bool:
-        return self._request("delete_scope", org=org, workspace=workspace).deleted
+    def delete_container(self, service: str, type: str, id: str) -> bool:
+        return self._request(
+            "delete_container", service=service, type=type, id=id
+        ).deleted
+
+    def container(self, service: str, type: str, id: str) -> str | None:
+        return (
+            self._request("get_container", service=service, type=type, id=id).name
+            or None
+        )
 
     def register_catalog(self, catalog: Any) -> bool:
         if not isinstance(catalog, ActionCatalog):

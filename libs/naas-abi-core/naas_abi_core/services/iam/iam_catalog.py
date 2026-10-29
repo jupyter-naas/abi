@@ -1,10 +1,11 @@
 """IAM's own catalog and the seals.
 
 IAM authorizes its own operations with these actions, like any other service.
-Three resource types are named in an org or a workspace: ``attachment``, at its
-attachment's scope, ``policy`` and ``group``, at the scope that owns them, so
-the admins of a workspace or an org manage that level's roles, policies and
-groups. Every other type is platform-level.
+Three resource types are named in a container: ``attachment``, in its
+attachment's scope's container, ``policy`` and ``group``, in the container that
+owns them, so the admins of a container manage its roles, policies and groups.
+The platform's own are named at the platform, where no ``${scope}`` reaches
+them. Every other type is platform-level.
 """
 
 from __future__ import annotations
@@ -45,7 +46,10 @@ CATALOG = ActionCatalog(
     # 6: organisation and workspace sets (GetSet, PutSet).
     # 7: no more sets (the store's migration takes their actions out of the
     # policies that named them).
-    version=7,
+    # 8: container paths: the registry of containers (``container``) and the
+    # rewrite of the names before them (RewriteNames); PutScope and
+    # DeleteScope authorize nothing but the reading of the legacy sets.
+    version=8,
     resource_types=(
         ResourceType("principal", id="opaque", placement="platform"),
         ResourceType(
@@ -69,7 +73,18 @@ CATALOG = ActionCatalog(
         ResourceType("key", id="path", placement="platform", personal=True),
         ResourceType("manifest", id="opaque", placement="platform"),
         ResourceType("placement", id="path", placement="platform"),
-        ResourceType("scope", id="path", placement="platform"),
+        ResourceType(
+            "scope",
+            id="path",
+            placement="platform",
+            description="Deprecated: the orgs and workspaces before container paths.",
+        ),
+        ResourceType(
+            "container",
+            id="path",
+            placement="platform",
+            description="container/<service>/<type>/<id>: IAM's record of a container.",
+        ),
         ResourceType("catalog", id="opaque", placement="platform"),
         ResourceType("audience", id="opaque", placement="platform"),
     ),
@@ -153,8 +168,11 @@ CATALOG = ActionCatalog(
         _action("RejectManifest", "admin", ("manifest",), "reject_manifest"),
         _action("PutPlacement", "admin", ("placement",), "put_placement"),
         _action("DeletePlacement", "admin", ("placement",), "delete_placement"),
-        _action("PutScope", "admin", ("scope",), "put_scope"),
-        _action("DeleteScope", "admin", ("scope",), "delete_scope"),
+        # Deprecated: kept so a policy naming them never blocks the catalog;
+        # DeleteScope reads the legacy sets (IAMService.legacy_scope_sets).
+        _action("PutScope", "admin", ("scope",)),
+        _action("DeleteScope", "admin", ("scope",)),
+        _action("RewriteNames", "admin", ("container",)),
         _action("RegisterCatalog", "admin", ("catalog",), "register_catalog"),
     ),
 )

@@ -17,6 +17,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     IIAMService,
 )
 from naas_abi_core.services.iam.IAMService import IAMService
+from naas_abi_core.services.iam.names import anywhere
 from naas_abi_core.services.iam.policy import PolicyDocument
 from naas_abi_core.services.iam.tests import sub_policy_contract as contract
 from naas_abi_core.services.iam.tests.iam_harness import (
@@ -24,10 +25,11 @@ from naas_abi_core.services.iam.tests.iam_harness import (
     document,
     graph,
     statement,
+    workspace,
 )
 
 QUERY = "triple_store:Query"
-WS1 = "abi:org-1:ws-1"
+WS1 = workspace("ws-1")
 
 
 def _as_user(h: IAMHarness):
@@ -45,9 +47,13 @@ def test_sub_policy_scenarios_in_process(h, scenario):
 
 
 def _scopes(h: IAMHarness) -> None:
-    h.admin("put_scope", "org-1")
-    h.admin("put_scope", "org-1", "ws-1")
-    h.admin("put_scope", "org-1", "ws-2")
+    h.register("ws-1")
+    h.register("ws-2")
+
+
+def _delete_ws1(h: IAMHarness) -> None:
+    with as_service_account("api"):
+        h.iam.delete_container("nexus", "workspace", "ws-1")
 
 
 def test_the_parents_variables_come_from_the_sub_policys_attachment(h):
@@ -58,13 +64,13 @@ def test_the_parents_variables_come_from_the_sub_policys_attachment(h):
         "create_policy",
         "own graphs",
         document(
-            statement("Allow", [QUERY], ["${scope}:triple_store:graph/${principal.id}"])
+            statement("Allow", [QUERY], ["${scope}/triple_store:graph/${principal.id}"])
         ),
     )
     child = h.admin(
         "create_policy",
         "graphs",
-        document(statement("Allow", [QUERY], ["${scope}:triple_store:graph/*"])),
+        document(statement("Allow", [QUERY], ["${scope}/triple_store:graph/*"])),
         scope=WS1,
         parent=parent.id,
     )
@@ -80,18 +86,18 @@ def test_the_parents_variables_come_from_the_sub_policys_attachment(h):
 
 
 def test_a_parent_allow_beyond_scope_bounds_a_scoped_sub_policy(h):
-    """A parent's Allows are bounds: one written for every org still bounds a
+    """A parent's Allows are bounds: one written for every container still bounds a
     workspace's sub-policy attached at its scope."""
     _scopes(h)
     parent = h.admin(
         "create_policy",
         "sales anywhere",
-        document(statement("Allow", [QUERY], ["abi:*:*:triple_store:graph/sales"])),
+        document(statement("Allow", [QUERY], anywhere("triple_store:graph/sales"))),
     )
     child = h.admin(
         "create_policy",
         "ws graphs",
-        document(statement("Allow", [QUERY], ["${scope}:triple_store:graph/*"])),
+        document(statement("Allow", [QUERY], ["${scope}/triple_store:graph/*"])),
         scope=WS1,
         parent=parent.id,
     )
@@ -107,12 +113,12 @@ def test_a_sub_policy_whose_chain_uses_scope_is_attached_at_a_scope(h):
     parent = h.admin(
         "create_policy",
         "ws graphs",
-        document(statement("Allow", [QUERY], ["${scope}:triple_store:graph/*"])),
+        document(statement("Allow", [QUERY], ["${scope}/triple_store:graph/*"])),
     )
     child = h.admin(
         "create_policy",
         "every graph",
-        document(statement("Allow", [QUERY], ["abi:*:*:triple_store:graph/*"])),
+        document(statement("Allow", [QUERY], anywhere("triple_store:graph/*"))),
         parent=parent.id,
     )
     with pytest.raises(ValueError, match="scope"):
@@ -121,20 +127,20 @@ def test_a_sub_policy_whose_chain_uses_scope_is_attached_at_a_scope(h):
 
 def test_a_parent_deny_beyond_scope_is_attached_at_a_scope_by_the_platform_admin(h):
     """The chain's Deny is the sub-policy's: as for a platform policy denying
-    beyond ``${scope}:``, a scope's admin does not impose it."""
+    beyond ``${scope}``, a scope's admin does not impose it."""
     _scopes(h)
     parent = h.admin(
         "create_policy",
         "no hr anywhere",
         document(
-            statement("Allow", [QUERY], ["${scope}:triple_store:graph/*"]),
-            statement("Deny", [QUERY], ["abi:*:*:triple_store:graph/hr"]),
+            statement("Allow", [QUERY], ["${scope}/triple_store:graph/*"]),
+            statement("Deny", [QUERY], anywhere("triple_store:graph/hr")),
         ),
     )
     child = h.admin(
         "create_policy",
         "ws graphs",
-        document(statement("Allow", [QUERY], ["${scope}:triple_store:graph/*"])),
+        document(statement("Allow", [QUERY], ["${scope}/triple_store:graph/*"])),
         scope=WS1,
         parent=parent.id,
     )
@@ -157,15 +163,15 @@ def test_a_chain_iam_cannot_read_whole_grants_nothing(h):
     parent = h.admin(
         "create_policy",
         "graphs",
-        document(statement("Allow", [QUERY], ["${scope}:triple_store:graph/*"])),
+        document(statement("Allow", [QUERY], ["${scope}/triple_store:graph/*"])),
     )
     child = h.admin(
         "create_policy",
         "ws graphs",
         document(
-            statement("Allow", [QUERY], ["${scope}:triple_store:graph/*"]),
+            statement("Allow", [QUERY], ["${scope}/triple_store:graph/*"]),
             statement(
-                "Deny", ["triple_store:Insert"], ["${scope}:triple_store:graph/*"]
+                "Deny", ["triple_store:Insert"], ["${scope}/triple_store:graph/*"]
             ),
         ),
         scope=WS1,
@@ -191,18 +197,14 @@ def test_a_narrowed_parent_reaches_another_process_on_its_change_event(h):
         "create_policy",
         "a and b",
         document(
-            statement(
-                "Allow", [QUERY], [graph("a").replace("abi:org-1:ws-1", "${scope}")]
-            ),
-            statement(
-                "Allow", [QUERY], [graph("b").replace("abi:org-1:ws-1", "${scope}")]
-            ),
+            statement("Allow", [QUERY], [graph("a").replace(WS1, "${scope}")]),
+            statement("Allow", [QUERY], [graph("b").replace(WS1, "${scope}")]),
         ),
     )
     child = h.admin(
         "create_policy",
         "ws graphs",
-        document(statement("Allow", [QUERY], ["${scope}:triple_store:graph/*"])),
+        document(statement("Allow", [QUERY], ["${scope}/triple_store:graph/*"])),
         scope=WS1,
         parent=parent.id,
     )
@@ -217,9 +219,7 @@ def test_a_narrowed_parent_reaches_another_process_on_its_change_event(h):
         parent.id,
         expected_revision=1,
         document=document(
-            statement(
-                "Allow", [QUERY], [graph("a").replace("abi:org-1:ws-1", "${scope}")]
-            )
+            statement("Allow", [QUERY], [graph("a").replace(WS1, "${scope}")])
         ),
     )
     assert h.allowed(QUERY, graph("a"), bob) and not h.allowed(QUERY, graph("b"), bob)
@@ -236,19 +236,17 @@ def test_a_module_variable_of_a_parent_is_bound_for_the_module(h):
         parent = h.iam.create_policy(
             "own namespace",
             document(
-                statement(
-                    "Allow", [QUERY], ["abi:-:-:triple_store:graph/${module.id}-*"]
-                )
+                statement("Allow", [QUERY], ["abi:triple_store:graph/${module.id}-*"])
             ),
         )
         child = h.iam.create_policy(
             "graphs",
-            document(statement("Allow", [QUERY], ["abi:-:-:triple_store:graph/*"])),
+            document(statement("Allow", [QUERY], ["abi:triple_store:graph/*"])),
             parent=parent.id,
         )
     account = h.service_account("module/acme/people")
     h.attach(child.id, account.id)
-    platform = "abi:-:-:triple_store:graph/"
+    platform = "abi:triple_store:graph/"
     assert h.allowed(QUERY, platform + "people-x", account)
     assert not h.allowed(QUERY, platform + "crm-x", account)
 
@@ -257,42 +255,42 @@ def _ws_policy(h: IAMHarness, name: str, parent: str | None = None):
     return h.admin(
         "create_policy",
         name,
-        document(statement("Allow", [QUERY], ["${scope}:triple_store:graph/*"])),
+        document(statement("Allow", [QUERY], ["${scope}/triple_store:graph/*"])),
         scope=WS1,
         parent=parent,
     )
 
 
-def test_deleting_a_scope_goes_through_a_cycle_its_policies_were_left_in(h):
+def test_deleting_a_container_goes_through_a_cycle_its_policies_were_left_in(h):
     """Two policies of ws-1 parents of each other (two concurrent writes): the
-    scope's deletion cuts the cycle and deletes them, its groups after."""
+    container's deletion cuts the cycle and deletes them, its groups after."""
     _scopes(h)
     first = _ws_policy(h, "first")
     second = _ws_policy(h, "second", parent=first.id)
     h.iam.store.update_policy(replace(first, parent_id=second.id), first.revision)
     group = h.admin("create_group", "analysts", scope=WS1)
-    h.admin("delete_scope", "org-1", "ws-1")
+    _delete_ws1(h)
     for gone in (first.id, second.id):
         with pytest.raises(IAMNotFoundError):
             h.iam.store.get_policy(gone)
     assert h.iam.store.get_principal(group.id).status == "deleted"
 
 
-def test_deleting_a_scope_refuses_up_front_a_sub_policy_owned_elsewhere(h):
+def test_deleting_a_container_refuses_up_front_a_sub_policy_owned_elsewhere(h):
     """Only a write that bypasses IAM makes one; nothing is detached or deleted."""
     _scopes(h)
     parent = _ws_policy(h, "ws-1's")
     stray = h.admin(
         "create_policy",
         "ws-2's",
-        document(statement("Allow", [QUERY], ["${scope}:triple_store:graph/*"])),
-        scope="abi:org-1:ws-2",
+        document(statement("Allow", [QUERY], ["${scope}/triple_store:graph/*"])),
+        scope=workspace("ws-2"),
     )
     h.iam.store.update_policy(replace(stray, parent_id=parent.id), stray.revision)
     bob = h.user()
     h.attach(parent.id, bob.id, WS1)
     with pytest.raises(IAMConflictError, match=stray.id):
-        h.admin("delete_scope", "org-1", "ws-1")
+        _delete_ws1(h)
     assert h.iam.store.get_policy(parent.id).id == parent.id
     assert h.iam.store.list_attachments(policy_id=parent.id)
 
@@ -317,7 +315,7 @@ def test_a_write_reads_the_chain_from_the_store_not_the_cache(h):
     parent = h.admin(
         "create_policy",
         "graphs",
-        document(statement("Allow", [QUERY], ["${scope}:triple_store:graph/*"])),
+        document(statement("Allow", [QUERY], ["${scope}/triple_store:graph/*"])),
     )
     child = _ws_policy(h, "ws graphs", parent=parent.id)
     admin, bob = h.user("admin"), h.user("bob")
@@ -329,8 +327,8 @@ def test_a_write_reads_the_chain_from_the_store_not_the_cache(h):
             parent,
             document=PolicyDocument.from_dict(
                 document(
-                    statement("Allow", [QUERY], ["${scope}:triple_store:graph/*"]),
-                    statement("Deny", [QUERY], ["abi:*:*:triple_store:graph/hr"]),
+                    statement("Allow", [QUERY], ["${scope}/triple_store:graph/*"]),
+                    statement("Deny", [QUERY], anywhere("triple_store:graph/hr")),
                 )
             ),
         ),

@@ -1,4 +1,5 @@
-"""Policies and groups owned by an org or a workspace: the acceptance scenario,
+"""Policies and groups owned by a container (an organisation or a workspace of
+it): the acceptance scenario,
 run in process (``IAMService_owned_test.py``) and over NATS
 (``IAMSecondaryAdapterNATSClient_test.py``).
 
@@ -22,12 +23,22 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalRecord,
 )
 from naas_abi_core.services.iam.IAMService import IAMService
-from naas_abi_core.services.iam.tests.iam_harness import document, graph, statement
+from naas_abi_core.services.iam.names import anywhere
+from naas_abi_core.services.iam.tests.iam_harness import (
+    NEXUS,
+    below,
+    document,
+    graph,
+    name_in,
+    org,
+    statement,
+    workspace,
+)
 
 ORG = "org-1"
-WS1, WS2 = f"abi:{ORG}:ws-1", f"abi:{ORG}:ws-2"
-ORG_SCOPE, ORG_WIDE = f"abi:{ORG}:-", f"abi:{ORG}:*"
-OTHER_ORG = "abi:org-2:ws-9"
+WS1, WS2 = workspace("ws-1", ORG), workspace("ws-2", ORG)
+ORG_SCOPE, ORG_WIDE = org(ORG), below(ORG)
+OTHER_ORG = workspace("ws-9", "org-2")
 REFUSED = (IAMNotFoundError, PermissionDeniedError)
 
 AsUser = Callable[[PrincipalRecord], AbstractContextManager[IIAMService]]
@@ -36,7 +47,7 @@ AsUser = Callable[[PrincipalRecord], AbstractContextManager[IIAMService]]
 def reader(scope_var: str = "${scope}") -> dict:
     return document(
         statement(
-            "Allow", ["triple_store:Query"], [f"{scope_var}:triple_store:graph/*"]
+            "Allow", ["triple_store:Query"], [f"{scope_var}/triple_store:graph/*"]
         )
     )
 
@@ -44,7 +55,7 @@ def reader(scope_var: str = "${scope}") -> dict:
 @dataclass
 class Team:
     ws_admin: PrincipalRecord  # admin of ws-1
-    org_admin: PrincipalRecord  # admin of the org, mirrored org-wide
+    org_admin: PrincipalRecord  # admin of the org, mirrored below it
     member: PrincipalRecord  # member of ws-1
     viewer: PrincipalRecord  # viewer of ws-1
     colleague: PrincipalRecord  # member of ws-2: in the org
@@ -54,11 +65,20 @@ class Team:
     ws2_group: str
 
 
+def register_containers(iam: IAMService) -> None:
+    """The organisations and workspaces of the scenario, registered as Nexus
+    registers them (``api``)."""
+    if iam.catalogs.get("nexus") is None:
+        iam._register_catalog(NEXUS)
+    with as_service_account("api"):
+        for org_id, ws in ((ORG, "ws-1"), (ORG, "ws-2"), ("org-2", "ws-9")):
+            iam.register_container("nexus", "organization", org_id)
+            iam.register_container("nexus", "workspace", ws, parent=org(org_id))
+
+
 def team(iam: IAMService) -> Team:
+    register_containers(iam)
     with as_service_account("engine"):
-        for org, ws in ((ORG, "ws-1"), (ORG, "ws-2"), ("org-2", "ws-9")):
-            iam.put_scope(org)
-            iam.put_scope(org, ws)
         users = {
             name: iam.ensure_user("https://idp.example", name)
             for name in (
@@ -99,11 +119,12 @@ def run_workspace_admin(iam: IAMService, as_user: AsUser) -> None:
         policy = admin.create_policy("ws-1 readers", reader(), scope=WS1)
         assert policy.owner_scope == WS1
         group = admin.create_group("ws-1 analysts", scope=WS1)
-        assert (group.owner_scope, group.org) == (WS1, ORG)
+        assert group.owner_scope == WS1
         attachment = admin.attach_policy(policy.id, group.id, WS1)
         assert attachment.scope == WS1
         admin.add_group_member(group.id, t.member.id)
-        admin.add_group_member(group.id, t.colleague.id)  # in the org, not in ws-1
+        # In the org (the group's top container), not in ws-1.
+        admin.add_group_member(group.id, t.colleague.id)
         assert sorted(admin.list_group_members(group.id)) == sorted(
             [t.member.id, t.colleague.id]
         )
@@ -162,7 +183,7 @@ def run_org_admin(iam: IAMService, as_user: AsUser) -> None:
         admin.attach_policy(t.ws2_policy, t.ws2_group, WS2)
         org_policy = admin.create_policy("org readers", reader(), scope=ORG_SCOPE)
         org_group = admin.create_group("org analysts", scope=ORG_SCOPE)
-        # An org's policy goes at the org, org-wide or at any of its workspaces.
+        # An org's policy goes at the org, below it or at any of its workspaces.
         for scope in (ORG_SCOPE, ORG_WIDE, WS1, WS2):
             admin.attach_policy(org_policy.id, org_group.id, scope)
         # Never unscoped, never in another org.
@@ -215,10 +236,10 @@ def run_owned_documents(iam: IAMService, as_user: AsUser) -> None:
             document(statement("Allow", ["triple_store:Query"], ["*"])),
             document(
                 statement(
-                    "Allow", ["triple_store:Query"], ["${scope}:triple_store:graph/*"]
+                    "Allow", ["triple_store:Query"], ["${scope}/triple_store:graph/*"]
                 ),
                 statement(
-                    "Deny", ["triple_store:Query"], ["abi:*:*:triple_store:graph/*"]
+                    "Deny", ["triple_store:Query"], anywhere("triple_store:graph/*")
                 ),
             ),
         ):
@@ -231,12 +252,13 @@ def run_owned_documents(iam: IAMService, as_user: AsUser) -> None:
                 expected_revision=1,
                 document=document(statement("Allow", ["triple_store:Query"], ["*"])),
             )
+        # Owned by a container, never below one.
         with pytest.raises(ValueError):
-            admin.create_policy("org-wide", reader(), scope=ORG_WIDE)
+            admin.create_policy("below the org", reader(), scope=ORG_WIDE)
 
 
 def run_platform_denies_at_a_scope(iam: IAMService, as_user: AsUser) -> None:
-    """A platform policy with a Deny beyond ${scope}: is attached at a scope by
+    """A platform policy with a Deny beyond ${scope} is attached at a scope by
     the platform admin only: a scope's admin or owner could otherwise impose
     the Deny on anyone, in any org, the platform admin included."""
     t = team(iam)
@@ -250,7 +272,7 @@ def run_platform_denies_at_a_scope(iam: IAMService, as_user: AsUser) -> None:
             "guardrail",
             document(
                 statement(
-                    "Allow", ["triple_store:Query"], ["${scope}:triple_store:graph/*"]
+                    "Allow", ["triple_store:Query"], ["${scope}/triple_store:graph/*"]
                 ),
                 statement("Deny", ["iam:*", "triple_store:Insert"], ["*"]),
             ),
@@ -269,11 +291,14 @@ def run_platform_denies_at_a_scope(iam: IAMService, as_user: AsUser) -> None:
                 )
             with pytest.raises(REFUSED):
                 session.bind_idp_group("acme", "Sales", guard.id, WS1)
-            # Wholly within ${scope}:, a platform policy is still theirs to attach.
+            # Wholly within ${scope}, a platform policy is still theirs to attach.
             session.attach_policy(shared_reader.id, t.member.id, WS1)
-    _assert_allowed(iam, root, "iam:CreatePolicy", "abi:%2A:%2A:iam:policy/x")
+    _assert_allowed(iam, root, "iam:CreatePolicy", "abi:iam:policy/x")
     _assert_allowed(
-        iam, t.outsider, "triple_store:Insert", "abi:org-2:ws-9:triple_store:graph/g"
+        iam,
+        t.outsider,
+        "triple_store:Insert",
+        name_in(OTHER_ORG, "triple_store:graph/g"),
     )
     with as_user(root) as session:
         assert guard.id in {p.id for p in session.list_policies(scope=WS1).items}

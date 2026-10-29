@@ -29,28 +29,41 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalRecord,
 )
 from naas_abi_core.services.iam.IAMService import IAMService
-from naas_abi_core.services.iam.tests.iam_harness import document, statement
+from naas_abi_core.services.iam.names import anywhere
+from naas_abi_core.services.iam.tests.iam_harness import NEXUS as CONTAINERS
+from naas_abi_core.services.iam.tests.iam_harness import (
+    below,
+    document,
+    org,
+    statement,
+    workspace,
+)
 
 ORG = "org-1"
-WS1, WS2 = f"abi:{ORG}:ws-1", f"abi:{ORG}:ws-2"
-ORG_SCOPE, ORG_WIDE = f"abi:{ORG}:-", f"abi:{ORG}:*"
+WS1, WS2 = workspace("ws-1", ORG), workspace("ws-2", ORG)
+ORG_SCOPE, ORG_WIDE = org(ORG), below(ORG)
 QUERY, INSERT = "triple_store:Query", "triple_store:Insert"
-GRAPHS = "${scope}:triple_store:graph/*"
+GRAPHS = "${scope}/triple_store:graph/*"
 
-# Nexus's feature type, as Nexus registers it: a policy grants it, no role.
+# Nexus's containers (the organisation and its workspaces) and its feature
+# type, as Nexus registers them: a policy grants a feature, no role.
 NEXUS = ActionCatalog(
     service="nexus",
-    version=1,
-    resource_types=(ResourceType("feature", id="opaque", policy_only=True),),
-    actions=(ActionSpec("UseFeature", "read", ("feature",)),),
+    version=CONTAINERS.version + 1,
+    resource_types=(
+        *CONTAINERS.resource_types,
+        ResourceType("feature", id="opaque", policy_only=True),
+    ),
+    actions=(*CONTAINERS.actions, ActionSpec("UseFeature", "read", ("feature",))),
 )
 
 
 def features(*keys: str) -> dict:
     """A workspace's "Features of <role>": ``UseFeature`` on ``keys`` at its scope."""
     return reader(
-        ["nexus:UseFeature"], [f"${{scope}}:nexus:feature/{key}" for key in keys]
+        ["nexus:UseFeature"], [f"${{scope}}/nexus:feature/{key}" for key in keys]
     )
+
 
 AsUser = Callable[..., AbstractContextManager[IIAMService]]
 
@@ -63,7 +76,7 @@ def reader(actions: Sequence[str] = (QUERY,), resources: Sequence[str] = (GRAPHS
 class Team:
     owner: PrincipalRecord  # owner of ws-1
     admin: PrincipalRecord  # admin of ws-1
-    org_admin: PrincipalRecord  # admin of the org, mirrored org-wide
+    org_admin: PrincipalRecord  # admin of the org, mirrored below it
     member: PrincipalRecord  # member of ws-1
     colleague: PrincipalRecord  # member of ws-2
     root: PrincipalRecord  # the platform admin
@@ -71,9 +84,12 @@ class Team:
 
 def team(iam: IAMService) -> Team:
     with as_service_account("engine"):
+        iam.register_catalog(NEXUS)
+    with as_service_account("api"):
+        iam.register_container("nexus", "organization", ORG)
         for ws in ("ws-1", "ws-2"):
-            iam.put_scope(ORG)
-            iam.put_scope(ORG, ws)
+            iam.register_container("nexus", "workspace", ws, parent=ORG_SCOPE)
+    with as_service_account("engine"):
         users = {
             name: iam.ensure_user("https://idp.example", name)
             for name in ("owner", "admin", "org-admin", "member", "colleague", "root")
@@ -123,7 +139,7 @@ def run_narrower_admin_writes_wider_policy(iam: IAMService, as_user: AsUser) -> 
         statement(
             "Allow",
             ["iam:CreatePolicy", "iam:UpdatePolicy", "iam:GetPolicy"],
-            ["${scope}:iam:policy/*"],
+            ["${scope}/iam:policy/*"],
         ),
         statement("Allow", [QUERY], [GRAPHS]),
     )
@@ -132,7 +148,7 @@ def run_narrower_admin_writes_wider_policy(iam: IAMService, as_user: AsUser) -> 
         refused(
             lambda: session.create_policy("writers", reader([INSERT]), scope=WS1),
             INSERT,
-            "abi:org-1:ws-1:triple_store:graph/*",
+            f"{WS1}/triple_store:graph/*",
         )
         # A wildcard expands to what the catalog has: Insert among it.
         refused(
@@ -153,7 +169,7 @@ def run_narrower_admin_writes_wider_policy(iam: IAMService, as_user: AsUser) -> 
             document=document(
                 statement("Allow", [QUERY], [GRAPHS]),
                 statement(
-                    "Deny", ["triple_store:*"], ["${scope}:triple_store:graph/hr*"]
+                    "Deny", ["triple_store:*"], ["${scope}/triple_store:graph/hr*"]
                 ),
             ),
         )
@@ -167,7 +183,7 @@ def run_admin_cannot_make_itself_owner(iam: IAMService, as_user: AsUser) -> None
         statement(
             "Allow",
             ["iam:AttachPolicy"],
-            ["${scope}:iam:attachment/builtin.owner/*"],
+            ["${scope}/iam:attachment/builtin.owner/*"],
         )
     )
     for who, scope in ((t.admin, WS1), (t.org_admin, ORG_SCOPE)):
@@ -187,21 +203,23 @@ def run_owner_grants_a_feature_it_lacks(iam: IAMService, as_user: AsUser) -> Non
     t = team(iam)
     with as_service_account("engine"):
         iam.register_catalog(NEXUS)
-        chat_of_owner = iam.create_policy("Features of owner", features("chat"), scope=WS1)
+        chat_of_owner = iam.create_policy(
+            "Features of owner", features("chat"), scope=WS1
+        )
         iam.attach_policy(chat_of_owner.id, t.owner.id, WS1)
         every_feature = iam.create_policy(
             "every feature",
-            reader(["nexus:UseFeature"], ["${scope}:nexus:feature/*"]),
+            reader(["nexus:UseFeature"], ["${scope}/nexus:feature/*"]),
         )
     with as_user(t.owner) as session:
         refused(
             lambda: session.create_policy(
                 "features",
-                reader(["nexus:UseFeature"], ["${scope}:nexus:feature/*"]),
+                reader(["nexus:UseFeature"], ["${scope}/nexus:feature/*"]),
                 scope=WS1,
             ),
             "nexus:UseFeature",
-            "abi:org-1:ws-1:nexus:feature/*",
+            f"{WS1}/nexus:feature/*",
         )
         refused(
             lambda: session.attach_policy(every_feature.id, t.member.id, WS1),
@@ -209,7 +227,7 @@ def run_owner_grants_a_feature_it_lacks(iam: IAMService, as_user: AsUser) -> Non
         )
         chat = session.create_policy(
             "chat",
-            reader(["nexus:UseFeature"], ["${scope}:nexus:feature/chat"]),
+            reader(["nexus:UseFeature"], ["${scope}/nexus:feature/chat"]),
             scope=WS1,
         )
         session.attach_policy(chat.id, t.member.id, WS1)
@@ -250,7 +268,7 @@ def run_group_member_exceeds_adder(iam: IAMService, as_user: AsUser) -> None:
         refused(
             lambda: session.add_group_member(owners.id, t.admin.id),
             "builtin.owner",
-            "abi:org-1:ws-1",
+            WS1,
         )
         session.add_group_member(readers.id, t.member.id)
     with as_service_account("engine"):
@@ -283,7 +301,7 @@ def run_group_feature_policy_is_checked(iam: IAMService, as_user: AsUser) -> Non
         refused(
             lambda: session.add_group_member(billing.id, t.member.id),
             of_owner.id,
-            "abi:org-1:ws-1:nexus:feature/billing",
+            f"{WS1}/nexus:feature/billing",
         )
     with as_user(t.owner) as session:
         session.add_group_member(billing.id, t.member.id)
@@ -298,8 +316,8 @@ def _inviter(iam: IAMService):
             "Allow",
             ["iam:AttachPolicy"],
             [
-                "${scope}:iam:attachment/builtin.member/*",
-                "${scope}:iam:attachment/builtin.viewer/*",
+                "${scope}/iam:attachment/builtin.member/*",
+                "${scope}/iam:attachment/builtin.viewer/*",
             ],
         ),
     )
@@ -350,17 +368,15 @@ def run_delegated_approver(iam: IAMService, as_user: AsUser) -> None:
         statement(
             "Allow",
             ["iam:ApproveManifest", "iam:GetManifest", "iam:ListManifests"],
-            ["abi:-:-:iam:manifest/*"],
+            ["abi:iam:manifest/*"],
         ),
-        statement("Allow", [QUERY], ["abi:-:-:triple_store:graph/*"]),
+        statement("Allow", [QUERY], ["abi:triple_store:graph/*"]),
         scope=None,
     )
     with as_service_account("engine"):
         account = iam.create_service_account("module/acme/people")
     manifest = document(
-        statement(
-            "Allow", [QUERY, INSERT], ["abi:-:-:triple_store:graph/${module.id}-*"]
-        )
+        statement("Allow", [QUERY, INSERT], ["abi:triple_store:graph/${module.id}-*"])
     )
     with use_call_context(
         CallContext(
@@ -374,14 +390,12 @@ def run_delegated_approver(iam: IAMService, as_user: AsUser) -> None:
         refused(
             lambda: session.approve_manifest(account.id),
             INSERT,
-            "abi:-:-:triple_store:graph/people-*",
+            "abi:triple_store:graph/people-*",
         )
         approved = session.approve_manifest(
             account.id,
             document=document(
-                statement(
-                    "Allow", [QUERY], ["abi:-:-:triple_store:graph/${module.id}-*"]
-                )
+                statement("Allow", [QUERY], ["abi:triple_store:graph/${module.id}-*"])
             ),
         )
         assert approved.status == "approved"
@@ -393,17 +407,17 @@ def run_bus_wildcards_are_checked(iam: IAMService, as_user: AsUser) -> None:
     bus's names are."""
     team(iam)
     approvals = ["iam:ApproveManifest", "iam:GetManifest", "iam:ListManifests"]
-    payments = "abi:-:-:bus:topic/payments"
+    payments = "abi:bus:topic/payments"
     approver = custom(
         iam,
         "approver",
-        statement("Allow", approvals, ["abi:-:-:iam:manifest/*"]),
+        statement("Allow", approvals, ["abi:iam:manifest/*"]),
         scope=None,
     )
     bus_holder = custom(
         iam,
         "bus holder",
-        statement("Allow", approvals, ["abi:-:-:iam:manifest/*"]),
+        statement("Allow", approvals, ["abi:iam:manifest/*"]),
         statement("Allow", ["*"], [payments]),  # a policy names the bus so
         scope=None,
     )
@@ -447,15 +461,15 @@ def run_bus_topics_are_compared_as_the_broker_grants_them(
     approver = custom(
         iam,
         "approver",
-        statement("Allow", approvals, ["abi:-:-:iam:manifest/*"]),
+        statement("Allow", approvals, ["abi:iam:manifest/*"]),
         scope=None,
     )
     guarded = custom(
         iam,
         "guarded",
-        statement("Allow", approvals, ["abi:-:-:iam:manifest/*"]),
-        statement("Allow", ["*"], ["abi:-:-:bus:topic/*"]),
-        statement("Deny", ["*"], ["abi:-:-:bus:topic/payments"]),
+        statement("Allow", approvals, ["abi:iam:manifest/*"]),
+        statement("Allow", ["*"], ["abi:bus:topic/*"]),
+        statement("Deny", ["*"], ["abi:bus:topic/payments"]),
         scope=None,
     )
     with as_service_account("engine"):
@@ -470,7 +484,7 @@ def run_bus_topics_are_compared_as_the_broker_grants_them(
         iam.submit_manifest(
             "topics",
             "acme",
-            document(statement("Allow", ["*"], ["abi:-:-:bus:topic/*"])),
+            document(statement("Allow", ["*"], ["abi:bus:topic/*"])),
         )
 
     def approve(
@@ -478,9 +492,7 @@ def run_bus_topics_are_compared_as_the_broker_grants_them(
     ) -> Callable[[], Any]:
         return lambda: session.approve_manifest(
             account.id,
-            document=document(
-                statement("Allow", actions, [f"abi:-:-:bus:topic/{topic}"])
-            ),
+            document=document(statement("Allow", actions, [f"abi:bus:topic/{topic}"])),
         )
 
     with as_user(approver) as session:
@@ -500,9 +512,9 @@ def run_bus_topics_are_compared_as_the_broker_grants_them(
     hierarchy = custom(
         iam,
         "hierarchy",
-        statement("Allow", approvals, ["abi:-:-:iam:manifest/*"]),
-        statement("Allow", ["*"], ["abi:-:-:bus:topic/*"]),
-        statement("Deny", ["*"], ["abi:-:-:bus:topic/payments*"]),
+        statement("Allow", approvals, ["abi:iam:manifest/*"]),
+        statement("Allow", ["*"], ["abi:bus:topic/*"]),
+        statement("Deny", ["*"], ["abi:bus:topic/payments*"]),
         scope=None,
     )
     with as_user(hierarchy) as session:
@@ -521,9 +533,9 @@ def run_a_topic_names_only_module_variables(iam: IAMService, as_user: AsUser) ->
         statement(
             "Allow",
             ["iam:ApproveManifest", "iam:GetManifest", "iam:ListManifests"],
-            ["abi:-:-:iam:manifest/*"],
+            ["abi:iam:manifest/*"],
         ),
-        statement("Allow", ["*"], ["abi:-:-:bus:topic/*"]),
+        statement("Allow", ["*"], ["abi:bus:topic/*"]),
         scope=None,
     )
     with as_service_account("engine"):
@@ -535,17 +547,13 @@ def run_a_topic_names_only_module_variables(iam: IAMService, as_user: AsUser) ->
         iam.submit_manifest(
             "feeds",
             "acme",
-            document(
-                statement("Allow", ["*"], ["abi:-:-:bus:topic/x.${principal.id}"])
-            ),
+            document(statement("Allow", ["*"], ["abi:bus:topic/x.${principal.id}"])),
         )
     with use_call_context(module):
         iam.submit_manifest(
             "feeds",
             "acme",
-            document(
-                statement("Allow", ["*"], ["abi:-:-:bus:topic/${module.id}.events"])
-            ),
+            document(statement("Allow", ["*"], ["abi:bus:topic/${module.id}.events"])),
         )
     with as_user(approver) as session:
         assert session.approve_manifest(account.id).status == "approved"
@@ -566,7 +574,7 @@ def run_built_in_roles_keep_working(iam: IAMService, as_user: AsUser) -> None:
     with as_user(t.owner) as session:
         session.attach_policy(roles.OWNER, extra.id, WS1)
     with as_user(t.org_admin) as session:
-        # Through the org-wide role, in each workspace of the org.
+        # Through the role below the org, in each workspace of the org.
         session.attach_policy(roles.ADMIN, extra.id, WS2)
         session.attach_policy(roles.MEMBER, t.member.id, WS2)
         session.attach_policy(roles.MEMBER, extra.id, ORG_SCOPE)
@@ -577,29 +585,30 @@ def run_grantable(iam: IAMService, as_user: AsUser) -> None:
     lister = custom(
         iam,
         "lister",
-        statement("Allow", ["iam:ListPolicies"], ["abi:*:*:iam:policy/*"]),
+        statement("Allow", ["iam:ListPolicies"], anywhere("iam:policy/*")),
         scope=None,
     )
     with as_user(t.root) as session:
         found = _actions(session.grantable(WS1))
-        assert found[QUERY] == ("${scope}:*",)
-        assert found["iam:AttachPolicy"] == ("${scope}:*",)
+        assert found[QUERY] == ("${scope}/*",)
+        assert found["iam:AttachPolicy"] == ("${scope}/*",)
     with as_user(t.admin) as session:
         found = _actions(session.grantable(WS1))
-        assert found[INSERT] == ("${scope}:triple_store:graph/*",)
+        assert found[INSERT] == ("${scope}/triple_store:graph/*",)
         assert "iam:CreatePolicy" in found
         assert all(
-            r.startswith("${scope}:iam:attachment/builtin.")
-            or r == "${scope}:iam:attachment/pol_*/*"
+            r.startswith("${scope}/iam:attachment/builtin.")
+            or r == "${scope}/iam:attachment/pol_*/*"
             for r in found["iam:AttachPolicy"]
         )
         assert (
-            "${scope}:iam:attachment/builtin.owner/*" not in found["iam:AttachPolicy"]
+            "${scope}/iam:attachment/builtin.owner/*" not in found["iam:AttachPolicy"]
         )
         assert _actions(session.grantable(WS2)).get(INSERT) is None
     with as_user(lister) as session:
+        # Written for every container: at ws-1 and in what ws-1 holds.
         assert _actions(session.grantable(WS1)) == {
-            "iam:ListPolicies": ("${scope}:iam:policy/*",)
+            "iam:ListPolicies": ("${scope}/iam:policy/*", "${scope}/*/iam:policy/*")
         }
 
 

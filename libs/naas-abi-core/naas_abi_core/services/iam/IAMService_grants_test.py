@@ -12,8 +12,14 @@ from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam import roles
 from naas_abi_core.services.iam.adapters import iam_nats_codec as codec
 from naas_abi_core.services.iam.IAMPorts import GrantNotHeldError, IIAMService
+from naas_abi_core.services.iam.names import anywhere
 from naas_abi_core.services.iam.tests import grant_contract as contract
-from naas_abi_core.services.iam.tests.iam_harness import IAMHarness, statement
+from naas_abi_core.services.iam.tests.iam_harness import (
+    IAMHarness,
+    graph,
+    statement,
+    workspace,
+)
 
 WS1, ORG_SCOPE, ORG_WIDE = contract.WS1, contract.ORG_SCOPE, contract.ORG_WIDE
 
@@ -44,7 +50,7 @@ def test_api_acting_for_a_user_grants_what_the_user_holds_only(h):
                 statement(
                     "Allow",
                     ["iam:AttachPolicy"],
-                    ["${scope}:iam:attachment/builtin.viewer/*"],
+                    ["${scope}/iam:attachment/builtin.viewer/*"],
                 )
             ),
         )
@@ -64,7 +70,7 @@ def test_a_module_acting_for_a_user_is_bounded_by_both(h):
     account = h.service_account("module/acme/people")
     h.grant(
         account.id,
-        statement("Allow", ["iam:AttachPolicy"], ["abi:*:*:iam:attachment/*"]),
+        statement("Allow", ["iam:AttachPolicy"], anywhere("iam:attachment/*")),
     )
     with (
         h.as_(account, on_behalf_of=t.admin),
@@ -81,17 +87,17 @@ def test_an_actor_for_no_user_holds_no_user_variable(h):
     account = h.service_account("ci/grants")
     h.grant(
         account.id,
-        statement("Allow", ["iam:AttachPolicy"], ["abi:*:*:iam:attachment/*"]),
+        statement("Allow", ["iam:AttachPolicy"], anywhere("iam:attachment/*")),
         statement(
             "Allow",
             ["triple_store:Query"],
-            [f"{WS1}:triple_store:graph/${{user.id}}/*"],
+            [f"{WS1}/triple_store:graph/${{user.id}}/*"],
         ),
     )
     with as_service_account("engine"):
         mine = h.iam.create_policy(
             "mine",
-            contract.reader(resources=["${scope}:triple_store:graph/${user.id}/*"]),
+            contract.reader(resources=["${scope}/triple_store:graph/${user.id}/*"]),
         )
     with h.as_(account), pytest.raises(GrantNotHeldError) as refused:
         h.iam.attach_policy(mine.id, t.member.id, WS1)
@@ -128,25 +134,24 @@ def test_existing_grants_are_not_checked_again(h):
         h.iam.attach_policy(roles.ADMIN, t.colleague.id, WS1)
     with as_service_account("engine"):
         h.iam.detach_policy(roles.ADMIN, t.admin.id, WS1)
-    assert h.allowed(
-        "triple_store:DropGraph", "abi:org-1:ws-1:triple_store:graph/g", t.colleague
-    )
+    assert h.allowed("triple_store:DropGraph", graph("g"), t.colleague)
 
 
 def test_the_refusal_travels_with_its_own_code():
+    where = workspace("w", "o")
     error = GrantNotHeldError(
         "triple_store:Insert",
-        "abi:o:w:triple_store:graph/*",
+        f"{where}/triple_store:graph/*",
         policy_id="pol_x",
         statement=0,
         sid="Write",
-        scope="abi:o:w",
+        scope=where,
         reason="you do not hold it there",
     )
     assert codec.error_code(error) == "GRANT_NOT_HELD"
     assert str(error) == (
         "You cannot grant what you do not hold: statement 0 (Write) of pol_x allows "
-        "triple_store:Insert on abi:o:w:triple_store:graph/* at abi:o:w, and you "
+        f"triple_store:Insert on {where}/triple_store:graph/* at {where}, and you "
         "do not hold it there"
     )
 

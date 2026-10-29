@@ -18,23 +18,26 @@ NEXUS = ActionCatalog(
     service="nexus",
     version=1,
     resource_types=(
-        ResourceType("workspace", id="singleton"),
+        ResourceType("workspace", container=True, platform_companions=True),
         ResourceType("feature", policy_only=True),
         ResourceType("conversation", id="path", personal=True),
-        ResourceType("organization", id="singleton"),
+        ResourceType("organization", container=True),
         ResourceType("provider_model", placement="platform"),
     ),
     actions=(
         ActionSpec("GetWorkspace", "read", ("workspace",)),
+        ActionSpec("CreateWorkspace", "write", ("workspace",), creates=True),
         ActionSpec("UpdateWorkspace", "admin", ("workspace",)),
-        ActionSpec("DeleteWorkspace", "admin", ("workspace",), owner_only=True),
+        ActionSpec(
+            "DeleteWorkspace", "admin", ("workspace",), owner_only=True, deletes=True
+        ),
         ActionSpec("UseFeature", "read", ("feature",)),
         ActionSpec("GetConversation", "read", ("conversation",)),
-        ActionSpec("CreateOrganization", "write", ("organization",)),
+        ActionSpec("CreateOrganization", "write", ("organization",), creates=True),
         ActionSpec("ListProviderModels", "list", ("provider_model",)),
     ),
     platform_access=(
-        PlatformAccess(("organization/-",), self_=("CreateOrganization",)),
+        PlatformAccess(("organization/*",), self_=("CreateOrganization",)),
         PlatformAccess(("provider_model/*",), viewer=("ListProviderModels",)),
     ),
 )
@@ -83,9 +86,9 @@ def test_no_role_reaches_a_policy_only_type_and_owner_only_actions_are_the_owner
 
 def test_personal_types_are_reached_through_their_owner():
     viewer = roles.role_policy(roles.VIEWER, registry())
-    assert "${scope}:nexus:conversation/${principal.id}" in resources_of(viewer)
-    assert "${scope}:nexus:conversation/${principal.id}/*" in resources_of(viewer)
-    assert "${scope}:nexus:conversation/*" not in resources_of(viewer)
+    assert "${scope}/nexus:conversation/${principal.id}" in resources_of(viewer)
+    assert "${scope}/nexus:conversation/${principal.id}/*" in resources_of(viewer)
+    assert "${scope}/nexus:conversation/*" not in resources_of(viewer)
 
 
 def test_admins_grant_roles_below_owner_only():
@@ -93,12 +96,12 @@ def test_admins_grant_roles_below_owner_only():
     sids = ("AdminGrantsRolesBelowOwner", "AdminAttachesCustomerPolicies")
     grants = {s.sid: s for s in admin.document.statements if s.sid in sids}
     assert set(grants[sids[0]].resources) == {
-        "${scope}:iam:attachment/builtin.admin/*",
-        "${scope}:iam:attachment/builtin.member/*",
-        "${scope}:iam:attachment/builtin.viewer/*",
+        "${scope}/iam:attachment/builtin.admin/*",
+        "${scope}/iam:attachment/builtin.member/*",
+        "${scope}/iam:attachment/builtin.viewer/*",
     }
     # Customer policies (pol_…), never another managed one (owner, features).
-    assert grants[sids[1]].resources == ("${scope}:iam:attachment/pol_*/*",)
+    assert grants[sids[1]].resources == ("${scope}/iam:attachment/pol_*/*",)
     # Nothing else of admin's names the attachment type with an admin action.
     others = [s for s in admin.document.statements if s.sid not in sids]
     assert not any(
@@ -167,10 +170,10 @@ def test_a_catalogs_platform_access_joins_the_platform_policies():
     viewer = _platform(roles.PLATFORM_VIEWER, found)
     member = _platform(roles.PLATFORM_MEMBER, found)
     assert "nexus:CreateOrganization" in actions_of(self_policy)
-    assert "abi:-:-:nexus:organization/-" in resources_of(self_policy)
+    assert "abi:nexus:organization/*" in resources_of(self_policy)
     for policy in (viewer, member):
         assert "nexus:ListProviderModels" in actions_of(policy)
-        assert "abi:-:-:nexus:provider_model/*" in resources_of(policy)
+        assert "abi:nexus:provider_model/*" in resources_of(policy)
     assert "nexus:ListProviderModels" not in actions_of(self_policy)
 
 
@@ -224,8 +227,33 @@ def test_the_flags_survive_the_catalog_format_and_the_wire():
     # The stored form has the format; read back from a store without one, it
     # is an older writer's.
     assert "format" not in NEXUS.to_dict()
-    assert ActionCatalog.from_dict(NEXUS.to_dict(), stored=True).format == 1
+    flags = ActionCatalog(
+        service="nexus",
+        version=1,
+        resource_types=(ResourceType("feature", policy_only=True),),
+        actions=(ActionSpec("UseFeature", "read", ("feature",)),),
+    )
+    assert ActionCatalog.from_dict(flags.to_dict(), stored=True).format == 1
     assert codec.catalog_from_pb(codec.catalog_to_pb(NEXUS)) == NEXUS
+
+
+def test_a_stored_catalog_before_container_paths_reads_its_container_as_an_id_prefix():
+    """Formats 1 and 2 called ``id_prefix`` ``container``."""
+    stored = {
+        "service": "document",
+        "version": 1,
+        "format": 2,
+        "resource_types": [{"name": "namespace", "id": "path", "container": True}],
+        "actions": [{"name": "Find", "level": "read", "resource_types": ["namespace"]}],
+    }
+    namespace = ActionCatalog.from_dict(stored, stored=True).resource_types[0]
+    assert (namespace.id_prefix, namespace.container) == (True, False)
+    # Written now, ``container`` is the new flag and ``id_prefix`` its own.
+    types = [{"name": "namespace", "id": "path", "id_prefix": True}]
+    fresh = ActionCatalog.from_dict(
+        {**stored, "format": 3, "resource_types": types}, stored=True
+    )
+    assert fresh.resource_types[0] == namespace
 
 
 def test_core_roles_name_no_nexus_action_or_type():
@@ -238,3 +266,50 @@ def test_core_roles_name_no_nexus_action_or_type():
     assert "nexus:" not in source
     assert '"nexus"' not in source
     assert "feature" not in source.replace("builtin.features.", "")
+
+
+# -- roles per container ---------------------------------------------------------
+
+
+def _statements_with(policy, action: str) -> list:
+    return [s for s in policy.document.statements if action in s.actions]
+
+
+def test_a_container_type_is_decided_at_the_container_and_created_in_it():
+    """The actions on a container type cover the container the role is
+    attached at, ``${scope}``; its create action ``${scope}/<svc>:<type>/*``,
+    the containers of that type made in it."""
+    found = registry()
+    for role in roles.ROLES:
+        policy = roles.role_policy(role, found)
+        for statement in _statements_with(policy, "nexus:GetWorkspace"):
+            assert statement.resources == ("${scope}",)
+        for statement in _statements_with(policy, "nexus:CreateWorkspace"):
+            assert "${scope}/nexus:workspace/*" in statement.resources
+            assert "${scope}" not in statement.resources
+        # Neither form reaches a container below the one it is attached at.
+        assert "${scope}/nexus:workspace/*" not in {
+            r
+            for s in policy.document.statements
+            if "nexus:GetWorkspace" in s.actions
+            for r in s.resources
+        }
+    viewer = roles.role_policy(roles.VIEWER, found)
+    assert _statements_with(viewer, "nexus:GetWorkspace")
+    assert not _statements_with(viewer, "nexus:CreateWorkspace")
+    member = roles.role_policy(roles.MEMBER, found)
+    assert _statements_with(member, "nexus:CreateWorkspace")
+    owner = roles.role_policy(roles.OWNER, found)
+    assert _statements_with(owner, "nexus:DeleteWorkspace")[0].resources == (
+        "${scope}",
+    )
+
+
+def test_a_role_names_what_sits_in_its_container_never_the_platform():
+    found = registry()
+    for role in roles.ROLES:
+        for resource in resources_of(roles.role_policy(role, found)):
+            assert resource == "${scope}" or resource.startswith("${scope}/"), (
+                role,
+                resource,
+            )

@@ -18,6 +18,8 @@ from naas_abi_proto.transfer.v1 import transfer_pb2
 SECRET = TEST_TOKENS.verifier
 AGENTS = TEST_TOKENS.verifier
 SERVICE_ONLY = TEST_TOKENS.verifier_for(("abi:nats",))
+# The container a call is made in: request data, carried as is.
+WS = "abi:nexus:organization/org-1/nexus:workspace/ws-1"
 
 
 def headers(identity: str, **extra: str) -> dict[str, str]:
@@ -178,18 +180,18 @@ def test_a_refused_user_is_answered_and_logged_as_such():
     assert any("Abi-On-Behalf-Of" in line for line in seen)
 
 
-def test_trace_and_workspace_come_from_the_request_but_identity_never_does():
+def test_trace_and_container_come_from_the_request_but_identity_never_does():
     caller = CallContext(principal=service_account("api"))
     request = keyvalue_pb2.GetRequest(
         context=common_pb2.CallContext(
             trace_id="trace-1",
-            workspace_id="ws-1",
+            container=WS,
             principal_id="usr-mallory",  # reserved: never read
             tenant_id="tenant-x",
         )
     )
     assert for_request(caller, request) == CallContext(
-        principal=service_account("api"), workspace_id="ws-1", trace_id="trace-1"
+        principal=service_account("api"), container=WS, trace_id="trace-1"
     )
 
 

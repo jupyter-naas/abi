@@ -20,10 +20,16 @@ message CallContext {
   int32 timeout_ms = 2;
   // Reserved and deprecated: servers ignore it, clients leave it empty.
   string principal_id = 3;
-  // The target workspace of a create: an input, authorized like any other.
+  // Before container paths (SDK 0.2): the target workspace of a create. An
+  // engine of today refuses a call that sets it (INVALID_ARGUMENT): set
+  // container instead.
   string workspace_id = 4;
   // Reserved and deprecated: servers ignore it, clients leave it empty.
   string tenant_id = 5;
+  // The container the call is made in (a container's name, abi:...): where what
+  // it creates is placed and its module scopes are named. An input, checked by
+  // IAM against its registry.
+  string container = 6;
 }
 
 // A structured, machine-readable error for a failed RPC call.

@@ -11,7 +11,7 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class Principal(_message.Message):
-    __slots__ = ("id", "kind", "status", "name", "issuer", "subject", "provider", "email", "email_verified", "display_name", "org", "owner_id", "created_at", "updated_at", "owner_scope")
+    __slots__ = ("id", "kind", "status", "name", "issuer", "subject", "provider", "email", "email_verified", "display_name", "owner_id", "created_at", "updated_at", "owner_scope")
     ID_FIELD_NUMBER: _ClassVar[int]
     KIND_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
@@ -22,7 +22,6 @@ class Principal(_message.Message):
     EMAIL_FIELD_NUMBER: _ClassVar[int]
     EMAIL_VERIFIED_FIELD_NUMBER: _ClassVar[int]
     DISPLAY_NAME_FIELD_NUMBER: _ClassVar[int]
-    ORG_FIELD_NUMBER: _ClassVar[int]
     OWNER_ID_FIELD_NUMBER: _ClassVar[int]
     CREATED_AT_FIELD_NUMBER: _ClassVar[int]
     UPDATED_AT_FIELD_NUMBER: _ClassVar[int]
@@ -37,12 +36,11 @@ class Principal(_message.Message):
     email: str
     email_verified: bool
     display_name: str
-    org: str
     owner_id: str
     created_at: _timestamp_pb2.Timestamp
     updated_at: _timestamp_pb2.Timestamp
     owner_scope: str
-    def __init__(self, id: _Optional[str] = ..., kind: _Optional[str] = ..., status: _Optional[str] = ..., name: _Optional[str] = ..., issuer: _Optional[str] = ..., subject: _Optional[str] = ..., provider: _Optional[str] = ..., email: _Optional[str] = ..., email_verified: bool = ..., display_name: _Optional[str] = ..., org: _Optional[str] = ..., owner_id: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., owner_scope: _Optional[str] = ...) -> None: ...
+    def __init__(self, id: _Optional[str] = ..., kind: _Optional[str] = ..., status: _Optional[str] = ..., name: _Optional[str] = ..., issuer: _Optional[str] = ..., subject: _Optional[str] = ..., provider: _Optional[str] = ..., email: _Optional[str] = ..., email_verified: bool = ..., display_name: _Optional[str] = ..., owner_id: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., owner_scope: _Optional[str] = ...) -> None: ...
 
 class Policy(_message.Message):
     __slots__ = ("id", "name", "description", "document_json", "managed", "revision", "created_at", "updated_at", "owner_scope", "parent_id")
@@ -127,47 +125,57 @@ class GroupMapping(_message.Message):
     def __init__(self, provider: _Optional[str] = ..., claim_value: _Optional[str] = ..., group_id: _Optional[str] = ...) -> None: ...
 
 class Placement(_message.Message):
-    __slots__ = ("service", "id_key", "org", "workspace")
+    __slots__ = ("service", "id_key", "container")
     SERVICE_FIELD_NUMBER: _ClassVar[int]
     ID_KEY_FIELD_NUMBER: _ClassVar[int]
-    ORG_FIELD_NUMBER: _ClassVar[int]
-    WORKSPACE_FIELD_NUMBER: _ClassVar[int]
+    CONTAINER_FIELD_NUMBER: _ClassVar[int]
     service: str
     id_key: str
-    org: str
-    workspace: str
-    def __init__(self, service: _Optional[str] = ..., id_key: _Optional[str] = ..., org: _Optional[str] = ..., workspace: _Optional[str] = ...) -> None: ...
+    container: str
+    def __init__(self, service: _Optional[str] = ..., id_key: _Optional[str] = ..., container: _Optional[str] = ...) -> None: ...
 
-class Scope(_message.Message):
-    __slots__ = ("org", "workspace")
-    ORG_FIELD_NUMBER: _ClassVar[int]
-    WORKSPACE_FIELD_NUMBER: _ClassVar[int]
-    org: str
-    workspace: str
-    def __init__(self, org: _Optional[str] = ..., workspace: _Optional[str] = ...) -> None: ...
+class Container(_message.Message):
+    __slots__ = ("service", "type", "id", "parent", "name")
+    SERVICE_FIELD_NUMBER: _ClassVar[int]
+    TYPE_FIELD_NUMBER: _ClassVar[int]
+    ID_FIELD_NUMBER: _ClassVar[int]
+    PARENT_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    service: str
+    type: str
+    id: str
+    parent: str
+    name: str
+    def __init__(self, service: _Optional[str] = ..., type: _Optional[str] = ..., id: _Optional[str] = ..., parent: _Optional[str] = ..., name: _Optional[str] = ...) -> None: ...
 
 class ResourceType(_message.Message):
-    __slots__ = ("name", "id", "placement", "container", "personal", "description", "module_scope", "policy_only")
+    __slots__ = ("name", "id", "placement", "id_prefix", "personal", "description", "module_scope", "policy_only", "container", "platform_companions", "parents")
     NAME_FIELD_NUMBER: _ClassVar[int]
     ID_FIELD_NUMBER: _ClassVar[int]
     PLACEMENT_FIELD_NUMBER: _ClassVar[int]
-    CONTAINER_FIELD_NUMBER: _ClassVar[int]
+    ID_PREFIX_FIELD_NUMBER: _ClassVar[int]
     PERSONAL_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
     MODULE_SCOPE_FIELD_NUMBER: _ClassVar[int]
     POLICY_ONLY_FIELD_NUMBER: _ClassVar[int]
+    CONTAINER_FIELD_NUMBER: _ClassVar[int]
+    PLATFORM_COMPANIONS_FIELD_NUMBER: _ClassVar[int]
+    PARENTS_FIELD_NUMBER: _ClassVar[int]
     name: str
     id: str
     placement: str
-    container: bool
+    id_prefix: bool
     personal: bool
     description: str
     module_scope: bool
     policy_only: bool
-    def __init__(self, name: _Optional[str] = ..., id: _Optional[str] = ..., placement: _Optional[str] = ..., container: bool = ..., personal: bool = ..., description: _Optional[str] = ..., module_scope: bool = ..., policy_only: bool = ...) -> None: ...
+    container: bool
+    platform_companions: bool
+    parents: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, name: _Optional[str] = ..., id: _Optional[str] = ..., placement: _Optional[str] = ..., id_prefix: bool = ..., personal: bool = ..., description: _Optional[str] = ..., module_scope: bool = ..., policy_only: bool = ..., container: bool = ..., platform_companions: bool = ..., parents: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class ActionSpec(_message.Message):
-    __slots__ = ("name", "level", "resource_types", "creates", "subjects", "description", "owner_only")
+    __slots__ = ("name", "level", "resource_types", "creates", "subjects", "description", "owner_only", "deletes")
     NAME_FIELD_NUMBER: _ClassVar[int]
     LEVEL_FIELD_NUMBER: _ClassVar[int]
     RESOURCE_TYPES_FIELD_NUMBER: _ClassVar[int]
@@ -175,6 +183,7 @@ class ActionSpec(_message.Message):
     SUBJECTS_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
     OWNER_ONLY_FIELD_NUMBER: _ClassVar[int]
+    DELETES_FIELD_NUMBER: _ClassVar[int]
     name: str
     level: str
     resource_types: _containers.RepeatedScalarFieldContainer[str]
@@ -182,7 +191,8 @@ class ActionSpec(_message.Message):
     subjects: _containers.RepeatedScalarFieldContainer[str]
     description: str
     owner_only: bool
-    def __init__(self, name: _Optional[str] = ..., level: _Optional[str] = ..., resource_types: _Optional[_Iterable[str]] = ..., creates: bool = ..., subjects: _Optional[_Iterable[str]] = ..., description: _Optional[str] = ..., owner_only: bool = ...) -> None: ...
+    deletes: bool
+    def __init__(self, name: _Optional[str] = ..., level: _Optional[str] = ..., resource_types: _Optional[_Iterable[str]] = ..., creates: bool = ..., subjects: _Optional[_Iterable[str]] = ..., description: _Optional[str] = ..., owner_only: bool = ..., deletes: bool = ...) -> None: ...
 
 class PlatformAccess(_message.Message):
     __slots__ = ("resources", "viewer", "member", "self")
@@ -349,18 +359,18 @@ class AuthorizeResponse(_message.Message):
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., decision: _Optional[_Union[Decision, _Mapping]] = ...) -> None: ...
 
 class AuthorizeDeclaredRequest(_message.Message):
-    __slots__ = ("context", "action", "resource_type", "parts", "workspace_id")
+    __slots__ = ("context", "action", "resource_type", "parts", "container")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     ACTION_FIELD_NUMBER: _ClassVar[int]
     RESOURCE_TYPE_FIELD_NUMBER: _ClassVar[int]
     PARTS_FIELD_NUMBER: _ClassVar[int]
-    WORKSPACE_ID_FIELD_NUMBER: _ClassVar[int]
+    CONTAINER_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
     action: str
     resource_type: str
     parts: _containers.RepeatedScalarFieldContainer[str]
-    workspace_id: str
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., action: _Optional[str] = ..., resource_type: _Optional[str] = ..., parts: _Optional[_Iterable[str]] = ..., workspace_id: _Optional[str] = ...) -> None: ...
+    container: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., action: _Optional[str] = ..., resource_type: _Optional[str] = ..., parts: _Optional[_Iterable[str]] = ..., container: _Optional[str] = ...) -> None: ...
 
 class AuthorizeDeclaredResponse(_message.Message):
     __slots__ = ("error", "decision", "resource")
@@ -577,16 +587,14 @@ class DeletePrincipalResponse(_message.Message):
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., principal: _Optional[_Union[Principal, _Mapping]] = ...) -> None: ...
 
 class CreateGroupRequest(_message.Message):
-    __slots__ = ("context", "name", "org", "scope")
+    __slots__ = ("context", "name", "scope")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
-    ORG_FIELD_NUMBER: _ClassVar[int]
     SCOPE_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
     name: str
-    org: str
     scope: str
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., name: _Optional[str] = ..., org: _Optional[str] = ..., scope: _Optional[str] = ...) -> None: ...
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., name: _Optional[str] = ..., scope: _Optional[str] = ...) -> None: ...
 
 class CreateGroupResponse(_message.Message):
     __slots__ = ("error", "group")
@@ -982,41 +990,67 @@ class ListPlacementsResponse(_message.Message):
     placements: _containers.RepeatedCompositeFieldContainer[Placement]
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., placements: _Optional[_Iterable[_Union[Placement, _Mapping]]] = ...) -> None: ...
 
-class PutScopeRequest(_message.Message):
-    __slots__ = ("context", "org", "workspace")
+class RegisterContainerRequest(_message.Message):
+    __slots__ = ("context", "service", "type", "id", "parent")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
-    ORG_FIELD_NUMBER: _ClassVar[int]
-    WORKSPACE_FIELD_NUMBER: _ClassVar[int]
+    SERVICE_FIELD_NUMBER: _ClassVar[int]
+    TYPE_FIELD_NUMBER: _ClassVar[int]
+    ID_FIELD_NUMBER: _ClassVar[int]
+    PARENT_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
-    org: str
-    workspace: str
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., org: _Optional[str] = ..., workspace: _Optional[str] = ...) -> None: ...
+    service: str
+    type: str
+    id: str
+    parent: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., service: _Optional[str] = ..., type: _Optional[str] = ..., id: _Optional[str] = ..., parent: _Optional[str] = ...) -> None: ...
 
-class PutScopeResponse(_message.Message):
-    __slots__ = ("error", "scope")
+class RegisterContainerResponse(_message.Message):
+    __slots__ = ("error", "container")
     ERROR_FIELD_NUMBER: _ClassVar[int]
-    SCOPE_FIELD_NUMBER: _ClassVar[int]
+    CONTAINER_FIELD_NUMBER: _ClassVar[int]
     error: _common_pb2.CallError
-    scope: Scope
-    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., scope: _Optional[_Union[Scope, _Mapping]] = ...) -> None: ...
+    container: Container
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., container: _Optional[_Union[Container, _Mapping]] = ...) -> None: ...
 
-class DeleteScopeRequest(_message.Message):
-    __slots__ = ("context", "org", "workspace")
+class DeleteContainerRequest(_message.Message):
+    __slots__ = ("context", "service", "type", "id")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
-    ORG_FIELD_NUMBER: _ClassVar[int]
-    WORKSPACE_FIELD_NUMBER: _ClassVar[int]
+    SERVICE_FIELD_NUMBER: _ClassVar[int]
+    TYPE_FIELD_NUMBER: _ClassVar[int]
+    ID_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
-    org: str
-    workspace: str
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., org: _Optional[str] = ..., workspace: _Optional[str] = ...) -> None: ...
+    service: str
+    type: str
+    id: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., service: _Optional[str] = ..., type: _Optional[str] = ..., id: _Optional[str] = ...) -> None: ...
 
-class DeleteScopeResponse(_message.Message):
+class DeleteContainerResponse(_message.Message):
     __slots__ = ("error", "deleted")
     ERROR_FIELD_NUMBER: _ClassVar[int]
     DELETED_FIELD_NUMBER: _ClassVar[int]
     error: _common_pb2.CallError
     deleted: bool
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., deleted: bool = ...) -> None: ...
+
+class GetContainerRequest(_message.Message):
+    __slots__ = ("context", "service", "type", "id")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    SERVICE_FIELD_NUMBER: _ClassVar[int]
+    TYPE_FIELD_NUMBER: _ClassVar[int]
+    ID_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    service: str
+    type: str
+    id: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., service: _Optional[str] = ..., type: _Optional[str] = ..., id: _Optional[str] = ...) -> None: ...
+
+class GetContainerResponse(_message.Message):
+    __slots__ = ("error", "name")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    name: str
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., name: _Optional[str] = ...) -> None: ...
 
 class RegisterCatalogRequest(_message.Message):
     __slots__ = ("context", "catalog")

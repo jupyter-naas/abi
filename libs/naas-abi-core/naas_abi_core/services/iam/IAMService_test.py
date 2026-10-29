@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from naas_abi_core.engine.call_context import as_service_account
-from naas_abi_core.services.iam import roles
+from naas_abi_core.services.iam import grants, roles
 from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import IAMStoreMemory
 from naas_abi_core.services.iam.catalog import ActionCatalog, ActionSpec, ResourceType
 from naas_abi_core.services.iam.IAMPorts import (
@@ -25,18 +25,24 @@ from naas_abi_core.services.iam.IAMService import (
     IAMService,
     attachment_resource,
 )
+from naas_abi_core.services.iam.names import PLATFORM, UNRESOLVED, anywhere
 from naas_abi_core.services.iam.policy import (
     PolicyValidationError,
     parse_policy_document,
 )
 from naas_abi_core.services.iam.tests.iam_harness import (
     TRIPLE_STORE,
+    below,
     document,
     graph,
+    org,
     statement,
+    workspace,
 )
 
 QUERY = "triple_store:Query"
+WS = workspace("ws-1")
+WS_2 = workspace("ws-2")
 
 
 # -- boot ---------------------------------------------------------------------------
@@ -107,10 +113,10 @@ def test_iam_operations_need_iam_actions(h):
     h.grant(
         bob.id,
         statement(
-            # The platform's policies are named for every org, abi:%2A:%2A.
+            # The platform's policies are named at the platform.
             "Allow",
             ["iam:CreatePolicy", "iam:GetPolicy"],
-            ["abi:*:*:iam:policy/*"],
+            ["abi:iam:policy/*"],
         ),
         # What the policy allows: nobody writes a grant they do not hold.
         statement("Allow", [QUERY], ["*"]),
@@ -131,7 +137,7 @@ def test_list_operations_return_only_allowed_items_and_page_after_filtering(h):
         statement(
             "Allow",
             ["iam:ListPrincipals"],
-            [f"abi:-:-:iam:principal/{i}" for i in visible],
+            [f"abi:iam:principal/{i}" for i in visible],
         ),
     )
     with h.as_(bob):
@@ -189,7 +195,7 @@ def _nexus_call(user_id: str):
     )
 
 
-def _member(h, nexus_id: str, role: str = "member", scope: str = "abi:org-1:ws-1"):
+def _member(h, nexus_id: str, role: str = "member", scope: str = WS):
     """A Nexus user holding ``role`` at ``scope``, named on calls by its Nexus id."""
     record = h.admin("ensure_user", LEGACY_NEXUS_ISSUER, nexus_id)
     h.attach(f"builtin.{role}", record.id, scope)
@@ -207,9 +213,7 @@ def test_a_nexus_user_holds_only_what_its_roles_grant(h):
         assert h.iam.authorize(QUERY, graph_a).allowed
         assert not h.iam.authorize("triple_store:Insert", graph_a).allowed
         assert not h.iam.authorize(QUERY, graph("a", workspace="ws-2")).allowed
-        assert not h.iam.authorize(
-            "iam:ListPrincipals", "abi:-:-:iam:principal/x"
-        ).allowed
+        assert not h.iam.authorize("iam:ListPrincipals", "abi:iam:principal/x").allowed
     _member(h, "user-0123456789ab", "member")
     with _nexus_call("user-0123456789ab"):
         assert h.iam.authorize("triple_store:Insert", graph_a).allowed
@@ -227,14 +231,14 @@ def _approved_module(h, document_, name="module/default/research"):
 def test_a_remote_module_cannot_evict_registrations(h):
     """Its bootstrap registers its own module; no manifest grants eviction."""
     account = _approved_module(h, document(statement("Allow", ["discovery:*"], ["*"])))
-    own = "abi:-:-:discovery:module/default/research"
-    other = "abi:-:-:discovery:module/default/other"
+    own = "abi:discovery:module/default/research"
+    other = "abi:discovery:module/default/other"
     assert h.allowed("discovery:Register", own, account)
     assert not h.allowed("discovery:Evict", own, account)
     assert not h.allowed("discovery:Evict", other, account)
 
 
-RUN = "abi:-:-:discovery:run/{owner}/default/inv-1"
+RUN = "abi:discovery:run/{owner}/default/inv-1"
 
 
 @pytest.fixture
@@ -257,7 +261,7 @@ def test_a_nexus_user_reaches_only_their_own_agent_runs(h, discovery, action):
             action, RUN.format(owner="user-bbbbbbbbbbbb")
         ).allowed
         assert h.iam.authorize(
-            "discovery:InvokeAgent", "abi:-:-:discovery:agent/default/m/a"
+            "discovery:InvokeAgent", "abi:discovery:agent/default/m/a"
         ).allowed
 
 
@@ -311,7 +315,7 @@ def test_an_iam_user_holds_no_transitional_grant(h):
     bob = h.user()
     assert not h.allowed(
         "model_registry:Chat",
-        "abi:-:-:model_registry:model/m",
+        "abi:model_registry:model/m",
         actor="api",
         on_behalf_of=bob,
     )
@@ -337,7 +341,7 @@ def test_deleting_a_principal_keeps_its_id_and_drops_its_grants(h):
     assert h.iam.store.groups_of(bob.id) == []
     assert not h.allowed(QUERY, graph("a"), bob)
     with pytest.raises(IAMConflictError):
-        h.attach(roles.VIEWER, bob.id, "abi:org-1:ws-1")
+        h.attach(roles.VIEWER, bob.id, WS)
     with pytest.raises(IAMConflictError):
         h.admin("resume_principal", bob.id)
 
@@ -421,29 +425,33 @@ def test_a_policy_using_scope_needs_a_scoped_attachment(h):
         h.attach(roles.VIEWER, bob.id)
     with pytest.raises(ValueError):
         h.attach(roles.VIEWER, bob.id, "org-1:ws-1")
-    first = h.attach(roles.VIEWER, bob.id, "abi:org-1:ws-1")
-    assert h.attach(roles.VIEWER, bob.id, "abi:org-1:ws-1") == first
+    first = h.attach(roles.VIEWER, bob.id, WS)
+    assert h.attach(roles.VIEWER, bob.id, WS) == first
 
 
 def test_attachment_names_sit_at_their_scope():
-    assert attachment_resource("builtin.viewer", "usr_x", "abi:org-1:ws-1") == (
-        "abi:org-1:ws-1:iam:attachment/builtin.viewer/usr_x"
+    assert attachment_resource("builtin.viewer", "usr_x", WS) == (
+        WS + "/iam:attachment/builtin.viewer/usr_x"
     )
-    assert (
-        attachment_resource("p", "u", "abi:org-1:*")
-        == "abi:org-1:%2A:iam:attachment/p/u"
+    # Below a container: in that container, where "Grant only what you hold"
+    # checks what it grants under it.
+    assert attachment_resource("p", "u", below("org-1")) == (
+        org("org-1") + "/iam:attachment/p/u"
     )
-    assert attachment_resource("p", "u", None) == "abi:%2A:%2A:iam:attachment/p/u"
+    # Unscoped and at the platform: at the platform, which only unscoped grants
+    # reach.
+    assert attachment_resource("p", "u", None) == "abi:iam:attachment/p/u"
+    assert attachment_resource("p", "u", PLATFORM) == "abi:iam:attachment/p/u"
 
 
 def test_list_attachments_is_filtered(h):
     admin, bob = h.user("admin"), h.user("bob")
-    h.attach(roles.ADMIN, admin.id, "abi:org-1:ws-1")
-    h.attach(roles.VIEWER, bob.id, "abi:org-1:ws-1")
-    h.attach(roles.VIEWER, bob.id, "abi:org-1:ws-2")
+    h.attach(roles.ADMIN, admin.id, WS)
+    h.attach(roles.VIEWER, bob.id, WS)
+    h.attach(roles.VIEWER, bob.id, WS_2)
     with h.as_(admin):
         listed = h.iam.list_attachments(principal_id=bob.id)
-    assert [a.scope for a in listed] == ["abi:org-1:ws-1"]
+    assert [a.scope for a in listed] == [WS]
 
 
 # -- catalogs ---------------------------------------------------------------------------------
@@ -451,8 +459,8 @@ def test_list_attachments_is_filtered(h):
 
 def test_registering_a_catalog_regenerates_the_roles(h):
     bob = h.user()
-    h.attach(roles.VIEWER, bob.id, "abi:org-1:ws-1")
-    kv = "abi:org-1:ws-1:keyvalue:key/k"
+    h.attach(roles.VIEWER, bob.id, WS)
+    kv = WS + "/keyvalue:key/k"
     assert not h.allowed("keyvalue:Get", kv, bob)
     catalog = ActionCatalog(
         service="keyvalue",
@@ -504,40 +512,207 @@ def test_register_catalog_needs_the_action(h):
 
 
 def test_placement_resolution(h):
-    h.admin("put_placement", "document", "nexus-ws-1", "org-1", "ws-1")
-    h.admin("put_placement", "document", "nexus-ws-1/*", "org-1", "ws-1")
-    h.admin("put_placement", "document", "nexus-ws-1/private/*", "org-1", "ws-2")
-    h.admin("put_placement", "document", "people", "-", "-")
-    assert h.iam.resolve_placement("document", "nexus-ws-1") == ("org-1", "ws-1")
-    assert h.iam.resolve_placement("document", "nexus-ws-1/c/d") == ("org-1", "ws-1")
-    assert h.iam.resolve_placement("document", "nexus-ws-1/private/x") == (
-        "org-1",
-        "ws-2",
-    )
-    assert h.iam.resolve_placement("document", "elsewhere") == ("-", "-")
-    assert h.iam.resolve_placement("dataset", "nexus-ws-1") == ("-", "-")
+    h.admin("put_placement", "document", "nexus-ws-1", WS)
+    h.admin("put_placement", "document", "nexus-ws-1/*", WS)
+    h.admin("put_placement", "document", "nexus-ws-1/private/*", WS_2)
+    h.admin("put_placement", "document", "people", PLATFORM)
+    assert h.iam.resolve_placement("document", "nexus-ws-1") == WS
+    assert h.iam.resolve_placement("document", "nexus-ws-1/c/d") == WS
+    assert h.iam.resolve_placement("document", "nexus-ws-1/private/x") == WS_2
+    assert h.iam.resolve_placement("document", "elsewhere") == PLATFORM
+    assert h.iam.resolve_placement("dataset", "nexus-ws-1") == PLATFORM
     assert h.admin("delete_placement", "document", "nexus-ws-1/private/*") is True
-    assert h.iam.resolve_placement("document", "nexus-ws-1/private/x") == (
-        "org-1",
-        "ws-1",
-    )
+    assert h.iam.resolve_placement("document", "nexus-ws-1/private/x") == WS
     with pytest.raises(ValueError):
         h.admin("put_placement", "document", "a*b")
+    # A placement is in a container, never below one nor in a pattern.
+    for container in (below("org-1"), "abi:*", "abi:org-1:ws-1"):
+        with pytest.raises(ValueError):
+            h.admin("put_placement", "document", "x", container)
     assert len(h.admin("list_placements", "document")) == 3
 
 
-def test_scopes_map_workspaces_to_their_org(h):
-    h.admin("put_scope", "org-1")
-    h.admin("put_scope", "org-1", "ws-1")
-    assert h.iam.workspace_org("ws-1") == "org-1"
-    assert h.iam.workspace_org("ws-2") is None
-    # An org's own scope is ``(org, -)``: "-" and "*" name no workspace, so no org.
-    assert h.iam.workspace_org("-") is None and h.iam.workspace_org("*") is None
-    with pytest.raises(IAMConflictError):
-        h.admin("put_scope", "org-2", "ws-1")
-    with pytest.raises(ValueError):
-        h.admin("put_scope", "Org 1")
-    assert h.admin("delete_scope", "org-1", "ws-1") is True
+def test_containers_are_registered_under_their_parent(h):
+    with as_service_account("api"):
+        org_1 = h.iam.register_container("nexus", "organization", "org-1")
+        assert org_1.name == org("org-1") and org_1.parent == PLATFORM
+        ws = h.iam.register_container("nexus", "workspace", "ws-1", parent=org_1.name)
+        assert ws.name == WS
+        revision = h.iam.store.revision()
+        # Again under the same parent: nothing changes.
+        assert (
+            h.iam.register_container("nexus", "workspace", "ws-1", parent=org_1.name)
+            == ws
+        )
+        assert h.iam.store.revision() == revision
+        # A container never moves.
+        with pytest.raises(IAMConflictError):
+            h.iam.register_container("nexus", "workspace", "ws-1")
+        # Its parent is the platform or a registered container.
+        with pytest.raises(IAMNotFoundError):
+            h.iam.register_container("nexus", "workspace", "ws-2", parent=org("org-9"))
+        with pytest.raises(ValueError):
+            h.iam.register_container("nexus", "workspace", "ws-2", parent="abi:o:w")
+        # Only a container type of a registered catalog is one.
+        with pytest.raises(ValueError):
+            h.iam.register_container("triple_store", "graph", "g")
+        with pytest.raises(ValueError):
+            h.iam.register_container("crm", "project", "p-1", parent=WS)
+    assert h.iam.container("nexus", "workspace", "ws-1") == WS
+    assert h.iam.container("nexus", "organization", "org-1") == org("org-1")
+    assert h.iam.container("nexus", "workspace", "ws-2") is None
+    assert h.admin("list_containers") == [org_1, ws]
+
+
+FOLDERS = ActionCatalog(
+    service="crm",
+    version=1,
+    module="crm",
+    resource_types=(
+        # A project sits in a workspace; a folder anywhere.
+        ResourceType(
+            "project", container=True, module_scope=True, parents=("nexus:workspace",)
+        ),
+        ResourceType("folder", container=True, module_scope=True),
+    ),
+    actions=(
+        ActionSpec("CreateProject", "write", ("project",), creates=True),
+        ActionSpec("CreateFolder", "write", ("folder",), creates=True),
+    ),
+)
+
+
+def test_a_container_type_sits_in_its_parents_only(h):
+    h.register("ws-1", "org-1")
+    with as_service_account("engine"):
+        h.iam.register_catalog(FOLDERS)
+    with as_service_account("api"):
+        project = h.iam.register_container("crm", "project", "p-1", parent=WS)
+        assert project.name == f"{WS}/crm:project/p-1"
+        for parent in (PLATFORM, org("org-1"), project.name):
+            with pytest.raises(ValueError, match="sits in nexus:workspace"):
+                h.iam.register_container("crm", "project", "p-2", parent=parent)
+        # No parents named: anywhere, inside a project too.
+        h.iam.register_container("crm", "folder", "f-1", parent=project.name)
+        h.iam.register_container("crm", "folder", "f-2")
+
+
+def test_a_container_type_has_no_name_outside_its_parents():
+    """Grant only what you hold counts a project's names in a workspace only: a
+    project directly in an organisation, or at the platform, names nothing (so
+    granting it needs no cover); a folder, which sits anywhere, does."""
+    containers = frozenset({("nexus", "organization"), ("nexus", "workspace")})
+    projects = grants.universe("crm", "project", containers, ("nexus:workspace",))
+    folders = grants.universe("crm", "folder", containers)
+    for pattern in (f"{org('org-1')}/crm:project/*", "abi:crm:project/*"):
+        assert grants.covered(pattern, (), projects)
+        assert not grants.covered(pattern.replace("project", "folder"), (), folders)
+    assert not grants.covered(f"{WS}/crm:project/*", (), projects)
+
+
+def test_registering_a_container_needs_its_create_action_where_it_is_placed(h):
+    h.register("-", "org-1")
+    h.register("-", "org-2")
+    alice = h.user("alice")
+    # A role at an organisation creates workspaces in it, nowhere else.
+    h.attach(roles.MEMBER, alice.id, org("org-1"))
+    with h.as_(alice):
+        made = h.iam.register_container(
+            "nexus", "workspace", "ws-1", parent=org("org-1")
+        )
+        assert made.name == WS
+        with pytest.raises((PermissionDeniedError, ResourceNotFoundError)):
+            h.iam.register_container("nexus", "workspace", "ws-2", parent=org("org-2"))
+        with pytest.raises((PermissionDeniedError, ResourceNotFoundError)):
+            h.iam.register_container("nexus", "organization", "org-3")
+    assert h.iam.container("nexus", "workspace", "ws-2") is None
+    assert h.iam.container("nexus", "organization", "org-3") is None
+
+
+def test_deleting_a_container_drops_what_it_and_those_below_own(h):
+    h.register("ws-1")
+    h.register("ws-2")
+    other = h.register("ws-9", "org-2")
+    bob, alice, carol = h.user("bob"), h.user("alice"), h.user("carol")
+    h.attach(roles.MEMBER, bob.id, WS)
+    h.attach(roles.VIEWER, alice.id, below("org-1"))
+    h.attach(roles.MEMBER, carol.id, other)
+    read = document(statement("Allow", [QUERY], ["${scope}/triple_store:graph/*"]))
+    ws_policy = h.admin("create_policy", "ws", read, scope=WS)
+    org_policy = h.admin("create_policy", "org", read, scope=org("org-1"))
+    other_policy = h.admin("create_policy", "other", read, scope=other)
+    ws_group = h.admin("create_group", "ws team", scope=WS)
+    org_group = h.admin("create_group", "org team", scope=org("org-1"))
+    h.admin("add_group_member", org_group.id, bob.id)
+    h.admin("attach_policy", ws_policy.id, alice.id, WS)
+    invited = h.admin(
+        "create_pending_grant", "builtin", "dan@example.com", roles.MEMBER, WS
+    )
+    h.admin("put_placement", "document", "nexus-ws-1", WS)
+    h.admin("put_placement", "document", "nexus-ws-2", WS_2)
+    h.admin("put_placement", "document", "nexus-ws-9", other)
+    assert h.allowed(QUERY, graph("g"), bob)
+
+    # Deleting needs the type's delete action: a member holds none.
+    with h.as_(bob), pytest.raises((PermissionDeniedError, ResourceNotFoundError)):
+        h.iam.delete_container("nexus", "workspace", "ws-1")
+    assert h.iam.container("nexus", "workspace", "ws-1") == WS
+
+    with as_service_account("api"):
+        assert h.iam.delete_container("nexus", "workspace", "ws-1") is True
+        assert h.iam.delete_container("nexus", "workspace", "ws-1") is False
+    assert h.iam.container("nexus", "workspace", "ws-1") is None
+    assert h.iam.container("nexus", "workspace", "ws-2") == WS_2
+    with pytest.raises(IAMNotFoundError):
+        h.iam.store.get_policy(ws_policy.id)
+    assert h.iam.store.get_principal(ws_group.id).status == "deleted"
+    # Its attachments go, the companions the roles brought with them, and a
+    # user left with nothing within the organisation leaves its groups.
+    assert h.iam.store.list_attachments(principal_id=bob.id) == []
+    assert not h.allowed(QUERY, graph("g"), bob)
+    assert h.iam.store.list_group_members(org_group.id) == []
+    assert {a.scope for a in h.iam.store.list_attachments(principal_id=alice.id)} == {
+        below("org-1"),
+        None,
+    }
+    assert h.iam.store.get_pending_grant(invited.id) is None
+    assert h.iam.resolve_placement("document", "nexus-ws-1") == PLATFORM
+    assert h.iam.resolve_placement("document", "nexus-ws-2") == WS_2
+
+    # The organisation goes with every container below it.
+    with as_service_account("api"):
+        assert h.iam.delete_container("nexus", "organization", "org-1") is True
+    assert h.iam.container("nexus", "workspace", "ws-2") is None
+    with pytest.raises(IAMNotFoundError):
+        h.iam.store.get_policy(org_policy.id)
+    assert h.iam.store.get_principal(org_group.id).status == "deleted"
+    assert h.iam.store.list_attachments(principal_id=alice.id) == []
+    assert h.iam.resolve_placement("document", "nexus-ws-2") == PLATFORM
+    # Another organisation keeps what it has.
+    assert h.iam.store.get_policy(other_policy.id).owner_scope == other
+    assert h.iam.resolve_placement("document", "nexus-ws-9") == other
+    assert {a.scope for a in h.iam.store.list_attachments(principal_id=carol.id)} == {
+        other,
+        None,
+    }
+
+
+def test_the_container_of_a_call_is_checked_against_its_path(h):
+    from naas_abi_core.engine.call_context import inside
+
+    h.register("ws-1")
+    with inside(None):
+        assert h.iam.call_container() is None
+    with inside(PLATFORM):
+        assert h.iam.call_container() is None
+    with inside(WS):
+        assert h.iam.call_container() == WS
+    with inside(org("org-1")):
+        assert h.iam.call_container() == org("org-1")
+    # Named under another path, unknown, or no container's name: nothing.
+    for claimed in (workspace("ws-1", "org-2"), workspace("ws-9"), "abi:org-1:ws-1"):
+        with inside(claimed):
+            assert h.iam.call_container() == UNRESOLVED
 
 
 # -- caching --------------------------------------------------------------------------------------
@@ -666,11 +841,13 @@ def test_a_caller_who_may_list_nothing_never_scans_the_store(h):
     assert calls == []
 
 
-def test_attachment_names_for_org_wide_scopes_differ_from_org_level_ones():
-    org_wide = attachment_resource("p", "u", "abi:acme:*")
-    org_level = attachment_resource("p", "u", "abi:acme:-")
-    assert org_wide == "abi:acme:%2A:iam:attachment/p/u"
-    assert org_level == "abi:acme:-:iam:attachment/p/u"
+def test_an_attachment_below_a_container_is_named_in_that_container():
+    """The name no longer tells an attachment below a container from one at it:
+    "Grant only what you hold" checks what one below grants at every container
+    under it, so an admin of the container's own level attaches nothing below."""
+    acme = org("acme")
+    assert attachment_resource("p", "u", acme + "/*") == acme + "/iam:attachment/p/u"
+    assert attachment_resource("p", "u", acme) == acme + "/iam:attachment/p/u"
 
 
 # -- review round 2 --------------------------------------------------------------------
@@ -681,9 +858,9 @@ def test_a_policy_attached_at_a_scope_cannot_be_updated_out_of_it(h):
     policy = h.admin(
         "create_policy",
         "read here",
-        document(statement("Allow", [QUERY], ["${scope}:triple_store:graph/*"])),
+        document(statement("Allow", [QUERY], ["${scope}/triple_store:graph/*"])),
     )
-    h.attach(policy.id, bob.id, "abi:acme:ws1")
+    h.attach(policy.id, bob.id, workspace("ws1", "acme"))
     with pytest.raises(ValueError, match=r"\$\{scope\}"):
         h.admin(
             "update_policy",
@@ -696,7 +873,7 @@ def test_a_policy_attached_at_a_scope_cannot_be_updated_out_of_it(h):
         policy.id,
         expected_revision=1,
         document=document(
-            statement("Allow", [QUERY], ["${scope}:triple_store:graph/a"])
+            statement("Allow", [QUERY], ["${scope}/triple_store:graph/a"])
         ),
     )
     assert narrowed.revision == 2
@@ -712,12 +889,23 @@ def test_a_policy_attached_at_a_scope_cannot_be_updated_out_of_it(h):
     )
 
 
-def test_every_workspace_is_a_name_for_org_wide_attachments_only(h):
+def test_below_a_container_is_a_scope_for_attachments_only(h):
+    """``<container>/*`` is a scope: no container is registered, placed or owns
+    anything under that name."""
+    h.register("-", "acme")
+    acme_below = below("acme")
     with pytest.raises(ValueError):
-        h.admin("put_scope", "acme", "%2A")
+        h.admin("put_placement", "document", "nexus-ws-1/*", acme_below)
     with pytest.raises(ValueError):
-        h.admin("put_placement", "document", "nexus-ws-1/*", "acme", "%2A")
-    assert h.iam.workspace_org("%2A") is None
+        h.admin(
+            "create_policy",
+            "p",
+            document(statement("Allow", [QUERY], ["${scope}/triple_store:graph/*"])),
+            scope=acme_below,
+        )
+    with pytest.raises(ValueError):
+        h.admin("register_container", "nexus", "workspace", "w", parent=acme_below)
+    assert h.iam.container("nexus", "workspace", "%2A") is None
 
 
 def test_the_ensure_user_race_authorizes_the_existing_principal(h):
@@ -725,8 +913,8 @@ def test_the_ensure_user_race_authorizes_the_existing_principal(h):
     clerk = h.service_account("ci/clerk")
     h.grant(
         clerk.id,
-        statement("Allow", ["iam:CreateUser"], ["abi:-:-:iam:principal/*"]),
-        statement("Deny", ["iam:CreateUser"], [f"abi:-:-:iam:principal/{bob.id}"]),
+        statement("Allow", ["iam:CreateUser"], ["abi:iam:principal/*"]),
+        statement("Deny", ["iam:CreateUser"], [f"abi:iam:principal/{bob.id}"]),
     )
     store = h.iam.store
     original = store.find_user
@@ -771,14 +959,10 @@ def test_api_never_reaches_what_it_does_not_name(h):
     h.attach(roles.PLATFORM_ADMIN, user.id)
     with _api_for("user-aaaaaaaaaaaa"):
         assert h.iam.authorize(QUERY, graph("a")).allowed
+        assert not h.iam.authorize("iam:DeletePrincipal", "abi:iam:principal/x").allowed
+        assert not h.iam.authorize("secret:Get", "abi:secret:secret/idp%2Fk").allowed
         assert not h.iam.authorize(
-            "iam:DeletePrincipal", "abi:-:-:iam:principal/x"
-        ).allowed
-        assert not h.iam.authorize(
-            "secret:Get", "abi:-:-:secret:secret/idp%2Fk"
-        ).allowed
-        assert not h.iam.authorize(
-            "dataset:QueryUnchecked", "abi:-:-:dataset:catalog/-"
+            "dataset:QueryUnchecked", "abi:dataset:catalog/-"
         ).allowed
 
 
@@ -788,8 +972,10 @@ def test_allows_every_is_a_safe_shortcut(h):
         assert h.iam.allows_every(QUERY, "triple_store", "graph")
     with h.as_(bob):
         assert not h.iam.allows_every(QUERY, "triple_store", "graph")
+    # Every graph: at the platform and in any container (``names.anywhere``).
     h.grant(
-        bob.id, statement("Allow", ["triple_store:*"], ["abi:*:*:triple_store:graph/*"])
+        bob.id,
+        statement("Allow", ["triple_store:*"], anywhere("triple_store:graph/*")),
     )
     with h.as_(bob):
         assert h.iam.allows_every(QUERY, "triple_store", "graph")
@@ -800,7 +986,7 @@ def test_allows_every_is_a_safe_shortcut(h):
         assert not h.iam.allows_every(QUERY, "triple_store", "graph")
     # A workspace role is not "every graph".
     alice = h.user("alice")
-    h.attach(roles.VIEWER, alice.id, "abi:org-1:ws-1")
+    h.attach(roles.VIEWER, alice.id, WS)
     with h.as_(alice):
         assert not h.iam.allows_every(QUERY, "triple_store", "graph")
     # Sealed types are never "every": the seal owner's own is checked.
@@ -1035,7 +1221,7 @@ MANIFEST = document(
     statement(
         "Allow",
         ["triple_store:Query"],
-        ["abi:-:-:triple_store:graph/${module.id}-*"],
+        ["abi:triple_store:graph/${module.id}-*"],
         sid="OwnGraphs",
     )
 )
@@ -1048,18 +1234,18 @@ def _submit(h, account, manifest=MANIFEST, module_id="people", project="acme"):
 
 def test_a_manifest_is_pending_until_approved(h, iam):
     account = _module(h)
-    own = "abi:-:-:triple_store:graph/people-contacts"
+    own = "abi:triple_store:graph/people-contacts"
     submitted = _submit(h, account)
     assert submitted.manifest.status == "pending" and not submitted.approved_now
     assert not h.allowed(QUERY, own, account)
     approved = h.admin("approve_manifest", account.id)
     assert approved.status == "approved" and approved.decided_by
     assert h.allowed(QUERY, own, account)
-    assert not h.allowed(QUERY, "abi:-:-:triple_store:graph/other-x", account)
+    assert not h.allowed(QUERY, "abi:triple_store:graph/other-x", account)
     policy = iam.store.get_policy("module.acme.people")
     assert policy.managed
     assert policy.document.statements[0].resources == (
-        "abi:-:-:triple_store:graph/people-*",
+        "abi:triple_store:graph/people-*",
     )
     # Submitting the approved version again changes nothing.
     again = _submit(h, account)
@@ -1086,19 +1272,19 @@ def test_a_new_version_waits_while_the_approved_one_holds(h):
     wider = document(statement("Allow", ["triple_store:*"], ["*"]))
     pending = _submit(h, account, wider)
     assert pending.manifest.status == "pending"
-    assert h.allowed(QUERY, "abi:-:-:triple_store:graph/people-a", account)
-    assert not h.allowed("triple_store:Insert", "abi:-:-:triple_store:graph/x", account)
+    assert h.allowed(QUERY, "abi:triple_store:graph/people-a", account)
+    assert not h.allowed("triple_store:Insert", "abi:triple_store:graph/x", account)
 
 
 def test_an_admin_can_narrow_or_reject(h):
     account = _module(h)
     _submit(h, account, document(statement("Allow", ["triple_store:*"], ["*"])))
     narrowed = document(
-        statement("Allow", ["triple_store:Query"], ["abi:-:-:triple_store:graph/a"])
+        statement("Allow", ["triple_store:Query"], ["abi:triple_store:graph/a"])
     )
     h.admin("approve_manifest", account.id, document=narrowed)
-    assert h.allowed(QUERY, "abi:-:-:triple_store:graph/a", account)
-    assert not h.allowed("triple_store:Insert", "abi:-:-:triple_store:graph/a", account)
+    assert h.allowed(QUERY, "abi:triple_store:graph/a", account)
+    assert not h.allowed("triple_store:Insert", "abi:triple_store:graph/a", account)
 
     other = _module(h, "module/acme/other")
     _submit(h, other, module_id="other")
@@ -1116,7 +1302,7 @@ def test_auto_approve_approves_at_submission(h, iam):
     account = _module(h)
     submitted = _submit(h, account)
     assert submitted.manifest.status == "approved" and submitted.approved_now
-    assert h.allowed(QUERY, "abi:-:-:triple_store:graph/people-a", account)
+    assert h.allowed(QUERY, "abi:triple_store:graph/people-a", account)
     assert not _submit(h, account).approved_now
 
 
@@ -1157,9 +1343,9 @@ def test_a_superseded_version_submitted_again_waits_for_approval(h):
     assert [m.sha256 for m in h.admin("list_manifests", status="pending")] == [
         first.sha256
     ]
-    assert h.allowed("triple_store:Insert", "abi:-:-:triple_store:graph/x", account)
+    assert h.allowed("triple_store:Insert", "abi:triple_store:graph/x", account)
     assert h.admin("approve_manifest", account.id).sha256 == first.sha256
-    assert not h.allowed("triple_store:Insert", "abi:-:-:triple_store:graph/x", account)
+    assert not h.allowed("triple_store:Insert", "abi:triple_store:graph/x", account)
 
 
 def test_approving_needs_the_admin_action(h):
@@ -1173,10 +1359,8 @@ def test_approving_needs_the_admin_action(h):
 def test_unapproved_modules_reach_nothing_but_their_bootstrap(h):
     account = _module(h)
     _submit(h, account)
-    assert not h.allowed(
-        "document:Find", "abi:-:-:document:collection/people/c", account
-    )
-    assert not h.allowed(QUERY, "abi:-:-:triple_store:graph/people-a", account)
+    assert not h.allowed("document:Find", "abi:document:collection/people/c", account)
+    assert not h.allowed(QUERY, "abi:triple_store:graph/people-a", account)
 
 
 # -- broker permissions -------------------------------------------------------
@@ -1210,14 +1394,14 @@ def test_broker_permissions_never_read_a_cached_policy(h, iam):
     key = h.admin("create_key", account.id).record
     _submit(h, account, document(statement("Allow", ["document:*"], ["*"])))
     h.admin("approve_manifest", account.id)
-    assert h.allowed("document:Get", "abi:-:-:document:document/x/y", account)
+    assert h.allowed("document:Get", "abi:document:document/x/y", account)
     # Narrowed in the store by another process (abi iam), this one not told.
     policy = iam.store.get_policy("module.acme.people")
     iam.store.put_managed_policy(
         replace(
             policy,
             document=parse_policy_document(
-                document(statement("Allow", ["keyvalue:*"], ["abi:*:*:keyvalue:*"]))
+                document(statement("Allow", ["keyvalue:*"], anywhere("keyvalue:*")))
             ),
         )
     )
@@ -1228,7 +1412,7 @@ def test_broker_permissions_never_read_a_cached_policy(h, iam):
 
 def test_a_manifest_naming_a_platform_topic_is_refused(h):
     account = _module(h)
-    wide = document(statement("Allow", ["bus:*"], ["abi:-:-:bus:topic/abi.iam.v1"]))
+    wide = document(statement("Allow", ["bus:*"], ["abi:bus:topic/abi.iam.v1"]))
     with pytest.raises(PolicyValidationError, match="reserved for the platform"):
         _submit(h, account, wide)
     _submit(h, account)
@@ -1237,7 +1421,7 @@ def test_a_manifest_naming_a_platform_topic_is_refused(h):
 
 
 def _topic(topic: str):
-    return document(statement("Allow", ["bus:*"], [f"abi:-:-:bus:topic/{topic}"]))
+    return document(statement("Allow", ["bus:*"], [f"abi:bus:topic/{topic}"]))
 
 
 def test_a_topic_nested_in_another_modules_approved_topic_is_refused(h):
@@ -1309,7 +1493,7 @@ def test_a_denied_topic_is_no_topic_another_one_nests_in(h):
     _submit(h, orders, _topic("orders"))
     h.admin("approve_manifest", orders.id)
     denier = _module(h, "module/acme/denier")
-    only_deny = document(statement("Deny", ["bus:*"], ["abi:-:-:bus:topic/orders.eu"]))
+    only_deny = document(statement("Deny", ["bus:*"], ["abi:bus:topic/orders.eu"]))
     _submit(h, denier, only_deny, module_id="denier")
     assert h.admin("approve_manifest", denier.id).status == "approved"
 
@@ -1363,7 +1547,8 @@ def _old_feature_policy(policy_id="builtin.features.org-1.member"):
         name="Features of org-1.member",
         document=PolicyDocument(
             statements=(
-                Statement("Allow", ("triple_store:Query",), ("${scope}:*",), "Old"),
+                # As the rewrite of the names left it (``${scope}:*`` before).
+                Statement("Allow", ("triple_store:Query",), ("${scope}/*",), "Old"),
             )
         ),
         managed=True,
@@ -1380,7 +1565,7 @@ def test_the_feature_policies_an_older_version_made_stay_until_moved(h):
     old = _old_feature_policy()
     h.iam.store.put_managed_policy(old)
     bob = h.user("bob")
-    h.iam.store.attach(Attachment("att_old", old.id, bob.id, "abi:org-1:ws-1"))
+    h.iam.store.attach(Attachment("att_old", old.id, bob.id, WS))
     h.iam.bootstrap()
     h.iam.invalidate()
     assert h.allowed(QUERY, graph("a", "org-1", "ws-1"), bob)
@@ -1412,10 +1597,10 @@ def test_an_old_companion_follows_its_role_out(h):
     old = _old_feature_policy()
     h.iam.store.put_managed_policy(old)
     bob = h.user("bob")
-    h.attach(roles.MEMBER, bob.id, "abi:org-1:ws-1")
-    h.iam.store.attach(Attachment("att_old", old.id, bob.id, "abi:org-1:ws-1"))
+    h.attach(roles.MEMBER, bob.id, WS)
+    h.iam.store.attach(Attachment("att_old", old.id, bob.id, WS))
     with as_service_account("engine"):
-        h.iam.detach_policy(roles.MEMBER, bob.id, "abi:org-1:ws-1")
+        h.iam.detach_policy(roles.MEMBER, bob.id, WS)
     assert h.iam.store.list_attachments(policy_id=old.id) == []
 
 
@@ -1512,7 +1697,7 @@ def test_a_demoted_role_takes_its_old_features_with_it(h):
     role is still held there."""
     from naas_abi_core.services.iam.IAMPorts import Attachment
 
-    ws = "abi:org-1:ws-1"
+    ws = WS
     admins = _old_feature_policy("builtin.features.org-1.admin")
     h.iam.store.put_managed_policy(admins)
     bob = h.user("bob")
@@ -1574,11 +1759,11 @@ def test_a_retired_policy_that_is_a_parent_is_detached_but_kept(h):
     old = _old_feature_policy()
     h.iam.store.put_managed_policy(old)
     bob = h.user("bob")
-    h.iam.store.attach(Attachment("att_old", old.id, bob.id, "abi:org-1:ws-1"))
+    h.iam.store.attach(Attachment("att_old", old.id, bob.id, WS))
     with as_service_account("engine"):
         child = h.iam.create_policy(
             "narrower",
-            document(statement("Allow", [QUERY], ["${scope}:triple_store:graph/a"])),
+            document(statement("Allow", [QUERY], ["${scope}/triple_store:graph/a"])),
             parent=old.id,
         )
         assert h.iam.retire_policies([old.id]) == []

@@ -13,6 +13,7 @@ from naas_abi_core.engine.call_context import (
 from naas_abi_core.services.iam.catalog import ActionCatalog, ActionSpec, ResourceType
 from naas_abi_core.services.iam.IAMPorts import PrincipalRecord
 from naas_abi_core.services.iam.IAMService import IAMService
+from naas_abi_core.services.iam.names import PLATFORM, container_name
 
 TRIPLE_STORE = ActionCatalog(
     service="triple_store",
@@ -46,8 +47,71 @@ ACTIVITY_LOG = ActionCatalog(
 )
 
 
+# The containers of the tests: an organisation and its workspaces, declared as
+# Nexus declares them. A role at a workspace brings the platform companions.
+NEXUS = ActionCatalog(
+    service="nexus",
+    version=1,
+    resource_types=(
+        ResourceType("organization", container=True),
+        ResourceType("workspace", container=True, platform_companions=True),
+    ),
+    actions=(
+        ActionSpec("CreateOrganization", "write", ("organization",), creates=True),
+        ActionSpec("GetOrganization", "read", ("organization",)),
+        ActionSpec("UpdateOrganization", "admin", ("organization",)),
+        ActionSpec(
+            "DeleteOrganization",
+            "admin",
+            ("organization",),
+            owner_only=True,
+            deletes=True,
+        ),
+        ActionSpec("CreateWorkspace", "write", ("workspace",), creates=True),
+        ActionSpec("GetWorkspace", "read", ("workspace",)),
+        ActionSpec("UpdateWorkspace", "admin", ("workspace",)),
+        ActionSpec(
+            "DeleteWorkspace", "admin", ("workspace",), owner_only=True, deletes=True
+        ),
+    ),
+)
+
+
+def org(org_id: str = "org-1") -> str:
+    """An organisation's container name; ``-`` is the platform."""
+    if org_id == "-":
+        return PLATFORM
+    return container_name("nexus", "organization", org_id)
+
+
+def workspace(ws: str = "ws-1", org_id: str = "org-1") -> str:
+    """A workspace's container name, in ``org_id`` (``-``: at the platform);
+    ``ws`` ``-`` is the organisation itself."""
+    if ws == "-":
+        return org(org_id)
+    return container_name("nexus", "workspace", ws, parent=org(org_id))
+
+
+def below(org_id: str = "org-1") -> str:
+    """The scope below an organisation: it and every workspace of it."""
+    return org(org_id) + "/*"
+
+
+def name_in(container: str, rest: str) -> str:
+    """``rest`` (``<service>:<type>/<id>``) in ``container``."""
+    return f"{PLATFORM}{rest}" if container == PLATFORM else f"{container}/{rest}"
+
+
 def graph(name: str, org: str = "org-1", workspace: str = "ws-1") -> str:
-    return f"abi:{org}:{workspace}:triple_store:graph/{name}"
+    """A graph in a workspace (``workspace`` ``-``: in the organisation; ``org``
+    ``-``: at the platform). ``name`` is written as is."""
+    return name_in(_where(org, workspace), f"triple_store:graph/{name}")
+
+
+def _where(org_id: str, ws: str) -> str:
+    if org_id == "-" and ws == "-":
+        return PLATFORM
+    return workspace(ws, org_id)
 
 
 def statement(effect: str, actions: list[str], resources: list[str], sid=None) -> dict:
@@ -72,6 +136,19 @@ class IAMHarness:
     def service_account(self, name: str) -> PrincipalRecord:
         with as_service_account("engine"):
             return self.iam.create_service_account(name)
+
+    def register(self, ws: str = "ws-1", org_id: str = "org-1") -> str:
+        """Register an organisation and a workspace of it (``ws`` ``-``: the
+        organisation only; ``org_id`` ``-``: a workspace at the platform), as
+        Nexus does with ``api``. Returns the innermost container's name."""
+        with as_service_account("api"):
+            if org_id != "-":
+                self.iam.register_container("nexus", "organization", org_id)
+            if ws != "-":
+                self.iam.register_container(
+                    "nexus", "workspace", ws, parent=org(org_id)
+                )
+        return workspace(ws, org_id)
 
     def group(self, name: str = "sales") -> PrincipalRecord:
         with as_service_account("engine"):

@@ -39,6 +39,8 @@ Principal = _definitions.Principal
 PrincipalKind = _definitions.PrincipalKind
 Statement = _definitions.Statement
 current_call_context = _definitions.current_call_context
+# Make the calls of a block in a container (its name): request data, not identity.
+inside = _definitions.inside
 reset_call_context = _definitions.reset_call_context
 service_account = _definitions.service_account
 set_call_context = _definitions.set_call_context
@@ -51,7 +53,7 @@ def as_service_account(name: str) -> Iterator[CallContext]:
     """Run the block as the engine's own service account ``name``, for no user.
 
     In process only: remote code holds nothing but its token. The trace and
-    the target workspace of the surrounding call are kept.
+    the container of the surrounding call are kept.
     """
     logger.debug(f"Running as service account {name!r}")
     context = replace(

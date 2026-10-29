@@ -43,6 +43,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     TokenExchange,
 )
 from naas_abi_core.services.iam.IAMService import IAMService
+from naas_abi_core.services.iam.names import PLATFORM_SCOPE
 from naas_abi_proto.common.v1 import common_pb2
 from naas_abi_proto.iam.v1 import iam_pb2 as pb
 
@@ -163,7 +164,7 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
             req.action,
             req.resource_type,
             list(req.parts),
-            workspace=req.workspace_id or None,
+            container=req.container or None,
         )
         return pb.AuthorizeDeclaredResponse(
             decision=codec.decision_to_pb(decision), resource=resource
@@ -245,9 +246,7 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
     # -- groups ---------------------------------------------------------------------
 
     def _call_create_group(self, req: pb.CreateGroupRequest) -> pb.CreateGroupResponse:
-        record = self._iam.create_group(
-            req.name, org=_opt(req, "org"), scope=_opt(req, "scope")
-        )
+        record = self._iam.create_group(req.name, scope=_opt(req, "scope"))
         return pb.CreateGroupResponse(group=codec.principal_to_pb(record))
 
     def _call_get_group(self, req: pb.GetGroupRequest) -> pb.GetGroupResponse:
@@ -455,14 +454,14 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
             bindings=[codec.binding_to_pb(b) for b in found]
         )
 
-    # -- placements, scopes, catalogs ------------------------------------------------
+    # -- placements, containers, catalogs --------------------------------------------
 
     def _call_put_placement(
         self, req: pb.PutPlacementRequest
     ) -> pb.PutPlacementResponse:
         wanted = codec.placement_from_pb(req.placement)
         placement = self._iam.put_placement(
-            wanted.service, wanted.id_key, wanted.org, wanted.workspace
+            wanted.service, wanted.id_key, wanted.container
         )
         return pb.PutPlacementResponse(placement=codec.placement_to_pb(placement))
 
@@ -480,13 +479,26 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
             placements=[codec.placement_to_pb(p) for p in found]
         )
 
-    def _call_put_scope(self, req: pb.PutScopeRequest) -> pb.PutScopeResponse:
-        scope = self._iam.put_scope(req.org, req.workspace or "-")
-        return pb.PutScopeResponse(scope=codec.scope_to_pb(scope))
+    def _call_register_container(
+        self, req: pb.RegisterContainerRequest
+    ) -> pb.RegisterContainerResponse:
+        record = self._iam.register_container(
+            req.service, req.type, req.id, parent=req.parent or PLATFORM_SCOPE
+        )
+        return pb.RegisterContainerResponse(container=codec.container_to_pb(record))
 
-    def _call_delete_scope(self, req: pb.DeleteScopeRequest) -> pb.DeleteScopeResponse:
-        deleted = self._iam.delete_scope(req.org, req.workspace or "-")
-        return pb.DeleteScopeResponse(deleted=deleted)
+    def _call_delete_container(
+        self, req: pb.DeleteContainerRequest
+    ) -> pb.DeleteContainerResponse:
+        deleted = self._iam.delete_container(req.service, req.type, req.id)
+        return pb.DeleteContainerResponse(deleted=deleted)
+
+    def _call_get_container(
+        self, req: pb.GetContainerRequest
+    ) -> pb.GetContainerResponse:
+        return pb.GetContainerResponse(
+            name=self._iam.container(req.service, req.type, req.id) or ""
+        )
 
     def _call_register_catalog(
         self, req: pb.RegisterCatalogRequest

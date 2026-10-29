@@ -457,14 +457,14 @@ class NatsRPCClient:
     def _context(self, timeout_seconds: float | None = None) -> common_pb2.CallContext:
         """The call's context; ``timeout_seconds`` as passed to ``_call``.
 
-        The trace and the target workspace are the current call's. Identity
+        The trace and the container are the current call's. Identity
         never travels here: the server reads it from the headers (``_call``).
         """
         current = current_call_context()
         return common_pb2.CallContext(
             trace_id=current.trace_id or str(uuid.uuid4()),
             timeout_ms=int(self._deadline(timeout_seconds) * 1000),
-            workspace_id=current.workspace_id or "",
+            container=current.container or "",
         )
 
     def _served_user(self) -> Principal | None:
@@ -611,12 +611,12 @@ class NatsRPCClient:
     # ------------------------------------------------------------------
 
     def _chunk_envelope(self, request: Message) -> common_pb2.CallContext:
-        """The overflow chunks' ``context``: the call's own trace and workspace."""
+        """The overflow chunks' ``context``: the call's own trace and container."""
         envelope = self._context()
         sent = request_envelope(request)
         if sent is not None:
             envelope.trace_id = sent.trace_id or envelope.trace_id
-            envelope.workspace_id = sent.workspace_id or envelope.workspace_id
+            envelope.container = sent.container or envelope.container
         return envelope
 
     def _chunk_call(
@@ -626,7 +626,7 @@ class NatsRPCClient:
         trace: TransferTrace,
     ) -> overflow.Call:
         """One overflow exchange, counted on the call's span (``trace``), sent
-        as the call it belongs to: its token, its user, its trace and workspace.
+        as the call it belongs to: its token, its user, its trace and container.
         The envelope is built on the first chunk: most calls never overflow."""
         envelopes: list[common_pb2.CallContext] = []
 

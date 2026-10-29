@@ -20,6 +20,7 @@ from naas_abi_core.services.iam.catalog import (
 from naas_abi_core.services.iam.IAMPorts import (
     Attachment,
     BoundingStatement,
+    ContainerRecord,
     DecidingStatement,
     Decision,
     Explanation,
@@ -39,7 +40,6 @@ from naas_abi_core.services.iam.IAMPorts import (
     Policy,
     PrincipalRecord,
     RevisionConflictError,
-    ScopeRecord,
 )
 from naas_abi_core.services.iam.names import PLATFORM_SCOPE
 from naas_abi_core.services.iam.policy import PolicyDocument
@@ -93,8 +93,9 @@ OPERATIONS = {
     "put_placement": "PutPlacement",
     "delete_placement": "DeletePlacement",
     "list_placements": "ListPlacements",
-    "put_scope": "PutScope",
-    "delete_scope": "DeleteScope",
+    "register_container": "RegisterContainer",
+    "delete_container": "DeleteContainer",
+    "get_container": "GetContainer",
     "register_catalog": "RegisterCatalog",
     "token": "Token",
     "jwks": "Jwks",
@@ -204,7 +205,6 @@ def principal_to_pb(record: PrincipalRecord) -> pb.Principal:
         email=record.email,
         email_verified=record.email_verified,
         display_name=record.display_name,
-        org=record.org,
         owner_id=record.owner_id,
         owner_scope=record.owner_scope,
     )
@@ -223,7 +223,6 @@ def principal_from_pb(message: pb.Principal) -> PrincipalRecord:
         email=_optional(message, "email"),
         email_verified=message.email_verified,
         display_name=_optional(message, "display_name"),
-        org=_optional(message, "org"),
         owner_id=_optional(message, "owner_id"),
         created_at=_datetime(message, "created_at"),
         updated_at=_datetime(message, "updated_at"),
@@ -342,23 +341,30 @@ def placement_to_pb(placement: Placement) -> pb.Placement:
     return pb.Placement(
         service=placement.service,
         id_key=placement.id_key,
-        org=placement.org,
-        workspace=placement.workspace,
+        container=placement.container,
     )
 
 
 def placement_from_pb(message: pb.Placement) -> Placement:
     return Placement(
-        message.service, message.id_key, message.org or "-", message.workspace or "-"
+        message.service, message.id_key, message.container or PLATFORM_SCOPE
     )
 
 
-def scope_to_pb(scope: ScopeRecord) -> pb.Scope:
-    return pb.Scope(org=scope.org, workspace=scope.workspace)
+def container_to_pb(record: ContainerRecord) -> pb.Container:
+    return pb.Container(
+        service=record.service,
+        type=record.type,
+        id=record.id,
+        parent=record.parent,
+        name=record.name,
+    )
 
 
-def scope_from_pb(message: pb.Scope) -> ScopeRecord:
-    return ScopeRecord(message.org, message.workspace or "-")
+def container_from_pb(message: pb.Container) -> ContainerRecord:
+    return ContainerRecord(
+        message.service, message.type, message.id, message.parent or PLATFORM_SCOPE
+    )
 
 
 def catalog_to_pb(catalog: ActionCatalog) -> pb.ActionCatalog:
@@ -371,10 +377,13 @@ def catalog_to_pb(catalog: ActionCatalog) -> pb.ActionCatalog:
                 id=t.id,
                 placement=t.placement,
                 container=t.container,
+                id_prefix=t.id_prefix,
                 personal=t.personal,
                 description=t.description,
                 module_scope=t.module_scope,
                 policy_only=t.policy_only,
+                platform_companions=t.platform_companions,
+                parents=list(t.parents),
             )
             for t in catalog.resource_types
         ],
@@ -387,6 +396,7 @@ def catalog_to_pb(catalog: ActionCatalog) -> pb.ActionCatalog:
                 subjects=list(a.subjects),
                 description=a.description,
                 owner_only=a.owner_only,
+                deletes=a.deletes,
             )
             for a in catalog.actions
         ],
@@ -413,11 +423,16 @@ def catalog_from_pb(message: pb.ActionCatalog) -> ActionCatalog:
                 name=t.name,
                 id=t.id or "opaque",  # type: ignore[arg-type]
                 placement=t.placement or "placed",  # type: ignore[arg-type]
-                container=t.container,
+                # A writer before container paths sent id_prefix as "container"
+                # (the same field number): read as id_prefix, never a container.
+                container=t.container and (message.format or 1) >= 3,
+                id_prefix=t.id_prefix,
                 personal=t.personal,
                 description=t.description,
                 module_scope=t.module_scope,
                 policy_only=t.policy_only,
+                platform_companions=t.platform_companions,
+                parents=tuple(t.parents),
             )
             for t in message.resource_types
         ),
@@ -430,6 +445,7 @@ def catalog_from_pb(message: pb.ActionCatalog) -> ActionCatalog:
                 subjects=tuple(a.subjects),
                 description=a.description,
                 owner_only=a.owner_only,
+                deletes=a.deletes,
             )
             for a in message.actions
         ),

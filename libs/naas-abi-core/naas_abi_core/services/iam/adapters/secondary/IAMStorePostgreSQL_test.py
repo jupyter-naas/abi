@@ -136,6 +136,24 @@ def test_a_version_4_store_upgrades(schema):
 
 
 @pytest.mark.integration
+def test_a_version_5_store_upgrades(schema):
+    from naas_abi_core.services.iam.tests.iam_store_upgrade import (
+        check_upgrade_from_5,
+    )
+    from sqlalchemy import create_engine, text
+
+    dsn, name = schema
+
+    def execute(statement: str) -> None:
+        engine = create_engine(sqlalchemy_url(dsn))
+        with engine.begin() as conn:
+            conn.execute(text(statement.format(schema=f'"{name}".')))
+        engine.dispose()
+
+    check_upgrade_from_5(lambda: IAMStorePostgreSQL(dsn, name), execute)
+
+
+@pytest.mark.integration
 def test_two_processes_upgrade_a_version_1_store_together(schema):
     """The engine and the API open a version 1 store at once: the second waits
     for the first's ALTER TABLE, then finds the column there."""
@@ -166,7 +184,7 @@ def test_two_processes_upgrade_a_version_1_store_together(schema):
         first.execute(
             text(
                 f'ALTER TABLE "{name}".{table} ADD COLUMN owner_scope TEXT NOT NULL '
-                "DEFAULT 'abi:-:-'"
+                "DEFAULT 'abi:'"
             )
         )
     other = threading.Thread(target=second)

@@ -6,6 +6,9 @@ import pytest
 from naas_abi_core.engine import nats_dispatch
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 
+# The container a call is made in: request data, carried as is.
+WS = "abi:nexus:organization/org-1/nexus:workspace/ws-1"
+
 
 def test_nested_domains_progress_with_one_shared_worker_and_keep_context():
     identity = contextvars.ContextVar("caller", default="missing")
@@ -47,7 +50,7 @@ def test_the_worker_runs_as_the_caller_given_and_only_for_that_call():
 
     caller = CallContext(principal=service_account("api"), on_behalf_of=user("usr-1"))
     request = keyvalue_pb2.GetRequest(
-        context=common_pb2.CallContext(trace_id="trace-1", workspace_id="ws-1")
+        context=common_pb2.CallContext(trace_id="trace-1", container=WS)
     )
 
     async def exercise():
@@ -65,7 +68,7 @@ def test_the_worker_runs_as_the_caller_given_and_only_for_that_call():
     assert seen == CallContext(
         principal=service_account("api"),
         on_behalf_of=user("usr-1"),
-        workspace_id="ws-1",
+        container=WS,
         trace_id="trace-1",
     )
     # Neither the worker thread nor the event loop keeps it afterwards.

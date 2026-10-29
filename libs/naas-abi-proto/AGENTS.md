@@ -18,9 +18,11 @@ The engine's authorization model (principals, policies, evaluation, tokens) is c
   `abi:delegated:agent` token whose `act` is the caller; the `Abi-On-Behalf-Of`
   header is gone and a request carrying it is refused (`on-behalf-of refused`).
 - **`common.v1.CallContext`** is request data: `trace_id`, `timeout_ms` and
-  `workspace_id` (the target workspace of a create, an input authorized like any
-  other). `principal_id` (3) and `tenant_id` (5) are reserved and deprecated: servers
-  ignore them and clients leave them empty. Do not reuse them for anything.
+  `container` (6: the container the call is made in, a container's name `abi:...`;
+  an input IAM checks against its registry). `principal_id` (3) and `tenant_id` (5)
+  are reserved and deprecated: servers ignore them and clients leave them empty. Do
+  not reuse them for anything. `workspace_id` (4) is what SDK 0.2 sends: kept so an
+  engine can refuse a call that sets it (`INVALID_ARGUMENT`); clients leave it empty.
 - **Other fields that look like identity are not.** `HttpRequest.user_id` and
   `principal_*` (app) are replaced by the app host from verified credentials;
   `user_id` in `source_control` and `coding_environment` requests is ignored, and so
@@ -39,7 +41,15 @@ The engine's authorization model (principals, policies, evaluation, tokens) is c
   `ExchangeTokenRequest` is the token exchange of RFC 8693 (delegated audiences, keys, links);
   `SubmitManifestRequest` / `Manifest` carry a module's permission manifest
   (`status`: pending, approved, rejected, superseded); `Key` carries `kind`, `audience`,
-  `resource` and `scope_json` for personal keys and link grants.
+  `resource` and `scope_json` for personal keys and link grants. Resource names,
+  scopes and owners are container paths (core `services/iam/AGENTS.md`, "Resource
+  names"): `Placement.container`, `Container` (a registered container:
+  `RegisterContainerRequest`, `DeleteContainerRequest`, `GetContainerRequest`),
+  `AuthorizeDeclaredRequest.container`; the `org`/`workspace` fields of the earlier
+  grammar are reserved, and `Scope`, `PutScope*` and `DeleteScope*` are gone.
+  `ResourceType.id_prefix` (4) is the field once named `container`;
+  `ResourceType.container` (9) marks a container type, `platform_companions` (10)
+  and `ActionSpec.deletes` (8) go with it.
 - **Errors.** `CallError.code` is the stable code a client matches on, and a denial is
   `PERMISSION_DENIED` (or the service's own not-found where a resource must not be
   revealed). Never put a backend's exception text in `message`.

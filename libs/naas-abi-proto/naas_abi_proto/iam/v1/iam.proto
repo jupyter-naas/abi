@@ -41,12 +41,14 @@ message Principal {
   optional string email = 8;
   bool email_verified = 9;
   optional string display_name = 10;
-  optional string org = 11;
+  // Before container paths: a group's org.
+  reserved 11;
+  reserved "org";
   optional string owner_id = 12;
   google.protobuf.Timestamp created_at = 13;
   google.protobuf.Timestamp updated_at = 14;
-  // Groups: the scope that owns them and names them, abi:-:- (the platform),
-  // abi:<org>:- or abi:<org>:<ws>. Empty from an older engine: the platform.
+  // Groups: the container that owns them and names them, or abi: (the
+  // platform). Empty: the platform.
   string owner_scope = 15;
 }
 
@@ -60,8 +62,8 @@ message Policy {
   int32 revision = 6;
   google.protobuf.Timestamp created_at = 7;
   google.protobuf.Timestamp updated_at = 8;
-  // The scope that owns the policy and names it, abi:-:- (the platform),
-  // abi:<org>:- or abi:<org>:<ws>. Empty from an older engine: the platform.
+  // The container that owns the policy and names it, or abi: (the platform).
+  // Empty: the platform.
   string owner_scope = 9;
   // The policy this one is a sub-policy of; empty: none.
   string parent_id = 10;
@@ -71,7 +73,8 @@ message Attachment {
   string id = 1;
   string policy_id = 2;
   string principal_id = 3;
-  // abi:<org>:<ws>, abi:<org>:-, abi:<org>:* or abi:-:-; absent for none.
+  // A container's name, below one (<container>/*) or abi: (the platform);
+  // absent for none.
   optional string scope = 4;
   google.protobuf.Timestamp created_at = 5;
 }
@@ -105,18 +108,25 @@ message GroupMapping {
   string group_id = 3;
 }
 
-// (service, id_key) -> (org, workspace); id_key is exact or ends with "*".
+// (service, id_key) -> container; id_key is exact or ends with "*".
 message Placement {
   string service = 1;
   string id_key = 2;
-  string org = 3;
-  string workspace = 4;
+  // Before container paths: the org and the workspace.
+  reserved 3, 4;
+  reserved "org", "workspace";
+  // A container's name, abi: for the platform.
+  string container = 5;
 }
 
-message Scope {
-  string org = 1;
-  // "-" for the org itself.
-  string workspace = 2;
+// A registered container: its type, its id (unique within its type) and the
+// container it sits in (abi: for the platform). name is its path.
+message Container {
+  string service = 1;
+  string type = 2;
+  string id = 3;
+  string parent = 4;
+  string name = 5;
 }
 
 // The catalog format of a service's actions (services/iam/AGENTS.md).
@@ -126,7 +136,9 @@ message ResourceType {
   string id = 2;
   // placed | platform
   string placement = 3;
-  bool container = 4;
+  // Its id is the prefix of its children's ids (a document namespace). Called
+  // container before container paths: the field number is that one's.
+  bool id_prefix = 4;
   bool personal = 5;
   string description = 6;
   // A module scope: what a module exposes, never reached by the viewer and
@@ -134,6 +146,14 @@ message ResourceType {
   bool module_scope = 7;
   // Reached through a policy only: no built-in role holds it.
   bool policy_only = 8;
+  // A container: a step of the names of what it holds (services/iam/AGENTS.md,
+  // "Containers").
+  bool container = 9;
+  // A container type at which a role brings the platform companions.
+  bool platform_companions = 10;
+  // A container type: the containers it may sit in, <service>:<type> each, "-"
+  // for the platform; empty: any.
+  repeated string parents = 11;
 }
 
 message ActionSpec {
@@ -146,6 +166,8 @@ message ActionSpec {
   string description = 6;
   // An admin action no role below owner holds.
   bool owner_only = 7;
+  // Deleting a container of its type.
+  bool deletes = 8;
 }
 
 // Platform-level resources of a first-party catalog that the roles' platform
@@ -267,13 +289,16 @@ message AuthorizeResponse {
 
 // A decision on an action a module declares (services/iam/module_scopes.py):
 // IAM names the resource, <type>/<parts> of the action's catalog, in
-// workspace_id or else the call's workspace, platform-level without one.
+// container or else the container of the call, platform-level without one.
 message AuthorizeDeclaredRequest {
   abi.common.v1.CallContext context = 1;
   string action = 2;
   string resource_type = 3;
   repeated string parts = 4;
-  string workspace_id = 5;
+  // Before container paths: a workspace id.
+  reserved 5;
+  reserved "workspace_id";
+  string container = 6;
 }
 message AuthorizeDeclaredResponse {
   abi.common.v1.CallError error = 1;
@@ -305,7 +330,7 @@ message ExplainResponse {
 }
 
 // What the caller may grant at a scope: per catalog, the actions they hold
-// there and the resource patterns (${scope}:...) they hold them on, minus
+// there and the resource patterns (${scope}/...) they hold them on, minus
 // their Denies. About the caller, so it needs no iam: action.
 message GrantableAction {
   string action = 1;
@@ -405,9 +430,10 @@ message DeletePrincipalResponse {
 message CreateGroupRequest {
   abi.common.v1.CallContext context = 1;
   string name = 2;
-  // Alone: the group belongs to the org, abi:<org>:-.
-  optional string org = 3;
-  // The owner: abi:-:- (the default), abi:<org>:- or abi:<org>:<ws>.
+  // Before container paths: an org.
+  reserved 3;
+  reserved "org";
+  // The owner: abi: (the platform, the default) or a container's name.
   optional string scope = 4;
 }
 message CreateGroupResponse {
@@ -428,8 +454,8 @@ message ListGroupsRequest {
   abi.common.v1.CallContext context = 1;
   int32 limit = 2;
   optional string after = 3;
-  // The groups this scope owns (and, at a workspace, its org's the caller
-  // attaches to there); absent: every group the caller may list.
+  // The groups this container owns (and those of the containers above it the
+  // caller attaches to there); absent: every group the caller may list.
   optional string scope = 4;
 }
 message ListGroupsResponse {
@@ -514,7 +540,7 @@ message CreatePolicyRequest {
   // A policy document as JSON (or YAML) text.
   string document_json = 3;
   string description = 4;
-  // The owner: abi:-:- (the default), abi:<org>:- or abi:<org>:<ws>.
+  // The owner: abi: (the platform, the default) or a container's name.
   optional string scope = 5;
   // The policy it is a sub-policy of; absent: none.
   optional string parent = 6;
@@ -642,24 +668,44 @@ message ListPlacementsResponse {
   repeated Placement placements = 2;
 }
 
-message PutScopeRequest {
+// -- containers (services/iam/AGENTS.md, "Containers") ----------------------
+
+// A create on the container's name as placed: the type's create action there.
+message RegisterContainerRequest {
   abi.common.v1.CallContext context = 1;
-  string org = 2;
-  string workspace = 3;
+  string service = 2;
+  string type = 3;
+  string id = 4;
+  // abi: (the platform, the default) or a registered container's name.
+  string parent = 5;
 }
-message PutScopeResponse {
+message RegisterContainerResponse {
   abi.common.v1.CallError error = 1;
-  Scope scope = 2;
+  Container container = 2;
 }
 
-message DeleteScopeRequest {
+// The type's delete action on the container's name; what it owns goes with it.
+message DeleteContainerRequest {
   abi.common.v1.CallContext context = 1;
-  string org = 2;
-  string workspace = 3;
+  string service = 2;
+  string type = 3;
+  string id = 4;
 }
-message DeleteScopeResponse {
+message DeleteContainerResponse {
   abi.common.v1.CallError error = 1;
   bool deleted = 2;
+}
+
+// A registered container's name (its path), empty for an unknown one.
+message GetContainerRequest {
+  abi.common.v1.CallContext context = 1;
+  string service = 2;
+  string type = 3;
+  string id = 4;
+}
+message GetContainerResponse {
+  abi.common.v1.CallError error = 1;
+  string name = 2;
 }
 
 message RegisterCatalogRequest {

@@ -11,10 +11,16 @@ by no Deny of any side.
 
 Resource patterns are compared as languages: ``*`` is any run (``:`` and
 ``/`` included), ``?`` exactly one character (one of the three of ``%2F``).
-Only names of the action's resource types count
-(``abi:<org>:<ws>:<service>:<type>/<id>``, each field free of ``:``), so
-``${scope}:triple_store:*`` is no wider than ``${scope}:triple_store:graph/*``
-for an action on graphs only. A grant one held pattern embeds is covered at
+Only names of the action's resource types count (``universe``: ``abi:``, steps
+of the registered container types, then ``<service>:<type>/<id>``), so
+``${scope}/triple_store:*`` is no wider than ``${scope}/triple_store:graph/*``
+for an action on graphs only.
+
+Scopes (``held_forms``): ``${scope}`` is a container, the platform (where
+``${scope}/`` reads ``abi:``), or below a container, where it stands for each
+container under it: a pattern then has several forms, fewer for what a caller
+holds (``over=False``: never more than the evaluator lets through), more for
+what a grant gives or a Deny refuses (``over=True``: never less). A grant one held pattern embeds is covered at
 once (``_embeds``); otherwise containment is decided on the product of the
 patterns' automata; when one search takes more than ``STATE_BUDGET`` states, or
 the searches of one check more than ``CALL_BUDGET`` together, it is not proven,
@@ -47,12 +53,15 @@ from naas_abi_core.services.iam.broker import BUS_ACTIONS, TOPIC_PREFIX
 from naas_abi_core.services.iam.catalog import CatalogRegistry
 from naas_abi_core.services.iam.IAMPorts import GrantableAction, GrantableCatalog
 from naas_abi_core.services.iam.names import (
+    PLATFORM,
+    container_of_scope,
     encode_segment,
+    is_below,
     literal_prefix,
     matches,
-    scope_fields,
     split_action,
     substitute,
+    validate_scope,
 )
 from naas_abi_core.services.iam.policy import Statement, within_scope
 
@@ -114,6 +123,70 @@ def _spend() -> None:
             raise Exhausted
 
 
+_STEP_START = re.compile(r"[a-z][a-z0-9_]*:")
+# The platform's own policies, groups and attachments: never reached through an
+# attachment at the platform (``names.platform_own``).
+_IAM_OWNED = frozenset({("iam", "policy"), ("iam", "group"), ("iam", "attachment")})
+
+
+def scope_forms(pattern: str, scope: str | None, *, over: bool = False) -> list[str]:
+    """``pattern`` with ``${scope}`` filled for an attachment at ``scope``: one
+    form at a container; at the platform, ``${scope}/`` as ``abi:`` (and
+    ``${scope}`` alone matching nothing); below a container C, for ``${scope}/R``,
+    ``C/R`` and, when R starts with a step, ``C/*/R`` (with ``over``, any other R
+    as ``C/*R``), and for ``${scope}`` alone C and, with ``over``, ``C/*``. None of
+    them when it names ``${scope}`` and there is no scope."""
+    if "${scope}" not in pattern:
+        return [pattern]
+    if scope is None:
+        return []
+    if scope == PLATFORM:
+        filled = pattern.replace("${scope}/", "abi:")
+        # ``${scope}`` alone names the platform itself: nothing.
+        return [] if "${scope}" in filled else [filled]
+    if not is_below(scope):
+        return [pattern.replace("${scope}", scope)]
+    container = container_of_scope(scope)
+    base = "abi:" if container == PLATFORM else container + "/"
+    rest = pattern.removeprefix("${scope}").replace("${scope}", container)
+    if not pattern.startswith("${scope}"):
+        return [pattern.replace("${scope}", container)]
+    if not rest:
+        if container == PLATFORM:
+            return ["abi:*"] if over else []
+        return [container, base + "*"] if over else [container]
+    if not rest.startswith("/"):
+        return [base + "*" + rest] if over else [container + rest]
+    tail = rest[1:]
+    if tail.startswith("*"):
+        return [base + tail]
+    if _STEP_START.match(tail):
+        return [base + tail, base + "*/" + tail]
+    return [base + "*" + tail] if over else [base + tail]
+
+
+def held_forms(
+    pattern: str,
+    scope: str | None,
+    *,
+    canonical: bool = True,
+    variables: bool = False,
+    over: bool = False,
+) -> list[str]:
+    """``pattern`` with ``${scope}`` filled (``scope_forms``) and the other
+    variables as marks, a bus topic in its canonical spelling
+    (``canonical_topic``, ``variables`` passed on) unless not ``canonical``."""
+    found: list[str] = []
+    for form in scope_forms(pattern, scope, over=over):
+        if canonical:
+            form = canonical_topic(form, variables=variables)
+        for name, mark in MARKS.items():
+            form = form.replace("${" + name + "}", mark)
+        if form not in found:
+            found.append(form)
+    return found
+
+
 def held_form(
     pattern: str,
     scope: str | None,
@@ -121,28 +194,17 @@ def held_form(
     canonical: bool = True,
     variables: bool = False,
 ) -> str | None:
-    """``pattern`` with ``${scope}`` filled and the other variables as marks,
-    a bus topic in its canonical spelling (``canonical_topic``, ``variables``
-    passed on) unless not ``canonical``.
-
-    None when it names ``${scope}`` and there is no scope: it matches nothing.
-    """
-    if "${scope}" in pattern:
-        if scope is None:
-            return None
-        pattern = pattern.replace("${scope}", scope)
-    if canonical:
-        pattern = canonical_topic(pattern, variables=variables)
-    for name, mark in MARKS.items():
-        pattern = pattern.replace("${" + name + "}", mark)
-    return pattern
+    """The one held form of ``pattern`` at a container, the platform or with no
+    scope; None when it matches nothing there."""
+    forms = held_forms(pattern, scope, canonical=canonical, variables=variables)
+    return forms[0] if forms else None
 
 
 _VARIABLE = re.compile(r"(\$\{[^}]*\})")
 
 
 def canonical_topic(pattern: str, *, variables: bool = False) -> str:
-    """A bus topic (``abi:-:-:bus:topic/<t>``) as the broker grants it: each
+    """A bus topic (``abi:bus:topic/<t>``) as the broker grants it: each
     run of it decoded, then encoded as a canonical name is (``pay%6Dents`` is
     ``payments``, ``pay:ments`` is ``pay%3Aments``).
 
@@ -179,29 +241,106 @@ def _glob(pattern: str) -> Tokens:
     )
 
 
+@dataclass(frozen=True)
+class Universe:
+    """The names a pattern is compared within, as an automaton: a glob's tokens
+    (``EVERYTHING``, the bus's topics), or the names of one resource type
+    (``universe``): ``abi:``, steps ``<service>:<type>/<id>/`` of the container
+    types, then ``<service>:<type>/`` and an id with no raw ``:``. For a
+    container type that names its parents, its own step only right after one of
+    them (``-``: right after ``abi:``)."""
+
+    tokens: Tokens = ()
+    final: str = ""  # "<service>:<type>/" of the names of one type
+    containers: tuple[str, ...] = ()  # "<service>:<type>/" of each container type
+    # The containers (indexes in ``containers``, -1 for the platform) the final
+    # step may follow; None for any.
+    after: frozenset[int] | None = None
+
+    def start(self) -> frozenset[object]:
+        if self.final:
+            return frozenset({("p", 0)})
+        return _close(self.tokens, (0,))
+
+    def literals(self) -> set[str]:
+        if self.final:
+            return set("abi:/" + self.final + "".join(self.containers))
+        return {c for kind, c in self.tokens if kind == _LIT}
+
+    def step(self, states: frozenset[object], char: str) -> frozenset[object]:
+        if not self.final:
+            return _step(self.tokens, states, char)  # type: ignore[arg-type]
+        after: set[object] = set()
+        literals = (self.final, *self.containers)
+        for state in states:
+            kind = state[0]  # type: ignore[index]
+            if kind == "p":
+                index = state[1]  # type: ignore[index]
+                if "abi:"[index] == char:
+                    after |= {("p", index + 1)} if index < 3 else self._steps(-1)
+            elif kind == "l":
+                which: int = state[1]  # type: ignore[index]
+                index = state[2]  # type: ignore[index]
+                literal = literals[which]
+                if literal[index] != char:
+                    continue
+                if index + 1 < len(literal):
+                    after.add(("l", which, index + 1))
+                else:
+                    after.add(("id0",) if which == 0 else ("seg0", which - 1))
+            elif kind in ("id0", "id"):
+                if char != ":":
+                    after.add(("id",))
+            elif kind in ("seg0", "seg"):
+                container: int = state[1]  # type: ignore[index]
+                if char == "/" and kind == "seg":
+                    after |= self._steps(container)
+                elif char not in ":/":
+                    after.add(("seg", container))
+        return frozenset(after)
+
+    def _steps(self, previous: int) -> set[object]:
+        """The steps that may follow container ``previous`` (-1: the platform)."""
+        first = 0 if self.after is None or previous in self.after else 1
+        return {("l", which, 0) for which in range(first, len(self.containers) + 1)}
+
+    def accepts(self, states: frozenset[object]) -> bool:
+        if not self.final:
+            return _accepts(self.tokens, states)  # type: ignore[arg-type]
+        return ("id",) in states
+
+
 @lru_cache(maxsize=1024)
-def universe(service: str, resource_type: str) -> Tokens:
-    """The canonical names of a resource type,
-    ``abi:<org>:<ws>:<service>:<type>/<id>`` (no field holds a raw ``:``)."""
-    field_: Tokens = ((_FIELD_ONE, ""), (_FIELD_RUN, ""))
-    return (
-        *_glob("abi:"),
-        *field_,
-        (_LIT, ":"),
-        *field_,
-        *_glob(f":{service}:{resource_type}/"),
-        *field_,
+def universe(
+    service: str,
+    resource_type: str,
+    containers: frozenset[tuple[str, str]] = frozenset(),
+    parents: tuple[str, ...] = (),
+) -> Universe:
+    """The canonical names of a resource type: at the platform or in containers
+    of ``containers`` (``(service, type)``, the registered container types); for
+    a container type that names ``parents``, only in those."""
+    ordered = tuple(sorted(f"{s}:{t}/" for s, t in containers))
+    after = (
+        frozenset(
+            -1 if parent == "-" else ordered.index(f"{parent}/")
+            for parent in parents
+            if parent == "-" or f"{parent}/" in ordered
+        )
+        if parents
+        else None
     )
+    return Universe(final=f"{service}:{resource_type}/", containers=ordered, after=after)
 
 
-EVERYTHING: Tokens = ((_RUN, ""),)
+EVERYTHING = Universe(tokens=((_RUN, ""),))
 
 # Actions the broker grants with no catalog to expand a wildcard against: the
-# bus's, on its topics, which are never at a scope (``abi:-:-:bus:topic/<t>``).
+# bus's, on its topics, which are never at a scope (``abi:bus:topic/<t>``).
 # A wildcard reaching them is checked for them, like their names. Any run after
 # the prefix is a topic, a raw ":" included: every topic resource needs cover.
-UNCATALOGUED: dict[str, tuple[tuple[str, ...], Tokens]] = {
-    "bus": (BUS_ACTIONS, (*_glob(TOPIC_PREFIX), (_RUN, ""))),
+UNCATALOGUED: dict[str, tuple[tuple[str, ...], Universe]] = {
+    "bus": (BUS_ACTIONS, Universe(tokens=(*_glob(TOPIC_PREFIX), (_RUN, "")))),
 }
 
 
@@ -240,11 +379,13 @@ def _accepts(tokens: Tokens, states: frozenset[int]) -> bool:
     return len(tokens) in states
 
 
-def _alphabet(*token_lists: Tokens) -> list[str]:
-    """Every literal character, ``:``, and one character none of them is: the
-    patterns treat every other character alike."""
-    literals = {c for tokens in token_lists for kind, c in tokens if kind == _LIT}
-    literals.add(":")
+def _alphabet(literals: set[str], *token_lists: Tokens) -> list[str]:
+    """Every literal character, ``:`` and ``/``, and one character none of them
+    is: the patterns treat every other character alike."""
+    literals = set(literals) | {
+        c for tokens in token_lists for kind, c in tokens if kind == _LIT
+    }
+    literals |= {":", "/"}
     other = next(chr(c) for c in range(0x10, 0x110000) if chr(c) not in literals)
     return sorted(literals) + [other]
 
@@ -265,7 +406,7 @@ Bounds = tuple[tuple[str, ...], ...]
 def _search(
     grant: str,
     others: tuple[str, ...],
-    within: Tokens,
+    within: Universe,
     goal: Literal["uncovered", "overlap"],
     bounds: Bounds = (),
 ) -> bool:
@@ -275,16 +416,16 @@ def _search(
     g, u = _glob(grant), within
     hs = [_glob(other) for other in others]
     bs = [[_glob(pattern) for pattern in level] for level in bounds]
-    alphabet = _alphabet(g, u, *hs, *(b for level in bs for b in level))
+    alphabet = _alphabet(u.literals(), g, *hs, *(b for level in bs for b in level))
     State = tuple[
         frozenset[int],
-        frozenset[int],
+        frozenset[object],
         tuple[frozenset[int], ...],
         tuple[tuple[frozenset[int], ...], ...],
     ]
     start: State = (
         _close(g, (0,)),
-        _close(u, (0,)),
+        u.start(),
         tuple(_close(h, (0,)) for h in hs),
         tuple(tuple(_close(b, (0,)) for b in level) for level in bs),
     )
@@ -294,7 +435,7 @@ def _search(
         gs, us, hstates, bstates = queue.popleft()
         if (
             _accepts(g, gs)
-            and _accepts(u, us)
+            and u.accepts(us)
             and all(
                 any(_accepts(b, s) for b, s in zip(level, states))
                 for level, states in zip(bs, bstates)
@@ -306,7 +447,7 @@ def _search(
         for char in alphabet:
             nxt: State = (
                 _step(g, gs, char),
-                _step(u, us, char),
+                u.step(us, char),
                 tuple(_step(h, s, char) for h, s in zip(hs, hstates)),
                 tuple(
                     tuple(_step(b, s, char) for b, s in zip(level, states))
@@ -368,7 +509,7 @@ def _bounds_for(grant: str, bounds: Bounds) -> Bounds | None:
 
 @lru_cache(maxsize=16384)
 def _covered(
-    grant: str, held: tuple[str, ...], within: Tokens, bounds: Bounds = ()
+    grant: str, held: tuple[str, ...], within: Universe, bounds: Bounds = ()
 ) -> bool:
     if grant in held or "*" in held:
         return True
@@ -386,7 +527,7 @@ def _covered(
 
 @lru_cache(maxsize=16384)
 def _overlaps(
-    grant: str, others: tuple[str, ...], within: Tokens, bounds: Bounds = ()
+    grant: str, others: tuple[str, ...], within: Universe, bounds: Bounds = ()
 ) -> bool:
     others = tuple(o for o in others if _compatible(grant, o))
     if not others:
@@ -403,7 +544,7 @@ def _overlaps(
 def covered(
     grant: str,
     held: Iterable[str],
-    within: Tokens = EVERYTHING,
+    within: Universe = EVERYTHING,
     bounds: Bounds = (),
 ) -> bool:
     """Whether every name of ``within`` that ``grant`` matches, and one pattern
@@ -416,7 +557,7 @@ def covered(
 def overlaps(
     grant: str,
     others: Iterable[str],
-    within: Tokens = EVERYTHING,
+    within: Universe = EVERYTHING,
     bounds: Bounds = (),
 ) -> bool:
     """Whether some name of ``within`` (within ``bounds``) matches ``grant`` and
@@ -446,17 +587,23 @@ def within_chain(
     (``_meet``, on held forms, ``${scope}`` filled). It may say less than the
     sub-policy reaches, never more: what a giver holds through it, and what the
     broker grants for it."""
-    own = [held_form(r, scope, canonical=False) for r in statement.resources]
-    parts = [(statement.actions, tuple(r for r in own if r is not None))]
+    own = [
+        f for r in statement.resources for f in held_forms(r, scope, canonical=False)
+    ]
+    parts = [(statement.actions, tuple(own))]
     for level in chain:
         narrowed: list[tuple[tuple[str, ...], tuple[str, ...]]] = []
         for bound in level:
             if bound.effect != "Allow":
                 continue
-            theirs = [held_form(r, scope, canonical=False) for r in bound.resources]
+            theirs = [
+                f
+                for r in bound.resources
+                for f in held_forms(r, scope, canonical=False)
+            ]
             for actions, resources in parts:
                 met_actions = _meet(actions, bound.actions)
-                met_resources = _meet(resources, (r for r in theirs if r is not None))
+                met_resources = _meet(resources, theirs)
                 if met_actions and met_resources:
                     narrowed.append((met_actions, met_resources))
         parts = narrowed
@@ -479,6 +626,12 @@ class HeldStatement:
     actions: tuple[str, ...]
     resources: tuple[str, ...]
     policy_id: str | None = None
+    # Held for actions on a container type only: below a container, ``${scope}``
+    # alone reaches each container under it, nothing else of what it holds.
+    containers_only: tuple[str, ...] = ()
+    # Reached through an attachment at the platform: never the platform's own
+    # policies, groups and attachments (``names.platform_own``).
+    not_platform_own: tuple[str, ...] = ()
 
 
 def held_statement(
@@ -502,22 +655,34 @@ def held_statement(
         "principal.id": encode_segment(principal_id),
         "user.id": encode_segment(user_id) if user_id is not None else None,
     }
+    deny = statement.effect == "Deny"
     resources: dict[str, None] = {}
+    containers_only: dict[str, None] = {}
+    shielded: dict[str, None] = {}
     for pattern in statement.resources:
         if user_id is None and "${user.id}" in pattern:
             continue
-        held = held_form(pattern, scope)
-        if held is None:
+        forms = held_forms(pattern, scope, over=deny)
+        if not deny and pattern == "${scope}" and is_below(scope):
+            # ${scope} alone, below a container: each container under it too.
+            containers_only.update(
+                dict.fromkeys(
+                    f for f in held_forms(pattern, scope, over=True) if f not in forms
+                )
+            )
+        if not deny and scope == PLATFORM and "${scope}" in pattern:
+            shielded.update(dict.fromkeys(forms))
             continue
-        resources[held] = None
-        if statement.effect == "Deny":
-            bound = substitute(pattern, values)
-            for spelling in (
-                held_form(pattern, scope, canonical=False),
-                held_form(pattern, scope, variables=True),
-                bound,
-                canonical_topic(bound) if bound else None,
-            ):
+        resources.update(dict.fromkeys(forms))
+        if deny:
+            spellings: list[str | None] = [
+                *held_forms(pattern, scope, canonical=False, over=True),
+                *held_forms(pattern, scope, variables=True, over=True),
+            ]
+            for value in _scope_values(scope):
+                bound = substitute(pattern, {**values, "scope": value})
+                spellings += [bound, canonical_topic(bound) if bound else None]
+            for spelling in spellings:
                 if not spelling:
                     continue
                 resources[spelling] = None
@@ -526,8 +691,22 @@ def held_statement(
                     # A topic's stream holds its sub-topics (``<t>.>``).
                     resources[f"{spelling}.*"] = None
     return HeldStatement(
-        statement.effect, statement.actions, tuple(resources), policy_id
+        statement.effect,
+        statement.actions,
+        tuple(resources),
+        policy_id,
+        tuple(containers_only),
+        tuple(shielded),
     )
+
+
+def _scope_values(scope: str | None) -> list[str | None]:
+    """What ``${scope}`` is filled with to bind a Deny to the giver's ids: the
+    container (below one, the container and a run of any below it)."""
+    if not is_below(scope):
+        return [scope]
+    container = container_of_scope(scope or "")
+    return [container, ("abi:" if container == PLATFORM else container + "/") + "*"]
 
 
 @dataclass(frozen=True)
@@ -569,6 +748,8 @@ class Holdings:
         key = (index, action)
         if key not in self._allows:
             side = self.sides[index]
+            on_containers = self._on_containers(action)
+            platform_own = self._on_platform_own(action)
             self._allows[key] = (
                 tuple(
                     sorted(
@@ -577,7 +758,11 @@ class Holdings:
                             for s in side.statements
                             if s.effect == "Allow"
                             and any(matches(p, action) for p in s.actions)
-                            for r in s.resources
+                            for r in (
+                                *s.resources,
+                                *(s.containers_only if on_containers else ()),
+                                *(s.not_platform_own if not platform_own else ()),
+                            )
                         }
                     )
                 )
@@ -585,6 +770,25 @@ class Holdings:
                 else ()
             )
         return self._allows[key]
+
+    def _types(self, action: str) -> list[tuple[str, str]]:
+        try:
+            service, name = split_action(action)
+        except ValueError:
+            return []
+        catalog = self.catalogs.get(service)
+        spec = catalog.action(name) if catalog is not None else None
+        return [(service, t) for t in spec.resource_types] if spec is not None else []
+
+    def _on_containers(self, action: str) -> bool:
+        """Whether ``action`` is on a container type (unknown: no)."""
+        return any(self.catalogs.is_container(s, t) for s, t in self._types(action))
+
+    def _on_platform_own(self, action: str) -> bool:
+        """Whether ``action`` may name the platform's own policies, groups or
+        attachments (unknown: yes)."""
+        types = self._types(action)
+        return not types or any(t in _IAM_OWNED for t in types)
 
     def _denied(self, index: int, action: str) -> tuple[tuple[str, str | None], ...]:
         key = (index, action)
@@ -603,7 +807,7 @@ class Holdings:
             )
         return self._denies[key]
 
-    def _universes(self, action: str) -> list[Tokens]:
+    def _universes(self, action: str) -> list[Universe]:
         try:
             service, name = split_action(action)
         except ValueError:
@@ -614,7 +818,12 @@ class Holdings:
         spec = catalog.action(name) if catalog is not None else None
         if spec is None or not spec.resource_types:
             return [EVERYTHING]
-        return [universe(service, t) for t in spec.resource_types]
+        containers = self.catalogs.container_types()
+        return [
+            universe(service, t, containers, declared.parents if declared else ())
+            for t in spec.resource_types
+            for declared in [catalog.resource_type(t) if catalog is not None else None]
+        ]
 
     def _actions(self, patterns: Iterable[str]) -> list[str]:
         """Each action a statement's patterns match: the registered ones a
@@ -671,10 +880,8 @@ class Holdings:
                     continue
                 grants = [
                     g
-                    for g in (
-                        held_form(r, scope, variables=True) for r in statement.resources
-                    )
-                    if g is not None
+                    for r in statement.resources
+                    for g in held_forms(r, scope, variables=True, over=True)
                 ]
                 for action in self._actions(statement.actions):
                     bounds = _chain_bounds(parents, action, scope)
@@ -696,7 +903,7 @@ class Holdings:
         self,
         action: str,
         grant: str,
-        universes: list[Tokens],
+        universes: list[Universe],
         bounds: Bounds = (),
     ) -> str | None:
         for index, side in enumerate(self.sides):
@@ -717,9 +924,10 @@ class Holdings:
 
     def grantable(self, scope: str) -> list[GrantableCatalog]:
         """For each catalog, the actions held at ``scope`` and the resource
-        patterns they are held on there, written ``${scope}:...``, minus what a
-        Deny takes back (whole patterns dropped, partial ones in ``excluded``)."""
-        scope_fields(scope)
+        patterns they are held on there, written ``${scope}/...`` (or
+        ``${scope}``, the container itself), minus what a Deny takes back (whole
+        patterns dropped, partial ones in ``excluded``). Below a container, at it."""
+        scope = container_of_scope(validate_scope(scope))
         found: list[GrantableCatalog] = []
         with budget():
             for catalog in self.catalogs.all():
@@ -748,9 +956,18 @@ class Holdings:
         ]
         kept: list[str] = []
         excluded: set[str] = set()
-        for pattern in self._allowed(0, action):
-            restricted = _restrict(pattern, scope)
-            if restricted is None or restricted in kept:
+        on_containers = self._on_containers(action)
+        for restricted in (
+            r for pattern in self._allowed(0, action) for r in _restrict(pattern, scope)
+        ):
+            if restricted in kept:
+                continue
+            if (restricted == scope or on_containers) and not any(
+                overlaps(restricted, ("*",), u) for u in universes
+            ):
+                # It names no name of the action's types there: the container
+                # itself for an action on no container type, or a container type
+                # that does not sit in this one (its ``parents``).
                 continue
             if not all(
                 covered(restricted, self._allowed(i, action), u)
@@ -774,10 +991,12 @@ class Holdings:
             tuple(
                 sorted(
                     {
-                        _written_at(r, scope)
-                        if (r := _restrict(d, scope))
-                        else shown(d)
+                        written
                         for d in excluded
+                        for written in (
+                            [_written_at(r, scope) for r in _restrict(d, scope)]
+                            or [shown(d)]
+                        )
                     }
                 )
             ),
@@ -801,7 +1020,7 @@ def _chain_bounds(
                 if statement.effect == "Allow"
                 and any(_actions_meet(p, action) for p in statement.actions)
                 for r in statement.resources
-                if (held := held_form(r, scope, variables=True)) is not None
+                for held in held_forms(r, scope, variables=True, over=True)
             )
         )
         if not patterns:
@@ -821,28 +1040,87 @@ def _actions_meet(pattern: str, action: str) -> bool:
         return True
 
 
+def _under(scope: str) -> str:
+    """What a name under ``scope`` starts with: ``<container>/``, ``abi:`` at
+    the platform."""
+    return "abi:" if scope == PLATFORM else scope + "/"
+
+
 def _written_at(pattern: str, scope: str) -> str:
     """A pattern under ``scope``, in held form, as a policy writes it there."""
-    return shown("${scope}:" + pattern.removeprefix(f"{scope}:"))
+    if pattern == scope:
+        return "${scope}"
+    return shown("${scope}/" + pattern.removeprefix(_under(scope)))
 
 
-def _restrict(pattern: str, scope: str) -> str | None:
-    """A pattern, in held form, of the names under ``scope`` that ``pattern``
-    matches (``<scope>:<rest>``), or None. It may say less than ``pattern``
-    reaches there, never more."""
-    prefix = f"{scope}:"
-    if pattern.startswith(prefix):
-        return pattern
-    if covered(f"{prefix}*", (pattern,)):
-        return f"{prefix}*"
-    fields = pattern.split(":", 3)
-    if len(fields) == 4 and fields[0] == "abi":
-        org, workspace = scope_fields(scope)
-        rest = fields[3]
-        if (
-            matches(fields[1], org)
-            and matches(fields[2], workspace)
-            and covered(prefix + rest, (pattern,))
+def _restrict(pattern: str, scope: str) -> list[str]:
+    """Patterns, in held form, of the names under ``scope`` (and the container
+    itself) that ``pattern`` matches. They may say less than ``pattern`` reaches
+    there, never more. Shown without a search: what ``pattern`` is left with
+    after ``<scope>/`` (``_after``) embeds each one, so a list costs no budget."""
+    prefix = _under(scope)
+    if pattern.startswith(prefix) or pattern == scope:
+        return [pattern]
+    found: list[str] = []
+    if scope != PLATFORM and matches(pattern, scope):
+        found.append(scope)
+    rests = _after(pattern, prefix)
+    if any(_embeds("*", rest) for rest in rests):
+        return [*found, f"{prefix}*"]
+    # A pattern written for every container (``abi:*/R``), the platform
+    # (``abi:R``) or below a container above the scope (``<C>/*/R``) holds
+    # ``<scope>/R`` when it covers it: each tail R of it, the shortest first,
+    # one a kept one does not cover already.
+    kept: list[str] = []
+    for candidate in _candidates(pattern, prefix):
+        tail = candidate[len(prefix) :]
+        if any(_embeds(tail, rest) for rest in rests) and not any(
+            _embeds(candidate, k) for k in kept
         ):
-            return prefix + rest
-    return None
+            kept.append(candidate)
+    return [*found, *kept]
+
+
+@lru_cache(maxsize=16384)
+def _after(pattern: str, literal: str) -> frozenset[str]:
+    """What ``pattern`` is left to match after ``literal``: the globs a rest
+    matches exactly when ``literal`` and that rest match ``pattern``."""
+
+    def close(states: Iterable[int]) -> set[int]:
+        found: set[int] = set()
+        stack = list(states)
+        while stack:
+            index = stack.pop()
+            if index not in found:
+                found.add(index)
+                if index < len(pattern) and pattern[index] == "*":
+                    stack.append(index + 1)
+        return found
+
+    states = close({0})
+    for char in literal:
+        moved: set[int] = set()
+        for index in states:
+            if index == len(pattern):
+                continue
+            current = pattern[index]
+            if current == "*":
+                moved.add(index)
+            elif (current == "?" and char not in _MARK_CHARS) or current == char:
+                moved.add(index + 1)
+        states = close(moved)
+    return frozenset(pattern[index:] for index in states)
+
+
+def _candidates(pattern: str, prefix: str) -> list[str]:
+    """``<prefix>R`` for each tail R of ``pattern`` after ``abi:`` or a ``/``,
+    the shortest first, and ``<prefix>*R`` for ``abi:*R``."""
+    tails = [
+        pattern[index + 1 :]
+        for index, char in enumerate(pattern)
+        if char == "/" or (index == len("abi:") - 1 and pattern.startswith("abi:"))
+    ]
+    candidates = [prefix + tail for tail in sorted(set(tails), key=len) if tail]
+    if pattern.startswith("abi:*"):
+        candidates.append(prefix + "*" + pattern[len("abi:*") :])
+    return candidates

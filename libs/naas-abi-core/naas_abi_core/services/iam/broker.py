@@ -18,8 +18,9 @@ answers there only, ``naas_abi_sdk.messages.reply_allowed``).
 
 * **Always**: IAM's read-only and self-service request subjects
   (``IAM_ALWAYS``: ``token``, ``exchange_token``, ``jwks``, ``submit_manifest``, ``get_manifest``,
-  ``find_service_account``, ``authorize``, ``authorize_declared``, ``filter``, ``grantable``;
-  never a mutation, never
+  ``find_service_account``, ``authorize``, ``authorize_declared``, ``filter``, ``grantable``,
+  and the containers' ``register_container``, ``delete_container``, ``get_container``,
+  which IAM decides with the container type's own actions; never another mutation, never
   ``abi.iam.v1.changed``); the others only for an ``iam:`` action the policy
   allows; the engine's broker
   control (``abi.broker.v1.<operation>``: it checks each request against the
@@ -44,7 +45,7 @@ answers there only, ``naas_abi_sdk.messages.reply_allowed``).
   completion notices (``abi.jobdone.*``, core NATS). ``GetJobRun`` on a
   module's runs subscribes to their notices. A module writes nothing into
   the jobs stream: its schedules make the server allow rollups there.
-* **Bus topics** named ``abi:-:-:bus:topic/<topic>`` (a concrete topic, none
+* **Bus topics** named ``abi:bus:topic/<topic>`` (a concrete topic, none
   under a reserved root, naming no variable: nothing here substitutes one), by
   action: ``bus:Publish`` publishes on the topic
   and writes its claim checks; ``bus:Consume`` subscribes to it and fetches
@@ -70,6 +71,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from urllib.parse import quote, unquote
@@ -96,14 +98,15 @@ IAM_OPERATIONS = (
     "delete_group",
     "delete_placement",
     "delete_policy",
+    "delete_container",
     "delete_principal",
-    "delete_scope",
     "detach_policy",
     "ensure_user",
     "exchange_token",
     "explain",
     "filter",
     "find_service_account",
+    "get_container",
     "get_group",
     "get_manifest",
     "get_policy",
@@ -124,8 +127,8 @@ IAM_OPERATIONS = (
     "list_sub_policies",
     "map_idp_group",
     "put_placement",
-    "put_scope",
     "register_catalog",
+    "register_container",
     "reject_manifest",
     "remove_group_member",
     "resume_principal",
@@ -169,6 +172,11 @@ IAM_ALWAYS = (
     "authorize_declared",
     "filter",
     "grantable",
+    # Containers: IAM decides each with the type's own create or delete action
+    # (a module's own catalog), and reading a path needs no permission.
+    "register_container",
+    "delete_container",
+    "get_container",
 )
 ALWAYS_PUBLISH = (
     *(f"abi.iam.v1.{operation}" for operation in IAM_ALWAYS),
@@ -210,7 +218,7 @@ KERNEL_SERVICES = (
 # changes on: the bus checks no subscriber, so a module reads graphs through
 # ``triple_store:Subscribe``, never by naming the topic.
 RESERVED_TOPIC_ROOTS = ("abi", "evt", "_INBOX", "triple_store")
-TOPIC_PREFIX = "abi:-:-:bus:topic/"
+TOPIC_PREFIX = "abi:bus:topic/"
 
 # Names shared with naas_abi_sdk (claim_check, jobs, bus); a test keeps them equal.
 CLAIM_CHECK_STREAM = "ABI_CLAIM_CHECKS"
@@ -380,7 +388,7 @@ def nested_topic_problems(topics: Iterable[str], others: Iterable[str]) -> list[
 
 
 def _topics(resources: Iterable[str]) -> list[str]:
-    """Bus topics named ``abi:-:-:bus:topic/<topic>``: concrete, not reserved.
+    """Bus topics named ``abi:bus:topic/<topic>``: concrete, not reserved.
     A topic pattern would reach other connections' subjects."""
     topics = []
     for resource in resources:
@@ -611,15 +619,23 @@ def _segments(resource: str, service: str) -> tuple[str, list[str]] | None:
     service's."""
     if resource == "*":
         return "*", ["*"]
-    fields = resource.split(":", 4)
-    if len(fields) != 5 or fields[0] != "abi":
+    if not resource.startswith("abi:"):
         return None
-    if not matches(fields[3], service):
+    steps = list(_STEP.finditer(resource))
+    if not steps:
+        # No literal step: a wildcard may reach any of the service's resources.
+        return ("*", ["*"]) if "*" in resource or "?" in resource else None
+    last = steps[-1]
+    if not matches(last.group(1), service):
         return None
-    type_, _, id_ = fields[4].partition("/")
+    type_, id_ = last.group(2), resource[last.end() :]
     if "*" in type_ or "?" in type_:
         return "*", ["*"]
     return type_, [unquote(part) for part in id_.split("/")] if id_ else ["*"]
+
+
+# A step of a name or a pattern, ``<service>:<type>/``: after ``abi:`` or a "/".
+_STEP = re.compile(r"(?:(?<=^abi:)|(?<=/))([a-z0-9_*?]+):([a-z0-9_*?]+)/")
 
 
 def _concrete(value: str) -> bool:

@@ -35,7 +35,7 @@ from naas_abi_core.services.iam.tests.iam_harness import graph, statement
 
 QUERY = "triple_store:Query"
 INSERT = "triple_store:Insert"
-MODULE = "abi:-:-:discovery:module/acme/people"
+MODULE = "abi:discovery:module/acme/people"
 ALL_DELEGATED = nats_auth.DELEGATED_AUDIENCES
 
 
@@ -245,7 +245,7 @@ def test_a_resource_names_the_module_that_acts_for_the_user(h, iam, bob, people)
     assert claims.actor_name == "module/acme/people"
     assert claims.resource == MODULE
     # The same resource, spelled as one of its agents, names the same module.
-    agent = "abi:-:-:discovery:agent/acme/people/summarize"
+    agent = "abi:discovery:agent/acme/people/summarize"
     assert (
         _verify(iam, _vouched(iam, bob.id, AGENT_AUDIENCE, resource=agent).token).actor
         == people.id
@@ -254,8 +254,8 @@ def test_a_resource_names_the_module_that_acts_for_the_user(h, iam, bob, people)
 
 def test_a_resource_that_is_no_module_or_has_no_account_is_refused(h, iam, bob, people):
     for resource in (
-        "abi:-:-:triple_store:graph/x",
-        "abi:-:-:discovery:module/acme/ghost",
+        "abi:triple_store:graph/x",
+        "abi:discovery:module/acme/ghost",
         "not a name",
     ):
         with pytest.raises((ValueError, KeyRefusedError)):
@@ -606,7 +606,7 @@ def test_a_link_grant_opens_one_audience_for_hours_and_is_revocable(h, iam, bob)
         bob,
         kind="grant",
         audience=APP_AUDIENCE,
-        resource="abi:-:-:discovery:app/acme/people/crm",
+        resource="abi:discovery:app/acme/people/crm",
         scope=(
             {"effect": "Allow", "actions": ["discovery:OpenApp"], "resources": ["*"]},
         ),
@@ -615,7 +615,7 @@ def test_a_link_grant_opens_one_audience_for_hours_and_is_revocable(h, iam, bob)
     assert grant.value.startswith("abi_gk_")
     claims = _verify(iam, _by_key(iam, grant.value, APP_AUDIENCE).token, APP_AUDIENCE)
     assert claims.subject == bob.id and claims.audience == APP_AUDIENCE
-    assert claims.resource == "abi:-:-:discovery:app/acme/people/crm"
+    assert claims.resource == "abi:discovery:app/acme/people/crm"
     with pytest.raises((PermissionDeniedError, KeyRefusedError)):
         _by_key(iam, grant.value, API_KEY_AUDIENCE)
     with h.as_(actor="api", on_behalf_of=bob):
@@ -918,12 +918,12 @@ def test_a_module_acting_for_a_user_may_invoke_what_it_hosts_and_nothing_else(
                 "discovery:OpenApp",
                 "discovery:ChatModel",
             ],
-            ["abi:-:-:discovery:*"],
+            ["abi:discovery:*"],
         ),
         statement(
             "Allow",
             ["discovery:GetAgentRun", "discovery:CancelAgentRun"],
-            [f"abi:-:-:discovery:run/{bob.id}/*", "abi:-:-:discovery:run/usr_alice/*"],
+            [f"abi:discovery:run/{bob.id}/*", "abi:discovery:run/usr_alice/*"],
         ),
     )
     context = token_context(
@@ -933,7 +933,7 @@ def test_a_module_acting_for_a_user_may_invoke_what_it_hosts_and_nothing_else(
     def allowed(action, resource):
         return iam.authorizer.check(context, action, resource).allowed
 
-    mine = "abi:-:-:discovery:{}/acme/people/x"
+    mine = "abi:discovery:{}/acme/people/x"
     for action, type_ in (
         ("discovery:InvokeAgent", "agent"),
         ("discovery:OpenApp", "app"),
@@ -941,23 +941,17 @@ def test_a_module_acting_for_a_user_may_invoke_what_it_hosts_and_nothing_else(
     ):
         assert allowed(action, mine.format(type_)), action
         # Another module's, and another project's, are not its to serve.
-        assert not allowed(action, f"abi:-:-:discovery:{type_}/acme/billing/x")
-        assert not allowed(action, f"abi:-:-:discovery:{type_}/other/people/x")
+        assert not allowed(action, f"abi:discovery:{type_}/acme/billing/x")
+        assert not allowed(action, f"abi:discovery:{type_}/other/people/x")
     # The runs of the project that belong to the user it acts for: bob's, never
     # alice's (bob's policy would let him, the module's side does not).
-    assert allowed("discovery:GetAgentRun", f"abi:-:-:discovery:run/{bob.id}/acme/i1")
-    assert allowed(
-        "discovery:CancelAgentRun", f"abi:-:-:discovery:run/{bob.id}/acme/i1"
-    )
-    assert not allowed(
-        "discovery:GetAgentRun", "abi:-:-:discovery:run/usr_alice/acme/i1"
-    )
-    assert not allowed(
-        "discovery:GetAgentRun", f"abi:-:-:discovery:run/{bob.id}/other/i1"
-    )
+    assert allowed("discovery:GetAgentRun", f"abi:discovery:run/{bob.id}/acme/i1")
+    assert allowed("discovery:CancelAgentRun", f"abi:discovery:run/{bob.id}/acme/i1")
+    assert not allowed("discovery:GetAgentRun", "abi:discovery:run/usr_alice/acme/i1")
+    assert not allowed("discovery:GetAgentRun", f"abi:discovery:run/{bob.id}/other/i1")
     # And it gains nothing else: bob holds no key rights it could borrow.
-    assert not allowed("discovery:Evict", "abi:-:-:discovery:module/acme/people")
-    assert not allowed("iam:CreateKey", f"abi:-:-:iam:key/{bob.id}/new")
+    assert not allowed("discovery:Evict", "abi:discovery:module/acme/people")
+    assert not allowed("iam:CreateKey", f"abi:iam:key/{bob.id}/new")
 
 
 def test_the_modules_own_side_alone_grants_a_user_with_no_policy_nothing(
@@ -970,7 +964,7 @@ def test_the_modules_own_side_alone_grants_a_user_with_no_policy_nothing(
     context = token_context(
         _verify(iam, _vouched(iam, nobody.id, AGENT_AUDIENCE, resource=MODULE).token)
     )
-    mine = "abi:-:-:discovery:agent/acme/people/x"
+    mine = "abi:discovery:agent/acme/people/x"
     assert not iam.authorizer.check(context, "discovery:InvokeAgent", mine).allowed
 
 

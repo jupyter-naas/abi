@@ -58,7 +58,7 @@ DOCUMENT = {
         {
             "effect": "Allow",
             "actions": ["keyvalue:*"],
-            "resources": ["abi:*:*:keyvalue:*"],
+            "resources": ["abi:keyvalue:*", "abi:*/keyvalue:*"],
         }
     ],
 }
@@ -203,9 +203,7 @@ def test_an_unapproved_module_reaches_iam_only_then_its_approved_services(stack)
                     principal=Principal(account, "service_account", claims.name)
                 )
             ):
-                assert not iam.authorize(
-                    "keyvalue:Get", "abi:-:-:keyvalue:key/x"
-                ).allowed
+                assert not iam.authorize("keyvalue:Get", "abi:keyvalue:key/x").allowed
             approve(iam, account, "module/default/people")
             # The connection keeps its permissions until it reconnects.
             await transport.reconnect()
@@ -349,7 +347,7 @@ BUS = {
         {
             "effect": "Allow",
             "actions": ["bus:*"],
-            "resources": [f"abi:-:-:bus:topic/{TOPIC}"],
+            "resources": [f"abi:bus:topic/{TOPIC}"],
         }
     ],
 }
@@ -418,7 +416,7 @@ def test_a_topic_under_a_platform_root_is_refused_and_reaches_nothing(stack):
             {
                 "effect": "Allow",
                 "actions": ["bus:*"],
-                "resources": ["abi:-:-:bus:topic/abi"],
+                "resources": ["abi:bus:topic/abi"],
             }
         ],
     }
@@ -950,12 +948,12 @@ def test_the_engine_decides_each_request_on_its_resource(stack):
                 {
                     "effect": "Allow",
                     "actions": ["discovery:TriggerJob"],
-                    "resources": ["abi:-:-:discovery:job/default/billing/*"],
+                    "resources": ["abi:discovery:job/default/billing/*"],
                 },
                 {
                     "effect": "Deny",
                     "actions": ["discovery:TriggerJob"],
-                    "resources": ["abi:-:-:discovery:job/default/billing/secret"],
+                    "resources": ["abi:discovery:job/default/billing/secret"],
                 },
             ],
         },
@@ -992,7 +990,7 @@ def test_no_module_makes_another_ones_trigger_a_duplicate(stack):
                 {
                     "effect": "Allow",
                     "actions": ["discovery:TriggerJob"],
-                    "resources": ["abi:-:-:discovery:job/default/billing/*"],
+                    "resources": ["abi:discovery:job/default/billing/*"],
                 }
             ],
         },
@@ -1182,7 +1180,7 @@ def test_a_narrowed_manifest_reaches_the_broker_at_the_next_renewal(stack):
                         {
                             "effect": "Allow",
                             "actions": ["document:*"],
-                            "resources": ["abi:-:-:document:namespace/people"],
+                            "resources": ["abi:document:namespace/people"],
                         }
                     ],
                 },
@@ -1243,7 +1241,7 @@ def test_a_module_with_secret_grants_reads_no_signing_key_or_broker_password(sta
                 {
                     "effect": "Allow",
                     "actions": ["secret:*"],
-                    "resources": ["abi:*:*:secret:*"],
+                    "resources": ["abi:secret:*", "abi:*/secret:*"],
                 }
             ],
         },
@@ -1306,7 +1304,7 @@ def _bus_for(action: str) -> dict:
             {
                 "effect": "Allow",
                 "actions": [action],
-                "resources": [f"abi:-:-:bus:topic/{TOPIC}"],
+                "resources": [f"abi:bus:topic/{TOPIC}"],
             }
         ],
     }
@@ -1674,7 +1672,7 @@ def test_a_host_token_is_good_at_the_host_it_names_and_nowhere_else(stack):
                 "effect": "Allow",
                 "actions": ["discovery:InvokeAgent"],
                 # Its dependency: not P. The broker's subjects are wider.
-                "resources": ["abi:-:-:discovery:agent/default/dependency/*"],
+                "resources": ["abi:discovery:agent/default/dependency/*"],
             }
         ],
     }
@@ -1913,7 +1911,7 @@ def test_a_remote_agent_called_from_nexus_sees_the_end_user_and_their_policy_lim
                         {
                             "effect": "Allow",
                             "actions": ["discovery:InvokeAgent"],
-                            "resources": ["abi:-:-:discovery:agent/default/mal/*"],
+                            "resources": ["abi:discovery:agent/default/mal/*"],
                         }
                     ],
                 },
@@ -1926,12 +1924,12 @@ def test_a_remote_agent_called_from_nexus_sees_the_end_user_and_their_policy_lim
                         {
                             "effect": "Allow",
                             "actions": ["discovery:InvokeAgent"],
-                            "resources": ["abi:-:-:discovery:agent/default/mal/*"],
+                            "resources": ["abi:discovery:agent/default/mal/*"],
                         },
                         {
                             "effect": "Deny",
                             "actions": ["discovery:InvokeAgent"],
-                            "resources": ["abi:-:-:discovery:agent/default/mal/Agent"],
+                            "resources": ["abi:discovery:agent/default/mal/Agent"],
                         },
                     ],
                 },

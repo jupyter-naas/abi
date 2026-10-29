@@ -1,5 +1,5 @@
-"""An IAM store of schema version 1 upgrades: what the SQLite and PostgreSQL
-tests run on a store they downgrade by hand."""
+"""An IAM store of an earlier schema version upgrades: what the SQLite and
+PostgreSQL tests run on a store they downgrade by hand."""
 
 from __future__ import annotations
 
@@ -16,39 +16,55 @@ from naas_abi_core.services.iam.IAMPorts import (
     Attachment,
     GroupMapping,
     LegacyScopeSet,
+    PendingGrant,
+    Placement,
     Policy,
     PrincipalRecord,
     new_id,
 )
+from naas_abi_core.services.iam.names import PLATFORM, UNRESOLVED
 from naas_abi_core.services.iam.policy import PolicyDocument, Statement
 from naas_abi_core.services.iam.tests.iam__secondary_adapter__generic_test import (
+    WS,
+    _Rewriter,
     group,
     policy,
 )
 
-# What version 1 had: no owner scopes, no sets and no parents (version 2 had no
-# sets, version 3 no parents, version 4 still its sets). The store of today
-# makes no ``iam_scope_sets``: versions 3 and 4 get theirs back.
+# What version 1 had: no owner scopes, no sets, no parents and no containers
+# (version 2 had no sets, version 3 no parents, version 4 still its sets,
+# version 5 no containers). The store of today makes no ``iam_scope_sets``:
+# versions 3 and 4 get theirs back.
 SETS_TABLE = (
     "CREATE TABLE {schema}iam_scope_sets (org VARCHAR(64) NOT NULL, "
     "workspace VARCHAR(64) NOT NULL, modules TEXT, features TEXT, "
     "PRIMARY KEY (org, workspace))"
 )
-DOWNGRADE_TO_4 = (SETS_TABLE, "UPDATE {schema}iam_state SET schema_version = 4")
+NO_CONTAINERS = (
+    "DROP TABLE {schema}iam_containers",
+    "ALTER TABLE {schema}iam_placements DROP COLUMN container",
+)
+DOWNGRADE_TO_5 = (*NO_CONTAINERS, "UPDATE {schema}iam_state SET schema_version = 5")
+DOWNGRADE_TO_4 = (
+    *NO_CONTAINERS,
+    SETS_TABLE,
+    "UPDATE {schema}iam_state SET schema_version = 4",
+)
 DOWNGRADE_TO_3 = (
+    *NO_CONTAINERS,
     "DROP INDEX {schema}iam_policies_parent",
     "ALTER TABLE {schema}iam_policies DROP COLUMN parent_id",
     SETS_TABLE,
     "UPDATE {schema}iam_state SET schema_version = 3",
 )
 DOWNGRADE = (
-    *DOWNGRADE_TO_3[:2],
+    *DOWNGRADE_TO_3[:4],
     "ALTER TABLE {schema}iam_policies DROP COLUMN owner_scope",
     "ALTER TABLE {schema}iam_principals DROP COLUMN owner_scope",
     "UPDATE {schema}iam_state SET schema_version = 1",
 )
 DOWNGRADE_TO_2 = (
-    *DOWNGRADE_TO_3[:2],
+    *DOWNGRADE_TO_3[:4],
     "UPDATE {schema}iam_state SET schema_version = 2",
 )
 
@@ -58,20 +74,16 @@ def check_upgrade(
 ) -> None:
     store = open_store()
     shared = store.create_policy(policy())
-    hand_made = store.create_principal(group("sales", org="org-1"))
+    hand_made = store.create_principal(group("sales"))
     bound = store.create_principal(
-        PrincipalRecord(
-            id=new_id("grp"), kind="group", name="idp:acme:Sales", org="org-1"
-        )
+        PrincipalRecord(id=new_id("grp"), kind="group", name="idp:acme:Sales")
     )
     store.map_idp_group(GroupMapping("acme", "Sales", bound.id))
     store.attach(Attachment(new_id("att"), shared.id, bound.id, "abi:org-1:ws-1"))
     store.attach(Attachment(new_id("att"), shared.id, bound.id, "abi:org-1:*"))
     # Bound in org-1 first, then in org-2 and unscoped: one group held them all.
     everywhere = store.create_principal(
-        PrincipalRecord(
-            id=new_id("grp"), kind="group", name="idp:acme:Ops", org="org-1"
-        )
+        PrincipalRecord(id=new_id("grp"), kind="group", name="idp:acme:Ops")
     )
     store.map_idp_group(GroupMapping("acme", "Ops", everywhere.id))
     for scope in ("abi:org-1:ws-1", "abi:org-2:ws-9", None):
@@ -90,12 +102,19 @@ def check_upgrade(
         )
     )
     unbound = store.create_principal(
-        PrincipalRecord(id=new_id("grp"), kind="group", name="idp:acme:All", org=None)
+        PrincipalRecord(id=new_id("grp"), kind="group", name="idp:acme:All")
     )
     store.map_idp_group(GroupMapping("acme", "All", unbound.id))
     store.close()
     for statement in DOWNGRADE:
         execute(statement)
+    # Version 1 kept the org a group was made for; the store of today writes
+    # none (the column stays, read by this upgrade only).
+    for made_in_org in (hand_made, bound, everywhere):
+        execute(
+            "UPDATE {schema}iam_principals SET org = 'org-1' "  # nosec B608
+            f"WHERE id = '{made_in_org.id}'"
+        )
 
     with patch.object(iam_sql, "logger") as log:
         upgraded = open_store()
@@ -106,21 +125,22 @@ def check_upgrade(
     assert "abi:-:-:iam:policy/*" in warned[0]
     assert "${scope}:iam:group/*" in warned[0] and "'*'" not in warned[0]
     try:
-        assert upgraded.get_policy(shared.id).owner_scope == "abi:-:-"
-        assert upgraded.get_principal(hand_made.id).owner_scope == "abi:-:-"
-        # A group an IdP binding made belongs to the org it was made for.
+        assert upgraded.get_policy(shared.id).owner_scope == PLATFORM
+        assert upgraded.get_principal(hand_made.id).owner_scope == PLATFORM
+        # A group an IdP binding made belongs to the org it was made for, in
+        # the grammar of then until the names are rewritten.
         assert upgraded.get_principal(bound.id).owner_scope == "abi:org-1:-"
-        assert upgraded.get_principal(unbound.id).owner_scope == "abi:-:-"
+        assert upgraded.get_principal(unbound.id).owner_scope == PLATFORM
         # Held at org-2 and unscoped too: org-1's admins must not own it.
-        assert upgraded.get_principal(everywhere.id).owner_scope == "abi:-:-"
-        assert upgraded.create_policy(policy()).owner_scope == "abi:-:-"
+        assert upgraded.get_principal(everywhere.id).owner_scope == PLATFORM
+        assert upgraded.create_policy(policy()).owner_scope == PLATFORM
     finally:
         upgraded.close()
     # Opening it again changes nothing.
     again = open_store()
     try:
         assert again.get_principal(bound.id).owner_scope == "abi:org-1:-"
-        assert SCHEMA_VERSION == 5
+        assert SCHEMA_VERSION == 6
         assert again.legacy_scope_sets() == []
     finally:
         again.close()
@@ -230,5 +250,81 @@ def check_upgrade_from_4(
         assert again.revision() > before
         assert again.legacy_scope_sets() == []
         assert again.drop_legacy_scope_sets() is False
+    finally:
+        again.close()
+
+
+def check_upgrade_from_5(
+    open_store: Callable[[], IAMStoreSQL], execute: Callable[[str], None]
+) -> None:
+    """A store of version 5 (names ``abi:<org>:<ws>:...``) narrows, never widens,
+    until its names are rewritten: a placement of the old form reads as
+    ``names.UNRESOLVED``, the platform's (``-``, ``-``) as the platform, and the
+    old platform ``abi:-:-`` as an owner or a scope is the platform ``abi:``."""
+    store = open_store()
+    platform_policy = store.create_policy(replace(policy(), owner_scope="abi:-:-"))
+    workspace_policy = store.create_policy(
+        replace(policy(), owner_scope="abi:org-1:ws-1")
+    )
+    platform_group = store.create_principal(replace(group(), owner_scope="abi:-:-"))
+    store.attach(
+        Attachment(new_id("att"), platform_policy.id, platform_group.id, "abi:-:-")
+    )
+    store.attach(
+        Attachment(
+            new_id("att"), platform_policy.id, platform_group.id, "abi:org-1:ws-1"
+        )
+    )
+    invited = store.add_pending_grant(
+        PendingGrant(
+            new_id("pgr"), "builtin", "bob@example.com", platform_policy.id, "abi:-:-"
+        )
+    )
+    store.close()
+    for statement in DOWNGRADE_TO_5:
+        execute(statement)
+    for id_key, org, workspace in (
+        ("nexus-ws-1", "org-1", "ws-1"),
+        ("nexus-ws-1/*", "org-1", "ws-1"),
+        ("module", "-", "-"),
+    ):
+        execute(
+            "INSERT INTO {schema}iam_placements (service, id_key, org, workspace) "  # nosec B608
+            f"VALUES ('document', '{id_key}', '{org}', '{workspace}')"
+        )
+    upgraded = open_store()
+    try:
+        assert upgraded.list_placements() == [
+            Placement("document", "module", PLATFORM),
+            Placement("document", "nexus-ws-1", UNRESOLVED),
+            Placement("document", "nexus-ws-1/*", UNRESOLVED),
+        ]
+        assert upgraded.list_containers() == []
+        assert upgraded.get_policy(platform_policy.id).owner_scope == PLATFORM
+        assert upgraded.get_policy(workspace_policy.id).owner_scope == "abi:org-1:ws-1"
+        assert upgraded.get_principal(platform_group.id).owner_scope == PLATFORM
+        assert {
+            a.scope for a in upgraded.list_attachments(principal_id=platform_group.id)
+        } == {PLATFORM, "abi:org-1:ws-1"}
+        grant = upgraded.get_pending_grant(invited.id)
+        assert grant is not None and grant.scope == PLATFORM
+        # The rewrite of the names, once Nexus registers its containers.
+        counts = upgraded.rewrite_names(_Rewriter())
+        assert (counts["containers"], counts["placements"]) == (2, 2)
+        assert counts["policies"] == 1 and counts["attachments"] == 1
+        assert upgraded.list_placements() == [
+            Placement("document", "module", PLATFORM),
+            Placement("document", "nexus-ws-1", WS),
+            Placement("document", "nexus-ws-1/*", WS),
+        ]
+        assert upgraded.get_policy(workspace_policy.id).owner_scope == WS
+    finally:
+        upgraded.close()
+    # Opening it again changes nothing, and the rewrite is done.
+    again = open_store()
+    try:
+        assert again.list_placements()[1] == Placement("document", "nexus-ws-1", WS)
+        assert set(again.rewrite_names(_Rewriter()).values()) == {0}
+        assert SCHEMA_VERSION == 6
     finally:
         again.close()

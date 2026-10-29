@@ -68,6 +68,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     KIND_PREFIXES,
     Attachment,
     Bound,
+    ContainerRecord,
     CreatedKey,
     Decision,
     EffectiveStatement,
@@ -91,6 +92,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     ManifestRecord,
     ManifestStatus,
     ManifestSubmission,
+    NameRewriter,
     Page,
     PendingGrant,
     PermissionDeniedError,
@@ -99,23 +101,27 @@ from naas_abi_core.services.iam.IAMPorts import (
     PolicySource,
     PrincipalKind,
     PrincipalRecord,
-    ScopeRecord,
     Seal,
     Subject,
     TokenExchange,
     new_id,
 )
 from naas_abi_core.services.iam.names import (
-    ALL_ORGS,
-    ALL_WORKSPACES,
-    NONE,
+    EVERYWHERE,
     PLATFORM_SCOPE,
+    UNRESOLVED,
+    as_container,
+    container_name,
+    container_of_scope,
+    is_below,
+    is_old_scope,
     owner_ancestors,
+    parse_container,
     resource_name,
-    scope_fields,
-    scope_name,
+    top_container,
     validate_owner_scope,
     validate_scope,
+    within,
     within_owner,
 )
 from naas_abi_core.services.iam.policy import (
@@ -147,15 +153,12 @@ def principal_resource(principal_id: str) -> str:
 
 
 def _owned_resource(type_name: str, item_id: str, owner_scope: str) -> str:
-    """A policy or a group, named at the org or workspace that owns it,
-    ``abi:<org>:<ws>:iam:<type>/<id>``. The platform's are ``abi:%2A:%2A:…``
-    (``ALL_ORGS``), like unscoped attachments: no ``${scope}`` expands to it,
-    the platform scope ``abi:-:-`` included, so a role attached anywhere never
-    reaches a platform policy, which may be attached unscoped."""
-    org, workspace = scope_fields(owner_scope)
-    if owner_scope == PLATFORM_SCOPE:
-        org, workspace = ALL_ORGS, ALL_WORKSPACES
-    return resource_name("iam", type_name, item_id, org=org, workspace=workspace)
+    """A policy or a group, named in the container that owns it,
+    ``<owner>/iam:<type>/<id>``; the platform's ``abi:iam:<type>/<id>``, which no
+    ``${scope}`` reaches, the platform's included (``AGENTS.md``, "Attachments and
+    scope"). An owner of the grammar before container paths names it in
+    ``names.UNRESOLVED`` until it is rewritten."""
+    return resource_name("iam", type_name, item_id, container=as_container(owner_scope))
 
 
 def group_resource(group_id: str, owner_scope: str = PLATFORM_SCOPE) -> str:
@@ -167,31 +170,20 @@ def policy_resource(policy_id: str, owner_scope: str = PLATFORM_SCOPE) -> str:
 
 
 def attachment_resource(policy_id: str, principal_id: str, scope: str | None) -> str:
-    """Named at the attachment's scope (§6.4), so no ``${scope}`` grant reaches
-    past its scope.
-
-    * An org-wide one (``abi:<org>:*``) is in workspace ``%2A``
-      (``ALL_WORKSPACES``): an ``abi:<org>:*`` grant reaches it, an org-level
-      ``abi:<org>:-`` one does not, so an org admin cannot widen itself to every
-      workspace.
-    * An unscoped one is ``abi:%2A:%2A:…`` (``ALL_ORGS``): no ``${scope}``
-      expands to it, the platform scope ``abi:-:-`` included, so only grants
-      written for every org (the platform admin's) attach or detach policies
-      that apply everywhere.
-    """
-    if scope is None:
-        org, workspace = ALL_ORGS, ALL_WORKSPACES
-    else:
-        org, workspace = scope_fields(scope)
-        if workspace == "*":
-            workspace = ALL_WORKSPACES
+    """Named in the attachment's scope's container, so no ``${scope}`` grant
+    reaches past its scope; below a container, in that container ("Grant only
+    what you hold" checks what it grants under it). An unscoped one, and one at
+    the platform, at the platform, which only unscoped grants reach (the
+    platform admin's)."""
+    container = (
+        PLATFORM_SCOPE if scope is None else as_container(container_of_scope(scope))
+    )
     return resource_name(
         "iam",
         "attachment",
         [policy_id, principal_id],
         kind="path",
-        org=org,
-        workspace=workspace,
+        container=container,
     )
 
 
@@ -240,9 +232,9 @@ def placement_resource(service: str, id_key: str) -> str:
     return resource_name("iam", "placement", [service, id_key], kind="path")
 
 
-def scope_resource(org: str, workspace: str = NONE) -> str:
-    parts = [org] if workspace == NONE else [org, workspace]
-    return resource_name("iam", "scope", parts, kind="path")
+def container_resource(service: str, type_name: str, id: str) -> str:
+    """IAM's record of a container, at the platform: ``iam:container/<s>/<t>/<id>``."""
+    return resource_name("iam", "container", [service, type_name, id], kind="path")
 
 
 def catalog_resource(service: str) -> str:
@@ -371,7 +363,7 @@ class IAMService(IIAMService, PolicySource):
         resource_type: str,
         parts: Sequence[str],
         *,
-        workspace: str | None = None,
+        container: str | None = None,
     ) -> tuple[Decision, str]:
         service, _, name = action.partition(":")
         catalog = self._registry.get(service)
@@ -384,14 +376,30 @@ class IAMService(IIAMService, PolicySource):
             raise IAMNotFoundError(
                 f"No module declares {action} on {service}:{resource_type}"
             )
-        where = workspace or current_call_context().workspace_id or ""
-        org = self.workspace_org(where) if where else None
+        where = self._known_container(container) if container else self.call_container()
+        if where == UNRESOLVED:
+            # A container IAM does not know names nothing: not found.
+            unknown = container or current_call_context().container or ""
+            return Decision(False, False, "implicit_deny"), unknown
+        declared = catalog.resource_type(resource_type)
+        if declared is not None and declared.container:
+            # A container's own resource is the container: registered, never placed.
+            values = [parts] if isinstance(parts, str) else list(parts)
+            found = (
+                self.container(service, resource_type, values[0])
+                if len(values) == 1
+                else None
+            )
+            if found is None:
+                return Decision(False, False, "implicit_deny"), resource_name(
+                    service,
+                    resource_type,
+                    values or ["-"],
+                    container=where or PLATFORM_SCOPE,
+                )
+            return self.authorize(action, found), found
         resource = module_scopes.declared_resource(
-            catalog,
-            resource_type,
-            list(parts),
-            org=org or NONE,
-            workspace=where if org else NONE,
+            catalog, resource_type, list(parts), container=where or PLATFORM_SCOPE
         )
         return self.authorize(action, resource), resource
 
@@ -704,9 +712,9 @@ class IAMService(IIAMService, PolicySource):
         return self._placements.get("index", build)
 
     def put_placement(
-        self, service: str, id_key: str, org: str = NONE, workspace: str = NONE
+        self, service: str, id_key: str, container: str = PLATFORM_SCOPE
     ) -> Placement:
-        placement = Placement(service, id_key, org, workspace)
+        placement = Placement(service, id_key, container)
         _check_placement(placement)
         self.require("iam:PutPlacement", placement_resource(service, id_key))
         self.store.put_placement(placement)
@@ -733,65 +741,147 @@ class IAMService(IIAMService, PolicySource):
         ]
 
     # =========================================================================
-    # Scopes: the orgs and workspaces Nexus registers.
+    # Containers: what any module declares and registers (AGENTS.md, "Containers").
     # =========================================================================
 
-    def put_scope(self, org: str, workspace: str = NONE) -> ScopeRecord:
-        scope = ScopeRecord(org, workspace)
-        resource_name(
-            "iam", "scope", org, org=org, workspace=workspace
-        )  # validates ids
-        if org == NONE:
-            raise ValueError("A scope names an org")
-        self.require("iam:PutScope", scope_resource(org, workspace))
-        self.store.put_scope(scope)
+    def _container_type(self, service: str, type_name: str) -> ActionCatalog:
+        catalog = self._registry.get(service)
+        declared = catalog.resource_type(type_name) if catalog is not None else None
+        if catalog is None or declared is None or not declared.container:
+            raise ValueError(
+                f"{service}:{type_name} is not a registered container type"
+            )
+        return catalog
+
+    def register_container(
+        self, service: str, type: str, id: str, *, parent: str = PLATFORM_SCOPE
+    ) -> ContainerRecord:
+        """Register a container in ``parent``: a create on its name as placed,
+        which needs the type's create action there. Again under the same parent
+        changes nothing; under another, ``IAMConflictError``."""
+        catalog = self._container_type(service, type)
+        record = ContainerRecord(service, type, id, parent)
+        name = record.name  # validates the id and the parent's name
+        create = catalog.container_action(type, "creates")
+        assert create is not None  # a container type declares one (catalog.py)
+        self.require(catalog.qualified(create.name), name)
+        if parent != PLATFORM_SCOPE and self._known_container(parent) != parent:
+            raise IAMNotFoundError(f"No container {parent}")
+        declared = catalog.resource_type(type)
+        if declared is not None and declared.parents:
+            steps = parse_container(parent)
+            where = f"{steps[-1].service}:{steps[-1].type}" if steps else "-"
+            if where not in declared.parents:
+                raise ValueError(
+                    f"A {service}:{type} sits in {', '.join(declared.parents)}, "
+                    f"not in {parent}"
+                )
+        existing = self.store.get_container(service, type, id)
+        if existing is not None:
+            if existing.parent != parent:
+                raise IAMConflictError(
+                    f"{service}:{type}/{id} is registered in {existing.parent}"
+                )
+            return existing
+        self.store.put_container(record)
         self._changed()
-        return scope
+        return record
 
-    def delete_scope(self, org: str, workspace: str = NONE) -> bool:
-        """Forget a deleted workspace, or an org (``workspace`` ``-``) with its
-        workspaces: what it owns (``_drop_owned``), then every attachment left
-        at it. A user left with no attachment in the org leaves its groups."""
-        self.require("iam:DeleteScope", scope_resource(org, workspace))
-        changed = self._drop_owned(org, workspace)
-        detached = self._detach_scope(org, workspace)
-        deleted = self.store.delete_scope(org, workspace)
+    def delete_container(self, service: str, type: str, id: str) -> bool:
+        """Forget a deleted container and every container below it: what they own
+        (``_drop_owned``), every attachment and invitation left at them (below them
+        included), and their placements. A user left with no attachment within the
+        top container leaves the groups owned there."""
+        catalog = self._container_type(service, type)
+        delete = catalog.container_action(type, "deletes")
+        if delete is None:
+            raise ValueError(f"{service}:{type} declares no action that deletes one")
+        found = self.store.get_container(service, type, id)
+        name = found.name if found is not None else container_name(service, type, id)
+        self.require(catalog.qualified(delete.name), name)
+        if found is None:
+            return False
+        doomed = [c for c in self.store.list_containers() if within(c.name, name)]
+        names = {c.name for c in doomed}
+        changed = self._drop_owned(names)
+        detached = self._detach_at(names)
+        for grant in self.store.list_pending_grants():
+            if grant.scope is not None and container_of_scope(grant.scope) in names:
+                changed = self.store.remove_pending_grant(grant.id) or changed
+        self.store.delete_containers(doomed)
+        top = top_container(name)
         for principal_id in detached:
-            self._leave_groups_of(principal_id, org)
-        if deleted or detached or changed:
-            self._changed()
-        return deleted
+            self._leave_groups_of(principal_id, top)
+        self._changed()
+        return True
 
-    def _detach_scope(self, org: str, workspace: str) -> set[str]:
-        """Detach every attachment at a deleted workspace, or anywhere in a
-        deleted org; the principals that held one."""
-
-        def at(scope: str | None) -> bool:
-            if scope is None:
-                return False
-            scope_org, scope_workspace = scope_fields(scope)
-            return scope_org == org and workspace in (NONE, scope_workspace)
-
+    def _detach_at(self, containers: set[str]) -> set[str]:
+        """Detach every attachment at one of ``containers`` (below it too); the
+        principals that held one."""
         held: set[str] = set()
         for attachment in self.store.list_attachments():
-            if not at(attachment.scope):
+            scope = attachment.scope
+            if scope is None or container_of_scope(scope) not in containers:
                 continue
-            if self.store.detach(
-                attachment.policy_id, attachment.principal_id, attachment.scope
-            ):
+            if self.store.detach(attachment.policy_id, attachment.principal_id, scope):
                 held.add(attachment.principal_id)
                 if attachment.policy_id in roles.ROLES:
                     self._sync_role_companions(attachment.principal_id)
         return held
 
-    def workspace_org(self, workspace: str) -> str | None:
-        """The org a workspace was registered in (``iam:PutScope``). ``-`` and ``*``
-        are not workspaces (an org's own scope is ``(org, -)``): they have no org."""
-        if workspace in ("", "-", "*"):
-            return None
-        return next(
-            (s.org for s in self.store.list_scopes() if s.workspace == workspace), None
+    def container(self, service: str, type: str, id: str) -> str | None:
+        return self._container_index().get((service, type, id))
+
+    def _container_index(self) -> dict[tuple[str, str, str], str]:
+        def build() -> dict[tuple[str, str, str], str]:
+            return {
+                (c.service, c.type, c.id): c.name for c in self.store.list_containers()
+            }
+
+        return self._placements.get("containers", build)
+
+    def _known_container(self, name: str) -> str:
+        """``name`` when it is a registered container under that path, the
+        platform for the platform, else ``names.UNRESOLVED``."""
+        if name == PLATFORM_SCOPE:
+            return name
+        try:
+            steps = parse_container(name)
+        except ValueError:
+            return UNRESOLVED
+        last = steps[-1]
+        return (
+            name
+            if self.container(last.service, last.type, last.value) == name
+            else UNRESOLVED
         )
+
+    def list_containers(self) -> list[ContainerRecord]:
+        """Every registered container (in process: what the module listing
+        builds on, ``AGENTS.md``)."""
+        return self.store.list_containers()
+
+    # =========================================================================
+    # The names before container paths: rewritten once by the module that
+    # defined them (AGENTS.md, "Migrating an existing install").
+    # =========================================================================
+
+    def rewrite_names(self, rewriter: NameRewriter) -> dict[str, int]:
+        """Rewrite every stored name with ``rewriter`` in one store transaction;
+        in process only. Needs ``iam:RewriteNames``."""
+        self.require("iam:RewriteNames", container_resource("iam", "container", "-"))
+        counts = self.store.rewrite_names(rewriter)
+        self._changed()
+        # What the roles bring, now that their scopes are containers.
+        holders = {
+            a.principal_id
+            for a in self.store.list_attachments()
+            if a.policy_id in roles.ROLES
+        }
+        for principal_id in sorted(holders):
+            self._sync_role_companions(principal_id)
+        self._changed()
+        return counts
 
     # =========================================================================
     # Catalogs
@@ -1124,28 +1214,18 @@ class IAMService(IIAMService, PolicySource):
     # Groups
     # =========================================================================
 
-    def create_group(
-        self, name: str, *, org: str | None = None, scope: str | None = None
-    ) -> PrincipalRecord:
-        """A group owned by ``scope``: the platform (``abi:-:-``, the default),
-        an org (``abi:<org>:-``, also what ``org`` alone means) or a workspace
-        (``abi:<org>:<ws>``). Its name carries the owner, so whoever may
+    def create_group(self, name: str, *, scope: str | None = None) -> PrincipalRecord:
+        """A group owned by ``scope``: the platform (``abi:``, the default) or a
+        registered container. Its name carries the owner, so whoever may
         ``iam:CreateGroup`` there creates it."""
         if not name:
             raise ValueError("A group needs a name")
-        owner = _owner_scope(scope, org)
+        owner = validate_owner_scope(scope) if scope is not None else PLATFORM_SCOPE
         group_id = new_id("grp")
         self.require("iam:CreateGroup", group_resource(group_id, owner))
         self._check_owner_known(owner)
-        owner_org = scope_fields(owner)[0]
         record = self.store.create_principal(
-            PrincipalRecord(
-                id=group_id,
-                kind="group",
-                name=name,
-                org=owner_org if owner_org != NONE else None,
-                owner_scope=owner,
-            )
+            PrincipalRecord(id=group_id, kind="group", name=name, owner_scope=owner)
         )
         self._changed()
         return record
@@ -1156,9 +1236,9 @@ class IAMService(IIAMService, PolicySource):
     def list_groups(
         self, *, limit: int = 100, after: str | None = None, scope: str | None = None
     ) -> Page:
-        """The groups the caller may list. With ``scope``, the groups it owns; at
-        a workspace, also its org's groups, which receive attachments there, for
-        whoever may list that workspace's attachments to them."""
+        """The groups the caller may list. With ``scope``, the groups it owns, and
+        those of the containers above it (not the platform's), which receive
+        attachments there, for whoever may list its attachments to them."""
         if scope is None:
             return self._filtered_page(
                 lambda size, cursor: self.store.list_principals(
@@ -1170,8 +1250,7 @@ class IAMService(IIAMService, PolicySource):
                 after,
             )
         validate_owner_scope(scope)
-        org, workspace = scope_fields(scope)
-        above = [scope_name(org)] if NONE not in (org, workspace) else []
+        above = [c for c in owner_ancestors(scope) if c != PLATFORM_SCOPE]
 
         def keep(groups: list[PrincipalRecord]) -> set[str]:
             own = {
@@ -1212,9 +1291,9 @@ class IAMService(IIAMService, PolicySource):
         return record
 
     def add_group_member(self, group_id: str, member_id: str) -> None:
-        """Static membership. Groups cannot contain groups. A group owned by an
-        org or a workspace holds only users of that org: users with an
-        attachment of their own under ``abi:<org>:``. The new member gets every
+        """Static membership. Groups cannot contain groups. A group owned by a
+        container holds only users of its top container: users with an
+        attachment of their own within it. The new member gets every
         attachment of the group, so the caller holds what each grants at its
         scope (``_require_held``), but for the companions IAM keeps in step with
         the group's roles (``_companions``): they follow the roles."""
@@ -1225,16 +1304,16 @@ class IAMService(IIAMService, PolicySource):
         if "deleted" in (group.status, member.status):
             raise IAMConflictError("Nothing joins or holds a deleted principal")
         if group.owner_scope != PLATFORM_SCOPE:
-            org = scope_fields(group.owner_scope)[0]
+            top = top_container(as_container(group.owner_scope))
             if member.kind != "user":
                 raise ValueError(
                     f"Group {group_id} belongs to {group.owner_scope}: it holds "
                     "users only (a module's account is approved by its manifest)"
                 )
-            if not self._belongs_to(member_id, org):
+            if not self._belongs_to(member_id, top):
                 raise ValueError(
                     f"Group {group_id} belongs to {group.owner_scope}: "
-                    f"{member_id} is not a member of org {org}"
+                    f"{member_id} holds nothing in {top}"
                 )
         if member_id in self.store.list_group_members(group_id):
             return
@@ -1325,7 +1404,7 @@ class IAMService(IIAMService, PolicySource):
 
     def _require_mapping(self, action: str, group_id: str) -> None:
         """IdP group mappings are the platform's: decided on the group's platform
-        name, which no grant at an org or a workspace reaches."""
+        name, which no grant at a container reaches."""
         self.require(
             action,
             group_resource(group_id),
@@ -1338,32 +1417,52 @@ class IAMService(IIAMService, PolicySource):
             raise IAMNotFoundError(f"Group {group_id} not found")
         return record
 
-    def _belongs_to(self, principal_id: str, org: str) -> bool:
-        """Whether a principal has an attachment of its own under ``abi:<org>:``."""
+    def _belongs_to(self, principal_id: str, top: str) -> bool:
+        """Whether a principal has an attachment of its own within ``top``."""
         return any(
-            a.scope is not None and scope_fields(a.scope)[0] == org
+            a.scope is not None
+            and within(as_container(container_of_scope(a.scope)), top)
             for a in self.store.list_attachments(principal_id=principal_id)
         )
 
-    def _leave_groups_of(self, principal_id: str, org: str) -> None:
-        """A user who no longer belongs to ``org`` leaves the groups it owns."""
-        if org == NONE or self._belongs_to(principal_id, org):
+    def _leave_groups_of(self, principal_id: str, top: str) -> None:
+        """A user who no longer belongs to the top container ``top`` leaves the
+        groups owned within it."""
+        if top == PLATFORM_SCOPE or self._belongs_to(principal_id, top):
             return
         for group_id in self.store.groups_of(principal_id):
             group = self._find_group(group_id)
             if group is not None and group.owner_scope != PLATFORM_SCOPE:
-                if scope_fields(group.owner_scope)[0] == org:
+                if within(as_container(group.owner_scope), top):
                     self.store.remove_group_member(group_id, principal_id)
 
     def _check_owner_known(self, owner: str) -> None:
-        """An org or a workspace owns something only once Nexus registered it
-        (``iam:PutScope``), a workspace in that org."""
-        org, workspace = scope_fields(owner)
-        if org == NONE:
+        """A container owns something only once it is registered under that path
+        (an owner of the old grammar, from a start-up move, waits for the
+        rewrite of the names: ``_owner_checked``)."""
+        if is_old_scope(owner):
             return
-        known = self.store.list_scopes(org)
-        if not any(s.workspace == workspace for s in known):
-            raise ValueError(f"{owner} is not a registered org or workspace")
+        if owner != PLATFORM_SCOPE and self._known_container(owner) != owner:
+            raise ValueError(f"{owner} is not a registered container")
+
+    def _old_grammar_writer(self) -> bool:
+        """A first-party account (``engine``, ``api``) acting for no user: Nexus's
+        start-up moves that predate container paths, which may still write the
+        grammar before them (``AGENTS.md``, "Migrating an existing install")."""
+        ctx = current_call_context()
+        return ctx.on_behalf_of is None and self._first_party(ctx.principal)
+
+    def _scope_checked(self, scope: str) -> str:
+        """An attachment's scope, valid; one of the old grammar only from an old
+        grammar writer, named in ``names.UNRESOLVED`` until the rewrite."""
+        if is_old_scope(scope) and self._old_grammar_writer():
+            return scope
+        return validate_scope(scope)
+
+    def _owner_checked(self, owner: str) -> str:
+        if is_old_scope(owner) and self._old_grammar_writer():
+            return owner
+        return validate_owner_scope(owner)
 
     # =========================================================================
     # Policies
@@ -1379,16 +1478,16 @@ class IAMService(IIAMService, PolicySource):
         parent: str | None = None,
     ) -> Policy:
         """A customer policy, validated against the registered catalogs, owned by
-        ``scope``: the platform (the default), an org (``abi:<org>:-``) or a
-        workspace (``abi:<org>:<ws>``). Its name carries the owner, so whoever
-        may ``iam:CreatePolicy`` there creates it. An owned policy is written
-        for its scope: every resource pattern starts with ``${scope}:``. With
+        ``scope``: the platform (the default) or a registered container. Its
+        name carries the owner, so whoever may ``iam:CreatePolicy`` there
+        creates it. An owned policy is written for its scope: every resource
+        pattern is ``${scope}`` or ``${scope}/...``. With
         ``parent``, a sub-policy of it ("Sub-policies"): owned at the parent's
         owner or below, derived only from a policy the caller holds there. The
         caller holds what it allows (``_require_held``), within the chain."""
         if not name:
             raise ValueError("A policy needs a name")
-        owner = validate_owner_scope(scope) if scope is not None else PLATFORM_SCOPE
+        owner = self._owner_checked(scope) if scope is not None else PLATFORM_SCOPE
         parsed = parse_policy_document(document, self._registry)
         policy_id = new_id("pol")
         self.require("iam:CreatePolicy", policy_resource(policy_id, owner))
@@ -1423,7 +1522,7 @@ class IAMService(IIAMService, PolicySource):
         self, *, limit: int = 100, after: str | None = None, scope: str | None = None
     ) -> Page:
         """The policies the caller may list. With ``scope``, the policies it
-        owns, plus those of the levels above (its org's, the platform's) that
+        owns, plus those of the containers above it (and the platform's) that
         the caller may attach there."""
         if scope is None:
             return self._filtered_page(
@@ -1433,7 +1532,7 @@ class IAMService(IIAMService, PolicySource):
                 limit,
                 after,
             )
-        validate_owner_scope(scope)
+        self._owner_checked(scope)
 
         def keep(found: list[Policy]) -> set[str]:
             own = {
@@ -1464,7 +1563,7 @@ class IAMService(IIAMService, PolicySource):
 
         return self._kept_page(
             lambda size, cursor: self.store.list_policies(
-                limit=size, after=cursor, owner_scopes=[scope, *owner_ancestors(scope)]
+                limit=size, after=cursor, owner_scopes=[scope, *_owners_above(scope)]
             ),
             keep,
             ("iam:ListPolicies", "iam:AttachPolicy"),
@@ -1811,21 +1910,13 @@ class IAMService(IIAMService, PolicySource):
             raise IAMNotFoundError(f"Policy {policy_id} not found")
         return policy
 
-    def _drop_owned(self, org: str, workspace: str) -> bool:
-        """Delete what a deleted workspace owns, or, for an org (``workspace``
-        ``-``), what the org and each of its workspaces own: policies with their
-        attachments and invitations, and groups with their attachments,
-        members and mappings. Whether anything went."""
-        if workspace != NONE:
-            owners = [scope_name(org, workspace)]
-        else:
-            owners = [scope_name(org)] + [
-                scope_name(org, s.workspace)
-                for s in self.store.list_scopes(org)
-                if s.workspace != NONE
-            ]
+    def _drop_owned(self, owners: set[str]) -> bool:
+        """Delete what deleted containers own: policies with their attachments
+        and invitations, and groups with their attachments, members and
+        mappings. Whether anything went."""
+        ordered = sorted(owners)
         changed = False
-        for policy in self._deletion_order(self._all_policies(owners)):
+        for policy in self._deletion_order(self._all_policies(ordered)):
             for attachment in self.store.list_attachments(policy_id=policy.id):
                 self.store.detach(policy.id, attachment.principal_id, attachment.scope)
             for grant in self.store.list_pending_grants(policy_id=policy.id):
@@ -1835,7 +1926,7 @@ class IAMService(IIAMService, PolicySource):
         after: str | None = None
         while True:
             page = self.store.list_principals(
-                "group", limit=500, after=after, owner_scopes=owners
+                "group", limit=500, after=after, owner_scopes=ordered
             )
             for group in page.items:
                 if group.status != "deleted":
@@ -1910,7 +2001,7 @@ class IAMService(IIAMService, PolicySource):
         (``builtin.platform.member`` or ``.viewer``) in step.
         """
         if scope is not None:
-            validate_scope(scope)
+            self._scope_checked(scope)
         self._require_attach(policy_id, principal_id, scope)
         return self._attach(policy_id, principal_id, scope)
 
@@ -2009,8 +2100,7 @@ class IAMService(IIAMService, PolicySource):
             )
 
     def _check_receives(self, principal: PrincipalRecord, scope: str | None) -> None:
-        """A group owned by an org or a workspace receives attachments at its
-        scope or below."""
+        """A group owned by a container receives attachments at it or below."""
         if principal.kind == "group" and not within_owner(principal.owner_scope, scope):
             self._outside_owner(
                 "iam:GetGroup",
@@ -2030,7 +2120,7 @@ class IAMService(IIAMService, PolicySource):
         self, policy_id: str, principal_id: str, scope: str | None = None
     ) -> bool:
         if scope is not None:
-            validate_scope(scope)
+            self._scope_checked(scope)
         self.require(
             "iam:DetachPolicy",
             attachment_resource(policy_id, principal_id, scope),
@@ -2041,7 +2131,9 @@ class IAMService(IIAMService, PolicySource):
             if policy_id in roles.ROLES:
                 self._sync_role_companions(principal_id)
             if scope is not None:
-                self._leave_groups_of(principal_id, scope_fields(scope)[0])
+                self._leave_groups_of(
+                    principal_id, top_container(as_container(container_of_scope(scope)))
+                )
             self._changed()
         return detached
 
@@ -2091,19 +2183,39 @@ class IAMService(IIAMService, PolicySource):
         self, principal_id: str, attachments: Sequence[Attachment] | None = None
     ) -> None:
         """Hold ``builtin.platform.member`` while a member, admin or owner role is
-        attached at a workspace or org-wide scope; ``.viewer`` with only viewer
-        roles there. Org-level roles (``abi:<org>:-``) bring neither."""
-        wanted = _platform_companion(
+        attached where it brings the companions (``_brings_companions``);
+        ``.viewer`` with only viewer roles there."""
+        attachments = (
             attachments
             if attachments is not None
             else self.store.list_attachments(principal_id=principal_id)
         )
+        if any(
+            a.policy_id in roles.ROLES and is_old_scope(a.scope) for a in attachments
+        ):
+            # A role still at a scope of the old grammar: what it brings is
+            # read once the names are rewritten (``rewrite_names``).
+            return
+        wanted = _platform_companion(attachments, self._brings_companions)
         for companion in (roles.PLATFORM_MEMBER, roles.PLATFORM_VIEWER):
             present = self._find_attachment(companion, principal_id, None) is not None
             if companion == wanted and not present:
                 self.store.attach(Attachment(new_id("att"), companion, principal_id))
             elif companion != wanted and present:
                 self.store.detach(companion, principal_id, None)
+
+    def _brings_companions(self, scope: str) -> bool:
+        """Whether a role at ``scope`` brings the platform companions: below a
+        container, or at a container whose type is marked
+        ``platform_companions`` (Nexus's workspace)."""
+        if is_below(scope):
+            return True
+        container = as_container(scope)
+        if container in (PLATFORM_SCOPE, UNRESOLVED):
+            return False
+        last = parse_container(container)[-1]
+        found = self._registry.resource_type(last.service, last.type)
+        return found is not None and found.platform_companions
 
     # =========================================================================
     # Grant only what you hold (AGENTS.md, "Grant only what you hold")
@@ -2242,7 +2354,7 @@ class IAMService(IIAMService, PolicySource):
         follows the role, ``_drop_retired_companions``). A platform policy
         attached by hand is not one of them."""
         found: set[tuple[str, str | None]] = set(_retired_companions(attachments))
-        platform = _platform_companion(attachments)
+        platform = _platform_companion(attachments, self._brings_companions)
         if platform is not None:
             found.add((platform, None))
         return found
@@ -2263,7 +2375,7 @@ class IAMService(IIAMService, PolicySource):
         """
         provider, email = _grantee(provider, email)
         if scope is not None:
-            validate_scope(scope)
+            self._scope_checked(scope)
         self._require_attach(policy_id, _invitee(provider, email), scope)
         policy = self.store.get_policy(policy_id)
         self._check_attachable(policy, scope)
@@ -2427,22 +2539,17 @@ class IAMService(IIAMService, PolicySource):
     def _binding_group(
         self, provider: str, claim_value: str, scope: str | None
     ) -> PrincipalRecord:
-        """The group of a claim value for the org of ``scope`` (the platform's
-        for a platform or unscoped binding), made when there is none: it
-        belongs to that org, so it holds that org's attachments only."""
+        """The group of a claim value for the top container of ``scope`` (the
+        platform's for a platform or unscoped binding), made when there is none:
+        it belongs to that container, so it holds attachments within it only."""
         found = self._find_binding_group(provider, claim_value, scope)
         if found is not None:
             return found
-        org = scope_fields(scope)[0] if scope is not None else NONE
-        owner = scope_name(org) if org != NONE else PLATFORM_SCOPE
+        owner = _binding_owner(scope)
         name = _bound_group(provider, claim_value)
         group = self.store.create_principal(
             PrincipalRecord(
-                id=new_id("grp"),
-                kind="group",
-                name=name,
-                org=org if org != NONE else None,
-                owner_scope=owner,
+                id=new_id("grp"), kind="group", name=name, owner_scope=owner
             )
         )
         self.store.map_idp_group(GroupMapping(provider, claim_value, group.id))
@@ -2452,8 +2559,7 @@ class IAMService(IIAMService, PolicySource):
     def _find_binding_group(
         self, provider: str, claim_value: str, scope: str | None
     ) -> PrincipalRecord | None:
-        org = scope_fields(scope)[0] if scope is not None else NONE
-        owner = scope_name(org) if org != NONE else PLATFORM_SCOPE
+        owner = _binding_owner(scope)
         for group_id in self._binding_groups(provider, claim_value):
             record = self.store.get_principal(group_id)
             if record.owner_scope == owner:
@@ -3476,7 +3582,7 @@ class IAMService(IIAMService, PolicySource):
             found
             for found in self.store.legacy_scope_sets()
             if self.authorize(
-                "iam:DeleteScope", scope_resource(found.org, found.workspace)
+                "iam:DeleteScope", _legacy_scope_resource(found.org, found.workspace)
             ).allowed
         ]
 
@@ -3484,7 +3590,9 @@ class IAMService(IIAMService, PolicySource):
         """Drop the legacy sets once they were moved. Needs ``iam:DeleteScope``
         on the scope of every one, checked before anything goes."""
         for found in self.store.legacy_scope_sets():
-            self.require("iam:DeleteScope", scope_resource(found.org, found.workspace))
+            self.require(
+                "iam:DeleteScope", _legacy_scope_resource(found.org, found.workspace)
+            )
         dropped = self.store.drop_legacy_scope_sets()
         if dropped:
             self._changed()
@@ -3634,19 +3742,9 @@ class IAMService(IIAMService, PolicySource):
         self.store.close()
 
 
-def _owner_scope(scope: str | None, org: str | None) -> str:
-    """The owner of a new group: ``scope``, else ``abi:<org>:-``, else the
-    platform. ``org`` and ``scope`` together must agree."""
-    if scope is None:
-        return scope_name(org) if org is not None else PLATFORM_SCOPE
-    validate_owner_scope(scope)
-    if org is not None and scope_fields(scope)[0] != org:
-        raise ValueError(f"Scope {scope} is not in org {org}")
-    return scope
-
-
-# Where a platform policy's ``${scope}`` may be filled: any scope, as a pattern.
-_ANY_SCOPE = "abi:*:*"
+# Where a platform policy's ``${scope}`` may be filled: any container or the
+# platform, as a pattern (below the platform).
+_ANY_SCOPE = EVERYWHERE
 
 
 def _bind_bounds(
@@ -3682,32 +3780,50 @@ def _unbounded(effective: EffectiveStatement) -> list[Statement]:
     )
 
 
-def _as_owner(scope: str | None) -> str:
-    """The owner level an attachment at ``scope`` reaches from: unscoped and the
-    platform's the platform, an org-wide one its org."""
+def _binding_owner(scope: str | None) -> str:
+    """The owner of a binding's group: the top container of its scope, the
+    platform for a platform or unscoped binding."""
     if scope is None:
         return PLATFORM_SCOPE
-    org, workspace = scope_fields(scope)
-    return scope_name(org) if workspace == "*" else scope
+    return top_container(as_container(container_of_scope(scope)))
+
+
+def _legacy_scope_resource(*fields: str) -> str:
+    """The scope a legacy set was recorded for, named as ``iam:DeleteScope``
+    decides it: ``abi:iam:scope/<field>/<field>``."""
+    return resource_name("iam", "scope", [f for f in fields if f != "-"], kind="path")
+
+
+def _owners_above(scope: str) -> list[str]:
+    """The owners above ``scope`` whose policies a list there offers; none for
+    an owner of the old grammar (a start-up move lists its own only)."""
+    return [] if is_old_scope(scope) else owner_ancestors(scope)
+
+
+def _as_owner(scope: str | None) -> str:
+    """The owner level an attachment at ``scope`` reaches from: unscoped and the
+    platform's the platform, one below a container that container."""
+    if scope is None:
+        return PLATFORM_SCOPE
+    return as_container(container_of_scope(scope))
 
 
 def _written_for(owner: str) -> list[str | None]:
-    """The scopes a policy is held at when it is written: its owner's for an
-    org's or a workspace's (it is attached there or below, and checked again
-    there); for the platform's, as written unscoped and at any scope."""
+    """The scopes a policy is held at when it is written: its owner's for a
+    container's (it is attached there or below, and checked again there); for
+    the platform's, as written unscoped and at any scope."""
     return [owner] if owner != PLATFORM_SCOPE else [None, _ANY_SCOPE]
 
 
-def _workspace_roles(
-    attachments: Iterable[Attachment],
+def _companion_roles(
+    attachments: Iterable[Attachment], brings: Callable[[str], bool]
 ) -> Iterator[tuple[str, str]]:
-    """The (role, scope) attached at a workspace or org-wide scope
-    (``abi:<org>:<ws>``, neither ``-``): org-level roles bring no companion."""
+    """The (role, scope) attached where a role brings the platform companions
+    (``brings``): below a container, or at a container whose type says so."""
     for attachment in attachments:
         if attachment.policy_id not in roles.ROLES or attachment.scope is None:
             continue
-        org, workspace = scope_fields(attachment.scope)
-        if org != NONE and workspace != NONE:
+        if brings(attachment.scope):
             yield attachment.policy_id, attachment.scope
 
 
@@ -3726,11 +3842,13 @@ def _retired_companions(
     }
 
 
-def _platform_companion(attachments: Iterable[Attachment]) -> str | None:
+def _platform_companion(
+    attachments: Iterable[Attachment], brings: Callable[[str], bool]
+) -> str | None:
     """``builtin.platform.member`` while a member, admin or owner role is
-    attached at a workspace or org-wide scope; ``.viewer`` with only viewer
-    roles there."""
-    held = {role for role, _scope in _workspace_roles(attachments)}
+    attached where it brings the companions; ``.viewer`` with only viewer roles
+    there."""
+    held = {role for role, _scope in _companion_roles(attachments, brings)}
     if held & roles.PLATFORM_MEMBER_ROLES:
         return roles.PLATFORM_MEMBER
     if roles.VIEWER in held:
@@ -3850,13 +3968,7 @@ def _check_service_account_name(name: str) -> None:
 
 
 def _check_placement(placement: Placement) -> None:
-    resource_name(
-        placement.service,
-        "placement",
-        "x",
-        org=placement.org,
-        workspace=placement.workspace,
-    )
+    resource_name(placement.service, "placement", "x", container=placement.container)
     key = placement.id_key
     if not key or "*" in key[:-1] or "?" in key:
         raise ValueError(f"A placement key is an id or a prefix ending in '*': {key!r}")
