@@ -489,7 +489,7 @@ intentMapping:findInterestsQuery a intentMapping:TemplatableSparqlQuery ;
 # Connection queries
 #
 # Who is connected to whom. The acts are LinkedIn's
-# (applications/linkedin, ActOfConnectionsOnLinkedIn.ttl): an act of
+# (applications/linkedin, ActOfConnectionProcess.ttl): an act of
 # association between the owner of a data export and one connection,
 # on the same people vocabulary as an act of working.
 #-----------------------------------------------------------------

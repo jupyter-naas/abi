@@ -559,7 +559,7 @@ if __name__ == "__main__":
     # Example: Use file paths (commented out) or load from triplestore
     tbox_paths = [
         "libs/naas-abi-marketplace/naas_abi_marketplace/domains/signals/pipelines/ontology_engineer/ontologies/BFO7BucketsProcessOntology.ttl",
-        "libs/naas-abi-marketplace/naas_abi_marketplace/applications/linkedin/ontologies/modules/ActOfConnectionsOnLinkedIn.ttl",
+        "libs/naas-abi-marketplace/naas_abi_marketplace/applications/linkedin/ontologies/modules/LinkedInOntology.ttl",
     ]
     abox_paths = [
         "libs/naas-abi-marketplace/naas_abi_marketplace/applications/linkedin/sandbox/insert_Florent_Ravenel.ttl"

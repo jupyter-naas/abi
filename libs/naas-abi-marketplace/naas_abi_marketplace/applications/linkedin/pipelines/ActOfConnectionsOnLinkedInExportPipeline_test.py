@@ -38,8 +38,8 @@ Jane,Doe,https://www.linkedin.com/in/jane-doe?trk=dup,,AXA,Chief Risk Officer,23
 LINKEDIN_TTL = (
     Path(__file__).parents[1]
     / "ontologies"
-    / "modules"
-    / "ActOfConnectionsOnLinkedIn.ttl"
+    / "processes"
+    / "ActOfConnectionProcess.ttl"
 )
 WORKING_TTL = (
     Path(__file__).parents[3]

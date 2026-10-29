@@ -10,7 +10,7 @@
 @prefix abi:   <http://ontology.naas.ai/abi/> .
 @prefix linkedin: <http://ontology.naas.ai/abi/linkedin/> .
 
-<http://ontology.naas.ai/abi/linkedin/ActOfConnection> a owl:Ontology ;
+linkedin:ActOfConnectionProcess a owl:Ontology ;
   # Process slice for one LinkedIn connection, on the same vocabulary as
   # abi:ActOfWorking (people module, ActOfWorkingProcess.ttl), so a connected
   # person and a person from the corporate website are the same kind of node.
@@ -31,8 +31,8 @@
   owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
   owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
   abi:pythonPackage "naas_abi_marketplace.applications.linkedin" ;
-  abi:ontologyResource "ontologies/modules/ActOfConnectionsOnLinkedIn.ttl" ;
-  abi:pythonResource "ontologies/modules/ActOfConnectionsOnLinkedIn.py" ;
+  abi:ontologyResource "ontologies/processes/ActOfConnectionProcess.ttl" ;
+  abi:pythonResource "ontologies/processes/ActOfConnectionProcess.py" ;
   dc:title "Act of Connection on LinkedIn"@en ;
   dc:description "Process slice for an act of connection on LinkedIn - a CCO Act of Association between the owner of a LinkedIn data export and one of their connections, over the temporal region that starts on the connection date, realizing a connection role in each participant and read from the export file."@en ;
   dc:license <https://creativecommons.org/licenses/by/4.0/> ;

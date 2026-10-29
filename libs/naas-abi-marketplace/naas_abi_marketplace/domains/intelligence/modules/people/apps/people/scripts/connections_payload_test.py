@@ -58,6 +58,7 @@ ALICE_CSV = HEADER + (
 )
 CAROL_CSV = HEADER + (
     b"Jane,Doe,https://www.linkedin.com/in/jane-doe,,AXA,Chief Risk Officer,05 Mar 2023\n"
+    b"Marc,Roux,https://www.linkedin.com/in/marc-roux,,AXA,Actuary,01 Jun 2022\n"
 )
 
 
@@ -211,7 +212,8 @@ def test_the_connections_of_a_person_with_organization_position_and_date(
     }
     # Most connected first, then most recent.
     order = [
-        (-item["connections_count"], item["connected_on"]) for item in payload["results"]
+        (-item["connections_count"], item["connected_on"])
+        for item in payload["results"]
     ]
     assert [count for count, _ in order] == sorted(count for count, _ in order)
     for (count, date), (next_count, next_date) in zip(order, order[1:]):
@@ -232,21 +234,63 @@ def test_an_unknown_person_is_not_found(store, config) -> None:
         cp.connections(store, config, slug="nobody")
 
 
+def _relations(view, predicate):
+    return [
+        relation
+        for relation in view["data"]["relations"]
+        if relation["predicateUri"] == predicate
+    ]
+
+
+def _entities(view, class_uri):
+    return {
+        entity["id"]: entity
+        for entity in view["data"]["entities"]
+        if entity["classUri"] == class_uri
+    }
+
+
 def test_the_connections_network_is_the_person_and_their_connections_only(
     store, config
 ) -> None:
     view = cp.connections_network(store, config, slug="alice_dupont")
     drawn = {person["slug"] for person in view["data"]["people"]}
     assert drawn == {"alice_dupont", "li_jane_doe", "li_john_smith", "bob_martin"}
-    root = view["root"]
-    connected = {
-        relation["to"]
-        for relation in view["data"]["relations"]
-        if relation["predicateUri"] == cp.CONNECTION_PREDICATE
-    }
+
+
+def test_each_connection_is_an_act_both_people_take_part_in(store, config) -> None:
+    view = cp.connections_network(store, config, slug="alice_dupont")
+    acts = _entities(view, cp.CONNECTION_CLASS)
+    assert len(acts) == 3
+    assert all(act["bfoBucket"] == "Process" for act in acts.values())
+    participants: dict[str, set[str]] = {}
+    for relation in _relations(view, "abi:hasParticipant"):
+        participants.setdefault(relation["from"], set()).add(relation["to"])
+    assert set(participants) == set(acts)
     assert all(
-        relation["from"] == root
-        for relation in view["data"]["relations"]
-        if relation["predicateUri"] == cp.CONNECTION_PREDICATE
+        view["root"] in pair and len(pair) == 2 for pair in participants.values()
     )
-    assert len(connected) == 3
+    jane = next(act for act in acts.values() if "Jane Doe" in str(act["properties"]))
+    assert jane["startedAt"] == "2025-10-23"
+
+
+def test_colleagues_meet_at_their_organization_through_their_acts_of_working(
+    store, config
+) -> None:
+    view = cp.connections_network(store, config, slug="carol_owner")
+    workings = _entities(view, "abi:ActOfWorking")
+    organizations = _entities(view, "abi:Organization")
+    assert set(organizations) == {"organization:axa"}
+    worked_by = {
+        relation["from"]: relation["to"]
+        for relation in _relations(view, "abi:hasActOfWorking")
+    }
+    assert set(worked_by) == {"Jane Doe", "Marc Roux"}
+    assert set(worked_by.values()) == set(workings)
+    for_org = {
+        relation["from"]: relation["to"]
+        for relation in _relations(view, "abi:forOrganization")
+    }
+    assert for_org == {act: "organization:axa" for act in workings}
+    # No shortcut from a person straight to the organization.
+    assert not _relations(view, "abi:worksFor")

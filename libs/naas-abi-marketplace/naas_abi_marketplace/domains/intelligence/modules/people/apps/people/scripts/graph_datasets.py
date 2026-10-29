@@ -98,6 +98,14 @@ def dataset_version(
     return service.namespace_version(namespace)
 
 
+def _written_tables(service: DatasetService, namespace: str) -> set[str] | None:
+    """The tables *namespace* holds, or None if the service cannot say."""
+    try:
+        return {info.name for info in service.list(namespace=namespace)}
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def read_namespace(
     service: DatasetService, config: dict[str, Any], namespace: str
 ) -> dict[str, list[dict[str, Any]]] | None:
@@ -105,7 +113,13 @@ def read_namespace(
     if dataset_version(service, config, namespace) is None:
         return None
     tables: dict[str, list[dict[str, Any]]] = {}
+    written = _written_tables(service, namespace)
     for logical, table in config["data"]["tables"].items():
+        if written is not None and table not in written and logical != "people":
+            # Written before this table existed (connections): read as empty,
+            # without a failing query the adapter would log as an error.
+            tables[logical] = []
+            continue
         try:
             tables[logical] = ds.query(
                 service, f"SELECT * FROM {table}", namespace=namespace, table=table

@@ -29,7 +29,7 @@ from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.pipeline import Pipeline, PipelineConfiguration, PipelineParameters
 from naas_abi_core.services.triple_store.TripleStorePorts import ITripleStoreService
 from naas_abi_core.utils.Expose import APIRouter
-from naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn import (
+from naas_abi_marketplace.applications.linkedin.ontologies.modules.LinkedInOntology import (
     ActOfConnection,
     ConnectionRole,
 )
