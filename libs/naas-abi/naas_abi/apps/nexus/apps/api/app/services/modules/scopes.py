@@ -21,6 +21,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
 
+from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam import module_scopes
 from naas_abi_core.services.iam.catalog import ActionCatalog
 from naas_abi_core.services.iam.names import PLATFORM, matches
@@ -262,7 +263,13 @@ def declared_catalogs() -> list[ActionCatalog]:
 async def gather(unavailable: set[str] | None = None) -> list[dict[str, Any]]:
     """Every module with its scopes, from every source that answers. The kinds a
     source could not read in full are added to ``unavailable`` (``agents``,
-    ``apps``, ``workflows``, ``pipelines``): what is listed of them may be short."""
+    ``apps``, ``workflows``, ``pipelines``): what is listed of them may be short.
+
+    What exists is read as Nexus's own account (``api``), whoever asks: someone
+    who holds policies but no role (no discovery listing) still sees what they
+    may grant, and a cache of it (``iam/listers.ModuleItems``) is everyone's.
+    Each caller's view is narrowed afterwards (``granted``,
+    ``authz.filter_scopes``)."""
     exposed: list[Exposed] = []
     token = _unavailable.set(unavailable if unavailable is not None else set())
     kinds_of = {
@@ -283,13 +290,14 @@ async def gather(unavailable: set[str] | None = None) -> list[dict[str, Any]]:
 
     # The engine's sources read in process; discovery and the jobs are NATS calls,
     # which run at once.
-    *parts, catalogs = await asyncio.gather(
-        collect("engine agents", engine_agents),
-        collect("remote agents", remote_agents),
-        collect("apps", apps),
-        collect("workflows", workflows),
-        collect("declared catalogs", declared_catalogs),
-    )
+    with as_service_account("api"):
+        *parts, catalogs = await asyncio.gather(
+            collect("engine agents", engine_agents),
+            collect("remote agents", remote_agents),
+            collect("apps", apps),
+            collect("workflows", workflows),
+            collect("declared catalogs", declared_catalogs),
+        )
     _unavailable.reset(token)
     for part in parts:
         exposed.extend(part)
@@ -341,9 +349,7 @@ def granted(
                 {
                     **declared,
                     "actions": actions,
-                    "resource_types": [
-                        t for t in declared["resource_types"] if t["name"] in named
-                    ],
+                    "resource_types": [t for t in declared["resource_types"] if t["name"] in named],
                 }
                 if actions
                 else None

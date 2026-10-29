@@ -135,7 +135,11 @@ async def test_module_scopes_list_only_what_the_caller_may_grant(team, monkeypat
             "actions": ["module:UseAgent"],
             "resources": ["${scope}/module:agent/acme.people/Recruiter"],
         },
-        {"effect": "Allow", "actions": ["iam:CreatePolicy"], "resources": ["${scope}/iam:policy/*"]},
+        {
+            "effect": "Allow",
+            "actions": ["iam:CreatePolicy"],
+            "resources": ["${scope}/iam:policy/*"],
+        },
     )
     response = await _get("builder", paths[0])
     assert response.status_code == 200, response.text
@@ -210,6 +214,37 @@ async def test_a_source_that_fails_leaves_its_part_out(monkeypatch) -> None:
     assert [(m["module"], [a["name"] for a in m["agents"]]) for m in listed] == [
         ("acme.people", ["Recruiter"])
     ]
+
+
+@pytest.mark.asyncio
+async def test_the_modules_are_read_as_nexus_whoever_asks(monkeypatch) -> None:
+    """What exists is read as Nexus's own account, never as the caller: a user
+    holding only policies (no role, so no discovery listing) still sees the
+    module items they may grant, and a cache of the gathered modules
+    (``iam/listers.ModuleItems``) is the same for everyone. Who sees what is
+    each caller's narrowing afterwards (``granted``, ``authz.filter_scopes``)."""
+    from naas_abi_core.engine.call_context import current_call_context, use_call_context
+    from naas_abi_core.engine.call_context_types import CallContext, user
+
+    seen: list[str] = []
+
+    async def remote():
+        seen.append(current_call_context().principal.id)
+        return [Exposed("agent", "acme.people", "Recruiter")]
+
+    async def nothing():
+        return []
+
+    monkeypatch.setattr(scopes, "engine_agents", lambda: [])
+    monkeypatch.setattr(scopes, "remote_agents", remote)
+    monkeypatch.setattr(scopes, "apps", nothing)
+    monkeypatch.setattr(scopes, "workflows", nothing)
+    monkeypatch.setattr(scopes, "declared_catalogs", lambda: [])
+    monkeypatch.setattr(scopes, "engine_modules", lambda: [])
+    with use_call_context(CallContext(principal=user("usr_dana"))):
+        listed = await scopes.gather()
+    assert [m["module"] for m in listed] == ["acme.people"]
+    assert seen == ["api"]
 
 
 def test_what_a_caller_may_use_is_each_module_with_its_usable_items() -> None:
