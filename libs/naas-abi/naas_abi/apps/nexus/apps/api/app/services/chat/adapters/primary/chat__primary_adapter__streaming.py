@@ -231,9 +231,9 @@ async def stream_chat_response(
     if request.workspace_id:
         from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
             bind_usable_processes,
-            caller_enabled_class_names,
             caller_feature_flags,
             caller_usable_agents,
+            caller_usable_class_names,
             feature_keys_of,
         )
         from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agents__primary_adapter__FastAPI import (
@@ -257,7 +257,7 @@ async def stream_chat_response(
                     workspace_agents, current_user, request.workspace_id, flags
                 )
                 agent_workspace_enabled_class_names.set(
-                    caller_enabled_class_names(workspace_agents, flags)
+                    caller_usable_class_names(workspace_agents, flags)
                 )
                 await bind_usable_processes(current_user, request.workspace_id)
         resolved_agent = pick_workspace_chat_agent_id(workspace_agents, request.agent)

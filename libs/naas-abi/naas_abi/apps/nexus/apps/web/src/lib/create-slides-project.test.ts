@@ -46,33 +46,26 @@ describe('DEFAULT_SLIDES_TEMPLATE_ID', () => {
  */
 describe('pickWorkspaceDefaultAgent', () => {
   it('prefers the workspace default over Abi', () => {
-    const orchestrator = { id: 'default', enabled: true, isDefault: true };
-    const abi = { id: 'abi', enabled: true, isDefault: false };
+    const orchestrator = { id: 'default', isDefault: true };
+    const abi = { id: 'abi', isDefault: false };
     expect(pickWorkspaceDefaultAgent([abi, orchestrator])?.id).toBe('default');
   });
 
-  it('still picks the workspace default when sync left it disabled', () => {
-    const orchestrator = { id: 'default', enabled: false, isDefault: true };
-    const abi = { id: 'abi', enabled: false, isDefault: false };
-    expect(pickWorkspaceDefaultAgent([abi, orchestrator])?.id).toBe('default');
-  });
 
-  it('falls back to Abi, then the first enabled agent, when there is no default', () => {
-    const maps = { id: 'maps', enabled: true, class_name: 'naas_abi.agents.MapsAgent/MapsAgent' };
-    const abi = { id: 'abi', enabled: true, class_name: 'naas_abi.agents.AbiAgent/AbiAgent' };
-    const lookalike = { id: 'acme', enabled: true, class_name: 'acme.agents.AbiAgent/AbiAgent' };
+  it('falls back to Abi, then the first listed agent, when there is no default', () => {
+    const maps = { id: 'maps', class_name: 'naas_abi.agents.MapsAgent/MapsAgent' };
+    const abi = { id: 'abi', class_name: 'naas_abi.agents.AbiAgent/AbiAgent' };
+    const lookalike = { id: 'acme', class_name: 'acme.agents.AbiAgent/AbiAgent' };
     expect(pickWorkspaceDefaultAgent([maps, abi])?.id).toBe('abi');
     expect(pickWorkspaceDefaultAgent([maps, lookalike])?.id).toBe('maps');
-    expect(pickWorkspaceDefaultAgent([maps, { ...abi, enabled: false }])?.id).toBe('maps');
   });
 });
 
 describe('pickSlidesOfficeAgent', () => {
-  it('prefers enabled Nexus Slides over the workspace default', () => {
-    const orchestrator = { id: 'default', enabled: true, isDefault: true, name: 'Orchestrator' };
+  it('prefers listed Nexus Slides over the workspace default', () => {
+    const orchestrator = { id: 'default', isDefault: true, name: 'Orchestrator' };
     const slides = {
       id: 'slides',
-      enabled: true,
       isDefault: false,
       name: 'Slides',
       class_name: 'naas_abi.agents.SlidesAgent/SlidesAgent',
@@ -81,16 +74,15 @@ describe('pickSlidesOfficeAgent', () => {
   });
 
   it('falls back to the workspace default when Slides is not on the roster', () => {
-    const orchestrator = { id: 'default', enabled: true, isDefault: true, name: 'Orchestrator' };
-    const abi = { id: 'abi', enabled: true, isDefault: false, name: 'Abi' };
+    const orchestrator = { id: 'default', isDefault: true, name: 'Orchestrator' };
+    const abi = { id: 'abi', isDefault: false, name: 'Abi' };
     expect(pickSlidesOfficeAgent([abi, orchestrator])?.id).toBe('default');
   });
 
   it('ignores an office agent that is not Nexus Slides', () => {
-    const orchestrator = { id: 'default', enabled: true, isDefault: true, name: 'Orchestrator' };
+    const orchestrator = { id: 'default', isDefault: true, name: 'Orchestrator' };
     const other = {
       id: 'sheet',
-      enabled: true,
       isDefault: false,
       name: 'Office Slides',
       class_name: 'acme.office.agents.SheetSlidesAgent/SheetSlidesAgent',
@@ -112,7 +104,6 @@ describe('openSlidesAgentPane', () => {
           id: ABI_ID,
           name: 'Abi',
           class_name: 'naas_abi.agents/AbiAgent',
-          enabled: true,
           isDefault: false,
           modelIds: ['gpt-4.1-mini', 'anthropic/claude-sonnet-5'],
         } as Agent,
@@ -120,7 +111,6 @@ describe('openSlidesAgentPane', () => {
           id: DEFAULT_ID,
           name: 'Orchestrator',
           class_name: 'demo.agents/OrchestratorAgent',
-          enabled: true,
           isDefault: true,
           modelIds: ['gpt-4.1-mini'],
         } as Agent,
@@ -130,7 +120,6 @@ describe('openSlidesAgentPane', () => {
                 id: SLIDES_ID,
                 name: 'Slides',
                 class_name: 'naas_abi.agents.SlidesAgent/SlidesAgent',
-                enabled: true,
                 isDefault: false,
                 modelIds: ['qwen-3.8'],
               } as Agent,
@@ -178,7 +167,7 @@ describe('openSlidesAgentPane', () => {
     expect(useWorkspaceStore.getState().paneAgent).toBe(DEFAULT_ID);
   });
 
-  it('pins Nexus Slides when the workspace enabled it', () => {
+  it('pins Nexus Slides when the workspace lists it', () => {
     seedAgents(true);
     openSlidesAgentPane();
 

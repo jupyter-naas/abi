@@ -74,7 +74,7 @@ export default function HomePage() {
   }, [currentWorkspaceId, fetchApps]);
 
   const surfaceIcons = deskSurfaceIcons({ chat: canChat, files: canFiles });
-  const desktopApps = apps.filter((a) => a.enabled && a.installed && a.url);
+  const desktopApps = apps.filter((a) => a.installed && a.url);
   const desktopFiles = starredItems.filter((item) => item.workspaceId === currentWorkspaceId);
 
   const openSurface = useCallback(

@@ -56,15 +56,15 @@ export function createWorkspaceResourcesStore(
 /** One store for the nav and the pages. */
 export const useWorkspaceResourcesStore = createWorkspaceResourcesStore();
 
-/** Read the workspace's resources again (the settings Reload, a set changed). */
+/** Read the caller's usable resources again (the settings Reload, a policy changed). */
 export function reloadWorkspaceResources(workspaceId: string | null | undefined): Promise<void> {
   return workspaceId ? useWorkspaceResourcesStore.getState().load(workspaceId, true) : Promise.resolve();
 }
 
 /**
  * The workspace's resources (null while loading, or for a caller who may not read them).
- * `refresh`: read them again when the caller mounts (the settings layout, so a set changed
- * on Modules & features shows when the settings are opened again).
+ * `refresh`: read them again when the caller mounts (the settings layout, so a module or a
+ * policy changed since shows when the settings are opened again).
  */
 export function useWorkspaceResources(
   workspaceId: string | null | undefined,

@@ -20,21 +20,18 @@ function seedAgents(withApps = true, withDefault = true): void {
         id: DEFAULT_ID,
         name: 'Bob',
         class_name: 'bob.agents.BobAgent/BobAgent',
-        enabled: true,
         isDefault: withDefault,
       } as Agent,
       {
         id: ABI_ID,
         name: 'Abi',
         class_name: 'naas_abi.agents.AbiAgent/AbiAgent',
-        enabled: true,
         isDefault: false,
       } as Agent,
       {
         id: SLIDES_ID,
         name: 'Slides',
         class_name: 'naas_abi.agents.SlidesAgent/SlidesAgent',
-        enabled: true,
         isDefault: false,
       } as Agent,
       ...(withApps
@@ -43,7 +40,6 @@ function seedAgents(withApps = true, withDefault = true): void {
               id: APPS_ID,
               name: 'Apps',
               class_name: 'naas_abi.agents.AppsAgent/AppsAgent',
-              enabled: true,
               isDefault: false,
             } as Agent,
           ]
@@ -52,7 +48,6 @@ function seedAgents(withApps = true, withDefault = true): void {
         id: CUAS_ID,
         name: 'Counter-UAS',
         class_name: 'operations.counter_uas.agents.CounterUASAgent/CounterUASAgent',
-        enabled: true,
         isDefault: false,
       } as Agent,
     ],

@@ -25,8 +25,8 @@ export function useStartNewChat(): () => void {
     if (!agentExplicitlySelected) {
       const safeAgents = Array.isArray(agents) ? agents : [];
       const defaultAgent =
-        safeAgents.find((a) => a.isDefault && a.enabled) ??
-        safeAgents.find((a) => a.enabled);
+        safeAgents.find((a) => a.isDefault) ??
+        safeAgents[0];
       if (defaultAgent) setSelectedAgent(defaultAgent.id);
     }
     setActiveConversation(null);

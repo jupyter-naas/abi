@@ -22,9 +22,9 @@ export type SettingsNavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
-  /** The Nexus feature the page manages: shown only when the workspace's set has it. */
+  /** The Nexus feature the page manages: shown only when the caller holds it here. */
   feature?: string;
-  /** The module resources the page lists: shown only when the set has one of them. */
+  /** The module resources the page lists: shown only when the caller may use one of them. */
   kinds?: ResourceKind[];
   /** `iam`: shown to whoever would see a section of Roles & permissions in the workspace
    *  (IAM says, `GET /access`). */
@@ -43,8 +43,8 @@ export type SettingsNavGroup = {
  * Account and Organization live in standalone routes (linked from the
  * top-right user menu), and are not duplicated here.
  *
- * The Features group is what the workspace has: an entry whose feature or
- * module resources are outside the workspace's set is hidden
+ * The Features group is what the caller may use here: an entry whose feature
+ * they do not hold, or whose module resources they may use none of, is hidden
  * (`visibleSettingsGroups`), and its page says so.
  */
 export const SETTINGS_GROUPS: SettingsNavGroup[] = [

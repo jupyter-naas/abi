@@ -1,19 +1,9 @@
-"""Apps service port + HTTP schemas.
-
-This module groups everything the apps service exposes to its adapters:
-
-* Persistence port (``AppPersistencePort``) + records/inputs used by the
-  secondary adapter.
-* HTTP-bound pydantic schemas (``AppInfo``, ``AppsResponse``,
-  ``AppConfigCreate``, ``AppConfigUpdate``) returned/accepted by the
-  FastAPI primary adapter.
-"""
+"""Apps HTTP schemas (``AppInfo``, ``AppsResponse``) returned by the FastAPI
+primary adapter. Who may open an app is IAM's (``scopes.py``): a workspace keeps
+no state of its own about an app."""
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel
@@ -61,82 +51,9 @@ class AppInfo(BaseModel):
     # Optional manifest agent (``module AgentClass``); binds the chat pane when the app is open.
     agent: str | None = None
 
-    # Runtime
+    # Runtime: a loaded module's app, or one a READY remote module serves.
     installed: bool = False
-    # Per-workspace enable state. Missing config rows default to off.
-    enabled: bool = False
 
 
 class AppsResponse(BaseModel):
     apps: list[AppInfo]
-
-
-class AppConfigCreate(BaseModel):
-    """Body for ``POST /api/apps/{workspace_id}``."""
-
-    app_id: str
-    enabled: bool = True
-
-
-class AppConfigUpdate(BaseModel):
-    """Body for ``PATCH /api/apps/{workspace_id}/{app_id:path}``."""
-
-    enabled: bool | None = None
-
-
-# ---------------------------------------------------------------------------
-# Persistence port + records (consumed by secondary adapters)
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class AppConfigRecord:
-    """Per-workspace config row for a single app."""
-
-    id: str
-    workspace_id: str
-    app_id: str
-    enabled: bool
-    created_at: datetime
-    updated_at: datetime
-
-
-@dataclass
-class AppConfigCreateInput:
-    workspace_id: str
-    app_id: str
-    enabled: bool = True
-
-
-@dataclass
-class AppConfigUpdateInput:
-    enabled: bool | None = None
-
-
-class AppPersistencePort(ABC):
-    @abstractmethod
-    async def list_by_workspace(self, workspace_id: str) -> list[AppConfigRecord]:
-        """Return every per-workspace app config record."""
-
-    @abstractmethod
-    async def get(self, workspace_id: str, app_id: str) -> AppConfigRecord | None:
-        """Return the record for a single (workspace, app) pair, or None."""
-
-    @abstractmethod
-    async def create(self, data: AppConfigCreateInput) -> AppConfigRecord:
-        """Insert a new config row.
-
-        Implementations should raise ``LookupError``-distinct exceptions on
-        duplicate (workspace_id, app_id); the service translates these to
-        domain errors.
-        """
-
-    @abstractmethod
-    async def update(
-        self, workspace_id: str, app_id: str, updates: AppConfigUpdateInput
-    ) -> AppConfigRecord | None:
-        """Update an existing config row; returns ``None`` if absent."""
-
-    @abstractmethod
-    async def delete(self, workspace_id: str, app_id: str) -> bool:
-        """Remove a config row. Returns True if a row was removed."""

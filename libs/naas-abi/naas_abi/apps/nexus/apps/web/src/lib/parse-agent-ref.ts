@@ -10,7 +10,7 @@ export function parseAgentRef(
   return { moduleName, className };
 }
 
-type AgentLike = { enabled?: boolean; class_name?: string | null };
+type AgentLike = { class_name?: string | null };
 
 /**
  * Match a roster agent to a config/manifest ref (``operations.counter_uas CounterUASAgent``).
@@ -24,8 +24,8 @@ export function pickAgentByRef<T extends AgentLike>(
   if (!parsed) return undefined;
   const { moduleName, className } = parsed;
   const suffix = `/${className}`;
-  const enabled = agents.filter((agent) => agent.enabled && (agent.class_name ?? '').endsWith(suffix));
-  const preferred = enabled.find((agent) => {
+  const matching = agents.filter((agent) => (agent.class_name ?? '').endsWith(suffix));
+  const preferred = matching.find((agent) => {
     const classNameFull = agent.class_name ?? '';
     const modulePrefix = classNameFull.split('/')[0] ?? '';
     return (
@@ -33,6 +33,6 @@ export function pickAgentByRef<T extends AgentLike>(
     );
   });
   if (preferred) return preferred;
-  if (enabled.length === 1) return enabled[0];
+  if (matching.length === 1) return matching[0];
   return undefined;
 }

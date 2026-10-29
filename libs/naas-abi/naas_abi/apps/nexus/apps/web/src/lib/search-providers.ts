@@ -66,8 +66,8 @@ const PROVIDERS: Record<string, Provider> = {
   apps: async (q, ctx) => {
     const store = useAppsStore.getState();
     if (store.workspaceId !== ctx.workspaceId || !store.apps.length) await store.fetchApps(ctx.workspaceId);
-    // The catalog lists every app with this workspace's enable state: search only the enabled ones.
-    const apps = useAppsStore.getState().apps.filter(a => a.enabled);
+    // The catalog lists exactly the apps the caller may open here.
+    const apps = useAppsStore.getState().apps;
     const ranked = rankItems(apps, q, a => [a.name, a.description, (a.keywords || []).join(' '), a.category], ctx.limit);
     return {
       hasMore: ranked.hasMore,
@@ -187,13 +187,13 @@ const PROVIDERS: Record<string, Provider> = {
   },
 
   agents: async (q, ctx) => {
-    // The workspace's own roster (already filtered by its feature flags), enabled agents only.
+    // The workspace's agents the caller may use, as the API lists them.
     // Not the agents store: it keeps one list across workspaces.
     const agents = await cachedList(`agents:${ctx.workspaceId}`, () =>
-      getJson<{ id: string; name: string; description: string; enabled: boolean; logo_url: string | null }[]>(
+      getJson<{ id: string; name: string; description: string; logo_url: string | null }[]>(
         `/api/agents/?workspace_id=${encodeURIComponent(ctx.workspaceId)}`,
       ));
-    const ranked = rankItems(agents.filter(a => a.enabled), q, a => [a.name, a.description], ctx.limit);
+    const ranked = rankItems(agents, q, a => [a.name, a.description], ctx.limit);
     return {
       hasMore: ranked.hasMore,
       hits: ranked.items.map(a => ({

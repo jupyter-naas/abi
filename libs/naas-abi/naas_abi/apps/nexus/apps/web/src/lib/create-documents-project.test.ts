@@ -47,24 +47,18 @@ describe('DEFAULT_DOCUMENTS_TEMPLATE_ID', () => {
  */
 describe('pickWorkspaceDefaultAgent', () => {
   it('prefers the workspace default over Abi', () => {
-    const orchestrator = { id: 'default', enabled: true, isDefault: true };
-    const abi = { id: 'abi', enabled: true, isDefault: false };
+    const orchestrator = { id: 'default', isDefault: true };
+    const abi = { id: 'abi', isDefault: false };
     expect(pickWorkspaceDefaultAgent([abi, orchestrator])?.id).toBe('default');
   });
 
-  it('still picks the workspace default when sync left it disabled', () => {
-    const orchestrator = { id: 'default', enabled: false, isDefault: true };
-    const abi = { id: 'abi', enabled: false, isDefault: false };
-    expect(pickWorkspaceDefaultAgent([abi, orchestrator])?.id).toBe('default');
-  });
 });
 
 describe('pickDocumentsOfficeAgent', () => {
-  it('prefers enabled Nexus Documents over the workspace default', () => {
-    const orchestrator = { id: 'default', enabled: true, isDefault: true, name: 'Orchestrator' };
+  it('prefers listed Nexus Documents over the workspace default', () => {
+    const orchestrator = { id: 'default', isDefault: true, name: 'Orchestrator' };
     const sections = {
       id: 'documents',
-      enabled: true,
       isDefault: false,
       name: 'Documents',
       class_name: 'naas_abi.agents.DocumentsAgent/DocumentsAgent',
@@ -73,16 +67,15 @@ describe('pickDocumentsOfficeAgent', () => {
   });
 
   it('falls back to the workspace default when Documents is not on the roster', () => {
-    const orchestrator = { id: 'default', enabled: true, isDefault: true, name: 'Orchestrator' };
-    const abi = { id: 'abi', enabled: true, isDefault: false, name: 'Abi' };
+    const orchestrator = { id: 'default', isDefault: true, name: 'Orchestrator' };
+    const abi = { id: 'abi', isDefault: false, name: 'Abi' };
     expect(pickDocumentsOfficeAgent([abi, orchestrator])?.id).toBe('default');
   });
 
   it('ignores an office agent that is not Nexus Documents', () => {
-    const orchestrator = { id: 'default', enabled: true, isDefault: true, name: 'Orchestrator' };
+    const orchestrator = { id: 'default', isDefault: true, name: 'Orchestrator' };
     const other = {
       id: 'sheet',
-      enabled: true,
       isDefault: false,
       name: 'Office Documents',
       class_name: 'acme.office.agents.SheetDocumentsAgent/SheetDocumentsAgent',
@@ -92,17 +85,15 @@ describe('pickDocumentsOfficeAgent', () => {
 });
 
 describe('pickPaneOfficeAgent', () => {
-  const orchestrator = { id: 'default', enabled: true, isDefault: true, name: 'Bob' };
+  const orchestrator = { id: 'default', isDefault: true, name: 'Bob' };
   const slides = {
     id: 'slides',
-    enabled: true,
     isDefault: false,
     name: 'Slides',
     class_name: 'naas_abi.agents.SlidesAgent/SlidesAgent',
   };
   const documents = {
     id: 'documents',
-    enabled: true,
     isDefault: false,
     name: 'Documents',
     class_name: 'naas_abi.agents.DocumentsAgent/DocumentsAgent',
@@ -196,7 +187,6 @@ describe('openDocumentsAgentPane', () => {
           id: ABI_ID,
           name: 'Abi',
           class_name: 'naas_abi.agents/AbiAgent',
-          enabled: true,
           isDefault: false,
           modelIds: ['gpt-4.1-mini', 'anthropic/claude-sonnet-5'],
         } as Agent,
@@ -204,7 +194,6 @@ describe('openDocumentsAgentPane', () => {
           id: DEFAULT_ID,
           name: 'Orchestrator',
           class_name: 'demo.agents/OrchestratorAgent',
-          enabled: true,
           isDefault: true,
           modelIds: ['gpt-4.1-mini'],
         } as Agent,
@@ -214,7 +203,6 @@ describe('openDocumentsAgentPane', () => {
                 id: SLIDES_ID,
                 name: 'Documents',
                 class_name: 'naas_abi.agents.DocumentsAgent/DocumentsAgent',
-                enabled: true,
                 isDefault: false,
                 modelIds: ['qwen-3.8'],
               } as Agent,
@@ -262,7 +250,7 @@ describe('openDocumentsAgentPane', () => {
     expect(useWorkspaceStore.getState().paneAgent).toBe(DEFAULT_ID);
   });
 
-  it('pins Nexus Documents when the workspace enabled it', () => {
+  it('pins Nexus Documents when the workspace lists it', () => {
     seedAgents(true);
     openDocumentsAgentPane();
 

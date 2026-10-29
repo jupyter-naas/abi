@@ -64,7 +64,7 @@
   background-color: var(--background, #fff);
 }
 
-/* Features cell: the workspace's features as chips (its set is edited on Modules & features). */
+/* Features cell: the workspace's features as chips. */
 .org-workspaces-features {
   display: flex;
   flex-wrap: wrap;

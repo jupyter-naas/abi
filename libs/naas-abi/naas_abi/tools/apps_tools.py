@@ -1,15 +1,15 @@
 """AppsAgent tools for Nexus Apps.
 
-Same data the Apps page shows (``GET /api/apps/?workspace_id=``): the module
-catalog discovered from ``<module>/apps/<name>/manifest.json``, the workspace
-enable state (DB row, then the config seed, then off), and the tenant's
-external shortcuts. When the user has an app open (``?open=<app_id>``) the
-pane sends it as the open feature resource, so tools default to that app and
-the agent never asks which one.
+Same data the Apps page shows (``GET /api/apps/?workspace_id=``): the apps of
+the module catalog discovered from ``<module>/apps/<name>/manifest.json`` that
+the user may open in the workspace (IAM's ``module:OpenApp``, nothing else),
+and the tenant's external shortcuts. When the user has an app open
+(``?open=<app_id>``) the pane sends it as the open feature resource, so tools
+default to that app and the agent never asks which one.
 
-Access mirrors the HTTP adapter: workspace membership, same as
-``PATCH /api/apps/{workspace_id}/{app_id}``. Demo passwords never reach the
-model; tools only say whether a demo login exists.
+Demo passwords never reach the model; tools only say whether a demo login
+exists. Who may use which app is set by policies (Roles & permissions), never
+by these tools.
 """
 
 from __future__ import annotations
@@ -22,7 +22,6 @@ from naas_abi_core.services.agent.context import agent_workspace_id
 
 from naas_abi.agents.feature.context import active_feature_resource_id
 from naas_abi.tools.nexus_admin_tools import (
-    _record_to_dict,
     _require_user_id,
     _run_async,
     _with_db,
@@ -49,7 +48,7 @@ def _catalog() -> list[Any]:
 
 
 def _external_apps() -> list[Any]:
-    """Tenant shortcuts (``nexus_config.tenant.apps``). Always on, not toggleable."""
+    """Tenant shortcuts (``nexus_config.tenant.apps``), shown to everyone."""
     try:
         from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
 
@@ -57,15 +56,6 @@ def _external_apps() -> list[Any]:
         return list(getattr(tenant, "apps", None) or [])
     except Exception:  # noqa: BLE001
         return []
-
-
-def _apps_service(db: Any) -> Any:
-    from naas_abi.apps.nexus.apps.api.app.services.apps.adapters.secondary.postgres import (
-        AppSecondaryAdapterPostgres,
-    )
-    from naas_abi.apps.nexus.apps.api.app.services.apps.service import AppsService
-
-    return AppsService(adapter=AppSecondaryAdapterPostgres(db=db))
 
 
 def _embed_kind(url: str | None) -> str | None:
@@ -81,14 +71,13 @@ def _find_app(catalog: list[Any], app_id: str) -> Any | None:
     )
 
 
-def _summary(app: Any, enabled: bool) -> dict[str, Any]:
+def _summary(app: Any) -> dict[str, Any]:
     return {
         "app_id": app.app_id,
         "name": app.name,
         "source": "module",
         "module": app.module_name,
         "category": app.category,
-        "enabled": enabled,
         "embed": _embed_kind(app.url),
         "description": (app.description or "")[:_MAX_DESCRIPTION],
     }
@@ -99,15 +88,14 @@ def _external_summary(app: Any) -> dict[str, Any]:
         "app_id": app.url,
         "name": app.name,
         "source": "external",
-        "enabled": True,
         "embed": "external",
         "url": app.url,
         "description": (getattr(app, "description", None) or "")[:_MAX_DESCRIPTION],
     }
 
 
-def _detail(app: Any, enabled: bool, workspace_id: str) -> dict[str, Any]:
-    out = _summary(app, enabled)
+def _detail(app: Any, workspace_id: str) -> dict[str, Any]:
+    out = _summary(app)
     out.update(
         {
             "module_path": app.module_path,
@@ -153,77 +141,38 @@ def _resolve_app_id(app_id: str) -> str | dict[str, str]:
     return {"error": "No app is open. Pass app_id (see list_workspace_apps)."}
 
 
-async def _enable_state(
-    db: Any, user_id: str, workspace_id: str
-) -> tuple[dict[str, bool], set[str]] | dict[str, str]:
-    """(DB rows, seed list) for the workspace, after the membership check: the
-    seed as the catalog and the visibility read it (its stored catalog seed first,
-    then the config's), so what is shown is what is enforced."""
-    from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import (
-        workspace_seed_apps,
-    )
+async def _usable(
+    db: Any, user_id: str, workspace_id: str, catalog: list[Any]
+) -> list[Any] | dict[str, str]:
+    """The apps of ``catalog`` the user may open in the workspace, after the
+    membership check: IAM's ``module:OpenApp``, as the Apps page lists them."""
+    from naas_abi.apps.nexus.apps.api.app.services.apps.scopes import app_scope
+    from naas_abi.apps.nexus.apps.api.app.services.iam import authz
     from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
         WorkspacePermissionError,
     )
 
-    workspaces = _workspace_service(db)
     try:
-        await workspaces.require_workspace_access(
+        await _workspace_service(db).require_workspace_access(
             user_id=user_id, workspace_id=workspace_id
         )
     except WorkspacePermissionError:
         return {"error": "You do not have access to this workspace."}
-    enabled_by_app_id = await _apps_service(db).get_enabled_states(workspace_id)
-    workspace = await workspaces.get_workspace(workspace_id)
-    return enabled_by_app_id, workspace_seed_apps(workspace)
-
-
-async def _in_set(catalog: list[Any], workspace_id: str) -> list[Any]:
-    """The catalog's apps in the workspace's set: what its settings list."""
-    from naas_abi.apps.nexus.apps.api.app.services.apps.scopes import app_scope
-    from naas_abi.apps.nexus.apps.api.app.services.iam import sets as scope_sets
-
-    return await scope_sets.within_set(
-        catalog, workspace=workspace_id, scope_of=lambda app: app_scope(app.app_id)
+    return await authz.filter_scopes(
+        catalog,
+        user=user_id,
+        workspace=workspace_id,
+        scope_of=lambda app: app_scope(app.app_id),
     )
-
-
-async def _switch_refusal(
-    user_id: str, workspace_id: str, app: Any, enabled: bool
-) -> str | None:
-    """Same rule as the Settings > Apps toggle: the caller turns apps on and off
-    there (``UpdateApp``), and turns on only one of the workspace's set."""
-    from naas_abi.apps.nexus.apps.api.app.services.iam import authz
-
-    if not await authz.allowed(
-        "UpdateApp", user=user_id, workspace=workspace_id, id=app.app_id
-    ):
-        return "You may not turn apps on or off in this workspace."
-    if enabled and not await _in_set([app], workspace_id):
-        return (
-            "This app is not in the workspace's set: its organization adds it on the "
-            "Modules & features page."
-        )
-    return None
-
-
-def _is_enabled(app_id: str, state: tuple[dict[str, bool], set[str]]) -> bool:
-    from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
-        resolve_app_enabled,
-    )
-
-    enabled_by_app_id, seed_apps = state
-    return resolve_app_enabled(app_id, enabled_by_app_id, seed_apps)
 
 
 def apps_tools() -> list[BaseTool]:
     @tool
-    def list_workspace_apps(include_disabled: bool = True) -> Any:
-        """List the apps of this workspace: module apps of its set and external shortcuts.
+    def list_workspace_apps() -> Any:
+        """List the apps of this workspace the user may open, and external shortcuts.
 
         Each row has app_id, name, source (module or external), module,
-        category, enabled, embed (bundled or external). The Apps page only
-        shows enabled apps; set include_disabled=False to match it.
+        category, embed (bundled or external). The same apps as the Apps page.
         """
         ctx = _context()
         if isinstance(ctx, dict):
@@ -233,15 +182,10 @@ def apps_tools() -> list[BaseTool]:
         open_id = active_feature_resource_id(APP_RESOURCE_KIND)
 
         async def _run(db: Any) -> Any:
-            state = await _enable_state(db, user_id, workspace_id)
-            if isinstance(state, dict):
-                return state
-            rows = [
-                _summary(app, _is_enabled(app.app_id, state))
-                for app in await _in_set(_catalog(), workspace_id)
-            ]
-            if not include_disabled:
-                rows = [row for row in rows if row["enabled"]]
+            usable = await _usable(db, user_id, workspace_id, _catalog())
+            if isinstance(usable, dict):
+                return usable
+            rows = [_summary(app) for app in usable]
             rows += [_external_summary(app) for app in _external_apps()]
             return {"workspace_id": workspace_id, "open_app_id": open_id, "apps": rows}
 
@@ -252,7 +196,7 @@ def apps_tools() -> list[BaseTool]:
 
     @tool
     def get_app(app_id: str = "") -> Any:
-        """Details of one app: manifest fields, enable state, embed kind, URL.
+        """Details of one app the user may open: manifest fields, embed kind, URL.
 
         Omit app_id to use the app open in the Apps page.
         """
@@ -272,65 +216,16 @@ def apps_tools() -> list[BaseTool]:
             return {"error": f"Unknown app_id: {resolved}. See list_workspace_apps."}
 
         async def _run(db: Any) -> Any:
-            state = await _enable_state(db, user_id, workspace_id)
-            if isinstance(state, dict):
-                return state
-            return _detail(app, _is_enabled(app.app_id, state), workspace_id)
+            usable = await _usable(db, user_id, workspace_id, [app])
+            if isinstance(usable, dict):
+                return usable
+            if not usable:
+                return {"error": "You may not open this app in this workspace."}
+            return _detail(app, workspace_id)
 
         try:
             return _run_async(_with_db(_run))
         except Exception as exc:  # noqa: BLE001
             return _tool_error(exc)
 
-    @tool
-    def set_app_enabled(enabled: bool, app_id: str = "") -> Any:
-        """Enable or disable a module app in this workspace (one of its set).
-
-        Same rule as the Settings > Apps toggle. Omit app_id to use the open
-        app. External shortcuts come from tenant config and cannot be toggled.
-        """
-        ctx = _context()
-        if isinstance(ctx, dict):
-            return ctx
-        user_id, workspace_id = ctx
-        resolved = _resolve_app_id(app_id)
-        if isinstance(resolved, dict):
-            return resolved
-        if any(a.url == resolved for a in _external_apps()):
-            return {
-                "error": (
-                    "External shortcuts come from nexus_config.tenant.apps and "
-                    "are always shown. Change the config to remove one."
-                )
-            }
-        app = _find_app(_catalog(), resolved)
-        if app is None:
-            return {"error": f"Unknown app_id: {resolved}. See list_workspace_apps."}
-
-        async def _run(db: Any) -> Any:
-            from naas_abi.apps.nexus.apps.api.app.services.apps.port import (
-                AppConfigUpdateInput,
-            )
-
-            state = await _enable_state(db, user_id, workspace_id)
-            if isinstance(state, dict):
-                return state
-            refused = await _switch_refusal(user_id, workspace_id, app, bool(enabled))
-            if refused is not None:
-                return {"error": refused}
-            record = await _apps_service(db).upsert_app_config(
-                workspace_id=workspace_id,
-                app_id=app.app_id,
-                updates=AppConfigUpdateInput(enabled=bool(enabled)),
-            )
-            out = _record_to_dict(record)
-            out["name"] = app.name
-            out["note"] = "Reload the Apps page to see the change."
-            return out
-
-        try:
-            return _run_async(_with_db(_run))
-        except Exception as exc:  # noqa: BLE001
-            return _tool_error(exc)
-
-    return [list_workspace_apps, get_app, set_app_enabled]
+    return [list_workspace_apps, get_app]

@@ -17,20 +17,21 @@ _API = "naas_abi/apps/nexus/apps/api/app"
 _WS = f"{_WEB}/app/workspace/[workspaceId]"
 
 CATALOG_CODE_MAP = f"""Web:
-- {_WS}/settings/agents/page.tsx and settings/agents/[agentId]/page.tsx: roster list, enable/disable, default agent, agent detail (model, prompt, suggestions).
+- {_WS}/settings/agents/page.tsx and settings/agents/[agentId]/page.tsx: roster list (the agents the user may use), default agent, agent detail (model, prompt, suggestions).
 - {_WEB}/stores/agents.ts: agents fetch and sync, default and pane agent selection.
 - {_WEB}/app/workspace/[workspaceId]/chat/components/chat-agent-selector.tsx: the agent picker in chat and the right pane.
 - {_WEB}/lib/pick-workspace-default-agent.ts and {_WEB}/lib/feature-office-agents.ts: which agent the pane binds per section.
 API:
-- {_API}/services/agents/adapters/primary/agents__primary_adapter__FastAPI.py: /api/agents (list, sync, create, update, delete) and the roster sync from config (_workspace_agent_roster, pick_workspace_chat_agent_id).
+- {_API}/services/agents/adapters/primary/agents__primary_adapter__FastAPI.py: /api/agents (list, sync, create, update, delete) the roster sync from the modules (_reconcile_workspace_agents) and pick_workspace_chat_agent_id.
+- {_API}/services/agents/scopes.py: an agent's module scope; IAM's module:UseAgent decides who uses it in a workspace.
 - {_API}/services/agents/service.py, port.py, adapters/secondary/postgres.py: AgentService and AgentRecord.
 - {_API}/core/workspace_catalog_seed.py: parse_agent_ref and workspace seeds (default_agent, agents).
 Engine: naas_abi_core/module/ModuleAgentLoader.py (how agent classes are discovered from <module>/agents/*.py).
 Agent: naas_abi/agents/AgentCatalogAgent.py and naas_abi/tools/agent_catalog_tools.py."""
 
-CATALOG_CAPABILITIES = """- See the workspace's agent roster: which agents are enabled, which one is the default (main chat orchestrator), their models.
-- Open an agent: description, suggestions, intents, prompt preview; enable or disable it; pick its model.
-- Roster comes from config: a workspace's agents: list in config.yaml ("<module> <ClassName>") and default_agent. Unlisted agents stay off.
+CATALOG_CAPABILITIES = """- See the workspace's agents the user may use, which one is the default (main chat orchestrator), their models.
+- Open an agent: description, suggestions, intents, prompt preview; pick its model.
+- Who may use which agent is set by policies (Roles & permissions, module:UseAgent on the agent's module scope): there is no per-workspace on/off switch. The default comes from the workspace's default_agent in config.yaml.
 - Skills (reusable /slug prompts) belong to the Skills office agent: it writes and saves them, Settings > Skills edits them by hand. Point the user there; you have no skill tools.
 - The Agents feature flag is `agents` (owners and admins by default)."""
 
@@ -73,17 +74,17 @@ class AgentCatalogAgent(IntentAgent):
         ),
         tasks="""1. "What can I do here?": answer from <capabilities>, tied to the real roster (list_workspace_agents).
 2. "How is it built?": read <code_map> files first, then explain with paths.
-3. "Add agent X": find its roster ref with list_agent_classes, then give the exact config.yaml change (agents: list) and say a restart syncs it.
+3. "Add agent X": find it with list_agent_classes, then say a policy on Roles & permissions (module:UseAgent on it) lets people use it in the workspace.
 4. Skills: not yours. Say the Skills agent writes and saves them (or Settings > Skills), and let Abi hand the request over.""",
         capabilities=CATALOG_CAPABILITIES,
         code_map=CATALOG_CODE_MAP,
-        constraints="- Never claim you enabled an agent: you have no write tools, and skills are the Skills agent's to create.",
+        constraints="- Never claim you gave anyone an agent: you have no write tools, and skills are the Skills agent's to create.",
     )
     suggestions: list[dict] = [
         {"label": "What can you do?", "value": "What can I do with the agent roster?"},
         {
             "label": "How is it built?",
-            "value": "How does a workspace roster decide which agents are enabled? Cite files.",
+            "value": "How does a workspace decide which agents a user may use? Cite files.",
         },
         {"label": "Roster", "value": "Which agents are on this workspace?"},
     ]

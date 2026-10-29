@@ -67,7 +67,13 @@ PROCESSES: list = []
 STREAMED: list[frozenset[str] | None] = []
 
 
+def _grant_every_agent(team: NexusIam, user: str = "admin") -> None:
+    """No role holds a module scope: a policy grants naas_abi's agents."""
+    team.allow(user, ["module:UseAgent"], ["${scope}:module:agent/naas_abi/*"], "abi:org-1:ws-1")
+
+
 def test_models(team: NexusIam, monkeypatch: pytest.MonkeyPatch) -> None:
+    _grant_every_agent(team)
     client = _client(monkeypatch)
     resp = client.get("/v1/models")
     assert resp.status_code == 200, resp.text
@@ -76,6 +82,7 @@ def test_models(team: NexusIam, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_chat_completion_non_streaming(team: NexusIam, monkeypatch: pytest.MonkeyPatch) -> None:
+    _grant_every_agent(team)
     client = _client(monkeypatch)
     resp = client.post(
         "/v1/chat/completions",
@@ -89,6 +96,7 @@ def test_chat_completion_non_streaming(team: NexusIam, monkeypatch: pytest.Monke
 
 
 def test_chat_completion_streaming(team: NexusIam, monkeypatch: pytest.MonkeyPatch) -> None:
+    _grant_every_agent(team)
     client = _client(monkeypatch)
     resp = client.post(
         "/v1/chat/completions",
@@ -155,6 +163,7 @@ def test_gateway_turn_carries_the_caller_profile_onto_the_agent_prompt(
     key = f"{_Agent.__module__}/{_Agent.__name__}"
     monkeypatch.setattr(shim, "_agent_classes", lambda: ({key: _Agent}, {key: "naas_abi"}))
 
+    _grant_every_agent(team)
     app = FastAPI()
     app.include_router(shim.router, prefix="/v1")
     app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
@@ -197,9 +206,10 @@ _COMPLETION = {"model": "aia", "messages": [{"role": "user", "content": "hi"}]}
 
 
 @pytest.mark.parametrize("user", ["admin", "owner"])
-def test_admins_and_owners_use_every_agent(
+def test_a_policy_granting_every_agent_lets_admins_and_owners_use_them(
     team: NexusIam, monkeypatch: pytest.MonkeyPatch, user: str
 ) -> None:
+    _grant_every_agent(team, user)
     client = _client(monkeypatch, user)
 
     assert [m["id"] for m in client.get("/v1/models").json()["data"]] == ["aia", "support"]
@@ -210,8 +220,8 @@ def test_admins_and_owners_use_every_agent(
     assert PROCESSES == [frozenset()]
 
 
-@pytest.mark.parametrize("user", ["viewer", "member"])
-def test_viewers_and_members_use_no_agent_by_default(
+@pytest.mark.parametrize("user", ["viewer", "member", "admin", "owner"])
+def test_no_role_uses_an_agent_without_a_policy(
     team: NexusIam, monkeypatch: pytest.MonkeyPatch, user: str
 ) -> None:
     client = _client(monkeypatch, user)

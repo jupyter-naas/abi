@@ -74,38 +74,6 @@ export type ModuleScopesEntry = {
 
 export type ModuleScopesView = { modules: ModuleScopesEntry[] };
 
-// -- sets: the module scopes and features usable in an organization or a workspace ------
-
-/**
- * What an organization or a workspace may use. `null`: nothing recorded, so everything (for a
- * workspace, whatever its organization has); `[]`: nothing. Module items are `<module>` (the
- * whole module), `<type>/<module>/<name>` (`agent`, `app`, `workflow`, `pipeline`; `*` for every
- * item of that type) or `<service>:<Action>` (an action the module declares). Features are
- * Nexus feature keys (`chat`, `files`, ...).
- */
-export type SetParts = { modules: string[] | null; features: string[] | null };
-
-export type WorkspaceSetView = {
-  id: string;
-  name: string;
-  /** What is recorded. */
-  set: SetParts;
-  /** What it has: the recorded set within its organization's. */
-  effective: SetParts;
-  /** Whether the caller may change it (`PUT`). */
-  editable: boolean;
-};
-
-export type OrganizationSetView = WorkspaceSetView & { workspaces: WorkspaceSetView[] };
-
-/** `GET /api/iam/admin/sets[?organization_id=]`: the rows (modules, features) and the columns. */
-export type SetsView = {
-  modules: ModuleScopesEntry[];
-  /** The deployment's enabled features, in order. */
-  features: string[];
-  organizations: OrganizationSetView[];
-};
-
 // -- policies -------------------------------------------------------------------------
 
 export type PolicyStatement = {
@@ -303,7 +271,7 @@ export type ManifestReject = { reason: string };
 export type GrantableAction = { action: string; resources: string[]; excluded: string[] };
 
 /** `GET /api/iam/admin/grantable?scope=`: per catalog (a kernel service, `nexus`, `module` or a
- *  module's own service), what the caller may grant there, within the scope's sets. */
+ *  module's own service), what the caller may grant there. */
 export type GrantableView = {
   scope: string;
   catalogs: { service: string; actions: GrantableAction[] }[];
@@ -330,7 +298,7 @@ export type DecidingStatement = {
 
 export type Simulation = {
   allowed: boolean;
-  /** `allow`, `explicit_deny`, `implicit_deny`, `suspended`, `sealed` or `outside_set`. */
+  /** `allow`, `explicit_deny`, `implicit_deny`, `suspended` or `sealed`. */
   reason: string;
   action: string;
   resource: string;
@@ -364,7 +332,7 @@ export type AuditEntry = {
  *  `iam:MapIdpGroup`, `iam:UnmapIdpGroup`, `iam:ListPrincipals`, `iam:CreateServiceAccount`,
  *  `iam:DeletePrincipal`, `iam:SuspendPrincipal`, `iam:ResumePrincipal`, `iam:ListKeys`,
  *  `iam:CreateKey`, `iam:RevokeKey`, `iam:ListManifests`, `iam:ApproveManifest`,
- *  `iam:RejectManifest`, `iam:Explain`, `iam:GetSet`, `iam:PutSet` and `nexus:ReadSystem`
+ *  `iam:RejectManifest`, `iam:Explain` and `nexus:ReadSystem`
  *  (the audit). Without a scope they are decided on the platform; with
  *  `?scope=abi:<org>:<workspace>` (`-` for the org itself) the attachment actions at that
  *  scope and the policy and group actions on that level's own, so an org admin may attach at

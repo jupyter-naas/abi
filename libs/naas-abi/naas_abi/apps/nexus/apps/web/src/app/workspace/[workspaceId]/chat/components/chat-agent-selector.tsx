@@ -79,16 +79,16 @@ export function ChatAgentSelector({
   const fetchModels = useModelsStore((s) => s.fetchModels);
   const { defaultAgents, customAgents, filteredAgents } = useAgentList(searchQuery);
 
-  const enabledAgents = useMemo(
+  const usableAgents = useMemo(
     () => [...defaultAgents, ...customAgents],
     [defaultAgents, customAgents]
   );
 
   const defaultAgent = useMemo(() => {
-    return enabledAgents.find((a) => a.isDefault) ?? enabledAgents[0];
-  }, [enabledAgents]);
+    return usableAgents.find((a) => a.isDefault) ?? usableAgents[0];
+  }, [usableAgents]);
   const activeAgent =
-    enabledAgents.find((a) => a.id === selectedAgent) || defaultAgent;
+    usableAgents.find((a) => a.id === selectedAgent) || defaultAgent;
   const autoMode = !agentExplicitlySelected;
 
   useEffect(() => {
@@ -162,7 +162,7 @@ export function ChatAgentSelector({
     (agent?.modelIds || []).map((id) => id.trim()).filter(Boolean);
 
   const openPicker = () => {
-    const current = enabledAgents.find((a) => a.id === selectedAgent);
+    const current = usableAgents.find((a) => a.id === selectedAgent);
     setExpandedAgentId(
       current && selectableModels(current).length > 1 ? current.id : null
     );

@@ -524,14 +524,11 @@ def test_a_module_agent_needs_its_module_scope(world) -> None:
     assert run("abi").status_code == 403
 
 
-def test_an_agent_turned_off_in_its_workspace_is_refused_to_everyone(world) -> None:
-    """Hidden by the workspace's admins: refused for every role, a module's agent
-    and one the workspace built alike, not only left out of the pickers."""
-    from naas_abi.apps.nexus.apps.api.app.services.agents.visibility import AgentsVisibility
-    from naas_abi.apps.nexus.apps.api.app.services.visibility.testing import (
-        visibility_installed,
-    )
-
+def test_iam_alone_decides_an_agent_and_no_role_holds_a_module_agent(world) -> None:
+    """No workspace switch: an agent's stored ``enabled`` is not read. A module's
+    agent is refused to an owner with no policy granting it (no role holds a
+    module scope), and runs once one does; one the workspace built runs for who
+    holds ``nexus:UseAgent``."""
     for agent_id, class_name, provider in (
         ("remote-a", "acme.p/A", "remote"),
         ("built", None, "openai"),
@@ -543,11 +540,7 @@ def test_an_agent_turned_off_in_its_workspace_is_refused_to_everyone(world) -> N
             class_name=class_name,
             model_id="gpt",
             provider=provider,
-            enabled=False,
         )
-
-    async def rows(workspace_id):
-        return [a for a in world.chat.agents.values() if a.workspace_id == workspace_id]
 
     def turn(user: str, agent: str):
         return call(
@@ -558,27 +551,13 @@ def test_an_agent_turned_off_in_its_workspace_is_refused_to_everyone(world) -> N
             json={"message": "hi", "conversation_id": f"conv-{user}", "agent": agent},
         )
 
-    world.iam.allow_scope("member", ModuleScope("agent", "acme.p", "A"), "abi:org-1:ws-1")
-    with visibility_installed({"agent": AgentsVisibility(rows)}):
-        for user in ("member", "owner"):
-            world.chat.add(user, f"conv-{user}")
-            for agent in ("remote-a", "built"):
-                refused = turn(user, agent)
-                assert refused.status_code == 403, (user, agent)
-                assert refused.json()["detail"] == "This agent is turned off in this workspace"
-        assert world.chat.completed == []
-        # The module's agent is one scope: a second row of it, on, shows it in the
-        # roster, and every row of it is usable, the one turned off included.
-        world.chat.agents["remote-a2"] = ChatAgentRecord(
-            id="remote-a2",
-            workspace_id="ws-1",
-            name="remote-a2",
-            class_name="acme.p/A",
-            model_id="gpt",
-            provider="remote",
-        )
-        assert turn("member", "remote-a").status_code == 200
-        assert turn("member", "built").status_code == 403
+    for user in ("member", "owner"):
+        world.chat.add(user, f"conv-{user}")
+        assert turn(user, "remote-a").status_code == 403, user
+        assert turn(user, "built").status_code == 200, user
+    world.iam.allow_scope("owner", ModuleScope("agent", "acme.p", "A"), "abi:org-1:ws-1")
+    assert turn("owner", "remote-a").status_code == 200
+    assert turn("member", "remote-a").status_code == 403
 
 
 # -- file ingestion ------------------------------------------------------------

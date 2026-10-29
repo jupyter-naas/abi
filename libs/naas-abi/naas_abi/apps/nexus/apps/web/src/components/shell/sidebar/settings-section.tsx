@@ -26,7 +26,7 @@ export function SettingsSection({ collapsed, detailOnly }: { collapsed: boolean;
     undefined,
     { skip: !workspace }
   );
-  // Only what the workspace has (its set's features and module resources), and what the caller may open.
+  // Only what the caller may use here (the features they hold, the module resources they may use).
   const groups = visibleSettingsGroups(resources, flags, SETTINGS_GROUPS, {
     holdsIam: !!workspace && opensRolesAndPermissions(access),
   });

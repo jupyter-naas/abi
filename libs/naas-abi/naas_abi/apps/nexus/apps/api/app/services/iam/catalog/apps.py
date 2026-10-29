@@ -9,10 +9,14 @@ ACTIONS = (
     # (``module:OpenApp``, ``services/apps/scopes.py``), not the "apps"
     # section: the section is the settings page and the app projects.
     action("ListApps", "list", "app"),
-    action("GetApp", "read", "app"),
     # A link that is no module's app: a Pages portal's sign-in.
     action("UseApp", "read", "app"),
-    # Turning an app on, off or back to its default in the workspace.
+    # Deprecated, no route: a workspace's app on/off switch and its config rows,
+    # gone (who opens an app is ``module:OpenApp`` alone). Kept declared so a
+    # policy that still names the actions never blocks the catalog's
+    # registration (IAM refuses dropping an action a policy names); they
+    # authorize nothing.
+    action("GetApp", "read", "app"),
     action("InstallApp", "admin", "app", feature="apps"),
     action("UpdateApp", "admin", "app", feature="apps"),
     action("UninstallApp", "admin", "app", feature="apps"),

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 
@@ -8,10 +7,7 @@ import pytest
 from naas_abi_core.services.agent.context import agent_user_id, agent_workspace_id
 
 from naas_abi.agents.feature.context import nexus_feature_context
-from naas_abi.apps.nexus.apps.api.app.services.apps.port import (
-    AppConfigRecord,
-    AppInfo,
-)
+from naas_abi.apps.nexus.apps.api.app.services.apps.port import AppInfo
 from naas_abi.tools import apps_tools as tools_module
 
 WSR = "acme.module:wsr"
@@ -32,63 +28,32 @@ def _app(app_name: str, **extra: Any) -> AppInfo:
     )
 
 
-class _FakeAppsService:
-    def __init__(self) -> None:
-        self.upserts: list[tuple[str, str, bool | None]] = []
-
-    async def upsert_app_config(self, workspace_id, app_id, updates):
-        self.upserts.append((workspace_id, app_id, updates.enabled))
-        now = datetime(2026, 9, 10, tzinfo=UTC)
-        return AppConfigRecord(
-            id="cfg-1",
-            workspace_id=workspace_id,
-            app_id=app_id,
-            enabled=bool(updates.enabled),
-            created_at=now,
-            updated_at=now,
-        )
-
-
 @pytest.fixture
 def apps(monkeypatch) -> dict[str, Any]:
-    service = _FakeAppsService()
     catalog = [_app("wsr", demo_login="demo", demo_password="s3cret"), _app("docs")]
     external = [
         SimpleNamespace(name="Status", url="https://status.example.com", description="")
     ]
+    # The apps IAM lets the user open (``module:OpenApp``).
+    allowed = {"ids": {WSR}}
 
     async def _with_db(fn):
         return await fn(object())
 
-    async def _enable_state(db, user_id, workspace_id):
-        return {DOCS: False}, {WSR, DOCS}
+    async def _usable(db, user_id, workspace_id, found):
+        return [app for app in found if app.app_id in allowed["ids"]]
 
     monkeypatch.setattr(tools_module, "_catalog", lambda: catalog)
     monkeypatch.setattr(tools_module, "_external_apps", lambda: external)
     monkeypatch.setattr(tools_module, "_with_db", _with_db)
-    monkeypatch.setattr(tools_module, "_enable_state", _enable_state)
-    monkeypatch.setattr(tools_module, "_apps_service", lambda db: service)
-    refusals: dict[str, str | None] = {"refusal": None}
-
-    async def _whole_set(catalog, workspace_id):
-        return list(catalog)
-
-    async def _switch_refusal(user_id, workspace_id, app, enabled):
-        return refusals["refusal"]
-
-    monkeypatch.setattr(tools_module, "_in_set", _whole_set)
-    monkeypatch.setattr(tools_module, "_switch_refusal", _switch_refusal)
+    monkeypatch.setattr(tools_module, "_usable", _usable)
 
     tokens = [
         agent_user_id.set("user-1"),
         agent_workspace_id.set("ws-1"),
         nexus_feature_context.set(None),
     ]
-    yield {
-        "service": service,
-        "refusals": refusals,
-        "tools": {t.name: t for t in tools_module.apps_tools()},
-    }
+    yield {"allowed": allowed, "tools": {t.name: t for t in tools_module.apps_tools()}}
     agent_user_id.reset(tokens[0])
     agent_workspace_id.reset(tokens[1])
     nexus_feature_context.reset(tokens[2])
@@ -100,22 +65,19 @@ def _open(app_id: str) -> None:
     )
 
 
-def test_list_resolves_db_row_then_seed_and_adds_external(apps) -> None:
+def test_list_is_what_the_user_may_open_and_the_external_shortcuts(apps) -> None:
     out = apps["tools"]["list_workspace_apps"].invoke({})
     rows = {row["app_id"]: row for row in out["apps"]}
 
-    assert rows[WSR]["enabled"] is True  # seed only
-    assert rows[DOCS]["enabled"] is False  # DB row wins over seed
+    assert set(rows) == {WSR, "https://status.example.com"}
     assert rows[WSR]["embed"] == "bundled"
+    assert "enabled" not in rows[WSR]
     assert rows["https://status.example.com"]["source"] == "external"
     assert out["open_app_id"] is None
 
 
-def test_list_can_match_the_apps_page(apps) -> None:
-    out = apps["tools"]["list_workspace_apps"].invoke({"include_disabled": False})
-    ids = [row["app_id"] for row in out["apps"]]
-    assert DOCS not in ids
-    assert WSR in ids
+def test_the_tools_switch_nothing(apps) -> None:
+    assert set(apps["tools"]) == {"list_workspace_apps", "get_app"}
 
 
 def test_get_app_defaults_to_the_open_app_and_hides_the_password(apps) -> None:
@@ -128,6 +90,11 @@ def test_get_app_defaults_to_the_open_app_and_hides_the_password(apps) -> None:
     assert out["open_in_nexus"] == "/workspace/ws-1/apps?open=acme.module%3Awsr"
 
 
+def test_get_app_of_an_app_the_user_may_not_open_is_refused(apps) -> None:
+    out = apps["tools"]["get_app"].invoke({"app_id": DOCS})
+    assert "may not open" in out["error"]
+
+
 def test_get_app_without_open_app_asks_for_an_id(apps) -> None:
     out = apps["tools"]["get_app"].invoke({})
     assert "No app is open" in out["error"]
@@ -138,23 +105,6 @@ def test_get_app_rejects_unknown_ids(apps) -> None:
     assert "Unknown app_id" in out["error"]
 
 
-def test_set_app_enabled_toggles_the_open_app(apps) -> None:
-    _open(DOCS)
-    out = apps["tools"]["set_app_enabled"].invoke({"enabled": True})
-
-    assert apps["service"].upserts == [("ws-1", DOCS, True)]
-    assert out["enabled"] is True
-    assert out["name"] == "DOCS"
-
-
-def test_set_app_enabled_refuses_external_shortcuts(apps) -> None:
-    out = apps["tools"]["set_app_enabled"].invoke(
-        {"enabled": False, "app_id": "https://status.example.com"}
-    )
-    assert "tenant.apps" in out["error"]
-    assert apps["service"].upserts == []
-
-
 def test_tools_need_a_signed_in_user(apps) -> None:
     agent_user_id.set(None)
     out = apps["tools"]["list_workspace_apps"].invoke({})
@@ -162,44 +112,34 @@ def test_tools_need_a_signed_in_user(apps) -> None:
 
 
 def test_membership_refusal_is_reported(apps, monkeypatch) -> None:
-    async def _denied(db, user_id, workspace_id):
+    async def _denied(db, user_id, workspace_id, found):
         return {"error": "You do not have access to this workspace."}
 
-    monkeypatch.setattr(tools_module, "_enable_state", _denied)
-    _open(DOCS)
-    out = apps["tools"]["set_app_enabled"].invoke({"enabled": True})
+    monkeypatch.setattr(tools_module, "_usable", _denied)
+    out = apps["tools"]["list_workspace_apps"].invoke({})
 
     assert "do not have access" in out["error"]
-    assert apps["service"].upserts == []
-
-
-def test_set_app_enabled_follows_the_settings_rule(apps) -> None:
-    apps["refusals"]["refusal"] = "This app is not in the workspace's set."
-    out = apps["tools"]["set_app_enabled"].invoke({"enabled": True, "app_id": DOCS})
-    assert out == {"error": "This app is not in the workspace's set."}
-    assert apps["service"].upserts == []
 
 
 @pytest.mark.asyncio
-async def test_turning_an_app_on_needs_update_app_and_the_set() -> None:
+async def test_the_apps_listed_are_those_iam_lets_the_user_open(monkeypatch) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
     from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 
+    class Workspaces:
+        async def require_workspace_access(self, *, user_id, workspace_id):
+            return None
+
+    monkeypatch.setattr(tools_module, "_workspace_service", lambda db: Workspaces())
     team = NexusIam()
     scope = team.workspace("org-1", "ws-1")
     for role in ("admin", "member"):
         team.grant(role, role, scope)
-    app = _app("wsr")
+    wsr, docs = _app("wsr"), _app("docs")
     with team.installed():
-        await _refusals(team, app)
-
-
-async def _refusals(team: Any, app: AppInfo) -> None:
-    team.put_set("org-1", "ws-1", modules=["acme.other"])
-    refused = await tools_module._switch_refusal("member", "ws-1", app, True)
-    assert refused is not None and "may not" in refused
-    refused = await tools_module._switch_refusal("admin", "ws-1", app, True)
-    assert refused is not None and "not in the workspace's set" in refused
-    assert await tools_module._switch_refusal("admin", "ws-1", app, False) is None
-    assert await tools_module._in_set([app], "ws-1") == []
-    team.put_set("org-1", "ws-1", modules=["acme.module"])
-    assert await tools_module._switch_refusal("admin", "ws-1", app, True) is None
+        # No role holds an app: an admin with no policy opens none.
+        assert await tools_module._usable(object(), "admin", "ws-1", [wsr, docs]) == []
+        team.allow_scope("member", ModuleScope("app", "acme.module", "wsr"), scope)
+        assert await tools_module._usable(object(), "member", "ws-1", [wsr, docs]) == [
+            wsr
+        ]

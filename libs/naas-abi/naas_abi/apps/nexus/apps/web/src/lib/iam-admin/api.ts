@@ -21,7 +21,6 @@ import type {
   ManifestStatus,
   ManifestView,
   ModuleScopesView,
-  OrganizationSetView,
   Page,
   PolicyCreate,
   PolicySource,
@@ -31,11 +30,8 @@ import type {
   PrincipalKind,
   PrincipalView,
   ServiceAccountView,
-  SetParts,
-  SetsView,
   Simulation,
   SimulationRequest,
-  WorkspaceSetView,
 } from './types';
 
 export const IAM_ADMIN_API = '/api/iam/admin';
@@ -293,31 +289,6 @@ export function createIamAdminApi(fetcher: Fetcher = authFetch) {
         'POST',
         input,
         'Could not reject the manifest.',
-      ),
-
-    // sets: the module scopes and features of organizations and their workspaces
-    /** Every organization the caller may read the set of (the platform), or one. */
-    sets: (organizationId?: string) =>
-      read<SetsView>(
-        fetcher,
-        path('sets') + query({ organization_id: organizationId }),
-        'Could not load the modules and features.',
-      ),
-    putOrganizationSet: (organizationId: string, set: SetParts) =>
-      send<OrganizationSetView>(
-        fetcher,
-        path('sets', organizationId),
-        'PUT',
-        set,
-        'Could not save the organization’s modules and features.',
-      ),
-    putWorkspaceSet: (organizationId: string, workspaceId: string, set: SetParts) =>
-      send<WorkspaceSetView>(
-        fetcher,
-        path('sets', organizationId, 'workspaces', workspaceId),
-        'PUT',
-        set,
-        'Could not save the workspace’s modules and features.',
       ),
 
     // the simulator and the audit

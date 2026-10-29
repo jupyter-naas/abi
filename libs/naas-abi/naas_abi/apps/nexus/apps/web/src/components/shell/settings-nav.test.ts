@@ -10,7 +10,6 @@ import { describeModuleResources, type WorkspaceResources } from '@/lib/workspac
 function resources(over: Partial<WorkspaceResources> = {}): WorkspaceResources {
   return {
     organization_id: 'org-1',
-    can_edit_set: false,
     features: ['agents', 'apps', 'files', 'graph', 'maps', 'ontology', 'search', 'skills', 'settings'],
     modules: [],
     totals: { agents: 2, apps: 1, workflows: 0, pipelines: 1 },
@@ -22,7 +21,7 @@ const labels = (groups: ReturnType<typeof visibleSettingsGroups>) =>
   groups.flatMap((group) => group.items.map((item) => item.label));
 
 describe('workspace settings nav', () => {
-  it('lists every entry the set has', () => {
+  it('lists every entry the caller may use', () => {
     expect(labels(visibleSettingsGroups(resources(), undefined, SETTINGS_GROUPS, { holdsIam: true }))).toEqual(
       SETTINGS_GROUPS.flatMap((group) => group.items.map((item) => item.label))
     );
@@ -35,7 +34,7 @@ describe('workspace settings nav', () => {
     );
   });
 
-  it('hides an entry whose feature is outside the set', () => {
+  it('hides an entry whose feature the caller does not hold', () => {
     const shown = labels(visibleSettingsGroups(resources({ features: ['apps', 'settings'] })));
     expect(shown).toContain('Apps');
     expect(shown).not.toContain('Agents');
@@ -45,7 +44,7 @@ describe('workspace settings nav', () => {
     expect(shown).toContain('General');
   });
 
-  it('hides Apps and Workflows when the set has none of theirs', () => {
+  it('hides Apps and Workflows when the caller may use none of theirs', () => {
     const none = { agents: 0, apps: 0, workflows: 0, pipelines: 0 };
     const shown = labels(visibleSettingsGroups(resources({ totals: none })));
     expect(shown).not.toContain('Apps');
@@ -66,7 +65,7 @@ describe('workspace settings nav', () => {
     expect(settingsItemShown(settingsItemFor('/workspace/ws-1/settings/workflows')!, down)).toBe(true);
   });
 
-  it('follows the caller flags while the set is unknown', () => {
+  it('follows the caller flags while the resources are unknown', () => {
     const shown = labels(visibleSettingsGroups(null, { apps: false, maps: true }));
     expect(shown).not.toContain('Apps');
     expect(shown).toContain('Maps');
@@ -80,7 +79,7 @@ describe('workspace settings nav', () => {
     expect(settingsItemFor('/workspace/ws-1/chat')).toBeUndefined();
   });
 
-  it('describes a module by what it has in the set', () => {
+  it('describes a module by what the caller may use of it', () => {
     expect(
       describeModuleResources({ module: 'p', agents: 2, apps: 1, workflows: 0, pipelines: 1 })
     ).toBe('2 agents · 1 app · 1 pipeline');

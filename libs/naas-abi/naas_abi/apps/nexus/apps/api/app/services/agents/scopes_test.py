@@ -18,9 +18,21 @@ def processes(monkeypatch):
     monkeypatch.setattr(scopes, "engine_process_scopes", lambda: [EXPORT, DAILY])
 
 
+def _grant_every_process(team, user: str) -> None:
+    team.allow(
+        user,
+        ["module:RunWorkflow", "module:RunPipeline"],
+        ["${scope}:module:workflow/*", "${scope}:module:pipeline/*"],
+        "abi:org-1:ws-1",
+    )
+
+
 @pytest.mark.asyncio
 async def test_a_turn_binds_the_workflows_the_caller_may_run(team) -> None:
-    assert await scopes.usable_process_scopes("member", "ws-1") == frozenset()
+    # No role holds a module scope: an admin with no policy runs none.
+    for user in ("member", "admin"):
+        assert await scopes.usable_process_scopes(user, "ws-1") == frozenset()
+    _grant_every_process(team, "admin")
     assert await scopes.usable_process_scopes("admin", "ws-1") == {
         ("workflow", "acme.reports", "workflow.export"),
         ("pipeline", "acme.reports", "pipeline.daily"),
@@ -33,6 +45,7 @@ async def test_a_turn_binds_the_workflows_the_caller_may_run(team) -> None:
 
 @pytest.mark.asyncio
 async def test_a_turn_without_a_workspace_runs_no_module_workflow(team) -> None:
+    _grant_every_process(team, "admin")
     token = agent_usable_module_scopes.set(None)
     try:
         await bind_usable_processes("admin", None)

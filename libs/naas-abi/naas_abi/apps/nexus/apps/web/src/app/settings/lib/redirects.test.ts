@@ -26,7 +26,7 @@ describe('old table pages', () => {
   });
 
   it('leave the sections, the index and legacy workspace links alone', () => {
-    for (const path of ['/settings', '/settings/tables', '/settings/tables/users', '/settings/system', '/settings/system/jobs', '/settings/roles', '/settings/modules']) {
+    for (const path of ['/settings', '/settings/tables', '/settings/tables/users', '/settings/system', '/settings/system/jobs', '/settings/roles']) {
       expect(platformSettingsRedirect(path)).toBeNull();
     }
     expect(platformSettingsRedirect('/settings/infrastructure')).toBeNull();
@@ -57,6 +57,11 @@ describe('old System links', () => {
     expect(platformSettingsRedirect('/settings/system/access')).toBe('/settings/roles');
   });
 
+  it('send Modules & features, removed with the sets, to Roles & permissions', () => {
+    expect(platformSettingsRedirect('/settings/modules')).toBe('/settings/roles');
+    expect(platformSettingsRedirect('/settings/modules', '?org=acme')).toBe('/settings/roles?org=acme');
+  });
+
   it('send Events to System › Events', () => {
     expect(platformSettingsRedirect('/workspace/ws-1/admin/events')).toBe('/settings/system/events');
     expect(platformSettingsRedirect('/org/acme/workspace/ws-1/admin/events')).toBe(
@@ -72,7 +77,7 @@ describe('old System links', () => {
 
 describe('PLATFORM_SETTINGS_SECTIONS', () => {
   it('is the first segment of each section path', () => {
-    expect(PLATFORM_SETTINGS_SECTIONS).toEqual(['tables', 'system', 'roles', 'modules']);
+    expect(PLATFORM_SETTINGS_SECTIONS).toEqual(['tables', 'system', 'roles']);
   });
 });
 
@@ -82,7 +87,7 @@ describe('isPlatformSettingsPath', () => {
     expect(isPlatformSettingsPath('/settings/tables/users')).toBe(true);
     expect(isPlatformSettingsPath('/settings/system/events')).toBe(true);
     expect(isPlatformSettingsPath('/settings/roles')).toBe(true);
-    expect(isPlatformSettingsPath('/settings/modules')).toBe(true);
+    expect(isPlatformSettingsPath('/settings/modules')).toBe(false);
     expect(isPlatformSettingsPath('/settings/members')).toBe(false);
     expect(isPlatformSettingsPath('/settings/tablesx')).toBe(false);
   });

@@ -48,13 +48,13 @@ def engine_iam():
 @pytest.fixture(autouse=True)
 def workspaces(monkeypatch) -> list[tuple[str, str, str | None]]:
     """The workspace a grant names (access.py checks it in the database):
-    the one asked for, else "ws-first"; "ws-off" enables no app."""
+    the one asked for, else "ws-first"; in "ws-off" IAM lets the user open no app."""
     asked: list[tuple[str, str, str | None]] = []
 
     async def remote_app_workspace(user_id: str, app_id: str, workspace_id: str | None) -> str:
         asked.append((user_id, app_id, workspace_id))
         if workspace_id == "ws-off":
-            raise HTTPException(status_code=403, detail="This app is not enabled in this workspace")
+            raise HTTPException(status_code=403, detail="You may not use this app here")
         return workspace_id or "ws-first"
 
     monkeypatch.setattr(http.access, "remote_app_workspace", remote_app_workspace)

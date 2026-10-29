@@ -180,7 +180,7 @@ export function QuickOpen() {
       .slice(0, 20)
       .map((c) => ({ id: c.id, title: c.title }));
     const listedApps = apps
-      .filter((a) => a.enabled && a.installed && a.url)
+      .filter((a) => a.installed && a.url)
       .map((a) => ({ id: a.app_id, name: a.name }));
     const files = starredItems
       .filter((item) => item.workspaceId === currentWorkspaceId)

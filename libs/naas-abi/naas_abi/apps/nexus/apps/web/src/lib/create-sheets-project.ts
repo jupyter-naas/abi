@@ -62,7 +62,7 @@ function pickSheetsPaneAgentId(): string | null {
 
 /** Open the Sheets pane beside the workbook so the next message can edit it.
  *
- * Binds Nexus Sheets when that agent is enabled in this workspace. Falls
+ * Binds Nexus Sheets when the caller may use that agent in this workspace. Falls
  * back to the workspace default only when Sheets is not on the roster.
  * A new workbook always resets so a leftover picker choice cannot ride in.
  *
@@ -93,7 +93,7 @@ export function openSheetsAgentPane(opts?: {
   if (!defaultId) return;
   const agents = useAgentsStore.getState().agents;
   const currentStillValid = Boolean(
-    ws.paneAgent && agents.some((a) => a.enabled && a.id === ws.paneAgent),
+    ws.paneAgent && agents.some((a) => a.id === ws.paneAgent),
   );
   // An open workbook always binds Sheets. The workspace default has no
   // write_sheets_* tools; keeping an explicit pick burns the step budget

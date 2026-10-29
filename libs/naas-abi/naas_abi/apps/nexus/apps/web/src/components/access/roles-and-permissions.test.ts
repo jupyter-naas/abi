@@ -43,8 +43,6 @@ const PLATFORM_ONLY = [
   'iam:Explain',
   'iam:MapIdpGroup',
   'iam:ListKeys',
-  'iam:GetSet',
-  'iam:PutSet',
   'nexus:ReadSystem',
 ];
 
@@ -139,8 +137,8 @@ describe('Roles & permissions, one UI for every level', () => {
         expect(opensRolesAndPermissions(access), `${caller} at ${level}`).toBe(EXPECTED_ANY(caller, level));
       }
     }
-    // An `iam:` action no section lists (the sets page's) opens nothing.
-    expect(opensRolesAndPermissions({ actions: { 'iam:GetSet': true } })).toBe(false);
+    // An `iam:` action no section lists opens nothing.
+    expect(opensRolesAndPermissions({ actions: { 'iam:Unlisted': true } })).toBe(false);
   });
 
   it('gives a delegated lister the policies to read, and no button to change them', async () => {

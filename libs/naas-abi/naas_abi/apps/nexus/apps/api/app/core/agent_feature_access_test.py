@@ -6,7 +6,6 @@ from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
     caller_feature_flags,
     feature_agent_visible,
     feature_keys_of,
-    feature_office_class_names_for_flags,
     filter_feature_agents,
 )
 
@@ -92,16 +91,11 @@ async def test_the_caller_holds_the_features_iam_grants_their_role(team) -> None
     }
 
 
-def test_feature_office_class_names_follow_flags() -> None:
-    registry = {
-        APPS: object(),
-        ONTOLOGY: object(),
-        "naas_abi.agents.SearchAgent/SearchAgent": object(),
-    }
-    names = feature_office_class_names_for_flags(
-        {"apps": True, "ontology": False, "search": True},
-        registry,
+def test_the_usable_class_names_are_the_listed_agents_within_the_features() -> None:
+    from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
+        caller_usable_class_names,
     )
-    assert APPS in names
-    assert ONTOLOGY not in names
-    assert "naas_abi.agents.SearchAgent/SearchAgent" in names
+
+    rows = [Row("1", AXI), Row("2", APPS), Row("3", ONTOLOGY), Row("4", None)]
+    # No on/off state: every listed agent counts, within the caller's features.
+    assert caller_usable_class_names(rows, {"apps": True}) == frozenset({AXI, APPS})

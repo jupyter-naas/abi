@@ -86,7 +86,7 @@ COMPETENCY_QUESTIONS: dict[str, tuple[CompetencyQuestion, ...]] = {
         _q(
             "What can I do with Apps in Nexus?",
             "capabilities",
-            terms=("enable", "embed", "open"),
+            terms=("embed", "open"),
         ),
         _q(
             "How does Nexus discover which apps exist? Read the code and cite the files.",
@@ -95,10 +95,10 @@ COMPETENCY_QUESTIONS: dict[str, tuple[CompetencyQuestion, ...]] = {
             ("manifest.json",),
         ),
         _q(
-            "List the Nexus apps of this workspace and say which ones are enabled.",
+            "List the Nexus apps I may open in this workspace.",
             "operate",
             ("list_workspace_apps",),
-            ("enabled", "disabled"),
+            ("app",),
         ),
         _q(
             "In Nexus Apps, why would a bundled app get a 401 on /app-html/? Check the code.",
@@ -107,9 +107,9 @@ COMPETENCY_QUESTIONS: dict[str, tuple[CompetencyQuestion, ...]] = {
             ("token",),
         ),
         _q(
-            "Comment activer une app Nexus dans cet espace de travail ? Explique seulement, n'active rien.",
+            "Comment donner accès à une app Nexus dans cet espace de travail ? Explique seulement, ne change rien.",
             "operate",
-            terms=("activ", "enable"),
+            terms=("politique", "policy", "Roles", "rôles"),
         ),
         _q(
             "Can I build my own app in Nexus Apps? How does it work?",
@@ -388,10 +388,10 @@ COMPETENCY_QUESTIONS: dict[str, tuple[CompetencyQuestion, ...]] = {
             terms=("agent", "roster"),
         ),
         _q(
-            "How does a Nexus workspace roster decide which agents are enabled? Read the code and cite the files.",
+            "How does a Nexus workspace decide which agents a user may use? Read the code and cite the files.",
             "implementation",
             SOURCE_TOOLS,
-            ("agents:", "roster"),
+            ("UseAgent", "scope"),
         ),
         _q(
             "Which agents are on this Nexus workspace's roster?",

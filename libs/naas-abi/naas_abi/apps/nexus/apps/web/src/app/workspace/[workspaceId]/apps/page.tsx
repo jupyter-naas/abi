@@ -539,7 +539,7 @@ export default function AppsPage() {
       .then((r) => (r.ok ? r.json() : Promise.reject(r.statusText)))
       .then((data: AppsResponse) => {
         setApps(
-          data.apps.filter((a) => a.installed && a.url && a.enabled).map(toRecord),
+          data.apps.filter((a) => a.installed && a.url).map(toRecord),
         );
       })
       .catch((e) => setError(String(e)))
