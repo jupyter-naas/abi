@@ -12,7 +12,6 @@ import type {
   AuditEntry,
   CatalogsView,
   CreatedKey,
-  GrantableView,
   GroupView,
   KeyCreate,
   KeyView,
@@ -126,14 +125,13 @@ export function createIamAdminApi(fetcher: Fetcher = authFetch) {
     /** The actions the caller may grant at `scope` (within `parent`, for a sub-policy of it). */
     catalogs: (scope?: string, parent?: string | null) =>
       read<CatalogsView>(fetcher, path('catalogs') + query({ scope, parent }), 'Could not load the action catalogs.'),
-    /** What the caller may grant at `scope` (`abi:` for the platform), within `parent`. */
-    grantable: (scope: string, parent?: string | null) =>
-      read<GrantableView>(fetcher, path('grantable') + query({ scope, parent }), 'Could not read what you may grant.'),
-    /** The same by publisher and resource type: the policy builder's groups. */
-    publishers: (scope: string, parent?: string | null) =>
+    /** What the caller may grant at `scope` (`abi:` for the platform) by publisher and resource
+     *  type, within `parent`; `derive` for a new sub-policy of it (IAM refuses the parent as
+     *  creating it would). The policy builder's groups. */
+    publishers: (scope: string, parent?: string | null, options: { derive?: boolean } = {}) =>
       read<PublishersView>(
         fetcher,
-        path('publishers') + query({ scope, parent }),
+        path('publishers') + query({ scope, parent, derive: options.derive ? 'true' : null }),
         'Could not read what you may grant.',
       ),
     /** The existing resources of a type the caller may list at the scope, a page at a time. */

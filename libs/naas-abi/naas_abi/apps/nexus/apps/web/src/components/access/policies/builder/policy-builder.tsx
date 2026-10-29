@@ -173,7 +173,6 @@ function TypeSection({
   choice,
   onChange,
   refused,
-  readOnly,
   delayMs,
 }: {
   api: IamAdminApi;
@@ -184,7 +183,6 @@ function TypeSection({
   choice: Choice;
   onChange: (choice: Choice) => void;
   refused?: string;
-  readOnly: boolean;
   delayMs: number;
 }) {
   const chosen = choice.actions.length + choice.resources.length > 0;
@@ -220,6 +218,8 @@ function TypeSection({
     .map((item) => ({ item, resource: scopedName(item.name, scope) }))
     .filter(({ resource }) => grantableOn(type, resource));
   const listedNames = new Set(items.map(({ resource }) => resource));
+  // A listed resource is shown once: the container itself (`${scope}`) by its name, not twice.
+  const shownPatterns = patterns.filter((p) => !listedNames.has(p));
   const others = choice.resources.filter((r) => !patterns.includes(r) && !listedNames.has(r));
 
   return (
@@ -261,7 +261,6 @@ function TypeSection({
                       type="checkbox"
                       aria-label={`${title}: ${action.name}`}
                       checked={choice.actions.includes(action.action)}
-                      disabled={readOnly}
                       onChange={(e) => toggleAction(action.action, e.target.checked)}
                     />
                     <span>{action.name}</span>
@@ -274,14 +273,13 @@ function TypeSection({
           <div className="access-builder-section">
             <h5 className="access-builder-heading">Resources</h5>
             <ul className="access-builder-items access-builder-items-wide" aria-label={`What you may grant of ${title}`}>
-              {patterns.map((pattern) => (
+              {shownPatterns.map((pattern) => (
                 <li key={pattern} className="access-builder-item">
                   <label className="access-checkbox">
                     <input
                       type="checkbox"
                       aria-label={`${title}: ${pattern}`}
                       checked={choice.resources.includes(pattern)}
-                      disabled={readOnly}
                       onChange={(e) => toggleResource(pattern, e.target.checked)}
                     />
                     <code>{pattern}</code>
@@ -310,7 +308,6 @@ function TypeSection({
                             type="checkbox"
                             aria-label={`${title}: ${item.label}`}
                             checked={choice.resources.includes(resource)}
-                            disabled={readOnly}
                             onChange={(e) => toggleResource(resource, e.target.checked)}
                           />
                           <span>{item.label}</span>
@@ -337,31 +334,27 @@ function TypeSection({
                 {others.map((resource) => (
                   <li key={resource} className="access-policy-value">
                     <code>{resource}</code>
-                    {!readOnly && (
-                      <button
-                        type="button"
-                        className="access-policy-icon-button"
-                        aria-label={`Remove ${resource}`}
-                        onClick={() => toggleResource(resource, false)}
-                      >
-                        <X size={12} />
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      className="access-policy-icon-button"
+                      aria-label={`Remove ${resource}`}
+                      onClick={() => toggleResource(resource, false)}
+                    >
+                      <X size={12} />
+                    </button>
                   </li>
                 ))}
               </ul>
             )}
-            {!readOnly && (
-              <WildcardField
-                api={api}
-                type={type}
-                title={title}
-                actions={choice.actions}
-                validateAt={validateAt}
-                onAdd={(resource) => toggleResource(resource, true)}
-                delayMs={delayMs}
-              />
-            )}
+            <WildcardField
+              api={api}
+              type={type}
+              title={title}
+              actions={choice.actions}
+              validateAt={validateAt}
+              onAdd={(resource) => toggleResource(resource, true)}
+              delayMs={delayMs}
+            />
             {choice.actions.length > 0 && choice.resources.length === 0 && (
               <p className="access-policy-notice" role="status">
                 Pick the resources these actions are on.
@@ -395,7 +388,6 @@ export function PolicyBuilder({
   onChange,
   kept,
   refused = {},
-  readOnly = false,
   delayMs = SEARCH_DELAY_MS,
 }: {
   api: IamAdminApi;
@@ -408,7 +400,6 @@ export function PolicyBuilder({
   onChange: (key: string, choice: Choice) => void;
   kept: number;
   refused?: Record<string, string>;
-  readOnly?: boolean;
   delayMs?: number;
 }) {
   if (publishers.length === 0) {
@@ -448,7 +439,6 @@ export function PolicyBuilder({
                   choice={choices[type.key] ?? { actions: [], resources: [] }}
                   onChange={(choice) => onChange(type.key, choice)}
                   refused={refused[type.key]}
-                  readOnly={readOnly}
                   delayMs={delayMs}
                 />
               ))}

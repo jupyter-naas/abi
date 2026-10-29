@@ -21,7 +21,8 @@ import {
 } from './policy-editor-model';
 
 const LISTING_DELAY_MS = 250;
-import { globMatches, scopedName } from './builder/builder-model';
+import { encodeSegment } from '../access-scope';
+import { grantableOn, scopedName } from './builder/builder-model';
 import { SuggestInput } from './suggest-input';
 
 /** A list of patterns (actions or resources) with a field that suggests the next one; with
@@ -147,20 +148,24 @@ export function StatementEditor({
       // Only a type the caller may grant something of, and that is listed.
       if (!type?.listed) return null;
       const page = await api.resources({ scope, service: step.service, type: step.type, module: step.module, q: step.text });
+      // What was typed before the id: a listed resource is suggested only when it is named
+      // there (the same container, written the same way), and when the caller may grant it.
+      const typed = text.trim();
+      const base = typed.slice(0, typed.length - step.text.length);
       return {
         service: step.service,
         type: step.type,
         module: step.module,
-        // Only what the caller may grant of the type (within a sub-policy's parent).
-        ids: page.items
-          .filter((item) => {
-            const resource = scopedName(item.name, scope);
-            return type.actions.some((a) => a.resources.some((pattern) => globMatches(pattern, resource)));
-          })
-          .map((item) => ({
-          id: step.module ? item.id.slice(item.id.indexOf('/') + 1) : item.id,
-          detail: item.description ? `${item.label}: ${item.description}` : item.label,
-        })),
+        ids: page.items.flatMap((item) => {
+          const id = step.module ? item.id.slice(item.id.indexOf('/') + 1) : item.id;
+          const scoped = scopedName(item.name, scope);
+          // An id as a name writes it: one segment, or a path of segments.
+          const written = [encodeSegment(id), id.split('/').map(encodeSegment).join('/')].find(
+            (form) => base + form === scoped || base + form === item.name,
+          );
+          if (written === undefined || !grantableOn(type, scoped)) return [];
+          return [{ id: written, detail: item.description ? `${item.label}: ${item.description}` : item.label }];
+        }),
       };
     };
   }, [api, scope, publishers]);

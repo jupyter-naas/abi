@@ -146,7 +146,7 @@ describe('PoliciesView at a workspace', () => {
   it('offers by publisher: the engine, naas_abi, then the modules', async () => {
     const api = await open(() => true, listed, wsScope);
     await newPolicy('Anything');
-    expect(api.publishers).toHaveBeenCalledWith(WS, null);
+    expect(api.publishers).toHaveBeenCalledWith(WS, null, { derive: false });
     const publishers = [...document.querySelectorAll('[data-builder-publisher]')].map((e) => e.getAttribute('data-builder-publisher'));
     expect(publishers).toEqual(['engine', 'naas_abi', 'acme.market', 'acme.people']);
     const naasAbi = document.querySelector('[data-builder-publisher="naas_abi"]');
@@ -155,6 +155,24 @@ describe('PoliciesView at a workspace', () => {
       'nexus:workspace',
       'nexus:feature',
     ]);
+  });
+
+  it('lists the workspace itself at the workspace, once', async () => {
+    const resources = vi.fn((query: ResourceQuery) =>
+      Promise.resolve(
+        query.type === 'workspace'
+          ? { ...resourcePage('nexus', 'workspace', []), items: [{ name: WS, id: 'ws-1', label: 'Alpha', description: '' }] }
+          : listing(query),
+      ),
+    );
+    await open(() => true, { ...listed, resources }, wsScope);
+    await newPolicy('Alpha readers');
+    await expand('Workspaces');
+    const boxes = [...document.querySelectorAll('[data-builder-type="nexus:workspace"] input[type="checkbox"]')].map((e) =>
+      e.getAttribute('aria-label'),
+    );
+    expect(boxes).toEqual(['Workspaces: GetWorkspace', 'Workspaces: Alpha']);
+    expect(document.querySelector('[data-builder-resource="${scope}"]')).not.toBeNull();
   });
 
   it('builds a policy of a type’s actions and resources picked from the listing, owned by the workspace', async () => {
@@ -375,7 +393,8 @@ describe('PoliciesView sub-policies', () => {
     parent.dispatchEvent(new Event('change', { bubbles: true }));
     await mounted!.flush();
 
-    expect(publishers).toHaveBeenLastCalledWith(WS, 'pol_o');
+    // A new sub-policy: IAM judges the parent as creating it would.
+    expect(publishers).toHaveBeenLastCalledWith(WS, 'pol_o', { derive: true });
     const offered = [...document.querySelectorAll('[data-builder-publisher]')].map((e) => e.getAttribute('data-builder-publisher'));
     expect(offered).toEqual(['naas_abi', 'acme.people']);
     await mounted!.click(field('Open acme.people Agents'));
@@ -391,10 +410,11 @@ describe('PoliciesView sub-policies', () => {
     );
   });
 
-  it('shows IAM’s refusal of a parent the caller may not derive from', async () => {
+  it('shows IAM’s refusal of a parent the caller may read but not derive from', async () => {
+    // A W admin who is not an O admin reads "O access" (listed here), and may not derive from it.
     const refusal = `You derive only from a policy attached to you or to one of your groups at ${WS} or above: pol_o is not`;
-    const refusing = vi.fn((_scope: string, parent?: string | null) =>
-      parent ? Promise.reject(new IamAdminError(refusal, 403)) : Promise.resolve(adminPublishers),
+    const refusing = vi.fn((_scope: string, parent?: string | null, options?: { derive?: boolean }) =>
+      parent && options?.derive ? Promise.reject(new IamAdminError(refusal, 403)) : Promise.resolve(adminPublishers),
     );
     await open(() => true, { ...listed, publishers: refusing }, wsScope);
     await mounted!.click(button('New policy') ?? null);
@@ -410,6 +430,64 @@ describe('PoliciesView sub-policies', () => {
     expect(button('Create policy')?.disabled).toBe(true);
   });
 
+  it('does not take a failure for a refusal: it offers to retry and lets IAM judge the save', async () => {
+    let fail = true;
+    const flaky = vi.fn((_scope: string, parent?: string | null) =>
+      parent && fail ? Promise.reject(new IamAdminError('IAM is not available on this server.', 503)) : Promise.resolve(withinO),
+    );
+    await open(() => true, { ...listed, publishers: flaky }, wsScope);
+    await mounted!.click(button('New policy') ?? null);
+    await mounted!.flush();
+    await mounted!.type(field('Policy name'), 'Mine');
+    const parent = field('Sub-policy of') as HTMLSelectElement;
+    parent.value = 'pol_o';
+    parent.dispatchEvent(new Event('change', { bubbles: true }));
+    await mounted!.flush();
+    // No builder: the statement editor ("Visual") is open.
+    expect(document.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe('Visual');
+    await mounted!.click(button('Add statement') ?? null);
+    await mounted!.type(field('Add to actions of statement 1'), 'nexus:UseFeature');
+    await mounted!.click(document.querySelector('[role="option"] button') ?? button('Add statement') ?? null);
+    await validated();
+
+    expect(document.querySelector('[data-grantable-failure]')?.textContent).toContain('IAM is not available');
+    expect(document.querySelector('[data-parent-verdict]')?.getAttribute('role')).toBe('status');
+    expect(button('Create policy')?.disabled).toBe(false);
+    fail = false;
+    await mounted!.click(button('Retry') ?? null);
+    await mounted!.flush();
+    expect(document.querySelector('[data-grantable-failure]')).toBeNull();
+    // The builder is back, within the parent.
+    expect([...document.querySelectorAll('[role="tab"]')].map((t) => t.textContent)).toContain('Builder');
+    expect(flaky).toHaveBeenLastCalledWith(WS, 'pol_o', { derive: true });
+  });
+
+  it('shows the builder loading, never an empty text view, while a new parent is read', async () => {
+    let arrive: (view: PublishersView) => void = () => undefined;
+    const slow = vi.fn((_scope: string, parent?: string | null) =>
+      parent ? new Promise<PublishersView>((resolve) => (arrive = resolve)) : Promise.resolve(adminPublishers),
+    );
+    await open(() => true, { ...listed, publishers: slow }, wsScope);
+    await mounted!.click(button('New policy') ?? null);
+    await mounted!.flush();
+    // Agents chosen, no agent yet: an unfinished choice.
+    await mounted!.click(field('Open acme.people Agents'));
+    await validated();
+    await mounted!.click(field('acme.people Agents: UseAgent'));
+    const parent = field('Sub-policy of') as HTMLSelectElement;
+    parent.value = 'pol_o';
+    parent.dispatchEvent(new Event('change', { bubbles: true }));
+    await mounted!.flush();
+
+    expect(document.querySelector('[data-builder-loading]')).not.toBeNull();
+    expect(field('Policy document')).toBeNull();
+    arrive(withinO);
+    await mounted!.flush();
+    expect(document.querySelector('[data-builder-loading]')).toBeNull();
+    // Still offered within the parent: kept.
+    expect((field('acme.people Agents: UseAgent') as HTMLInputElement).checked).toBe(true);
+  });
+
   it('opens a sub-policy within its parent, and names its parent and sub-policies', async () => {
     const getPolicy = vi.fn((id: string) =>
       Promise.resolve(
@@ -421,7 +499,8 @@ describe('PoliciesView sub-policies', () => {
     await open(() => true, { ...listed, publishers, getPolicy }, wsScope);
     await mounted!.click(document.querySelector('[data-policy="pol_w"] button'));
     await mounted!.flush();
-    expect(publishers).toHaveBeenLastCalledWith(WS, 'pol_o');
+    // An existing one is edited within its parent: reading it is enough.
+    expect(publishers).toHaveBeenLastCalledWith(WS, 'pol_o', { derive: false });
     expect(field('Parent policy')?.textContent).toContain('Sub-policy of O access');
 
     await mounted!.click([...document.querySelectorAll('[aria-label="Parent policy"] button')][0]);
@@ -470,7 +549,7 @@ describe('PoliciesView, no leak', () => {
     await validated();
     expect([...document.querySelectorAll('[data-builder-type="module:agent@acme.people"] input[type="checkbox"]')].map((e) => e.getAttribute('aria-label'))).toEqual([
       'acme.people Agents: UseAgent',
-      'acme.people Agents: ${scope}/module:agent/acme.people/A',
+      // The one pattern they may grant is agent A, listed: shown once.
       'acme.people Agents: A',
     ]);
 

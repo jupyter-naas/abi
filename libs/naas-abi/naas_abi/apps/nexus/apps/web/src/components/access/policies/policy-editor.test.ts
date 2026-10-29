@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { IamAdminError } from '@/lib/iam-admin/api';
-import type { PolicyDocument, PolicyValidation } from '@/lib/iam-admin/types';
+import type { PolicyDocument, PolicyValidation, PublishersView } from '@/lib/iam-admin/types';
 import { mount, type Mounted } from '@/lib/testing/mount';
-import { WS, catalogsView, fakeApi, managedPolicy, publishersOf, readerPolicy } from '../access-fixtures';
+import { WS, catalogsView, fakeApi, managedPolicy, publishedType, publishersOf, readerPolicy, resourcePage, wsScope } from '../access-fixtures';
 import { PolicyEditor } from './policy-editor';
 
 let mounted: Mounted | null = null;
@@ -296,5 +296,64 @@ describe('PolicyEditor read-only', () => {
     expect(field('Remove statement 1')).toBeNull();
     expect(document.querySelector('[aria-label="Actions of statement 1"]')?.textContent).toContain('triple_store:Query');
     expect(validatePolicy).not.toHaveBeenCalled();
+  });
+});
+
+describe('PolicyEditor Statements view listing', () => {
+  /** Graphs listed at ws-1; the caller may grant Query on every graph but `secret`. */
+  const graphs: PublishersView = {
+    scope: WS,
+    publishers: [
+      {
+        id: 'engine',
+        kind: 'engine',
+        types: [
+          {
+            ...publishedType('triple_store', 'graph', [['triple_store:Query', ['${scope}/triple_store:graph/*']]]),
+            actions: [
+              {
+                action: 'triple_store:Query',
+                name: 'Query',
+                level: 'read',
+                description: '',
+                resources: ['${scope}/triple_store:graph/*'],
+                excluded: ['${scope}/triple_store:graph/secret'],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const resources = vi.fn(() => Promise.resolve(resourcePage('triple_store', 'graph', [['sales', 'Sales'], ['secret', 'Secret']])));
+
+  async function typed(text: string) {
+    await open({ api: api({ publishers: vi.fn().mockResolvedValue(graphs), resources }), scope: wsScope });
+    await mounted!.click(button('Add statement') ?? null);
+    await mounted!.type(field('Add to actions of statement 1'), 'triple_store:Query');
+    await mounted!.click(document.querySelector('[role="option"] button'));
+    await mounted!.type(field('Add to resources of statement 1'), text);
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await mounted!.flush();
+  }
+
+  it('suggests what the listing finds that the caller may grant, never what their Deny takes back', async () => {
+    await typed('${scope}/triple_store:graph/');
+    expect(suggestions()).toContain('${scope}/triple_store:graph/sales');
+    expect(suggestions()).not.toContain('${scope}/triple_store:graph/secret');
+  });
+
+  it('suggests a listed id only where it is named, not under any base typed', async () => {
+    await typed('abi:triple_store:graph/');
+    expect(suggestions().filter((s) => s?.endsWith('/sales'))).toEqual([]);
+    await mounted!.unmount();
+    mounted = null;
+    await typed(`\${scope}/nexus:workspace/other/triple_store:graph/`);
+    expect(suggestions().filter((s) => s?.endsWith('/sales'))).toEqual([]);
+    await mounted!.unmount();
+    mounted = null;
+    // Named in the scope's container, written absolutely: suggested.
+    await typed(`${WS}/triple_store:graph/`);
+    expect(suggestions()).toContain(`${WS}/triple_store:graph/sales`);
   });
 });

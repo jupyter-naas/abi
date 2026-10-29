@@ -306,19 +306,6 @@ export type ManifestView = {
 export type ManifestApprove = { document?: PolicyDocument };
 export type ManifestReject = { reason: string };
 
-// -- what the caller may grant ------------------------------------------------------------
-
-/** One action the caller holds at a scope, and on which resources (`${scope}/...`);
- *  `excluded` are Deny patterns that take back part of them. */
-export type GrantableAction = { action: string; resources: string[]; excluded: string[] };
-
-/** `GET /api/iam/admin/grantable?scope=`: per catalog (a kernel service, `nexus`, `module` or a
- *  module's own service), what the caller may grant there. */
-export type GrantableView = {
-  scope: string;
-  catalogs: { service: string; publisher?: string | null; actions: GrantableAction[] }[];
-};
-
 // -- the access simulator ---------------------------------------------------------------
 
 export type SimulationRequest = { principal_id: string; action: string; resource: string };

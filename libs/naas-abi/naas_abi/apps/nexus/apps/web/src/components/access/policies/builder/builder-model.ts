@@ -134,7 +134,7 @@ export function belongsTo(type: BuilderType, resource: string): boolean {
 
 /** Whether the caller may grant something of ``type`` on ``resource`` (written at the scope):
  *  a listed resource is offered only then, so a sub-policy lists only what its parent has. */
-export function grantableOn(type: BuilderType, resource: string): boolean {
+export function grantableOn(type: Pick<BuilderType, 'actions'>, resource: string): boolean {
   return type.actions.some(
     (a) => a.resources.some((p) => globMatches(p, resource)) && !a.excluded.some((d) => globMatches(d, resource)),
   );

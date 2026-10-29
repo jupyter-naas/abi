@@ -7,8 +7,10 @@ import type { PolicyRef, PolicySource, PolicyStatement, PolicyView, Publisher } 
 import { PLATFORM_ACCESS_SCOPE, ownerOf, type AccessScope } from '../access-scope';
 import { ROLE_LABELS, roleOfPolicy } from '../roles/role-change';
 import {
+  allTypes,
   builderPublishers,
   builderStatements,
+  grantableOn,
   refusedTypes,
   splitStatements,
   type BuilderPublisher,
@@ -36,7 +38,12 @@ type SaveError = { message: string; errors: string[]; conflict: boolean; refused
 type Grantable =
   | { state: 'loading' }
   | { state: 'ready'; publishers: Publisher[]; builder: BuilderPublisher[] }
-  | { state: 'failed'; message: string };
+  /** ``refused``: IAM's verdict on the parent (not derivable, not its owner's, too deep, not
+   *  found); else a failure to retry, which does not block a save IAM judges anyway. */
+  | { state: 'failed'; message: string; refused: boolean };
+
+/** The statuses that are IAM's refusal of a parent: denied, not found, or invalid there. */
+const REFUSALS = new Set([403, 404, 422]);
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -105,6 +112,8 @@ export function PolicyEditor({
   const [grantable, setGrantable] = useState<Grantable>({ state: 'loading' });
   const [choices, setChoices] = useState<Choices>({});
   const [kept, setKept] = useState<PolicyStatement[]>([]);
+  // Bumped by Retry: what may be granted is read again.
+  const [attempt, setAttempt] = useState(0);
   const owner = scope.value ?? undefined;
   const parentId = policy ? parent?.id ?? null : newParent || null;
 
@@ -117,16 +126,23 @@ export function PolicyEditor({
     if (readOnly) return;
     let cancelled = false;
     setGrantable({ state: 'loading' });
+    // A new sub-policy asks IAM's verdict on its parent as creating it would: derive, owner, depth.
     api
-      .publishers(ownerOf(scope), parentId)
+      .publishers(ownerOf(scope), parentId, { derive: !policy && !!parentId })
       .then((view) => {
         if (!cancelled) setGrantable({ state: 'ready', publishers: view.publishers, builder: builderPublishers(view) });
       })
-      .catch((error) => !cancelled && setGrantable({ state: 'failed', message: message(error) }));
+      .catch((error) => {
+        if (cancelled) return;
+        const refused = !!parentId && error instanceof IamAdminError && REFUSALS.has(error.status);
+        setGrantable({ state: 'failed', message: message(error), refused });
+      });
     return () => {
       cancelled = true;
     };
-  }, [api, scope, parentId, readOnly]);
+    // An existing policy's parent is read once with it; the policy itself does not change here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, scope, parentId, readOnly, attempt]);
 
   // A policy read one by one names its parent and its sub-policies.
   useEffect(() => {
@@ -145,10 +161,20 @@ export function PolicyEditor({
     };
   }, [api, policy]);
 
-  /** The document read into the builder's choices, what it cannot show kept as statements. */
-  const intoBuilder = (from: PolicyStatement[], offered: BuilderPublisher[]) => {
+  /** The document read into the builder's choices, what it cannot show kept as statements.
+   *  With ``unfinished`` (the choices before a reload), a type's actions or resources picked
+   *  without the other stay, as far as the type is still offered. */
+  const intoBuilder = (from: PolicyStatement[], offered: BuilderPublisher[], unfinished: Choices = {}) => {
     const split = splitStatements(offered, from);
-    setChoices(split.choices);
+    const next = { ...split.choices };
+    for (const type of allTypes(offered)) {
+      const before = unfinished[type.key];
+      if (!before || next[type.key] || (before.actions.length > 0 && before.resources.length > 0)) continue;
+      const actions = before.actions.filter((a) => type.actions.some((offeredAction) => offeredAction.action === a));
+      const resources = before.resources.filter((r) => grantableOn(type, r));
+      if (actions.length || resources.length) next[type.key] = { actions, resources };
+    }
+    setChoices(next);
     setKept(split.rest);
     return split;
   };
@@ -161,7 +187,7 @@ export function PolicyEditor({
       if (grantable.state === 'failed' && mode === 'builder') setMode('visual');
       return;
     }
-    const split = intoBuilder(doc.statements, builder);
+    const split = intoBuilder(doc.statements, builder, choices);
     if (!picked && mode !== 'text' && (policy ? split.rest.length === 0 : statements.length === 0 || split.rest.length === 0)) {
       setMode('builder');
     }
@@ -172,7 +198,7 @@ export function PolicyEditor({
   const source: PolicySource = mode === 'text' ? { text } : { document: doc };
   const validation = usePolicyValidation(api, readOnly ? null : source, validationDelayMs, owner);
   const verdict = validation.result;
-  const parentRefused = !policy && !!newParent && grantable.state === 'failed';
+  const parentRefused = !policy && !!newParent && grantable.state === 'failed' && grantable.refused;
   const canSave =
     !readOnly &&
     !saving &&
@@ -419,9 +445,11 @@ export function PolicyEditor({
       </div>
       {newParent && !policy && (
         <p className={parentRefused ? 'access-policy-error' : 'access-policy-muted'} role={parentRefused ? 'alert' : 'status'} data-parent-verdict="">
-          {grantable.state === 'failed'
+          {parentRefused
             ? grantable.message
-            : 'The builder offers only what the parent allows and you may grant.'}
+            : grantable.state === 'loading'
+              ? 'Asking IAM about this parent…'
+              : 'The builder offers only what the parent allows and you may grant.'}
         </p>
       )}
 
@@ -431,7 +459,12 @@ export function PolicyEditor({
         {tab('text', 'YAML / JSON', showText)}
       </div>
 
-      {mode === 'builder' && builder ? (
+      {mode === 'builder' && !builder ? (
+        // While what may be granted is read again (a new parent): nothing to edit yet.
+        <p className="access-policy-muted" role="status" data-builder-loading="">
+          Loading what you may grant…
+        </p>
+      ) : mode === 'builder' && builder ? (
         <PolicyBuilder
           api={api}
           scope={ownerOf(scope)}
@@ -441,7 +474,6 @@ export function PolicyEditor({
           onChange={change}
           kept={kept.length}
           refused={refused}
-          readOnly={readOnly}
           delayMs={validationDelayMs}
         />
       ) : mode === 'visual' ? (
@@ -463,8 +495,11 @@ export function PolicyEditor({
         </p>
       )}
       {!readOnly && grantable.state === 'failed' && !parentRefused && (
-        <p className="access-policy-notice" role="status">
-          No builder or suggestions: {grantable.message}
+        <p className="access-policy-notice" role="status" data-grantable-failure="">
+          No builder or suggestions: {grantable.message}{' '}
+          <button type="button" className="access-policy-button" onClick={() => setAttempt((n) => n + 1)}>
+            Retry
+          </button>
         </p>
       )}
 
