@@ -209,3 +209,56 @@ def test_grantable_names_each_catalog_s_publisher_and_types(listed):
     assert by_service["triple_store"]["publisher"] == "engine"
     query = next(a for a in by_service["triple_store"]["actions"] if a["action"] == "triple_store:Query")
     assert query["resource_types"] == ["graph"]
+
+
+def test_within_a_parent_only_what_it_has_is_offered(listed):
+    """A sub-policy of "O access" offers only what it allows: P's agents and chat,
+    none of the data rights the admin holds besides; a parent the caller may not
+    derive from is refused."""
+    with as_service_account("engine"):
+        o_access = listed.nexus.iam.create_policy(
+            "O access",
+            {
+                "version": "2026-10-13",
+                "statements": [
+                    {
+                        "effect": "Allow",
+                        "actions": ["module:UseAgent"],
+                        "resources": ["${scope}/module:agent/p/*"],
+                    },
+                    {
+                        "effect": "Allow",
+                        "actions": ["nexus:UseFeature"],
+                        "resources": ["${scope}/nexus:feature/chat"],
+                    },
+                ],
+            },
+        )
+        listed.nexus.iam.attach_policy(o_access.id, listed.nexus.principal("admin"), WS1)
+    at = quote(WS1, safe="")
+    alone = get(listed, f"/publishers?scope={at}", "admin").json()
+    assert [p["id"] for p in alone["publishers"]] == ["engine", "naas_abi", "p"]
+
+    within = get(listed, f"/publishers?scope={at}&parent={o_access.id}", "admin")
+    assert within.status_code == 200, within.text
+    by_id = {p["id"]: p for p in within.json()["publishers"]}
+    assert list(by_id) == ["naas_abi", "p"]
+    assert [
+        (t["type"], [(a["action"], a["resources"]) for a in t["actions"]])
+        for t in by_id["naas_abi"]["types"]
+    ] == [("feature", [("nexus:UseFeature", ["${scope}/nexus:feature/chat"])])]
+    assert [a["resources"] for a in by_id["p"]["types"][0]["actions"]] == [
+        ["${scope}/module:agent/p/*"]
+    ]
+    catalogs = get(listed, f"/catalogs?scope={at}&parent={o_access.id}", "admin").json()
+    assert {a["qualified"] for c in catalogs["catalogs"] for a in c["actions"]} == {
+        "module:UseAgent",
+        "nexus:UseFeature",
+    }
+    grantable = get(listed, f"/grantable?scope={at}&parent={o_access.id}", "admin").json()
+    assert {c["service"] for c in grantable["catalogs"]} == {"module", "nexus"}
+
+    listed.nexus.grant("wsadmin", "admin", WS1)
+    refused = get(listed, f"/publishers?scope={at}&parent={o_access.id}", "wsadmin")
+    assert refused.status_code == 403
+    assert o_access.id in refused.json()["detail"]

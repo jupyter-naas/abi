@@ -1464,6 +1464,18 @@ the part of it under the scope, as stored when none can be told). It may say les
 caller reaches there, never more, and it stops listing past `grants.CALL_BUDGET`. Like `explain` of oneself it is about the caller only, so it needs no `iam:*`
 action, and a module's connection may always ask (`broker.IAM_ALWAYS`).
 
+`iam.grantable(scope, parent=<policy>)` (`GrantableRequest.parent`) is what a sub-policy of
+`parent` owned at `scope` may grant: the same, within the parent's chain (`Holdings.grantable(
+parents=)`): per policy of the chain, its Allows naming the action, restricted to the scope,
+met with what the caller holds (`grants._meet`: the patterns of either side the other embeds,
+so it may say less than the chain lets through, never more; a pattern naming a variable other
+than `${scope}` is left out). It answers only for a parent the caller may derive from at
+`scope` (`_require_derivable`, whose refusal it keeps) or may read (`iam:GetPolicy`, so whoever
+edits an existing sub-policy sees what it may hold): what a parent allows is said to no one
+else. A parent that does not exist is not found, as one the caller may not read; a chain that
+cannot be read whole is `IAMConflictError`. It is what the policy builder offers a sub-policy;
+`create_policy` and `update_policy` still decide (`_require_held` with the chain).
+
 **Writes made for no user.** A first-party account (`engine`, `api`) writing for no user is
 not checked: each such write sits behind a route or a boot step that authorized what it
 stands for. They are:
@@ -1498,6 +1510,7 @@ iam.authorize(action, resource)  # Decision
 iam.allows_every(action, "triple_store", "graph")  # a safe shortcut: False when unsure
 iam.explain(action, resource, principal_id=...)  # needs iam:Explain on the principal
 iam.grantable(scope)  # what the caller may grant there (needs no permission)
+iam.grantable(scope, parent=policy_id)  # ... in a sub-policy of policy_id
 iam.list_resources(
     "triple_store", "graph", scope=container, text="sales", cursor=None
 )  # ResourcePage: what the caller may list there (needs no permission)

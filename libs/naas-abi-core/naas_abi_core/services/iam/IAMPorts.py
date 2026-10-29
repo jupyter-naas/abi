@@ -1112,10 +1112,15 @@ class IIAMService(ABC):
     ) -> Explanation: ...
 
     @abstractmethod
-    def grantable(self, scope: str) -> list[GrantableCatalog]:
+    def grantable(
+        self, scope: str, *, parent: str | None = None
+    ) -> list[GrantableCatalog]:
         """What the caller may grant at ``scope``: per catalog, the actions they
-        hold there and the resource patterns (``${scope}:…``) they hold them on,
-        minus their Denies. About the caller only, so it needs no permission."""
+        hold there and the resource patterns (``${scope}/…``) they hold them on,
+        minus their Denies. About the caller only, so it needs no permission.
+        With ``parent``, what a sub-policy of it owned at ``scope`` may grant:
+        that, within the parent's chain. ``PermissionDeniedError`` unless the
+        caller may derive from ``parent`` there, or read it."""
 
     @abstractmethod
     def list_resources(

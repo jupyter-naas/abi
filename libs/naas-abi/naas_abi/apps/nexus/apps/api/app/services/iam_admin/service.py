@@ -229,14 +229,16 @@ class IamAdminService:
         actions["nexus:ReadSystem"] = reads_system
         return {"actions": actions}
 
-    async def grantable(self, user: Any, scope: str) -> dict[str, Any]:
+    async def grantable(self, user: Any, scope: str, parent: str | None = None) -> dict[str, Any]:
         """What the caller may grant at ``scope``, for the policy builder: per catalog
         (a kernel service or a module), its publisher, the actions they hold there,
         the types each acts on and the resource patterns (``${scope}/...``) they
         hold them on, minus their Denies. IAM's ``grantable``, about the caller
         only, like ``access``: IAM validates the scope. ``publishers`` groups the
-        same by publisher and type."""
-        found = await self._read(user, lambda session: session.grantable(scope))
+        same by publisher and type. With ``parent``, what a sub-policy of it may
+        grant there: within its chain (IAM refuses a parent the caller may not
+        derive from or read)."""
+        found = await self._read(user, lambda session: session.grantable(scope, parent=parent))
         registry = self._gateway.catalogs()
         return {
             "scope": scope,
@@ -259,18 +261,18 @@ class IamAdminService:
         except PermissionDeniedError:
             return False
 
-    async def publishers(self, user: Any, scope: str) -> dict[str, Any]:
+    async def publishers(self, user: Any, scope: str, parent: str | None = None) -> dict[str, Any]:
         """Each publisher (the engine, naas_abi, then the modules), its resource
         types, their actions and what the caller may grant of each at ``scope``,
         and whether a type's resources are listed (``GET /resources``). Only what
         the caller may grant: a type, or a publisher, with nothing of it is left
-        out. About the caller, like ``grantable``."""
+        out. About the caller, like ``grantable``, and within ``parent`` as it is."""
         modules = await self._modules()
 
         def read(session: IIAMService) -> dict[str, Any]:
             found = by_publisher(
                 self._gateway.catalogs().all(),
-                session.grantable(scope),
+                session.grantable(scope, parent=parent),
                 modules=modules,
                 listable=self._gateway.listable,
             )
@@ -321,11 +323,13 @@ class IamAdminService:
 
     # -- catalogs and validation ------------------------------------------------------
 
-    async def catalogs(self, user: Any, scope: str | None = None) -> dict[str, Any]:
+    async def catalogs(
+        self, user: Any, scope: str | None = None, parent: str | None = None
+    ) -> dict[str, Any]:
         """The action catalogs a policy names, for the editor's autocomplete:
         only the actions the caller may grant at ``scope`` (the platform by
-        default) and the types they name. For whoever may write policies or read
-        them (at ``scope``'s level)."""
+        default), within ``parent`` for a sub-policy of it, and the types they
+        name. For whoever may write policies or read them (at ``scope``'s level)."""
         owner = _owner_of(scope)
 
         def read(session: IIAMService) -> dict[str, Any]:
@@ -337,7 +341,8 @@ class IamAdminService:
             # Only what the caller may grant there: nothing lists more to
             # someone who may grant less.
             return views.catalogs_view(
-                self._gateway.catalogs().all(), granted=session.grantable(owner)
+                self._gateway.catalogs().all(),
+                granted=session.grantable(owner, parent=parent),
             )
 
         return await self._read(user, read)

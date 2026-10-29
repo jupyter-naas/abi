@@ -914,7 +914,9 @@ class IAMService(IIAMService, PolicySource):
         try:
             return self.remote_listers.lists(catalog.module, service, type)
         except Exception as exc:  # noqa: BLE001 - unsure: offered as wildcards
-            logger.warning(f"Listing {service}:{type}: cannot ask module {catalog.module}: {exc}")
+            logger.warning(
+                f"Listing {service}:{type}: cannot ask module {catalog.module}: {exc}"
+            )
             return False
 
     def list_resources(
@@ -986,7 +988,11 @@ class IAMService(IIAMService, PolicySource):
             return listing.FunctionLister(
                 lambda query: self._singleton(catalog.service, declared, query)
             )
-        if catalog.module and self.remote_listers is not None and not declared.container:
+        if (
+            catalog.module
+            and self.remote_listers is not None
+            and not declared.container
+        ):
             try:
                 return self.remote_listers.lister(
                     catalog.module, catalog.service, declared.name
@@ -2408,13 +2414,47 @@ class IAMService(IIAMService, PolicySource):
     # Grant only what you hold (AGENTS.md, "Grant only what you hold")
     # =========================================================================
 
-    def grantable(self, scope: str) -> list[GrantableCatalog]:
+    def grantable(
+        self, scope: str, *, parent: str | None = None
+    ) -> list[GrantableCatalog]:
         """What the caller may grant at ``scope``: per catalog, the actions they
         hold there and the resource patterns they hold them on, minus their
         Denies. About the caller only, like ``explain`` of oneself, it needs no
-        ``iam:*`` action."""
+        ``iam:*`` action. With ``parent``, what a sub-policy of it owned at
+        ``scope`` may grant: within the parent's chain (``_grantable_chain``)."""
         validate_scope(scope)
-        return self._holdings(current_call_context(), scope).grantable(scope)
+        holdings = self._holdings(current_call_context(), scope)
+        if not parent:
+            return holdings.grantable(scope)
+        return holdings.grantable(scope, parents=self._grantable_chain(parent, scope))
+
+    def _grantable_chain(
+        self, parent_id: str, scope: str
+    ) -> list[tuple[Statement, ...]]:
+        """The statements of the chain a sub-policy of ``parent_id`` owned at
+        ``scope`` would have, nearest first. Only of a parent the caller may
+        derive from there (``_require_derivable``, whose refusal is kept) or may
+        read (``iam:GetPolicy``): what it allows is not said to anyone else. One
+        that does not exist is not found, as one the caller may not read."""
+        owner = as_container(container_of_scope(scope))
+        parent = self._load_policy(parent_id)
+        if parent is None:
+            self._require_policy("iam:GetPolicy", parent_id)
+            raise IAMNotFoundError(f"Policy {parent_id} not found")
+        try:
+            self._require_derivable(parent, owner)
+        except PermissionDeniedError as refused:
+            try:
+                self._require_policy("iam:GetPolicy", parent.id)
+            except (PermissionDeniedError, IAMNotFoundError):
+                raise refused from None
+        above, whole = self._chain(parent, fresh=True)
+        if not whole:
+            raise IAMConflictError(
+                f"The chain of parents of {parent.id} cannot be read whole (a "
+                f"parent missing, a cycle or deeper than {MAX_DEPTH} policies)"
+            )
+        return [p.document.statements for p in (parent, *above)]
 
     def _require_held(
         self,

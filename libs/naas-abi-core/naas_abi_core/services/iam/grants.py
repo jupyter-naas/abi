@@ -330,7 +330,9 @@ def universe(
         if parents
         else None
     )
-    return Universe(final=f"{service}:{resource_type}/", containers=ordered, after=after)
+    return Universe(
+        final=f"{service}:{resource_type}/", containers=ordered, after=after
+    )
 
 
 EVERYTHING = Universe(tokens=((_RUN, ""),))
@@ -922,11 +924,15 @@ class Holdings:
 
     # -- what may be granted -------------------------------------------------------
 
-    def grantable(self, scope: str) -> list[GrantableCatalog]:
+    def grantable(
+        self, scope: str, *, parents: Sequence[Sequence[Statement]] = ()
+    ) -> list[GrantableCatalog]:
         """For each catalog, the actions held at ``scope`` and the resource
         patterns they are held on there, written ``${scope}/...`` (or
         ``${scope}``, the container itself), minus what a Deny takes back (whole
-        patterns dropped, partial ones in ``excluded``). Below a container, at it."""
+        patterns dropped, partial ones in ``excluded``). Below a container, at it.
+        With ``parents`` (a sub-policy's chain, each policy's statements, nearest
+        first), only what an Allow of each also names (``_within_parents``)."""
         scope = container_of_scope(validate_scope(scope))
         found: list[GrantableCatalog] = []
         with budget():
@@ -935,7 +941,9 @@ class Holdings:
                 exhausted = False
                 for spec in catalog.actions:
                     try:
-                        held = self._held_at(catalog.qualified(spec.name), scope)
+                        held = self._held_at(
+                            catalog.qualified(spec.name), scope, parents
+                        )
                     except Exhausted:
                         exhausted = True
                         break
@@ -947,7 +955,12 @@ class Holdings:
                     break
         return found
 
-    def _held_at(self, action: str, scope: str) -> GrantableAction | None:
+    def _held_at(
+        self,
+        action: str,
+        scope: str,
+        parents: Sequence[Sequence[Statement]] = (),
+    ) -> GrantableAction | None:
         if not self.sides:
             return None
         universes = self._universes(action)
@@ -978,6 +991,9 @@ class Holdings:
             if denies and all(covered(restricted, denies, u) for u in universes):
                 continue
             kept.append(restricted)
+        if parents:
+            kept = _within_parents(kept, parents, action, scope)
+        for restricted in kept:
             excluded.update(
                 d
                 for d in denies
@@ -1027,6 +1043,31 @@ def _chain_bounds(
             return None
         bounds.append(patterns)
     return tuple(bounds)
+
+
+def _within_parents(
+    kept: Sequence[str],
+    parents: Sequence[Sequence[Statement]],
+    action: str,
+    scope: str,
+) -> list[str]:
+    """``kept`` (held forms under ``scope``) within a sub-policy's chain: per
+    policy of it, the patterns of either side the other embeds (``_meet``), the
+    chain's restricted to ``scope`` first. It may say less than the chain lets
+    through, never more; a pattern naming a variable is left out, as no
+    container fills it."""
+    bounds = _chain_bounds(parents, action, scope)
+    if bounds is None:
+        return []
+    found = list(kept)
+    for level in bounds:
+        theirs = [r for pattern in level for r in _restrict(pattern, scope)]
+        found = [
+            p for p in _meet(found, theirs) if not any(m in p for m in _MARK_CHARS)
+        ]
+        if not found:
+            break
+    return found
 
 
 def _actions_meet(pattern: str, action: str) -> bool:

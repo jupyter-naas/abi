@@ -28,11 +28,14 @@ Nexus adds no role check of its own.
 - `GET /access?scope=` the actions the caller may do (platform, or attachments and that level's policies and groups
   at `scope`; at a scope, what the platform alone administers is false; no role feature defaults exist to
   report: no role brings a feature, a policy does);
-  `GET /catalogs?scope=` (only the actions the caller may grant
-  at `scope`, the platform by default, and the types they name: a catalog with none is left out)
+  `GET /catalogs?scope=&parent=` (only the actions the caller may grant
+  at `scope`, the platform by default, and the types they name: a catalog with none is left out; with `parent`,
+  within that policy, as `/grantable`)
 - `GET /grantable?scope=` what the caller may grant at `scope` (IAM's `grantable`: per catalog, its `publisher`,
   the actions, the `resource_types` each acts on and the resource patterns they hold there, `${scope}` or
-  `${scope}/…`, minus their Denies), for the policy builder; any caller, about themselves, like `/access`
+  `${scope}/…`, minus their Denies), for the policy builder; any caller, about themselves, like `/access`.
+  `&parent=<policy>`: what a sub-policy of it may grant there, within its chain (IAM's `grantable(parent=)`: 403
+  for a parent the caller may neither derive from nor read). `/publishers` and `/catalogs` take it too
 - `GET /publishers?scope=` the same by publisher (core's `publishers.by_publisher`): the engine, then naas_abi,
   then the modules by key (`{id, kind, types: [{service, type, description, id, placement, container, listed,
   module, actions: [{action, name, level, description, resources, excluded}]}]}`); a type appears only with an

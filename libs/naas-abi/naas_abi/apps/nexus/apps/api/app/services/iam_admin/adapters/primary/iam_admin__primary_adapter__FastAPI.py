@@ -164,25 +164,32 @@ async def access(
     return await _call(service.access(user, scope))
 
 
+# A sub-policy's parent: what is offered is within it.
+Parent = Query(None, min_length=1, max_length=255)
+
+
 @router.get("/grantable")
 async def grantable(
     scope: str = Query(..., min_length=1),
+    parent: str | None = Parent,
     user: User = Signed,
     service: IamAdminService = Service,
 ) -> dict[str, Any]:
-    """What the caller may grant at ``scope``: the policy builder offers only this."""
-    return await _call(service.grantable(user, scope))
+    """What the caller may grant at ``scope``, within ``parent`` for a sub-policy
+    of it: the policy builder offers only this."""
+    return await _call(service.grantable(user, scope, parent))
 
 
 @router.get("/publishers")
 async def publishers(
     scope: str = Query(..., min_length=1),
+    parent: str | None = Parent,
     user: User = Signed,
     service: IamAdminService = Service,
 ) -> dict[str, Any]:
     """Each publisher, its resource types, their actions and what the caller may
-    grant of each at ``scope``: only what they may grant."""
-    return await _call(service.publishers(user, scope))
+    grant of each at ``scope`` (within ``parent``): only what they may grant."""
+    return await _call(service.publishers(user, scope, parent))
 
 
 @router.get("/resources")
@@ -215,9 +222,12 @@ async def resources(
 
 @router.get("/catalogs", dependencies=[declares("iam:ListPolicies")])
 async def catalogs(
-    scope: str | None = None, user: User = Signed, service: IamAdminService = Service
+    scope: str | None = None,
+    parent: str | None = Parent,
+    user: User = Signed,
+    service: IamAdminService = Service,
 ) -> dict[str, Any]:
-    return await _call(service.catalogs(user, scope))
+    return await _call(service.catalogs(user, scope, parent))
 
 
 # -- policies -----------------------------------------------------------------------------

@@ -107,8 +107,11 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
         )
         return codec.explanation_from_pb(response.explanation)
 
-    def grantable(self, scope: str) -> list[GrantableCatalog]:
-        response = self._request("grantable", scope=scope)
+    def grantable(
+        self, scope: str, *, parent: str | None = None
+    ) -> list[GrantableCatalog]:
+        fields = {"parent": parent} if parent else {}
+        response = self._request("grantable", scope=scope, **fields)
         return [codec.grantable_from_pb(c) for c in response.catalogs]
 
     def list_resources(

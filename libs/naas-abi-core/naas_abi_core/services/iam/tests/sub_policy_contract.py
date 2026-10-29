@@ -572,6 +572,48 @@ def run_lifting_a_parent_s_deny_is_checked_below_it(iam: IAMService, as_user: As
         assert session.authorize(query, secret).allowed
 
 
+def run_grantable_within_a_parent(iam: IAMService, as_user: AsUser):
+    """What the caller may grant in a sub-policy of a parent: what they hold
+    there, within the parent's chain (the builder offers only that). Asked of a
+    parent they may not derive from, refused as the derive itself is."""
+    t = team(iam)
+    s = tree(iam)
+    with as_service_account("engine"):
+        # P (agents a and b) is held by the org's admin below the org.
+        iam.attach_policy(s.parent.id, t.org_admin.id, ORG_WIDE)
+        held = iam.create_policy("every agent", allow([AGENTS]), scope=WS1)
+        iam.attach_policy(held.id, t.org_admin.id, WS1)
+        # S (every agent, within P) too, to derive from it.
+        iam.attach_policy(s.child.id, t.org_admin.id, WS1)
+    with as_user(t.org_admin) as session:
+        alone = _granted(session.grantable(WS1))
+        assert AGENTS in alone[USE]
+        assert "triple_store:Query" in alone
+        # Within P: agents a and b, and nothing P does not allow.
+        assert _granted(session.grantable(WS1, parent=s.parent.id)) == {
+            USE: tuple(agents("a", "b"))
+        }
+        # The chain is read whole: within S, within P.
+        assert _granted(session.grantable(WS1, parent=s.child.id)) == {
+            USE: tuple(agents("a", "b"))
+        }
+    # Ws-1's admin may not derive from P: refused, naming it, as at create.
+    with as_user(t.admin) as session:
+        with pytest.raises(PermissionDeniedError, match=s.parent.id):
+            session.grantable(WS1, parent=s.parent.id)
+        with pytest.raises(IAMNotFoundError):
+            session.grantable(WS1, parent="pol_missing")
+    # The platform admin derives from any policy.
+    with as_user(t.root) as session:
+        assert _granted(session.grantable(WS1, parent=s.parent.id)) == {
+            USE: tuple(agents("a", "b"))
+        }
+
+
+def _granted(catalogs) -> dict[str, tuple[str, ...]]:
+    return {a.action: a.resources for c in catalogs for a in c.actions}
+
+
 SCENARIOS = (
     run_a_sub_policy_grants_within_its_parent,
     run_a_deny_of_the_parent_refuses_through_the_sub_policy,
@@ -586,4 +628,5 @@ SCENARIOS = (
     run_re_parenting_under_a_deny_beyond_scope_is_attaching_it,
     run_a_refusal_names_only_what_the_caller_may_see,
     run_lifting_a_parent_s_deny_is_checked_below_it,
+    run_grantable_within_a_parent,
 )

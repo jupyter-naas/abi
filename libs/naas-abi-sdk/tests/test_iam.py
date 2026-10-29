@@ -311,6 +311,10 @@ def test_what_may_be_granted_and_its_refusal():
         }
     ]
     assert client.grantable.call_args.args[0].scope == WORKSPACE
+    assert client.grantable.call_args.args[0].parent == ""
+    # Within a parent: what a sub-policy of it may grant.
+    run(IAMService(client).grantable(WORKSPACE, parent="pol_parent"))
+    assert client.grantable.call_args.args[0].parent == "pol_parent"
     client.attach_policy.side_effect = RPCError(
         "GRANT_NOT_HELD", "You cannot grant what you do not hold: ..."
     )

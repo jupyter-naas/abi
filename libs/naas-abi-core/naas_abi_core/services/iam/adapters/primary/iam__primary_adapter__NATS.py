@@ -184,7 +184,10 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
 
     def _call_grantable(self, req: pb.GrantableRequest) -> pb.GrantableResponse:
         return pb.GrantableResponse(
-            catalogs=[codec.grantable_to_pb(c) for c in self._iam.grantable(req.scope)]
+            catalogs=[
+                codec.grantable_to_pb(c)
+                for c in self._iam.grantable(req.scope, parent=req.parent or None)
+            ]
         )
 
     def _call_list_resources(
