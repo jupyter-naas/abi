@@ -3,11 +3,9 @@ scenario (``tests/owned_scope_contract.py``) and what only the service shows."""
 
 from __future__ import annotations
 
-import os
 import re
 from collections.abc import Iterator
 from contextlib import contextmanager
-from uuid import uuid4
 
 import pytest
 
@@ -57,51 +55,82 @@ def test_owned_scenarios_in_process(h, scenario):
     scenario(h.iam, _as_user(h))
 
 
-@pytest.fixture(params=["sqlite", "postgresql"])
+@pytest.fixture(
+    params=["sqlite", pytest.param("postgresql", marks=pytest.mark.integration)]
+)
 def stored(request, tmp_path) -> Iterator[IAMHarness]:
-    """A bootstrapped service on SQLite, and on PostgreSQL when
-    IAM_TEST_POSTGRES_DSN names a database (skipped otherwise)."""
+    """A bootstrapped service on SQLite, and on PostgreSQL in a fresh schema
+    (``conftest.schema``: skipped without a database)."""
     if request.param == "sqlite":
         from naas_abi_core.services.iam.adapters.secondary.IAMStoreSQLite import (
             IAMStoreSQLite,
         )
 
         store: IAMStore = IAMStoreSQLite(str(tmp_path / "iam.sqlite"))
-        drop = None
     else:
-        dsn = os.environ.get("IAM_TEST_POSTGRES_DSN")
-        if not dsn:
-            pytest.skip("Set IAM_TEST_POSTGRES_DSN to run on PostgreSQL")
         from naas_abi_core.services.iam.adapters.secondary.IAMStorePostgreSQL import (
             IAMStorePostgreSQL,
         )
 
-        schema = f"iam_test_{uuid4().hex[:12]}"
-        store = IAMStorePostgreSQL(dsn, schema)
-        drop = (dsn, schema)
+        store = IAMStorePostgreSQL(*request.getfixturevalue("schema"))
     iam = IAMService(store)
-    iam.bootstrap()
-    for catalog in (TRIPLE_STORE, ACTIVITY_LOG, NEXUS):
-        iam._register_catalog(catalog)
-    yield IAMHarness(iam)
-    iam.close()
-    if drop is not None:
-        from sqlalchemy import create_engine, text
-
-        from naas_abi_core.services.iam.adapters.secondary.IAMStorePostgreSQL import (
-            sqlalchemy_url,
-        )
-
-        engine = create_engine(sqlalchemy_url(drop[0]))
-        with engine.begin() as conn:
-            conn.execute(text(f'DROP SCHEMA IF EXISTS "{drop[1]}" CASCADE'))
-        engine.dispose()
+    try:
+        iam.bootstrap()
+        for catalog in (TRIPLE_STORE, ACTIVITY_LOG, NEXUS):
+            iam._register_catalog(catalog)
+        yield IAMHarness(iam)
+    finally:
+        iam.close()
 
 
-def test_another_containers_policies_are_not_listed_on_each_store(stored):
-    contract.run_another_containers_policies_are_not_listed(
-        stored.iam, _as_user(stored)
-    )
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        contract.run_another_containers_policies_are_not_listed,
+        contract.run_the_attach_list_follows_the_right_to_attach,
+    ],
+    ids=lambda s: s.__name__,
+)
+def test_what_a_container_lists_on_each_store(stored, scenario):
+    scenario(stored.iam, _as_user(stored))
+
+
+def test_whether_a_policy_is_known_is_one_read_whatever_the_organisations(h):
+    """Every organisation's admin may attach every "<O> access" (a platform
+    policy confined to a scope): which are attached at their organisation is
+    read once per list, not once per organisation."""
+    contract.register_containers(h.iam)
+    others = [f"org-x{i}" for i in range(20)]
+    with as_service_account("api"):
+        for org_id in others:
+            h.iam.register_container("nexus", "organization", org_id)
+    with as_service_account("engine"):
+        admins = {}
+        for org_id in [contract.ORG, *others]:
+            admin = h.iam.ensure_user("https://idp.example", f"admin-{org_id}")
+            h.iam.attach_policy(roles.ADMIN, admin.id, org(org_id))
+            access = h.iam.create_policy(f"{org_id} access", contract.reader())
+            h.iam.attach_policy(access.id, admin.id, org(org_id))
+            admins[org_id] = (admin, access.id)
+    admin, own = admins[contract.ORG]
+    reads: list[str] = []
+    for name in ("attachments_of", "list_attachments"):
+        method = getattr(h.iam.store, name)
+
+        def counted(*args, _method=method, _name=name, **kwargs):
+            if _name == "attachments_of" or kwargs.get("policy_id"):
+                reads.append(_name)
+            return _method(*args, **kwargs)
+
+        setattr(h.iam.store, name, counted)
+    with h.as_(admin):
+        listed = {p.id for p in h.iam.list_policies(scope=ORG_SCOPE).items}
+        assert reads == ["attachments_of"]
+        offered = {p.id for p in h.iam.attachable_policies(ORG_SCOPE).items}
+        assert reads == ["attachments_of", "attachments_of"]
+    for found in (listed, offered):
+        assert own in found
+        assert not {access for _admin, access in admins.values()} - {own} & found
 
 
 def test_names_carry_the_owner():

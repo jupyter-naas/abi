@@ -1093,6 +1093,66 @@ def test_another_organisations_access_policy_is_not_listed(world, ws2):
     assert derived.status_code == 201, derived.text
 
 
+def _attachable(world, user: str, scope: str, principal_id: str | None = None) -> set[str]:
+    query = f"?scope={scope}" + (f"&principal_id={principal_id}" if principal_id else "")
+    response = get(world, f"/attachable-policies{query}", user)
+    assert response.status_code == 200, response.text
+    return {p["id"] for p in response.json()["items"]}
+
+
+def test_the_attach_list_offers_what_may_be_attached_without_listing(world):
+    """A right to attach at a level, without one to list its policies, still
+    offers the level's own policies."""
+    ws1 = workspace_container("org-1", "ws-1")
+    own = post(world, "/policies", name="ws-1 readers", document=SCOPED_READER, scope=ws1)
+    assert own.status_code == 201, own.text
+    world.nexus.user("attacher")
+    _holding(
+        world,
+        "attacher",
+        {
+            "effect": "Allow",
+            "actions": ["iam:AttachPolicy"],
+            "resources": [f"{ws1}/iam:attachment/pol_*/*"],
+        },
+    )
+    listed = get(world, f"/policies?scope={ws1}", "attacher")
+    assert own.json()["id"] not in {p["id"] for p in listed.json().get("items", [])}
+    assert own.json()["id"] in _attachable(world, "attacher", ws1)
+    assert own.json()["id"] in _attachable(world, "attacher", ws1, _principal_id(world, "member"))
+
+
+def test_the_attach_list_offers_a_policy_for_the_one_principal_it_may_go_to(world):
+    """A right to attach a policy from above to one principal offers it for that
+    principal only."""
+    ws1, org1 = workspace_container("org-1", "ws-1"), org_container("org-1")
+    created = post(world, "/policies", name="org readers", document=SCOPED_READER, scope=org1)
+    assert created.status_code == 201, created.text
+    policy = created.json()["id"]
+    known = post(
+        world,
+        "/attachments",
+        policy_id=policy,
+        principal_id=_principal_id(world, "admin"),
+        scope=org1,
+    )
+    assert known.status_code == 201, known.text
+    member, viewer = _principal_id(world, "member"), _principal_id(world, "viewer")
+    world.nexus.user("narrow")
+    _holding(
+        world,
+        "narrow",
+        {
+            "effect": "Allow",
+            "actions": ["iam:AttachPolicy"],
+            "resources": [f"{ws1}/iam:attachment/{policy}/{member}"],
+        },
+    )
+    assert policy in _attachable(world, "narrow", ws1, member)
+    assert policy not in _attachable(world, "narrow", ws1, viewer)
+    assert policy not in _attachable(world, "narrow", ws1)
+
+
 # -- grant only what you hold ------------------------------------------------------------------
 
 

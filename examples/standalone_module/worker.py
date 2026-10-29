@@ -890,6 +890,7 @@ class ABIModule(BaseModule):
             "list_principals",
             "list_groups",
             "list_policies",
+            "attachable_policies",
             "list_attachments",
             "list_placements",
             "list_keys",

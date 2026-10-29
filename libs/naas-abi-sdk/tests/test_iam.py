@@ -115,6 +115,25 @@ def test_a_sub_policy_names_its_parent_and_is_listed_under_it():
     assert client.list_sub_policies.call_args.args[0].policy_id == "pol_p"
 
 
+def test_what_the_caller_may_attach_at_a_scope():
+    document = {"version": "2026-10-13", "statements": []}
+    client = AsyncMock()
+    client.attachable_policies.return_value = pb.AttachablePoliciesResponse(
+        policies=[pb.Policy(id="pol_a", name="a", document_json=json.dumps(document))],
+        next_after="pol_a",
+    )
+    iam = IAMService(client)
+    page = run(iam.attachable_policies(WORKSPACE, principal_id="usr_1", limit=1))
+    assert [p["id"] for p in page["policies"]] == ["pol_a"]
+    assert page["next_after"] == "pol_a"
+    sent = client.attachable_policies.call_args.args[0]
+    assert (sent.scope, sent.principal_id, sent.limit) == (WORKSPACE, "usr_1", 1)
+    # Unscoped and to anyone: both unset on the wire.
+    run(iam.attachable_policies())
+    sent = client.attachable_policies.call_args.args[0]
+    assert not sent.HasField("scope") and not sent.HasField("principal_id")
+
+
 def test_wire_errors_become_portable_exceptions():
     client = AsyncMock()
     client.get_principal.side_effect = RPCError("NOT_FOUND", "Principal x not found")
@@ -361,7 +380,13 @@ def test_a_listing_of_what_the_caller_may_list():
         "listed": True,
     }
     request = client.list_resources.call_args.args[0]
-    assert (request.service, request.type, request.scope, request.text, request.limit) == (
+    assert (
+        request.service,
+        request.type,
+        request.scope,
+        request.text,
+        request.limit,
+    ) == (
         "triple_store",
         "graph",
         WORKSPACE,

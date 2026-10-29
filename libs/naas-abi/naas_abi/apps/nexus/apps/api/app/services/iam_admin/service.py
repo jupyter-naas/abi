@@ -63,14 +63,11 @@ from naas_abi_core.services.iam.names import (
     split_action,
     validate_owner_scope,
     validate_scope,
-    within_owner,
 )
 from naas_abi_core.services.iam.policy import (
-    MAX_DEPTH,
     PolicyDocument,
     PolicyValidationError,
     check_owned_document,
-    denies_beyond_scope,
     parse_policy_document,
 )
 from naas_abi_core.services.iam.publishers import by_publisher
@@ -538,53 +535,35 @@ class IamAdminService:
     async def attachable(
         self, user: Any, scope: str | None, principal_id: str | None = None
     ) -> dict[str, Any]:
-        """The policies the caller may attach at ``scope``: IAM's rule for a scope
-        (every Allow is ``${scope}`` or starts with ``${scope}/``) and the caller's own
-        right to attach. A policy with a Deny beyond ``${scope}``, its own or its chain's, is offered
-        at a scope only to whoever may attach it unscoped, as IAM decides; one whose
-        chain names ``${scope}`` is never offered unscoped. At a scope, only what IAM
-        lists at its level (``list_policies``): another container's policy is offered
-        to whoever may list it at its owner, or where it is attached at that level or
-        above."""
+        """The policies the caller may attach at ``scope`` (to ``principal_id`` when
+        given), as IAM decides them (``attachable_policies``): written for the scope,
+        the caller's own right to attach, a Deny beyond ``${scope}`` only for whoever
+        may attach it unscoped, ``${scope}`` never unscoped, and another container's
+        policy only where the caller may know of it. At most ``MAX_ATTACHABLE_SCAN``."""
         if scope is not None:
             validate_scope(scope)
 
         def read(session: IIAMService) -> dict[str, Any]:
-            every = self._gateway.policies()
-            documents = _chains(every)
-            listed = _listed_at(session, _owner_of(scope)) if scope is not None else None
-            candidates = [
-                p
-                for p in every[:MAX_ATTACHABLE_SCAN]
-                if within_owner(p.owner_scope, scope)
-                and (listed is None or p.id in listed)
-                and (
-                    p.document.confined_to_scope
-                    if scope is not None
-                    else not any(d.uses_scope for d in documents[p.id])
+            found: list[Policy] = []
+            after: str | None = None
+            while len(found) < MAX_ATTACHABLE_SCAN:
+                page = session.attachable_policies(
+                    scope, principal_id=principal_id, limit=1000, after=after
                 )
-            ]
-            names = {attachment_resource(p.id, principal_id or "*", scope): p for p in candidates}
-            allowed = set(session.filter("iam:AttachPolicy", names).allowed)
-            if scope is not None:
-                unscoped = {
-                    attachment_resource(p.id, principal_id or "*", None): name
-                    for name, p in names.items()
-                    if name in allowed and denies_beyond_scope(documents[p.id])
-                }
-                reach = set(session.filter("iam:AttachPolicy", unscoped).allowed)
-                allowed -= {name for u, name in unscoped.items() if u not in reach}
+                found.extend(page.items)
+                if page.next_after is None:
+                    break
+                after = page.next_after
             return {
                 "items": [
                     {
-                        "id": names[name].id,
-                        "name": names[name].name,
-                        "description": names[name].description,
-                        "managed": names[name].managed,
-                        "owner_scope": names[name].owner_scope,
+                        "id": p.id,
+                        "name": p.name,
+                        "description": p.description,
+                        "managed": p.managed,
+                        "owner_scope": p.owner_scope,
                     }
-                    for name in names
-                    if name in allowed
+                    for p in found[:MAX_ATTACHABLE_SCAN]
                 ]
             }
 
@@ -972,20 +951,6 @@ class IamAdminService:
         }
 
 
-def _listed_at(session: IIAMService, owner: str) -> set[str]:
-    """The ids of the policies IAM lists at ``owner`` to the caller, at most
-    ``MAX_ATTACHABLE_SCAN``."""
-    listed: set[str] = set()
-    after: str | None = None
-    while len(listed) < MAX_ATTACHABLE_SCAN:
-        page = session.list_policies(limit=1000, after=after, scope=owner)
-        listed.update(p.id for p in page.items)
-        if page.next_after is None:
-            break
-        after = page.next_after
-    return listed
-
-
 def _owner_of(scope: str | None) -> str:
     """The level whose policies and groups a scope's page shows: the scope's
     container (a scope below a container, ``<container>/*``, shows that
@@ -1009,18 +974,3 @@ def _actor_id(user: Any) -> str:
 
 
 __all__ = ["ACCESS_ACTIONS", "IamAdminService"]
-
-
-def _chains(policies: list[Policy]) -> dict[str, list[PolicyDocument]]:
-    """Each policy's document and those of its chain (its parent, and so on), as
-    IAM reads them to decide where it is attached ("Sub-policies")."""
-    by_id = {p.id: p for p in policies}
-    found: dict[str, list[PolicyDocument]] = {}
-    for policy in policies:
-        documents = [policy.document]
-        parent_id = policy.parent_id
-        while parent_id is not None and parent_id in by_id and len(documents) < MAX_DEPTH:
-            documents.append(by_id[parent_id].document)
-            parent_id = by_id[parent_id].parent_id
-        found[policy.id] = documents
-    return found

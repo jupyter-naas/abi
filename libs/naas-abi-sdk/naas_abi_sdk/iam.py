@@ -178,6 +178,13 @@ class IamClient:
             "abi.iam.v1.list_policies", request, pb.ListPoliciesResponse
         )
 
+    async def attachable_policies(
+        self, request: pb.AttachablePoliciesRequest
+    ) -> pb.AttachablePoliciesResponse:
+        return await self._transport.call(
+            "abi.iam.v1.attachable_policies", request, pb.AttachablePoliciesResponse
+        )
+
     async def update_policy(
         self, request: pb.UpdatePolicyRequest
     ) -> pb.UpdatePolicyResponse:

@@ -354,6 +354,20 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
             next_after=page.next_after,
         )
 
+    def _call_attachable_policies(
+        self, req: pb.AttachablePoliciesRequest
+    ) -> pb.AttachablePoliciesResponse:
+        page = self._iam.attachable_policies(
+            _opt(req, "scope"),
+            principal_id=_opt(req, "principal_id"),
+            limit=req.limit or 100,
+            after=_opt(req, "after"),
+        )
+        return pb.AttachablePoliciesResponse(
+            policies=[codec.policy_to_pb(p) for p in page.items],
+            next_after=page.next_after,
+        )
+
     def _call_update_policy(
         self, req: pb.UpdatePolicyRequest
     ) -> pb.UpdatePolicyResponse:

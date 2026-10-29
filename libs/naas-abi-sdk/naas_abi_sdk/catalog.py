@@ -86,6 +86,7 @@ OPERATIONS = {
         "create_policy",
         "get_policy",
         "list_policies",
+        "attachable_policies",
         "update_policy",
         "delete_policy",
         "list_sub_policies",

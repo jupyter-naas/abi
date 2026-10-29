@@ -417,6 +417,14 @@ class IAMStoreMemory(IAMStore):
                 key=lambda a: a.id,
             )
 
+    def attachments_of(self, policy_ids: Sequence[str]) -> list[Attachment]:
+        wanted = set(policy_ids)
+        with self._lock:
+            return sorted(
+                (a for a in self._attachments.values() if a.policy_id in wanted),
+                key=lambda a: a.id,
+            )
+
     # -- pending grants -----------------------------------------------------------
 
     def add_pending_grant(self, grant: PendingGrant) -> PendingGrant:

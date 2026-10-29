@@ -98,7 +98,8 @@ model_registry, discovery, source_control, coding_environment) use
 unique service-account names), static group members, IdP group mappings,
 policies with optimistic revisions and their parents (`list_sub_policies`; a
 parent is not deleted while it has sub-policies), attachments (unique per policy, principal
-and scope), containers (unique per type and id, with their parent), placements, catalogs, keys (hashed), manifests (one row
+and scope; read by principal, by policy, or for several principals or policies at once:
+`attachments_for`, `attachments_of`), containers (unique per type and id, with their parent), placements, catalogs, keys (hashed), manifests (one row
 per submitted version) and signing keys (public half and schedule). What an older version
 recorded of the sets of orgs and workspaces (`iam_scope_sets`) is read as stored
 (`legacy_scope_sets`) and dropped (`drop_legacy_scope_sets`) by whoever moves it into policies,
@@ -329,7 +330,8 @@ scope it is attached at. Such a policy (`confined_to_scope` but not
 (`create_pending_grant`) or bound (`bind_idp_group`) only by whoever may also attach it
 unscoped, `iam:AttachPolicy` on `abi:iam:attachment/<policy>/<principal>`: the platform
 admin. A scope's admins and owners are refused with `PermissionDeniedError`, and lists at a
-scope (`list_policies(scope=)`, Nexus `/attachable-policies`) do not offer it to them.
+scope (`list_policies(scope=)`, `attachable_policies`, Nexus `/attachable-policies`) do not
+offer it to them.
 
 An attachment is named at its scope's container, `<container>/iam:attachment/<policy>/<principal>`
 (a below one too; the platform's and an unscoped one `abi:iam:attachment/…`, which only
@@ -1579,13 +1581,24 @@ the platform's) that are confined to a scope and that the caller may attach at `
 owned above `S` is listed only to whoever may list it at its owner (`iam:ListPolicies` on
 `<owner>/iam:policy/<id>`: the platform admin, for a platform policy), or once it is
 attached at `S` or at a container above it (an attachment at the platform `abi:` counts,
-an unscoped one does not; `IAMService._unknown_at`). The built-in roles are no one's and
+an unscoped one does not; an invitation, `create_pending_grant`, does not either;
+`IAMService._unknown_at`, one store read, `attachments_of`, whatever the number of such
+policies). The built-in roles are no one's and
 are listed wherever they may be attached. A workspace admin is offered the roles below
 owner and the organisation's policies attached at the workspace or the organisation (its
 organisation admins see them all); an organisation's admin is never offered another
 organisation's "<O> access". `get_policy` stays decided at the owner, and deriving
 (`create_policy(parent=)`, `grantable(derive=True)`) at the caller's own attachments
 (see "Sub-policies"), so neither names a policy that the list leaves out.
+`attachable_policies(scope, principal_id=)` returns the policies the caller may attach at
+`scope` (to `principal_id` when given, to anyone otherwise), paged: owned at `scope`'s
+container or above it, written for it (confined to `${scope}`; unscoped, the platform's whose
+chain never names `${scope}`), that the caller may attach there (`iam:AttachPolicy` on
+`attachment/<policy>/<principal or *>`), with a Deny beyond `${scope}` only for whoever may
+attach it unscoped too, and one owned above only where the list above knows it. It needs no
+permission of its own, and no `iam:ListPolicies`: a right to attach at a level, without one
+to list there, is offered that level's own policies. Nexus's `/attachable-policies` is this
+call; the broker refuses it to a module, like the other lists.
 `list_groups(scope=S)` returns the
 groups `S` owns (`iam:ListGroups`), plus the groups of the containers above it but the
 platform's, for whoever may list `S`'s attachments to them (`iam:ListAttachments` on
@@ -2079,7 +2092,9 @@ change would give more than the caller holds), `NOT_FOUND`,
 `CONFLICT`, `REVISION_CONFLICT`, `INVALID_ARGUMENT`, `UNAUTHENTICATED` (a
 refused key). Sub-policies: `CreatePolicyRequest.parent`, `UpdatePolicyRequest.parent`
 (absent keeps it, `""` removes it), `Policy.parent_id` (empty: none), `list_sub_policies`
-(`ListSubPoliciesRequest`, needing what the in-process call needs); the same refusals,
+(`ListSubPoliciesRequest`, needing what the in-process call needs); `attachable_policies`
+(`AttachablePoliciesRequest`: `scope` and `principal_id` absent for unscoped and for anyone),
+offered by the broker to whoever may `iam:AttachPolicy`; the same refusals,
 with the same codes and messages, in process, over NATS and through the SDK. There is no
 set operation (the sets are gone: `get_set`, `effective_set`, `list_sets`, `put_set` and
 their messages were removed; IAM's catalog 7 drops `iam:GetSet` and `iam:PutSet`). Containers:
@@ -2338,8 +2353,9 @@ or a container's above `S`) only to whoever may list it at its owner, or when it
 at `S` or at a container above it. Being attachable there (`iam:AttachPolicy` on
 `attachment/pol_*/*`, which every admin holds) is no longer enough. The access policies the
 upgrade makes stay owned by the platform, so an organisation's admin still cannot widen the
-bound their organisation's policy sets. Nexus's attach list (`/attachable-policies`) offers
-what this list holds, and its parent picker is this list. A flag on the upgrade's access
+bound their organisation's policy sets. The attach list is IAM's too
+(`attachable_policies`), with the same rule for what is owned above, and Nexus's parent
+picker is the policy list. A flag on the upgrade's access
 policies was the alternative: it would have covered those policies only, and left the same
 disclosure for any platform policy written for one organisation.
 *Consequences.* An admin of organisation O2 no longer sees "<O1> access", or any other policy
@@ -2348,7 +2364,17 @@ see "<O1> access" where it is attached, so they derive from it as before. A plat
 meant for every organisation (a shared reader) is offered at a container only once the
 platform admin attaches it there or above; attaching it by its id, as before, needs no listing.
 A workspace admin no longer sees the organisation's policies that are attached nowhere at
-the workspace or above. The built-in roles are listed as before.
+the workspace or above. The built-in roles are listed as before. An invitation
+(`create_pending_grant`) does not make a policy known at its scope: a policy offered only
+through an invitation there is not listed there until someone claims it. A sub-policy's
+parent can drop out of the list: an "<O> access" attached nowhere at O or above (no admin
+at the upgrade, or their attachments detached since) is no longer listed to O's admins,
+while the "<W> access" sub-policies they manage still name it as their parent. Nexus shows
+such a sub-policy at the top of the tree, as a sub-policy of the parent's id; opened, it names
+the parent (name and owner, read as Nexus, never its document), and deriving from that
+parent is decided by the caller's own attachments as before. Attaching it again at O, or
+the platform admin listing it, brings it back. Deciding the rule takes one store read per
+page of a list (`attachments_of`), whatever the number of organisations.
 
 ## Known limits and open questions
 

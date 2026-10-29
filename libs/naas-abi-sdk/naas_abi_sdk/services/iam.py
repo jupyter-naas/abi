@@ -314,6 +314,25 @@ class IAMService(ServiceProxy):
         )
         return {**page, "policies": [_policy(p) for p in page["policies"]]}
 
+    async def attachable_policies(
+        self,
+        scope: str | None = None,
+        *,
+        principal_id: str | None = None,
+        limit: int = 100,
+        after: str | None = None,
+    ) -> dict[str, Any]:
+        """The policies the caller may attach at ``scope`` (to ``principal_id``
+        when given)."""
+        page = await self._request(
+            "attachable_policies",
+            scope=scope,
+            principal_id=principal_id,
+            limit=limit,
+            after=after,
+        )
+        return {**page, "policies": [_policy(p) for p in page["policies"]]}
+
     async def update_policy(
         self,
         policy_id: str,

@@ -380,6 +380,17 @@ class IAMStoreContract(ABC):
             via_group.id,
         }
         assert store.attachments_for([]) == []
+        other = store.create_policy(policy())
+        theirs = store.attach(Attachment(new_id("att"), other.id, sales.id, WS))
+        assert {a.id for a in store.attachments_of([read.id, other.id])} == {
+            plain.id,
+            scoped.id,
+            via_group.id,
+            theirs.id,
+        }
+        assert [a.id for a in store.attachments_of([other.id])] == [theirs.id]
+        assert store.attachments_of([]) == []
+        store.detach(other.id, sales.id, WS)
         assert store.detach(read.id, bob.id, WS) is True
         assert store.detach(read.id, bob.id, WS) is False
         assert store.list_attachments(principal_id=bob.id) == [plain]

@@ -292,6 +292,26 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
             response.next_after if response.HasField("next_after") else None,
         )
 
+    def attachable_policies(
+        self,
+        scope: str | None,
+        *,
+        principal_id: str | None = None,
+        limit: int = 100,
+        after: str | None = None,
+    ) -> Page:
+        response = self._request(
+            "attachable_policies",
+            scope=scope,
+            principal_id=principal_id,
+            limit=limit,
+            after=after,
+        )
+        return Page(
+            [codec.policy_from_pb(p) for p in response.policies],
+            response.next_after if response.HasField("next_after") else None,
+        )
+
     def update_policy(
         self,
         policy_id: str,

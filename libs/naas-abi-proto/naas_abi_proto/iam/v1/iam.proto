@@ -615,6 +615,24 @@ message ListPoliciesResponse {
   optional string next_after = 3;
 }
 
+// The policies the caller may attach at a scope: those owned there or above it,
+// written for it, that the caller may attach there and may know of (listed at
+// their owner, or attached at the scope or above).
+message AttachablePoliciesRequest {
+  abi.common.v1.CallContext context = 1;
+  // Absent: unscoped.
+  optional string scope = 2;
+  // Absent: to anyone.
+  optional string principal_id = 3;
+  int32 limit = 4;
+  optional string after = 5;
+}
+message AttachablePoliciesResponse {
+  abi.common.v1.CallError error = 1;
+  repeated Policy policies = 2;
+  optional string next_after = 3;
+}
+
 message UpdatePolicyRequest {
   abi.common.v1.CallContext context = 1;
   string policy_id = 2;

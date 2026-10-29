@@ -655,6 +655,10 @@ class IAMStore(ABC):
     def attachments_for(self, principal_ids: Sequence[str]) -> list[Attachment]:
         """Every attachment of any of ``principal_ids`` (a principal and its groups)."""
 
+    @abstractmethod
+    def attachments_of(self, policy_ids: Sequence[str]) -> list[Attachment]:
+        """Every attachment of any of ``policy_ids``, in one read."""
+
     # -- pending grants -------------------------------------------------------
 
     @abstractmethod
@@ -1272,7 +1276,21 @@ class IIAMService(ABC):
         self, *, limit: int = 100, after: str | None = None, scope: str | None = None
     ) -> Page:
         """The policies the caller may list; with ``scope``, those it owns, plus
-        those of the levels above that the caller may attach there."""
+        those of the levels above that the caller may attach there and may know
+        of (listed at their owner, or attached at ``scope`` or above)."""
+
+    @abstractmethod
+    def attachable_policies(
+        self,
+        scope: str | None,
+        *,
+        principal_id: str | None = None,
+        limit: int = 100,
+        after: str | None = None,
+    ) -> Page:
+        """The policies the caller may attach at ``scope`` (to ``principal_id``
+        when given); one owned above it only where the caller may know of it,
+        as ``list_policies`` decides."""
 
     @abstractmethod
     def update_policy(

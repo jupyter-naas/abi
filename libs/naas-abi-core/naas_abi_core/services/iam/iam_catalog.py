@@ -142,6 +142,7 @@ CATALOG = ActionCatalog(
             "admin",
             ("attachment",),
             "attach_policy",
+            "attachable_policies",
             "create_pending_grant",
             "bind_idp_group",
         ),

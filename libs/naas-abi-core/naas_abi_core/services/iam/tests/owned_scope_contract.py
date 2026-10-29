@@ -346,21 +346,26 @@ def run_another_containers_policies_are_not_listed(
         with as_user(who) as session:
             return {p.id for p in session.list_policies(scope=scope).items}
 
+    def attachable(who: PrincipalRecord, scope: str) -> set[str]:
+        with as_user(who) as session:
+            return {p.id for p in session.attachable_policies(scope).items}
+
     # Not to another organisation's admins, at it or in its workspaces.
     for who, scopes in (
         (other_admin, (other_org, other_ws)),
         (other_ws_admin, (other_ws,)),
     ):
         for scope in scopes:
-            offered = listed(who, scope)
-            assert access.id not in offered and org_only.id not in offered
-            # The built-in roles are no one's: still offered.
-            assert roles.MEMBER in offered
+            for offered in (listed(who, scope), attachable(who, scope)):
+                assert access.id not in offered and org_only.id not in offered
+                # The built-in roles are no one's: still offered.
+                assert roles.MEMBER in offered
         with as_user(who) as session, pytest.raises(REFUSED):
             session.get_policy(access.id)
     # To org-1's admins, at org-1 and in its workspaces: it is attached there.
     for scope in (ORG_SCOPE, WS1, WS2):
         assert access.id in listed(t.org_admin, scope)
+        assert access.id in attachable(t.org_admin, scope)
     assert access.id in listed(t.ws_admin, WS1)
     # An org-1 policy attached nowhere: to whoever may list it at org-1 only.
     assert org_only.id in listed(t.org_admin, WS1)
@@ -372,6 +377,58 @@ def run_another_containers_policies_are_not_listed(
     # The platform admin lists it everywhere.
     for scope in (ORG_SCOPE, WS1, other_org, other_ws):
         assert access.id in listed(root, scope)
+        assert access.id in attachable(root, scope)
+
+
+def run_the_attach_list_follows_the_right_to_attach(
+    iam: IAMService, as_user: AsUser
+) -> None:
+    """What ``attachable_policies`` offers is what the caller may attach: a
+    right to attach without one to list still offers the level's own policies,
+    and a right to attach to one principal offers the policy for that principal
+    only. Only another container's policy unknown at the scope is left out."""
+    t = team(iam)
+    with as_service_account("engine"):
+        ws_policy = iam.create_policy("ws-1 readers", reader(), scope=WS1)
+        org_policy = iam.create_policy("org readers", reader(), scope=ORG_SCOPE)
+        # Known at ws-1: attached at the organisation.
+        iam.attach_policy(org_policy.id, t.org_admin.id, ORG_SCOPE)
+        hidden = iam.create_policy("org writers", reader(), scope=ORG_SCOPE)
+        attacher = iam.ensure_user("https://idp.example", "attacher")
+        narrow = iam.ensure_user("https://idp.example", "narrow")
+        for who, resources in (
+            # (a) Attach at ws-1, list nothing.
+            (attacher, [f"{WS1}/iam:attachment/pol_*/*"]),
+            # (b) Attach the org's policy at ws-1, to the member only.
+            (narrow, [f"{WS1}/iam:attachment/{org_policy.id}/{t.member.id}"]),
+        ):
+            delegated = iam.create_policy(
+                f"attach for {who.subject}",
+                document(statement("Allow", ["iam:AttachPolicy"], resources)),
+            )
+            iam.attach_policy(delegated.id, who.id)
+
+    def offered(who: PrincipalRecord, principal: str | None = None) -> set[str]:
+        with as_user(who) as session:
+            return {
+                p.id
+                for p in session.attachable_policies(WS1, principal_id=principal).items
+            }
+
+    with as_user(attacher) as session:
+        # Not listed (no iam:ListPolicies on ws-1's own), yet attachable.
+        assert ws_policy.id not in {
+            p.id for p in session.list_policies(scope=WS1).items
+        }
+    # (a) The level's own and the organisation's known one, never the hidden one.
+    assert offered(attacher) == {ws_policy.id, org_policy.id}
+    assert offered(attacher, t.member.id) == {ws_policy.id, org_policy.id}
+    # (b) For the member only.
+    assert offered(narrow, t.member.id) == {org_policy.id}
+    assert offered(narrow) == set()
+    assert offered(narrow, t.viewer.id) == set()
+    assert hidden.id not in offered(t.ws_admin)
+    assert hidden.id in offered(t.org_admin)
 
 
 def _assert_allowed(
@@ -397,4 +454,5 @@ SCENARIOS = (
     run_owned_documents,
     run_platform_denies_at_a_scope,
     run_another_containers_policies_are_not_listed,
+    run_the_attach_list_follows_the_right_to_attach,
 )

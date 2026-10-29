@@ -41,8 +41,3 @@ class IamGateway(ABC):
     @abstractmethod
     def policy(self, policy_id: str) -> Policy | None:
         """A policy, to name it where the caller already sees its id."""
-
-    @abstractmethod
-    def policies(self) -> list[Policy]:
-        """Every policy, to offer those a caller may attach (the caller's own right
-        to attach each is checked by IAM, not here)."""

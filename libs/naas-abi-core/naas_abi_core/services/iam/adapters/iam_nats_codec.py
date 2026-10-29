@@ -80,6 +80,7 @@ OPERATIONS = {
     "create_policy": "CreatePolicy",
     "get_policy": "GetPolicy",
     "list_policies": "ListPolicies",
+    "attachable_policies": "AttachablePolicies",
     "update_policy": "UpdatePolicy",
     "delete_policy": "DeletePolicy",
     "list_sub_policies": "ListSubPolicies",

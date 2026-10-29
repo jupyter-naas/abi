@@ -876,6 +876,30 @@ class ListPoliciesResponse(_message.Message):
     next_after: str
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., policies: _Optional[_Iterable[_Union[Policy, _Mapping]]] = ..., next_after: _Optional[str] = ...) -> None: ...
 
+class AttachablePoliciesRequest(_message.Message):
+    __slots__ = ("context", "scope", "principal_id", "limit", "after")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    SCOPE_FIELD_NUMBER: _ClassVar[int]
+    PRINCIPAL_ID_FIELD_NUMBER: _ClassVar[int]
+    LIMIT_FIELD_NUMBER: _ClassVar[int]
+    AFTER_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    scope: str
+    principal_id: str
+    limit: int
+    after: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., scope: _Optional[str] = ..., principal_id: _Optional[str] = ..., limit: _Optional[int] = ..., after: _Optional[str] = ...) -> None: ...
+
+class AttachablePoliciesResponse(_message.Message):
+    __slots__ = ("error", "policies", "next_after")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    POLICIES_FIELD_NUMBER: _ClassVar[int]
+    NEXT_AFTER_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    policies: _containers.RepeatedCompositeFieldContainer[Policy]
+    next_after: str
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., policies: _Optional[_Iterable[_Union[Policy, _Mapping]]] = ..., next_after: _Optional[str] = ...) -> None: ...
+
 class UpdatePolicyRequest(_message.Message):
     __slots__ = ("context", "policy_id", "expected_revision", "document_json", "name", "description", "parent")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]

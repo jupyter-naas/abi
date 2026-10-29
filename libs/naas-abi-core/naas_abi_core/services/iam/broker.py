@@ -87,6 +87,7 @@ IAM_OPERATIONS = (
     "add_group_member",
     "approve_manifest",
     "attach_policy",
+    "attachable_policies",
     "authorize",
     "authorize_declared",
     "bind_idp_group",

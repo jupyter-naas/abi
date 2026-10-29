@@ -1245,6 +1245,19 @@ class IAMStoreSQL(IAMStore):
                 )
             ]
 
+    def attachments_of(self, policy_ids: Sequence[str]) -> list[Attachment]:
+        if not policy_ids:
+            return []
+        with self._read() as conn:
+            return [
+                _attachment(row)
+                for row in conn.execute(
+                    select(attachments)
+                    .where(attachments.c.policy_id.in_(list(policy_ids)))
+                    .order_by(attachments.c.id)
+                )
+            ]
+
     # -- pending grants -----------------------------------------------------------
 
     def add_pending_grant(self, grant: PendingGrant) -> PendingGrant:
