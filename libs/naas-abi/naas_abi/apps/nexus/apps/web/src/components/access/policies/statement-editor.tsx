@@ -186,7 +186,7 @@ export function StatementEditor({
                 values={statement.resources}
                 onChange={(resources) => update(index, { resources })}
                 suggest={(text) => suggestResources(text, { catalogs, actions: statement.actions, modules })}
-                placeholder="abi:<org>:<workspace>:<service>:<type>/<id>"
+                placeholder="${scope}/<service>:<type>/<id> or abi:<service>:<type>/<id>"
                 disabled={readOnly}
               />
             </div>

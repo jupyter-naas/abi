@@ -7,7 +7,7 @@ import { FEATURE_LABELS } from '@/lib/feature-labels';
 import { useWorkspaceStore } from '@/stores/workspace';
 import type { CatalogsView, ModuleScopesView, PolicyView } from '@/lib/iam-admin/types';
 import type { AccessViewProps } from '../access-props';
-import { ownedHere, ownerOf, type AccessScope } from '../access-scope';
+import { PLATFORM, ownedHere, ownerOf, type AccessScope } from '../access-scope';
 import { scopeLabel } from '../attachments/attachments-model';
 import { roleOfPolicy } from '../roles/role-change';
 import { builderGroups, type BuilderGroup } from './builder/builder-model';
@@ -179,7 +179,7 @@ export function PoliciesView({ api, can, scope, nonce = 0 }: AccessViewProps) {
               <td>
                 <code>{policy.id}</code>
               </td>
-              <td>{scopeLabel(policy.owner_scope ?? 'abi:-:-')}</td>
+              <td>{scopeLabel(policy.owner_scope ?? PLATFORM)}</td>
               <td>{policy.document.statements.length}</td>
               <td>{policy.revision}</td>
               <td className="access-policy-row-actions">

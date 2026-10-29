@@ -53,11 +53,13 @@ describe('roles', () => {
 describe('the scope', () => {
   it('names the level the API answers for, and what it owns', () => {
     expect(PLATFORM_ACCESS_SCOPE.value).toBeNull();
-    expect(organizationAccessScope('acme').value).toBe('abi:acme:-');
-    expect(workspaceAccessScope('acme', 'ws-1').value).toBe('abi:acme:ws-1');
+    expect(organizationAccessScope('acme').value).toBe('abi:nexus:organization/acme');
+    expect(workspaceAccessScope('acme', 'ws-1').value).toBe('abi:nexus:organization/acme/nexus:workspace/ws-1');
+    expect(workspaceAccessScope(null, 'ws-1').value).toBe('abi:nexus:workspace/ws-1');
     expect(ownedHere(PLATFORM_ACCESS_SCOPE, undefined)).toBe(true);
-    expect(ownedHere(organizationAccessScope('acme'), 'abi:acme:-')).toBe(true);
-    expect(ownedHere(workspaceAccessScope('acme', 'ws-1'), 'abi:acme:-')).toBe(false);
+    expect(ownedHere(PLATFORM_ACCESS_SCOPE, 'abi:')).toBe(true);
+    expect(ownedHere(organizationAccessScope('acme'), 'abi:nexus:organization/acme')).toBe(true);
+    expect(ownedHere(workspaceAccessScope('acme', 'ws-1'), 'abi:nexus:organization/acme')).toBe(false);
   });
 });
 

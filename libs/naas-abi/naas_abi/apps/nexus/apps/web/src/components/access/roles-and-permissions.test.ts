@@ -47,7 +47,7 @@ const PLATFORM_ONLY = [
 ];
 
 type Level = 'platform' | 'org' | 'ws';
-const levelOf = (scope?: string): Level => (scope === undefined ? 'platform' : scope.endsWith(':-') ? 'org' : 'ws');
+const levelOf = (scope?: string): Level => (scope === undefined ? 'platform' : scope.includes('/nexus:workspace/') ? 'ws' : 'org');
 
 /** What each caller holds, by level, as the API answers `access`. */
 const CALLERS: Record<string, (level: Level) => string[]> = {
@@ -93,8 +93,8 @@ const nothing = () => document.querySelector('[role="status"]')?.textContent;
 
 const SCOPES: [string, AccessScope, string | undefined][] = [
   ['the platform', PLATFORM_ACCESS_SCOPE, undefined],
-  ['an organization', orgScope, 'abi:acme:-'],
-  ['a workspace', wsScope, 'abi:acme:ws-1'],
+  ['an organization', orgScope, 'abi:nexus:organization/acme'],
+  ['a workspace', wsScope, 'abi:nexus:organization/acme/nexus:workspace/ws-1'],
 ];
 
 const EXPECTED: Record<string, Record<string, string[]>> = {
@@ -143,7 +143,7 @@ describe('Roles & permissions, one UI for every level', () => {
 
   it('gives a delegated lister the policies to read, and no button to change them', async () => {
     const api = await render('delegated lister', wsScope);
-    expect(api.listPolicies).toHaveBeenCalledWith(undefined, 'abi:acme:ws-1');
+    expect(api.listPolicies).toHaveBeenCalledWith(undefined, 'abi:nexus:organization/acme/nexus:workspace/ws-1');
     expect(button('New policy')).toBeUndefined();
     expect(api.grantable).not.toHaveBeenCalled();
   });
@@ -176,7 +176,7 @@ describe('Roles & permissions, one UI for every level', () => {
     picker.dispatchEvent(new Event('change', { bubbles: true }));
     await mounted.flush();
     await mounted.flush();
-    expect(api.access).toHaveBeenLastCalledWith('abi:acme:ws-1');
+    expect(api.access).toHaveBeenLastCalledWith('abi:nexus:organization/acme/nexus:workspace/ws-1');
     expect(sections()).toEqual(['people', 'groups', 'policies']);
   });
 });

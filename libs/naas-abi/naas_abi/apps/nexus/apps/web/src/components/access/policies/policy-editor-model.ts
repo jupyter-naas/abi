@@ -2,9 +2,11 @@
  * The policy editor's logic, apart from the screen: the form state of a document, the
  * autocomplete of actions and resource names, wildcard counts and the text forms (JSON, YAML).
  *
- * Names follow IAM's grammar: actions `<service>:<Action>`, resources
- * `abi:<org>:<workspace>:<service>:<type>/<id>` (or `${scope}:<service>:<type>/<id>`), with the
- * wildcards `*` and `?` and the variables of `CatalogsView.variables`.
+ * Names follow IAM's grammar: actions `<service>:<Action>`, resources paths of containers
+ * `abi:<service>:<type>/<id>/.../<service>:<type>/<id>` (`abi:nexus:organization/<org>/
+ * nexus:workspace/<ws>/triple_store:graph/<id>`; a platform-level one `abi:<service>:<type>/<id>`),
+ * or `${scope}` and `${scope}/<service>:<type>/<id>` at the scope a policy is attached at, with
+ * the wildcards `*` and `?` and the variables of `CatalogsView.variables`.
  */
 import type { Catalog, CatalogsView, Effect, Level, ModuleScopesView, PolicyDocument, PolicyStatement } from '@/lib/iam-admin/types';
 
@@ -215,7 +217,7 @@ const MODULE_SCOPE_LISTS = {
 function moduleScopeIds(type: string, modules: ModuleScopesView): Suggestion[] {
   const list = MODULE_SCOPE_LISTS[type as keyof typeof MODULE_SCOPE_LISTS];
   if (!list) return [];
-  const marker = `:${MODULE_SCOPES}:${type}/`;
+  const marker = `${MODULE_SCOPES}:${type}/`;
   const out: Suggestion[] = [];
   for (const entry of modules.modules) {
     const items = entry[list];
@@ -230,17 +232,28 @@ function moduleScopeIds(type: string, modules: ModuleScopesView): Suggestion[] {
   return out;
 }
 
-function variableSuggestion(name: string): Suggestion {
+function variableSuggestions(name: string): Suggestion[] {
   return name === 'scope'
-    ? { value: '${scope}:', detail: 'the scope the policy is attached at' }
-    : { value: `\${${name}}`, detail: 'a variable' };
+    ? [
+        { value: SCOPE_PREFIX, detail: 'what the scope the policy is attached at holds' },
+        { value: '${scope}', detail: 'the scope the policy is attached at, itself' },
+      ]
+    : [{ value: `\${${name}}`, detail: 'a variable' }];
 }
 
+/** What a resource name starts with: a name, or what the attachment's scope holds. */
+const SCOPE_PREFIX = '${scope}/';
+
+/** A step of a name being typed: its service and type, and the id segments after it. */
+type TypedStep = { service: string; type: string; container: boolean; ids: string[] };
+
 /**
- * Resource names for what was typed, one segment at a time: the prefix (`abi:` or a
- * variable), the org and workspace (`*`, `-`), the service and type from the catalogs of the
- * chosen actions, then the id (`*`). Each suggestion is the whole text up to and including
- * its segment, so picking it continues the name.
+ * Resource names for what was typed, one step at a time: the prefix (`abi:` or a variable),
+ * then steps `<service>:<type>/<id>` joined by `/`: the services and types of the chosen
+ * actions (and the container types, which a name passes through), then the id (`*`, a
+ * module's items). After a container's id comes the next step; `abi:*` + `/` is any container.
+ * Each suggestion is the whole text up to and including its segment, so picking it continues
+ * the name.
  */
 export function suggestResources(
   input: string,
@@ -251,87 +264,94 @@ export function suggestResources(
   const catalogs = context.catalogs?.catalogs ?? [];
   const variables = context.catalogs?.variables ?? [];
   const chosen = typesOfActions(context.actions, catalogs);
-  const services = catalogs.filter(
-    (catalog) => chosen.size === 0 || chosen.has(catalog.service),
-  );
+  const offered = (catalog: Catalog) =>
+    chosen.size === 0 || chosen.has(catalog.service) || catalog.resource_types.some((t) => t.container);
 
-  const typesOf = (catalog: Catalog): { name: string; id: string; detail: string }[] => {
-    const wanted = chosen.get(catalog.service);
-    return catalog.resource_types
-      .filter((type) => !wanted || wanted.has(type.name))
-      .map((type) => ({ name: type.name, id: type.id, detail: type.description }));
-  };
-
-  // First segment: `abi`, or a variable such as `${scope}`.
-  if (!text.startsWith('abi:') && !text.startsWith('${scope}:')) {
-    if (text.includes(':')) return [];
+  // First segment: `abi:`, or a variable such as `${scope}`.
+  const prefix = text.startsWith('abi:') ? 'abi:' : text.startsWith(SCOPE_PREFIX) ? SCOPE_PREFIX : null;
+  if (prefix === null) {
+    if (text.includes(':') || text.includes('/')) return [];
     const wants = text.toLowerCase();
     const candidates: Suggestion[] = [
-      { value: 'abi:', detail: 'a resource name: abi:<org>:<workspace>:<service>:<type>/<id>' },
-      ...variables.map(variableSuggestion),
+      { value: 'abi:', detail: 'a resource name: abi:<service>:<type>/<id>, in its containers' },
+      ...variables.flatMap(variableSuggestions),
       { value: '*', detail: 'every resource' },
     ];
     return candidates.filter((c) => c.value.toLowerCase().startsWith(wants)).slice(0, limit);
   }
 
-  const lastColon = text.lastIndexOf(':');
-  const head = text.slice(0, lastColon + 1);
-  const typed = text.slice(lastColon + 1);
-  const segments = head.split(':').slice(0, -1); // finished segments
-  const scoped = segments[0] === '${scope}';
-  const serviceIndex = scoped ? 1 : 3;
+  // The finished segments: steps (a token with a `:`) and their ids; `*` first is any container.
+  const tokens = text.slice(prefix.length).split('/');
+  const typed = tokens.pop() ?? '';
+  const head = text.slice(0, text.length - typed.length);
+  let step: TypedStep | null = null;
+  for (const [index, token] of tokens.entries()) {
+    if (token.includes(':')) {
+      if (step && (!step.container || step.ids.length !== 1)) return [];
+      const [service, type] = token.split(':');
+      const known = catalogs.find((c) => c.service === service)?.resource_types.find((t) => t.name === type);
+      step = { service, type, container: Boolean(known?.container), ids: [] };
+    } else if (token === '*' && index === 0 && prefix === 'abi:') {
+      continue;
+    } else if (step) {
+      // A container's id is one segment: what follows it is a step.
+      if (step.container && step.ids.length === 1) return [];
+      step.ids.push(token);
+    } else {
+      return [];
+    }
+  }
 
   const make = (value: string, detail?: string): Suggestion => ({ value: head + value, detail });
-  const starts = (value: string) => value.toLowerCase().startsWith(typed.toLowerCase());
+  const starts = (value: string, what: string = typed) => value.toLowerCase().startsWith(what.toLowerCase());
 
-  if (!scoped && segments.length < 3) {
-    // The org (index 1), then the workspace (index 2).
-    const where = segments.length === 1 ? 'org' : 'workspace';
-    return [
-      make('*:', `every ${where}`),
-      make('-:', where === 'org' ? 'the platform' : 'the organization itself'),
-    ]
-      .filter((s) => starts(s.value.slice(head.length)))
-      .slice(0, limit);
-  }
-
-  if (segments.length === serviceIndex) {
-    return services
-      .filter((catalog) => starts(catalog.service))
-      .map((catalog) => make(`${catalog.service}:`, `${catalog.resource_types.length} resource types`))
-      .slice(0, limit);
-  }
-
-  if (segments.length === serviceIndex + 1) {
-    const service = segments[serviceIndex];
-    const catalog = catalogs.find((c) => c.service === service);
-    if (!catalog) return [];
-    const [typed_type, ...rest] = typed.split('/');
-    if (rest.length === 0) {
-      return typesOf(catalog)
-        .filter((type) => starts(type.name))
-        .map((type) => make(`${type.name}/`, type.detail || `a ${type.name}`))
-        .slice(0, limit);
-    }
-    const type = catalog.resource_types.find((t) => t.name === typed_type);
-    const base = `${head}${typed_type}/`;
-    const idHint =
-      type?.id === 'path'
+  // A step's id: everything after its type, a container's one segment.
+  const current: TypedStep | null = step;
+  if (current && (current.ids.length === 0 || !current.container)) {
+    if (current.container && typed.includes(':')) return [];
+    const type = catalogs
+      .find((c) => c.service === current.service)
+      ?.resource_types.find((t) => t.name === current.type);
+    const idTyped = [...current.ids, typed].join('/');
+    const base = text.slice(0, text.length - idTyped.length);
+    const idHint = type?.container
+      ? 'a container: what it holds comes after it'
+      : type?.id === 'path'
         ? 'a path: <part>/<part>'
         : type?.id === 'singleton'
           ? 'the only one'
           : 'an id';
-    const idTyped = rest.join('/');
-    const every: Suggestion[] = '*'.startsWith(idTyped)
-      ? [{ value: `${base}*`, detail: `every ${typed_type}: ${idHint}` }]
+    const every: Suggestion[] = starts('*', idTyped)
+      ? [{ value: `${base}*`, detail: `every ${current.type}: ${idHint}` }]
       : [];
-    if (service !== MODULE_SCOPES || !context.modules) return every;
-    const ids = moduleScopeIds(typed_type, context.modules)
-      .filter((s) => s.value.toLowerCase().startsWith(idTyped.toLowerCase()))
+    if (current.service !== MODULE_SCOPES || !context.modules) return every.slice(0, limit);
+    const ids = moduleScopeIds(current.type, context.modules)
+      .filter((s) => starts(s.value, idTyped))
       .map((s) => ({ ...s, value: base + s.value }));
     return [...every, ...ids].slice(0, limit);
   }
-  return [];
+
+  // A step: its service, then its type.
+  if (typed.includes(':')) {
+    const [service, typedType] = typed.split(':');
+    const catalog = catalogs.find((c) => c.service === service);
+    if (!catalog) return [];
+    const wanted = chosen.get(catalog.service);
+    return catalog.resource_types
+      .filter((type) => !wanted || wanted.has(type.name) || type.container)
+      .filter((type) => starts(type.name, typedType))
+      .map((type) => make(`${service}:${type.name}/`, type.description || `a ${type.name}`))
+      .slice(0, limit);
+  }
+  const below: Suggestion[] = [];
+  if (current) below.push(make('*', 'everything in it'));
+  else if (head === 'abi:') below.push(make('*/', 'in any container'));
+  return [
+    ...below.filter((s) => starts(s.value.slice(head.length))),
+    ...catalogs
+      .filter((catalog) => offered(catalog) && starts(catalog.service))
+      .map((catalog) => make(`${catalog.service}:`, `${catalog.resource_types.length} resource types`)),
+  ].slice(0, limit);
 }
 
 // -- text forms ---------------------------------------------------------------------------

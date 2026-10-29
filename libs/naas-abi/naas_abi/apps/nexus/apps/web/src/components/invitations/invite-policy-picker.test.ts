@@ -11,7 +11,7 @@ afterEach(async () => {
 
 const member = { id: 'builtin.member', name: 'Member', description: '', managed: true };
 const features = { id: 'pol_features', name: 'Features of member', description: 'chat, files', managed: false };
-const graph = { id: 'pol_graph', name: 'Graph readers', description: '', managed: false, owner_scope: 'abi:acme:-' };
+const graph = { id: 'pol_graph', name: 'Graph readers', description: '', managed: false, owner_scope: 'abi:nexus:organization/acme' };
 
 const offered = () => [...document.querySelectorAll('[data-policy]')].map((input) => input.getAttribute('data-policy'));
 const box = (id: string) => document.querySelector(`[data-policy="${id}"]`);
@@ -19,7 +19,7 @@ const box = (id: string) => document.querySelector(`[data-policy="${id}"]`);
 async function render(attachable: ReturnType<typeof vi.fn>, props: { scope?: string | null; value?: string[] } = {}) {
   const onChange = vi.fn();
   mounted = await mount(InvitePolicyPicker, {
-    scope: props.scope === undefined ? 'abi:acme:ws-1' : props.scope,
+    scope: props.scope === undefined ? 'abi:nexus:organization/acme/nexus:workspace/ws-1' : props.scope,
     value: props.value ?? [],
     onChange,
     api: { attachable },
@@ -32,7 +32,7 @@ describe('the policies an invitation carries', () => {
   it('offers what the inviter may attach at the scope, never a built-in role', async () => {
     const attachable = vi.fn().mockResolvedValue({ items: [member, features, graph] });
     await render(attachable);
-    expect(attachable).toHaveBeenCalledWith('abi:acme:ws-1');
+    expect(attachable).toHaveBeenCalledWith('abi:nexus:organization/acme/nexus:workspace/ws-1');
     expect(offered()).toEqual(['pol_features', 'pol_graph']);
   });
 
@@ -63,7 +63,7 @@ describe('the policies an invitation carries', () => {
 
   it('says that what attaches at the organization reaches no workspace feature', async () => {
     const attachable = vi.fn().mockResolvedValue({ items: [graph] });
-    await render(attachable, { scope: 'abi:acme:-' });
+    await render(attachable, { scope: 'abi:nexus:organization/acme' });
     expect(document.querySelector('[data-invite-policies-org]')).not.toBeNull();
     await mounted?.unmount();
     mounted = null;

@@ -81,10 +81,10 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
   },
 ];
 
-/** The organization a workspace's IAM scope names: its own, or `_none`, the reserved org of a
- *  personal workspace. */
-export function workspaceOrganization(workspace: { organizationId?: string } | null | undefined): string {
-  return workspace?.organizationId || '_none';
+/** The organization a workspace's IAM scope names: its own, or null for a personal workspace
+ *  (in no organization: `abi:nexus:workspace/<ws>`). */
+export function workspaceOrganization(workspace: { organizationId?: string } | null | undefined): string | null {
+  return workspace?.organizationId || null;
 }
 
 /** First settings item, used as the default landing for /settings. */

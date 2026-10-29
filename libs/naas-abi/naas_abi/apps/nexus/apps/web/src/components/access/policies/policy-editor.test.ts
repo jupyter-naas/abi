@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { IamAdminError } from '@/lib/iam-admin/api';
 import type { PolicyDocument, PolicyValidation } from '@/lib/iam-admin/types';
 import { mount, type Mounted } from '@/lib/testing/mount';
-import { catalogsView, fakeApi, managedPolicy, readerPolicy } from '../access-fixtures';
+import { WS, catalogsView, fakeApi, managedPolicy, readerPolicy } from '../access-fixtures';
 import { PolicyEditor } from './policy-editor';
 
 let mounted: Mounted | null = null;
@@ -76,11 +76,11 @@ describe('PolicyEditor autocomplete', () => {
     await mounted!.click(button('Add statement') ?? null);
     await mounted!.type(field('Add to actions of statement 1'), 'triple_store:Query');
     await mounted!.click(document.querySelector('[role="option"] button'));
-    await mounted!.type(field('Add to resources of statement 1'), 'abi:acme:ws-1:');
+    await mounted!.type(field('Add to resources of statement 1'), `${WS}/t`);
 
-    expect(suggestions()).toEqual(['abi:acme:ws-1:triple_store:']);
+    expect(suggestions()).toEqual([`${WS}/triple_store:`]);
     await mounted!.click(document.querySelector('[role="option"] button'));
-    expect((field('Add to resources of statement 1') as HTMLInputElement).value).toBe('abi:acme:ws-1:triple_store:');
+    expect((field('Add to resources of statement 1') as HTMLInputElement).value).toBe(`${WS}/triple_store:`);
   });
 });
 
@@ -95,8 +95,8 @@ describe('PolicyEditor document', () => {
     await mounted!.type(field('Sid of statement 1'), 'Read');
     await mounted!.type(field('Add to actions of statement 1'), 'triple_store:Query');
     await mounted!.click(document.querySelector('[role="option"] button'));
-    await mounted!.type(field('Add to resources of statement 1'), 'abi:acme:ws-1:triple_store:graph/*');
-    await mounted!.type(field('Add to resources of statement 1'), 'abi:acme:ws-1:triple_store:graph/*');
+    await mounted!.type(field('Add to resources of statement 1'), `${WS}/triple_store:graph/*`);
+    await mounted!.type(field('Add to resources of statement 1'), `${WS}/triple_store:graph/*`);
     field('Add to resources of statement 1')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     await mounted!.flush();
     await mounted!.flush();
@@ -113,7 +113,7 @@ describe('PolicyEditor document', () => {
             sid: 'Read',
             effect: 'Allow',
             actions: ['triple_store:Query'],
-            resources: ['abi:acme:ws-1:triple_store:graph/*'],
+            resources: [`${WS}/triple_store:graph/*`],
           },
         ],
       },
@@ -238,7 +238,7 @@ describe('PolicyEditor sub-policies', () => {
   const subPolicy = {
     ...readerPolicy,
     parent_id: 'pol_parent',
-    parent: { id: 'pol_parent', name: 'Org access', owner_scope: 'abi:-:-', managed: false },
+    parent: { id: 'pol_parent', name: 'Org access', owner_scope: 'abi:', managed: false },
   };
 
   it('shows the parent of a sub-policy and keeps it on save', async () => {

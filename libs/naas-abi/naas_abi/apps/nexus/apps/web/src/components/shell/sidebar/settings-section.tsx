@@ -10,6 +10,7 @@ import { getWorkspacePath } from './utils';
 import { SETTINGS_GROUPS, visibleSettingsGroups, workspaceOrganization } from '@/components/shell/settings-nav';
 import { useWorkspaceResources } from '@/hooks/use-workspace-resources';
 import { opensRolesAndPermissions } from '@/components/access/access-sections';
+import { workspaceContainer } from '@/components/access/access-scope';
 import { useIamAccess } from '@/lib/iam-admin/use-access';
 
 export function SettingsSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
@@ -22,7 +23,7 @@ export function SettingsSection({ collapsed, detailOnly }: { collapsed: boolean;
   // Roles & permissions is shown to whoever would see a section of it in the workspace; asked
   // once the workspace (and so its organization) is known.
   const { access } = useIamAccess(
-    workspace ? `abi:${workspaceOrganization(workspace)}:${workspace.id}` : undefined,
+    workspace ? workspaceContainer(workspaceOrganization(workspace), workspace.id) : undefined,
     undefined,
     { skip: !workspace }
   );

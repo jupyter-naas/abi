@@ -26,9 +26,12 @@ export type CatalogResourceType = {
   name: string;
   /** How the id of a resource is written: one opaque value, a `/` path, or `-`. */
   id: 'opaque' | 'path' | 'singleton';
-  /** `placed`: named in an org and workspace; `platform`: `abi:-:-:...`. */
+  /** `placed`: named in the container it sits in; `platform`: `abi:<service>:<type>/<id>`. */
   placement: 'placed' | 'platform';
+  /** A container: a step of the names of what it holds (`abi:nexus:organization/<org>/...`). */
   container: boolean;
+  /** Its id is the prefix of its children's ids (a document namespace). */
+  id_prefix?: boolean;
   personal: boolean;
   description: string;
 };
@@ -52,7 +55,7 @@ export type ModuleScopeItem = {
   display_name: string;
   description: string;
   icon: string | null;
-  /** The pattern a policy names: `${scope}:module:<type>/<module>/<name>`. */
+  /** The pattern a policy names: `${scope}/module:<type>/<module>/<name>`. */
   resource: string;
   actions: string[];
 };
@@ -95,7 +98,8 @@ export type PolicyView = {
   /** Built-in and module policies: IAM writes them, they are read-only here. */
   managed: boolean;
   revision: number;
-  /** Who owns it: `abi:-:-` (the platform), `abi:<org>:-` or `abi:<org>:<ws>`. */
+  /** Who owns it: `abi:` (the platform) or a container, `abi:nexus:organization/<org>` or
+   *  its workspace's `abi:nexus:organization/<org>/nexus:workspace/<ws>`. */
   owner_scope?: string;
   /** The policy it is a sub-policy of: it never grants more than that one, read live. */
   parent_id?: string | null;
@@ -121,7 +125,7 @@ export type Page<T> = { items: T[]; next_after: string | null };
 /** The document as the user wrote it: an object (visual editor) or text (YAML or JSON). */
 export type PolicySource = { document: PolicyDocument } | { text: string };
 
-/** `scope`: the owner, `abi:<org>:-` or `abi:<org>:<ws>`; none: the platform. */
+/** `scope`: the owner, an organization's or a workspace's container; none: the platform. */
 export type PolicyCreate = PolicySource & {
   name: string;
   description?: string;
@@ -161,7 +165,8 @@ export type PrincipalView = {
   provider: string | null;
   org: string | null;
   owner_id: string | null;
-  /** Groups: who owns them, `abi:-:-` (the platform), `abi:<org>:-` or `abi:<org>:<ws>`. */
+  /** Groups: who owns them, `abi:` (the platform) or a container (an organization's, a
+   *  workspace's). */
   owner_scope?: string;
   created_at: string | null;
 };
@@ -209,7 +214,8 @@ export type AttachmentView = {
   policy_name: string | null;
   principal_id: string;
   principal: PrincipalView | null;
-  /** `abi:<org>:<workspace>` (`-` for the org itself), or null: everywhere. */
+  /** A container (`abi:nexus:organization/<org>`, `.../nexus:workspace/<ws>`), below one
+   *  (`<container>/*`), the platform (`abi:`), or null: everywhere. */
   scope: string | null;
   created_at: string | null;
 };
@@ -221,7 +227,7 @@ export type AttachmentCreate = {
 };
 
 /** A policy the caller may attach at a scope (IAM's rules: only a policy whose
- *  every Allow starts with `${scope}:` goes at a scope). */
+ *  every Allow is `${scope}` or starts with `${scope}/` goes at a scope). */
 export type AttachablePolicy = {
   id: string;
   name: string;
@@ -266,7 +272,7 @@ export type ManifestReject = { reason: string };
 
 // -- what the caller may grant ------------------------------------------------------------
 
-/** One action the caller holds at a scope, and on which resources (`${scope}:...`);
+/** One action the caller holds at a scope, and on which resources (`${scope}/...`);
  *  `excluded` are Deny patterns that take back part of them. */
 export type GrantableAction = { action: string; resources: string[]; excluded: string[] };
 
@@ -334,8 +340,8 @@ export type AuditEntry = {
  *  `iam:CreateKey`, `iam:RevokeKey`, `iam:ListManifests`, `iam:ApproveManifest`,
  *  `iam:RejectManifest`, `iam:Explain` and `nexus:ReadSystem`
  *  (the audit). Without a scope they are decided on the platform; with
- *  `?scope=abi:<org>:<workspace>` (`-` for the org itself) the attachment actions at that
- *  scope and the policy and group actions on that level's own, so an org admin may attach at
+ *  `?scope=` a container (`abi:nexus:organization/<org>`, a workspace's) the attachment actions
+ *  at that scope and the policy and group actions on that level's own, so an org admin may attach at
  *  their org and not on the platform. At a scope, what is administered at platform level only
  *  (principals and service accounts, keys, manifests, the simulator, IdP mappings, the audit)
  *  is false. */

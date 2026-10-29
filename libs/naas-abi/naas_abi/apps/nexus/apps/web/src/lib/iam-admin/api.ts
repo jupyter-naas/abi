@@ -118,12 +118,12 @@ async function send<T>(
 export function createIamAdminApi(fetcher: Fetcher = authFetch) {
   return {
     /** What the caller may do on the platform, or on the attachments of `scope`
-     *  (`abi:<org>:<workspace>`, `-` for the org itself) when one is given. */
+     *  (an organization's or a workspace's container) when one is given. */
     access: (scope?: string) =>
       read<AccessView>(fetcher, path('access') + query({ scope }), 'Could not read your access.'),
     catalogs: (scope?: string) =>
       read<CatalogsView>(fetcher, path('catalogs') + query({ scope }), 'Could not load the action catalogs.'),
-    /** What the caller may grant at `scope` (`abi:-:-` for the platform): the policy builder's items. */
+    /** What the caller may grant at `scope` (`abi:` for the platform): the policy builder's items. */
     grantable: (scope: string) =>
       read<GrantableView>(fetcher, path('grantable') + query({ scope }), 'Could not read what you may grant.'),
     /** Every module with its agents, apps, workflows, pipelines and declared actions, for
@@ -197,7 +197,7 @@ export function createIamAdminApi(fetcher: Fetcher = authFetch) {
     listGroups: (scope?: string) =>
       read<{ items: PrincipalView[] }>(fetcher, path('groups') + query({ scope }), 'Could not load the groups.'),
     getGroup: (id: string) => read<GroupView>(fetcher, path('groups', id), 'Could not load the group.'),
-    /** `scope`: the owner (`abi:<org>:-`, `abi:<org>:<ws>`); none: the platform. */
+    /** `scope`: the owner (an organization's or a workspace's container); none: the platform. */
     createGroup: (input: { name: string; org?: string | null; scope?: string | null }) =>
       send<PrincipalView>(fetcher, path('groups'), 'POST', input, 'Could not create the group.'),
     deleteGroup: (id: string) =>

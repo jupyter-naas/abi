@@ -27,7 +27,7 @@ describe('wildcards', () => {
 
   it('counts the catalog actions a pattern names', () => {
     expect(matchingActions('triple_store:*', catalogs)).toHaveLength(4);
-    expect(matchingActions('*', catalogs)).toHaveLength(6);
+    expect(matchingActions('*', catalogs)).toHaveLength(7);
     expect(matchingActions('triple_store:List*', catalogs).map((a) => a.qualified)).toEqual([
       'triple_store:ListGraphs',
     ]);
@@ -61,49 +61,72 @@ describe('resource suggestions', () => {
   it('starts with the prefix and the variables', () => {
     expect(suggestResources('', context([])).map((s) => s.value)).toEqual([
       'abi:',
-      '${scope}:',
+      '${scope}/',
+      '${scope}',
       '${principal.id}',
       '${user.id}',
       '*',
     ]);
-    expect(suggestResources('${s', context([])).map((s) => s.value)).toEqual(['${scope}:']);
+    expect(suggestResources('${s', context([])).map((s) => s.value)).toEqual(['${scope}/', '${scope}']);
   });
 
-  it('walks the name: org, workspace, service, type, id', () => {
-    expect(suggestResources('abi:', context([])).map((s) => s.value)).toEqual(['abi:*:', 'abi:-:']);
-    expect(suggestResources('abi:acme:', context([])).map((s) => s.value)).toEqual([
-      'abi:acme:*:',
-      'abi:acme:-:',
+  it('walks the name: containers, service, type, id', () => {
+    expect(suggestResources('abi:', context([])).map((s) => s.value)).toEqual([
+      'abi:*/',
+      'abi:triple_store:',
+      'abi:iam:',
+      'abi:nexus:',
     ]);
-    expect(suggestResources('abi:acme:ws-1:', context([])).map((s) => s.value)).toEqual([
-      'abi:acme:ws-1:triple_store:',
-      'abi:acme:ws-1:iam:',
+    expect(suggestResources('abi:nexus:', context([])).map((s) => s.value)).toEqual([
+      'abi:nexus:organization/',
+      'abi:nexus:workspace/',
     ]);
-    expect(suggestResources('abi:acme:ws-1:triple_store:', context([])).map((s) => s.value)).toEqual([
-      'abi:acme:ws-1:triple_store:graph/',
+    expect(suggestResources('abi:nexus:organization/', context([]))).toEqual([
+      { value: 'abi:nexus:organization/*', detail: 'every organization: a container: what it holds comes after it' },
     ]);
-    expect(
-      suggestResources('abi:acme:ws-1:triple_store:graph/', context([])).map((s) => s.value),
-    ).toEqual(['abi:acme:ws-1:triple_store:graph/*']);
+    expect(suggestResources('abi:nexus:organization/acme/', context([])).map((s) => s.value)).toEqual([
+      'abi:nexus:organization/acme/*',
+      'abi:nexus:organization/acme/triple_store:',
+      'abi:nexus:organization/acme/iam:',
+      'abi:nexus:organization/acme/nexus:',
+    ]);
+    const ws = 'abi:nexus:organization/acme/nexus:workspace/ws-1/';
+    expect(suggestResources(`${ws}triple_store:`, context([])).map((s) => s.value)).toEqual([
+      `${ws}triple_store:graph/`,
+    ]);
+    expect(suggestResources(`${ws}triple_store:graph/`, context([])).map((s) => s.value)).toEqual([
+      `${ws}triple_store:graph/*`,
+    ]);
   });
 
-  it('keeps to the services and types of the chosen actions', () => {
-    expect(
-      suggestResources('abi:acme:ws-1:', context(['triple_store:Query'])).map((s) => s.value),
-    ).toEqual(['abi:acme:ws-1:triple_store:']);
-    expect(
-      suggestResources('abi:-:-:iam:', context(['iam:ListKeys'])).map((s) => s.value),
-    ).toEqual(['abi:-:-:iam:key/']);
+  it('offers `*` + `/` after `abi:`, any container, and nothing inside a resource', () => {
+    expect(suggestResources('abi:*/tr', context([])).map((s) => s.value)).toEqual(['abi:*/triple_store:']);
+    expect(suggestResources('abi:triple_store:graph/main/', context([])).map((s) => s.value)).toEqual([]);
+    expect(suggestResources('abi:acme/', context([])).map((s) => s.value)).toEqual([]);
+    expect(suggestResources('abi:nexus:organization/a/b/', context([])).map((s) => s.value)).toEqual([]);
   });
 
-  it('follows ${scope}: the service comes right after it', () => {
-    expect(suggestResources('${scope}:', context([])).map((s) => s.value)).toEqual([
-      '${scope}:triple_store:',
-      '${scope}:iam:',
+  it('keeps to the services and types of the chosen actions, and the containers', () => {
+    expect(
+      suggestResources('abi:nexus:organization/acme/', context(['triple_store:Query'])).map((s) => s.value),
+    ).toEqual([
+      'abi:nexus:organization/acme/*',
+      'abi:nexus:organization/acme/triple_store:',
+      'abi:nexus:organization/acme/nexus:',
     ]);
-    expect(suggestResources('${scope}:triple_store:g', context([])).map((s) => s.value)).toEqual([
-      '${scope}:triple_store:graph/',
+    expect(suggestResources('abi:iam:', context(['iam:ListKeys'])).map((s) => s.value)).toEqual(['abi:iam:key/']);
+  });
+
+  it('follows ${scope}/: a step comes right after it', () => {
+    expect(suggestResources('${scope}/', context([])).map((s) => s.value)).toEqual([
+      '${scope}/triple_store:',
+      '${scope}/iam:',
+      '${scope}/nexus:',
     ]);
+    expect(suggestResources('${scope}/triple_store:g', context([])).map((s) => s.value)).toEqual([
+      '${scope}/triple_store:graph/',
+    ]);
+    expect(suggestResources('${scope}:', context([]))).toEqual([]);
   });
 
   it('knows which types the actions reach', () => {
@@ -117,7 +140,7 @@ describe('document and form', () => {
   const document = {
     version: '2026-10-13',
     statements: [
-      { sid: 'Read', effect: 'Allow' as const, actions: ['triple_store:Query'], resources: ['abi:a:b:c:d/e'] },
+      { sid: 'Read', effect: 'Allow' as const, actions: ['triple_store:Query'], resources: ['abi:c:d/e'] },
       { effect: 'Deny' as const, actions: ['triple_store:DropGraph'], resources: ['*'] },
     ],
   };
@@ -144,7 +167,7 @@ describe('document and form', () => {
         '    actions:',
         '      - "triple_store:Query"',
         '    resources:',
-        '      - "abi:a:b:c:d/e"',
+        '      - "abi:c:d/e"',
         '  - effect: Deny',
         '    actions:',
         '      - "triple_store:DropGraph"',
@@ -178,7 +201,7 @@ describe('module scope ids', () => {
               display_name: 'Recruiter',
               description: 'Finds people.',
               icon: null,
-              resource: '${scope}:module:agent/acme.people/Recruiter',
+              resource: '${scope}/module:agent/acme.people/Recruiter',
               actions: ['module:UseAgent'],
             },
           ],
@@ -192,21 +215,21 @@ describe('module scope ids', () => {
   } as Parameters<typeof suggestResources>[1];
 
   it('suggests each module and each of its agents from the listing', () => {
-    expect(suggestResources('${scope}:module:agent/', withModules).map((s) => s.value)).toEqual([
-      '${scope}:module:agent/*',
-      '${scope}:module:agent/acme.people/*',
-      '${scope}:module:agent/acme.people/Recruiter',
+    expect(suggestResources('${scope}/module:agent/', withModules).map((s) => s.value)).toEqual([
+      '${scope}/module:agent/*',
+      '${scope}/module:agent/acme.people/*',
+      '${scope}/module:agent/acme.people/Recruiter',
     ]);
-    const typed = suggestResources('${scope}:module:agent/acme.people/R', withModules);
+    const typed = suggestResources('${scope}/module:agent/acme.people/R', withModules);
     expect(typed).toEqual([
-      { value: '${scope}:module:agent/acme.people/Recruiter', detail: 'Recruiter: Finds people.' },
+      { value: '${scope}/module:agent/acme.people/Recruiter', detail: 'Recruiter: Finds people.' },
     ]);
   });
 
   it('suggests only `*` without the listing', () => {
     const context = { ...withModules, modules: null };
-    expect(suggestResources('${scope}:module:agent/', context).map((s) => s.value)).toEqual([
-      '${scope}:module:agent/*',
+    expect(suggestResources('${scope}/module:agent/', context).map((s) => s.value)).toEqual([
+      '${scope}/module:agent/*',
     ]);
   });
 });

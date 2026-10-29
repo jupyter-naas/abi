@@ -11,6 +11,10 @@ import type {
 import type { AccessDirectory, ScopeMember } from './access-directory';
 import { organizationAccessScope, workspaceAccessScope } from './access-scope';
 
+/** The containers of the organization acme and of its workspace ws-1, as IAM names them. */
+export const ORG = 'abi:nexus:organization/acme';
+export const WS = `${ORG}/nexus:workspace/ws-1`;
+
 export const orgScope = organizationAccessScope('acme');
 export const wsScope = workspaceAccessScope('acme', 'ws-1', 'Workspace ws-1');
 
@@ -29,8 +33,8 @@ export const moduleScopesView: ModuleScopesView = {
     {
       module: 'acme.people',
       agents: [
-        { name: 'Recruiter', display_name: 'Recruiter', description: '', icon: null, resource: '${scope}:module:agent/acme.people/Recruiter', actions: ['module:UseAgent'] },
-        { name: 'Coach', display_name: 'Coach', description: '', icon: null, resource: '${scope}:module:agent/acme.people/Coach', actions: ['module:UseAgent'] },
+        { name: 'Recruiter', display_name: 'Recruiter', description: '', icon: null, resource: '${scope}/module:agent/acme.people/Recruiter', actions: ['module:UseAgent'] },
+        { name: 'Coach', display_name: 'Coach', description: '', icon: null, resource: '${scope}/module:agent/acme.people/Coach', actions: ['module:UseAgent'] },
       ],
       apps: [],
       workflows: [],
@@ -39,7 +43,7 @@ export const moduleScopesView: ModuleScopesView = {
     },
     {
       module: 'acme.market',
-      agents: [{ name: 'Analyst', display_name: 'Analyst', description: '', icon: null, resource: '${scope}:module:agent/acme.market/Analyst', actions: ['module:UseAgent'] }],
+      agents: [{ name: 'Analyst', display_name: 'Analyst', description: '', icon: null, resource: '${scope}/module:agent/acme.market/Analyst', actions: ['module:UseAgent'] }],
       apps: [],
       workflows: [],
       pipelines: [],
@@ -50,10 +54,10 @@ export const moduleScopesView: ModuleScopesView = {
 
 /** A workspace admin whose workspace's set has acme.people, with the chat feature. */
 export const adminGrantable: GrantableView = {
-  scope: 'abi:acme:ws-1',
+  scope: WS,
   catalogs: [
-    { service: 'module', actions: [{ action: 'module:UseAgent', resources: ['${scope}:module:agent/acme.people/*'], excluded: [] }] },
-    { service: 'nexus', actions: [{ action: 'nexus:UseFeature', resources: ['${scope}:nexus:feature/chat'], excluded: [] }] },
+    { service: 'module', actions: [{ action: 'module:UseAgent', resources: ['${scope}/module:agent/acme.people/*'], excluded: [] }] },
+    { service: 'nexus', actions: [{ action: 'nexus:UseFeature', resources: ['${scope}/nexus:feature/chat'], excluded: [] }] },
   ],
 };
 
@@ -64,7 +68,7 @@ export const catalogsView: CatalogsView = {
       service: 'triple_store',
       version: 1,
       resource_types: [
-        { name: 'graph', id: 'opaque', placement: 'placed', container: false, personal: false, description: 'A named graph.' },
+        { name: 'graph', id: 'opaque', placement: 'placed', container: false, id_prefix: false, personal: false, description: 'A named graph.' },
       ],
       actions: [
         { name: 'ListGraphs', qualified: 'triple_store:ListGraphs', level: 'list', resource_types: ['graph'], creates: false, description: 'List graphs.' },
@@ -77,12 +81,23 @@ export const catalogsView: CatalogsView = {
       service: 'iam',
       version: 4,
       resource_types: [
-        { name: 'policy', id: 'opaque', placement: 'platform', container: false, personal: false, description: 'A policy.' },
-        { name: 'key', id: 'path', placement: 'platform', container: false, personal: true, description: 'A key.' },
+        { name: 'policy', id: 'opaque', placement: 'platform', container: false, id_prefix: false, personal: false, description: 'A policy.' },
+        { name: 'key', id: 'path', placement: 'platform', container: false, id_prefix: false, personal: true, description: 'A key.' },
       ],
       actions: [
         { name: 'GetPolicy', qualified: 'iam:GetPolicy', level: 'read', resource_types: ['policy'], creates: false, description: 'Read a policy.' },
         { name: 'ListKeys', qualified: 'iam:ListKeys', level: 'list', resource_types: ['key'], creates: false, description: 'List keys.' },
+      ],
+    },
+    {
+      service: 'nexus',
+      version: 1,
+      resource_types: [
+        { name: 'organization', id: 'opaque', placement: 'platform', container: true, id_prefix: false, personal: false, description: 'An organization.' },
+        { name: 'workspace', id: 'opaque', placement: 'platform', container: true, id_prefix: false, personal: false, description: 'A workspace.' },
+      ],
+      actions: [
+        { name: 'CreateWorkspace', qualified: 'nexus:CreateWorkspace', level: 'write', resource_types: ['workspace'], creates: true, description: 'Create a workspace.' },
       ],
     },
   ],
@@ -101,7 +116,7 @@ export const readerPolicy: PolicyView = {
         sid: 'Read',
         effect: 'Allow',
         actions: ['triple_store:Query'],
-        resources: ['abi:acme:ws-1:triple_store:graph/*'],
+        resources: [`${WS}/triple_store:graph/*`],
       },
     ],
   },
@@ -146,7 +161,7 @@ export function attachment(over: Partial<AttachmentView> = {}): AttachmentView {
     policy_name: 'Graph reader',
     principal_id: ada.id,
     principal: ada,
-    scope: 'abi:acme:-',
+    scope: ORG,
     created_at: '2026-10-03T10:00:00Z',
     ...over,
   };

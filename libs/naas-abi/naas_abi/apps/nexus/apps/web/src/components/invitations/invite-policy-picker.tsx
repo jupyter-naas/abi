@@ -6,12 +6,13 @@ import { createIamAdminApi, type IamAdminApi } from '@/lib/iam-admin/api';
 import type { AttachablePolicy } from '@/lib/iam-admin/types';
 import { invitablePolicies } from '@/lib/invitations';
 import { cn } from '@/lib/utils';
+import { parseScope } from '@/components/access/access-scope';
 
 /**
- * The policies an invitation attaches beside the role, at the invite's scope
- * (`abi:<org>:<ws>`, `abi:<org>:-` for the organization): the customer policies IAM lets the
- * inviter attach there (`attachable`, as Roles & permissions' attach form, those of the levels
- * above included). Features come from such policies (`nexus:UseFeature`), not from the role.
+ * The policies an invitation attaches beside the role, at the invite's scope (a workspace's
+ * container, or the organization's `abi:nexus:organization/<org>`): the customer policies IAM
+ * lets the inviter attach there (`attachable`, as Roles & permissions' attach form, those of the
+ * levels above included). Features come from such policies (`nexus:UseFeature`), not from the role.
  * Optional: nothing is shown when there is none to offer or the inviter may not list them.
  */
 export function InvitePolicyPicker({
@@ -93,7 +94,10 @@ export function InvitePolicyPicker({
   );
 }
 
-/** An organization's own scope (`abi:<org>:-`): what attaches there reaches no workspace. */
+/** An organization's own scope (`abi:nexus:organization/<org>`): what attaches there reaches
+ *  no workspace. */
 export function atOrganization(scope: string | null): boolean {
-  return Boolean(scope && scope.endsWith(':-'));
+  const parsed = parseScope(scope);
+  const last = parsed?.containers[parsed.containers.length - 1];
+  return Boolean(parsed && !parsed.below && last?.service === 'nexus' && last.type === 'organization');
 }

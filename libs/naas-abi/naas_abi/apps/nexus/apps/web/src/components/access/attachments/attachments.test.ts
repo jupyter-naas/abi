@@ -30,10 +30,21 @@ function formApi(over: Record<string, unknown> = {}) {
 describe('scopeLabel', () => {
   it('puts scopes in words', () => {
     expect(scopeLabel(null)).toBe('Everywhere');
-    expect(scopeLabel('abi:-:-')).toBe('Platform');
-    expect(scopeLabel('abi:acme:-')).toBe('Organization acme');
-    expect(scopeLabel('abi:acme:ws-1')).toBe('Workspace ws-1 of acme');
-    expect(scopeLabel('abi:acme:*')).toBe('Every workspace of acme');
+    expect(scopeLabel('abi:')).toBe('Platform');
+    expect(scopeLabel('abi:nexus:organization/acme')).toBe('Organization acme');
+    expect(scopeLabel('abi:nexus:organization/acme/nexus:workspace/ws-1')).toBe('Workspace ws-1 of acme');
+    expect(scopeLabel('abi:nexus:workspace/ws-1')).toBe('Workspace ws-1');
+    expect(scopeLabel('abi:nexus:organization/acme/*')).toBe('Organization acme and its workspaces');
+    expect(scopeLabel('abi:nexus:organization/acme/nexus:workspace/ws-1/*')).toBe(
+      'Workspace ws-1 of acme and everything in it',
+    );
+  });
+
+  it('decodes ids and leaves what is not a scope as written', () => {
+    expect(scopeLabel('abi:crm:project/p%209')).toBe('project p 9');
+    expect(scopeLabel('abi:nexus:organization/acme/triple_store:graph/a%2Fb')).toBe('graph a/b of acme');
+    expect(scopeLabel('abi:triple_store:graph/a/b')).toBe('abi:triple_store:graph/a/b');
+    expect(scopeLabel('abi:acme:ws-1')).toBe('abi:acme:ws-1');
   });
 });
 
@@ -46,20 +57,20 @@ describe('AttachForm', () => {
   it('attaches a policy IAM lets the caller attach at the scope', async () => {
     const api = formApi();
     const onAttached = vi.fn();
-    mounted = await mount(AttachForm, { api, scope: 'abi:acme:ws-1', principals, onAttached });
+    mounted = await mount(AttachForm, { api, scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1', principals, onAttached });
     await mounted.flush();
-    expect(api.attachable).toHaveBeenCalledWith('abi:acme:ws-1');
+    expect(api.attachable).toHaveBeenCalledWith('abi:nexus:organization/acme/nexus:workspace/ws-1');
 
     await mounted.type(field('Principal to attach to'), 'usr_bob');
     await mounted.click(button('Attach policy') ?? null);
     await mounted.flush();
 
-    expect(api.attach).toHaveBeenCalledWith({ policy_id: 'pol_1', principal_id: 'usr_bob', scope: 'abi:acme:ws-1' });
+    expect(api.attach).toHaveBeenCalledWith({ policy_id: 'pol_1', principal_id: 'usr_bob', scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1' });
     expect(onAttached).toHaveBeenCalled();
   });
 
   it('offers a built-in role to a group, never to a person (their role is a membership)', async () => {
-    mounted = await mount(AttachForm, { api: formApi(), scope: 'abi:acme:ws-1', principals, onAttached: vi.fn() });
+    mounted = await mount(AttachForm, { api: formApi(), scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1', principals, onAttached: vi.fn() });
     await mounted.flush();
     await mounted.type(field('Principal to attach to'), 'usr_bob');
     expect(options()).toEqual(['pol_1']);
@@ -70,7 +81,7 @@ describe('AttachForm', () => {
   it('never offers what comes with a role, and tells a typed id’s kind by its prefix', async () => {
     const companion = { id: 'builtin.platform.member', name: 'Platform member', description: '', managed: true };
     const api = formApi({ attachable: vi.fn().mockResolvedValue({ items: [companion, viewer, reader] }) });
-    mounted = await mount(AttachForm, { api, scope: 'abi:acme:ws-1', principals: [], onAttached: vi.fn() });
+    mounted = await mount(AttachForm, { api, scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1', principals: [], onAttached: vi.fn() });
     await mounted.flush();
     await mounted.type(field('Principal to attach to'), 'usr_typed');
     expect(options()).toEqual(['pol_1']);
@@ -91,7 +102,7 @@ describe('AttachForm', () => {
 
   it('shows IAM’s refusal of an attach', async () => {
     const api = formApi({ attach: vi.fn().mockRejectedValue(new Error('You cannot grant what you do not hold: …')) });
-    mounted = await mount(AttachForm, { api, scope: 'abi:acme:-', principals, onAttached: vi.fn() });
+    mounted = await mount(AttachForm, { api, scope: 'abi:nexus:organization/acme', principals, onAttached: vi.fn() });
     await mounted.flush();
     await mounted.type(field('Principal to attach to'), 'grp_1');
     await mounted.click(button('Attach policy') ?? null);

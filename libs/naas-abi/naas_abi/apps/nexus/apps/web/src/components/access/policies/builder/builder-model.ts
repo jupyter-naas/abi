@@ -2,7 +2,7 @@
  * The policy builder's logic, apart from the screen. It starts from what the caller may grant
  * at the scope (`GET /grantable?scope=`, already within the scope's sets) and offers it as
  * checkboxes: per module its agents, apps, workflows, pipelines and declared actions, and the
- * Nexus features. A choice is written as Allow statements on `${scope}:` resources, and a
+ * Nexus features. A choice is written as Allow statements on `${scope}/` resources, and a
  * document is read back into choices, what the builder cannot show kept as statements.
  */
 import type { GrantableView, ModuleScopeItem, ModuleScopesEntry, PolicyStatement } from '@/lib/iam-admin/types';
@@ -24,7 +24,22 @@ export type BuilderSection = { id: BuilderSectionId; label: string; items: Build
 
 export type BuilderGroup = { id: string; label: string; kind: 'module' | 'nexus'; sections: BuilderSection[] };
 
-const FEATURE_PREFIX = '${scope}:nexus:feature/';
+/** What a pattern written at the scope starts with: what the scope's container holds. */
+const SCOPE_PREFIX = '${scope}/';
+
+const FEATURE_PREFIX = `${SCOPE_PREFIX}nexus:feature/`;
+
+/** A pattern written at a scope (`${scope}` or `${scope}/...`) as it reads at ``scope``: a
+ *  container's name, the platform `abi:` (where `${scope}/` reads `abi:`), or below a
+ *  container (`<container>/*`), read at the container itself. */
+export function atScope(pattern: string, scope: string): string {
+  const container = scope.endsWith('/*') ? scope.slice(0, -2) : scope;
+  if (pattern.startsWith(SCOPE_PREFIX)) {
+    const rest = pattern.slice(SCOPE_PREFIX.length);
+    return container === 'abi:' ? `abi:${rest}` : `${container}/${rest}`;
+  }
+  return pattern === '${scope}' ? container : pattern;
+}
 
 /** IAM's glob (core `names.matches`): `*` any run of characters, `?` one, the rest as is. */
 export function globMatches(pattern: string, value: string): boolean {
@@ -66,7 +81,7 @@ function itemsOf(held: Holdings, items: ModuleScopeItem[]): BuilderItem[] {
       if (!actions.length) return [];
       return [
         {
-          key: item.resource.replace('${scope}:', ''),
+          key: item.resource.startsWith(SCOPE_PREFIX) ? item.resource.slice(SCOPE_PREFIX.length) : item.resource,
           label: item.display_name || item.name,
           description: item.description,
           icon: item.icon,
@@ -83,7 +98,7 @@ function declaredItems(held: Holdings, declared: NonNullable<ModuleScopesEntry['
     .flatMap((spec) =>
       spec.resource_types.flatMap((type) => {
         const resource =
-          declared.resource_types.find((t) => t.name === type)?.resource ?? `\${scope}:${declared.service}:${type}/*`;
+          declared.resource_types.find((t) => t.name === type)?.resource ?? `${SCOPE_PREFIX}${declared.service}:${type}/*`;
         if (!heldOf(held, [spec.action], resource).length) return [];
         const name = spec.action.split(':')[1] ?? spec.action;
         return [
@@ -213,7 +228,7 @@ export function splitStatements(
 const REFUSAL = /allows (\S+) on (\S+?)(?: at (\S+))?, and /;
 
 /** The items an IAM refusal names ("You cannot grant what you do not hold: … allows <action>
- *  on <resource> at <scope>, and …"), whether the resource is written `${scope}:` or placed. */
+ *  on <resource> at <scope>, and …"), whether the resource is written `${scope}/` or placed. */
 export function refusedItems(groups: BuilderGroup[], message: string, scope: string): string[] {
   const match = REFUSAL.exec(message);
   if (!match) return [];
@@ -223,7 +238,7 @@ export function refusedItems(groups: BuilderGroup[], message: string, scope: str
     .filter(
       (item) =>
         item.actions.includes(action) &&
-        (item.resource === resource || item.resource.replace('${scope}', placedAt) === resource),
+        (item.resource === resource || atScope(item.resource, placedAt) === resource),
     )
     .map((item) => item.key);
 }

@@ -7,6 +7,7 @@ import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { opensRolesAndPermissions } from '@/components/access/access-sections';
+import { organizationContainer } from '@/components/access/access-scope';
 import { useIamAccess } from '@/lib/iam-admin/use-access';
 import { SettingsLayoutNav } from '@/components/settings/settings-layout-nav';
 import {
@@ -59,7 +60,7 @@ export default function OrganizationSettingsLayout({
   const orgId = params.orgId as string;
   const [viewerRole, setViewerRole] = useState<string | null>(null);
   // Roles & permissions is shown to whoever would see a section of it at the organization.
-  const { access, loading: accessLoading } = useIamAccess(orgId ? `abi:${orgId}:-` : undefined, undefined, {
+  const { access, loading: accessLoading } = useIamAccess(orgId ? organizationContainer(orgId) : undefined, undefined, {
     skip: !orgId,
   });
   const holdsIam = opensRolesAndPermissions(access);

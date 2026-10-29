@@ -6,6 +6,8 @@ import { mount, type Mounted } from '@/lib/testing/mount';
 import { EMPTY_DIRECTORY } from '../access-directory';
 import { PLATFORM_ACCESS_SCOPE, type AccessScope } from '../access-scope';
 import {
+  ORG,
+  WS,
   adminGrantable,
   catalogsView,
   fakeApi,
@@ -94,13 +96,13 @@ describe('PoliciesView', () => {
 });
 
 describe('PoliciesView at a workspace', () => {
-  const owned = { ...readerPolicy, id: 'pol_ws', name: 'Recruiters', owner_scope: 'abi:acme:ws-1' };
-  const fromOrg = { ...readerPolicy, id: 'pol_org', name: 'Org readers', owner_scope: 'abi:acme:-' };
+  const owned = { ...readerPolicy, id: 'pol_ws', name: 'Recruiters', owner_scope: WS };
+  const fromOrg = { ...readerPolicy, id: 'pol_org', name: 'Org readers', owner_scope: ORG };
   const listed = { listPolicies: vi.fn().mockResolvedValue({ items: [owned, fromOrg], next_after: null }) };
 
   it('lists the level’s own and, read-only, those it may attach from above', async () => {
     const api = await open(() => true, listed, wsScope);
-    expect(api.listPolicies).toHaveBeenCalledWith(undefined, 'abi:acme:ws-1');
+    expect(api.listPolicies).toHaveBeenCalledWith(undefined, WS);
     expect(document.querySelector('[data-policy="pol_org"]')?.textContent).toContain('Organization acme');
     expect(document.querySelector('[aria-label="Delete Org readers"]')).toBeNull();
     expect(document.querySelector('[aria-label="Delete Recruiters"]')).not.toBeNull();
@@ -113,7 +115,7 @@ describe('PoliciesView at a workspace', () => {
       Promise.resolve({ ...owned, document: input.document }),
     );
     const api = await open(() => true, { ...listed, createPolicy }, wsScope);
-    expect(api.grantable).toHaveBeenCalledWith('abi:acme:ws-1');
+    expect(api.grantable).toHaveBeenCalledWith(WS);
     expect(api.moduleScopes).toHaveBeenCalledWith({ workspace_id: 'ws-1' });
 
     await mounted!.click(button('New policy') ?? null);
@@ -126,7 +128,7 @@ describe('PoliciesView at a workspace', () => {
     await mounted!.type(field('Policy name'), 'Recruiters');
     await mounted!.click(field('acme.people: Recruiter'));
     await validated();
-    expect(api.validatePolicy).toHaveBeenLastCalledWith(expect.anything(), 'abi:acme:ws-1');
+    expect(api.validatePolicy).toHaveBeenLastCalledWith(expect.anything(), WS);
     await mounted!.click(button('Create policy') ?? null);
     await mounted!.flush();
 
@@ -134,12 +136,12 @@ describe('PoliciesView at a workspace', () => {
       document: {
         version: '2026-10-13',
         statements: [
-          { sid: 'ModuleUseAgent', effect: 'Allow', actions: ['module:UseAgent'], resources: ['${scope}:module:agent/acme.people/Recruiter'] },
+          { sid: 'ModuleUseAgent', effect: 'Allow', actions: ['module:UseAgent'], resources: ['${scope}/module:agent/acme.people/Recruiter'] },
         ],
       },
       name: 'Recruiters',
       description: '',
-      scope: 'abi:acme:ws-1',
+      scope: WS,
     });
   });
 
@@ -147,7 +149,7 @@ describe('PoliciesView at a workspace', () => {
     const member = {
       ...managedPolicy,
       id: 'builtin.member',
-      document: { version: '2026-10-13', statements: [{ effect: 'Allow' as const, actions: ['nexus:ListFiles'], resources: ['${scope}:nexus:file/*'] }] },
+      document: { version: '2026-10-13', statements: [{ effect: 'Allow' as const, actions: ['nexus:ListFiles'], resources: ['${scope}/nexus:file/*'] }] },
     };
     await open(() => true, { listPolicies: vi.fn().mockResolvedValue({ items: [owned, member], next_after: null }) }, wsScope);
     await mounted!.click(button('New policy') ?? null);
@@ -178,7 +180,7 @@ describe('PoliciesView at a workspace', () => {
 
   it('shows IAM’s refusal beside the item it names', async () => {
     const refusal =
-      'You cannot grant what you do not hold: statement 0 (UseAgent) allows module:UseAgent on ${scope}:module:agent/acme.people/Coach at abi:acme:ws-1, and you do not hold it there';
+      `You cannot grant what you do not hold: statement 0 (UseAgent) allows module:UseAgent on \${scope}/module:agent/acme.people/Coach at ${WS}, and you do not hold it there`;
     const createPolicy = vi.fn().mockRejectedValue(new IamAdminError(refusal, 403));
     await open(() => true, { ...listed, createPolicy }, wsScope);
     await mounted!.click(button('New policy') ?? null);
@@ -200,7 +202,7 @@ describe('PoliciesView at a workspace', () => {
     const member = {
       ...managedPolicy,
       id: 'builtin.member',
-      document: { version: '2026-10-13', statements: [{ effect: 'Allow' as const, actions: ['nexus:ListFiles'], resources: ['${scope}:nexus:file/*'] }] },
+      document: { version: '2026-10-13', statements: [{ effect: 'Allow' as const, actions: ['nexus:ListFiles'], resources: ['${scope}/nexus:file/*'] }] },
     };
     await open(() => true, { listPolicies: vi.fn().mockResolvedValue({ items: [owned, member], next_after: null }) }, wsScope);
     await mounted!.click(button('New policy') ?? null);
