@@ -408,12 +408,15 @@ def warn_deprecated_settings(flags: FeatureFlagsConfig) -> list[str]:
     return found
 
 
-def _retire_old() -> list[str]:
-    """Retire what is left of the old policies (the move is recorded)."""
+def _retire_old() -> tuple[list[str], list[str]]:
+    """Retire what is left of the old policies (the move is recorded):
+    ``(retired, kept)``. IAM keeps one that is the parent of a sub-policy,
+    detached, until an administrator re-parents its sub-policies."""
     iam = runtime.iam()
     with as_service_account("engine"):
         old = [p.id for p in iam.retired_policies() if p.id.startswith(OLD_PREFIX)]
-        return iam.retire_policies(old) if old else []
+        retired = iam.retire_policies(old) if old else []
+        return retired, [p for p in old if p not in retired]
 
 
 async def _retire_and_record(db: AsyncSession) -> None:
@@ -421,9 +424,18 @@ async def _retire_and_record(db: AsyncSession) -> None:
     look no more. A failure is logged and tried again at the next start: they
     grant what the new ones do meanwhile."""
     try:
-        retired = await run_in_threadpool(_retire_old)
+        retired, kept = await run_in_threadpool(_retire_old)
     except Exception:  # noqa: BLE001 - tried again at the next start
         _log.warning("The old role feature policies were not retired yet", exc_info=True)
+        return
+    if retired:
+        _log.info("The old role feature policies were retired: %s", ", ".join(retired))
+    if kept:
+        # Detached, they grant nothing; each start tries again until they can go.
+        _log.warning(
+            "The old role feature policies %s are kept: each is a sub-policy's parent",
+            ", ".join(kept),
+        )
         return
     await db.execute(
         text("INSERT INTO iam_migrations (name, applied_at, report) VALUES (:n, :at, :r)"),
@@ -434,8 +446,6 @@ async def _retire_and_record(db: AsyncSession) -> None:
         },
     )
     await db.commit()
-    if retired:
-        _log.info("The old role feature policies were retired: %s", ", ".join(retired))
 
 
 async def migrate_role_features(db: AsyncSession, flags: FeatureFlagsConfig) -> int | None:
