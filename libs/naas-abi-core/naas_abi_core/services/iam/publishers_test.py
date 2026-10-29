@@ -220,3 +220,46 @@ def test_a_type_lists_only_patterns_that_can_name_its_resources(world):
         "${scope}/nexus:workspace/*",
         "${scope}/triple_store:graph/*",
     )
+
+
+def test_a_step_of_another_type_names_nothing_of_a_type_without_a_search(
+    world, monkeypatch
+):
+    """A name is its containers' steps, then its own: a pattern holding a literal
+    step of a type that is no container, and not the type itself, names none of
+    the type's resources. It is left out at once, as the search would: a holder
+    of every type's pattern (an owner who is also the platform admin) is not
+    made to wait for one search per type and pattern."""
+    from naas_abi_core.services.iam import grants
+    from naas_abi_core.services.iam.IAMPorts import GrantableAction, GrantableCatalog
+
+    held = (
+        "${scope}/*",
+        "${scope}/model_registry:model/*",
+        "${scope}/*/model_registry:model/*",
+        "${scope}/nexus:workspace/*",
+        "${scope}/triple_store:graph/*",
+    )
+    grantable = [
+        GrantableCatalog(
+            "triple_store", (GrantableAction("triple_store:Query", held, ()),)
+        )
+    ]
+    searched: list[str] = []
+    overlaps = grants.overlaps
+
+    def spy(grant, others, within=grants.EVERYTHING, bounds=()):
+        searched.append(grant)
+        return overlaps(grant, others, within, bounds)
+
+    monkeypatch.setattr(grants, "overlaps", spy)
+    view = {
+        p.id: p for p in by_publisher(world.iam.catalogs.all(), grantable, scope=WS1)
+    }
+    graph = next(t for t in view["engine"].types if t.type.name == "graph")
+    assert graph.actions[0].grantable.resources == (
+        "${scope}/*",
+        "${scope}/nexus:workspace/*",
+        "${scope}/triple_store:graph/*",
+    )
+    assert not [g for g in searched if "model_registry:model" in g]

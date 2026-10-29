@@ -10,6 +10,7 @@ they may grant is left out, and so is a publisher with no such type.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Collection, Iterable, Mapping
 from dataclasses import dataclass
 
@@ -29,6 +30,9 @@ from naas_abi_core.services.iam.names import (
 )
 
 SCOPE = "${scope}"
+# A literal step of a name, ``<service>:<type>`` before a ``/``, after ``abi:``
+# or a ``/``. Ids are percent-encoded (a ``:`` included), so none is inside one.
+_STEP = re.compile(r"(?:^abi:|(?<=/))([a-z][a-z0-9_]*:[a-z][a-z0-9_]*)(?=/)")
 
 
 @dataclass(frozen=True)
@@ -82,30 +86,45 @@ def _at(pattern: str, scope: str) -> str:
     return container if pattern == SCOPE else pattern
 
 
+def _names_another_type(pattern: str, own: str, containers: frozenset[str]) -> bool:
+    """Whether ``pattern`` holds a literal step of a type that is no container
+    and not ``own``: a name is its containers' steps, then its own, so such a
+    pattern names nothing of ``own`` (``<service>:<type>``)."""
+    return any(
+        step != own and step not in containers for step in _STEP.findall(pattern)
+    )
+
+
 def _of_type(
     action: GrantableAction,
     scope: str,
     within: grants.Universe,
     *,
+    service: str,
     type_name: str,
+    containers: frozenset[tuple[str, str]],
     module: str = "",
 ) -> GrantableAction | None:
     """What of ``action`` can name resources of one type: its patterns that
     overlap a name of the type (``within``, the type's names: an id holds no
     step, so ``.../graph/*`` names no workspace, and a module's ``.../p/*``
     none of another module's items), read at ``scope``; for a module, its own
-    items only. None when none does."""
+    items only. None when none does. A pattern with a step of another type
+    that holds nothing is left out before the search, which would say so too."""
     if module:
         step = f"{module_scopes.SERVICE}:{type_name}/{encode_segment(module)}/*"
         names: tuple[str, ...] = (f"abi:*{step}",)
     else:
         names = ("*",)
+    own = f"{service}:{type_name}"
+    holders = frozenset(f"{s}:{t}" for s, t in containers)
     with grants.budget():
         try:
             kept = tuple(
                 r
                 for r in action.resources
-                if grants.overlaps(_at(r, scope), names, within)
+                if not _names_another_type(_at(r, scope), own, holders)
+                and grants.overlaps(_at(r, scope), names, within)
             )
         except grants.Exhausted:
             # Unsure: shown, as the patterns are what the caller holds anyway.
@@ -145,7 +164,13 @@ def _types(
             if held is None:
                 continue
             of_type = _of_type(
-                held, scope, within, type_name=resource_type.name, module=module
+                held,
+                scope,
+                within,
+                service=catalog.service,
+                type_name=resource_type.name,
+                containers=containers,
+                module=module,
             )
             if of_type is None:
                 continue
