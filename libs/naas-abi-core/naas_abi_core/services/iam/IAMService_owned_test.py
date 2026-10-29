@@ -3,9 +3,11 @@ scenario (``tests/owned_scope_contract.py``) and what only the service shows."""
 
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Iterator
 from contextlib import contextmanager
+from uuid import uuid4
 
 import pytest
 
@@ -14,10 +16,12 @@ from naas_abi_core.services.iam import roles
 from naas_abi_core.services.iam.catalog import ActionCatalog, ActionSpec, ResourceType
 from naas_abi_core.services.iam.IAMPorts import (
     IAMNotFoundError,
+    IAMStore,
     IIAMService,
     PermissionDeniedError,
 )
 from naas_abi_core.services.iam.IAMService import (
+    IAMService,
     attachment_resource,
     group_resource,
     policy_resource,
@@ -26,6 +30,9 @@ from naas_abi_core.services.iam.names import UNRESOLVED, anywhere
 from naas_abi_core.services.iam.policy import PolicyValidationError
 from naas_abi_core.services.iam.tests import owned_scope_contract as contract
 from naas_abi_core.services.iam.tests.iam_harness import (
+    ACTIVITY_LOG,
+    NEXUS,
+    TRIPLE_STORE,
     IAMHarness,
     graph,
     name_in,
@@ -48,6 +55,53 @@ def _as_user(h: IAMHarness):
 @pytest.mark.parametrize("scenario", contract.SCENARIOS, ids=lambda s: s.__name__)
 def test_owned_scenarios_in_process(h, scenario):
     scenario(h.iam, _as_user(h))
+
+
+@pytest.fixture(params=["sqlite", "postgresql"])
+def stored(request, tmp_path) -> Iterator[IAMHarness]:
+    """A bootstrapped service on SQLite, and on PostgreSQL when
+    IAM_TEST_POSTGRES_DSN names a database (skipped otherwise)."""
+    if request.param == "sqlite":
+        from naas_abi_core.services.iam.adapters.secondary.IAMStoreSQLite import (
+            IAMStoreSQLite,
+        )
+
+        store: IAMStore = IAMStoreSQLite(str(tmp_path / "iam.sqlite"))
+        drop = None
+    else:
+        dsn = os.environ.get("IAM_TEST_POSTGRES_DSN")
+        if not dsn:
+            pytest.skip("Set IAM_TEST_POSTGRES_DSN to run on PostgreSQL")
+        from naas_abi_core.services.iam.adapters.secondary.IAMStorePostgreSQL import (
+            IAMStorePostgreSQL,
+        )
+
+        schema = f"iam_test_{uuid4().hex[:12]}"
+        store = IAMStorePostgreSQL(dsn, schema)
+        drop = (dsn, schema)
+    iam = IAMService(store)
+    iam.bootstrap()
+    for catalog in (TRIPLE_STORE, ACTIVITY_LOG, NEXUS):
+        iam._register_catalog(catalog)
+    yield IAMHarness(iam)
+    iam.close()
+    if drop is not None:
+        from sqlalchemy import create_engine, text
+
+        from naas_abi_core.services.iam.adapters.secondary.IAMStorePostgreSQL import (
+            sqlalchemy_url,
+        )
+
+        engine = create_engine(sqlalchemy_url(drop[0]))
+        with engine.begin() as conn:
+            conn.execute(text(f'DROP SCHEMA IF EXISTS "{drop[1]}" CASCADE'))
+        engine.dispose()
+
+
+def test_another_containers_policies_are_not_listed_on_each_store(stored):
+    contract.run_another_containers_policies_are_not_listed(
+        stored.iam, _as_user(stored)
+    )
 
 
 def test_names_carry_the_owner():
@@ -115,6 +169,14 @@ def test_a_workspace_admin_sees_what_it_may_attach_from_above(h):
         platform_policy = h.iam.create_policy("platform readers", contract.reader())
         org_group = h.iam.create_group("org analysts", scope=ORG_SCOPE)
         platform_group = h.iam.create_group("platform analysts")
+    with h.as_(t.ws_admin):
+        listed = {p.id for p in h.iam.list_policies(scope=WS1).items}
+        # Attached nowhere: named only to whoever may list them at their owner.
+        assert {roles.ADMIN, roles.VIEWER} <= listed
+        assert not {org_policy.id, platform_policy.id} & listed
+    with as_service_account("engine"):
+        h.iam.attach_policy(org_policy.id, t.org_admin.id, contract.ORG_WIDE)
+        h.iam.attach_policy(platform_policy.id, t.org_admin.id, ORG_SCOPE)
     with h.as_(t.ws_admin):
         listed = {p.id for p in h.iam.list_policies(scope=WS1).items}
         assert {org_policy.id, platform_policy.id, roles.ADMIN, roles.VIEWER} <= listed

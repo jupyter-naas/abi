@@ -542,17 +542,22 @@ class IamAdminService:
         (every Allow is ``${scope}`` or starts with ``${scope}/``) and the caller's own
         right to attach. A policy with a Deny beyond ``${scope}``, its own or its chain's, is offered
         at a scope only to whoever may attach it unscoped, as IAM decides; one whose
-        chain names ``${scope}`` is never offered unscoped."""
+        chain names ``${scope}`` is never offered unscoped. At a scope, only what IAM
+        lists at its level (``list_policies``): another container's policy is offered
+        to whoever may list it at its owner, or where it is attached at that level or
+        above."""
         if scope is not None:
             validate_scope(scope)
 
         def read(session: IIAMService) -> dict[str, Any]:
             every = self._gateway.policies()
             documents = _chains(every)
+            listed = _listed_at(session, _owner_of(scope)) if scope is not None else None
             candidates = [
                 p
                 for p in every[:MAX_ATTACHABLE_SCAN]
                 if within_owner(p.owner_scope, scope)
+                and (listed is None or p.id in listed)
                 and (
                     p.document.confined_to_scope
                     if scope is not None
@@ -965,6 +970,20 @@ class IamAdminService:
                 if operation is None or e.operation == operation
             ]
         }
+
+
+def _listed_at(session: IIAMService, owner: str) -> set[str]:
+    """The ids of the policies IAM lists at ``owner`` to the caller, at most
+    ``MAX_ATTACHABLE_SCAN``."""
+    listed: set[str] = set()
+    after: str | None = None
+    while len(listed) < MAX_ATTACHABLE_SCAN:
+        page = session.list_policies(limit=1000, after=after, scope=owner)
+        listed.update(p.id for p in page.items)
+        if page.next_after is None:
+            break
+        after = page.next_after
+    return listed
 
 
 def _owner_of(scope: str | None) -> str:

@@ -1013,6 +1013,9 @@ def test_a_platform_deny_is_attached_at_a_scope_by_the_platform_admin_only(world
     shared = post(world, "/policies", name="shared", document=SCOPED_READER).json()
     scope = workspace_container("org-1", "ws-1")
     member = _principal_id(world, "member")
+    # Attached nowhere, the shared policy is offered once attached at ws-1.
+    attached = post(world, "/attachments", policy_id=shared["id"], principal_id=member, scope=scope)
+    assert attached.status_code == 201, attached.text
     for user in ("admin", "owner"):
         offered = {
             p["id"] for p in get(world, f"/attachable-policies?scope={scope}", user).json()["items"]
@@ -1026,6 +1029,68 @@ def test_a_platform_deny_is_attached_at_a_scope_by_the_platform_admin_only(world
     assert guard["id"] in offered
     attached = post(world, "/attachments", policy_id=guard["id"], principal_id=member, scope=scope)
     assert attached.status_code == 201, attached.text
+
+
+def test_another_organisations_access_policy_is_not_listed(world, ws2):
+    """A platform policy confined to a scope and attached in org-1 ("org-1 access",
+    as the upgrade makes one per organisation): listed, offered as a parent and
+    for attaching in org-1, never to org-9's admins."""
+    other_org, other_ws = org_container("org-9"), workspace_container("org-9", "ws-9")
+    world.nexus.grant("admin9", "admin", other_org)
+    world.nexus.grant("wsadmin9", "admin", other_ws)
+    access = post(world, "/policies", name="org-1 access", document=SCOPED_READER).json()
+    attached = post(
+        world,
+        "/attachments",
+        policy_id=access["id"],
+        principal_id=_principal_id(world, "admin"),
+        scope=org_below("org-1"),
+    )
+    assert attached.status_code == 201, attached.text
+
+    def ids(path: str, user: str) -> set[str]:
+        response = get(world, path, user)
+        assert response.status_code == 200, response.text
+        return {p["id"] for p in response.json()["items"]}
+
+    # The policy list, which the parent picker offers from, and the attach list.
+    for user, scopes in (("admin9", (other_org, other_ws)), ("wsadmin9", (other_ws,))):
+        for scope in scopes:
+            assert access["id"] not in ids(f"/policies?scope={scope}", user), (user, scope)
+            assert access["id"] not in ids(f"/attachable-policies?scope={scope}", user)
+            assert "builtin.member" in ids(f"/policies?scope={scope}", user)
+        assert get(world, f"/policies/{access['id']}", user).status_code == 404
+        # Nor named by deriving from it, at its own level.
+        refused = post(
+            world,
+            "/policies",
+            user,
+            name="mine",
+            document=SCOPED_READER,
+            scope=other_ws,
+            parent=access["id"],
+        )
+        assert refused.status_code == 403, refused.text
+        assert "org-1 access" not in refused.text
+    # Org-1's admins, at org-1 and in its workspaces; the platform admin everywhere.
+    for scope in (org_container("org-1"), workspace_container("org-1", "ws-1"), ws2):
+        assert access["id"] in ids(f"/policies?scope={scope}", "admin")
+        assert access["id"] in ids(f"/attachable-policies?scope={scope}", "admin")
+    assert access["id"] in ids(f"/policies?scope={ws2}", "ws2admin")
+    for scope in (org_container("org-1"), other_org, other_ws):
+        assert access["id"] in ids(f"/policies?scope={scope}", "root")
+        assert access["id"] in ids(f"/attachable-policies?scope={scope}", "root")
+    # Org-1's admin derives from it, as the scenario's "W analysts".
+    derived = post(
+        world,
+        "/policies",
+        "admin",
+        name="ws-2 analysts",
+        document=SCOPED_READER,
+        scope=ws2,
+        parent=access["id"],
+    )
+    assert derived.status_code == 201, derived.text
 
 
 # -- grant only what you hold ------------------------------------------------------------------

@@ -1716,7 +1716,7 @@ class IAMService(IIAMService, PolicySource):
     ) -> Page:
         """The policies the caller may list. With ``scope``, the policies it
         owns, plus those of the containers above it (and the platform's) that
-        the caller may attach there."""
+        the caller may attach there and may know of (``_unknown_at``)."""
         if scope is None:
             return self._filtered_page(
                 lambda size, cursor: self.store.list_policies(limit=size, after=cursor),
@@ -1748,11 +1748,14 @@ class IAMService(IIAMService, PolicySource):
             allowed = set(self.filter("iam:ListPolicies", own.values()).allowed)
             allowed |= set(self.filter("iam:AttachPolicy", inherited.values()).allowed)
             reach = set(self.filter("iam:AttachPolicy", unscoped.values()).allowed)
-            return {
+            kept = {
                 i
                 for i, n in {**own, **inherited}.items()
                 if n in allowed and (i not in unscoped or unscoped[i] in reach)
             }
+            return kept - self._unknown_at(
+                scope, [p for p in found if p.id in kept and p.id in inherited]
+            )
 
         return self._kept_page(
             lambda size, cursor: self.store.list_policies(
@@ -1763,6 +1766,30 @@ class IAMService(IIAMService, PolicySource):
             limit,
             after,
         )
+
+    def _unknown_at(self, scope: str, inherited: Sequence[Policy]) -> set[str]:
+        """Which of ``inherited`` (policies owned above ``scope``) a list at
+        ``scope`` leaves out: what another container's policy allows is said
+        only to whoever may list it at its owner, or where it is attached at
+        ``scope`` or above (``AGENTS.md``, "Service API"). The built-in roles are
+        no one's. Otherwise "<O> access", a platform policy confined to a
+        scope, would name O and what it holds to the admins of every other
+        organisation."""
+        customer = [p for p in inherited if not p.managed]
+        if not customer:
+            return set()
+        names = {p.id: policy_resource(p.id, p.owner_scope) for p in customer}
+        listed = set(self.filter("iam:ListPolicies", names.values()).allowed)
+        here = {scope, *_owners_above(scope)}
+        return {
+            p.id
+            for p in customer
+            if names[p.id] not in listed
+            and not any(
+                a.scope is not None and _as_owner(a.scope) in here
+                for a in self.store.list_attachments(policy_id=p.id)
+            )
+        }
 
     def update_policy(
         self,

@@ -113,9 +113,11 @@ below a container, `<container>/*`. Nexus builds them with `services/iam/names.p
   core `services/iam/AGENTS.md`, "Owner scopes"), and every route takes the scope as a parameter: `POST
   /policies` and `POST /groups` create at the body's `scope`, `GET /policies?scope=` and `GET /groups?scope=`
   list that level's own plus what the caller may attach there from above (IAM's `list_policies` /
-  `list_groups`), `GET /attachable-policies?scope=` the policies the caller may attach there (leaving out a
-  policy owned by another org or workspace and, at a scope, a platform policy with a Deny outside `${scope}`
-  for anyone but the platform admin, as IAM refuses it), and `GET /access?scope=`, `/catalogs?scope=`,
+  `list_groups`; a policy from above only where the caller may list it at its owner or where it is attached
+  at that level or above, so no organisation's admin sees another's "<O> access"), `GET
+  /attachable-policies?scope=` the policies the caller may attach there, among those IAM lists at that level
+  (leaving out a policy owned by another org or workspace and, at a scope, a platform policy with a Deny
+  outside `${scope}` for anyone but the platform admin, as IAM refuses it), and `GET /access?scope=`, `/catalogs?scope=`,
   `/grantable?scope=` and `/policies/validate?scope=` answer for that level (a scope below a container, in these
   and in the lists, answers for that container). One web module serves every level (Nexus `AGENTS.md`, "Roles & permissions
   UI module"): Platform settings, Organization settings and Workspace settings › Roles & permissions mount it

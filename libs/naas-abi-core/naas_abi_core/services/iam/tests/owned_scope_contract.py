@@ -280,8 +280,16 @@ def run_platform_denies_at_a_scope(iam: IAMService, as_user: AsUser) -> None:
         shared_reader = session.create_policy("shared reader", reader())
     for who in (t.ws_admin, owner):
         with as_user(who) as session:
-            offered = {p.id for p in session.list_policies(scope=WS1).items}
-            assert guard.id not in offered and shared_reader.id in offered
+            # Attached nowhere yet: another container's policy is named only to
+            # whoever may list it at its owner.
+            assert shared_reader.id not in {
+                p.id for p in session.list_policies(scope=WS1).items
+            }
+    for who in (t.ws_admin, owner):
+        with as_user(who) as session:
+            assert guard.id not in {
+                p.id for p in session.list_policies(scope=WS1).items
+            }
             for target in (t.outsider, root, t.member):
                 with pytest.raises(REFUSED):
                     session.attach_policy(guard.id, target.id, WS1)
@@ -291,8 +299,12 @@ def run_platform_denies_at_a_scope(iam: IAMService, as_user: AsUser) -> None:
                 )
             with pytest.raises(REFUSED):
                 session.bind_idp_group("acme", "Sales", guard.id, WS1)
-            # Wholly within ${scope}, a platform policy is still theirs to attach.
+            # Wholly within ${scope}, a platform policy is still theirs to attach,
+            # and listed there once attached.
             session.attach_policy(shared_reader.id, t.member.id, WS1)
+            assert shared_reader.id in {
+                p.id for p in session.list_policies(scope=WS1).items
+            }
     _assert_allowed(iam, root, "iam:CreatePolicy", "abi:iam:policy/x")
     _assert_allowed(
         iam,
@@ -305,6 +317,61 @@ def run_platform_denies_at_a_scope(iam: IAMService, as_user: AsUser) -> None:
         session.attach_policy(guard.id, t.member.id, WS1)
         session.create_pending_grant("builtin", "eve@example.com", guard.id, WS1)
         session.bind_idp_group("acme", "Sales", guard.id, WS1)
+
+
+def run_another_containers_policies_are_not_listed(
+    iam: IAMService, as_user: AsUser
+) -> None:
+    """A policy owned above a container is listed there only to whoever may list
+    it at its owner, or where it is attached at that container or above it:
+    "org-1 access" (a platform policy confined to a scope, as the upgrade makes
+    one per organisation) names org-1 and what it holds to no admin of org-2."""
+    t = team(iam)
+    other_org, other_ws = org("org-2"), OTHER_ORG
+    with as_service_account("engine"):
+        root = iam.ensure_user("https://idp.example", "root")
+        iam.attach_policy(roles.PLATFORM_ADMIN, root.id)
+        other_admin = iam.ensure_user("https://idp.example", "org-2-admin")
+        iam.attach_policy(roles.ADMIN, other_admin.id, other_org)
+        iam.attach_policy(roles.ADMIN, other_admin.id, below("org-2"))
+        other_ws_admin = iam.ensure_user("https://idp.example", "ws-9-admin")
+        iam.attach_policy(roles.ADMIN, other_ws_admin.id, other_ws)
+    with as_user(root) as session:
+        access = session.create_policy("org-1 access", reader())
+        session.attach_policy(access.id, t.org_admin.id, ORG_WIDE)
+    with as_user(t.org_admin) as session:
+        org_only = session.create_policy("org-1 readers", reader(), scope=ORG_SCOPE)
+
+    def listed(who: PrincipalRecord, scope: str) -> set[str]:
+        with as_user(who) as session:
+            return {p.id for p in session.list_policies(scope=scope).items}
+
+    # Not to another organisation's admins, at it or in its workspaces.
+    for who, scopes in (
+        (other_admin, (other_org, other_ws)),
+        (other_ws_admin, (other_ws,)),
+    ):
+        for scope in scopes:
+            offered = listed(who, scope)
+            assert access.id not in offered and org_only.id not in offered
+            # The built-in roles are no one's: still offered.
+            assert roles.MEMBER in offered
+        with as_user(who) as session, pytest.raises(REFUSED):
+            session.get_policy(access.id)
+    # To org-1's admins, at org-1 and in its workspaces: it is attached there.
+    for scope in (ORG_SCOPE, WS1, WS2):
+        assert access.id in listed(t.org_admin, scope)
+    assert access.id in listed(t.ws_admin, WS1)
+    # An org-1 policy attached nowhere: to whoever may list it at org-1 only.
+    assert org_only.id in listed(t.org_admin, WS1)
+    assert org_only.id not in listed(t.ws_admin, WS1)
+    with as_user(t.org_admin) as session:
+        session.attach_policy(org_only.id, t.member.id, WS1)
+    assert org_only.id in listed(t.ws_admin, WS1)
+    assert org_only.id not in listed(t.ws_admin, WS2)
+    # The platform admin lists it everywhere.
+    for scope in (ORG_SCOPE, WS1, other_org, other_ws):
+        assert access.id in listed(root, scope)
 
 
 def _assert_allowed(
@@ -329,4 +396,5 @@ SCENARIOS = (
     run_members_and_viewers,
     run_owned_documents,
     run_platform_denies_at_a_scope,
+    run_another_containers_policies_are_not_listed,
 )

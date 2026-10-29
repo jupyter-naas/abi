@@ -1030,7 +1030,7 @@ attachment per scope.
 |---|---|---|
 | `builtin.viewer` | every `list` and `read` action | every `policy_only` type; the whole `iam` catalog; every module scope type |
 | `builtin.member` | viewer, plus every `write` action | every `policy_only` type; the whole `iam` catalog; every module scope type |
-| `builtin.admin` | member, plus every `admin` action, except on the `iam` `attachment` type; the scope's policies and groups (`ListPolicies`, `GetPolicy`, `CreatePolicy`, `UpdatePolicy`, `DeletePolicy`, `ListGroups`, `GetGroup`, `CreateGroup`, `DeleteGroup`, `AddGroupMember`, `RemoveGroupMember` on `${scope}/iam:policy/*` and `${scope}/iam:group/*`); `iam:ListAttachments` on `${scope}/iam:attachment/*`, and `iam:AttachPolicy` and `iam:DetachPolicy` on `${scope}/iam:attachment/builtin.admin/*`, `…/builtin.member/*`, `…/builtin.viewer/*` and `…/pol_*/*` (customer policies: the scope's own and those above it, IAM refusing one owned elsewhere) | every `policy_only` type; every module scope type; anything on `attachment/builtin.owner/*` and the other managed policies; `iam:MapIdpGroup`, `iam:UnmapIdpGroup`; every `owner_only` action |
+| `builtin.admin` | member, plus every `admin` action, except on the `iam` `attachment` type; the scope's policies and groups (`ListPolicies`, `GetPolicy`, `CreatePolicy`, `UpdatePolicy`, `DeletePolicy`, `ListGroups`, `GetGroup`, `CreateGroup`, `DeleteGroup`, `AddGroupMember`, `RemoveGroupMember` on `${scope}/iam:policy/*` and `${scope}/iam:group/*`); `iam:ListAttachments` on `${scope}/iam:attachment/*`, and `iam:AttachPolicy` and `iam:DetachPolicy` on `${scope}/iam:attachment/builtin.admin/*`, `…/builtin.member/*`, `…/builtin.viewer/*` and `…/pol_*/*` (customer policies: the scope's own and those above it, IAM refusing one owned elsewhere; one owned above is listed there only where it is attached at the scope or above, "Service API") | every `policy_only` type; every module scope type; anything on `attachment/builtin.owner/*` and the other managed policies; `iam:MapIdpGroup`, `iam:UnmapIdpGroup`; every `owner_only` action |
 | `builtin.owner` | admin, plus every action on every `attachment/…` (owner included) and every `owner_only` action | every `policy_only` type; every module scope type; `iam:MapIdpGroup`, `iam:UnmapIdpGroup` |
 | `builtin.platform_admin` | `*` on `*` (attached without scope) | sealed resources |
 | `builtin.self` | held implicitly by every user (no attachment row, unknown users included; `explain` shows it with no attachment id) | none |
@@ -1575,8 +1575,18 @@ process only; `has_lister`; `remote_listers`: "Publishers and listing").
 Lists page after filtering. `list_policies(scope=S)` returns the policies `S` owns
 (`iam:ListPolicies` on each), plus those of the containers above it (its organisation's,
 the platform's) that are confined to a scope and that the caller may attach at `S`
-(`iam:AttachPolicy` on `attachment/<policy>/*` there): a workspace admin is offered
-the roles below owner and the organisation's policies. `list_groups(scope=S)` returns the
+(`iam:AttachPolicy` on `attachment/<policy>/*` there) and may know of: a customer policy
+owned above `S` is listed only to whoever may list it at its owner (`iam:ListPolicies` on
+`<owner>/iam:policy/<id>`: the platform admin, for a platform policy), or once it is
+attached at `S` or at a container above it (an attachment at the platform `abi:` counts,
+an unscoped one does not; `IAMService._unknown_at`). The built-in roles are no one's and
+are listed wherever they may be attached. A workspace admin is offered the roles below
+owner and the organisation's policies attached at the workspace or the organisation (its
+organisation admins see them all); an organisation's admin is never offered another
+organisation's "<O> access". `get_policy` stays decided at the owner, and deriving
+(`create_policy(parent=)`, `grantable(derive=True)`) at the caller's own attachments
+(see "Sub-policies"), so neither names a policy that the list leaves out.
+`list_groups(scope=S)` returns the
 groups `S` owns (`iam:ListGroups`), plus the groups of the containers above it but the
 platform's, for whoever may list `S`'s attachments to them (`iam:ListAttachments` on
 `attachment/*/<group>`); platform groups are not offered there. Without `scope`, a
@@ -2321,6 +2331,24 @@ answers as its module, reachable by the engine alone (no action names its subjec
 module's container type is listed from IAM's registry, never from the module. One call examines at most
 `MAX_EXAMINED` candidates and `MAX_SECONDS`, so a caller who may list few of many, or a slow
 lister, pages through short pages and never holds a worker for long.
+
+**A list at a container names another container's policy only where it is known there.**
+*Decision.* `list_policies(scope=S)` lists a customer policy owned above `S` (the platform's,
+or a container's above `S`) only to whoever may list it at its owner, or when it is attached
+at `S` or at a container above it. Being attachable there (`iam:AttachPolicy` on
+`attachment/pol_*/*`, which every admin holds) is no longer enough. The access policies the
+upgrade makes stay owned by the platform, so an organisation's admin still cannot widen the
+bound their organisation's policy sets. Nexus's attach list (`/attachable-policies`) offers
+what this list holds, and its parent picker is this list. A flag on the upgrade's access
+policies was the alternative: it would have covered those policies only, and left the same
+disclosure for any platform policy written for one organisation.
+*Consequences.* An admin of organisation O2 no longer sees "<O1> access", or any other policy
+written for O1, in O2's lists or parent picker. O1's admins and those of its workspaces still
+see "<O1> access" where it is attached, so they derive from it as before. A platform policy
+meant for every organisation (a shared reader) is offered at a container only once the
+platform admin attaches it there or above; attaching it by its id, as before, needs no listing.
+A workspace admin no longer sees the organisation's policies that are attached nowhere at
+the workspace or above. The built-in roles are listed as before.
 
 ## Known limits and open questions
 
