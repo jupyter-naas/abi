@@ -33,11 +33,17 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.catalog import (
     workspaces,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.catalog.dsl import NexusAction
-from naas_abi_core.services.iam.catalog import ActionCatalog, PlatformAccess, ResourceType
+from naas_abi_core.services.iam.catalog import (
+    NAAS_ABI,
+    ActionCatalog,
+    PlatformAccess,
+    ResourceType,
+)
 
 SERVICE = "nexus"
 # Raise when the catalog changes; IAM keeps the highest version it has seen.
-VERSION = 8
+# 9: published by naas_abi (``publisher``).
+VERSION = 9
 
 _MODULES = (
     organizations,
@@ -71,6 +77,8 @@ NEXUS_CATALOG = ActionCatalog(
     resource_types=RESOURCE_TYPES,
     actions=tuple(a.spec for a in NEXUS_ACTIONS),
     platform_access=PLATFORM_ACCESS,
+    # naas_abi publishes it (core ``services/iam/AGENTS.md``, "Publishers and listing").
+    publisher=NAAS_ABI,
 )
 
 # action name -> the feature whose UseFeature it also needs.

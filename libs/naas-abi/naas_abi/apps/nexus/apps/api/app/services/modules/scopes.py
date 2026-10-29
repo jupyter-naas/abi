@@ -16,14 +16,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Collection, Iterable
+from collections.abc import Collection, Iterable, Mapping
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
 
 from naas_abi_core.services.iam import module_scopes
 from naas_abi_core.services.iam.catalog import ActionCatalog
-from naas_abi_core.services.iam.names import PLATFORM
+from naas_abi_core.services.iam.names import PLATFORM, matches
 
 _log = logging.getLogger(__name__)
 
@@ -294,6 +294,64 @@ async def gather(unavailable: set[str] | None = None) -> list[dict[str, Any]]:
     for part in parts:
         exposed.extend(part)
     return build(exposed, catalogs, engine_modules())
+
+
+def exposed_types(modules: Iterable[dict[str, Any]]) -> dict[str, list[str]]:
+    """Each module ``gather`` lists and the ``module`` catalog types it has items
+    of (its agents, apps, workflows, pipelines), for the publishers' view."""
+    return {
+        entry["module"]: [t for t, plural in PLURAL.items() if entry.get(plural)]
+        for entry in modules
+    }
+
+
+def granted(
+    modules: Iterable[dict[str, Any]], grantable: Iterable[Mapping[str, Any]]
+) -> list[dict[str, Any]]:
+    """What ``gather`` lists, narrowed to what the caller may grant at a scope
+    (``grantable``: IAM's, as ``iam_admin`` shows it, patterns written at
+    ``${scope}``): an item one of whose actions the caller may grant on it, a
+    declared catalog's actions they may grant and the types those name. A module
+    left with nothing is left out: nothing lists more to someone who may grant
+    less."""
+    held = {a["action"]: a for c in grantable for a in c.get("actions") or ()}
+
+    def may(action: str, resource: str) -> bool:
+        found = held.get(action)
+        return (
+            found is not None
+            and any(matches(p, resource) for p in found.get("resources") or ())
+            and not any(matches(p, resource) for p in found.get("excluded") or ())
+        )
+
+    narrowed: list[dict[str, Any]] = []
+    for entry in modules:
+        kept: dict[str, Any] = {"module": entry["module"]}
+        for plural in PLURAL.values():
+            kept[plural] = [
+                item
+                for item in entry.get(plural) or ()
+                if any(may(action, item["resource"]) for action in item["actions"])
+            ]
+        declared = entry.get("declared")
+        if declared:
+            actions = [a for a in declared["actions"] if a["action"] in held]
+            named = {t for a in actions for t in a["resource_types"]}
+            declared = (
+                {
+                    **declared,
+                    "actions": actions,
+                    "resource_types": [
+                        t for t in declared["resource_types"] if t["name"] in named
+                    ],
+                }
+                if actions
+                else None
+            )
+        kept["declared"] = declared
+        if declared or any(kept[plural] for plural in PLURAL.values()):
+            narrowed.append(kept)
+    return narrowed
 
 
 def item_scopes(modules: Iterable[dict[str, Any]]) -> list[Any]:

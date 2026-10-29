@@ -13,3 +13,8 @@ Assertions must verify results and state changes, not just lack of exceptions.
 imports core for the existing Agent/IntentAgent classes. It starts no engine and
 constructs no provider models; all inference uses SDK proxies to engine_host in
 another process. Keep this distinct from the core-free workers above.
+
+`discovery_demo.py`'s provider declares a catalog (`demo_research`) and a lister of its
+briefs (`@lister`); its consumer lists them through IAM (`list_resources`), which asks the
+provider over NATS and keeps what the consumer may list. `worker.py` lists its own
+container type from IAM's registry and a type with no lister (offered as wildcards).

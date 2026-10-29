@@ -21,6 +21,7 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
 | `legacy_names.py` | The old grammar's `NO_ORG`, `org_scope`, `workspace_scope`: only for the start-up moves that predate container paths |
 | `placements.py` | Which workspace owns the kernel resources Nexus keeps (`placement_source`, `place`, `place_existing`) |
 | `bootstrap.py` | Startup: register the catalog, move the old membership rows into IAM once (`iam_migrations`) |
+| `listers.py` | What naas_abi lists for the policy builder, registered with IAM at startup (`register`): organizations and workspaces (labels; IAM keeps only what its registry holds), members, the features in `enabled_features`, and every module's agents, apps, workflows and pipelines (`modules/scopes.gather`, named in the container asked). Each query runs on the API's loop (`OnLoop`) |
 | `role_features.py` | Startup, once: what each role brought in each workspace becomes that workspace's policy "Features of <role>" (`migrate_role_features`, `iam_migrations` `role_features_v1`); then warns while a configuration still sets `role_baseline`, `organization_overrides` or `workspace_overrides` |
 | `user_features.py` | A user's feature flags from IAM (`user_feature_flags`: `UseFeature` per workspace, in one `filter`), what `/api/workspaces` shows |
 | `feature_overrides.py` | Startup, once: the per-workspace feature overrides of earlier versions (`migrate_feature_overrides`, `iam_migrations` `workspace_feature_sets_v1`) |
@@ -102,9 +103,13 @@ of one at a workspace is `${scope}/module:<type>/<module>/<name>`. One source of
   workspace settings › Agents, Apps, Workflows) is what the caller may use there, IAM's `filter` alone
   (`filter_scopes`): no set, no switch. A workspace that should not offer a module denies it in a policy (its
   access policy's Denies, "The upgrade").
-- **The listing** `GET /api/modules/scopes?workspace_id=|organization_id=` (`nexus:ListModuleScopes`, admin) is every
-  module with its agents, apps, workflows, pipelines and declared catalog, with display data and the `resource` and
-  `actions` a policy names (`services/modules/scopes.py`). The policy editor suggests ids from it.
+- **The listing** `GET /api/modules/scopes?workspace_id=|organization_id=` (`nexus:ListModuleScopes`, admin, or
+  whoever may create or update policies there) is every module with its agents, apps, workflows, pipelines and
+  declared catalog, with display data and the `resource` and `actions` a policy names (`services/modules/scopes.py`),
+  **narrowed to what the caller may grant there** (`scopes.granted`, from IAM's `grantable` as the caller): an item
+  none of whose actions the caller may grant on it, a declared action they may not grant, and a module left with
+  nothing are left out. An admin who holds no module scope gets an empty list. The policy editor suggests ids
+  from it.
 - **Discovery's grants** stay the broker-side check (a member holds `InvokeAgent`, `OpenApp`, `TriggerJob`
   platform-wide); the module scope is checked here first, and a turn that names no workspace runs no module agent
   or workflow.
@@ -112,7 +117,9 @@ of one at a workspace is `${scope}/module:<type>/<module>/<name>`. One source of
 ## The `nexus` catalog
 
 Nexus registers the `nexus` action catalog with IAM at startup (`catalog/__init__.py`, `VERSION`: raise it
-when the catalog changes; IAM keeps the highest it has seen). `organization` and `workspace` are its
+when the catalog changes; IAM keeps the highest it has seen). Its publisher is naas_abi (`publisher:
+naas_abi`, core `services/iam/AGENTS.md`, "Publishers and listing"), as are the agents, apps, workflows and
+pipelines of the engine module `naas_abi` in the `module` catalog. `organization` and `workspace` are its
 containers (`rtype(..., container=True)`): an organization is `abi:nexus:organization/<org>`, a workspace
 `abi:nexus:organization/<org>/nexus:workspace/<ws>` (`abi:nexus:workspace/<ws>` for one in no organization),
 and actions on them are decided on those names. What a workspace holds is `<workspace>/nexus:<type>/<id>`,
@@ -307,6 +314,16 @@ chain from an old-grammar world (`testing.LegacyNexusIam`) through their move an
 
 ## Decisions
 
+- **naas_abi lists its own, IAM filters.** Decision: naas_abi registers listers with the engine's IAM at
+  start (`listers.py`) for `organization`, `workspace`, `member`, `feature` and the `module` catalog's four types;
+  each returns candidates from Nexus's database (or the modules' listing) and IAM keeps what the caller may list
+  (core `services/iam/AGENTS.md`, "Publishers and listing"). Organizations and workspaces are IAM's containers:
+  its registry decides which exist, naas_abi only labels them. Features come from `enabled_features` alone, so a
+  disabled feature is listed nowhere, as it is usable nowhere (`authz.feature_exists`). Consequences: IAM is
+  synchronous and the database async, so each query runs on the API's loop from IAM's thread (`OnLoop`); asked
+  from that loop it fails, and the type comes back as wildcards rather than blocking. The modules' items are
+  gathered at most every 30 seconds. Nexus's other types (conversations, files, …) are offered as wildcards: no
+  lister yet.
 - **Roles are attachments, and only IAM knows them.** `organization_members`, `workspace_members` and the
   `owner_id` fallbacks were read once into IAM at boot (`iam_migrations` marks it, migration `0059`) and
   are never read for a decision again; the configuration seeds grants. An existing install enforces once

@@ -953,13 +953,14 @@ class IAMService(IIAMService, PolicySource):
                 left = [name for name in left if name not in found]
             return found
 
-        def keep(item: listing.ListedResource) -> bool:
+        def of_module(item: listing.ListedResource) -> bool:
             """The ``module`` catalog asked for one module: its items only."""
             if not module or service != module_scopes.SERVICE:
                 return True
             segments = parse_resource_name(item.name).segments
             return bool(segments) and segments[0] == module
 
+        keep: Callable[[listing.ListedResource], bool] = of_module
         lister = self._lister_of(catalog, declared)
         if declared.container:
             lister, keep = self._container_listing(service, type, lister, keep)

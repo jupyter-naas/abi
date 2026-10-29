@@ -125,6 +125,11 @@ passes the secret service built from its local adapters, never `nats_rpc`.
 over NATS by `IAMSecondaryAdapterNATSClient`. `require` is defined once, on the
 port, from `authorize`.
 
+**`ResourceLister`** (`listing.py`, secondary): the existing resources of one type,
+candidates for a listing as the caller ("Publishers and listing"). In process
+(`register_lister`) or a remote module's, found by a **`ListerDirectory`**
+(`listers__nats.NATSModuleListers`, discovery and `abi.mod.<project>.<sa>.<instance>.iam.list`).
+
 ## Vocabulary
 
 | Term | Meaning |
@@ -903,9 +908,11 @@ below before anyone sees it. `listing.page_of` pages an in-memory list for one.
 - **In process**, for the engine's services and engine modules:
   `iam.register_lister(service, type, lister)` (`IAMService`, not over NATS; the catalog must
   be registered and declare the type; a later registration replaces an earlier one). The
-  engine registers its kernel services' once they are loaded (each service's
-  `iam_catalog.listers(service)`, `kernel_catalogs.register_kernel_listers`) and its modules'
-  (`BaseModule.iam_listers()`, for its declared catalog); naas_abi registers its own at start.
+  engine registers, once its modules are loaded, the listers its loaded kernel services
+  offer (each service's `iam_listers()`, `{(service, type): lister}`) and its modules'
+  (`BaseModule.iam_listers()`, for its declared catalog), as the engine
+  (`kernel_catalogs.register_listers`; one refused is logged, its type offered as wildcards);
+  naas_abi registers its own at start.
   A kernel lister is the service's own list call (`list_graphs`, `list_collections`,
   `namespaces`, `list_objects`, `list_canonical_ids`, ...), made as the caller, its items
   named where IAM places them (`ResourceGuard.name`).
@@ -1478,6 +1485,9 @@ iam.authorize(action, resource)  # Decision
 iam.allows_every(action, "triple_store", "graph")  # a safe shortcut: False when unsure
 iam.explain(action, resource, principal_id=...)  # needs iam:Explain on the principal
 iam.grantable(scope)  # what the caller may grant there (needs no permission)
+iam.list_resources(
+    "triple_store", "graph", scope=container, text="sales", cursor=None
+)  # ResourcePage: what the caller may list there (needs no permission)
 iam.placement_of(
     service, canonical_id
 )  # the covering placement, or None (serving engine)
@@ -1517,7 +1527,8 @@ a statement reached through a scoped attachment keeps only those Allow patterns,
 container, else the platform), containers (`register_container`, `delete_container`,
 `container`, `list_containers`, `call_container`: "Containers"),
 `register_catalog` (highest
-version wins; refuses dropping an action a policy names).
+version wins; refuses dropping an action a policy names), listers (`register_lister`, in
+process only; `has_lister`; `remote_listers`: "Publishers and listing").
 
 Lists page after filtering. `list_policies(scope=S)` returns the policies `S` owns
 (`iam:ListPolicies` on each), plus those of the containers above it (its organisation's,
@@ -2024,7 +2035,11 @@ their messages were removed; IAM's catalog 7 drops `iam:GetSet` and `iam:PutSet`
 `delete_scope` and `workspace_org` are gone with the scopes (`iam:PutScope` and
 `iam:DeleteScope` stay declared, deprecated: they authorize nothing). `Placement.container`,
 `AuthorizeDeclaredRequest.container` and `common.CallContext.container` carry container
-names; `common.CallContext.workspace_id` is refused when set (SDK 0.2, "Placements"). The SDK
+names; `common.CallContext.workspace_id` is refused when set (SDK 0.2, "Placements"). Listing:
+`list_resources` (`ListResourcesRequest`, `ListResourcesResponse`, `ListedResource`), offered to every
+module like `grantable` (`broker.IAM_ALWAYS`: it is filtered as the caller); `ActionCatalog.publisher`
+(empty: the engine). A remote module's lister answers `discovery.v1.ListerQuery` with `ListerPage` on its
+instance's `iam.list` subject, its types in `ModuleDescriptor.listers`. The SDK
 facade is `engine.services.iam` (`naas_abi_sdk/services/iam.py`), reachable without a
 dependency declaration; records are dictionaries. A module makes calls inside a container
 with `call_context.inside(container)` (the SDK's `with engine.inside(container):`).
@@ -2246,6 +2261,23 @@ where its holder could not attach it. What a caller holds through a sub-policy c
 shown without a search, so such a caller may be refused a grant they could prove the hard way.
 A parent's Deny beyond `${scope}` makes each sub-policy a policy that only the platform admin
 attaches at a scope.
+
+**Every catalog names its publisher; a listing is the caller's.**
+*Decision.* A catalog says who publishes it (`ActionCatalog.publisher`: the engine by default,
+`naas_abi` for Nexus's, a module's key for its own), and the `module` catalog's resources belong to the
+module their id names. A resource type may have a lister, which returns candidates and decides nothing:
+in process for the engine's services and modules, over NATS for a remote module (the SDK serves it, its
+types in discovery), IAM itself for containers (its registry) and singletons. `list_resources` keeps what
+the caller may list (the type's `list` actions, else any of its actions, through `filter`), within the
+scope, searched and paged by name, and needs no permission, like `grantable`.
+*Consequences.* The policy builder can offer, per publisher and type, only what the caller may grant
+(`publishers.by_publisher` over `grantable`) and the existing resources they may list, with nothing
+listed beyond it. A lister may read unchecked: what it returns is filtered before anyone sees it, and
+what falls outside the query (another type, container, order) is dropped. A lister that fails, times out
+or is gone leaves its type offered as wildcards and is logged, never failing the call. A remote lister
+answers as its module, reachable by the engine alone (no action names its subject); a remote
+module's container type is listed from IAM's registry, never from the module. One call examines at most
+`MAX_EXAMINED` candidates, so a caller who may list few of many pages through short pages.
 
 ## Known limits and open questions
 

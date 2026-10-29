@@ -30,6 +30,11 @@ class IamGateway(ABC):
         """The registered action catalogs, to validate documents against."""
 
     @abstractmethod
+    def listable(self, service: str, type: str) -> bool:
+        """Whether IAM lists the existing resources of ``service:type`` (a lister
+        it can ask), rather than offering the type as wildcards only."""
+
+    @abstractmethod
     def principal(self, principal_id: str) -> PrincipalRecord | None:
         """A principal's profile, to name it where the caller already sees its id."""
 

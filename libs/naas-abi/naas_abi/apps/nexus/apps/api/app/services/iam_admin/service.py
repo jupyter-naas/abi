@@ -18,7 +18,7 @@ this service adds is
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Collection, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, TypeVar
@@ -53,6 +53,7 @@ from naas_abi_core.services.iam.IAMService import (
     manifest_resource,
     policy_resource,
 )
+from naas_abi_core.services.iam.listing import MAX_TEXT
 from naas_abi_core.services.iam.modules import split_manifest
 from naas_abi_core.services.iam.names import (
     PLATFORM,
@@ -72,6 +73,7 @@ from naas_abi_core.services.iam.policy import (
     denies_beyond_scope,
     parse_policy_document,
 )
+from naas_abi_core.services.iam.publishers import by_publisher
 from starlette.concurrency import run_in_threadpool
 
 T = TypeVar("T")
@@ -121,6 +123,17 @@ _PLATFORM_ONLY = frozenset(
 )
 ACCESS_ACTIONS: tuple[str, ...] = (*_WILDCARD_TYPE, *_ATTACHMENT_ACTIONS, *_KEY_ACTIONS)
 
+# Each module's key and the ``module`` catalog types it exposes (its agents, apps,
+# workflows, pipelines), for ``publishers``.
+ModuleTypes = Callable[[], Awaitable[Mapping[str, Collection[str]]]]
+
+
+async def _module_types() -> Mapping[str, Collection[str]]:
+    """What every module exposes, from Nexus's module listing (``modules/scopes.py``)."""
+    from naas_abi.apps.nexus.apps.api.app.services.modules import scopes
+
+    return scopes.exposed_types(await scopes.gather())
+
 
 class IamAdminService:
     def __init__(
@@ -129,10 +142,12 @@ class IamAdminService:
         audit: AdminAuditLog,
         *,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        modules: ModuleTypes = _module_types,
     ) -> None:
         self._gateway = gateway
         self._audit = audit
         self._clock = clock
+        self._modules = modules
 
     # -- plumbing ---------------------------------------------------------------------
 
@@ -216,11 +231,88 @@ class IamAdminService:
 
     async def grantable(self, user: Any, scope: str) -> dict[str, Any]:
         """What the caller may grant at ``scope``, for the policy builder: per catalog
-        (a kernel service or a module), the actions they hold there and the resource
-        patterns (``${scope}/...``) they hold them on, minus their Denies. IAM's
-        ``grantable``, about the caller only, like ``access``: IAM validates the scope."""
+        (a kernel service or a module), its publisher, the actions they hold there,
+        the types each acts on and the resource patterns (``${scope}/...``) they
+        hold them on, minus their Denies. IAM's ``grantable``, about the caller
+        only, like ``access``: IAM validates the scope. ``publishers`` groups the
+        same by publisher and type."""
         found = await self._read(user, lambda session: session.grantable(scope))
-        return {"scope": scope, "catalogs": [views.grantable_view(c) for c in found]}
+        registry = self._gateway.catalogs()
+        return {
+            "scope": scope,
+            "catalogs": [views.grantable_view(c, registry.get(c.service)) for c in found],
+        }
+
+    async def writes_policies(self, user: Any, scope: str) -> bool:
+        """Whether the caller may create or update policies at ``scope``'s level:
+        who builds a policy there sees what they may grant there."""
+        owner = _owner_of(scope)
+
+        def decide(session: IIAMService) -> bool:
+            return any(
+                session.authorize(action, self._wildcard("policy", owner)).allowed
+                for action in ("iam:CreatePolicy", "iam:UpdatePolicy")
+            )
+
+        try:
+            return await self._read(user, decide)
+        except PermissionDeniedError:
+            return False
+
+    async def publishers(self, user: Any, scope: str) -> dict[str, Any]:
+        """Each publisher (the engine, naas_abi, then the modules), its resource
+        types, their actions and what the caller may grant of each at ``scope``,
+        and whether a type's resources are listed (``GET /resources``). Only what
+        the caller may grant: a type, or a publisher, with nothing of it is left
+        out. About the caller, like ``grantable``."""
+        modules = await self._modules()
+
+        def read(session: IIAMService) -> dict[str, Any]:
+            found = by_publisher(
+                self._gateway.catalogs().all(),
+                session.grantable(scope),
+                modules=modules,
+                listable=self._gateway.listable,
+            )
+            return {"scope": scope, "publishers": [views.publisher_view(p) for p in found]}
+
+        return await self._read(user, read)
+
+    async def resources(
+        self,
+        user: Any,
+        scope: str,
+        service: str,
+        type_name: str,
+        *,
+        text: str = "",
+        cursor: str | None = None,
+        module: str = "",
+        limit: int | None = None,
+    ) -> dict[str, Any]:
+        """The existing resources of ``service:type_name`` in ``scope`` that the
+        caller may list (IAM's ``list_resources``, as the caller): a stranger gets
+        an empty page. ``listed`` False: offered as wildcards only."""
+        if len(text) > MAX_TEXT:
+            raise ValueError(f"A search text is at most {MAX_TEXT} characters")
+        page = await self._read(
+            user,
+            lambda session: session.list_resources(
+                service,
+                type_name,
+                scope=scope,
+                text=text,
+                cursor=cursor,
+                limit=limit,
+                module=module,
+            ),
+        )
+        return {
+            "scope": scope,
+            "service": service,
+            "type": type_name,
+            **views.resource_page_view(page),
+        }
 
     async def _reads_system(self, user: Any) -> bool:
         from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
@@ -230,8 +322,10 @@ class IamAdminService:
     # -- catalogs and validation ------------------------------------------------------
 
     async def catalogs(self, user: Any, scope: str | None = None) -> dict[str, Any]:
-        """The action catalogs a policy names, for the editor's autocomplete.
-        For whoever may write policies or read them (at ``scope``'s level)."""
+        """The action catalogs a policy names, for the editor's autocomplete:
+        only the actions the caller may grant at ``scope`` (the platform by
+        default) and the types they name. For whoever may write policies or read
+        them (at ``scope``'s level)."""
         owner = _owner_of(scope)
 
         def read(session: IIAMService) -> dict[str, Any]:
@@ -240,7 +334,11 @@ class IamAdminService:
                 ("iam:ListPolicies", "iam:CreatePolicy", "iam:UpdatePolicy"),
                 self._wildcard("policy", owner),
             )
-            return views.catalogs_view(self._gateway.catalogs().all())
+            # Only what the caller may grant there: nothing lists more to
+            # someone who may grant less.
+            return views.catalogs_view(
+                self._gateway.catalogs().all(), granted=session.grantable(owner)
+            )
 
         return await self._read(user, read)
 

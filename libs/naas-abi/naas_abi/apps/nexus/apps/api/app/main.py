@@ -349,6 +349,7 @@ async def _prepare_iam() -> None:
         container_names,
         policy_tree,
     )
+    from naas_abi.apps.nexus.apps.api.app.services.iam import listers as iam_listers
     from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
 
     log = logging.getLogger(__name__)
@@ -360,6 +361,12 @@ async def _prepare_iam() -> None:
     try:
         async with AsyncSessionLocal() as db:
             await bootstrap.register_catalog()
+            # What the policy builder lists of naas_abi's types and the modules'
+            # items; a type left out is offered as wildcards.
+            try:
+                await iam_listers.register()
+            except Exception:  # noqa: BLE001 - listing never stops the API
+                log.exception("naas_abi's listers are not registered")
             # The moves of the grammar before container paths: they read and write
             # it, so they run before the names are rewritten (IAM takes it from
             # them, as the engine or the API acting for nobody). They read the

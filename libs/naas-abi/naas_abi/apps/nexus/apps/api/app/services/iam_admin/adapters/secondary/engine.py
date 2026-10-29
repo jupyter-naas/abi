@@ -75,6 +75,10 @@ class EngineIamGateway(IamGateway):
             raise IamUnavailableError("IAM does not publish its action catalogs here")
         return registry
 
+    def listable(self, service: str, type: str) -> bool:
+        has_lister = getattr(self._iam(), "has_lister", None)
+        return bool(has_lister(service, type)) if callable(has_lister) else False
+
     def principal(self, principal_id: str) -> PrincipalRecord | None:
         iam = self._iam()
         with as_service_account("api"):

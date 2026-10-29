@@ -16,6 +16,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     Attachment,
     CreatedKey,
     Explanation,
+    GrantableAction,
     GrantableCatalog,
     KeyRecord,
     ManifestRecord,
@@ -23,8 +24,10 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalRecord,
 )
 from naas_abi_core.services.iam.keys import PREFIXES
+from naas_abi_core.services.iam.listing import ResourcePage
 from naas_abi_core.services.iam.modules import split_manifest
 from naas_abi_core.services.iam.policy import POLICY_VARIABLES, Statement
+from naas_abi_core.services.iam.publishers import Publisher
 
 # The service accounts the engine itself holds (``roles.SERVICE_ACCOUNTS``) and the
 # jobs of its modules.
@@ -156,27 +159,103 @@ def manifest_view(record: ManifestRecord, account_name: str | None) -> dict[str,
     }
 
 
-def catalog_view(catalog: ActionCatalog) -> dict[str, Any]:
+def catalog_view(
+    catalog: ActionCatalog, granted: Mapping[str, GrantableAction] | None = None
+) -> dict[str, Any]:
+    """A catalog as the editor reads it; with ``granted``, only those actions and
+    the resource types they name."""
     data = catalog.to_dict()
+    data["publisher"] = catalog.publisher
     data["actions"] = [
-        {**action, "qualified": catalog.qualified(action["name"])} for action in data["actions"]
+        {**action, "qualified": catalog.qualified(action["name"])}
+        for action in data["actions"]
+        if granted is None or catalog.qualified(action["name"]) in granted
     ]
+    if granted is not None:
+        named = {t for action in data["actions"] for t in action["resource_types"]}
+        data["resource_types"] = [t for t in data["resource_types"] if t["name"] in named]
     return data
 
 
-def catalogs_view(catalogs: list[ActionCatalog]) -> dict[str, Any]:
+def catalogs_view(
+    catalogs: list[ActionCatalog], granted: list[GrantableCatalog] | None = None
+) -> dict[str, Any]:
+    """The catalogs; with ``granted`` (what the caller may grant), only what is in
+    it: a catalog with nothing granted is left out."""
+    held = (
+        {a.action: a for found in granted for a in found.actions} if granted is not None else None
+    )
+    views = [catalog_view(c, held) for c in catalogs]
     return {
-        "catalogs": [catalog_view(c) for c in catalogs],
+        "catalogs": [v for v in views if held is None or v["actions"]],
         "variables": sorted(POLICY_VARIABLES),
     }
 
 
-def grantable_view(catalog: GrantableCatalog) -> dict[str, Any]:
+def publisher_view(publisher: Publisher) -> dict[str, Any]:
+    return {
+        "id": publisher.id,
+        "kind": publisher.kind,
+        "types": [
+            {
+                "service": t.service,
+                "type": t.type.name,
+                "description": t.type.description,
+                "id": t.type.id,
+                "placement": t.type.placement,
+                "container": t.type.container,
+                "listed": t.listed,
+                "module": t.module or None,
+                "actions": [
+                    {
+                        "action": f"{t.service}:{a.spec.name}",
+                        "name": a.spec.name,
+                        "level": a.spec.level,
+                        "description": a.spec.description,
+                        "resources": list(a.grantable.resources),
+                        "excluded": list(a.grantable.excluded),
+                    }
+                    for a in t.actions
+                ],
+            }
+            for t in publisher.types
+        ],
+    }
+
+
+def resource_page_view(page: ResourcePage) -> dict[str, Any]:
+    return {
+        "items": [
+            {
+                "name": item.name,
+                "id": item.id,
+                "label": item.label or item.id,
+                "description": item.description,
+            }
+            for item in page.items
+        ],
+        "next_cursor": page.next_cursor,
+        "listed": page.listed,
+    }
+
+
+def grantable_view(
+    catalog: GrantableCatalog, declared: ActionCatalog | None = None
+) -> dict[str, Any]:
+    """What the caller may grant of one catalog; with ``declared`` (the registered
+    catalog), its publisher and the types each action acts on."""
+
+    def types(action: str) -> list[str]:
+        spec = declared.action(action.partition(":")[2]) if declared is not None else None
+        return list(spec.resource_types) if spec is not None else []
+
     return {
         "service": catalog.service,
+        "publisher": declared.publisher if declared is not None else None,
         "actions": [
             {
                 "action": a.action,
+                "resource_types": types(a.action),
                 "resources": list(a.resources),
                 "excluded": list(a.excluded),
             }

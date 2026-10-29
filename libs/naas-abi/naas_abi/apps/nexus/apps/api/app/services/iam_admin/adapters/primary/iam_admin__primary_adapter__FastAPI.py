@@ -174,6 +174,45 @@ async def grantable(
     return await _call(service.grantable(user, scope))
 
 
+@router.get("/publishers")
+async def publishers(
+    scope: str = Query(..., min_length=1),
+    user: User = Signed,
+    service: IamAdminService = Service,
+) -> dict[str, Any]:
+    """Each publisher, its resource types, their actions and what the caller may
+    grant of each at ``scope``: only what they may grant."""
+    return await _call(service.publishers(user, scope))
+
+
+@router.get("/resources")
+async def resources(
+    scope: str = Query(..., min_length=1),
+    service_name: str = Query(..., alias="service", min_length=1, max_length=64),
+    type_name: str = Query(..., alias="type", min_length=1, max_length=64),
+    q: str = Query("", max_length=200),
+    cursor: str | None = Query(None, max_length=4096),
+    module: str = Query("", max_length=255),
+    limit: int | None = Query(None, ge=1, le=200),
+    user: User = Signed,
+    service: IamAdminService = Service,
+) -> dict[str, Any]:
+    """The existing resources of a type at ``scope`` that the caller may list, as
+    the caller (a page after ``cursor``, searched with ``q``)."""
+    return await _call(
+        service.resources(
+            user,
+            scope,
+            service_name,
+            type_name,
+            text=q,
+            cursor=cursor,
+            module=module,
+            limit=limit,
+        )
+    )
+
+
 @router.get("/catalogs", dependencies=[declares("iam:ListPolicies")])
 async def catalogs(
     scope: str | None = None, user: User = Signed, service: IamAdminService = Service

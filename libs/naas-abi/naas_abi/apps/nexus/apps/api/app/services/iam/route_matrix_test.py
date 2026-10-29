@@ -61,6 +61,12 @@ ACCOUNT_ROUTES: dict[tuple[str, str], str] = {
     ("GET", "/api/iam/admin/grantable"): (
         "what the caller may grant, decided by IAM for the caller only"
     ),
+    ("GET", "/api/iam/admin/publishers"): (
+        "what the caller may grant, by publisher, decided by IAM for the caller only"
+    ),
+    ("GET", "/api/iam/admin/resources"): (
+        "what the caller may list of a type, filtered by IAM as the caller"
+    ),
     (
         "GET",
         "/api/websocket/websocket/presence/user/{user_id}",

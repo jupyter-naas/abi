@@ -91,23 +91,102 @@ async def _get(user_id: str, path: str):
         return await http.get(path)
 
 
+def _hold(team, user: str, scope: str, *statements: dict) -> None:
+    from naas_abi_core.engine.call_context import as_service_account
+
+    with as_service_account("engine"):
+        policy = team.iam.create_policy(
+            f"{user} holds", {"version": "2026-10-13", "statements": list(statements)}
+        )
+        team.iam.attach_policy(policy.id, team.principal(user), scope)
+
+
 @pytest.mark.asyncio
-async def test_admins_list_the_module_scopes_of_their_workspace_or_org(team, monkeypatch) -> None:
+async def test_module_scopes_list_only_what_the_caller_may_grant(team, monkeypatch) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
+
     async def gathered():
         return build(EXPOSED, [DECLARED])
 
     monkeypatch.setattr(scopes, "gather", gathered)
-    for path in (
+    paths = (
         "/api/modules/scopes?workspace_id=ws-1",
         "/api/modules/scopes?organization_id=org-1",
-    ):
+    )
+    # Admins and owners hold no module scope (zero trust): nothing to grant.
+    for path in paths:
         for user in ("admin", "owner"):
             response = await _get(user, path)
             assert response.status_code == 200, (user, path)
-            assert [m["module"] for m in response.json()["modules"]] == ["acme.people", "naas_abi"]
+            assert response.json()["modules"] == []
         for user in ("member", "viewer", "stranger"):
             assert (await _get(user, path)).status_code == 403, (user, path)
     assert (await _get("admin", "/api/modules/scopes")).status_code == 422
+
+    # Holding one agent and the right to write policies: that agent alone.
+    ws1 = workspace_container("org-1", "ws-1")
+    team.user("builder")
+    _hold(
+        team,
+        "builder",
+        ws1,
+        {
+            "effect": "Allow",
+            "actions": ["module:UseAgent"],
+            "resources": ["${scope}/module:agent/acme.people/Recruiter"],
+        },
+        {"effect": "Allow", "actions": ["iam:CreatePolicy"], "resources": ["${scope}/iam:policy/*"]},
+    )
+    response = await _get("builder", paths[0])
+    assert response.status_code == 200, response.text
+    (only,) = response.json()["modules"]
+    assert only["module"] == "acme.people"
+    assert [a["name"] for a in only["agents"]] == ["Recruiter"]
+    assert only["apps"] == only["workflows"] == only["pipelines"] == []
+    assert only["declared"] is None
+    # Not at the organization, where they hold nothing.
+    assert (await _get("builder", paths[1])).status_code == 403
+
+
+def test_granted_keeps_what_the_patterns_reach_minus_the_excluded() -> None:
+    listed = build(EXPOSED, [DECLARED])
+    grantable = [
+        {
+            "service": "module",
+            "actions": [
+                {
+                    "action": "module:OpenApp",
+                    "resources": ["${scope}/module:app/acme.people/*"],
+                    "excluded": [],
+                },
+                {
+                    "action": "module:UseAgent",
+                    "resources": ["${scope}/*"],
+                    "excluded": ["${scope}/module:agent/naas_abi/*"],
+                },
+            ],
+        },
+        {
+            "service": "acme_people",
+            "actions": [
+                {
+                    "action": "acme_people:ExportReport",
+                    "resources": ["${scope}/acme_people:report/*"],
+                    "excluded": [],
+                }
+            ],
+        },
+    ]
+    (people,) = scopes.granted(listed, grantable)
+    assert [a["name"] for a in people["agents"]] == ["Recruiter"]
+    assert [a["name"] for a in people["apps"]] == ["directory"]
+    assert people["workflows"] == []
+    assert [a["action"] for a in people["declared"]["actions"]] == ["acme_people:ExportReport"]
+    assert scopes.granted(listed, []) == []
+    assert scopes.exposed_types(listed) == {
+        "acme.people": ["agent", "app", "workflow", "pipeline"],
+        "naas_abi": ["agent"],
+    }
 
 
 @pytest.mark.asyncio

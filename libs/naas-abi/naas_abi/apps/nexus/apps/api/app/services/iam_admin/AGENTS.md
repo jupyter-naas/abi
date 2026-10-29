@@ -12,8 +12,8 @@ Nexus adds no role check of its own.
 
 | File | Role |
 |---|---|
-| `port.py` | `IamGateway`: IAM bound to a user (`bind`), the catalogs, and the engine's own name lookups |
-| `service.py` | `IamAdminService`: the use cases, audit (`run_audited`), the `access` view, the empty-list-is-a-refusal rule |
+| `port.py` | `IamGateway`: IAM bound to a user (`bind`), the catalogs, whether a type is listed (`listable`), and the engine's own name lookups |
+| `service.py` | `IamAdminService`: the use cases, audit (`run_audited`), the `access` view, the empty-list-is-a-refusal rule, `publishers` and `resources` (what the caller may grant, by publisher; what they may list) |
 | `narrowing.py` | What narrowing a manifest means: Allow patterns may be removed, never added; Deny stays |
 | `views.py` | IAM records as the JSON the pages read; a key's value only in `created_key` |
 | `runtime.py` | Builds the service (engine IAM + `SqlAdminAuditLog(prefix="iam.")`); tests `configure` another |
@@ -28,10 +28,21 @@ Nexus adds no role check of its own.
 - `GET /access?scope=` the actions the caller may do (platform, or attachments and that level's policies and groups
   at `scope`; at a scope, what the platform alone administers is false; no role feature defaults exist to
   report: no role brings a feature, a policy does);
-  `GET /catalogs?scope=`
-- `GET /grantable?scope=` what the caller may grant at `scope` (IAM's `grantable`: per catalog, the actions and
-  resource patterns they hold there, `${scope}` or `${scope}/…`, minus their Denies), for the policy builder;
-  any caller, about themselves, like `/access`
+  `GET /catalogs?scope=` (only the actions the caller may grant
+  at `scope`, the platform by default, and the types they name: a catalog with none is left out)
+- `GET /grantable?scope=` what the caller may grant at `scope` (IAM's `grantable`: per catalog, its `publisher`,
+  the actions, the `resource_types` each acts on and the resource patterns they hold there, `${scope}` or
+  `${scope}/…`, minus their Denies), for the policy builder; any caller, about themselves, like `/access`
+- `GET /publishers?scope=` the same by publisher (core's `publishers.by_publisher`): the engine, then naas_abi,
+  then the modules by key (`{id, kind, types: [{service, type, description, id, placement, container, listed,
+  module, actions: [{action, name, level, description, resources, excluded}]}]}`); a type appears only with an
+  action the caller may grant, a publisher only with such a type; `listed` says whether `/resources` lists it
+  (false: offered as wildcards). A module's agents, apps, workflows and pipelines come from the module listing
+  (`modules/scopes.exposed_types`). Any caller, about themselves
+- `GET /resources?scope=&service=&type=&q=&cursor=&module=&limit=` the existing resources of a type at `scope`
+  that the caller may list (IAM's `list_resources`, as the caller): `{scope, service, type, items: [{name, id,
+  label, description}], next_cursor, listed}`. A stranger gets an empty page, not a 403; an unknown type is a 404,
+  a malformed scope a 422. `module` keeps one module's items of the `module` catalog. Any caller
 - `GET|POST /policies` (`?scope=`; the body's `scope` is the owner, its `parent` the policy it is a sub-policy
   of), `GET|PUT|DELETE /policies/{id}`, `POST /policies/validate?scope=` (`document` or YAML/JSON `text`).
   A policy carries `parent_id`; `GET /policies/{id}` adds `parent` (`{id, name, owner_scope, managed}`, the
@@ -131,6 +142,14 @@ below a container, `<container>/*`. Nexus builds them with `services/iam/names.p
   valid document the approver holds, so the API checks the narrowing itself (`narrowing.py`): an Allow statement may
   lose actions and resources, none may gain or appear, and Deny statements stay exactly as submitted (dropping one
   widens). A delegated approver approves no more than they hold: narrow what they do not.
+- **Nothing lists more to someone who may grant less.** Decision: `/publishers`, `/catalogs` and
+  `/api/modules/scopes` answer from IAM's `grantable` at the scope, as the caller, and `/resources` from IAM's
+  `list_resources`, as the caller; none answers from the registered catalogs or the module listing alone.
+  Consequences: a user holding only agent A and `iam:CreatePolicy` sees A and `iam:CreatePolicy` and nothing
+  else, in every one of them; an admin who holds no module scope sees no module there; the editor's validation
+  still reads every registered catalog, so a document naming what the caller may not grant is refused for that
+  (`GRANT_NOT_HELD`), not as unknown. `/publishers` and `/resources` need no permission, like `/grantable`: they
+  say only what the caller already holds or may list (the route matrix lists them with the caller-only routes).
 - **The policy builder offers what the caller may grant.** `GET /grantable?scope=` is IAM's `grantable`, so the
   builder and IAM's refusal agree: what it lists is what the caller holds at that scope (it may list less, never
   more). It needs no permission: it says only what the caller holds.
@@ -166,3 +185,8 @@ The route tests run a real IAM on the memory store (`team` fixture: `owner`, `ad
 `abi:iam:policy/*` and `abi:*/iam:policy/*`, every policy wherever it is owned). The `ws2` fixture adds `ws-2` of `org-1` with
 `ws2admin` and `colleague`, and `outsider` in another org: a workspace admin's and an org admin's policies
 and groups.
+
+`adapters/primary/iam_admin__primary_adapter__FastAPI_publishers_test.py` runs `/publishers`, `/resources` and the
+narrowed `/catalogs` on the same world, with listers registered for graphs, workspaces and features (`listed`
+fixture): a workspace admin's graphs, a stranger's empty pages, a disabled feature listed nowhere, and a user
+holding only agent A and `iam:CreatePolicy`.

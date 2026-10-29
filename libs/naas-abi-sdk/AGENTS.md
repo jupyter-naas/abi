@@ -380,6 +380,22 @@ for an unknown one; no permission needed). Calls made inside one
 there and name its module scopes there. The standalone demo (`examples/standalone_module/discovery_demo.py`) declares
 and enforces one (`make demo-sdk`).
 
+### Listers (`listers.py`)
+
+The policy builder lists the existing resources of each type (core `services/iam/AGENTS.md`, "Publishers
+and listing"). For a type of its own catalog a module registers a lister: a method marked
+`@lister("brief")`, or `expose_lister("brief", handler)` before `on_load` returns; `(query: ListerQuery) ->
+Iterable[Listed]`, sync or async, each `Listed` a canonical name (its catalog's type in a container), its id
+and a label. `run_module` checks each type is one of its catalog's, names them in its discovery descriptor
+(`ModuleDescriptor.listers`, `ModuleInstance.listers`) and serves them on
+`abi.mod.<project>.<sa>.<instance>.iam.list` (`ListerHost`): IAM asks a ready instance, as the engine, and
+keeps what the caller may list; the host pages, searches and confines the answer to the container asked
+(`page`). A lister answers as the module (it may read its own data unchecked): no action names the subject,
+so only the engine's connections reach it. A lister that raises is logged and answered as an error: IAM then
+offers the type as wildcards. `engine.services.iam.list_resources(service, type, scope=, text=, cursor=)` is
+the caller's side, about itself (no permission needed). The standalone demo's provider lists its briefs and
+its consumer lists them through IAM (`make demo-sdk`).
+
 ### Tokens the SDK meets
 
 Engine tokens are ES256 JWTs with one audience and at most ten minutes of life. An
