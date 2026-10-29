@@ -102,33 +102,36 @@ def _of_type(
     *,
     service: str,
     type_name: str,
-    containers: frozenset[tuple[str, str]],
+    holders: frozenset[str],
     module: str = "",
 ) -> GrantableAction | None:
     """What of ``action`` can name resources of one type: its patterns that
     overlap a name of the type (``within``, the type's names: an id holds no
     step, so ``.../graph/*`` names no workspace, and a module's ``.../p/*``
     none of another module's items), read at ``scope``; for a module, its own
-    items only. None when none does. A pattern with a step of another type
-    that holds nothing is left out before the search, which would say so too."""
+    items only. None when none does. A pattern with a step of a type that is
+    neither a container (``holders``, ``<service>:<type>``) nor this one is
+    left out before the search, which would say so too, and stays out when the
+    search runs out of budget."""
     if module:
         step = f"{module_scopes.SERVICE}:{type_name}/{encode_segment(module)}/*"
         names: tuple[str, ...] = (f"abi:*{step}",)
     else:
         names = ("*",)
     own = f"{service}:{type_name}"
-    holders = frozenset(f"{s}:{t}" for s, t in containers)
+    candidates = [
+        (resource, read)
+        for resource in action.resources
+        if not _names_another_type(read := _at(resource, scope), own, holders)
+    ]
     with grants.budget():
         try:
             kept = tuple(
-                r
-                for r in action.resources
-                if not _names_another_type(_at(r, scope), own, holders)
-                and grants.overlaps(_at(r, scope), names, within)
+                r for r, read in candidates if grants.overlaps(read, names, within)
             )
         except grants.Exhausted:
-            # Unsure: shown, as the patterns are what the caller holds anyway.
-            kept = action.resources
+            # Unsure: what the structure leaves is shown, the caller holds it anyway.
+            kept = tuple(r for r, _ in candidates)
     if not kept:
         return None
     return GrantableAction(action.action, kept, action.excluded)
@@ -141,6 +144,7 @@ def _types(
     *,
     scope: str,
     containers: frozenset[tuple[str, str]],
+    holders: frozenset[str],
     nesting: frozenset[tuple[str, tuple[str, ...]]] = frozenset(),
     module: str = "",
     only: Collection[str] | None = None,
@@ -169,7 +173,7 @@ def _types(
                 within,
                 service=catalog.service,
                 type_name=resource_type.name,
-                containers=containers,
+                holders=holders,
                 module=module,
             )
             if of_type is None:
@@ -208,6 +212,7 @@ def by_publisher(
     containers = frozenset(
         (c.service, t.name) for c in catalogs for t in c.resource_types if t.container
     )
+    holders = frozenset(f"{s}:{t}" for s, t in containers)
     # Where each container may sit: a pattern listed under a type names one of
     # its resources that can exist (no organisation in a workspace).
     nesting = frozenset(
@@ -227,6 +232,7 @@ def by_publisher(
                         listable,
                         scope=scope,
                         containers=containers,
+                        holders=holders,
                         nesting=nesting,
                         module=module,
                         only=exposed,
@@ -240,6 +246,7 @@ def by_publisher(
                 listable,
                 scope=scope,
                 containers=containers,
+                holders=holders,
                 nesting=nesting,
             )
         )

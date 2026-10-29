@@ -985,8 +985,9 @@ pattern names only: IAM decides within the names without it. A pattern holding a
 step of a type that is no container and not the type itself (`.../nexus:agent/*` under
 graphs) names none of the type's resources, since a name is its containers' steps, then
 its own: it is left out before the search, which would leave it out too, slowly (an owner
-who is also the platform admin holds every type's pattern). Nothing appears that the
-caller may not grant.
+who is also the platform admin holds every type's pattern). When the searches run out of
+budget, the type shows the patterns the caller holds that this check left, unsure but never
+one it ruled out. Nothing appears that the caller may not grant.
 
 ## Sealed resources
 

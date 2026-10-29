@@ -263,3 +263,34 @@ def test_a_step_of_another_type_names_nothing_of_a_type_without_a_search(
         "${scope}/triple_store:graph/*",
     )
     assert not [g for g in searched if "model_registry:model" in g]
+
+
+def test_past_the_budget_a_step_of_another_type_is_still_left_out(world, monkeypatch):
+    """When the searches run out of budget the type shows what the caller holds,
+    unsure, but never a pattern the structure already rules out."""
+    from naas_abi_core.services.iam import grants
+    from naas_abi_core.services.iam.IAMPorts import GrantableAction, GrantableCatalog
+
+    held = (
+        "${scope}/*",
+        "${scope}/model_registry:model/*",
+        "${scope}/triple_store:graph/*",
+    )
+    grantable = [
+        GrantableCatalog(
+            "triple_store", (GrantableAction("triple_store:Query", held, ()),)
+        )
+    ]
+
+    def exhausted(grant, others, within=grants.EVERYTHING, bounds=()):
+        raise grants.Exhausted
+
+    monkeypatch.setattr(grants, "overlaps", exhausted)
+    view = {
+        p.id: p for p in by_publisher(world.iam.catalogs.all(), grantable, scope=WS1)
+    }
+    graph = next(t for t in view["engine"].types if t.type.name == "graph")
+    assert graph.actions[0].grantable.resources == (
+        "${scope}/*",
+        "${scope}/triple_store:graph/*",
+    )
