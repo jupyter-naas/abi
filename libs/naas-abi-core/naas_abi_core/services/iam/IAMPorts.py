@@ -31,9 +31,7 @@ from naas_abi_core.services.iam.policy import PolicyDocument, Statement
 
 PrincipalKind = Literal["user", "group", "service_account"]
 Status = Literal["active", "suspended", "deleted"]
-Reason = Literal[
-    "allow", "explicit_deny", "implicit_deny", "suspended", "sealed", "outside_set"
-]
+Reason = Literal["allow", "explicit_deny", "implicit_deny", "suspended", "sealed"]
 
 KIND_PREFIXES: dict[PrincipalKind, str] = {
     "user": "usr",
@@ -279,30 +277,17 @@ class ScopeRecord:
 
 
 @dataclass(frozen=True)
-class ScopeSet:
-    """The set of an org (``workspace`` ``-``) or of a workspace in it: the
-    module items and the Nexus features usable there, each part ``None`` when
-    nothing is recorded (everything). See ``sets.py``."""
+class LegacyScopeSet:
+    """A row an older version recorded in ``iam_scope_sets`` for an org
+    (``workspace`` ``-``) or a workspace, as it was stored: two JSON lists, each
+    None when nothing was recorded. IAM no longer reads them for anything; they
+    wait for whoever recorded them to move what they said into policies
+    (``AGENTS.md``, "Migrating an existing install")."""
 
     org: str
     workspace: str = "-"
     modules: tuple[str, ...] | None = None
     features: tuple[str, ...] | None = None
-
-    @property
-    def scope(self) -> str:
-        return f"abi:{self.org}:{self.workspace}"
-
-    @property
-    def recorded(self) -> bool:
-        """Whether it narrows anything: a set of everything is not stored."""
-        return self.modules is not None or self.features is not None
-
-    def label(self) -> str:
-        """How an error names it."""
-        if self.workspace != "-":
-            return f"the set of workspace {self.workspace}"
-        return f"the set of organization {self.org}"
 
 
 @dataclass(frozen=True)
@@ -674,21 +659,17 @@ class IAMStore(ABC):
     @abstractmethod
     def list_scopes(self, org: str | None = None) -> list[ScopeRecord]: ...
 
-    # -- sets -----------------------------------------------------------------
+    # -- what an older version left ------------------------------------------
 
     @abstractmethod
-    def put_scope_set(self, scope_set: ScopeSet) -> None:
-        """Create or replace the set of ``(org, workspace)``; one that narrows
-        nothing (``recorded`` false) is deleted instead."""
+    def legacy_scope_sets(self) -> list[LegacyScopeSet]:
+        """The rows of an older version's ``iam_scope_sets``, ordered by org then
+        workspace (``-`` first); none on a store that never had the table."""
 
     @abstractmethod
-    def delete_scope_sets(self, org: str, workspace: str = "-") -> bool:
-        """Delete a workspace's set, or an org's (``workspace`` ``-``) with the
-        sets of its workspaces."""
-
-    @abstractmethod
-    def list_scope_sets(self, org: str | None = None) -> list[ScopeSet]:
-        """The recorded sets, ordered by org then workspace (``-`` first)."""
+    def drop_legacy_scope_sets(self) -> bool:
+        """Drop ``iam_scope_sets`` once what it held was moved; False when there
+        was none."""
 
     # -- catalogs -----------------------------------------------------------
 
@@ -836,9 +817,6 @@ class Subject:
     principal_id: str  # as the call names it: ${principal.id}
     status: Status
     statements: tuple[EffectiveStatement, ...] = ()
-    # Whether the org and workspace sets bound its Allows: a user who does not
-    # hold builtin.platform_admin. Service accounts are bound by their policies.
-    bounded: bool = False
 
 
 @dataclass(frozen=True)
@@ -960,16 +938,6 @@ class PolicySource(ABC):
     @property
     @abstractmethod
     def catalogs(self) -> CatalogRegistry: ...
-
-    def has_sets(self) -> bool:
-        """Whether any org or workspace has a set recorded (a shortcut)."""
-        return False
-
-    def scope_sets(
-        self, org: str, workspace: str
-    ) -> tuple[ScopeSet | None, ScopeSet | None]:
-        """The recorded sets of ``org`` and of ``workspace`` (None: everything)."""
-        return None, None
 
 
 # ---------------------------------------------------------------------------
@@ -1335,33 +1303,6 @@ class IIAMService(ABC):
     @abstractmethod
     def delete_scope(self, org: str, workspace: str = "-") -> bool: ...
 
-    # -- sets ---------------------------------------------------------------
-
-    @abstractmethod
-    def get_set(self, org: str, workspace: str = "-") -> ScopeSet:
-        """The set recorded for an org or a workspace (both parts None when
-        none is): ``iam:GetSet`` at its scope."""
-
-    @abstractmethod
-    def effective_set(self, org: str, workspace: str = "-") -> ScopeSet:
-        """A workspace's set within its org's, or an org's own."""
-
-    @abstractmethod
-    def list_sets(self, org: str | None = None) -> list[ScopeSet]:
-        """The recorded sets the caller may read."""
-
-    @abstractmethod
-    def put_set(
-        self,
-        org: str,
-        workspace: str = "-",
-        *,
-        modules: Iterable[str] | None = None,
-        features: Iterable[str] | None = None,
-    ) -> ScopeSet:
-        """Record a set (``iam:PutSet`` at the level above); a workspace's must
-        be within its org's (``SetValidationError``, a ``ValueError``)."""
-
     @abstractmethod
     def register_catalog(self, catalog: Any) -> bool: ...
 
@@ -1379,6 +1320,16 @@ class IIAMService(ABC):
         """Drop retired managed policies once what they granted was moved (the
         serving engine's IAM only)."""
         raise NotImplementedError("Retired policies are moved on the serving engine")
+
+    def legacy_scope_sets(self) -> list[LegacyScopeSet]:
+        """The org and workspace sets an older version recorded, until they are
+        moved into policies (the serving engine's IAM only)."""
+        raise NotImplementedError("Legacy sets are moved on the serving engine")
+
+    def drop_legacy_scope_sets(self) -> bool:
+        """Drop the legacy sets once they were moved (the serving engine's IAM
+        only)."""
+        raise NotImplementedError("Legacy sets are moved on the serving engine")
 
     # -- service accounts, keys and manifests ----------------------------------
 

@@ -21,7 +21,6 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalRecord,
     RevisionConflictError,
     ScopeRecord,
-    ScopeSet,
     SigningKeyRecord,
     new_id,
 )
@@ -504,29 +503,9 @@ class IAMStoreContract(ABC):
         assert store.delete_scope("org-1", "ws-1") is True
         assert store.delete_scope("org-1", "ws-1") is False
 
-    def test_scope_sets(self, store: IAMStore):
-        before = store.revision()
-        org = ScopeSet("org-1", modules=("acme.people", "agent/naas_abi/Abi"))
-        store.put_scope_set(org)
-        assert store.revision() > before
-        workspace = ScopeSet("org-1", "ws-1", modules=(), features=("chat",))
-        store.put_scope_set(workspace)
-        store.put_scope_set(ScopeSet("org-2", features=()))
-        assert store.list_scope_sets("org-1") == [org, workspace]
-        assert len(store.list_scope_sets()) == 3
-        # Replaced as a whole; a set of everything is not kept.
-        replaced = ScopeSet("org-1", "ws-1", features=("chat", "files"))
-        store.put_scope_set(replaced)
-        assert store.list_scope_sets("org-1") == [org, replaced]
-        store.put_scope_set(ScopeSet("org-1", "ws-1"))
-        assert store.list_scope_sets("org-1") == [org]
-        # An org's sets go with its workspaces'.
-        store.put_scope_set(workspace)
-        assert store.delete_scope_sets("org-1", "ws-1") is True
-        assert store.delete_scope_sets("org-1", "ws-1") is False
-        store.put_scope_set(workspace)
-        assert store.delete_scope_sets("org-1") is True
-        assert store.list_scope_sets() == [ScopeSet("org-2", features=())]
+    def test_no_legacy_scope_sets_on_a_new_store(self, store: IAMStore):
+        assert store.legacy_scope_sets() == []
+        assert store.drop_legacy_scope_sets() is False
 
     # -- catalogs and the store -----------------------------------------------------
 

@@ -246,28 +246,6 @@ class IamClient:
             "abi.iam.v1.delete_scope", request, pb.DeleteScopeResponse
         )
 
-    async def get_set(self, request: pb.GetSetRequest) -> pb.GetSetResponse:
-        return await self._transport.call(
-            "abi.iam.v1.get_set", request, pb.GetSetResponse
-        )
-
-    async def effective_set(
-        self, request: pb.EffectiveSetRequest
-    ) -> pb.EffectiveSetResponse:
-        return await self._transport.call(
-            "abi.iam.v1.effective_set", request, pb.EffectiveSetResponse
-        )
-
-    async def list_sets(self, request: pb.ListSetsRequest) -> pb.ListSetsResponse:
-        return await self._transport.call(
-            "abi.iam.v1.list_sets", request, pb.ListSetsResponse
-        )
-
-    async def put_set(self, request: pb.PutSetRequest) -> pb.PutSetResponse:
-        return await self._transport.call(
-            "abi.iam.v1.put_set", request, pb.PutSetResponse
-        )
-
     async def register_catalog(
         self, request: pb.RegisterCatalogRequest
     ) -> pb.RegisterCatalogResponse:

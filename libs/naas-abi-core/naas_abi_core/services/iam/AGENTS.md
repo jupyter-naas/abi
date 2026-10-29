@@ -36,7 +36,7 @@ model_registry, discovery, source_control, coding_environment) use
   [Placements](#placements), [Evaluation](#evaluation),
   [Action catalogs](#action-catalogs), [Sealed resources](#sealed-resources),
   [Built-in policies](#built-in-policies), [Module scopes](#module-scopes),
-  [Sets](#sets), [Sub-policies](#sub-policies),
+  [Sub-policies](#sub-policies),
   [Grant only what you hold](#grant-only-what-you-hold)
 - Using it: [Service API](#service-api),
   [Enforcing in a domain service](#enforcing-in-a-domain-service-guardpy),
@@ -66,7 +66,6 @@ model_registry, discovery, source_control, coding_environment) use
 | `enforcement.py` | `ResourceGuard`, what a data service enforces with; `scan_allowed`, `own_storage`, `internal_call`, wire codes |
 | `kernel_catalogs.py` | The kernel services' catalogs (`services/<name>/iam_catalog.py`), registered at boot |
 | `module_scopes.py` | The `module` catalog (what modules expose, per workspace) and the checks of a catalog a module declares |
-| `sets.py` | Organisation and workspace sets: the item grammar, what a set allows (`allows`, `bounded`), intersection, containment (`outside`), what a set lets anyone grant (`held_patterns`), their names |
 | `keys.py` | Keys `abi_sk_` (service accounts), `abi_pk_` (personal), `abi_gk_` (link grants): generation, parsing, hashing |
 | `exchange.py` | `TokenExchanger`: RFC 8693 token exchange: subjects, audiences, actors, scopes, renewal |
 | `tokens.py` | `TokenIssuer`: ES256 signing keys, their rotation, the JWKS and the tokens it signs |
@@ -96,8 +95,10 @@ unique service-account names), static group members, IdP group mappings,
 policies with optimistic revisions and their parents (`list_sub_policies`; a
 parent is not deleted while it has sub-policies), attachments (unique per policy, principal
 and scope), placements, scopes, catalogs, keys (hashed), manifests (one row
-per submitted version), signing keys (public half and schedule) and the sets of orgs and
-workspaces (`iam_scope_sets`, one row per recorded set). Every write bumps `revision()` in
+per submitted version) and signing keys (public half and schedule). What an older version
+recorded of the sets of orgs and workspaces (`iam_scope_sets`) is read as stored
+(`legacy_scope_sets`) and dropped (`drop_legacy_scope_sets`) by whoever moves it into policies,
+and by nothing else. Every write bumps `revision()` in
 the same transaction; `install_id()` is generated once. Errors:
 `IAMNotFoundError`, `IAMConflictError`, `RevisionConflictError`. The store is not
 the Document Service: IAM authorizes that.
@@ -472,10 +473,8 @@ decide(ctx, action, resource):
      d_U = principal_decision(U) if U set else ALLOW
   4. if d_P == EXPLICIT_DENY or d_U == EXPLICIT_DENY:         DENY (explicit_deny)
   5. if d_P != ALLOW or d_U != ALLOW:                         DENY (implicit_deny)
-  6. if (P or U is bounded) and resource is bounded
-       and resource outside the set of its org or workspace:  DENY (outside_set)
-  7. if T set and no statement of T matches:                  DENY (implicit_deny)
-  8. ALLOW
+  6. if T set and no statement of T matches:                  DENY (implicit_deny)
+  7. ALLOW
 
 principal_decision(X):
   S = statements of every policy attached to X and to each of X's effective groups,
@@ -499,13 +498,11 @@ principal_decision(X):
 - **Token narrowing (`T`) only narrows.** It holds Allow statements only (a
   Deny is rejected when the token is issued; a statement's `actions` and
   `resources` must be lists of strings, anything else matches nothing).
-- **Sets bound users' Allows** on module scopes and features (step 6, "Sets"): a side is
-  *bounded* when it is a user who holds no `builtin.platform_admin` (directly or through a
-  group, `Subject.bounded`); service accounts never are. A *bounded* resource is one of a
-  `module_scope` type or `nexus:feature/…`. Since both sides must allow, a bounded actor or
-  a bounded user the call acts for is enough: on a Nexus call, `api` acts for the user and
-  the user's side is bounded. Denies and every other action are unchanged.
-- Reasons: `allow`, `explicit_deny`, `implicit_deny`, `suspended`, `sealed`, `outside_set`.
+- **Policies are the one place access is decided.** Nothing bounds an Allow but its own
+  chain and the other side of the call: there are no sets of an org or a workspace, and no
+  workspace switch (what an older version kept of them became policies: "Migrating an
+  existing install").
+- Reasons: `allow`, `explicit_deny`, `implicit_deny`, `suspended`, `sealed`.
   `explain` returns the outcome, the reason and the deciding statement (side,
   policy id, statement index or `sid`, attachment, scope, group), and the chain: for an
   Allow of a sub-policy, `bounded_by`, the statement of each parent that allowed it too,
@@ -560,7 +557,7 @@ itself (`triple_store:ListGraphs` on each `graph/…`).
   key-prefix scan, a SQL `LIKE` on ids): `[""]` means no push-down, `[]` means
   nothing is allowed. Denies apply after the push-down.
 
-**Freshness.** Policy (a parent's included), attachment, group, placement, set and status changes take effect
+**Freshness.** Policy (a parent's included), attachment, group, placement and status changes take effect
 at the next check after IAM's change event reaches the checking process: at once
 in process, within the event's delivery over NATS. Cached state also expires after
 60 seconds, so a missed event cannot keep stale grants for long. Group membership
@@ -690,7 +687,7 @@ operations map):
 | `source_control` | `repo` (container), `branch`, `proposal` (path), `forge_user` (personal, platform) |
 | `coding_environment` | `environment` (path, personal, placed), `template` (platform), `coder_user` (personal, platform) |
 | `identity` | `provider` (opaque, platform) |
-| `iam` | `attachment` (path, at its scope), `policy` and `group` (opaque, at their owner scope), `set` (opaque, read at its scope, written at the level above: "Sets"); `principal`, `key` (personal for personal keys), `manifest`, `placement`, `scope`, `catalog`, `audience` (platform) |
+| `iam` | `attachment` (path, at its scope), `policy` and `group` (opaque, at their owner scope); `principal`, `key` (personal for personal keys), `manifest`, `placement`, `scope`, `catalog`, `audience` (platform) |
 | `module` | `agent`, `app`, `workflow`, `pipeline` (path, module scopes): see "Module scopes" |
 | `<module service>` | a module's own catalog (`acme_people` for `acme.people`), every type a module scope: see "Module scopes" |
 | `nexus` | registered by Nexus at start, not by core: see `libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/iam_admin/AGENTS.md` |
@@ -763,8 +760,8 @@ attachment per scope.
 |---|---|---|
 | `builtin.viewer` | every `list` and `read` action | every `policy_only` type; the whole `iam` catalog; every module scope type |
 | `builtin.member` | viewer, plus every `write` action | every `policy_only` type; the whole `iam` catalog; every module scope type |
-| `builtin.admin` | member, plus every `admin` action, except on the `iam` `attachment` type; the scope's policies and groups (`ListPolicies`, `GetPolicy`, `CreatePolicy`, `UpdatePolicy`, `DeletePolicy`, `ListGroups`, `GetGroup`, `CreateGroup`, `DeleteGroup`, `AddGroupMember`, `RemoveGroupMember` on `${scope}:iam:policy/*` and `${scope}:iam:group/*`); `iam:ListAttachments` on `${scope}:iam:attachment/*`, and `iam:AttachPolicy` and `iam:DetachPolicy` on `${scope}:iam:attachment/builtin.admin/*`, `…/builtin.member/*`, `…/builtin.viewer/*` and `…/pol_*/*` (customer policies: the scope's own and those above it, IAM refusing one owned elsewhere) | every `policy_only` type; anything on `attachment/builtin.owner/*` and the other managed policies; `iam:MapIdpGroup`, `iam:UnmapIdpGroup`; every `owner_only` action |
-| `builtin.owner` | admin, plus every action on every `attachment/…` (owner included) and every `owner_only` action | every `policy_only` type; `iam:MapIdpGroup`, `iam:UnmapIdpGroup` |
+| `builtin.admin` | member, plus every `admin` action, except on the `iam` `attachment` type; the scope's policies and groups (`ListPolicies`, `GetPolicy`, `CreatePolicy`, `UpdatePolicy`, `DeletePolicy`, `ListGroups`, `GetGroup`, `CreateGroup`, `DeleteGroup`, `AddGroupMember`, `RemoveGroupMember` on `${scope}:iam:policy/*` and `${scope}:iam:group/*`); `iam:ListAttachments` on `${scope}:iam:attachment/*`, and `iam:AttachPolicy` and `iam:DetachPolicy` on `${scope}:iam:attachment/builtin.admin/*`, `…/builtin.member/*`, `…/builtin.viewer/*` and `…/pol_*/*` (customer policies: the scope's own and those above it, IAM refusing one owned elsewhere) | every `policy_only` type; every module scope type; anything on `attachment/builtin.owner/*` and the other managed policies; `iam:MapIdpGroup`, `iam:UnmapIdpGroup`; every `owner_only` action |
+| `builtin.owner` | admin, plus every action on every `attachment/…` (owner included) and every `owner_only` action | every `policy_only` type; every module scope type; `iam:MapIdpGroup`, `iam:UnmapIdpGroup` |
 | `builtin.platform_admin` | `*` on `*` (attached without scope) | sealed resources |
 | `builtin.self` | held implicitly by every user (no attachment row, unknown users included; `explain` shows it with no attachment id) | none |
 
@@ -774,8 +771,6 @@ attachment per scope.
   groups and attach them there; an org's owners and admins reach its workspaces'
   through their org-wide role (`abi:<org>:*`, which Nexus mirrors). They also see,
   in a list at their scope, what they may attach there from above (see "Service API").
-  Their admin actions on the `set` type read their scope's set (`iam:GetSet`); a workspace's set is
-  written only through the org-wide role, an org's only by the platform admin ("Sets").
 - **Owner protection.** An admin cannot attach or detach `builtin.owner`; demoting or
   removing an owner means detaching their owner attachment, so only an owner can, at
   org and workspace scope alike.
@@ -853,7 +848,7 @@ attachment per scope.
 
 Everything a module exposes is grantable per workspace, one item at a time
 (`module_scopes.py`). Two kinds, both marked `module_scope: true` on their resource
-types (`ResourceType.module_scope`), so the UI and the sets find them:
+types (`ResourceType.module_scope`), so the UI finds them and no role holds them:
 
 - **The `module` catalog.** Every agent, app, workflow and pipeline of every module,
   engine or remote, is `abi:<org>:<ws>:module:<type>/<module>/<name>`
@@ -912,11 +907,11 @@ the scope in the workspace the request names after checking the user belongs to 
 and a user who claims another workspace gets what they hold there, which is what
 using it there needs. A user who belongs to no workspace holds no module scope.
 
-**Zero trust.** `builtin.viewer` and `builtin.member` hold no module scope type
-(`roles.MODULE_SCOPE_ROLES` is admin and owner), on upgrade too: there is no
-migration grant. `builtin.admin` and `builtin.owner` hold every one at their scope,
-within the sets of their org and workspace ("Sets"). A member uses a module's agent, app, workflow or
-pipeline in a workspace only with a policy granting it there, for example:
+**Zero trust.** No built-in role holds a module scope type, `builtin.admin` and
+`builtin.owner` included (`roles._role_statements` leaves every `module_scope` type out): a
+user uses a module's agent, app, workflow, pipeline or declared action in a workspace only
+with a policy granting it there, an admin or an owner of a workspace with no policy nothing.
+For example:
 
 ```yaml
 statements:
@@ -941,79 +936,6 @@ an agent that is no sub-agent, `IntentAgent` an intent to one; Abi's prompt list
 sub-agents alone, in the copy's own configuration, `AbiAgent.with_agents_section`), and the agent refuses a tool of a workflow outside
 them (`services/agent/context.tool_scope_refused`; the engine marks each process
 instance, `EngineProcessBridge.tag_process_scopes`).
-
-## Sets
-
-Each organisation and each workspace has a **set**: the module scopes and the Nexus
-features usable there (`sets.py`). The platform admin sets an org's set; the org's owners
-and admins set each of its workspaces', within the org's. IAM applies them when it decides
-(step 6 of "Evaluation"), so an org always bounds its workspaces and a workspace bounds
-everyone in it, and when a grant is made ("Grant only what you hold").
-
-**What a set holds** (`ScopeSet`): two parts, each a list or `None` (nothing recorded:
-everything; for a workspace, whatever its org has).
-
-| Part | Items |
-|---|---|
-| `modules` | `<module>`: the whole module, every agent, app, workflow and pipeline (`module:<type>/<module>/*`) and every action of the catalog it declares (a name with no catalog name, `*`, `--`, `...`, is refused: every module is written `<type>/*/*` and `*:*`); `<type>/<module>/<name>`: one agent, app, workflow or pipeline (`<name>` `*`: every one of that type; `<type>/*/*`: every one of that type of every module, installed now or later); `<service>:<Action>`: one action of the catalog a module declares (`<service>` is `module_service(<module>)`; `<service>:*` all of them, `*:*` every module's) |
-| `features` | Nexus feature keys: `nexus:feature/<key>` |
-
-The wildcards of every module say "every module but only these agents" with no list of
-the modules running today: a catalog seed narrowing an org with no set records
-`agent/<m>/<a>`, `app/*/*`, `workflow/*/*`, `pipeline/*/*`, `*:*`. A whole module on one
-side of an intersection and such a wildcard on the other give that module's part
-(`people` and `agent/*/*`: `agent/people/*`). Items are written decoded, as the module names them; `normalize` sorts them, drops
-duplicates and refuses a malformed one (`SetValidationError`, a `ValueError`, listing each).
-A set is stored in IAM (`iam_scope_sets`, a JSON list per part, NULL for everything), cached
-with the policies and dropped on every change event, so a narrowed set applies at the next
-decision in process and within the event's delivery over NATS.
-
-**What it bounds.** For a resource placed in org O and workspace W, an Allow on a
-`module_scope` type (the `module` catalog and every declared catalog) or on
-`nexus:feature/…` counts only if O's set and W's set both allow it (`sets.allows`): a user
-acting directly, through a group, as the actor of a call or as the user a call acts for.
-`abi:O:-:…` names (an org's own) meet O's set alone; a workspace in no org (`abi:-:W`, Nexus's
-`_none`) meets W's. Denies, and every other action (files, graphs, …), are unchanged.
-
-- **Bounded:** every user, owners and admins of O and W included.
-- **Not bounded:** holders of `builtin.platform_admin` attached unscoped (or at `abi:-:-`), directly or
-  through a group (they set the orgs' sets and support every org; an attachment of it at an org or a
-  workspace, which `attach_policy` refuses anyway, unbinds no one), and service accounts (`engine`, `api`, modules, `ci/*`, `job/*`): their
-  manifests and enumerated policies bound them. On a Nexus call `api` acts for the user, so
-  the user's side is bounded; a module acting for a user likewise.
-
-**The effective set** of a workspace is its own within its org's (`intersect`,
-`effective_set`). Narrowing an org's set leaves its workspaces' recorded sets as they were;
-they are bounded anyway, and the effective set shows it.
-
-**Names and who may change them.**
-
-| | Read (`iam:GetSet`) | Written (`iam:PutSet`) | Who writes |
-|---|---|---|---|
-| Org O | `abi:O:-:iam:set/O` | `abi:%2A:%2A:iam:set/O` | grants written for every org: the platform admin |
-| Workspace W of O | `abi:O:W:iam:set/W` | `abi:O:%2A:iam:set/W` | an org-wide role (`abi:O:*`): the org's owners and admins |
-
-A role at the workspace reads its set and never writes it; a role at the org (`abi:O:-`)
-reads the org's. Viewers and members hold nothing of the `iam` catalog. A refusal is always
-`PermissionDeniedError`: every org and workspace has a set, so none is "not found".
-
-**Validation.** A workspace's recorded items must each be within its org's set (`outside`):
-a wider one is refused with `SetValidationError` naming the extra items
-("Not in the set of organization O: crm, feature files"). A part the workspace leaves
-`None` follows the org's and is never wider. `put_set` refuses a workspace IAM has not
-registered in that org (`IAMNotFoundError`).
-
-**Defaults.** No set recorded means everything: existing orgs and workspaces, and a new
-org, start with everything the deployment has. Nexus records a new workspace's set as its
-org's, narrowed by its create form (features, catalog seed; Nexus `services/iam/sets.py`).
-`delete_scope` drops the sets of what it deletes.
-
-```python
-iam.get_set(org, workspace="-")  # ScopeSet as recorded (both parts None if none)
-iam.effective_set(org, workspace="-")  # within the org's
-iam.list_sets(org=None)  # the recorded ones the caller may read
-iam.put_set(org, workspace="-", modules=[...] | None, features=[...] | None)
-```
 
 ## Sub-policies
 
@@ -1225,12 +1147,8 @@ On every resource:
   acting for a user: their own statements never stand in for the user's), plus an actor
   that is not first-party (a module acting for a user is bounded by its own policy too),
   plus the credential's narrowing (`abi_scope`): a read-only personal key grants no write.
-  For a caller the sets bound, the sets of the scope are sides too, Allow-only
-  (`IAMService._set_sides`, `grants.Side.allowed_for`, `sets.held_patterns`): at a
-  workspace its org's and its own, at an org (`abi:O:-`, `abi:O:*`) the org's. Nobody but
-  the platform admin grants, at a scope, a module scope or a feature its sets leave out,
-  whatever their role reaches; the refusal names the set ("the set of workspace W does not
-  include it").
+  Nothing else is a side: a module scope or a feature is granted by whoever holds it, through
+  a policy, as any other grant.
 - **Unproven is refused.** A grant one held pattern embeds (each `*` of it within a `*`,
   each `?` within a `?` or a `*`, the rest character for character) is covered without a
   search: the built-in roles, at a workspace or through an org-wide role, mostly are. The
@@ -1260,10 +1178,7 @@ scope, per catalog (a kernel service or a module), the actions they hold there a
 resource patterns they hold them on, written `${scope}:…` (`GrantableCatalog`,
 `GrantableAction`), minus their Denies: a pattern a Deny covers whole is left out, one it
 covers in part lists the Deny in `excluded`, written as the resources are (`${scope}:…` for
-the part of it under the scope, as stored when none can be told). For a caller the sets bound
-it is what they hold intersected with the scope's sets: where a role holds
-`${scope}:module:agent/*` and the set has `acme.people`, it lists
-`${scope}:module:agent/acme.people/*`. It may say less than the
+the part of it under the scope, as stored when none can be told). It may say less than the
 caller reaches there, never more, and it stops listing past `grants.CALL_BUDGET`. Like `explain` of oneself it is about the caller only, so it needs no `iam:*`
 action, and a module's connection may always ask (`broker.IAM_ALWAYS`).
 
@@ -1280,7 +1195,8 @@ stands for. They are:
 | Placements (`put_placement`, `PLACEMENT_WRITER`) | They place resources; they grant nothing. |
 | Shared graph grants (`graph_grants.py`, `workspace.<ws>.graphs.*`) | Behind `nexus:UpdateResourceAccess` on the workspace, which offers only graphs the workspace holds, gives writing only to whoever may drop the graph, and sharing every graph only to platform administrators (`resource_access.py`). |
 | `abi iam` | The operator holding the project's IAM store and config. |
-| The move of the workspace feature overrides (Nexus `services/iam/sets.migrate_feature_overrides`, once at start) | Features an override gave every role of a workspace, kept for the people who held a role there then, so nobody's features change (a workspace policy attached at the workspace). |
+| The move of the workspace feature overrides (Nexus `services/iam/feature_overrides.migrate_feature_overrides`, once at start) | Features an override gave every role of a workspace, kept for the people who held a role there then, so nobody's features change (a workspace policy attached at the workspace). |
+| The move of the sets and the workspace toggles (Nexus `services/iam/policy_tree.migrate_sets`, once at start) | What the sets and the toggles let each person use becomes access policies and sub-policies of them, attached where the roles and policies that reached it were, so nobody gains or loses access ("Migrating an existing install"). |
 | The move of the role features (Nexus `services/iam/role_features.migrate_role_features`, once at start) | The features each role had in each workspace, kept for the people who held that role there then, so nobody's features change ("Features of <role>", a workspace policy attached at the workspace). |
 | Workspace snapshot import (Nexus `core/workspaces_import.py`) | An operator command run with the project's engine, never a route: it makes the owner of a workspace it creates, as creating one does. |
 | `modules.auto_approve` | The `abi dev` overlay only: a module's manifest approved on submission. |
@@ -1300,7 +1216,6 @@ iam.authorize(action, resource)  # Decision
 iam.allows_every(action, "triple_store", "graph")  # a safe shortcut: False when unsure
 iam.explain(action, resource, principal_id=...)  # needs iam:Explain on the principal
 iam.grantable(scope)  # what the caller may grant there (needs no permission)
-iam.effective_set(org, workspace)  # what a workspace may use (iam:GetSet; "Sets")
 iam.placement_of(
     service, canonical_id
 )  # the covering placement, or None (serving engine)
@@ -1338,7 +1253,7 @@ a statement reached through a scoped attachment keeps only its `${scope}:`
 Allow patterns, `policy.within_scope`), placements
 (`put_placement`, `placement_of`: exact key, then the longest prefix, else
 None; `resolve_placement`: its org and workspace, else platform), scopes (`put_scope`, `workspace_org`),
-sets (`get_set`, `effective_set`, `list_sets`, `put_set`: "Sets"), `register_catalog` (highest
+`register_catalog` (highest
 version wins; refuses dropping an action a policy names).
 
 Lists page after filtering. `list_policies(scope=S)` returns the policies `S` owns
@@ -1607,7 +1522,7 @@ iam.broker_permissions(principal, key)  # records from authenticate_key; never c
 - **Logs hold no key.** `PresentedKey`, `NewKey` and `CreatedKey` keep the key out of
   their `repr`, and failing decisions are logged by exception type.
 
-**Caching.** Effective statements per principal, policies, placements and sets are
+**Caching.** Effective statements per principal, policies and placements are
 cached for at most `cache_ttl_seconds` (60) and dropped on every change made
 through the service. Listeners (`add_change_listener`) hear each new revision;
 the NATS primary publishes it on `abi.iam.v1.changed` (`ChangeEvent`, a core NATS
@@ -1839,11 +1754,11 @@ change would give more than the caller holds), `NOT_FOUND`,
 refused key). Sub-policies: `CreatePolicyRequest.parent`, `UpdatePolicyRequest.parent`
 (absent keeps it, `""` removes it), `Policy.parent_id` (empty: none), `list_sub_policies`
 (`ListSubPoliciesRequest`, needing what the in-process call needs); the same refusals,
-with the same codes and messages, in process, over NATS and through the SDK. Sets: `get_set`, `effective_set`, `list_sets` (`iam:GetSet`) and `put_set`
-(`iam:PutSet`); a part of a `ScopeSet` with no `SetItems` is everything, a workspace's set
-wider than its org's is `INVALID_ARGUMENT` naming the extras. The SDK facade is
-`engine.services.iam` (`naas_abi_sdk/services/iam.py`), reachable without a
-dependency declaration; records are dictionaries (a set's part is a list or None).
+with the same codes and messages, in process, over NATS and through the SDK. There is no
+set operation (the sets are gone: `get_set`, `effective_set`, `list_sets`, `put_set` and
+their messages were removed; IAM's catalog 7 drops `iam:GetSet` and `iam:PutSet`). The SDK
+facade is `engine.services.iam` (`naas_abi_sdk/services/iam.py`), reachable without a
+dependency declaration; records are dictionaries.
 
 ## Migrating an existing install
 
@@ -1865,7 +1780,9 @@ AGENTS.md there), and IAM is the only record afterwards:
 | IAM store schema 1 (no owner scopes) | schema 2, at the store's first open: every policy and group platform-owned, except the groups IdP bindings made (named `idp:<provider>:<claim>` and mapped from that claim, with an org) whose attachments are all under `abi:<org>:`, which belong to that org (`abi:<org>:-`). A binding group schema 1 shared with other orgs, the platform or an unscoped binding stays the platform's: owned by one org, its admins could add their users to what it holds elsewhere. Two processes may open the store at once (PostgreSQL adds the columns `IF NOT EXISTS`; SQLite serializes writes). The upgrade logs a warning for each stored customer policy whose patterns reached the platform's policies or groups as `abi:-:-:iam:…` (or `${scope}:iam:…` at `abi:-:-`) and no longer match them: rewrite them `abi:*:*:iam:policy/…`, `…:iam:group/…` |
 | IAM store schema 2 (no sets) | schema 3: the table `iam_scope_sets`, created empty at the store's first open (PostgreSQL behind an advisory lock, so the engine and the API opening it together both start). Every org and workspace starts with everything. |
 | IAM store schema 3 (no sub-policies) | schema 4: the nullable column `iam_policies.parent_id` and its index, added at the store's first open (PostgreSQL `IF NOT EXISTS`, behind the schema's advisory lock). Every existing policy has no parent. No foreign key: every write locks the state row (`iam_state`) before it checks anything (`IAMStoreSQL._change`; SQLite's `BEGIN IMMEDIATE` already serializes), so "the parent exists" and "the policy has no sub-policies" still hold when the write commits, and a delete and a re-parent racing on PostgreSQL run one after the other. |
-| Per-workspace feature overrides (`workspaces.feature_overrides`, the deprecated `feature_flags.workspace_overrides`) | moved once by Nexus at start (`services/iam/sets.migrate_feature_overrides`, recorded in `iam_migrations`): a feature turned off leaves the workspace's feature set; one turned on stays in it and, for each role whose defaults lack it, a workspace policy keeps it for the people holding that role there then. No one's features change. The column is cleared. |
+| Per-workspace feature overrides (`workspaces.feature_overrides`, the deprecated `feature_flags.workspace_overrides`) | moved once by Nexus at start (`services/iam/feature_overrides.migrate_feature_overrides`, recorded in `iam_migrations`): a feature turned off leaves the workspace's feature set, kept in the move's report for the move of the sets below; one turned on, for each role whose defaults lack it, becomes a workspace policy for the people holding that role there then. No one's features change. The column is cleared. |
+| IAM store schema 4 (sets) | schema 5, at the store's first open: `iam:GetSet` and `iam:PutSet` leave the customer policies that named them (a statement naming nothing else with them), their revision bumped; they authorized nothing but the sets. `iam_scope_sets` is no longer created; an existing one stays, read by nothing, until Nexus moved it (`legacy_scope_sets`, then `drop_legacy_scope_sets`, both in process only, `iam:DeleteScope` on each row's scope). |
+| The sets of orgs and workspaces (`iam_scope_sets`), the roles that held every module scope (`builtin.admin`, `builtin.owner`), and what each workspace turned off (Nexus's `app_configs.enabled`, `agent_configs.enabled`, `workflow_visibility`) | moved once by Nexus at start (`services/iam/policy_tree.migrate_sets`, recorded in `iam_migrations` as `policy_tree_v1`, after the overrides' and the role features' moves): each org gets a platform-owned "<org> access" (its set's module items and features; everything without a set), each workspace an org-owned "<workspace> access", a sub-policy of it (its own set's items and features, the apps it had turned on, a Deny of what it had turned off). Who held `builtin.admin` or `builtin.owner` gets, where the role reached, a sub-policy of that place's access granting every module scope (the roles brought no feature, so not the access policy itself); a group like a person, a pending invitation to the role as a pending grant beside its own. A customer policy granting module scopes or features moves under the access policy of its owner (an org's or a workspace's), split from what else it grants; where that would not bound it as before (an org's policy attached in a workspace or org-wide, a platform policy) its attachment becomes, at each place it reached, one of a sub-policy of that place's access with the same statements. A service account, never bounded by a set, gets the same grants with no parent. Every user's decision on every module item, declared action and feature is the same before and after (`policy_tree_test.py`, on the memory, SQLite and PostgreSQL stores), but the platform admin, who now reaches what a workspace had turned off. What cannot be kept exactly stops the move (logged, nothing recorded), and Nexus refuses every module scope and feature until a start moves everything. Then IAM's legacy sets and `workflow_visibility` are dropped. |
 | Sessions, refresh tokens, app grants and preview tokens signed with `secret_key` | invalidated: users sign in again; workspace secrets get their own key (`secrets_encryption_key`) |
 
 ## Decisions
@@ -1997,8 +1914,8 @@ an invitation, an IdP binding and a manifest approval when the result would give
 scope, more than the caller holds there (see "Grant only what you hold"). The caller is the
 call's user, never the first-party account acting for them; a narrowed credential narrows
 what it may grant; Denies need no cover; what cannot be proven is refused. A grant already
-made is not checked again when its granter later loses a permission: the organisation and
-workspace sets ("Sets") bound every grant when IAM decides, whoever made it. `engine` and `api` writing for no user are not checked, each behind a route
+made is not checked again when its granter later loses a permission: narrowing the parent
+of a sub-policy narrows it at the next decision, whoever made it. `engine` and `api` writing for no user are not checked, each behind a route
 or boot step that authorized what it stands for (the table there).
 *Consequences.* A scope's admin can no longer make itself owner through a policy or a group,
 nor an owner give a feature it does not hold. Wildcards are expanded against the catalogs
@@ -2027,25 +1944,19 @@ module's catalog cannot declare `platform_access`: what it publishes reaches its
 through policies only. Removing a flag is a catalog change like any other: the roles are
 regenerated at the next registration.
 
-**Sets bound users when IAM decides, and grants when they are made.**
-*Decision.* Each org and workspace has a set of module items and Nexus features, stored in
-IAM (`iam_scope_sets`, cached and dropped on change events like policies). An Allow of a
-user on a module scope or a feature counts only within the sets of the resource's org and
-workspace; the platform admin and service accounts are not bound. The set is applied after
-the sides' decisions (an `outside_set` refusal), not by rewriting statements, so `explain`
-still names the statement that would allow. It is also an Allow-only side of every grant
-check, so `grantable` and the refusals follow it. Sets are written at the level above their
-own (`abi:%2A:%2A:iam:set/<org>`, `abi:<org>:%2A:iam:set/<ws>`), so a workspace's admins never
-widen their own and an org's do only through the org-wide role. A workspace's recorded items
-must be within its org's; narrowing an org leaves its workspaces' records alone. Nothing
-recorded is everything.
-*Consequences.* Narrowing a set takes a module or a feature from everyone it bounds at the
-next decision, owners and admins included, and from what they may grant; nothing needs
-detaching. A grant made before stays attached and counts again if the set widens. A
-workspace's feature set replaces the per-workspace feature overrides: a feature is reached
-by a policy within the set, never added by the set. Items name
-modules by their stable identifiers: a renamed module is a new item. Discovery's broker-side
-grants are not bounded by sets (they carry no workspace), as for module scopes.
+**Policies are the one place access is decided.**
+*Decision.* The organisation and workspace sets and their evaluation step (`outside_set`) are
+gone, with their store table, their `iam` actions and type, their NATS operations, SDK calls
+and proto messages; so is Nexus's workspace on/off switch. No built-in role holds a module
+scope type, admins and owners included. What an org or a workspace may use is a policy: an
+access policy per org and per workspace (a sub-policy of its org's) that the upgrade made
+from the sets, and what is granted below them is their sub-policies, narrowed live.
+*Consequences.* Narrowing what an org uses is editing its access policy: every sub-policy
+below it narrows at the next decision. An admin or owner of a workspace with no policy uses
+no agent, app, workflow, pipeline, declared action or feature there; a new workspace grants
+nothing to its creator until a policy attached there, or above, does. Core IAM holds no
+feature logic: `nexus:feature` is a `policy_only` type of Nexus's catalog like any other. A
+module installed later is in no access policy until someone adds it.
 
 **A sub-policy narrows its parent, read live.**
 *Decision.* A policy has at most one parent (`parent_id`). What it grants is its own Allows

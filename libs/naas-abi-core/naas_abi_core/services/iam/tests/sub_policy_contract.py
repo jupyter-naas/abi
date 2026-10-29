@@ -295,6 +295,9 @@ def run_derive_only_from_what_you_hold(iam: IAMService, as_user: AsUser):
     with as_service_account("engine"):
         # P is held by the org's admins, org-wide: above every workspace of the org.
         iam.attach_policy(s.parent.id, t.org_admin.id, ORG_WIDE)
+        # Ws-1's admin holds agent a through a policy of its own (no role does).
+        held = iam.create_policy("a, for ws-1's admin", allow(agents("a")), scope=WS1)
+        iam.attach_policy(held.id, t.admin.id, WS1)
     with as_user(t.org_admin) as session:
         made = session.create_policy(
             "analysts", allow(agents("a")), scope=WS1, parent=s.parent.id

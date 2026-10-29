@@ -16,6 +16,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     IAMNotFoundError,
     IAMStore,
     KeyRecord,
+    LegacyScopeSet,
     ManifestRecord,
     ManifestStatus,
     Page,
@@ -26,7 +27,6 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalRecord,
     RevisionConflictError,
     ScopeRecord,
-    ScopeSet,
     SigningKeyRecord,
 )
 
@@ -47,7 +47,7 @@ class IAMStoreMemory(IAMStore):
         self._pending: dict[str, PendingGrant] = {}
         self._placements: dict[tuple[str, str], Placement] = {}
         self._scopes: dict[tuple[str, str], ScopeRecord] = {}
-        self._sets: dict[tuple[str, str], ScopeSet] = {}
+        self._legacy_sets: list[LegacyScopeSet] = []
         self._catalogs: dict[str, ActionCatalog] = {}
         self._keys: dict[str, KeyRecord] = {}
         self._token_floors: dict[str, datetime] = {}
@@ -537,38 +537,24 @@ class IAMStoreMemory(IAMStore):
                 key=lambda s: (s.org, s.workspace),
             )
 
-    # -- sets -------------------------------------------------------------------
+    # -- what an older version left ------------------------------------------------
 
-    def put_scope_set(self, scope_set: ScopeSet) -> None:
+    def legacy_scope_sets(self) -> list[LegacyScopeSet]:
         with self._lock:
-            self._write()
-            key = (scope_set.org, scope_set.workspace)
-            if scope_set.recorded:
-                self._sets[key] = scope_set
-            else:
-                self._sets.pop(key, None)
+            return sorted(self._legacy_sets, key=lambda s: (s.org, s.workspace))
 
-    def delete_scope_sets(self, org: str, workspace: str = "-") -> bool:
+    def drop_legacy_scope_sets(self) -> bool:
         with self._lock:
-            keys = [
-                key
-                for key in self._sets
-                if key[0] == org and workspace in ("-", key[1])
-            ]
-            if not keys:
+            if not self._legacy_sets:
                 return False
             self._write()
-            for key in keys:
-                del self._sets[key]
+            self._legacy_sets = []
             return True
 
-    def list_scope_sets(self, org: str | None = None) -> list[ScopeSet]:
+    def seed_legacy_scope_sets(self, found: Iterable[LegacyScopeSet]) -> None:
+        """Tests: the rows an older version's store would hold."""
         with self._lock:
-            return [
-                self._sets[key]
-                for key in sorted(self._sets)
-                if org is None or key[0] == org
-            ]
+            self._legacy_sets = list(found)
 
     # -- catalogs -----------------------------------------------------------------
 

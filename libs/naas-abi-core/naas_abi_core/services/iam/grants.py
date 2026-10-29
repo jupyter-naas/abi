@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import re
 from collections import deque
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -533,14 +533,11 @@ def held_statement(
 @dataclass(frozen=True)
 class Side:
     """One side that decides for the giver: the user, an actor acting for them,
-    the narrowing of their credential (Allow statements only), or a set of the
-    scope (``bound``: ``allowed_for(action)`` is what it lets anyone hold)."""
+    or the narrowing of their credential (Allow statements only)."""
 
     statements: tuple[HeldStatement, ...]
     lacks: str  # how a refusal says this side does not hold it
     active: bool = True
-    allowed_for: Callable[[str], tuple[str, ...]] | None = None
-    bound: bool = False
 
 
 TOO_COSTLY = "proving you hold it takes too long: name fewer, or simpler, resources"
@@ -572,9 +569,6 @@ class Holdings:
         key = (index, action)
         if key not in self._allows:
             side = self.sides[index]
-            if side.allowed_for is not None:
-                self._allows[key] = side.allowed_for(action) if side.active else ()
-                return self._allows[key]
             self._allows[key] = (
                 tuple(
                     sorted(
@@ -754,21 +748,13 @@ class Holdings:
         ]
         kept: list[str] = []
         excluded: set[str] = set()
-        # What the caller holds, and, where a set bounds the action, what the
-        # set has: a role's `${scope}:module:agent/*` is grantable as the
-        # set's modules, not as a whole.
-        candidates = [(p, 0) for p in self._allowed(0, action)]
-        for index, side in enumerate(self.sides):
-            if side.bound and self._allowed(index, action) != ("*",):
-                candidates += [(p, index) for p in self._allowed(index, action)]
-        for pattern, source in candidates:
+        for pattern in self._allowed(0, action):
             restricted = _restrict(pattern, scope)
             if restricted is None or restricted in kept:
                 continue
             if not all(
                 covered(restricted, self._allowed(i, action), u)
-                for i in range(len(self.sides))
-                if i != source
+                for i in range(1, len(self.sides))
                 for u in universes
             ):
                 continue

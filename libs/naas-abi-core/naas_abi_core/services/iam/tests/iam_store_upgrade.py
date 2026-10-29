@@ -15,9 +15,9 @@ from naas_abi_core.services.iam.adapters.secondary.iam_sql import (
 from naas_abi_core.services.iam.IAMPorts import (
     Attachment,
     GroupMapping,
+    LegacyScopeSet,
     Policy,
     PrincipalRecord,
-    ScopeSet,
     new_id,
 )
 from naas_abi_core.services.iam.policy import PolicyDocument, Statement
@@ -27,22 +27,28 @@ from naas_abi_core.services.iam.tests.iam__secondary_adapter__generic_test impor
 )
 
 # What version 1 had: no owner scopes, no sets and no parents (version 2 had no
-# sets, version 3 no parents).
+# sets, version 3 no parents, version 4 still its sets). The store of today
+# makes no ``iam_scope_sets``: versions 3 and 4 get theirs back.
+SETS_TABLE = (
+    "CREATE TABLE {schema}iam_scope_sets (org VARCHAR(64) NOT NULL, "
+    "workspace VARCHAR(64) NOT NULL, modules TEXT, features TEXT, "
+    "PRIMARY KEY (org, workspace))"
+)
+DOWNGRADE_TO_4 = (SETS_TABLE, "UPDATE {schema}iam_state SET schema_version = 4")
 DOWNGRADE_TO_3 = (
     "DROP INDEX {schema}iam_policies_parent",
     "ALTER TABLE {schema}iam_policies DROP COLUMN parent_id",
+    SETS_TABLE,
     "UPDATE {schema}iam_state SET schema_version = 3",
 )
 DOWNGRADE = (
     *DOWNGRADE_TO_3[:2],
     "ALTER TABLE {schema}iam_policies DROP COLUMN owner_scope",
     "ALTER TABLE {schema}iam_principals DROP COLUMN owner_scope",
-    "DROP TABLE {schema}iam_scope_sets",
     "UPDATE {schema}iam_state SET schema_version = 1",
 )
 DOWNGRADE_TO_2 = (
     *DOWNGRADE_TO_3[:2],
-    "DROP TABLE {schema}iam_scope_sets",
     "UPDATE {schema}iam_state SET schema_version = 2",
 )
 
@@ -114,9 +120,8 @@ def check_upgrade(
     again = open_store()
     try:
         assert again.get_principal(bound.id).owner_scope == "abi:org-1:-"
-        assert SCHEMA_VERSION == 4
-        again.put_scope_set(ScopeSet("org-1", modules=("acme.people",)))
-        assert again.list_scope_sets() == [ScopeSet("org-1", modules=("acme.people",))]
+        assert SCHEMA_VERSION == 5
+        assert again.legacy_scope_sets() == []
     finally:
         again.close()
 
@@ -149,8 +154,7 @@ def check_upgrade_from_3(
 def check_upgrade_from_2(
     open_store: Callable[[], IAMStoreSQL], execute: Callable[[str], None]
 ) -> None:
-    """A store of version 2 (no sets) opens with every org and workspace's set
-    unrecorded, everything, and records sets from then on."""
+    """A store of version 2 (no sets) opens with no legacy set to move."""
     store = open_store()
     kept = store.create_policy(policy())
     store.close()
@@ -159,9 +163,72 @@ def check_upgrade_from_2(
     upgraded = open_store()
     try:
         assert upgraded.get_policy(kept.id).id == kept.id
-        assert upgraded.list_scope_sets() == []
-        workspace = ScopeSet("org-1", "ws-1", modules=(), features=("chat",))
-        upgraded.put_scope_set(workspace)
-        assert upgraded.list_scope_sets() == [workspace]
+        assert upgraded.legacy_scope_sets() == []
+        assert upgraded.drop_legacy_scope_sets() is False
     finally:
         upgraded.close()
+
+
+def check_upgrade_from_4(
+    open_store: Callable[[], IAMStoreSQL], execute: Callable[[str], None]
+) -> None:
+    """A store of version 4 keeps its sets, unread, until they are moved:
+    ``legacy_scope_sets`` reads them as stored, ``drop_legacy_scope_sets``
+    drops the table. ``iam:GetSet`` and ``iam:PutSet`` leave the customer
+    policies that named them, a statement naming nothing else with them."""
+    store = open_store()
+    named = store.create_policy(
+        Policy(
+            id=new_id("pol"),
+            name="set reader",
+            document=PolicyDocument(
+                statements=(
+                    Statement("Allow", ("iam:GetSet",), ("${scope}:iam:set/*",)),
+                    Statement(
+                        "Allow",
+                        ("iam:PutSet", "iam:GetPolicy"),
+                        ("${scope}:iam:*",),
+                        sid="Both",
+                    ),
+                )
+            ),
+        )
+    )
+    untouched = store.create_policy(policy())
+    store.close()
+    for statement in DOWNGRADE_TO_4:
+        execute(statement)
+    execute(
+        "INSERT INTO {schema}iam_scope_sets (org, workspace, modules, features) "
+        """VALUES ('org-1', '-', '["acme.people"]', NULL)"""
+    )
+    execute(
+        "INSERT INTO {schema}iam_scope_sets (org, workspace, modules, features) "
+        """VALUES ('org-1', 'ws-1', '[]', '["chat"]')"""
+    )
+    upgraded = open_store()
+    try:
+        assert upgraded.legacy_scope_sets() == [
+            LegacyScopeSet("org-1", "-", ("acme.people",), None),
+            LegacyScopeSet("org-1", "ws-1", (), ("chat",)),
+        ]
+        rewritten = upgraded.get_policy(named.id)
+        assert rewritten.document.statements == (
+            Statement("Allow", ("iam:GetPolicy",), ("${scope}:iam:*",), sid="Both"),
+        )
+        assert rewritten.revision == named.revision + 1
+        assert upgraded.get_policy(untouched.id).revision == untouched.revision
+    finally:
+        upgraded.close()
+    # Opening it again changes nothing; dropping them is once.
+    again = open_store()
+    try:
+        assert again.get_policy(named.id).revision == named.revision + 1
+        assert len(again.legacy_scope_sets()) == 2
+        before = again.revision()
+        assert again.drop_legacy_scope_sets() is True
+        assert again.revision() > before
+        assert again.legacy_scope_sets() == []
+        assert again.drop_legacy_scope_sets() is False
+    finally:
+        again.close()

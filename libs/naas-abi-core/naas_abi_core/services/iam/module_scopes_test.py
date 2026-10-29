@@ -60,25 +60,21 @@ def test_a_scope_names_the_workspace_module_and_item():
     )
 
 
-@pytest.mark.parametrize("role", ["viewer", "member"])
-def test_viewers_and_members_hold_no_module_scope(h, role):
+@pytest.mark.parametrize("role", ["viewer", "member", "admin", "owner"])
+def test_no_role_holds_a_module_scope(h, role):
+    """Zero trust: owners and admins included, a policy grants each one."""
     user = _role(h, role, role)
     for type_name, action in module_scopes.USE_ACTION.items():
         resource = scope_resource(
             type_name, "people", "x", org="org-1", workspace="ws-1"
         )
         assert not h.allowed(f"module:{action}", resource, user)
-
-
-@pytest.mark.parametrize("role", ["admin", "owner"])
-def test_admins_and_owners_hold_every_module_scope_at_their_scope(h, role):
-    user = _role(h, role, role)
-    assert h.allowed("module:UseAgent", _agent("A"), user)
-    assert h.allowed(
-        "module:RunPipeline",
-        scope_resource("pipeline", "p", "pipeline.x", org="org-1", workspace="ws-1"),
-        user,
+    h.grant(
+        user.id,
+        statement("Allow", ["module:UseAgent"], ["${scope}:module:agent/*"]),
+        scope=WS,
     )
+    assert h.allowed("module:UseAgent", _agent("A"), user)
     assert not h.allowed("module:UseAgent", _agent("A", workspace="ws-2"), user)
 
 
@@ -94,16 +90,15 @@ def test_a_grant_of_one_agent_leaves_the_others_refused(h):
     assert not h.allowed("module:UseAgent", _agent("A", workspace="ws-2"), bob)
 
 
-def test_the_role_policies_mark_no_module_scope_for_viewers_and_members(iam):
-    for role in (roles.VIEWER, roles.MEMBER):
+def test_the_role_policies_name_no_module_scope(iam):
+    for role in roles.ROLES:
         policy = iam.store.get_policy(role)
         assert not any(
-            action.startswith("module:")
+            action.startswith("module:") or ":module:" in resource
             for s in policy.document.statements
             for action in s.actions
+            for resource in s.resources
         )
-    admin = iam.store.get_policy(roles.ADMIN)
-    assert any("module:UseAgent" in s.actions for s in admin.document.statements)
 
 
 def test_a_module_service_is_its_identifier_as_a_catalog_name():
@@ -174,8 +169,14 @@ def test_a_manifest_carries_its_catalog_and_approval_registers_it(h, iam):
     assert iam.catalogs.get("acme_people") is None
     h.admin("approve_manifest", account.id)
     assert iam.catalogs.get("acme_people").module == "acme.people"
-    # The module's side of its own actions, for the user it acts for.
+    # The module's side of its own actions, for the user it acts for, who
+    # holds them through a policy (no role does).
     bob = _role(h, "admin", "bob")
+    h.grant(
+        bob.id,
+        statement("Allow", ["acme_people:*"], ["${scope}:acme_people:*"]),
+        scope=WS,
+    )
     report = "abi:org-1:ws-1:acme_people:report/q3"
     assert h.allowed("acme_people:ExportReport", report, account, on_behalf_of=bob)
     stranger = h.user("stranger")

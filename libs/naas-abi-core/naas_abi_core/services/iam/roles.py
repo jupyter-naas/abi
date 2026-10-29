@@ -64,6 +64,7 @@ def retired_role(policy_id: str) -> str | None:
     role = f"builtin.{policy_id.removeprefix(prefix).rsplit('.', 1)[-1]}"
     return role if role in ROLES else None
 
+
 ROLES = (VIEWER, MEMBER, ADMIN, OWNER)
 ROLE_LEVELS: dict[str, frozenset[Level]] = {
     VIEWER: frozenset({"list", "read"}),
@@ -73,8 +74,6 @@ ROLE_LEVELS: dict[str, frozenset[Level]] = {
 }
 # The workspace roles that bring builtin.platform.member; viewer brings .viewer.
 PLATFORM_MEMBER_ROLES = frozenset({MEMBER, ADMIN, OWNER})
-# The roles that hold module scopes (``module_scopes.py``) by themselves.
-MODULE_SCOPE_ROLES = frozenset({ADMIN, OWNER})
 
 # The built-in service accounts and the policy each holds.
 SERVICE_ACCOUNTS: dict[str, str] = {"engine": ENGINE, "api": API, "idp": IDP}
@@ -201,9 +200,9 @@ def _role_statements(role: str, catalog: ActionCatalog) -> list[Statement]:
         if t.placement == "placed"
         # Granted by a policy only: no role holds it.
         and not t.policy_only
-        # Zero trust: viewers and members reach a module scope only through a
-        # policy granting it; admins and owners hold every one at their scope.
-        and not (t.module_scope and role not in MODULE_SCOPE_ROLES)
+        # Zero trust: no role holds a module scope, owners included; a policy
+        # grants each one.
+        and not t.module_scope
     ]
     groups: dict[bool, tuple[list[str], list[str]]] = {
         False: ([], []),

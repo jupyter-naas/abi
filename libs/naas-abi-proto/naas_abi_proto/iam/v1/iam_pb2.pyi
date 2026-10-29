@@ -146,24 +146,6 @@ class Scope(_message.Message):
     workspace: str
     def __init__(self, org: _Optional[str] = ..., workspace: _Optional[str] = ...) -> None: ...
 
-class SetItems(_message.Message):
-    __slots__ = ("items",)
-    ITEMS_FIELD_NUMBER: _ClassVar[int]
-    items: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, items: _Optional[_Iterable[str]] = ...) -> None: ...
-
-class ScopeSet(_message.Message):
-    __slots__ = ("org", "workspace", "modules", "features")
-    ORG_FIELD_NUMBER: _ClassVar[int]
-    WORKSPACE_FIELD_NUMBER: _ClassVar[int]
-    MODULES_FIELD_NUMBER: _ClassVar[int]
-    FEATURES_FIELD_NUMBER: _ClassVar[int]
-    org: str
-    workspace: str
-    modules: SetItems
-    features: SetItems
-    def __init__(self, org: _Optional[str] = ..., workspace: _Optional[str] = ..., modules: _Optional[_Union[SetItems, _Mapping]] = ..., features: _Optional[_Union[SetItems, _Mapping]] = ...) -> None: ...
-
 class ResourceType(_message.Message):
     __slots__ = ("name", "id", "placement", "container", "personal", "description", "module_scope", "policy_only")
     NAME_FIELD_NUMBER: _ClassVar[int]
@@ -1035,80 +1017,6 @@ class DeleteScopeResponse(_message.Message):
     error: _common_pb2.CallError
     deleted: bool
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., deleted: bool = ...) -> None: ...
-
-class GetSetRequest(_message.Message):
-    __slots__ = ("context", "org", "workspace")
-    CONTEXT_FIELD_NUMBER: _ClassVar[int]
-    ORG_FIELD_NUMBER: _ClassVar[int]
-    WORKSPACE_FIELD_NUMBER: _ClassVar[int]
-    context: _common_pb2.CallContext
-    org: str
-    workspace: str
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., org: _Optional[str] = ..., workspace: _Optional[str] = ...) -> None: ...
-
-class GetSetResponse(_message.Message):
-    __slots__ = ("error", "scope_set")
-    ERROR_FIELD_NUMBER: _ClassVar[int]
-    SCOPE_SET_FIELD_NUMBER: _ClassVar[int]
-    error: _common_pb2.CallError
-    scope_set: ScopeSet
-    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., scope_set: _Optional[_Union[ScopeSet, _Mapping]] = ...) -> None: ...
-
-class EffectiveSetRequest(_message.Message):
-    __slots__ = ("context", "org", "workspace")
-    CONTEXT_FIELD_NUMBER: _ClassVar[int]
-    ORG_FIELD_NUMBER: _ClassVar[int]
-    WORKSPACE_FIELD_NUMBER: _ClassVar[int]
-    context: _common_pb2.CallContext
-    org: str
-    workspace: str
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., org: _Optional[str] = ..., workspace: _Optional[str] = ...) -> None: ...
-
-class EffectiveSetResponse(_message.Message):
-    __slots__ = ("error", "scope_set")
-    ERROR_FIELD_NUMBER: _ClassVar[int]
-    SCOPE_SET_FIELD_NUMBER: _ClassVar[int]
-    error: _common_pb2.CallError
-    scope_set: ScopeSet
-    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., scope_set: _Optional[_Union[ScopeSet, _Mapping]] = ...) -> None: ...
-
-class ListSetsRequest(_message.Message):
-    __slots__ = ("context", "org")
-    CONTEXT_FIELD_NUMBER: _ClassVar[int]
-    ORG_FIELD_NUMBER: _ClassVar[int]
-    context: _common_pb2.CallContext
-    org: str
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., org: _Optional[str] = ...) -> None: ...
-
-class ListSetsResponse(_message.Message):
-    __slots__ = ("error", "sets")
-    ERROR_FIELD_NUMBER: _ClassVar[int]
-    SETS_FIELD_NUMBER: _ClassVar[int]
-    error: _common_pb2.CallError
-    sets: _containers.RepeatedCompositeFieldContainer[ScopeSet]
-    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., sets: _Optional[_Iterable[_Union[ScopeSet, _Mapping]]] = ...) -> None: ...
-
-class PutSetRequest(_message.Message):
-    __slots__ = ("context", "org", "workspace", "modules", "features")
-    CONTEXT_FIELD_NUMBER: _ClassVar[int]
-    ORG_FIELD_NUMBER: _ClassVar[int]
-    WORKSPACE_FIELD_NUMBER: _ClassVar[int]
-    MODULES_FIELD_NUMBER: _ClassVar[int]
-    FEATURES_FIELD_NUMBER: _ClassVar[int]
-    context: _common_pb2.CallContext
-    org: str
-    workspace: str
-    modules: SetItems
-    features: SetItems
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., org: _Optional[str] = ..., workspace: _Optional[str] = ..., modules: _Optional[_Union[SetItems, _Mapping]] = ..., features: _Optional[_Union[SetItems, _Mapping]] = ...) -> None: ...
-
-class PutSetResponse(_message.Message):
-    __slots__ = ("error", "scope_set")
-    ERROR_FIELD_NUMBER: _ClassVar[int]
-    SCOPE_SET_FIELD_NUMBER: _ClassVar[int]
-    error: _common_pb2.CallError
-    scope_set: ScopeSet
-    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., scope_set: _Optional[_Union[ScopeSet, _Mapping]] = ...) -> None: ...
 
 class RegisterCatalogRequest(_message.Message):
     __slots__ = ("context", "catalog")

@@ -11,6 +11,7 @@ import json
 import uuid
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -23,6 +24,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     IAMNotFoundError,
     IAMStore,
     KeyRecord,
+    LegacyScopeSet,
     ManifestRecord,
     ManifestStatus,
     Page,
@@ -33,7 +35,6 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalRecord,
     RevisionConflictError,
     ScopeRecord,
-    ScopeSet,
     SigningKeyRecord,
 )
 from naas_abi_core.services.iam.names import (
@@ -75,7 +76,10 @@ from sqlalchemy.exc import IntegrityError
 # 2: the owner scope of policies and groups (``owner_scope``).
 # 3: the sets of orgs and workspaces (``iam_scope_sets``, made by create_all).
 # 4: the parent of a policy (``iam_policies.parent_id``, "Sub-policies").
-SCHEMA_VERSION = 4
+# 5: no more sets: ``iam:GetSet`` and ``iam:PutSet`` leave the policies;
+# ``iam_scope_sets`` stays, unread, until its rows are moved
+# (``legacy_scope_sets``, ``drop_legacy_scope_sets``).
+SCHEMA_VERSION = 5
 
 metadata = MetaData()
 
@@ -209,10 +213,13 @@ scopes = Table(
     Column("workspace", String(64), primary_key=True),
 )
 
-# A set's parts are JSON lists; NULL is "nothing recorded", everything.
-scope_sets = Table(
+# An older version's sets (schema 3 and 4): never created any more, read once by
+# whoever moves them into policies, then dropped. A part is a JSON list; NULL
+# was "nothing recorded".
+legacy_metadata = MetaData()
+legacy_scope_sets = Table(
     "iam_scope_sets",
-    metadata,
+    legacy_metadata,
     Column("org", String(64), primary_key=True),
     Column("workspace", String(64), primary_key=True),
     Column("modules", Text, nullable=True),
@@ -433,10 +440,6 @@ def _signing_key(row: Row) -> SigningKeyRecord:
     )
 
 
-def _json_list(items: tuple[str, ...] | None) -> str | None:
-    return json.dumps(list(items)) if items is not None else None
-
-
 def _list_json(raw: str | None) -> tuple[str, ...] | None:
     if raw is None:
         return None
@@ -488,6 +491,8 @@ class IAMStoreSQL(IAMStore):
             self._migrate_owner_scopes(conn)
         if version < 4:
             self._migrate_parents(conn)
+        if version < 5:
+            self._migrate_set_actions(conn)
         if version < SCHEMA_VERSION:
             conn.execute(update(state).values(schema_version=SCHEMA_VERSION))
 
@@ -566,6 +571,41 @@ class IAMStoreSQL(IAMStore):
                 f"CREATE INDEX IF NOT EXISTS iam_policies_parent ON {name} (parent_id)"
             )
         )
+
+    def _migrate_set_actions(self, conn: Connection) -> None:
+        """5: the sets are gone (IAM's catalog 7): ``iam:GetSet`` and
+        ``iam:PutSet`` are taken out of the customer policies that named them, a
+        statement left with no action with them. They authorized nothing else,
+        so no decision changes; without this the catalog would refuse dropping
+        actions a policy still names."""
+        gone = {"iam:GetSet", "iam:PutSet"}
+        for row in conn.execute(
+            select(policies.c.id, policies.c.document).where(
+                policies.c.managed.is_(False)
+            )
+        ):
+            document = PolicyDocument.from_dict(json.loads(row.document))
+            if not any(a in gone for s in document.statements for a in s.actions):
+                continue
+            kept = tuple(
+                replace(statement, actions=actions)
+                for statement in document.statements
+                if (actions := tuple(a for a in statement.actions if a not in gone))
+            )
+            conn.execute(
+                update(policies)
+                .where(policies.c.id == row.id)
+                .values(
+                    document=replace(document, statements=kept).to_json(),
+                    revision=policies.c.revision + 1,
+                    updated_at=_now(),
+                )
+            )
+            logger.info(
+                f"IAM policy {row.id}: iam:GetSet and iam:PutSet taken out, the "
+                "sets they read and wrote are gone"
+            )
+        conn.execute(update(state).values(revision=state.c.revision + 1))
 
     def _warn_old_platform_names(self, conn: Connection) -> None:
         """Schema 2 names the platform's policies and groups
@@ -1291,45 +1331,32 @@ class IAMStoreSQL(IAMStore):
         with self._read() as conn:
             return [ScopeRecord(row.org, row.workspace) for row in conn.execute(query)]
 
-    # -- sets -------------------------------------------------------------------
+    # -- what an older version left ------------------------------------------------
 
-    def put_scope_set(self, scope_set: ScopeSet) -> None:
-        key = (
-            scope_sets.c.org == scope_set.org,
-            scope_sets.c.workspace == scope_set.workspace,
-        )
-        with self._change() as conn:
-            conn.execute(delete(scope_sets).where(*key))
-            if scope_set.recorded:
-                conn.execute(
-                    insert(scope_sets).values(
-                        org=scope_set.org,
-                        workspace=scope_set.workspace,
-                        modules=_json_list(scope_set.modules),
-                        features=_json_list(scope_set.features),
-                    )
-                )
-
-    def delete_scope_sets(self, org: str, workspace: str = "-") -> bool:
-        query = delete(scope_sets).where(scope_sets.c.org == org)
-        if workspace != "-":
-            query = query.where(scope_sets.c.workspace == workspace)
-        return self._delete(query)
-
-    def list_scope_sets(self, org: str | None = None) -> list[ScopeSet]:
-        query = select(scope_sets).order_by(scope_sets.c.org, scope_sets.c.workspace)
-        if org is not None:
-            query = query.where(scope_sets.c.org == org)
+    def legacy_scope_sets(self) -> list[LegacyScopeSet]:
+        table = legacy_scope_sets
         with self._read() as conn:
+            if not inspect(conn).has_table(table.name, schema=self._schema):
+                return []
             return [
-                ScopeSet(
+                LegacyScopeSet(
                     row.org,
                     row.workspace,
                     _list_json(row.modules),
                     _list_json(row.features),
                 )
-                for row in conn.execute(query)
+                for row in conn.execute(
+                    select(table).order_by(table.c.org, table.c.workspace)
+                )
             ]
+
+    def drop_legacy_scope_sets(self) -> bool:
+        table = legacy_scope_sets
+        with self._change() as conn:
+            if not inspect(conn).has_table(table.name, schema=self._schema):
+                return False
+            table.drop(conn)
+            return True
 
     # -- catalogs -----------------------------------------------------------------
 

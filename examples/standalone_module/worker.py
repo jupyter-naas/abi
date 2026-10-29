@@ -859,14 +859,6 @@ class ABIModule(BaseModule):
             "delete_placement": {"service": "document", "id_key": "standalone-demo"},
             "put_scope": {"org": "org-demo", "workspace": "-"},
             "delete_scope": {"org": "org-demo", "workspace": "-"},
-            # Sets (what an org or a workspace may use): read by the admins of
-            # that org or workspace, written by the platform admin and an org's
-            # owners and admins. A module holds no iam:GetSet or iam:PutSet, so
-            # the broker refuses each before it reaches IAM.
-            "get_set": {"org": "org-demo", "workspace": "ws-demo"},
-            "effective_set": {"org": "org-demo", "workspace": "ws-demo"},
-            "list_sets": {"org": "org-demo"},
-            "put_set": {"org": "org-demo", "workspace": "-"},
             "register_catalog": {
                 "catalog": pb.ActionCatalog(
                     service="standalone_demo",

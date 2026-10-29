@@ -18,7 +18,6 @@ from collections import OrderedDict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
-from functools import partial
 from typing import Any, Literal, NoReturn, TypeVar
 
 from naas_abi_core import logger
@@ -53,7 +52,6 @@ from naas_abi_core.services.iam import (
     module_scopes,
     modules,
     roles,
-    sets,
 )
 from naas_abi_core.services.iam.adapters.secondary.authorizer__policy import (
     PolicyAuthorizer,
@@ -89,6 +87,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     KeyKind,
     KeyRecord,
     KeyRefusedError,
+    LegacyScopeSet,
     ManifestRecord,
     ManifestStatus,
     ManifestSubmission,
@@ -101,7 +100,6 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalKind,
     PrincipalRecord,
     ScopeRecord,
-    ScopeSet,
     Seal,
     Subject,
     TokenExchange,
@@ -130,14 +128,6 @@ from naas_abi_core.services.iam.policy import (
     denies_beyond_scope,
     parse_policy_document,
     within_scope,
-)
-from naas_abi_core.services.iam.sets import (
-    SetValidationError,
-    intersect,
-    normalize,
-    outside,
-    read_resource,
-    write_resource,
 )
 from naas_abi_core.services.iam.tokens import TokenIssuer, normalize_scope
 
@@ -329,7 +319,6 @@ class IAMService(IIAMService, PolicySource):
         self._subjects = _TTLCache(cache_ttl_seconds, cache_size)
         self._policies = _TTLCache(cache_ttl_seconds, cache_size)
         self._placements = _TTLCache(cache_ttl_seconds, 2)
-        self._sets = _TTLCache(cache_ttl_seconds, 1)
         self._platform_grants: tuple[roles.PlatformGrant, ...] = ()
         self._floors = _TTLCache(cache_ttl_seconds, 1)
         self._pending_index: tuple[int, frozenset[tuple[str, str]]] | None = None
@@ -453,27 +442,6 @@ class IAMService(IIAMService, PolicySource):
     def seals(self) -> Sequence[Seal]:
         return self._seals
 
-    def has_sets(self) -> bool:
-        return bool(self._recorded_sets())
-
-    def scope_sets(
-        self, org: str, workspace: str
-    ) -> tuple[ScopeSet | None, ScopeSet | None]:
-        found = self._recorded_sets()
-        org_set = found.get((org, NONE)) if org not in (NONE, ALL_ORGS) else None
-        workspace_set = (
-            found.get((org, workspace))
-            if workspace not in (NONE, ALL_WORKSPACES)
-            else None
-        )
-        return org_set, workspace_set
-
-    def _recorded_sets(self) -> dict[tuple[str, str], ScopeSet]:
-        return self._sets.get(
-            "sets",
-            lambda: {(s.org, s.workspace): s for s in self.store.list_scope_sets()},
-        )
-
     def subject(
         self, ctx: CallContext, side: Literal["actor", "user"]
     ) -> Subject | None:
@@ -532,13 +500,7 @@ class IAMService(IIAMService, PolicySource):
         record = self._resolve(principal)
         status = record.status if record is not None else "active"
         statements: list[EffectiveStatement] = []
-        platform_admin = False
         for attachment, group in self._held_attachments(principal, record):
-            # Only the platform's own attachment of it: one at an org or a
-            # workspace grants there and never takes its holder out of the sets.
-            platform_admin |= attachment.policy_id == roles.PLATFORM_ADMIN and (
-                attachment.scope in (None, PLATFORM_SCOPE)
-            )
             statements += self._statements_of(
                 attachment.policy_id, attachment, group, fresh=fresh
             )
@@ -563,11 +525,7 @@ class IAMService(IIAMService, PolicySource):
             for effective in statements
             if (bound := bind_variables(effective.statement, variables)) is not None
         ]
-        # The sets bound users; the platform admin, who sets the orgs' sets and
-        # supports every org, and service accounts, bound by their own
-        # policies, are not.
-        bounded = principal.kind == "user" and not platform_admin
-        return Subject(principal.id, status, tuple(statements), bounded)
+        return Subject(principal.id, status, tuple(statements))
 
     def _statements_of(
         self,
@@ -796,7 +754,6 @@ class IAMService(IIAMService, PolicySource):
         at it. A user left with no attachment in the org leaves its groups."""
         self.require("iam:DeleteScope", scope_resource(org, workspace))
         changed = self._drop_owned(org, workspace)
-        changed |= self.store.delete_scope_sets(org, workspace)
         detached = self._detach_scope(org, workspace)
         deleted = self.store.delete_scope(org, workspace)
         for principal_id in detached:
@@ -835,89 +792,6 @@ class IAMService(IIAMService, PolicySource):
         return next(
             (s.org for s in self.store.list_scopes() if s.workspace == workspace), None
         )
-
-    # =========================================================================
-    # Sets: what an org or a workspace may use (sets.py).
-    # =========================================================================
-
-    def get_set(self, org: str, workspace: str = NONE) -> ScopeSet:
-        """The set recorded for an org or a workspace; one of everything (both
-        parts None) when none is. Needs ``iam:GetSet`` on it, at its scope."""
-        self._check_set_scope(org, workspace)
-        self._require_set("iam:GetSet", read_resource(org, workspace))
-        org_set, workspace_set = self.scope_sets(org, workspace)
-        found = workspace_set if workspace != NONE else org_set
-        return found or ScopeSet(org, workspace)
-
-    def effective_set(self, org: str, workspace: str = NONE) -> ScopeSet:
-        """What an org or a workspace may use: a workspace's set within its org's.
-        Needs ``iam:GetSet`` on the set asked for."""
-        self._check_set_scope(org, workspace)
-        self._require_set("iam:GetSet", read_resource(org, workspace))
-        org_set, workspace_set = self.scope_sets(org, workspace)
-        return replace(
-            intersect(org_set or ScopeSet(org), workspace_set),
-            org=org,
-            workspace=workspace,
-        )
-
-    def list_sets(self, org: str | None = None) -> list[ScopeSet]:
-        """The recorded sets the caller may read (``iam:GetSet``)."""
-        found = [
-            s for s in self._recorded_sets().values() if org is None or s.org == org
-        ]
-        allowed = set(
-            self.filter(
-                "iam:GetSet", [read_resource(s.org, s.workspace) for s in found]
-            ).allowed
-        )
-        return sorted(
-            (s for s in found if read_resource(s.org, s.workspace) in allowed),
-            key=lambda s: (s.org, s.workspace),
-        )
-
-    def put_set(
-        self,
-        org: str,
-        workspace: str = NONE,
-        *,
-        modules: Iterable[str] | None = None,
-        features: Iterable[str] | None = None,
-    ) -> ScopeSet:
-        """Record the set of an org (``iam:PutSet`` on ``abi:%2A:%2A:iam:set/<org>``,
-        the platform admin's) or of a workspace (on ``abi:<org>:%2A:iam:set/<ws>``,
-        an org-wide role's). A part left None is everything; for a workspace that
-        is its org's. A workspace's items must be within its org's set
-        (``SetValidationError`` naming the extra ones). Narrowing applies at the
-        next decision: the change drops every cache, here and over NATS."""
-        self._check_set_scope(org, workspace)
-        self._require_set("iam:PutSet", write_resource(org, workspace))
-        kept_modules, kept_features = normalize(modules, features)
-        if workspace != NONE and self.workspace_org(workspace) != org:
-            raise IAMNotFoundError(f"Workspace {workspace} is not in org {org}")
-        recorded = ScopeSet(org, workspace, kept_modules, kept_features)
-        if workspace != NONE:
-            org_set, _ = self.scope_sets(org, workspace)
-            extra = outside(recorded, org_set)
-            if extra:
-                raise SetValidationError(
-                    f"Not in the set of organization {org}: {', '.join(extra)}"
-                )
-        self.store.put_scope_set(recorded)
-        self._changed()
-        return recorded
-
-    def _require_set(self, action: str, resource: str) -> None:
-        # Every org and workspace has a set: a refusal is never "not found".
-        self.require(
-            action, resource, not_found=lambda: PermissionDeniedError(action, resource)
-        )
-
-    @staticmethod
-    def _check_set_scope(org: str, workspace: str) -> None:
-        if org in (NONE, ALL_ORGS) or workspace == ALL_WORKSPACES:
-            raise ValueError("A set is an org's or a workspace's in an org")
-        scope_name(org, workspace)  # validates the ids
 
     # =========================================================================
     # Catalogs
@@ -2290,31 +2164,27 @@ class IAMService(IIAMService, PolicySource):
         """What decides for the caller, side by side: the user a call acts for
         (never the first-party account acting, whose statements would stand in
         for the user's), an actor that is not first-party, the credential's
-        narrowing, and, for a caller the sets bound, the sets of ``scope``."""
+        narrowing."""
         actor = ctx.principal
         user_id = ctx.user.id if ctx.user is not None else None
         sides: list[grants.Side] = []
-        bounded = False
         if ctx.on_behalf_of is not None:
-            side, bounded = self._held_side(
-                ctx, "user", user_id, "you do not hold it there"
+            sides.append(
+                self._held_side(ctx, "user", user_id, "you do not hold it there")
             )
-            sides.append(side)
             if not self._first_party(actor):
-                side, _ = self._held_side(
-                    ctx,
-                    "actor",
-                    user_id,
-                    f"{actor.name or actor.id}, acting for you, does not hold it there",
+                sides.append(
+                    self._held_side(
+                        ctx,
+                        "actor",
+                        user_id,
+                        f"{actor.name or actor.id}, acting for you, does not hold it there",
+                    )
                 )
-                sides.append(side)
         else:
-            side, bounded = self._held_side(
-                ctx, "actor", user_id, "you do not hold it there"
+            sides.append(
+                self._held_side(ctx, "actor", user_id, "you do not hold it there")
             )
-            sides.append(side)
-        if bounded and scope is not None:
-            sides += self._set_sides(scope)
         if ctx.scope is not None:
             narrowing = tuple(
                 grants.held_statement(
@@ -2333,54 +2203,25 @@ class IAMService(IIAMService, PolicySource):
         side: Literal["actor", "user"],
         user_id: str | None,
         lacks: str,
-    ) -> tuple[grants.Side, bool]:
+    ) -> grants.Side:
         subject = self.subject(ctx, side)
         if subject is None:
-            return grants.Side((), lacks, active=False), False
-        return (
-            grants.Side(
-                tuple(
-                    grants.held_statement(
-                        statement,
-                        effective.scope,
-                        principal_id=subject.principal_id,
-                        user_id=user_id,
-                        policy_id=effective.policy_id,
-                    )
-                    for effective in subject.statements
-                    for statement in _unbounded(effective)
-                ),
-                lacks,
-                active=subject.status == "active",
+            return grants.Side((), lacks, active=False)
+        return grants.Side(
+            tuple(
+                grants.held_statement(
+                    statement,
+                    effective.scope,
+                    principal_id=subject.principal_id,
+                    user_id=user_id,
+                    policy_id=effective.policy_id,
+                )
+                for effective in subject.statements
+                for statement in _unbounded(effective)
             ),
-            subject.bounded,
+            lacks,
+            active=subject.status == "active",
         )
-
-    def _set_sides(self, scope: str) -> list[grants.Side]:
-        """The sets of ``scope`` as Allow-only sides: an org's set at the org,
-        org-wide and at each of its workspaces, a workspace's at the workspace.
-        Nobody the sets bound grants, there, what they leave out."""
-        try:
-            org, workspace = scope_fields(scope)
-        except ValueError:
-            return []  # a platform policy's abi:*:*: no org's set applies
-        if org == NONE:
-            return []
-        org_set, workspace_set = self.scope_sets(
-            org, workspace if workspace not in ("*", NONE) else NONE
-        )
-        return [
-            grants.Side(
-                (),
-                f"{found.label()} does not include it",
-                allowed_for=partial(
-                    sets.held_patterns, found, self._registry, scope=scope
-                ),
-                bound=True,
-            )
-            for found in (org_set, workspace_set)
-            if found is not None
-        ]
 
     def _first_party(self, principal: CallPrincipal) -> bool:
         if principal.kind != "service_account":
@@ -3625,6 +3466,30 @@ class IAMService(IIAMService, PolicySource):
             self._changed()
         return dropped
 
+    def legacy_scope_sets(self) -> list[LegacyScopeSet]:
+        """The org and workspace sets an older version recorded, as stored, until
+        whoever recorded them moved what they said into policies and dropped
+        them (``drop_legacy_scope_sets``). IAM decides nothing with them. In
+        process only; needs ``iam:DeleteScope`` on each one's scope (whoever may
+        forget a scope reads what it had); the others are left out."""
+        return [
+            found
+            for found in self.store.legacy_scope_sets()
+            if self.authorize(
+                "iam:DeleteScope", scope_resource(found.org, found.workspace)
+            ).allowed
+        ]
+
+    def drop_legacy_scope_sets(self) -> bool:
+        """Drop the legacy sets once they were moved. Needs ``iam:DeleteScope``
+        on the scope of every one, checked before anything goes."""
+        for found in self.store.legacy_scope_sets():
+            self.require("iam:DeleteScope", scope_resource(found.org, found.workspace))
+        dropped = self.store.drop_legacy_scope_sets()
+        if dropped:
+            self._changed()
+        return dropped
+
     def _drop_retired_companions(self, attachments: Sequence[Attachment]) -> None:
         """A retired policy attached beside a role (an older version's
         companion, until it is moved and retired) follows its own role out: it
@@ -3686,7 +3551,6 @@ class IAMService(IIAMService, PolicySource):
         self._subjects.clear()
         self._policies.clear()
         self._placements.clear()
-        self._sets.clear()
         self._floors.clear()
 
     def refresh_if_changed(self) -> bool:
@@ -3857,7 +3721,8 @@ def _retired_companions(
     return {
         (a.policy_id, a.scope)
         for a in attachments
-        if (role := roles.retired_role(a.policy_id)) is not None and (role, a.scope) in held
+        if (role := roles.retired_role(a.policy_id)) is not None
+        and (role, a.scope) in held
     }
 
 
