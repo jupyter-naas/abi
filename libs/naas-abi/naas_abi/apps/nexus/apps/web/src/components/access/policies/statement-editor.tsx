@@ -21,6 +21,7 @@ import {
 } from './policy-editor-model';
 
 const LISTING_DELAY_MS = 250;
+import { globMatches, scopedName } from './builder/builder-model';
 import { SuggestInput } from './suggest-input';
 
 /** A list of patterns (actions or resources) with a field that suggests the next one; with
@@ -150,7 +151,13 @@ export function StatementEditor({
         service: step.service,
         type: step.type,
         module: step.module,
-        ids: page.items.map((item) => ({
+        // Only what the caller may grant of the type (within a sub-policy's parent).
+        ids: page.items
+          .filter((item) => {
+            const resource = scopedName(item.name, scope);
+            return type.actions.some((a) => a.resources.some((pattern) => globMatches(pattern, resource)));
+          })
+          .map((item) => ({
           id: step.module ? item.id.slice(item.id.indexOf('/') + 1) : item.id,
           detail: item.description ? `${item.label}: ${item.description}` : item.label,
         })),

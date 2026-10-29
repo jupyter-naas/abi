@@ -50,6 +50,7 @@ const PUBLISHER_LABELS: Record<string, string> = { engine: 'Engine', naas_abi: '
 const MODULE_LABELS: Record<string, string> = { agent: 'Agents', app: 'Apps', workflow: 'Workflows', pipeline: 'Pipelines' };
 
 function plural(word: string): string {
+  if (/[^s]s$/.test(word)) return word;
   if (/[^aeiou]y$/.test(word)) return `${word.slice(0, -1)}ies`;
   if (/(s|x|ch|sh)$/.test(word)) return `${word}es`;
   return `${word}s`;
@@ -129,6 +130,14 @@ export function belongsTo(type: BuilderType, resource: string): boolean {
   if (at !== SCOPE_PREFIX.length && resource[at - 1] !== '/') return false;
   // Nothing of another type after it: an id holds no `:` (IAM encodes it).
   return !resource.slice(at + type.marker.length).includes(':');
+}
+
+/** Whether the caller may grant something of ``type`` on ``resource`` (written at the scope):
+ *  a listed resource is offered only then, so a sub-policy lists only what its parent has. */
+export function grantableOn(type: BuilderType, resource: string): boolean {
+  return type.actions.some(
+    (a) => a.resources.some((p) => globMatches(p, resource)) && !a.excluded.some((d) => globMatches(d, resource)),
+  );
 }
 
 /** Why a wildcard typed after `${scope}/` is not one of ``type``'s, or null. */

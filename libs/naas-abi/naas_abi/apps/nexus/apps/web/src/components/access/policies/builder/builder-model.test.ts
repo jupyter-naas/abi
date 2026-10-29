@@ -4,6 +4,7 @@ import { ORG, WS, adminPublishers, publishedType } from '../../access-fixtures';
 import {
   atScope,
   belongsTo,
+  grantableOn,
   builderPublishers,
   builderStatements,
   globMatches,
@@ -38,6 +39,7 @@ describe('builderPublishers', () => {
     expect(graph.actions.map((a) => a.action)).toEqual(['triple_store:ListGraphs', 'triple_store:Query']);
     expect(graph.patterns).toEqual(['${scope}/triple_store:graph/*']);
     expect(naasAbi.types.map((t) => t.label)).toEqual(['Organizations', 'Workspaces', 'Features']);
+    expect(builderPublishers({ scope: WS, publishers: [{ id: 'naas_abi', kind: 'naas_abi', types: [publishedType('nexus', 'role_features', [['nexus:X', ['${scope}/*']]])] }] })[0].types[0].label).toBe('Role features');
     // A module's agents are the `module` catalog's type under that module.
     expect(people.types.map((t) => [t.key, t.label, t.marker])).toEqual([
       ['module:agent@acme.people', 'Agents', 'module:agent/acme.people/'],
@@ -85,6 +87,13 @@ describe('resources', () => {
     expect(belongsTo(agents, '${scope}/module:agent/acme.market/Analyst')).toBe(false);
     // What the caller may grant of a type is the type's, whatever it names.
     expect(belongsTo(workspace, '${scope}')).toBe(true);
+  });
+
+  it('lists only what the caller may grant of a type, as within a parent', () => {
+    const features = naasAbi.types.find((t) => t.type === 'feature')!;
+    expect(grantableOn(features, '${scope}/nexus:feature/chat')).toBe(true);
+    expect(grantableOn(features, '${scope}/nexus:feature/code')).toBe(false);
+    expect(grantableOn(agents, '${scope}/module:agent/acme.people/Coach')).toBe(true);
   });
 
   it('accepts a wildcard under ${scope}/ that names the type', () => {

@@ -6,6 +6,7 @@ import { IamAdminError, type IamAdminApi } from '@/lib/iam-admin/api';
 import type { ListedResource } from '@/lib/iam-admin/types';
 import { POLICY_VERSION } from '../policy-editor-model';
 import {
+  grantableOn,
   scopedName,
   wildcardProblem,
   type BuilderPublisher,
@@ -214,7 +215,11 @@ function TypeSection({
         .flatMap((a) => a.resources),
     ),
   ];
-  const listedNames = new Set(listing.items.map((item) => scopedName(item.name, scope)));
+  // What the caller lists of the type, kept to what they may grant of it (within a parent).
+  const items = listing.items
+    .map((item) => ({ item, resource: scopedName(item.name, scope) }))
+    .filter(({ resource }) => grantableOn(type, resource));
+  const listedNames = new Set(items.map(({ resource }) => resource));
   const others = choice.resources.filter((r) => !patterns.includes(r) && !listedNames.has(r));
 
   return (
@@ -268,7 +273,7 @@ function TypeSection({
           </div>
           <div className="access-builder-section">
             <h5 className="access-builder-heading">Resources</h5>
-            <ul className="access-builder-items" aria-label={`What you may grant of ${title}`}>
+            <ul className="access-builder-items access-builder-items-wide" aria-label={`What you may grant of ${title}`}>
               {patterns.map((pattern) => (
                 <li key={pattern} className="access-builder-item">
                   <label className="access-checkbox">
@@ -297,8 +302,7 @@ function TypeSection({
                 />
                 {listing.error && <p className="access-policy-error">{listing.error}</p>}
                 <ul className="access-builder-items" aria-label={`Existing ${title}`}>
-                  {listing.items.map((item) => {
-                    const resource = scopedName(item.name, scope);
+                  {items.map(({ item, resource }) => {
                     return (
                       <li key={item.name} className="access-builder-item" data-builder-resource={resource}>
                         <label className="access-checkbox" title={item.description || item.name}>
@@ -315,7 +319,7 @@ function TypeSection({
                       </li>
                     );
                   })}
-                  {!listing.loading && listing.items.length === 0 && !listing.error && (
+                  {!listing.loading && items.length === 0 && !listing.error && (
                     <li className="access-policy-muted">{search ? 'Nothing matches.' : 'None you may list here.'}</li>
                   )}
                   {listing.loading && <li className="access-policy-muted">Loading…</li>}

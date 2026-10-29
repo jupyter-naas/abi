@@ -142,3 +142,14 @@
   font-size: var(--font-size-xs);
   color: var(--muted-foreground-hex);
 }
+
+/* Patterns are read whole: one per line. */
+.access-builder-items-wide {
+  grid-template-columns: 1fr;
+}
+
+.access-builder-items-wide .access-checkbox span,
+.access-builder-items-wide .access-checkbox code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
