@@ -92,8 +92,8 @@ class TestDatasetAuthorization(DataServiceContract):
     @staticmethod
     def _namespace(namespace: str) -> list[str]:
         return [
-            f"abi:-:-:dataset:namespace/{namespace}",
-            f"abi:-:-:dataset:dataset/{namespace}/*",
+            f"abi:dataset:namespace/{namespace}",
+            f"abi:dataset:dataset/{namespace}/*",
         ]
 
     def granted_resources(self):
@@ -102,7 +102,7 @@ class TestDatasetAuthorization(DataServiceContract):
     def denied_resources(self):
         # The catalog too: allowed dataset:* on it, the principal could run
         # unchecked SQL (QueryUnchecked), which the cases below refuse.
-        return [*self._namespace("hr"), "abi:-:-:dataset:catalog/-"]
+        return [*self._namespace("hr"), "abi:dataset:catalog/-"]
 
     def read_only_resources(self):
         return self._namespace("frozen")
@@ -285,6 +285,7 @@ def _as_nexus_user(iam):
         user,
     )
     from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER
+    from naas_abi_core.services.iam.names import anywhere
     from naas_abi_core.services.iam.tests.iam_harness import document, statement
 
     with as_service_account("engine"):
@@ -292,8 +293,8 @@ def _as_nexus_user(iam):
         policy = iam.create_policy(
             "every-dataset",
             document(
-                statement("Allow", ["dataset:*"], ["abi:*:*:dataset:dataset/*"]),
-                statement("Allow", ["dataset:*"], ["abi:*:*:dataset:namespace/*"]),
+                statement("Allow", ["dataset:*"], anywhere("dataset:dataset/*")),
+                statement("Allow", ["dataset:*"], anywhere("dataset:namespace/*")),
             ),
         )
         iam.attach_policy(policy.id, record.id)

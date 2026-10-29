@@ -42,7 +42,7 @@ CATALOG = ActionCatalog(
             "repo",
             id="opaque",
             placement="placed",
-            container=True,
+            id_prefix=True,
             description="A repository, by its id <owner>/<name>.",
         ),
         ResourceType("branch", id="path", placement="placed"),

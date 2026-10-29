@@ -234,16 +234,25 @@ class IamClient:
             "abi.iam.v1.list_placements", request, pb.ListPlacementsResponse
         )
 
-    async def put_scope(self, request: pb.PutScopeRequest) -> pb.PutScopeResponse:
+    async def register_container(
+        self, request: pb.RegisterContainerRequest
+    ) -> pb.RegisterContainerResponse:
         return await self._transport.call(
-            "abi.iam.v1.put_scope", request, pb.PutScopeResponse
+            "abi.iam.v1.register_container", request, pb.RegisterContainerResponse
         )
 
-    async def delete_scope(
-        self, request: pb.DeleteScopeRequest
-    ) -> pb.DeleteScopeResponse:
+    async def delete_container(
+        self, request: pb.DeleteContainerRequest
+    ) -> pb.DeleteContainerResponse:
         return await self._transport.call(
-            "abi.iam.v1.delete_scope", request, pb.DeleteScopeResponse
+            "abi.iam.v1.delete_container", request, pb.DeleteContainerResponse
+        )
+
+    async def get_container(
+        self, request: pb.GetContainerRequest
+    ) -> pb.GetContainerResponse:
+        return await self._transport.call(
+            "abi.iam.v1.get_container", request, pb.GetContainerResponse
         )
 
     async def register_catalog(

@@ -77,18 +77,19 @@ class IAMService(ServiceProxy):
         resource_type: str,
         parts: Iterable[str],
         *,
-        workspace: str | None = None,
+        container: str | None = None,
     ) -> tuple[Decision, str]:
         """The decision on an action a module declares, and the resource IAM
-        named for it: ``<type>/<parts>`` of the action's catalog, in
-        ``workspace`` or else the workspace of the call, platform-level with
-        none. The module never builds the name."""
+        named for it: ``<container>/<service>:<type>/<id>`` of the action's
+        catalog, in ``container`` (a container's name) or else the container
+        of the call, platform-level with none; a declared container type's own
+        resource is the container. The module never builds the name."""
         found = await self._request(
             "authorize_declared",
             action=action,
             resource_type=resource_type,
             parts=list(parts),
-            workspace_id=workspace or "",
+            container=container or "",
         )
         decision = found["decision"]
         return (
@@ -102,11 +103,11 @@ class IAMService(ServiceProxy):
         resource_type: str,
         parts: Iterable[str],
         *,
-        workspace: str | None = None,
+        container: str | None = None,
     ) -> None:
         """``require`` for an action a module declares."""
         decision, resource = await self.authorize_declared(
-            action, resource_type, parts, workspace=workspace
+            action, resource_type, parts, container=container
         )
         if decision.allowed:
             return
@@ -130,7 +131,8 @@ class IAMService(ServiceProxy):
     async def grantable(self, scope: str) -> list[dict[str, Any]]:
         """What the caller may grant at ``scope`` (about the caller: no permission
         needed): ``[{"service", "actions": [{"action", "resources", "excluded"}]}]``,
-        resources written ``${scope}:...``. A change that gives more than the
+        resources written ``${scope}/...``. ``scope`` is a container's name or
+        ``abi:`` (the platform). A change that gives more than the
         caller holds raises ``GrantNotHeld``."""
         return await self._request("grantable", scope=scope)
 
@@ -186,11 +188,11 @@ class IAMService(ServiceProxy):
     # -- groups ---------------------------------------------------------------------
 
     async def create_group(
-        self, name: str, *, org: str | None = None, scope: str | None = None
+        self, name: str, *, scope: str | None = None
     ) -> dict[str, Any]:
-        """A group owned by ``scope``: ``abi:-:-`` (the default), ``abi:<org>:-``
-        (also what ``org`` alone means) or ``abi:<org>:<ws>``."""
-        return await self._request("create_group", name=name, org=org, scope=scope)
+        """A group owned by ``scope``: ``abi:`` (the platform, the default) or a
+        container's name."""
+        return await self._request("create_group", name=name, scope=scope)
 
     async def get_group(self, group_id: str) -> dict[str, Any]:
         return await self._request("get_group", group_id=group_id)
@@ -248,8 +250,8 @@ class IAMService(ServiceProxy):
         scope: str | None = None,
         parent: str | None = None,
     ) -> dict[str, Any]:
-        """A policy owned by ``scope`` (the platform when None); an org's or a
-        workspace's names only ``${scope}:`` resources. With ``parent``, a
+        """A policy owned by ``scope`` (a container's name; the platform when
+        None); a container's names only ``${scope}`` and ``${scope}/...``. With ``parent``, a
         sub-policy of it: it never grants more than its parent, read live."""
         return _policy(
             await self._request(
@@ -388,19 +390,16 @@ class IAMService(ServiceProxy):
             "list_idp_bindings", provider=provider, policy_id=policy_id
         )
 
-    # -- placements, scopes, catalogs -------------------------------------------------
+    # -- placements, containers, catalogs ----------------------------------------------
 
     async def put_placement(
-        self, service: str, id_key: str, org: str = "-", workspace: str = "-"
+        self, service: str, id_key: str, container: str = "abi:"
     ) -> dict[str, Any]:
+        """Place ``service``'s ids matching ``id_key`` (exact, or a prefix ending
+        in ``*``) in ``container`` (a container's name, ``abi:`` the platform)."""
         return await self._request(
             "put_placement",
-            placement={
-                "service": service,
-                "id_key": id_key,
-                "org": org,
-                "workspace": workspace,
-            },
+            placement={"service": service, "id_key": id_key, "container": container},
         )
 
     async def delete_placement(self, service: str, id_key: str) -> bool:
@@ -409,11 +408,28 @@ class IAMService(ServiceProxy):
     async def list_placements(self, service: str | None = None) -> list[dict[str, Any]]:
         return await self._request("list_placements", service=service)
 
-    async def put_scope(self, org: str, workspace: str = "-") -> dict[str, Any]:
-        return await self._request("put_scope", org=org, workspace=workspace)
+    async def register_container(
+        self, service: str, type: str, id: str, *, parent: str = "abi:"
+    ) -> dict[str, Any]:
+        """Register a container of a declared container type in ``parent`` (a
+        container's name, ``abi:`` the platform): ``{"service", "type", "id",
+        "parent", "name"}``, ``name`` its path. Needs the type's create action
+        on that name, for the module and the user it acts for."""
+        return await self._request(
+            "register_container", service=service, type=type, id=id, parent=parent
+        )
 
-    async def delete_scope(self, org: str, workspace: str = "-") -> bool:
-        return await self._request("delete_scope", org=org, workspace=workspace)
+    async def delete_container(self, service: str, type: str, id: str) -> bool:
+        """Delete a container, with the containers below it and what they own.
+        Needs the type's delete action on its name."""
+        return await self._request(
+            "delete_container", service=service, type=type, id=id
+        )
+
+    async def get_container(self, service: str, type: str, id: str) -> str | None:
+        """A registered container's name (its path), None for an unknown one."""
+        name = await self._request("get_container", service=service, type=type, id=id)
+        return name or None
 
     async def register_catalog(self, catalog: Mapping[str, Any]) -> bool:
         """Register a service's action catalog (a catalog document, as a mapping)."""

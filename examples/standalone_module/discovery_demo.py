@@ -80,7 +80,11 @@ class Consumer(BaseModule):
                 "sid": "ExportResearchBriefs",
                 "effect": "Allow",
                 "actions": ["demo_research:ExportBrief"],
-                "resources": ["abi:*:*:demo_research:brief/*"],
+                # Its briefs at the platform and in any container.
+                "resources": [
+                    "abi:demo_research:brief/*",
+                    "abi:*/demo_research:brief/*",
+                ],
             },
         ],
     }

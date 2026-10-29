@@ -68,7 +68,7 @@ def _stamp(event: Any) -> None:
     served = context.user
     for field_name, value in (
         ("actor_user_id", served.id if served is not None else None),
-        ("actor_workspace_id", context.workspace_id),
+        ("actor_container", context.container),
         ("triggered_via", context.triggered_via),
     ):
         if getattr(event, field_name, None) is None and value is not None:

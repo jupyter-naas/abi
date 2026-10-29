@@ -17,7 +17,13 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_Identity impo
 from naas_abi_core.services.iam import roles
 from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
 from naas_abi_core.services.iam.IAMService import IAMService
-from naas_abi_core.services.iam.tests.iam_harness import document, statement
+from naas_abi_core.services.iam.tests.iam_harness import (
+    NEXUS,
+    IAMHarness,
+    document,
+    statement,
+    workspace,
+)
 from naas_abi_core.services.identity.adapters.secondary.AdminHttp import (
     AdminHttp,
     ClientCredentialsToken,
@@ -50,7 +56,8 @@ from naas_abi_core.services.identity.tests.identity_contract import (
     sign_in,
 )
 
-W1 = "abi:acme:ws1"
+# The workspace ws1 of organisation acme, as Nexus registers it.
+W1 = workspace("ws1", "acme")
 
 
 def address() -> str:
@@ -90,7 +97,10 @@ def service_with(iam: IAMService, *adapters: tuple[str, ProvisioningPort | None]
 
 @pytest.fixture
 def iam() -> IAMService:
-    return bootstrapped_iam()
+    iam = bootstrapped_iam()
+    iam._register_catalog(NEXUS)
+    IAMHarness(iam).register("ws1", "acme")
+    return iam
 
 
 # -- the service ----------------------------------------------------------------------
@@ -143,7 +153,7 @@ def test_a_caller_that_may_only_sign_in_cannot_provision(iam):
                         "identity:GetProvider",
                         "identity:ListProviders",
                     ],
-                    ["abi:-:-:identity:provider/*"],
+                    ["abi:identity:provider/*"],
                 )
             ),
         )

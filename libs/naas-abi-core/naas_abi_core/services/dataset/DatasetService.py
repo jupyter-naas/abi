@@ -123,11 +123,9 @@ class DatasetService(ServiceBase, IDatasetPort):
             "Create",
             DATASET,
             [spec.namespace, spec.name],
-            container=(NAMESPACE, [spec.namespace]),
+            prefix=(NAMESPACE, [spec.namespace]),
             exists=lambda: self.__exists(spec.name, spec.namespace),
-            container_exists=lambda: bool(
-                self.__adapter.list(namespace=spec.namespace)
-            ),
+            prefix_exists=lambda: bool(self.__adapter.list(namespace=spec.namespace)),
             not_found=lambda: DatasetNotFoundError(spec.name, spec.namespace),
         )
         info = self.__adapter.create(spec)

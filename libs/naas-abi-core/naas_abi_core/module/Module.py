@@ -201,14 +201,14 @@ class BaseModule(JobsMixin, Generic[TConfig]):
         type_name: str,
         parts: str | list[str] | tuple[str, ...],
         *,
-        workspace: str | None = None,
+        container: str | None = None,
     ) -> None:
         """Enforce one of this module's declared actions for the caller.
 
-        The resource is ``abi:<org>:<ws>:<service>:<type>/<id>`` in the
-        workspace of the call (``CallContext.workspace_id``), unless
-        ``workspace`` names one. Raises ``PermissionDeniedError`` when IAM
-        refuses it.
+        The resource is ``<container>/<service>:<type>/<id>``, in the container
+        of the call (``CallContext.container``) unless ``container`` names one
+        (a declared container type's own resource is the container). Raises
+        ``PermissionDeniedError`` when IAM refuses it.
         """
         if self.__iam_catalog is None:
             raise ValueError(f"Module {self.module_key} declares no catalog")
@@ -216,7 +216,7 @@ class BaseModule(JobsMixin, Generic[TConfig]):
             self.__iam_catalog.qualified(action),
             type_name,
             [parts] if isinstance(parts, str) else list(parts),
-            workspace=workspace,
+            container=container,
         )
 
     def on_load(self):

@@ -11,6 +11,7 @@ import os
 import signal
 import socket
 from collections.abc import Awaitable, Iterable
+from contextlib import AbstractContextManager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -18,6 +19,7 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from naas_abi_sdk import lifeline, telemetry
 from naas_abi_sdk.apps import AppDescriptor, discover_apps
+from naas_abi_sdk.call_context import CallContext, inside
 from naas_abi_sdk.catalog import OPERATIONS
 from naas_abi_sdk.client import ABIClient
 from naas_abi_sdk.components import by_name, discover_components
@@ -170,6 +172,12 @@ class EngineProxy:
         self.rpc = RPCServicesProxy(client, dependencies, module_name)
         self._client = client
 
+    @staticmethod
+    def inside(container: str | None) -> AbstractContextManager[CallContext]:
+        """``with engine.inside(container):`` makes the block's calls in
+        ``container`` (``call_context.inside``)."""
+        return inside(container)
+
     @property
     def principal_id(self) -> str:
         """The service account this module runs as (its ``sa_`` id), known once
@@ -278,15 +286,16 @@ class BaseModule(JobsMixin, Generic[Config]):
         resource_type: str,
         parts: str | Iterable[str],
         *,
-        workspace: str | None = None,
+        container: str | None = None,
     ) -> None:
         """Enforce one of this module's declared actions for the call it serves.
 
         IAM decides for the current context: during a run for a user (an agent
         invocation or a job carrying a delegation) the user's policies and the
         module's approved manifest must both allow it. The resource is
-        ``<type>/<parts>`` in ``workspace``, else the workspace of the call.
-        Raises ``PermissionDenied`` (or ``NotFound`` for a caller who sees
+        ``<container>/<service>:<type>/<id>``, in ``container`` (a container's
+        name) else the container of the call (a declared container type's own
+        resource is the container). Raises ``PermissionDenied`` (or ``NotFound`` for a caller who sees
         nothing of it)."""
         service = self.__dict__.get("_declared_service")
         if service is None:
@@ -301,7 +310,7 @@ class BaseModule(JobsMixin, Generic[Config]):
             f"{service}:{action}",
             resource_type,
             [parts] if isinstance(parts, str) else list(parts),
-            workspace=workspace,
+            container=container,
         )
 
     @classmethod

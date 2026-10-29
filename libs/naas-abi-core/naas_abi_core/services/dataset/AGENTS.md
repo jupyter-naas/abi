@@ -262,7 +262,7 @@ in the adapter.
   `catalog/-` is the platform's snapshots (`list_snapshots` is empty without
   `ListSnapshots`).
 * `create` is a create (§4.4): the first dataset of a new namespace places the
-  namespace in the call's target workspace, or on the platform.
+  namespace in the container of the call, or on the platform.
 * `query` and `query_stream` need `Query` on every dataset the SQL reads
   (`sql_references.py`, DuckDB's parser), through joins, subqueries and CTEs;
   unqualified names are in the query's namespace. A CTE hides a dataset only in
@@ -364,9 +364,9 @@ it answers a refusal itself) and hands that `CallContext`
 token's identity; the user it acts for is named by the token itself: a
 delegated token (`abi:delegated:agent`, `act` the acting service, `sub` the user)
 made by IAM's token exchange, never a header (the old `Abi-On-Behalf-Of` header is
-refused); trace and target workspace come from the request's `context`. Never read identity from request fields
+refused); trace and container come from the request's `context`. Never read identity from request fields
 (`principal_id` and `tenant_id` are reserved). Clients of `api` and `engine` send a
-delegation for the current call's user, and the call's trace and workspace; the domain service authorizes on that
+delegation for the current call's user, and the call's trace and container; the domain service authorizes on that
 context (Authorization above).
 
 Clients inherit connection, JWT renewal, deadlines, and error handling from

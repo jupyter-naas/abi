@@ -62,11 +62,17 @@ abi:actorUserId a owl:DatatypeProperty ;
     rdfs:range xsd:string ;
     skos:definition "Identifier of the user account the event happened for. Populated by EventService.publish() from the request context if not set by the caller."@en .
 
+abi:actorContainer a owl:DatatypeProperty ;
+    rdfs:label "actor container"@en ;
+    rdfs:domain abi:LogProcess ;
+    rdfs:range xsd:string ;
+    skos:definition "Name of the container the event happened in (abi:..., e.g. a Nexus workspace's). Populated by EventService.publish() from the request context if not set by the caller."@en .
+
 abi:actorWorkspaceId a owl:DatatypeProperty ;
     rdfs:label "actor workspace id"@en ;
     rdfs:domain abi:LogProcess ;
     rdfs:range xsd:string ;
-    skos:definition "Identifier of the workspace the event happened in. Populated by EventService.publish() from the request context if not set by the caller."@en .
+    skos:definition "Identifier of the workspace the event happened in, on events recorded before container paths. No longer populated: see actor container."@en .
 
 abi:triggeredVia a owl:DatatypeProperty ;
     rdfs:label "triggered via"@en ;

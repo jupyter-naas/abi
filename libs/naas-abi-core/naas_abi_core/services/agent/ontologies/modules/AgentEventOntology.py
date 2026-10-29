@@ -323,13 +323,15 @@ class AgentModelCalled(LogProcess, RDFEntity):
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "user_id": "http://ontology.naas.ai/abi/agent/userId",
         "workspace_id": "http://ontology.naas.ai/abi/agent/workspaceId",
+        "container": "http://ontology.naas.ai/abi/agent/container",
     }
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
     user_id: Annotated[str, Field(description="Identifier of the human user the agent is acting on behalf of, when known.")] | None = None
     chat_id: Annotated[str, Field(description="Identifier of the conversation/thread (typically Agent thread_id).")] | None = None
-    workspace_id: Annotated[str, Field(description="Identifier of the workspace/tenant the invocation belongs to, when known.")] | None = None
+    container: Annotated[str, Field(description="Name of the container the invocation is made in (abi:..., e.g. a Nexus workspace's), when known.")] | None = None
+    workspace_id: Annotated[str, Field(description="Identifier of the workspace/tenant the invocation belonged to, on events recorded before container paths. No longer populated: see container.")] | None = None
     agent_name: Annotated[str, Field(description="Name of the Agent that produced the event.")] | None = None
     created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller.")] | None = None
     label: Annotated[str, Field(description="Label of the resource.")] | None = None
@@ -357,13 +359,15 @@ class AgentAIMessageEmitted(LogProcess, RDFEntity):
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "user_id": "http://ontology.naas.ai/abi/agent/userId",
         "workspace_id": "http://ontology.naas.ai/abi/agent/workspaceId",
+        "container": "http://ontology.naas.ai/abi/agent/container",
     }
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
     user_id: Annotated[str, Field(description="Identifier of the human user the agent is acting on behalf of, when known.")] | None = None
     chat_id: Annotated[str, Field(description="Identifier of the conversation/thread (typically Agent thread_id).")] | None = None
-    workspace_id: Annotated[str, Field(description="Identifier of the workspace/tenant the invocation belongs to, when known.")] | None = None
+    container: Annotated[str, Field(description="Name of the container the invocation is made in (abi:..., e.g. a Nexus workspace's), when known.")] | None = None
+    workspace_id: Annotated[str, Field(description="Identifier of the workspace/tenant the invocation belonged to, on events recorded before container paths. No longer populated: see container.")] | None = None
     agent_name: Annotated[str, Field(description="Name of the Agent that produced the event.")] | None = None
     content_length: Annotated[int, Field(description="Character length of the rendered content. Kept alongside the full content for cheap filtering.")] | None = None
     content: Annotated[str, Field(description="Full rendered content (user prompt, assistant message text, tool response payload, or final invocation output).")] | None = None
@@ -392,13 +396,15 @@ class AgentToolCalled(LogProcess, RDFEntity):
         "tool_name": "http://ontology.naas.ai/abi/agent/toolName",
         "user_id": "http://ontology.naas.ai/abi/agent/userId",
         "workspace_id": "http://ontology.naas.ai/abi/agent/workspaceId",
+        "container": "http://ontology.naas.ai/abi/agent/container",
     }
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
     user_id: Annotated[str, Field(description="Identifier of the human user the agent is acting on behalf of, when known.")] | None = None
     chat_id: Annotated[str, Field(description="Identifier of the conversation/thread (typically Agent thread_id).")] | None = None
-    workspace_id: Annotated[str, Field(description="Identifier of the workspace/tenant the invocation belongs to, when known.")] | None = None
+    container: Annotated[str, Field(description="Name of the container the invocation is made in (abi:..., e.g. a Nexus workspace's), when known.")] | None = None
+    workspace_id: Annotated[str, Field(description="Identifier of the workspace/tenant the invocation belonged to, on events recorded before container paths. No longer populated: see container.")] | None = None
     agent_name: Annotated[str, Field(description="Name of the Agent that produced the event.")] | None = None
     tool_name: Annotated[str, Field(description="Name of the tool that was called or responded.")] | None = None
     tool_call_id: Annotated[str, Field(description="Correlation id linking a tool call to its response.")] | None = None
@@ -429,13 +435,15 @@ class AgentToolResponded(LogProcess, RDFEntity):
         "tool_name": "http://ontology.naas.ai/abi/agent/toolName",
         "user_id": "http://ontology.naas.ai/abi/agent/userId",
         "workspace_id": "http://ontology.naas.ai/abi/agent/workspaceId",
+        "container": "http://ontology.naas.ai/abi/agent/container",
     }
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
     user_id: Annotated[str, Field(description="Identifier of the human user the agent is acting on behalf of, when known.")] | None = None
     chat_id: Annotated[str, Field(description="Identifier of the conversation/thread (typically Agent thread_id).")] | None = None
-    workspace_id: Annotated[str, Field(description="Identifier of the workspace/tenant the invocation belongs to, when known.")] | None = None
+    container: Annotated[str, Field(description="Name of the container the invocation is made in (abi:..., e.g. a Nexus workspace's), when known.")] | None = None
+    workspace_id: Annotated[str, Field(description="Identifier of the workspace/tenant the invocation belonged to, on events recorded before container paths. No longer populated: see container.")] | None = None
     agent_name: Annotated[str, Field(description="Name of the Agent that produced the event.")] | None = None
     tool_name: Annotated[str, Field(description="Name of the tool that was called or responded.")] | None = None
     tool_call_id: Annotated[str, Field(description="Correlation id linking a tool call to its response.")] | None = None
@@ -464,13 +472,15 @@ class AgentRouted(LogProcess, RDFEntity):
         "routed_to": "http://ontology.naas.ai/abi/agent/routedTo",
         "user_id": "http://ontology.naas.ai/abi/agent/userId",
         "workspace_id": "http://ontology.naas.ai/abi/agent/workspaceId",
+        "container": "http://ontology.naas.ai/abi/agent/container",
     }
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
     user_id: Annotated[str, Field(description="Identifier of the human user the agent is acting on behalf of, when known.")] | None = None
     chat_id: Annotated[str, Field(description="Identifier of the conversation/thread (typically Agent thread_id).")] | None = None
-    workspace_id: Annotated[str, Field(description="Identifier of the workspace/tenant the invocation belongs to, when known.")] | None = None
+    container: Annotated[str, Field(description="Name of the container the invocation is made in (abi:..., e.g. a Nexus workspace's), when known.")] | None = None
+    workspace_id: Annotated[str, Field(description="Identifier of the workspace/tenant the invocation belonged to, on events recorded before container paths. No longer populated: see container.")] | None = None
     agent_name: Annotated[str, Field(description="Name of the Agent that produced the event.")] | None = None
     routed_to: Annotated[str, Field(description="Name of the (sub)agent the conversation was routed to.")] | None = None
     created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller.")] | None = None
@@ -499,13 +509,15 @@ class AgentInvocationCompleted(LogProcess, RDFEntity):
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "user_id": "http://ontology.naas.ai/abi/agent/userId",
         "workspace_id": "http://ontology.naas.ai/abi/agent/workspaceId",
+        "container": "http://ontology.naas.ai/abi/agent/container",
     }
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
     user_id: Annotated[str, Field(description="Identifier of the human user the agent is acting on behalf of, when known.")] | None = None
     chat_id: Annotated[str, Field(description="Identifier of the conversation/thread (typically Agent thread_id).")] | None = None
-    workspace_id: Annotated[str, Field(description="Identifier of the workspace/tenant the invocation belongs to, when known.")] | None = None
+    container: Annotated[str, Field(description="Name of the container the invocation is made in (abi:..., e.g. a Nexus workspace's), when known.")] | None = None
+    workspace_id: Annotated[str, Field(description="Identifier of the workspace/tenant the invocation belonged to, on events recorded before container paths. No longer populated: see container.")] | None = None
     agent_name: Annotated[str, Field(description="Name of the Agent that produced the event.")] | None = None
     content_length: Annotated[int, Field(description="Character length of the rendered content. Kept alongside the full content for cheap filtering.")] | None = None
     content: Annotated[str, Field(description="Full rendered content (user prompt, assistant message text, tool response payload, or final invocation output).")] | None = None
@@ -535,13 +547,15 @@ class AgentUserMessageReceived(LogProcess, RDFEntity):
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "user_id": "http://ontology.naas.ai/abi/agent/userId",
         "workspace_id": "http://ontology.naas.ai/abi/agent/workspaceId",
+        "container": "http://ontology.naas.ai/abi/agent/container",
     }
     _object_properties: ClassVar[set[str]] = set()
 
     # Data properties
     user_id: Annotated[str, Field(description="Identifier of the human user the agent is acting on behalf of, when known.")] | None = None
     chat_id: Annotated[str, Field(description="Identifier of the conversation/thread (typically Agent thread_id).")] | None = None
-    workspace_id: Annotated[str, Field(description="Identifier of the workspace/tenant the invocation belongs to, when known.")] | None = None
+    container: Annotated[str, Field(description="Name of the container the invocation is made in (abi:..., e.g. a Nexus workspace's), when known.")] | None = None
+    workspace_id: Annotated[str, Field(description="Identifier of the workspace/tenant the invocation belonged to, on events recorded before container paths. No longer populated: see container.")] | None = None
     agent_name: Annotated[str, Field(description="Name of the Agent that produced the event.")] | None = None
     content_length: Annotated[int, Field(description="Character length of the rendered content. Kept alongside the full content for cheap filtering.")] | None = None
     content: Annotated[str, Field(description="Full rendered content (user prompt, assistant message text, tool response payload, or final invocation output).")] | None = None

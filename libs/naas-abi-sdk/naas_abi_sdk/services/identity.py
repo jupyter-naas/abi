@@ -3,7 +3,7 @@
 The engine verifies providers' ID tokens and resolves them to IAM users; a
 module declares ``identity`` among its services and holds the ``identity:*``
 actions it needs (``VerifyToken``, ``Authenticate``, ``SignIn`` on
-``abi:-:-:identity:provider/<name>``). Client secrets never leave the engine:
+``abi:identity:provider/<name>``). Client secrets never leave the engine:
 a module acting as a relying party asks the engine to build the authorization
 URL, redeem the code and refresh.
 

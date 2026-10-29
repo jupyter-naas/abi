@@ -68,20 +68,20 @@ class TestVectorStoreAuthorization(DataServiceContract):
 
     def granted_resources(self):
         return [
-            "abi:-:-:vector_store:collection/shared",
-            "abi:-:-:vector_store:vector/shared/*",
+            "abi:vector_store:collection/shared",
+            "abi:vector_store:vector/shared/*",
         ]
 
     def denied_resources(self):
         return [
-            "abi:-:-:vector_store:collection/private",
-            "abi:-:-:vector_store:vector/private/*",
+            "abi:vector_store:collection/private",
+            "abi:vector_store:vector/private/*",
         ]
 
     def read_only_resources(self):
         return [
-            "abi:-:-:vector_store:collection/frozen",
-            "abi:-:-:vector_store:vector/frozen/*",
+            "abi:vector_store:collection/frozen",
+            "abi:vector_store:vector/frozen/*",
         ]
 
     def outcome_of(self, exc):

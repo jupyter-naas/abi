@@ -46,7 +46,7 @@ reaches it only through its owner, as `environment/${principal.id}/*`.
 | admin | `ListAllEnvironments`: each `environment`; `EnsureUser`: `coder_user/<principal id>` |
 
 - **Resources.** `environment/<owner principal id>/<environment id>` is personal,
-  placed in the call's target workspace when provisioned; `template/<id>` and
+  placed in the container of the call when provisioned; `template/<id>` and
   `coder_user/<principal id>` are platform-level.
 - **The principal is the call's**, never a request field: the call's user, or the
   actor when the call is on behalf of no one. `user_id` and `external_id` in
@@ -64,8 +64,8 @@ reaches it only through its owner, as `environment/${principal.id}/*`.
   environment whose owner the service cannot tell is named with owner `-`, which
   only grants on every environment reach.
 - `Provision` is checked on `environment/<principal>/-` as placed (the create rule); the new
-  environment is then placed in the target workspace. A target
-  workspace IAM has no scope for leaves it on the platform.
+  environment is then placed in the container of the call. A container IAM does
+  not know is refused as not found.
 - `list_environments` keeps the caller's own; `list_all_environments` needs the
   admin `ListAllEnvironments`. `get_runtime_binding` and `get_harness_binding`
   return a credential, so they need `GetAccess` (None when denied).
@@ -115,9 +115,9 @@ it answers a refusal itself) and hands that `CallContext`
 token's identity; the user it acts for is named by the token itself: a
 delegated token (`abi:delegated:agent`, `act` the acting service, `sub` the user)
 made by IAM's token exchange, never a header (the old `Abi-On-Behalf-Of` header is
-refused); trace and target workspace come from the request's `context`. Never read identity from request fields
+refused); trace and container come from the request's `context`. Never read identity from request fields
 (`principal_id` and `tenant_id` are reserved). Clients of `api` and `engine` send a
-delegation for the current call's user, and the call's trace and workspace. The domain service then authorizes the call (see "Authorization").
+delegation for the current call's user, and the call's trace and container. The domain service then authorizes the call (see "Authorization").
 
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception

@@ -19,6 +19,9 @@ from naas_abi_sdk.call_context import (
 )
 from naas_abi_sdk.transport import RPCError, Transport
 
+WS_1 = "abi:nexus:organization/o-1/nexus:workspace/ws-1"
+WS_2 = "abi:nexus:organization/o-1/nexus:workspace/ws-2"
+
 
 def transport(reply=b"", headers=None, **options):
     rpc = Transport("nats://unused", "issued-token", timeout=0.02, **options)
@@ -44,12 +47,12 @@ def test_roundtrip_preserves_bytes_and_does_not_mutate_request():
     }
 
 
-def test_the_current_calls_trace_and_workspace_travel_with_the_call():
+def test_the_current_calls_trace_and_container_travel_with_the_call():
     rpc, nc = transport(kv.GetResponse().SerializeToString())
     caller = CallContext(
         principal=service_account("api"),
         on_behalf_of=user("usr-ada"),
-        workspace_id="ws-1",
+        container=WS_1,
         trace_id="trace-1",
     )
     with use_call_context(caller):
@@ -57,7 +60,9 @@ def test_the_current_calls_trace_and_workspace_travel_with_the_call():
             rpc.call("abi.svc.keyvalue.v1.get", kv.GetRequest(), kv.GetResponse)
         )
     sent = kv.GetRequest.FromString(nc.request.call_args.args[1])
-    assert (sent.context.trace_id, sent.context.workspace_id) == ("trace-1", "ws-1")
+    assert (sent.context.trace_id, sent.context.container) == ("trace-1", WS_1)
+    # Never the field of SDK 0.2, which an engine refuses.
+    assert not sent.context.workspace_id
     # Identity travels only in headers, never in the request body.
     assert not sent.context.principal_id and not sent.context.tenant_id
 
@@ -224,17 +229,17 @@ def test_a_delegation_about_to_expire_is_renewed_through_the_service_key():
     assert nc.request.call_args.kwargs["headers"]["Nats-Auth-Token"] == fresh
 
 
-def test_a_request_keeps_its_own_trace_and_workspace():
+def test_a_request_keeps_its_own_trace_and_container():
     rpc, nc = transport(kv.GetResponse().SerializeToString())
     request = kv.GetRequest(
-        context=common_pb2.CallContext(trace_id="mine", workspace_id="ws-2")
+        context=common_pb2.CallContext(trace_id="mine", container=WS_2)
     )
     with use_call_context(
-        CallContext(principal=service_account("api"), workspace_id="ws-1")
+        CallContext(principal=service_account("api"), container=WS_1)
     ):
         asyncio.run(rpc.call("abi.svc.keyvalue.v1.get", request, kv.GetResponse))
     sent = kv.GetRequest.FromString(nc.request.call_args.args[1])
-    assert (sent.context.trace_id, sent.context.workspace_id) == ("mine", "ws-2")
+    assert (sent.context.trace_id, sent.context.container) == ("mine", WS_2)
     assert "Abi-On-Behalf-Of" not in nc.request.call_args.kwargs["headers"]
 
 

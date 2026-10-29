@@ -1,4 +1,4 @@
-# onto2py-source-sha256: 1fd595dad34bea58477ccabb7fdcc6973f6af8361f9b25134d7e332d14d2c07d
+# onto2py-source-sha256: 42efa6ac89fa534c9b00ce1ea2d4979d3a573867465f6d5f420c182040729037
 from __future__ import annotations
 
 import datetime
@@ -345,6 +345,7 @@ class LogProcess(Process, RDFEntity):
         "creator": "http://purl.org/dc/terms/creator",
         "label": "http://www.w3.org/2000/01/rdf-schema#label",
         "actor_user_id": "http://ontology.naas.ai/abi/actorUserId",
+        "actor_container": "http://ontology.naas.ai/abi/actorContainer",
         "actor_workspace_id": "http://ontology.naas.ai/abi/actorWorkspaceId",
         "triggered_via": "http://ontology.naas.ai/abi/triggeredVia",
     }
@@ -353,7 +354,8 @@ class LogProcess(Process, RDFEntity):
     # Data properties
     created_at: Annotated[datetime.datetime, Field(description="ISO 8601 timestamp at which the event occurred. Populated by EventService.publish() if not set by the caller.")] | None = None
     actor_user_id: Annotated[str, Field(description="Identifier of the user account the event happened for. Populated by EventService.publish() from the request context if not set by the caller.")] | None = None
-    actor_workspace_id: Annotated[str, Field(description="Identifier of the workspace the event happened in. Populated by EventService.publish() from the request context if not set by the caller.")] | None = None
+    actor_container: Annotated[str, Field(description="Name of the container the event happened in (abi:..., e.g. a Nexus workspace's). Populated by EventService.publish() from the request context if not set by the caller.")] | None = None
+    actor_workspace_id: Annotated[str, Field(description="Identifier of the workspace the event happened in, on events recorded before container paths. No longer populated: see actor container.")] | None = None
     triggered_via: Annotated[str, Field(description="Channel that triggered the event, e.g. api, configuration, system. Populated by EventService.publish() from the request context if not set by the caller.")] | None = None
     label: Annotated[str, Field(description="Label of the resource.")] | None = None
     created: Annotated[

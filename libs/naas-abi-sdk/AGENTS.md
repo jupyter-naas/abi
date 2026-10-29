@@ -306,7 +306,10 @@ A module asks for what it needs as a policy document (the language of core's
    modules' agents, models and apps (never the identity provider's `admin` app) and
    the runs the module starts, for it and for the user it acts for; its own jobs, each
    by name. `bus` has no default: a module using it declares `bus:*` on
-   `abi:-:-:bus:topic/<topic>`. Default grants contain no admin action.
+   `abi:bus:topic/<topic>`. Default grants contain no admin action. A grant meant for
+   every container names both forms of core's `names.anywhere` (`abi:<service>:*` and
+   `abi:*/<service>:*`, the platform and any container); a platform resource is
+   `abi:<service>:<type>/<id>`.
 
 `${module.id}` and `${module.project}` are bound when the manifest is approved.
 
@@ -360,10 +363,21 @@ decision, resource = await engine.services.iam.authorize_declared(
 )
 ```
 
-IAM names the resource in the workspace of the call (`workspace=` to name another):
-`abi:<org>:<ws>:demo_research:brief/q3`. A user needs a grant such as
-`demo_research:ExportBrief` on `${scope}:demo_research:brief/*`, attached at the
-workspace. The standalone demo (`examples/standalone_module/discovery_demo.py`) declares
+IAM names the resource in the container of the call (`container=` to name another):
+`<container>/demo_research:brief/q3`, e.g.
+`abi:nexus:organization/o-1/nexus:workspace/w-2/demo_research:brief/q3`. A user needs a
+grant such as `demo_research:ExportBrief` on `${scope}/demo_research:brief/*`, attached at
+that container. A container IAM does not know is refused as not found.
+
+A module whose catalog declares a container type (`container: true`, with an action
+marked `creates: true` on it, and one marked `deletes: true` to delete one) registers its
+own containers: `engine.services.iam.register_container(service, type, id, parent=)`
+(the type's create action on the name as placed, for the module and the user it acts
+for), `delete_container(service, type, id)` (its delete action; what the container and
+those below it own goes with it) and `get_container(service, type, id)` (its name, None
+for an unknown one; no permission needed). Calls made inside one
+(`with engine.inside(container):`, or `call_context.inside`) place what they create
+there and name its module scopes there. The standalone demo (`examples/standalone_module/discovery_demo.py`) declares
 and enforces one (`make demo-sdk`).
 
 ### Tokens the SDK meets
@@ -380,8 +394,8 @@ host.
 
 One ContextVar, `CallContext`, holds the caller of the call being served: `principal`
 (the actor), `on_behalf_of` (the user, when acting for one), `audience`, `token_id`,
-`token_issued_at`, `scope` (the token's `abi_scope`), `workspace_id` (the target
-workspace of a create: a request input, not identity), `trace_id`, `triggered_via` and
+`token_issued_at`, `scope` (the token's `abi_scope`), `container` (the container the
+call is made in, its name: a request input, not identity), `trace_id`, `triggered_via` and
 `delegated_token`. `CallContext.user` is `on_behalf_of`, else the principal when it is a
 user: services use it wherever an operation concerns "the user". The default is
 `ANONYMOUS`, which every check denies.
@@ -401,9 +415,12 @@ user: services use it wherever an operation concerns "the user". The default is
   `contextvars.copy_context().run`.
 - Helpers: `use_call_context(ctx)`, `current_call_context()`, `set_call_context` /
   `reset_call_context` (for code that cannot wrap a block), `service_account(name)`,
-  `user(id)`. `as_service_account` is core's, in process only; remote code has no
-  equivalent: it holds only its token.
-- `Transport.call` puts the call's trace and workspace in the request's `context`.
+  `user(id)`, `inside(container)` (the block's calls are made in that container).
+  `as_service_account` is core's, in process only; remote code has no equivalent: it
+  holds only its token.
+- `Transport.call` puts the call's trace and container in the request's `context`
+  (`common.CallContext.container`). It never sets `workspace_id`: an engine refuses a
+  call that does (SDK 0.2's, core `services/iam/AGENTS.md`, "Placements").
 
 ### Acting for a user (delegation)
 
@@ -420,8 +437,8 @@ The user a call acts for travels in an `abi:delegated:agent` token (`sub` the us
 - A module host runs an invocation with the delegation it was handed
   (`SubmitRequest.delegated_token`, kept only if it names the run's owner and this
   host's own account as the actor: `agent_host.py`, otherwise the run is the module's
-  own): `CallContext.delegated_token`, with the workspace of the submit
-  (`SubmitRequest.context.workspace_id`, the turn's: Nexus sends it), so IAM places what
+  own): `CallContext.delegated_token`, with the container of the submit
+  (`SubmitRequest.context.container`, the turn's: Nexus sends it), so IAM places what
   the run does for the user there (`require_action`). Only the handler runs under it
   (`_Run.for_user`; a streaming handler is consumed whole by one task made in that
   context, `_UserStream`, so what it sets across a `yield` stays): the host's own records (the run, its events and output, the

@@ -15,6 +15,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     PermissionDeniedError,
     ResourceNotFoundError,
 )
+from naas_abi_core.services.iam.names import PLATFORM
 from naas_abi_core.services.iam.tests.authorization_contract import (
     JWT_SECRET,
     AuthorizationContract,
@@ -23,7 +24,7 @@ from naas_abi_core.services.iam.tests.authorization_contract import (
     nats_server,
     wire,
 )
-from naas_abi_core.services.iam.tests.iam_harness import IAMHarness, statement
+from naas_abi_core.services.iam.tests.iam_harness import NEXUS, IAMHarness, statement
 from naas_abi_core.services.source_control.adapters.primary.source_control__primary_adapter__NATS import (
     SourceControlPrimaryAdapterNATS,
 )
@@ -44,7 +45,7 @@ from naas_abi_core.services.source_control.SourceControlService import (
 )
 
 REPO = "acme/proj"
-REPO_NAME = "abi:-:-:source_control:repo/acme%2Fproj"
+REPO_NAME = "abi:source_control:repo/acme%2Fproj"
 
 
 def _facade(nats_url: str, identity: str) -> SourceControlService:
@@ -91,6 +92,7 @@ class TestAddCollaborator(SourceControlContract):
 
 def _service() -> tuple[SourceControlService, IAMHarness, InMemoryAdapter]:
     iam = contract_iam()
+    iam._register_catalog(NEXUS)  # the containers a call may be made in
     adapter = InMemoryAdapter()
     return wire(SourceControlService(adapter), iam), IAMHarness(iam), adapter
 
@@ -149,30 +151,23 @@ def test_over_nats_the_token_is_the_callers_whatever_the_request_names():
     assert adapter.find_user(external_id="bob") is None
 
 
-def test_a_repository_is_placed_in_the_target_workspace_and_others_cannot_claim_it():
+def test_a_repository_is_placed_in_the_container_of_the_call_and_others_cannot_claim_it():
     sc, h, _ = _service()
-    h.admin("put_scope", "org-1", "ws-1")
-    h.admin("put_scope", "org-1", "ws-2")
+    ws_1, ws_2 = h.register("ws-1"), h.register("ws-2")
     with use_call_context(
-        CallContext(principal=service_account("engine"), workspace_id="ws-1")
+        CallContext(principal=service_account("engine"), container=ws_1)
     ):
         sc.ensure_repo(owner="acme", name="team")
-    assert h.iam.resolve_placement("source_control", "acme%2Fteam") == (
-        "org-1",
-        "ws-1",
-    )
-    assert h.iam.resolve_placement("source_control", "acme%2Fteam/main") == (
-        "org-1",
-        "ws-1",
-    )
+    assert h.iam.resolve_placement("source_control", "acme%2Fteam") == ws_1
+    assert h.iam.resolve_placement("source_control", "acme%2Fteam/main") == ws_1
     bob = h.user("bob")
-    h.grant(bob.id, statement("Allow", ["source_control:*"], ["abi:org-1:ws-2:*"]))
+    h.grant(bob.id, statement("Allow", ["source_control:*"], [f"{ws_2}/*"]))
     with (
         use_call_context(
             CallContext(
                 principal=service_account("api"),
                 on_behalf_of=h.context(bob).principal,
-                workspace_id="ws-2",
+                container=ws_2,
             )
         ),
         pytest.raises(RepoNotFoundError),
@@ -183,21 +178,21 @@ def test_a_repository_is_placed_in_the_target_workspace_and_others_cannot_claim_
 def test_a_repository_that_predates_iam_stays_on_the_platform():
     sc, h, adapter = _service()
     adapter.ensure_repo(owner="acme", name="legacy")
-    h.admin("put_scope", "org-1", "ws-1")
+    ws_1 = h.register("ws-1")
     bob = h.user("bob")
-    h.grant(bob.id, statement("Allow", ["source_control:*"], ["abi:org-1:ws-1:*"]))
+    h.grant(bob.id, statement("Allow", ["source_control:*"], [f"{ws_1}/*"]))
     with (
         use_call_context(
             CallContext(
                 principal=service_account("api"),
                 on_behalf_of=h.context(bob).principal,
-                workspace_id="ws-1",
+                container=ws_1,
             )
         ),
         pytest.raises(RepoNotFoundError),
     ):
         sc.ensure_repo(owner="acme", name="legacy")
-    assert h.iam.resolve_placement("source_control", "acme%2Flegacy") == ("-", "-")
+    assert h.iam.resolve_placement("source_control", "acme%2Flegacy") == PLATFORM
 
 
 @pytest.mark.parametrize("transport", ["in_process", "nats"])
@@ -206,11 +201,11 @@ def test_create_repo_never_hands_back_an_existing_repository(transport):
     case, is never returned by create_repo, and nothing is placed for it."""
     sc, h, adapter = _service()
     adapter.ensure_repo(owner="platform", name="Secret")
-    h.admin("put_scope", "org-1", "ws-b")
+    ws_b = h.register("ws-b")
 
     def create(service):
         with use_call_context(
-            CallContext(principal=service_account("api"), workspace_id="ws-b")
+            CallContext(principal=service_account("api"), container=ws_b)
         ):
             return service.create_repo(owner="platform", name="secret")
 
@@ -242,14 +237,14 @@ def test_repository_names_ignore_case():
         statement(
             "Allow",
             ["source_control:GetFile", "source_control:ListContents"],
-            ["abi:-:-:source_control:repo/acme%2Fmixed"],
+            ["abi:source_control:repo/acme%2Fmixed"],
         ),
     )
     with h.as_(actor="api", on_behalf_of=bob):
         # Checked on the lowercase name, whatever the spelling asked for.
         sc.list_contents(repo_id="acme/Mixed")
         assert sc._guard.name("repo", "acme/MIXED".lower()) == (
-            "abi:-:-:source_control:repo/acme%2Fmixed"
+            "abi:source_control:repo/acme%2Fmixed"
         )
 
 
@@ -265,12 +260,12 @@ def test_lists_keep_what_the_caller_may_list():
         statement(
             "Allow",
             ["source_control:ListRepos", "source_control:ListContents"],
-            ["abi:-:-:source_control:repo/acme%2Fa"],
+            ["abi:source_control:repo/acme%2Fa"],
         ),
         statement(
             "Allow",
             ["source_control:ListBranches"],
-            ["abi:-:-:source_control:branch/acme%2Fa/feature"],
+            ["abi:source_control:branch/acme%2Fa/feature"],
         ),
     )
     with h.as_(actor="api", on_behalf_of=bob):
@@ -285,7 +280,7 @@ def test_writing_a_branch_needs_the_branch_action():
     with as_service_account("engine"):
         sc.ensure_repo(owner="acme", name="a")
     bob = h.user("bob")
-    main = "abi:-:-:source_control:branch/acme%2Fa/main"
+    main = "abi:source_control:branch/acme%2Fa/main"
 
     def write() -> None:
         sc.upsert_file(

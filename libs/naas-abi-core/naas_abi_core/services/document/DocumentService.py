@@ -140,16 +140,16 @@ class DocumentService(ServiceBase):
 
     def ensure_collection(self, spec: CollectionSpec) -> None:
         """Declare a collection; a create: a new namespace is
-        placed in the call's target workspace, or on the platform."""
+        placed in the container of the call, or on the platform."""
         namespace = self.namespace
         name = validate_name(spec.name)
         commit = self._guard.create(
             "EnsureCollection",
             COLLECTION,
             [namespace, name],
-            container=(NAMESPACE, [namespace]),
+            prefix=(NAMESPACE, [namespace]),
             exists=lambda: name in self.__adapter.collections(namespace),
-            container_exists=lambda: namespace in self.__adapter.namespaces(),
+            prefix_exists=lambda: namespace in self.__adapter.namespaces(),
             not_found=lambda: CollectionNotFound(
                 f"Collection {namespace}/{name} not found"
             ),

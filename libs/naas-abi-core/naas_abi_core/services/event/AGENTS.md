@@ -96,11 +96,14 @@ set_cursor(consumer_id, event_type, last_seq) -> None
 query_stored_for_consumer(consumer_id, event_type, limit=None, filter=None)
 ```
 
-`publish` stamps `actor_user_id`, `actor_workspace_id` and `triggered_via` from
-the call's `CallContext` (`engine/call_context.py`): the call's user, its target
-workspace and how it started, unless the event sets its own. `context.py`'s
-`event_actor_user_id`, `event_actor_workspace_id` and `event_triggered_via`
-(and `agent_user_id`/`agent_workspace_id`, the same objects) are views of that
+`publish` stamps `actor_user_id`, `actor_container` and `triggered_via` from
+the call's `CallContext` (`engine/call_context.py`): the call's user, the
+container the call is made in (its name, `CallContext.container`) and how it
+started, unless the event sets its own. Events recorded before container paths
+keep their `actor_workspace_id`: the field stays on `LogProcess` so they still
+read, and nothing writes it. `context.py`'s `event_actor_user_id`,
+`event_actor_container` and `event_triggered_via` (and
+`agent_user_id`/`agent_container`, the same objects) are views of that
 context with a ContextVar-like `get`/`set`/`reset`; setting the user sets
 `on_behalf_of`. There is no second source of identity.
 
@@ -252,9 +255,9 @@ it answers a refusal itself) and hands that `CallContext`
 token's identity; the user it acts for is named by the token itself: a
 delegated token (`abi:delegated:agent`, `act` the acting service, `sub` the user)
 made by IAM's token exchange, never a header (the old `Abi-On-Behalf-Of` header is
-refused); trace and target workspace come from the request's `context`. Never read identity from request fields
+refused); trace and container come from the request's `context`. Never read identity from request fields
 (`principal_id` and `tenant_id` are reserved). Clients of `api` and `engine` send a
-delegation for the current call's user, and the call's trace and workspace. The domain service then authorizes the call (see "Authorization").
+delegation for the current call's user, and the call's trace and container. The domain service then authorizes the call (see "Authorization").
 
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception

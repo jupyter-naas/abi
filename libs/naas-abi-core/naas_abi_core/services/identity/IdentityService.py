@@ -1,7 +1,7 @@
 """The identity domain service: configured providers, verified users.
 
 Every operation is authorized with the ``identity`` catalog on the provider it
-concerns (``abi:-:-:identity:provider/<name>``), for the caller of the current
+concerns (``abi:identity:provider/<name>``), for the caller of the current
 ``CallContext``. Once a caller is allowed ``identity:Authenticate``, the user is
 created or refreshed in IAM as the engine: the caller is authorized for the
 sign-in, not for IAM administration.

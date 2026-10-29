@@ -320,8 +320,8 @@ class Transport:
         current = current_call_context()
         if not context.trace_id:
             context.trace_id = current.trace_id or str(uuid.uuid4())
-        if not context.workspace_id and current.workspace_id:
-            context.workspace_id = current.workspace_id
+        if not context.container and current.container:
+            context.container = current.container
         context.timeout_ms = int(self.timeout * 1000)
         headers = await self.auth_headers(current, host=host_recipient(subject))
         payload = outgoing.SerializeToString()

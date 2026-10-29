@@ -58,7 +58,7 @@ agent:AgentUserMessageReceived a owl:Class ;
     skos:definition "Emitted once when an agent receives a user prompt at the entrypoint (stream/invoke/stream_invoke)."@en .
 
 # ---------------------------------------------------------------------------
-# Identity properties — present on every event for per-user/chat/workspace querying
+# Identity properties — present on every event for per-user/chat/container querying
 # ---------------------------------------------------------------------------
 
 agent:userId a owl:DatatypeProperty ;
@@ -77,13 +77,21 @@ agent:chatId a owl:DatatypeProperty ;
     rdfs:range xsd:string ;
     skos:definition "Identifier of the conversation/thread (typically Agent thread_id)."@en .
 
+agent:container a owl:DatatypeProperty ;
+    rdfs:label "container"@en ;
+    rdfs:domain agent:AgentModelCalled, agent:AgentAIMessageEmitted, agent:AgentToolCalled,
+                agent:AgentToolResponded, agent:AgentRouted, agent:AgentInvocationCompleted,
+                agent:AgentUserMessageReceived ;
+    rdfs:range xsd:string ;
+    skos:definition "Name of the container the invocation is made in (abi:..., e.g. a Nexus workspace's), when known."@en .
+
 agent:workspaceId a owl:DatatypeProperty ;
     rdfs:label "workspace id"@en ;
     rdfs:domain agent:AgentModelCalled, agent:AgentAIMessageEmitted, agent:AgentToolCalled,
                 agent:AgentToolResponded, agent:AgentRouted, agent:AgentInvocationCompleted,
                 agent:AgentUserMessageReceived ;
     rdfs:range xsd:string ;
-    skos:definition "Identifier of the workspace/tenant the invocation belongs to, when known."@en .
+    skos:definition "Identifier of the workspace/tenant the invocation belonged to, on events recorded before container paths. No longer populated: see container."@en .
 
 agent:agentName a owl:DatatypeProperty ;
     rdfs:label "agent name"@en ;

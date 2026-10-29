@@ -75,13 +75,13 @@ class TestCacheAuthorization(DataServiceContract):
             adapter.close()
 
     def granted_resources(self):
-        return ["abi:-:-:cache:key/shared%3A*"]
+        return ["abi:cache:key/shared%3A*"]
 
     def denied_resources(self):
-        return ["abi:-:-:cache:key/private%3A*"]
+        return ["abi:cache:key/private%3A*"]
 
     def read_only_resources(self):
-        return ["abi:-:-:cache:key/frozen%3A*"]
+        return ["abi:cache:key/frozen%3A*"]
 
     def outcome_of(self, exc):
         return NOT_FOUND if isinstance(exc, CacheNotFoundError) else None
@@ -184,7 +184,7 @@ def test_the_decorator_computes_for_a_caller_who_may_not_use_the_cache(tmp_path)
         for name, actions in (("writer", ["cache:Set"]), ("reader", ["cache:Get"])):
             account = iam.create_service_account(name)
             policy = iam.create_policy(
-                name, document(statement("Allow", actions, ["abi:-:-:cache:key/*"]))
+                name, document(statement("Allow", actions, ["abi:cache:key/*"]))
             )
             iam.attach_policy(policy.id, account.id)
     cache = CacheService([("cold", CacheFSAdapter(str(tmp_path / "cache")))])
