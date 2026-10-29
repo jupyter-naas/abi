@@ -212,11 +212,17 @@ class ObjectStorageService(ServiceBase, IObjectStorageDomain):
         with ``/``)."""
 
         def entries(query: ListingQuery) -> list[str]:
-            prefix = query.text if query.text.endswith("/") else ""
+            prefix = self.__remove_storage_prefix(
+                query.text if query.text.endswith("/") else ""
+            )
             try:
-                return self.adapter.list_objects(self.__remove_storage_prefix(prefix))
-            except Exceptions.ObjectNotFound:
-                return []  # nothing under that prefix: nothing to list
+                # The search text is the caller's: a plain path only, as every
+                # guarded call, or ``ws1/../ws2/`` would be named (and checked)
+                # under ws1 while the backend lists ws2, or the base path's parent.
+                self.__plain(prefix)
+                return self.adapter.list_objects(prefix)
+            except (Exceptions.InvalidObjectPath, Exceptions.ObjectNotFound):
+                return []  # not a plain path, or nothing under it: nothing to list
 
         return {
             (CATALOG.service, "object"): named_lister(

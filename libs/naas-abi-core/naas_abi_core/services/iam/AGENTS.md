@@ -918,6 +918,10 @@ below before anyone sees it. `listing.page_of` pages an in-memory list for one.
   where IAM places them (`ResourceGuard.name`): `list_resources` is the one check, so a
   listing is filtered once, and "nothing here" (an object prefix that does not exist) is an
   empty page, not a failure. The services' own list calls stay guarded for their callers.
+  Reading unchecked keeps the service's own input rules: object storage lists under the
+  caller's search text only when it is a plain path (no `.`, `..` or empty segment, no
+  leading `/`, the check every guarded object call makes), else nothing, since a name is
+  checked as written while the backend lists what the path resolves to.
 - **Over NATS**, for a remote module: the SDK serves the listers a module registers
   (`Module.listers`, `@lister`) on `abi.mod.<project>.<sa>.<instance>.iam.list`
   (`ListerRequest` / `ListerResponse`) and names their types in its discovery descriptor

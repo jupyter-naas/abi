@@ -67,3 +67,32 @@ def test_a_reader_lists_what_they_may_list_and_under_a_prefix(world, warnings):
     assert [i.id for i in top.items] == ["reports"]
     assert [i.id for i in under.items] == ["reports/q3.pdf"]
     assert warnings == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "reports/../drafts/",  # .. in the middle
+        "reports/../../",  # .. above the storage root
+        "../",
+        "/",  # a leading /
+        "/etc/",
+        "reports//",  # an empty segment
+        "./reports/",
+        "storage/../drafts/",
+    ],
+)
+def test_a_search_that_is_not_a_plain_path_lists_nothing(world, tmp_path, warnings, text):
+    (tmp_path.parent / "outside_secret.txt").write_text("x")
+    reader = world.user("reader")
+    world.grant(
+        reader.id,
+        statement("Allow", ["object_storage:ListObjects"], ["abi:object_storage:object/reports*"]),
+    )
+    root = world.user("root")
+    world.grant(root.id, statement("Allow", ["object_storage:*"], ["*"]))
+    for who in (reader, root):
+        with world.as_(who):
+            page = world.iam.list_resources("object_storage", "object", text=text)
+        assert page.listed is True and page.items == (), (who.subject, text, page.items)
+    assert warnings == []
