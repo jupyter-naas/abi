@@ -22,6 +22,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
+from naas_abi_core import logger
 from naas_abi_core.services.iam.adapters.iam_nats_codec import listed_from_pb
 from naas_abi_core.services.iam.listing import (
     ListedPage,
@@ -33,7 +34,11 @@ from naas_abi_core.services.iam.listing import (
 TIMEOUTS = (TimeoutError, asyncio.TimeoutError, concurrent.futures.TimeoutError)
 # Discovery is read at most this often.
 SNAPSHOT_SECONDS = 10.0
+# One instance's answer at most; a listing asks at most ATTEMPTS instances.
 TIMEOUT_SECONDS = 5.0
+ATTEMPTS = 2
+# What the waiting thread allows beyond the attempts (a connection, discovery).
+MARGIN_SECONDS = 5.0
 
 
 @dataclass(frozen=True)
@@ -78,29 +83,49 @@ class NATSModuleListers(ListerDirectory):
         self._snapshot: tuple[float, list[ListerInstance]] | None = None
 
     def lister(self, module: str, service: str, type: str) -> ResourceLister | None:
-        found = [
-            i
-            for i in self._run_sync(self._ready())
-            if i.module_id == module and type in i.listers
-        ]
-        if not found:
-            return None
-        return _RemoteLister(self, found)
+        found = self._serving(module, type)
+        return _RemoteLister(self, found) if found else None
+
+    def lists(self, module: str, service: str, type: str) -> bool:
+        return bool(self._serving(module, type))
+
+    def _serving(self, module: str, type: str) -> list[ListerInstance]:
+        ready = self._run_sync(self._ready(), self._timeout + MARGIN_SECONDS)
+        return [i for i in ready if i.module_id == module and type in i.listers]
 
     def close(self) -> None:
-        """Close the connection it opened, if any (the engine's shutdown)."""
+        """Close the connection it opened, if any (the engine's shutdown, before
+        the NATS runtime stops)."""
         client, self._client = self._client, None
+        loop, self._loop = self._loop, None
         if client is not None:
-            self._run_sync(client[0].close())
+            self._close_on(client[0], loop)
+
+    def _close_on(self, transport: Any, loop: asyncio.AbstractEventLoop | None) -> None:
+        """Close ``transport`` on the loop it was opened on, waiting when called
+        from another thread; nothing to do once that loop is gone."""
+        if loop is None or loop.is_closed() or not loop.is_running():
+            return
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+        future = asyncio.run_coroutine_threadsafe(transport.close(), loop)
+        if running is loop:
+            return  # on that loop itself: it closes once this call yields
+        try:
+            future.result(self._timeout + MARGIN_SECONDS)
+        except Exception as exc:  # noqa: BLE001 - shutting down: logged, not raised
+            logger.warning(f"Remote listers: closing their connection failed: {exc}")
 
     # -- the engine's NATS loop --------------------------------------------------------
 
-    def _run_sync(self, coroutine: Awaitable[Any]) -> Any:
+    def _run_sync(self, coroutine: Awaitable[Any], timeout: float) -> Any:
         if self._run is not None:
-            return self._run(coroutine, timeout=self._timeout + 5)
+            return self._run(coroutine, timeout=timeout)
         from naas_abi_core.engine import nats_runtime
 
-        return nats_runtime.run_coro(coroutine, timeout=self._timeout + 5)
+        return nats_runtime.run_coro(coroutine, timeout=timeout)
 
     def _clients(self) -> tuple[Any, Any]:
         loop = asyncio.get_running_loop()
@@ -108,6 +133,9 @@ class NATSModuleListers(ListerDirectory):
             from naas_abi_sdk.discovery import DiscoveryClient
             from naas_abi_sdk.transport import Transport
 
+            if self._client is not None:
+                # Opened on another loop (the runtime restarted): closed there.
+                self._close_on(self._client[0], self._loop)
             transport = Transport(
                 self._url,
                 self._token,
@@ -175,22 +203,26 @@ class NATSModuleListers(ListerDirectory):
         return self._clients()[0]
 
     def ask(self, instances: list[ListerInstance], query: ListingQuery) -> ListedPage:
-        """One instance's answer, another's when it does not answer."""
+        """One instance's answer, another's when it does not answer: at most
+        ``ATTEMPTS``, each bounded by the timeout, all within one wait."""
 
         async def first() -> ListedPage:
             from naas_abi_sdk.transport import RPCError
             from nats.errors import NoRespondersError
 
+            order = list(instances)
+            random.shuffle(order)
             last = "no instance answered"
-            for instance in random.sample(instances, min(len(instances), 2)):
+            for instance in order[:ATTEMPTS]:
                 try:
-                    return await self._ask(instance, query)
+                    return await asyncio.wait_for(self._ask(instance, query), self._timeout)
                 except (RPCError, NoRespondersError, *TIMEOUTS) as exc:
                     last = str(exc) or type(exc).__name__
                     self._snapshot = None  # that instance is gone or going
             raise ListerUnavailableError(f"{query.service}:{query.type}: {last}")
 
-        return self._run_sync(first())  # type: ignore[no-any-return]
+        wait = ATTEMPTS * self._timeout + MARGIN_SECONDS
+        return self._run_sync(first(), wait)  # type: ignore[no-any-return]
 
 
 class _RemoteLister(ResourceLister):

@@ -96,7 +96,14 @@ def world(broker):  # noqa: F811 - imported pytest fixture
     )
     iam.remote_listers = directory
     try:
-        yield SimpleNamespace(h=h, ready=ready, calls=calls)
+        yield SimpleNamespace(
+            h=h,
+            ready=ready,
+            calls=calls,
+            url=url,
+            connection=connection,
+            directory=directory,
+        )
     finally:
         directory.close()
         nats_runtime.run_coro(host.close())
@@ -129,3 +136,62 @@ def test_a_remote_lister_that_fails_or_is_gone_offers_wildcards(world):
         world.ready.clear()
         gone = h.iam.list_resources("demo_research", "brief", scope=WS1)
         assert gone.listed is False
+
+
+@BROKER
+def test_a_hanging_instance_fails_over_to_another_within_one_wait(world, monkeypatch):
+    import time
+
+    from naas_abi_core.services.iam.adapters.secondary import listers__nats
+    from naas_abi_sdk.listers import lister_subject
+
+    h = world.h
+
+    async def swallow(msg):
+        return None  # never answers
+
+    hanging = nats_runtime.run_coro(
+        world.connection.subscribe(lister_subject("acme", "01SB", "i-0"), cb=swallow)
+    )
+    nats_runtime.run_coro(world.connection.flush())
+    both = [
+        ListerInstance("demo.research", "01SB", "i-0", frozenset({"brief"})),
+        ListerInstance("demo.research", "01SA", "i-1", frozenset({"brief"})),
+    ]
+
+    async def instances():
+        return list(both)
+
+    # The hanging one first.
+    monkeypatch.setattr(listers__nats.random, "shuffle", lambda order: None)
+    directory = NATSModuleListers(
+        nats_url=world.url,
+        project="acme",
+        token=lambda: "engine-token",
+        host_token=lambda recipient: f"host-token-{recipient}",
+        instances=instances,
+        timeout=1.0,
+    )
+    h.iam.remote_listers = directory
+    try:
+        started = time.monotonic()
+        with as_service_account("engine"):
+            page = h.iam.list_resources("demo_research", "brief")
+        elapsed = time.monotonic() - started
+        assert page.listed and [i.id for i in page.items] == ["q1", "q2", "q3"]
+        assert elapsed < 2 * 1.0 + listers__nats.MARGIN_SECONDS
+    finally:
+        directory.close()
+        nats_runtime.run_coro(hanging.unsubscribe())
+
+
+@BROKER
+def test_the_directory_closes_its_connection(world):
+    with as_service_account("engine"):
+        assert world.h.iam.list_resources("demo_research", "brief").listed
+    directory = world.directory
+    transport = directory._client[0]
+    directory.close()
+    assert directory._client is None
+    assert transport._closed and transport.connection.is_closed
+    directory.close()  # again: nothing to do

@@ -393,11 +393,16 @@ class VectorStoreService(ServiceBase):
         self.__collection("CountVectors", collection_name)
         return self.adapter.count_vectors(collection_name)
 
+    def __collections(self) -> list[str]:
+        self._ensure_initialized()
+        return self.adapter.list_collections()
+
     def iam_listers(self) -> dict[tuple[str, str], ResourceLister]:
-        """What IAM lists of this service for the policy builder: its collections."""
+        """What IAM lists of this service for the policy builder: its collections.
+        Read unchecked: IAM filters it as the caller (``list_resources``)."""
         return {
             (CATALOG.service, "collection"): named_lister(
-                lambda query: self.list_collections(),
+                lambda query: self.__collections(),
                 lambda name: self._guard.name("collection", [name]),
                 str,
             )

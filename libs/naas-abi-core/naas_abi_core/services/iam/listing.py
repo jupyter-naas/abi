@@ -11,6 +11,7 @@ as wildcards only, and is logged.
 
 from __future__ import annotations
 
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
@@ -31,6 +32,10 @@ MAX_LIMIT = 200
 # The candidates one call examines at most: past it, the page is short and has
 # a cursor, so a caller who may list few of many still gets an answer.
 MAX_EXAMINED = 5000
+# The time one call may spend asking its lister: past it, the page is short and
+# has a cursor too, so a slow lister never holds a worker for long. A lister
+# call already running finishes (each bounds its own wait).
+MAX_SECONDS = 10.0
 # What one call asks a lister for at a time.
 BATCH = 200
 # The longest search text.
@@ -123,6 +128,10 @@ class ListerDirectory(ABC):
         """The lister ``module`` serves for ``service:type``; None when no ready
         instance of it serves one."""
 
+    def lists(self, module: str, service: str, type: str) -> bool:
+        """Whether a ready instance of ``module`` lists ``service:type``."""
+        return self.lister(module, service, type) is not None
+
 
 @dataclass(frozen=True)
 class ResourcePage:
@@ -191,15 +200,18 @@ def run_listing(
     limit: int,
     allowed: Callable[[Sequence[str]], set[str]],
     keep: Callable[[ListedResource], bool] = lambda _item: True,
+    clock: Callable[[], float] = time.monotonic,
 ) -> ResourcePage:
     """Read ``lister`` from ``query.after`` until ``limit`` resources the caller
     may list are found (``allowed``: the names of a batch they may list), at most
-    ``MAX_EXAMINED`` candidates. ``keep``: a further test of each (a container's
-    registry). What falls outside the query (another type, container, text, or
-    out of order) is dropped. A lister that fails gives ``listed`` False."""
+    ``MAX_EXAMINED`` candidates and ``MAX_SECONDS`` (then a short page with a
+    cursor). ``keep``: a further test of each (a container's registry). What
+    falls outside the query (another type, container, text, or out of order) is
+    dropped. A lister that fails gives ``listed`` False."""
     found: list[ListedResource] = []
     after = query.after
     examined = 0
+    deadline = clock() + MAX_SECONDS
     while True:
         asked = replace(query, after=after, limit=BATCH)
         try:
@@ -236,7 +248,7 @@ def run_listing(
                     return ResourcePage(tuple(found), after if more else None)
         if not page.more or not ordered:
             return ResourcePage(tuple(found), None)
-        if examined >= MAX_EXAMINED:
+        if examined >= MAX_EXAMINED or clock() >= deadline:
             return ResourcePage(tuple(found), after)
 
 

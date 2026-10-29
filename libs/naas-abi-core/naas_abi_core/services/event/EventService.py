@@ -263,10 +263,11 @@ class EventService(ServiceBase, IEventService):
             yield (self._reconstruct(row, event_class) for row in rows)
 
     def iam_listers(self) -> dict[tuple[str, str], ResourceLister]:
-        """What IAM lists of this service for the policy builder: its event types."""
+        """What IAM lists of this service for the policy builder: its event types.
+        Read unchecked: IAM filters it as the caller (``list_resources``)."""
         return {
             (CATALOG.service, "event_type"): named_lister(
-                lambda query: self.event_types(),
+                lambda query: self._adapter.list_event_types(),
                 lambda summary: self._guard.name("event_type", summary.event_type),
                 lambda summary: summary.event_type,
             )

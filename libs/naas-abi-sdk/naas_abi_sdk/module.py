@@ -859,6 +859,9 @@ async def run_module(
                 await model_host.start()
             listers = declared_listers(module)
             if listers:
+                # Its subject carries the account discovery returned at registration;
+                # the instance stays STARTING (IAM asks READY ones only) until the
+                # renew below marks it initialized, after the host subscribed.
                 if registration is None:
                     raise ValueError("Listers require discovery")
                 from naas_abi_sdk.permissions import module_catalog

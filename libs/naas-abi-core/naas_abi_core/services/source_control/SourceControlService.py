@@ -280,10 +280,11 @@ class SourceControlService(ServiceBase):
         return True
 
     def iam_listers(self) -> dict[tuple[str, str], ResourceLister]:
-        """What IAM lists of this service for the policy builder: its repositories."""
+        """What IAM lists of this service for the policy builder: its repositories.
+        Read unchecked: IAM filters it as the caller (``list_resources``)."""
         return {
             (CATALOG.service, "repo"): named_lister(
-                lambda query: self.list_repos(),
+                lambda query: self._adapter.list_repos(),
                 lambda repo: self._guard.name(
                     "repo", repo_key(f"{repo.owner}/{repo.name}")
                 ),

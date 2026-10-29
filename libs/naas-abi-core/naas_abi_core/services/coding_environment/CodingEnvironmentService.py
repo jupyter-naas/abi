@@ -152,10 +152,11 @@ class CodingEnvironmentService(ServiceBase):
         )
 
     def iam_listers(self) -> dict[tuple[str, str], ResourceLister]:
-        """What IAM lists of this service for the policy builder: its templates."""
+        """What IAM lists of this service for the policy builder: its templates.
+        Read unchecked: IAM filters it as the caller (``list_resources``)."""
         return {
             (CATALOG.service, "template"): named_lister(
-                lambda query: self.list_templates(),
+                lambda query: self._adapter.list_templates(),
                 lambda template: self._guard.name("template", template.id),
                 lambda template: template.id,
                 lambda template: getattr(template, "name", "") or "",

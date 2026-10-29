@@ -485,10 +485,11 @@ class ModelRegistryService(ServiceBase, IModelRegistry):
         return [model for _, model in self.list_registered_models()]
 
     def iam_listers(self) -> dict[tuple[str, str], ResourceLister]:
-        """What IAM lists of this service for the policy builder: its models."""
+        """What IAM lists of this service for the policy builder: its models.
+        Read unchecked: IAM filters it as the caller (``list_resources``)."""
         return {
             (CATALOG.service, "model"): named_lister(
-                lambda query: self.list_canonical_ids(),
+                lambda query: list(self._models),
                 lambda canonical_id: self._guard.name("model", canonical_id),
                 str,
             )

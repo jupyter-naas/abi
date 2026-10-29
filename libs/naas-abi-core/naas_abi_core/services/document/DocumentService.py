@@ -131,11 +131,12 @@ class DocumentService(ServiceBase):
         return self.for_namespace(namespace)
 
     def iam_listers(self) -> dict[tuple[str, str], ResourceLister]:
-        """What IAM lists of this service for the policy builder: its namespaces
+        """What IAM lists of this service for the policy builder (read unchecked:
+        IAM filters it as the caller): its namespaces
         (the engine's root service only)."""
         return {
             (CATALOG.service, "namespace"): named_lister(
-                lambda query: self.namespaces(),
+                lambda query: self.__adapter.namespaces(),
                 lambda namespace: self._guard.name("namespace", [namespace]),
                 str,
             )

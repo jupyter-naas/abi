@@ -899,21 +899,23 @@ class IAMService(IIAMService, PolicySource):
     def has_lister(self, service: str, type: str) -> bool:
         """Whether ``service:type`` is listed, not offered as wildcards only: a
         lister in process, a container or singleton type IAM lists itself, or a
-        module's catalog with a remote directory to ask."""
+        type of a module's catalog that a ready instance of that module names
+        in discovery. What ``list_resources`` would ask, so the two agree."""
         declared = self._registry.resource_type(service, type)
         if declared is None:
             return False
+        if (service, type) in self._listers or declared.container:
+            return True
+        if declared.id == "singleton":
+            return True
         catalog = self._registry.get(service)
-        return (
-            (service, type) in self._listers
-            or declared.container
-            or declared.id == "singleton"
-            or (
-                catalog is not None
-                and bool(catalog.module)
-                and self.remote_listers is not None
-            )
-        )
+        if catalog is None or not catalog.module or self.remote_listers is None:
+            return False
+        try:
+            return self.remote_listers.lists(catalog.module, service, type)
+        except Exception as exc:  # noqa: BLE001 - unsure: offered as wildcards
+            logger.warning(f"Listing {service}:{type}: cannot ask module {catalog.module}: {exc}")
+            return False
 
     def list_resources(
         self,

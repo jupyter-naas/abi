@@ -67,7 +67,7 @@ model_registry, discovery, source_control, coding_environment) use
 | `iam_catalog.py` | IAM's own `iam:*` catalog and the code-declared seals |
 | `guard.py` | `ServiceGuard`: how a runtime service checks (names, require, filter, create rule, placements) and the shared wire codes |
 | `enforcement.py` | `ResourceGuard`, what a data service enforces with; `scan_allowed`, `own_storage`, `internal_call`, wire codes |
-| `kernel_catalogs.py` | The kernel services' catalogs (`services/<name>/iam_catalog.py`), registered at boot, and their listers (`register_kernel_listers`) |
+| `kernel_catalogs.py` | The kernel services' catalogs (`services/<name>/iam_catalog.py`), registered at boot, and `register_listers` (what the loaded services and engine modules list) |
 | `module_scopes.py` | The `module` catalog (what modules expose, per workspace) and the checks of a catalog a module declares |
 | `keys.py` | Keys `abi_sk_` (service accounts), `abi_pk_` (personal), `abi_gk_` (link grants): generation, parsing, hashing |
 | `exchange.py` | `TokenExchanger`: RFC 8693 token exchange: subjects, audiences, actors, scopes, renewal |
@@ -913,17 +913,26 @@ below before anyone sees it. `listing.page_of` pages an in-memory list for one.
   (`BaseModule.iam_listers()`, for its declared catalog), as the engine
   (`kernel_catalogs.register_listers`; one refused is logged, its type offered as wildcards);
   naas_abi registers its own at start.
-  A kernel lister is the service's own list call (`list_graphs`, `list_collections`,
-  `namespaces`, `list_objects`, `list_canonical_ids`, ...), made as the caller, its items
-  named where IAM places them (`ResourceGuard.name`).
+  A kernel lister reads its adapter unchecked (the graphs, collections, namespaces, objects,
+  event types, models, datasets, repositories, providers, templates it holds), its items named
+  where IAM places them (`ResourceGuard.name`): `list_resources` is the one check, so a
+  listing is filtered once, and "nothing here" (an object prefix that does not exist) is an
+  empty page, not a failure. The services' own list calls stay guarded for their callers.
 - **Over NATS**, for a remote module: the SDK serves the listers a module registers
   (`Module.listers`, `@lister`) on `abi.mod.<project>.<sa>.<instance>.iam.list`
   (`ListerRequest` / `ListerResponse`) and names their types in its discovery descriptor
-  (`ModuleDescriptor.listers`). A serving engine on NATS gives IAM a directory of them
+  (`ModuleDescriptor.listers`). The host subscribes before the instance renews as
+  initialized, and discovery reports an instance `STARTING` until then, so IAM, which asks
+  `READY` instances only, never picks one that does not answer yet. A serving engine on NATS
+  gives IAM a directory of them
   (`IAMService.remote_listers`, `adapters/secondary/listers__nats.py`): for a type of a
   module's catalog with no lister in process, IAM asks a ready instance of that module that
-  names the type. No action names that subject, so the broker lets only the engine's own
-  connections publish there; the module answers as itself, and its answer is filtered here.
+  names the type (at most two instances, each within the directory's timeout, all within one
+  wait; the directory is closed at the engine's shutdown). `has_lister` asks the same
+  directory, so a type of a module's catalog that no ready instance lists is offered as
+  wildcards in the publishers' view too. No action names that subject, so the broker lets only
+  the engine's own connections publish there; the module answers as itself, and its answer is
+  filtered here.
 - **Containers**: IAM lists a container type itself, from its registry. A lister registered
   for one only adds labels: an item it returns that the registry does not hold under that
   name is dropped, and the registry alone answers when it has none or it fails.
@@ -947,8 +956,8 @@ cursor=, limit=, module=)` returns a `ResourcePage`:
   `module` keeps the `module` catalog's resources of that module only.
 - **Paged by name.** `cursor` is the last name of the previous page; `next_cursor` is None at
   the end. IAM reads the lister page by page until its own page is full, examining at most
-  `listing.MAX_EXAMINED` candidates per call (a page may then be short, with a
-  `next_cursor`). What a lister returns outside the scope, after-cursor order or type is
+  `listing.MAX_EXAMINED` candidates and `listing.MAX_SECONDS` per call (a page may then be
+  short, with a `next_cursor`). What a lister returns outside the scope, after-cursor order or type is
   dropped.
 - **A lister that fails** (raises, times out, answers what cannot be read): the type is
   offered as wildcards (`listed` false) and the failure is logged at warning level with the
@@ -2277,7 +2286,8 @@ what falls outside the query (another type, container, order) is dropped. A list
 or is gone leaves its type offered as wildcards and is logged, never failing the call. A remote lister
 answers as its module, reachable by the engine alone (no action names its subject); a remote
 module's container type is listed from IAM's registry, never from the module. One call examines at most
-`MAX_EXAMINED` candidates, so a caller who may list few of many pages through short pages.
+`MAX_EXAMINED` candidates and `MAX_SECONDS`, so a caller who may list few of many, or a slow
+lister, pages through short pages and never holds a worker for long.
 
 ## Known limits and open questions
 

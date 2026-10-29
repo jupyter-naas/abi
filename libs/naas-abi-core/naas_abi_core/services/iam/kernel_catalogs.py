@@ -110,7 +110,3 @@ def register_listers(iam: Any, owners: Iterable[Any]) -> list[tuple[str, str]]:
             registered.append((service, type_name))
     return registered
 
-
-def register_kernel_listers(iam: Any, services: Iterable[Any]) -> list[tuple[str, str]]:
-    """The listers of the kernel services loaded (``Engine.Services.all``)."""
-    return register_listers(iam, services)

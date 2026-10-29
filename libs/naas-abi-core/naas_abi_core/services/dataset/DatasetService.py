@@ -145,10 +145,11 @@ class DatasetService(ServiceBase, IDatasetPort):
         return self.__adapter.describe(name, namespace=namespace)
 
     def iam_listers(self) -> dict[tuple[str, str], ResourceLister]:
-        """What IAM lists of this service for the policy builder: its datasets."""
+        """What IAM lists of this service for the policy builder: its datasets.
+        Read unchecked: IAM filters it as the caller (``list_resources``)."""
         return {
             (CATALOG.service, DATASET): named_lister(
-                lambda query: self.list(),
+                lambda query: self.__adapter.list(namespace=None),
                 lambda info: self._guard.name(DATASET, [info.namespace, info.name]),
                 lambda info: f"{info.namespace}/{info.name}",
                 lambda info: info.name,

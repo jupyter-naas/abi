@@ -748,10 +748,11 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         self.__publish_event(GraphDropped(graph_name=str(graph_name)))
 
     def iam_listers(self) -> dict[tuple[str, str], ResourceLister]:
-        """What IAM lists of this service for the policy builder: its graphs."""
+        """What IAM lists of this service for the policy builder: its graphs.
+        Read unchecked: IAM filters it as the caller (``list_resources``)."""
         return {
             (CATALOG.service, "graph"): named_lister(
-                lambda query: self.list_graphs(),
+                lambda query: self.__triple_store_adapter.list_graphs(),
                 lambda graph: self._guard.name("graph", str(graph)),
                 str,
             )

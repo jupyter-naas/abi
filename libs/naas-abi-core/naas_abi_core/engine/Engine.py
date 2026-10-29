@@ -70,6 +70,8 @@ class Engine(IEngine):
     __credentials: Any = None
     # A client-role engine's IAM facade: it calls with the engine's key alone.
     __client_iam: Any = None
+    # IAM's directory of remote modules' listers (a serving engine on NATS).
+    __remote_listers: Any = None
 
     @property
     def configuration(self) -> EngineConfiguration:
@@ -411,7 +413,9 @@ class Engine(IEngine):
         iam = self.__services.iam if self.__services.iam_available() else None
         if not isinstance(iam, IAMService) or nats is None or nats.discovery is None:
             return
-        iam.remote_listers = NATSModuleListers(
+        if self.__remote_listers is not None:
+            self.__remote_listers.close()  # serving again: the previous one goes
+        self.__remote_listers = iam.remote_listers = NATSModuleListers(
             nats_url=nats.nats_url,
             project=nats.discovery.project,
             token=lambda: self.service_credentials("engine").token(),
@@ -789,6 +793,10 @@ class Engine(IEngine):
         if self.__client_iam is not None:
             self.__client_iam.close()
             self.__client_iam = None
+        if self.__remote_listers is not None:
+            # Its connection runs on the NATS runtime: closed before it stops.
+            self.__remote_listers.close()
+            self.__remote_listers = None
         nats_runtime.close()
 
 

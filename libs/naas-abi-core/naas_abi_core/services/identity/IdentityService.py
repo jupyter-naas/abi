@@ -183,10 +183,11 @@ class IdentityService(IIdentityService):
         return self._default
 
     def iam_listers(self) -> dict[tuple[str, str], ResourceLister]:
-        """What IAM lists of this service for the policy builder: its providers."""
+        """What IAM lists of this service for the policy builder: its providers.
+        Read unchecked: IAM filters it as the caller (``list_resources``)."""
         return {
             (SERVICE, "provider"): named_lister(
-                lambda query: self.list_providers(),
+                lambda query: [p.public() for p in self._providers.values()],
                 lambda provider: provider_resource(provider.name),
                 lambda provider: provider.name,
                 lambda provider: provider.display_name,

@@ -343,7 +343,8 @@ def test_a_remote_module_type_is_asked_through_the_directory(h):
     with h.as_(user):
         page = h.iam.list_resources("acme_crm", "deal", scope=WS1)
     assert _names(page) == [name_in(WS1, "acme_crm:deal/d1")]
-    assert asked == [("acme.crm", "acme_crm", "deal")]
+    # Asked for has_lister and for the listing, never for anything else.
+    assert set(asked) == {("acme.crm", "acme_crm", "deal")}
 
 
 def test_a_listing_examines_a_bounded_number_of_candidates(h, monkeypatch):
@@ -397,3 +398,106 @@ def test_listers_an_owner_offers_are_registered_and_bad_ones_left_out(h):
     assert registered == [("triple_store", "graph")]
     assert h.iam.has_lister("triple_store", "graph")
     assert not h.iam.has_lister("triple_store", "nope")
+
+
+def test_a_module_type_nothing_lists_is_not_listed(h):
+    """``has_lister`` (what ``/publishers`` shows) agrees with ``list_resources``:
+    a remote module with no lister for a type, and an engine module with no
+    ``iam_listers()``, are offered as wildcards in both."""
+    from naas_abi_core.services.iam.publishers import by_publisher
+
+    def catalog(service: str, module: str) -> ActionCatalog:
+        return ActionCatalog(
+            service=service,
+            version=1,
+            module=module,
+            resource_types=(
+                ResourceType("deal", module_scope=True),
+                ResourceType("note", module_scope=True),
+            ),
+            actions=(
+                ActionSpec("ListDeals", "list", ("deal",)),
+                ActionSpec("ReadNote", "read", ("note",)),
+            ),
+        )
+
+    with as_service_account("engine"):
+        h.iam.register_catalog(catalog("acme_crm", "acme.crm"))  # remote, lists deals
+        h.iam.register_catalog(catalog("local_mod", "local.mod"))  # engine module, none
+
+    class Directory(ListerDirectory):
+        def lister(self, module, service, type):
+            if (module, type) == ("acme.crm", "deal"):
+                return FunctionLister(lambda query: [])
+            return None
+
+    h.iam.remote_listers = Directory()
+    assert h.iam.has_lister("acme_crm", "deal")
+    assert not h.iam.has_lister("acme_crm", "note")
+    assert not h.iam.has_lister("local_mod", "deal")
+    with as_service_account("engine"):
+        assert h.iam.list_resources("acme_crm", "note").listed is False
+        assert h.iam.list_resources("local_mod", "deal").listed is False
+        assert h.iam.list_resources("acme_crm", "deal").listed is True
+    h.register("ws-1")
+    user = h.user("bob")
+    h.grant(
+        user.id,
+        statement("Allow", ["acme_crm:*", "local_mod:*"], ["${scope}/*"]),
+        scope=WS1,
+    )
+    with h.as_(user):
+        view = by_publisher(
+            h.iam.catalogs.all(), h.iam.grantable(WS1), listable=h.iam.has_lister
+        )
+    listed = {(t.service, t.type.name): t.listed for p in view for t in p.types}
+    assert listed == {
+        ("acme_crm", "deal"): True,
+        ("acme_crm", "note"): False,
+        ("local_mod", "deal"): False,
+        ("local_mod", "note"): False,
+    }
+
+    class Broken(ListerDirectory):
+        def lister(self, module, service, type):
+            raise RuntimeError("discovery down")
+
+    h.iam.remote_listers = Broken()
+    assert not h.iam.has_lister("acme_crm", "deal")
+
+
+def test_a_listing_has_a_time_budget(h, team):
+    from naas_abi_core.services.iam import listing
+
+    admin, _ = team
+    now = [0.0]
+    calls: list[str] = []
+
+    class Slow(ResourceLister):
+        """Answers a batch the admin may not list, with more after it, and takes
+        three seconds each time."""
+
+        def list_resources(self, query: ListingQuery) -> ListedPage:
+            calls.append(query.after)
+            now[0] += 3.0
+            start = len(calls) * 10
+            return ListedPage(
+                tuple(
+                    ListedResource(graph(f"g{i:05d}", workspace="ws-2"), f"g{i}")
+                    for i in range(start, start + 10)
+                ),
+                more=True,
+            )
+
+    with h.as_(admin):
+        page = listing.run_listing(
+            Slow(),
+            ListingQuery("triple_store", "graph", WS1),
+            limit=10,
+            allowed=lambda names: set(),
+            clock=lambda: now[0],
+        )
+    assert page.listed and page.items == ()
+    # MAX_SECONDS (10) spent after four calls: a short page with a cursor.
+    assert len(calls) == 4
+    assert page.next_cursor == graph("g00049", workspace="ws-2")

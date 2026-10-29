@@ -206,13 +206,17 @@ class ObjectStorageService(ServiceBase, IObjectStorageDomain):
         self.__publish_event(ObjectDeleted(prefix=prefix, key=key))
 
     def iam_listers(self) -> dict[tuple[str, str], ResourceLister]:
-        """What IAM lists of this service for the policy builder: the objects
+        """What IAM lists of this service for the policy builder (read unchecked:
+        IAM filters it as the caller): the objects
         and folders at the top, or under the prefix searched (a text ending
         with ``/``)."""
 
         def entries(query: ListingQuery) -> list[str]:
             prefix = query.text if query.text.endswith("/") else ""
-            return self.list_objects(prefix)
+            try:
+                return self.adapter.list_objects(self.__remove_storage_prefix(prefix))
+            except Exceptions.ObjectNotFound:
+                return []  # nothing under that prefix: nothing to list
 
         return {
             (CATALOG.service, "object"): named_lister(

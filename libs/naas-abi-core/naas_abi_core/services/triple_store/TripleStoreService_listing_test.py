@@ -10,7 +10,7 @@ from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import IAMStor
 from naas_abi_core.services.iam.IAMService import IAMService
 from naas_abi_core.services.iam.kernel_catalogs import (
     kernel_catalogs,
-    register_kernel_listers,
+    register_listers,
 )
 from naas_abi_core.services.iam.names import resource_name
 from naas_abi_core.services.iam.tests.iam_harness import NEXUS, IAMHarness, workspace
@@ -48,7 +48,7 @@ def test_a_workspace_admin_lists_the_graphs_of_their_workspace(tmp_path):
     for where, iri in ((WS1, "http://g/sales"), (WS1, "http://g/hr"), (WS2, "http://g/ops")):
         with as_service_account("api"), iam_inside(where):
             store.create_graph(URIRef(iri))
-    assert register_kernel_listers(iam, [store, None]) == [("triple_store", "graph")]
+    assert register_listers(iam, [store, None]) == [("triple_store", "graph")]
 
     admin, stranger = h.user("admin"), h.user("stranger")
     h.attach(roles.ADMIN, admin.id, WS1)
