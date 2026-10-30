@@ -429,6 +429,19 @@ def run_the_attach_list_follows_the_right_to_attach(
     assert offered(narrow, t.viewer.id) == set()
     assert hidden.id not in offered(t.ws_admin)
     assert hidden.id in offered(t.org_admin)
+    # Nothing for a principal the attach refuses: a group of ws-2 receives no
+    # attachment at ws-1, a deleted user none, and no principal is unknown.
+    with as_service_account("engine"):
+        ws1_group = iam.create_group("ws-1 analysts", scope=WS1)
+        ws2_group = iam.create_group("ws-2 analysts", scope=WS2)
+        gone = iam.ensure_user("https://idp.example", "gone")
+        iam.delete_principal(gone.id)
+    assert offered(attacher, ws1_group.id) == {ws_policy.id, org_policy.id}
+    for refused in (ws2_group.id, gone.id, "usr_nobody"):
+        assert offered(attacher, refused) == set()
+        assert offered(t.org_admin, refused) == set()
+    with as_user(attacher) as session, pytest.raises(REFUSED):
+        session.attach_policy(ws_policy.id, ws2_group.id, WS1)
 
 
 def _assert_allowed(

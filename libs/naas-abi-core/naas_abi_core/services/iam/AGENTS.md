@@ -1600,8 +1600,10 @@ organisation's "<O> access". `get_policy` stays decided at the owner, and derivi
 container or above it, written for it (confined to `${scope}`; unscoped, the platform's whose
 chain never names `${scope}`), that the caller may attach there (`iam:AttachPolicy` on
 `attachment/<policy>/<principal or *>`), with a Deny beyond `${scope}` only for whoever may
-attach it unscoped too, and one owned above only where the list above knows it. It needs no
-permission of its own, and no `iam:ListPolicies`: a right to attach at a level, without one
+attach it unscoped too, and one owned above only where the list above knows it. For a
+`principal_id` the attach refuses at `scope` (unknown, deleted, or a group owned where `scope`
+is not, as `attach_policy` checks it) the list is empty: it offers nothing the attach refuses.
+It needs no permission of its own, and no `iam:ListPolicies`: a right to attach at a level, without one
 to list there, is offered that level's own policies. Nexus's `/attachable-policies` is this
 call; the broker refuses it to a module, like the other lists.
 `list_groups(scope=S)` returns the

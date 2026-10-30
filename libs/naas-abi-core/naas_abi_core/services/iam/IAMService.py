@@ -1781,8 +1781,9 @@ class IAMService(IIAMService, PolicySource):
         to it, one denying beyond it only for whoever may attach it unscoped,
         and one owned above it only where the caller may know of it
         (``_unknown_at``). Unscoped: the platform's whose chain never names
-        ``${scope}``. It needs no permission of its own: what it lists is what
-        the caller may attach."""
+        ``${scope}``. Nothing for a principal the attach refuses there (unknown,
+        deleted, or a group owned elsewhere, ``_check_receives``). It needs no
+        permission of its own: what it lists is what the caller may attach."""
         who = principal_id or "*"
         if scope is None:
             owner = PLATFORM_SCOPE
@@ -1791,6 +1792,8 @@ class IAMService(IIAMService, PolicySource):
             scope = self._scope_checked(scope)
             owner = as_container(container_of_scope(scope))
             owners = [owner, *_owners_above(owner)]
+        if principal_id is not None and not self._receives_at(principal_id, scope):
+            return Page([], None)
 
         def keep(found: list[Policy]) -> set[str]:
             if scope is None:
@@ -1823,6 +1826,18 @@ class IAMService(IIAMService, PolicySource):
             limit,
             after,
         )
+
+    def _receives_at(self, principal_id: str, scope: str | None) -> bool:
+        """Whether ``principal_id`` may be attached a policy at ``scope``, as
+        ``_attach`` checks it: it exists, is not deleted, and is no group owned
+        where ``scope`` is not."""
+        try:
+            principal = self._get_principal(principal_id)
+        except IAMNotFoundError:
+            return False
+        if principal.status == "deleted":
+            return False
+        return principal.kind != "group" or within_owner(principal.owner_scope, scope)
 
     def _names_scope(self, policy: Policy) -> bool:
         """Whether the policy or a policy of its chain names ``${scope}``, its
