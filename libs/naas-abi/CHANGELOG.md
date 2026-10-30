@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v3.6.0 (2026-10-30)
+
+### Bug Fixes
+
+- **auth**: Reorder imports in auth primary adapter schemas and profile links test
+  ([`23e606f`](https://github.com/jupyter-naas/abi/commit/23e606fc7f6c057d2606b300ee32fd93a0b5a9a1))
+
+### Chores
+
+- **nexus-web**: Stop tracking generated next-env.d.ts [skip ci]
+  ([`77ca8be`](https://github.com/jupyter-naas/abi/commit/77ca8bef9ee126d5f80b8c6910415c8317fdb50b))
+
+### Features
+
+- **auth,linkedin**: Add owner_linkedin_url support and profile links
+  ([`cb75a36`](https://github.com/jupyter-naas/abi/commit/cb75a362bebc608b001214ced4faa265aaf51c30))
+
+
 ## v3.5.0 (2026-10-26)
 
 
