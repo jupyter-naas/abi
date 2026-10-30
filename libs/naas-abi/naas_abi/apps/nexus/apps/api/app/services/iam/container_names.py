@@ -49,7 +49,8 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Mapping, Sequence
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -73,7 +74,7 @@ from naas_abi_core.services.iam.names import (
 )
 from naas_abi_core.services.iam.policy import MAX_PATTERNS, MAX_STATEMENTS
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 _log = logging.getLogger(__name__)
@@ -585,6 +586,42 @@ async def recorded(db: AsyncSession, name: str) -> bool:
     return (
         await db.execute(text("SELECT 1 FROM iam_migrations WHERE name = :n"), {"n": name})
     ).first() is not None
+
+
+async def refresh_pending(db: AsyncSession) -> bool:
+    """Stop waiting for each move another API process has recorded since this
+    one's start (whose own move failed, or waited for it): whether this process
+    still refuses module scopes and features (``authz.upgrading``)."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import policy_tree
+
+    if policy_tree.pending() and await recorded(db, policy_tree.MIGRATION_NAME):
+        policy_tree.set_pending(False)
+    if pending() and await recorded(db, MIGRATION_NAME):
+        set_pending(False)
+    return policy_tree.pending() or pending()
+
+
+# The PostgreSQL advisory lock the start-up moves hold: a number of Nexus's own.
+MOVES_LOCK = 0x4E58_4D4F_5645_5331
+
+
+@asynccontextmanager
+async def moves_lock(engine: AsyncEngine) -> AsyncIterator[None]:
+    """Hold the start-up moves to one API process at a time. On PostgreSQL, a
+    session advisory lock on a connection of its own: the other processes wait
+    for it, then find each move recorded and skip it. SQLite has no lock between
+    processes: an install on it runs one API process for the start that upgrades
+    (``AGENTS.md``)."""
+    if engine.dialect.name != "postgresql":
+        yield
+        return
+    async with engine.connect() as connection:
+        connection = await connection.execution_options(isolation_level="AUTOCOMMIT")
+        await connection.execute(text("SELECT pg_advisory_lock(:k)"), {"k": MOVES_LOCK})
+        try:
+            yield
+        finally:
+            await connection.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": MOVES_LOCK})
 
 
 async def read_nexus(db: AsyncSession) -> tuple[list[str], dict[str, str | None]]:

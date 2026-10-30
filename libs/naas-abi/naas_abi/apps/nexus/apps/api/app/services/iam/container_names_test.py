@@ -342,3 +342,96 @@ def test_an_org_wide_mirror_missing_is_made_before_the_moves():
         assert ("builtin.admin", "abi:org-1:*") in scopes
         assert {a.scope for a in world.iam.list_attachments(principal_id=member.id)} == {org_scope}
     assert container_names.mirror_old_org_wide(world.iam) == 0
+
+
+@pytest.mark.asyncio
+async def test_a_process_stops_waiting_once_another_has_recorded_the_moves(nexus_db):
+    """A replica whose start did not make the moves refuses module scopes and
+    features until it re-reads that another one recorded them."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import authz, policy_tree
+
+    async with nexus_db() as db:
+        await db.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS iam_migrations (name VARCHAR(128) PRIMARY KEY, "
+                "applied_at TIMESTAMP NOT NULL, report TEXT)"
+            )
+        )
+        await db.commit()
+        policy_tree.set_pending(True)
+        container_names.set_pending(True)
+        try:
+            assert await container_names.refresh_pending(db) is True
+            assert authz.upgrading()
+            # Another process records the sets' move: the names still wait.
+            await db.execute(
+                text(
+                    "INSERT INTO iam_migrations (name, applied_at, report) "
+                    f"VALUES ('{policy_tree.MIGRATION_NAME}', CURRENT_TIMESTAMP, '{{}}')"
+                )
+            )
+            await db.commit()
+            assert await container_names.refresh_pending(db) is True
+            assert not policy_tree.pending() and container_names.pending()
+            await db.execute(
+                text(
+                    "INSERT INTO iam_migrations (name, applied_at, report) "
+                    f"VALUES ('{container_names.MIGRATION_NAME}', CURRENT_TIMESTAMP, '{{}}')"
+                )
+            )
+            await db.commit()
+            assert await container_names.refresh_pending(db) is False
+            assert not authz.upgrading()
+        finally:
+            policy_tree.set_pending(False)
+            container_names.set_pending(False)
+
+
+@pytest.mark.asyncio
+async def test_the_moves_lock_holds_nothing_on_sqlite():
+    """SQLite has no lock between processes: one API process starts the upgrade
+    (the lock is PostgreSQL's advisory lock)."""
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    engine = create_async_engine("sqlite+aiosqlite://")
+    try:
+        async with container_names.moves_lock(engine):
+            async with container_names.moves_lock(engine):
+                pass
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_the_moves_lock_holds_one_process_at_a_time_on_postgresql():
+    """Two API processes starting at once: the second moves only once the first
+    is done, and then finds the moves recorded."""
+    import asyncio
+    import os
+
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    dsn = os.environ.get("IAM_TEST_POSTGRES_DSN") or os.environ.get("DOCUMENT_TEST_POSTGRES_DSN")
+    if not dsn:
+        pytest.skip("Set IAM_TEST_POSTGRES_DSN to run on PostgreSQL")
+    url = dsn.replace("postgresql://", "postgresql+asyncpg://", 1)
+    first, second = create_async_engine(url), create_async_engine(url)
+    order: list[str] = []
+    held = asyncio.Event()
+
+    async def start(engine, name: str, signal: asyncio.Event | None) -> None:
+        async with container_names.moves_lock(engine):
+            order.append(f"{name} in")
+            if signal is not None:
+                signal.set()
+                await asyncio.sleep(0.3)
+            order.append(f"{name} out")
+
+    try:
+        one = asyncio.create_task(start(first, "one", held))
+        await held.wait()
+        await asyncio.gather(start(second, "two", None), one)
+        assert order == ["one in", "one out", "two in", "two out"]
+    finally:
+        await first.dispose()
+        await second.dispose()

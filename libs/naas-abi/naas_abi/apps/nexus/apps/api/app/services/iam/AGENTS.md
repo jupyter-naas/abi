@@ -289,6 +289,13 @@ register them as containers and rewrite every stored name in one transaction (`i
   role data, `iam_roles_v1`, not recorded: an install from before #360), nothing moves and nothing is recorded,
   an error says so, and every module scope and feature stays refused (`role_data_pending`): such an install
   upgrades through a version that moved its role data first, never by recording moves that moved nothing.
+- **Several API processes.** The moves run in one process at a time (`container_names.moves_lock`): on
+  PostgreSQL a session advisory lock, on a connection of its own, that the other processes wait for at start,
+  then find each move recorded and skip it. SQLite has no lock between processes: an install on SQLite starts
+  one API process for the start that upgrades. A process that still refuses module scopes and features after
+  its start (its move failed, or another process was making it) re-reads `iam_migrations` every minute
+  (`main._watch_upgrade`, `container_names.refresh_pending`) and stops refusing once the moves are recorded,
+  without a restart.
 
 Tested on a store the code before container paths made (`container_names_test.py`,
 `tests/artifacts/names_v1`: 1872 decisions of platform, org, org-wide, workspace and orgless roles, an org's

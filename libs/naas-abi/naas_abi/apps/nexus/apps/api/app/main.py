@@ -343,7 +343,7 @@ async def _prepare_iam() -> None:
     decision is a refusal, so the failure is logged loudly and boot goes on.
     Until the sets are moved and the names rewritten, module scopes and features
     are refused (``authz.upgrading``)."""
-    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal, async_engine
     from naas_abi.apps.nexus.apps.api.app.services.iam import (
         bootstrap,
         container_names,
@@ -373,24 +373,60 @@ async def _prepare_iam() -> None:
             # roles IAM holds: while Nexus keeps memberships IAM does not, nothing
             # moves, nothing is recorded, and every module scope and feature stays
             # refused (logged).
-            if not await container_names.before_names(
-                db, lambda: _move_before_container_paths(db, log)
-            ):
-                return
-            # IAM's names become container paths, once, organizations and
-            # workspaces registered as containers (after the moves above).
-            await container_names.migrate_names(db)
-            report = await bootstrap.migrate_role_data(db)
-            if report.applied:
-                log.info("Role data moved into IAM: %s", report)
-            # Org owners and admins reach every workspace of their organization.
-            made = await MEMBERSHIPS.sync_org_wide_roles()
-            if made:
-                log.info("Organization-wide roles given to %d owner(s) and admin(s)", made)
-            # Nothing left to move: say so to a start that skipped the moves.
-            await policy_tree.migrate_sets(db)
+            # One API process moves at a time: the others wait, then find the
+            # moves recorded (PostgreSQL; on SQLite one process starts).
+            async with container_names.moves_lock(async_engine):
+                if not await container_names.before_names(
+                    db, lambda: _move_before_container_paths(db, log)
+                ):
+                    return
+                # IAM's names become container paths, once, organizations and
+                # workspaces registered as containers (after the moves above).
+                await container_names.migrate_names(db)
+                report = await bootstrap.migrate_role_data(db)
+                if report.applied:
+                    log.info("Role data moved into IAM: %s", report)
+                # Org owners and admins reach every workspace of their organization.
+                made = await MEMBERSHIPS.sync_org_wide_roles()
+                if made:
+                    log.info("Organization-wide roles given to %d owner(s) and admin(s)", made)
+                # Nothing left to move: say so to a start that skipped the moves.
+                await policy_tree.migrate_sets(db)
     except Exception:
         log.exception("Nexus could not set up its authorization in IAM: every request is refused")
+
+
+_upgrade_watch_task: asyncio.Task[None] | None = None
+# How often a process that still refuses module scopes and features re-reads
+# whether another API process has recorded the moves.
+UPGRADE_WATCH_SECONDS = 60.0
+
+
+def _watch_upgrade() -> None:
+    """While this process waits for a move (``authz.upgrading``), re-read
+    ``iam_migrations`` every ``UPGRADE_WATCH_SECONDS``: a replica whose start did
+    not make the moves stops refusing once another one has recorded them."""
+    global _upgrade_watch_task
+    from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+
+    if not authz.upgrading() or (_upgrade_watch_task and not _upgrade_watch_task.done()):
+        return
+
+    async def watch() -> None:
+        from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+        from naas_abi.apps.nexus.apps.api.app.services.iam import container_names
+
+        log = logging.getLogger(__name__)
+        while authz.upgrading():
+            await asyncio.sleep(UPGRADE_WATCH_SECONDS)
+            try:
+                async with AsyncSessionLocal() as db:
+                    if not await container_names.refresh_pending(db):
+                        log.info("The moves are recorded: module scopes and features are decided")
+            except Exception:  # noqa: BLE001 - read again at the next tick
+                log.warning("Could not read whether the moves are recorded", exc_info=True)
+
+    _upgrade_watch_task = asyncio.get_running_loop().create_task(watch())
 
 
 async def _move_before_container_paths(db: Any, log: logging.Logger) -> None:
@@ -485,6 +521,7 @@ async def _startup(app: FastAPI) -> None:
     # Nexus's authorization lives in IAM: its action catalog and feature policies,
     # and (once) the memberships and superadmin flags it kept itself before.
     await _prepare_iam()
+    _watch_upgrade()
     await _hint_unlinked_users()
 
     # Apply config-driven user/org/workspace seeds from config.yaml.
