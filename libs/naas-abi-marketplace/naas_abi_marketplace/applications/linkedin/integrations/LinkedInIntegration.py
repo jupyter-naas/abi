@@ -18,10 +18,6 @@ from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
 from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_marketplace.applications.linkedin import ABIModule
-from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
-    NaasIntegration,
-    NaasIntegrationConfiguration,
-)
 
 cache = CacheFactory.CacheFS_find_storage(subpath="linkedin")
 
@@ -34,7 +30,6 @@ class LinkedInIntegrationConfiguration(IntegrationConfiguration):
         li_at (str): LinkedIn li_at cookie value for authentication
         JSESSIONID (str): LinkedIn JSESSIONID cookie value for authentication
         profile_url (str): LinkedIn profile URL to use for the integration.
-        naas_integration_config (NaasIntegrationConfiguration): Configuration for Naas integration.
         base_url (str): Base URL for LinkedIn API
         datastore_path (str): Path to store cached data
     """
@@ -42,7 +37,6 @@ class LinkedInIntegrationConfiguration(IntegrationConfiguration):
     li_at: str
     JSESSIONID: str
     linkedin_url: str
-    naas_integration_config: NaasIntegrationConfiguration | None = None
     base_url: str = "https://www.linkedin.com/voyager/api"
     datastore_path: str = field(
         default_factory=lambda: ABIModule.get_instance().configuration.datastore_path
@@ -54,7 +48,6 @@ class LinkedInIntegration(Integration):
 
     __configuration: LinkedInIntegrationConfiguration
     __storage_utils: StorageUtils
-    __naas_integration: NaasIntegration | None = None
 
     def __init__(self, configuration: LinkedInIntegrationConfiguration):
         """Initialize LinkedIn client with authentication cookies."""
@@ -63,10 +56,6 @@ class LinkedInIntegration(Integration):
         self.__configuration.JSESSIONID = self.__configuration.JSESSIONID.replace(
             '"', ""
         )
-        if self.__configuration.naas_integration_config:
-            self.__naas_integration = NaasIntegration(
-                self.__configuration.naas_integration_config
-            )
         self.__storage_utils: StorageUtils = StorageUtils(
             ABIModule.get_instance().engine.services.object_storage
         )
@@ -1153,7 +1142,6 @@ class LinkedInIntegration(Integration):
             entities (list): List of entities to export.
             filename (str): Filename to export the Excel file.
         """
-        from io import BytesIO
 
         import pandas as pd
 
@@ -1176,19 +1164,7 @@ class LinkedInIntegration(Integration):
             sheet_name,
             copy=False,
         )
-        excel_buffer = BytesIO()
-        df.to_excel(excel_buffer, index=False, sheet_name=sheet_name)
-        excel_buffer.seek(0)
-        if self.__naas_integration:
-            asset = self.__naas_integration.upload_asset(
-                data=excel_buffer.getvalue(),
-                prefix=os.path.join(self.__configuration.datastore_path, prefix),
-                object_name=file_name,
-                return_url=True,
-            )
-            return asset.get("asset_url", "")
-        else:
-            return os.path.join(self.__configuration.datastore_path, prefix, file_name)
+        return os.path.join(self.__configuration.datastore_path, prefix, file_name)
 
     @cache(
         lambda self, profile_url, organization_url, connection_distance: profile_url

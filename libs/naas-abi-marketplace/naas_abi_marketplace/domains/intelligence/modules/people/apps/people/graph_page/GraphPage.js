@@ -75,6 +75,10 @@ let TEMPORAL_FILTER = true;
 // With rings, the class whose nodes each get a sector of their own (a search:
 // "Organization"); empty, the rings are not cut.
 let RING_CLUSTER_CLASS = "";
+// Draw each edge's predicate on it (``graph.edge_labels``; a dense network turns it off).
+let EDGE_LABELS = true;
+// Draw only what lies within Distance hops of the root (``graph.distance_filter``).
+let DISTANCE_FILTER = true;
 // The farthest the Distance setting goes. A person's graph is read in three
 // hops; a search reaches the people's organizations in four.
 let MAX_DISTANCE = 3;
@@ -155,9 +159,11 @@ export function configureGraph(config) {
   if (graph.view_defaults) GRAPH_VIEW_DEFAULT_OVERRIDES = graph.view_defaults;
   if (graph.params_session_key) PARAMS_KEY = graph.params_session_key;
   DATE_SLICER_CONFIG = configureDateSlicer(graph.date_slicer);
-  GRAPH_LAYOUT = graph.layout === "rings" ? "rings" : "semantic";
+  GRAPH_LAYOUT = ["rings", "free"].includes(graph.layout) ? graph.layout : "semantic";
   TEMPORAL_FILTER = graph.temporal_filter !== false;
   RING_CLUSTER_CLASS = graph.ring_cluster_class || "";
+  EDGE_LABELS = graph.edge_labels !== false;
+  DISTANCE_FILTER = graph.distance_filter !== false;
   MAX_DISTANCE = Math.max(1, Math.floor(Number(graph.max_distance) || 3));
   DISTANCE_HINT = graph.distance_hint;
   GRAPH_VIEW_LABELS = graph.view_labels || {};
@@ -349,7 +355,15 @@ function collectVisibleGraph(adj, rootId, distance) {
     }
   }
 
-  const active = new Set(nodeDistance.keys());
+  // Without a distance filter (a network with no natural centre), everything
+  // is drawn, reached from the root or not.
+  const active = DISTANCE_FILTER
+    ? new Set(nodeDistance.keys())
+    : new Set([
+        ...Object.keys(adj.peopleById || {}),
+        ...Object.keys(adj.processesById || {}),
+        ...Object.keys(adj.entitiesById || {}),
+      ]);
   const visibleRelations = relations.filter(
     (rel) => active.has(rel.from) && active.has(rel.to)
   );
@@ -828,7 +842,16 @@ function hasNodeImage(n) {
   return Boolean(n?.entity?.image || n?.person?.image);
 }
 
+// A compact node (``entity.compact``: the acts tying people in a connections
+// network) is a small dot with its label underneath, so the people stand out.
+const COMPACT_NODE_SCALE = 0.45;
+
+function isCompactNode(n) {
+  return Boolean(n?.entity?.compact);
+}
+
 function graphNodeRadius(n) {
+  if (isCompactNode(n)) return GRAPH_NODE_RADIUS * COMPACT_NODE_SCALE;
   return hasNodeImage(n) ? GRAPH_NODE_RADIUS * IMAGE_NODE_SCALE : GRAPH_NODE_RADIUS;
 }
 
@@ -1479,6 +1502,16 @@ function classPhysicsStep(nodes, edges, alpha) {
     }
   }
 
+  // A free layout has nothing pinned: a weak pull to the middle keeps the
+  // pieces that nothing links together from drifting off the canvas.
+  if (GRAPH_LAYOUT === "free") {
+    for (const node of nodes) {
+      if (!node.physicsEnabled) continue;
+      node.vx -= node.x * 0.004 * alpha;
+      node.vy -= node.y * 0.004 * alpha;
+    }
+  }
+
   // Clustering anchors each group to where the seeding pass put it. The seed
   // already fans the acts of working out into separate angular sectors, so the
   // groups start well apart; emergent forces alone could not reproduce that,
@@ -1845,8 +1878,36 @@ function seedRingLayout(focusNode, nodes, edges) {
   }
 }
 
+/**
+ * No rule of placement: the nodes start spread evenly on a spiral, in no
+ * particular order, nobody pinned - the focus included - and the physics alone
+ * lays them out (a connections network has no natural centre).
+ */
+function seedFreeLayout(focusNode, nodes) {
+  const spacing = GRAPH_NODE_RADIUS * 2 + (graphParams.nodeMinGap ?? 60);
+  nodes.forEach((node, index) => {
+    // The golden angle: an even spread with no rings or rays to it.
+    const angle = index * 2.399963;
+    const radius = spacing * 0.6 * Math.sqrt(index);
+    node.x = Math.cos(angle) * radius;
+    node.y = Math.sin(angle) * radius;
+    node.z = 0;
+    node.rayId = null;
+    node.radialLevel = null;
+    node.clusterSector = null;
+    node.homeX = node.x;
+    node.homeY = node.y;
+    node.physicsEnabled = true;
+  });
+  focusNode.pinned = false;
+}
+
 export function layoutGraphNodes(focusRootId, visible, lookup) {
   const graph = buildGraph(focusRootId, visible, lookup);
+  if (GRAPH_LAYOUT === "free") {
+    seedFreeLayout(graph.focusNode, graph.nodes);
+    return graph;
+  }
   if (GRAPH_LAYOUT === "rings") {
     seedRingLayout(graph.focusNode, graph.nodes, graph.edges);
     return graph;
@@ -1911,6 +1972,20 @@ export {
  */
 function resetGraphView(canvas, focusNode, setPanScale, nodes = null) {
   let scale = graphParams.zoom;
+  // A free layout has no centre: the whole network, fitted and centred.
+  if (GRAPH_LAYOUT === "free" && graphParams.view === "2d" && nodes?.length) {
+    const pad = GRAPH_NODE_RADIUS * 2.5;
+    const xs = nodes.map((node) => node.x ?? 0);
+    const ys = nodes.map((node) => node.y ?? 0);
+    const minX = Math.min(...xs) - pad;
+    const maxX = Math.max(...xs) + pad;
+    const minY = Math.min(...ys) - pad;
+    const maxY = Math.max(...ys) + pad;
+    const fit = Math.min(canvas.clientWidth / (maxX - minX), canvas.clientHeight / (maxY - minY));
+    if (Number.isFinite(fit) && fit > 0) scale = Math.max(MIN_SCALE, Math.min(scale, fit));
+    setPanScale({ scale, panX: -((minX + maxX) / 2) * scale, panY: -((minY + maxY) / 2) * scale });
+    return;
+  }
   // Rings are read as a whole - centre, matches, acts, people - so they open
   // fitted to the canvas, never above the default zoom.
   if (GRAPH_LAYOUT === "rings" && graphParams.view === "2d" && nodes?.length) {
@@ -2117,7 +2192,7 @@ function mountGraphCanvas(root, options) {
     const angle = Math.atan2(tangent.y, tangent.x);
     drawArrowhead(end.x, end.y, angle, 14 / Math.max(scale, 0.6), stroke);
 
-    const label = e.predicateLabel;
+    const label = EDGE_LABELS ? e.predicateLabel : "";
     if (!label) {
       ctx.globalAlpha = 1;
       return;
@@ -2165,9 +2240,14 @@ function mountGraphCanvas(root, options) {
     ctx.fillStyle = image ? "#ffffff" : n.palette.color;
     ctx.fill();
     if (image) {
-      // The logo whole, inside the disc: fitted to its inscribed square.
-      const side = r * 1.3;
-      const fit = Math.min(side / image.naturalWidth, side / image.naturalHeight);
+      // A portrait fills the disc (cropped, as an avatar); a logo is drawn
+      // whole inside it, fitted to its inscribed square.
+      const portrait = n.kind === "person";
+      const side = portrait ? r * 2 : r * 1.3;
+      const fit = (portrait ? Math.max : Math.min)(
+        side / image.naturalWidth,
+        side / image.naturalHeight,
+      );
       const w = image.naturalWidth * fit;
       const h = image.naturalHeight * fit;
       ctx.save();
@@ -2195,6 +2275,15 @@ function mountGraphCanvas(root, options) {
     // Labels behind this point are unreadable anyway, and drawing them only
     // adds clutter over the nodes in front.
     if (graphParams.view === "3d" && depth < 0.88) return;
+    if (isCompactNode(n)) {
+      // A small act: its short label underneath, quieter than a person's.
+      ctx.font = `${Math.round(fontSize * 0.85) * depth}px var(--font-body), sans-serif`;
+      ctx.fillStyle = colors.muted || colors.ink;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText(n.label, viewX(n), viewY(n) + nodeRadius(n) + 3 * depth);
+      return;
+    }
     if (nodeImage(n)) {
       // The picture fills the node: its name goes underneath.
       ctx.font = `600 ${fontSize * depth}px var(--font-body), sans-serif`;

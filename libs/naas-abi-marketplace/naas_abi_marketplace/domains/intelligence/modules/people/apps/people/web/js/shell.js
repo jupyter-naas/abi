@@ -5,6 +5,7 @@
  * hash into a page, and where to put what that page returns.
  */
 
+import { linkedInImportButton, linkedInImportEnabled } from "../components/LinkedInImport.js";
 import { searchBoxHtml, wireSearch } from "../components/SearchBox.js";
 import { applyBrand, applyTheme, loadAppConfig, logoHtml } from "../lib/config.js";
 import { escapeHtml } from "../lib/dom.js";
@@ -49,8 +50,19 @@ function topbarEndSlot() {
   return slot;
 }
 
+// Pages with their own search box (home) or none (ontology).
+const PAGES_WITHOUT_TOPBAR = new Set(["home", "ontology"]);
+
+// The "Import LinkedIn data" button, beside whatever the page puts in the topbar.
+let importButton = null;
+
 function renderTopbar(state) {
-  topbarEndSlot().replaceChildren(...(state.topbarEnd ? [state.topbarEnd] : []));
+  if (!importButton && linkedInImportEnabled(config)) importButton = linkedInImportButton(config);
+  // While a page loads, what the previous one put there stays: the page
+  // replaces it once loaded, so a switch does not blink out between pages.
+  if (!state.keepTopbarEnd) {
+    topbarEndSlot().replaceChildren(...[state.topbarEnd, importButton].filter(Boolean));
+  }
   if (!state.showTopbarSearch) {
     topbar.hidden = true;
     return;
@@ -72,7 +84,17 @@ function renderFooter() {
     `${config.brand?.name || "People"} · built from the people graph`;
 }
 
+// Renders overlap when the location changes before a page has loaded (a tab
+// clicked while a slow search is still out). Each is numbered: one that a
+// newer render superseded may have drawn over the newer page as it finished,
+// so it is torn down and the newest is drawn again - at once if it has
+// finished, else once it does.
+let renderCount = 0;
+let finishedRender = 0;
+let overdrawn = false;
+
 async function render() {
+  const renderId = ++renderCount;
   const route = parseRoute(config);
   if (currentHash) scrollMemory.set(currentHash, window.scrollY);
   currentHash = window.location.hash || "#/";
@@ -80,13 +102,39 @@ async function render() {
   activePageTeardown?.();
   activePageTeardown = null;
 
-  let state = { showTopbarSearch: true };
+  // The topbar is drawn before the page loads (a search can take a while):
+  // otherwise the page's "Searching…" sits alone where the search box goes.
+  // The page redraws it once loaded, with what it hands over.
+  let state = {
+    showTopbarSearch: !PAGES_WITHOUT_TOPBAR.has(route.pageId),
+    query: route.params?.get("q") || "",
+    keepTopbarEnd: true,
+  };
+  renderTopbar(state);
+  // Measured now, not once the page has loaded: the page aligns with the
+  // search box from its first frame instead of jumping there from the left.
+  watchContentAlign();
+  delete state.keepTopbarEnd;
   try {
     state = (await mountPage(route.pageId, view, { config, ...route })) || state;
   } catch (error) {
+    if (renderId !== renderCount) return;
     view.innerHTML = `<div class="results"><div class="empty-state error-block">
       <h2>Something went wrong</h2><p>${escapeHtml(error.message)}</p></div></div>`;
   }
+  if (renderId !== renderCount) {
+    state.teardown?.();
+    if (finishedRender === renderCount) render();
+    else overdrawn = true;
+    return;
+  }
+  if (overdrawn) {
+    overdrawn = false;
+    state.teardown?.();
+    render();
+    return;
+  }
+  finishedRender = renderId;
   if (state.teardown) activePageTeardown = state.teardown;
   renderTopbar(state);
   watchContentAlign();

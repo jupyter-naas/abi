@@ -71,3 +71,41 @@ def test_a_drive_failure_does_not_fail_the_save() -> None:
     client, _ = _client(MemoryStorage())
 
     assert client.patch("/api/auth/me", json={"name": "Alice"}).status_code == 200
+
+
+def test_the_linkedin_url_and_github_handle_are_saved_normalized() -> None:
+    client, auth_service = _client(MemoryStorage())
+
+    resp = client.patch(
+        "/api/auth/me",
+        json={
+            "linkedin_url": "fr.linkedin.com/in/AliceDupont/",
+            "github_handle": "@alice-dupont",
+        },
+    )
+
+    assert resp.status_code == 200
+    kwargs = auth_service.update_profile.await_args.kwargs
+    assert kwargs["linkedin_url"] == "https://www.linkedin.com/in/alicedupont"
+    assert kwargs["github_handle"] == "alice-dupont"
+
+
+def test_an_empty_link_clears_it_and_an_absent_one_is_left_alone() -> None:
+    client, auth_service = _client(MemoryStorage())
+
+    client.patch("/api/auth/me", json={"linkedin_url": ""})
+
+    kwargs = auth_service.update_profile.await_args.kwargs
+    assert kwargs["linkedin_url"] == ""
+    assert kwargs["github_handle"] is None
+
+
+def test_a_url_that_is_not_a_linkedin_profile_is_refused() -> None:
+    client, auth_service = _client(MemoryStorage())
+
+    resp = client.patch(
+        "/api/auth/me", json={"linkedin_url": "https://www.linkedin.com/company/acme"}
+    )
+
+    assert resp.status_code == 422
+    auth_service.update_profile.assert_not_awaited()

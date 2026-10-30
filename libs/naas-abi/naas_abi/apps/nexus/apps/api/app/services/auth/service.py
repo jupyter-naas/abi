@@ -319,6 +319,8 @@ class AuthService:
         organization: str | None,
         job_title: str | None,
         bio: str | None,
+        linkedin_url: str | None = None,
+        github_handle: str | None = None,
     ) -> AuthUserRecord:
         normalized_email = email.lower() if email is not None else None
         if normalized_email and await self.adapter.user_exists_with_email(
@@ -334,6 +336,8 @@ class AuthService:
             organization=organization,
             job_title=job_title,
             bio=bio,
+            linkedin_url=linkedin_url,
+            github_handle=github_handle,
         )
         if updated_user is None:
             raise UserNotFoundError(user_id=user_id)

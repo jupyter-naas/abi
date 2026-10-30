@@ -1,4 +1,4 @@
-from naas_abi_marketplace.applications.linkedin.ontologies.modules.ActOfConnectionsOnLinkedIn import (
+from naas_abi_marketplace.applications.linkedin.ontologies.modules.LinkedInOntology import (
     ActOfConnection as _ActOfConnection,
 )
 

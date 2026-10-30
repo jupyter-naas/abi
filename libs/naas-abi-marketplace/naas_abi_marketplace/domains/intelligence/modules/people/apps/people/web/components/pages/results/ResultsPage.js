@@ -1,13 +1,23 @@
-import { fetchSearch, fetchSearchNetwork } from "../../../lib/api.js";
+import {
+  fetchConnections,
+  fetchConnectionsNetwork,
+  fetchMostConnectedNetwork,
+  fetchSearch,
+  fetchSearchNetwork,
+} from "../../../lib/api.js";
 import { avatarHtml, escapeHtml, flagHtml, highlight, ICONS, orgLogoHtml } from "../../../lib/dom.js";
 import { profileHref, searchHref } from "../../../lib/routes.js";
 import { apiUrl } from "../../../lib/config.js";
 import { mountGraphView } from "../../../lib/graph-view.js";
-import { overflowTabs } from "../../../lib/tab-overflow.js";
+import { connectionsLabel, personOfQuery, resultsState, TABS } from "../../../lib/results-state.js";
+import { displaySwitch, resultsHeaderHtml, wireResultsHeader } from "../../ResultsHeader.js";
 
-function resultHtml(config, hit, tokens, query) {
+function resultHtml(config, hit, tokens, query, facet = "", display = "", { connectionsCta = false } = {}) {
   const place = [hit.organization, ...(hit.place || [])].filter(Boolean);
   const snippet = hit.snippet || {};
+  const count = connectionsLabel(hit.connections_count);
+  // On the Connections tab the count is the way in: "See their 12 connections".
+  const connections = count && connectionsCta ? `See their ${count} →` : count;
   return `
     <article class="result">
       <div class="result-body">
@@ -35,10 +45,30 @@ function resultHtml(config, hit, tokens, query) {
             : ""
         }
         ${
-          hit.linkedin_url
-            ? `<p class="result-contact"><a class="contact-link" href="${escapeHtml(hit.linkedin_url)}"
+          hit.linkedin_url || connections
+            ? `<p class="result-contact">${
+                hit.linkedin_url
+                  ? `<a class="contact-link" href="${escapeHtml(hit.linkedin_url)}"
                 target="_blank" rel="noopener noreferrer"
-                aria-label="${escapeHtml(`LinkedIn: ${hit.full_name || ""}`)}">${ICONS.linkedin_url}<span>LinkedIn</span></a></p>`
+                aria-label="${escapeHtml(`LinkedIn: ${hit.full_name || ""}`)}">${ICONS.linkedin_url}<span>LinkedIn</span></a>`
+                  : ""
+              }${
+                hit.linkedin_url && connections
+                  ? `<span class="result-contact-separator" aria-hidden="true">·</span>`
+                  : ""
+              }${
+                connections
+                  ? `<a class="result-connections${
+                      connectionsCta ? " result-connections-cta" : ""
+                    }" href="${searchHref(config, {
+                      query,
+                      facet,
+                      view: "connections",
+                      display,
+                      person: hit.slug,
+                    })}">${escapeHtml(connections)}</a>`
+                  : ""
+              }</p>`
             : ""
         }
       </div>
@@ -46,14 +76,8 @@ function resultHtml(config, hit, tokens, query) {
     </article>`;
 }
 
-/**
- * The ways to look at a search: the list of people, then its network (the
- * search at the centre, what it matched, and the people it leads to).
- */
-export const VIEWS = [
-  { id: "", label: "People" },
-  { id: "network", label: "Network" },
-];
+/** The tabs of a search; each can be drawn as a list or as a network. */
+export const VIEWS = TABS;
 
 // The network of each search asked for in this page's lifetime. The People view
 // starts it in the background, so the Network tab is ready, or on its way,
@@ -71,9 +95,9 @@ function loadNetwork(query, facet) {
   return networkRequests.get(key);
 }
 
-/** Mark the Network tab as loading until its network has arrived. */
-function prefetchNetwork(host, query, facet) {
-  const tab = host.querySelector('.tabs .tab[data-view="network"]');
+/** Mark the topbar's Network option as loading until the search's network has arrived. */
+function prefetchNetwork(displaySwitchEl, query, facet) {
+  const tab = displaySwitchEl?.querySelector('[data-display="network"]');
   tab?.classList.add("is-loading");
   loadNetwork(query, facet)
     .catch(() => {})
@@ -84,17 +108,9 @@ export function viewOf(value) {
   return VIEWS.some((item) => item.id === value) ? value : "";
 }
 
-function tabsHtml(config, { query, facet, view }) {
-  const tabs = VIEWS.map(
-    (item) => `<a class="tab" data-view="${item.id || "people"}" href="${searchHref(config, { query, facet, view: item.id })}"
-      aria-current="${item.id === view}">${escapeHtml(item.label)}</a>`,
-  ).join("");
-  return `<nav class="tabs" aria-label="View">${tabs}</nav>`;
-}
-
-function bodyHtml(config, results, tokens, query) {
+function bodyHtml(config, results, tokens, query, facet, display) {
   if (!results.length) return emptyHtml(config, query);
-  return results.map((hit) => resultHtml(config, hit, tokens, query)).join("");
+  return results.map((hit) => resultHtml(config, hit, tokens, query, facet, display)).join("");
 }
 
 /**
@@ -124,6 +140,7 @@ function pagerHtml(config, payload, query, view = "") {
   if (pages < 2) return "";
   const current = payload.page || 1;
   const href = (page) => searchHref(config, { query, facet: payload.facet, page, view });
+
   const link = (page, label, { disabled = false, ariaLabel = "" } = {}) =>
     disabled
       ? `<span class="page page-disabled" aria-disabled="true">${label}</span>`
@@ -144,13 +161,20 @@ function pagerHtml(config, payload, query, view = "") {
   </nav>`;
 }
 
+// Past this, the exact total is noise: "of +10000 people".
+const TOTAL_CAP = 10000;
+
+function totalText(total) {
+  return total > TOTAL_CAP ? `+${TOTAL_CAP}` : `${total}`;
+}
+
 function statsText(payload) {
   const noun = payload.total === 1 ? "person" : "people";
   const shown = (payload.results || []).length;
   // "101–200 of 847 people" once there is more than one page; otherwise the plain count.
-  if ((payload.pages || 1) < 2 || !shown) return `${payload.total} ${noun}`;
+  if ((payload.pages || 1) < 2 || !shown) return `${totalText(payload.total)} ${noun}`;
   const first = (payload.page - 1) * payload.page_size + 1;
-  return `${first}–${first + shown - 1} of ${payload.total} ${noun}`;
+  return `${first}–${first + shown - 1} of ${totalText(payload.total)} ${noun}`;
 }
 
 function emptyHtml(config, query) {
@@ -210,12 +234,10 @@ function networkStatsText(network, query) {
 async function mountNetwork(host, { config, query, facet }) {
   host.innerHTML = `
     <div class="results results-network">
-      ${tabsHtml(config, { query, facet, view: "network" })}
-      <p class="stats">Drawing the network…</p>
+      ${resultsHeaderHtml(config, { query, facet, view: "", display: "network" }, "Drawing the network…")}
       <div class="profile-graph search-graph"></div>
     </div>`;
-  const tabs = host.querySelector(".tabs");
-  if (tabs) overflowTabs(tabs);
+  wireResultsHeader(host);
   const stats = host.querySelector(".stats");
   const graphEl = host.querySelector(".search-graph");
   try {
@@ -227,6 +249,7 @@ async function mountNetwork(host, { config, query, facet }) {
         if (!network.total) throw Object.assign(new Error("empty"), { empty: true });
         for (const person of network.data.people || []) {
           if (person.slug) person.href = profileHref(config, person.slug, { query });
+          if (person.image) person.image = apiUrl(person.image);
         }
         for (const entity of network.data.entities || []) {
           // Served under this app's API: the same path the People list uses.
@@ -244,19 +267,223 @@ async function mountNetwork(host, { config, query, facet }) {
   }
 }
 
-export async function mountResults(host, { config, params }) {
-  const query = params.get("q") || "";
-  const facet = params.get("facet") || "";
-  const rawView = params.get("view");
-  const view =
-    rawView === null
-      ? viewOf(config.app?.default_results_view ?? "")
-      : viewOf(rawView);
-  const requestedPage = Math.max(1, parseInt(params.get("page") || "1", 10) || 1);
+function connectionHtml(config, item, query) {
+  const place = [item.organization, item.position].filter(Boolean).join(" · ");
+  const connections = connectionsLabel(item.connections_count);
+  return `
+    <article class="result connection">
+      <div class="result-body">
+        <p class="result-line">
+          ${flagHtml(item.country_code)}
+          ${orgLogoHtml(item.organization, item.organization_logo)}
+          <span>${escapeHtml(place)}</span>
+        </p>
+        <h2 class="result-title">
+          <a href="${profileHref(config, item.slug, { query })}">${escapeHtml(item.full_name || item.slug)}</a>
+        </h2>
+        ${
+          item.connected_on
+            ? `<p class="result-headline">Connected on ${escapeHtml(formatDate(item.connected_on))}</p>`
+            : ""
+        }
+        ${
+          connections
+            ? `<p class="result-contact"><a class="result-connections" href="${searchHref(config, {
+                query,
+                view: "connections",
+                person: item.slug,
+              })}">${escapeHtml(connections)}</a></p>`
+            : ""
+        }
+      </div>
+      ${avatarHtml(item, "md")}
+    </article>`;
+}
 
-  if (view === "network") {
+function formatDate(iso) {
+  const date = new Date(`${iso}T00:00:00`);
+  return Number.isNaN(date.getTime())
+    ? iso
+    : date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+}
+
+function connectionsEmptyHtml(person) {
+  if (!person) {
+    return `<div class="empty-state">
+      <h2>No one here has connections yet</h2>
+      <p>Connections come from LinkedIn data exports imported into this app.</p>
+    </div>`;
+  }
+  return `<div class="empty-state">
+    <h2>No connections recorded for ${escapeHtml(person.full_name || person.slug)}</h2>
+    <p>Connections come from LinkedIn data exports imported into this app.</p>
+  </div>`;
+}
+
+/** Whose connections to show: the person in the URL, else the one the query names. */
+async function connectionsPerson(state) {
+  if (state.person) return state.person;
+  if (!state.query) return "";
+  const payload = await fetchSearch({ query: state.query, facet: state.facet });
+  return personOfQuery(payload.results, state.query)?.slug || "";
+}
+
+/** The people of the search who have connections, most connected first. */
+async function mountMostConnected(config, state, stats, body) {
+  const { query, facet, display } = state;
+  let payload;
+  try {
+    payload = await fetchSearch({ query, facet, page: state.page, sort: "connections" });
+  } catch (error) {
+    body.innerHTML = errorHtml(error);
+    return;
+  }
+  const results = payload.results || [];
+  if (!results.length) {
+    stats.textContent = "";
+    body.innerHTML = connectionsEmptyHtml(null);
+    return;
+  }
+  stats.innerHTML = `Most connected first · ${statsText(payload)} with connections${
+    query ? ` for “${escapeHtml(query)}”` : ""
+  }${payload.facet ? ` in ${escapeHtml(payload.facet)}` : ""}`;
+  body.innerHTML = `<p class="connections-intro">Choose someone to see who they know.</p>${results
+    .map((hit) =>
+      resultHtml(config, hit, payload.tokens || [], query, payload.facet, display, {
+        connectionsCta: true,
+      }),
+    )
+    .join("")}${pagerHtml(config, payload, query, "connections")}`;
+}
+
+/** The most connected people of the search, drawn with what ties them. */
+async function mountMostConnectedNetwork(config, state, stats, body) {
+  const { query, facet } = state;
+  body.className = "profile-graph search-graph";
+  try {
+    return await mountGraphView(
+      body,
+      async () => {
+        const network = structuredClone(await fetchMostConnectedNetwork({ query, facet }));
+        stats.innerHTML = network.total
+          ? `The ${network.shown} most connected of ${network.total} people with connections${
+              query ? ` for “${escapeHtml(query)}”` : ""
+            } · choose someone to see who they know`
+          : "";
+        if (!network.total) throw Object.assign(new Error("empty"), { empty: true });
+        for (const person of network.data.people || []) {
+          if (person.image) person.image = apiUrl(person.image);
+          if (person.slug) {
+            person.href = searchHref(config, {
+              query,
+              facet,
+              view: "connections",
+              display: "network",
+              person: person.slug,
+            });
+          }
+        }
+        for (const entity of network.data.entities || []) {
+          if (entity.image) entity.image = apiUrl(entity.image);
+        }
+        return network;
+      },
+    );
+  } catch (error) {
+    if (!body.isConnected) return null;
+    body.className = "connections-body";
+    body.innerHTML = error.empty ? connectionsEmptyHtml(null) : errorHtml(error);
+    return null;
+  }
+}
+
+/** The Connections tab: the most connected people, or one person's connections. */
+async function mountConnections(host, { config, state }) {
+  const { query, facet, display } = state;
+  host.innerHTML = `
+    <div class="results${display === "network" ? " results-network" : ""}">
+      ${resultsHeaderHtml(config, { ...state, view: "connections" }, "Finding connections…")}
+      <div class="connections-body"></div>
+    </div>`;
+  wireResultsHeader(host);
+  const stats = host.querySelector(".stats");
+  const body = host.querySelector(".connections-body");
+  let slug = "";
+  try {
+    slug = await connectionsPerson(state);
+  } catch (error) {
+    body.outerHTML = errorHtml(error);
+    return null;
+  }
+  if (!slug) {
+    if (display === "network") return mountMostConnectedNetwork(config, state, stats, body);
+    await mountMostConnected(config, state, stats, body);
+    return null;
+  }
+  const whose = (payload) => {
+    const name = escapeHtml(payload.person?.full_name || slug);
+    const href = profileHref(config, slug, { query });
+    const noun = payload.total === 1 ? "connection" : "connections";
+    return `<a href="${href}">${name}</a> · ${payload.total} ${noun}`;
+  };
+
+  if (display === "network") {
+    body.className = "profile-graph search-graph";
+    try {
+      return await mountGraphView(
+        body,
+        async () => {
+          const network = structuredClone(await fetchConnectionsNetwork(slug));
+          stats.innerHTML =
+            network.shown < network.total
+              ? `${whose(network)} · the ${network.shown} most connected drawn`
+              : whose(network);
+          if (!network.total) throw Object.assign(new Error("empty"), { person: network.person });
+          for (const person of network.data.people || []) {
+            if (person.slug) person.href = profileHref(config, person.slug, { query });
+            if (person.image) person.image = apiUrl(person.image);
+          }
+          for (const entity of network.data.entities || []) {
+            if (entity.image) entity.image = apiUrl(entity.image);
+          }
+          return network;
+        },
+      );
+    } catch (error) {
+      if (!body.isConnected) return null;
+      body.className = "connections-body";
+      body.innerHTML = error.person ? connectionsEmptyHtml(error.person) : errorHtml(error);
+      return null;
+    }
+  }
+
+  try {
+    const payload = await fetchConnections(slug);
+    stats.innerHTML = whose(payload);
+    body.innerHTML = payload.total
+      ? payload.results.map((item) => connectionHtml(config, item, query)).join("")
+      : connectionsEmptyHtml(payload.person);
+  } catch (error) {
+    body.innerHTML = errorHtml(error);
+  }
+  return null;
+}
+
+export async function mountResults(host, { config, params }) {
+  const state = resultsState(params, config.app?.default_results_view ?? "");
+  const { query, facet, view, display } = state;
+  const requestedPage = state.page;
+  // List / Network, in the topbar beside the search box (as Resume / Graph on a profile).
+  const topbarEnd = displaySwitch(config, state);
+
+  if (view === "connections") {
+    const dispose = await mountConnections(host, { config, state });
+    return { showTopbarSearch: true, query, topbarEnd, teardown: dispose || undefined };
+  }
+
+  if (display === "network") {
     const dispose = await mountNetwork(host, { config, query, facet });
-    return { showTopbarSearch: true, query, teardown: dispose || undefined };
+    return { showTopbarSearch: true, query, topbarEnd, teardown: dispose || undefined };
   }
 
   host.innerHTML = `<div class="results"><p class="stats">Searching…</p></div>`;
@@ -265,7 +492,7 @@ export async function mountResults(host, { config, params }) {
     payload = await fetchSearch({ query, facet, page: requestedPage });
   } catch (error) {
     host.innerHTML = `<div class="results">${errorHtml(error)}</div>`;
-    return { showTopbarSearch: true, query };
+    return { showTopbarSearch: true, query, topbarEnd };
   }
 
   const tokens = payload.tokens || [];
@@ -277,18 +504,20 @@ export async function mountResults(host, { config, params }) {
 
   host.innerHTML = `
     <div class="results">
-      ${tabsHtml(config, { query, facet: payload.facet, view })}
-      <p class="stats">${statsText(payload)}${
-        query ? ` for “${escapeHtml(query)}”` : ""
-      }${payload.facet ? ` in ${escapeHtml(payload.facet)}` : ""}</p>
+      ${resultsHeaderHtml(
+        config,
+        { query, facet: payload.facet, view, display },
+        `${statsText(payload)}${query ? ` for “${escapeHtml(query)}”` : ""}${
+          payload.facet ? ` in ${escapeHtml(payload.facet)}` : ""
+        }`,
+      )}
       ${noticeHtml}
-      ${bodyHtml(config, results, tokens, query)}
+      ${bodyHtml(config, results, tokens, query, payload.facet, display)}
       ${pagerHtml(config, payload, query, view)}
     </div>`;
-  const tabs = host.querySelector(".tabs");
-  if (tabs) overflowTabs(tabs);
+  wireResultsHeader(host);
   // Not awaited: the list is already on screen.
-  if (results.length) prefetchNetwork(host, query, payload.facet);
+  if (results.length) prefetchNetwork(topbarEnd, query, payload.facet);
 
-  return { showTopbarSearch: true, query };
+  return { showTopbarSearch: true, query, topbarEnd };
 }
