@@ -29,8 +29,8 @@ from naas_abi_core.services.iam.modules import subject_token
 from naas_abi_core.services.iam.tests.authorization_contract import contract_iam
 from naas_abi_core.services.iam.tests.iam_harness import IAMHarness, statement
 
-PEOPLE_JOBS = "abi:-:-:discovery:job/acme/people/*"
-LEGACY_JOBS = "abi:-:-:discovery:job/acme/legacy/*"
+PEOPLE_JOBS = "abi:discovery:job/acme/people/*"
+LEGACY_JOBS = "abi:discovery:job/acme/legacy/*"
 
 
 def _world():
@@ -147,7 +147,7 @@ def test_a_user_who_may_start_only_workflows_gets_a_delegation_never_none():
         statement(
             "Allow",
             ["discovery:TriggerJob"],
-            ["abi:-:-:discovery:workflow/acme/people/*"],
+            ["abi:discovery:workflow/acme/people/*"],
         ),
     )
     token = _delegation(iam, _for(member, _api(api)))
@@ -164,12 +164,8 @@ def test_a_deny_on_a_workflow_s_job_name_refuses_it_wherever_it_is_decided():
     member = h.user("member")
     h.grant(
         member.id,
-        statement(
-            "Allow", ["discovery:TriggerJob"], ["abi:-:-:discovery:workflow/acme/*"]
-        ),
-        statement(
-            "Deny", ["discovery:TriggerJob"], ["abi:-:-:discovery:job/acme/*/purge"]
-        ),
+        statement("Allow", ["discovery:TriggerJob"], ["abi:discovery:workflow/acme/*"]),
+        statement("Deny", ["discovery:TriggerJob"], ["abi:discovery:job/acme/*/purge"]),
     )
     context = _for(member, _api(api))
     with use_call_context(context):

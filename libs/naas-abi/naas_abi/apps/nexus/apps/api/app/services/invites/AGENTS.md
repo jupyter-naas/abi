@@ -5,9 +5,13 @@
 Admins give access to people who do not exist yet. An invitation to an
 email, through one identity provider, does three things:
 
-1. **IAM keeps the roles** as pending grants (`builtin.<role>` at `abi:<org>:-` for the
-   org's own role, `abi:<org>:<workspace>` for a workspace's) that attach to whoever first
-   signs in through that provider with the email verified (core's `services/iam/AGENTS.md`).
+1. **IAM keeps the roles** as pending grants (`builtin.<role>` at the organization's container,
+   `abi:nexus:organization/<org>`, for the org's own role, at the workspace's,
+   `…/nexus:workspace/<workspace>`, for a workspace's) that attach to whoever first
+   signs in through that provider with the email verified (core's `services/iam/AGENTS.md`),
+   and the **policies the invitation carries** (`policy_ids`: customer policies, `pol_…`)
+   beside them, at its workspace, else its organization. No role brings a feature, so this
+   is how a newcomer gets a workspace's "Features of member".
 2. **The provider makes the person exist**: the engine's provisioning port (`builtin`,
    `zitadel`, `keycloak`; `none` makes nobody, the provider manages its people).
 3. **Nexus records the invitation** (`invitations` table: `pending`, `accepted`,
@@ -24,7 +28,7 @@ IdP group bindings are the same idea for a whole group of a provider: the member
 |---|---|
 | `port.py` | Records (`Invitation`, `ProviderChoice`, `Directory`), `InvitationPersistencePort`, `DirectoryGateway` (providers, provisioning), `GrantsGateway` (IAM), `InvitationMailer` |
 | `service.py` | `InvitationService`: `choose` a provider, `invite`, `resend`, `revoke`, `claim`, group bindings |
-| `names.py` | Scopes of orgs and workspaces (`_none` for a workspace with no org) |
+| `names.py` | Scopes of orgs and workspaces: their container names (`services/iam/names.py`; a workspace with no org at the platform, `abi:nexus:workspace/<ws>`) |
 | `invitation_email.py` | The invitation mail's text |
 | `views.py` | The answers of the routes (no service behind them, so the org and workspace routers can import them) |
 | `runtime.py` | `RUNTIME`: builds the service from the engine's, `claimer` (the sign-in hook), `get_invitation_service` (the route dependency); tests `configure` another |
@@ -37,10 +41,15 @@ IdP group bindings are the same idea for a whole group of a provider: the member
 ## Routes
 
 - `POST /api/organizations/{org}/members/invite` and
-  `POST /api/workspaces/{ws}/members/invite` (optional `provider`). For an email with no
+  `POST /api/workspaces/{ws}/members/invite` (optional `provider`, optional `policy_ids`: at most
+  20 customer policies, attached at the invite's workspace, else the organization; a `builtin.*`
+  one is a 400, the role is chosen as the role). For an email with no
   Nexus account they answer `{"status": "invited", "invitation", "provider", "user_created",
   "sign_in_email_sent", "renewed"}`; someone who already has an account is added directly and
-  mailed a notice with a sign-in link (`sign_in_email_sent`); with no provider configured an invite of
+  mailed a notice with a sign-in link (`sign_in_email_sent`); the policies are attached to them as the
+  inviting person **before** the membership is made (`InvitationService.attach_policies`), so a refused one
+  (400 not a customer policy, 403 not held, 404 not one they may see) leaves no membership behind, and a
+  refused membership takes back what was attached (`detach_policies`); with no provider configured an invite of
   someone with no account answers 400: Nexus has no login of its own to fall back to.
 - `GET /api/invitations/providers` → `{enabled, default_provider, providers:[{name,
   display_name, provisioning, managed_in_provider}]}`; `managed_in_provider` is
@@ -80,8 +89,15 @@ IdP group bindings are the same idea for a whole group of a provider: the member
   invitation, renewing it, or rolling a failed one back withdraws only grants that no other pending
   invitation of that person lists, and a failed call takes back only the grants it made
   (`GrantMade.created`). The invitation row and the grants are written together or not at all.
-- Re-inviting the same email at the same place renews the invitation (roles may change; the
-  grants it no longer needs are withdrawn).
+- Re-inviting the same email at the same place renews the invitation (roles and policies may
+  change; the grants it no longer needs are withdrawn). A policy it carries already at a scope of its
+  own (an organization's "Features of <role>" the move of the role features carried org-wide, for an
+  invitation pending then) keeps that grant where it is (`_kept_carried`).
+- **Policies are checked like roles.** Each carried policy is a pending grant written as `api` on behalf
+  of the inviting person: IAM refuses one they may not attach at the scope or whose grants they do not
+  hold (`GrantNotHeldError`, a 403 naming it). The invitation stores them (`invitations.policy_ids`,
+  `migrations/0065_invitation_policies.sql`); the web's invite forms offer what the inviter may attach
+  there (`attachable-policies`).
 
 ## Decisions
 

@@ -9,6 +9,7 @@ from naas_abi_core.engine.call_context import (
     vouched_by_first_party,
 )
 from naas_abi_core.services.iam.guard import PLACEMENT_WRITER, ServiceGuard
+from naas_abi_core.services.iam.listing import ResourceLister, named_lister
 from naas_abi_core.services.ServiceBase import ServiceBase
 from naas_abi_core.services.source_control.iam_catalog import CATALOG
 from naas_abi_core.services.source_control.ontologies.modules.SourceControlEventOntology import (
@@ -212,20 +213,20 @@ class SourceControlService(ServiceBase):
     def ensure_repo(
         self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
     ) -> Repo:
-        """Create the repository, placed in the call's target workspace.
+        """Create the repository, placed in the container of the call.
 
         Re-ensuring a repository that exists is not a create: it needs
         ``EnsureRepo`` on the repository as placed. One with no placement
-        predates IAM: it is recorded on the platform, so no workspace claims it.
+        predates IAM: it is recorded on the platform, so no container claims it.
         """
         repo_id = self._new_repo_id(owner, name)
         iam = self._guard.iam
         if iam is not None and self._exists(repo_id):
             # Not a create: an existing repository is ensured where it is
-            # placed, whatever the call's target workspace.
+            # placed, whatever the container of the call.
             canonical = self._guard.canonical_id("repo", repo_key(repo_id))
             if iam.placement_of("source_control", canonical) is None:
-                # It predates IAM: the platform's, so no workspace claims it.
+                # It predates IAM: the platform's, so no container claims it.
                 with as_service_account(PLACEMENT_WRITER):
                     iam.put_placement("source_control", canonical)
                     iam.put_placement("source_control", f"{canonical}/*")
@@ -245,7 +246,7 @@ class SourceControlService(ServiceBase):
     def create_repo(
         self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
     ) -> Repo:
-        """Create a new repository, placed in the call's target workspace.
+        """Create a new repository, placed in the container of the call.
 
         Unlike ``ensure_repo``, it never hands back a repository that exists:
         one with that id in any letter case raises ``RepoExistsError``, and
@@ -277,6 +278,19 @@ class SourceControlService(ServiceBase):
         except RepoNotFoundError:
             return False
         return True
+
+    def iam_listers(self) -> dict[tuple[str, str], ResourceLister]:
+        """What IAM lists of this service for the policy builder: its repositories.
+        Read unchecked: IAM filters it as the caller (``list_resources``)."""
+        return {
+            (CATALOG.service, "repo"): named_lister(
+                lambda query: self._adapter.list_repos(),
+                lambda repo: self._guard.name(
+                    "repo", repo_key(f"{repo.owner}/{repo.name}")
+                ),
+                lambda repo: f"{repo.owner}/{repo.name}",
+            )
+        }
 
     def list_repos(self) -> list[Repo]:
         return self._guard.filter(

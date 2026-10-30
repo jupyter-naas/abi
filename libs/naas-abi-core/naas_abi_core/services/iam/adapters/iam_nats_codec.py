@@ -6,19 +6,22 @@ Shared by the NATS primary and the NATS client, so neither imports the other.
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
 from naas_abi_core.engine.nats_auth import InvalidServiceTokenError
 from naas_abi_core.services.iam.catalog import (
+    ENGINE,
     ActionCatalog,
     ActionSpec,
     CatalogError,
+    PlatformAccess,
     ResourceType,
 )
 from naas_abi_core.services.iam.IAMPorts import (
     Attachment,
+    BoundingStatement,
+    ContainerRecord,
     DecidingStatement,
     Decision,
     Explanation,
@@ -38,9 +41,8 @@ from naas_abi_core.services.iam.IAMPorts import (
     Policy,
     PrincipalRecord,
     RevisionConflictError,
-    ScopeRecord,
-    ScopeSet,
 )
+from naas_abi_core.services.iam.listing import ListedResource, ResourcePage
 from naas_abi_core.services.iam.names import PLATFORM_SCOPE
 from naas_abi_core.services.iam.policy import PolicyDocument
 from naas_abi_proto.iam.v1 import iam_pb2 as pb
@@ -57,6 +59,7 @@ OPERATIONS = {
     "filter": "Filter",
     "explain": "Explain",
     "grantable": "Grantable",
+    "list_resources": "ListResources",
     "ensure_user": "EnsureUser",
     "create_service_account": "CreateServiceAccount",
     "get_principal": "GetPrincipal",
@@ -77,8 +80,10 @@ OPERATIONS = {
     "create_policy": "CreatePolicy",
     "get_policy": "GetPolicy",
     "list_policies": "ListPolicies",
+    "attachable_policies": "AttachablePolicies",
     "update_policy": "UpdatePolicy",
     "delete_policy": "DeletePolicy",
+    "list_sub_policies": "ListSubPolicies",
     "attach_policy": "AttachPolicy",
     "detach_policy": "DetachPolicy",
     "list_attachments": "ListAttachments",
@@ -92,12 +97,9 @@ OPERATIONS = {
     "put_placement": "PutPlacement",
     "delete_placement": "DeletePlacement",
     "list_placements": "ListPlacements",
-    "put_scope": "PutScope",
-    "delete_scope": "DeleteScope",
-    "get_set": "GetSet",
-    "effective_set": "EffectiveSet",
-    "list_sets": "ListSets",
-    "put_set": "PutSet",
+    "register_container": "RegisterContainer",
+    "delete_container": "DeleteContainer",
+    "get_container": "GetContainer",
     "register_catalog": "RegisterCatalog",
     "token": "Token",
     "jwks": "Jwks",
@@ -207,7 +209,6 @@ def principal_to_pb(record: PrincipalRecord) -> pb.Principal:
         email=record.email,
         email_verified=record.email_verified,
         display_name=record.display_name,
-        org=record.org,
         owner_id=record.owner_id,
         owner_scope=record.owner_scope,
     )
@@ -226,7 +227,6 @@ def principal_from_pb(message: pb.Principal) -> PrincipalRecord:
         email=_optional(message, "email"),
         email_verified=message.email_verified,
         display_name=_optional(message, "display_name"),
-        org=_optional(message, "org"),
         owner_id=_optional(message, "owner_id"),
         created_at=_datetime(message, "created_at"),
         updated_at=_datetime(message, "updated_at"),
@@ -243,6 +243,7 @@ def policy_to_pb(policy: Policy) -> pb.Policy:
         managed=policy.managed,
         revision=policy.revision,
         owner_scope=policy.owner_scope,
+        parent_id=policy.parent_id or "",
     )
     return _stamped(message, created_at=policy.created_at, updated_at=policy.updated_at)
 
@@ -258,6 +259,7 @@ def policy_from_pb(message: pb.Policy) -> Policy:
         created_at=_datetime(message, "created_at"),
         updated_at=_datetime(message, "updated_at"),
         owner_scope=message.owner_scope or PLATFORM_SCOPE,
+        parent_id=message.parent_id or None,
     )
 
 
@@ -343,49 +345,29 @@ def placement_to_pb(placement: Placement) -> pb.Placement:
     return pb.Placement(
         service=placement.service,
         id_key=placement.id_key,
-        org=placement.org,
-        workspace=placement.workspace,
+        container=placement.container,
     )
 
 
 def placement_from_pb(message: pb.Placement) -> Placement:
     return Placement(
-        message.service, message.id_key, message.org or "-", message.workspace or "-"
+        message.service, message.id_key, message.container or PLATFORM_SCOPE
     )
 
 
-def scope_to_pb(scope: ScopeRecord) -> pb.Scope:
-    return pb.Scope(org=scope.org, workspace=scope.workspace)
-
-
-def scope_from_pb(message: pb.Scope) -> ScopeRecord:
-    return ScopeRecord(message.org, message.workspace or "-")
-
-
-def set_items_to_pb(items: Sequence[str] | None) -> pb.SetItems | None:
-    """A part of a set: no message is everything, an empty list nothing."""
-    return pb.SetItems(items=list(items)) if items is not None else None
-
-
-def set_items_from_pb(message: Any, field: str) -> tuple[str, ...] | None:
-    return tuple(getattr(message, field).items) if message.HasField(field) else None
-
-
-def scope_set_to_pb(scope_set: ScopeSet) -> pb.ScopeSet:
-    return pb.ScopeSet(
-        org=scope_set.org,
-        workspace=scope_set.workspace,
-        modules=set_items_to_pb(scope_set.modules),
-        features=set_items_to_pb(scope_set.features),
+def container_to_pb(record: ContainerRecord) -> pb.Container:
+    return pb.Container(
+        service=record.service,
+        type=record.type,
+        id=record.id,
+        parent=record.parent,
+        name=record.name,
     )
 
 
-def scope_set_from_pb(message: pb.ScopeSet) -> ScopeSet:
-    return ScopeSet(
-        message.org,
-        message.workspace or "-",
-        set_items_from_pb(message, "modules"),
-        set_items_from_pb(message, "features"),
+def container_from_pb(message: pb.Container) -> ContainerRecord:
+    return ContainerRecord(
+        message.service, message.type, message.id, message.parent or PLATFORM_SCOPE
     )
 
 
@@ -399,9 +381,13 @@ def catalog_to_pb(catalog: ActionCatalog) -> pb.ActionCatalog:
                 id=t.id,
                 placement=t.placement,
                 container=t.container,
+                id_prefix=t.id_prefix,
                 personal=t.personal,
                 description=t.description,
                 module_scope=t.module_scope,
+                policy_only=t.policy_only,
+                platform_companions=t.platform_companions,
+                parents=list(t.parents),
             )
             for t in catalog.resource_types
         ],
@@ -413,10 +399,23 @@ def catalog_to_pb(catalog: ActionCatalog) -> pb.ActionCatalog:
                 creates=a.creates,
                 subjects=list(a.subjects),
                 description=a.description,
+                owner_only=a.owner_only,
+                deletes=a.deletes,
             )
             for a in catalog.actions
         ],
         module=catalog.module,
+        format=catalog.format,
+        publisher="" if catalog.publisher == ENGINE else catalog.publisher,
+        platform_access=[
+            pb.PlatformAccess(
+                resources=list(row.resources),
+                viewer=list(row.viewer),
+                member=list(row.member),
+                self=list(row.self_),
+            )
+            for row in catalog.platform_access
+        ],
     )
 
 
@@ -429,10 +428,16 @@ def catalog_from_pb(message: pb.ActionCatalog) -> ActionCatalog:
                 name=t.name,
                 id=t.id or "opaque",  # type: ignore[arg-type]
                 placement=t.placement or "placed",  # type: ignore[arg-type]
+                # A writer before container paths sent id_prefix in field 4 (then
+                # "container"), read as id_prefix; it never sets field 9.
                 container=t.container,
+                id_prefix=t.id_prefix,
                 personal=t.personal,
                 description=t.description,
                 module_scope=t.module_scope,
+                policy_only=t.policy_only,
+                platform_companions=t.platform_companions,
+                parents=tuple(t.parents),
             )
             for t in message.resource_types
         ),
@@ -444,10 +449,23 @@ def catalog_from_pb(message: pb.ActionCatalog) -> ActionCatalog:
                 creates=a.creates,
                 subjects=tuple(a.subjects),
                 description=a.description,
+                owner_only=a.owner_only,
+                deletes=a.deletes,
             )
             for a in message.actions
         ),
         module=message.module,
+        format=message.format or 1,
+        publisher=message.publisher or ENGINE,
+        platform_access=tuple(
+            PlatformAccess(
+                resources=tuple(row.resources),
+                viewer=tuple(row.viewer),
+                member=tuple(row.member),
+                self_=tuple(row.self),
+            )
+            for row in message.platform_access
+        ),
     )
 
 
@@ -484,6 +502,15 @@ def explanation_to_pb(explanation: Explanation) -> pb.Explanation:
                 attachment_id=statement.attachment_id,
                 scope=statement.scope,
                 via_group=statement.via_group,
+                bounded_by=[
+                    pb.BoundingStatement(
+                        policy_id=b.policy_id,
+                        statement_index=b.statement_index,
+                        sid=b.sid,
+                    )
+                    for b in statement.bounded_by
+                ],
+                through=list(statement.through),
             )
         )
     return message
@@ -503,6 +530,11 @@ def explanation_from_pb(message: pb.Explanation) -> Explanation:
             attachment_id=_optional(s, "attachment_id"),
             scope=_optional(s, "scope"),
             via_group=_optional(s, "via_group"),
+            bounded_by=tuple(
+                BoundingStatement(b.policy_id, b.statement_index, _optional(b, "sid"))
+                for b in s.bounded_by
+            ),
+            through=tuple(s.through),
         )
     return Explanation(
         allowed=message.allowed,
@@ -597,6 +629,38 @@ def grantable_to_pb(catalog: GrantableCatalog) -> pb.GrantableCatalog:
             )
             for a in catalog.actions
         ],
+    )
+
+
+def listed_to_pb(item: ListedResource) -> pb.ListedResource:
+    return pb.ListedResource(
+        name=item.name, id=item.id, label=item.label, description=item.description
+    )
+
+
+def listed_from_pb(message: Any) -> ListedResource:
+    """A ``ListedResource`` of IAM's proto, or of discovery's (a module's lister)."""
+    return ListedResource(
+        name=message.name,
+        id=message.id,
+        label=message.label,
+        description=message.description,
+    )
+
+
+def resource_page_to_pb(page: ResourcePage) -> pb.ListResourcesResponse:
+    return pb.ListResourcesResponse(
+        items=[listed_to_pb(item) for item in page.items],
+        next_cursor=page.next_cursor or "",
+        listed=page.listed,
+    )
+
+
+def resource_page_from_pb(message: pb.ListResourcesResponse) -> ResourcePage:
+    return ResourcePage(
+        items=tuple(listed_from_pb(item) for item in message.items),
+        next_cursor=message.next_cursor or None,
+        listed=message.listed,
     )
 
 

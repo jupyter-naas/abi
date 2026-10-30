@@ -7,7 +7,6 @@ import pytest_asyncio
 from naas_abi.apps.nexus.apps.api.app.core.workspaces_import import (
     import_workspaces,
     load_entries,
-    record_feature_sets,
 )
 from naas_abi.apps.nexus.apps.api.app.models import (
     OrganizationModel,
@@ -15,7 +14,7 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     WorkspaceModel,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
-from naas_abi_core.engine.call_context import as_service_account
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
@@ -132,9 +131,8 @@ async def test_fills_a_slug_named_workspace_with_the_snapshot_values(db) -> None
         "Key Accounts",
         "src/external/axa/assets/public/axa-logo.png",
     )
-    # Maps turned off: the workspace's feature set is every other feature.
-    org_id, features = report.feature_sets[axa.id]
-    assert org_id == "org-1" and "maps" not in features and "graph" in features
+    # Its feature overrides grant and narrow nothing: the import records no set.
+    assert not hasattr(report, "feature_sets")
 
 
 @pytest.mark.asyncio
@@ -155,8 +153,8 @@ async def test_creates_missing_workspaces_and_reports_unknown_organizations(db) 
         "lead",
         "#3b82f6",
     )
-    # The owner role is IAM's attachment, at the new workspace's scope.
-    assert await MEMBERSHIPS.role_at("lead", f"abi:org-1:{created.id}") == "owner"
+    # The owner role is IAM's attachment, at the new workspace's container.
+    assert await MEMBERSHIPS.role_at("lead", workspace_container("org-1", created.id)) == "owner"
     assert await _ws(db, "orphan") is None
     # EDF has nothing empty to fill: only AXA counts as updated.
     assert (report.workspaces_created, report.workspaces_updated) == (1, 1)
@@ -169,8 +167,11 @@ async def test_a_dry_run_leaves_iam_alone(db) -> None:
     created = (await _ws(db, "new-one")).id
     await db.rollback()
 
-    assert report.created_ids == [created] and "ws-axa" in report.feature_sets
-    assert await MEMBERSHIPS.role_at("lead", f"abi:org-1:{created}") is None
+    assert report.created_ids == [created]
+    assert (
+        await MEMBERSHIPS.role_at("lead", f"abi:nexus:organization/org-1/nexus:workspace/{created}")
+        is None
+    )
 
 
 @pytest.mark.asyncio
@@ -187,26 +188,3 @@ def test_load_entries_reads_the_workspaces_list(tmp_path) -> None:
     path.write_text("workspaces:\n  - slug: axa\n    name: AXA\n")
 
     assert load_entries(path) == [{"slug": "axa", "name": "AXA"}]
-
-
-def test_feature_sets_are_recorded_within_the_orgs_set(iam) -> None:
-    """A platform admin narrowed the org before the import: each workspace's
-    feature set is recorded within it, and every workspace is recorded."""
-    iam.workspace("org-1", "ws-a")
-    iam.workspace("org-1", "ws-b")
-    with as_service_account("engine"):
-        iam.iam.put_set("org-1", modules=["acme.people"], features=["chat", "settings"])
-        iam.iam.put_set("org-1", "ws-b", modules=["agent/acme.people/A"])
-
-    recorded = record_feature_sets(
-        {
-            "ws-a": ("org-1", ["chat", "files", "settings"]),
-            "ws-b": ("org-1", ["files", "settings"]),
-        }
-    )
-
-    assert recorded == ["ws-a", "ws-b"]
-    with as_service_account("engine"):
-        assert iam.iam.get_set("org-1", "ws-a").features == ("chat", "settings")
-        found = iam.iam.get_set("org-1", "ws-b")
-    assert (found.modules, found.features) == (("agent/acme.people/A",), ("settings",))

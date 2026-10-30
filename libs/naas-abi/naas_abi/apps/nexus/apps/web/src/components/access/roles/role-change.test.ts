@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createAccessDirectory, toMembers } from '../access-directory';
 import { PLATFORM_ACCESS_SCOPE, organizationAccessScope, ownedHere, workspaceAccessScope } from '../access-scope';
-import { assignableRoles, changeMemberRole, roleChangeable, roleOfPolicy } from './role-change';
-import { baselineOf, changed, toggled, type RoleFeatures } from './role-features-model';
+import { assignableRoles, changeMemberRole, isRoleCompanion, roleChangeable, roleOfPolicy } from './role-change';
 
 const ok = (body: unknown) => ({ ok: true, status: 200, json: () => Promise.resolve(body) }) as Response;
 
@@ -43,16 +42,24 @@ describe('roles', () => {
     expect(roleOfPolicy('builtin.platform_admin')).toBeNull();
     expect(roleOfPolicy('pol_1')).toBeNull();
   });
+
+  it('keeps the platform companions with a role', () => {
+    expect(isRoleCompanion('builtin.platform.member')).toBe(true);
+    expect(isRoleCompanion('builtin.platform.viewer')).toBe(true);
+    expect(isRoleCompanion('builtin.member')).toBe(false);
+  });
 });
 
 describe('the scope', () => {
   it('names the level the API answers for, and what it owns', () => {
     expect(PLATFORM_ACCESS_SCOPE.value).toBeNull();
-    expect(organizationAccessScope('acme').value).toBe('abi:acme:-');
-    expect(workspaceAccessScope('acme', 'ws-1').value).toBe('abi:acme:ws-1');
+    expect(organizationAccessScope('acme').value).toBe('abi:nexus:organization/acme');
+    expect(workspaceAccessScope('acme', 'ws-1').value).toBe('abi:nexus:organization/acme/nexus:workspace/ws-1');
+    expect(workspaceAccessScope(null, 'ws-1').value).toBe('abi:nexus:workspace/ws-1');
     expect(ownedHere(PLATFORM_ACCESS_SCOPE, undefined)).toBe(true);
-    expect(ownedHere(organizationAccessScope('acme'), 'abi:acme:-')).toBe(true);
-    expect(ownedHere(workspaceAccessScope('acme', 'ws-1'), 'abi:acme:-')).toBe(false);
+    expect(ownedHere(PLATFORM_ACCESS_SCOPE, 'abi:')).toBe(true);
+    expect(ownedHere(organizationAccessScope('acme'), 'abi:nexus:organization/acme')).toBe(true);
+    expect(ownedHere(workspaceAccessScope('acme', 'ws-1'), 'abi:nexus:organization/acme')).toBe(false);
   });
 });
 
@@ -69,24 +76,5 @@ describe('the directory', () => {
     expect(toMembers([{ name: 'no id' }, { user_id: 'u2', role: 'nope' }])).toEqual([
       { userId: 'u2', name: '', email: '', role: null, inherited: false },
     ]);
-  });
-});
-
-describe('the roles’ feature defaults', () => {
-  const view: RoleFeatures = {
-    enabled_features: ['chat', 'files', 'apps'],
-    known_features: [],
-    roles: ['owner', 'admin', 'member', 'viewer'],
-    role_baseline: { owner: ['chat', 'files', 'apps'], admin: ['chat', 'files', 'apps'], member: ['chat'], viewer: [] },
-  };
-
-  it('toggles a role’s feature, never the owner’s', () => {
-    const baseline = baselineOf(view);
-    const order = view.enabled_features;
-    const next = toggled(baseline, 'member', 'files', order);
-    expect(next.member).toEqual(['chat', 'files']);
-    expect(changed(next, baseline)).toBe(true);
-    expect(toggled(baseline, 'owner', 'chat', order)).toBe(baseline);
-    expect(changed(toggled(next, 'member', 'files', order), baseline)).toBe(false);
   });
 });

@@ -66,8 +66,8 @@ from naas_abi_core.services.agent.context import (
     DOCUMENTS_RECURSION_LIMIT,
     SLIDES_RECURSION_LIMIT,
     agent_chat_id,
+    agent_container,
     agent_user_id,
-    agent_workspace_id,
     coder_workspace_base,
     documents_step_limit_message,
     documents_turn_active,
@@ -2489,7 +2489,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         return {
             "user_id": agent_user_id.get(),
             "chat_id": agent_chat_id.get() or self._state.thread_id,
-            "workspace_id": agent_workspace_id.get(),
+            "container": agent_container.get(),
         }
 
     def _publish_agent_event(self, event: Any) -> None:

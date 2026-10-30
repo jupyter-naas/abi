@@ -666,11 +666,11 @@ class AgentHost:
             run.delegation = delegation_context(
                 req.delegated_token, caller, self.session.service_account
             )
-            if run.delegation is not None and req.context.workspace_id:
-                # The workspace of the turn: IAM places what the run does for
+            if run.delegation is not None and req.context.container:
+                # The container of the turn: IAM places what the run does for
                 # the user there (``require_action``), as for any call made in it.
                 run.delegation = replace(
-                    run.delegation, workspace_id=req.context.workspace_id
+                    run.delegation, container=req.context.container
                 )
             run.task = asyncio.create_task(self._execute(name, req, run))
             run.task.add_done_callback(self._observe_task)

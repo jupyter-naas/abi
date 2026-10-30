@@ -4,7 +4,6 @@ import type { ResourcesAnswer, WorkspaceResources } from '@/lib/workspace-resour
 
 const resources = (apps: number): WorkspaceResources => ({
   organization_id: 'org-1',
-  can_edit_set: true,
   features: ['apps', 'settings'],
   modules: [],
   totals: { agents: 0, apps, workflows: 0, pipelines: 0 },
@@ -23,13 +22,13 @@ const appsOf = (store: ReturnType<typeof createWorkspaceResourcesStore>) =>
   store.getState().byWorkspace['ws-1']?.resources?.totals.apps;
 
 describe('workspace resources store', () => {
-  it('keeps a known answer until asked again, then reads the new set', async () => {
+  it('keeps a known answer until asked again, then reads the new answer', async () => {
     const { calls, store } = scripted({ kind: 'ok', resources: resources(0) }, { kind: 'ok', resources: resources(2) });
     await store.getState().load('ws-1');
     await store.getState().load('ws-1');
     expect(calls).toHaveLength(1);
     expect(appsOf(store)).toBe(0);
-    // The settings opened again, or Reload: the set changed on Modules & features.
+    // The settings opened again, or Reload: what the caller may use may have changed.
     await store.getState().load('ws-1', true);
     expect(calls).toHaveLength(2);
     expect(appsOf(store)).toBe(2);

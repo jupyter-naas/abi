@@ -3,10 +3,10 @@ and the module × workspace page.
 
 Each module (an engine module by its configured path, a remote one by its id)
 lists its agents, apps, workflows and pipelines (core ``module_scopes``: the
-``module`` catalog, ``abi:<org>:<ws>:module:<type>/<module>/<name>``) with
+``module`` catalog, ``<container>/module:<type>/<module>/<name>``) with
 their display name, description and icon, and the catalog it declares (its
 own service, resource types and actions). ``resource`` is the pattern a policy
-names, placed at the scope it is attached to (``${scope}``).
+names, written for the container it is attached at (``${scope}/...``).
 
 ``build`` is the pure part; ``gather`` reads the engine, discovery, the jobs
 and IAM, each source on its own: one that fails leaves its part out.
@@ -16,13 +16,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable, Mapping
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
 
+from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam import module_scopes
 from naas_abi_core.services.iam.catalog import ActionCatalog
+from naas_abi_core.services.iam.names import PLATFORM, matches
 
 _log = logging.getLogger(__name__)
 
@@ -72,13 +74,14 @@ def _actions(type_name: str) -> list[str]:
 
 
 def _item_view(item: Exposed) -> dict[str, Any]:
+    # Named at the platform, then written for the container the policy is attached at.
     resource = module_scopes.scope_resource(item.type, item.module, item.name)
     return {
         "name": item.name,
         "display_name": item.display_name or item.name,
         "description": item.description,
         "icon": item.icon,
-        "resource": "${scope}:" + resource.split(":", 3)[3],
+        "resource": "${scope}/" + resource.removeprefix(PLATFORM),
         "actions": _actions(item.type),
     }
 
@@ -91,7 +94,7 @@ def _catalog_view(catalog: ActionCatalog) -> dict[str, Any]:
             {
                 "name": t.name,
                 "description": t.description,
-                "resource": f"${{scope}}:{catalog.service}:{t.name}/*",
+                "resource": f"${{scope}}/{catalog.service}:{t.name}/*",
             }
             for t in catalog.resource_types
         ],
@@ -260,7 +263,13 @@ def declared_catalogs() -> list[ActionCatalog]:
 async def gather(unavailable: set[str] | None = None) -> list[dict[str, Any]]:
     """Every module with its scopes, from every source that answers. The kinds a
     source could not read in full are added to ``unavailable`` (``agents``,
-    ``apps``, ``workflows``, ``pipelines``): what is listed of them may be short."""
+    ``apps``, ``workflows``, ``pipelines``): what is listed of them may be short.
+
+    What exists is read as Nexus's own account (``api``), whoever asks: someone
+    who holds policies but no role (no discovery listing) still sees what they
+    may grant, and a cache of it (``iam/listers.ModuleItems``) is everyone's.
+    Each caller's view is narrowed afterwards (``granted``,
+    ``authz.filter_scopes``)."""
     exposed: list[Exposed] = []
     token = _unavailable.set(unavailable if unavailable is not None else set())
     kinds_of = {
@@ -281,25 +290,96 @@ async def gather(unavailable: set[str] | None = None) -> list[dict[str, Any]]:
 
     # The engine's sources read in process; discovery and the jobs are NATS calls,
     # which run at once.
-    *parts, catalogs = await asyncio.gather(
-        collect("engine agents", engine_agents),
-        collect("remote agents", remote_agents),
-        collect("apps", apps),
-        collect("workflows", workflows),
-        collect("declared catalogs", declared_catalogs),
-    )
-    _unavailable.reset(token)
+    try:
+        with as_service_account("api"):
+            *parts, catalogs = await asyncio.gather(
+                collect("engine agents", engine_agents),
+                collect("remote agents", remote_agents),
+                collect("apps", apps),
+                collect("workflows", workflows),
+                collect("declared catalogs", declared_catalogs),
+            )
+    finally:
+        _unavailable.reset(token)
     for part in parts:
         exposed.extend(part)
     return build(exposed, catalogs, engine_modules())
 
 
-def in_set(modules: Iterable[dict[str, Any]], scope_set: Any) -> list[dict[str, Any]]:
-    """What ``gather`` lists, narrowed to a set (core ``ScopeSet``): each module
-    with something in it and how many agents, apps, workflows and pipelines,
-    for a workspace's settings (what the workspace has)."""
+def exposed_types(modules: Iterable[dict[str, Any]]) -> dict[str, list[str]]:
+    """Each module ``gather`` lists and the ``module`` catalog types it has items
+    of (its agents, apps, workflows, pipelines), for the publishers' view."""
+    return {
+        entry["module"]: [t for t, plural in PLURAL.items() if entry.get(plural)]
+        for entry in modules
+    }
+
+
+def granted(
+    modules: Iterable[dict[str, Any]], grantable: Iterable[Mapping[str, Any]]
+) -> list[dict[str, Any]]:
+    """What ``gather`` lists, narrowed to what the caller may grant at a scope
+    (``grantable``: IAM's, as ``iam_admin`` shows it, patterns written at
+    ``${scope}``): an item one of whose actions the caller may grant on it, a
+    declared catalog's actions they may grant and the types those name. A module
+    left with nothing is left out: nothing lists more to someone who may grant
+    less."""
+    held = {a["action"]: a for c in grantable for a in c.get("actions") or ()}
+
+    def may(action: str, resource: str) -> bool:
+        found = held.get(action)
+        return (
+            found is not None
+            and any(matches(p, resource) for p in found.get("resources") or ())
+            and not any(matches(p, resource) for p in found.get("excluded") or ())
+        )
+
+    narrowed: list[dict[str, Any]] = []
+    for entry in modules:
+        kept: dict[str, Any] = {"module": entry["module"]}
+        for plural in PLURAL.values():
+            kept[plural] = [
+                item
+                for item in entry.get(plural) or ()
+                if any(may(action, item["resource"]) for action in item["actions"])
+            ]
+        declared = entry.get("declared")
+        if declared:
+            actions = [a for a in declared["actions"] if a["action"] in held]
+            named = {t for a in actions for t in a["resource_types"]}
+            declared = (
+                {
+                    **declared,
+                    "actions": actions,
+                    "resource_types": [t for t in declared["resource_types"] if t["name"] in named],
+                }
+                if actions
+                else None
+            )
+        kept["declared"] = declared
+        if declared or any(kept[plural] for plural in PLURAL.values()):
+            narrowed.append(kept)
+    return narrowed
+
+
+def item_scopes(modules: Iterable[dict[str, Any]]) -> list[Any]:
+    """The module scope of every agent, app, workflow and pipeline ``gather``
+    lists, to ask IAM which of them a caller may use."""
     from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
-    from naas_abi.apps.nexus.apps.api.app.services.iam.sets import in_set as scope_in_set
+
+    return [
+        ModuleScope(type_name, entry["module"], item["name"])
+        for entry in modules
+        for type_name, plural in PLURAL.items()
+        for item in entry.get(plural) or ()
+    ]
+
+
+def counted(modules: Iterable[dict[str, Any]], usable: Collection[Any]) -> list[dict[str, Any]]:
+    """What ``gather`` lists, counted within ``usable`` (module scopes): each
+    module with something in it and how many agents, apps, workflows and
+    pipelines, for a workspace's settings (what the caller may use there)."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
 
     found: list[dict[str, Any]] = []
     for entry in modules:
@@ -307,7 +387,7 @@ def in_set(modules: Iterable[dict[str, Any]], scope_set: Any) -> list[dict[str, 
             plural: sum(
                 1
                 for item in entry.get(plural) or ()
-                if scope_in_set(scope_set, ModuleScope(type_name, entry["module"], item["name"]))
+                if ModuleScope(type_name, entry["module"], item["name"]) in usable
             )
             for type_name, plural in PLURAL.items()
         }

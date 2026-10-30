@@ -70,6 +70,8 @@ class Engine(IEngine):
     __credentials: Any = None
     # A client-role engine's IAM facade: it calls with the engine's key alone.
     __client_iam: Any = None
+    # IAM's directory of remote modules' listers (a serving engine on NATS).
+    __remote_listers: Any = None
 
     @property
     def configuration(self) -> EngineConfiguration:
@@ -336,6 +338,7 @@ class Engine(IEngine):
             self.__nats_primary_adapters = primaries
             self.__keep_engine_key()
             self.__attach_builtin_idp()
+            self.__attach_remote_listers()
 
     def __attach_builtin_idp(self) -> None:
         """Point the identity service at the built-in IdP, a module that runs
@@ -394,6 +397,32 @@ class Engine(IEngine):
         # ``idp``: the sign-in the engine reads; ``admin``: provisioning.
         if identity.attach_builtin_idp(app(IDP_APP), app(IDP_ADMIN_APP)):
             warm_up_in_background(identity)
+
+    def __attach_remote_listers(self) -> None:
+        """Let IAM ask remote modules' listers over NATS, as the engine: a type
+        of a module's catalog is listed by a ready instance of that module that
+        names it in discovery (``services/iam/AGENTS.md``, "Publishers and
+        listing")."""
+        from naas_abi_core.engine.nats_auth import host_audience
+        from naas_abi_core.services.iam.adapters.secondary.listers__nats import (
+            NATSModuleListers,
+        )
+        from naas_abi_core.services.iam.IAMService import IAMService
+
+        nats = self.__configuration.nats
+        iam = self.__services.iam if self.__services.iam_available() else None
+        if not isinstance(iam, IAMService) or nats is None or nats.discovery is None:
+            return
+        if self.__remote_listers is not None:
+            self.__remote_listers.close()  # serving again: the previous one goes
+        self.__remote_listers = iam.remote_listers = NATSModuleListers(
+            nats_url=nats.nats_url,
+            project=nats.discovery.project,
+            token=lambda: self.service_credentials("engine").token(),
+            host_token=lambda recipient: self.service_credentials(
+                "engine", audience=host_audience(recipient)
+            ).token(),
+        )
 
     def service_credentials(
         self, name: str = "engine", audience: str | None = None
@@ -703,6 +732,15 @@ class Engine(IEngine):
             )
 
             register_module_catalogs(self.__services.iam, self.__modules.values())
+            # What the policy builder lists: the loaded kernel services' resources
+            # and the engine modules' own types, in process on the serving engine.
+            from naas_abi_core.services.iam.kernel_catalogs import register_listers
+
+            with as_service_account("engine"):
+                register_listers(
+                    self.__services.iam,
+                    [*self.__services.all, *self.__modules.values()],
+                )
 
     def shutdown(self) -> None:
         """Gracefully tear down everything ``load()`` started over NATS.
@@ -755,6 +793,10 @@ class Engine(IEngine):
         if self.__client_iam is not None:
             self.__client_iam.close()
             self.__client_iam = None
+        if self.__remote_listers is not None:
+            # Its connection runs on the NATS runtime: closed before it stops.
+            self.__remote_listers.close()
+            self.__remote_listers = None
         nats_runtime.close()
 
 

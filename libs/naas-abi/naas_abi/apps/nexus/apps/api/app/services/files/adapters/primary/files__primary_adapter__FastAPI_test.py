@@ -7,16 +7,7 @@ from fastapi import HTTPException
 from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary import (
     files__primary_adapter__FastAPI as files_api,
 )
-from naas_abi.apps.nexus.apps.api.app.services.files.testing import (
-    with_personal_drive_rows,
-)
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AuthzDenied
-from naas_abi_core.services.iam import roles
-
-
-@pytest.fixture(autouse=True)
-def _personal_drive_rows(monkeypatch) -> None:
-    monkeypatch.setattr(roles, "PLATFORM_TYPES", with_personal_drive_rows())
 
 
 def test_resolve_workspace_scoped_path_rejects_empty_path_without_workspace() -> None:

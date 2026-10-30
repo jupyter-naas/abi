@@ -17,17 +17,15 @@ import {
   pickSlidesOfficeAgent,
 } from './pick-workspace-default-agent';
 
-const orchestrator = { id: 'default', enabled: true, isDefault: true, name: 'Orchestrator' };
+const orchestrator = { id: 'default', isDefault: true, name: 'Orchestrator' };
 const slides = {
   id: 'slides',
-  enabled: true,
   isDefault: false,
   name: 'Slides',
   class_name: 'naas_abi.agents.SlidesAgent/SlidesAgent',
 };
 const apps = {
   id: 'apps',
-  enabled: true,
   isDefault: false,
   name: 'Apps',
   class_name: 'naas_abi.agents.AppsAgent/AppsAgent',
@@ -35,7 +33,6 @@ const apps = {
 
 const abi = {
   id: 'abi',
-  enabled: true,
   isDefault: false,
   name: 'Abi',
   class_name: 'naas_abi.agents.AbiAgent/AbiAgent',
@@ -169,10 +166,8 @@ describe('pickFeaturePaneAgent', () => {
     expect(pickFeaturePaneAgent([noDefault, abi], 'apps')?.id).toBe('abi');
   });
 
-  it('skips a disabled office agent', () => {
-    expect(pickFeaturePaneAgent([orchestrator, { ...apps, enabled: false }], 'apps')?.id).toBe(
-      'default',
-    );
+  it('falls back to the default when the office agent is not listed', () => {
+    expect(pickFeaturePaneAgent([orchestrator], 'apps')?.id).toBe('default');
   });
 
   it('does not let Apps answer on Slides', () => {

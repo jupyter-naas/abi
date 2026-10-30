@@ -106,9 +106,9 @@ def test_a_module_reaches_its_own_namespace_only(broker, tmp_path):  # noqa: F81
                     "Allow",
                     ["document:*"],
                     [
-                        "abi:-:-:document:namespace/${module.id}",
-                        "abi:-:-:document:collection/${module.id}/*",
-                        "abi:-:-:document:document/${module.id}/*",
+                        "abi:document:namespace/${module.id}",
+                        "abi:document:collection/${module.id}/*",
+                        "abi:document:document/${module.id}/*",
                     ],
                 )
             ),

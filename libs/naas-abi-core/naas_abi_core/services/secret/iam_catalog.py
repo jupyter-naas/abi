@@ -13,6 +13,7 @@ from naas_abi_core.services.iam.catalog import (
     service_action,
 )
 from naas_abi_core.services.iam.IAMPorts import Seal
+from naas_abi_core.services.iam.names import anywhere
 
 SERVICE = "secret"
 SUBJECT_PREFIX = "abi.svc.secret.v1"
@@ -36,6 +37,7 @@ CATALOG = ActionCatalog(
 )
 
 SEALS: tuple[Seal, ...] = (
-    Seal("abi:*:*:secret:secret/idp%2F*", "idp", module_id="idp"),
-    Seal("abi:*:*:secret:secret/iam%2F*", "engine"),
+    # Sealed at any placement: the platform's and every container's.
+    *(Seal(p, "idp", module_id="idp") for p in anywhere("secret:secret/idp%2F*")),
+    *(Seal(p, "engine") for p in anywhere("secret:secret/iam%2F*")),
 )

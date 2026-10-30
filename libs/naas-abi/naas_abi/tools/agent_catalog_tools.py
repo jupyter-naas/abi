@@ -39,15 +39,13 @@ def _registry() -> Any:
 
 
 async def _workspace_agents(db: Any, user_id: str, workspace_id: str) -> Any:
-    """The roster this caller may see, filtered like ``GET /api/agents``.
-
-    Without the filter the catalog would name the office agents of sections
-    this role cannot open, which the HTTP listing hides.
-    """
+    """The agents this caller may use, filtered like ``GET /api/agents``: the
+    office agents of sections the caller can open, the module agents IAM lets
+    them use (``module:UseAgent``)."""
     from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
         caller_feature_flags,
+        caller_usable_agents,
         feature_keys_of,
-        filter_feature_agents,
     )
 
     denied = await require_action(user_id, workspace_id, "ListAgents")
@@ -56,7 +54,7 @@ async def _workspace_agents(db: Any, user_id: str, workspace_id: str) -> Any:
     with bound_session(db):
         agents = await _registry().agents.list_workspace_agents(workspace_id)
     flags = await caller_feature_flags(user_id, workspace_id, feature_keys_of(agents))
-    return filter_feature_agents(agents, flags)
+    return await caller_usable_agents(agents, user_id, workspace_id, flags)
 
 
 def _agent_row(agent: Any) -> dict[str, Any]:
@@ -64,7 +62,6 @@ def _agent_row(agent: Any) -> dict[str, Any]:
         "id": agent.id,
         "name": agent.name,
         "class_name": agent.class_name,
-        "enabled": agent.enabled,
         "is_default": agent.is_default,
         "model": agent.model_id,
         "description": clip(agent.description, 200),
@@ -74,7 +71,7 @@ def _agent_row(agent: Any) -> dict[str, Any]:
 def agent_catalog_tools() -> list[BaseTool]:
     @tool
     def list_workspace_agents(query: str = "") -> Any:
-        """Agents on this workspace's roster: name, class_name, enabled,
+        """Agents of this workspace the user may use: name, class_name,
         is_default (the main chat orchestrator), model."""
         ctx = tool_context()
         if isinstance(ctx, dict):

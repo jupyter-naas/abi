@@ -156,6 +156,15 @@
   color: var(--muted-foreground-hex);
 }
 
+.access-policy-parent {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+  color: var(--muted-foreground-hex);
+}
+
 .access-policy-muted {
   font-size: var(--font-size-sm);
   color: var(--muted-foreground-hex);
@@ -328,4 +337,24 @@
   font-family: var(--font-mono, monospace);
   font-size: var(--font-size-sm);
   color: var(--foreground-hex);
+}
+
+.access-policy-tree {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.access-policy-tree-mark {
+  flex-shrink: 0;
+  color: var(--muted-foreground-hex);
+}
+
+.access-policy-subs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }

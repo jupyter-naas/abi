@@ -244,6 +244,8 @@ class DiscoveryRemoteAppDirectory:
             user_id=request.user_id,
             workspace_id=request.workspace_id,
         )
+        # The container the app is opened in: where its calls are made.
+        message.context.container = request.container
         for name, value in request.headers:
             message.headers.add(name=name, value=value)
         source: BodySource | None = None

@@ -11,6 +11,8 @@ from naas_abi_sdk.services import IAMService
 from naas_abi_sdk.services.errors import GrantNotHeld, NotFound, PermissionDenied
 from naas_abi_sdk.transport import RPCError
 
+WORKSPACE = "abi:nexus:organization/org-1/nexus:workspace/ws-1"
+
 
 def run(coro):
     return asyncio.run(coro)
@@ -22,21 +24,21 @@ def test_decisions_convert_to_python_values():
         decision=pb.Decision(allowed=False, visible=True, reason="implicit_deny")
     )
     client.filter.return_value = pb.FilterResponse(
-        allowed=["abi:-:-:svc:t/a"], prefix_hints=["abi:-:-:svc:t/"]
+        allowed=["abi:svc:t/a"], prefix_hints=["abi:svc:t/"]
     )
     iam = IAMService(client)
 
-    decision = run(iam.authorize("svc:Get", "abi:-:-:svc:t/a"))
+    decision = run(iam.authorize("svc:Get", "abi:svc:t/a"))
     assert (decision.allowed, decision.visible, decision.reason) == (
         False,
         True,
         "implicit_deny",
     )
     request = client.authorize.call_args.args[0]
-    assert (request.action, request.resource) == ("svc:Get", "abi:-:-:svc:t/a")
-    result = run(iam.filter("svc:List", ["abi:-:-:svc:t/a", "abi:-:-:svc:t/b"]))
-    assert result.allowed == ["abi:-:-:svc:t/a"]
-    assert result.prefix_hints == ["abi:-:-:svc:t/"]
+    assert (request.action, request.resource) == ("svc:Get", "abi:svc:t/a")
+    result = run(iam.filter("svc:List", ["abi:svc:t/a", "abi:svc:t/b"]))
+    assert result.allowed == ["abi:svc:t/a"]
+    assert result.prefix_hints == ["abi:svc:t/"]
 
 
 def test_require_tells_denied_from_not_found():
@@ -46,18 +48,18 @@ def test_require_tells_denied_from_not_found():
         decision=pb.Decision(allowed=False, visible=True, reason="implicit_deny")
     )
     with pytest.raises(PermissionDenied):
-        run(iam.require("svc:Put", "abi:-:-:svc:t/a"))
+        run(iam.require("svc:Put", "abi:svc:t/a"))
     client.authorize.return_value = pb.AuthorizeResponse(
         decision=pb.Decision(allowed=False, visible=False, reason="implicit_deny")
     )
     with pytest.raises(NotFound):
-        run(iam.require("svc:Put", "abi:-:-:svc:t/a"))
+        run(iam.require("svc:Put", "abi:svc:t/a"))
     with pytest.raises(KeyError):
-        run(iam.require("svc:Put", "abi:-:-:svc:t/a", not_found=lambda: KeyError("a")))
+        run(iam.require("svc:Put", "abi:svc:t/a", not_found=lambda: KeyError("a")))
     client.authorize.return_value = pb.AuthorizeResponse(
         decision=pb.Decision(allowed=True, visible=True, reason="allow")
     )
-    run(iam.require("svc:Put", "abi:-:-:svc:t/a"))
+    run(iam.require("svc:Put", "abi:svc:t/a"))
 
 
 def test_policies_carry_their_document_as_a_mapping():
@@ -75,6 +77,61 @@ def test_policies_carry_their_document_as_a_mapping():
     assert policy["document"] == document and policy["revision"] == 1
     sent = client.create_policy.call_args.args[0]
     assert json.loads(sent.document_json) == document
+
+
+def test_a_sub_policy_names_its_parent_and_is_listed_under_it():
+    document = {
+        "version": "2026-10-13",
+        "statements": [{"effect": "Allow", "actions": ["*"], "resources": ["*"]}],
+    }
+    record = pb.Policy(
+        id="pol_s",
+        name="sub",
+        document_json=json.dumps(document),
+        revision=1,
+        parent_id="pol_p",
+    )
+    client = AsyncMock()
+    client.create_policy.return_value = pb.CreatePolicyResponse(policy=record)
+    client.update_policy.return_value = pb.UpdatePolicyResponse(
+        policy=pb.Policy(id="pol_s", document_json=json.dumps(document), revision=2)
+    )
+    client.list_sub_policies.return_value = pb.ListSubPoliciesResponse(
+        policies=[record]
+    )
+    iam = IAMService(client)
+    created = run(iam.create_policy("sub", document, parent="pol_p"))
+    assert created["parent_id"] == "pol_p"
+    assert client.create_policy.call_args.args[0].parent == "pol_p"
+    # "" removes the parent; None, the default, keeps it (unset on the wire).
+    freed = run(iam.update_policy("pol_s", expected_revision=1, parent=""))
+    assert freed["parent_id"] is None
+    sent = client.update_policy.call_args.args[0]
+    assert sent.HasField("parent") and sent.parent == ""
+    run(iam.update_policy("pol_s", expected_revision=2, name="kept"))
+    assert not client.update_policy.call_args.args[0].HasField("parent")
+    listed = run(iam.list_sub_policies("pol_p"))
+    assert [p["id"] for p in listed] == ["pol_s"]
+    assert client.list_sub_policies.call_args.args[0].policy_id == "pol_p"
+
+
+def test_what_the_caller_may_attach_at_a_scope():
+    document = {"version": "2026-10-13", "statements": []}
+    client = AsyncMock()
+    client.attachable_policies.return_value = pb.AttachablePoliciesResponse(
+        policies=[pb.Policy(id="pol_a", name="a", document_json=json.dumps(document))],
+        next_after="pol_a",
+    )
+    iam = IAMService(client)
+    page = run(iam.attachable_policies(WORKSPACE, principal_id="usr_1", limit=1))
+    assert [p["id"] for p in page["policies"]] == ["pol_a"]
+    assert page["next_after"] == "pol_a"
+    sent = client.attachable_policies.call_args.args[0]
+    assert (sent.scope, sent.principal_id, sent.limit) == (WORKSPACE, "usr_1", 1)
+    # Unscoped and to anyone: both unset on the wire.
+    run(iam.attachable_policies())
+    sent = client.attachable_policies.call_args.args[0]
+    assert not sent.HasField("scope") and not sent.HasField("principal_id")
 
 
 def test_wire_errors_become_portable_exceptions():
@@ -125,44 +182,84 @@ def test_every_iam_operation_has_a_facade_method():
     assert missing == []
 
 
-def test_listing_mappings_and_placements_and_deleting_scopes():
+def test_listing_mappings_and_placements():
     client = AsyncMock()
     client.list_idp_group_mappings.return_value = pb.ListIdpGroupMappingsResponse(
         mappings=[pb.GroupMapping(provider="acme", claim_value="Sales", group_id="g")]
     )
     client.list_placements.return_value = pb.ListPlacementsResponse(
-        placements=[
-            pb.Placement(service="document", id_key="n/*", org="o", workspace="w")
-        ]
+        placements=[pb.Placement(service="document", id_key="n/*", container=WORKSPACE)]
     )
-    client.delete_scope.return_value = pb.DeleteScopeResponse(deleted=True)
+    client.put_placement.return_value = pb.PutPlacementResponse(
+        placement=pb.Placement(service="document", id_key="n", container=WORKSPACE)
+    )
     iam = IAMService(client)
     assert run(iam.list_idp_group_mappings("g")) == [
         {"provider": "acme", "claim_value": "Sales", "group_id": "g"}
     ]
-    assert run(iam.list_placements("document"))[0]["id_key"] == "n/*"
-    assert run(iam.delete_scope("o", "w")) is True
+    found = run(iam.list_placements("document"))[0]
+    assert (found["id_key"], found["container"]) == ("n/*", WORKSPACE)
+    run(iam.put_placement("document", "n", WORKSPACE))
+    sent = client.put_placement.call_args.args[0].placement
+    assert (sent.service, sent.id_key, sent.container) == ("document", "n", WORKSPACE)
+
+
+def test_registering_reading_and_deleting_containers():
+    client = AsyncMock()
+    client.register_container.return_value = pb.RegisterContainerResponse(
+        container=pb.Container(
+            service="acme_crm",
+            type="project",
+            id="p-9",
+            parent=WORKSPACE,
+            name=f"{WORKSPACE}/acme_crm:project/p-9",
+        )
+    )
+    client.get_container.return_value = pb.GetContainerResponse(
+        name=f"{WORKSPACE}/acme_crm:project/p-9"
+    )
+    client.delete_container.return_value = pb.DeleteContainerResponse(deleted=True)
+    iam = IAMService(client)
+
+    record = run(iam.register_container("acme_crm", "project", "p-9", parent=WORKSPACE))
+    assert record["name"] == f"{WORKSPACE}/acme_crm:project/p-9"
+    sent = client.register_container.call_args.args[0]
+    assert (sent.service, sent.type, sent.id, sent.parent) == (
+        "acme_crm",
+        "project",
+        "p-9",
+        WORKSPACE,
+    )
+    run(iam.register_container("acme_crm", "project", "p-1"))
+    assert client.register_container.call_args.args[0].parent == "abi:"
+    assert run(iam.get_container("acme_crm", "project", "p-9")) == (
+        f"{WORKSPACE}/acme_crm:project/p-9"
+    )
+    client.get_container.return_value = pb.GetContainerResponse(name="")
+    assert run(iam.get_container("acme_crm", "project", "nope")) is None
+    assert run(iam.delete_container("acme_crm", "project", "p-9")) is True
+    assert not hasattr(iam, "put_scope") and not hasattr(iam, "delete_scope")
 
 
 def test_a_declared_action_is_named_by_iam_and_required():
     client = AsyncMock()
     client.authorize_declared.return_value = pb.AuthorizeDeclaredResponse(
         decision=pb.Decision(allowed=False, visible=False, reason="implicit_deny"),
-        resource="abi:org-1:ws-1:acme_reports:report/q3",
+        resource=f"{WORKSPACE}/acme_reports:report/q3",
     )
     iam = IAMService(client)
     decision, resource = run(
         iam.authorize_declared("acme_reports:ExportReport", "report", ["q3"])
     )
     assert not decision.allowed
-    assert resource == "abi:org-1:ws-1:acme_reports:report/q3"
+    assert resource == f"{WORKSPACE}/acme_reports:report/q3"
     request = client.authorize_declared.call_args.args[0]
     assert (request.action, request.resource_type, list(request.parts)) == (
         "acme_reports:ExportReport",
         "report",
         ["q3"],
     )
-    assert request.workspace_id == ""
+    assert request.container == ""
     with pytest.raises(NotFound):
         run(iam.require_declared("acme_reports:ExportReport", "report", ["q3"]))
     client.authorize_declared.return_value = pb.AuthorizeDeclaredResponse(
@@ -170,10 +267,10 @@ def test_a_declared_action_is_named_by_iam_and_required():
     )
     run(
         iam.require_declared(
-            "acme_reports:ExportReport", "report", ["q3"], workspace="ws-1"
+            "acme_reports:ExportReport", "report", ["q3"], container=WORKSPACE
         )
     )
-    assert client.authorize_declared.call_args.args[0].workspace_id == "ws-1"
+    assert client.authorize_declared.call_args.args[0].container == WORKSPACE
 
 
 def test_a_module_requires_its_own_actions_by_name():
@@ -199,7 +296,7 @@ def test_a_module_requires_its_own_actions_by_name():
     module._engine = Engine
     run(module.require_action("ExportReport", "report", "q3"))
     iam.require_declared.assert_awaited_once_with(
-        "acme_reports:ExportReport", "report", ["q3"], workspace=None
+        "acme_reports:ExportReport", "report", ["q3"], container=None
     )
 
 
@@ -212,35 +309,87 @@ def test_what_may_be_granted_and_its_refusal():
                 actions=[
                     pb.GrantableAction(
                         action="triple_store:Query",
-                        resources=["${scope}:triple_store:graph/*"],
-                        excluded=["${scope}:triple_store:graph/hr*"],
+                        resources=["${scope}/triple_store:graph/*"],
+                        excluded=["${scope}/triple_store:graph/hr*"],
                     )
                 ],
             )
         ]
     )
-    found = run(IAMService(client).grantable("abi:org-1:ws-1"))
+    found = run(IAMService(client).grantable(WORKSPACE))
     assert found == [
         {
             "service": "triple_store",
             "actions": [
                 {
                     "action": "triple_store:Query",
-                    "resources": ["${scope}:triple_store:graph/*"],
-                    "excluded": ["${scope}:triple_store:graph/hr*"],
+                    "resources": ["${scope}/triple_store:graph/*"],
+                    "excluded": ["${scope}/triple_store:graph/hr*"],
                 }
             ],
         }
     ]
-    assert client.grantable.call_args.args[0].scope == "abi:org-1:ws-1"
+    assert client.grantable.call_args.args[0].scope == WORKSPACE
+    assert client.grantable.call_args.args[0].parent == ""
+    # Within a parent: what a sub-policy of it may grant.
+    run(IAMService(client).grantable(WORKSPACE, parent="pol_parent"))
+    assert client.grantable.call_args.args[0].parent == "pol_parent"
+    assert client.grantable.call_args.args[0].derive is False
+    # For a new one: refused as create_policy would refuse the parent.
+    run(IAMService(client).grantable(WORKSPACE, parent="pol_parent", derive=True))
+    assert client.grantable.call_args.args[0].derive is True
     client.attach_policy.side_effect = RPCError(
         "GRANT_NOT_HELD", "You cannot grant what you do not hold: ..."
     )
     with pytest.raises(GrantNotHeld) as refused:
-        run(IAMService(client).attach_policy("builtin.owner", "usr_x", "abi:o:w"))
+        run(IAMService(client).attach_policy("builtin.owner", "usr_x", WORKSPACE))
     assert isinstance(refused.value, PermissionDenied)
     assert "do not hold" in str(refused.value)
     # The code is said once.
     assert str(refused.value) == (
         "GRANT_NOT_HELD: You cannot grant what you do not hold: ..."
+    )
+
+
+def test_a_listing_of_what_the_caller_may_list():
+    client = AsyncMock()
+    client.list_resources.return_value = pb.ListResourcesResponse(
+        items=[
+            pb.ListedResource(
+                name=f"{WORKSPACE}/triple_store:graph/g1", id="g1", label="Sales"
+            )
+        ],
+        next_cursor="",
+        listed=True,
+    )
+    found = run(
+        IAMService(client).list_resources(
+            "triple_store", "graph", scope=WORKSPACE, text="sa", limit=10
+        )
+    )
+    assert found == {
+        "items": [
+            {
+                "name": f"{WORKSPACE}/triple_store:graph/g1",
+                "id": "g1",
+                "label": "Sales",
+                "description": "",
+            }
+        ],
+        "next_cursor": None,
+        "listed": True,
+    }
+    request = client.list_resources.call_args.args[0]
+    assert (
+        request.service,
+        request.type,
+        request.scope,
+        request.text,
+        request.limit,
+    ) == (
+        "triple_store",
+        "graph",
+        WORKSPACE,
+        "sa",
+        10,
     )

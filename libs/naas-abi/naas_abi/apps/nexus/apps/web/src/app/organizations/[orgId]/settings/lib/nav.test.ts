@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isOrgAdminRole, orgModulesPath, orgSectionRedirect, orgSettingsNavForRole } from './nav';
+import { isOrgAdminRole, orgSectionRedirect, orgSettingsNavForRole } from './nav';
 import { orgSettingsRedirect } from './redirects';
 
 describe('org settings nav', () => {
@@ -9,7 +9,6 @@ describe('org settings nav', () => {
     expect(orgSettingsNavForRole('member').map((item) => item.slug)).toEqual([
       'general',
       'workspaces',
-      'modules',
     ]);
   });
 
@@ -32,7 +31,6 @@ describe('org settings nav', () => {
       'general',
       'branding',
       'workspaces',
-      'modules',
       'users',
       'roles',
     ]);
@@ -67,13 +65,13 @@ describe('orgSettingsRedirect', () => {
     );
     expect(orgSettingsRedirect('/organizations/org-1/settings/roles')).toBeNull();
     expect(orgSettingsRedirect('/organizations/org-1/settings/users')).toBeNull();
-    expect(orgSettingsRedirect('/organizations/org-1/settings/constructor')).toBeNull();
   });
-});
 
-describe('orgModulesPath', () => {
-  it('opens Modules & features, at a workspace when given', () => {
-    expect(orgModulesPath('org-1')).toBe('/organizations/org-1/settings/modules');
-    expect(orgModulesPath('org-1', 'ws 1')).toBe('/organizations/org-1/settings/modules?workspace=ws%201');
+  it('sends Modules & features, removed with the sets, to Roles & permissions', () => {
+    expect(orgSettingsRedirect('/organizations/org-1/settings/modules')).toBe('/organizations/org-1/settings/roles');
+    expect(orgSettingsRedirect('/organizations/org-1/settings/modules', '?workspace=ws-1')).toBe(
+      '/organizations/org-1/settings/roles?workspace=ws-1'
+    );
+    expect(orgSettingsRedirect('/organizations/org-1/settings/constructor')).toBeNull();
   });
 });

@@ -38,7 +38,8 @@ def test_apps_agent_is_the_only_agent_class_the_loader_sees() -> None:
 
 def test_apps_agent_owns_apps_and_source_tools() -> None:
     names = {tool.name for tool in AppsAgent.get_tools()}
-    assert {"list_workspace_apps", "get_app", "set_app_enabled"} <= names
+    assert {"list_workspace_apps", "get_app"} <= names
+    assert "set_app_enabled" not in names
     assert {"list_nexus_source", "read_nexus_source", "search_nexus_source"} <= names
     source = inspect.getsource(AppsAgent.get_tools)
     assert "nexus_admin_tools" not in source
@@ -119,7 +120,7 @@ def test_new_builds_with_apps_tools(monkeypatch) -> None:
     assert isinstance(agent, AppsAgent)
     assert agent.name == "Apps"
     assert requested == [("abi-model", None)]
-    assert "set_app_enabled" in names
+    assert "get_app" in names
     assert "read_nexus_source" in names
     assert "[TOOLS]" not in agent.configuration.system_prompt
     assert agent._markdown_pretty_display is False
@@ -139,8 +140,8 @@ def test_abi_hands_apps_requests_to_apps() -> None:
         i.intent_value.lower() for i in intents if i.intent_target == "Apps"
     )
 
-    assert "enable an app" in values
-    assert "active une app" in values
+    assert "open an app" in values
+    assert "ouvre une app" in values
     assert "Apps for workspace apps" in AbiAgent.system_prompt
 
 

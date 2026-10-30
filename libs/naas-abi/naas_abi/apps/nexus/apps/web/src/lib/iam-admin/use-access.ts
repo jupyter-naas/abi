@@ -22,8 +22,8 @@ export type IamAccessOptions = {
 
 /**
  * What the caller may do (`GET /api/iam/admin/access`). Without a scope the attachment actions
- * are decided on the platform; with `abi:<org>:<workspace>` (`-` for the org itself) at that
- * scope, so an org admin sees attach and detach on their org.
+ * are decided on the platform; with a container (`abi:nexus:organization/<org>`, a workspace's)
+ * at that scope, so an org admin sees attach and detach on their org.
  */
 export function useIamAccess(scope?: string, api?: IamAdminApi, { skip = false, reload = 0 }: IamAccessOptions = {}): IamAccess {
   const client = useMemo(() => api ?? createIamAdminApi(), [api]);

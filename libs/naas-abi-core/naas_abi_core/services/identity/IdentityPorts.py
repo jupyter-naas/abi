@@ -335,7 +335,7 @@ class IIdentityService(ABC):
     """What callers use: in process, or over NATS (``abi.identity.v1.*``).
 
     Every operation is authorized with the ``identity`` catalog
-    (``iam_catalog.py``) on ``abi:-:-:identity:provider/<name>``.
+    (``iam_catalog.py``) on ``abi:identity:provider/<name>``.
     """
 
     @abstractmethod

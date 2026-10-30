@@ -5,6 +5,7 @@ from naas_abi_core.services.iam.adapters.secondary.IAMStoreSQLite import IAMStor
 from naas_abi_core.services.iam.IAMPorts import new_id
 from naas_abi_core.services.iam.tests.iam__secondary_adapter__generic_test import (
     IAMStoreContract,
+    run_a_container_registered_meanwhile_by_another_process,
     user,
 )
 
@@ -95,3 +96,96 @@ def test_a_version_2_store_upgrades(tmp_path):
             conn.execute(statement.format(schema=""))
 
     check_upgrade_from_2(lambda: IAMStoreSQLite(path), execute)
+
+
+def test_a_version_3_store_upgrades(tmp_path):
+    import sqlite3
+
+    from naas_abi_core.services.iam.tests.iam_store_upgrade import (
+        check_upgrade_from_3,
+    )
+
+    path = str(tmp_path / "iam.sqlite")
+
+    def execute(statement: str) -> None:
+        with sqlite3.connect(path) as conn:
+            conn.execute(statement.format(schema=""))
+
+    check_upgrade_from_3(lambda: IAMStoreSQLite(path), execute)
+
+
+def test_a_version_4_store_upgrades(tmp_path):
+    import sqlite3
+
+    from naas_abi_core.services.iam.tests.iam_store_upgrade import (
+        check_upgrade_from_4,
+    )
+
+    path = str(tmp_path / "iam.sqlite")
+
+    def execute(statement: str) -> None:
+        with sqlite3.connect(path) as conn:
+            conn.execute(statement.format(schema=""))
+
+    check_upgrade_from_4(lambda: IAMStoreSQLite(path), execute)
+
+
+def test_a_version_5_store_upgrades(tmp_path):
+    import sqlite3
+
+    from naas_abi_core.services.iam.tests.iam_store_upgrade import (
+        check_upgrade_from_5,
+    )
+
+    path = str(tmp_path / "iam.sqlite")
+
+    def execute(statement: str) -> None:
+        with sqlite3.connect(path) as conn:
+            conn.execute(statement.format(schema=""))
+
+    check_upgrade_from_5(lambda: IAMStoreSQLite(path), execute)
+
+
+def test_a_catalog_stored_before_the_format_reads_as_format_one(tmp_path):
+    """The previous version stored catalogs without ``format``: read back, their
+    flags are unknown (``ActionCatalog.flags_known``); what this version stores
+    carries it."""
+    import json
+    import sqlite3
+
+    from naas_abi_core.services.iam.adapters.secondary.IAMStoreSQLite import (
+        IAMStoreSQLite,
+    )
+    from naas_abi_core.services.iam.catalog import (
+        CATALOG_FORMAT,
+        ActionCatalog,
+        ActionSpec,
+        ResourceType,
+    )
+
+    path = str(tmp_path / "iam.sqlite")
+    catalog = ActionCatalog(
+        service="nexus",
+        version=6,
+        resource_types=(ResourceType("feature"),),
+        actions=(ActionSpec("UseFeature", "read", ("feature",)),),
+    )
+    IAMStoreSQLite(path).put_catalog(catalog)
+    assert IAMStoreSQLite(path).list_catalogs()[0].format == CATALOG_FORMAT
+    old = json.dumps(catalog.to_dict(), sort_keys=True)  # no "format", as before
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "UPDATE iam_catalogs SET document = ? WHERE service = 'nexus'", (old,)
+        )
+    (found,) = IAMStoreSQLite(path).list_catalogs()
+    assert found.format == 1 and not found.flags_known
+
+
+def test_a_container_registered_meanwhile_by_another_process(tmp_path):
+    path = str(tmp_path / "iam.sqlite")
+    store, other = IAMStoreSQLite(path), IAMStoreSQLite(path)
+    try:
+        run_a_container_registered_meanwhile_by_another_process(store, other)
+    finally:
+        store.close()
+        other.close()

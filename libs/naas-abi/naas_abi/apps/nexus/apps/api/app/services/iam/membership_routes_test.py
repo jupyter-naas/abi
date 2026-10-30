@@ -28,7 +28,7 @@ from naas_abi.apps.nexus.apps.api.app.services.exceptions import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_scope, workspace_scope
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container, workspace_container
 from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.primary import (
     organizations__primary_adapter__FastAPI as organizations_module,
 )
@@ -142,8 +142,8 @@ async def role(user: str, scope: str) -> str | None:
     return await MEMBERSHIPS.role_at(user, scope)
 
 
-WS = workspace_scope("org-1", "ws-1")
-ORG = org_scope("org-1")
+WS = workspace_container("org-1", "ws-1")
+ORG = org_container("org-1")
 
 
 # -- workspaces: who sees and does what ---------------------------------------------------
@@ -229,7 +229,7 @@ async def test_a_workspace_is_created_only_in_an_organization_the_caller_may(api
         assert created["organization_id"] == "org-1"
         assert created["current_user_role"] == "owner"
     # The creator owns it, nobody else holds a role there.
-    scope = workspace_scope("org-1", created["id"])
+    scope = workspace_container("org-1", created["id"])
     assert await role("admin", scope) == "owner"
     assert await role("owner", scope) is None
 
@@ -352,7 +352,7 @@ class _IamRefuses(Exception):
 
 
 def _scope_orgs(team) -> set[str]:
-    return {scope.org for scope in team.iam.store.list_scopes()}
+    return {c.name for c in team.iam.store.list_containers()}
 
 
 @pytest.mark.asyncio
@@ -442,7 +442,6 @@ async def test_a_viewer_changes_nothing_in_an_organization(api) -> None:
         for method, path, body in (
             ("patch", "/api/organizations/org-1", {"name": "x"}),
             ("post", "/api/organizations/org-1/domains", {"domain": "example.org"}),
-            ("put", "/api/organizations/org-1/roles/features", {"role_baseline": {}}),
         ):
             sent = await http.request(method.upper(), path, json=body)
             assert sent.status_code == 403, (method, path, sent.text)
@@ -453,8 +452,9 @@ async def test_a_viewer_changes_nothing_in_an_organization(api) -> None:
 
 @pytest.mark.asyncio
 async def test_an_orgs_own_scope_is_never_a_workspace_of_the_path(api) -> None:
-    """``-`` is how an organization's own scope is written: a path naming it is not
-    the organization's members' workspace, whatever role the org gives."""
+    """``-`` and ``*`` name no workspace (nor the old grammar's ``_none``): a path
+    naming one is not the organization's members' workspace, whatever role the
+    org gives."""
     for user in ("member", "viewer", "admin", "owner", "stranger"):
         async with api(user) as http:
             for path in (
@@ -475,8 +475,9 @@ async def test_an_orgs_own_scope_is_never_a_workspace_of_the_path(api) -> None:
             await http.patch("/api/workspaces/-/members/bob", json={"role": "member"})
         ).status_code in (403, 404)
         assert await role("bob", ORG) is None
-    assert await AUTHZ.org_of("-") is None and await AUTHZ.org_of("*") is None
-    assert await AUTHZ.org_of("ws-1") == "org-1"
+    assert await AUTHZ.container_of("-") is None and await AUTHZ.container_of("*") is None
+    assert await AUTHZ.container_of("_none") is None
+    assert await AUTHZ.container_of("ws-1") == WS
 
 
 # -- grant only what you hold -------------------------------------------------------------
@@ -553,7 +554,7 @@ async def test_assigning_workspaces_is_checked_at_each_workspace(api, team, nexu
         {
             "effect": "Allow",
             "actions": ["nexus:UpdateOrganizationMember"],
-            "resources": ["abi:org-1:-:nexus:member/*"],
+            "resources": [f"{ORG}/nexus:member/*"],
         },
     )
     async with api("viewer") as http:
@@ -567,7 +568,7 @@ async def test_assigning_workspaces_is_checked_at_each_workspace(api, team, nexu
         {
             "effect": "Allow",
             "actions": ["iam:AttachPolicy", "iam:DetachPolicy"],
-            "resources": ["abi:org-1:*:iam:attachment/*"],
+            "resources": [f"{ORG}/iam:attachment/*", f"{ORG}/*/iam:attachment/*"],
         },
     )
     async with api("viewer") as http:

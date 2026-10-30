@@ -14,15 +14,16 @@ signed in; if the audit record cannot be written nothing is started.
 
 ``workspace_router`` (/api/workspaces/{workspace_id}/workflows) is the same for
 any user of the workspace, by module scope (``scopes.py``): the workflows and
-pipelines of its set they may start there, a start, and the runs they started
-there. Its ``/settings`` are the workspace settings page: each workflow and
-pipeline of the set, on or off for everyone in the workspace (admins).
+pipelines they may start there (IAM alone decides: no set, no on/off switch), a
+start, and the runs they started there. Its ``/settings`` are the workspace
+settings page: the workflows and pipelines the caller may run there, those an
+engine module's agents run as tools included.
 """
 
 from __future__ import annotations
 
 from collections.abc import Awaitable
-from typing import Any, Literal, TypeVar
+from typing import Any, TypeVar
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, Response
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
@@ -34,7 +35,6 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.credentials import API_KEY
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
-from naas_abi.apps.nexus.apps.api.app.services.iam import sets as scope_sets
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.adapters.primary.sysadmin__primary_adapter__jobs import (
@@ -51,15 +51,8 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.jobs import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.port import SourceUnavailable
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import AuditUnavailable
-from naas_abi.apps.nexus.apps.api.app.services.workflows.factory import (
-    get_workflow_visibility,
-    get_workflows_service,
-)
-from naas_abi.apps.nexus.apps.api.app.services.workflows.port import (
-    RunOwner,
-    WorkflowSwitch,
-    WorkflowVisibilityPort,
-)
+from naas_abi.apps.nexus.apps.api.app.services.workflows.factory import get_workflows_service
+from naas_abi.apps.nexus.apps.api.app.services.workflows.port import RunOwner
 from naas_abi.apps.nexus.apps.api.app.services.workflows.scopes import (
     runs_action,
     workflow_scope,
@@ -71,7 +64,6 @@ from naas_abi.apps.nexus.apps.api.app.services.workflows.workflows import (
     InvalidIdempotencyKey,
     WorkflowRunView,
 )
-from pydantic import BaseModel, Field
 
 T = TypeVar("T")
 
@@ -227,15 +219,14 @@ async def list_workspace_workflows(
     user: User = Depends(get_current_user_required),
     service: WorkflowsService = Depends(get_workflows_service),
 ) -> Any:
-    """The workflows and pipelines of the workspace's set the caller may start
-    there; one turned off there is left out."""
+    """The workflows and pipelines the caller may start there: IAM's decision
+    (``module:RunWorkflow`` / ``RunPipeline``) alone."""
     found = await _call(service.list())
     usable = await authz.filter_scopes(
         found.workflows,
         user=user,
         workspace=workspace_id,
         scope_of=lambda d: workflow_scope(d.module_id, d.name),
-        within_set=True,
     )
     return {
         "workflows": [
@@ -256,24 +247,23 @@ async def list_workspace_workflows(
 @workspace_router.get("/settings", dependencies=[guard("ListWorkflowSettings", literal="-")])
 async def list_workflow_settings(
     workspace_id: str,
+    user: User = Depends(get_current_user_required),
     service: WorkflowsService = Depends(get_workflows_service),
-    store: WorkflowVisibilityPort = Depends(get_workflow_visibility),
 ) -> Any:
-    """Every workflow and pipeline of the workspace's set (the jobs catalogs', and
-    those an engine module's agents run as tools), on or off there. Who may list
-    and switch them is ``ListWorkflowSettings`` / ``UpdateWorkflow``, never the
-    caller's own right to run each one."""
+    """The workflows and pipelines the caller may run in the workspace (the jobs
+    catalogs', and those an engine module's agents run as tools), as Workspace
+    settings › Workflows lists them. IAM alone decides, as everywhere: there is
+    no on/off switch."""
     from naas_abi.apps.nexus.apps.api.app.services.modules.scopes import (
         workflows as module_workflows,
     )
 
-    found = {(i.type, i.module, i.name): i for i in await module_workflows(service)}
-    listed = await scope_sets.within_set(
-        found.values(), workspace=workspace_id, scope_of=lambda i: _scope(i)
+    listed = await authz.filter_scopes(
+        await module_workflows(service),
+        user=user,
+        workspace=workspace_id,
+        scope_of=_scope,
     )
-    off = {
-        (s.type, s.module_id, s.name) for s in await store.list_for(workspace_id) if not s.enabled
-    }
     return {
         "workflows": [
             {
@@ -282,7 +272,6 @@ async def list_workflow_settings(
                 "name": i.name,
                 "display_name": i.display_name or i.name,
                 "description": i.description,
-                "enabled": (i.type, i.module, i.name) not in off,
             }
             for i in sorted(listed, key=lambda i: (i.module, i.type, i.name.lower()))
         ]
@@ -291,36 +280,6 @@ async def list_workflow_settings(
 
 def _scope(item: Any) -> ModuleScope:
     return ModuleScope(item.type, item.module, item.name)
-
-
-class WorkflowSwitchBody(BaseModel):
-    type: Literal["workflow", "pipeline"]
-    module_id: str = Field(..., min_length=1, max_length=255)
-    name: str = Field(..., min_length=1, max_length=255)
-    enabled: bool
-
-
-@workspace_router.put("/settings", dependencies=[guard("UpdateWorkflow", literal="-")])
-async def put_workflow_setting(
-    workspace_id: str,
-    body: WorkflowSwitchBody,
-    store: WorkflowVisibilityPort = Depends(get_workflow_visibility),
-) -> Any:
-    """Turn a workflow or pipeline on or off for everyone in the workspace. Turning
-    one on needs it in the workspace's set; off, any."""
-    scope = ModuleScope(body.type, body.module_id, body.name)
-    if body.enabled and not await scope_sets.within_set(
-        [scope], workspace=workspace_id, scope_of=lambda s: s
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail=f"This {body.type} is not in the workspace's set: its organization adds "
-            "its module on the Modules & features page",
-        )
-    await store.put(
-        WorkflowSwitch(workspace_id, body.type, body.module_id, body.name, body.enabled)
-    )
-    return {**body.model_dump(), "workspace_id": workspace_id}
 
 
 @workspace_router.post(

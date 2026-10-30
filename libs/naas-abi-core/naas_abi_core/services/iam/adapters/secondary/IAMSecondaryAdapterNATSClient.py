@@ -21,6 +21,7 @@ from naas_abi_core.services.iam.catalog import ActionCatalog
 from naas_abi_core.services.iam.IAMPorts import (
     GRANT_TYPE_TOKEN_EXCHANGE,
     Attachment,
+    ContainerRecord,
     CreatedKey,
     Decision,
     Explanation,
@@ -40,10 +41,10 @@ from naas_abi_core.services.iam.IAMPorts import (
     Policy,
     PrincipalKind,
     PrincipalRecord,
-    ScopeRecord,
-    ScopeSet,
     TokenExchange,
 )
+from naas_abi_core.services.iam.listing import ResourcePage
+from naas_abi_core.services.iam.names import PLATFORM_SCOPE
 from naas_abi_core.services.iam.policy import PolicyDocument
 from naas_abi_proto.iam.v1 import iam_pb2 as pb
 
@@ -83,14 +84,14 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
         resource_type: str,
         parts: Sequence[str],
         *,
-        workspace: str | None = None,
+        container: str | None = None,
     ) -> tuple[Decision, str]:
         response = self._request(
             "authorize_declared",
             action=action,
             resource_type=resource_type,
             parts=list(parts),
-            workspace_id=workspace or "",
+            container=container or "",
         )
         return codec.decision_from_pb(response.decision), response.resource
 
@@ -106,9 +107,37 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
         )
         return codec.explanation_from_pb(response.explanation)
 
-    def grantable(self, scope: str) -> list[GrantableCatalog]:
-        response = self._request("grantable", scope=scope)
+    def grantable(
+        self, scope: str, *, parent: str | None = None, derive: bool = False
+    ) -> list[GrantableCatalog]:
+        # An empty parent is none, as the server reads it.
+        response = self._request(
+            "grantable", scope=scope, parent=parent or "", derive=derive
+        )
         return [codec.grantable_from_pb(c) for c in response.catalogs]
+
+    def list_resources(
+        self,
+        service: str,
+        type: str,
+        *,
+        scope: str = PLATFORM_SCOPE,
+        text: str = "",
+        cursor: str | None = None,
+        limit: int | None = None,
+        module: str = "",
+    ) -> ResourcePage:
+        response = self._request(
+            "list_resources",
+            service=service,
+            type=type,
+            scope=scope,
+            text=text,
+            cursor=cursor or "",
+            limit=limit or 0,
+            module=module,
+        )
+        return codec.resource_page_from_pb(response)
 
     # -- principals ---------------------------------------------------------------------
 
@@ -170,11 +199,9 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
 
     # -- groups -------------------------------------------------------------------------
 
-    def create_group(
-        self, name: str, *, org: str | None = None, scope: str | None = None
-    ) -> PrincipalRecord:
+    def create_group(self, name: str, *, scope: str | None = None) -> PrincipalRecord:
         return codec.principal_from_pb(
-            self._request("create_group", name=name, org=org, scope=scope).group
+            self._request("create_group", name=name, scope=scope).group
         )
 
     def get_group(self, group_id: str) -> PrincipalRecord:
@@ -239,6 +266,7 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
         *,
         description: str = "",
         scope: str | None = None,
+        parent: str | None = None,
     ) -> Policy:
         response = self._request(
             "create_policy",
@@ -246,6 +274,7 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
             document_json=_document_text(document),
             description=description,
             scope=scope,
+            parent=parent,
         )
         return codec.policy_from_pb(response.policy)
 
@@ -263,6 +292,26 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
             response.next_after if response.HasField("next_after") else None,
         )
 
+    def attachable_policies(
+        self,
+        scope: str | None,
+        *,
+        principal_id: str | None = None,
+        limit: int = 100,
+        after: str | None = None,
+    ) -> Page:
+        response = self._request(
+            "attachable_policies",
+            scope=scope,
+            principal_id=principal_id,
+            limit=limit,
+            after=after,
+        )
+        return Page(
+            [codec.policy_from_pb(p) for p in response.policies],
+            response.next_after if response.HasField("next_after") else None,
+        )
+
     def update_policy(
         self,
         policy_id: str,
@@ -271,6 +320,7 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
         document: Any = None,
         name: str | None = None,
         description: str | None = None,
+        parent: str | None = None,
     ) -> Policy:
         response = self._request(
             "update_policy",
@@ -279,8 +329,13 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
             document_json=_document_text(document) if document is not None else None,
             name=name,
             description=description,
+            parent=parent,
         )
         return codec.policy_from_pb(response.policy)
+
+    def list_sub_policies(self, policy_id: str) -> list[Policy]:
+        response = self._request("list_sub_policies", policy_id=policy_id)
+        return [codec.policy_from_pb(p) for p in response.policies]
 
     def delete_policy(self, policy_id: str) -> None:
         self._request("delete_policy", policy_id=policy_id)
@@ -375,11 +430,11 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
     # -- placements, scopes, catalogs -----------------------------------------------------
 
     def put_placement(
-        self, service: str, id_key: str, org: str = "-", workspace: str = "-"
+        self, service: str, id_key: str, container: str = PLATFORM_SCOPE
     ) -> Placement:
         response = self._request(
             "put_placement",
-            placement=codec.placement_to_pb(Placement(service, id_key, org, workspace)),
+            placement=codec.placement_to_pb(Placement(service, id_key, container)),
         )
         return codec.placement_from_pb(response.placement)
 
@@ -396,49 +451,24 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
             "serving engine, never through a NATS facade"
         )
 
-    def put_scope(self, org: str, workspace: str = "-") -> ScopeRecord:
-        response = self._request("put_scope", org=org, workspace=workspace)
-        return codec.scope_from_pb(response.scope)
-
-    def workspace_org(self, workspace: str) -> str | None:
-        raise NotImplementedError(
-            "Scopes are read by the service owning the resource, on the serving "
-            "engine, never through a NATS facade"
-        )
-
-    def delete_scope(self, org: str, workspace: str = "-") -> bool:
-        return self._request("delete_scope", org=org, workspace=workspace).deleted
-
-    def get_set(self, org: str, workspace: str = "-") -> ScopeSet:
-        response = self._request("get_set", org=org, workspace=workspace)
-        return codec.scope_set_from_pb(response.scope_set)
-
-    def effective_set(self, org: str, workspace: str = "-") -> ScopeSet:
-        response = self._request("effective_set", org=org, workspace=workspace)
-        return codec.scope_set_from_pb(response.scope_set)
-
-    def list_sets(self, org: str | None = None) -> list[ScopeSet]:
-        response = self._request("list_sets", org=org)
-        return [codec.scope_set_from_pb(s) for s in response.sets]
-
-    def put_set(
-        self,
-        org: str,
-        workspace: str = "-",
-        *,
-        modules: Iterable[str] | None = None,
-        features: Iterable[str] | None = None,
-    ) -> ScopeSet:
+    def register_container(
+        self, service: str, type: str, id: str, *, parent: str = PLATFORM_SCOPE
+    ) -> ContainerRecord:
         response = self._request(
-            "put_set",
-            org=org,
-            workspace=workspace,
-            modules=codec.set_items_to_pb(None if modules is None else list(modules)),
-            features=codec.set_items_to_pb(
-                None if features is None else list(features)
-            ),
+            "register_container", service=service, type=type, id=id, parent=parent
         )
-        return codec.scope_set_from_pb(response.scope_set)
+        return codec.container_from_pb(response.container)
+
+    def delete_container(self, service: str, type: str, id: str) -> bool:
+        return self._request(
+            "delete_container", service=service, type=type, id=id
+        ).deleted
+
+    def container(self, service: str, type: str, id: str) -> str | None:
+        return (
+            self._request("get_container", service=service, type=type, id=id).name
+            or None
+        )
 
     def register_catalog(self, catalog: Any) -> bool:
         if not isinstance(catalog, ActionCatalog):

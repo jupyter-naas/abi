@@ -57,6 +57,8 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import (
     RemoteAppStreamFailed,
     RemoteAppUnavailable,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+from naas_abi.apps.nexus.apps.api.app.services.iam.runtime import IAMUnavailableError
 from naas_abi_core.apps.api.abi_api_key_auth import (
     APP_HTML_TOKEN_COOKIE,
     extract_abi_api_token,
@@ -225,6 +227,17 @@ def _is_nexus_credential(value: str, presented: tuple[str, ...]) -> bool:
     any token or key the engine issued, whatever else authenticated the
     request."""
     return value in presented or is_abi_api_token_valid(value) or _issued_by_nexus(value)
+
+
+async def _container_of(workspace_id: str) -> str:
+    """The workspace's container, the container the app's calls are made in;
+    empty for none, or while IAM is not there to say."""
+    if not workspace_id:
+        return ""
+    try:
+        return await AUTHZ.container_of(workspace_id) or ""
+    except IAMUnavailableError:
+        return ""
 
 
 def _query(
@@ -524,6 +537,7 @@ async def _forward(
         body=body,
         user_id=user_id,
         workspace_id=workspace_id,
+        container=await _container_of(workspace_id),
         body_stream=rest,
         # The module holds to its own limit too, whatever this says.
         max_body_bytes=limit,

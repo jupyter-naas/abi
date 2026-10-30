@@ -8,9 +8,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AccessView } from '@/lib/iam-admin/types';
 import { mount, type Mounted } from '@/lib/testing/mount';
-import { catalogsView, fakeApi, fakeDirectory, orgScope, wsScope } from './access-fixtures';
+import { fakeApi, fakeDirectory, orgScope, wsScope } from './access-fixtures';
 import { PLATFORM_ACCESS_SCOPE, type AccessScope } from './access-scope';
-import { opensRolesAndPermissions } from './access-sections';
+import { ACCESS_SECTIONS, opensRolesAndPermissions, parseAccessSection } from './access-sections';
 import { RolesAndPermissions } from './roles-and-permissions';
 
 let mounted: Mounted | null = null;
@@ -43,28 +43,27 @@ const PLATFORM_ONLY = [
   'iam:Explain',
   'iam:MapIdpGroup',
   'iam:ListKeys',
-  'iam:GetSet',
-  'iam:PutSet',
   'nexus:ReadSystem',
 ];
-const ROLE_FEATURES = ['nexus:GetRoleFeatures', 'nexus:UpdateRoleFeatures'];
 
 type Level = 'platform' | 'org' | 'ws';
-const levelOf = (scope?: string): Level => (scope === undefined ? 'platform' : scope.endsWith(':-') ? 'org' : 'ws');
+const levelOf = (scope?: string): Level => (scope === undefined ? 'platform' : scope.includes('/nexus:workspace/') ? 'ws' : 'org');
 
 /** What each caller holds, by level, as the API answers `access`. */
 const CALLERS: Record<string, (level: Level) => string[]> = {
   'platform admin': (level) =>
-    level === 'platform' ? [...LEVEL, ...PLATFORM_ONLY] : level === 'org' ? [...LEVEL, ...ROLE_FEATURES] : LEVEL,
-  'organization admin': (level) => (level === 'org' ? [...LEVEL, ...ROLE_FEATURES] : level === 'ws' ? LEVEL : []),
+    level === 'platform' ? [...LEVEL, ...PLATFORM_ONLY] : LEVEL,
+  'organization admin': (level) => (level === 'org' || level === 'ws' ? LEVEL : []),
   'workspace admin': (level) => (level === 'ws' ? LEVEL : []),
   'delegated lister': () => ['iam:ListPolicies'],
+  // May create policies, not list them: builds one from what it holds.
+  'policy builder': () => ['iam:CreatePolicy'],
   viewer: () => [],
   stranger: () => [],
 };
 
 function answer(holds: string[]): AccessView {
-  const all = [...LEVEL, ...PLATFORM_ONLY, ...ROLE_FEATURES];
+  const all = [...LEVEL, ...PLATFORM_ONLY];
   return { actions: Object.fromEntries(all.map((a) => [a, holds.includes(a)])) };
 }
 
@@ -75,20 +74,13 @@ function apiFor(caller: string) {
     attachable: vi.fn().mockResolvedValue({ items: [] }),
     listGroups: vi.fn().mockResolvedValue({ items: [] }),
     listPolicies: vi.fn().mockResolvedValue({ items: [], next_after: null }),
-    catalogs: vi.fn().mockResolvedValue(catalogsView),
-    grantable: vi.fn().mockResolvedValue({ scope: '', catalogs: [] }),
-    moduleScopes: vi.fn().mockResolvedValue({ modules: [] }),
+    publishers: vi.fn().mockResolvedValue({ scope: '', publishers: [] }),
   });
 }
 
-const roleFeatures = {
-  read: vi.fn().mockResolvedValue({ enabled_features: ['chat'], known_features: [], roles: ['owner', 'admin', 'member', 'viewer'], role_baseline: {} }),
-  save: vi.fn(),
-};
-
 async function render(caller: string, scope: AccessScope) {
   const api = apiFor(caller);
-  mounted = await mount(RolesAndPermissions, { scopes: [scope], api, directory: fakeDirectory([]), roleFeatures });
+  mounted = await mount(RolesAndPermissions, { scopes: [scope], api, directory: fakeDirectory([]) });
   await mounted.flush();
   await mounted.flush();
   return api;
@@ -101,23 +93,24 @@ const nothing = () => document.querySelector('[role="status"]')?.textContent;
 
 const SCOPES: [string, AccessScope, string | undefined][] = [
   ['the platform', PLATFORM_ACCESS_SCOPE, undefined],
-  ['an organization', orgScope, 'abi:acme:-'],
-  ['a workspace', wsScope, 'abi:acme:ws-1'],
+  ['an organization', orgScope, 'abi:nexus:organization/acme'],
+  ['a workspace', wsScope, 'abi:nexus:organization/acme/nexus:workspace/ws-1'],
 ];
 
 const EXPECTED: Record<string, Record<string, string[]>> = {
   'platform admin': {
     'the platform': ['people', 'groups', 'policies', 'service-accounts', 'approvals', 'simulator', 'audit'],
-    'an organization': ['people', 'groups', 'policies', 'role-features'],
+    'an organization': ['people', 'groups', 'policies'],
     'a workspace': ['people', 'groups', 'policies'],
   },
   'organization admin': {
     'the platform': [],
-    'an organization': ['people', 'groups', 'policies', 'role-features'],
+    'an organization': ['people', 'groups', 'policies'],
     'a workspace': ['people', 'groups', 'policies'],
   },
   'workspace admin': { 'the platform': [], 'an organization': [], 'a workspace': ['people', 'groups', 'policies'] },
   'delegated lister': { 'the platform': ['policies'], 'an organization': ['policies'], 'a workspace': ['policies'] },
+  'policy builder': { 'the platform': ['policies'], 'an organization': ['policies'], 'a workspace': ['policies'] },
   viewer: { 'the platform': [], 'an organization': [], 'a workspace': [] },
   stranger: { 'the platform': [], 'an organization': [], 'a workspace': [] },
 };
@@ -145,17 +138,22 @@ describe('Roles & permissions, one UI for every level', () => {
         expect(opensRolesAndPermissions(access), `${caller} at ${level}`).toBe(EXPECTED_ANY(caller, level));
       }
     }
-    // An `iam:` action no section lists (the sets page's) opens nothing; an org's role
-    // feature defaults alone open Built-in roles.
-    expect(opensRolesAndPermissions({ actions: { 'iam:GetSet': true } })).toBe(false);
-    expect(opensRolesAndPermissions({ actions: { 'nexus:GetRoleFeatures': true } })).toBe(true);
+    // An `iam:` action no section lists opens nothing.
+    expect(opensRolesAndPermissions({ actions: { 'iam:Unlisted': true } })).toBe(false);
   });
 
   it('gives a delegated lister the policies to read, and no button to change them', async () => {
     const api = await render('delegated lister', wsScope);
-    expect(api.listPolicies).toHaveBeenCalledWith(undefined, 'abi:acme:ws-1');
+    expect(api.listPolicies).toHaveBeenCalledWith(undefined, 'abi:nexus:organization/acme/nexus:workspace/ws-1');
     expect(button('New policy')).toBeUndefined();
-    expect(api.grantable).not.toHaveBeenCalled();
+    expect(api.publishers).not.toHaveBeenCalled();
+  });
+
+  it('lets whoever may only create policies build one, without the list', async () => {
+    const api = await render('policy builder', wsScope);
+    expect(api.listPolicies).not.toHaveBeenCalled();
+    expect(mounted!.host.textContent).toContain('You may create policies here, not list them.');
+    expect(button('New policy')).toBeDefined();
   });
 
   it('lets a workspace admin create groups and policies in their workspace, and nothing of the platform', async () => {
@@ -169,21 +167,24 @@ describe('Roles & permissions, one UI for every level', () => {
     expect(sections()).not.toContain('service-accounts');
   });
 
-  it('opens an organization’s built-in roles to its admin, and switches to one of its workspaces', async () => {
+  it('has no built-in roles section: features come from policies, like agents', () => {
+    expect(ACCESS_SECTIONS.map((s) => s.label)).not.toContain('Built-in roles');
+    // A section that no longer exists opens the first one the caller may.
+    expect(parseAccessSection('gone', answer(LEVEL))).toBe('people');
+  });
+
+  it('opens an organization to its admin, and switches to one of its workspaces', async () => {
     const api = apiFor('organization admin');
-    mounted = await mount(RolesAndPermissions, { scopes: [orgScope, wsScope], api, directory: fakeDirectory([]), roleFeatures });
+    mounted = await mount(RolesAndPermissions, { scopes: [orgScope, wsScope], api, directory: fakeDirectory([]) });
     await mounted.flush();
-    await mounted.click(document.querySelector('[data-section="role-features"]'));
-    await mounted.flush();
-    expect(roleFeatures.read).toHaveBeenCalledWith('acme');
-    expect(document.querySelector('[aria-label="Member can use Chat"]')).not.toBeNull();
+    expect(sections()).toEqual(['people', 'groups', 'policies']);
 
     const picker = document.querySelector('[aria-label="Scope"]') as HTMLSelectElement;
     picker.value = '1';
     picker.dispatchEvent(new Event('change', { bubbles: true }));
     await mounted.flush();
     await mounted.flush();
-    expect(api.access).toHaveBeenLastCalledWith('abi:acme:ws-1');
+    expect(api.access).toHaveBeenLastCalledWith('abi:nexus:organization/acme/nexus:workspace/ws-1');
     expect(sections()).toEqual(['people', 'groups', 'policies']);
   });
 });

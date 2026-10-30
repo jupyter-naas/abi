@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import datetime
-import json
 
 import pytest
 from naas_abi.apps.nexus.apps.api.app.models import (
     AgentConfigModel,
     AppConfigModel,
     OrganizationModel,
-    OrganizationRoleFeaturesModel,
     UserModel,
     WorkspaceModel,
 )
@@ -23,7 +21,6 @@ T1 = datetime.datetime(2026, 5, 2, 9, 30)
 _TABLES = (
     UserModel,
     OrganizationModel,
-    OrganizationRoleFeaturesModel,
     WorkspaceModel,
     AppConfigModel,
     AgentConfigModel,
@@ -61,9 +58,6 @@ async def test_load_snapshot_reads_every_identity_table(tmp_path, nexus_iam) -> 
                 primary_color="#0057B8",
                 created_at=T0,
             ),
-            OrganizationRoleFeaturesModel(
-                organization_id="org-1", role_baseline=json.dumps({"viewer": ["chat"]})
-            ),
             WorkspaceModel(
                 id="ws-1",
                 name="Acme",
@@ -73,16 +67,13 @@ async def test_load_snapshot_reads_every_identity_table(tmp_path, nexus_iam) -> 
                 background_image_url="bg.webp",
                 created_at=T0,
             ),
-            AppConfigModel(
-                id="app-1", workspace_id="ws-1", app_id="external.acme:web", enabled=True
-            ),
+            AppConfigModel(id="app-1", workspace_id="ws-1", app_id="external.acme:web"),
             AgentConfigModel(
                 id="agc-1",
                 workspace_id="ws-1",
                 name="Bob",
                 class_name="BobAgent",
                 module_path="bob",
-                enabled=True,
                 is_default=1,
             ),
         ]
@@ -113,7 +104,6 @@ async def test_load_snapshot_reads_every_identity_table(tmp_path, nexus_iam) -> 
     assert [(m.organization_id, m.user_id, m.role) for m in snapshot.organization_memberships] == [
         ("org-1", "usr-2", "admin")
     ]
-    assert snapshot.organization_role_features == {"org-1": {"viewer": ["chat"]}}
 
     [ws] = snapshot.workspaces
     assert (ws.id, ws.slug, ws.organization_id, ws.owner_id) == ("ws-1", "acme", "org-1", "usr-1")
@@ -121,30 +111,8 @@ async def test_load_snapshot_reads_every_identity_table(tmp_path, nexus_iam) -> 
     assert [(m.workspace_id, m.user_id, m.role) for m in snapshot.memberships] == [
         ("ws-1", "usr-2", "admin")
     ]
-    assert [(a.workspace_id, a.app_id, a.enabled) for a in snapshot.app_configs] == [
-        ("ws-1", "external.acme:web", True)
+    assert [(a.workspace_id, a.app_id) for a in snapshot.app_configs] == [
+        ("ws-1", "external.acme:web")
     ]
     [agent] = snapshot.agent_configs
-    assert (agent.id, agent.class_name, agent.enabled, agent.is_default) == (
-        "agc-1",
-        "BobAgent",
-        True,
-        True,
-    )
-
-
-@pytest.mark.asyncio
-async def test_unparseable_role_features_are_skipped(tmp_path) -> None:
-    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'nexus.db'}")
-    async with engine.begin() as conn:
-        for model in _TABLES:
-            await conn.run_sync(model.__table__.create)
-    session = async_sessionmaker(engine, expire_on_commit=False)()
-    session.add(OrganizationRoleFeaturesModel(organization_id="org-1", role_baseline="{not json"))
-    await session.commit()
-
-    snapshot = await IdentitySourceSecondaryAdapterPostgres(session).load_snapshot()
-    await session.close()
-    await engine.dispose()
-
-    assert snapshot.organization_role_features == {}
+    assert (agent.id, agent.class_name, agent.is_default) == ("agc-1", "BobAgent", True)

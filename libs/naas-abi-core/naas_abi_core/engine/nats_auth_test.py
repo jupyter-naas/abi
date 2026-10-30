@@ -55,7 +55,7 @@ def test_round_trip_keeps_every_claim(key):
         scope=({"effect": "Allow", "actions": ["a:B"], "resources": ["*"]},),
         session="s1",
         since=1_700_000_000,
-        resource="abi:-:-:discovery:module/p/acme.people",
+        resource="abi:discovery:module/p/acme.people",
     )
     verified = verifier_for(key).verify(sign_token(key, original))
     assert verified == original

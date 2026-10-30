@@ -193,7 +193,7 @@ def test_an_identity_that_may_not_evict_gets_a_reason(broker):
         statement(
             "Allow",
             ["discovery:ListModules", "discovery:GetModule"],
-            ["abi:-:-:discovery:module/*"],
+            ["abi:discovery:module/*"],
         ),
     )
     registry = Registry(broker, identity="viewer", iam=iam)

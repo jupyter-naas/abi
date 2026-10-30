@@ -9,7 +9,6 @@ profile of a principal in a list) are the engine's own (``lookup``).
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from typing import Any
 
 from naas_abi_core.services.iam.catalog import CatalogRegistry
@@ -31,38 +30,14 @@ class IamGateway(ABC):
         """The registered action catalogs, to validate documents against."""
 
     @abstractmethod
+    def listable(self, service: str, type: str) -> bool:
+        """Whether IAM lists the existing resources of ``service:type`` (a lister
+        it can ask), rather than offering the type as wildcards only."""
+
+    @abstractmethod
     def principal(self, principal_id: str) -> PrincipalRecord | None:
         """A principal's profile, to name it where the caller already sees its id."""
 
     @abstractmethod
     def policy(self, policy_id: str) -> Policy | None:
         """A policy, to name it where the caller already sees its id."""
-
-    @abstractmethod
-    def policies(self) -> list[Policy]:
-        """Every policy, to offer those a caller may attach (the caller's own right
-        to attach each is checked by IAM, not here)."""
-
-
-@dataclass(frozen=True)
-class ScopeName:
-    id: str
-    name: str
-
-
-@dataclass(frozen=True)
-class OrganizationScopes:
-    """An organization and its workspaces, by id and name, for the sets page."""
-
-    id: str
-    name: str
-    workspaces: tuple[ScopeName, ...] = ()
-
-
-class ScopeDirectory(ABC):
-    """Nexus's organizations and workspaces: what the sets page names. Which of
-    them the caller sees a set of is IAM's (``iam:GetSet``)."""
-
-    @abstractmethod
-    async def organizations(self, org_id: str | None = None) -> list[OrganizationScopes]:
-        """Every organization (or the one named), each with its workspaces, by name."""

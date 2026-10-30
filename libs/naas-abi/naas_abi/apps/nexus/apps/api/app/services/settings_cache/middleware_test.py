@@ -29,9 +29,9 @@ def _build(tmp_path, ttl: datetime.timedelta = datetime.timedelta(hours=24)):
     def update_agent(agent_id: str):
         return {"id": agent_id}
 
-    @app.put("/api/iam/admin/sets/{org}/workspaces/{workspace}")
-    def put_set(org: str, workspace: str):
-        return {"org": org, "workspace": workspace}
+    @app.post("/api/iam/admin/attachments")
+    def attach():
+        return {"attached": True}
 
     @app.get("/api/skills/broken")
     def broken():
@@ -130,13 +130,12 @@ def test_successful_write_invalidates_every_users_cache(tmp_path) -> None:
     assert calls["agents"] == 3
 
 
-def test_a_change_of_a_workspaces_set_invalidates_every_users_cache(tmp_path) -> None:
-    # A narrower set lists less on the settings pages (Apps, Agents): read again.
+def test_a_change_of_policies_invalidates_every_users_cache(tmp_path) -> None:
+    # The settings pages (Apps, Agents) list what a policy lets the caller use:
+    # an attachment made elsewhere is read again.
     client, calls = _build(tmp_path)
     _get(client, "/api/agents/", user="alice")
-    client.put(
-        "/api/iam/admin/sets/org-1/workspaces/ws-1", headers={"Authorization": "Bearer root"}
-    )
+    client.post("/api/iam/admin/attachments", headers={"Authorization": "Bearer root"})
     assert _get(client, "/api/agents/", user="alice").headers[CACHE_HEADER] == "MISS"
     assert calls["agents"] == 2
 

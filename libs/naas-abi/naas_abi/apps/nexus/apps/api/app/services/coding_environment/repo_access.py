@@ -27,6 +27,12 @@ from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.models import CodingEnvironmentModel, WorkspaceModel
 from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS, UnknownUserError
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import SERVICE as NEXUS
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
+    WORKSPACE,
+    workspace_container,
+    workspace_of,
+)
 from naas_abi.apps.nexus.apps.api.app.services.iam.placements import (
     Placement,
     placement_source,
@@ -39,7 +45,7 @@ from naas_abi_core.engine.call_context import (
 )
 from naas_abi_core.services.iam.guard import ServiceGuard
 from naas_abi_core.services.iam.IAMPorts import IIAMService
-from naas_abi_core.services.iam.names import NONE, encode_id, encode_segment
+from naas_abi_core.services.iam.names import NONE, PLATFORM, encode_id, encode_segment
 from naas_abi_core.services.source_control.iam_catalog import CATALOG
 from naas_abi_core.services.source_control.SourceControlPorts import Repo
 from naas_abi_core.services.source_control.SourceControlService import (
@@ -52,7 +58,6 @@ from starlette.concurrency import run_in_threadpool
 
 SERVICE = "source_control"
 ENVIRONMENT_SERVICE = "coding_environment"
-_SCOPE_ID = re.compile(r"^[a-z0-9_-]{1,64}$")
 _REPO_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
@@ -79,11 +84,11 @@ def canonical_repo_id(repo_id: str) -> str:
 
 def belongs_to_workspace(iam: IIAMService, repo_id: str, workspace_id: str) -> bool:
     """Whether ``repo_id`` is this workspace's, or the shared deployment repository."""
-    _, workspace = iam.resolve_placement(SERVICE, canonical_repo_id(repo_id))
-    if workspace == workspace_id:
+    placed = iam.resolve_placement(SERVICE, canonical_repo_id(repo_id))
+    if workspace_of(placed) == workspace_id:
         return True
     return bool(settings.coding_repo_id) and (
-        repo_key(repo_id) == repo_key(settings.coding_repo_id) and workspace == NONE
+        repo_key(repo_id) == repo_key(settings.coding_repo_id) and placed == PLATFORM
     )
 
 
@@ -119,11 +124,11 @@ def authorize_environment(iam: IIAMService | None, environment_id: str, workspac
     if iam is None:
         raise AuthorizationUnavailable("Authorization is unavailable")
     owner = current_call_context().user
-    _, placed = iam.resolve_placement(
+    placed = iam.resolve_placement(
         ENVIRONMENT_SERVICE,
         encode_id([owner.id if owner else NONE, environment_id], "path"),
     )
-    if placed not in (NONE, workspace_id):
+    if placed != PLATFORM and workspace_of(placed) != workspace_id:
         raise EnvironmentNotInWorkspace(environment_id)
 
 
@@ -138,7 +143,7 @@ def ensure_shared_repo(sc: SourceControlService, *, owner: str, name: str) -> Re
     """Ensure the deployment's shared repository: a platform container, so it is
     ensured with no target workspace, whatever the request's workspace."""
     context = current_call_context()
-    with use_call_context(replace(context, workspace_id=None)):
+    with use_call_context(replace(context, container=None)):
         return sc.ensure_repo(owner=owner, name=name)
 
 
@@ -161,16 +166,16 @@ def place_created_repo(
     """
     canonical = canonical_repo_id(f"{repo.owner}/{repo.name}")
     current = iam.placement_of(SERVICE, canonical)
-    if current is not None and current.workspace == workspace_id:
+    if current is not None and workspace_of(current.container) == workspace_id:
         return
-    if current is not None and (
-        current.id_key != canonical or (current.org, current.workspace) != (NONE, NONE)
-    ):
+    if current is not None and (current.id_key != canonical or current.container != PLATFORM):
         raise RepoNameTaken(canonical)
-    org = organization_id if organization_id and _SCOPE_ID.match(organization_id) else NONE
+    container = iam.container(NEXUS, WORKSPACE, workspace_id) or workspace_container(
+        organization_id or None, workspace_id
+    )
     with as_service_account("api"):
-        iam.put_placement(SERVICE, canonical, org, workspace_id)
-        iam.put_placement(SERVICE, f"{canonical}/*", org, workspace_id)
+        iam.put_placement(SERVICE, canonical, container)
+        iam.put_placement(SERVICE, f"{canonical}/*", container)
 
 
 # -- what already exists ---------------------------------------------------------------
@@ -179,7 +184,7 @@ def place_created_repo(
 def _on_platform(iam: IIAMService, service: str, id_key: str) -> bool:
     """Whether nothing places this resource in a workspace yet."""
     current = iam.placement_of(service, id_key)
-    return current is None or (current.org, current.workspace) == (NONE, NONE)
+    return current is None or current.container == PLATFORM
 
 
 def _platform_keys(service: str, keys: list[str]) -> set[str]:

@@ -10,6 +10,8 @@ import pytest
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
 from naas_abi.apps.nexus.apps.api.app.services.coding_environment import agent_credentials
+from naas_abi.apps.nexus.apps.api.app.services.iam.catalog import NEXUS_CATALOG
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from naas_abi.apps.nexus.apps.api.app.services.openai_gateway.adapters.primary import (
     openai_gateway__primary_adapter__FastAPI as gateway,
 )
@@ -33,8 +35,11 @@ def iam():
 @pytest.fixture
 def ada(iam):
     with as_service_account("engine"):
-        iam.put_scope("org-1")
-        iam.put_scope("org-1", "ws-1")
+        iam.register_catalog(NEXUS_CATALOG)
+    with as_service_account("api"):
+        org = iam.register_container("nexus", "organization", "org-1").name
+        iam.register_container("nexus", "workspace", "ws-1", parent=org)
+    with as_service_account("engine"):
         return iam.ensure_user("https://idp.example", "ada")
 
 
@@ -63,11 +68,13 @@ def test_it_is_narrowed_to_the_environments_workspace_and_the_platforms_models(i
     [record] = iam.store.list_keys(ada.id)
     [statement] = record.scope
     assert statement["effect"] == "Allow" and statement["actions"] == ["*"]
-    assert "abi:org-1:ws-1:*" in statement["resources"]
-    assert "abi:-:-:model_registry:*" in statement["resources"]
+    workspace = workspace_container("org-1", "ws-1")
+    assert {workspace, f"{workspace}/*"} <= set(statement["resources"])
+    assert "abi:model_registry:*" in statement["resources"]
     # Nothing of another workspace, and no IAM administration.
-    assert not any(r.startswith("abi:org-1:ws-2") for r in statement["resources"])
-    assert not any(":iam:" in r for r in statement["resources"])
+    other = workspace_container("org-1", "ws-2")
+    assert not any(r.startswith(other) for r in statement["resources"])
+    assert not any("iam:" in r for r in statement["resources"])
 
 
 def test_a_workspace_iam_does_not_know_gets_the_platforms_models_only(iam, ada):
@@ -75,10 +82,7 @@ def test_a_workspace_iam_does_not_know_gets_the_platforms_models_only(iam, ada):
         user_id=ada.id, workspace_id="ws-unknown", sidecar_base=SIDECAR
     )
     [record] = iam.store.list_keys(ada.id)
-    assert record.scope[0]["resources"] == [
-        "abi:-:-:model_registry:*",
-        "abi:-:-:discovery:*",
-    ]
+    assert record.scope[0]["resources"] == ["abi:model_registry:*", "abi:discovery:*"]
 
 
 def test_it_lives_as_long_as_the_configuration_says_and_never_past_a_year(iam, ada, monkeypatch):

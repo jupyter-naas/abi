@@ -136,6 +136,36 @@ export function invitationRoles(invitation: Invitation): string {
   return roles.join(' · ') || '—';
 }
 
+// -- the policies an invitation carries ---------------------------------------------
+
+/**
+ * The policies an invite offers: the customer ones the inviter may attach at its scope, never
+ * a managed `builtin.*` one (the role is picked on its own, and comes with what it needs).
+ */
+export function invitablePolicies<T extends { id: string; managed?: boolean }>(items: T[]): T[] {
+  return items.filter((policy) => !policy.managed && !policy.id.startsWith('builtin.'));
+}
+
+/** The `policy_ids` an invite request names: only when some are picked. */
+export function policyIdsToSend(ids: readonly string[] | undefined): { policy_ids?: string[] } {
+  return ids && ids.length ? { policy_ids: [...ids] } : {};
+}
+
+/** `POST /api/workspaces/{ws}/members/invite`'s body; the policies attach at that workspace. */
+export function workspaceInviteBody(invite: {
+  email: string;
+  role: string;
+  provider?: string;
+  policyIds?: readonly string[];
+}): Record<string, unknown> {
+  return {
+    email: invite.email,
+    role: invite.role,
+    provider: invite.provider,
+    ...policyIdsToSend(invite.policyIds),
+  };
+}
+
 // -- API ----------------------------------------------------------------------------
 
 async function api(url: string, options: RequestInit = {}): Promise<Response> {

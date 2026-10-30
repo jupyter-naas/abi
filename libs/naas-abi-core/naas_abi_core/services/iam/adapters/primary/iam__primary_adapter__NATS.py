@@ -43,6 +43,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     TokenExchange,
 )
 from naas_abi_core.services.iam.IAMService import IAMService
+from naas_abi_core.services.iam.names import PLATFORM_SCOPE
 from naas_abi_proto.common.v1 import common_pb2
 from naas_abi_proto.iam.v1 import iam_pb2 as pb
 
@@ -163,7 +164,7 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
             req.action,
             req.resource_type,
             list(req.parts),
-            workspace=req.workspace_id or None,
+            container=req.container or None,
         )
         return pb.AuthorizeDeclaredResponse(
             decision=codec.decision_to_pb(decision), resource=resource
@@ -183,8 +184,27 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
 
     def _call_grantable(self, req: pb.GrantableRequest) -> pb.GrantableResponse:
         return pb.GrantableResponse(
-            catalogs=[codec.grantable_to_pb(c) for c in self._iam.grantable(req.scope)]
+            catalogs=[
+                codec.grantable_to_pb(c)
+                for c in self._iam.grantable(
+                    req.scope, parent=req.parent or None, derive=req.derive
+                )
+            ]
         )
+
+    def _call_list_resources(
+        self, req: pb.ListResourcesRequest
+    ) -> pb.ListResourcesResponse:
+        page = self._iam.list_resources(
+            req.service,
+            req.type,
+            scope=req.scope or PLATFORM_SCOPE,
+            text=req.text,
+            cursor=req.cursor or None,
+            limit=req.limit or None,
+            module=req.module,
+        )
+        return codec.resource_page_to_pb(page)
 
     # -- principals ---------------------------------------------------------------
 
@@ -245,9 +265,7 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
     # -- groups ---------------------------------------------------------------------
 
     def _call_create_group(self, req: pb.CreateGroupRequest) -> pb.CreateGroupResponse:
-        record = self._iam.create_group(
-            req.name, org=_opt(req, "org"), scope=_opt(req, "scope")
-        )
+        record = self._iam.create_group(req.name, scope=_opt(req, "scope"))
         return pb.CreateGroupResponse(group=codec.principal_to_pb(record))
 
     def _call_get_group(self, req: pb.GetGroupRequest) -> pb.GetGroupResponse:
@@ -316,6 +334,7 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
             req.document_json,
             description=req.description,
             scope=_opt(req, "scope"),
+            parent=_opt(req, "parent"),
         )
         return pb.CreatePolicyResponse(policy=codec.policy_to_pb(policy))
 
@@ -335,6 +354,20 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
             next_after=page.next_after,
         )
 
+    def _call_attachable_policies(
+        self, req: pb.AttachablePoliciesRequest
+    ) -> pb.AttachablePoliciesResponse:
+        page = self._iam.attachable_policies(
+            _opt(req, "scope"),
+            principal_id=_opt(req, "principal_id"),
+            limit=req.limit or 100,
+            after=_opt(req, "after"),
+        )
+        return pb.AttachablePoliciesResponse(
+            policies=[codec.policy_to_pb(p) for p in page.items],
+            next_after=page.next_after,
+        )
+
     def _call_update_policy(
         self, req: pb.UpdatePolicyRequest
     ) -> pb.UpdatePolicyResponse:
@@ -344,6 +377,7 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
             document=_opt(req, "document_json"),
             name=_opt(req, "name"),
             description=_opt(req, "description"),
+            parent=_opt(req, "parent"),
         )
         return pb.UpdatePolicyResponse(policy=codec.policy_to_pb(policy))
 
@@ -352,6 +386,16 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
     ) -> pb.DeletePolicyResponse:
         self._iam.delete_policy(req.policy_id)
         return pb.DeletePolicyResponse()
+
+    def _call_list_sub_policies(
+        self, req: pb.ListSubPoliciesRequest
+    ) -> pb.ListSubPoliciesResponse:
+        return pb.ListSubPoliciesResponse(
+            policies=[
+                codec.policy_to_pb(p)
+                for p in self._iam.list_sub_policies(req.policy_id)
+            ]
+        )
 
     def _call_attach_policy(
         self, req: pb.AttachPolicyRequest
@@ -443,14 +487,14 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
             bindings=[codec.binding_to_pb(b) for b in found]
         )
 
-    # -- placements, scopes, catalogs ------------------------------------------------
+    # -- placements, containers, catalogs --------------------------------------------
 
     def _call_put_placement(
         self, req: pb.PutPlacementRequest
     ) -> pb.PutPlacementResponse:
         wanted = codec.placement_from_pb(req.placement)
         placement = self._iam.put_placement(
-            wanted.service, wanted.id_key, wanted.org, wanted.workspace
+            wanted.service, wanted.id_key, wanted.container
         )
         return pb.PutPlacementResponse(placement=codec.placement_to_pb(placement))
 
@@ -468,36 +512,27 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
             placements=[codec.placement_to_pb(p) for p in found]
         )
 
-    def _call_put_scope(self, req: pb.PutScopeRequest) -> pb.PutScopeResponse:
-        scope = self._iam.put_scope(req.org, req.workspace or "-")
-        return pb.PutScopeResponse(scope=codec.scope_to_pb(scope))
-
-    def _call_delete_scope(self, req: pb.DeleteScopeRequest) -> pb.DeleteScopeResponse:
-        deleted = self._iam.delete_scope(req.org, req.workspace or "-")
-        return pb.DeleteScopeResponse(deleted=deleted)
-
-    def _call_get_set(self, req: pb.GetSetRequest) -> pb.GetSetResponse:
-        found = self._iam.get_set(req.org, req.workspace or "-")
-        return pb.GetSetResponse(scope_set=codec.scope_set_to_pb(found))
-
-    def _call_effective_set(
-        self, req: pb.EffectiveSetRequest
-    ) -> pb.EffectiveSetResponse:
-        found = self._iam.effective_set(req.org, req.workspace or "-")
-        return pb.EffectiveSetResponse(scope_set=codec.scope_set_to_pb(found))
-
-    def _call_list_sets(self, req: pb.ListSetsRequest) -> pb.ListSetsResponse:
-        found = self._iam.list_sets(_opt(req, "org"))
-        return pb.ListSetsResponse(sets=[codec.scope_set_to_pb(s) for s in found])
-
-    def _call_put_set(self, req: pb.PutSetRequest) -> pb.PutSetResponse:
-        recorded = self._iam.put_set(
-            req.org,
-            req.workspace or "-",
-            modules=codec.set_items_from_pb(req, "modules"),
-            features=codec.set_items_from_pb(req, "features"),
+    def _call_register_container(
+        self, req: pb.RegisterContainerRequest
+    ) -> pb.RegisterContainerResponse:
+        record = self._iam.register_container(
+            req.service, req.type, req.id, parent=req.parent or PLATFORM_SCOPE
         )
-        return pb.PutSetResponse(scope_set=codec.scope_set_to_pb(recorded))
+        return pb.RegisterContainerResponse(container=codec.container_to_pb(record))
+
+    def _call_delete_container(
+        self, req: pb.DeleteContainerRequest
+    ) -> pb.DeleteContainerResponse:
+        deleted = self._iam.delete_container(req.service, req.type, req.id)
+        return pb.DeleteContainerResponse(deleted=deleted)
+
+    def _call_get_container(
+        self, req: pb.GetContainerRequest
+    ) -> pb.GetContainerResponse:
+        # Only to a caller allowed an action of its type on it (not found else).
+        return pb.GetContainerResponse(
+            name=self._iam.read_container(req.service, req.type, req.id) or ""
+        )
 
     def _call_register_catalog(
         self, req: pb.RegisterCatalogRequest

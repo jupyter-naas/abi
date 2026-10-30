@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from naas_abi.apps.nexus.apps.api.app.services.iam import placements
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from naas_abi.apps.nexus.apps.api.app.services.iam.placements import Placement
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.names import encode_id
@@ -42,8 +43,9 @@ async def test_a_new_workspace_runs_its_hooks_and_never_the_sources(nexus_iam, r
 
     assert (hooked, scanned, written) == (["ws-2"], [], 1)
     with as_service_account("api"):
-        found = {(p.id_key, p.workspace) for p in nexus_iam.iam.list_placements("object_storage")}
-    assert found == {(f"{encode_id(('workspaces', 'ws-2'), 'path')}/*", "ws-2")}
+        found = {(p.id_key, p.container) for p in nexus_iam.iam.list_placements("object_storage")}
+    key = f"{encode_id(('workspaces', 'ws-2'), 'path')}/*"
+    assert found == {(key, workspace_container("org-1", "ws-2"))}
 
 
 @pytest.mark.asyncio

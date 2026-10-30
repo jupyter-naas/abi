@@ -16,6 +16,7 @@ from pathlib import Path
 from naas_abi_proto.dataset.rows import decode_row, encode_row
 from naas_abi_proto.vector_store.values import decode_object, encode_object
 from naas_abi_sdk import RPCError
+from naas_abi_sdk.call_context import inside
 from naas_abi_sdk.catalog import OPERATIONS
 from naas_abi_sdk.module import (
     BaseModule,
@@ -32,6 +33,8 @@ BUS_TOPICS = ("demo.inbox", "demo.reply", "demo.jobs", "demo.outbox")
 # The identity the demo engine issues the worker's token for (engine_host): a module
 # loads schemas only under module/<its own identity>/.
 TOKEN_IDENTITY = "standalone-demo"
+# A Nexus workspace's container: invitations and bindings name one.
+DEMO_WORKSPACE = "abi:nexus:organization/org-demo/nexus:workspace/ws-demo"
 
 
 class ABIModule(BaseModule):
@@ -52,14 +55,38 @@ class ABIModule(BaseModule):
                 "sid": "DemoKeptMail",
                 "effect": "Allow",
                 "actions": ["email:ListSent", "email:GetSent", "email:DeleteSent"],
-                "resources": ["abi:*:*:email:message/*"],
+                # The platform's and those kept in any container.
+                "resources": ["abi:email:message/*", "abi:*/email:message/*"],
             },
             {
                 "sid": "DemoBus",
                 "effect": "Allow",
                 "actions": ["bus:*"],
-                "resources": [f"abi:-:-:bus:topic/{topic}" for topic in BUS_TOPICS],
+                "resources": [f"abi:bus:topic/{topic}" for topic in BUS_TOPICS],
             },
+        ],
+    }
+    # Actions of its own (service standalone_demo), with a container type: the
+    # module registers a project, makes calls inside it and deletes it.
+    iam_catalog = {
+        "resource_types": [
+            {"name": "project", "container": True},
+            {"name": "note"},
+        ],
+        "actions": [
+            {
+                "name": "CreateProject",
+                "level": "write",
+                "resource_types": ["project"],
+                "creates": True,
+            },
+            {
+                "name": "DeleteProject",
+                "level": "admin",
+                "resource_types": ["project"],
+                "deletes": True,
+            },
+            {"name": "ReadNote", "level": "read", "resource_types": ["note"]},
         ],
     }
 
@@ -747,13 +774,79 @@ class ABIModule(BaseModule):
             nc._error_cb = previous
         return any("ermissions violation" in e for e in errors)
 
+    async def containers(self):
+        """The module registers a container of its own type, finds it, makes a
+        call inside it, and deletes it. A Nexus workspace is not its to make."""
+        project = await self.call(
+            "iam",
+            "register_container",
+            service="standalone_demo",
+            type="project",
+            id="p-1",
+        )
+        name = project.container.name
+        assert name == "abi:standalone_demo:project/p-1", name
+        assert project.container.parent == "abi:"
+        found = await self.call(
+            "iam", "get_container", service="standalone_demo", type="project", id="p-1"
+        )
+        assert found.name == name
+        # Inside it, IAM names what the module declares in the project.
+        with inside(name):
+            note = await self.call(
+                "iam",
+                "authorize_declared",
+                action="standalone_demo:ReadNote",
+                resource_type="note",
+                parts=["n-1"],
+            )
+        assert note.resource == f"{name}/standalone_demo:note/n-1", note.resource
+        assert note.decision.allowed
+        # IAM lists a container type from its registry, as the caller: the
+        # project it holds; a type with no lister is offered as wildcards.
+        projects = await self.call(
+            "iam", "list_resources", service="standalone_demo", type="project"
+        )
+        assert projects.listed and [i.name for i in projects.items] == [name], projects
+        notes = await self.call(
+            "iam", "list_resources", service="standalone_demo", type="note", scope=name
+        )
+        assert not notes.listed and not notes.items, notes
+        try:
+            await self.call(
+                "iam",
+                "register_container",
+                service="nexus",
+                type="workspace",
+                id="ws-demo",
+                parent="abi:nexus:organization/org-demo",
+            )
+        except RPCError as exc:
+            assert exc.code in ("NOT_FOUND", "PERMISSION_DENIED", "INVALID_ARGUMENT"), (
+                exc
+            )
+        else:
+            raise AssertionError("a module registered a Nexus workspace")
+        deleted = await self.call(
+            "iam",
+            "delete_container",
+            service="standalone_demo",
+            type="project",
+            id="p-1",
+        )
+        assert deleted.deleted
+        gone = await self.call(
+            "iam", "get_container", service="standalone_demo", type="project", id="p-1"
+        )
+        assert gone.name == ""
+
     async def iam(self):
         """A module asks IAM about itself; administering IAM is refused to it,
         by the broker for most operations and by IAM for the rest."""
         from naas_abi_proto.iam.v1 import iam_pb2 as pb
 
-        own = "abi:-:-:document:collection/standalone-demo/runs"
-        other = "abi:-:-:document:collection/someone-else/runs"
+        own = "abi:document:collection/standalone-demo/runs"
+        other = "abi:document:collection/someone-else/runs"
         assert (
             await self.call("iam", "authorize", action="document:Find", resource=own)
         ).decision.allowed
@@ -775,9 +868,11 @@ class ABIModule(BaseModule):
             parts=["q3"],
         )
         assert not declared.decision.allowed
-        assert declared.resource == "abi:-:-:demo_research:brief/q3"
-        # What it may grant: what it holds, its own collections among it.
-        grantable = await self.call("iam", "grantable", scope="abi:-:-")
+        assert declared.resource == "abi:demo_research:brief/q3"
+        await self.containers()
+        # What it may grant at the platform: what it holds, its own collections
+        # among it.
+        grantable = await self.call("iam", "grantable", scope="abi:")
         held = {
             r
             for c in grantable.catalogs
@@ -786,7 +881,7 @@ class ABIModule(BaseModule):
             if a.action == "document:Find"
             for r in a.resources
         }
-        assert any(r.startswith("${scope}:document:collection/") for r in held), held
+        assert any(r.startswith("${scope}/document:collection/") for r in held), held
         # The broker offers a module IAM's self-service and read-only questions
         # (token, jwks, manifest, authorize, filter, grantable) and no more: the lists and
         # every change are refused before they reach IAM, whoever's token the
@@ -795,6 +890,7 @@ class ABIModule(BaseModule):
             "list_principals",
             "list_groups",
             "list_policies",
+            "attachable_policies",
             "list_attachments",
             "list_placements",
             "list_keys",
@@ -839,6 +935,10 @@ class ABIModule(BaseModule):
             "get_policy": {"policy_id": "builtin.platform_admin"},
             "update_policy": {"policy_id": "builtin.viewer", "expected_revision": 1},
             "delete_policy": {"policy_id": "builtin.viewer"},
+            # Sub-policies: deriving one from a built-in policy, moving one
+            # under another, and listing those below a policy are an
+            # administrator's; the broker refuses each to a module.
+            "list_sub_policies": {"policy_id": "builtin.viewer"},
             "attach_policy": {
                 "policy_id": "builtin.platform_admin",
                 "principal_id": user,
@@ -849,20 +949,10 @@ class ABIModule(BaseModule):
             },
             "put_placement": {
                 "placement": pb.Placement(
-                    service="document", id_key="standalone-demo", org="-", workspace="-"
+                    service="document", id_key="standalone-demo", container="abi:"
                 )
             },
             "delete_placement": {"service": "document", "id_key": "standalone-demo"},
-            "put_scope": {"org": "org-demo", "workspace": "-"},
-            "delete_scope": {"org": "org-demo", "workspace": "-"},
-            # Sets (what an org or a workspace may use): read by the admins of
-            # that org or workspace, written by the platform admin and an org's
-            # owners and admins. A module holds no iam:GetSet or iam:PutSet, so
-            # the broker refuses each before it reaches IAM.
-            "get_set": {"org": "org-demo", "workspace": "ws-demo"},
-            "effective_set": {"org": "org-demo", "workspace": "ws-demo"},
-            "list_sets": {"org": "org-demo"},
-            "put_set": {"org": "org-demo", "workspace": "-"},
             "register_catalog": {
                 "catalog": pb.ActionCatalog(
                     service="standalone_demo",
@@ -897,7 +987,7 @@ class ABIModule(BaseModule):
                     "provider": "acme",
                     "email": "bob@example.com",
                     "policy_id": "builtin.member",
-                    "scope": "abi:org-demo:ws-demo",
+                    "scope": DEMO_WORKSPACE,
                 },
                 "list_pending_grants": {"provider": "acme"},
                 "revoke_pending_grant": {"grant_id": "pgr_" + "0" * 26},
@@ -906,13 +996,13 @@ class ABIModule(BaseModule):
                     "provider": "acme",
                     "claim_value": "Sales",
                     "policy_id": "builtin.member",
-                    "scope": "abi:org-demo:ws-demo",
+                    "scope": DEMO_WORKSPACE,
                 },
                 "unbind_idp_group": {
                     "provider": "acme",
                     "claim_value": "Sales",
                     "policy_id": "builtin.member",
-                    "scope": "abi:org-demo:ws-demo",
+                    "scope": DEMO_WORKSPACE,
                 },
                 "list_idp_bindings": {"provider": "acme"},
                 "get_manifest": {"principal_id": user},

@@ -85,13 +85,13 @@ class TestSecretAuthorization(DataServiceContract):
             adapter.close()
 
     def granted_resources(self):
-        return ["abi:-:-:secret:secret/shared%2F*"]
+        return ["abi:secret:secret/shared%2F*"]
 
     def denied_resources(self):
-        return ["abi:-:-:secret:secret/private%2F*"]
+        return ["abi:secret:secret/private%2F*"]
 
     def read_only_resources(self):
-        return ["abi:-:-:secret:secret/frozen%2F*"]
+        return ["abi:secret:secret/frozen%2F*"]
 
     def outcome_of(self, exc):
         return "invalid" if isinstance(exc, InvalidSecretKey) else None

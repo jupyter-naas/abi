@@ -39,13 +39,13 @@ export default function SettingsLayout({
     () => Promise.all([fetchWorkspaces(), reloadWorkspaceResources(workspaceId)]),
     [fetchWorkspaces, workspaceId]
   );
-  // A page of something outside the workspace's set has nothing to manage here.
-  // Read again each time the settings open: a set changed on Modules & features shows.
+  // A page of something the caller may not use here has nothing to manage.
+  // Read again each time the settings open: a module or a policy changed since shows.
   const { resources } = useWorkspaceResources(workspaceId, { refresh: true });
   const item = settingsItemFor(pathname ?? '');
   const outsideSet = Boolean(item && resources && !settingsItemShown(item, resources));
   const page = outsideSet && item && resources ? (
-    <NotInWorkspace label={item.label} resources={resources} workspaceId={workspaceId ?? ''} />
+    <NotInWorkspace label={item.label} />
   ) : (
     children
   );

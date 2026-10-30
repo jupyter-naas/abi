@@ -41,12 +41,14 @@ message Principal {
   optional string email = 8;
   bool email_verified = 9;
   optional string display_name = 10;
-  optional string org = 11;
+  // Before container paths: a group's org.
+  reserved 11;
+  reserved "org";
   optional string owner_id = 12;
   google.protobuf.Timestamp created_at = 13;
   google.protobuf.Timestamp updated_at = 14;
-  // Groups: the scope that owns them and names them, abi:-:- (the platform),
-  // abi:<org>:- or abi:<org>:<ws>. Empty from an older engine: the platform.
+  // Groups: the container that owns them and names them, or abi: (the
+  // platform). Empty: the platform.
   string owner_scope = 15;
 }
 
@@ -60,16 +62,19 @@ message Policy {
   int32 revision = 6;
   google.protobuf.Timestamp created_at = 7;
   google.protobuf.Timestamp updated_at = 8;
-  // The scope that owns the policy and names it, abi:-:- (the platform),
-  // abi:<org>:- or abi:<org>:<ws>. Empty from an older engine: the platform.
+  // The container that owns the policy and names it, or abi: (the platform).
+  // Empty: the platform.
   string owner_scope = 9;
+  // The policy this one is a sub-policy of; empty: none.
+  string parent_id = 10;
 }
 
 message Attachment {
   string id = 1;
   string policy_id = 2;
   string principal_id = 3;
-  // abi:<org>:<ws>, abi:<org>:-, abi:<org>:* or abi:-:-; absent for none.
+  // A container's name, below one (<container>/*) or abi: (the platform);
+  // absent for none.
   optional string scope = 4;
   google.protobuf.Timestamp created_at = 5;
 }
@@ -103,33 +108,25 @@ message GroupMapping {
   string group_id = 3;
 }
 
-// (service, id_key) -> (org, workspace); id_key is exact or ends with "*".
+// (service, id_key) -> container; id_key is exact or ends with "*".
 message Placement {
   string service = 1;
   string id_key = 2;
-  string org = 3;
-  string workspace = 4;
+  // Before container paths: the org and the workspace.
+  reserved 3, 4;
+  reserved "org", "workspace";
+  // A container's name, abi: for the platform.
+  string container = 5;
 }
 
-message Scope {
-  string org = 1;
-  // "-" for the org itself.
-  string workspace = 2;
-}
-
-// Items of one part of a set. A part with no list is everything (nothing
-// recorded); an empty list is nothing.
-message SetItems {
-  repeated string items = 1;
-}
-
-// What an org (workspace "-") or a workspace may use: module items
-// (<module>, <type>/<module>/<name>, <service>:<Action>) and Nexus features.
-message ScopeSet {
-  string org = 1;
-  string workspace = 2;
-  SetItems modules = 3;
-  SetItems features = 4;
+// A registered container: its type, its id (unique within its type) and the
+// container it sits in (abi: for the platform). name is its path.
+message Container {
+  string service = 1;
+  string type = 2;
+  string id = 3;
+  string parent = 4;
+  string name = 5;
 }
 
 // The catalog format of a service's actions (services/iam/AGENTS.md).
@@ -139,12 +136,24 @@ message ResourceType {
   string id = 2;
   // placed | platform
   string placement = 3;
-  bool container = 4;
+  // Its id is the prefix of its children's ids (a document namespace). Called
+  // container before container paths: the field number is that one's.
+  bool id_prefix = 4;
   bool personal = 5;
   string description = 6;
   // A module scope: what a module exposes, never reached by the viewer and
   // member roles (services/iam/module_scopes.py).
   bool module_scope = 7;
+  // Reached through a policy only: no built-in role holds it.
+  bool policy_only = 8;
+  // A container: a step of the names of what it holds (services/iam/AGENTS.md,
+  // "Containers").
+  bool container = 9;
+  // A container type at which a role brings the platform companions.
+  bool platform_companions = 10;
+  // A container type: the containers it may sit in, <service>:<type> each, "-"
+  // for the platform; empty: any.
+  repeated string parents = 11;
 }
 
 message ActionSpec {
@@ -155,6 +164,20 @@ message ActionSpec {
   bool creates = 4;
   repeated string subjects = 5;
   string description = 6;
+  // An admin action no role below owner holds.
+  bool owner_only = 7;
+  // Deleting a container of its type.
+  bool deletes = 8;
+}
+
+// Platform-level resources of a first-party catalog that the roles' platform
+// companions reach (services/iam/roles.py): <type>/<id> patterns, and the
+// actions each column holds on them.
+message PlatformAccess {
+  repeated string resources = 1;
+  repeated string viewer = 2;
+  repeated string member = 3;
+  repeated string self = 4;
 }
 
 message ActionCatalog {
@@ -164,6 +187,13 @@ message ActionCatalog {
   repeated ActionSpec actions = 4;
   // The module that declared this catalog; empty for a kernel service's.
   string module = 5;
+  repeated PlatformAccess platform_access = 6;
+  // The catalog format (services/iam/catalog.py CATALOG_FORMAT); 0 or 1: written
+  // before the flags existed, so a first-party catalog holds nothing for roles.
+  int32 format = 7;
+  // Who publishes it (services/iam/AGENTS.md, "Publishers and listing"):
+  // empty is the engine, "naas_abi" Nexus's; a module's catalog is its module's.
+  string publisher = 8;
 }
 
 // reason: allow | explicit_deny | implicit_deny | suspended | sealed.
@@ -174,7 +204,17 @@ message Decision {
   string reason = 3;
 }
 
+// The statement of a parent that allowed what a sub-policy's Allow did.
+message BoundingStatement {
+  string policy_id = 1;
+  int32 statement_index = 2;
+  optional string sid = 3;
+}
+
 // side: actor | user | token.
+// bounded_by: for an Allow of a sub-policy, the statement of each policy of its
+// chain that allowed it too, nearest first. through: for a parent's statement
+// reached through a sub-policy, the sub-policies, the attached one first.
 message DecidingStatement {
   string side = 1;
   string principal_id = 2;
@@ -185,6 +225,8 @@ message DecidingStatement {
   optional string attachment_id = 7;
   optional string scope = 8;
   optional string via_group = 9;
+  repeated BoundingStatement bounded_by = 10;
+  repeated string through = 11;
 }
 
 message Explanation {
@@ -250,13 +292,16 @@ message AuthorizeResponse {
 
 // A decision on an action a module declares (services/iam/module_scopes.py):
 // IAM names the resource, <type>/<parts> of the action's catalog, in
-// workspace_id or else the call's workspace, platform-level without one.
+// container or else the container of the call, platform-level without one.
 message AuthorizeDeclaredRequest {
   abi.common.v1.CallContext context = 1;
   string action = 2;
   string resource_type = 3;
   repeated string parts = 4;
-  string workspace_id = 5;
+  // Before container paths: a workspace id.
+  reserved 5;
+  reserved "workspace_id";
+  string container = 6;
 }
 message AuthorizeDeclaredResponse {
   abi.common.v1.CallError error = 1;
@@ -288,7 +333,7 @@ message ExplainResponse {
 }
 
 // What the caller may grant at a scope: per catalog, the actions they hold
-// there and the resource patterns (${scope}:...) they hold them on, minus
+// there and the resource patterns (${scope}/...) they hold them on, minus
 // their Denies. About the caller, so it needs no iam: action.
 message GrantableAction {
   string action = 1;
@@ -303,10 +348,49 @@ message GrantableCatalog {
 message GrantableRequest {
   abi.common.v1.CallContext context = 1;
   string scope = 2;
+  // What a sub-policy of this policy may grant: within its chain. Empty: none.
+  string parent = 3;
+  // For a new sub-policy: refused as create_policy would refuse the parent.
+  bool derive = 4;
 }
 message GrantableResponse {
   abi.common.v1.CallError error = 1;
   repeated GrantableCatalog catalogs = 2;
+}
+
+// The existing resources of a type that the caller may list, in a container
+// (services/iam/AGENTS.md, "Publishers and listing"). About the caller, so it
+// needs no iam: action.
+message ListedResource {
+  // The canonical name.
+  string name = 1;
+  // The decoded id within its type.
+  string id = 2;
+  string label = 3;
+  string description = 4;
+}
+message ListResourcesRequest {
+  abi.common.v1.CallContext context = 1;
+  string service = 2;
+  string type = 3;
+  // A container, below one (<container>/*) or abi: (the platform, the default).
+  string scope = 4;
+  // Kept: the resources whose id or label contains it, case folded.
+  string text = 5;
+  // The last name of the previous page; empty: the first page.
+  string cursor = 6;
+  // At most this many; 0: the default (50); at most 200.
+  uint32 limit = 7;
+  // The module catalog's: that module's items only.
+  string module = 8;
+}
+message ListResourcesResponse {
+  abi.common.v1.CallError error = 1;
+  repeated ListedResource items = 2;
+  // Empty at the end.
+  string next_cursor = 3;
+  // False: the type has no lister, or its lister failed: offered as wildcards.
+  bool listed = 4;
 }
 
 // -- principals ------------------------------------------------------------------
@@ -388,9 +472,10 @@ message DeletePrincipalResponse {
 message CreateGroupRequest {
   abi.common.v1.CallContext context = 1;
   string name = 2;
-  // Alone: the group belongs to the org, abi:<org>:-.
-  optional string org = 3;
-  // The owner: abi:-:- (the default), abi:<org>:- or abi:<org>:<ws>.
+  // Before container paths: an org.
+  reserved 3;
+  reserved "org";
+  // The owner: abi: (the platform, the default) or a container's name.
   optional string scope = 4;
 }
 message CreateGroupResponse {
@@ -411,8 +496,8 @@ message ListGroupsRequest {
   abi.common.v1.CallContext context = 1;
   int32 limit = 2;
   optional string after = 3;
-  // The groups this scope owns (and, at a workspace, its org's the caller
-  // attaches to there); absent: every group the caller may list.
+  // The groups this container owns (and those of the containers above it the
+  // caller attaches to there); absent: every group the caller may list.
   optional string scope = 4;
 }
 message ListGroupsResponse {
@@ -497,8 +582,10 @@ message CreatePolicyRequest {
   // A policy document as JSON (or YAML) text.
   string document_json = 3;
   string description = 4;
-  // The owner: abi:-:- (the default), abi:<org>:- or abi:<org>:<ws>.
+  // The owner: abi: (the platform, the default) or a container's name.
   optional string scope = 5;
+  // The policy it is a sub-policy of; absent: none.
+  optional string parent = 6;
 }
 message CreatePolicyResponse {
   abi.common.v1.CallError error = 1;
@@ -528,6 +615,24 @@ message ListPoliciesResponse {
   optional string next_after = 3;
 }
 
+// The policies the caller may attach at a scope: those owned there or above it,
+// written for it, that the caller may attach there and may know of (listed at
+// their owner, or attached at the scope or above).
+message AttachablePoliciesRequest {
+  abi.common.v1.CallContext context = 1;
+  // Absent: unscoped.
+  optional string scope = 2;
+  // Absent: to anyone.
+  optional string principal_id = 3;
+  int32 limit = 4;
+  optional string after = 5;
+}
+message AttachablePoliciesResponse {
+  abi.common.v1.CallError error = 1;
+  repeated Policy policies = 2;
+  optional string next_after = 3;
+}
+
 message UpdatePolicyRequest {
   abi.common.v1.CallContext context = 1;
   string policy_id = 2;
@@ -535,6 +640,8 @@ message UpdatePolicyRequest {
   optional string document_json = 4;
   optional string name = 5;
   optional string description = 6;
+  // Absent keeps the parent, "" removes it, an id sets it.
+  optional string parent = 7;
 }
 message UpdatePolicyResponse {
   abi.common.v1.CallError error = 1;
@@ -547,6 +654,16 @@ message DeletePolicyRequest {
 }
 message DeletePolicyResponse {
   abi.common.v1.CallError error = 1;
+}
+
+// The direct sub-policies of a policy the caller may list.
+message ListSubPoliciesRequest {
+  abi.common.v1.CallContext context = 1;
+  string policy_id = 2;
+}
+message ListSubPoliciesResponse {
+  abi.common.v1.CallError error = 1;
+  repeated Policy policies = 2;
 }
 
 message AttachPolicyRequest {
@@ -611,69 +728,44 @@ message ListPlacementsResponse {
   repeated Placement placements = 2;
 }
 
-message PutScopeRequest {
+// -- containers (services/iam/AGENTS.md, "Containers") ----------------------
+
+// A create on the container's name as placed: the type's create action there.
+message RegisterContainerRequest {
   abi.common.v1.CallContext context = 1;
-  string org = 2;
-  string workspace = 3;
+  string service = 2;
+  string type = 3;
+  string id = 4;
+  // abi: (the platform, the default) or a registered container's name.
+  string parent = 5;
 }
-message PutScopeResponse {
+message RegisterContainerResponse {
   abi.common.v1.CallError error = 1;
-  Scope scope = 2;
+  Container container = 2;
 }
 
-message DeleteScopeRequest {
+// The type's delete action on the container's name; what it owns goes with it.
+message DeleteContainerRequest {
   abi.common.v1.CallContext context = 1;
-  string org = 2;
-  string workspace = 3;
+  string service = 2;
+  string type = 3;
+  string id = 4;
 }
-message DeleteScopeResponse {
+message DeleteContainerResponse {
   abi.common.v1.CallError error = 1;
   bool deleted = 2;
 }
 
-// Sets: GetSet on the set at its own scope; PutSet on abi:%2A:%2A:iam:set/<org>
-// for an org's, abi:<org>:%2A:iam:set/<ws> for a workspace's. A workspace's
-// set wider than its org's is INVALID_ARGUMENT, the message naming the extras.
-message GetSetRequest {
+// A registered container's name (its path), empty for an unknown one.
+message GetContainerRequest {
   abi.common.v1.CallContext context = 1;
-  string org = 2;
-  string workspace = 3;
+  string service = 2;
+  string type = 3;
+  string id = 4;
 }
-message GetSetResponse {
+message GetContainerResponse {
   abi.common.v1.CallError error = 1;
-  ScopeSet scope_set = 2;
-}
-
-// A workspace's set within its org's (or an org's own).
-message EffectiveSetRequest {
-  abi.common.v1.CallContext context = 1;
-  string org = 2;
-  string workspace = 3;
-}
-message EffectiveSetResponse {
-  abi.common.v1.CallError error = 1;
-  ScopeSet scope_set = 2;
-}
-
-message ListSetsRequest {
-  abi.common.v1.CallContext context = 1;
-  optional string org = 2;
-}
-message ListSetsResponse {
-  abi.common.v1.CallError error = 1;
-  repeated ScopeSet sets = 2;
-}
-
-message PutSetRequest {
-  abi.common.v1.CallContext context = 1;
-  string org = 2;
-  string workspace = 3;
-  SetItems modules = 4;
-  SetItems features = 5;
-}
-message PutSetResponse {
-  abi.common.v1.CallError error = 1;
-  ScopeSet scope_set = 2;
+  string name = 2;
 }
 
 message RegisterCatalogRequest {

@@ -1,6 +1,6 @@
 """The ``identity`` action catalog: the configured OIDC providers.
 
-A provider is a platform resource, ``abi:-:-:identity:provider/<name>``.
+A provider is a platform resource, ``abi:identity:provider/<name>``.
 ``Authenticate`` creates or refreshes the token's IAM user, as the engine, once
 the caller is allowed it; ``SignIn`` runs the provider side of a relying
 party's sign-in with the provider's client secret, which never leaves the

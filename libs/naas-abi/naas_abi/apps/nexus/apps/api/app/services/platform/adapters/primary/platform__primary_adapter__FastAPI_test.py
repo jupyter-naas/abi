@@ -11,13 +11,9 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
 )
-from naas_abi.apps.nexus.apps.api.app.services.files.testing import (
-    with_personal_drive_rows,
-)
 from naas_abi.apps.nexus.apps.api.app.services.platform.adapters.primary import (
     platform__primary_adapter__FastAPI as platform,
 )
-from naas_abi_core.services.iam import roles
 
 
 class _FakeStorage:
@@ -58,11 +54,6 @@ def _client(storage: _FakeStorage, user: str = "member") -> TestClient:
         id=user, email=f"{user}@example.com", name=user
     )
     return TestClient(app)
-
-
-@pytest.fixture(autouse=True)
-def _personal_drive_rows(monkeypatch) -> None:
-    monkeypatch.setattr(roles, "PLATFORM_TYPES", with_personal_drive_rows())
 
 
 @pytest.fixture

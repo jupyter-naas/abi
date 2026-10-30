@@ -14,9 +14,14 @@ from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import (
 )
 from naas_abi_core.services.iam.IAMPorts import GrantNotHeldError, KeyRefusedError
 from naas_abi_core.services.iam.IAMService import IAMService
+from naas_abi_core.services.iam.names import container_name
+from naas_abi_core.services.iam.tests.iam_harness import NEXUS
 
 from naas_abi_cli.cli.iam import iam, provision_dev_modules
 
+# Organisation acme and its workspace ws1, as Nexus registers them.
+ACME = "abi:nexus:organization/acme"
+ACME_WS1 = "abi:nexus:organization/acme/nexus:workspace/ws1"
 MANIFEST = {
     "version": "2026-10-13",
     "statements": [{"effect": "Allow", "actions": ["document:*"], "resources": ["*"]}],
@@ -112,7 +117,7 @@ def test_a_manifest_is_listed_shown_approved_or_narrowed(cli, service, tmp_path)
         "statements:\n"
         "  - effect: Allow\n"
         "    actions: [document:Get]\n"
-        "    resources: ['abi:-:-:document:document/people/*']\n"
+        "    resources: ['abi:document:document/people/*']\n"
     )
     approved = cli(
         "module", "approve", "module/acme/people", "--document", str(narrowed)
@@ -147,7 +152,7 @@ def test_a_grant_beyond_what_the_caller_holds_is_printed(service, monkeypatch):
         service.create_service_account("module/acme/people")
     refusal = GrantNotHeldError(
         "triple_store:Insert",
-        "abi:-:-:triple_store:graph/people-*",
+        "abi:triple_store:graph/people-*",
         policy_id="module.acme.people",
         statement=0,
         reason="you do not hold it there",
@@ -291,8 +296,8 @@ def test_inviting_keeps_the_roles_and_creates_the_person(run, service, identity)
     assert result.closed
     grants = service.store.list_pending_grants()
     assert {(g.provider, g.email, g.policy_id, g.scope) for g in grants} == {
-        ("builtin", "bob@example.com", "builtin.member", "abi:acme:-"),
-        ("builtin", "bob@example.com", "builtin.viewer", "abi:acme:ws1"),
+        ("builtin", "bob@example.com", "builtin.member", ACME),
+        ("builtin", "bob@example.com", "builtin.viewer", ACME_WS1),
     }
     assert identity.provisioned == [("builtin", "Bob@Example.com", "Bob")]
     assert "created" in result.output
@@ -365,11 +370,25 @@ def test_an_invitation_must_say_where(run, service, args):
 
 
 def test_a_workspace_iam_knows_needs_no_org(run, service):
-    with as_service_account("engine"):
-        service.put_scope("acme", "ws1")
+    service._register_catalog(NEXUS)
+    with as_service_account("api"):
+        service.register_container("nexus", "organization", "acme")
+        service.register_container("nexus", "workspace", "ws1", parent=ACME)
     result = run("invite", "bob@example.com", "--workspace", "ws1", "--role", "member")
     assert result.exit_code == 0, result.output
-    assert [g.scope for g in service.store.list_pending_grants()] == ["abi:acme:ws1"]
+    assert [g.scope for g in service.store.list_pending_grants()] == [ACME_WS1]
+    # Named in another organization than the one IAM registered it in: refused.
+    elsewhere = run(
+        "invite",
+        "eve@example.com",
+        "--workspace",
+        "ws1",
+        "--org",
+        "other",
+        "--role",
+        "member",
+    )
+    assert elsewhere.exit_code != 0 and "not in organization" in elsewhere.output
 
 
 def test_pending_grants_are_listed_and_revoked(run, service):
@@ -407,10 +426,18 @@ def test_idp_groups_are_bound_listed_and_unbound(run, service):
     assert bound.exit_code == 0, bound.output
     assert bound.output.split("\t")[:2] == ["acme", "Data readers"]
     assert service.resolve_idp_groups("acme", ["Data readers"])
-    assert "abi:o:w" in run("group", "list").output
+    assert (
+        container_name(
+            "nexus",
+            "workspace",
+            "w",
+            parent=container_name("nexus", "organization", "o"),
+        )
+        in run("group", "list").output
+    )
     assert run("group", "list", "--provider", "other").output == ""
     org_level = run("group", "bind", "acme", "Admins", "--org", "o", "--role", "admin")
-    assert "abi:o:-" in org_level.output
+    assert f"{container_name('nexus', 'organization', 'o')}\n" in org_level.output
     assert (
         run(
             "group",
@@ -482,7 +509,7 @@ def test_a_failing_provider_takes_back_only_the_grants_this_command_made(
     assert again.exit_code != 0
     # The org grant of the earlier invitation stays; the workspace one is gone.
     assert [(g.policy_id, g.scope) for g in service.store.list_pending_grants()] == [
-        ("builtin.member", "abi:acme:-")
+        ("builtin.member", ACME)
     ]
 
 

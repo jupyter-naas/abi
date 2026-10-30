@@ -26,14 +26,13 @@ from typing import Any, Literal
 from naas_abi_core.engine.call_context import CallContext
 from naas_abi_core.engine.nats_auth import IssuedToken
 from naas_abi_core.services.iam.catalog import ActionCatalog, CatalogRegistry
-from naas_abi_core.services.iam.names import PLATFORM_SCOPE
+from naas_abi_core.services.iam.listing import ResourcePage
+from naas_abi_core.services.iam.names import PLATFORM_SCOPE, container_name
 from naas_abi_core.services.iam.policy import PolicyDocument, Statement
 
 PrincipalKind = Literal["user", "group", "service_account"]
 Status = Literal["active", "suspended", "deleted"]
-Reason = Literal[
-    "allow", "explicit_deny", "implicit_deny", "suspended", "sealed", "outside_set"
-]
+Reason = Literal["allow", "explicit_deny", "implicit_deny", "suspended", "sealed"]
 
 KIND_PREFIXES: dict[PrincipalKind, str] = {
     "user": "usr",
@@ -172,16 +171,12 @@ class PrincipalRecord:
     email: str | None = None
     email_verified: bool = False
     display_name: str | None = None
-    # Groups: the org of their owner scope, None for a platform group. A group
-    # made before owner scopes may name an org while platform-owned.
-    org: str | None = None
     # Service accounts: the user who created them, for scripts and CI.
     owner_id: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
-    # Groups: the platform (``abi:-:-``), an org (``abi:<org>:-``) or a
-    # workspace (``abi:<org>:<ws>``) that owns them and names them. Users and
-    # service accounts are the platform's.
+    # Groups: the platform (``abi:``) or the container that owns them and names
+    # them. Users and service accounts are the platform's.
     owner_scope: str = PLATFORM_SCOPE
 
     @property
@@ -208,15 +203,18 @@ class Policy:
     revision: int = 1
     created_at: datetime | None = None
     updated_at: datetime | None = None
-    # The platform (``abi:-:-``), an org (``abi:<org>:-``) or a workspace
-    # (``abi:<org>:<ws>``): it names the policy and bounds where it is attached.
-    # Managed policies are the platform's.
+    # The platform (``abi:``) or a container: it names the policy and bounds
+    # where it is attached. Managed policies are the platform's.
     owner_scope: str = PLATFORM_SCOPE
+    # The policy this one is a sub-policy of: it never grants more than it
+    # (AGENTS.md, "Sub-policies"). Never set on a managed policy.
+    parent_id: str | None = None
 
 
 @dataclass(frozen=True)
 class Attachment:
-    """A policy bound to a principal, optionally at a scope."""
+    """A policy bound to a principal, optionally at a scope: a container, below
+    one (``<container>/*``) or the platform (``abi:``)."""
 
     id: str
     policy_id: str
@@ -259,47 +257,87 @@ class IdpBinding:
 
 @dataclass(frozen=True)
 class Placement:
-    """``(service, id_key) -> (org, workspace)``; ``id_key`` is exact or ends with ``*``."""
+    """``(service, id_key) -> container`` (a container's name, ``abi:`` for the
+    platform); ``id_key`` is exact or ends with ``*``."""
 
     service: str
     id_key: str
-    org: str = "-"
-    workspace: str = "-"
+    container: str = PLATFORM_SCOPE
 
 
 @dataclass(frozen=True)
-class ScopeRecord:
-    """An org (``workspace`` is ``-``) or a workspace in an org, from ``iam:PutScope``."""
+class ContainerRecord:
+    """A registered container: its type, its id (unique within its type) and
+    the container it sits in (``abi:`` for the platform)."""
 
-    org: str
-    workspace: str = "-"
+    service: str
+    type: str
+    id: str
+    parent: str = PLATFORM_SCOPE
+
+    @property
+    def name(self) -> str:
+        return container_name(self.service, self.type, self.id, parent=self.parent)
 
 
 @dataclass(frozen=True)
-class ScopeSet:
-    """The set of an org (``workspace`` ``-``) or of a workspace in it: the
-    module items and the Nexus features usable there, each part ``None`` when
-    nothing is recorded (everything). See ``sets.py``."""
+class LegacyPlacement:
+    """A placement of the grammar before container paths, as stored: ``scope``
+    is ``abi:<field>:<field>``. Only the rewrite of the names reads one."""
+
+    service: str
+    id_key: str
+    scope: str
+
+
+class NameRewriter(ABC):
+    """How the module that defined the names before container paths rewrites
+    what IAM stored with them (``IAMService.rewrite_names``). Every method keeps
+    what is already a path as it is, so the rewrite may run again."""
+
+    def containers(self) -> Sequence[ContainerRecord]:
+        """The containers to register, parents first."""
+        return ()
+
+    @abstractmethod
+    def scope(self, scope: str | None) -> str | None:
+        """An attachment's, an invitation's or a binding's scope."""
+
+    @abstractmethod
+    def owner(self, owner: str) -> str:
+        """A policy's or a group's owner."""
+
+    @abstractmethod
+    def document(self, document: Mapping[str, Any]) -> Mapping[str, Any]:
+        """A policy document, its ``${scope}`` patterns included."""
+
+    @abstractmethod
+    def statements(
+        self, statements: Sequence[Mapping[str, Any]]
+    ) -> Sequence[Mapping[str, Any]]:
+        """A credential's narrowing statements (``abi_scope``)."""
+
+    @abstractmethod
+    def placement(self, placement: LegacyPlacement) -> str:
+        """The container of a placement of the old form."""
+
+    def resource(self, resource: str | None) -> str | None:
+        """A resource a key is bound to; unchanged by default."""
+        return resource
+
+
+@dataclass(frozen=True)
+class LegacyScopeSet:
+    """A row an older version recorded in ``iam_scope_sets`` for an org
+    (``workspace`` ``-``) or a workspace, as it was stored: two JSON lists, each
+    None when nothing was recorded. IAM no longer reads them for anything; they
+    wait for whoever recorded them to move what they said into policies
+    (``AGENTS.md``, "Migrating an existing install")."""
 
     org: str
     workspace: str = "-"
     modules: tuple[str, ...] | None = None
     features: tuple[str, ...] | None = None
-
-    @property
-    def scope(self) -> str:
-        return f"abi:{self.org}:{self.workspace}"
-
-    @property
-    def recorded(self) -> bool:
-        """Whether it narrows anything: a set of everything is not stored."""
-        return self.modules is not None or self.features is not None
-
-    def label(self) -> str:
-        """How an error names it."""
-        if self.workspace != "-":
-            return f"the set of workspace {self.workspace}"
-        return f"the set of organization {self.org}"
 
 
 @dataclass(frozen=True)
@@ -575,21 +613,27 @@ class IAMStore(ABC):
 
     @abstractmethod
     def update_policy(self, policy: Policy, expected_revision: int) -> Policy:
-        """Replace name, description and document (never the owner scope);
-        the revision goes up by one.
+        """Replace name, description, document and parent (never the owner
+        scope); the revision goes up by one.
 
         ``RevisionConflictError`` when the stored revision is not
-        ``expected_revision``.
+        ``expected_revision``; ``IAMNotFoundError`` for a parent that does not
+        exist (on ``create_policy`` too).
         """
 
     @abstractmethod
+    def list_sub_policies(self, policy_id: str) -> list[Policy]:
+        """The policies whose parent is ``policy_id``, by ascending id."""
+
+    @abstractmethod
     def put_managed_policy(self, policy: Policy) -> Policy:
-        """Create or replace a managed policy. The revision goes up only when
-        its name, description or document changed."""
+        """Create or replace a managed policy, with no parent. The revision goes
+        up only when its name, description or document changed."""
 
     @abstractmethod
     def delete_policy(self, policy_id: str) -> None:
-        """``IAMConflictError`` while the policy is attached."""
+        """``IAMConflictError`` while the policy is attached, invited to or a
+        parent."""
 
     # -- attachments --------------------------------------------------------
 
@@ -610,6 +654,10 @@ class IAMStore(ABC):
     @abstractmethod
     def attachments_for(self, principal_ids: Sequence[str]) -> list[Attachment]:
         """Every attachment of any of ``principal_ids`` (a principal and its groups)."""
+
+    @abstractmethod
+    def attachments_of(self, policy_ids: Sequence[str]) -> list[Attachment]:
+        """Every attachment of any of ``policy_ids``, in one read."""
 
     # -- pending grants -------------------------------------------------------
 
@@ -642,7 +690,7 @@ class IAMStore(ABC):
         (an attachment that exists is kept). None when another claim, or a
         removal, took the grant first: exactly one caller wins."""
 
-    # -- placements and scopes ----------------------------------------------
+    # -- placements and containers ------------------------------------------
 
     @abstractmethod
     def put_placement(self, placement: Placement) -> None:
@@ -652,34 +700,47 @@ class IAMStore(ABC):
     def delete_placement(self, service: str, id_key: str) -> bool: ...
 
     @abstractmethod
-    def list_placements(self, service: str | None = None) -> list[Placement]: ...
+    def list_placements(self, service: str | None = None) -> list[Placement]:
+        """Placements of the old form read as ``names.as_container`` makes them
+        (the platform's as the platform, any other as ``names.UNRESOLVED``)."""
 
     @abstractmethod
-    def put_scope(self, scope: ScopeRecord) -> None:
-        """Idempotent. A workspace keeps its first org: ``IAMConflictError``
+    def put_container(self, record: ContainerRecord) -> None:
+        """Idempotent. A container keeps its first parent: ``IAMConflictError``
         when it is registered under another."""
 
     @abstractmethod
-    def delete_scope(self, org: str, workspace: str = "-") -> bool: ...
+    def get_container(
+        self, service: str, type: str, id: str
+    ) -> ContainerRecord | None: ...
 
     @abstractmethod
-    def list_scopes(self, org: str | None = None) -> list[ScopeRecord]: ...
-
-    # -- sets -----------------------------------------------------------------
+    def list_containers(self) -> list[ContainerRecord]: ...
 
     @abstractmethod
-    def put_scope_set(self, scope_set: ScopeSet) -> None:
-        """Create or replace the set of ``(org, workspace)``; one that narrows
-        nothing (``recorded`` false) is deleted instead."""
+    def delete_containers(self, records: Sequence[ContainerRecord]) -> int:
+        """Forget these containers and every placement in them; how many went."""
+
+    # -- the names before container paths ------------------------------------
 
     @abstractmethod
-    def delete_scope_sets(self, org: str, workspace: str = "-") -> bool:
-        """Delete a workspace's set, or an org's (``workspace`` ``-``) with the
-        sets of its workspaces."""
+    def rewrite_names(self, rewriter: NameRewriter) -> dict[str, int]:
+        """Rewrite every stored name with ``rewriter``, in one transaction:
+        containers registered, policies (owner and document; managed ones too),
+        groups' owners, attachments, pending grants, placements (the old form's
+        too), keys' narrowing statements, manifests. How many of each changed."""
+
+    # -- what an older version left ------------------------------------------
 
     @abstractmethod
-    def list_scope_sets(self, org: str | None = None) -> list[ScopeSet]:
-        """The recorded sets, ordered by org then workspace (``-`` first)."""
+    def legacy_scope_sets(self) -> list[LegacyScopeSet]:
+        """The rows of an older version's ``iam_scope_sets``, ordered by org then
+        workspace (``-`` first); none on a store that never had the table."""
+
+    @abstractmethod
+    def drop_legacy_scope_sets(self) -> bool:
+        """Drop ``iam_scope_sets`` once what it held was moved; False when there
+        was none."""
 
     # -- catalogs -----------------------------------------------------------
 
@@ -794,6 +855,15 @@ class IAMSecrets(ABC):
 
 
 @dataclass(frozen=True)
+class Bound:
+    """One policy of a sub-policy's chain, as it bounds the sub-policy's Allows:
+    its Allow statements, with their index in its document."""
+
+    policy_id: str
+    allows: tuple[tuple[int, Statement], ...]
+
+
+@dataclass(frozen=True)
 class EffectiveStatement:
     """A statement as it reaches a principal: through which policy and attachment."""
 
@@ -803,6 +873,12 @@ class EffectiveStatement:
     attachment_id: str | None = None  # None for an implicit attachment (builtin.self)
     scope: str | None = None
     via_group: str | None = None
+    # An Allow of a sub-policy counts only where each policy of its chain,
+    # nearest first, allows too ("Sub-policies").
+    bounds: tuple[Bound, ...] = ()
+    # A statement of a parent reached through a sub-policy's attachment: the
+    # sub-policies it came through, the attached one first.
+    through: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -812,14 +888,25 @@ class Subject:
     principal_id: str  # as the call names it: ${principal.id}
     status: Status
     statements: tuple[EffectiveStatement, ...] = ()
-    # Whether the org and workspace sets bound its Allows: a user who does not
-    # hold builtin.platform_admin. Service accounts are bound by their policies.
-    bounded: bool = False
+
+
+@dataclass(frozen=True)
+class BoundingStatement:
+    """The statement of a parent that allowed what a sub-policy's Allow did."""
+
+    policy_id: str
+    statement_index: int
+    sid: str | None = None
 
 
 @dataclass(frozen=True)
 class DecidingStatement:
-    """Which statement decided, and whose it was: the actor's, the user's or the token's."""
+    """Which statement decided, and whose it was: the actor's, the user's or the token's.
+
+    For an Allow of a sub-policy, ``bounded_by`` names the statement of each
+    policy of its chain that allowed it too, nearest first; for a parent's
+    statement reached through a sub-policy, ``through`` names the sub-policies,
+    the attached one first."""
 
     side: Literal["actor", "user", "token"]
     principal_id: str
@@ -830,6 +917,8 @@ class DecidingStatement:
     attachment_id: str | None = None
     scope: str | None = None
     via_group: str | None = None
+    bounded_by: tuple[BoundingStatement, ...] = ()
+    through: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -921,16 +1010,6 @@ class PolicySource(ABC):
     @abstractmethod
     def catalogs(self) -> CatalogRegistry: ...
 
-    def has_sets(self) -> bool:
-        """Whether any org or workspace has a set recorded (a shortcut)."""
-        return False
-
-    def scope_sets(
-        self, org: str, workspace: str
-    ) -> tuple[ScopeSet | None, ScopeSet | None]:
-        """The recorded sets of ``org`` and of ``workspace`` (None: everything)."""
-        return None, None
-
 
 # ---------------------------------------------------------------------------
 # What callers use: the in-process service, or a NATS client of it
@@ -940,7 +1019,7 @@ class PolicySource(ABC):
 @dataclass(frozen=True)
 class GrantableAction:
     """An action the caller may grant at a scope, on these resource patterns
-    (``${scope}:…``); ``excluded`` are the patterns a Deny of theirs takes back,
+    (``${scope}/…``); ``excluded`` are the patterns a Deny of theirs takes back,
     written as the resources are where they fall under the scope."""
 
     action: str
@@ -996,12 +1075,13 @@ class IIAMService(ABC):
         resource_type: str,
         parts: Sequence[str],
         *,
-        workspace: str | None = None,
+        container: str | None = None,
     ) -> tuple[Decision, str]:
         """The decision on an action a module declares (``module_scopes.py``),
         and the resource IAM named for it: ``<type>/<parts>`` of the action's
-        catalog, in ``workspace`` or else the call's (``CallContext.workspace_id``),
-        platform-level without one. ``IAMNotFoundError`` when no module declares
+        catalog, in ``container`` or else the call's (``CallContext.container``),
+        platform-level without one; a container IAM does not know names nothing
+        (``ResourceNotFoundError``). ``IAMNotFoundError`` when no module declares
         the action or the type."""
 
     def require_declared(
@@ -1010,11 +1090,11 @@ class IIAMService(ABC):
         resource_type: str,
         parts: Sequence[str],
         *,
-        workspace: str | None = None,
+        container: str | None = None,
     ) -> None:
         """``require`` for an action a module declares."""
         decision, resource = self.authorize_declared(
-            action, resource_type, parts, workspace=workspace
+            action, resource_type, parts, container=container
         )
         if decision.allowed:
             return
@@ -1036,10 +1116,36 @@ class IIAMService(ABC):
     ) -> Explanation: ...
 
     @abstractmethod
-    def grantable(self, scope: str) -> list[GrantableCatalog]:
+    def grantable(
+        self, scope: str, *, parent: str | None = None, derive: bool = False
+    ) -> list[GrantableCatalog]:
         """What the caller may grant at ``scope``: per catalog, the actions they
-        hold there and the resource patterns (``${scope}:…``) they hold them on,
-        minus their Denies. About the caller only, so it needs no permission."""
+        hold there and the resource patterns (``${scope}/…``) they hold them on,
+        minus their Denies. About the caller only, so it needs no permission.
+        With ``parent``, what a sub-policy of it owned at ``scope`` may grant:
+        that, within the parent's chain. ``PermissionDeniedError`` unless the
+        caller may derive from ``parent`` there, or read it; with ``derive`` (a
+        new sub-policy), unless ``create_policy`` would take it as its parent
+        (the derive rule, the owner, the depth: its refusal as it words it)."""
+
+    @abstractmethod
+    def list_resources(
+        self,
+        service: str,
+        type: str,
+        *,
+        scope: str = "abi:",
+        text: str = "",
+        cursor: str | None = None,
+        limit: int | None = None,
+        module: str = "",
+    ) -> ResourcePage:
+        """The existing resources of ``service:type`` in ``scope`` (a container,
+        below one, or the platform) that the caller may list, matching ``text``,
+        a page after ``cursor`` (``AGENTS.md``, "Publishers and listing"). A type
+        with no lister, or whose lister failed, comes back ``listed`` False: it
+        is offered as wildcards. About the caller only, so it needs no permission.
+        ``IAMNotFoundError`` for an unknown service or type."""
 
     # -- principals -------------------------------------------------------------
 
@@ -1107,11 +1213,9 @@ class IIAMService(ABC):
     # -- groups -----------------------------------------------------------------
 
     @abstractmethod
-    def create_group(
-        self, name: str, *, org: str | None = None, scope: str | None = None
-    ) -> PrincipalRecord:
-        """A group owned by ``scope`` (``abi:<org>:-`` when only ``org`` is
-        given, else the platform)."""
+    def create_group(self, name: str, *, scope: str | None = None) -> PrincipalRecord:
+        """A group owned by ``scope``: a registered container, else the
+        platform."""
 
     @abstractmethod
     def get_group(self, group_id: str) -> PrincipalRecord: ...
@@ -1159,8 +1263,10 @@ class IIAMService(ABC):
         *,
         description: str = "",
         scope: str | None = None,
+        parent: str | None = None,
     ) -> Policy:
-        """A customer policy owned by ``scope`` (the platform when None)."""
+        """A customer policy owned by ``scope`` (the platform when None), a
+        sub-policy of ``parent`` when given."""
 
     @abstractmethod
     def get_policy(self, policy_id: str) -> Policy: ...
@@ -1170,7 +1276,21 @@ class IIAMService(ABC):
         self, *, limit: int = 100, after: str | None = None, scope: str | None = None
     ) -> Page:
         """The policies the caller may list; with ``scope``, those it owns, plus
-        those of the levels above that the caller may attach there."""
+        those of the levels above that the caller may attach there and may know
+        of (listed at their owner, or attached at ``scope`` or above)."""
+
+    @abstractmethod
+    def attachable_policies(
+        self,
+        scope: str | None,
+        *,
+        principal_id: str | None = None,
+        limit: int = 100,
+        after: str | None = None,
+    ) -> Page:
+        """The policies the caller may attach at ``scope`` (to ``principal_id``
+        when given); one owned above it only where the caller may know of it,
+        as ``list_policies`` decides."""
 
     @abstractmethod
     def update_policy(
@@ -1181,7 +1301,13 @@ class IIAMService(ABC):
         document: Any = None,
         name: str | None = None,
         description: str | None = None,
-    ) -> Policy: ...
+        parent: str | None = None,
+    ) -> Policy:
+        """``parent``: None keeps it, ``""`` removes it, an id sets it."""
+
+    @abstractmethod
+    def list_sub_policies(self, policy_id: str) -> list[Policy]:
+        """The direct sub-policies of ``policy_id`` the caller may list."""
 
     @abstractmethod
     def delete_policy(self, policy_id: str) -> None: ...
@@ -1250,11 +1376,11 @@ class IIAMService(ABC):
     ) -> list[IdpBinding]:
         """The bindings the caller may list (``iam:ListAttachments`` at their scope)."""
 
-    # -- placements, scopes, catalogs ----------------------------------------------
+    # -- placements, containers, catalogs ------------------------------------------
 
     @abstractmethod
     def put_placement(
-        self, service: str, id_key: str, org: str = "-", workspace: str = "-"
+        self, service: str, id_key: str, container: str = PLATFORM_SCOPE
     ) -> Placement: ...
 
     @abstractmethod
@@ -1272,47 +1398,47 @@ class IIAMService(ABC):
         it is not an authorization decision and needs no action.
         """
 
-    def resolve_placement(self, service: str, canonical_id: str) -> tuple[str, str]:
-        """``(org, workspace)`` of a resource; the platform when nothing covers it."""
+    def resolve_placement(self, service: str, canonical_id: str) -> str:
+        """The container of a resource; the platform when nothing covers it."""
         placement = self.placement_of(service, canonical_id)
-        return (placement.org, placement.workspace) if placement else ("-", "-")
+        return placement.container if placement else PLATFORM_SCOPE
 
     @abstractmethod
-    def put_scope(self, org: str, workspace: str = "-") -> ScopeRecord: ...
+    def register_container(
+        self, service: str, type: str, id: str, *, parent: str = PLATFORM_SCOPE
+    ) -> ContainerRecord:
+        """Register a container in ``parent``: a create on its name as placed,
+        which needs the type's create action there (``AGENTS.md``, "Containers")."""
 
     @abstractmethod
-    def workspace_org(self, workspace: str) -> str | None:
-        """The org a workspace was registered in (``iam:PutScope``), or None."""
+    def delete_container(self, service: str, type: str, id: str) -> bool:
+        """Delete a container, what it owns and every container below it: the
+        type's delete action on its name."""
 
     @abstractmethod
-    def delete_scope(self, org: str, workspace: str = "-") -> bool: ...
+    def container(self, service: str, type: str, id: str) -> str | None:
+        """The name of a registered container (its path), or None. In process it
+        is read for the service owning the resource; over NATS
+        (``get_container``) only for a caller allowed an action of the type on
+        it (``IAMService.read_container``), None for anyone else."""
 
-    # -- sets ---------------------------------------------------------------
+    def call_container(self) -> str | None:
+        """The container of the call (``CallContext.container``) once IAM checked
+        it is registered under that path; None for none; ``names.UNRESOLVED`` for a
+        container IAM does not know."""
+        from naas_abi_core.engine.call_context import current_call_context
+        from naas_abi_core.services.iam.names import UNRESOLVED, parse_container
 
-    @abstractmethod
-    def get_set(self, org: str, workspace: str = "-") -> ScopeSet:
-        """The set recorded for an org or a workspace (both parts None when
-        none is): ``iam:GetSet`` at its scope."""
-
-    @abstractmethod
-    def effective_set(self, org: str, workspace: str = "-") -> ScopeSet:
-        """A workspace's set within its org's, or an org's own."""
-
-    @abstractmethod
-    def list_sets(self, org: str | None = None) -> list[ScopeSet]:
-        """The recorded sets the caller may read."""
-
-    @abstractmethod
-    def put_set(
-        self,
-        org: str,
-        workspace: str = "-",
-        *,
-        modules: Iterable[str] | None = None,
-        features: Iterable[str] | None = None,
-    ) -> ScopeSet:
-        """Record a set (``iam:PutSet`` at the level above); a workspace's must
-        be within its org's (``SetValidationError``, a ``ValueError``)."""
+        claimed = current_call_context().container
+        if not claimed or claimed == PLATFORM_SCOPE:
+            return None
+        try:
+            steps = parse_container(claimed)
+        except ValueError:
+            return UNRESOLVED
+        last = steps[-1]
+        found = self.container(last.service, last.type, last.value)
+        return claimed if found == claimed else UNRESOLVED
 
     @abstractmethod
     def register_catalog(self, catalog: Any) -> bool: ...
@@ -1322,10 +1448,25 @@ class IIAMService(ABC):
         serving engine's IAM only)."""
         raise NotImplementedError("Platform grants are set on the serving engine")
 
-    def put_feature_policies(self, grants: Mapping[str, Sequence[str]]) -> None:
-        """Replace the feature policies (``UseFeature`` grants). The
-        serving engine's IAM only: Nexus runs there."""
-        raise NotImplementedError("Feature policies are set on the serving engine")
+    def retired_policies(self) -> list[Policy]:
+        """The retired managed policies still in force (the serving engine's IAM
+        only): ``roles.RETIRED_POLICY_PREFIXES``."""
+        raise NotImplementedError("Retired policies are moved on the serving engine")
+
+    def retire_policies(self, policy_ids: Iterable[str]) -> list[str]:
+        """Drop retired managed policies once what they granted was moved (the
+        serving engine's IAM only)."""
+        raise NotImplementedError("Retired policies are moved on the serving engine")
+
+    def legacy_scope_sets(self) -> list[LegacyScopeSet]:
+        """The org and workspace sets an older version recorded, until they are
+        moved into policies (the serving engine's IAM only)."""
+        raise NotImplementedError("Legacy sets are moved on the serving engine")
+
+    def drop_legacy_scope_sets(self) -> bool:
+        """Drop the legacy sets once they were moved (the serving engine's IAM
+        only)."""
+        raise NotImplementedError("Legacy sets are moved on the serving engine")
 
     # -- service accounts, keys and manifests ----------------------------------
 

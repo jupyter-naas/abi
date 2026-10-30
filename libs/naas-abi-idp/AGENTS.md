@@ -111,7 +111,7 @@ A sign-in challenge, a refresh token, a counter: one document each, changed with
 | App | Reached by | Authorized by |
 |---|---|---|
 | `idp` | browsers and relying parties, through Nexus at `/idp` (a dedicated trusted route) | nobody: a login page has no user yet |
-| `admin` | services over NATS (`abi.app.v1` requests to the app, as every module app) | discovery's `discovery:OpenApp` on `abi:-:-:discovery:app/<project>/idp/admin`, **and the app itself**: only the engine's own accounts (`api`, `engine`: `admin.ADMIN_ACCOUNTS`) acting for nobody; a user, a module account or a CI account is refused whatever discovery allowed |
+| `admin` | services over NATS (`abi.app.v1` requests to the app, as every module app) | discovery's `discovery:OpenApp` on `abi:discovery:app/<project>/idp/admin`, **and the app itself**: only the engine's own accounts (`api`, `engine`: `admin.ADMIN_ACCOUNTS`) acting for nobody; a user, a module account or a CI account is refused whatever discovery allowed |
 
 The admin API (JSON): `GET/POST /users`, `GET /users/{id}`, `GET /users/by-email`,
 `PATCH /users/{id}`, `POST /users/{id}/disable|enable`, `GET/POST /groups`,

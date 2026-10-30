@@ -7,7 +7,7 @@ import { create } from 'zustand';
 import { getApiUrl } from '@/lib/config';
 import { invalidateOrgBranding } from '@/lib/org-branding';
 import { authFetch } from './auth';
-import { classifyInviteAnswer, type InviteAnswer } from '@/lib/invitations';
+import { classifyInviteAnswer, policyIdsToSend, type InviteAnswer } from '@/lib/invitations';
 
 const getApiBase = () => getApiUrl();
 const normalize = (url?: string | null) =>
@@ -204,6 +204,9 @@ export interface OrganizationInvite {
   // A workspace of the organization to add them to, with the role they get there.
   workspaceId?: string;
   workspaceRole?: 'admin' | 'member' | 'viewer';
+  // Customer policies (`pol_…`) attached with the role: at the workspace's scope when one is
+  // named, else at the organization's. Pending grants until someone with no account signs in.
+  policyIds?: string[];
   // The member's organization profile, set when the person is created.
   profile?: OrganizationMemberCreateProfile;
 }
@@ -449,6 +452,7 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
           provider: invite.provider,
           workspace_id: invite.workspaceId,
           workspace_role: invite.workspaceRole,
+          ...policyIdsToSend(invite.policyIds),
           ...invite.profile,
         }),
       });

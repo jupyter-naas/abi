@@ -28,6 +28,8 @@ ADAPTERS = [
     ("vector_store", "VectorStore"),
 ]
 SECRET = TEST_TOKENS.verifier
+# The container a call is made in: request data, carried as is.
+WS = "abi:nexus:organization/org-1/nexus:workspace/ws-1"
 
 
 def adapter_class(domain, name, primary=False):
@@ -659,7 +661,7 @@ def test_a_delegating_client_sends_a_delegation_naming_the_user(identity):
     caller = CallContext(
         principal=service_account("api"),
         on_behalf_of=user("usr-ada"),
-        workspace_id="ws-1",
+        container=WS,
         trace_id="trace-1",
     )
     try:
@@ -675,7 +677,7 @@ def test_a_delegating_client_sends_a_delegation_naming_the_user(identity):
     )
     assert served.principal.id == identity
     assert served.on_behalf_of is not None and served.on_behalf_of.id == "usr-ada"
-    assert (context.trace_id, context.workspace_id) == ("trace-1", "ws-1")
+    assert (context.trace_id, context.container) == ("trace-1", WS)
     assert not context.principal_id and not context.tenant_id
 
 
@@ -748,7 +750,7 @@ def test_without_a_user_no_delegation_and_a_fresh_trace():
     headers = nc.request.call_args.kwargs["headers"]
     assert "Abi-On-Behalf-Of" not in headers
     assert caller_context(headers, TEST_TOKENS.verifier).on_behalf_of is None
-    assert context.trace_id and not context.workspace_id
+    assert context.trace_id and not context.container
 
 
 def test_overflow_chunks_travel_as_the_call_they_belong_to(monkeypatch):
@@ -773,7 +775,7 @@ def test_overflow_chunks_travel_as_the_call_they_belong_to(monkeypatch):
     monkeypatch.setattr(client, "_do_request_async", request)
     caller = CallContext(principal=service_account("api"), on_behalf_of=user("u1"))
     call_request = keyvalue_pb2.SetRequest(
-        context=common_pb2.CallContext(trace_id="trace-1", workspace_id="ws-1")
+        context=common_pb2.CallContext(trace_id="trace-1", container=WS)
     )
     try:
         with use_call_context(caller):
@@ -794,9 +796,9 @@ def test_overflow_chunks_travel_as_the_call_they_belong_to(monkeypatch):
     finally:
         client.close()
     for message, headers in sent:
-        assert (message.context.trace_id, message.context.workspace_id) == (
+        assert (message.context.trace_id, message.context.container) == (
             "trace-1",
-            "ws-1",
+            WS,
         )
         assert "Abi-On-Behalf-Of" not in headers
         served = caller_context(

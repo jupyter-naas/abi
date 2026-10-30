@@ -1,27 +1,38 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, Plus, Trash2, X } from 'lucide-react';
-import type { CatalogsView, Effect, ModuleScopesView } from '@/lib/iam-admin/types';
+import type { IamAdminApi } from '@/lib/iam-admin/api';
+import type { Effect, Publisher } from '@/lib/iam-admin/types';
 import {
   emptyStatement,
+  grantableCatalogs,
+  grantablePatterns,
   hasWildcard,
   matchingActions,
   moveStatement,
   removeAt,
   suggestActions,
   suggestResources,
+  typedStep,
   type EditorStatement,
+  type ListedIds,
   type Suggestion,
 } from './policy-editor-model';
+
+const LISTING_DELAY_MS = 250;
+import { encodeSegment } from '../access-scope';
+import { grantableOn, scopedName } from './builder/builder-model';
 import { SuggestInput } from './suggest-input';
 
-/** A list of patterns (actions or resources) with a field that suggests the next one. */
+/** A list of patterns (actions or resources) with a field that suggests the next one; with
+ *  ``list``, the ids of the step being typed come from the listing as it is typed. */
 function PatternList({
   label,
   values,
   onChange,
   suggest,
+  list,
   note,
   placeholder,
   disabled,
@@ -29,13 +40,28 @@ function PatternList({
   label: string;
   values: string[];
   onChange: (next: string[]) => void;
-  suggest: (text: string) => Suggestion[];
+  suggest: (text: string, listed: ListedIds | null) => Suggestion[];
+  list?: (text: string) => Promise<ListedIds | null>;
   note?: (value: string) => string | null;
   placeholder: string;
   disabled?: boolean;
 }) {
   const [text, setText] = useState('');
-  const suggestions = useMemo(() => suggest(text), [suggest, text]);
+  const [listed, setListed] = useState<ListedIds | null>(null);
+  useEffect(() => {
+    if (!list || disabled) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      list(text)
+        .then((found) => !cancelled && setListed(found))
+        .catch(() => !cancelled && setListed(null));
+    }, LISTING_DELAY_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [list, text, disabled]);
+  const suggestions = useMemo(() => suggest(text, listed), [suggest, text, listed]);
   const add = (value: string) => {
     const clean = value.trim();
     if (!clean) return;
@@ -83,22 +109,66 @@ function PatternList({
   );
 }
 
-/** The visual editor of a policy's statements: effect, sid, actions and resources, with
- *  autocomplete from the action catalogs and the resource-name grammar. */
+/**
+ * The visual editor of a policy's statements: effect, sid, actions and resources, with
+ * autocomplete of what the caller may grant at ``scope`` only: the actions and types of
+ * ``publishers`` (`GET /publishers`), the patterns they may grant them on, and the ids the
+ * listing (`GET /resources`) finds as a name is typed. Never every catalog.
+ */
 export function StatementEditor({
   statements,
   onChange,
-  catalogs,
-  modules = null,
+  api,
+  scope,
+  publishers = null,
   readOnly,
 }: {
   statements: EditorStatement[];
   onChange: (next: EditorStatement[]) => void;
-  catalogs: CatalogsView | null;
-  modules?: ModuleScopesView | null;
+  api?: IamAdminApi;
+  /** Where the policy is written: `abi:` or a container. */
+  scope?: string;
+  /** What the caller may grant there; null: no suggestions. */
+  publishers?: Publisher[] | null;
   readOnly?: boolean;
 }) {
-  const catalogList = catalogs?.catalogs ?? [];
+  const catalogList = useMemo(() => grantableCatalogs(publishers ?? []), [publishers]);
+  const modules = useMemo(
+    () => [...new Set((publishers ?? []).flatMap((p) => p.types.flatMap((t) => (t.module ? [t.module] : []))))],
+    [publishers],
+  );
+  const list = useMemo(() => {
+    if (!api || !scope || !publishers) return undefined;
+    return async (text: string): Promise<ListedIds | null> => {
+      const step = typedStep(text);
+      if (!step) return null;
+      const type = publishers
+        .flatMap((p) => p.types)
+        .find((t) => t.service === step.service && t.type === step.type && (t.module ?? null) === step.module);
+      // Only a type the caller may grant something of, and that is listed.
+      if (!type?.listed) return null;
+      const page = await api.resources({ scope, service: step.service, type: step.type, module: step.module, q: step.text });
+      // What was typed before the id: a listed resource is suggested only when it is named
+      // there (the same container, written the same way), and when the caller may grant it.
+      const typed = text.trim();
+      const base = typed.slice(0, typed.length - step.text.length);
+      return {
+        service: step.service,
+        type: step.type,
+        module: step.module,
+        ids: page.items.flatMap((item) => {
+          const id = step.module ? item.id.slice(item.id.indexOf('/') + 1) : item.id;
+          const scoped = scopedName(item.name, scope);
+          // An id as a name writes it: one segment, or a path of segments.
+          const written = [encodeSegment(id), id.split('/').map(encodeSegment).join('/')].find(
+            (form) => base + form === scoped || base + form === item.name,
+          );
+          if (written === undefined || !grantableOn(type, scoped)) return [];
+          return [{ id: written, detail: item.description ? `${item.label}: ${item.description}` : item.label }];
+        }),
+      };
+    };
+  }, [api, scope, publishers]);
   const update = (index: number, patch: Partial<EditorStatement>) =>
     onChange(statements.map((s, i) => (i === index ? { ...s, ...patch } : s)));
 
@@ -173,7 +243,7 @@ export function StatementEditor({
                 onChange={(actions) => update(index, { actions })}
                 suggest={(text) => suggestActions(text, catalogList)}
                 note={(value) =>
-                  hasWildcard(value) ? `${matchingActions(value, catalogList).length} actions` : null
+                  !readOnly && hasWildcard(value) ? `${matchingActions(value, catalogList).length} actions you may grant` : null
                 }
                 placeholder="service:Action, e.g. triple_store:Query"
                 disabled={readOnly}
@@ -185,8 +255,18 @@ export function StatementEditor({
                 label={`Resources of statement ${n}`}
                 values={statement.resources}
                 onChange={(resources) => update(index, { resources })}
-                suggest={(text) => suggestResources(text, { catalogs, actions: statement.actions, modules })}
-                placeholder="abi:<org>:<workspace>:<service>:<type>/<id>"
+                suggest={(text, listed) =>
+                  suggestResources(text, {
+                    catalogs: catalogList,
+                    actions: statement.actions,
+                    grantable: grantablePatterns(publishers ?? [], statement.actions),
+                    scope,
+                    modules,
+                    listed,
+                  })
+                }
+                list={list}
+                placeholder="${scope}/<service>:<type>/<id> or abi:<service>:<type>/<id>"
                 disabled={readOnly}
               />
             </div>

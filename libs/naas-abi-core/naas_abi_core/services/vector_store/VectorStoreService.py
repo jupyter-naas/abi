@@ -7,6 +7,7 @@ import numpy as np
 
 from naas_abi_core import logger as abi_logger
 from naas_abi_core.services.iam.enforcement import ResourceGuard
+from naas_abi_core.services.iam.listing import ResourceLister, named_lister
 from naas_abi_core.services.ServiceBase import ServiceBase
 from naas_abi_core.services.vector_store.iam_catalog import (
     CATALOG,
@@ -391,6 +392,21 @@ class VectorStoreService(ServiceBase):
         self._ensure_initialized()
         self.__collection("CountVectors", collection_name)
         return self.adapter.count_vectors(collection_name)
+
+    def __collections(self) -> list[str]:
+        self._ensure_initialized()
+        return self.adapter.list_collections()
+
+    def iam_listers(self) -> dict[tuple[str, str], ResourceLister]:
+        """What IAM lists of this service for the policy builder: its collections.
+        Read unchecked: IAM filters it as the caller (``list_resources``)."""
+        return {
+            (CATALOG.service, "collection"): named_lister(
+                lambda query: self.__collections(),
+                lambda name: self._guard.name("collection", [name]),
+                str,
+            )
+        }
 
     def list_collections(self) -> list[str]:
         """The collections the caller may list; never fails for that."""

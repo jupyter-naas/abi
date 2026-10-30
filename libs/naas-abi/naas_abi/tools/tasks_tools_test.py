@@ -38,15 +38,18 @@ def tasks(monkeypatch) -> dict[str, Any]:
     state = {"user": ADA, "role": "owner"}
     members = [_member(ADA, "Ada", "owner"), _member(GRACE, "Grace", "member")]
 
-    def execute(op):
+    def execute(op, action):
+        # IAM's ``ManageTasks``: the owners' and admins' of the workspace here.
         call = tools_module.TasksCall(
             service=service,
             workspace_id=WS,
             user_id=state["user"],
-            role=state["role"],
+            may_manage=state["role"] in ("owner", "admin"),
             members=members,
             today=TODAY,
         )
+        if action == "ManageTasks" and not call.may_manage:
+            return {"error": "You do not have access to this in this workspace."}
         return asyncio.run(op(call))
 
     monkeypatch.setattr(tools_module, "_execute", execute)

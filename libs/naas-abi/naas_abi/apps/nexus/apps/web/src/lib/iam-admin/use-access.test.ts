@@ -23,17 +23,17 @@ function Probe({ api, scope, skip, reload }: { api: IamAdminApi; scope?: string;
 describe('useIamAccess', () => {
   it('asks for the scope it is given and answers from what IAM says', async () => {
     const access = vi.fn().mockResolvedValue({ actions: { 'iam:AttachPolicy': true, 'iam:CreatePolicy': false } });
-    mounted = await mount(Probe, { api: { access } as unknown as IamAdminApi, scope: 'abi:acme:-' });
+    mounted = await mount(Probe, { api: { access } as unknown as IamAdminApi, scope: 'abi:nexus:organization/acme' });
     await mounted.flush();
 
-    expect(access).toHaveBeenCalledWith('abi:acme:-');
+    expect(access).toHaveBeenCalledWith('abi:nexus:organization/acme');
     expect(mounted.host.textContent).toBe('ready||true|false');
   });
 
   it('asks nothing while skipped, and again when the reload key changes', async () => {
     const access = vi.fn().mockResolvedValue({ actions: { 'iam:AttachPolicy': true } });
     const api = { access } as unknown as IamAdminApi;
-    mounted = await mount(Probe, { api, scope: 'abi:acme:-', skip: true });
+    mounted = await mount(Probe, { api, scope: 'abi:nexus:organization/acme', skip: true });
     await mounted.flush();
     expect(access).not.toHaveBeenCalled();
     expect(mounted.host.textContent).toBe('ready||false|false');
@@ -44,8 +44,8 @@ describe('useIamAccess', () => {
     const { createRoot } = await import('react-dom/client');
     const { act } = await import('react');
     const root = createRoot(host);
-    await act(async () => root.render(createElement(Probe, { api, scope: 'abi:acme:-', reload: 0 })));
-    await act(async () => root.render(createElement(Probe, { api, scope: 'abi:acme:-', reload: 1 })));
+    await act(async () => root.render(createElement(Probe, { api, scope: 'abi:nexus:organization/acme', reload: 0 })));
+    await act(async () => root.render(createElement(Probe, { api, scope: 'abi:nexus:organization/acme', reload: 1 })));
     expect(access).toHaveBeenCalledTimes(2);
     await act(async () => root.unmount());
     host.remove();

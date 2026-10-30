@@ -32,6 +32,7 @@ from naas_abi_core.services.coding_environment.ontologies.modules.CodingEnvironm
     WorkspaceStopped,
 )
 from naas_abi_core.services.iam.guard import ServiceGuard
+from naas_abi_core.services.iam.listing import ResourceLister, named_lister
 from naas_abi_core.services.ServiceBase import ServiceBase
 
 # The owner segment of an environment whose owner this service does not know:
@@ -52,8 +53,8 @@ class CodingEnvironmentService(ServiceBase):
 
     Every operation is authorized (``coding_environment:*``) once the
     service is wired with IAM. An environment is personal:
-    ``environment/<owner principal id>/<environment id>``, placed in the call's
-    target workspace when it is provisioned. The principal an operation
+    ``environment/<owner principal id>/<environment id>``, placed in the
+    container of the call when it is provisioned. The principal an operation
     concerns is the call's user, or the actor when the call is on behalf of no
     one; ``user_id`` arguments are ignored then. The owner of an environment
     comes from the orchestrator's records: the environments it lists for the
@@ -150,6 +151,18 @@ class CodingEnvironmentService(ServiceBase):
             vouched_email=vouched_by_first_party(),
         )
 
+    def iam_listers(self) -> dict[tuple[str, str], ResourceLister]:
+        """What IAM lists of this service for the policy builder: its templates.
+        Read unchecked: IAM filters it as the caller (``list_resources``)."""
+        return {
+            (CATALOG.service, "template"): named_lister(
+                lambda query: self._adapter.list_templates(),
+                lambda template: self._guard.name("template", template.id),
+                lambda template: template.id,
+                lambda template: getattr(template, "name", "") or "",
+            )
+        }
+
     def list_templates(self) -> list[WorkspaceTemplate]:
         return self._guard.filter(
             "ListTemplates",
@@ -167,7 +180,7 @@ class CodingEnvironmentService(ServiceBase):
         user_id: str | None = None,
     ) -> WorkspaceStatus:
         """Provision an environment for the call's principal, placed in the
-        call's target workspace. ``user_id`` is ignored once the service checks."""
+        container of the call. ``user_id`` is ignored once the service checks."""
         owner = user_id or ""
         if self._guard.enforcing:
             principal = self._principal()

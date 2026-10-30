@@ -74,7 +74,7 @@ def _exported(store, graph=None) -> list[str]:
 def _name(iri: URIRef) -> str:
     from naas_abi_core.services.iam.names import encode_segment
 
-    return f"abi:-:-:triple_store:graph/{encode_segment(str(iri))}"
+    return f"abi:triple_store:graph/{encode_segment(str(iri))}"
 
 
 class TestTripleStoreAuthorization(DataServiceContract):
@@ -528,7 +528,7 @@ def _schema_owner(tmp_path):
                 statement(
                     "Allow",
                     ["triple_store:LoadSchema"],
-                    ["abi:-:-:triple_store:schema/module/foo/*"],
+                    ["abi:triple_store:schema/module/foo/*"],
                 )
             ),
         )

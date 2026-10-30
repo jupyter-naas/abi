@@ -11,6 +11,7 @@ import json
 import uuid
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -18,13 +19,17 @@ from naas_abi_core import logger
 from naas_abi_core.services.iam.catalog import ActionCatalog
 from naas_abi_core.services.iam.IAMPorts import (
     Attachment,
+    ContainerRecord,
     GroupMapping,
     IAMConflictError,
     IAMNotFoundError,
     IAMStore,
     KeyRecord,
+    LegacyPlacement,
+    LegacyScopeSet,
     ManifestRecord,
     ManifestStatus,
+    NameRewriter,
     Page,
     PendingGrant,
     Placement,
@@ -32,17 +37,14 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalKind,
     PrincipalRecord,
     RevisionConflictError,
-    ScopeRecord,
-    ScopeSet,
     SigningKeyRecord,
 )
 from naas_abi_core.services.iam.names import (
-    ALL_ORGS,
-    ALL_WORKSPACES,
     PLATFORM_SCOPE,
+    UNRESOLVED,
+    as_container,
     matches,
-    resource_name,
-    scope_fields,
+    within,
 )
 from naas_abi_core.services.iam.policy import PolicyDocument
 from sqlalchemy import (
@@ -51,6 +53,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     MetaData,
     String,
@@ -73,7 +76,17 @@ from sqlalchemy.exc import IntegrityError
 
 # 2: the owner scope of policies and groups (``owner_scope``).
 # 3: the sets of orgs and workspaces (``iam_scope_sets``, made by create_all).
-SCHEMA_VERSION = 3
+# 4: the parent of a policy (``iam_policies.parent_id``, "Sub-policies").
+# 5: no more sets: ``iam:GetSet`` and ``iam:PutSet`` leave the policies;
+# ``iam_scope_sets`` stays, unread, until its rows are moved
+# (``legacy_scope_sets``, ``drop_legacy_scope_sets``).
+# 6: container paths: ``iam_containers``, the registry of containers, and
+# ``iam_placements.container``; a placement of the old form (``org``,
+# ``workspace``) waits for the rewrite of the names (``rewrite_names``).
+SCHEMA_VERSION = 6
+
+# The platform before container paths, as schemas 2 to 5 stored it.
+_OLD_PLATFORM = "abi:-:-"
 
 metadata = MetaData()
 
@@ -92,6 +105,7 @@ principals = Table(
     Column("email", Text),
     Column("email_verified", Boolean, nullable=False, default=False),
     Column("display_name", Text),
+    # Before container paths: a group's org. Read by the upgrade to schema 2 only.
     Column("org", Text),
     Column("owner_id", String(64)),
     Column("created_at", DateTime(timezone=True), nullable=False),
@@ -157,6 +171,10 @@ policies = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
     Column("owner_scope", Text, nullable=False, default=PLATFORM_SCOPE),
+    # The policy this one is a sub-policy of; the store refuses one that does
+    # not exist, and deleting a parent while it has sub-policies.
+    Column("parent_id", String(255), nullable=True),
+    Index("iam_policies_parent", "parent_id"),
 )
 
 attachments = Table(
@@ -192,10 +210,24 @@ placements = Table(
     metadata,
     Column("service", String(64), primary_key=True),
     Column("id_key", Text, primary_key=True),
+    # Before container paths: the org and the workspace (``-`` for none). A row
+    # of today has both ``-`` and its ``container``.
     Column("org", String(64), nullable=False),
     Column("workspace", String(64), nullable=False),
+    Column("container", Text, nullable=True),
 )
 
+containers = Table(
+    "iam_containers",
+    metadata,
+    Column("service", String(64), primary_key=True),
+    Column("type", String(64), primary_key=True),
+    Column("id", Text, primary_key=True),
+    Column("parent", Text, nullable=False, default=PLATFORM_SCOPE),
+)
+
+# Before container paths: the orgs and workspaces Nexus registered. Read by
+# nothing; the rewrite of the names registers containers instead.
 scopes = Table(
     "iam_scopes",
     metadata,
@@ -203,10 +235,13 @@ scopes = Table(
     Column("workspace", String(64), primary_key=True),
 )
 
-# A set's parts are JSON lists; NULL is "nothing recorded", everything.
-scope_sets = Table(
+# An older version's sets (schema 3 and 4): never created any more, read once by
+# whoever moves them into policies, then dropped. A part is a JSON list; NULL
+# was "nothing recorded".
+legacy_metadata = MetaData()
+legacy_scope_sets = Table(
     "iam_scope_sets",
-    metadata,
+    legacy_metadata,
     Column("org", String(64), primary_key=True),
     Column("workspace", String(64), primary_key=True),
     Column("modules", Text, nullable=True),
@@ -323,7 +358,6 @@ def _principal(row: Row) -> PrincipalRecord:
         email=row.email,
         email_verified=bool(row.email_verified),
         display_name=row.display_name,
-        org=row.org,
         owner_id=row.owner_id,
         created_at=_aware(row.created_at),
         updated_at=_aware(row.updated_at),
@@ -342,9 +376,35 @@ def _principal_values(record: PrincipalRecord) -> dict[str, Any]:
         "email": record.email,
         "email_verified": record.email_verified,
         "display_name": record.display_name,
-        "org": record.org,
         "owner_id": record.owner_id,
     }
+
+
+def _placed_in(row: Row) -> str:
+    """A placement's container; one of the old form waits for the rewrite of the
+    names in ``names.UNRESOLVED`` (the platform's reads as the platform)."""
+    if row.container is not None:
+        # Anything but a container's name (written by no IAM of today) names nothing.
+        return as_container(row.container)
+    if (row.org, row.workspace) == ("-", "-"):
+        return PLATFORM_SCOPE
+    return UNRESOLVED
+
+
+def _container(row: Row) -> ContainerRecord:
+    return ContainerRecord(row.service, row.type, row.id, row.parent)
+
+
+def _rewrite_manifest(
+    document: dict[str, Any], rewriter: NameRewriter
+) -> dict[str, Any]:
+    """A manifest as stored (``modules.split_manifest``: its policy, and its
+    catalog under ``catalog``), its policy's names rewritten."""
+    policy = {k: v for k, v in document.items() if k != "catalog"}
+    rewritten = dict(rewriter.document(policy))
+    if "catalog" in document:
+        rewritten["catalog"] = document["catalog"]
+    return rewritten
 
 
 def _policy(row: Row) -> Policy:
@@ -358,6 +418,7 @@ def _policy(row: Row) -> Policy:
         created_at=_aware(row.created_at),
         updated_at=_aware(row.updated_at),
         owner_scope=row.owner_scope,
+        parent_id=row.parent_id,
     )
 
 
@@ -426,10 +487,6 @@ def _signing_key(row: Row) -> SigningKeyRecord:
     )
 
 
-def _json_list(items: tuple[str, ...] | None) -> str | None:
-    return json.dumps(list(items)) if items is not None else None
-
-
 def _list_json(raw: str | None) -> tuple[str, ...] | None:
     if raw is None:
         return None
@@ -479,6 +536,12 @@ class IAMStoreSQL(IAMStore):
         version = int(conn.execute(select(state.c.schema_version)).scalar() or 1)
         if version < 2:
             self._migrate_owner_scopes(conn)
+        if version < 4:
+            self._migrate_parents(conn)
+        if version < 5:
+            self._migrate_set_actions(conn)
+        if version < 6:
+            self._migrate_containers(conn)
         if version < SCHEMA_VERSION:
             conn.execute(update(state).values(schema_version=SCHEMA_VERSION))
 
@@ -535,6 +598,105 @@ class IAMStoreSQL(IAMStore):
         )
         self._warn_old_platform_names(conn)
 
+    def _migrate_parents(self, conn: Connection) -> None:
+        """4: every policy starts with no parent (``parent_id`` NULL), indexed
+        to list a policy's sub-policies."""
+        name = f'"{self._schema}".{policies.name}' if self._schema else policies.name
+        add: str | None
+        if conn.dialect.name == "postgresql":
+            # The schema's advisory lock serializes two processes opening it, and
+            # a second one finds the column there.
+            add = "ADD COLUMN IF NOT EXISTS"
+        else:
+            columns = {
+                c["name"]
+                for c in inspect(conn).get_columns(policies.name, schema=self._schema)
+            }
+            add = None if "parent_id" in columns else "ADD COLUMN"
+        if add is not None:
+            conn.execute(text(f"ALTER TABLE {name} {add} parent_id VARCHAR(255)"))
+        conn.execute(
+            text(
+                f"CREATE INDEX IF NOT EXISTS iam_policies_parent ON {name} (parent_id)"
+            )
+        )
+
+    def _migrate_set_actions(self, conn: Connection) -> None:
+        """5: the sets are gone (IAM's catalog 7): ``iam:GetSet`` and
+        ``iam:PutSet`` are taken out of the customer policies that named them, a
+        statement left with no action with them. They authorized nothing else,
+        so no decision changes; without this the catalog would refuse dropping
+        actions a policy still names."""
+        gone = {"iam:GetSet", "iam:PutSet"}
+        for row in conn.execute(
+            select(policies.c.id, policies.c.document).where(
+                policies.c.managed.is_(False)
+            )
+        ):
+            document = PolicyDocument.from_dict(json.loads(row.document))
+            if not any(a in gone for s in document.statements for a in s.actions):
+                continue
+            kept = tuple(
+                replace(statement, actions=actions)
+                for statement in document.statements
+                if (actions := tuple(a for a in statement.actions if a not in gone))
+            )
+            conn.execute(
+                update(policies)
+                .where(policies.c.id == row.id)
+                .values(
+                    document=replace(document, statements=kept).to_json(),
+                    revision=policies.c.revision + 1,
+                    updated_at=_now(),
+                )
+            )
+            logger.info(
+                f"IAM policy {row.id}: iam:GetSet and iam:PutSet taken out, the "
+                "sets they read and wrote are gone"
+            )
+        conn.execute(update(state).values(revision=state.c.revision + 1))
+
+    def _migrate_containers(self, conn: Connection) -> None:
+        """6: ``iam_placements.container`` (``iam_containers`` is created with
+        the metadata). A placement of the old form keeps its org and workspace
+        until the names are rewritten; the platform's reads as the platform."""
+        name = (
+            f'"{self._schema}".{placements.name}' if self._schema else placements.name
+        )
+        add: str | None
+        if conn.dialect.name == "postgresql":
+            add = "ADD COLUMN IF NOT EXISTS"
+        else:
+            columns = {
+                c["name"]
+                for c in inspect(conn).get_columns(placements.name, schema=self._schema)
+            }
+            add = None if "container" in columns else "ADD COLUMN"
+        if add is not None:
+            conn.execute(text(f"ALTER TABLE {name} {add} container TEXT"))
+        conn.execute(
+            update(placements)
+            .where(
+                placements.c.container.is_(None),
+                placements.c.org == "-",
+                placements.c.workspace == "-",
+            )
+            .values(container=PLATFORM_SCOPE)
+        )
+        # The old platform, ``abi:-:-``, is the platform ``abi:``: as an owner
+        # (every platform policy and group of schema 5) and as a scope.
+        for table, column in (
+            (policies, policies.c.owner_scope),
+            (principals, principals.c.owner_scope),
+            (attachments, attachments.c.scope),
+            (pending_grants, pending_grants.c.scope),
+        ):
+            conn.execute(
+                update(table)
+                .where(column == _OLD_PLATFORM)
+                .values({column.name: PLATFORM_SCOPE})
+            )
+
     def _warn_old_platform_names(self, conn: Connection) -> None:
         """Schema 2 names the platform's policies and groups
         ``abi:%2A:%2A:iam:<type>/<id>``: a stored customer policy that reached
@@ -542,12 +704,11 @@ class IAMStoreSQL(IAMStore):
         ``abi:-:-``) matches nothing of them any more."""
 
         def names(type_name: str, item_id: str, owner: str) -> tuple[str, str]:
-            org, workspace = scope_fields(owner)
-            if owner == PLATFORM_SCOPE:
-                org, workspace = ALL_ORGS, ALL_WORKSPACES
+            # The grammar of schema 1 and 2, written out: a store this old
+            # predates container paths, and is rewritten after this.
             return (
-                resource_name("iam", type_name, item_id),
-                resource_name("iam", type_name, item_id, org=org, workspace=workspace),
+                f"abi:-:-:iam:{type_name}/{item_id}",
+                f"abi:%2A:%2A:iam:{type_name}/{item_id}",
             )
 
         renamed = [
@@ -574,7 +735,7 @@ class IAMStoreSQL(IAMStore):
                     for pattern in statement.resources
                     if any(
                         matches(probe, old) and not matches(probe, new)
-                        for probe in [pattern.replace("${scope}", PLATFORM_SCOPE)]
+                        for probe in [pattern.replace("${scope}", "abi:-:-")]
                         for old, new in renamed
                     )
                 }
@@ -607,9 +768,15 @@ class IAMStoreSQL(IAMStore):
 
     @contextmanager
     def _change(self) -> Iterator[Connection]:
-        """A write that bumps the revision; unique violations become conflicts."""
+        """A write that bumps the revision; unique violations become conflicts.
+
+        It locks the state row first, so writes are serialized (SQLite's
+        ``BEGIN IMMEDIATE`` already does it): a check made inside one, such as a
+        parent existing or a policy having no sub-policies, still holds when it
+        commits, whatever PostgreSQL's isolation level."""
         try:
             with self._write() as conn:
+                conn.execute(select(state.c.id).with_for_update())
                 yield conn
                 conn.execute(update(state).values(revision=state.c.revision + 1))
         except IntegrityError as exc:
@@ -864,6 +1031,7 @@ class IAMStoreSQL(IAMStore):
                 select(policies.c.id).where(policies.c.id == policy.id)
             ).first():
                 raise IAMConflictError(f"Policy {policy.id} exists")
+            self._require_parent(conn, policy.parent_id)
             conn.execute(
                 insert(policies).values(
                     id=policy.id,
@@ -873,6 +1041,7 @@ class IAMStoreSQL(IAMStore):
                     managed=policy.managed,
                     revision=1,
                     owner_scope=policy.owner_scope,
+                    parent_id=policy.parent_id,
                     created_at=now,
                     updated_at=now,
                 )
@@ -907,6 +1076,7 @@ class IAMStoreSQL(IAMStore):
 
     def update_policy(self, policy: Policy, expected_revision: int) -> Policy:
         with self._change() as conn:
+            self._require_parent(conn, policy.parent_id)
             result = conn.execute(
                 update(policies)
                 .where(
@@ -917,6 +1087,7 @@ class IAMStoreSQL(IAMStore):
                     name=policy.name,
                     description=policy.description,
                     document=policy.document.to_json(),
+                    parent_id=policy.parent_id,
                     revision=policies.c.revision + 1,
                     updated_at=_now(),
                 )
@@ -988,9 +1159,34 @@ class IAMStoreSQL(IAMStore):
                 )
             ).first():
                 raise IAMConflictError(f"Policy {policy_id} is granted to invitees")
+            if conn.execute(
+                select(policies.c.id).where(policies.c.parent_id == policy_id)
+            ).first():
+                raise IAMConflictError(f"Policy {policy_id} has sub-policies")
             result = conn.execute(delete(policies).where(policies.c.id == policy_id))
             if result.rowcount == 0:
                 raise IAMNotFoundError(f"Policy {policy_id} not found")
+
+    def list_sub_policies(self, policy_id: str) -> list[Policy]:
+        with self._read() as conn:
+            return [
+                _policy(row)
+                for row in conn.execute(
+                    select(policies)
+                    .where(policies.c.parent_id == policy_id)
+                    .order_by(policies.c.id)
+                )
+            ]
+
+    @staticmethod
+    def _require_parent(conn: Connection, parent_id: str | None) -> None:
+        if (
+            parent_id is not None
+            and not conn.execute(
+                select(policies.c.id).where(policies.c.id == parent_id)
+            ).first()
+        ):
+            raise IAMNotFoundError(f"Policy {parent_id} not found")
 
     # -- attachments --------------------------------------------------------------
 
@@ -1045,6 +1241,19 @@ class IAMStoreSQL(IAMStore):
                 for row in conn.execute(
                     select(attachments)
                     .where(attachments.c.principal_id.in_(list(principal_ids)))
+                    .order_by(attachments.c.id)
+                )
+            ]
+
+    def attachments_of(self, policy_ids: Sequence[str]) -> list[Attachment]:
+        if not policy_ids:
+            return []
+        with self._read() as conn:
+            return [
+                _attachment(row)
+                for row in conn.execute(
+                    select(attachments)
+                    .where(attachments.c.policy_id.in_(list(policy_ids)))
                     .order_by(attachments.c.id)
                 )
             ]
@@ -1156,10 +1365,7 @@ class IAMStoreSQL(IAMStore):
         )
         with self._read() as conn:
             row = conn.execute(select(placements).where(key)).first()
-        if row is not None and (row.org, row.workspace) == (
-            placement.org,
-            placement.workspace,
-        ):
+        if row is not None and row.container == placement.container:
             return
         with self._change() as conn:
             conn.execute(delete(placements).where(key))
@@ -1167,8 +1373,9 @@ class IAMStoreSQL(IAMStore):
                 insert(placements).values(
                     service=placement.service,
                     id_key=placement.id_key,
-                    org=placement.org,
-                    workspace=placement.workspace,
+                    org="-",
+                    workspace="-",
+                    container=placement.container,
                 )
             )
 
@@ -1185,89 +1392,261 @@ class IAMStoreSQL(IAMStore):
             query = query.where(placements.c.service == service)
         with self._read() as conn:
             return [
-                Placement(row.service, row.id_key, row.org, row.workspace)
+                Placement(row.service, row.id_key, _placed_in(row))
                 for row in conn.execute(query)
             ]
 
-    def put_scope(self, scope: ScopeRecord) -> None:
-        with self._read() as conn:
-            if conn.execute(
-                select(scopes.c.org).where(
-                    scopes.c.org == scope.org, scopes.c.workspace == scope.workspace
+    def put_container(self, record: ContainerRecord) -> None:
+        key = (
+            (containers.c.service == record.service)
+            & (containers.c.type == record.type)
+            & (containers.c.id == record.id)
+        )
+
+        def same(row: Any) -> None:
+            if row.parent != record.parent:
+                raise IAMConflictError(
+                    f"{record.service}:{record.type}/{record.id} is in {row.parent}"
                 )
-            ).first():
-                return
+
+        with self._read() as conn:
+            row = conn.execute(select(containers).where(key)).first()
+        if row is not None:
+            same(row)
+            return
         with self._change() as conn:
-            if scope.workspace != "-":
-                other = conn.execute(
-                    select(scopes.c.org).where(
-                        scopes.c.workspace == scope.workspace, scopes.c.org != scope.org
-                    )
-                ).scalar()
-                if other is not None:
-                    raise IAMConflictError(
-                        f"Workspace {scope.workspace} is in org {other}"
-                    )
+            # Read again under the write lock: another process may have registered
+            # it since, and the same registration twice is no conflict.
+            row = conn.execute(select(containers).where(key)).first()
+            if row is not None:
+                same(row)
+                return
             conn.execute(
-                insert(scopes).values(org=scope.org, workspace=scope.workspace)
+                insert(containers).values(
+                    service=record.service,
+                    type=record.type,
+                    id=record.id,
+                    parent=record.parent,
+                )
             )
 
-    def delete_scope(self, org: str, workspace: str = "-") -> bool:
-        return self._delete(
-            delete(scopes).where(scopes.c.org == org, scopes.c.workspace == workspace)
-        )
-
-    def list_scopes(self, org: str | None = None) -> list[ScopeRecord]:
-        query = select(scopes).order_by(scopes.c.org, scopes.c.workspace)
-        if org is not None:
-            query = query.where(scopes.c.org == org)
+    def get_container(self, service: str, type: str, id: str) -> ContainerRecord | None:
         with self._read() as conn:
-            return [ScopeRecord(row.org, row.workspace) for row in conn.execute(query)]
-
-    # -- sets -------------------------------------------------------------------
-
-    def put_scope_set(self, scope_set: ScopeSet) -> None:
-        key = (
-            scope_sets.c.org == scope_set.org,
-            scope_sets.c.workspace == scope_set.workspace,
-        )
-        with self._change() as conn:
-            conn.execute(delete(scope_sets).where(*key))
-            if scope_set.recorded:
-                conn.execute(
-                    insert(scope_sets).values(
-                        org=scope_set.org,
-                        workspace=scope_set.workspace,
-                        modules=_json_list(scope_set.modules),
-                        features=_json_list(scope_set.features),
-                    )
+            row = conn.execute(
+                select(containers).where(
+                    containers.c.service == service,
+                    containers.c.type == type,
+                    containers.c.id == id,
                 )
+            ).first()
+        return _container(row) if row is not None else None
 
-    def delete_scope_sets(self, org: str, workspace: str = "-") -> bool:
-        query = delete(scope_sets).where(scope_sets.c.org == org)
-        if workspace != "-":
-            query = query.where(scope_sets.c.workspace == workspace)
-        return self._delete(query)
-
-    def list_scope_sets(self, org: str | None = None) -> list[ScopeSet]:
-        query = select(scope_sets).order_by(scope_sets.c.org, scope_sets.c.workspace)
-        if org is not None:
-            query = query.where(scope_sets.c.org == org)
+    def list_containers(self) -> list[ContainerRecord]:
         with self._read() as conn:
             return [
-                ScopeSet(
+                _container(row)
+                for row in conn.execute(
+                    select(containers).order_by(
+                        containers.c.service, containers.c.type, containers.c.id
+                    )
+                )
+            ]
+
+    def delete_containers(self, records: Sequence[ContainerRecord]) -> int:
+        if not records:
+            return 0
+        names = {record.name for record in records}
+        with self._change() as conn:
+            for record in records:
+                conn.execute(
+                    delete(containers).where(
+                        containers.c.service == record.service,
+                        containers.c.type == record.type,
+                        containers.c.id == record.id,
+                    )
+                )
+            for row in conn.execute(select(placements)).all():
+                if row.container is not None and any(
+                    within(row.container, name) for name in names
+                ):
+                    conn.execute(
+                        delete(placements).where(
+                            placements.c.service == row.service,
+                            placements.c.id_key == row.id_key,
+                        )
+                    )
+        return len(records)
+
+    # -- the names before container paths -------------------------------------------
+
+    def rewrite_names(self, rewriter: NameRewriter) -> dict[str, int]:
+        counts = dict.fromkeys(
+            (
+                "containers",
+                "policies",
+                "groups",
+                "attachments",
+                "pending_grants",
+                "placements",
+                "keys",
+                "manifests",
+            ),
+            0,
+        )
+        with self._change() as conn:
+            for record in rewriter.containers():
+                found = conn.execute(
+                    select(containers.c.parent).where(
+                        containers.c.service == record.service,
+                        containers.c.type == record.type,
+                        containers.c.id == record.id,
+                    )
+                ).first()
+                if found is None:
+                    conn.execute(
+                        insert(containers).values(
+                            service=record.service,
+                            type=record.type,
+                            id=record.id,
+                            parent=record.parent,
+                        )
+                    )
+                    counts["containers"] += 1
+                elif found.parent != record.parent:
+                    raise IAMConflictError(
+                        f"{record.service}:{record.type}/{record.id} is in {found.parent}"
+                    )
+            for row in conn.execute(select(policies)).all():
+                before = json.loads(row.document)
+                document = dict(rewriter.document(before))
+                owner = rewriter.owner(row.owner_scope)
+                if document == before and owner == row.owner_scope:
+                    continue
+                checked = PolicyDocument.from_dict(document).to_json()
+                conn.execute(
+                    update(policies)
+                    .where(policies.c.id == row.id)
+                    .values(
+                        document=checked,
+                        owner_scope=owner,
+                        revision=policies.c.revision + 1,
+                        updated_at=_now(),
+                    )
+                )
+                counts["policies"] += 1
+            for row in conn.execute(
+                select(principals.c.id, principals.c.owner_scope).where(
+                    principals.c.kind == "group"
+                )
+            ).all():
+                owner = rewriter.owner(row.owner_scope)
+                if owner != row.owner_scope:
+                    conn.execute(
+                        update(principals)
+                        .where(principals.c.id == row.id)
+                        .values(owner_scope=owner)
+                    )
+                    counts["groups"] += 1
+            for table, name in (
+                (attachments, "attachments"),
+                (pending_grants, "pending_grants"),
+            ):
+                for row in conn.execute(select(table.c.id, table.c.scope)).all():
+                    scope = rewriter.scope(row.scope or None) or ""
+                    if scope != (row.scope or ""):
+                        conn.execute(
+                            update(table)
+                            .where(table.c.id == row.id)
+                            .values(scope=scope)
+                        )
+                        counts[name] += 1
+            for row in conn.execute(select(placements)).all():
+                if row.container is not None:
+                    continue  # a placement of today
+                container = rewriter.placement(
+                    LegacyPlacement(
+                        row.service, row.id_key, f"abi:{row.org}:{row.workspace}"
+                    )
+                )
+                if as_container(container) == UNRESOLVED:
+                    # No container to name (a workspace that is gone): kept in the
+                    # old form, read as UNRESOLVED, tried again by a later rewrite.
+                    continue
+                conn.execute(
+                    update(placements)
+                    .where(
+                        placements.c.service == row.service,
+                        placements.c.id_key == row.id_key,
+                    )
+                    .values(container=container, org="-", workspace="-")
+                )
+                counts["placements"] += 1
+            for row in conn.execute(select(key_narrowing)).all():
+                narrowing = json.loads(row.scope) if row.scope is not None else None
+                rewritten = (
+                    [dict(s) for s in rewriter.statements(narrowing)]
+                    if narrowing is not None
+                    else None
+                )
+                resource = rewriter.resource(row.resource)
+                if rewritten == narrowing and resource == row.resource:
+                    continue
+                conn.execute(
+                    update(key_narrowing)
+                    .where(key_narrowing.c.key_id == row.key_id)
+                    .values(
+                        scope=json.dumps(rewritten) if rewritten is not None else None,
+                        resource=resource,
+                    )
+                )
+                counts["keys"] += 1
+            for row in conn.execute(select(manifests)).all():
+                before = json.loads(row.document)
+                document = _rewrite_manifest(before, rewriter)
+                if document == before:
+                    continue
+                conn.execute(
+                    update(manifests)
+                    .where(
+                        manifests.c.principal_id == row.principal_id,
+                        manifests.c.sha256 == row.sha256,
+                    )
+                    .values(document=json.dumps(document, sort_keys=True))
+                )
+                counts["manifests"] += 1
+        return counts
+
+    # -- what an older version left ------------------------------------------------
+
+    def legacy_scope_sets(self) -> list[LegacyScopeSet]:
+        table = legacy_scope_sets
+        with self._read() as conn:
+            if not inspect(conn).has_table(table.name, schema=self._schema):
+                return []
+            return [
+                LegacyScopeSet(
                     row.org,
                     row.workspace,
                     _list_json(row.modules),
                     _list_json(row.features),
                 )
-                for row in conn.execute(query)
+                for row in conn.execute(
+                    select(table).order_by(table.c.org, table.c.workspace)
+                )
             ]
+
+    def drop_legacy_scope_sets(self) -> bool:
+        table = legacy_scope_sets
+        with self._change() as conn:
+            if not inspect(conn).has_table(table.name, schema=self._schema):
+                return False
+            table.drop(conn)
+            return True
 
     # -- catalogs -----------------------------------------------------------------
 
     def put_catalog(self, catalog: ActionCatalog) -> None:
-        document = json.dumps(catalog.to_dict(), sort_keys=True)
+        document = json.dumps(catalog.to_dict(stored=True), sort_keys=True)
         with self._read() as conn:
             current = conn.execute(
                 select(catalogs.c.document).where(catalogs.c.service == catalog.service)
@@ -1285,7 +1664,7 @@ class IAMStoreSQL(IAMStore):
     def list_catalogs(self) -> list[ActionCatalog]:
         with self._read() as conn:
             return [
-                ActionCatalog.from_dict(json.loads(document))
+                ActionCatalog.from_dict(json.loads(document), stored=True)
                 for document in conn.scalars(
                     select(catalogs.c.document).order_by(catalogs.c.service)
                 )

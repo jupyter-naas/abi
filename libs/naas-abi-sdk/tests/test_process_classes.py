@@ -856,6 +856,6 @@ def test_the_manifest_names_the_workflow_of_each_class(package):
 
     statements = {s["sid"]: s for s in module_manifest(module_type)["statements"]}
     assert (
-        "abi:-:-:discovery:job/${module.project}/${module.id}/workflow.greet_workflow"
+        "abi:discovery:job/${module.project}/${module.id}/workflow.greet_workflow"
         in statements["OwnJobs"]["resources"]
     )

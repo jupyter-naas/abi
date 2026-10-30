@@ -25,7 +25,7 @@ class EmailService(ServiceBase):
     """Sends mail and reads kept copies, each operation authorized (``email:*``).
 
     A send is checked on its sender (``sender/<from address>``); the copy it
-    keeps is placed in the call's target workspace. Wired with IAM, it checks
+    keeps is placed in the container of the call. Wired with IAM, it checks
     every call; a facade over NATS is not, and the owner it calls checks.
     """
 

@@ -64,7 +64,7 @@ export const manifest = (over: Partial<ManifestView> = {}): ManifestView => ({
       {
         effect: 'Allow',
         actions: ['triple_store:Query', 'triple_store:ListGraphs'],
-        resources: ['abi:-:-:triple_store:graph/a', 'abi:-:-:triple_store:graph/b'],
+        resources: ['abi:triple_store:graph/a', 'abi:triple_store:graph/b'],
       },
       { effect: 'Deny', actions: ['triple_store:DropGraph'], resources: ['*'] },
     ],

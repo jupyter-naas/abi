@@ -18,7 +18,6 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     AppConfigModel,
     OrganizationMemberModel,
     OrganizationModel,
-    OrganizationRoleFeaturesModel,
     UserModel,
     WorkspaceMemberModel,
     WorkspaceModel,
@@ -37,8 +36,8 @@ from naas_abi_core.services.event.adapters.secondary.EventSQLiteAdapter import (
     EventSQLiteAdapter,
 )
 from naas_abi_core.services.event.context import (
+    event_actor_container,
     event_actor_user_id,
-    event_actor_workspace_id,
     event_triggered_via,
 )
 from naas_abi_core.services.event.EventService import EventService
@@ -51,7 +50,6 @@ _TABLES = (
     UserModel,
     OrganizationModel,
     OrganizationMemberModel,
-    OrganizationRoleFeaturesModel,
     WorkspaceModel,
     WorkspaceMemberModel,
     AppConfigModel,
@@ -220,7 +218,7 @@ async def test_workspace_updates_keep_non_personal_before_and_after(env) -> None
 
 
 @pytest.mark.asyncio
-async def test_organization_member_and_role_features(env) -> None:
+async def test_organization_and_member(env) -> None:
     maker, events, _ = env
     await _seed_user(maker)
     async with maker() as session:
@@ -232,18 +230,12 @@ async def test_organization_member_and_role_features(env) -> None:
                 id="om-1", organization_id="org-1", user_id="usr-1", role="owner"
             )
         )
-        session.add(
-            OrganizationRoleFeaturesModel(
-                organization_id="org-1", role_baseline='{"viewer": ["chat"]}'
-            )
-        )
         await session.commit()
 
     kinds = [_kind(e) for e in _payloads(events)][1:]
     assert kinds == [
         "CreateOrganization",
         "AddUserToOrganization",
-        "ConfigureOrganizationRoleFeatures",
     ]
     assert all(e["target_organization_id"] == "org-1" for e in _payloads(events)[1:])
 
@@ -254,9 +246,7 @@ async def test_app_and_agent_configuration(env) -> None:
     await _seed_user(maker)
     async with maker() as session:
         session.add(WorkspaceModel(id="ws-1", name="Acme", slug="acme", owner_id="usr-1"))
-        session.add(
-            AppConfigModel(id="a-1", workspace_id="ws-1", app_id="external.acme:web", enabled=True)
-        )
+        session.add(AppConfigModel(id="a-1", workspace_id="ws-1", app_id="external.acme:web"))
         session.add(
             AgentConfigModel(
                 id="g-1",
@@ -305,15 +295,15 @@ async def test_touching_only_bookkeeping_columns_logs_nothing(env) -> None:
 async def test_workspace_context_is_stamped(env) -> None:
     maker, events, _ = env
     await _seed_user(maker)
-    token = event_actor_workspace_id.set("ws-ctx")
+    token = event_actor_container.set("abi:nexus:workspace/ws-ctx")
     try:
         async with maker() as session:
             (await session.get(UserModel, "usr-1")).organization = "Acme"
             await session.commit()
     finally:
-        event_actor_workspace_id.reset(token)
+        event_actor_container.reset(token)
 
-    assert _payloads(events)[-1]["actor_workspace_id"] == "ws-ctx"
+    assert _payloads(events)[-1]["actor_container"] == "abi:nexus:workspace/ws-ctx"
 
 
 @pytest.mark.asyncio

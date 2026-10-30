@@ -21,10 +21,10 @@ const row = (id: string) => document.querySelector(`[data-person="${id}"]`);
 const bob = member();
 const ann = member({ userId: 'usr_ann', name: 'Ann', email: 'ann@example.com', role: 'admin', inherited: true });
 const analysts = principal({ id: 'grp_1', kind: 'group', name: 'Analysts', display_name: null, email: null });
-const recruiters = attachment({ id: 'att_r', policy_id: 'pol_r', policy_name: 'Recruiters', principal_id: 'usr_bob', principal: principal({ id: 'usr_bob', display_name: 'Bob' }), scope: 'abi:acme:ws-1' });
-const roleRow = attachment({ id: 'att_m', policy_id: 'builtin.member', policy_name: 'Member', principal_id: 'usr_bob', scope: 'abi:acme:ws-1' });
-const groupHolds = attachment({ id: 'att_g', policy_id: 'pol_a', policy_name: 'Analysis', principal_id: 'grp_1', principal: analysts, scope: 'abi:acme:ws-1' });
-const elsewhere = attachment({ id: 'att_x', scope: 'abi:acme:ws-2' });
+const recruiters = attachment({ id: 'att_r', policy_id: 'pol_r', policy_name: 'Recruiters', principal_id: 'usr_bob', principal: principal({ id: 'usr_bob', display_name: 'Bob' }), scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1' });
+const roleRow = attachment({ id: 'att_m', policy_id: 'builtin.member', policy_name: 'Member', principal_id: 'usr_bob', scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1' });
+const groupHolds = attachment({ id: 'att_g', policy_id: 'pol_a', policy_name: 'Analysis', principal_id: 'grp_1', principal: analysts, scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1' });
+const elsewhere = attachment({ id: 'att_x', scope: 'abi:nexus:organization/acme/nexus:workspace/ws-2' });
 
 describe('peopleAt', () => {
   it('shows each person once: their role, their policies here and what their groups give them', () => {
@@ -75,7 +75,7 @@ describe('PeopleView', () => {
     mounted = await mount(PeopleView, { api, can: () => true, scope: wsScope, directory: fakeDirectory([bob, ann]), changeRole: vi.fn() });
     await mounted.flush();
 
-    expect(api.listAttachments).toHaveBeenCalledWith({ scope: 'abi:acme:ws-1' });
+    expect(api.listAttachments).toHaveBeenCalledWith({ scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1' });
     expect(row('usr_bob')?.textContent).toContain('Recruiters');
     expect(row('usr_bob')?.textContent).toContain('Analysts: Analysis');
     expect(row('usr_ann')?.textContent).toContain('from organization');
@@ -99,7 +99,7 @@ describe('PeopleView', () => {
 
     await mounted.click(field('Detach Recruiters from Bob'));
     await mounted.click(button('Confirm detach') ?? null);
-    expect(api.detach).toHaveBeenCalledWith({ policy_id: 'pol_r', principal_id: 'usr_bob', scope: 'abi:acme:ws-1' });
+    expect(api.detach).toHaveBeenCalledWith({ policy_id: 'pol_r', principal_id: 'usr_bob', scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1' });
   });
 
   it('attaches a policy to a person of the scope', async () => {
@@ -109,7 +109,7 @@ describe('PeopleView', () => {
     expect([...(field('Role of Bob') as HTMLSelectElement).options].map((o) => o.value)).toEqual(['member', 'admin']);
     await mounted.type(field('Principal to attach to'), 'usr_bob');
     await mounted.click(button('Attach policy') ?? null);
-    expect(api.attach).toHaveBeenCalledWith({ policy_id: 'pol_r', principal_id: 'usr_bob', scope: 'abi:acme:-' });
+    expect(api.attach).toHaveBeenCalledWith({ policy_id: 'pol_r', principal_id: 'usr_bob', scope: 'abi:nexus:organization/acme' });
   });
 
   it('shows the platform’s holders, everywhere attached, with no role to change', async () => {
@@ -124,13 +124,13 @@ describe('PeopleView', () => {
   });
 
   it('shows what comes with a role as part of it, with no detach', async () => {
-    const features = attachment({ id: 'att_f', policy_id: 'builtin.features.member', policy_name: 'Features of member', principal_id: 'usr_bob', principal: principal({ id: 'usr_bob' }), scope: 'abi:acme:ws-1' });
-    const api = peopleApi({ listAttachments: vi.fn().mockResolvedValue({ items: [recruiters, roleRow, features] }) });
+    const companion = attachment({ id: 'att_p', policy_id: 'builtin.platform.member', policy_name: 'Platform member', principal_id: 'usr_bob', principal: principal({ id: 'usr_bob' }), scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1' });
+    const api = peopleApi({ listAttachments: vi.fn().mockResolvedValue({ items: [recruiters, roleRow, companion] }) });
     mounted = await mount(PeopleView, { api, can: () => true, scope: wsScope, directory: fakeDirectory([bob]), changeRole: vi.fn() });
     await mounted.flush();
-    expect(row('usr_bob')?.querySelector('[data-with-role]')?.textContent).toContain('Features of member');
-    expect(document.querySelector('[data-held="builtin.features.member"]')).toBeNull();
-    expect(field('Detach Features of member from Bob')).toBeNull();
+    expect(row('usr_bob')?.querySelector('[data-with-role]')?.textContent).toContain('Platform member');
+    expect(document.querySelector('[data-held="builtin.platform.member"]')).toBeNull();
+    expect(field('Detach Platform member from Bob')).toBeNull();
     expect(field('Detach Recruiters from Bob')).not.toBeNull();
   });
 

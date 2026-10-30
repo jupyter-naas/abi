@@ -94,8 +94,8 @@ describe('GroupsView', () => {
 });
 
 describe('GroupsView at a workspace', () => {
-  const owned = group({ id: 'grp_ws', name: 'Recruiters', owner_scope: 'abi:acme:ws-1', members: [] });
-  const fromOrg = group({ id: 'grp_org', name: 'Org analysts', owner_scope: 'abi:acme:-', members: [] });
+  const owned = group({ id: 'grp_ws', name: 'Recruiters', owner_scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1', members: [] });
+  const fromOrg = group({ id: 'grp_org', name: 'Org analysts', owner_scope: 'abi:nexus:organization/acme', members: [] });
 
   function workspaceApi(over: Record<string, unknown> = {}) {
     return fakeApi({
@@ -103,7 +103,7 @@ describe('GroupsView at a workspace', () => {
       getGroup: vi.fn((id: string) => Promise.resolve(id === owned.id ? owned : fromOrg)),
       createGroup: vi.fn(() => Promise.resolve(owned)),
       addMember: vi.fn(() => Promise.resolve(owned)),
-      listAttachments: vi.fn(() => Promise.resolve({ items: [attachment({ principal_id: owned.id, scope: 'abi:acme:ws-1' })] })),
+      listAttachments: vi.fn(() => Promise.resolve({ items: [attachment({ principal_id: owned.id, scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1' })] })),
       attachable: vi.fn(() => Promise.resolve({ items: [{ id: 'pol_1', name: 'Graph reader', description: '', managed: false }] })),
       attach: vi.fn(() => Promise.resolve(attachment())),
       ...over,
@@ -123,10 +123,10 @@ describe('GroupsView at a workspace', () => {
     const api = workspaceApi();
     mounted = await mount(GroupsView, { api, can: admin, scope: wsScope, directory: EMPTY_DIRECTORY });
     await mounted.flush();
-    expect(api.listGroups).toHaveBeenCalledWith('abi:acme:ws-1');
+    expect(api.listGroups).toHaveBeenCalledWith('abi:nexus:organization/acme/nexus:workspace/ws-1');
     await mounted.type(document.querySelector('[aria-label="Group name"]'), 'Recruiters');
     await mounted.click(buttonNamed('Create group'));
-    expect(api.createGroup).toHaveBeenCalledWith({ name: 'Recruiters', scope: 'abi:acme:ws-1' });
+    expect(api.createGroup).toHaveBeenCalledWith({ name: 'Recruiters', scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1' });
   });
 
   it('adds a member of the scope, lists and attaches the group’s policies here, and maps no IdP claim', async () => {
@@ -137,10 +137,10 @@ describe('GroupsView at a workspace', () => {
     await mounted!.click(buttonNamed('Add member'));
     expect(api.addMember).toHaveBeenCalledWith('grp_ws', 'usr_bob');
 
-    expect(api.listAttachments).toHaveBeenCalledWith({ principal_id: 'grp_ws', scope: 'abi:acme:ws-1' });
+    expect(api.listAttachments).toHaveBeenCalledWith({ principal_id: 'grp_ws', scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1' });
     expect(document.querySelector('[aria-label="Policies of the group"]')?.textContent).toContain('Graph reader');
     await mounted!.click(buttonNamed('Attach policy'));
-    expect(api.attach).toHaveBeenCalledWith({ policy_id: 'pol_1', principal_id: 'grp_ws', scope: 'abi:acme:ws-1' });
+    expect(api.attach).toHaveBeenCalledWith({ policy_id: 'pol_1', principal_id: 'grp_ws', scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1' });
 
     expect(mounted!.host.textContent).not.toContain('IdP group claims');
   });

@@ -12,7 +12,7 @@ them (``graph_placements``). What a workspace *shares* or is *given* does:
   graphs it may write. Held by members, admins and owners, never by viewers.
 
 A grant onto another workspace's graph cannot be attached at the workspace's
-scope (a scoped attachment keeps only ``${scope}:`` resources), so each holder
+container (a scoped attachment keeps only ``${scope}/`` resources), so each holder
 is attached the policy itself, without scope: the policy is named for the
 workspace and held only while the user holds a role there. ``sync_members``
 keeps the holders in step with the workspace's memberships.
@@ -35,7 +35,6 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.workspac
 from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import NO_ORG, workspace_scope
 from naas_abi.apps.nexus.graph_policy_config import (
     NEXUS_GRAPH,
     WorkspaceGraphPolicyConfig,
@@ -43,7 +42,7 @@ from naas_abi.apps.nexus.graph_policy_config import (
 from naas_abi_core import logger
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.IAMPorts import IAMNotFoundError
-from naas_abi_core.services.iam.names import encode_id
+from naas_abi_core.services.iam.names import anywhere, encode_id, resource_name
 from naas_abi_core.services.iam.policy import POLICY_VERSION, PolicyDocument
 from naas_abi_core.services.triple_store.iam_catalog import CATALOG, GRAPH, SERVICE
 from sqlalchemy import text
@@ -74,15 +73,17 @@ def policy_name(workspace: str, kind: str) -> str:
     return f"workspace.{workspace}.graphs.{kind}"
 
 
-def _anywhere(iri: str) -> str:
-    """The graph wherever IAM placed it: an assignment names the graph, and the
-    graph keeps its identity if it moves."""
-    return f"abi:*:*:{SERVICE}:{GRAPH}/{encode_id(iri, 'opaque')}"
+def _anywhere(iri: str) -> list[str]:
+    """The graph wherever IAM placed it, at the platform or in any container: an
+    assignment names the graph, and the graph keeps its identity if it moves."""
+    return anywhere(f"{SERVICE}:{GRAPH}/{encode_id(iri, 'opaque')}")
 
 
-def _in(org: str, workspace: str, iri: str = "*") -> str:
-    target = "*" if iri == "*" else encode_id(iri, "opaque")
-    return f"abi:{org}:{workspace}:{SERVICE}:{GRAPH}/{target}"
+def _in(container: str, iri: str | None = None) -> str:
+    """A graph of the workspace ``container`` (every one without ``iri``)."""
+    if iri is None:
+        return f"{container}/{SERVICE}:{GRAPH}/*"
+    return resource_name(SERVICE, GRAPH, iri, kind="opaque", container=container)
 
 
 @dataclass(frozen=True)
@@ -96,12 +97,11 @@ class Assignment:
 def assignment_of(
     config: WorkspaceGraphPolicyConfig,
     *,
-    org: str,
-    workspace: str,
+    container: str,
     owned: Iterable[str] = (),
     catalog: Iterable[str] = (),
 ) -> Assignment:
-    """The statements of ``config`` for ``workspace``.
+    """The statements of ``config`` for the workspace ``container``.
 
     ``catalog`` is read when ``read_all`` is set; it is the graphs that exist
     when the assignment is applied, so a graph created later is shared at the
@@ -118,7 +118,7 @@ def assignment_of(
                 "sid": "SharedGraphsRead",
                 "effect": "Allow",
                 "actions": READ_ACTIONS,
-                "resources": [_anywhere(iri) for iri in sorted(shared)],
+                "resources": [p for iri in sorted(shared) for p in _anywhere(iri)],
             }
         )
     if not (config.allow_create and config.include_owned):
@@ -127,7 +127,7 @@ def assignment_of(
                 "sid": "NoNewGraphs",
                 "effect": "Deny",
                 "actions": CREATE_ACTIONS,
-                "resources": [_in(org, workspace)],
+                "resources": [_in(container)],
             }
         )
     if not config.include_owned:
@@ -138,7 +138,7 @@ def assignment_of(
                     "sid": "OwnGraphsClosed",
                     "effect": "Deny",
                     "actions": ALL_ACTIONS,
-                    "resources": [_in(org, workspace, iri) for iri in closed],
+                    "resources": [_in(container, iri) for iri in closed],
                 }
             )
     writing: list[dict[str, Any]] = []
@@ -148,7 +148,7 @@ def assignment_of(
                 "sid": "SharedGraphsWrite",
                 "effect": "Allow",
                 "actions": WRITE_ACTIONS,
-                "resources": [_anywhere(iri) for iri in sorted(config.write)],
+                "resources": [p for iri in sorted(config.write) for p in _anywhere(iri)],
             }
         )
 
@@ -237,8 +237,11 @@ class GraphGrants:
 
     # -- what a workspace holds ----------------------------------------------------
 
-    async def _holders(self, org: str, workspace: str) -> tuple[set[str], set[str]]:
-        members = await MEMBERSHIPS.members(workspace_scope(org, workspace))
+    @staticmethod
+    async def _holders(container: str | None) -> tuple[set[str], set[str]]:
+        if container is None:
+            return set(), set()
+        members = await MEMBERSHIPS.members(container)
         readers = {m.principal_id for m in members}
         writers = {m.principal_id for m in members if m.role in WRITER_ROLES}
         return readers, writers
@@ -253,8 +256,11 @@ class GraphGrants:
     ) -> None:
         """Make IAM say what ``config`` says for the workspace, and hold it for
         its current members."""
-        org = await AUTHZ.org_of(workspace_id) or NO_ORG
-        readers, writers = await self._holders(org, workspace_id)
+        container = await AUTHZ.container_of(workspace_id)
+        if container is None:
+            logger.warning(f"Graph assignments of {workspace_id}: a workspace IAM does not know")
+            return
+        readers, writers = await self._holders(container)
 
         recorded = await self._recorded_owners(store) if config.read_all and store else {}
 
@@ -267,13 +273,10 @@ class GraphGrants:
                 # tenants keep (the workspace's legacy-recorded graphs are its own).
                 catalog = graph_iam.within(
                     catalog_graphs(store) | set(legacy_owned),
-                    org=org,
-                    workspace=workspace_id,
+                    container=container,
                     recorded=recorded,
                 ) | set(legacy_owned)
-            assignment = assignment_of(
-                config, org=org, workspace=workspace_id, owned=owned, catalog=catalog
-            )
+            assignment = assignment_of(config, container=container, owned=owned, catalog=catalog)
             with as_service_account("api"):
                 self._apply(iam, workspace_id, READ, assignment.read, readers)
                 self._apply(iam, workspace_id, WRITE, assignment.write, writers)
@@ -281,27 +284,28 @@ class GraphGrants:
         await run_in_threadpool(work)
 
     @staticmethod
-    async def _recorded_owners(store: Any) -> dict[str, tuple[str, str]]:
-        """``{graph: (org, workspace)}`` of what the application graph records as a
-        workspace's: still its workspace's when IAM has not placed it yet."""
+    async def _recorded_owners(store: Any) -> dict[str, str]:
+        """``{graph: workspace container}`` of what the application graph records
+        as a workspace's: still its workspace's when IAM has not placed it yet."""
         from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.graph_placements import (  # noqa: E501
             legacy_owners,
         )
 
-        found: dict[str, tuple[str, str]] = {}
-        orgs: dict[str, str] = {}
+        found: dict[str, str] = {}
+        containers: dict[str, str | None] = {}
         for iri, workspaces in (await run_in_threadpool(legacy_owners, store)).items():
             owner = sorted(workspaces)[0]
-            if owner not in orgs:
-                orgs[owner] = await AUTHZ.org_of(owner) or NO_ORG
-            found[iri] = (orgs[owner], owner)
+            if owner not in containers:
+                containers[owner] = await AUTHZ.container_of(owner)
+            container = containers[owner]
+            if container is not None:
+                found[iri] = container
         return found
 
     async def sync_members(self, workspace_id: str) -> None:
         """Hold the workspace's policies for exactly its current members: call it
         after any change of who holds a role there."""
-        org = await AUTHZ.org_of(workspace_id) or NO_ORG
-        readers, writers = await self._holders(org, workspace_id)
+        readers, writers = await self._holders(await AUTHZ.container_of(workspace_id))
 
         def work() -> None:
             iam = runtime.iam()

@@ -9,7 +9,6 @@ import {
   ChevronDown,
   ChevronUp,
   Download,
-  Blocks,
   ExternalLink,
   Filter,
   FolderKanban,
@@ -29,7 +28,7 @@ import { OTHERS_GROUP } from '@/lib/workspace-picker';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
 import { rowMatchesColumnFilter } from '../users/users-table-filter';
 import { downloadTableExport, type UsersExportFormat } from '../users/users-table-export';
-import { isOrgAdminRole, orgModulesPath, orgSettingsSectionPath } from '../lib/nav';
+import { isOrgAdminRole, orgSettingsSectionPath } from '../lib/nav';
 import { featureLabel } from '@/lib/feature-labels';
 import { BulkEditModal } from './bulk-edit-modal';
 import '../components/org-settings-components.css';
@@ -48,7 +47,7 @@ interface OrgWorkspace {
   workspace_group?: string | null;
   organization_logo_url?: string | null;
   organization_logo_rectangle_url?: string | null;
-  /** The workspace's effective features (its set, within its organization's). */
+  /** The deployment's enabled features, as the API lists them (there is no workspace set). */
   features?: string[];
 }
 
@@ -119,8 +118,8 @@ function countFacets(values: string[]): FacetBucket[] {
  * Organization Settings > Workspaces: every workspace of the organization in a
  * table (search, sort, filters, export), like Organization Settings > Users.
  * Click a row to open the workspace's settings. Admins can select rows to
- * bulk edit their group. A workspace's modules and features are its set,
- * edited on Modules & features (each row links to its column there).
+ * bulk edit their group. Who uses which module or feature in a workspace is
+ * decided by policies, on Roles & permissions.
  */
 export default function OrganizationWorkspacesPage() {
   const params = useParams();
@@ -625,14 +624,6 @@ export default function OrganizationWorkspacesPage() {
                       <td>
                         <div className="org-workspaces-actions">
                           <Link
-                            href={orgModulesPath(orgId, workspace.id)}
-                            className="org-settings-users-secondary-button org-workspaces-open"
-                            title="The modules and features this workspace may use"
-                          >
-                            <Blocks size={14} />
-                            Modules & features
-                          </Link>
-                          <Link
                             href={`/workspace/${workspace.id}/home`}
                             className="org-settings-users-secondary-button org-workspaces-open"
                           >
@@ -652,7 +643,8 @@ export default function OrganizationWorkspacesPage() {
         <p className="org-settings-footnote">
           Members counts workspace members; org owners and admins reach every workspace anyway.
           Workspaces inherit the organization branding unless they set their own logo. Features
-          lists what the workspace has; Modules & features sets what each workspace may use.
+          lists the features the deployment enables; who may use each module and feature in a
+          workspace is decided by policies, on Roles &amp; permissions.
         </p>
 
         <BulkEditModal

@@ -3,10 +3,12 @@
 The invited person may not exist yet, so nothing is attached to an account:
 
 1. IAM keeps **pending grants**, the roles as ``builtin.<role>`` policies at the
-   org's or workspace's scope, for that email on that provider. They attach to
-   whoever first signs in through the provider with that email verified
-   (``IAMService.claim_pending_grants``, run by the engine's identity service),
-   and to nobody else.
+   org's or workspace's scope, and the policies the invitation carries beside
+   them (``policy_ids``: no role brings a feature, so a workspace's "Features of
+   member" comes this way) at its workspace, else its org, for that email on that
+   provider. They attach to whoever first signs in through the provider with
+   that email verified (``IAMService.claim_pending_grants``, run by the engine's
+   identity service), and to nobody else.
 2. The **provisioning** port makes the person exist at the provider (the
    built-in IdP's admin app, Zitadel, Keycloak), unless the provider's people
    are managed in the provider (``provisioning: none``): then the grants alone
@@ -21,7 +23,7 @@ as ``api`` for nobody (``GrantsGateway``).
 
 from __future__ import annotations
 
-from collections.abc import Callable, Collection, Iterable, Mapping
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from datetime import datetime
 from uuid import uuid4
 
@@ -37,6 +39,7 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
     GrantMade,
     GrantsGateway,
     IdpBindingView,
+    InvalidPolicyError,
     Invitation,
     InvitationMail,
     InvitationMailer,
@@ -128,6 +131,7 @@ class InvitationService:
         may_grant_owner: bool = False,
         may_renew_org_invitation: bool = False,
         profile: Mapping[str, str] | None = None,
+        policy_ids: Sequence[str] = (),
     ) -> InviteOutcome:
         """Invite ``email`` and send the invitation. Inviting again someone
         already invited here renews the invitation (new roles, a new email).
@@ -145,6 +149,11 @@ class InvitationService:
         ``profile``: what the organization sets about the person (``PROFILE_FIELDS``),
         written as their profile in the organization when they sign in and their
         account exists; with a renewal, it replaces the one kept.
+
+        ``policy_ids``: customer policies (``pol_…``) the person gets beside the
+        roles, at the workspace (else the organization), each a pending grant the
+        inviting person must be able to attach there and hold. A renewal carries
+        the ones it names, and the earlier ones it drops are withdrawn.
 
         The provider makes the person exist only for an inviting user IAM lets
         create accounts there (``identity:ProvisionUser``), or for an address on a
@@ -170,13 +179,26 @@ class InvitationService:
             org_role = existing.org_role
         if "owner" in (org_role, workspace_role) and not may_grant_owner:
             raise OwnerGrantRefusedError("Only an owner can invite an owner")
+        carried = _policies(policy_ids)
         now = self._clock()
-        scopes = _scopes(organization_id, org_role, workspace_id, workspace_role)
+        grants = [
+            (role_policy(role), scope)
+            for role, scope in _scopes(organization_id, org_role, workspace_id, workspace_role)
+        ]
+        # A policy the renewed invitation carries already, at a scope of its own
+        # (an organization's "Features of <role>" the move of the role features
+        # carried org-wide), keeps that grant as it is.
+        kept = await self._kept_carried(existing, carried, organization_id, workspace_id)
+        grants += [
+            (policy_id, policy_scope(organization_id, workspace_id))
+            for policy_id in carried
+            if policy_id not in kept
+        ]
         elsewhere = await self._held_elsewhere(
             email, choice.name, existing.id if existing else None
         )
-        made = await self._grant(choice.name, email, scopes, by=invited_by)
-        grant_ids = [g.id for g in made]
+        made = await self._grant(choice.name, email, grants, by=invited_by)
+        grant_ids = [g.id for g in made] + list(kept.values())
         try:
             provisioned, skipped = await self._provision(
                 choice, email, name, organization_id, invited_by
@@ -193,6 +215,7 @@ class InvitationService:
                         workspace_role=workspace_role,
                         invited_by=invited_by,
                         grant_ids=tuple(grant_ids),
+                        policy_ids=carried,
                         profile={
                             key: value
                             for key, value in (profile or {}).items()
@@ -207,6 +230,7 @@ class InvitationService:
                     org_role=org_role,
                     workspace_role=workspace_role,
                     grant_ids=grant_ids,
+                    policy_ids=carried,
                     invited_by=invited_by,
                     now=now,
                     profile={
@@ -271,6 +295,26 @@ class InvitationService:
         except ProvisioningRefused:
             return None, True
 
+    async def _kept_carried(
+        self,
+        existing: Invitation | None,
+        carried: Sequence[str],
+        organization_id: str | None,
+        workspace_id: str | None,
+    ) -> dict[str, str]:
+        """``{policy id: grant id}`` of the policies ``existing`` carries already
+        at another scope than this invitation's (``policy_scope``), still asked
+        for: renewing keeps them where they are."""
+        if existing is None or not existing.policy_ids:
+            return {}
+        default = policy_scope(organization_id, workspace_id)
+        held = await self.grants.pending(existing.grant_ids)
+        return {
+            policy_id: grant_id
+            for grant_id, (policy_id, scope) in held.items()
+            if policy_id in carried and policy_id in existing.policy_ids and scope != default
+        }
+
     async def _held_elsewhere(self, email: str, provider: str, except_id: str | None) -> set[str]:
         """The pending grants other invitations of this person rely on: IAM keeps
         one grant per role and scope, so an invitation to a workspace and one to
@@ -282,18 +326,17 @@ class InvitationService:
         self,
         provider: str,
         email: str,
-        scopes: list[tuple[str, str]],
+        grants: list[tuple[str, str]],
         *,
         by: str | None = None,
     ) -> list[GrantMade]:
-        """As ``by``, the inviting person: IAM refuses a role they may not attach
-        or that grants more than they hold (``GrantNotHeldError``)."""
+        """``(policy, scope)`` pending grants, as ``by``, the inviting person: IAM
+        refuses a role or a policy they may not attach or that grants more than
+        they hold (``GrantNotHeldError``)."""
         made: list[GrantMade] = []
         try:
-            for role, scope in scopes:
-                made.append(
-                    await self.grants.grant(provider, email, role_policy(role), scope, by=by)
-                )
+            for policy_id, scope in grants:
+                made.append(await self.grants.grant(provider, email, policy_id, scope, by=by))
         except Exception:
             await self._revoke([g.id for g in made if g.created])
             raise
@@ -334,6 +377,54 @@ class InvitationService:
         except Exception as exc:  # noqa: BLE001 - the invitation stands; the admin may resend
             logger.warning(f"Invitation email to {invitation.email} failed: {exc}")
             return False
+
+    async def attach_policies(
+        self,
+        *,
+        user_id: str,
+        organization_id: str | None,
+        workspace_id: str | None,
+        policy_ids: Sequence[str],
+        by: str | None,
+    ) -> tuple[str, ...]:
+        """For someone who has an account already (added directly, not invited):
+        attach the policies an invitation would carry, at the workspace, else the
+        organization, as ``by`` (IAM checks the attachment and what it grants).
+        Called before the membership is made: a refusal leaves nothing made
+        (what this call attached is taken back). Returns the policies it attached,
+        for ``detach_policies`` should the membership then fail."""
+        carried = _policies(policy_ids)
+        scope = policy_scope(organization_id, workspace_id)
+        made: list[str] = []
+        try:
+            for policy_id in carried:
+                if await self.grants.attach(user_id, policy_id, scope, by=by):
+                    made.append(policy_id)
+        except Exception:
+            await self.detach_policies(
+                user_id=user_id,
+                organization_id=organization_id,
+                workspace_id=workspace_id,
+                policy_ids=made,
+            )
+            raise
+        return tuple(made)
+
+    async def detach_policies(
+        self,
+        *,
+        user_id: str,
+        organization_id: str | None,
+        workspace_id: str | None,
+        policy_ids: Sequence[str],
+    ) -> None:
+        """Take back what ``attach_policies`` attached."""
+        scope = policy_scope(organization_id, workspace_id)
+        for policy_id in policy_ids:
+            try:
+                await self.grants.detach(user_id, policy_id, scope)
+            except Exception as exc:  # noqa: BLE001 - one left is logged, the rest go
+                logger.warning(f"Could not take back {policy_id} at {scope}: {exc}")
 
     # =========================================================================
     # Listing, resending, revoking
@@ -435,6 +526,27 @@ class InvitationService:
     @staticmethod
     def workspace_scope(organization_id: str | None, workspace_id: str) -> str:
         return workspace_scope(organization_id, workspace_id)
+
+
+def policy_scope(organization_id: str | None, workspace_id: str | None) -> str:
+    """Where an invitation's policies attach: its workspace, else its organization."""
+    if workspace_id is not None:
+        return workspace_scope(organization_id, workspace_id)
+    if organization_id is None:
+        raise ValueError("An invitation's policies need an organization or a workspace")
+    return org_scope(organization_id)
+
+
+def _policies(policy_ids: Sequence[str]) -> tuple[str, ...]:
+    """The customer policies an invitation carries, in order, once each."""
+    found = tuple(dict.fromkeys(str(p).strip() for p in policy_ids if str(p).strip()))
+    managed = [p for p in found if not p.startswith("pol_")]
+    if managed:
+        raise InvalidPolicyError(
+            f"An invitation carries customer policies (pol_…), not {', '.join(managed)}: "
+            "the role is chosen as the role"
+        )
+    return found
 
 
 def _scopes(

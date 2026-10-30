@@ -14,7 +14,7 @@ from naas_abi.tools.nexus_source_tools import (
     search_source,
 )
 
-APPS_SERVICE = "naas_abi/apps/nexus/apps/api/app/services/apps/service.py"
+APPS_SERVICE = "naas_abi/apps/nexus/apps/api/app/services/apps/scopes.py"
 
 
 def test_package_root_is_naas_abi() -> None:
@@ -28,13 +28,13 @@ def test_package_root_is_naas_abi() -> None:
         APPS_SERVICE,
         "libs/naas-abi/" + APPS_SERVICE,
         ".abi/libs/naas-abi/" + APPS_SERVICE,
-        "apps/nexus/apps/api/app/services/apps/service.py",
+        "apps/nexus/apps/api/app/services/apps/scopes.py",
     ],
 )
 def test_resolve_accepts_repo_and_package_relative_paths(raw: str) -> None:
     assert (
         resolve_source_path(raw)
-        == PACKAGE_ROOT / "apps/nexus/apps/api/app/services/apps/service.py"
+        == PACKAGE_ROOT / "apps/nexus/apps/api/app/services/apps/scopes.py"
     )
 
 
@@ -111,7 +111,7 @@ def test_list_hides_generated_dirs(tmp_path: Path, monkeypatch) -> None:
 
 def test_search_finds_a_route_in_the_apps_adapter() -> None:
     result = search_source(
-        r"@router\.patch",
+        r"@router\.get",
         path="naas_abi/apps/nexus/apps/api/app/services/apps",
         glob="*.py",
     )
@@ -124,7 +124,7 @@ def test_search_finds_a_route_in_the_apps_adapter() -> None:
 
 def test_search_treats_an_invalid_regex_as_literal() -> None:
     result = search_source(
-        "resolve_app_enabled(", path="naas_abi/apps/nexus/apps/api/app/core"
+        "normalize_ontology_ref(", path="naas_abi/apps/nexus/apps/api/app/core"
     )
     assert result["matches"]
 

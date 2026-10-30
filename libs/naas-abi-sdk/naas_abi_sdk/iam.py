@@ -35,6 +35,13 @@ class IamClient:
             "abi.iam.v1.grantable", request, pb.GrantableResponse
         )
 
+    async def list_resources(
+        self, request: pb.ListResourcesRequest
+    ) -> pb.ListResourcesResponse:
+        return await self._transport.call(
+            "abi.iam.v1.list_resources", request, pb.ListResourcesResponse
+        )
+
     async def ensure_user(self, request: pb.EnsureUserRequest) -> pb.EnsureUserResponse:
         return await self._transport.call(
             "abi.iam.v1.ensure_user", request, pb.EnsureUserResponse
@@ -171,6 +178,13 @@ class IamClient:
             "abi.iam.v1.list_policies", request, pb.ListPoliciesResponse
         )
 
+    async def attachable_policies(
+        self, request: pb.AttachablePoliciesRequest
+    ) -> pb.AttachablePoliciesResponse:
+        return await self._transport.call(
+            "abi.iam.v1.attachable_policies", request, pb.AttachablePoliciesResponse
+        )
+
     async def update_policy(
         self, request: pb.UpdatePolicyRequest
     ) -> pb.UpdatePolicyResponse:
@@ -183,6 +197,13 @@ class IamClient:
     ) -> pb.DeletePolicyResponse:
         return await self._transport.call(
             "abi.iam.v1.delete_policy", request, pb.DeletePolicyResponse
+        )
+
+    async def list_sub_policies(
+        self, request: pb.ListSubPoliciesRequest
+    ) -> pb.ListSubPoliciesResponse:
+        return await self._transport.call(
+            "abi.iam.v1.list_sub_policies", request, pb.ListSubPoliciesResponse
         )
 
     async def attach_policy(
@@ -227,38 +248,25 @@ class IamClient:
             "abi.iam.v1.list_placements", request, pb.ListPlacementsResponse
         )
 
-    async def put_scope(self, request: pb.PutScopeRequest) -> pb.PutScopeResponse:
+    async def register_container(
+        self, request: pb.RegisterContainerRequest
+    ) -> pb.RegisterContainerResponse:
         return await self._transport.call(
-            "abi.iam.v1.put_scope", request, pb.PutScopeResponse
+            "abi.iam.v1.register_container", request, pb.RegisterContainerResponse
         )
 
-    async def delete_scope(
-        self, request: pb.DeleteScopeRequest
-    ) -> pb.DeleteScopeResponse:
+    async def delete_container(
+        self, request: pb.DeleteContainerRequest
+    ) -> pb.DeleteContainerResponse:
         return await self._transport.call(
-            "abi.iam.v1.delete_scope", request, pb.DeleteScopeResponse
+            "abi.iam.v1.delete_container", request, pb.DeleteContainerResponse
         )
 
-    async def get_set(self, request: pb.GetSetRequest) -> pb.GetSetResponse:
+    async def get_container(
+        self, request: pb.GetContainerRequest
+    ) -> pb.GetContainerResponse:
         return await self._transport.call(
-            "abi.iam.v1.get_set", request, pb.GetSetResponse
-        )
-
-    async def effective_set(
-        self, request: pb.EffectiveSetRequest
-    ) -> pb.EffectiveSetResponse:
-        return await self._transport.call(
-            "abi.iam.v1.effective_set", request, pb.EffectiveSetResponse
-        )
-
-    async def list_sets(self, request: pb.ListSetsRequest) -> pb.ListSetsResponse:
-        return await self._transport.call(
-            "abi.iam.v1.list_sets", request, pb.ListSetsResponse
-        )
-
-    async def put_set(self, request: pb.PutSetRequest) -> pb.PutSetResponse:
-        return await self._transport.call(
-            "abi.iam.v1.put_set", request, pb.PutSetResponse
+            "abi.iam.v1.get_container", request, pb.GetContainerResponse
         )
 
     async def register_catalog(

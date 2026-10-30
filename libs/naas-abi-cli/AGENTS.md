@@ -72,9 +72,12 @@ side is [`services/iam/AGENTS.md`](../naas-abi-core/naas_abi_core/services/iam/A
 | `invitation list [--email] [--provider]`, `invitation revoke GRANT_ID` | The pending grants; withdrawing one does not undo a membership already made |
 | `group bind PROVIDER GROUP --role R (--org O \| --workspace W [--org O])`, `unbind`, `list [--provider]` | Give the members of an identity provider's group (a claim value) a role at an org or workspace |
 
-- Roles are `owner`, `admin`, `member`, `viewer`; `--org` / `--workspace` take IAM's own
-  names (the ids Nexus shows). `--workspace` alone works when IAM already placed the
-  workspace in an org (`workspace_org`), else name `--org` too.
+- Roles are `owner`, `admin`, `member`, `viewer`; `--org` / `--workspace` take the ids
+  Nexus shows, turned into the containers Nexus registers in IAM:
+  `abi:nexus:organization/<org>` and `abi:nexus:organization/<org>/nexus:workspace/<ws>`
+  (`_scope`). `--workspace` alone works when IAM knows the workspace (its registry,
+  `iam.container`), else name `--org` too; a workspace IAM registered in another
+  organisation than `--org` is refused.
 - `abi iam invite` never sends mail and keeps no invitation list: Nexus's
   `abi user invite` does (`POST .../members/invite`), and records the invitation for the
   people UI. Prefer it where Nexus runs; `abi iam invite` is the lower level.

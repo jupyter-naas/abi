@@ -676,9 +676,8 @@ class AgentConfigModel(Base):
         String, nullable=True, index=True
     )  # Provider name (xai, openai, anthropic, etc.)
     is_default = Column(Integer, nullable=False, default=0)
-    enabled = Column(Boolean, nullable=False, default=False)  # Whether agent is available for chat
-    # A user's explicit toggle; sync keeps it over the workspace roster. NULL = follow the roster.
-    enabled_override = Column(Boolean, nullable=True)
+    # The old on/off (``enabled``, ``enabled_override``) stays in the table, unread:
+    # the move of the toggles into policies reads it once (``services/iam/policy_tree``).
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 
@@ -715,31 +714,6 @@ class SkillModel(Base):
 
 
 # ============================================
-# Organization role -> feature overlays
-# ============================================
-
-
-class OrganizationRoleFeaturesModel(Base):
-    """Durable per-organization role_baseline overlay.
-
-    ``role_baseline`` is a JSON object mapping role name to feature keys,
-    e.g. ``{"owner": ["chat", "files"], "admin": [...], ...}``.
-    """
-
-    __tablename__ = "organization_role_features"
-
-    organization_id = Column(
-        String,
-        ForeignKey("organizations.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    role_baseline = Column(Text, nullable=False)  # JSON object
-    updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
-    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
-
-
-# ============================================
 # App Configurations (per-workspace enable state)
 # ============================================
 
@@ -754,7 +728,8 @@ class AppConfigModel(Base):
     # Marketplace app identifier: "<module_path>:<app_name>" (e.g.
     # "naas_abi_marketplace.applications.openrouter:dashboard").
     app_id = Column(String(512), nullable=False, index=True)
-    enabled = Column(Boolean, nullable=False, default=False)
+    # The old on/off (``enabled``) stays in the table, unread: the move of the
+    # toggles into policies reads it once (``services/iam/policy_tree``).
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 
@@ -959,6 +934,8 @@ class InvitationModel(Base):
     accepted_user_id = Column(String, nullable=True)
     # JSON object: the member profile set at invitation (see ``invites.port.PROFILE_FIELDS``).
     profile = Column(Text, nullable=True)
+    # JSON list: the policies the invitation carries beside the roles, at its scope.
+    policy_ids = Column(Text, nullable=True)
 
 
 # ============================================
@@ -978,20 +955,6 @@ class WorkflowRunOwnerModel(Base):
     user_id = Column(String(255), nullable=False)
     workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
     started_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
-
-
-class WorkflowVisibilityModel(Base):
-    """A workflow or pipeline a workspace's admins turned on or off for everyone
-    in it (``services/workflows``, ``services/visibility``); none recorded: on."""
-
-    __tablename__ = "workflow_visibility"
-
-    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
-    type = Column(String(32), primary_key=True)
-    module_id = Column(String(255), primary_key=True)
-    name = Column(String(255), primary_key=True)
-    enabled = Column(Boolean, nullable=False, default=True)
-    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 
 
 # ============================================

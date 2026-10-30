@@ -1,12 +1,7 @@
-"""Fakes for the IAM admin tests: an audit log that remembers (and can break),
-and a fixed directory of organizations and workspaces."""
+"""Fakes for the IAM admin tests: an audit log that remembers (and can break)."""
 
 from __future__ import annotations
 
-from naas_abi.apps.nexus.apps.api.app.services.iam_admin.port import (
-    OrganizationScopes,
-    ScopeDirectory,
-)
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import (
     AuditEntry,
     AuditRecord,
@@ -52,13 +47,3 @@ class MemoryAudit:
 
     def phases(self, operation: str) -> list[str]:
         return [r.phase for r in self.records if r.action.operation == operation]
-
-
-class MemoryDirectory(ScopeDirectory):
-    """``ScopeDirectory`` over a fixed list of organizations."""
-
-    def __init__(self, organizations: list[OrganizationScopes]) -> None:
-        self.found = organizations
-
-    async def organizations(self, org_id: str | None = None) -> list[OrganizationScopes]:
-        return [o for o in self.found if org_id is None or o.id == org_id]

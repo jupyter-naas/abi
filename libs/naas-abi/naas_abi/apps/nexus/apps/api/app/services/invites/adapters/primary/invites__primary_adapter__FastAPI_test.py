@@ -25,7 +25,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
 from naas_abi.apps.nexus.apps.api.app.services.exceptions import (
     register_service_exception_handlers,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_scope
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from naas_abi.apps.nexus.apps.api.app.services.invites import runtime as invites_runtime
 from naas_abi.apps.nexus.apps.api.app.services.invites.adapters.primary.invites__primary_adapter__FastAPI import (  # noqa: E501
     idp_groups_router,
@@ -47,7 +47,7 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary impor
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER
 
-WS1 = workspace_scope("org-1", "ws-1")
+WS1 = workspace_container("org-1", "ws-1")
 REFUSAL = "You cannot grant what you do not hold"
 
 
@@ -64,14 +64,14 @@ def _inviter(team) -> None:
                     {
                         "effect": "Allow",
                         "actions": ["nexus:InviteWorkspaceMember"],
-                        "resources": ["${scope}:nexus:member/*"],
+                        "resources": ["${scope}/nexus:member/*"],
                     },
                     {
                         "effect": "Allow",
                         "actions": ["iam:AttachPolicy"],
                         "resources": [
-                            "${scope}:iam:attachment/builtin.member/*",
-                            "${scope}:iam:attachment/builtin.viewer/*",
+                            "${scope}/iam:attachment/builtin.member/*",
+                            "${scope}/iam:attachment/builtin.viewer/*",
                         ],
                     },
                 ],
@@ -85,7 +85,7 @@ def _inviter(team) -> None:
 async def api(team, nexus_db, monkeypatch):
     now = datetime(2026, 1, 1)
     async with nexus_db() as db:
-        for user in ("owner", "admin", "inviter"):
+        for user in ("owner", "admin", "inviter", "carl"):
             db.add(
                 UserModel(
                     id=user,
@@ -161,7 +161,8 @@ def _refused(response, policy_id: str) -> None:
     detail = response.json()["detail"]
     assert detail.startswith(REFUSAL), detail
     assert f"of {policy_id} allows" in detail, detail
-    assert re.search(r"allows \w+:\w+ on abi:org-1:ws-1:\S+ at abi:org-1:ws-1,", detail), detail
+    where = re.escape(WS1)
+    assert re.search(rf"allows \w+:\w+ on {where}/\S+ at {where},", detail), detail
     assert detail.endswith("you do not hold it there"), detail
 
 
@@ -201,3 +202,40 @@ async def test_an_idp_binding_to_a_role_the_binder_lacks_is_a_403_naming_it(api,
         response = await client.put("/api/idp-groups/workspaces/ws-1", json=binding)
         assert response.status_code == 200, response.text
         assert [b["group"] for b in response.json()["bindings"]] == ["Sales"]
+
+
+def _held(team, user: str) -> set[tuple[str, str | None]]:
+    with as_service_account("engine"):
+        found = team.iam.ensure_user(LEGACY_NEXUS_ISSUER, user, provider="nexus")
+        return {(a.policy_id, a.scope) for a in team.iam.list_attachments(principal_id=found.id)}
+
+
+@pytest.mark.asyncio
+async def test_adding_an_account_checks_its_policies_before_the_membership(api, team, monkeypatch):
+    """Someone who has an account is added directly: the policies the invite
+    carries are checked first, so a refused one leaves no membership behind."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import role_features
+
+    async def known(email: str) -> str | None:
+        return "carl" if email == "carl@example.com" else None
+
+    monkeypatch.setattr(api.invites.persistence, "user_id_by_email", known)
+    with as_service_account("engine"):
+        features = team.iam.create_policy(
+            "Features of member", role_features.policy_document(["chat"]), scope=WS1
+        )
+    body = {"email": "carl@example.com", "role": "viewer", "policy_ids": [features.id]}
+    async with api.as_("inviter") as client:
+        refused = await client.post("/api/workspaces/ws-1/members/invite", json=body)
+    assert refused.status_code in (403, 404), refused.text
+    assert _held(team, "carl") == set()
+    async with api.as_("admin") as client:
+        wrong = await client.post(
+            "/api/workspaces/ws-1/members/invite",
+            json={**body, "policy_ids": ["builtin.owner"]},
+        )
+        assert wrong.status_code == 400, wrong.text
+        assert _held(team, "carl") == set()
+        added = await client.post("/api/workspaces/ws-1/members/invite", json=body)
+    assert added.status_code == 200, added.text
+    assert {("builtin.viewer", WS1), (features.id, WS1)} <= _held(team, "carl")

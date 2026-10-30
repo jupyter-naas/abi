@@ -58,11 +58,11 @@ def test_a_listing_groups_each_module_s_scopes_with_their_display_data() -> None
             "display_name": "Recruiter",
             "description": "Finds people.",
             "icon": "https://i/r.png",
-            "resource": "${scope}:module:agent/acme.people/Recruiter",
+            "resource": "${scope}/module:agent/acme.people/Recruiter",
             "actions": ["module:UseAgent"],
         }
     ]
-    assert people["apps"][0]["resource"] == "${scope}:module:app/acme.people/directory"
+    assert people["apps"][0]["resource"] == "${scope}/module:app/acme.people/directory"
     assert people["apps"][0]["actions"] == ["module:OpenApp"]
     assert people["workflows"][0]["actions"] == ["module:RunWorkflow", "module:ReadWorkflowRuns"]
     assert people["pipelines"][0]["actions"] == ["module:RunPipeline", "module:ReadPipelineRuns"]
@@ -75,7 +75,7 @@ def test_a_listing_groups_each_module_s_scopes_with_their_display_data() -> None
             "description": "Export one.",
         }
     ]
-    assert people["declared"]["resource_types"][0]["resource"] == "${scope}:acme_people:report/*"
+    assert people["declared"]["resource_types"][0]["resource"] == "${scope}/acme_people:report/*"
 
     # naas_abi's own agents are module scopes too; a module with nothing is listed.
     assert [a["name"] for a in by_module["naas_abi"]["agents"]] == ["Abi"]
@@ -91,23 +91,106 @@ async def _get(user_id: str, path: str):
         return await http.get(path)
 
 
+def _hold(team, user: str, scope: str, *statements: dict) -> None:
+    from naas_abi_core.engine.call_context import as_service_account
+
+    with as_service_account("engine"):
+        policy = team.iam.create_policy(
+            f"{user} holds", {"version": "2026-10-13", "statements": list(statements)}
+        )
+        team.iam.attach_policy(policy.id, team.principal(user), scope)
+
+
 @pytest.mark.asyncio
-async def test_admins_list_the_module_scopes_of_their_workspace_or_org(team, monkeypatch) -> None:
+async def test_module_scopes_list_only_what_the_caller_may_grant(team, monkeypatch) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
+
     async def gathered():
         return build(EXPOSED, [DECLARED])
 
     monkeypatch.setattr(scopes, "gather", gathered)
-    for path in (
+    paths = (
         "/api/modules/scopes?workspace_id=ws-1",
         "/api/modules/scopes?organization_id=org-1",
-    ):
+    )
+    # Admins and owners hold no module scope (zero trust): nothing to grant.
+    for path in paths:
         for user in ("admin", "owner"):
             response = await _get(user, path)
             assert response.status_code == 200, (user, path)
-            assert [m["module"] for m in response.json()["modules"]] == ["acme.people", "naas_abi"]
+            assert response.json()["modules"] == []
         for user in ("member", "viewer", "stranger"):
             assert (await _get(user, path)).status_code == 403, (user, path)
     assert (await _get("admin", "/api/modules/scopes")).status_code == 422
+
+    # Holding one agent and the right to write policies: that agent alone.
+    ws1 = workspace_container("org-1", "ws-1")
+    team.user("builder")
+    _hold(
+        team,
+        "builder",
+        ws1,
+        {
+            "effect": "Allow",
+            "actions": ["module:UseAgent"],
+            "resources": ["${scope}/module:agent/acme.people/Recruiter"],
+        },
+        {
+            "effect": "Allow",
+            "actions": ["iam:CreatePolicy"],
+            "resources": ["${scope}/iam:policy/*"],
+        },
+    )
+    response = await _get("builder", paths[0])
+    assert response.status_code == 200, response.text
+    (only,) = response.json()["modules"]
+    assert only["module"] == "acme.people"
+    assert [a["name"] for a in only["agents"]] == ["Recruiter"]
+    assert only["apps"] == only["workflows"] == only["pipelines"] == []
+    assert only["declared"] is None
+    # Not at the organization, where they hold nothing.
+    assert (await _get("builder", paths[1])).status_code == 403
+
+
+def test_granted_keeps_what_the_patterns_reach_minus_the_excluded() -> None:
+    listed = build(EXPOSED, [DECLARED])
+    grantable = [
+        {
+            "service": "module",
+            "actions": [
+                {
+                    "action": "module:OpenApp",
+                    "resources": ["${scope}/module:app/acme.people/*"],
+                    "excluded": [],
+                },
+                {
+                    "action": "module:UseAgent",
+                    "resources": ["${scope}/*"],
+                    "excluded": ["${scope}/module:agent/naas_abi/*"],
+                },
+            ],
+        },
+        {
+            "service": "acme_people",
+            "actions": [
+                {
+                    "action": "acme_people:ExportReport",
+                    "resources": ["${scope}/acme_people:report/*"],
+                    "excluded": [],
+                }
+            ],
+        },
+    ]
+    (people,) = scopes.granted(listed, grantable)
+    assert [a["name"] for a in people["agents"]] == ["Recruiter"]
+    assert [a["name"] for a in people["apps"]] == ["directory"]
+    assert people["workflows"] == []
+    assert [a["action"] for a in people["declared"]["actions"]] == ["acme_people:ExportReport"]
+    assert scopes.granted(listed, []) == []
+    assert scopes.exposed_types(listed) == {
+        "acme.people": ["agent", "app", "workflow", "pipeline"],
+        "naas_abi": ["agent"],
+    }
 
 
 @pytest.mark.asyncio
@@ -133,22 +216,57 @@ async def test_a_source_that_fails_leaves_its_part_out(monkeypatch) -> None:
     ]
 
 
-def test_what_a_workspace_has_is_each_module_with_its_items_in_the_set() -> None:
-    from naas_abi_core.services.iam.IAMPorts import ScopeSet
+@pytest.mark.asyncio
+async def test_the_modules_are_read_as_nexus_whoever_asks(monkeypatch) -> None:
+    """What exists is read as Nexus's own account, never as the caller: a user
+    holding only policies (no role, so no discovery listing) still sees the
+    module items they may grant, and a cache of the gathered modules
+    (``iam/listers.ModuleItems``) is the same for everyone. Who sees what is
+    each caller's narrowing afterwards (``granted``, ``authz.filter_scopes``)."""
+    from naas_abi_core.engine.call_context import current_call_context, use_call_context
+    from naas_abi_core.engine.call_context_types import CallContext, user
+
+    seen: list[str] = []
+
+    async def remote():
+        seen.append(current_call_context().principal.id)
+        return [Exposed("agent", "acme.people", "Recruiter")]
+
+    async def nothing():
+        return []
+
+    monkeypatch.setattr(scopes, "engine_agents", lambda: [])
+    monkeypatch.setattr(scopes, "remote_agents", remote)
+    monkeypatch.setattr(scopes, "apps", nothing)
+    monkeypatch.setattr(scopes, "workflows", nothing)
+    monkeypatch.setattr(scopes, "declared_catalogs", lambda: [])
+    monkeypatch.setattr(scopes, "engine_modules", lambda: [])
+    with use_call_context(CallContext(principal=user("usr_dana"))):
+        listed = await scopes.gather()
+    assert [m["module"] for m in listed] == ["acme.people"]
+    assert seen == ["api"]
+
+
+def test_what_a_caller_may_use_is_each_module_with_its_usable_items() -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
 
     listed = build(EXPOSED, [DECLARED], modules=["naas_abi_marketplace.applications.github"])
+    every = scopes.item_scopes(listed)
     counts = {"agents": 1, "apps": 1, "workflows": 1, "pipelines": 1}
-    # Nothing recorded: everything; a module with nothing is left out.
-    assert scopes.in_set(listed, ScopeSet("org-1", "ws-1")) == [
+    # Everything usable; a module with nothing is left out.
+    assert scopes.counted(listed, set(every)) == [
         {"module": "acme.people", **counts},
         {"module": "naas_abi", "agents": 1, "apps": 0, "workflows": 0, "pipelines": 0},
     ]
-    one_app = ScopeSet("org-1", "ws-1", ("app/acme.people/directory", "agent/*/*"), None)
-    assert scopes.in_set(listed, one_app) == [
+    one_app = {
+        ModuleScope("app", "acme.people", "directory"),
+        *(s for s in every if s.type == "agent"),
+    }
+    assert scopes.counted(listed, one_app) == [
         {"module": "acme.people", "agents": 1, "apps": 1, "workflows": 0, "pipelines": 0},
         {"module": "naas_abi", "agents": 1, "apps": 0, "workflows": 0, "pipelines": 0},
     ]
-    assert scopes.in_set(listed, ScopeSet("org-1", "ws-1", (), ())) == []
+    assert scopes.counted(listed, set()) == []
 
 
 @pytest.mark.asyncio

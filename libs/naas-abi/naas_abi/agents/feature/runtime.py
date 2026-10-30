@@ -2,7 +2,7 @@
 
 Every feature tool follows the same rules as the HTTP adapter it mirrors:
 the signed-in user and Nexus workspace come from the chat boundary
-(``agent_user_id`` / ``agent_workspace_id``), membership is checked with the
+(``agent_user_id`` / ``agent_container``), membership is checked with the
 workspace service, and DB work runs on a fresh session (see
 ``nexus_admin_tools._with_db``: tools run on worker threads, so they must not
 reuse the API process's asyncpg pool).
@@ -26,8 +26,8 @@ from naas_abi.tools.nexus_admin_tools import (
     _run_async,
     _with_db,
     _workspace_service,
+    turn_workspace_id,
 )
-from naas_abi_core.services.agent.context import agent_workspace_id
 
 T = TypeVar("T")
 
@@ -40,7 +40,7 @@ def tool_context() -> tuple[str, str] | dict[str, str]:
     user_id = _require_user_id()
     if isinstance(user_id, dict):
         return user_id
-    workspace_id = (agent_workspace_id.get() or "").strip()
+    workspace_id = turn_workspace_id()
     if not workspace_id:
         return {"error": _NO_WORKSPACE}
     return user_id, workspace_id

@@ -20,7 +20,8 @@ Provisioning = Literal["builtin", "zitadel", "keycloak", "none"]
 class Invitation:
     """An email invited to an organization and/or a workspace through one
     identity provider. ``grant_ids`` are the IAM pending grants that carry the
-    roles until the person signs in."""
+    roles and ``policy_ids`` until the person signs in. The policies attach at
+    the invitation's workspace, else at its organization (``policy_scope``)."""
 
     id: str
     email: str
@@ -37,6 +38,8 @@ class Invitation:
     accepted_user_id: str | None = None
     # The member profile to write in ``organization_id`` once the person exists.
     profile: dict[str, str] = field(default_factory=dict)
+    # The policies carried beside the roles ("Features of member", say).
+    policy_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -129,6 +132,11 @@ class OwnerGrantRefusedError(Exception):
     """Only an owner makes an owner: an admin's invitation names a lower role."""
 
 
+class InvalidPolicyError(ValueError):
+    """An invitation carries customer policies (``pol_…``): a role is chosen as
+    the role, never as one of its policies."""
+
+
 class InvitationPersistencePort(ABC):
     """Nexus's ``invitations`` table."""
 
@@ -168,6 +176,7 @@ class InvitationPersistencePort(ABC):
         org_role: str | None,
         workspace_role: str | None,
         grant_ids: Sequence[str],
+        policy_ids: Sequence[str] = (),
         invited_by: str | None,
         now: datetime,
         profile: Mapping[str, str] | None = None,
@@ -236,6 +245,23 @@ class GrantsGateway(ABC):
 
     @abstractmethod
     async def revoke(self, grant_id: str) -> None: ...
+
+    @abstractmethod
+    async def pending(self, grant_ids: Sequence[str]) -> dict[str, tuple[str, str | None]]:
+        """``{grant id: (policy id, scope)}`` of these pending grants that still
+        exist (Nexus's own read, for nobody)."""
+
+    @abstractmethod
+    async def attach(
+        self, user_id: str, policy_id: str, scope: str, *, by: str | None = None
+    ) -> bool:
+        """Attach ``policy_id`` at ``scope`` to a Nexus user who exists already,
+        as ``api`` on behalf of ``by``: IAM checks that they may attach it and
+        hold what it grants. True when this call attached it (it was not)."""
+
+    @abstractmethod
+    async def detach(self, user_id: str, policy_id: str, scope: str) -> None:
+        """Take back what ``attach`` made (Nexus's own call, for nobody)."""
 
     @abstractmethod
     async def bind(

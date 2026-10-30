@@ -3,7 +3,7 @@
 A second app of the module (``admin``), never on the public route: Nexus serves
 only the ``idp`` app at ``/idp``. It is for services (the provisioning port, the
 CLI), which reach it with ``abi.app.v1`` requests and are authorized by
-discovery's ``OpenApp`` on ``abi:-:-:discovery:app/<project>/idp/admin``.
+discovery's ``OpenApp`` on ``abi:discovery:app/<project>/idp/admin``.
 
 Discovery's ``OpenApp`` is a read-level action, so it is not enough: a service
 account that holds a workspace role holds it too. The app therefore checks the

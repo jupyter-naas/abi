@@ -12,7 +12,6 @@ import type {
   AuditEntry,
   CatalogsView,
   CreatedKey,
-  GrantableView,
   GroupView,
   KeyCreate,
   KeyView,
@@ -20,8 +19,6 @@ import type {
   ManifestReject,
   ManifestStatus,
   ManifestView,
-  ModuleScopesView,
-  OrganizationSetView,
   Page,
   PolicyCreate,
   PolicySource,
@@ -30,12 +27,12 @@ import type {
   PolicyView,
   PrincipalKind,
   PrincipalView,
+  PublishersView,
+  ResourcePage,
+  ResourceQuery,
   ServiceAccountView,
-  SetParts,
-  SetsView,
   Simulation,
   SimulationRequest,
-  WorkspaceSetView,
 } from './types';
 
 export const IAM_ADMIN_API = '/api/iam/admin';
@@ -122,18 +119,37 @@ async function send<T>(
 export function createIamAdminApi(fetcher: Fetcher = authFetch) {
   return {
     /** What the caller may do on the platform, or on the attachments of `scope`
-     *  (`abi:<org>:<workspace>`, `-` for the org itself) when one is given. */
+     *  (an organization's or a workspace's container) when one is given. */
     access: (scope?: string) =>
       read<AccessView>(fetcher, path('access') + query({ scope }), 'Could not read your access.'),
-    catalogs: (scope?: string) =>
-      read<CatalogsView>(fetcher, path('catalogs') + query({ scope }), 'Could not load the action catalogs.'),
-    /** What the caller may grant at `scope` (`abi:-:-` for the platform): the policy builder's items. */
-    grantable: (scope: string) =>
-      read<GrantableView>(fetcher, path('grantable') + query({ scope }), 'Could not read what you may grant.'),
-    /** Every module with its agents, apps, workflows, pipelines and declared actions, for
-     *  the admins of the workspace or organization named. */
-    moduleScopes: (where: { workspace_id?: string; organization_id?: string }) =>
-      read<ModuleScopesView>(fetcher, '/api/modules/scopes' + query(where), 'Could not load the module scopes.'),
+    /** The actions the caller may grant at `scope` (within `parent`, for a sub-policy of it). */
+    catalogs: (scope?: string, parent?: string | null) =>
+      read<CatalogsView>(fetcher, path('catalogs') + query({ scope, parent }), 'Could not load the action catalogs.'),
+    /** What the caller may grant at `scope` (`abi:` for the platform) by publisher and resource
+     *  type, within `parent`; `derive` for a new sub-policy of it (IAM refuses the parent as
+     *  creating it would). The policy builder's groups. */
+    publishers: (scope: string, parent?: string | null, options: { derive?: boolean } = {}) =>
+      read<PublishersView>(
+        fetcher,
+        path('publishers') + query({ scope, parent, derive: options.derive ? 'true' : null }),
+        'Could not read what you may grant.',
+      ),
+    /** The existing resources of a type the caller may list at the scope, a page at a time. */
+    resources: (input: ResourceQuery) =>
+      read<ResourcePage>(
+        fetcher,
+        path('resources') +
+          query({
+            scope: input.scope,
+            service: input.service,
+            type: input.type,
+            q: input.q,
+            cursor: input.cursor,
+            module: input.module,
+            limit: input.limit,
+          }),
+        'Could not list the resources.',
+      ),
 
     // policies
     /** Every policy the caller may list; with `scope`, that level's own and those above it the
@@ -201,7 +217,7 @@ export function createIamAdminApi(fetcher: Fetcher = authFetch) {
     listGroups: (scope?: string) =>
       read<{ items: PrincipalView[] }>(fetcher, path('groups') + query({ scope }), 'Could not load the groups.'),
     getGroup: (id: string) => read<GroupView>(fetcher, path('groups', id), 'Could not load the group.'),
-    /** `scope`: the owner (`abi:<org>:-`, `abi:<org>:<ws>`); none: the platform. */
+    /** `scope`: the owner (an organization's or a workspace's container); none: the platform. */
     createGroup: (input: { name: string; org?: string | null; scope?: string | null }) =>
       send<PrincipalView>(fetcher, path('groups'), 'POST', input, 'Could not create the group.'),
     deleteGroup: (id: string) =>
@@ -293,31 +309,6 @@ export function createIamAdminApi(fetcher: Fetcher = authFetch) {
         'POST',
         input,
         'Could not reject the manifest.',
-      ),
-
-    // sets: the module scopes and features of organizations and their workspaces
-    /** Every organization the caller may read the set of (the platform), or one. */
-    sets: (organizationId?: string) =>
-      read<SetsView>(
-        fetcher,
-        path('sets') + query({ organization_id: organizationId }),
-        'Could not load the modules and features.',
-      ),
-    putOrganizationSet: (organizationId: string, set: SetParts) =>
-      send<OrganizationSetView>(
-        fetcher,
-        path('sets', organizationId),
-        'PUT',
-        set,
-        'Could not save the organization’s modules and features.',
-      ),
-    putWorkspaceSet: (organizationId: string, workspaceId: string, set: SetParts) =>
-      send<WorkspaceSetView>(
-        fetcher,
-        path('sets', organizationId, 'workspaces', workspaceId),
-        'PUT',
-        set,
-        'Could not save the workspace’s modules and features.',
       ),
 
     // the simulator and the audit

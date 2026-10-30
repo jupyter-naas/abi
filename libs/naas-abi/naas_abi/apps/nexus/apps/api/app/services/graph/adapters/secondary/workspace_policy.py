@@ -72,7 +72,7 @@ def build_scope(
     user: Any,
     owned: set[str],
     catalog: set[str],
-    org: str | None,
+    container: str | None,
 ) -> GraphAccessScope:
     """The workspace's view for ``user``: what it offers, narrowed to what IAM
     lets the user read, and to write."""
@@ -83,7 +83,7 @@ def build_scope(
     # The schema graph is read-only whatever IAM would say; sharing never writes it.
     writing = ((set(config.write) | owned) - {NEXUS_GRAPH, SCHEMA_GRAPH}) & readable
     writable = graph_iam.allowed("Insert", writing, user=user)
-    can_create = org is not None and graph_iam.may_create(workspace_id, org, user=user)
+    can_create = container is not None and graph_iam.may_create(container, user=user)
     return GraphAccessScope(workspace_id, frozenset(readable), frozenset(writable), can_create)
 
 
@@ -99,12 +99,14 @@ async def load_workspace_scope(
 
     saved = await load_resource_policy(db, workspace_id, "graphs")
     config = WorkspaceGraphPolicyConfig.model_validate(saved.data)
-    org = await AUTHZ.org_of(workspace_id)
+    container = await AUTHZ.container_of(workspace_id)
 
     def resolve() -> GraphAccessScope:
         owned = graph_iam.owned_by(workspace_id)
         catalog = catalog_graphs(store) if config.read_all else set()
-        return build_scope(workspace_id, config, user=user, owned=owned, catalog=catalog, org=org)
+        return build_scope(
+            workspace_id, config, user=user, owned=owned, catalog=catalog, container=container
+        )
 
     return await asyncio.to_thread(resolve)
 

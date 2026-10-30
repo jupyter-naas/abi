@@ -7,8 +7,8 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from naas_abi_core.services.agent.context import (
+    agent_container,
     agent_user_id,
-    agent_workspace_id,
     documents_active_slug,
     documents_active_title,
     documents_brief,
@@ -24,6 +24,7 @@ from naas_abi_core.services.source_control.SourceControlService import (
     SourceControlService,
 )
 
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from naas_abi.tools.documents_tools import (
     _DATA_URL_RE,
     _REDACTED_PLACEHOLDER,
@@ -367,7 +368,7 @@ def _seed_in_memory_document(sc, html: str, *, slug: str = "untitled-local"):
 def _sections_context(*, workspace: str = "ws-test", slug: str = "untitled-local"):
     _forget_active_slugs()
     tokens = [
-        agent_workspace_id.set(workspace),
+        agent_container.set(workspace_container(None, workspace)),
         documents_active_slug.set(slug),
         agent_user_id.set("user-1"),
         documents_research_required.set(False),
@@ -378,7 +379,7 @@ def _sections_context(*, workspace: str = "ws-test", slug: str = "untitled-local
 
 
 def _reset_tokens(tokens) -> None:
-    agent_workspace_id.reset(tokens[0])
+    agent_container.reset(tokens[0])
     documents_active_slug.reset(tokens[1])
     agent_user_id.reset(tokens[2])
     documents_research_required.reset(tokens[3])
@@ -589,7 +590,7 @@ def _main_chat_context(*, workspace: str = "ws-test"):
     """Main chat surface: authenticated, but no document open."""
     _forget_active_slugs()
     return [
-        agent_workspace_id.set(workspace),
+        agent_container.set(workspace_container(None, workspace)),
         documents_active_slug.set(None),
         agent_user_id.set("user-1"),
         documents_research_required.set(False),

@@ -219,7 +219,7 @@ def test_only_an_owner_assigns_the_owner_role() -> None:
 
 
 def test_admin_reads_account_and_membership_details(team) -> None:
-    team.grant("member", "member", "abi:org-1:ws-1")
+    team.grant("member", "member", "abi:nexus:organization/org-1/nexus:workspace/ws-1")
     client, _ = _client(
         user="admin", profiles={"member": OrganizationMemberProfileRecord(name="Member (Acme)")}
     )

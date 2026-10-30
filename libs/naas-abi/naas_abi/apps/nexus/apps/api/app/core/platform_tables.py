@@ -69,12 +69,6 @@ _ENTRIES: list[PlatformTableEntry] = [
             "Each user's profile in an organization (roles are IAM's attachments, not rows here).",
         ),
         (
-            "organization_role_features",
-            "Organization role features",
-            "Which features each role gets in an organization, set in Organization Settings > "
-            "Roles.",
-        ),
-        (
             "organization_domains",
             "Organization domains",
             "Email domains of an organization, with the identity provider their sign-in goes to.",
@@ -125,7 +119,7 @@ _ENTRIES: list[PlatformTableEntry] = [
         (
             "agent_configs",
             "Agents",
-            "Agents enabled in each workspace, with their model and prompt.",
+            "Agents installed in each workspace, with their model and prompt.",
         ),
         ("skills", "Skills", "Skills (reusable prompts) per workspace, organization or user."),
         ("model_catalog", "Model catalog", "Models known to the platform, with overrides."),
@@ -136,7 +130,7 @@ _ENTRIES: list[PlatformTableEntry] = [
             "Inference servers registered in each workspace.",
         ),
     ),
-    *_section("Apps", ("app_configs", "Apps", "Apps enabled in each workspace.")),
+    *_section("Apps", ("app_configs", "Apps", "Apps installed in each workspace.")),
     *_section(
         "Workflows",
         (
@@ -144,10 +138,21 @@ _ENTRIES: list[PlatformTableEntry] = [
             "Workflow runs",
             "Who started each workflow or pipeline run, from which workspace.",
         ),
+    ),
+    *_section(
+        "Tasks",
+        ("tasks", "Tasks", "Tasks of each workspace; one with no iteration is in the backlog."),
+        ("task_comments", "Task comments", "Comments on each task."),
         (
-            "workflow_visibility",
-            "Workflows on or off",
-            "Workflows and pipelines turned on or off in each workspace.",
+            "task_activity",
+            "Task activity",
+            "Changes, comments and deletions of tasks: the feed, kept after a task goes.",
+        ),
+        ("task_iterations", "Task iterations", "Runs of whole weeks of a workspace's tasks."),
+        (
+            "task_settings",
+            "Task settings",
+            "Each workspace's tasks configuration: iterations, stages, priorities, labels.",
         ),
     ),
     *_section(

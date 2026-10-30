@@ -5,6 +5,11 @@ from typing import BinaryIO
 
 from naas_abi_core import logger
 from naas_abi_core.services.iam.enforcement import ResourceGuard
+from naas_abi_core.services.iam.listing import (
+    ListingQuery,
+    ResourceLister,
+    named_lister,
+)
 from naas_abi_core.services.iam.names import path_parts
 from naas_abi_core.services.object_storage.iam_catalog import (
     CATALOG,
@@ -199,6 +204,33 @@ class ObjectStorageService(ServiceBase, IObjectStorageDomain):
         self.__require("DeleteObject", prefix, key)
         self.adapter.delete_object(prefix, key)
         self.__publish_event(ObjectDeleted(prefix=prefix, key=key))
+
+    def iam_listers(self) -> dict[tuple[str, str], ResourceLister]:
+        """What IAM lists of this service for the policy builder (read unchecked:
+        IAM filters it as the caller): the objects
+        and folders at the top, or under the prefix searched (a text ending
+        with ``/``)."""
+
+        def entries(query: ListingQuery) -> list[str]:
+            prefix = self.__remove_storage_prefix(
+                query.text if query.text.endswith("/") else ""
+            )
+            try:
+                # The search text is the caller's: a plain path only, as every
+                # guarded call, or ``ws1/../ws2/`` would be named (and checked)
+                # under ws1 while the backend lists ws2, or the base path's parent.
+                self.__plain(prefix)
+                return self.adapter.list_objects(prefix)
+            except (Exceptions.InvalidObjectPath, Exceptions.ObjectNotFound):
+                return []  # not a plain path, or nothing under it: nothing to list
+
+        return {
+            (CATALOG.service, "object"): named_lister(
+                entries,
+                lambda path: self._guard.name("object", path_parts(path)),
+                lambda path: path.strip("/"),
+            )
+        }
 
     def list_objects(self, prefix: str = "", queue: Queue | None = None) -> list[str]:
         prefix = self.__remove_storage_prefix(prefix)

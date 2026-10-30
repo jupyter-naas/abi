@@ -218,6 +218,18 @@ def _merge_source_urls(*groups: list[str]) -> list[str]:
     return merged
 
 
+async def turn_container(workspace_id: str) -> str | None:
+    """The container of a turn's workspace; None when IAM cannot say (it is not
+    there): the turn then fails closed in IAM, never mid-stream here."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+    from naas_abi.apps.nexus.apps.api.app.services.iam.runtime import IAMUnavailableError
+
+    try:
+        return await AUTHZ.container_of(workspace_id)
+    except IAMUnavailableError:
+        return None
+
+
 async def stream_chat_response(
     request: ChatRequest,
     current_user: User,
@@ -231,33 +243,27 @@ async def stream_chat_response(
     if request.workspace_id:
         from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
             bind_usable_processes,
-            caller_enabled_class_names,
-            caller_feature_flags,
-            caller_usable_agents,
-            feature_keys_of,
+            caller_usable_class_names,
         )
         from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agents__primary_adapter__FastAPI import (
             pick_workspace_chat_agent_id,
             pick_workspace_documents_agent_id,
             pick_workspace_sheets_agent_id,
             pick_workspace_slides_agent_id,
-            workspace_roster,
+            usable_roster,
         )
         from naas_abi_core.services.agent.context import agent_workspace_enabled_class_names
 
         async with AsyncSessionLocal() as db:
             with bind_registry(db) as registry:
                 # The turn was authorized (SendMessage) in this workspace; the roster
-                # only picks which of its agents answers.
-                workspace_agents = await workspace_roster(registry.agents, request.workspace_id)
-                flags = await caller_feature_flags(
-                    current_user, request.workspace_id, feature_keys_of(workspace_agents)
-                )
-                workspace_agents = await caller_usable_agents(
-                    workspace_agents, current_user, request.workspace_id, flags
+                # only picks which of its agents answers, among those the listing
+                # shows the caller: a fallback never runs one it hides.
+                workspace_agents, flags = await usable_roster(
+                    registry.agents, current_user, request.workspace_id
                 )
                 agent_workspace_enabled_class_names.set(
-                    caller_enabled_class_names(workspace_agents, flags)
+                    caller_usable_class_names(workspace_agents, flags)
                 )
                 await bind_usable_processes(current_user, request.workspace_id)
         resolved_agent = pick_workspace_chat_agent_id(workspace_agents, request.agent)
@@ -342,11 +348,11 @@ async def stream_chat_response(
                 # (which uses copy_context) inherit them.
                 from naas_abi_core.services.agent.context import (
                     agent_chat_id,
+                    agent_container,
                     agent_user_email,
                     agent_user_id,
                     agent_user_name,
                     agent_workspace_enabled_class_names,
-                    agent_workspace_id,
                     coder_workspace_base,
                     coder_workspace_secret,
                     documents_active_mode,
@@ -378,7 +384,11 @@ async def stream_chat_response(
                     )
                     turn_workspace = stored.workspace_id if stored is not None else None
                 if turn_workspace is not None:
-                    agent_workspace_id.set(str(turn_workspace))
+                    # The turn's workspace, as its container (``CallContext.container``):
+                    # what the feature tools read, and where IAM places what the turn
+                    # creates. A workspace IAM does not know names none; without IAM
+                    # the turn goes on in no container and IAM refuses what it asks.
+                    agent_container.set(await turn_container(str(turn_workspace)))
                     if agent_workspace_enabled_class_names.get() is None:
                         from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
                             bind_usable_agents,

@@ -1,7 +1,7 @@
 """The identity domain service: configured providers, verified users.
 
 Every operation is authorized with the ``identity`` catalog on the provider it
-concerns (``abi:-:-:identity:provider/<name>``), for the caller of the current
+concerns (``abi:identity:provider/<name>``), for the caller of the current
 ``CallContext``. Once a caller is allowed ``identity:Authenticate``, the user is
 created or refreshed in IAM as the engine: the caller is authorized for the
 sign-in, not for IAM administration.
@@ -24,6 +24,7 @@ import jwt
 from naas_abi_core import logger
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.IAMPorts import FilterResult, PrincipalRecord
+from naas_abi_core.services.iam.listing import ResourceLister, named_lister
 from naas_abi_core.services.iam.names import resource_name
 from naas_abi_core.services.identity.iam_catalog import SERVICE
 from naas_abi_core.services.identity.IdentityPorts import (
@@ -180,6 +181,18 @@ class IdentityService(IIdentityService):
     @property
     def default_provider(self) -> str | None:
         return self._default
+
+    def iam_listers(self) -> dict[tuple[str, str], ResourceLister]:
+        """What IAM lists of this service for the policy builder: its providers.
+        Read unchecked: IAM filters it as the caller (``list_resources``)."""
+        return {
+            (SERVICE, "provider"): named_lister(
+                lambda query: [p.public() for p in self._providers.values()],
+                lambda provider: provider_resource(provider.name),
+                lambda provider: provider.name,
+                lambda provider: provider.display_name,
+            )
+        }
 
     def list_providers(self) -> list[ProviderInfo]:
         allowed = set(

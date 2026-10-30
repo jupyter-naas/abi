@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
-from uuid import uuid4
 
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import (
@@ -29,6 +28,7 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
     WorkspaceRecord,
     WorkspaceStatsRecord,
     WorkspaceUpdateInput,
+    new_workspace_id,
 )
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -157,7 +157,7 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
 
     async def create_workspace(self, workspace: WorkspaceCreateInput) -> WorkspaceRecord:
         now = datetime.now(UTC).replace(tzinfo=None)
-        workspace_id = f"ws-{uuid4().hex[:12]}"
+        workspace_id = workspace.id or new_workspace_id()
         workspace_model = WorkspaceModel(
             id=workspace_id,
             name=workspace.name,

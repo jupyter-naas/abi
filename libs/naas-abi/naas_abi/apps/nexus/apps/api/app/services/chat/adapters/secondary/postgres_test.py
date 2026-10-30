@@ -99,7 +99,8 @@ async def test_get_agent_by_id_maps_record() -> None:
     assert agent is not None
     assert agent.id == "agent-1"
     assert agent.provider == "openai"
-    assert agent.enabled is False
+    # No on/off state is read: the row's old ``enabled`` is ignored.
+    assert not hasattr(agent, "enabled")
 
 
 @pytest.mark.asyncio

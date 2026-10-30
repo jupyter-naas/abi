@@ -27,13 +27,14 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
 from naas_abi_core.services.coding_environment.CodingEnvironmentService import (
     CodingEnvironmentService,
 )
+from naas_abi_core.services.iam.names import anywhere
 from naas_abi_core.services.iam.tests.authorization_contract import (
     JWT_SECRET,
     AuthorizationContract,
     contract_iam,
     wire,
 )
-from naas_abi_core.services.iam.tests.iam_harness import IAMHarness, statement
+from naas_abi_core.services.iam.tests.iam_harness import NEXUS, IAMHarness, statement
 
 
 class CodingEnvironmentContract(AuthorizationContract):
@@ -66,7 +67,7 @@ class TestGetStatus(CodingEnvironmentContract):
         self.env = owner.provision(template_id="tmpl-default", name="dev").id
 
     def resource(self, owner):
-        return f"abi:-:-:coding_environment:environment/engine/{self.env}"
+        return f"abi:coding_environment:environment/engine/{self.env}"
 
     def call(self, service):
         return service.get_status(workspace_id=self.env)
@@ -82,7 +83,7 @@ class TestProvision(CodingEnvironmentContract):
         )
 
     def resource(self, owner):
-        return f"abi:-:-:coding_environment:environment/{self.who}/-"
+        return f"abi:coding_environment:environment/{self.who}/-"
 
     def call(self, service):
         return service.provision(template_id="tmpl-default", name="dev")
@@ -99,7 +100,7 @@ def _own_environments(h: IAMHarness, principal_id: str) -> None:
         statement(
             "Allow",
             ["coding_environment:*"],
-            [f"abi:*:*:coding_environment:environment/{principal_id}/*"],
+            anywhere(f"coding_environment:environment/{principal_id}/*"),
         ),
     )
 
@@ -124,18 +125,16 @@ def test_an_environment_belongs_to_the_caller_whatever_the_request_names():
             ce.get_access(workspace_id=bob_env, app_slug="code-server")
 
 
-def test_an_environment_is_placed_in_the_target_workspace():
+def test_an_environment_is_placed_in_the_container_of_the_call():
     ce, h = _service()
-    h.admin("put_scope", "org-1", "ws-1")
+    h.iam._register_catalog(NEXUS)
+    ws_1 = h.register("ws-1")
     with use_call_context(
-        CallContext(principal=service_account("engine"), workspace_id="ws-1")
+        CallContext(principal=service_account("engine"), container=ws_1)
     ):
         ce.ensure_user(email="e@example.com", username="engine")
         env = ce.provision(template_id="tmpl-default", name="dev")
-    assert h.iam.resolve_placement("coding_environment", f"engine/{env.id}") == (
-        "org-1",
-        "ws-1",
-    )
+    assert h.iam.resolve_placement("coding_environment", f"engine/{env.id}") == ws_1
 
 
 def test_listing_every_environment_is_an_admin_action():

@@ -28,11 +28,12 @@ from naas_abi.apps.nexus.apps.api.app.main_public_routes_test import PUBLIC_ROUT
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AuthzDenied
 from naas_abi.apps.nexus.apps.api.app.services.iam.catalog import (
     LEVEL_OF,
+    NEXUS_ACTIONS,
     TYPE_OF,
     TYPES_BY_NAME,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import Declared, Guard
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_scope
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 
 # Signed-in routes about the caller's own account or the platform's login: no
@@ -59,6 +60,12 @@ ACCOUNT_ROUTES: dict[tuple[str, str], str] = {
     ("GET", "/api/iam/admin/access"): "what the caller may do, decided by IAM for the caller only",
     ("GET", "/api/iam/admin/grantable"): (
         "what the caller may grant, decided by IAM for the caller only"
+    ),
+    ("GET", "/api/iam/admin/publishers"): (
+        "what the caller may grant, by publisher, decided by IAM for the caller only"
+    ),
+    ("GET", "/api/iam/admin/resources"): (
+        "what the caller may list of a type, filtered by IAM as the caller"
     ),
     (
         "GET",
@@ -139,7 +146,7 @@ LEVELS = {
     "admin": (False, False, True, True),
 }
 # Platform-level types are reached by the platform admin alone, bar the model
-# list the built-in roles carry (roles.PLATFORM_TYPES).
+# list the platform companions carry (the catalog's PLATFORM_ACCESS).
 PLATFORM_VIEWER_ACTIONS = {"ListProviderModels", "GetProviderModel"}
 
 
@@ -244,7 +251,7 @@ def world():
     )
     nexus = NexusIam(flags)
     workspace = nexus.workspace("org-1", "ws-1")
-    organization = org_scope("org-1")
+    organization = org_container("org-1")
     for role in ROLES:
         nexus.grant(role, role, workspace)
         nexus.grant(role, role, organization)
@@ -261,8 +268,8 @@ def _guards(table) -> list[tuple[tuple[str, str], Guard]]:
     )
 
 
-# Admin-level actions only an owner holds (roles.py ``_OWNER_ONLY_ACTIONS``).
-OWNER_ONLY_ACTIONS = {"DeleteWorkspace", "DeleteOrganization"}
+# Admin-level actions only an owner holds: flagged ``owner_only`` in the catalog.
+OWNER_ONLY_ACTIONS = {a.spec.name for a in NEXUS_ACTIONS if a.spec.owner_only}
 
 
 def _expected(guard: Guard) -> tuple[bool, ...]:

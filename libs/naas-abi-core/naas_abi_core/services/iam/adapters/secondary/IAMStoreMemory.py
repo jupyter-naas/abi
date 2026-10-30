@@ -11,13 +11,17 @@ from datetime import UTC, datetime
 from naas_abi_core.services.iam.catalog import ActionCatalog
 from naas_abi_core.services.iam.IAMPorts import (
     Attachment,
+    ContainerRecord,
     GroupMapping,
     IAMConflictError,
     IAMNotFoundError,
     IAMStore,
     KeyRecord,
+    LegacyPlacement,
+    LegacyScopeSet,
     ManifestRecord,
     ManifestStatus,
+    NameRewriter,
     Page,
     PendingGrant,
     Placement,
@@ -25,10 +29,10 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalKind,
     PrincipalRecord,
     RevisionConflictError,
-    ScopeRecord,
-    ScopeSet,
     SigningKeyRecord,
 )
+from naas_abi_core.services.iam.names import UNRESOLVED, as_container, within
+from naas_abi_core.services.iam.policy import PolicyDocument
 
 
 def _now() -> datetime:
@@ -46,8 +50,10 @@ class IAMStoreMemory(IAMStore):
         self._attachments: dict[str, Attachment] = {}
         self._pending: dict[str, PendingGrant] = {}
         self._placements: dict[tuple[str, str], Placement] = {}
-        self._scopes: dict[tuple[str, str], ScopeRecord] = {}
-        self._sets: dict[tuple[str, str], ScopeSet] = {}
+        self._containers: dict[tuple[str, str, str], ContainerRecord] = {}
+        # Tests: placements of the old form, by key, as ``abi:<org>:<ws>``.
+        self._legacy_placements: dict[tuple[str, str], str] = {}
+        self._legacy_sets: list[LegacyScopeSet] = []
         self._catalogs: dict[str, ActionCatalog] = {}
         self._keys: dict[str, KeyRecord] = {}
         self._token_floors: dict[str, datetime] = {}
@@ -248,6 +254,7 @@ class IAMStoreMemory(IAMStore):
         with self._lock:
             if policy.id in self._policies:
                 raise IAMConflictError(f"Policy {policy.id} exists")
+            self._require_parent(policy.parent_id)
             now = _now()
             stored = replace(policy, revision=1, created_at=now, updated_at=now)
             self._write()
@@ -285,11 +292,13 @@ class IAMStoreMemory(IAMStore):
                     f"Policy {policy.id} is at revision {current.revision}, "
                     f"not {expected_revision}"
                 )
+            self._require_parent(policy.parent_id)
             stored = replace(
                 current,
                 name=policy.name,
                 description=policy.description,
                 document=policy.document,
+                parent_id=policy.parent_id,
                 revision=current.revision + 1,
                 updated_at=_now(),
             )
@@ -303,7 +312,12 @@ class IAMStoreMemory(IAMStore):
             if current is None:
                 now = _now()
                 stored = replace(
-                    policy, managed=True, revision=1, created_at=now, updated_at=now
+                    policy,
+                    managed=True,
+                    parent_id=None,
+                    revision=1,
+                    created_at=now,
+                    updated_at=now,
                 )
             elif (current.name, current.description, current.document) == (
                 policy.name,
@@ -332,8 +346,21 @@ class IAMStoreMemory(IAMStore):
                 raise IAMConflictError(f"Policy {policy_id} is attached")
             if any(g.policy_id == policy_id for g in self._pending.values()):
                 raise IAMConflictError(f"Policy {policy_id} is granted to invitees")
+            if any(p.parent_id == policy_id for p in self._policies.values()):
+                raise IAMConflictError(f"Policy {policy_id} has sub-policies")
             self._write()
             del self._policies[policy_id]
+
+    def list_sub_policies(self, policy_id: str) -> list[Policy]:
+        with self._lock:
+            return sorted(
+                (p for p in self._policies.values() if p.parent_id == policy_id),
+                key=lambda p: p.id,
+            )
+
+    def _require_parent(self, parent_id: str | None) -> None:
+        if parent_id is not None and parent_id not in self._policies:
+            raise IAMNotFoundError(f"Policy {parent_id} not found")
 
     # -- attachments --------------------------------------------------------------
 
@@ -387,6 +414,14 @@ class IAMStoreMemory(IAMStore):
         with self._lock:
             return sorted(
                 (a for a in self._attachments.values() if a.principal_id in wanted),
+                key=lambda a: a.id,
+            )
+
+    def attachments_of(self, policy_ids: Sequence[str]) -> list[Attachment]:
+        wanted = set(policy_ids)
+        with self._lock:
+            return sorted(
+                (a for a in self._attachments.values() if a.policy_id in wanted),
                 key=lambda a: a.id,
             )
 
@@ -484,68 +519,166 @@ class IAMStoreMemory(IAMStore):
                 key=lambda p: (p.service, p.id_key),
             )
 
-    def put_scope(self, scope: ScopeRecord) -> None:
+    def put_container(self, record: ContainerRecord) -> None:
         with self._lock:
-            if scope.workspace != "-":
-                for existing in self._scopes.values():
-                    if (
-                        existing.workspace == scope.workspace
-                        and existing.org != scope.org
-                    ):
-                        raise IAMConflictError(
-                            f"Workspace {scope.workspace} is in org {existing.org}"
-                        )
-            key = (scope.org, scope.workspace)
-            if key in self._scopes:
+            key = (record.service, record.type, record.id)
+            existing = self._containers.get(key)
+            if existing is not None:
+                if existing.parent != record.parent:
+                    raise IAMConflictError(
+                        f"{record.service}:{record.type}/{record.id} is in {existing.parent}"
+                    )
                 return
             self._write()
-            self._scopes[key] = scope
+            self._containers[key] = record
 
-    def delete_scope(self, org: str, workspace: str = "-") -> bool:
+    def get_container(self, service: str, type: str, id: str) -> ContainerRecord | None:
         with self._lock:
-            if (org, workspace) not in self._scopes:
+            return self._containers.get((service, type, id))
+
+    def list_containers(self) -> list[ContainerRecord]:
+        with self._lock:
+            return [self._containers[k] for k in sorted(self._containers)]
+
+    def delete_containers(self, records: Sequence[ContainerRecord]) -> int:
+        with self._lock:
+            if not records:
+                return 0
+            self._write()
+            names = {record.name for record in records}
+            for record in records:
+                self._containers.pop((record.service, record.type, record.id), None)
+            for key, placement in list(self._placements.items()):
+                if any(within(placement.container, name) for name in names):
+                    del self._placements[key]
+            return len(records)
+
+    def rewrite_names(self, rewriter: NameRewriter) -> dict[str, int]:
+        counts = dict.fromkeys(
+            (
+                "containers",
+                "policies",
+                "groups",
+                "attachments",
+                "pending_grants",
+                "placements",
+                "keys",
+                "manifests",
+            ),
+            0,
+        )
+        with self._lock:
+            self._write()
+            for container in rewriter.containers():
+                at = (container.service, container.type, container.id)
+                found = self._containers.get(at)
+                if found is None:
+                    self._containers[at] = container
+                    counts["containers"] += 1
+                elif found.parent != container.parent:
+                    raise IAMConflictError(f"{at} is in {found.parent}")
+            for policy_id, policy in list(self._policies.items()):
+                before = policy.document.to_dict()
+                document = dict(rewriter.document(before))
+                owner = rewriter.owner(policy.owner_scope)
+                if document == before and owner == policy.owner_scope:
+                    continue
+                self._policies[policy_id] = replace(
+                    policy,
+                    document=PolicyDocument.from_dict(document),
+                    owner_scope=owner,
+                    revision=policy.revision + 1,
+                    updated_at=_now(),
+                )
+                counts["policies"] += 1
+            for principal_id, principal in list(self._principals.items()):
+                if principal.kind != "group":
+                    continue
+                owner = rewriter.owner(principal.owner_scope)
+                if owner != principal.owner_scope:
+                    self._principals[principal_id] = replace(
+                        principal, owner_scope=owner
+                    )
+                    counts["groups"] += 1
+            for attachment_id, attachment in list(self._attachments.items()):
+                scope = rewriter.scope(attachment.scope)
+                if scope != attachment.scope:
+                    self._attachments[attachment_id] = replace(attachment, scope=scope)
+                    counts["attachments"] += 1
+            for grant_id, grant in list(self._pending.items()):
+                scope = rewriter.scope(grant.scope)
+                if scope != grant.scope:
+                    self._pending[grant_id] = replace(grant, scope=scope)
+                    counts["pending_grants"] += 1
+            for key, placement in list(self._placements.items()):
+                if placement.container != UNRESOLVED:
+                    continue
+                legacy = self._legacy_placements.get(key, "abi:-:-")
+                placed_in = rewriter.placement(
+                    LegacyPlacement(placement.service, placement.id_key, legacy)
+                )
+                if as_container(placed_in) == UNRESOLVED:
+                    continue  # no container to name: kept, read as UNRESOLVED
+                self._placements[key] = replace(placement, container=placed_in)
+                self._legacy_placements.pop(key, None)
+                counts["placements"] += 1
+            for key_id, key_record in list(self._keys.items()):
+                narrowing = (
+                    [dict(s) for s in key_record.scope]
+                    if key_record.scope is not None
+                    else None
+                )
+                rewritten = (
+                    [dict(s) for s in rewriter.statements(narrowing)]
+                    if narrowing is not None
+                    else None
+                )
+                resource = rewriter.resource(key_record.resource)
+                if rewritten == narrowing and resource == key_record.resource:
+                    continue
+                self._keys[key_id] = replace(
+                    key_record,
+                    scope=tuple(rewritten) if rewritten is not None else None,
+                    resource=resource,
+                )
+                counts["keys"] += 1
+            for manifest_key, manifest in list(self._manifests.items()):
+                written = dict(manifest.document)
+                declared = {k: v for k, v in written.items() if k != "catalog"}
+                document = dict(rewriter.document(declared))
+                if "catalog" in written:
+                    document["catalog"] = written["catalog"]
+                if document != written:
+                    self._manifests[manifest_key] = replace(manifest, document=document)
+                    counts["manifests"] += 1
+        return counts
+
+    def seed_legacy_placement(self, placement: Placement, scope: str) -> None:
+        """Tests: a placement of the grammar before container paths."""
+        with self._lock:
+            key = (placement.service, placement.id_key)
+            self._placements[key] = replace(placement, container=UNRESOLVED)
+            self._legacy_placements[key] = scope
+
+    # -- what an older version left ------------------------------------------------
+
+    def legacy_scope_sets(self) -> list[LegacyScopeSet]:
+        with self._lock:
+            return sorted(self._legacy_sets, key=lambda s: (s.org, s.workspace))
+
+    def drop_legacy_scope_sets(self) -> bool:
+        with self._lock:
+            if not self._legacy_sets:
                 return False
             self._write()
-            del self._scopes[(org, workspace)]
+            self._legacy_sets = []
             return True
 
-    def list_scopes(self, org: str | None = None) -> list[ScopeRecord]:
+    def seed_legacy_scope_sets(self, found: Iterable[LegacyScopeSet]) -> None:
+        """Tests: the rows an older version's store would hold."""
         with self._lock:
-            return sorted(
-                (s for s in self._scopes.values() if org in (None, s.org)),
-                key=lambda s: (s.org, s.workspace),
-            )
+            self._legacy_sets = list(found)
 
-    # -- sets -------------------------------------------------------------------
-
-    def put_scope_set(self, scope_set: ScopeSet) -> None:
-        with self._lock:
-            self._write()
-            key = (scope_set.org, scope_set.workspace)
-            if scope_set.recorded:
-                self._sets[key] = scope_set
-            else:
-                self._sets.pop(key, None)
-
-    def delete_scope_sets(self, org: str, workspace: str = "-") -> bool:
-        with self._lock:
-            keys = [
-                key for key in self._sets if key[0] == org and workspace in ("-", key[1])
-            ]
-            if not keys:
-                return False
-            self._write()
-            for key in keys:
-                del self._sets[key]
-            return True
-
-    def list_scope_sets(self, org: str | None = None) -> list[ScopeSet]:
-        with self._lock:
-            return [
-                self._sets[key]
-                for key in sorted(self._sets)
-                if org is None or key[0] == org
-            ]
     # -- catalogs -----------------------------------------------------------------
 
     def put_catalog(self, catalog: ActionCatalog) -> None:

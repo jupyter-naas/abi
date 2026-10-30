@@ -59,9 +59,7 @@ def _caller_allowed(iam: IAMService, name: str, *actions: str) -> str:
         account = iam.create_service_account(name)
         policy = iam.create_policy(
             f"{name}-identity",
-            document(
-                statement("Allow", list(actions), ["abi:-:-:identity:provider/*"])
-            ),
+            document(statement("Allow", list(actions), ["abi:identity:provider/*"])),
         )
         iam.attach_policy(policy.id, account.id)
     return name

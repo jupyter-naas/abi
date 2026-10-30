@@ -61,7 +61,7 @@ class CallContext:
     token_id: str | None = None              # jti, for audit
     token_issued_at: int | None = None       # iat: IAM refuses a token older than the revocation floor
     scope: tuple[Statement, ...] | None = None   # abi_scope narrowing
-    workspace_id: str | None = None          # target workspace of a create: a request input, not identity
+    container: str | None = None             # the container the call is made in (its name): a request input, not identity
     trace_id: str | None = None
     triggered_via: str | None = None         # "api", "cli", "configuration"...: stamped on events
     delegated_token: str | None = None       # a module host's delegation (a credential: never printed)
@@ -79,9 +79,14 @@ class CallContext:
   the user, such as a verified email, is trusted).
 - Id convention: service accounts and users carry `sa_`/`usr_` ids once IAM assigns
   them; `Principal.name` is the account name (`api`, `engine`, `module/<project>/<id>`).
-- The event actor fields (`actor_user_id`, `actor_workspace_id`, `triggered_via`) come
-  from the call's user, `workspace_id` and `triggered_via`; the older
-  `event_actor_*` / `agent_*` names are views of this context.
+- The event actor fields (`actor_user_id`, `actor_container`, `triggered_via`) come
+  from the call's user, `container` and `triggered_via`; the older
+  `event_actor_*` / `agent_*` names are views of this context. Events recorded before
+  container paths keep their `actor_workspace_id`, which is read but no longer written.
+- `inside(container)` makes the calls of a block in a container (the SDK's
+  `call_context.inside`, re-exported): what they create is placed there and their
+  module scopes are named there. IAM checks the container is registered under that
+  path (`IAMService.call_container`).
 
 **Who sets it.** Every primary adapter sets it **only from verified credentials**:
 
@@ -98,13 +103,15 @@ class CallContext:
   the same way. A transfer session runs as the caller who opened it and belongs to that
   actor acting for that user (the same actor for another user is refused); model registry
   chat streams follow the rule (`same_caller`). Overflow chunks carry their call's token,
-  user, trace and workspace; a client stream captures its user once, when it opens.
+  user, trace and container; a client stream captures its user once, when it opens.
   `nats_runtime.run_coro` schedules through `run_coroutine_threadsafe`, which copies the
   calling thread's context, so a sync caller keeps its identity.
 - **Never from request-body fields.** `CallContext.principal_id` and `tenant_id` in the
   proto are reserved and ignored (servers ignore them, clients leave them empty).
-  `CallContext.workspace_id` stays, documented as the target workspace of a create: an
-  input like any other, and authorized. `HttpRequest.user_id`, `request.user_id` in
+  `CallContext.container` is the container the call is made in: an input like any
+  other, which IAM checks against its registry. `CallContext.workspace_id`, which SDK
+  0.2 sets, is refused when set (`nats_identity.WorkspaceIdRefusedError`,
+  `INVALID_ARGUMENT`): this engine takes the container of a call instead. `HttpRequest.user_id`, `request.user_id` in
   `source_control` and `coding_environment`, the prompt preamble Nexus prepends for
   agents and any `X-User-*` header are not identity.
 - **The `Abi-On-Behalf-Of` header is refused, not ignored.** A user is named by a
@@ -302,7 +309,7 @@ in-process code inherits it; work for no caller declares an identity (`as_servic
 from a request body. A user is named by a delegated token, never a header.
 *Consequences.* A domain service reads who calls with `current_call_context()`, whatever the transport (a test
 checks that every kernel service sees the same context in process, through the core client and through the SDK
-transport). Events published for a NATS call carry the user the caller acted for and its target workspace. A
+transport). Events published for a NATS call carry the user the caller acted for and the container of the call. A
 request with no verified user is anonymous and denied everywhere.
 
 **The broker confines each module; the engine writes what a module could abuse.**

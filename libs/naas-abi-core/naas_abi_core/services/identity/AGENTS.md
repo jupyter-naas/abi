@@ -102,7 +102,7 @@ identity.end_session_url("acme", id_token_hint=..., post_logout_redirect_uri=...
 ```
 
 - **Authorization.** Every call is checked with the `identity` catalog on
-  `abi:-:-:identity:provider/<name>` for the current `CallContext`:
+  `abi:identity:provider/<name>` for the current `CallContext`:
   `ListProviders`, `GetProvider`, `VerifyToken` (no side effect),
   `Authenticate` (creates or refreshes the IAM user, as `engine`) and `SignIn`
   (the relying-party operations). `exchange_code` and `refresh` resolve the
@@ -330,7 +330,7 @@ against each configured issuer's discovery document and JWKS: exact `iss`; an as
 most every 30 s. It resolves `(issuer, sub)` to the IAM user, maps the groups claim and refuses suspended principals.
 It also runs the provider side of a relying party's sign-in, so client secrets never leave the engine. It is
 exposed over NATS as `abi.identity.v1.*` and to SDK modules as `engine.services.identity`, and authorized by its own
-`identity:*` catalog on `abi:-:-:identity:provider/<name>`; the IAM user is written as `engine` once the caller holds
+`identity:*` catalog on `abi:identity:provider/<name>`; the IAM user is written as `engine` once the caller holds
 `identity:Authenticate`, as placements are.
 *Consequences.* Nexus has no login code (no passwords, magic links, codes, reset, signup or refresh tokens of its
 own) and `secret_key` signs and encrypts nothing. Group changes and offboarding reach ABI within ten minutes through

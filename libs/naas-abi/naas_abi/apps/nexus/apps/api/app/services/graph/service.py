@@ -2175,7 +2175,9 @@ class GraphService:
         # The kernel's create rule places the graph in the workspace the call
         # names (and refuses a caller who may not create graphs there): the
         # route authorized this user in ``workspace_id`` before getting here.
-        with use_call_context(replace(current_call_context(), workspace_id=workspace_id)):
+        with use_call_context(
+            replace(current_call_context(), container=_workspace_container(workspace_id))
+        ):
             store.create_graph(new_graph_uri)
         normalized_role = _normalize_role_label(role_label)
         knowledge_graph_role = _get_or_create_knowledge_graph_role(nexus, normalized_role)
@@ -3943,3 +3945,21 @@ def _produce_export(store: Any, graph_uri: str, format: str, emit: Callable[[byt
                 buffer.clear()
     if buffer:
         emit(bytes(buffer))
+
+
+def _workspace_container(workspace_id: str) -> str:
+    """The container a graph created for ``workspace_id`` is placed in, as IAM
+    registered it (a workspace it does not know, or no IAM at all, names one IAM
+    refuses)."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
+    from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
+        SERVICE,
+        WORKSPACE,
+        workspace_container,
+    )
+
+    try:
+        found = runtime.iam().container(SERVICE, WORKSPACE, workspace_id)
+    except runtime.IAMUnavailableError:
+        found = None
+    return found if found is not None else workspace_container(None, workspace_id)

@@ -30,7 +30,7 @@ CATALOG = ActionCatalog(
     version=1,
     resource_types=(
         ResourceType(
-            COLLECTION, id="path", container=True, description="A collection."
+            COLLECTION, id="path", id_prefix=True, description="A collection."
         ),
         ResourceType(VECTOR, id="path", description="A vector, in its collection."),
         ResourceType(

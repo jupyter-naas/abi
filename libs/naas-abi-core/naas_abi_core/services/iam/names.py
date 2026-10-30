@@ -1,12 +1,16 @@
 """Canonical resource names, action names and their wildcard patterns.
 
-Grammar and encoding: ``AGENTS.md``, "Resource names":
+Grammar and encoding: ``AGENTS.md``, "Resource names". A name is a path of
+containers:
 
-    abi:<org>:<workspace>:<service>:<type>/<id>
+    abi:<service>:<type>/<id>/.../<service>:<type>/<id>
 
-Ids are percent-encoded UTF-8 (every octet outside RFC 3986 ``unreserved``),
-so a canonical name never holds a raw ``*`` or ``?`` and a wildcard can never
-be read as a literal. Callers build and parse names here, never by string
+``abi:``, the steps of the containers it sits in from the top, then its own
+step. Ids are percent-encoded UTF-8 (every octet outside RFC 3986
+``unreserved``), so a canonical name never holds a raw ``*`` or ``?`` and a
+wildcard can never be read as a literal, and a raw ``:`` only ever separates a
+step's service from its type. A container's id is one segment; only the last
+step's id may be a path. Callers build and parse names here, never by string
 formatting.
 """
 
@@ -22,53 +26,65 @@ from urllib.parse import quote, unquote
 IdKind = Literal["opaque", "path", "singleton"]
 
 NONE = "-"
-# The workspace field of what spans every workspace of an org: the encoded "*",
-# which no workspace id can be. Only org-wide attachments are named with it, so
-# "abi:<org>:*" patterns reach them and "abi:<org>:-:" ones never do.
-ALL_WORKSPACES = "%2A"
-# The org field of what spans every org: unscoped attachments, named
-# abi:%2A:%2A:iam:attachment/..., and the platform's own policies and groups,
-# abi:%2A:%2A:iam:policy/... and iam:group/.... No ${scope} expands to it (no
-# org id is "%2A"), so a role at any scope, the platform's abi:-:- included,
-# never reaches them: only grants written for every org ("*", "abi:*:...") do.
-ALL_ORGS = "%2A"
-# The only resource type the workspace marker may name, with an org (org-wide).
-ORG_WIDE_TYPE = ("iam", "attachment")
-# Sets are written where only the level above reaches (``sets.write_resource``):
-# an org's at abi:%2A:%2A:iam:set/<org>, a workspace's at abi:<org>:%2A:iam:set/<ws>.
-SET_TYPE = ("iam", "set")
-# The resource types the workspace marker may name, with an org.
-ORG_WIDE_TYPES = frozenset({ORG_WIDE_TYPE, SET_TYPE})
-# The resource types the org marker may name, with the workspace marker.
-EVERY_ORG_TYPES = frozenset(
-    {ORG_WIDE_TYPE, ("iam", "policy"), ("iam", "group"), SET_TYPE}
-)
 PREFIX = "abi:"
-PLATFORM_SCOPE = "abi:-:-"
+# The path of no container: what is platform-level, the platform as an owner, a
+# scope or a placement. "${scope}/" reads "abi:" there.
+PLATFORM = PREFIX
+PLATFORM_SCOPE = PLATFORM
+# The suffix of a scope below a container: it counts at every container under it.
+BELOW = "/*"
+# Below the platform: any container, or the platform. Never an attachment's scope:
+# how a platform policy's ``${scope}`` is read when nobody attached it yet.
+EVERYWHERE = PREFIX + "*"
+# A container nobody registers: where an owner, a scope or a placement of the
+# grammar before container paths resolves until it is rewritten. Only grants that
+# span every container ("*", "abi:*/...") reach what is named in it.
+UNRESOLVED = "abi:iam:unresolved/-"
+# The old platform scope, read as the platform.
+_OLD_PLATFORM = "abi:-:-"
 
-_SCOPE_ID = re.compile(r"^[a-z0-9_-]{1,64}$")
 _SERVICE = re.compile(r"^[a-z][a-z0-9_]*$")
 _ACTION_NAME = re.compile(r"^[A-Z][A-Za-z0-9]*$")
 _ACTION = re.compile(r"^([a-z][a-z0-9_]*):([A-Z][A-Za-z0-9]*)$")
+# One id segment: unreserved characters and %XX escapes.
+_SEGMENT = re.compile(r"^(?:[A-Za-z0-9._~-]|%[0-9A-F]{2})+$")
 # Inside a canonical id: unreserved characters, %XX escapes and "/".
 _ID = re.compile(r"^(?:[A-Za-z0-9._~/-]|%[0-9A-F]{2})*$")
 _VARIABLE = re.compile(r"\$\{([^}]*)\}")
+_SCOPE_SLASH = "${scope}/"
 
 
 @dataclass(frozen=True)
-class ResourceName:
-    """A parsed canonical name. ``id`` is the encoded form."""
+class Step:
+    """One step of a path: ``<service>:<type>/<id>``, ``id`` encoded."""
 
-    org: str
-    workspace: str
     service: str
     type: str
     id: str
 
     @property
-    def scope(self) -> str:
-        """``abi:<org>:<workspace>``: the workspace, org or platform it sits in."""
-        return f"abi:{self.org}:{self.workspace}"
+    def value(self) -> str:
+        """The decoded id of a container step (one segment)."""
+        return unquote(self.id)
+
+    def __str__(self) -> str:
+        return f"{self.service}:{self.type}/{self.id}"
+
+
+@dataclass(frozen=True)
+class ResourceName:
+    """A parsed canonical name: the steps of its containers, then its own.
+    ``id`` is the encoded form."""
+
+    containers: tuple[Step, ...]
+    service: str
+    type: str
+    id: str
+
+    @property
+    def container(self) -> str:
+        """The name of the container it sits in, ``abi:`` for the platform."""
+        return _join(self.containers)
 
     @property
     def segments(self) -> tuple[str, ...]:
@@ -78,7 +94,16 @@ class ResourceName:
         return tuple(unquote(part) for part in self.id.split("/"))
 
     def __str__(self) -> str:
-        return f"abi:{self.org}:{self.workspace}:{self.service}:{self.type}/{self.id}"
+        return f"{_prefix(self.container)}{self.service}:{self.type}/{self.id}"
+
+
+def _join(steps: Sequence[Step]) -> str:
+    return PREFIX + "/".join(str(step) for step in steps) if steps else PLATFORM
+
+
+def _prefix(container: str) -> str:
+    """What a step is written after: ``abi:`` at the platform, ``<container>/``."""
+    return PLATFORM if container == PLATFORM else container + "/"
 
 
 def encode_segment(value: str) -> str:
@@ -116,144 +141,251 @@ def path_parts(path: str) -> list[str]:
     return path.strip("/").split("/") if path.strip("/") else []
 
 
+def _check_type(service: str, type: str) -> None:
+    if not _SERVICE.match(service):
+        raise ValueError(f"Invalid service name {service!r}")
+    if not _SERVICE.match(type):
+        raise ValueError(f"Invalid resource type {type!r}")
+
+
 def resource_name(
     service: str,
     type: str,
     parts: str | Sequence[str] = (),
     *,
     kind: IdKind = "opaque",
-    org: str = NONE,
-    workspace: str = NONE,
+    container: str = PLATFORM,
 ) -> str:
-    """Build a canonical name, platform-level unless ``org``/``workspace`` say otherwise."""
-    if not _SERVICE.match(service):
-        raise ValueError(f"Invalid service name {service!r}")
-    if not _SERVICE.match(type):
-        raise ValueError(f"Invalid resource type {type!r}")
-    _check_org(org, workspace, service, type)
-    _check_workspace(workspace, org, service, type)
-    return f"abi:{org}:{workspace}:{service}:{type}/{encode_id(parts, kind)}"
+    """Build a canonical name in ``container`` (a container's name; the platform
+    by default)."""
+    _check_type(service, type)
+    parse_container(container)
+    return f"{_prefix(container)}{service}:{type}/{encode_id(parts, kind)}"
 
 
+def container_name(service: str, type: str, id: str, *, parent: str = PLATFORM) -> str:
+    """The name of a container: its own step, ``<service>:<type>/<id>``, in
+    ``parent``. Its id is one segment."""
+    return resource_name(service, type, id, container=parent)
+
+
+def _steps(body: str, name: str) -> list[tuple[str, str, list[str]]]:
+    """The ``(service, type, id tokens)`` of each step of ``body``, the part of
+    a name after ``abi:``."""
+    steps: list[tuple[str, str, list[str]]] = []
+    for token in body.split("/"):
+        if ":" in token:
+            service, _, type_ = token.partition(":")
+            if ":" in type_ or not _SERVICE.match(service) or not _SERVICE.match(type_):
+                raise ValueError(f"Malformed step {token!r} in {name!r}")
+            steps.append((service, type_, []))
+        elif not steps:
+            raise ValueError(f"A resource name is abi:<service>:<type>/<id>: {name!r}")
+        else:
+            steps[-1][2].append(token)
+    return steps
+
+
+@lru_cache(maxsize=16384)
 def parse_resource_name(name: str) -> ResourceName:
     """Parse a canonical name; raises ``ValueError`` for anything else."""
-    if not name.startswith(PREFIX):
+    if not isinstance(name, str) or not name.startswith(PREFIX):
         raise ValueError(f"A resource name starts with 'abi:': {name!r}")
-    fields = name[len(PREFIX) :].split(":", 3)
-    if len(fields) != 4:
+    steps = _steps(name[len(PREFIX) :], name)
+    if not steps:
         raise ValueError(f"Malformed resource name {name!r}")
-    org, workspace, service, rest = fields
-    type_, slash, id_ = rest.partition("/")
-    if not slash or not id_:
+    containers = tuple(_container_step(step, name) for step in steps[:-1])
+    service, type_, tokens = steps[-1]
+    id_ = "/".join(tokens)
+    if not tokens or not id_:
         raise ValueError(f"A resource name ends with <type>/<id>: {name!r}")
-    if not _SERVICE.match(service):
-        raise ValueError(f"Invalid service in {name!r}")
-    if not _SERVICE.match(type_):
-        raise ValueError(f"Invalid resource type in {name!r}")
-    _check_org(org, workspace, service, type_)
-    _check_workspace(workspace, org, service, type_)
     if id_ != NONE and not _ID.match(id_):
         raise ValueError(f"The id of {name!r} is not canonically encoded")
-    return ResourceName(org, workspace, service, type_, id_)
+    return ResourceName(containers, service, type_, id_)
 
 
-def scope_name(org: str = NONE, workspace: str = NONE) -> str:
-    """``abi:<org>:<workspace>``, the form of an attachment scope."""
-    _check_scope_id(org, "org")
-    _check_scope_id(workspace, "workspace")
-    return f"abi:{org}:{workspace}"
+def _container_step(step: tuple[str, str, list[str]], name: str) -> Step:
+    service, type_, tokens = step
+    if len(tokens) != 1 or not _SEGMENT.match(tokens[0]):
+        raise ValueError(f"A container's id is one encoded segment: {name!r}")
+    return Step(service, type_, tokens[0])
+
+
+@lru_cache(maxsize=16384)
+def parse_container(name: str) -> tuple[Step, ...]:
+    """The steps of a container's name, ``()`` for the platform ``abi:``."""
+    if name == PLATFORM:
+        return ()
+    if not isinstance(name, str) or not name.startswith(PREFIX):
+        raise ValueError(f"A container's name starts with 'abi:': {name!r}")
+    steps = _steps(name[len(PREFIX) :], name)
+    if not steps:
+        raise ValueError(f"Malformed container name {name!r}")
+    return tuple(_container_step(step, name) for step in steps)
+
+
+def path_of(name: ResourceName) -> list[str]:
+    """The containers a name sits in, from the top down to its own."""
+    return [
+        _join(name.containers[:depth]) for depth in range(1, len(name.containers) + 1)
+    ]
+
+
+# The platform's own policies, groups and attachments (unscoped ones included):
+# no ${scope} names them, the platform's included (AGENTS.md, "Attachments and scope").
+_PLATFORM_OWN = tuple(PREFIX + f"iam:{t}/" for t in ("policy", "group", "attachment"))
+
+
+def platform_own(resource: str) -> bool:
+    return resource.startswith(_PLATFORM_OWN)
+
+
+def is_container_name(value: str) -> bool:
+    try:
+        parse_container(value)
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
+def parent_of(container: str) -> str:
+    """The container ``container`` sits in, the platform for a top one."""
+    return _join(parse_container(container)[:-1])
+
+
+def top_container(container: str) -> str:
+    """The first step of a container's path (itself for a top one); the platform
+    for the platform."""
+    return _join(parse_container(container)[:1])
+
+
+def ancestors(container: str) -> list[str]:
+    """The containers ``container`` sits in, nearest first, the platform last."""
+    steps = parse_container(container)
+    return [_join(steps[:depth]) for depth in range(len(steps) - 1, -1, -1)]
+
+
+def within(container: str, ancestor: str) -> bool:
+    """Whether ``container`` is ``ancestor`` or sits below it (anything is within
+    the platform)."""
+    if ancestor == PLATFORM:
+        return True
+    return container == ancestor or container.startswith(ancestor + "/")
+
+
+def anywhere(rest: str) -> list[str]:
+    """Patterns for ``<service>:<type>/<id>`` (a pattern) at the platform and in
+    any container: ``abi:<rest>`` and ``abi:*/<rest>``."""
+    return [PREFIX + rest, PREFIX + "*/" + rest]
+
+
+# A scope or an owner of the grammar before container paths, ``abi:<x>:<y>``.
+_OLD_SCOPE = re.compile(r"^abi:[^:/]+:[^:/]+$")
+
+
+def is_old_scope(value: str | None) -> bool:
+    """Whether ``value`` is a scope or an owner of the grammar before container
+    paths (``abi:<org>:<ws>``, ``abi:<org>:-``, ``abi:<org>:*``): written only by
+    the start-up moves that predate them, named in ``UNRESOLVED`` until the
+    names are rewritten."""
+    return value is not None and bool(_OLD_SCOPE.match(value))
+
+
+def as_container(value: str | None) -> str:
+    """A stored owner, scope or placement as a container: itself when it is one
+    (or the platform), the platform for the old ``abi:-:-``, else ``UNRESOLVED``
+    (the grammar before container paths, waiting to be rewritten)."""
+    if value is None or value == _OLD_PLATFORM:
+        return PLATFORM
+    return value if is_container_name(value) else UNRESOLVED
+
+
+# ---------------------------------------------------------------------------
+# Scopes and owners
+# ---------------------------------------------------------------------------
+
+
+def below(container: str) -> str:
+    """The scope below ``container``: at it and at every container under it."""
+    if container == PLATFORM:
+        raise ValueError("Below the platform is everywhere: attach without a scope")
+    parse_container(container)
+    return container + BELOW
+
+
+def is_below(scope: str | None) -> bool:
+    return scope is not None and scope.endswith(BELOW)
+
+
+def container_of_scope(scope: str) -> str:
+    """The container of a scope (a below one's, without ``/*``)."""
+    return scope.removesuffix(BELOW)
 
 
 def validate_scope(scope: str) -> str:
-    """Check an attachment scope: ``abi:<org>:<ws>``, ``abi:<org>:-``,
-    ``abi:<org>:*`` or ``abi:-:-``."""
-    if not scope.startswith(PREFIX):
-        raise ValueError(f"A scope starts with 'abi:': {scope!r}")
-    fields = scope[len(PREFIX) :].split(":")
-    if len(fields) != 2:
-        raise ValueError(f"A scope is abi:<org>:<workspace>: {scope!r}")
-    org, workspace = fields
-    _check_scope_id(org, "org")
-    if workspace != "*":
-        _check_scope_id(workspace, "workspace")
-    if org == NONE and workspace != NONE:
-        raise ValueError(f"A platform scope is abi:-:-, not {scope!r}")
+    """Check an attachment scope: a container, below one (``<container>/*``) or
+    the platform ``abi:``."""
+    if scope == PLATFORM:
+        return scope
+    if not isinstance(scope, str) or not scope.startswith(PREFIX):
+        raise ValueError(f"A scope is a container's name or abi:: {scope!r}")
+    container = container_of_scope(scope)
+    if container == PLATFORM:
+        raise ValueError(f"Invalid scope {scope!r}")
+    try:
+        parse_container(container)
+    except ValueError as error:
+        raise ValueError(f"Invalid scope {scope!r}: {error}") from error
     return scope
-
-
-def scope_fields(scope: str) -> tuple[str, str]:
-    """The ``(org, workspace)`` of a valid scope (``workspace`` may be ``*``)."""
-    org, workspace = validate_scope(scope)[len(PREFIX) :].split(":")
-    return org, workspace
 
 
 def validate_owner_scope(scope: str) -> str:
-    """Check the scope that owns a policy or a group: the platform ``abi:-:-``,
-    an org ``abi:<org>:-`` or a workspace ``abi:<org>:<ws>``, never org-wide."""
-    if scope_fields(scope)[1] == "*":
-        raise ValueError(
-            "A policy or a group is owned by the platform, an org or a workspace, "
-            f"not {scope!r}"
-        )
-    return scope
+    """Check the owner of a policy or a group: the platform or a container,
+    never below one."""
+    if is_below(scope):
+        raise ValueError(f"A policy or a group is owned by a container, not {scope!r}")
+    return validate_scope(scope)
 
 
 def within_owner(owner: str, scope: str | None) -> bool:
-    """Whether an attachment at ``scope`` is at ``owner``'s level or below: an
-    org's at the org, org-wide or at any of its workspaces, a workspace's at
-    that workspace only, the platform's anywhere (unscoped included)."""
-    if owner == PLATFORM_SCOPE:
+    """Whether an attachment at ``scope`` is at ``owner`` or below it: the
+    platform's anywhere (unscoped included), a container's at it, below it or at
+    any container inside it."""
+    if owner in (PLATFORM, _OLD_PLATFORM):
         return True
     if scope is None:
         return False
-    owner_org, owner_workspace = scope_fields(owner)
-    org, workspace = scope_fields(scope)
-    return org == owner_org and owner_workspace in (NONE, workspace)
+    if is_old_scope(owner) or is_old_scope(scope):
+        # The grammar before container paths, which only the start-up moves write
+        # until the names are rewritten: its own rules, never across grammars.
+        return is_old_scope(owner) and is_old_scope(scope) and _old_within(owner, scope)
+    container = container_of_scope(scope)
+    if UNRESOLVED in (owner, container):
+        return False
+    if not (is_container_name(owner) and is_container_name(container)):
+        return False
+    return within(container, owner)
 
 
-def owner_ancestors(scope: str) -> list[str]:
-    """The owner scopes above ``scope``, nearest first: a workspace's org, then
-    the platform; an org's platform; none for the platform."""
-    org, workspace = scope_fields(validate_owner_scope(scope))
-    if org == NONE:
-        return []
-    if workspace == NONE:
-        return [PLATFORM_SCOPE]
-    return [scope_name(org), PLATFORM_SCOPE]
+def _old_within(owner: str, scope: str) -> bool:
+    """``within_owner`` in the grammar before container paths: an organisation's
+    (``abi:<org>:-``) at it, organisation-wide and at each of its workspaces; a
+    workspace's (``abi:<org>:<ws>``) at that workspace only."""
+    owner_org, owner_ws = owner.removeprefix(PREFIX).split(":")
+    org, ws = scope.removeprefix(PREFIX).split(":")
+    return org == owner_org and (owner_ws in ("-", "*") or ws == owner_ws)
 
 
-def _check_org(org: str, workspace: str, service: str, type: str) -> None:
-    if org == ALL_ORGS:
-        # Only unscoped attachments and the platform's policies and groups.
-        if (service, type) not in EVERY_ORG_TYPES or workspace != ALL_WORKSPACES:
-            raise ValueError(
-                f"Org {ALL_ORGS} names unscoped attachments, the platform's "
-                f"policies and groups, and the orgs' sets only, abi:{ALL_ORGS}:{ALL_WORKSPACES}:iam:..."
-            )
-        return
-    _check_scope_id(org, "org")
+def owner_ancestors(container: str) -> list[str]:
+    """The owners above ``container``, nearest first: its containers up to the
+    platform; none for the platform."""
+    return ancestors(container) if container != PLATFORM else []
 
 
-def _check_workspace(workspace: str, org: str, service: str, type: str) -> None:
-    if workspace == ALL_WORKSPACES:
-        if org == ALL_ORGS:
-            return  # checked with the org
-        # Only org-wide attachments and workspace sets span every workspace.
-        if (service, type) not in ORG_WIDE_TYPES:
-            raise ValueError(
-                f"Workspace {ALL_WORKSPACES} names org-wide attachments and "
-                f"workspace sets only, "
-                f"not {service}:{type}"
-            )
-        if org == NONE:
-            raise ValueError("Every workspace of an org needs an org")
-        return
-    _check_scope_id(workspace, "workspace")
-
-
-def _check_scope_id(value: str, field: str) -> None:
-    if value != NONE and not _SCOPE_ID.match(value):
-        raise ValueError(f"Invalid {field} id {value!r}")
+def expand_scope(pattern: str, scope: str) -> str | None:
+    """``pattern`` with ``${scope}`` filled with a container (or the platform,
+    where ``${scope}/`` reads ``abi:`` and ``${scope}`` alone is unresolved)."""
+    return substitute(pattern, {"scope": scope})
 
 
 # ---------------------------------------------------------------------------
@@ -332,11 +464,13 @@ def substitute(pattern: str, values: dict[str, str | None]) -> str | None:
     A statement whose resource holds an unresolved variable matches nothing.
     """
     unresolved = False
+    if values.get("scope") == PLATFORM and _SCOPE_SLASH in pattern:
+        pattern = pattern.replace(_SCOPE_SLASH, PREFIX)
 
     def replace(found: re.Match[str]) -> str:
         nonlocal unresolved
         value = values.get(found.group(1))
-        if value is None:
+        if value is None or (found.group(1) == "scope" and value == PLATFORM):
             unresolved = True
             return ""
         return value

@@ -1,4 +1,4 @@
-/* components/access/policies/builder — what the caller may grant, as checkboxes */
+/* components/access/policies/builder — what the caller may grant, by publisher and type */
 
 .access-builder {
   display: flex;
@@ -43,13 +43,6 @@
   list-style: none;
 }
 
-.access-builder-icon {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-  color: var(--muted-foreground-hex);
-}
-
 .access-builder-refused {
   margin: var(--space-1) 0 0;
   font-size: var(--font-size-xs);
@@ -70,4 +63,93 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.access-builder-types {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.access-builder-type {
+  border-top: 1px solid var(--border-hex);
+  padding-top: var(--space-1);
+}
+
+.access-builder-type:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.access-builder-type-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-1) 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.access-builder-type-label {
+  font-weight: var(--font-weight-medium);
+}
+
+.access-builder-type-code {
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground-hex);
+}
+
+.access-builder-type-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-1) 0 var(--space-2) var(--space-4);
+}
+
+.access-builder-listing {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.access-builder-wildcard {
+  margin-top: var(--space-2);
+}
+
+.access-builder-wildcard-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.access-builder-wildcard-row .access-policy-input {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.access-builder-prefix {
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground-hex);
+}
+
+/* Patterns are read whole: one per line. */
+.access-builder-items-wide {
+  grid-template-columns: 1fr;
+}
+
+.access-builder-items-wide .access-checkbox span,
+.access-builder-items-wide .access-checkbox code {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }

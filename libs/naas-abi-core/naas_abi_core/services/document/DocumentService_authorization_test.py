@@ -31,6 +31,7 @@ from naas_abi_core.services.document.DocumentPort import (
 from naas_abi_core.services.document.DocumentService import DocumentService
 from naas_abi_core.services.document.iam_catalog import CATALOG
 from naas_abi_core.services.iam.enforcement import internal_call
+from naas_abi_core.services.iam.names import anywhere
 from naas_abi_core.services.iam.tests.data_service_contract import (
     ANY_OK,
     DENY,
@@ -86,9 +87,9 @@ class TestDocumentAuthorization(DataServiceContract):
     @staticmethod
     def _namespace(namespace: str) -> list[str]:
         return [
-            f"abi:-:-:document:namespace/{namespace}",
-            f"abi:-:-:document:collection/{namespace}/*",
-            f"abi:-:-:document:document/{namespace}/*",
+            f"abi:document:namespace/{namespace}",
+            f"abi:document:collection/{namespace}/*",
+            f"abi:document:document/{namespace}/*",
         ]
 
     def granted_resources(self):
@@ -240,9 +241,9 @@ def test_a_module_reaches_its_own_namespace_not_another_modules(tmp_path):
                     "Allow",
                     ["document:*"],
                     [
-                        "abi:-:-:document:namespace/${module.id}",
-                        "abi:-:-:document:collection/${module.id}/*",
-                        "abi:-:-:document:document/${module.id}/*",
+                        "abi:document:namespace/${module.id}",
+                        "abi:document:collection/${module.id}/*",
+                        "abi:document:document/${module.id}/*",
                     ],
                 )
             ),
@@ -271,7 +272,7 @@ def test_the_idp_module_account_owns_the_idp_namespace_and_no_manifest_opens_it(
 
     contract = TestDocumentAuthorization()
     root, iam = contract._owner(tmp_path)
-    everything = document(statement("Allow", ["document:*"], ["abi:*:*:document:*"]))
+    everything = document(statement("Allow", ["document:*"], anywhere("document:*")))
     contexts = {}
     with internal_call():
         for name in ("module/default/idp", "module/default/greedy"):
@@ -292,9 +293,9 @@ def test_the_idp_module_account_owns_the_idp_namespace_and_no_manifest_opens_it(
                         "Allow",
                         ["document:*"],
                         [
-                            "abi:-:-:document:namespace/${module.id}",
-                            "abi:-:-:document:collection/${module.id}/*",
-                            "abi:-:-:document:document/${module.id}/*",
+                            "abi:document:namespace/${module.id}",
+                            "abi:document:collection/${module.id}/*",
+                            "abi:document:document/${module.id}/*",
                         ],
                     )
                 ),

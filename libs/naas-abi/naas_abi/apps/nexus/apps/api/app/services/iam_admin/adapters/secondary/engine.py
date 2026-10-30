@@ -31,8 +31,6 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalRecord,
 )
 
-_PAGE = 200
-
 
 class _BoundIam:
     """IAM, every call of it made as ``context``."""
@@ -75,6 +73,10 @@ class EngineIamGateway(IamGateway):
             raise IamUnavailableError("IAM does not publish its action catalogs here")
         return registry
 
+    def listable(self, service: str, type: str) -> bool:
+        has_lister = getattr(self._iam(), "has_lister", None)
+        return bool(has_lister(service, type)) if callable(has_lister) else False
+
     def principal(self, principal_id: str) -> PrincipalRecord | None:
         iam = self._iam()
         with as_service_account("api"):
@@ -90,15 +92,3 @@ class EngineIamGateway(IamGateway):
                 return iam.get_policy(policy_id)
             except (IAMNotFoundError, PermissionDeniedError):
                 return None
-
-    def policies(self) -> list[Policy]:
-        iam = self._iam()
-        found: list[Policy] = []
-        after: str | None = None
-        with as_service_account("api"):
-            while True:
-                page = iam.list_policies(limit=_PAGE, after=after)
-                found += page.items
-                after = page.next_after
-                if after is None:
-                    return found

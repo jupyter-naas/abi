@@ -66,14 +66,14 @@ async def readable_projects(
 ) -> list[_P]:
     """The projects of a list the user may read: a policy may deny one
     deck of a workspace whose others the role reaches."""
-    org = await authz_module.AUTHZ.org_of(workspace_id)
-    if org is None:
+    container = await authz_module.AUTHZ.container_of(workspace_id)
+    if container is None:
         return []
     return await authz_module.AUTHZ.filter(
         "GetProject",
         projects,
         user=user,
         resource_of=lambda project: nexus_resource(
-            "project", org=org, workspace=workspace_id, id=(kind, project.slug)
+            "project", container=container, id=(kind, project.slug)
         ),
     )

@@ -74,12 +74,12 @@ async def test_the_notice_is_sent_as_nexus_for_no_workspace(monkeypatch) -> None
 
     def send(**kwargs):
         context = current_call_context()
-        seen.update(actor=context.principal.id, workspace=context.workspace_id, **kwargs)
+        seen.update(actor=context.principal.id, workspace=context.container, **kwargs)
 
     service.send.side_effect = send
     from dataclasses import replace
 
-    with use_call_context(replace(ANONYMOUS, workspace_id="ws-from-the-request")):
+    with use_call_context(replace(ANONYMOUS, container="abi:nexus:workspace/ws-from-the-request")):
         sent = await mail.send_added_notice(
             "bob@example.com", inviter_name="Ada", workspace_name="W", email_service=service
         )

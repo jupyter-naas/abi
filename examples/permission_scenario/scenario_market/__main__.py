@@ -1,6 +1,6 @@
 """``python -m scenario_market``: M, run by ``abi dev up`` (``config.scenario.yaml``)."""
 
-from runner import run_until_stopped
+from launch import run_until_stopped
 
 from scenario_market import ABIModule
 

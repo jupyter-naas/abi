@@ -135,7 +135,7 @@ Resource types: `collection/<name>` (`path`, placed container),
 | `Initialize` | admin | `service/-` | `initialize` |
 | `Close` | admin | `service/-` | `close` |
 
-* A new collection is placed in the call's target workspace, or on the
+* A new collection is placed in the container of the call, or on the
   platform (the create rule of "Enforcing in a data service" in
   [`../iam/AGENTS.md`](../iam/AGENTS.md)); the placement is dropped with the
   collection. A call naming several vectors (`StoreVectors`, `DeleteVectors`)
@@ -190,9 +190,9 @@ it answers a refusal itself) and hands that `CallContext`
 token's identity; the user it acts for is named by the token itself: a
 delegated token (`abi:delegated:agent`, `act` the acting service, `sub` the user)
 made by IAM's token exchange, never a header (the old `Abi-On-Behalf-Of` header is
-refused); trace and target workspace come from the request's `context`. Never read identity from request fields
+refused); trace and container come from the request's `context`. Never read identity from request fields
 (`principal_id` and `tenant_id` are reserved). Clients of `api` and `engine` send a
-delegation for the current call's user, and the call's trace and workspace. The domain service authorizes the call on that context (see "Authorization").
+delegation for the current call's user, and the call's trace and container. The domain service authorizes the call on that context (see "Authorization").
 
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception

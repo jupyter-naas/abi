@@ -10,9 +10,8 @@ Fill-only, so it is safe to run against a live platform:
   this runs in an engine: ``main`` opens the project's);
 - on an existing workspace, fills only empty values. A name equal to the
   slug (what the seed sets when the config has no name) counts as empty.
-  ``feature_overrides`` become the workspace's feature set (every feature but
-  those turned off; IAM's, ``services/iam/sets.py``), recorded only when the
-  workspace has none; an override turning a feature on adds nothing to a set;
+  A snapshot's ``feature_overrides`` are ignored: who uses a feature is a
+  policy's, and an import grants nothing;
 - never deletes anything. Unknown organizations and owners are reported.
 
 Not run on API boot. Usage::
@@ -33,16 +32,12 @@ from uuid import uuid4
 
 import yaml
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
-from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
-    KNOWN_FEATURE_KEYS,
-    feature_set_from_overrides,
-)
 from naas_abi.apps.nexus.apps.api.app.core.org_seed import _get_user_by_email, _normalize_email
 from naas_abi.apps.nexus.apps.api.app.core.users_import import _in_engine
 from naas_abi.apps.nexus.apps.api.app.models import OrganizationModel, WorkspaceModel
 from naas_abi.apps.nexus.apps.api.app.services.iam import placements
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS, Memberships
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_scope
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -70,20 +65,11 @@ class ImportReport:
     missing: set[str] = field(default_factory=set)
     # What IAM derives from them, done once the rows are committed.
     created_ids: list[str] = field(default_factory=list)
-    # Workspace id -> (org id, the features of its set), from the overrides.
-    feature_sets: dict[str, tuple[str, list[str]]] = field(default_factory=dict)
 
 
 def load_entries(path: str | Path) -> list[dict[str, Any]]:
     data = yaml.safe_load(Path(path).read_text()) or {}
     return list(data.get("workspaces") or [])
-
-
-def _feature_overrides(entry: dict[str, Any]) -> dict[str, bool] | None:
-    raw = entry.get("feature_overrides")
-    if not isinstance(raw, dict):
-        return None
-    return {str(k): bool(v) for k, v in raw.items() if k in KNOWN_FEATURE_KEYS}
 
 
 async def import_workspaces(
@@ -123,7 +109,6 @@ async def import_workspaces(
         org = await org_for(str(org_slug)) if org_slug else None
         if org_slug and org is None:
             report.missing.add(f"organization {org_slug}")
-        overrides = _feature_overrides(entry)
 
         workspace = (
             await session.execute(select(WorkspaceModel).where(WorkspaceModel.slug == slug))
@@ -150,12 +135,9 @@ async def import_workspaces(
                 # The owner is IAM's attachment; the workspace's scope exists first.
                 scope = await memberships.register_workspace(org.id, workspace.id)
                 await memberships.grant(owner_id, "owner", scope)
-                assert scope == workspace_scope(org.id, workspace.id)
+                assert scope == workspace_container(org.id, workspace.id)
             report.workspaces_created += 1
             report.created_ids.append(workspace.id)
-            features = feature_set_from_overrides(overrides)
-            if features is not None:
-                report.feature_sets[workspace.id] = (org.id, features)
             continue
 
         changed = False
@@ -175,9 +157,6 @@ async def import_workspaces(
             if owner_id:
                 workspace.owner_id = owner_id
                 changed = True
-        features = feature_set_from_overrides(overrides)
-        if features is not None and workspace.organization_id:
-            report.feature_sets[workspace.id] = (workspace.organization_id, features)
         if changed:
             workspace.updated_at = now
             report.workspaces_updated += 1
@@ -196,32 +175,10 @@ async def _main(path: str, dry_run: bool) -> ImportReport:
         else:
             await session.commit()
             # What IAM derives from the rows: the kernel resources a new workspace's
-            # roles reach, and the feature sets of the overrides.
+            # roles reach.
             for workspace_id in report.created_ids:
                 await placements.place_new_workspace(session, workspace_id)
-            record_feature_sets(report.feature_sets)
     return report
-
-
-def record_feature_sets(feature_sets: dict[str, tuple[str, list[str]]]) -> list[str]:
-    """Record each workspace's feature set, as the engine, where its set records
-    none yet (fill-only), within its org's set (``sets.put_features``): an org the
-    platform admin narrowed keeps its workspaces within it. The workspaces
-    recorded."""
-    from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
-    from naas_abi.apps.nexus.apps.api.app.services.iam.sets import put_features
-    from naas_abi_core.engine.call_context import as_service_account
-
-    recorded: list[str] = []
-    iam = runtime.iam()
-    with as_service_account("engine"):
-        for workspace_id, (org_id, features) in sorted(feature_sets.items()):
-            current = iam.get_set(org_id, workspace_id)
-            if current.features is not None:
-                continue
-            put_features(iam, org_id, workspace_id, features)
-            recorded.append(workspace_id)
-    return recorded
 
 
 def main() -> None:

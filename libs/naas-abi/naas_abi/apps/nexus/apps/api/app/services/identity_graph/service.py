@@ -1,6 +1,6 @@
 """Materialise Nexus identity and access as a BFO 7-bucket graph.
 
-Event logs only carry ids (``actor_user_id``, ``actor_workspace_id``, ...).
+Event logs only carry ids (``actor_user_id``, ``actor_container``, ...).
 This graph is how an id gets back to a person, a workspace and a role:
 
 - WHO: ``abi:Person`` carries its ``nexus:User`` account; ``nexus:Organization``
@@ -46,7 +46,6 @@ from naas_abi.ontologies.modules.NexusPlatformOntology import (
     CreateWorkspace,
     DeploymentSite,
     Feature,
-    FeatureAccessPolicy,
     NexusOrganization,
     OrganizationAccessRole,
     OrganizationAdminRole,
@@ -63,7 +62,6 @@ from naas_abi.ontologies.modules.NexusPlatformOntology import (
     WorkspaceAdminRole,
     WorkspaceAgentConfiguration,
     WorkspaceAppConfiguration,
-    WorkspaceFeatureOverride,
     WorkspaceMemberRole,
     WorkspaceMembership,
     WorkspaceOwnerRole,
@@ -168,7 +166,6 @@ class _Builder:
                     _uri=str(iris.workspace_app_iri(app.workspace_id, app.app_id)),
                     label=app.app_id,
                     app_id=app.app_id,
-                    app_enabled=app.enabled,
                     is_part_of=[iris.workspace_iri(app.workspace_id)],
                 )
             )
@@ -184,7 +181,6 @@ class _Builder:
                     _uri=str(iris.workspace_agent_iri(agent.id)),
                     label=agent.name,
                     agent_name=agent.name,
-                    agent_enabled=agent.enabled,
                     is_default_agent=agent.is_default,
                     is_part_of=[iris.workspace_iri(agent.workspace_id)],
                     **{k: v for k, v in fields.items() if v},
@@ -195,23 +191,9 @@ class _Builder:
     def platform_configuration(self, platform: PlatformSnapshot) -> None:
         assert self.site is not None and self.config is not None
         self.add(DeploymentSite(_uri=str(self.site), label=platform.host))
-        features = sorted(
-            set(platform.enabled_features)
-            | {f for fs in platform.role_baseline.values() for f in fs}
-            | {f for fs in platform.workspace_overrides.values() for f in fs}
-            | {
-                f
-                for roles in platform.organization_overrides.values()
-                for fs in roles.values()
-                for f in fs
-            }
-            | {
-                f
-                for roles in self.snapshot.organization_role_features.values()
-                for fs in roles.values()
-                for f in fs
-            }
-        )
+        # No role brings a feature (a policy does): the deployment's enabled
+        # features are what its configuration says of them.
+        features = sorted(set(platform.enabled_features))
         for key in features:
             self.add(Feature(_uri=str(iris.feature_iri(key)), label=key, feature_key=key))
 
@@ -240,32 +222,6 @@ class _Builder:
                     )
                 )
             )
-        for role, allowed in sorted(platform.role_baseline.items()):
-            parts.append(self.feature_policy(role, allowed, None))
-        overlays: dict[str, dict[str, list[str]]] = {}
-        for source in (platform.organization_overrides, self.snapshot.organization_role_features):
-            for org_id, roles in source.items():
-                overlays.setdefault(org_id, {}).update(roles)
-        for org_id, roles in sorted(overlays.items()):
-            for role, allowed in sorted(roles.items()):
-                parts.append(self.feature_policy(role, allowed, org_id))
-        workspace_by_slug = {w.slug: w.id for w in self.snapshot.workspaces if w.slug}
-        for slug, flags in sorted(platform.workspace_overrides.items()):
-            workspace_id = workspace_by_slug.get(slug)
-            if workspace_id is None:
-                continue
-            for key, enabled in sorted(flags.items()):
-                parts.append(
-                    self.add(
-                        WorkspaceFeatureOverride(
-                            _uri=str(iris.feature_override_iri(workspace_id, key)),
-                            label=f"{slug}: {key} {'on' if enabled else 'off'}",
-                            feature_enabled=enabled,
-                            overrides_feature=[iris.feature_iri(key)],
-                            overrides_workspace=[iris.workspace_iri(workspace_id)],
-                        )
-                    )
-                )
         self.add(
             PlatformConfiguration(
                 _uri=str(self.config),
@@ -282,26 +238,6 @@ class _Builder:
             f"Apply platform configuration of {platform.host}",
             platform.applied_at,
             concretizes=[self.config],
-        )
-
-    def feature_policy(self, role: str, allowed: list[str], organization_id: str | None) -> URIRef:
-        scope = (
-            self.organization_names.get(organization_id or "", organization_id)
-            if organization_id
-            else None
-        )
-        return self.add(
-            FeatureAccessPolicy(
-                _uri=str(iris.feature_policy_iri(role, organization_id)),
-                label=f"{role} features" + (f" in {scope}" if scope else ""),
-                policy_role=role,
-                grants_feature=[iris.feature_iri(k) for k in sorted(set(allowed))],
-                **(
-                    {"applies_to_organization": [iris.organization_iri(organization_id)]}
-                    if organization_id
-                    else {}
-                ),
-            )
         )
 
     def user(self, user: Any) -> None:

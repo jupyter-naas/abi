@@ -1,10 +1,10 @@
 """HTTP routes for workspace tasks, mounted under ``/api/tasks``.
 
-Every route takes ``workspace_id`` and needs workspace access plus the
-``tasks`` feature for the caller's role. By default only workspace owners and
-admins have it; an organization or workspace override can open it to members.
-Changing the tasks settings also takes the owner or admin role, and so does
-removing someone else's comment.
+Every route takes ``workspace_id`` and declares its IAM action on the
+workspace's tasks (``task/-``, ``services/iam/catalog/tasks.py``), each needing
+the ``tasks`` feature, which a policy grants: reading is ``ListTasks``, changing
+``UpdateTasks``, and the settings and removing someone else's comment
+``ManageTasks``.
 """
 
 from __future__ import annotations
@@ -14,11 +14,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import User, get_current_user_required
-from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import caller_feature_flags
-from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
-from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
-    require_workspace_access,
-)
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import guard
 from naas_abi.apps.nexus.apps.api.app.services.tasks.adapters.secondary.postgres import (
     PostgresTasksMemberDirectory,
     PostgresTasksStore,
@@ -44,29 +41,25 @@ router = APIRouter()
 
 _service = TasksService(PostgresTasksStore(), PostgresTasksMemberDirectory())
 
-TASKS_FEATURE = "tasks"
-SETTINGS_ROLES = frozenset({"owner", "admin"})
+# The workspace's tasks: one resource, ``task/-``.
+_TASKS = "-"
+_READ = [guard("ListTasks", literal=_TASKS)]
+_WRITE = [guard("UpdateTasks", literal=_TASKS)]
+_MANAGE = [
+    guard(
+        "ManageTasks",
+        literal=_TASKS,
+        denied="Only workspace owners and admins can change the tasks settings",
+    )
+]
 
 
 def get_tasks_service() -> TasksService:
     return _service
 
 
-async def _caller_flags(workspace_id: str, role: str) -> dict[str, bool]:
-    async with AsyncSessionLocal() as db:
-        return await caller_feature_flags(db, workspace_id, role)
-
-
-async def _require_tasks(user_id: str, workspace_id: str) -> str:
-    """The caller's workspace role, once workspace access and the feature are checked."""
-    role = await require_workspace_access(user_id, workspace_id)
-    flags = await _caller_flags(workspace_id, role)
-    if not flags.get(TASKS_FEATURE, False):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tasks are not enabled for your role in this workspace",
-        )
-    return role
+async def _may_manage(user: User, workspace_id: str) -> bool:
+    return await authz.allowed("ManageTasks", user=user, workspace=workspace_id, id=_TASKS)
 
 
 def _http_error(exc: Exception) -> HTTPException:
@@ -196,7 +189,7 @@ class SettingsOut(BaseModel):
     feed_limit: int
     updated_by: str | None
     updated_at: datetime | None
-    # Whether the caller may save changes (owners and admins).
+    # Whether the caller may save changes (``ManageTasks``: owners and admins).
     can_edit: bool
 
 
@@ -305,30 +298,23 @@ def _activity_out(entry: ActivityEntry) -> ActivityOut:
 # ---------------------------------------------------------------------------
 
 
-@router.get("/settings")
+@router.get("/settings", dependencies=_READ)
 async def get_settings(
     workspace_id: str = Query(...),
     current_user: User = Depends(get_current_user_required),
     service: TasksService = Depends(get_tasks_service),
 ) -> SettingsOut:
-    role = await _require_tasks(current_user.id, workspace_id)
     settings = await service.get_settings(workspace_id)
-    return _settings_out(settings, can_edit=role in SETTINGS_ROLES)
+    return _settings_out(settings, can_edit=await _may_manage(current_user, workspace_id))
 
 
-@router.put("/settings")
+@router.put("/settings", dependencies=_MANAGE)
 async def update_settings(
     body: SettingsIn,
     workspace_id: str = Query(...),
     current_user: User = Depends(get_current_user_required),
     service: TasksService = Depends(get_tasks_service),
 ) -> SettingsOut:
-    role = await _require_tasks(current_user.id, workspace_id)
-    if role not in SETTINGS_ROLES:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only workspace owners and admins can change the tasks settings",
-        )
     try:
         settings = await service.update_settings(
             workspace_id,
@@ -346,14 +332,13 @@ async def update_settings(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/feed")
+@router.get("/feed", dependencies=_READ)
 async def list_feed(
     workspace_id: str = Query(...),
     current_user: User = Depends(get_current_user_required),
     service: TasksService = Depends(get_tasks_service),
 ) -> list[ActivityOut]:
     """The workspace's latest task events for the sidebar, as the settings configure it."""
-    await _require_tasks(current_user.id, workspace_id)
     return [_activity_out(e) for e in await service.list_feed(workspace_id)]
 
 
@@ -362,17 +347,16 @@ async def list_feed(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/iterations")
+@router.get("/iterations", dependencies=_READ)
 async def list_iterations(
     workspace_id: str = Query(...),
     current_user: User = Depends(get_current_user_required),
     service: TasksService = Depends(get_tasks_service),
 ) -> list[IterationOut]:
-    await _require_tasks(current_user.id, workspace_id)
     return [_iteration_out(i) for i in await service.list_iterations(workspace_id)]
 
 
-@router.post("/iterations")
+@router.post("/iterations", dependencies=_WRITE)
 async def ensure_iteration(
     body: EnsureIterationIn,
     workspace_id: str = Query(...),
@@ -380,12 +364,11 @@ async def ensure_iteration(
     service: TasksService = Depends(get_tasks_service),
 ) -> IterationOut:
     """The iteration ``date`` falls in, created when missing."""
-    await _require_tasks(current_user.id, workspace_id)
     iteration = await service.ensure_iteration(workspace_id, body.date, user_id=current_user.id)
     return _iteration_out(iteration)
 
 
-@router.patch("/iterations/{iteration_id}")
+@router.patch("/iterations/{iteration_id}", dependencies=_WRITE)
 async def update_iteration(
     iteration_id: str,
     body: GoalIn,
@@ -393,7 +376,6 @@ async def update_iteration(
     current_user: User = Depends(get_current_user_required),
     service: TasksService = Depends(get_tasks_service),
 ) -> IterationOut:
-    await _require_tasks(current_user.id, workspace_id)
     try:
         iteration = await service.update_iteration_goal(
             workspace_id, iteration_id, body.goal, user_id=current_user.id
@@ -403,7 +385,7 @@ async def update_iteration(
     return _iteration_out(iteration)
 
 
-@router.post("/iterations/{iteration_id}/carry-over")
+@router.post("/iterations/{iteration_id}/carry-over", dependencies=_WRITE)
 async def carry_over(
     iteration_id: str,
     workspace_id: str = Query(...),
@@ -411,7 +393,6 @@ async def carry_over(
     service: TasksService = Depends(get_tasks_service),
 ) -> CarryOverOut:
     """Move the iteration's unfinished tasks to the iteration after it."""
-    await _require_tasks(current_user.id, workspace_id)
     try:
         result = await service.carry_over(workspace_id, iteration_id, user_id=current_user.id)
     except (TasksNotFoundError, TasksValidationError) as exc:
@@ -427,7 +408,7 @@ async def carry_over(
 # ---------------------------------------------------------------------------
 
 
-@router.get("")
+@router.get("", dependencies=_READ)
 async def list_tasks(
     workspace_id: str = Query(...),
     iteration_id: str | None = Query(default=None),
@@ -438,7 +419,6 @@ async def list_tasks(
 ) -> list[TaskOut]:
     """Tasks of ``iteration_id``, of the backlog with ``backlog=true``, or every
     task of the workspace (newest first) when neither is given."""
-    await _require_tasks(current_user.id, workspace_id)
     if iteration_id and backlog:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -458,14 +438,13 @@ async def list_tasks(
     return [_task_out(t) for t in tasks]
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED, dependencies=_WRITE)
 async def create_task(
     body: TaskCreateIn,
     workspace_id: str = Query(...),
     current_user: User = Depends(get_current_user_required),
     service: TasksService = Depends(get_tasks_service),
 ) -> TaskOut:
-    await _require_tasks(current_user.id, workspace_id)
     fields = body.model_dump(exclude_none=True)
     try:
         task = await service.create_task(workspace_id, fields, user_id=current_user.id)
@@ -474,7 +453,7 @@ async def create_task(
     return _task_out(task)
 
 
-@router.patch("/{task_id}")
+@router.patch("/{task_id}", dependencies=_WRITE)
 async def update_task(
     task_id: str,
     body: TaskPatchIn,
@@ -482,7 +461,6 @@ async def update_task(
     current_user: User = Depends(get_current_user_required),
     service: TasksService = Depends(get_tasks_service),
 ) -> TaskOut:
-    await _require_tasks(current_user.id, workspace_id)
     changes = body.model_dump(exclude_unset=True)
     try:
         task = await service.update_task(workspace_id, task_id, changes, user_id=current_user.id)
@@ -491,14 +469,13 @@ async def update_task(
     return _task_out(task)
 
 
-@router.post("/{task_id}/archive")
+@router.post("/{task_id}/archive", dependencies=_WRITE)
 async def archive_task(
     task_id: str,
     workspace_id: str = Query(...),
     current_user: User = Depends(get_current_user_required),
     service: TasksService = Depends(get_tasks_service),
 ) -> TaskOut:
-    await _require_tasks(current_user.id, workspace_id)
     try:
         task = await service.set_archived(workspace_id, task_id, True, user_id=current_user.id)
     except TasksNotFoundError as exc:
@@ -506,14 +483,13 @@ async def archive_task(
     return _task_out(task)
 
 
-@router.post("/{task_id}/restore")
+@router.post("/{task_id}/restore", dependencies=_WRITE)
 async def restore_task(
     task_id: str,
     workspace_id: str = Query(...),
     current_user: User = Depends(get_current_user_required),
     service: TasksService = Depends(get_tasks_service),
 ) -> TaskOut:
-    await _require_tasks(current_user.id, workspace_id)
     try:
         task = await service.set_archived(workspace_id, task_id, False, user_id=current_user.id)
     except TasksNotFoundError as exc:
@@ -521,14 +497,13 @@ async def restore_task(
     return _task_out(task)
 
 
-@router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=_WRITE)
 async def delete_task(
     task_id: str,
     workspace_id: str = Query(...),
     current_user: User = Depends(get_current_user_required),
     service: TasksService = Depends(get_tasks_service),
 ) -> Response:
-    await _require_tasks(current_user.id, workspace_id)
     try:
         await service.delete_task(workspace_id, task_id, user_id=current_user.id)
     except TasksNotFoundError as exc:
@@ -541,14 +516,13 @@ async def delete_task(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/{task_id}/comments")
+@router.get("/{task_id}/comments", dependencies=_READ)
 async def list_comments(
     task_id: str,
     workspace_id: str = Query(...),
     current_user: User = Depends(get_current_user_required),
     service: TasksService = Depends(get_tasks_service),
 ) -> list[CommentOut]:
-    await _require_tasks(current_user.id, workspace_id)
     try:
         comments = await service.list_comments(workspace_id, task_id)
     except TasksNotFoundError as exc:
@@ -556,7 +530,7 @@ async def list_comments(
     return [_comment_out(c) for c in comments]
 
 
-@router.post("/{task_id}/comments", status_code=status.HTTP_201_CREATED)
+@router.post("/{task_id}/comments", status_code=status.HTTP_201_CREATED, dependencies=_WRITE)
 async def add_comment(
     task_id: str,
     body: CommentIn,
@@ -564,7 +538,6 @@ async def add_comment(
     current_user: User = Depends(get_current_user_required),
     service: TasksService = Depends(get_tasks_service),
 ) -> CommentOut:
-    await _require_tasks(current_user.id, workspace_id)
     try:
         comment = await service.add_comment(
             workspace_id, task_id, body.body, user_id=current_user.id, parent_id=body.parent_id
@@ -574,7 +547,9 @@ async def add_comment(
     return _comment_out(comment)
 
 
-@router.delete("/{task_id}/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{task_id}/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=_WRITE
+)
 async def delete_comment(
     task_id: str,
     comment_id: str,
@@ -582,28 +557,26 @@ async def delete_comment(
     current_user: User = Depends(get_current_user_required),
     service: TasksService = Depends(get_tasks_service),
 ) -> Response:
-    role = await _require_tasks(current_user.id, workspace_id)
     try:
         await service.delete_comment(
             workspace_id,
             task_id,
             comment_id,
             user_id=current_user.id,
-            can_moderate=role in SETTINGS_ROLES,
+            can_moderate=await _may_manage(current_user, workspace_id),
         )
     except (TasksNotFoundError, TasksForbiddenError) as exc:
         raise _http_error(exc) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/{task_id}/activity")
+@router.get("/{task_id}/activity", dependencies=_READ)
 async def list_activity(
     task_id: str,
     workspace_id: str = Query(...),
     current_user: User = Depends(get_current_user_required),
     service: TasksService = Depends(get_tasks_service),
 ) -> list[ActivityOut]:
-    await _require_tasks(current_user.id, workspace_id)
     try:
         entries = await service.list_activity(workspace_id, task_id)
     except TasksNotFoundError as exc:

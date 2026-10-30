@@ -7,6 +7,7 @@ from naas_abi_sdk.call_context import (
     ANONYMOUS,
     CallContext,
     current_call_context,
+    inside,
     service_account,
     use_call_context,
     user,
@@ -97,3 +98,16 @@ def test_the_delegation_audience_is_the_credentials_one():
     from naas_abi_sdk import call_context, credentials
 
     assert call_context.AGENT_AUDIENCE == credentials.AGENT_AUDIENCE
+
+
+def test_inside_makes_the_blocks_calls_in_a_container():
+    workspace = "abi:nexus:organization/o-1/nexus:workspace/ws-1"
+    with use_call_context(NEXUS):
+        with inside(workspace) as context:
+            assert current_call_context() is context
+            assert context.container == workspace
+            # The caller stays who it was: a container is request data.
+            assert context.principal == NEXUS.principal and context.user == NEXUS.user
+            with inside(None):
+                assert current_call_context().container is None
+        assert current_call_context() is NEXUS

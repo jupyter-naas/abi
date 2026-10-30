@@ -12,45 +12,64 @@ Nexus adds no role check of its own.
 
 | File | Role |
 |---|---|
-| `port.py` | `IamGateway`: IAM bound to a user (`bind`), the catalogs, and the engine's own name lookups; `ScopeDirectory`: the organizations and workspaces the sets page names |
-| `service.py` | `IamAdminService`: the use cases, audit (`run_audited`), the `access` view, the empty-list-is-a-refusal rule |
+| `port.py` | `IamGateway`: IAM bound to a user (`bind`), the catalogs, whether a type is listed (`listable`), and the engine's own name lookups |
+| `service.py` | `IamAdminService`: the use cases, audit (`run_audited`), the `access` view, the empty-list-is-a-refusal rule, `publishers` and `resources` (what the caller may grant, by publisher; what they may list) |
 | `narrowing.py` | What narrowing a manifest means: Allow patterns may be removed, never added; Deny stays |
 | `views.py` | IAM records as the JSON the pages read; a key's value only in `created_key` |
 | `runtime.py` | Builds the service (engine IAM + `SqlAdminAuditLog(prefix="iam.")`); tests `configure` another |
 | `adapters/secondary/engine.py` | `EngineIamGateway`: the engine's IAM in process, acting as the user from the verified session |
-| `adapters/secondary/sql_directory.py` | `SqlScopeDirectory`: organizations and their workspaces, by name, from Nexus's database |
 | `adapters/primary/iam_admin__primary_adapter__FastAPI.py` | `/api/iam/admin/*`; each route `declares` the `iam:*` action it performs |
-| `testing.py` | `MemoryAudit` (remembers records; `broken` makes every write fail), `MemoryDirectory` |
+| `testing.py` | `MemoryAudit` (remembers records; `broken` makes every write fail) |
 
 ## Routes
 
 `/api/iam/admin` (session only, like the rest of `/api/iam/`):
 
 - `GET /access?scope=` the actions the caller may do (platform, or attachments and that level's policies and groups
-  at `scope`; at a scope, what the platform alone administers is false, and at an organization scope
-  `nexus:GetRoleFeatures` / `nexus:UpdateRoleFeatures` say who reads and edits its roles' feature defaults);
-  `GET /catalogs?scope=`
-- `GET /grantable?scope=` what the caller may grant at `scope` (IAM's `grantable`: per catalog, the actions and
-  `${scope}:…` resource patterns they hold there, minus their Denies), for the policy builder; any caller, about
-  themselves, like `/access`
-- `GET|POST /policies` (`?scope=`; the body's `scope` is the owner), `GET|PUT|DELETE /policies/{id}`,
-  `POST /policies/validate?scope=` (`document` or YAML/JSON `text`)
+  at `scope`; at a scope, what the platform alone administers is false; no role feature defaults exist to
+  report: no role brings a feature, a policy does);
+  `GET /catalogs?scope=&parent=` (only the actions the caller may grant
+  at `scope`, the platform by default, and the types they name: a catalog with none is left out; with `parent`,
+  within that policy, as `/grantable`)
+- `GET /grantable?scope=` what the caller may grant at `scope` (IAM's `grantable`: per catalog, its `publisher`,
+  the actions, the `resource_types` each acts on and the resource patterns they hold there, `${scope}` or
+  `${scope}/…`, minus their Denies), for the policy builder; any caller, about themselves, like `/access`.
+  `&parent=<policy>`: what a sub-policy of it may grant there, within its chain (IAM's `grantable(parent=)`: 403
+  for a parent the caller may neither derive from nor read); `&derive=true` for a new sub-policy, the parent
+  refused as creating it would (403 not derivable, 422 owner or depth). `/publishers` and `/catalogs` take both
+- `GET /publishers?scope=` the same by publisher (core's `publishers.by_publisher`): the engine, then naas_abi,
+  then the modules by key (`{id, kind, types: [{service, type, description, id, placement, container, listed,
+  module, actions: [{action, name, level, description, resources, excluded}]}]}`); a type appears only with an
+  action the caller may grant, a publisher only with such a type; `listed` says whether `/resources` lists it
+  (false: offered as wildcards). A module's agents, apps, workflows and pipelines come from the module listing
+  (`modules/scopes.exposed_types`, read as Nexus, then narrowed to what the caller may grant). Any caller,
+  about themselves
+- `GET /resources?scope=&service=&type=&q=&cursor=&module=&limit=` the existing resources of a type at `scope`
+  that the caller may list (IAM's `list_resources`, as the caller): `{scope, service, type, items: [{name, id,
+  label, description}], next_cursor, listed}`. A stranger gets an empty page, not a 403; an unknown type is a 404,
+  a malformed scope a 422. `module` keeps one module's items of the `module` catalog. Any caller
+- `GET|POST /policies` (`?scope=`; the body's `scope` is the owner, its `parent` the policy it is a sub-policy
+  of), `GET|PUT|DELETE /policies/{id}`, `POST /policies/validate?scope=` (`document` or YAML/JSON `text`).
+  A policy carries `parent_id`; `GET /policies/{id}` adds `parent` (`{id, name, owner_scope, managed}`, the
+  name read as `api` for the id the caller sees, null fields when it cannot be) and `sub_policies` (those below
+  it the caller may list, IAM's `list_sub_policies`). `PUT` takes `parent`: absent keeps it, `null` or `""`
+  removes it, an id sets it. Deleting a parent that has sub-policies is a 409 naming them
 - `GET|POST|DELETE /attachments` (`?scope=`, `?principal_id=`, `?policy_id=`), `GET /attachable-policies?scope=`
 - `GET /principals`, `GET /principals/{id}`, `POST /principals/{id}/suspend|resume`
-- `GET|POST /groups` (`?scope=`; the body's `scope`, or `org` alone, is the owner), `GET|DELETE /groups/{id}`, `PUT|DELETE /groups/{id}/members/{member}`,
+- `GET|POST /groups` (`?scope=`; the body's `scope`, or `org` alone, which names that organization's container, is the owner), `GET|DELETE /groups/{id}`, `PUT|DELETE /groups/{id}/members/{member}`,
   `PUT|DELETE /groups/{id}/idp-mappings`
 - `GET|POST /service-accounts`, `DELETE /service-accounts/{id}`, `GET|POST /service-accounts/{id}/keys`,
   `DELETE …/keys/{key}`, `POST …/keys/{key}/rotate`
 - `GET /manifests?status=`, `POST /manifests/{principal}/{sha256}/approve` (optional narrowed `document`) and `/reject`
 - `POST /simulate` (`principal_id`, `action`, `resource`); `GET /audit` (`require_superadmin`)
-- `GET /sets?organization_id=` the modules × workspaces page: every module's scopes (`modules/scopes.gather`), the
-  deployment's features, and each organization (all, or the one named) with its workspaces whose set the caller
-  may read (`iam:GetSet`), each `{id, name, set, effective, editable}` (`set` and `effective`:
-  `{modules, features}`, a part `null` for everything; `editable`: `iam:PutSet`); 403 when there is none. An org
-  whose own set the caller may not read but some workspace's they may is listed with `set: null`.
-  `PUT /sets/{org}` and `PUT /sets/{org}/workspaces/{ws}` (`{modules, features}`) record a set: 403 when not the
-  caller's, 422 with IAM's message naming what a workspace's set has beyond its org's, 404 for an unknown
-  organization or workspace
+- No set route: `/sets` and `/sets/{org}[/workspaces/{ws}]` are gone with the sets (what an org or a workspace
+  uses is its access policy, edited as any policy here)
+
+Every `scope` (a query parameter or a body field) is a container's name or the platform's, as core names them
+(core `services/iam/AGENTS.md`, "Resource names", "Attachments and scope"): `abi:` for the platform,
+`abi:nexus:organization/<org>` for an organization, `abi:nexus:organization/<org>/nexus:workspace/<ws>` (or
+`abi:nexus:workspace/<ws>` for a workspace in no organization) for a workspace, and an attachment's scope may be
+below a container, `<container>/*`. Nexus builds them with `services/iam/names.py`; IAM validates them (422).
 
 ## Rules
 
@@ -68,6 +87,8 @@ Nexus adds no role check of its own.
   `services/iam/AGENTS.md`) is a 403 whose detail is IAM's message: the statement, action and resource the caller
   does not hold. Creating or editing a policy, attaching one, adding a group member and approving a manifest all
   answer it.
+- **Never format a scope.** A scope, an owner and a resource are built by `services/iam/names.py` (or core's
+  `names`) and parsed by them: a group's `org` in its view is `names.org_of(owner_scope)`.
 - Names of principals and policies in a list are read as `api` (`gateway.principal`, `gateway.policy`) for ids the
   caller already sees through a list IAM let them read.
 
@@ -78,25 +99,36 @@ Nexus adds no role check of its own.
   page and button; Nexus adds no role check and no list of "who is an admin". `GET /access` asks IAM which actions
   the caller holds, so the pages show only what will answer. `api` keeps its enumerated statements: acting as the
   user is what keeps `api` out of IAM's administration.
+- **Scopes are container names.** Decision: the pages take and show the scopes and owners IAM stores, container
+  names (an organization's, a workspace's, `abi:` for the platform; an attachment may be below a container,
+  `<container>/*`), never fields of an `abi:<org>:<ws>` scope: the grammar before container paths is gone from
+  every route. A scope below a container answers, in `access`, `catalogs`, `validate` and the lists of policies
+  and groups, for that container (`_owner_of`, `names.container_of_scope`); a group is created with IAM's
+  `create_group(name, scope=)`, the body's `org` read as that organization's container. Consequences: an
+  organization's page passes `abi:nexus:organization/<org>`, an organization's owners and admins attach below it
+  with `abi:nexus:organization/<org>/*`, and a policy written for a scope says `${scope}` (the container itself)
+  or `${scope}/<service>:<type>/…` (what it holds). A page that still sends `abi:<org>:-` is refused (422).
 - **One UI, one API, the scope a parameter.** Decision: attachments, policies and groups are the IAM types
-  placed in an org and workspace (attachments at their scope, policies and groups at the scope that owns them:
+  named in an org's and a workspace's container (attachments at their scope, policies and groups at the scope that owns them:
   core `services/iam/AGENTS.md`, "Owner scopes"), and every route takes the scope as a parameter: `POST
   /policies` and `POST /groups` create at the body's `scope`, `GET /policies?scope=` and `GET /groups?scope=`
   list that level's own plus what the caller may attach there from above (IAM's `list_policies` /
-  `list_groups`), `GET /attachable-policies?scope=` the policies the caller may attach there (leaving out a
-  policy owned by another org or workspace and, at a scope, a platform policy with a Deny outside `${scope}:`
-  for anyone but the platform admin, as IAM refuses it), and `GET /access?scope=`, `/catalogs?scope=`,
-  `/grantable?scope=` and `/policies/validate?scope=` answer for that level (an org-wide scope, in these and in
-  the lists, answers for its org). One web module serves every level (Nexus `AGENTS.md`, "Roles & permissions
+  `list_groups`; a policy from above only where the caller may list it at its owner or where it is attached
+  at that level or above, so no organisation's admin sees another's "<O> access"), `GET
+  /attachable-policies?scope=` (`&principal_id=`) the policies the caller may attach there, as IAM's
+  `attachable_policies` decides them (leaving out a policy owned by another org or workspace, one owned above
+  that the caller may not know of there and, at a scope, a platform policy with a Deny outside `${scope}` for
+  anyone but the platform admin, as IAM refuses it; a right to attach without one to list still offers the
+  level's own), and `GET /access?scope=`, `/catalogs?scope=`,
+  `/grantable?scope=` and `/policies/validate?scope=` answer for that level (a scope below a container, in these
+  and in the lists, answers for that container). One web module serves every level (Nexus `AGENTS.md`, "Roles & permissions
   UI module"): Platform settings, Organization settings and Workspace settings › Roles & permissions mount it
   with their scope, and `GET /access?scope=` alone decides its sections and buttons. Consequences: an org or
   workspace admin holds, at their scope, the attachment actions and that level's policies and groups, and
   nothing else of IAM; members and viewers hold none of it. Service accounts and keys, module approvals, the
   simulator, IdP mappings and the audit are the platform's: `access` answers their actions (`_PLATFORM_ONLY`,
   `nexus:ReadSystem`) false at any scope, the platform admin's included, so only the platform's page shows them.
-  The built-in roles' feature defaults are an organization's: `access` reports `nexus:GetRoleFeatures` and
-  `nexus:UpdateRoleFeatures` (as the routes of `/api/organizations/{org}/roles/features` decide them) at an
-  organization scope only, false elsewhere. The Platform Settings sidebar shows Roles & permissions for any
+  The Platform Settings sidebar shows Roles & permissions for any
   platform-level `iam:` action `GET /access` grants, and the tables and System only with `nexus:ReadSystem`:
   a delegated IAM admin without it sees Roles & permissions alone, a stranger a 403; Organization and Workspace
   settings show it for any `iam:` action at their scope.
@@ -110,7 +142,7 @@ Nexus adds no role check of its own.
   registered catalogs and resources from the name grammar; the text view takes YAML or JSON. `POST
   /policies/validate` returns every error IAM lists (and the normalized document), so the editor shows them as the
   user types and a save refused for them says the same. With `?scope=` at an org or a workspace it also applies the
-  rule of a policy that level owns (core's `check_owned_document`: every pattern under `${scope}:`), so a document
+  rule of a policy that level owns (core's `check_owned_document`: every pattern `${scope}` or `${scope}/…`), so a document
   it calls valid there is one `POST /policies` with that `scope` takes.
 - **Keys are shown once.** Creating or rotating a service account's key returns its value in that one answer
   (`Cache-Control: no-store`); IAM keeps a hash, the audit and every list never carry it, and the page holds it in
@@ -119,20 +151,35 @@ Nexus adds no role check of its own.
   valid document the approver holds, so the API checks the narrowing itself (`narrowing.py`): an Allow statement may
   lose actions and resources, none may gain or appear, and Deny statements stay exactly as submitted (dropping one
   widens). A delegated approver approves no more than they hold: narrow what they do not.
-- **The policy builder offers what the caller may grant.** `GET /grantable?scope=` is IAM's `grantable`, so the
-  builder and IAM's refusal agree: what it lists is what the caller holds at that scope (it may list less, never
-  more). It needs no permission: it says only what the caller holds.
-- **The modules × workspaces page edits the sets as the user.** Decision: `GET/PUT /sets` call IAM's
-  `get_set`, `effective_set` and `put_set` bound to the user, every change through `_change` (`iam.put_set`,
-  resource `<org>` or `<org>/<ws>`, the parts' sizes as detail), and `editable` is IAM's `iam:PutSet` decision.
-  Consequences: the platform admin edits organizations' sets, an org's owners and admins its workspaces' (their
-  org-wide role), a workspace admin reads their workspace's; nobody else sees the page. Names come from Nexus's
-  database (`ScopeDirectory`), which of them the caller sees from IAM. The rows take three IAM calls whatever
-  the number of columns (`filter` for `GetSet`, `filter` for `PutSet`, one `list_sets`) and are intersected
-  here (`sets.intersect`); only a workspace whose org's set the caller may not read asks IAM its effective set.
+- **Nothing lists more to someone who may grant less.** Decision: `/publishers`, `/catalogs` and
+  `/api/modules/scopes` answer from IAM's `grantable` at the scope, as the caller, and `/resources` from IAM's
+  `list_resources`, as the caller; none answers from the registered catalogs or the module listing alone.
+  Consequences: a user holding only agent A and `iam:CreatePolicy` sees A and `iam:CreatePolicy` and nothing
+  else, in every one of them; an admin who holds no module scope sees no module there; the editor's validation
+  still reads every registered catalog, so a document naming what the caller may not grant is refused for that
+  (`GRANT_NOT_HELD`), not as unknown. `/publishers` and `/resources` need no permission, like `/grantable`: they
+  say only what the caller already holds or may list (the route matrix lists them with the caller-only routes).
+- **The policy builder offers what the caller may grant.** `GET /publishers?scope=&parent=` is IAM's `grantable`
+  by publisher (within a sub-policy's parent), so the builder and IAM's refusal agree: what it lists is what the
+  caller holds at that scope (it may list less, never more). It needs no permission: it says only what the caller
+  holds, and of a parent only what the caller may derive from or read.
+- **No modules × workspaces page.** Decision: the sets are gone (core `services/iam/AGENTS.md`, "Policies are
+  the one place access is decided"), so is the page that edited them, its routes and the directory port that named
+  its rows. Consequences: what an organization or a workspace uses is its access policy ("<O> access", "<W>
+  access", made by the upgrade: `../iam/AGENTS.md`, "The upgrade"), edited, narrowed and derived from here like
+  any policy; `GET /access` reports no `iam:GetSet` or `iam:PutSet`.
 - **The simulator is `explain`.** "Can X do Y on Z" is IAM's `explain` on the principal (`iam:Explain`): the answer
   names the deciding side, policy, statement, attachment, scope and group, and shows the statement when the
-  caller may read its policy.
+  caller may read its policy; for a sub-policy, `bounded_by` (each parent's statement that allowed it too) and
+  `through` (the sub-policies a parent's Deny was reached by).
+- **Sub-policies are IAM's, passed through.** Decision: `POST` and `PUT /policies` hand `parent` to IAM's
+  `create_policy` / `update_policy` as the user, through `_change` (the audit detail says `sub-policy of <id>`,
+  `parent <id>` or `no parent`); every rule (one parent, a cycle, a chain deeper than 8, a missing parent, an owner
+  outside the parent's, derive only from what you hold, grant only what you hold within the chain, no deleting a
+  parent) is IAM's, so its refusals come back as they do over NATS and through the SDK: 403 (`PERMISSION_DENIED`,
+  `GRANT_NOT_HELD`), 404, 409, 422 with IAM's message. Consequences: the editor shows a policy's parent and keeps it
+  on save (it leaves `parent` out of the `PUT`); choosing a parent and the tree of policies are the builder's
+  (a later change).
 - **The routes take a session only** (the `/api/iam/` prefix): an API key cannot administer permissions.
 - A user holding a custom role with only `iam:ListPolicies` gets exactly that page; a stranger gets 403 on all of
   them. Group and service-account deletion keep the id (IAM's rule); the lists hide deleted ones.
@@ -145,6 +192,11 @@ uv run pytest libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/iam_admin 
 
 The route tests run a real IAM on the memory store (`team` fixture: `owner`, `admin`, `member`, `viewer`,
 `stranger`; plus `root`, a platform admin, and `lister`, who holds only `iam:ListPolicies` on
-`abi:*:*:iam:policy/*`, every policy wherever it is owned). The `ws2` fixture adds `ws-2` of `org-1` with
+`abi:iam:policy/*` and `abi:*/iam:policy/*`, every policy wherever it is owned). The `ws2` fixture adds `ws-2` of `org-1` with
 `ws2admin` and `colleague`, and `outsider` in another org: a workspace admin's and an org admin's policies
 and groups.
+
+`adapters/primary/iam_admin__primary_adapter__FastAPI_publishers_test.py` runs `/publishers`, `/resources` and the
+narrowed `/catalogs` on the same world, with listers registered for graphs, workspaces and features (`listed`
+fixture): a workspace admin's graphs, a stranger's empty pages, a disabled feature listed nowhere, and a user
+holding only agent A and `iam:CreatePolicy`.

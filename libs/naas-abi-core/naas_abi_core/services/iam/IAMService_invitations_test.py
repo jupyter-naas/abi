@@ -10,11 +10,25 @@ from naas_abi_core.services.iam.IAMPorts import (
     IAMNotFoundError,
     PermissionDeniedError,
 )
-from naas_abi_core.services.iam.tests.iam_harness import graph
+from naas_abi_core.services.iam.tests.iam_harness import (
+    below,
+    document,
+    graph,
+    org,
+    statement,
+    workspace,
+)
 
-W1 = "abi:acme:ws1"
-W2 = "abi:acme:ws2"
+W1 = workspace("ws1", "acme")
+W2 = workspace("ws2", "acme")
 BOB = "bob@example.com"
+
+
+@pytest.fixture(autouse=True)
+def containers(h):
+    """The organisation acme and its workspaces ws1 and ws2."""
+    h.register("ws1", "acme")
+    h.register("ws2", "acme")
 
 
 @pytest.fixture
@@ -62,7 +76,7 @@ def test_a_workspace_admin_invites_to_their_workspace_only(h, ada):
         with pytest.raises((PermissionDeniedError, IAMNotFoundError)):
             h.iam.create_pending_grant("builtin", BOB, roles.MEMBER, W2)
         with pytest.raises((PermissionDeniedError, IAMNotFoundError)):
-            h.iam.create_pending_grant("builtin", BOB, roles.MEMBER, "abi:acme:*")
+            h.iam.create_pending_grant("builtin", BOB, roles.MEMBER, below("acme"))
         with pytest.raises((PermissionDeniedError, IAMNotFoundError)):
             h.iam.create_pending_grant("builtin", BOB, roles.MEMBER)
         # Never an owner: an admin cannot make one, invited or not.
@@ -133,16 +147,29 @@ def test_the_first_sign_in_with_the_verified_email_claims_the_grants(h):
     assert not h.allowed("triple_store:Insert", graph("g", "acme", "ws2"), bob)
 
 
-def test_a_claimed_role_brings_its_feature_policy(h):
-    """As an attached role does: the invitee's Nexus features follow the role."""
+def test_an_invitation_carries_policies_beside_the_role(h):
+    """A role brings no feature: an invitation carries the workspace's policies
+    for them (Nexus's "Features of member"), claimed with the role."""
     from naas_abi_core.engine.call_context import as_service_account
 
     with as_service_account("engine"):
-        h.iam.put_feature_policies({"member": ["chat"]})
+        chat = h.iam.create_policy(
+            "Features of member",
+            document(
+                statement(
+                    "Allow",
+                    ["triple_store:Query"],
+                    ["${scope}/triple_store:graph/shared"],
+                )
+            ),
+            scope=W1,
+        )
     h.admin("create_pending_grant", "builtin", BOB, roles.MEMBER, W1)
+    h.admin("create_pending_grant", "builtin", BOB, chat.id, W1)
     bob = sign_in(h)
     h.admin("claim_pending_grants", bob.id)
-    assert (roles.feature_policy_id("member"), W1) in held(h, bob)
+    assert {(roles.MEMBER, W1), (chat.id, W1)} <= held(h, bob)
+    assert not any(policy.startswith("builtin.features.") for policy, _ in held(h, bob))
 
 
 def test_an_unverified_email_claims_nothing(h):
@@ -200,7 +227,7 @@ def test_a_policy_an_invitee_holds_cannot_be_deleted(h):
                 {
                     "effect": "Allow",
                     "actions": ["triple_store:Query"],
-                    "resources": ["${scope}:triple_store:graph/*"],
+                    "resources": ["${scope}/triple_store:graph/*"],
                 }
             ],
         },
@@ -230,7 +257,8 @@ def test_a_bound_idp_group_holds_the_role_where_it_is_bound(h, ada):
     assert h.iam.resolve_idp_groups("acme", ["Data readers"]) == [binding.group_id]
     assert h.iam.resolve_idp_groups("other", ["Data readers"]) == []
     group = h.iam.store.get_principal(binding.group_id)
-    assert group.kind == "group" and group.org == "acme"
+    # It belongs to the top container of the binding's scope.
+    assert group.kind == "group" and group.owner_scope == org("acme")
     # A member of the IdP group (its sign-in carries the mapped group) reads
     # there and nowhere else.
     reader = h.user("reader")

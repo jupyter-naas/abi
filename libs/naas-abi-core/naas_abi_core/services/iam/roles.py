@@ -1,7 +1,7 @@
 """Built-in managed policies, generated from the registered catalogs.
 
-Roles are attached at a scope: "viewer on workspace W" is ``builtin.viewer``
-attached with scope ``abi:<org>:W``. They are cumulative (viewer ⊆ member ⊆
+Roles are attached at any container: "viewer on workspace W" is ``builtin.viewer``
+attached with scope W, the workspace's container name. They are cumulative (viewer ⊆ member ⊆
 admin ⊆ owner) and stored with explicit action lists, so ``explain`` shows real
 statements. IAM regenerates them whenever a catalog changes.
 
@@ -16,10 +16,16 @@ approved or not: its own discovery record and its own manifest.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
-from naas_abi_core.services.iam.catalog import ActionCatalog, CatalogRegistry, Level
+from naas_abi_core.services.iam.catalog import (
+    ActionCatalog,
+    CatalogRegistry,
+    Level,
+    PlatformAccess,
+)
 from naas_abi_core.services.iam.IAMPorts import Policy
 from naas_abi_core.services.iam.module_scopes import SERVICE as MODULE_SCOPES
 from naas_abi_core.services.iam.policy import PolicyDocument, Statement
@@ -37,13 +43,28 @@ API = "builtin.api"
 IDP = "builtin.idp"
 JOB = "builtin.job"
 MODULE_BOOTSTRAP = "builtin.module_bootstrap"
-FEATURES_PREFIX = "builtin.features."
 # Managed policies an older version stored, since removed: IAM drops them (and what
 # was attached) at boot, so no grant outlives its definition.
 RETIRED_POLICIES = (
     "builtin.transitional.nexus_user",
     "builtin.transitional.module",
 )
+# The same, by prefix: the policies an older version generated per key from a
+# deployment's settings (``builtin.features.*``) and attached beside a role, at
+# the role's scope. The last dot-separated segment of the key names that role
+# (``builtin.features.org-1.admin`` rode with ``builtin.admin``).
+RETIRED_POLICY_PREFIXES = ("builtin.features.",)
+
+
+def retired_role(policy_id: str) -> str | None:
+    """The role a retired companion rode with (``RETIRED_POLICY_PREFIXES``), or
+    None for any other policy."""
+    prefix = next((p for p in RETIRED_POLICY_PREFIXES if policy_id.startswith(p)), None)
+    if prefix is None:
+        return None
+    role = f"builtin.{policy_id.removeprefix(prefix).rsplit('.', 1)[-1]}"
+    return role if role in ROLES else None
+
 
 ROLES = (VIEWER, MEMBER, ADMIN, OWNER)
 ROLE_LEVELS: dict[str, frozenset[Level]] = {
@@ -54,16 +75,10 @@ ROLE_LEVELS: dict[str, frozenset[Level]] = {
 }
 # The workspace roles that bring builtin.platform.member; viewer brings .viewer.
 PLATFORM_MEMBER_ROLES = frozenset({MEMBER, ADMIN, OWNER})
-# The roles that hold module scopes (``module_scopes.py``) by themselves.
-MODULE_SCOPE_ROLES = frozenset({ADMIN, OWNER})
 
 # The built-in service accounts and the policy each holds.
 SERVICE_ACCOUNTS: dict[str, str] = {"engine": ENGINE, "api": API, "idp": IDP}
 
-# No role reaches UseFeature through its scope: features come from feature policies.
-_FEATURE_TYPE = ("nexus", "feature")
-# Kept from admins: they are the owner's.
-_OWNER_ONLY_ACTIONS = frozenset({"nexus:DeleteWorkspace", "nexus:DeleteOrganization"})
 _ATTACHMENT_TYPE = ("iam", "attachment")
 # IAM administration (policies, groups, attachments at the scope) is the
 # admins' and owners': viewers and members get nothing of the iam catalog.
@@ -75,7 +90,9 @@ _MAX_ACTIONS = 100
 
 @dataclass(frozen=True)
 class _PlatformRow:
-    """A row of the platform types table (``AGENTS.md``, "Built-in policies"): who reaches a platform-level type."""
+    """A row of the platform types table (``AGENTS.md``, "Built-in policies"): who
+    reaches a platform-level type. The kernel services' rows are here; a
+    first-party catalog declares its own (``ActionCatalog.platform_access``)."""
 
     service: str
     resources: tuple[str, ...]
@@ -134,26 +151,6 @@ PLATFORM_TYPES: tuple[_PlatformRow, ...] = (
         ("key/${principal.id}/*",),
         self_=("ListKeys", "CreateKey", "RevokeKey"),
     ),
-    _PlatformRow("nexus", ("organization/-",), self_=("CreateOrganization",)),
-    _PlatformRow(
-        "nexus",
-        ("provider_model/*",),
-        viewer=("ListProviderModels", "GetProviderModel"),
-    ),
-    # A user's own drive and storage, and the platform drive every workspace
-    # whose setting allows it shares: read by viewers, written by members.
-    _PlatformRow(
-        "nexus",
-        ("my_file/${principal.id}", "my_file/${principal.id}/*"),
-        viewer=("ListMyFiles", "GetMyFile"),
-        member=("PutMyFile", "DeleteMyFile"),
-    ),
-    _PlatformRow(
-        "nexus",
-        ("user_storage/${principal.id}", "user_storage/${principal.id}/*"),
-        viewer=("ListUserStorage", "GetUserStorage"),
-        member=("PutUserStorage",),
-    ),
     _PlatformRow(
         "object_storage",
         (
@@ -174,65 +171,6 @@ PLATFORM_TYPES: tuple[_PlatformRow, ...] = (
         member=("PutObject", "PutObjectStream", "DeleteObject"),
     ),
 )
-
-
-def feature_policy_id(key: str) -> str:
-    """``builtin.features.<key>``, with ``<key>`` one of ``<role>``,
-    ``<org>.<role>`` or ``<org>.<workspace>.<role>``."""
-    return f"{FEATURES_PREFIX}{key}"
-
-
-def feature_policy(key: str, features: Iterable[str]) -> Policy:
-    """The ``nexus:UseFeature`` grants of one feature key, confined to the
-    scope it is attached at. A key with no features is still a policy: it
-    overrides the broader keys with nothing."""
-    names = sorted(set(features))
-    statements = [
-        Statement(
-            effect="Allow",
-            actions=("nexus:UseFeature",),
-            resources=tuple(f"${{scope}}:nexus:feature/{name}" for name in names),
-            sid="UseFeatures",
-        )
-    ]
-    return _managed(
-        feature_policy_id(key),
-        f"Features of {key}",
-        f"The features the {key} role may use where it is attached.",
-        statements if names else [],
-    )
-
-
-def parse_feature_key(key: str) -> tuple[str | None, str | None, str]:
-    """``(org, workspace, role)`` of a feature key; ``ValueError`` if malformed."""
-    parts = key.split(".")
-    if not 1 <= len(parts) <= 3 or parts[-1] not in {
-        r.removeprefix("builtin.") for r in ROLES
-    }:
-        raise ValueError(f"Invalid feature policy key {key!r}")
-    role = parts[-1]
-    org = parts[0] if len(parts) >= 2 else None
-    workspace = parts[1] if len(parts) == 3 else None
-    for ident in (org, workspace):
-        if ident is not None and not ident:
-            raise ValueError(f"Invalid feature policy key {key!r}")
-    return org, workspace, role
-
-
-def feature_policy_for(
-    role_policy_id: str, scope_org: str, scope_workspace: str, available: Iterable[str]
-) -> str | None:
-    """The most specific feature policy that exists for a role attached at
-    ``abi:<org>:<workspace>``: workspace, then org, then the deployment's."""
-    role = role_policy_id.removeprefix("builtin.")
-    have = set(available)
-    candidates = []
-    if scope_workspace not in ("*", "-"):
-        candidates.append(f"{scope_org}.{scope_workspace}.{role}")
-    candidates += [f"{scope_org}.{role}", role]
-    return next(
-        (feature_policy_id(c) for c in candidates if feature_policy_id(c) in have), None
-    )
 
 
 def _sid(*words: str) -> str:
@@ -261,22 +199,21 @@ def _role_statements(role: str, catalog: ActionCatalog) -> list[Statement]:
         t
         for t in catalog.resource_types
         if t.placement == "placed"
-        and (catalog.service, t.name) != _FEATURE_TYPE
-        # Zero trust: viewers and members reach a module scope only through a
-        # policy granting it; admins and owners hold every one at their scope.
-        and not (t.module_scope and role not in MODULE_SCOPE_ROLES)
+        # Granted by a policy only: no role holds it.
+        and not t.policy_only
+        # Zero trust: no role holds a module scope, owners included; a policy
+        # grants each one.
+        and not t.module_scope
     ]
-    groups: dict[bool, tuple[list[str], list[str]]] = {
-        False: ([], []),
-        True: ([], []),
+    # One statement per kind of resource: what sits in the scope's container
+    # (``${scope}/<service>:<type>/*``), a personal type (its owner's), the
+    # container itself (``${scope}``: a container type is decided where it is)
+    # and making a container in it (its create action).
+    groups: dict[str, tuple[list[str], list[str]]] = {
+        kind: ([], []) for kind in ("", "personal", "container", "creates")
     }
     for resource_type in placed:
-        actions, resources = groups[resource_type.personal]
-        base = f"${{scope}}:{catalog.service}:{resource_type.name}/"
-        if resource_type.personal:
-            resources += [f"{base}${{principal.id}}", f"{base}${{principal.id}}/*"]
-        else:
-            resources.append(f"{base}*")
+        base = f"${{scope}}/{catalog.service}:{resource_type.name}/"
         for action in catalog.actions:
             if (
                 action.level not in levels
@@ -289,12 +226,22 @@ def _role_statements(role: str, catalog: ActionCatalog) -> list[Statement]:
             if role != OWNER and action.level == "admin":
                 if (catalog.service, resource_type.name) == _ATTACHMENT_TYPE:
                     continue
-                if qualified in _OWNER_ONLY_ACTIONS:
+                if action.owner_only:
                     continue
+            if resource_type.container:
+                kind = "creates" if action.creates else "container"
+                patterns = [f"{base}*"] if action.creates else ["${scope}"]
+            elif resource_type.personal:
+                kind = "personal"
+                patterns = [f"{base}${{principal.id}}", f"{base}${{principal.id}}/*"]
+            else:
+                kind, patterns = "", [f"{base}*"]
+            actions, resources = groups[kind]
             if qualified not in actions:
                 actions.append(qualified)
+            resources += [p for p in patterns if p not in resources]
     statements: list[Statement] = []
-    for personal, (actions, resources) in groups.items():
+    for kind, (actions, resources) in groups.items():
         if not actions:
             continue
         for index, chunk in enumerate(_chunks(actions)):
@@ -306,7 +253,7 @@ def _role_statements(role: str, catalog: ActionCatalog) -> list[Statement]:
                     sid=_sid(
                         role.removeprefix("builtin."),
                         catalog.service,
-                        "personal" if personal else "",
+                        kind,
                         str(index + 1) if index else "",
                     ),
                 )
@@ -325,7 +272,7 @@ def _admin_attachment_statements(registry: CatalogRegistry) -> list[Statement]:
             effect="Allow",
             actions=("iam:AttachPolicy", "iam:DetachPolicy"),
             resources=tuple(
-                f"${{scope}}:iam:attachment/{role}/*"
+                f"${{scope}}/iam:attachment/{role}/*"
                 for role in (ADMIN, MEMBER, VIEWER)
             ),
             sid="AdminGrantsRolesBelowOwner",
@@ -333,7 +280,7 @@ def _admin_attachment_statements(registry: CatalogRegistry) -> list[Statement]:
         Statement(
             effect="Allow",
             actions=("iam:AttachPolicy", "iam:DetachPolicy"),
-            resources=("${scope}:iam:attachment/pol_*/*",),
+            resources=("${scope}/iam:attachment/pol_*/*",),
             sid="AdminAttachesCustomerPolicies",
         ),
     ]
@@ -342,7 +289,11 @@ def _admin_attachment_statements(registry: CatalogRegistry) -> list[Statement]:
 def role_policy(role: str, registry: CatalogRegistry) -> Policy:
     statements: list[Statement] = []
     for catalog in registry.all():
-        statements += _role_statements(role, catalog)
+        # A catalog whose flags are unknown (stored before they existed) holds
+        # nothing for the roles until it is registered again: read as
+        # unflagged, its policy-only types and owner-only actions would widen.
+        if catalog.flags_known:
+            statements += _role_statements(role, catalog)
     if role == ADMIN:
         statements += _admin_attachment_statements(registry)
     return _managed(
@@ -353,11 +304,31 @@ def role_policy(role: str, registry: CatalogRegistry) -> Policy:
     )
 
 
+def _catalog_rows(registry: CatalogRegistry) -> list[_PlatformRow]:
+    """The platform access first-party catalogs declare, as rows of the table."""
+    return [
+        _platform_row(catalog.service, access)
+        for catalog in registry.all()
+        if not catalog.module and catalog.flags_known
+        for access in catalog.platform_access
+    ]
+
+
+def _platform_row(service: str, access: PlatformAccess) -> _PlatformRow:
+    return _PlatformRow(
+        service,
+        access.resources,
+        viewer=access.viewer,
+        member=access.member,
+        self_=access.self_,
+    )
+
+
 def _platform_statements(
     registry: CatalogRegistry, column: str, sid_prefix: str
 ) -> list[Statement]:
     statements: list[Statement] = []
-    for index, row in enumerate(PLATFORM_TYPES):
+    for index, row in enumerate((*PLATFORM_TYPES, *_catalog_rows(registry))):
         names = {
             "viewer": row.viewer,
             "member": row.viewer + row.member,
@@ -374,7 +345,7 @@ def _platform_statements(
             Statement(
                 effect="Allow",
                 actions=tuple(actions),
-                resources=tuple(f"abi:-:-:{row.service}:{r}" for r in row.resources),
+                resources=tuple(f"abi:{row.service}:{r}" for r in row.resources),
                 sid=_sid(sid_prefix, row.service, str(index)),
             )
         )
@@ -386,12 +357,16 @@ class PlatformGrant:
     """A platform-level resource of the deployment that workspace roles reach by
     level, beyond ``PLATFORM_TYPES``: a viewer the ``list`` and ``read`` actions
     of the resource's type, a member ``write`` too (``resources`` are canonical
-    names, ``abi:-:-:<service>:<type>/<id>``)."""
+    names, ``abi:<service>:<type>/<id>``)."""
 
     service: str
     resources: tuple[str, ...]
     # False: members read these like viewers do (a shared catalog nobody writes).
     member_writes: bool = True
+
+
+# The type of a pattern's last literal step, ``.../<service>:<type>/...``.
+_LAST_TYPE = re.compile(r"(?:^abi:|/)[a-z][a-z0-9_]*:([a-z][a-z0-9_]*)/")
 
 
 def _grant_statements(
@@ -407,7 +382,8 @@ def _grant_statements(
             continue
         granted = levels if grant.member_writes else levels & ROLE_LEVELS[VIEWER]
         for resource in grant.resources:
-            type_name = resource.split(":", 4)[-1].partition("/")[0]
+            named = _LAST_TYPE.findall(resource)
+            type_name = named[-1] if named else ""
             actions = [
                 catalog.qualified(a.name)
                 for a in catalog.actions
@@ -430,7 +406,7 @@ def _grant_statements(
 # opens it. ``discovery:OpenApp`` on ``app/*`` comes with every workspace
 # viewer and with a module's own bootstrap, so what carries it for the rest
 # must also refuse this app, whatever a workspace admin attaches to whom.
-_IDP_ADMIN_APP = "abi:-:-:discovery:app/*/idp/admin"
+_IDP_ADMIN_APP = "abi:discovery:app/*/idp/admin"
 
 
 def _no_idp_admin_app() -> Statement:
@@ -539,7 +515,7 @@ def api_policy(registry: CatalogRegistry | None = None) -> Policy:
         Statement(
             effect="Allow",
             actions=("secret:Get", "secret:Set"),
-            resources=("abi:-:-:secret:secret/*",),
+            resources=("abi:secret:secret/*",),
             sid="ConfiguredSeedCredentials",
         ),
         Statement(
@@ -554,7 +530,7 @@ def api_policy(registry: CatalogRegistry | None = None) -> Policy:
                 "identity:ProvisionUser",
                 "identity:FindProvisionedUser",
             ),
-            resources=("abi:-:-:identity:provider/*",),
+            resources=("abi:identity:provider/*",),
             sid="SignInThroughProviders",
         ),
         Statement(
@@ -567,6 +543,8 @@ def api_policy(registry: CatalogRegistry | None = None) -> Policy:
                 "iam:ListAttachments",
                 "iam:PutScope",
                 "iam:DeleteScope",
+                # The move of the names to container paths, once at start.
+                "iam:RewriteNames",
                 "iam:PutPlacement",
                 "iam:DeletePlacement",
                 "iam:ListPlacements",
@@ -589,11 +567,11 @@ def api_policy(registry: CatalogRegistry | None = None) -> Policy:
             effect="Allow",
             actions=("iam:ExchangeToken",),
             resources=(
-                "abi:-:-:iam:audience/abi%3Asession",
-                "abi:-:-:iam:audience/abi%3Adelegated%3A*",
+                "abi:iam:audience/abi%3Asession",
+                "abi:iam:audience/abi%3Adelegated%3A*",
                 # A key presented without an audience buys the token of its own
                 # (checked again on that audience once the key is read).
-                "abi:-:-:iam:audience/%2A",
+                "abi:iam:audience/%2A",
             ),
             sid="ExchangeTokensForUsers",
         ),
@@ -699,22 +677,22 @@ def idp_policy() -> Policy:
                 effect="Allow",
                 actions=("document:*",),
                 resources=(
-                    "abi:-:-:document:namespace/idp",
-                    "abi:-:-:document:collection/idp/*",
-                    "abi:-:-:document:document/idp/*",
+                    "abi:document:namespace/idp",
+                    "abi:document:collection/idp/*",
+                    "abi:document:document/idp/*",
                 ),
                 sid="OwnDocuments",
             ),
             Statement(
                 effect="Allow",
                 actions=("secret:*",),
-                resources=("abi:-:-:secret:secret/idp%2F*",),
+                resources=("abi:secret:secret/idp%2F*",),
                 sid="OwnSecrets",
             ),
             Statement(
                 effect="Allow",
                 actions=("email:Send",),
-                resources=("abi:-:-:email:sender/*",),
+                resources=("abi:email:sender/*",),
                 sid="SendMail",
             ),
         ],
@@ -750,7 +728,7 @@ def module_bootstrap_policy() -> Policy:
                     "discovery:Unregister",
                     "discovery:GetModule",
                 ),
-                resources=("abi:-:-:discovery:module/${module.project}/${module.id}",),
+                resources=("abi:discovery:module/${module.project}/${module.id}",),
                 sid="OwnRegistration",
             ),
             # ``default``, which the SDK uses when a module names none and
@@ -761,7 +739,7 @@ def module_bootstrap_policy() -> Policy:
             Statement(
                 effect="Allow",
                 actions=("iam:SubmitManifest", "iam:GetManifest"),
-                resources=("abi:-:-:iam:manifest/${principal.id}",),
+                resources=("abi:iam:manifest/${principal.id}",),
                 sid="OwnManifest",
             ),
             # Nexus calls a module's agent, app or model with a delegation that
@@ -777,9 +755,9 @@ def module_bootstrap_policy() -> Policy:
                     "discovery:ChatModel",
                 ),
                 resources=(
-                    "abi:-:-:discovery:agent/${module.project}/${module.id}/*",
-                    "abi:-:-:discovery:app/${module.project}/${module.id}/*",
-                    "abi:-:-:discovery:model/${module.project}/${module.id}/*",
+                    "abi:discovery:agent/${module.project}/${module.id}/*",
+                    "abi:discovery:app/${module.project}/${module.id}/*",
+                    "abi:discovery:model/${module.project}/${module.id}/*",
                 ),
                 sid="OwnHosted",
             ),
@@ -789,7 +767,7 @@ def module_bootstrap_policy() -> Policy:
             Statement(
                 effect="Allow",
                 actions=("discovery:GetAgentRun", "discovery:CancelAgentRun"),
-                resources=("abi:-:-:discovery:run/${user.id}/${module.project}/*",),
+                resources=("abi:discovery:run/${user.id}/${module.project}/*",),
                 sid="OwnRuns",
             ),
             # Evicting another module's registration is the platform's, whatever

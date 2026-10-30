@@ -34,7 +34,7 @@ export function bindFeaturePaneAgent(
   const target = pickPaneAgentForSurface(agents, surface, opts?.appAgentRef);
   if (!target) return null;
   const currentStillValid = Boolean(
-    ws.paneAgent && agents.some((a) => a.enabled && a.id === ws.paneAgent),
+    ws.paneAgent && agents.some((a) => a.id === ws.paneAgent),
   );
   if (opts?.force || !ws.paneAgentExplicitlySelected || !currentStillValid) {
     ws.setPaneAgent(target.id);

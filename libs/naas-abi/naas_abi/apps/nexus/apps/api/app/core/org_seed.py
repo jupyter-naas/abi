@@ -38,7 +38,7 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     UserModel,
     WorkspaceModel,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_scope, workspace_scope
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container, workspace_container
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -142,7 +142,7 @@ async def _ensure_org_member(
     role: str,
 ) -> None:
     _declare_scope(organization_id, None)
-    _declare_role(user_id, role, org_scope(organization_id))
+    _declare_role(user_id, role, org_container(organization_id))
 
 
 async def _ensure_workspace_member(
@@ -153,7 +153,7 @@ async def _ensure_workspace_member(
     organization_id: str | None = None,
 ) -> None:
     _declare_scope(organization_id, workspace_id)
-    _declare_role(user_id, role, workspace_scope(organization_id, workspace_id))
+    _declare_role(user_id, role, workspace_container(organization_id, workspace_id))
 
 
 async def _upsert_users(session: AsyncSession) -> dict[str, UserModel]:
@@ -302,7 +302,8 @@ async def _seed_workspace_apps(
     workspace_id: str,
     app_ids: list[str] | None,
 ) -> None:
-    """Insert missing enabled rows for seeded catalog apps. Existing rows win."""
+    """Insert the missing rows of seeded catalog apps (installed in the
+    workspace; who opens one is a policy's). Existing rows win."""
     if not app_ids:
         return
     now = datetime.now(UTC).replace(tzinfo=None)
@@ -323,13 +324,12 @@ async def _seed_workspace_apps(
                 id=f"app-{uuid4().hex[:12]}",
                 workspace_id=workspace_id,
                 app_id=app_id,
-                enabled=True,
                 created_at=now,
                 updated_at=now,
             )
         )
         logger.info(
-            "Seeded app_id=%s enabled on workspace_id=%s",
+            "Seeded app_id=%s on workspace_id=%s",
             app_id,
             workspace_id,
         )

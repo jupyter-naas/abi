@@ -308,9 +308,9 @@ containers) and `document/<ns>/<c>/<id>`.
 
   ```yaml
   resources:
-    - "abi:-:-:document:namespace/<module_id>"
-    - "abi:-:-:document:collection/<module_id>/*"
-    - "abi:-:-:document:document/<module_id>/*"
+    - "abi:document:namespace/<module_id>"
+    - "abi:document:collection/<module_id>/*"
+    - "abi:document:document/<module_id>/*"
   ```
 * Namespace administration is `Namespaces`, `EnsureCollection` and
   `DropCollection`, granted by policy. No identity holds it by name (there is no

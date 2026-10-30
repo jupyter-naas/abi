@@ -3,7 +3,7 @@
 ## Purpose
 
 Who may do what, for every kernel service: principals (users, groups, service
-accounts), AWS-style policies, attachments, built-in roles, placements, scopes,
+accounts), AWS-style policies, attachments, built-in roles, containers, placements,
 action catalogs, and the evaluator that decides. It also authenticates service
 accounts: their keys, the engine's ES256 tokens and JWKS, module permission
 manifests and the broker permissions derived from them. User login stays with
@@ -34,9 +34,11 @@ model_registry, discovery, source_control, coding_environment) use
 - The model: [Vocabulary](#vocabulary), [Principals](#principals),
   [Policy language](#policy-language), [Resource names](#resource-names),
   [Placements](#placements), [Evaluation](#evaluation),
-  [Action catalogs](#action-catalogs), [Sealed resources](#sealed-resources),
+  [Action catalogs](#action-catalogs), [Publishers and listing](#publishers-and-listing),
+  [Sealed resources](#sealed-resources),
   [Built-in policies](#built-in-policies), [Module scopes](#module-scopes),
-  [Sets](#sets), [Grant only what you hold](#grant-only-what-you-hold)
+  [Sub-policies](#sub-policies),
+  [Grant only what you hold](#grant-only-what-you-hold)
 - Using it: [Service API](#service-api),
   [Enforcing in a domain service](#enforcing-in-a-domain-service-guardpy),
   [Enforcing in a data service](#enforcing-in-a-data-service-enforcementpy)
@@ -54,18 +56,19 @@ model_registry, discovery, source_control, coding_environment) use
 
 | File | Role |
 |---|---|
-| `names.py` | Canonical names `abi:<org>:<ws>:<service>:<type>/<id>`, id encoding, `*`/`?` matching, variables |
-| `catalog.py` | `ActionCatalog`, `ResourceType`, `ActionSpec`, `CatalogRegistry` (catalog format) |
+| `names.py` | Canonical names, paths of containers `abi:<service>:<type>/<id>/…/<service>:<type>/<id>`, id encoding, scopes and owners, `*`/`?` matching, variables |
+| `catalog.py` | `ActionCatalog` (with its `publisher`), `ResourceType`, `ActionSpec`, `CatalogRegistry` (catalog format) |
+| `listing.py` | The lister port (`ResourceLister`, `ListingQuery`, `ListedPage`, `ListerDirectory`) and the listing as the caller (`run_listing`, `ResourcePage`) |
+| `publishers.py` | Catalogs and what the caller may grant, grouped by publisher (`by_publisher`) |
 | `policy.py` | Policy documents: schema, validation (every error listed), `Statement` |
 | `evaluator.py` | The evaluation algorithm: `check`, `filter`, `explain` over a `PolicySource` |
-| `grants.py` | Grant only what you hold: glob containment of resource patterns, `Holdings` (what a caller holds, side by side), `grantable` |
+| `grants.py` | Grant only what you hold: glob containment of resource patterns, within a sub-policy's chain too, `Holdings` (what a caller holds, side by side), `grantable`, `within_chain` |
 | `roles.py` | Built-in managed policies generated from the catalogs, and the enumerated ones of `engine`, `api` and engine jobs |
 | `iam_catalog.py` | IAM's own `iam:*` catalog and the code-declared seals |
 | `guard.py` | `ServiceGuard`: how a runtime service checks (names, require, filter, create rule, placements) and the shared wire codes |
 | `enforcement.py` | `ResourceGuard`, what a data service enforces with; `scan_allowed`, `own_storage`, `internal_call`, wire codes |
-| `kernel_catalogs.py` | The kernel services' catalogs (`services/<name>/iam_catalog.py`), registered at boot |
+| `kernel_catalogs.py` | The kernel services' catalogs (`services/<name>/iam_catalog.py`), registered at boot, and `register_listers` (what the loaded services and engine modules list) |
 | `module_scopes.py` | The `module` catalog (what modules expose, per workspace) and the checks of a catalog a module declares |
-| `sets.py` | Organisation and workspace sets: the item grammar, what a set allows (`allows`, `bounded`), intersection, containment (`outside`), what a set lets anyone grant (`held_patterns`), their names |
 | `keys.py` | Keys `abi_sk_` (service accounts), `abi_pk_` (personal), `abi_gk_` (link grants): generation, parsing, hashing |
 | `exchange.py` | `TokenExchanger`: RFC 8693 token exchange: subjects, audiences, actors, scopes, renewal |
 | `tokens.py` | `TokenIssuer`: ES256 signing keys, their rotation, the JWKS and the tokens it signs |
@@ -79,6 +82,7 @@ model_registry, discovery, source_control, coding_environment) use
 | `adapters/secondary/authorizer__policy.py`, `authorizer__allow_all.py` | Authorizer adapters |
 | `adapters/secondary/IAMSecretsSecretService.py`, `IAMSecretsMemory.py` | `IAMSecrets`: signing keys and the engine's key, under `iam/` |
 | `adapters/secondary/IAMSecondaryAdapterNATSClient.py` | `IIAMService` over NATS, for client-role engines |
+| `adapters/secondary/listers__nats.py` | `NATSModuleListers`: the listers remote modules serve, found through discovery |
 | `adapters/primary/iam__primary_adapter__NATS.py` | `abi.iam.v1.*` endpoints and `abi.iam.v1.changed` |
 | `adapters/iam_nats_codec.py` | Records and errors on the wire, shared by both NATS sides |
 | `tests/iam__secondary_adapter__generic_test.py` | The `IAMStore` contract every adapter passes |
@@ -86,15 +90,20 @@ model_registry, discovery, source_control, coding_environment) use
 | `tests/authorization_contract.py` | The contract every runtime service passes per operation: no policy, granted, denied, in process and over NATS |
 | `tests/data_service_contract.py` | The data services' contract: a table of cases for no policy, granted and denied principals, list filtering, in process and over NATS |
 | `tests/grant_contract.py` | Grant only what you hold: the refusals and what keeps working, in process and over NATS |
+| `tests/sub_policy_contract.py` | Sub-policies: what they grant, live narrowing, inherited Denies, `explain`, the refusals, deriving, deleting, in process and over NATS |
 
 ## Ports
 
 **`IAMStore`** (secondary): principals (unique `(issuer, subject)` for users,
 unique service-account names), static group members, IdP group mappings,
-policies with optimistic revisions, attachments (unique per policy, principal
-and scope), placements, scopes, catalogs, keys (hashed), manifests (one row
-per submitted version), signing keys (public half and schedule) and the sets of orgs and
-workspaces (`iam_scope_sets`, one row per recorded set). Every write bumps `revision()` in
+policies with optimistic revisions and their parents (`list_sub_policies`; a
+parent is not deleted while it has sub-policies), attachments (unique per policy, principal
+and scope; read by principal, by policy, or for several principals or policies at once:
+`attachments_for`, `attachments_of`), containers (unique per type and id, with their parent), placements, catalogs, keys (hashed), manifests (one row
+per submitted version) and signing keys (public half and schedule). What an older version
+recorded of the sets of orgs and workspaces (`iam_scope_sets`) is read as stored
+(`legacy_scope_sets`) and dropped (`drop_legacy_scope_sets`) by whoever moves it into policies,
+and by nothing else. Every write bumps `revision()` in
 the same transaction; `install_id()` is generated once. Errors:
 `IAMNotFoundError`, `IAMConflictError`, `RevisionConflictError`. The store is not
 the Document Service: IAM authorizes that.
@@ -117,6 +126,11 @@ passes the secret service built from its local adapters, never `nats_rpc`.
 over NATS by `IAMSecondaryAdapterNATSClient`. `require` is defined once, on the
 port, from `authorize`.
 
+**`ResourceLister`** (`listing.py`, secondary): the existing resources of one type,
+candidates for a listing as the caller ("Publishers and listing"). In process
+(`register_lister`) or a remote module's, found by a **`ListerDirectory`**
+(`listers__nats.NATSModuleListers`, discovery and `abi.mod.<project>.<sa>.<instance>.iam.list`).
+
 ## Vocabulary
 
 | Term | Meaning |
@@ -125,10 +139,11 @@ port, from `authorize`.
 | **Actor** | The principal that holds the credential on a call. |
 | **On behalf of (OBO)** | The user an actor acts for. Optional. |
 | **Action** | `<service>:<Action>`, one per operation, for example `triple_store:Query`. |
-| **Resource name** | `abi:<org>:<workspace>:<service>:<type>/<id>`. |
+| **Resource name** | A path of containers: `abi:<service>:<type>/<id>/…/<service>:<type>/<id>`. |
+| **Container** | A resource that holds resources: a step of their names. Declared by its catalog, registered with IAM. |
 | **Policy** | A versioned document of statements. Attached to principals. |
-| **Attachment** | (principal, policy, optional scope). |
-| **Placement** | The org and workspace that own a kernel resource. Recorded by IAM. |
+| **Attachment** | (principal, policy, optional scope: a container, below one, or the platform). |
+| **Placement** | The container a kernel resource sits in. Recorded by IAM. |
 | **Catalog** | A service's list of actions and resource types, registered at load time. |
 | **Sealed resource** | A resource only one named principal can ever be allowed on. |
 
@@ -157,25 +172,22 @@ attachments `att_`). Ids never change and are never reused.
 
 **Groups**
 
-- A group has a `name` and an **owner scope** (`owner_scope`): the platform
-  (`abi:-:-`), an org (`abi:<org>:-`) or a workspace (`abi:<org>:<ws>`). Its name
-  carries it (`abi:<org>:<ws>:iam:group/<id>`, see "Resource names"), so the admins
-  of that level manage it. `org` is the owner's org (null for a platform group; a
-  group made before owner scopes may still name one while the platform owns it).
-  Groups cannot contain groups.
-- **Static members** are users or service accounts, kept in IAM. A group owned by
-  an org or a workspace holds only **users of that org**: users with an attachment
-  of their own under `abi:<org>:…` (a role at the org, org-wide or at one of its
-  workspaces). Service accounts never join one: a module's account is approved by
-  its manifest. A user whose last attachment under the org is detached
-  (`detach_policy`, or `delete_scope` of the workspace or org it was at) leaves the
-  org's groups and its workspaces' groups. Platform
-  groups take any user or service account.
-- **Where it is attached.** A group owned by an org or a workspace receives
-  attachments only at its owner's scope or below (an org's at the org, org-wide or
-  at any of its workspaces; a workspace's at that workspace), always at a scope.
-  IAM's own companions (`builtin.platform.*`, feature policies) follow its roles as
-  for any principal. Platform groups receive attachments anywhere.
+- A group has a `name` and an **owner scope** (`owner_scope`): the platform (`abi:`)
+  or a registered container. Its name carries it (`<owner>/iam:group/<id>`, see
+  "Resource names"), so the admins of that container manage it. Groups cannot contain
+  groups.
+- **Static members** are users or service accounts, kept in IAM. A group owned by a
+  container holds only **users of its top container** (the first step of its owner's
+  path: an organisation for its workspaces' groups): users with an attachment of their
+  own at that container or below it. Service accounts never join one: a module's account
+  is approved by its manifest. A user whose last attachment within that top container is
+  detached (`detach_policy`, or `delete_container` of the container it was at) leaves
+  the groups owned within it. Platform groups take any user or service account.
+- **Where it is attached.** A group owned by a container receives attachments only at
+  its owner or below it (`names.within_owner`: an organisation's at the organisation,
+  below it or at any of its workspaces; a workspace's at that workspace or inside it),
+  always at a scope.
+  IAM's own companions (`builtin.platform.*`) follow its roles as for any principal. Platform groups receive attachments anywhere.
 - **Mapped members** come from IdP group claims: a mapping `(provider name,
   claim value) -> group id` is set with `iam:MapIdpGroup`. Mappings stay the
   platform admin's, whatever owns the group: `MapIdpGroup` and `UnmapIdpGroup`
@@ -250,22 +262,28 @@ and validated without catalogs, since they may name services that register later
 **Stored policies**: `id` (`pol_<ulid>`, or `builtin.<name>` / `module.<project>.<module_id>`
 for managed ones), `name`, `description`, `document`, `managed` (only IAM rewrites
 it), `revision` (increments on every change; `update_policy(expected_revision=)`
-is optimistic concurrency) and `owner_scope`.
+is optimistic concurrency), `owner_scope` and `parent_id` (the policy it is a
+sub-policy of, or none: "Sub-policies"; never set on a managed policy).
 
-**Owner scopes.** Every policy is owned by the platform (`abi:-:-`, the default and
-every managed policy's), an org (`abi:<org>:-`) or a workspace (`abi:<org>:<ws>`),
-never an org-wide scope; it never changes. Its name carries it,
-`abi:<org>:<ws>:iam:policy/<id>`, so whoever holds `iam:CreatePolicy` (and the
-rest) there manages it. An org or a workspace owns something only once Nexus
-registered it (`iam:PutScope`). A policy owned by an org or a workspace:
+**Owner scopes.** Every policy is owned by the platform (`abi:`, the default and every
+managed policy's) or by a registered container; it never changes. Its name carries it,
+`<owner>/iam:policy/<id>` (`abi:iam:policy/<id>` for the platform's), so whoever holds
+`iam:CreatePolicy` (and the rest) there manages it. A container owns something only once it
+is registered ("Containers"). A policy owned by a container:
 
-- is written for its scope: **every** resource pattern, a Deny's included, starts
-  with `${scope}:` (refused at create and update with `PolicyValidationError`;
-  `policy.check_owned_document`, which Nexus's validate route calls too), so
-  attached to anyone it neither grants nor refuses anything beyond its scope;
-- is attached only at its owner's scope or below, always at a scope: an org's at the
-  org, org-wide or at any of its workspaces, a workspace's at that workspace
-  (`names.within_owner`). No unscoped attachment of it exists.
+- is written for its scope: **every** resource pattern, a Deny's included, is `${scope}`
+  or starts with `${scope}/` (refused at create and update with `PolicyValidationError`;
+  `policy.check_owned_document`, which Nexus's validate route calls too), so attached to
+  anyone it neither grants nor refuses anything beyond its scope;
+- is attached only at its owner or at a container below it, always at a scope
+  (`names.within_owner`): an organisation's at the organisation, below it or at any of its
+  workspaces, a workspace's at that workspace or at a container inside it. No unscoped
+  attachment of it exists. An owner or a scope of the grammar before container paths
+  (`abi:<org>:<ws>`, which only the start-up moves write until the names are rewritten)
+  follows the old rules (an organisation's `abi:<org>:-` at it, `abi:<org>:*` and its
+  workspaces; a workspace's at that workspace), and is never within a name of the other
+  grammar, nor is anything within `names.UNRESOLVED`: the moves' own mistakes are refused,
+  as anyone's.
 
 A refusal names the owner to whoever may read the policy or the group, and is "not
 found" for anyone else.
@@ -280,28 +298,51 @@ group or service account) with an optional `scope`:
 
 | `scope` | Meaning | `${scope}` expands to |
 |---|---|---|
-| `abi:<org>:<workspace>` | One workspace | `abi:<org>:<workspace>` |
-| `abi:<org>:-` | The org's own resources only (members, domains, billing) | `abi:<org>:-` |
-| `abi:<org>:*` | The org and every workspace in it | `abi:<org>:*` |
-| `abi:-:-` | Platform resources | `abi:-:-` |
+| `<container>` | The container: what it holds directly and itself | the container's name, `abi:nexus:organization/org-1` |
+| `<container>/*` | **Below**: the container and every container under it, at any depth, each as if the policy were attached there | each container from `<container>` down to the resource's own (below) |
+| `abi:` | The platform: platform-level resources | `abi:` (`${scope}/` reads `abi:`) |
 | none | The policy uses no `${scope}` | none |
 
-A policy attached at a scope must start every Allow resource pattern with
-`${scope}:` (a Deny only narrows, so it may name anything): the scope only fills
-`${scope}`, so any other pattern would let whoever may attach at that scope
-grant beyond it. IAM refuses such an attachment, refuses to update a policy
-attached at a scope beyond it, and enforces the rule when it evaluates: a
-statement reached through a scoped attachment keeps only its `${scope}:` Allow
-patterns, whatever the policy says (`policy.within_scope`).
+A policy attached at a scope must write every Allow resource pattern `${scope}` or
+`${scope}/…` (a Deny only narrows, so it may name anything): the scope only fills
+`${scope}`, so any other pattern would let whoever may attach at that scope grant beyond
+it. **A policy attached at a container reaches only `${scope}/…`**: IAM refuses such an
+attachment, refuses to update a policy attached at a scope beyond it, and enforces the rule
+when it evaluates: a statement reached through a scoped attachment keeps only its
+`${scope}` and `${scope}/` Allow patterns, whatever the policy says (`policy.within_scope`).
+A pattern that names a type stays at its level (`${scope}/nexus:member/*` names the members
+of the container, never those of a container inside it); `${scope}/*` reaches everything
+below.
 
-A Deny is kept whole, so a policy with a Deny outside `${scope}:` refuses beyond the
+- **Below** replaces the organisation-wide scope: an organisation's owners and admins hold
+  their role `<org>/*` (Nexus mirrors it), so the role's `${scope}/triple_store:graph/*`
+  reaches the graphs of the organisation and of each of its workspaces, and its `${scope}`
+  each workspace itself. A role attached at `<org>` alone reaches the organisation's own
+  level: what sits directly in it, and the organisation itself.
+- **The platform's own.** `${scope}` never reaches the platform's own policies, groups
+  and unscoped attachments (`abi:iam:policy/…`, `abi:iam:group/…`,
+  `abi:iam:attachment/…`): a statement reached through an attachment at the platform
+  (`abi:`) does not match them (`evaluator`, and `grants.Holdings` leaves them out of what
+  it holds), and a statement attached at a container names only what is in it. Only an
+  unscoped statement written for them (`abi:iam:policy/*`, `abi:*`, `*`: the platform
+  admin's, `engine`'s, `api`'s) reaches them. A role attached at the platform therefore
+  never edits a platform policy, which may be attached unscoped. This rule is what the
+  `%2A` names said before.
+
+A Deny is kept whole, so a policy with a Deny outside `${scope}` refuses beyond the
 scope it is attached at. Such a policy (`confined_to_scope` but not
 `wholly_within_scope`, only ever the platform's) is attached at a scope, invited to
-(`create_pending_grant`) or bound
-(`bind_idp_group`) only by whoever may also attach it unscoped, `iam:AttachPolicy` on
-`abi:%2A:%2A:iam:attachment/<policy>/<principal>`: the platform admin. A scope's admins
-and owners are refused with `PermissionDeniedError`, and lists at a scope
-(`list_policies(scope=)`, Nexus `/attachable-policies`) do not offer it to them.
+(`create_pending_grant`) or bound (`bind_idp_group`) only by whoever may also attach it
+unscoped, `iam:AttachPolicy` on `abi:iam:attachment/<policy>/<principal>`: the platform
+admin. A scope's admins and owners are refused with `PermissionDeniedError`, and lists at a
+scope (`list_policies(scope=)`, `attachable_policies`, Nexus `/attachable-policies`) do not
+offer it to them.
+
+An attachment is named at its scope's container, `<container>/iam:attachment/<policy>/<principal>`
+(a below one too; the platform's and an unscoped one `abi:iam:attachment/…`, which only
+unscoped statements reach). Attaching below a container grants at every container under it,
+so "Grant only what you hold" checks it there: an admin of an organisation's own level holds
+nothing in its workspaces and attaches nothing below it.
 
 **Variables** are substituted into resource patterns before matching, against
 the principal whose policies are being evaluated (`X` in `principal_decision(X)`
@@ -310,7 +351,7 @@ computing the user's.
 
 | Variable | Value |
 |---|---|
-| `${scope}` | The attachment's scope. Invalid in a policy attached without one. |
+| `${scope}` | The attachment's container's name (each container from it down, for an attachment below one; `abi:` at the platform, where `${scope}/` reads `abi:` and `${scope}` alone matches nothing). Invalid in a policy attached without one. |
 | `${principal.id}` | `X`'s principal id. A policy reached through a group resolves to the member being evaluated, never to the group; percent-encoded as one segment. |
 | `${user.id}` | The call's user: the OBO user if the call is on behalf of one, else the actor if it is a user, else unresolved. The same on both sides, so an actor's policy can name the user it serves. |
 | `${module.id}`, `${module.project}` | Manifest-only: bound when a module's manifest is approved; they match nothing for any other principal. |
@@ -323,103 +364,176 @@ its `${principal.id}` is the user; `api`'s policies never see the user as
 
 ## Resource names
 
+A resource name is a **path of containers**: `abi:`, then the steps of the containers
+the resource sits in, from the top, then the resource's own step.
+
 ```abnf
-resource-name = "abi:" org ":" workspace ":" service ":" type "/" id
-org           = scope-id / "-" / "%2A"                    ; %2A: every org, unscoped attachments only
-workspace     = scope-id / "-" / "%2A"                    ; %2A: every workspace, org-wide attachments only
-scope-id      = 1*64( %x61-7A / DIGIT / "-" / "_" )       ; lowercase id, never exactly "-"
-service       = %x61-7A *( %x61-7A / DIGIT / "_" )        ; catalog name
-type          = %x61-7A *( %x61-7A / DIGIT / "_" )        ; declared in the service catalog
-id            = "-" / segment *( "/" segment )
-segment       = *( unreserved / pct-encoded )             ; RFC 3986; empty only inside path ids
-unreserved    = ALPHA / DIGIT / "-" / "." / "_" / "~"
-pct-encoded   = "%" 2HEXDIG                               ; uppercase hex
+resource-name  = "abi:" *( container-step "/" ) step
+container-name = "abi:" container-step *( "/" container-step )
+platform       = "abi:"                                     ; the path of no container
+container-step = service ":" type "/" segment               ; a container's id is one segment
+step           = service ":" type "/" id
+service        = %x61-7A *( %x61-7A / DIGIT / "_" )         ; catalog name
+type           = %x61-7A *( %x61-7A / DIGIT / "_" )         ; declared in the service catalog
+id             = "-" / segment *( "/" *pchar )              ; only the last step's id may be a path id
+segment        = 1*pchar
+pchar          = unreserved / pct-encoded
+unreserved     = ALPHA / DIGIT / "-" / "." / "_" / "~"
+pct-encoded    = "%" 2HEXDIG                                ; uppercase hex
 ```
 
-- `org` and `workspace` are the stable Nexus ids (`org-<12 hex>`, `ws-<12 hex>`),
-  never slugs: renames change no names. `-` means "none".
-- **Levels**: workspace `abi:<org>:<ws>:…`; org `abi:<org>:-:…` (the org's own
-  resources: members, domains, billing); platform `abi:-:-:…` (models, discovery,
-  IAM itself); a workspace in no org `abi:-:<ws>:…` (legacy workspaces with a null
-  `organization_id`).
-- `%2A` as the workspace names what spans every workspace of an org, and `%2A` as
-  both org and workspace what spans every org (`names.EVERY_ORG_TYPES`):
-  - `abi:<org>:%2A:iam:attachment/…`, an org-wide attachment, which an
-    `abi:<org>:*` grant reaches and an org-level `abi:<org>:-` one does not, so an
-    org admin cannot attach itself to every workspace;
-  - `abi:%2A:%2A:iam:attachment/…`, an unscoped attachment, and
-    `abi:%2A:%2A:iam:policy/…` and `…:iam:group/…`, the **platform's** policies and
-    groups: no `${scope}` expands to them, the platform scope `abi:-:-` included,
-    so only grants written for every org (`*` and `abi:*:…`, the platform admin's,
-    `engine`'s, `api`'s) reach them. A role attached at `abi:-:-` therefore never
-    edits a platform policy, which may be attached unscoped.
+```text
+abi:nexus:organization/org-1/nexus:workspace/ws-2/triple_store:graph/<iri>
+abi:nexus:organization/org-1/nexus:workspace/ws-2/crm:project/p-9/crm:deal/d-1
+abi:nexus:organization/org-1/nexus:member/u-7
+abi:model_registry:model/gpt-x                      (the platform: no container)
+```
 
-  No other resource may use `%2A`. An org's or a workspace's policies and groups
-  are named at their owner, `abi:<org>:-:iam:policy/…`, `abi:<org>:<ws>:iam:group/…`.
+- **Parsing.** Ids are percent-encoded, so a raw `:` appears only between a step's
+  service and type: after `abi:`, the `/`-separated tokens holding a raw `:` start the
+  steps; every other token is an id segment. A container step has exactly one id segment;
+  the last step takes the rest (`names.parse_resource_name`).
+- **Containers.** A catalog marks which of its types are containers
+  (`ResourceType.container`, "Action catalogs"). A container of any service may sit in a
+  container of any other; core knows that a container holds resources, nothing more. A
+  container's **name** is its own resource name, `<parent>/<service>:<type>/<id>`: the
+  organisation `org-1` is `abi:nexus:organization/org-1`, its workspace `ws-2` is
+  `abi:nexus:organization/org-1/nexus:workspace/ws-2`. Actions on a container are decided
+  on that name.
+- **One container per resource.** Each resource sits in exactly one container, or in
+  none (the platform, `abi:`). Something used in several places (an agent, a shared graph)
+  is shared through policies.
+- **The platform** is the path of no container, written `abi:` where a container is
+  expected (an owner, a scope, a placement): `abi:model_registry:model/gpt-x` is
+  platform-level.
 - `-` as the whole `id` names a singleton (`service/-`).
+- **No reserved names.** Nothing is named with `%2A` or any marker: the platform's own
+  policies, groups and unscoped attachments are named at the platform
+  (`abi:iam:policy/<id>`), and the rule that keeps them from the scopes is explicit
+  (see "Attachments and scope": `${scope}` never reaches them).
 
 **Encoding ids.** The id is percent-encoded UTF-8: every octet outside
 `unreserved` is encoded, including `:`, `/`, `*`, `?`, `%` and spaces. Each
 resource type declares its id kind in its catalog:
 
 - **`opaque`**: one segment, the whole value encoded (a `/` becomes `%2F`): graph
-  IRIs, key-value, cache and secret keys, event types, model ids.
+  IRIs, key-value, cache and secret keys, event types, model ids, every container's id.
   `http://ontology.naas.ai/graph/x` becomes `http%3A%2F%2Fontology.naas.ai%2Fgraph%2Fx`.
 - **`path`**: a hierarchy; each part is encoded on its own and the parts joined with
   a raw `/`: object paths, document namespace/collection/id, dataset
   namespace/name, vector collection/id. Object storage joins `prefix` and `key`
   with one `/` after stripping leading and trailing `/` from the prefix: prefix
   `workspaces/ws-1/files`, key `q3 report.pdf` is `object/workspaces/ws-1/files/q3%20report.pdf`.
+  A container type is never a path type.
 - **`singleton`**: `-`, for service-wide resources.
 
-Canonical names are built and parsed only by `names.resource_name(...)` and
-`names.parse_resource_name(...)`, never by string formatting in callers
-(SDK modules do not build names: the engine's services do).
+Canonical names are built and parsed only by `names.py` (`resource_name(..., container=)`,
+`container_name`, `parse_resource_name`, `parse_container`), never by string formatting in
+callers (SDK modules do not build names: the engine's services and IAM do).
 
-**Wildcards.** A resource pattern is matched against the whole canonical name.
-`*` matches any sequence of characters, including none and including `:` and `/`
-(it crosses segments); `?` matches exactly one character of the encoded form
-(so it can match one character of `%2F`); everything else is literal. There is no
-escaping and there are no regular expressions: canonical names never contain a raw
-`*` or `?` (they are `%2A`, `%3F`), so a wildcard is never confused with a
-literal. `*` alone matches every resource. End a field before the wildcard:
-`abi:org-1:*` matches org `org-1` only, `abi:org-1*` also matches `org-10`.
+**Wildcards** are unchanged. A resource pattern is matched against the whole canonical
+name. `*` matches any sequence of characters, including none and including `:` and `/`
+(it crosses levels); `?` matches exactly one character of the encoded form (so it can match
+one character of `%2F`); everything else is literal. There is no escaping and there are no
+regular expressions: canonical names never contain a raw `*` or `?` (they are `%2A`,
+`%3F`), so a wildcard is never confused with a literal. `*` alone matches every resource.
+**A pattern that names a type stays at its level**: the step `<service>:<type>/` must
+follow the container literally, and a raw `:` is only ever a step's, so
+`<container>/nexus:member/*` names the members directly in the container, never those of a
+container below it. `<container>/*` reaches everything below, at any depth. End an id
+before the wildcard: `…/nexus:organization/org-1/*` matches org `org-1` only,
+`…/nexus:organization/org-1*` also matches `org-10`.
 
 | Pattern | Matches |
 |---|---|
-| `abi:org-1:ws-2:*` | everything in workspace `ws-2` |
-| `abi:org-1:*` | the org's own resources and all its workspaces |
-| `abi:*:*:triple_store:graph/*` | every graph |
-| `abi:-:-:document:namespace/people`, `…:collection/people/*`, `…:document/people/*` | the `people` document namespace, its collections and documents. Not `document:*/people*`: that also matches another namespace's collection named `people`. |
+| `abi:nexus:organization/org-1/nexus:workspace/ws-2/*` | everything in ws-2, including what its CRM projects hold |
+| `abi:nexus:organization/org-1/*` | everything in org-1 and in all its workspaces |
+| `abi:nexus:organization/org-1/nexus:member/*` | org-1's members only |
+| `abi:nexus:organization/org-1/*/triple_store:graph/*` | every graph anywhere under org-1 |
+| `abi:nexus:organization/org-1` | org-1 itself (its own actions: `nexus:UpdateOrganization`) |
+| `abi:triple_store:graph/*`, `abi:*/triple_store:graph/*` | every platform graph; every graph in some container. Together, every graph (`names.anywhere`) |
+| `abi:document:namespace/people`, `…:collection/people/*`, `…:document/people/*` | the platform's `people` document namespace, its collections and documents. Not `document:*/people*`: that also matches another namespace's collection named `people`. |
+
+A type stays at its level only when the type is not a container of the same type's
+service nested in itself: `<C>/crm:folder/*` also reaches what a folder inside a folder
+holds, as it reaches everything inside the folders directly in `C`.
+
+## Containers
+
+IAM keeps the **registry of containers** (`iam_containers`), each with its type, id and
+parent: `(service, type, id) -> parent container` (`ContainerRecord`). A container's id is
+unique within its type, so its path is read from its type and id alone
+(`iam.container(service, type, id)`, None for an unknown one).
+
+- **Registering** (`iam.register_container(service, type, id, parent=)`) is a create on its
+  name as placed: the caller needs the type's create action (the action its catalog marks
+  `creates: true` on that type) on `<parent>/<service>:<type>/<id>`. The parent must be the
+  platform or a registered container, and the type a container type of a registered
+  catalog. A type that names its `parents` sits in those only (`ValueError`
+  elsewhere). Registering again under the same parent changes nothing; under another parent
+  it is refused (`IAMConflictError`): a container never moves.
+- **Deleting** (`iam.delete_container(service, type, id)`) needs the type's delete action
+  (marked `deletes: true`) on its name. It drops what the container owns and everything
+  below it, deepest first: its containers, the policies and groups they own (a policy with
+  its attachments and invitations, a group with its attachments, members and mappings,
+  sub-policies before their parents), every attachment, pending grant and binding at them
+  (deep ones included), and their placements. A user left with no attachment within the
+  top container of its path leaves the groups owned there.
+- **Who registers.** naas_abi registers its organisations and workspaces as it creates
+  them, with its own account (`api`), and deletes them with them: a workspace's parent is
+  its organisation, a workspace in no organisation sits at the platform. A remote module's
+  SDK registers its own (`engine.services.iam.register_container`), as the user it acts for
+  when there is one: both must hold the create action.
+- **Over NATS**: `register_container`, `delete_container`, `get_container`. Reading a
+  container's path (`get_container`, `IAMService.read_container`) answers only a caller
+  allowed some action of the container's type (its catalog's) on it; anyone else gets
+  none, as for an unknown container, so an unapproved module learns neither that a
+  workspace exists nor which organisation holds it. In process, the services that own a
+  resource read the registry unchecked (`container`, `call_container`).
 
 ## Placements
 
 A kernel service builds `<service>:<type>/<id>` from the request. It cannot take
-the org and workspace from the request (anyone could claim a workspace they
-belong to while addressing another workspace's data), and data ids rarely encode
-a workspace (Nexus graph IRIs are `…/graph/<slug>-<uuid>`). So IAM keeps
-**placements**: `(service, id-key) -> (org, workspace)`.
+the container from the request (anyone could claim a container they belong to while
+addressing another container's data), and data ids rarely encode one (Nexus graph IRIs
+are `…/graph/<slug>-<uuid>`). So IAM keeps **placements**: `(service, id-key) -> container`.
 
-- Both may be `-`. `id-key` is an exact canonical id, or a prefix ending in `*`
-  (plain string prefix matching on the canonical id, covering every type of that
-  service whose id starts that way: a document placement on `nexus-ws-1` plus
-  `nexus-ws-1/*` covers the namespace, its collections and its documents).
+- The container is a container name, or the platform `abi:`. `id-key` is an exact canonical
+  id, or a prefix ending in `*` (plain string prefix matching on the canonical id, covering
+  every type of that service whose id starts that way: a document placement on
+  `nexus-ws-1` plus `nexus-ws-1/*` covers the namespace, its collections and its
+  documents).
 - **Resolution** (`IAMService.placement_of`): an exact key beats a prefix, a longer
   prefix beats a shorter one; no match means the resource is platform-level,
-  `abi:-:-:…`. A resource type a catalog declares `placement: platform`
-  (model_registry models, discovery modules) always resolves to platform.
-- **Containers.** A resource type marked `container: true` holds children whose
-  ids extend its own (`<container id>/<rest>`): document `namespace` and
-  `collection`, vector_store `collection`, source_control `repo`, dataset
-  `namespace`. A placement on a container is written as a pair, the exact id and
-  the prefix `<id>/*`, so its children resolve to the container's placement,
-  platform included.
-- **Every existing container has a placement.** Containers created through a
-  service record one at creation; approving a module's manifest records platform
-  placements for the module's own `<module_id>` document and dataset namespaces
-  unless already placed (`modules.py`); Nexus places its per-workspace prefixes
-  and namespaces when it creates a workspace. "No placement covers this name"
-  therefore means a new top-level resource or a new container.
+  `abi:<service>:<type>/<id>`. A resource type a catalog declares `placement: platform`
+  (model_registry models, discovery modules) always resolves to platform. A container type
+  is never placed: its name comes from the registry.
+- **Id prefixes.** A resource type marked `id_prefix: true` holds children whose ids extend
+  its own (`<its id>/<rest>`): document `namespace` and `collection`, vector_store
+  `collection`, source_control `repo`, dataset `namespace`. They are not containers (a
+  container is a step of the path): a placement on one is written as a pair, the exact id
+  and the prefix `<id>/*`, so its children resolve to its placement, platform included.
+- **Every existing id prefix has a placement.** Those created through a service record one
+  at creation; approving a module's manifest records platform placements for the module's
+  own `<module_id>` document and dataset namespaces unless already placed (`modules.py`);
+  Nexus places its per-workspace prefixes and namespaces in the workspace when it creates
+  one. "No placement covers this name" therefore means a new top-level resource or a new
+  id prefix.
+
+**The container of the call.** `CallContext.container` is the container a call is made in,
+a container name, or none. It is request data, not identity: a caller may name any
+container, and IAM reads it only to name what the call creates and the module scopes and
+declared actions it uses (see "Module scopes"). IAM takes it only once it checked that it is
+the registered path of its last step (`IAMService.call_container`); a container it does not
+know, or named under another path, places nothing and names nothing: the create or the use
+is refused as not found. It travels in process (`CallContext.container`), over NATS
+(`common.CallContext.container`) and through the SDK (`call_context.container`).
+
+A call from the published SDK 0.2 sets the older `common.CallContext.workspace_id` and no
+container. The engine refuses such a call when `workspace_id` is set
+(`INVALID_ARGUMENT`, "upgrade the SDK: this engine takes the container of a call, not a
+workspace id", `nats_identity`), so it is never placed wider than before; a call of SDK
+0.2 that names no workspace runs as before.
 
 **Writing placements**
 
@@ -427,31 +541,29 @@ a workspace (Nexus graph IRIs are `…/graph/<slug>-<uuid>`). So IAM keeps
    Before it runs, the service resolves the placement of the would-be name
    (`ServiceGuard.create`, `ResourceGuard.create`). The create always needs its
    action allowed on the name *as placed*.
-   - A child of an existing container, or any name an existing placement covers,
-     takes that placement. `CallContext.workspace_id` must be empty or equal to its
-     workspace (for a platform container: empty); on a mismatch the call is denied
-     with the "not found or permission denied" outcome computed on the name as
-     placed. Nothing new is recorded. So a member of ws-A cannot claim a name inside
-     ws-B's namespace or a module's platform namespace by passing `workspace_id=ws-A`.
-   - `workspace_id` decides only for a name no placement covers. With it set the
-     name is placed in that workspace (IAM maps the workspace to its org with the
-     scope registry that Nexus fills with `iam:PutScope`; a workspace IAM has no
-     scope for places the resource on the platform, where no workspace role reaches
-     it, so the create is denied). With it empty the name is platform-level. On
-     success `Creation.record()` writes the placement: exact for a top-level
-     resource (none when platform-level), exact plus `<id>/*` for a container,
-     platform included.
-   - **Implicit containers**: a create whose name sits in a container that does not
-     exist yet (the first `dataset:Create` in a new namespace) first places that
-     container by the rule above, then creates the child inside it.
+   - A child of an existing id prefix, or any name an existing placement covers,
+     takes that placement. The call's container must be empty or equal to it
+     (for a platform placement: empty); on a mismatch the call is denied with the
+     "not found or permission denied" outcome computed on the name as placed. Nothing
+     new is recorded. So a member of ws-A cannot claim a name inside ws-B's namespace or
+     a module's platform namespace by making the call in ws-A.
+   - The call's container decides only for a name no placement covers. With one set
+     the name is placed in it; a container IAM does not know (or names under another
+     path) makes the create not found, whoever asks: it is placed nowhere. With none
+     the name is platform-level. On success `Creation.record()` writes the
+     placement: exact for a top-level resource (none when platform-level), exact plus
+     `<id>/*` for an id prefix, platform included.
+   - **Implicit id prefixes**: a create whose name sits under an id prefix that does not
+     exist yet (the first `dataset:Create` in a new namespace) first places that prefix by
+     the rule above, then creates the child inside it.
 2. **Explicitly**, with `iam:PutPlacement`, mainly for prefixes.
-3. **On delete.** Deleting a container or placed resource drops the placements the
-   create recorded (`forget`).
+3. **On delete.** Deleting an id prefix or placed resource drops the placements the
+   create recorded (`forget`); deleting a container drops every placement in it or below.
 
-`workspace_id` never renames an existing resource or overrides a placement: for
-an operation on an existing resource it is ignored. Placements are cached like
-policies. Placements are written as `engine` (`PLACEMENT_WRITER`), so a caller
-never needs `iam:PutPlacement` to create.
+The container of the call never renames an existing resource or overrides a placement:
+for an operation on an existing resource it is ignored. Placements are cached like
+policies. Placements are written as `engine` (`PLACEMENT_WRITER`), so a caller never needs
+`iam:PutPlacement` to create.
 
 ## Evaluation
 
@@ -469,17 +581,23 @@ decide(ctx, action, resource):
      d_U = principal_decision(U) if U set else ALLOW
   4. if d_P == EXPLICIT_DENY or d_U == EXPLICIT_DENY:         DENY (explicit_deny)
   5. if d_P != ALLOW or d_U != ALLOW:                         DENY (implicit_deny)
-  6. if (P or U is bounded) and resource is bounded
-       and resource outside the set of its org or workspace:  DENY (outside_set)
-  7. if T set and no statement of T matches:                  DENY (implicit_deny)
-  8. ALLOW
+  6. if T set and no statement of T matches:                  DENY (implicit_deny)
+  7. ALLOW
 
 principal_decision(X):
-  S = statements of every policy attached to X and to each of X's effective groups
+  S = statements of every policy attached to X and to each of X's effective groups,
+      and, for a sub-policy, the Deny statements of each policy of its chain
   if any Deny statement in S matches:   EXPLICIT_DENY
-  if any Allow statement in S matches:  ALLOW
+  if any Allow statement in S matches,
+     and, for a sub-policy's, an Allow of each policy of its chain matches too:
+                                        ALLOW
   otherwise:                            IMPLICIT_DENY
 ```
+
+- **Sub-policies** ("Sub-policies") narrow: an Allow of a sub-policy counts only where an
+  Allow of its parent, and of each policy above it, matches the same action and resource,
+  their variables filled from the sub-policy's attachment. Their Denies refuse through it.
+  IAM reads the chain when it decides; nothing is copied.
 
 - An explicit Deny wins over any number of Allows, including Allows reached
   through another group.
@@ -488,15 +606,44 @@ principal_decision(X):
 - **Token narrowing (`T`) only narrows.** It holds Allow statements only (a
   Deny is rejected when the token is issued; a statement's `actions` and
   `resources` must be lists of strings, anything else matches nothing).
-- **Sets bound users' Allows** on module scopes and features (step 6, "Sets"): a side is
-  *bounded* when it is a user who holds no `builtin.platform_admin` (directly or through a
-  group, `Subject.bounded`); service accounts never are. A *bounded* resource is one of a
-  `module_scope` type or `nexus:feature/…`. Since both sides must allow, a bounded actor or
-  a bounded user the call acts for is enough: on a Nexus call, `api` acts for the user and
-  the user's side is bounded. Denies and every other action are unchanged.
-- Reasons: `allow`, `explicit_deny`, `implicit_deny`, `suspended`, `sealed`, `outside_set`.
+- **Resource names are container paths.**
+*Decision.* A name is `abi:`, the steps of its containers from the top, then the resource
+(`<service>:<type>/<id>` each, ids percent-encoded, only the last id a path). A catalog marks
+its container types; IAM registers containers with their parents and knows nothing more of
+them: no organisation, workspace or other module concept. Placements map a resource to a
+container, the call carries the container it is made in (`CallContext.container`), and
+attachments and owners are any container, below one, or the platform. Wildcards are
+unchanged: a type stays at its level, `<container>/*` reaches everything below. What
+`%2A` names did is an explicit rule: `${scope}` never reaches the platform's own policies,
+groups and unscoped attachments. Roles are attached at any container and stay at its level;
+attached below a container (`<container>/*`) they count at every container under it. A
+container type's actions are decided at the container itself (`${scope}`), its create action
+in its parent.
+*Consequences.* Any module declares containers (a project in a workspace) and a policy
+attached at one reaches what it holds and nothing else. naas_abi is one such module: its
+`organization` and `workspace` are containers it registers through IAM's public API, and its
+mirror of an organisation's owners and admins is an attachment below the organisation. A
+name is longer and an id at a container's place has no `/`. SDK 0.2 calls naming a workspace
+are refused. A rule that read "organisation versus workspace" is restated per container, and
+these behaviours change (listed for the owner in the task notes): a group of a workspace in no
+organisation takes the users of that workspace only (before: of every workspace in no
+organisation); an admin of an organisation's own level may detach an attachment below the
+organisation of a role below owner (before: only one held there); a role attached at the
+platform no longer manages attachments at the platform (only unscoped grants do); a
+container type nested in itself (a folder in a folder) is reached by a grant on the type at
+the level of the outer one; registering a container needs its create action, deleting one its
+delete action (before: `iam:PutScope`, `iam:DeleteScope`).
+
+**Policies are the one place access is decided.** Nothing bounds an Allow but its own
+  chain and the other side of the call: there are no sets of an org or a workspace, and no
+  workspace switch (what an older version kept of them became policies: "Migrating an
+  existing install").
+- Reasons: `allow`, `explicit_deny`, `implicit_deny`, `suspended`, `sealed`.
   `explain` returns the outcome, the reason and the deciding statement (side,
-  policy id, statement index or `sid`, attachment, scope, group).
+  policy id, statement index or `sid`, attachment, scope, group), and the chain: for an
+  Allow of a sub-policy, `bounded_by`, the statement of each parent that allowed it too,
+  nearest first; for a parent's Deny refusing through a sub-policy, `through`, the
+  sub-policies it was reached by, the attached one first.
 - An inactive actor or OBO user (`suspended`, `deleted`) is denied everything.
 - A sealed resource opens to its owner only (the actor, never through OBO).
 - The built-in IdP's admin app (`discovery:app/*/idp/admin`) is denied `OpenApp` by `builtin.platform.viewer`,
@@ -546,7 +693,7 @@ itself (`triple_store:ListGraphs` on each `graph/…`).
   key-prefix scan, a SQL `LIKE` on ids): `[""]` means no push-down, `[]` means
   nothing is allowed. Denies apply after the push-down.
 
-**Freshness.** Policy, attachment, group, placement, set and status changes take effect
+**Freshness.** Policy (a parent's included), attachment, group, placement and status changes take effect
 at the next check after IAM's change event reaches the checking process: at once
 in process, within the event's delivery over NATS. Cached state also expires after
 60 seconds, so a missed event cannot keep stale grants for long. Group membership
@@ -569,7 +716,7 @@ level, so it is part of the contract:
 and registers it when it loads: in process with `iam.register_catalog(catalog)`
 during engine boot, before the service serves; over NATS with
 `abi.iam.v1.register_catalog`, from a module whose approved policy allows
-`iam:RegisterCatalog` on `abi:-:-:iam:catalog/<service>`.
+`iam:RegisterCatalog` on `abi:iam:catalog/<service>`.
 
 ```yaml
 service: triple_store
@@ -578,8 +725,12 @@ resource_types:
   - name: graph
     id: opaque                  # opaque | path | singleton
     placement: placed           # placed | platform
-    container: false            # true: children's ids extend this id
+    container: false            # true: a container, a step of the names it holds ("Containers")
+    id_prefix: false            # true: children's ids extend this id (not a container)
+    platform_companions: false  # true (a container type): a role attached at one brings the platform companions
+    parents: []                 # a container type: the containers it sits in ("<service>:<type>", "-" the platform); empty: any
     personal: false             # true: the id starts with the owner's principal id
+    policy_only: false          # true: no built-in role holds it, a policy grants it
     description: A named graph, by IRI. `default` is the default graph.
 actions:
   - name: Query
@@ -590,20 +741,74 @@ actions:
   - name: CreateGraph
     level: write
     resource_types: [graph]
-    creates: true               # records a placement from CallContext.workspace_id
+    creates: true               # placed in the container of the call; a container type's: registering one
     subjects: ["abi.svc.triple_store.v1.create_graph"]
+  - name: DropGraph
+    level: admin
+    resource_types: [graph]
+    owner_only: false           # true: an admin action no role below owner holds
+    deletes: false              # true, on a container type: deleting one (iam.delete_container)
+platform_access:                # first-party catalogs only: what the roles' platform companions reach
+  - resources: ["view/*"]       # <type>/<id>, named abi:<service>:<type>/<id>
+    viewer: [QueryView]         # builtin.platform.viewer and .member
+    member: []                  # builtin.platform.member
+    self: []                    # builtin.self
 ```
 
-`iam/v1/iam.proto` defines `ActionCatalog`, `ResourceType` and `ActionSpec` with the
-same fields. Rules: action names are unique within a service; a new version may only
+`iam/v1/iam.proto` defines `ActionCatalog`, `ResourceType`, `ActionSpec` and
+`PlatformAccess` with the same fields.
+
+**What the built-in roles leave out is the catalog's to say**, so core names no
+service's actions or types in its roles (`roles.py`):
+
+- `policy_only` on a resource type: no role holds it at its scope, owners included; only
+  a policy grants it (Nexus's `feature`).
+- `owner_only` on an `admin` action: no role below owner holds it (Nexus's
+  `DeleteWorkspace`, `DeleteOrganization`). Validation refuses it on another level.
+- `platform_access`: rows of the platform types table ("Built-in policies") for this
+  catalog's platform-level resources: `viewer`, `member` and `self` actions, each a
+  registered action of the catalog, on `<type>/<id>` patterns of its types. Only a
+  first-party catalog (no `module`) declares them: a module's catalog grants nothing to
+  every member, and validation refuses one that tries.
+- `container` on a resource type: a container ("Containers"): a step of the names of what
+  it holds, registered with IAM, never placed, never a path type; its catalog declares an
+  action on it marked `creates: true` (registering one) and may mark one `deletes: true`
+  (deleting one). Any catalog, a module's included, declares containers.
+  `platform_companions` on a container type: a role attached at one brings the platform
+  companions ("Built-in policies"; Nexus's `workspace`). `parents` on a container type:
+  the containers it may sit in (`<service>:<type>`, `-` for the platform; empty: any):
+  registering one elsewhere is refused, and "Grant only what you hold" counts its names
+  there only (`grants.universe`), so a create action granted with `*` (Nexus's
+  `CreateOrganization` on `abi:nexus:organization/*`) reaches no organization inside a
+  workspace. Nexus's `organization` sits at the platform, its `workspace` in an
+  organization or at the platform.
+- `id_prefix` on a resource type: its id is the prefix of its children's ids (document
+  `namespace` and `collection`, ...): placed as a pair ("Placements"). Formats 1 and 2
+  called it `container`; a stored catalog of those formats is read with its `container`
+  as `id_prefix`, and so is a catalog over NATS (`ResourceType.id_prefix` keeps the field
+  number `container` had, the new `container` has its own). A module's catalog in a
+  manifest has no format: there `container` is the new flag.
+- `format` (`catalog.CATALOG_FORMAT`, 3): in the stored form (`to_dict(stored=True)`,
+  `from_dict(..., stored=True)`) and over NATS, never in what a module manifest hashes, so
+  no manifest changes hash on an upgrade. A same version registered again with a lower
+  format (an older writer) never replaces the stored one: it is ignored.
+  A stored catalog written before the flags has none (format 1) and says nothing of them,
+  which must never read as "nothing is policy only": a **first-party catalog whose flags
+  are unknown holds nothing for the built-in roles or the platform companions** until it
+  is registered again (`ActionCatalog.flags_known`). IAM loads the stored catalogs and
+  regenerates the roles at boot, so an engine started on an older store narrows (that
+  service's actions are no role's for a moment), never widens, before or after a
+  registration that fails. A module's catalog has no flags to read.
+
+Rules: action names are unique within a service; a new version may only
 add actions or resource types, and removing one is refused while a policy still names
 it explicitly; `subjects` drives broker permissions (stream actions list their
 service's transfer subjects, in-process-only actions list none).
 
 **Request-to-resource rules shared by every service**
 
-- **Ids are canonical**; the org and workspace come from placement, never from the
-  request.
+- **Ids are canonical**; the container comes from placement (or, for a container, the
+  registry), never from the request.
 - **"All" calls.** An operation that takes an optional container and means "all" when
   it is empty (`event:Query` with no type, `triple_store:Get`) is filtered per item.
 - **Several resources.** An operation naming several resources
@@ -626,24 +831,24 @@ operations map):
 | Service | Resource types (id kind; `placed` unless noted) |
 |---|---|
 | `object_storage` | `object` (path) |
-| `document` | `namespace`, `collection` (containers), `document` (path) |
+| `document` | `namespace`, `collection` (id prefixes), `document` (path) |
 | `keyvalue`, `secret` | `key` / `secret` (opaque) |
 | `cache` | `key` (opaque), `service` (singleton, platform) |
-| `vector_store` | `collection` (container), `vector` (path), `service` (singleton, platform) |
+| `vector_store` | `collection` (id prefix), `vector` (path), `service` (singleton, platform) |
 | `triple_store` | `graph` (opaque), `view` (opaque, platform), `schema` (path, platform: a schema of the schema graph by its source) |
-| `dataset` | `namespace` (container), `dataset` (path), `catalog` (singleton, platform) |
+| `dataset` | `namespace` (id prefix), `dataset` (path), `catalog` (singleton, platform) |
 | `event` | `event_type` (opaque), `cursor` (path) |
 | `activity_log` | `actor` (opaque, personal, platform), `service` (singleton, platform) |
 | `email` | `sender` (opaque, platform), `message` (opaque, placed on send) |
 | `model_registry` | `model` (opaque, platform) |
 | `discovery` | `module`, `agent`, `model`, `app`, `job`, `job_run` (path, platform), `run` (path, personal, platform) |
-| `source_control` | `repo` (container), `branch`, `proposal` (path), `forge_user` (personal, platform) |
+| `source_control` | `repo` (id prefix), `branch`, `proposal` (path), `forge_user` (personal, platform) |
 | `coding_environment` | `environment` (path, personal, placed), `template` (platform), `coder_user` (personal, platform) |
 | `identity` | `provider` (opaque, platform) |
-| `iam` | `attachment` (path, at its scope), `policy` and `group` (opaque, at their owner scope), `set` (opaque, read at its scope, written at the level above: "Sets"); `principal`, `key` (personal for personal keys), `manifest`, `placement`, `scope`, `catalog`, `audience` (platform) |
+| `iam` | `attachment` (path, at its scope's container), `policy` and `group` (opaque, at their owner); `principal`, `key` (personal for personal keys), `manifest`, `placement`, `container`, `catalog`, `audience` (platform); `scope` (deprecated, authorizes nothing) |
 | `module` | `agent`, `app`, `workflow`, `pipeline` (path, module scopes): see "Module scopes" |
 | `<module service>` | a module's own catalog (`acme_people` for `acme.people`), every type a module scope: see "Module scopes" |
-| `nexus` | registered by Nexus at start, not by core: see `libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/iam_admin/AGENTS.md` |
+| `nexus` | registered by Nexus at start, not by core: `organization` and `workspace` are its containers; see `libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/iam_admin/AGENTS.md` |
 
 Rules that cut across services and are easy to get wrong:
 
@@ -680,6 +885,117 @@ Rules that cut across services and are easy to get wrong:
   `CallContext` and the service's own records, never `request.user_id`.
 - **Secrets.** `secret/iam%2F*` is sealed to `engine` and `secret/idp%2F*` to `idp`.
 
+## Publishers and listing
+
+What the policy builder shows: each publisher, its resource types, their actions, and the
+existing resources of each type that the caller may list.
+
+**Publishers.** Every catalog names who publishes it (`ActionCatalog.publisher`):
+
+| Publisher | Catalogs |
+|---|---|
+| `engine` (the default) | the kernel services' (`kernel_catalogs.py`), `iam`, and the `module` catalog itself |
+| `naas_abi` | `nexus`, registered by Nexus |
+| a module, by its key | its declared catalog (its publisher is its `module`, whatever it writes), and its agents, apps, workflows and pipelines of the `module` catalog |
+
+A module's key is a remote module's id, an engine module's configured key (`module_key`).
+The `module` catalog is the engine's, but each of its resources is one module's:
+`<container>/module:<type>/<module>/<name>` belongs to `<module>`, so a view by publisher
+shows the `module` types under each module that exposes some (`publishers.by_publisher`).
+`publisher` is in the stored form and on the wire (`ActionCatalog.publisher`), written only
+when it is neither `engine` nor the catalog's own module, so no module manifest changes hash.
+
+**Listers.** A resource type may have a lister (`listing.ResourceLister`): given a
+`ListingQuery` (service, type, container, search text, the name to start after, a page
+size) it returns the type's existing resources in that container (in it or below it), by
+canonical name, sorted by name, after the name given, at most a page, and whether there are
+more (`ListedPage`). It finds candidates and decides nothing: what it returns is filtered as
+below before anyone sees it. `listing.page_of` pages an in-memory list for one.
+
+- **In process**, for the engine's services and engine modules:
+  `iam.register_lister(service, type, lister)` (`IAMService`, not over NATS; the catalog must
+  be registered and declare the type; a later registration replaces an earlier one). The
+  engine registers, once its modules are loaded, the listers its loaded kernel services
+  offer (each service's `iam_listers()`, `{(service, type): lister}`) and its modules'
+  (`BaseModule.iam_listers()`, for its declared catalog), as the engine
+  (`kernel_catalogs.register_listers`; one refused is logged, its type offered as wildcards);
+  naas_abi registers its own at start.
+  A kernel lister reads its adapter unchecked (the graphs, collections, namespaces, objects,
+  event types, models, datasets, repositories, providers, templates it holds), its items named
+  where IAM places them (`ResourceGuard.name`): `list_resources` is the one check, so a
+  listing is filtered once, and "nothing here" (an object prefix that does not exist) is an
+  empty page, not a failure. The services' own list calls stay guarded for their callers.
+  Reading unchecked keeps the service's own input rules: object storage lists under the
+  caller's search text only when it is a plain path (no `.`, `..` or empty segment, no
+  leading `/`, the check every guarded object call makes), else nothing, since a name is
+  checked as written while the backend lists what the path resolves to.
+- **Over NATS**, for a remote module: the SDK serves the listers a module registers
+  (`Module.listers`, `@lister`) on `abi.mod.<project>.<sa>.<instance>.iam.list`
+  (`ListerRequest` / `ListerResponse`) and names their types in its discovery descriptor
+  (`ModuleDescriptor.listers`). The host subscribes before the instance renews as
+  initialized, and discovery reports an instance `STARTING` until then, so IAM, which asks
+  `READY` instances only, never picks one that does not answer yet. A serving engine on NATS
+  gives IAM a directory of them
+  (`IAMService.remote_listers`, `adapters/secondary/listers__nats.py`): for a type of a
+  module's catalog with no lister in process, IAM asks a ready instance of that module that
+  names the type (at most two instances, each within the directory's timeout, all within one
+  wait; the directory is closed at the engine's shutdown). `has_lister` asks the same
+  directory, so a type of a module's catalog that no ready instance lists is offered as
+  wildcards in the publishers' view too. No action names that subject, so the broker lets only
+  the engine's own connections publish there; the module answers as itself, and its answer is
+  filtered here.
+- **Containers**: IAM lists a container type itself, from its registry. A lister registered
+  for one only adds labels: an item it returns that the registry does not hold under that
+  name is dropped, and the registry alone answers when it has none or it fails.
+- **Singletons**: IAM lists the one resource of a singleton type itself:
+  `<container>/<service>:<type>/-` for a placed one at a container, `abi:<service>:<type>/-`
+  for a platform one at the platform.
+- **A type with none of these is offered as wildcards only** (`ResourcePage.listed` false).
+
+**A listing runs as the caller.** `iam.list_resources(service, type, scope=, text=,
+cursor=, limit=, module=)` returns a `ResourcePage`:
+
+- **Scoped.** `scope` is a container or the platform (`abi:`); below a container
+  (`<container>/*`), that container. Only what sits in it or below it is returned, and the
+  container itself when it is of the type asked (what `${scope}` names there: a workspace's
+  Workspaces are that workspace): what a policy attached there can name (a platform resource
+  is listed at the platform only; `listing.at_container`).
+- **Only what the caller may list**: a resource is kept when one of the type's `list`
+  actions allows it, or, for a type with no `list` action, any action of the type, as
+  `filter` decides for the current caller (`listing.listing_actions`). A stranger gets
+  nothing. It needs no `iam:*` action: like `grantable`, it says only what the caller could
+  already list.
+- **Searched.** `text` keeps the resources whose id or label contains it, case folded.
+  `module` keeps the `module` catalog's resources of that module only.
+- **Paged by name.** `cursor` is the last name of the previous page; `next_cursor` is None at
+  the end. IAM reads the lister page by page until its own page is full, examining at most
+  `listing.MAX_EXAMINED` candidates and `listing.MAX_SECONDS` per call (a page may then be
+  short, with a `next_cursor`). What a lister returns outside the scope, after-cursor order or type is
+  dropped.
+- **A lister that fails** (raises, times out, answers what cannot be read): the type is
+  offered as wildcards (`listed` false) and the failure is logged at warning level with the
+  service and the type. It never fails the call.
+- An unknown service or type is `IAMNotFoundError`; a malformed scope `ValueError`.
+- Over NATS: `list_resources` (`ListResourcesRequest` / `ListResourcesResponse`), the same
+  answer; in the SDK, `engine.services.iam.list_resources`.
+
+What a caller may grant at a container (`grantable`) is per catalog; by publisher and type,
+`publishers.by_publisher(catalogs, grantable, modules=, listable=)` groups it: the engine
+first, then naas_abi, then the modules by key, each with the types the caller may grant
+something of, each type with its actions, what the caller may grant of each, and whether
+it is listed. Under a type, an action keeps only its granted patterns that can name one of
+that type's resources at the scope (`by_publisher(scope=)`, `grants.overlaps` within the
+type's names: `grants.universe(..., nesting=)`, where each container sits only in its
+parents, so no organisation is in a workspace); a `module` catalog action goes under a
+module when one of them can name that module's items. The nesting is for showing what a
+pattern names only: IAM decides within the names without it. A pattern holding a literal
+step of a type that is no container and not the type itself (`.../nexus:agent/*` under
+graphs) names none of the type's resources, since a name is its containers' steps, then
+its own: it is left out before the search, which would leave it out too, slowly (an owner
+who is also the platform admin holds every type's pattern). When the searches run out of
+budget, the type shows the patterns the caller holds that this check left, unsure but never
+one it ruled out. Nothing appears that the caller may not grant.
+
 ## Sealed resources
 
 A sealed resource is a resource pattern bound to one principal. No other principal
@@ -689,8 +1005,9 @@ in code by the service that owns them (`iam_catalog.py`, next to each service's
 catalog) and loaded at boot; no API changes them, so editing policies cannot open
 them. The seals: the built-in IdP's document namespace `idp` (namespace, collections
 and documents) and secrets `idp%2F*`, sealed to `idp` (and to the module id `idp`,
-`Seal.module_id`); `secret/iam%2F*`, sealed to `engine`. Seals match at any placement
-(`abi:*:*:…`). An operator who needs the IdP's data back uses the IdP's own admin API
+`Seal.module_id`); `secret/iam%2F*`, sealed to `engine`. Seals match at any placement:
+each is written for the platform and for any container (`names.anywhere`,
+`abi:document:namespace/idp` and `abi:*/document:namespace/idp`). An operator who needs the IdP's data back uses the IdP's own admin API
 or the database directly, outside ABI's authorization by design.
 
 ## Built-in policies
@@ -698,68 +1015,75 @@ or the database directly, outside ABI's authorization by design.
 Built-in policies are managed: IAM generates their documents from the registered
 catalogs (so a new service's actions join the roles automatically), stores them with
 explicit action lists (so `explain` shows real statements), and regenerates them when
-a catalog version changes (`roles.py`). Roles are attached at a scope: "viewer on
-workspace W" is `builtin.viewer` attached with scope `abi:<org>:W`.
+a catalog version changes (`roles.py`). **Roles are attached at any container**:
+"viewer on workspace W" is `builtin.viewer` attached with scope
+`abi:nexus:organization/O/nexus:workspace/W`, "admin of organisation O and of everything
+in it" is `builtin.admin` at `abi:nexus:organization/O/*`.
 
-For each catalog resource type that can be placed in a workspace, the role's
-statement covers `${scope}:<service>:<type>/*`; a personal type covers
-`${scope}:<service>:<type>/${principal.id}` and `…/${principal.id}/*` instead
+For each catalog resource type that can be placed in a container, the role's statement
+covers `${scope}/<service>:<type>/*`; a personal type covers
+`${scope}/<service>:<type>/${principal.id}` and `…/${principal.id}/*` instead
 (`${principal.id}` is the member being evaluated, so on a Nexus call it is the user,
-not `api`). **The roles are cumulative**: `viewer` ⊆ `member` ⊆ `admin` ⊆ `owner`;
-each holds every statement of the role below it, so a principal needs one role
+not `api`). **A container type** is decided where it is: the actions on it cover
+`${scope}`, the container the role is attached at (an admin of W updates W), and its
+create action (`creates: true`) covers `${scope}/<service>:<type>/*`, so the role at a
+container makes containers of that type in it (an admin of O creates a workspace in O)
+and nothing else of them: a role attached at O never reaches a workspace of O, unless it
+is attached below O. **The roles are cumulative**: `viewer` ⊆ `member` ⊆ `admin` ⊆
+`owner`; each holds every statement of the role below it, so a principal needs one role
 attachment per scope.
 
 | Policy | Allows on the scope's types | Excludes |
 |---|---|---|
-| `builtin.viewer` | every `list` and `read` action | the nexus `feature` type; the whole `iam` catalog; every module scope type |
-| `builtin.member` | viewer, plus every `write` action | the `feature` type; the whole `iam` catalog; every module scope type |
-| `builtin.admin` | member, plus every `admin` action, except on the `iam` `attachment` type; the scope's policies and groups (`ListPolicies`, `GetPolicy`, `CreatePolicy`, `UpdatePolicy`, `DeletePolicy`, `ListGroups`, `GetGroup`, `CreateGroup`, `DeleteGroup`, `AddGroupMember`, `RemoveGroupMember` on `${scope}:iam:policy/*` and `${scope}:iam:group/*`); `iam:ListAttachments` on `${scope}:iam:attachment/*`, and `iam:AttachPolicy` and `iam:DetachPolicy` on `${scope}:iam:attachment/builtin.admin/*`, `…/builtin.member/*`, `…/builtin.viewer/*` and `…/pol_*/*` (customer policies: the scope's own and those above it, IAM refusing one owned elsewhere) | the `feature` type; anything on `attachment/builtin.owner/*` and the other managed policies; `iam:MapIdpGroup`, `iam:UnmapIdpGroup`; `nexus:DeleteWorkspace`; `nexus:DeleteOrganization` |
-| `builtin.owner` | admin, plus every action on every `attachment/…` (owner included), `nexus:DeleteWorkspace` and `nexus:DeleteOrganization` | the `feature` type; `iam:MapIdpGroup`, `iam:UnmapIdpGroup` |
+| `builtin.viewer` | every `list` and `read` action | every `policy_only` type; the whole `iam` catalog; every module scope type |
+| `builtin.member` | viewer, plus every `write` action | every `policy_only` type; the whole `iam` catalog; every module scope type |
+| `builtin.admin` | member, plus every `admin` action, except on the `iam` `attachment` type; the scope's policies and groups (`ListPolicies`, `GetPolicy`, `CreatePolicy`, `UpdatePolicy`, `DeletePolicy`, `ListGroups`, `GetGroup`, `CreateGroup`, `DeleteGroup`, `AddGroupMember`, `RemoveGroupMember` on `${scope}/iam:policy/*` and `${scope}/iam:group/*`); `iam:ListAttachments` on `${scope}/iam:attachment/*`, and `iam:AttachPolicy` and `iam:DetachPolicy` on `${scope}/iam:attachment/builtin.admin/*`, `…/builtin.member/*`, `…/builtin.viewer/*` and `…/pol_*/*` (customer policies: the scope's own and those above it, IAM refusing one owned elsewhere; one owned above is listed there only where it is attached at the scope or above, "Service API") | every `policy_only` type; every module scope type; anything on `attachment/builtin.owner/*` and the other managed policies; `iam:MapIdpGroup`, `iam:UnmapIdpGroup`; every `owner_only` action |
+| `builtin.owner` | admin, plus every action on every `attachment/…` (owner included) and every `owner_only` action | every `policy_only` type; every module scope type; `iam:MapIdpGroup`, `iam:UnmapIdpGroup` |
 | `builtin.platform_admin` | `*` on `*` (attached without scope) | sealed resources |
 | `builtin.self` | held implicitly by every user (no attachment row, unknown users included; `explain` shows it with no attachment id) | none |
 
 - **IAM administration is the admins' and owners'.** Viewers and members hold nothing
   of the `iam` catalog at their scope (no list, no read): every IAM administration
-  call refuses them. Owners and admins at a scope manage that scope's policies and
-  groups and attach them there; an org's owners and admins reach its workspaces'
-  through their org-wide role (`abi:<org>:*`, which Nexus mirrors). They also see,
-  in a list at their scope, what they may attach there from above (see "Service API").
-  Their admin actions on the `set` type read their scope's set (`iam:GetSet`); a workspace's set is
-  written only through the org-wide role, an org's only by the platform admin ("Sets").
+  call refuses them. Owners and admins at a container manage that container's policies
+  and groups and attach them there; attached below a container (an organisation's owners
+  and admins, which Nexus mirrors), they manage those of every container under it too.
+  They also see, in a list at their scope, what they may attach there from above (see
+  "Service API").
 - **Owner protection.** An admin cannot attach or detach `builtin.owner`; demoting or
   removing an owner means detaching their owner attachment, so only an owner can, at
-  org and workspace scope alike.
-- **Org roles.** Org roles (owner, admin, member) are attached with scope
-  `abi:<org>:-`, the org's own resources: org membership never grants workspace
-  access. Org-wide roles (`abi:<org>:*`) exist but are never created by default.
-- **Platform types.** A workspace-scoped role never reaches a platform-level
-  resource (`abi:-:-:…`). Two more managed policies, kept in step with role
-  attachments by IAM, carry what members need there (`roles.PLATFORM_TYPES` is the
-  table: models, discovery modules/agents/apps/runs, views, coding templates, the
-  user's own forge/coder/activity/key/principal resources, provider models, drives):
-  `builtin.platform.member` while the principal has a `member`, `admin` or `owner`
-  attachment at a workspace scope or an org-wide scope, `builtin.platform.viewer`
-  while it has only `viewer` attachments there. Org-level attachments (`abi:<org>:-`)
-  bring neither. Because Nexus calls as `api` on behalf of the user, the user must
-  hold these, not only `api`. A member holds `discovery:TriggerJob` on
-  `workflow/*`, the second name of every job of kind `workflow` (a viewer
-  nothing), as it holds `InvokeAgent` on `agent/*`: which workflow it starts is
-  the module scope's. An explicit Deny on a workflow's `job/…` name still refuses
-  it (discovery `trigger_decision`). Not reached by any role (platform admin, built-in accounts
-  and explicit policies only): plain jobs and job runs, email senders and messages,
-  `dataset:catalog`, `cache:service`, `vector_store:service`, `activity_log:service`,
-  and unplaced data until placed or granted.
-- **Features.** `nexus:UseFeature` comes only from feature policies
-  `builtin.features.<role>` (`<role>`, `<org>.<role>` or `<org>.<ws>.<role>`), set as
-  a whole by `iam.put_feature_policies({key: [feature, ...]})` (needs
-  `iam:RegisterCatalog` on `nexus`; Nexus computes them from its `feature_flags`).
-  Each allows `UseFeature` on `${scope}:nexus:feature/<key>` for the role's features
-  that are also enabled: a feature outside `enabled_features` is reachable by no role,
-  only by the platform admin's `*`. A role attached at a workspace scope brings the
-  most specific policy that exists, attached at the same scope (detached with the
-  role); org-level roles bring none. No role reaches `UseFeature` through its scope
-  pattern, and no one grants a feature they do not hold (see "Grant only what you hold"),
-  so a custom policy cannot bring back one the deployment turned off.
+  every container alike.
+- **A role at a container stays at its level.** A role attached at a container reaches
+  what sits directly in it and the container itself; one attached below it reaches every
+  container under it as well. Nexus attaches an organisation's roles at the organisation
+  and mirrors its owners' and admins' below it: organisation membership alone never grants
+  workspace access.
+- **Platform types.** A role at a container never reaches a platform-level resource
+  (`abi:<service>:…`). Two more managed policies, kept in step with role attachments by IAM,
+  carry what members need there (`roles.PLATFORM_TYPES` is the kernel services' table:
+  models, discovery modules/agents/apps/runs, views, coding templates, the user's own
+  forge/coder/activity/key/principal resources, drives; a first-party catalog adds its rows
+  with `platform_access`, as Nexus does for creating an organization, provider models and a
+  user's own files and storage): `builtin.platform.member` while the principal has a
+  `member`, `admin` or `owner` attachment that brings the companions,
+  `builtin.platform.viewer` while it has only `viewer` ones. **An attachment brings them**
+  when it is below a container, or at a container whose type its catalog marks
+  `platform_companions: true` (Nexus's `workspace`); an attachment at any other container
+  (an organisation's own level) brings neither. Because Nexus calls as `api` on behalf of
+  the user, the user must hold these, not only `api`. A member holds `discovery:TriggerJob`
+  on `workflow/*`, the second name of every job of kind `workflow` (a viewer nothing), as it
+  holds `InvokeAgent` on `agent/*`: which workflow it starts is the module scope's. An
+  explicit Deny on a workflow's `job/…` name still refuses it (discovery
+  `trigger_decision`). Not reached by any role (platform admin, built-in accounts and
+  explicit policies only): plain jobs and job runs, email senders and messages,
+  `dataset:catalog`, `cache:service`, `vector_store:service`, `activity_log:service`, and
+  unplaced data until placed or granted.
+- **Zero trust for `policy_only` types.** No role holds one, owners included, and IAM
+  generates no policy for one: what reaches it is a policy someone attached, as for any
+  grant. Nexus's features are such a type: a member of a workspace uses no feature until
+  a policy grants one (a workspace's "Features of <role>", attached directly, through a
+  group or with an invitation). Core IAM has no feature logic; that a feature outside
+  Nexus's `enabled_features` is usable by nobody, the platform admin included, is Nexus's
+  rule, applied before it asks IAM (`services/iam/authz.py` there).
 - **First-party accounts.** `builtin.engine`, `builtin.api` and `builtin.job` are
   enumerated: one statement per service, each with a `sid` saying what needs it. The
   engine holds IAM's administration and the kernel services; `api` holds `nexus:*`, the
@@ -770,7 +1094,17 @@ attachment per scope.
   `module:*` and each module's own catalog (`<service>:*`, generated as modules
   register), on behalf of users who must hold it too. Nobody holds `*` but the platform
   admin. A retired policy (`roles.RETIRED_POLICIES`: the old `builtin.transitional.*`) is
-  dropped, with what was attached to it, at boot.
+  dropped, with what was attached to it, at boot. Those an older version generated by
+  prefix (`roles.RETIRED_POLICY_PREFIXES`: the `builtin.features.*` it made from Nexus's
+  settings and attached beside each role) are not: they stay in force, unchanged, until
+  whoever made them has moved what they grant, then go with `iam.retire_policies(ids)`
+  (in process, `iam:DeletePolicy` on each, every id checked before any goes;
+  `iam.retired_policies()` lists them). Until then such a policy follows **its own role**,
+  the last segment of its key (`builtin.features.org-1.admin` rode with `builtin.admin`,
+  `roles.retired_role`): detaching that role at a scope detaches it there, whatever role
+  is still held (an admin made viewer loses the admin's), and adding a member to a group
+  skips it as one of the group's role companions while that role is held
+  (`_retired_companions`, one rule for both). No new one is ever attached.
 - **`builtin.idp`**: the built-in IdP's own namespace, secrets and sender, for the
   built-in account `idp`. By default the IdP (`libs/naas-abi-idp`) runs as the
   module account `module/<project>/idp` with its approved manifest instead; the
@@ -778,7 +1112,7 @@ attachment per scope.
   name both, so the module id `idp` is reserved: an admin creates its account,
   nothing else does.
 - **`builtin.platform.viewer` / `.member`**: attached and detached by IAM in step
-  with workspace and org-wide role attachments (above).
+  with the role attachments that bring them (above).
 - **`builtin.module_bootstrap`**: a module account before approval (see "Service accounts,
   keys, tokens and manifests").
 - **`LEGACY_NEXUS_ISSUER`** (`urn:abi:nexus`): a Nexus user named on a call by its Nexus id resolves to IAM's user of
@@ -793,13 +1127,13 @@ attachment per scope.
 
 ## Module scopes
 
-Everything a module exposes is grantable per workspace, one item at a time
+Everything a module exposes is grantable per container (a workspace, a module's project), one item at a time
 (`module_scopes.py`). Two kinds, both marked `module_scope: true` on their resource
-types (`ResourceType.module_scope`), so the UI and the sets find them:
+types (`ResourceType.module_scope`), so the UI finds them and no role holds them:
 
 - **The `module` catalog.** Every agent, app, workflow and pipeline of every module,
-  engine or remote, is `abi:<org>:<ws>:module:<type>/<module>/<name>`
-  (`scope_resource`). `<module>` is the module's stable identifier: an engine
+  engine or remote, is `<container>/module:<type>/<module>/<name>`, named in the container
+  of the call (`scope_resource`). `<module>` is the module's stable identifier: an engine
   module's configured key (`naas_abi`, `naas_abi_marketplace.applications.github`, which is
   `BaseModule.module_key`, its class's Python module), the same in every install; a
   remote module's id (`acme.people`), the same across restarts. `<name>` is the
@@ -824,8 +1158,9 @@ types (`ResourceType.module_scope`), so the UI and the sets find them:
   names a kernel service, `iam`, `nexus`, `module` or another module's service
   (`module_catalog`, `ModuleCatalogError`), and IAM refuses registering a catalog
   another module owns (`ActionCatalog.module`, `IAMConflictError`). Every type is
-  placed in the workspace of the call. Approval adds `OwnCatalog` (`<service>:*` on
-  `abi:*:*:<service>:*`) to the module's managed policy: the module's side of its own
+  named in the container of the call, but a container type, which is registered
+  ("Containers"). Approval adds `OwnCatalog` (`<service>:*` on `abi:<service>:*` and
+  `abi:*/<service>:*`, `names.anywhere`) to the module's managed policy: the module's side of its own
   actions, for the users it acts for (it grants the broker nothing). It is added after
   the approver's grant check ("Grant only what you hold"), which covers the approved
   permissions: it names only the module's own service, which exists with this manifest
@@ -843,34 +1178,39 @@ The module enforces a declared action on the caller's context:
 `iam.require_declared("<service>:<Action>", "<type>", [parts])` in an engine module
 (`BaseModule.require_action(action, type, parts)`), `await
 engine.services.iam.require_declared(...)` in an SDK module (`Module.require_action`).
-IAM names the resource itself (`authorize_declared`): the workspace of the call
-(`CallContext.workspace_id`, or `workspace=`), its organization from the scope
-table, platform level without one.
+IAM names the resource itself (`authorize_declared`): in the container of the call
+(`CallContext.container`, or `container=`), once IAM checked it is registered under that
+path; platform level without one; refused as not found for a container IAM does not know.
+A declared container type's own resource is the container: `authorize_declared(action,
+"project", ["p-9"])` names `<container of the call>/crm:project/p-9`.
 
-**The workspace of the call is safe.** A module scope is a permission to use
-something in a workspace, not data a workspace owns, so its name is placed in the
-workspace the call is made in, never looked up. The use happens there: Nexus checks
+**The container of the call is safe.** A module scope is a permission to use
+something in a container, not data a container owns, so its name is placed in the
+container the call is made in, never looked up. The use happens there: Nexus checks
 the scope in the workspace the request names after checking the user belongs to it,
-and a user who claims another workspace gets what they hold there, which is what
-using it there needs. A user who belongs to no workspace holds no module scope.
+and a user who claims another container gets what they hold there, which is what
+using it there needs. A user who holds nothing in a container holds no module scope
+there. A pattern names a type at its level, so a grant at a workspace does not reach
+what is used inside a project of it: the project's own grants do.
 
-**Zero trust.** `builtin.viewer` and `builtin.member` hold no module scope type
-(`roles.MODULE_SCOPE_ROLES` is admin and owner), on upgrade too: there is no
-migration grant. `builtin.admin` and `builtin.owner` hold every one at their scope,
-within the sets of their org and workspace ("Sets"). A member uses a module's agent, app, workflow or
-pipeline in a workspace only with a policy granting it there, for example:
+**Zero trust.** No built-in role holds a module scope type, `builtin.admin` and
+`builtin.owner` included (`roles._role_statements` leaves every `module_scope` type out): a
+user uses a module's agent, app, workflow, pipeline or declared action in a container only
+with a policy granting it there, an admin or an owner of a workspace with no policy nothing.
+For example:
 
 ```yaml
 statements:
   - effect: Allow
     actions: ["module:UseAgent"]
-    resources: ["${scope}:module:agent/acme.people/Recruiter"]
+    resources: ["${scope}/module:agent/acme.people/Recruiter"]
   - effect: Allow
     actions: ["module:RunWorkflow", "module:ReadWorkflowRuns"]
-    resources: ["${scope}:module:workflow/acme.people/*"]
+    resources: ["${scope}/module:workflow/acme.people/*"]
 ```
 
-attached to the member (or a group) at `abi:<org>:<ws>`. Discovery's grants stay
+attached to the member (or a group) at the workspace,
+`abi:nexus:organization/<org>/nexus:workspace/<ws>`. Discovery's grants stay
 the broker-side check (`builtin.platform.member`: `InvokeAgent`, `OpenApp`,
 `TriggerJob` on workflows); Nexus checks the module scope first, so no user reaches a module's
 resource in a workspace without it. An in-process agent's sub-agents and the
@@ -884,77 +1224,129 @@ sub-agents alone, in the copy's own configuration, `AbiAgent.with_agents_section
 them (`services/agent/context.tool_scope_refused`; the engine marks each process
 instance, `EngineProcessBridge.tag_process_scopes`).
 
-## Sets
+## Sub-policies
 
-Each organisation and each workspace has a **set**: the module scopes and the Nexus
-features usable there (`sets.py`). The platform admin sets an org's set; the org's owners
-and admins set each of its workspaces', within the org's. IAM applies them when it decides
-(step 6 of "Evaluation"), so an org always bounds its workspaces and a workspace bounds
-everyone in it, and when a grant is made ("Grant only what you hold").
+A policy may have a **parent** (`parent_id`), one at most: it is then a **sub-policy** of it.
+A sub-policy never grants more than its parent, and IAM reads the parent when it decides, so
+narrowing a parent narrows every sub-policy below it at the next decision.
 
-**What a set holds** (`ScopeSet`): two parts, each a list or `None` (nothing recorded:
-everything; for a workspace, whatever its org has).
+**What a sub-policy grants.** Its **chain** is its parent, its parent's parent, and so on up
+to a policy with none, nearest first.
 
-| Part | Items |
-|---|---|
-| `modules` | `<module>`: the whole module, every agent, app, workflow and pipeline (`module:<type>/<module>/*`) and every action of the catalog it declares (a name with no catalog name, `*`, `--`, `...`, is refused: every module is written `<type>/*/*` and `*:*`); `<type>/<module>/<name>`: one agent, app, workflow or pipeline (`<name>` `*`: every one of that type; `<type>/*/*`: every one of that type of every module, installed now or later); `<service>:<Action>`: one action of the catalog a module declares (`<service>` is `module_service(<module>)`; `<service>:*` all of them, `*:*` every module's) |
-| `features` | Nexus feature keys: `nexus:feature/<key>` |
+- An Allow statement of the sub-policy counts for an action on a resource only if the parent
+  allows that action on that resource through its own chain: an Allow of every policy of the
+  chain matches it (`EffectiveStatement.bounds`, the chain's Allow statements, read through
+  the policy cache).
+- The Denies of every policy of the chain apply to whoever holds the sub-policy, as if they
+  were its own.
+- The parent's variables are filled from the sub-policy's attachment: `${scope}` is the
+  sub-policy's attachment scope, `${principal.id}` the member being evaluated, `${user.id}`
+  the call's user. A parent's Allows are bounds, not grants: `policy.within_scope` applies
+  to the sub-policy's own Allows at a scope, never to its parent's (a platform parent
+  allowing `abi:*/module:agent/a` bounds a workspace's `${scope}/module:agent/*` to that
+  agent).
+- Nothing is copied: a change of a parent, or of anything above it, drops the policy cache
+  like any change (in process at once, over NATS within `abi.iam.v1.changed`).
+- A chain IAM cannot read whole (a cycle or a chain past the depth, which only a write
+  that bypasses IAM makes: every store write locks the state row first) grants nothing:
+  the sub-policy's Allows count for nothing, its Denies and those of the chain it could
+  read still apply. A grant of such a policy (attaching it, inviting to it, a member
+  joining a group holding it) is refused with `IAMConflictError` until its parent is
+  fixed, so a repaired chain never grants what nobody was checked for.
 
-The wildcards of every module say "every module but only these agents" with no list of
-the modules running today: a catalog seed narrowing an org with no set records
-`agent/<m>/<a>`, `app/*/*`, `workflow/*/*`, `pipeline/*/*`, `*:*`. A whole module on one
-side of an intersection and such a wildcard on the other give that module's part
-(`people` and `agent/*/*`: `agent/people/*`). Items are written decoded, as the module names them; `normalize` sorts them, drops
-duplicates and refuses a malformed one (`SetValidationError`, a `ValueError`, listing each).
-A set is stored in IAM (`iam_scope_sets`, a JSON list per part, NULL for everything), cached
-with the policies and dropped on every change event, so a narrowed set applies at the next
-decision in process and within the event's delivery over NATS.
+| Parent P allows | Sub-policy S allows | A holder of S only |
+|---|---|---|
+| `${scope}/module:agent/m/a`, `…/m/b` | `${scope}/module:agent/*` | uses a and b |
+| `${scope}/module:agent/m/a` (b removed) | unchanged | uses a only, at the next decision |
+| `${scope}/module:agent/*`, Deny `${scope}/module:agent/m/b` | `${scope}/module:agent/*` | uses every agent but b |
 
-**What it bounds.** For a resource placed in org O and workspace W, an Allow on a
-`module_scope` type (the `module` catalog and every declared catalog) or on
-`nexus:feature/…` counts only if O's set and W's set both allow it (`sets.allows`): a user
-acting directly, through a group, as the actor of a call or as the user a call acts for.
-`abi:O:-:…` names (an org's own) meet O's set alone; a workspace in no org (`abi:-:W`, Nexus's
-`_none`) meets W's. Denies, and every other action (files, graphs, …), are unchanged.
+**Refused**, at create and update, with `ValueError` (`INVALID_ARGUMENT`) unless said. A
+parent that exists is first checked against "derive only from what you hold", so a caller
+who may not derive from it learns nothing more of it (its owner, its chain):
 
-- **Bounded:** every user, owners and admins of O and W included.
-- **Not bounded:** holders of `builtin.platform_admin` attached unscoped (or at `abi:-:-`), directly or
-  through a group (they set the orgs' sets and support every org; an attachment of it at an org or a
-  workspace, which `attach_policy` refuses anyway, unbinds no one), and service accounts (`engine`, `api`, modules, `ci/*`, `job/*`): their
-  manifests and enumerated policies bound them. On a Nexus call `api` acts for the user, so
-  the user's side is bounded; a module acting for a user likewise.
+- a **cycle**: a parent that is the policy itself or one of its sub-policies, at any depth;
+- a chain **deeper than 8** (`policy.MAX_DEPTH`): the root is at depth 1, and a policy, with
+  the sub-policies below it, may sit no deeper than 8;
+- a parent that **does not exist**: `IAMNotFoundError`;
+- a **managed** child: built-in and module policies may be parents, never sub-policies;
+- an **owner** outside the parent's: a sub-policy is owned by its parent's owner or a
+  container below it (`names.within_owner(parent owner, child owner)`): a platform
+  policy's by the platform or any container; an organisation's by it or a container in it
+  (one of its workspaces); a workspace's by it or a container inside it.
 
-**The effective set** of a workspace is its own within its org's (`intersect`,
-`effective_set`). Narrowing an org's set leaves its workspaces' recorded sets as they were;
-they are bounded anyway, and the effective set shows it.
+**Derive only from what you hold.** A caller makes a policy a sub-policy of P only if P is
+attached to them, or to one of their groups (static or carried in the token's `grp`), at the
+sub-policy's owner or above (`IAMService._require_derivable`): the attachment's container
+(below it or not) is the owner or a container the owner sits in, or the attachment is
+unscoped or at the platform. For a sub-policy owned by workspace W of organisation O, an
+attachment of P unscoped, at `abi:`, at O, below O, at W or below W; for one owned by O, at
+O's or above; for the platform's, unscoped or at `abi:`. Holding P through a sub-policy of P
+does not count. The caller is the call's user
+when there is one, plus an actor that is not first-party, as in "Grant only what you hold".
 
-**Names and who may change them.**
+- The platform admin (`builtin.platform_admin` attached unscoped or at `abi:`, directly
+  or through a group) derives from any policy.
+- A first-party account (`engine`, `api`) acting for no user is not checked, as in
+  `_require_held`.
+- The refusal is `PermissionDeniedError` (`PERMISSION_DENIED`) naming the parent and the
+  scope: "You derive only from a policy attached to you or to one of your groups at
+  abi:nexus:organization/O/nexus:workspace/W or above: pol_… is not". It comes after `iam:CreatePolicy` (or
+  `iam:UpdatePolicy`) on the sub-policy, so only whoever may write policies there learns
+  whether a parent exists.
 
-| | Read (`iam:GetSet`) | Written (`iam:PutSet`) | Who writes |
-|---|---|---|---|
-| Org O | `abi:O:-:iam:set/O` | `abi:%2A:%2A:iam:set/O` | grants written for every org: the platform admin |
-| Workspace W of O | `abi:O:W:iam:set/W` | `abi:O:%2A:iam:set/W` | an org-wide role (`abi:O:*`): the org's owners and admins |
+**Grant only what you hold** checks the sub-policy's effective grant: its own Allows
+intersected with its chain's, at every scope it is checked at (see there).
 
-A role at the workspace reads its set and never writes it; a role at the org (`abi:O:-`)
-reads the org's. Viewers and members hold nothing of the `iam` catalog. A refusal is always
-`PermissionDeniedError`: every org and workspace has a set, so none is "not found".
+**Write-time checks read the store.** A chain is read from the policy cache when IAM
+decides, and from the store when it checks a write (attaching, inviting, binding, creating,
+updating, the scope rules), so a parent another process just changed is met as it is now.
 
-**Validation.** A workspace's recorded items must each be within its org's set (`outside`):
-a wider one is refused with `SetValidationError` naming the extra items
-("Not in the set of organization O: crm, feature files"). A part the workspace leaves
-`None` follows the org's and is never wider. `put_set` refuses a workspace IAM has not
-registered in that org (`IAMNotFoundError`).
+**Changing the parent** is an update with the optimistic revision (`update_policy(parent=)`:
+an id sets it, `""` removes it, None keeps it), checked like a create: the new chain is
+refused as above, the caller derives only from what they hold, and the sub-policy's
+effective grant under the new chain is checked at each scope it is written for, attached or
+invited at. Removing a parent widens the sub-policy to its own document, which is checked
+the same way. A change of a policy's parent, or of its document that may let through
+something the old one did not (`IAMService._widens`: an Allow reaching beyond the old
+Allows, or an old Deny reaching beyond the new Denies, a Deny lifted or narrowed; both
+compared as grants are, unproven counting as a widening), also checks, for each policy
+below it, its effective grant under the new chain at its own scopes: widening a parent,
+its Denies included, widens them. Narrowing a parent (fewer Allows, more Denies) is never
+refused for what is below it.
+A change that gives the policy, or one below it, a chain that denies beyond `${scope}` it
+did not before is that policy attached anew wherever it is attached or invited at a scope:
+refused (`PermissionDeniedError`) to whoever may not attach it unscoped there, as attaching
+it would be (`IAMService._check_new_denies`).
 
-**Defaults.** No set recorded means everything: existing orgs and workspaces, and a new
-org, start with everything the deployment has. Nexus records a new workspace's set as its
-org's, narrowed by its create form (features, catalog seed; Nexus `services/iam/sets.py`).
-`delete_scope` drops the sets of what it deletes.
+**Attaching a sub-policy.** The rules of "Policy language" read the chain:
+
+- a sub-policy whose chain names `${scope}` is attached at a scope only;
+- at a scope, the sub-policy's own Allows are `${scope}` or `${scope}/…` (its parent's need
+  not: they only bound);
+- a Deny of the chain outside `${scope}` is a Deny of the sub-policy: attached at a scope
+  only by whoever may attach it unscoped (the platform admin), and offered at a scope by
+  `list_policies(scope=)` only to them.
+
+**Deleting.** A policy that has sub-policies cannot be deleted: `IAMConflictError`
+(`CONFLICT`) naming each the caller may list (`iam:ListPolicies`) and counting the rest
+("Policy pol_P has sub-policies: pol_S (W analysts), and 1 you may not list. Delete them or
+give them another parent first"). The store refuses it too. `delete_container` deletes of
+what a container owns every sub-policy before its parent, from the store's parent links
+(`_deletion_order`); a sub-policy is owned at or below its parent's owner, so deleting a
+parent's owner deletes its sub-policies with it. A cycle among them is cut first; a
+sub-policy owned elsewhere (only a write bypassing IAM makes one) refuses the deletion
+before anything changes.
+
+**Reading.** A policy's record carries `parent_id`. `list_sub_policies(policy_id)` lists its
+direct sub-policies: `iam:GetPolicy` on the parent (not found otherwise), then each
+sub-policy the caller may list (`iam:ListPolicies` at its owner), the others left out.
+`explain` names the chain (see "Evaluation").
 
 ```python
-iam.get_set(org, workspace="-")           # ScopeSet as recorded (both parts None if none)
-iam.effective_set(org, workspace="-")     # within the org's
-iam.list_sets(org=None)                   # the recorded ones the caller may read
-iam.put_set(org, workspace="-", modules=[...] | None, features=[...] | None)
+# workspace: the workspace's container name
+iam.create_policy("W analysts", document, scope=workspace, parent="pol_P")
+iam.update_policy("pol_S", expected_revision=2, parent="pol_Q")  # "" removes it
+iam.list_sub_policies("pol_P")  # [Policy(id="pol_S", parent_id="pol_P", ...)]
 ```
 
 ## Grant only what you hold
@@ -968,10 +1360,10 @@ through the SDK, the CLI and Nexus alike.
 
 | Operation | The grant | Scopes |
 |---|---|---|
-| `create_policy` | the document | its owner's (an org's or a workspace's); a platform policy as written unscoped and with `${scope}` as `abi:*:*` |
-| `update_policy` with a new document | the new document | as `create_policy`, plus every scope it is attached or invited at |
-| `attach_policy` (user, group, service account) | the policy | the attachment's |
-| `add_group_member` | every attachment of the group, but IAM's companions of its roles, which follow them: the feature policies and the unscoped `builtin.platform.*` its role sync wants for the group's roles (`IAMService._companions`). A feature or platform policy attached to the group by hand is checked like any other | each attachment's |
+| `create_policy` | the document, within its chain's for a sub-policy | its owner's (a container's); a platform policy as written unscoped and with `${scope}` as any container or the platform (`abi:*`, below the platform) |
+| `update_policy` with a new document or a new parent | the new document within the new chain's; and, when the parent changes or the new document may let through what the old one did not, an Allow added or widened or a Deny lifted or narrowed (`IAMService._widens`), each policy below it within its new chain's | as `create_policy`, plus every scope it is attached or invited at; for each policy below, its own |
+| `attach_policy` (user, group, service account) | the policy | the attachment's (below a container: at it and at every container under it) |
+| `add_group_member` | every attachment of the group, but IAM's companions of its roles, which follow them: the unscoped `builtin.platform.*` its role sync wants for the group's roles (`IAMService._companions`). A platform policy attached to the group by hand is checked like any other | each attachment's |
 | `create_pending_grant` | the policy | the invitation's |
 | `bind_idp_group` | the policy, before the group is made, unless the binding is there already | the binding's |
 | `approve_manifest`, narrowed or not | the approved document, its module variables bound | unscoped (the module's policy is attached unscoped) |
@@ -981,14 +1373,19 @@ group holds grants nothing new and is not checked.
 
 **The rule.** Take each Allow statement of the grant at the scope (`${scope}` filled; at a
 scope, `policy.within_scope` applied first). Every action it matches must be allowed to the
-caller, on every resource it matches. Its actions (`Holdings._actions`):
+caller, on every resource it matches. For a sub-policy, only the resources an Allow of each
+policy of its chain also matches for that action count (`first_uncovered(parents=)`, the
+chain's patterns in the same product search, their `${scope}` the same scope): the grant is
+its effective one, its own within its parent's. An action the chain allows nowhere is not
+granted, and needs no cover. An action kept as a pattern (a wildcard of a service with no
+catalog) is bounded by every Allow of the chain whose actions may meet it. Its actions (`Holdings._actions`):
 
 - **A wildcard is expanded against the registered catalogs, and the bus.** The bus has no
   catalog, yet the broker turns `bus:*`, `*` or `*:Publish` into publishing and consuming a
   topic: a wildcard matching `bus:Publish` or `bus:Consume` is checked for them, on the
-  bus's topics (`abi:-:-:bus:topic/<t>`, `grants.UNCATALOGUED`), like the names themselves.
+  bus's topics (`abi:bus:topic/<t>`, `grants.UNCATALOGUED`), like the names themselves.
   A topic is never at a scope, so a scoped grant reaches none. Any run after
-  `abi:-:-:bus:topic/` is a topic, a raw `:` included, so every topic resource needs cover.
+  `abi:bus:topic/` is a topic, a raw `:` included, so every topic resource needs cover.
   Topics are compared in the spelling the broker grants (`grants.canonical_topic`: each
   literal run decoded, then encoded as a canonical name): `topic/pay:ments` is
   `topic/pay%3Aments`, `topic/pay%6Dents` is `topic/payments`, and in a grant the runs
@@ -1012,12 +1409,16 @@ caller, on every resource it matches. Its actions (`Holdings._actions`):
 On every resource:
 
 - **Resources are languages.** `*` is any run, `:` and `/` included; `?` one character (one
-  of the three of `%2F`). Only names of the action's resource types count,
-  `abi:<org>:<ws>:<service>:<type>/<id>` with no raw `:` in a field, so
-  `${scope}:triple_store:*` is no wider than `${scope}:triple_store:graph/*` for an action on
-  graphs. A grant is covered by the union of what the caller holds, not one pattern of it. A
-  resource that names no name of the action's types grants nothing for that action, so it
-  needs no cover there (`${scope}:triple_store:graph/*` under `triple_store:*` for an action
+  of the three of `%2F`). Only names of the action's resource types count (`grants.universe`):
+  `abi:`, container steps `<service>:<type>/<id>/` of the registered container types, then
+  `<service>:<type>/<id>` of the action's type, with no raw `:` or `/` in a step's fields
+  (but in a path id), so `${scope}/triple_store:*` is no wider than
+  `${scope}/triple_store:graph/*` for an action on graphs while `triple_store` declares no
+  container. A container type registered later makes names that a wildcard granted before
+  may reach, as an action a catalog adds later does. A grant is covered by the union of what
+  the caller holds, not one pattern of it. A resource that names no name of the action's
+  types grants nothing for that action, so it needs no cover there
+  (`${scope}/triple_store:graph/*` under `triple_store:*` for an action
   on views): refusing it would refuse every statement that lists several types.
 - **Variables keep their form.** A `${principal.id}` or `${user.id}` of the grant is covered
   by the caller holding the same variable there (an admin holds `…/${principal.id}/*` of a
@@ -1026,22 +1427,31 @@ On every resource:
   manifest, where it is bound. With no user (an account acting for nobody), the caller's
   patterns naming `${user.id}` match nothing, as the evaluator reads them, so they hold
   nothing.
+- **Below a container, and the platform.** What a statement attached below a container C
+  holds is, for `${scope}/R`, `C/R` and `C/*/R` (R starting with a step or a `*`; any other R
+  only `C/R`), and for `${scope}` alone C itself and, for an action on a container type,
+  `C/*`. The same below the platform (`abi:*`, a platform policy's `${scope}` at create)
+  gives `abi:R` and `abi:*/R`. A statement attached at the platform holds nothing of the
+  platform's own policies, groups and unscoped attachments ("Attachments and scope").
 - **No Deny of the caller may overlap it.** A Deny's variables are also taken bound to the
   caller's ids, so a Deny on `…/${principal.id}/*` refuses a grant of the caller's own literal
   id. A Deny statement of the grant never needs cover: it only narrows.
+- **What a sub-policy of the caller holds** is its Allows within its chain's, shown without
+  a search (`grants.within_chain`): pairs of action and resource patterns, each a pattern
+  of the sub-policy that a pattern of a policy of the chain embeds, or the other way round,
+  level after level, compared in held form (`${scope}` filled, variables as marks). The rest
+  counts for nothing: it may say less than the caller holds, never more. The chain's Denies
+  are the caller's Denies. The broker grants a connection what such an Allow opens the same
+  way (`IAMService._derive`).
 - **Every side decides.** The caller is the call's user when there is one (`api` or `engine`
   acting for a user: their own statements never stand in for the user's), plus an actor
   that is not first-party (a module acting for a user is bounded by its own policy too),
   plus the credential's narrowing (`abi_scope`): a read-only personal key grants no write.
-  For a caller the sets bound, the sets of the scope are sides too, Allow-only
-  (`IAMService._set_sides`, `grants.Side.allowed_for`, `sets.held_patterns`): at a
-  workspace its org's and its own, at an org (`abi:O:-`, `abi:O:*`) the org's. Nobody but
-  the platform admin grants, at a scope, a module scope or a feature its sets leave out,
-  whatever their role reaches; the refusal names the set ("the set of workspace W does not
-  include it").
+  Nothing else is a side: a module scope or a feature is granted by whoever holds it, through
+  a policy, as any other grant.
 - **Unproven is refused.** A grant one held pattern embeds (each `*` of it within a `*`,
   each `?` within a `?` or a `*`, the rest character for character) is covered without a
-  search: the built-in roles, at a workspace or through an org-wide role, mostly are. The
+  search: the built-in roles, at a container or below one, mostly are. The
   rest is decided on the product of the patterns' automata. One search past `grants.STATE_BUDGET` states is not proven, and refused as not held; the
   searches of one change together past `grants.CALL_BUDGET` (every statement, action, scope
   and, for `add_group_member`, every attachment: `grants.budget()`) leave the rest unproven,
@@ -1056,24 +1466,37 @@ named policy, or the credential's scope. Nexus answers it with a 403 carrying th
 
 **Built-in roles still work.** The roles are cumulative, so an admin attaches member and
 viewer, an owner owner, and an org's owners and admins assign roles in its workspaces through
-their org-wide role (`abi:<org>:*`), on the workspace routes and on the organization's
+their role below the organisation (`abi:nexus:organization/<org>/*`), on the workspace routes and on the organization's
 `PUT /organizations/<org>/members/<user>/workspaces` alike (as the caller, checked at each
-workspace before any change). The owner's way to `nexus:UseFeature` beyond its feature
-policy (a custom policy on `${scope}:nexus:feature/*`) is closed: a feature outside the
-caller's feature policy, and so outside `enabled_features`, is not theirs to give.
+workspace before any change). No role holds a `policy_only` type, so an owner gives a
+feature only if a policy gives it to them: a custom policy on `${scope}/nexus:feature/*`
+is refused to whoever holds fewer features.
 
 **What may I grant.** `iam.grantable(scope)` (`abi.iam.v1.grantable`, the SDK's
 `iam.grantable`, Nexus `GET /api/iam/admin/grantable?scope=`) lists, for the caller at that
 scope, per catalog (a kernel service or a module), the actions they hold there and the
-resource patterns they hold them on, written `${scope}:…` (`GrantableCatalog`,
+resource patterns they hold them on, written `${scope}/…` or `${scope}` (`GrantableCatalog`,
 `GrantableAction`), minus their Denies: a pattern a Deny covers whole is left out, one it
-covers in part lists the Deny in `excluded`, written as the resources are (`${scope}:…` for
-the part of it under the scope, as stored when none can be told). For a caller the sets bound
-it is what they hold intersected with the scope's sets: where a role holds
-`${scope}:module:agent/*` and the set has `acme.people`, it lists
-`${scope}:module:agent/acme.people/*`. It may say less than the
+covers in part lists the Deny in `excluded`, written as the resources are (`${scope}/…` for
+the part of it under the scope, as stored when none can be told). It may say less than the
 caller reaches there, never more, and it stops listing past `grants.CALL_BUDGET`. Like `explain` of oneself it is about the caller only, so it needs no `iam:*`
 action, and a module's connection may always ask (`broker.IAM_ALWAYS`).
+
+`iam.grantable(scope, parent=<policy>)` (`GrantableRequest.parent`) is what a sub-policy of
+`parent` owned at `scope` may grant: the same, within the parent's chain (`Holdings.grantable(
+parents=)`): per policy of the chain, its Allows naming the action, restricted to the scope,
+met with what the caller holds (`grants._meet`: the patterns of either side the other embeds,
+so it may say less than the chain lets through, never more; a pattern naming a variable other
+than `${scope}` is left out), each then checked as the caller's own are (a Deny of theirs that
+covers it drops it). The parent is checked first. It answers only for a parent the caller may
+derive from at `scope` (`_require_derivable`, whose refusal it keeps) or may read
+(`iam:GetPolicy`, so whoever edits an existing sub-policy sees what it may hold): what a parent
+allows is said to no one else. With `derive=True` (`GrantableRequest.derive`, for a new
+sub-policy), reading is not enough: `_new_chain`'s verdict, as `create_policy` gives it (the
+derive rule, the owner within the parent's, the depth). A parent that does not exist is not
+found, as one the caller may not read; a chain that cannot be read whole is
+`IAMConflictError`. It is what the policy builder offers a sub-policy; `create_policy` and
+`update_policy` still decide (`_require_held` with the chain).
 
 **Writes made for no user.** A first-party account (`engine`, `api`) writing for no user is
 not checked: each such write sits behind a route or a boot step that authorized what it
@@ -1082,14 +1505,15 @@ stands for. They are:
 | Path | Why it may |
 |---|---|
 | Boot: `IAMService.bootstrap`, `register_kernel_catalogs`, Nexus `register_catalog` | The root of trust: the managed policies and the built-in accounts. |
-| Feature policies: `put_feature_policies` (Nexus as `engine`, from `feature_flags`) | The deployment's and the orgs' feature settings, edited behind their own routes; `enabled_features` bounds every key. It needs `iam:RegisterCatalog` on `nexus`. |
-| Companions: `builtin.platform.*` and feature policies kept in step with roles, `claim_pending_grants` | They follow a role that was held when it was attached or invited. |
-| The org-wide mirror (`Memberships.mirror_org_wide`, `sync_org_wide_roles`) | It mirrors an org role the route just granted, checked as the user at the org's own scope, or the seeding below. |
+| Companions: `builtin.platform.*` kept in step with roles, `claim_pending_grants` | They follow a role that was held when it was attached or invited. |
+| The mirror below an organisation (`Memberships.mirror_org_wide`, `sync_org_wide_roles`) | It mirrors an org role the route just granted, checked as the user at the organisation itself, or the seeding below. |
 | Seeding: `Memberships.seed`, `org_seed.sync_platform_admins`, the owner of a new org or workspace (`grant(by=None)`) | The configuration's `users:`, the migration of old memberships, and the creator of what `nexus:CreateOrganization` / `CreateWorkspace` let them create. |
 | Placements (`put_placement`, `PLACEMENT_WRITER`) | They place resources; they grant nothing. |
 | Shared graph grants (`graph_grants.py`, `workspace.<ws>.graphs.*`) | Behind `nexus:UpdateResourceAccess` on the workspace, which offers only graphs the workspace holds, gives writing only to whoever may drop the graph, and sharing every graph only to platform administrators (`resource_access.py`). |
 | `abi iam` | The operator holding the project's IAM store and config. |
-| The move of the workspace feature overrides (Nexus `services/iam/sets.migrate_feature_overrides`, once at start) | Features an override gave every role of a workspace, kept for the people who held a role there then, so nobody's features change (a workspace policy attached at the workspace). |
+| The move of the workspace feature overrides (Nexus `services/iam/feature_overrides.migrate_feature_overrides`, once at start) | Features an override gave every role of a workspace, kept for the people who held a role there then, so nobody's features change (a workspace policy attached at the workspace). |
+| The move of the sets and the workspace toggles (Nexus `services/iam/policy_tree.migrate_sets`, once at start) | What the sets and the toggles let each person use becomes access policies and sub-policies of them, attached where the roles and policies that reached it were, so nobody gains or loses access ("Migrating an existing install"). |
+| The move of the role features (Nexus `services/iam/role_features.migrate_role_features`, once at start) | The features each role had in each workspace, kept for the people who held that role there then, so nobody's features change ("Features of <role>", a workspace policy attached at the workspace). |
 | Workspace snapshot import (Nexus `core/workspaces_import.py`) | An operator command run with the project's engine, never a route: it makes the owner of a workspace it creates, as creating one does. |
 | `modules.auto_approve` | The `abi dev` overlay only: a module's manifest approved on submission. |
 
@@ -1108,18 +1532,26 @@ iam.authorize(action, resource)  # Decision
 iam.allows_every(action, "triple_store", "graph")  # a safe shortcut: False when unsure
 iam.explain(action, resource, principal_id=...)  # needs iam:Explain on the principal
 iam.grantable(scope)  # what the caller may grant there (needs no permission)
-iam.effective_set(org, workspace)  # what a workspace may use (iam:GetSet; "Sets")
+iam.grantable(scope, parent=policy_id)  # ... in a sub-policy of policy_id
+iam.grantable(scope, parent=policy_id, derive=True)  # ... in a new one (refused as create)
+iam.list_resources(
+    "triple_store", "graph", scope=container, text="sales", cursor=None
+)  # ResourcePage: what the caller may list there (needs no permission)
 iam.placement_of(
     service, canonical_id
 )  # the covering placement, or None (serving engine)
-# A module's declared action, named by IAM in the workspace of the call:
-decision, resource = iam.authorize_declared("acme_people:ExportReport", "report", ["q3"])
-iam.require_declared("acme_people:ExportReport", "report", ["q3"])  # PermissionDeniedError
+# A module's declared action, named by IAM in the container of the call:
+decision, resource = iam.authorize_declared(
+    "acme_people:ExportReport", "report", ["q3"]
+)
+iam.require_declared(
+    "acme_people:ExportReport", "report", ["q3"]
+)  # PermissionDeniedError
 ```
 
 `allows_every` is True only when nothing can deny: no seal on the type, no
 narrowing token, no Deny naming the action, and on each side an Allow spanning
-every org, workspace and id of the type (`engine` and `api` today). Services use it
+every container and id of the type (`engine` and `api` today). Services use it
 to skip per-item work.
 
 Administration (each needs its `iam:*` action): `ensure_user`, `link_user`
@@ -1130,45 +1562,69 @@ holding keys refuses the link; `identity_at(principal, issuer)` names the subjec
 user, its own or linked), `create_service_account`, `get_principal`, `list_principals`,
 `suspend_principal`, `resume_principal`, `delete_principal` (keeps the id, drops
 attachments and memberships), groups (`create_group`, `add_group_member`,
-`map_idp_group`, ...; groups cannot contain groups; `create_group(name, scope=)`, or
-`org=` alone for `abi:<org>:-`), policies (`create_policy(name, document, scope=)`
-validated against the registered catalogs, `update_policy(expected_revision=)`;
-managed policies are IAM's alone), `attach_policy`/`detach_policy` (idempotent;
+`map_idp_group`, ...; groups cannot contain groups; `create_group(name, scope=)`, its
+owner a container or the platform), policies (`create_policy(name, document, scope=, parent=)`
+validated against the registered catalogs, `update_policy(expected_revision=, parent=)`,
+`list_sub_policies`: "Sub-policies"; managed policies are IAM's alone), `attach_policy`/`detach_policy` (idempotent;
 a policy naming `${scope}` needs a scoped attachment, and only a policy whose
-every Allow resource pattern starts with `${scope}:` may be attached at a scope,
-so whoever may attach at a scope cannot grant beyond it; `update_policy` refuses
+every Allow resource pattern is `${scope}` or starts with `${scope}/` may be attached at a
+scope, so whoever may attach at a scope cannot grant beyond it; `update_policy` refuses
 to widen a policy attached at a scope, and evaluation enforces the rule anyway:
-a statement reached through a scoped attachment keeps only its `${scope}:`
-Allow patterns, `policy.within_scope`), placements
-(`put_placement`, `placement_of`: exact key, then the longest prefix, else
-None; `resolve_placement`: its org and workspace, else platform), scopes (`put_scope`, `workspace_org`),
-sets (`get_set`, `effective_set`, `list_sets`, `put_set`: "Sets"), `register_catalog` (highest
-version wins; refuses dropping an action a policy names).
+a statement reached through a scoped attachment keeps only those Allow patterns,
+`policy.within_scope`), placements (`put_placement(service, id_key, container)`,
+`placement_of`: exact key, then the longest prefix, else None; `resolve_placement`: its
+container, else the platform), containers (`register_container`, `delete_container`,
+`container`, `list_containers`, `call_container`: "Containers"),
+`register_catalog` (highest
+version wins; refuses dropping an action a policy names), listers (`register_lister`, in
+process only; `has_lister`; `remote_listers`: "Publishers and listing").
 
 Lists page after filtering. `list_policies(scope=S)` returns the policies `S` owns
-(`iam:ListPolicies` on each), plus those of the levels above (its org's, the
-platform's) that are confined to a scope and that the caller may attach at `S`
-(`iam:AttachPolicy` on `attachment/<policy>/*` there): a workspace admin is offered
-the roles below owner and the org's policies. `list_groups(scope=S)` returns the
-groups `S` owns (`iam:ListGroups`), plus, at a workspace, its org's groups for whoever
-may list that workspace's attachments to them (`iam:ListAttachments` on
+(`iam:ListPolicies` on each), plus those of the containers above it (its organisation's,
+the platform's) that are confined to a scope and that the caller may attach at `S`
+(`iam:AttachPolicy` on `attachment/<policy>/*` there) and may know of: a customer policy
+owned above `S` is listed only to whoever may list it at its owner (`iam:ListPolicies` on
+`<owner>/iam:policy/<id>`: the platform admin, for a platform policy), or once it is
+attached at `S` or at a container above it (an attachment at the platform `abi:` counts,
+an unscoped one does not; an invitation, `create_pending_grant`, does not either;
+`IAMService._unknown_at`, one store read, `attachments_of`, whatever the number of such
+policies). The built-in roles are no one's and
+are listed wherever they may be attached. A workspace admin is offered the roles below
+owner and the organisation's policies attached at the workspace or the organisation (its
+organisation admins see them all); an organisation's admin is never offered another
+organisation's "<O> access". `get_policy` stays decided at the owner, and deriving
+(`create_policy(parent=)`, `grantable(derive=True)`) at the caller's own attachments
+(see "Sub-policies"), so neither names a policy that the list leaves out.
+`attachable_policies(scope, principal_id=)` returns the policies the caller may attach at
+`scope` (to `principal_id` when given, to anyone otherwise), paged: owned at `scope`'s
+container or above it, written for it (confined to `${scope}`; unscoped, the platform's whose
+chain never names `${scope}`), that the caller may attach there (`iam:AttachPolicy` on
+`attachment/<policy>/<principal or *>`), with a Deny beyond `${scope}` only for whoever may
+attach it unscoped too, and one owned above only where the list above knows it. For a
+`principal_id` the attach refuses at `scope` (unknown, deleted, or a group owned where `scope`
+is not, as `attach_policy` checks it) the list is empty: it offers nothing the attach refuses.
+It needs no permission of its own, and no `iam:ListPolicies`: a right to attach at a level, without one
+to list there, is offered that level's own policies. Nexus's `/attachable-policies` is this
+call; the broker refuses it to a module, like the other lists.
+`list_groups(scope=S)` returns the
+groups `S` owns (`iam:ListGroups`), plus the groups of the containers above it but the
+platform's, for whoever may list `S`'s attachments to them (`iam:ListAttachments` on
 `attachment/*/<group>`); platform groups are not offered there. Without `scope`, a
 list holds every policy or group the caller may list where it is owned. Reading one
 (`get_policy`, `get_group`) is decided at its owner only.
 
-**Lifecycle.** `delete_scope(org, ws)` (Nexus, when a workspace goes) deletes the
-policies and groups the workspace owns; `delete_scope(org)` those of the org and of
-each of its workspaces: a policy with its attachments and invitations, a group
-(marked deleted, its id kept) with its attachments, members and mappings. Then it
-detaches every attachment left at the deleted workspace (or anywhere in the deleted
-org), whatever its policy, so nothing grants at a scope that is gone or comes back
-under the same id; a user left with no attachment in the org leaves its groups. It
-is part of `iam:DeleteScope`.
+**Lifecycle.** `delete_container(service, type, id)` (Nexus, when a workspace or an
+organisation goes; a module, when its own container goes) deletes the container and those
+below it, and the policies and groups they own: a policy with its attachments and
+invitations, a group (marked deleted, its id kept) with its attachments, members and
+mappings. Then it detaches every attachment left at them (below them included), whatever
+its policy, so nothing grants at a container that is gone or comes back under the same id;
+a user left with no attachment within the top container leaves its groups. It needs the
+type's `deletes` action on the container.
 
 Names: `principal_resource`, `group_resource(id, owner_scope)`,
-`policy_resource(id, owner_scope)`, `attachment_resource` (at the attachment's scope; an org-wide
-one in workspace `%2A`, `names.ALL_WORKSPACES`; an unscoped one is `abi:%2A:%2A:…`,
-`names.ALL_ORGS`, see "Resource names"), `placement_resource`, `scope_resource`,
+`policy_resource(id, owner_scope)`, `attachment_resource` (at its scope's container; at the
+platform for a platform or unscoped one), `placement_resource`, `container_resource`,
 `catalog_resource`.
 
 ## Tokens
@@ -1253,7 +1709,7 @@ over NATS (`abi.iam.v1.exchange_token`) and, for scripts, through Nexus
 audience, derived from an identity that was already verified; an exchange can never
 add a permission.
 
-- **Requester.** The caller needs `iam:ExchangeToken` on `abi:-:-:iam:audience/<audience>`
+- **Requester.** The caller needs `iam:ExchangeToken` on `abi:iam:audience/<audience>`
   (only `api` and `engine` hold it, through their enumerated policies); the user it acts
   for, when there is one, does not decide. A module renewing the delegation it
   holds needs nothing: it only keeps what it was given.
@@ -1282,7 +1738,7 @@ add a permission.
 - **Agent tokens** (`abi:delegated:agent`): `sub` the user, `act` the actor with
   its account name, `abi_res` the target. The actor is the module that owns
   `resource` (a discovery module, agent, app, model or job, or the module's account
-  `abi:-:-:iam:principal/<sa id>`), else the requester; never a request field. App,
+  `abi:iam:principal/<sa id>`), else the requester; never a request field. App,
   preview, coding and API-key tokens have no actor. Kernel
   endpoints accept `abi:nats` and this audience (`nats_auth.KERNEL_AUDIENCES`), and
   evaluate it as the module for the user: both sides must allow. The module's side
@@ -1411,7 +1867,7 @@ iam.broker_permissions(principal, key)  # records from authenticate_key; never c
 - **Logs hold no key.** `PresentedKey`, `NewKey` and `CreatedKey` keep the key out of
   their `repr`, and failing decisions are logged by exception type.
 
-**Caching.** Effective statements per principal, policies, placements and sets are
+**Caching.** Effective statements per principal, policies and placements are
 cached for at most `cache_ttl_seconds` (60) and dropped on every change made
 through the service. Listeners (`add_change_listener`) hear each new revision;
 the NATS primary publishes it on `abi.iam.v1.changed` (`ChangeEvent`, a core NATS
@@ -1430,7 +1886,7 @@ short:
 
 | Source | Publish | Subscribe |
 |---|---|---|
-| Always | IAM's read-only and self-service operations (`broker.IAM_ALWAYS`: `token`, `exchange_token`, `jwks`, `submit_manifest`, `get_manifest`, `find_service_account`, `authorize`, `filter`, `grantable`; never `abi.iam.v1.changed`), the engine's broker control `abi.broker.v1.*`, `_INBOX.>`, `abi.rpc.overflow.>` | its own inbox prefix `_INBOX.<key id>` |
+| Always | IAM's read-only and self-service operations (`broker.IAM_ALWAYS`: `token`, `exchange_token`, `jwks`, `submit_manifest`, `get_manifest`, `find_service_account`, `authorize`, `authorize_declared`, `filter`, `grantable`, and `register_container`, `delete_container`, `get_container`, which IAM decides with the container type's own actions: create, delete, and any action of the type for a read; never `abi.iam.v1.changed`), the engine's broker control `abi.broker.v1.*`, `_INBOX.>`, `abi.rpc.overflow.>` | its own inbox prefix `_INBOX.<key id>` |
 | Hosting | the completion notices of its own jobs' runs (`abi.jobdone.<project>.<module hash>.<job hash>`) | `abi.agent.<project>.<sa>.>`, `abi.mod.<project>.<sa>.>`; its jobs' consumers |
 | `discovery:GetJobRun` on `job_run/<project>/<module>/...` | none | that module's (or job's) completion notices: a notice only wakes a waiter, which reads the run record again |
 | Each action with an Allow (any resource) and no Deny on every resource | that action's catalog `subjects` (a stream action adds the service's transfer subjects); a service without a registered catalog grants its whole `abi.svc.<service>.v1.>` | none |
@@ -1474,9 +1930,9 @@ class MyService(ServiceBase):
 - `require` before the backend is touched; `allowed` without raising;
   `filter(action, type, items, parts)` for lists (limit after filtering).
 - `create(action, type, parts)`: the create rule of "Placements". A name an existing placement
-  covers keeps it, and the call's `workspace_id` must be empty or match;
-  otherwise `workspace_id` places it (`workspace_org` maps it to its org; an
-  unknown workspace is "not found"). Call `.record()` once the create succeeded:
+  covers keeps it, and the container of the call must be empty or match; otherwise the
+  container of the call places it (`call_container` checks it is registered under that
+  path; an unknown container is "not found"). Call `.record()` once the create succeeded:
   the placements are written as `engine`, so the caller never needs
   `iam:PutPlacement`. `place_new` places a resource whose id the backend chose
   (a sent message); `forget` drops a deleted resource's placements.
@@ -1513,12 +1969,13 @@ iam.list_idp_bindings(provider=None, policy_id=None)
   never from an email the caller supplies, since `claim_pending_grants` reads the
   user's own record. The claim is one store step per grant
   (`IAMStore.claim_pending_grant`: delete the grant and attach, so racing sign-ins
-  attach it once) and keeps the companions of the roles in step, the platform ones and
-  the feature policies, as attaching the role does: an invitee gets the role's Nexus
-  features from the first sign-in.
+  attach it once) and keeps the companions of the roles in step (the platform ones), as
+  attaching the role does. An invitation carries any policy beside the role, each its own
+  pending grant at its scope: an invitee gets Nexus features only from a policy the
+  invitation carries ("Features of member", say), claimed at the same first sign-in.
 - **Authorized as the attachment it stands for.** Creating one needs
   `iam:AttachPolicy` and revoking one `iam:DetachPolicy` on
-  `abi:<org>:<ws>:iam:attachment/<policy>/pending:<provider>:<email>`, so a
+  `<scope's container>/iam:attachment/<policy>/pending:<provider>:<email>`, so a
   workspace admin invites to that workspace and no further, nobody makes an owner
   they could not attach, and the rules of `attach_policy` (a `${scope}` policy needs
   a scope, a scoped policy stays within it) hold. The inviting person holds what the policy
@@ -1526,10 +1983,11 @@ iam.list_idp_bindings(provider=None, policy_id=None)
   `iam:ListAttachments` on the same names. `iam:ClaimPendingGrants` (admin on a
   principal) is the identity service's, as the engine.
 - **A binding** gives the members of an IdP group a role at a scope: IAM finds or
-  creates the ABI group `idp:<provider>:<claim value>` owned by the org of the scope
-  (`abi:<org>:-`; the platform for a platform or unscoped binding), maps the claim to
-  it and attaches the policy to it. Binding the same claim in another org makes
-  that org its own group, so a group never holds another org's attachments. The caller is authorized for the
+  creates the ABI group `idp:<provider>:<claim value>` owned by the top container of the
+  scope (its organisation for a workspace; the platform for a platform or unscoped
+  binding), maps the claim to it and attaches the policy to it. Binding the same claim in
+  another top container makes that one its own group, so a group never holds another
+  organisation's attachments. The caller is authorized for the
   attachment alone (`attachment/<policy>/idp:<provider>:<claim value>`): creating
   the group and its mapping is part of that one operation, so a workspace admin never
   needs `iam:CreateGroup` or `iam:MapIdpGroup`. One group per org serves every binding of a
@@ -1639,11 +2097,26 @@ subscribe) and a Deny of an action on a topic is honoured. The secrets IAM keeps
 endpoint. Wire codes: `PERMISSION_DENIED`, `GRANT_NOT_HELD` (a
 change would give more than the caller holds), `NOT_FOUND`,
 `CONFLICT`, `REVISION_CONFLICT`, `INVALID_ARGUMENT`, `UNAUTHENTICATED` (a
-refused key). Sets: `get_set`, `effective_set`, `list_sets` (`iam:GetSet`) and `put_set`
-(`iam:PutSet`); a part of a `ScopeSet` with no `SetItems` is everything, a workspace's set
-wider than its org's is `INVALID_ARGUMENT` naming the extras. The SDK facade is
-`engine.services.iam` (`naas_abi_sdk/services/iam.py`), reachable without a
-dependency declaration; records are dictionaries (a set's part is a list or None).
+refused key). Sub-policies: `CreatePolicyRequest.parent`, `UpdatePolicyRequest.parent`
+(absent keeps it, `""` removes it), `Policy.parent_id` (empty: none), `list_sub_policies`
+(`ListSubPoliciesRequest`, needing what the in-process call needs); `attachable_policies`
+(`AttachablePoliciesRequest`: `scope` and `principal_id` absent for unscoped and for anyone),
+offered by the broker to whoever may `iam:AttachPolicy`; the same refusals,
+with the same codes and messages, in process, over NATS and through the SDK. There is no
+set operation (the sets are gone: `get_set`, `effective_set`, `list_sets`, `put_set` and
+their messages were removed; IAM's catalog 7 drops `iam:GetSet` and `iam:PutSet`). Containers:
+`register_container`, `delete_container`, `get_container` (`ContainerRecord`; a read only for a caller allowed an action of the type on it); `put_scope`,
+`delete_scope` and `workspace_org` are gone with the scopes (`iam:PutScope` and
+`iam:DeleteScope` stay declared, deprecated: they authorize nothing). `Placement.container`,
+`AuthorizeDeclaredRequest.container` and `common.CallContext.container` carry container
+names; `common.CallContext.workspace_id` is refused when set (SDK 0.2, "Placements"). Listing:
+`list_resources` (`ListResourcesRequest`, `ListResourcesResponse`, `ListedResource`), offered to every
+module like `grantable` (`broker.IAM_ALWAYS`: it is filtered as the caller); `ActionCatalog.publisher`
+(empty: the engine). A remote module's lister answers `discovery.v1.ListerQuery` with `ListerPage` on its
+instance's `iam.list` subject, its types in `ModuleDescriptor.listers`. The SDK
+facade is `engine.services.iam` (`naas_abi_sdk/services/iam.py`), reachable without a
+dependency declaration; records are dictionaries. A module makes calls inside a container
+with `call_context.inside(container)` (the SDK's `with engine.inside(container):`).
 
 ## Migrating an existing install
 
@@ -1657,14 +2130,18 @@ AGENTS.md there), and IAM is the only record afterwards:
 | `workspace_members.role`, the `workspaces.owner_id` fallback | `builtin.<role>` attachments at `abi:<org>:<ws>` (the fallback becomes an explicit owner attachment) |
 | `organization_members.role`, `organizations.owner_id` | `builtin.<role>` at `abi:<org>:-` |
 | `users.is_superadmin`, `users[].is_superadmin` | `builtin.platform_admin` |
-| `organization_role_features` | `builtin.features.<org>.<role>` |
+| The role features (`feature_flags.role_baseline`, `organization_overrides`, `organization_role_features`), and the `builtin.features.*` an older IAM generated from them | moved once by Nexus at start (`services/iam/role_features.migrate_role_features`, recorded in `iam_migrations` as `role_features_v1`), from what IAM has in force, never from the configuration: each role held at a workspace becomes that workspace's "Features of <role>" attached there; one held org-wide the organization's, attached org-wide (it still covers workspaces made later); each pending invitation to a role gets the matching pending grant. Every user's `UseFeature` decisions are the same at every step. Then `organization_role_features` is dropped and the `builtin.features.*` are retired (`retire_policies`); until then they stay in force. |
 | Workspace graph policies and per-workspace prefixes and namespaces (object storage, documents, vectors, datasets) | placements (`iam:PutPlacement`), plus Allow statements in a workspace policy for shared graphs |
 | Every other existing container (module and engine namespaces, collections, repos, graphs) | platform placements, so no workspace can claim a name inside them |
 | Remote modules sharing `NATS_JWT_SECRET` | service accounts, keys and approved manifests (`abi dev up` regenerates them; deployed systems run `abi iam module approve`) |
 | Nexus users of the old login | users of issuer `urn:abi:nexus`, linked to the built-in IdP at first sign-in (`link_user`) |
 | IAM store schema 1 (no owner scopes) | schema 2, at the store's first open: every policy and group platform-owned, except the groups IdP bindings made (named `idp:<provider>:<claim>` and mapped from that claim, with an org) whose attachments are all under `abi:<org>:`, which belong to that org (`abi:<org>:-`). A binding group schema 1 shared with other orgs, the platform or an unscoped binding stays the platform's: owned by one org, its admins could add their users to what it holds elsewhere. Two processes may open the store at once (PostgreSQL adds the columns `IF NOT EXISTS`; SQLite serializes writes). The upgrade logs a warning for each stored customer policy whose patterns reached the platform's policies or groups as `abi:-:-:iam:…` (or `${scope}:iam:…` at `abi:-:-`) and no longer match them: rewrite them `abi:*:*:iam:policy/…`, `…:iam:group/…` |
 | IAM store schema 2 (no sets) | schema 3: the table `iam_scope_sets`, created empty at the store's first open (PostgreSQL behind an advisory lock, so the engine and the API opening it together both start). Every org and workspace starts with everything. |
-| Per-workspace feature overrides (`workspaces.feature_overrides`, the deprecated `feature_flags.workspace_overrides`) | moved once by Nexus at start (`services/iam/sets.migrate_feature_overrides`, recorded in `iam_migrations`): a feature turned off leaves the workspace's feature set; one turned on stays in it and, for each role whose defaults lack it, a workspace policy keeps it for the people holding that role there then. No one's features change; later members follow the role defaults within the set. The column is cleared. |
+| IAM store schema 3 (no sub-policies) | schema 4: the nullable column `iam_policies.parent_id` and its index, added at the store's first open (PostgreSQL `IF NOT EXISTS`, behind the schema's advisory lock). Every existing policy has no parent. No foreign key: every write locks the state row (`iam_state`) before it checks anything (`IAMStoreSQL._change`; SQLite's `BEGIN IMMEDIATE` already serializes), so "the parent exists" and "the policy has no sub-policies" still hold when the write commits, and a delete and a re-parent racing on PostgreSQL run one after the other. |
+| Per-workspace feature overrides (`workspaces.feature_overrides`, the deprecated `feature_flags.workspace_overrides`) | moved once by Nexus at start (`services/iam/feature_overrides.migrate_feature_overrides`, recorded in `iam_migrations`): a feature turned off leaves the workspace's feature set, kept in the move's report for the move of the sets below; one turned on, for each role whose defaults lack it, becomes a workspace policy for the people holding that role there then. No one's features change. The column is cleared. |
+| IAM store schema 4 (sets) | schema 5, at the store's first open: `iam:GetSet` and `iam:PutSet` leave the customer policies that named them (a statement naming nothing else with them), their revision bumped; they authorized nothing but the sets. `iam_scope_sets` is no longer created; an existing one stays, read by nothing, until Nexus moved it (`legacy_scope_sets`, then `drop_legacy_scope_sets`, both in process only, `iam:DeleteScope` on each row's scope). |
+| The sets of orgs and workspaces (`iam_scope_sets`), the roles that held every module scope (`builtin.admin`, `builtin.owner`), and what each workspace turned off (Nexus's `app_configs.enabled`, `agent_configs.enabled`, `workflow_visibility`) | moved once by Nexus at start (`services/iam/policy_tree.migrate_sets`, recorded in `iam_migrations` as `policy_tree_v1`, after the overrides' and the role features' moves): each org gets a platform-owned "<org> access" (its set's module items and features; everything without a set), each workspace an org-owned "<workspace> access", a sub-policy of it (its own set's items and features, the apps it had turned on, a Deny of what it had turned off). Who held `builtin.admin` or `builtin.owner` gets, where the role reached, a sub-policy of that place's access granting every module scope (the roles brought no feature, so not the access policy itself); a group like a person, a pending invitation to the role as a pending grant beside its own. A customer policy granting module scopes or features moves under the access policy of its owner (an org's or a workspace's), split from what else it grants; where that would not bound it as before (an org's policy attached in a workspace or org-wide, a platform policy) its attachment becomes, at each place it reached, one of a sub-policy of that place's access with the same statements. A service account, never bounded by a set, gets the same grants cut to each place, within what the workspace had turned off (Nexus refused that to every caller). An agent a workspace built and had turned off is denied, at the workspace, to who held a role there. What moves to the workspaces of today (a grant attached org-wide or unscoped) and wildcards spelled out are named in the report's notes. Every user's decision on every module item, declared action and feature is the same before and after (`policy_tree_test.py`, on the memory, SQLite and PostgreSQL stores), but the platform admin, who now reaches what a workspace had turned off. What cannot be kept exactly stops the move (logged, nothing recorded), and Nexus refuses every module scope and feature until a start moves everything. Then IAM's legacy sets and `workflow_visibility` are dropped. |
+| IAM store schema 5 (names `abi:<org>:<ws>:<service>:<type>/<id>`, scopes, placements to an org and a workspace) | schema 6, at the store's first open: the table `iam_containers` and the column `iam_placements.container` (PostgreSQL `IF NOT EXISTS`, behind the schema's advisory lock). A placement of the old form reads as the platform when it was the platform's (`-`, `-`), else as `names.UNRESOLVED`, a container nobody registers, which only `*`-wide grants (the platform admin, `engine`, `api`) reach; an owner or a scope of the old form likewise; an old pattern matches no new name. So until the names are rewritten, an install narrows, never widens. The rewrite is the module's that defined the old fields: Nexus, once at start after the move of the sets (`services/iam/container_names.migrate_names`, recorded in `iam_migrations` as `container_names_v1`), registers its organisations and workspaces as containers and has IAM rewrite every stored name in one transaction (`iam.rewrite_names(rewriter)`, in process only, `iam:RewriteNames`): policy documents and their `${scope}:` patterns, owners, attachments, placements, the scopes (which become containers), keys' narrowing statements, manifests and their policies, pending grants and IdP bindings. It may run again: what is already a path is kept, and a placement the module names no container for (a workspace deleted since) is kept in the old form, read as `names.UNRESOLVED`, never written as a container it is not. Every user's decisions are the same before and after (`container_names_test.py`, on a store the code before the change made: `tests/artifacts/names_v1`). |
 | Sessions, refresh tokens, app grants and preview tokens signed with `secret_key` | invalidated: users sign in again; workspace secrets get their own key (`secrets_encryption_key`) |
 
 ## Decisions
@@ -1674,8 +2151,8 @@ AGENTS.md there), and IAM is the only record afterwards:
 attached to users, groups and service accounts at an optional scope; no resource-based
 policies; an explicit Deny wins; on behalf of a user both sides must allow; narrowed
 tokens only narrow; actions are `<service>:<Action>` with an access level; resource names
-are `abi:<org>:<ws>:<service>:<type>/<id>` with percent-encoded ids and `*`/`?` patterns,
-never regular expressions; the org and workspace of a kernel resource come from placements,
+are paths of containers, `abi:<service>:<type>/<id>/…`, with percent-encoded ids and `*`/`?` patterns,
+never regular expressions; the container of a kernel resource comes from placements,
 never from a request field; every service registers a catalog and policies are validated
 against them; roles are cumulative managed policies generated from the catalogs; a few
 resources are sealed in code; the authorizer port is shaped like OpenFGA.
@@ -1734,25 +2211,23 @@ while they link to an identity provider.
 *Consequences.* Zero trust is visible: a known principal with no policy is denied, and a remote
 module is refused every IAM administration endpoint.
 
-**Policies and groups are owned by the platform, an org or a workspace.**
-*Decision.* Each policy and group has one owner scope, in its record and in its name
-(`abi:<org>:<ws>:iam:<type>/<id>`); the built-in roles give owners and admins at a
-scope that scope's policies and groups, and viewers and members nothing of IAM. An
-owned policy names only `${scope}:` resources, Deny included, and is attached at its
-owner's scope or below; an owned group receives attachments there and holds only
-users of its org. The platform's are named `abi:%2A:%2A:…`, which no scope reaches.
-Deleting a workspace or an org deletes what it owns. IdP mappings stay the platform
-admin's.
+**Policies and groups are owned by the platform or a container.**
+*Decision.* Each policy and group has one owner, the platform or a registered container, in
+its record and in its name (`<owner>/iam:<type>/<id>`); the built-in roles give owners and
+admins at a container that container's policies and groups, and viewers and members nothing
+of IAM. An owned policy names only `${scope}` and `${scope}/…` resources, Deny included, and
+is attached at its owner or below; an owned group receives attachments there and holds only
+users of its top container. The platform's are named at the platform, and no `${scope}`
+reaches them (an explicit rule since container paths; `%2A` names before). Deleting a
+container deletes what it owns. IdP mappings stay the platform admin's.
 *Consequences.* A workspace admin builds its own groups and policies with no platform
 right, and nothing it writes reaches or refuses beyond its workspace, whoever it
-attaches it to: a Deny outside `${scope}:` would otherwise let it lock a user, the
+attaches it to: a Deny outside `${scope}` would otherwise let it lock a user, the
 platform admin included, out of everything. For the same reason a platform policy with
-a Deny outside `${scope}:` is attached at a scope only by the platform admin (see "Policy
+a Deny outside `${scope}` is attached at a scope only by the platform admin (see "Policy
 language"): a scope's admin or owner could otherwise impose its Deny on anyone, in any
-org, and the Deny would keep them from detaching it. Platform-scope roles (`abi:-:-`) never
-edit the platform's policies, some of which are attached unscoped. Grants written
-`abi:-:-:iam:policy/*` match no policy any more (the upgrade logs each stored policy
-that has one): write `abi:*:*:iam:policy/*`. Members
+org, and the Deny would keep them from detaching it. Platform-scope roles (`abi:`) never
+edit the platform's policies, some of which are attached unscoped. Members
 and viewers no longer list their scope's attachments (who holds which role is
 Nexus's members list, read as `api`). A user leaving an org leaves its groups, so a
 group never keeps granting a former member. An existing store upgrades in place
@@ -1760,7 +2235,7 @@ group never keeps granting a former member. An existing store upgrades in place
 
 **Module scopes are a catalog of their own; viewers and members hold none.**
 *Decision.* What modules expose is the `module` catalog, `module:<type>/<module>/<name>`
-with `module_scope` types, placed in the workspace of the call; the module is named by
+with `module_scope` types, placed in the container of the call; the module is named by
 its stable identifier (an engine module's configured key, a remote module's id). The
 built-in viewer and member roles leave every module scope type out, admin and owner
 hold them all, with no migration grant. Nexus decides a module's agents and apps with
@@ -1784,7 +2259,7 @@ too would need the workspace in the trigger, which a stored trigger does not car
 load; a remote module sends it in its manifest (`catalog`), registered at approval.
 Its service is derived from the module's identifier and owned by it; reserved names
 and another module's are refused. IAM names the resource of a declared action
-(`authorize_declared`) in the workspace of the call, so a module never builds names.
+(`authorize_declared`) in the container of the call, so a module never builds names.
 *Consequences.* An admin approving a remote module approves its catalog with its
 permissions, and a changed catalog waits for approval. A declared type is always a
 module scope placed in a workspace: viewers and members need a grant, and the module's
@@ -1796,8 +2271,8 @@ an invitation, an IdP binding and a manifest approval when the result would give
 scope, more than the caller holds there (see "Grant only what you hold"). The caller is the
 call's user, never the first-party account acting for them; a narrowed credential narrows
 what it may grant; Denies need no cover; what cannot be proven is refused. A grant already
-made is not checked again when its granter later loses a permission: the organisation and
-workspace sets ("Sets") bound every grant when IAM decides, whoever made it. `engine` and `api` writing for no user are not checked, each behind a route
+made is not checked again when its granter later loses a permission: narrowing the parent
+of a sub-policy narrows it at the next decision, whoever made it. `engine` and `api` writing for no user are not checked, each behind a route
 or boot step that authorized what it stands for (the table there).
 *Consequences.* A scope's admin can no longer make itself owner through a policy or a group,
 nor an owner give a feature it does not hold. Wildcards are expanded against the catalogs
@@ -1808,25 +2283,105 @@ searches take more than `grants.CALL_BUDGET` together, is refused even if it is 
 Invitations and bindings from Nexus now need the inviting person to hold the role's grants.
 `grantable` may under-report a holding whose pattern straddles the scope's fields.
 
-**Sets bound users when IAM decides, and grants when they are made.**
-*Decision.* Each org and workspace has a set of module items and Nexus features, stored in
-IAM (`iam_scope_sets`, cached and dropped on change events like policies). An Allow of a
-user on a module scope or a feature counts only within the sets of the resource's org and
-workspace; the platform admin and service accounts are not bound. The set is applied after
-the sides' decisions (an `outside_set` refusal), not by rewriting statements, so `explain`
-still names the statement that would allow. It is also an Allow-only side of every grant
-check, so `grantable` and the refusals follow it. Sets are written at the level above their
-own (`abi:%2A:%2A:iam:set/<org>`, `abi:<org>:%2A:iam:set/<ws>`), so a workspace's admins never
-widen their own and an org's do only through the org-wide role. A workspace's recorded items
-must be within its org's; narrowing an org leaves its workspaces' records alone. Nothing
-recorded is everything.
-*Consequences.* Narrowing a set takes a module or a feature from everyone it bounds at the
-next decision, owners and admins included, and from what they may grant; nothing needs
-detaching. A grant made before stays attached and counts again if the set widens. A
-workspace's feature set replaces the per-workspace feature overrides: a feature is reached
-by a role's defaults (or a policy) within the set, never added by the set. Items name
-modules by their stable identifiers: a renamed module is a new item. Discovery's broker-side
-grants are not bounded by sets (they carry no workspace), as for module scopes.
+**The catalogs say what the roles leave out; core's roles name no service.**
+*Decision.* What the built-in roles hold is generated from the catalogs by level, and what
+they leave out is flagged in the catalog that declares it: `policy_only` on a type no role
+holds, `owner_only` on an admin action no role below owner holds, and `platform_access` for
+the platform-level rows a first-party catalog's resources add to the platform companions.
+`roles.py` names its own kernel services' platform rows and no other service, Nexus
+included; `builtin.api`, Nexus's own account, keeps its enumerated statements. IAM generates
+no feature policy: `put_feature_policies`, `builtin.features.*` and their companions are
+gone. The stored ones stay in force until Nexus has moved them into policies, then go
+(`retire_policies`); a stored catalog older than the flags holds nothing for the roles until
+it is registered again (`format`).
+*Consequences.* Nexus's features are a `policy_only` type: no role brings one, owners and
+admins included, and a member of a new workspace uses none until a policy grants it (Nexus
+moved what each role had into workspace policies once, so nobody's features changed). A
+module's catalog cannot declare `platform_access`: what it publishes reaches its users
+through policies only. Removing a flag is a catalog change like any other: the roles are
+regenerated at the next registration.
+
+**Policies are the one place access is decided.**
+*Decision.* The organisation and workspace sets and their evaluation step (`outside_set`) are
+gone, with their store table, their `iam` actions and type, their NATS operations, SDK calls
+and proto messages; so is Nexus's workspace on/off switch. No built-in role holds a module
+scope type, admins and owners included. What an org or a workspace may use is a policy: an
+access policy per org and per workspace (a sub-policy of its org's) that the upgrade made
+from the sets, and what is granted below them is their sub-policies, narrowed live.
+*Consequences.* Narrowing what an org uses is editing its access policy: every sub-policy
+below it narrows at the next decision. An admin or owner of a workspace with no policy uses
+no agent, app, workflow, pipeline, declared action or feature there; a new workspace grants
+nothing to its creator until a policy attached there, or above, does. Core IAM holds no
+feature logic: `nexus:feature` is a `policy_only` type of Nexus's catalog like any other. A
+module installed later is in no access policy until someone adds it.
+
+**A sub-policy narrows its parent, read live.**
+*Decision.* A policy has at most one parent (`parent_id`). What it grants is its own Allows
+intersected with what its parent grants through its own chain, and the chain's Denies apply
+to it; IAM reads the chain from the policy cache at each decision, filling the parent's
+variables from the sub-policy's attachment, and copies nothing. A cycle, a chain deeper than 8,
+a missing parent and a managed child are refused; a sub-policy is owned at or below its
+parent's owner; a caller derives only from a policy attached to them or their groups at the
+sub-policy's owner or above (the platform admin from any); "Grant only what you hold" checks
+the intersection; a parent with sub-policies is not deleted.
+*Consequences.* Narrowing a parent narrows every sub-policy below it at the next decision, in
+process and over NATS, with nothing to rewrite; widening it widens them, so a change of a
+parent is checked for each policy below it. A decision reads up to eight policies per
+attachment, all cached. Store writes are serialized on the state row, so IAM's own checks
+keep chains whole; one broken by a write that bypasses IAM grants nothing rather than
+something, and grants of it are refused until it is repaired. A re-parent that brings a
+Deny beyond `${scope}` is checked as attaching would be, so it never imposes that Deny
+where its holder could not attach it. What a caller holds through a sub-policy counts in grant checks only where it is
+shown without a search, so such a caller may be refused a grant they could prove the hard way.
+A parent's Deny beyond `${scope}` makes each sub-policy a policy that only the platform admin
+attaches at a scope.
+
+**Every catalog names its publisher; a listing is the caller's.**
+*Decision.* A catalog says who publishes it (`ActionCatalog.publisher`: the engine by default,
+`naas_abi` for Nexus's, a module's key for its own), and the `module` catalog's resources belong to the
+module their id names. A resource type may have a lister, which returns candidates and decides nothing:
+in process for the engine's services and modules, over NATS for a remote module (the SDK serves it, its
+types in discovery), IAM itself for containers (its registry) and singletons. `list_resources` keeps what
+the caller may list (the type's `list` actions, else any of its actions, through `filter`), within the
+scope, searched and paged by name, and needs no permission, like `grantable`.
+*Consequences.* The policy builder can offer, per publisher and type, only what the caller may grant
+(`publishers.by_publisher` over `grantable`) and the existing resources they may list, with nothing
+listed beyond it. A lister may read unchecked: what it returns is filtered before anyone sees it, and
+what falls outside the query (another type, container, order) is dropped. A lister that fails, times out
+or is gone leaves its type offered as wildcards and is logged, never failing the call. A remote lister
+answers as its module, reachable by the engine alone (no action names its subject); a remote
+module's container type is listed from IAM's registry, never from the module. One call examines at most
+`MAX_EXAMINED` candidates and `MAX_SECONDS`, so a caller who may list few of many, or a slow
+lister, pages through short pages and never holds a worker for long.
+
+**A list at a container names another container's policy only where it is known there.**
+*Decision.* `list_policies(scope=S)` lists a customer policy owned above `S` (the platform's,
+or a container's above `S`) only to whoever may list it at its owner, or when it is attached
+at `S` or at a container above it. Being attachable there (`iam:AttachPolicy` on
+`attachment/pol_*/*`, which every admin holds) is no longer enough. The access policies the
+upgrade makes stay owned by the platform, so an organisation's admin still cannot widen the
+bound their organisation's policy sets. The attach list is IAM's too
+(`attachable_policies`), with the same rule for what is owned above, and Nexus's parent
+picker is the policy list. A flag on the upgrade's access
+policies was the alternative: it would have covered those policies only, and left the same
+disclosure for any platform policy written for one organisation.
+*Consequences.* An admin of organisation O2 no longer sees "<O1> access", or any other policy
+written for O1, in O2's lists or parent picker. O1's admins and those of its workspaces still
+see "<O1> access" where it is attached, so they derive from it as before. A platform policy
+meant for every organisation (a shared reader) is offered at a container only once the
+platform admin attaches it there or above; attaching it by its id, as before, needs no listing.
+A workspace admin no longer sees the organisation's policies that are attached nowhere at
+the workspace or above. The built-in roles are listed as before. An invitation
+(`create_pending_grant`) does not make a policy known at its scope: a policy offered only
+through an invitation there is not listed there until someone claims it. A sub-policy's
+parent can drop out of the list: an "<O> access" attached nowhere at O or above (no admin
+at the upgrade, or their attachments detached since) is no longer listed to O's admins,
+while the "<W> access" sub-policies they manage still name it as their parent. Nexus shows
+such a sub-policy at the top of the tree, as a sub-policy of the parent's id; opened, it names
+the parent (name and owner, read as Nexus, never its document), and deriving from that
+parent is decided by the caller's own attachments as before. Attaching it again at O, or
+the platform admin listing it, brings it back. Deciding the rule takes one store read per
+page of a list (`attachments_of`), whatever the number of organisations.
 
 ## Known limits and open questions
 

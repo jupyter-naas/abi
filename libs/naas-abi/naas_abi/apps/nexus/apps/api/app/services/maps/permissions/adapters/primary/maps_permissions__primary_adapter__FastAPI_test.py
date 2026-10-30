@@ -41,11 +41,10 @@ def setup():
     of ``ws-fr`` and ``ws-valeo``, ``member`` a member of ``ws-fr``."""
     nexus = NexusIam()
     nexus.org("org-1")
-    for workspace in WORKSPACES:
-        nexus.workspace("org-1", workspace)
+    containers = {workspace: nexus.workspace("org-1", workspace) for workspace in WORKSPACES}
     for workspace in ("ws-fr", "ws-valeo"):
-        nexus.grant("fr-admin", "admin", f"abi:org-1:{workspace}")
-    nexus.grant("member", "member", "abi:org-1:ws-fr")
+        nexus.grant("fr-admin", "admin", containers[workspace])
+    nexus.grant("member", "member", containers["ws-fr"])
     nexus.platform_admin("root")
     with nexus.installed():
         yield from _setup()

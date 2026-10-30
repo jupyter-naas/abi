@@ -33,6 +33,8 @@ class FilterResult:
 def _policy(record: dict[str, Any]) -> dict[str, Any]:
     record = dict(record)
     record["document"] = json.loads(record.pop("document_json"))
+    # A policy with no parent: None, as the engine's record says it.
+    record["parent_id"] = record.get("parent_id") or None
     return record
 
 
@@ -75,18 +77,19 @@ class IAMService(ServiceProxy):
         resource_type: str,
         parts: Iterable[str],
         *,
-        workspace: str | None = None,
+        container: str | None = None,
     ) -> tuple[Decision, str]:
         """The decision on an action a module declares, and the resource IAM
-        named for it: ``<type>/<parts>`` of the action's catalog, in
-        ``workspace`` or else the workspace of the call, platform-level with
-        none. The module never builds the name."""
+        named for it: ``<container>/<service>:<type>/<id>`` of the action's
+        catalog, in ``container`` (a container's name) or else the container
+        of the call, platform-level with none; a declared container type's own
+        resource is the container. The module never builds the name."""
         found = await self._request(
             "authorize_declared",
             action=action,
             resource_type=resource_type,
             parts=list(parts),
-            workspace_id=workspace or "",
+            container=container or "",
         )
         decision = found["decision"]
         return (
@@ -100,11 +103,11 @@ class IAMService(ServiceProxy):
         resource_type: str,
         parts: Iterable[str],
         *,
-        workspace: str | None = None,
+        container: str | None = None,
     ) -> None:
         """``require`` for an action a module declares."""
         decision, resource = await self.authorize_declared(
-            action, resource_type, parts, workspace=workspace
+            action, resource_type, parts, container=container
         )
         if decision.allowed:
             return
@@ -125,12 +128,52 @@ class IAMService(ServiceProxy):
             "explain", action=action, resource=resource, principal_id=principal_id
         )
 
-    async def grantable(self, scope: str) -> list[dict[str, Any]]:
+    async def grantable(
+        self, scope: str, *, parent: str | None = None, derive: bool = False
+    ) -> list[dict[str, Any]]:
         """What the caller may grant at ``scope`` (about the caller: no permission
         needed): ``[{"service", "actions": [{"action", "resources", "excluded"}]}]``,
-        resources written ``${scope}:...``. A change that gives more than the
-        caller holds raises ``GrantNotHeld``."""
+        resources written ``${scope}/...``. ``scope`` is a container's name or
+        ``abi:`` (the platform). With ``parent``, what a sub-policy of that
+        policy may grant there: within its chain (only of a parent the caller
+        may derive from or read; with ``derive``, for a new one, refused as
+        ``create_policy`` would). A change that gives more than the caller
+        holds raises ``GrantNotHeld``."""
+        if parent:
+            return await self._request(
+                "grantable", scope=scope, parent=parent, derive=derive
+            )
         return await self._request("grantable", scope=scope)
+
+    async def list_resources(
+        self,
+        service: str,
+        type: str,
+        *,
+        scope: str = "abi:",
+        text: str = "",
+        cursor: str | None = None,
+        limit: int | None = None,
+        module: str = "",
+    ) -> dict[str, Any]:
+        """The existing resources of ``service:type`` in ``scope`` (a container's
+        name, below one, or ``abi:``) that the caller may list, matching ``text``,
+        a page after ``cursor`` (about the caller: no permission needed):
+        ``{"items": [{"name", "id", "label", "description"}], "next_cursor",
+        "listed"}``. ``listed`` False: the type has no lister, or its lister
+        failed; offer it as wildcards. ``NotFound`` for an unknown type."""
+        page = await self._request(
+            "list_resources",
+            service=service,
+            type=type,
+            scope=scope,
+            text=text,
+            cursor=cursor or "",
+            limit=limit or 0,
+            module=module,
+        )
+        page["next_cursor"] = page.get("next_cursor") or None
+        return page
 
     # -- principals --------------------------------------------------------------
 
@@ -184,11 +227,11 @@ class IAMService(ServiceProxy):
     # -- groups ---------------------------------------------------------------------
 
     async def create_group(
-        self, name: str, *, org: str | None = None, scope: str | None = None
+        self, name: str, *, scope: str | None = None
     ) -> dict[str, Any]:
-        """A group owned by ``scope``: ``abi:-:-`` (the default), ``abi:<org>:-``
-        (also what ``org`` alone means) or ``abi:<org>:<ws>``."""
-        return await self._request("create_group", name=name, org=org, scope=scope)
+        """A group owned by ``scope``: ``abi:`` (the platform, the default) or a
+        container's name."""
+        return await self._request("create_group", name=name, scope=scope)
 
     async def get_group(self, group_id: str) -> dict[str, Any]:
         return await self._request("get_group", group_id=group_id)
@@ -244,9 +287,11 @@ class IAMService(ServiceProxy):
         *,
         description: str = "",
         scope: str | None = None,
+        parent: str | None = None,
     ) -> dict[str, Any]:
-        """A policy owned by ``scope`` (the platform when None); an org's or a
-        workspace's names only ``${scope}:`` resources."""
+        """A policy owned by ``scope`` (a container's name; the platform when
+        None); a container's names only ``${scope}`` and ``${scope}/...``. With ``parent``, a
+        sub-policy of it: it never grants more than its parent, read live."""
         return _policy(
             await self._request(
                 "create_policy",
@@ -254,6 +299,7 @@ class IAMService(ServiceProxy):
                 document_json=_document(document),
                 description=description,
                 scope=scope,
+                parent=parent,
             )
         )
 
@@ -268,6 +314,25 @@ class IAMService(ServiceProxy):
         )
         return {**page, "policies": [_policy(p) for p in page["policies"]]}
 
+    async def attachable_policies(
+        self,
+        scope: str | None = None,
+        *,
+        principal_id: str | None = None,
+        limit: int = 100,
+        after: str | None = None,
+    ) -> dict[str, Any]:
+        """The policies the caller may attach at ``scope`` (to ``principal_id``
+        when given)."""
+        page = await self._request(
+            "attachable_policies",
+            scope=scope,
+            principal_id=principal_id,
+            limit=limit,
+            after=after,
+        )
+        return {**page, "policies": [_policy(p) for p in page["policies"]]}
+
     async def update_policy(
         self,
         policy_id: str,
@@ -276,7 +341,9 @@ class IAMService(ServiceProxy):
         document: Mapping[str, Any] | str | None = None,
         name: str | None = None,
         description: str | None = None,
+        parent: str | None = None,
     ) -> dict[str, Any]:
+        """``parent``: None keeps it, ``""`` removes it, an id sets it."""
         return _policy(
             await self._request(
                 "update_policy",
@@ -285,8 +352,14 @@ class IAMService(ServiceProxy):
                 document_json=_document(document) if document is not None else None,
                 name=name,
                 description=description,
+                parent=parent,
             )
         )
+
+    async def list_sub_policies(self, policy_id: str) -> list[dict[str, Any]]:
+        """The direct sub-policies of ``policy_id`` the caller may list."""
+        found = await self._request("list_sub_policies", policy_id=policy_id)
+        return [_policy(p) for p in found]
 
     async def delete_policy(self, policy_id: str) -> None:
         await self._request("delete_policy", policy_id=policy_id)
@@ -375,19 +448,16 @@ class IAMService(ServiceProxy):
             "list_idp_bindings", provider=provider, policy_id=policy_id
         )
 
-    # -- placements, scopes, catalogs -------------------------------------------------
+    # -- placements, containers, catalogs ----------------------------------------------
 
     async def put_placement(
-        self, service: str, id_key: str, org: str = "-", workspace: str = "-"
+        self, service: str, id_key: str, container: str = "abi:"
     ) -> dict[str, Any]:
+        """Place ``service``'s ids matching ``id_key`` (exact, or a prefix ending
+        in ``*``) in ``container`` (a container's name, ``abi:`` the platform)."""
         return await self._request(
             "put_placement",
-            placement={
-                "service": service,
-                "id_key": id_key,
-                "org": org,
-                "workspace": workspace,
-            },
+            placement={"service": service, "id_key": id_key, "container": container},
         )
 
     async def delete_placement(self, service: str, id_key: str) -> bool:
@@ -396,44 +466,28 @@ class IAMService(ServiceProxy):
     async def list_placements(self, service: str | None = None) -> list[dict[str, Any]]:
         return await self._request("list_placements", service=service)
 
-    async def put_scope(self, org: str, workspace: str = "-") -> dict[str, Any]:
-        return await self._request("put_scope", org=org, workspace=workspace)
-
-    async def delete_scope(self, org: str, workspace: str = "-") -> bool:
-        return await self._request("delete_scope", org=org, workspace=workspace)
-
-    # -- sets: what an org or a workspace may use ----------------------------
-    # A set is {"org", "workspace", "modules", "features"}; a part that is None
-    # is everything (nothing recorded), a list the items.
-
-    async def get_set(self, org: str, workspace: str = "-") -> dict[str, Any]:
-        return await self._request("get_set", org=org, workspace=workspace)
-
-    async def effective_set(self, org: str, workspace: str = "-") -> dict[str, Any]:
-        """A workspace's set within its org's (an org's own for ``-``)."""
-        return await self._request("effective_set", org=org, workspace=workspace)
-
-    async def list_sets(self, org: str | None = None) -> list[dict[str, Any]]:
-        return await self._request("list_sets", org=org)
-
-    async def put_set(
-        self,
-        org: str,
-        workspace: str = "-",
-        *,
-        modules: Iterable[str] | None = None,
-        features: Iterable[str] | None = None,
+    async def register_container(
+        self, service: str, type: str, id: str, *, parent: str = "abi:"
     ) -> dict[str, Any]:
-        """Record a set: an org's needs the platform admin, a workspace's the
-        org's owners or admins; a workspace's set wider than its org's is
-        refused (``InvalidArgument``) naming the extra items."""
+        """Register a container of a declared container type in ``parent`` (a
+        container's name, ``abi:`` the platform): ``{"service", "type", "id",
+        "parent", "name"}``, ``name`` its path. Needs the type's create action
+        on that name, for the module and the user it acts for."""
         return await self._request(
-            "put_set",
-            org=org,
-            workspace=workspace,
-            modules=None if modules is None else {"items": list(modules)},
-            features=None if features is None else {"items": list(features)},
+            "register_container", service=service, type=type, id=id, parent=parent
         )
+
+    async def delete_container(self, service: str, type: str, id: str) -> bool:
+        """Delete a container, with the containers below it and what they own.
+        Needs the type's delete action on its name."""
+        return await self._request(
+            "delete_container", service=service, type=type, id=id
+        )
+
+    async def get_container(self, service: str, type: str, id: str) -> str | None:
+        """A registered container's name (its path), None for an unknown one."""
+        name = await self._request("get_container", service=service, type=type, id=id)
+        return name or None
 
     async def register_catalog(self, catalog: Mapping[str, Any]) -> bool:
         """Register a service's action catalog (a catalog document, as a mapping)."""
