@@ -16,8 +16,8 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
 )
 from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
     caller_feature_flags,
+    caller_usable_agents,
     feature_keys_of,
-    filter_feature_agents,
 )
 from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
     resolve_agent_ref,
@@ -184,30 +184,30 @@ async def _workspace_slug(workspace_id: str) -> str | None:
 async def _visible_to_caller(
     agents: list[AgentRecord], current_user: User, workspace_id: str
 ) -> list[AgentRecord]:
-    """The agents of ``workspace_id`` the caller may use: a module's agent needs
-    its module scope (``module:UseAgent``), an office agent its feature too, an
-    agent the workspace built ``nexus:UseAgent`` on it (one turned off before
-    is denied there). IAM alone decides: there is no set and no on/off switch."""
+    """The agents of ``workspace_id`` the caller may use (``caller_usable_agents``,
+    the rule a chat turn's roster follows too): a module's agent needs its module
+    scope (``module:UseAgent``), an office agent its feature too, an agent the
+    workspace built ``nexus:UseAgent`` on it (one turned off before is denied
+    there). IAM alone decides: there is no set and no on/off switch."""
     flags = await caller_feature_flags(current_user, workspace_id, feature_keys_of(agents))
-    classes = _get_agent_class_registry()
-
-    def scope_of(agent: AgentRecord) -> ModuleScope | None:
-        return agent_scope(agent, classes, _agent_class_modules)
-
-    usable = await authz.filter_scopes(
-        filter_feature_agents(agents, flags),
-        user=current_user,
-        workspace=workspace_id,
-        scope_of=scope_of,
-    )
-    built = [agent.id for agent in usable if scope_of(agent) is None]
-    if not built:
-        return usable
-    may = await authz.allowed_ids("UseAgent", user=current_user, workspace=workspace_id, ids=built)
-    return [agent for agent in usable if scope_of(agent) is not None or agent.id in may]
+    return await caller_usable_agents(agents, current_user, workspace_id, flags)
 
 
-async def _served(agents: list[AgentRecord]) -> list[AgentRecord]:
+async def usable_roster(
+    agent_service: AgentService, current_user: User, workspace_id: str
+) -> tuple[list[AgentRecord], dict[str, bool]]:
+    """What a chat turn in ``workspace_id`` may pick from, and the caller's feature
+    flags there: the workspace's roster as the listing shows it to the caller (the
+    remote agents a READY module serves, and only those the caller may use).
+
+    Whatever agent the turn falls back to (the default, Abi, the first) comes
+    from this list, so it never runs one the listing hides from the caller."""
+    roster = await served_agents(await workspace_roster(agent_service, workspace_id))
+    flags = await caller_feature_flags(current_user, workspace_id, feature_keys_of(roster))
+    return await caller_usable_agents(roster, current_user, workspace_id, flags), flags
+
+
+async def served_agents(agents: list[AgentRecord]) -> list[AgentRecord]:
     """``agents`` but the remote ones whose module is not READY (discovery does
     not list them); all of them when discovery cannot be read."""
     if not any(agent.provider == REMOTE_PROVIDER for agent in agents):
@@ -697,7 +697,7 @@ async def _reconcile_workspace_agents(
     * **Remote agents** (``remote_agents``, from NATS discovery) get rows with
       ``provider="remote"`` and ``class_name="<module_id>/<Agent>"``, kept while
       their module is not READY (the listing leaves them out meanwhile,
-      ``_served``).
+      ``served_agents``).
 
     The rows hold no on/off state: who uses each agent is IAM's
     (``module:UseAgent`` on its module scope), decided where it is listed or used.
@@ -929,7 +929,7 @@ async def _enriched_workspace_agents(
 
     return [
         _enrich_agent(agent, class_name_to_agent_class)
-        for agent in await _visible_to_caller(await _served(agent_list), current_user, workspace_id)
+        for agent in await _visible_to_caller(await served_agents(agent_list), current_user, workspace_id)
     ]
 
 

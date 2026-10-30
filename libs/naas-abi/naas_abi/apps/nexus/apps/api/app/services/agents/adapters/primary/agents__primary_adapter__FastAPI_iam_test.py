@@ -337,3 +337,76 @@ async def test_a_remote_agent_is_listed_while_its_module_serves_it(world, monkey
     async with world.as_("admin") as http:
         ids = {a["id"] for a in (await http.get("/?workspace_id=ws-1")).json()}
         assert "remote" in ids
+
+
+# -- A chat turn picks among what the listing shows ---------------------------------------
+
+
+def _deny_use_agent(team, user: str, agent_id: str) -> None:
+    from naas_abi_core.engine.call_context import as_service_account
+    from naas_abi_core.services.iam.policy import POLICY_VERSION
+
+    with as_service_account("engine"):
+        deny = team.iam.create_policy(
+            f"no-{agent_id}",
+            {
+                "version": POLICY_VERSION,
+                "statements": [
+                    {
+                        "effect": "Deny",
+                        "actions": ["nexus:UseAgent"],
+                        "resources": [f"${{scope}}/nexus:agent/{agent_id}"],
+                    }
+                ],
+            },
+        )
+        team.iam.attach_policy(deny.id, team.principal(user), WS)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("requested", [None, "stale-id", "plain"])
+async def test_a_turn_never_falls_back_to_a_built_agent_the_caller_may_not_use(
+    world, requested
+) -> None:
+    """The workspace's default, and only usable-looking, agent is one it built
+    and the caller is denied: a turn naming no agent, a stale id or that agent
+    picks none, as the listing shows none."""
+    world.agents.records["plain"].is_default = True
+    _deny_use_agent(world.team, "member", "plain")
+    async with world.as_("member") as http:
+        assert (await http.get("/?workspace_id=ws-1")).json() == []
+    roster, _ = await adapter.usable_roster(world.agents, "member", "ws-1")
+    assert roster == []
+    assert adapter.pick_workspace_chat_agent_id(roster, requested) is None
+    # Another member, not denied, still gets it as the default.
+    roster, _ = await adapter.usable_roster(world.agents, "admin", "ws-1")
+    assert adapter.pick_workspace_chat_agent_id(roster, requested) == "plain"
+
+
+@pytest.mark.asyncio
+async def test_a_turn_falls_back_past_a_denied_default_to_an_agent_the_caller_holds(
+    world,
+) -> None:
+    world.agents.records["plain"].is_default = True
+    _deny_use_agent(world.team, "member", "plain")
+    world.team.allow_scope("member", _scope("acme.p", "AAgent"), WS)
+    roster, _ = await adapter.usable_roster(world.agents, "member", "ws-1")
+    assert [agent.id for agent in roster] == ["a"]
+    for requested in (None, "stale-id", "plain", "b"):
+        assert adapter.pick_workspace_chat_agent_id(roster, requested) == "a"
+
+
+@pytest.mark.asyncio
+async def test_a_turn_does_not_pick_a_remote_agent_whose_module_is_not_ready(
+    world, monkeypatch
+) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.agents.remote.port import REMOTE_PROVIDER
+
+    remote = _agent("remote", class_name="acme.r/RAgent")
+    remote.provider = REMOTE_PROVIDER
+    world.agents.records.pop("plain")
+    world.agents.records[remote.id] = remote
+    world.team.allow_scope("member", _scope("acme.r", "RAgent"), WS)
+    roster, _ = await adapter.usable_roster(world.agents, "member", "ws-1")
+    assert roster == []
+    assert adapter.pick_workspace_chat_agent_id(roster, None) is None

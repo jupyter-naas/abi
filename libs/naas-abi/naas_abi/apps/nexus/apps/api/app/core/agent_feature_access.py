@@ -6,18 +6,21 @@ that sub-agent for their turn. Non-office agents (client modules, Abi itself)
 are not feature-gated.
 
 Every agent of a module, naas_abi's own included, also needs its module
-scope (``module:UseAgent`` in the workspace, ``services/agents/scopes.py``):
+scope (``module:UseAgent`` in the workspace, ``services/agents/scopes.py``), and
+an agent the workspace built needs ``nexus:UseAgent`` on it:
 ``caller_usable_agents`` is the roster a caller's turn may run and reach as
-sub-agents. There is no on/off state of a workspace's own: IAM decides alone.
+sub-agents, and the agents listing shows the same. There is no on/off state of a
+workspace's own: IAM decides alone.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from typing import Any, TypeVar
 
 from naas_abi.agents.feature.registry import spec_for_class_name
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
 
 AgentT = TypeVar("AgentT")
 
@@ -51,15 +54,27 @@ async def caller_usable_agents(
     agents: Iterable[AgentT], user: object, workspace_id: str, flags: Mapping[str, bool]
 ) -> list[AgentT]:
     """The roster entries the caller may use in this workspace: the office agents
-    of features it holds, then only the module agents it holds a scope for."""
+    of features it holds, the module agents it holds a scope for, and the agents
+    the workspace built that it may use (``nexus:UseAgent``: one turned off before
+    is denied there)."""
     from naas_abi.apps.nexus.apps.api.app.services.agents.scopes import scope_resolver
 
-    return await authz.filter_scopes(
+    scope_of: Callable[[Any], ModuleScope | None] = scope_resolver()
+    usable = await authz.filter_scopes(
         filter_feature_agents(agents, flags),
         user=user,
         workspace=workspace_id,
-        scope_of=scope_resolver(),  # type: ignore[arg-type]
+        scope_of=scope_of,
     )
+    built = [getattr(agent, "id", "") for agent in usable if scope_of(agent) is None]
+    if not built:
+        return usable
+    may = await authz.allowed_ids("UseAgent", user=user, workspace=workspace_id, ids=built)
+    return [
+        agent
+        for agent in usable
+        if scope_of(agent) is not None or getattr(agent, "id", "") in may
+    ]
 
 
 def caller_usable_class_names(

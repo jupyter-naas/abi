@@ -243,30 +243,24 @@ async def stream_chat_response(
     if request.workspace_id:
         from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
             bind_usable_processes,
-            caller_feature_flags,
-            caller_usable_agents,
             caller_usable_class_names,
-            feature_keys_of,
         )
         from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agents__primary_adapter__FastAPI import (
             pick_workspace_chat_agent_id,
             pick_workspace_documents_agent_id,
             pick_workspace_sheets_agent_id,
             pick_workspace_slides_agent_id,
-            workspace_roster,
+            usable_roster,
         )
         from naas_abi_core.services.agent.context import agent_workspace_enabled_class_names
 
         async with AsyncSessionLocal() as db:
             with bind_registry(db) as registry:
                 # The turn was authorized (SendMessage) in this workspace; the roster
-                # only picks which of its agents answers.
-                workspace_agents = await workspace_roster(registry.agents, request.workspace_id)
-                flags = await caller_feature_flags(
-                    current_user, request.workspace_id, feature_keys_of(workspace_agents)
-                )
-                workspace_agents = await caller_usable_agents(
-                    workspace_agents, current_user, request.workspace_id, flags
+                # only picks which of its agents answers, among those the listing
+                # shows the caller: a fallback never runs one it hides.
+                workspace_agents, flags = await usable_roster(
+                    registry.agents, current_user, request.workspace_id
                 )
                 agent_workspace_enabled_class_names.set(
                     caller_usable_class_names(workspace_agents, flags)

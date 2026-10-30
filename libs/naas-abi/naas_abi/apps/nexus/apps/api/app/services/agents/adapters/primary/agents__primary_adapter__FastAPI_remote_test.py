@@ -234,14 +234,14 @@ def test_the_listing_leaves_out_remote_agents_whose_module_is_not_ready(monkeypa
         return [RESEARCHER]
 
     monkeypatch.setattr(sync, "_discovered_remote_agents", discovered)
-    assert [a.id for a in asyncio.run(sync._served([zen, researcher, writer]))] == ["zen", "r"]
+    assert [a.id for a in asyncio.run(sync.served_agents([zen, researcher, writer]))] == ["zen", "r"]
 
     async def unknown():
         return None
 
     # Discovery cannot be read: every row is kept.
     monkeypatch.setattr(sync, "_discovered_remote_agents", unknown)
-    assert len(asyncio.run(sync._served([zen, researcher, writer]))) == 3
+    assert len(asyncio.run(sync.served_agents([zen, researcher, writer]))) == 3
 
 
 @pytest.mark.asyncio
