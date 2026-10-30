@@ -288,4 +288,77 @@ describe('only what the caller may grant', () => {
       '${scope}/module:agent/acme.people/*',
     ]);
   });
+
+  /** Every agent of acme.people, but those their Deny takes back: `secret*`. */
+  const allButSecret = (excluded: string[]): Publisher[] => [
+    {
+      id: 'acme.people',
+      kind: 'module',
+      types: [
+        {
+          ...publishedType('module', 'agent', [], { module: 'acme.people' }),
+          actions: [
+            {
+              action: 'module:UseAgent',
+              name: 'UseAgent',
+              level: 'read',
+              description: '',
+              resources: ['${scope}/module:agent/acme.people/*'],
+              excluded,
+            },
+          ],
+        },
+      ],
+    },
+  ];
+  const contextOf = (publishers: Publisher[], actions: string[] = ['module:UseAgent']) => ({
+    catalogs: grantableCatalogs(publishers),
+    actions,
+    grantable: grantablePatterns(publishers, actions),
+    modules: ['acme.people'],
+    scope: WS,
+  });
+
+  it('never suggests a wildcard their Deny takes part of back', () => {
+    const context = contextOf(allButSecret(['${scope}/module:agent/acme.people/secret*']));
+    for (const typed of ['', '${scope}/', '${scope}/module:agent/', '${scope}/module:agent/acme.people/']) {
+      const values = suggestResources(typed, context).map((s) => s.value);
+      expect(values.filter((v) => v.endsWith('*'))).toEqual([]);
+    }
+    // A Deny elsewhere takes nothing back from it.
+    const other = contextOf(allButSecret(['${scope}/module:agent/acme.other/secret']));
+    expect(suggestResources('${scope}/module:agent/acme.people/', other).map((s) => s.value)).toEqual([
+      '${scope}/module:agent/acme.people/*',
+    ]);
+  });
+
+  it('compares a name written absolutely under the scope as it compares ${scope}/', () => {
+    const typed = `${WS}/module:agent/acme.people/`;
+    const other = contextOf(allButSecret(['${scope}/module:agent/acme.other/secret']));
+    expect(suggestResources(typed, other).map((s) => s.value)).toContain(`${typed}*`);
+    const denied = contextOf(allButSecret(['${scope}/module:agent/acme.people/secret*']));
+    expect(suggestResources(typed, denied).map((s) => s.value)).not.toContain(`${typed}*`);
+    // Under another workspace, nothing they may grant covers it.
+    const elsewhere = `${WS.replace('ws-1', 'ws-2')}/module:agent/acme.people/`;
+    expect(suggestResources(elsewhere, other).map((s) => s.value)).not.toContain(`${elsewhere}*`);
+  });
+
+  it('suggests a wildcard only when they may grant every chosen action on it', () => {
+    const both: Publisher[] = [
+      ...allButSecret([]),
+      {
+        id: 'engine',
+        kind: 'engine',
+        types: [publishedType('iam', 'policy', [['iam:CreatePolicy', ['${scope}/iam:policy/*']]])],
+      },
+    ];
+    const one = contextOf(both, ['module:UseAgent']);
+    expect(suggestResources('${scope}/module:agent/acme.people/', one).map((s) => s.value)).toContain(
+      '${scope}/module:agent/acme.people/*',
+    );
+    const two = contextOf(both, ['module:UseAgent', 'iam:CreatePolicy']);
+    expect(suggestResources('${scope}/module:agent/acme.people/', two).map((s) => s.value)).not.toContain(
+      '${scope}/module:agent/acme.people/*',
+    );
+  });
 });

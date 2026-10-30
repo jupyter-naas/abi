@@ -343,6 +343,16 @@ describe('PolicyEditor Statements view listing', () => {
     expect(suggestions()).not.toContain('${scope}/triple_store:graph/secret');
   });
 
+  it('suggests no wildcard their Deny takes part of back, written at the scope or absolutely', async () => {
+    await typed('${scope}/triple_store:graph/');
+    expect(suggestions()).not.toContain('${scope}/triple_store:graph/*');
+    await mounted!.unmount();
+    mounted = null;
+    await typed(`${WS}/triple_store:graph/`);
+    expect(suggestions()).toContain(`${WS}/triple_store:graph/sales`);
+    expect(suggestions()).not.toContain(`${WS}/triple_store:graph/*`);
+  });
+
   it('suggests a listed id only where it is named, not under any base typed', async () => {
     await typed('abi:triple_store:graph/');
     expect(suggestions().filter((s) => s?.endsWith('/sales'))).toEqual([]);

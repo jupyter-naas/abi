@@ -13,6 +13,7 @@
  * ids `GET /resources` lists; never every catalog.
  */
 import type { Catalog, Effect, Level, PolicyDocument, PolicyStatement, Publisher } from '@/lib/iam-admin/types';
+import { grantsOn, scopedName, type ActionGrant } from './builder/builder-model';
 
 export const POLICY_VERSION = '2026-10-13';
 
@@ -60,18 +61,24 @@ export function grantableCatalogs(publishers: Publisher[]): Catalog[] {
   return [...byService.values()];
 }
 
-/** The resource patterns the caller may grant ``actions`` on (each action's, every one when none
- *  is chosen yet): the first resources to suggest. */
-export function grantablePatterns(publishers: Publisher[], actions: string[]): string[] {
-  const found = new Set<string>();
+/** What the caller may grant one action on (``ActionGrant``), for the suggestions. */
+export type Grantable = ActionGrant & { action: string };
+
+/** What the caller may grant each of ``actions`` on (every action, when none is chosen yet): the
+ *  patterns they may grant it on, the first resources to suggest, and what their Deny takes back. */
+export function grantablePatterns(publishers: Publisher[], actions: string[]): Grantable[] {
+  const byAction = new Map<string, Grantable>();
   for (const type of publishers.flatMap((p) => p.types)) {
     for (const action of type.actions) {
       if (actions.length === 0 || actions.some((pattern) => matchPattern(pattern, action.action))) {
-        for (const resource of action.resources) found.add(resource);
+        const found = byAction.get(action.action) ?? { action: action.action, resources: [], excluded: [] };
+        byAction.set(action.action, found);
+        for (const resource of action.resources) if (!found.resources.includes(resource)) found.resources.push(resource);
+        for (const resource of action.excluded) if (!found.excluded.includes(resource)) found.excluded.push(resource);
       }
     }
   }
-  return [...found];
+  return [...byAction.values()];
 }
 
 export type EditorStatement = {
@@ -272,8 +279,11 @@ export type ResourceContext = {
   variables?: string[];
   /** The statement's actions: they narrow the services and types suggested. */
   actions: string[];
-  /** The patterns the caller may grant those actions on (``grantablePatterns``). */
-  grantable?: string[];
+  /** What the caller may grant those actions on (``grantablePatterns``). */
+  grantable?: Grantable[];
+  /** Where the policy is written (`abi:` or a container): an absolute name typed under it is
+   *  compared with what the caller may grant as `${scope}/...`. */
+  scope?: string;
   /** The modules whose items the caller may grant (the `module` service's ids start with one). */
   modules?: string[];
   /** The listing of the step being typed (``typedStep`` says which). */
@@ -348,17 +358,25 @@ export function suggestResources(
   const catalogs = context.catalogs;
   const variables = context.variables ?? POLICY_VARIABLES;
   const chosen = typesOfActions(context.actions, catalogs);
+  const grants = context.grantable;
+  // A whole pattern is suggested only when the caller may grant every chosen action on it (any
+  // one, none chosen yet): a pattern they may grant covers it and their Deny takes back none of
+  // it, compared at the scope (none given, as in the simulator: any). IAM refuses at save what
+  // they may not.
+  const mayGrant = (resource: string) => {
+    if (grants === undefined) return true;
+    const name = context.scope ? scopedName(resource, context.scope) : resource;
+    return context.actions.length === 0
+      ? grants.some((grant) => grantsOn(grant, name))
+      : grants.length > 0 && grants.every((grant) => grantsOn(grant, name));
+  };
   // What the caller may grant the actions on, as patterns, first: whole suggestions.
   const granted = (typed: string): Suggestion[] =>
-    (context.grantable ?? [])
-      .filter((pattern) => pattern.toLowerCase().startsWith(typed.toLowerCase()) && pattern !== typed)
+    [...new Set((grants ?? []).flatMap((grant) => grant.resources))]
+      .filter((pattern) => pattern.toLowerCase().startsWith(typed.toLowerCase()) && pattern !== typed && mayGrant(pattern))
       .map((pattern) => ({ value: pattern, badge: 'grantable', detail: 'what you may grant it on' }));
   const offered = (catalog: Catalog) =>
     chosen.size === 0 || chosen.has(catalog.service) || catalog.resource_types.some((t) => t.container);
-  // A whole wildcard is suggested only when a pattern the caller may grant covers it (none
-  // given, as in the simulator: any); IAM refuses at save what it does not.
-  const mayGrant = (wildcard: string) =>
-    context.grantable === undefined || context.grantable.some((pattern) => matchPattern(pattern, wildcard));
 
   // First segment: `abi:`, or a variable such as `${scope}`.
   const prefix = text.startsWith('abi:') ? 'abi:' : text.startsWith(SCOPE_PREFIX) ? SCOPE_PREFIX : null;

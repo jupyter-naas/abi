@@ -132,12 +132,20 @@ export function belongsTo(type: BuilderType, resource: string): boolean {
   return !resource.slice(at + type.marker.length).includes(':');
 }
 
+/** What the caller may grant one action on, and what their Deny takes back of it. */
+export type ActionGrant = Pick<PublishedAction, 'resources' | 'excluded'>;
+
+/** Whether ``grant`` lets the caller grant its action on ``resource`` (a name or a wildcard,
+ *  written at the scope): a pattern of it covers ``resource`` whole, and no pattern their Deny
+ *  takes back names anything ``resource`` does. */
+export function grantsOn(grant: ActionGrant, resource: string): boolean {
+  return grant.resources.some((p) => globMatches(p, resource)) && !grant.excluded.some((d) => globsOverlap(d, resource));
+}
+
 /** Whether the caller may grant something of ``type`` on ``resource`` (written at the scope):
  *  a listed resource is offered only then, so a sub-policy lists only what its parent has. */
 export function grantableOn(type: Pick<BuilderType, 'actions'>, resource: string): boolean {
-  return type.actions.some(
-    (a) => a.resources.some((p) => globMatches(p, resource)) && !a.excluded.some((d) => globMatches(d, resource)),
-  );
+  return type.actions.some((a) => grantsOn(a, resource));
 }
 
 /** Why a wildcard typed after `${scope}/` is not one of ``type``'s, or null. */
@@ -256,6 +264,26 @@ export function globMatches(pattern: string, value: string): boolean {
     .map((char) => (char === '*' ? '.*' : char === '?' ? '.' : char.replace(/[.+^${}()|[\]\\]/g, '\\$&')))
     .join('');
   return new RegExp(`^${regex}$`, 's').test(value);
+}
+
+/** Whether some name matches both patterns (`*` any run, `?` one character): a Deny pattern takes
+ *  something back from a wildcard exactly then. */
+export function globsOverlap(a: string, b: string): boolean {
+  const seen = new Map<number, boolean>();
+  const meet = (i: number, j: number): boolean => {
+    const key = i * (b.length + 1) + j;
+    const known = seen.get(key);
+    if (known !== undefined) return known;
+    let found: boolean;
+    if (i === a.length && j === b.length) found = true;
+    else if (a[i] === '*') found = meet(i + 1, j) || (j < b.length && meet(i, j + 1));
+    else if (b[j] === '*') found = meet(i, j + 1) || (i < a.length && meet(i + 1, j));
+    else if (i === a.length || j === b.length) found = false;
+    else found = (a[i] === '?' || b[j] === '?' || a[i] === b[j]) && meet(i + 1, j + 1);
+    seen.set(key, found);
+    return found;
+  };
+  return meet(0, 0);
 }
 
 const REFUSAL = /allows (\S+) on (\S+?)(?: at (\S+))?, and /;

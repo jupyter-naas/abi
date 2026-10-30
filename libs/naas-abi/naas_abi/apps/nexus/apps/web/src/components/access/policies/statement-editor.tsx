@@ -260,6 +260,7 @@ export function StatementEditor({
                     catalogs: catalogList,
                     actions: statement.actions,
                     grantable: grantablePatterns(publishers ?? [], statement.actions),
+                    scope,
                     modules,
                     listed,
                   })

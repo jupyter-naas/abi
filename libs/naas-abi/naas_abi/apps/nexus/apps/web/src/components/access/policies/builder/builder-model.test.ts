@@ -8,6 +8,8 @@ import {
   builderPublishers,
   builderStatements,
   globMatches,
+  globsOverlap,
+  grantsOn,
   refusedTypes,
   scopedName,
   splitStatements,
@@ -230,6 +232,26 @@ describe('patterns', () => {
     expect(globMatches('${scope}/module:agent/*', '${scope}/module:agent/acme.people/Recruiter')).toBe(true);
     expect(globMatches('${scope}/module:agent/acme.?eople/*', '${scope}/module:agent/acme.people/Coach')).toBe(true);
     expect(globMatches('${scope}/module:app/*', '${scope}/module:agent/acme.people/Coach')).toBe(false);
+  });
+
+  it('tells whether two patterns name something in common', () => {
+    expect(globsOverlap('${scope}/module:agent/m/secret*', '${scope}/module:agent/m/*')).toBe(true);
+    expect(globsOverlap('${scope}/module:agent/m/*', '${scope}/module:agent/m/secret*')).toBe(true);
+    expect(globsOverlap('${scope}/module:agent/m/secret*', '${scope}/module:agent/n/*')).toBe(false);
+    expect(globsOverlap('${scope}/*/triple_store:graph/a', '${scope}/nexus:workspace/*')).toBe(true);
+    expect(globsOverlap('a?c', 'abc')).toBe(true);
+    expect(globsOverlap('a?c', 'ac')).toBe(false);
+    expect(globsOverlap('*x', 'y*')).toBe(true);
+    expect(globsOverlap('x*', 'y*')).toBe(false);
+  });
+
+  it('grants a wildcard only where no Deny takes part of it back', () => {
+    const grant = { resources: ['${scope}/module:agent/m/*'], excluded: ['${scope}/module:agent/m/secret*'] };
+    expect(grantsOn(grant, '${scope}/module:agent/m/public')).toBe(true);
+    expect(grantsOn(grant, '${scope}/module:agent/m/secret-1')).toBe(false);
+    expect(grantsOn(grant, '${scope}/module:agent/m/*')).toBe(false);
+    expect(grantsOn(grant, '${scope}/module:agent/m/pub*')).toBe(true);
+    expect(grantsOn(grant, '${scope}/module:agent/*')).toBe(false);
   });
 
   it('reads a pattern written at a scope where it is attached', () => {
