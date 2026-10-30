@@ -1,11 +1,13 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import localFont from 'next/font/local';
 import Script from 'next/script';
 import { AnalyticsPageTracker } from '@/components/analytics-page-tracker';
 import { AuthSessionManager } from '@/components/auth-session-manager';
+import { ServiceWorkerRegister } from '@/components/pwa/service-worker-register';
 import { ThemeProvider } from '@/components/theme-provider';
 import { TenantProvider } from '@/contexts/tenant-context';
 import { WebSocketProvider } from '@/contexts/websocket-context';
+import { DEFAULT_OG_IMAGE, fetchTenantBranding, siteUrlFromEnv } from '@/lib/tenant-branding';
 import './globals.css';
 
 const inter = localFont({
@@ -22,63 +24,39 @@ const jetbrainsMono = localFont({
   weight: '100 800',
 });
 
-const DEFAULT_TITLE = 'ABI Nexus | naas.ai';
-const DEFAULT_DESCRIPTION =
-  'The coordination platform where AI agents, knowledge, and humans connect into actionable intelligence.';
-const DEFAULT_OG_IMAGE = '/abi-logo-rounded.png';
-
-async function fetchTenantBranding(): Promise<{
-  title: string;
-  description: string | null;
-  ogImageUrl: string | null;
-  faviconUrl: string | null;
-}> {
-  const apiBase =
-    process.env.NEXUS_INTERNAL_API_URL ||
-    process.env.NEXUS_API_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    'http://localhost:9879';
-
-  try {
-    const res = await fetch(`${apiBase}/api/tenant`, { next: { revalidate: 60 } });
-    if (!res.ok) {
-      return { title: DEFAULT_TITLE, description: null, ogImageUrl: null, faviconUrl: null };
-    }
-    const data = await res.json();
-    return {
-      title: (data.og_title ?? data.tab_title ?? DEFAULT_TITLE) as string,
-      description: (data.og_description ?? null) as string | null,
-      ogImageUrl: (data.og_image_url ?? null) as string | null,
-      faviconUrl: (data.favicon_url ?? null) as string | null,
-    };
-  } catch {
-    return { title: DEFAULT_TITLE, description: null, ogImageUrl: null, faviconUrl: null };
-  }
-}
-
 export async function generateMetadata(): Promise<Metadata> {
-  const metadataBase = new URL(
-    process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3042'
-  );
+  const metadataBase = new URL(siteUrlFromEnv());
 
-  const { title, description, ogImageUrl, faviconUrl } = await fetchTenantBranding();
-  const resolvedDescription = description ?? DEFAULT_DESCRIPTION;
+  const branding = await fetchTenantBranding();
+  const { title, description, ogImageUrl, faviconUrl, shortName } = {
+    title: branding.title,
+    description: branding.description,
+    ogImageUrl: branding.ogImageUrl,
+    faviconUrl: branding.faviconUrl,
+    shortName: branding.shortName,
+  };
   const ogImage = ogImageUrl || DEFAULT_OG_IMAGE;
   const iconUrl = faviconUrl || '/favicon.ico';
 
   return {
     metadataBase,
     title,
-    description: resolvedDescription,
+    description,
+    applicationName: shortName,
+    appleWebApp: {
+      capable: true,
+      title: shortName,
+      statusBarStyle: 'black-translucent',
+    },
     openGraph: {
       title,
-      description: resolvedDescription,
+      description,
       images: [{ url: ogImage }],
     },
     twitter: {
       card: 'summary_large_image',
       title,
-      description: resolvedDescription,
+      description,
       images: [ogImage],
     },
     icons: {
@@ -86,6 +64,16 @@ export async function generateMetadata(): Promise<Metadata> {
       shortcut: iconUrl,
       apple: iconUrl,
     },
+  };
+}
+
+export async function generateViewport(): Promise<Viewport> {
+  const branding = await fetchTenantBranding();
+  return {
+    themeColor: [
+      { media: '(prefers-color-scheme: light)', color: branding.themeColor },
+      { media: '(prefers-color-scheme: dark)', color: branding.themeColor },
+    ],
   };
 }
 
@@ -137,6 +125,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <TenantProvider>
+            <ServiceWorkerRegister />
             <AuthSessionManager />
             <WebSocketProvider>
               <AnalyticsPageTracker />
