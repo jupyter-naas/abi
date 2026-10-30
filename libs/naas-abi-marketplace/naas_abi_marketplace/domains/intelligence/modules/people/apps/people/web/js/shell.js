@@ -58,9 +58,11 @@ let importButton = null;
 
 function renderTopbar(state) {
   if (!importButton && linkedInImportEnabled(config)) importButton = linkedInImportButton(config);
-  topbarEndSlot().replaceChildren(
-    ...[state.topbarEnd, importButton].filter(Boolean),
-  );
+  // While a page loads, what the previous one put there stays: the page
+  // replaces it once loaded, so a switch does not blink out between pages.
+  if (!state.keepTopbarEnd) {
+    topbarEndSlot().replaceChildren(...[state.topbarEnd, importButton].filter(Boolean));
+  }
   if (!state.showTopbarSearch) {
     topbar.hidden = true;
     return;
@@ -106,8 +108,13 @@ async function render() {
   let state = {
     showTopbarSearch: !PAGES_WITHOUT_TOPBAR.has(route.pageId),
     query: route.params?.get("q") || "",
+    keepTopbarEnd: true,
   };
   renderTopbar(state);
+  // Measured now, not once the page has loaded: the page aligns with the
+  // search box from its first frame instead of jumping there from the left.
+  watchContentAlign();
+  delete state.keepTopbarEnd;
   try {
     state = (await mountPage(route.pageId, view, { config, ...route })) || state;
   } catch (error) {

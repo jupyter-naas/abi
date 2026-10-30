@@ -419,7 +419,7 @@ mark,
 .results {
   width: 100%;
   max-width: min(var(--content-width), calc(100vw - var(--content-inset-left, 24px) - 24px));
-  padding: 20px 24px 56px 0;
+  padding: 0 24px 56px 0;
   margin: 0;
   margin-left: var(--content-inset-left, 24px);
 }
@@ -899,8 +899,9 @@ a.page:hover {
   white-space: nowrap;
 }
 
-/* The Network tab while its network loads in the background. */
-.tab.is-loading::after {
+/* The Network option while its network loads in the background. */
+.tab.is-loading::after,
+.profile-view-option.is-loading::after {
   content: "";
   display: inline-block;
   width: 9px;
@@ -920,12 +921,39 @@ a.page:hover {
   }
 }
 
-/* The search's Network view: the same graph page, as wide as the window. */
+/* The results header (components/ResultsHeader.js): tabs, toggle and count,
+   held under the topbar while the list scrolls. */
+.results-header {
+  position: sticky;
+  top: var(--topbar-offset, 0px);
+  z-index: 15;
+  padding-top: 20px;
+  /* The page's own ground, so the header reads as part of it (and covers the
+     list scrolling under it). */
+  background: var(--page-surface, var(--paper));
+}
+
+.results-header .stats {
+  margin: 0;
+  padding-bottom: 10px;
+}
+
+/* A network view: the header stays put above, aligned with the search box;
+   the network takes the rest of the page, the whole width of the window. */
 .results.results-network {
-  width: auto;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
   max-width: none;
-  margin-right: var(--content-inset-left, 24px);
-  padding: 20px 0 24px;
+  height: calc(100dvh - var(--topbar-offset, 0px));
+  margin: 0;
+  padding: 0;
+}
+
+.results.results-network > .results-header {
+  flex: none;
+  padding-left: var(--content-inset-left, 24px);
+  padding-right: var(--content-inset-left, 24px);
 }
 
 .search-graph {
@@ -933,6 +961,18 @@ a.page:hover {
   margin-top: 12px;
   border: none;
   background: transparent;
+}
+
+.results-network > .search-graph {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+}
+
+/* A network fills the window: nothing scrolls under it. */
+body:has(.results-network) .footer {
+  display: none;
 }
 
 .profile-graph.search-graph .graph-stage {
@@ -2509,4 +2549,13 @@ body.is-ontology-view main > .ontology-page {
 .result-connections.result-connections-cta {
   font-weight: 600;
   color: var(--accent);
+}
+
+/* The results' List / Network switch in the topbar: the profile's switch,
+   made of links. */
+a.profile-view-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
 }

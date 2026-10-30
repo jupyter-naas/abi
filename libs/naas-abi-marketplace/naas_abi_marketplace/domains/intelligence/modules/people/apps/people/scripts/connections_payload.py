@@ -28,15 +28,14 @@ from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.script
 from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.network_payload import (
     _props,
     _relation,
-    network_view_config,
+    free_network_view_config,
     organization_id,
-    search_root_id,
 )
 
 # The Connections network draws the person and this many of their connections,
 # most connected first: each brings an act of connection and an act of working,
 # so past that the canvas is a hairball.
-NETWORK_SIZE = 60
+NETWORK_SIZE = 40
 CONNECTION_CLASS = "linkedin:ActOfConnection"
 
 
@@ -177,12 +176,18 @@ def _network_labels(everyone: list[dict[str, Any]]) -> dict[str, str]:
     return labels
 
 
+def _short(text: str, limit: int = 28) -> str:
+    text = " ".join(str(text).split())
+    return text if len(text) <= limit else f"{text[: limit - 1]}…"
+
+
 def _connection_act(
     act_id: str, first: str, second: str, connected_on: str | None
 ) -> dict[str, Any]:
-    return _entity_node(
+    node = _entity_node(
         act_id,
-        label=f"Connection {connected_on}" if connected_on else "Connection",
+        # Drawn small: the year is enough, the date is in its properties.
+        label=f"since {connected_on[:4]}" if connected_on else "connected",
         class_uri=CONNECTION_CLASS,
         class_label="Act of Connection",
         bfo_bucket="Process",
@@ -193,16 +198,18 @@ def _connection_act(
             ("abi:instant_date", "connected on", connected_on),
         ),
     )
+    node["compact"] = True
+    return node
 
 
 def _working_act(act_id: str, worker: str, position: dict[str, Any]) -> dict[str, Any]:
-    title = position.get("title") or "Act of Working"
     organization = position.get("organization")
     start = position.get("start_date")
     end = position.get("end_date")
-    return _entity_node(
+    node = _entity_node(
         act_id,
-        label=f"{title} @ {organization}" if organization else title,
+        # Drawn small beside its organization's node: the title is enough.
+        label=_short(position.get("title") or "works at"),
         class_uri="abi:ActOfWorking",
         class_label="Act of Working",
         bfo_bucket="Process",
@@ -217,6 +224,8 @@ def _working_act(act_id: str, worker: str, position: dict[str, Any]) -> dict[str
             ("abi:hasLastInstant", "end", str(end)[:10] if end else None),
         ),
     )
+    node["compact"] = True
+    return node
 
 
 def _draw(
@@ -232,8 +241,12 @@ def _draw(
         [{"personLabel": labels[item["slug"]]} for item in everyone]
     )
     slugs = {label: slug for slug, label in labels.items()}
+    photos = {item["slug"]: item.get("photo_url") for item in everyone}
     for drawn in payload["people"]:
         drawn["slug"] = slugs.get(drawn["id"])
+        # Their portrait fills the node when there is one.
+        if photos.get(drawn["slug"]):
+            drawn["image"] = photos[drawn["slug"]]
 
     entities: dict[str, dict[str, Any]] = {}
     relations: list[dict[str, Any]] = []
@@ -310,14 +323,16 @@ def _draw(
     return data, labels
 
 
-def _view_config(config: dict[str, Any]) -> dict[str, Any]:
-    view_config = network_view_config(config)
-    view_config["graph"].update(
-        default_distance=4,
-        max_distance=4,
-        params_session_key="people-connections-graph-params-v2",
+def _view_config(
+    config: dict[str, Any], *, distance: int = 4, distance_filter: bool = True
+) -> dict[str, Any]:
+    """The People network's style (``free_network_view_config``)."""
+    return free_network_view_config(
+        config,
+        session_key="people-connections-graph-params-v6",
+        distance=distance,
+        distance_filter=distance_filter,
     )
-    return view_config
 
 
 def connections_network(
@@ -347,8 +362,7 @@ MOST_CONNECTED_SIZE = 40
 def most_connected_network(
     store: PeopleStore, config: dict[str, Any], *, query: str = "", facet: str = ""
 ) -> dict[str, Any]:
-    """The graph page payload of the search's most connected people (``_draw``),
-    gathered under the act of searching that found them."""
+    """The graph page payload of the search's most connected people (``_draw``)."""
     from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts import (
         search_payload,
     )
@@ -360,37 +374,12 @@ def most_connected_network(
     positions = _current_position(store, config, [hit["slug"] for hit in people])
     everyone = [_connection(hit, positions.get(hit["slug"]), None) for hit in people]
     data, labels = _draw(store, config, everyone)
-    root = search_root_id(query)
-    data["entities"].insert(
-        0,
-        _entity_node(
-            root,
-            label=f"Most connected: {query.strip()}"
-            if query.strip()
-            else "Most connected",
-            class_uri="abi:ActOfSearching",
-            class_label="Act of Searching",
-            bfo_bucket="Process",
-            properties=_props(
-                ("abi:query_text", "query", query.strip() or "(everyone)"),
-                ("abi:result_count", "people with connections", str(found["total"])),
-                ("abi:result_shown", "people drawn", str(len(everyone))),
-            ),
-        ),
-    )
-    for item in everyone:
-        data["relations"].append(
-            _relation(
-                root,
-                labels[item["slug"]],
-                "abi:hasSearchResult",
-                "has search result",
-            )
-        )
     return {
         "total": found["total"],
         "shown": len(everyone),
-        "root": root,
+        # No hub: the network starts from the most connected person.
+        "root": labels[everyone[0]["slug"]] if everyone else "",
         "data": data,
-        "config": _view_config(config),
+        # Everyone drawn, tied to that person or not.
+        "config": _view_config(config, distance_filter=False),
     }

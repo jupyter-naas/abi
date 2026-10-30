@@ -296,18 +296,22 @@ def test_colleagues_meet_at_their_organization_through_their_acts_of_working(
     assert not _relations(view, "abi:worksFor")
 
 
-def test_the_most_connected_network_ties_them_under_the_search(store, config) -> None:
+def test_the_most_connected_network_has_no_hub_and_draws_everyone(
+    store, config
+) -> None:
     view = cp.most_connected_network(store, config)
     drawn = {person["slug"] for person in view["data"]["people"]}
     # Only people with connections, most connected first.
     assert "alice_dupont" in drawn and "emma_petit" not in drawn
     assert view["shown"] == len(drawn) == view["total"]
-    results = {
-        relation["to"]
-        for relation in _relations(view, "abi:hasSearchResult")
-        if relation["from"] == view["root"]
-    }
-    assert len(results) == len(drawn)
+    # It starts from the most connected person; nothing gathers them.
+    assert view["root"] == "Alice Dupont"
+    assert not _entities(view, "abi:ActOfSearching")
+    graph = view["config"]["graph"]
+    assert graph["distance_filter"] is False
+    assert graph["layout"] == "free" and not graph["ring_cluster_class"]
+    defaults = graph["view_defaults"]["2d"]
+    assert defaults["physics"] is True and defaults["clusterBy"] == "none"
     # Jane is connected to Alice and to Carol: two acts, both drawn.
     jane = [
         act
@@ -315,3 +319,25 @@ def test_the_most_connected_network_ties_them_under_the_search(store, config) ->
         if "Jane Doe" in str(act["properties"])
     ]
     assert len(jane) == 2
+
+
+def test_people_are_drawn_with_their_portrait_and_acts_as_small_nodes(
+    store, config
+) -> None:
+    view = cp.connections_network(store, config, slug="alice_dupont")
+    bob = next(p for p in view["data"]["people"] if p["slug"] == "bob_martin")
+    photo = cp._people(store, config, ["bob_martin"])["bob_martin"]["photo_url"]
+    assert photo and bob["image"] == photo
+    acts = [
+        entity
+        for entity in view["data"]["entities"]
+        if entity["classUri"] in (cp.CONNECTION_CLASS, "abi:ActOfWorking")
+    ]
+    assert acts and all(act["compact"] for act in acts)
+    jane = next(
+        act
+        for act in _entities(view, cp.CONNECTION_CLASS).values()
+        if "Jane Doe" in str(act["properties"])
+    )
+    assert jane["label"] == "since 2025"
+    assert view["config"]["graph"]["edge_labels"] is False

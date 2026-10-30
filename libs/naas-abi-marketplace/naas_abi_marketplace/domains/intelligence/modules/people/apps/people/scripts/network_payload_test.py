@@ -101,13 +101,27 @@ def test_the_act_of_searching_is_the_centre(setup) -> None:
     assert view["config"]["graph"] and view["config"]["theme"]["bfo_buckets"]
 
 
-def test_the_view_opens_in_rings_without_filters_or_time() -> None:
+def test_the_view_has_no_filters_or_time() -> None:
     graph = network_view_config(load_config())["graph"]
-    assert graph["layout"] == "rings"
-    assert graph["ring_cluster_class"] == "Organization"
     assert graph["temporal_filter"] is False
     assert graph["default_distance"] == graph["max_distance"] == 4
     assert all(not graph["view_defaults"][view]["filters"] for view in ("2d", "3d"))
+
+
+def test_the_search_network_is_drawn_as_the_connections_network(setup) -> None:
+    view = network(*setup, query="Nexus")
+    graph = view["config"]["graph"]
+    assert graph["layout"] == "free" and not graph["ring_cluster_class"]
+    assert graph["edge_labels"] is False
+    assert graph["view_defaults"]["2d"]["physics"] is True
+    assert graph["view_defaults"]["2d"]["clusterBy"] == "none"
+    small = [
+        entity
+        for entity in view["data"]["entities"]
+        if entity["classUri"] in ("abi:SearchMatch", "abi:ActOfWorking")
+    ]
+    assert small and all(entity["compact"] for entity in small)
+    assert all(len(entity["label"]) <= 28 for entity in small)
 
 
 def test_a_match_leads_through_what_matched_to_the_person(setup) -> None:

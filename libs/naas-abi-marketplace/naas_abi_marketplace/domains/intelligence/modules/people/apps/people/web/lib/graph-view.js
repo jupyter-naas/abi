@@ -23,7 +23,7 @@ export async function mountGraphView(host, loadView, options = {}) {
   ensureGraphStylesheet();
   const [view, graphModule] = await Promise.all([
     loadView(),
-    import(`${API_BASE}/graph-page/GraphPage.js`),
+    import(`${API_BASE}/graph-page/GraphPage.js?v=4`),
   ]);
   if (!host.isConnected) return () => {};
   graphModule.configureGraph(view.config);

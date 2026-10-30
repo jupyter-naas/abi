@@ -9,14 +9,8 @@ import { avatarHtml, escapeHtml, flagHtml, highlight, ICONS, orgLogoHtml } from 
 import { profileHref, searchHref } from "../../../lib/routes.js";
 import { apiUrl } from "../../../lib/config.js";
 import { mountGraphView } from "../../../lib/graph-view.js";
-import {
-  connectionsLabel,
-  DISPLAYS,
-  personOfQuery,
-  resultsState,
-  TABS,
-} from "../../../lib/results-state.js";
-import { overflowTabs } from "../../../lib/tab-overflow.js";
+import { connectionsLabel, personOfQuery, resultsState, TABS } from "../../../lib/results-state.js";
+import { displaySwitch, resultsHeaderHtml, wireResultsHeader } from "../../ResultsHeader.js";
 
 function resultHtml(config, hit, tokens, query, facet = "", display = "", { connectionsCta = false } = {}) {
   const place = [hit.organization, ...(hit.place || [])].filter(Boolean);
@@ -101,9 +95,9 @@ function loadNetwork(query, facet) {
   return networkRequests.get(key);
 }
 
-/** Mark the Network toggle as loading until the search's network has arrived. */
-function prefetchNetwork(host, query, facet) {
-  const tab = host.querySelector('.view-toggle [data-display="network"]');
+/** Mark the topbar's Network option as loading until the search's network has arrived. */
+function prefetchNetwork(displaySwitchEl, query, facet) {
+  const tab = displaySwitchEl?.querySelector('[data-display="network"]');
   tab?.classList.add("is-loading");
   loadNetwork(query, facet)
     .catch(() => {})
@@ -112,34 +106,6 @@ function prefetchNetwork(host, query, facet) {
 
 export function viewOf(value) {
   return VIEWS.some((item) => item.id === value) ? value : "";
-}
-
-/**
- * The tabs, and in their top right corner the list/network toggle. Every link
- * keeps the search, the facet and the person: switching tab or display never
- * loses what was asked.
- */
-function tabsHtml(config, { query, facet, view, display = "", person = "" }) {
-  const tabs = TABS.map(
-    (item) => `<a class="tab" data-view="${item.id || "people"}" href="${searchHref(config, {
-      query,
-      facet,
-      view: item.id,
-      display,
-      person,
-    })}"
-      aria-current="${item.id === view}">${escapeHtml(item.label)}</a>`,
-  ).join("");
-  const toggle = DISPLAYS.map(
-    (item) => `<a class="view-toggle-option" data-display="${item.id || "list"}" href="${searchHref(
-      config,
-      { query, facet, view, display: item.id, person },
-    )}" aria-pressed="${item.id === display}">${escapeHtml(item.label)}</a>`,
-  ).join("");
-  return `<div class="tabbar">
-    <nav class="tabs" aria-label="View">${tabs}</nav>
-    <div class="view-toggle" role="group" aria-label="Display">${toggle}</div>
-  </div>`;
 }
 
 function bodyHtml(config, results, tokens, query, facet, display) {
@@ -268,12 +234,10 @@ function networkStatsText(network, query) {
 async function mountNetwork(host, { config, query, facet }) {
   host.innerHTML = `
     <div class="results results-network">
-      ${tabsHtml(config, { query, facet, view: "", display: "network" })}
-      <p class="stats">Drawing the network…</p>
+      ${resultsHeaderHtml(config, { query, facet, view: "", display: "network" }, "Drawing the network…")}
       <div class="profile-graph search-graph"></div>
     </div>`;
-  const tabs = host.querySelector(".tabs");
-  if (tabs) overflowTabs(tabs);
+  wireResultsHeader(host);
   const stats = host.querySelector(".stats");
   const graphEl = host.querySelector(".search-graph");
   try {
@@ -285,6 +249,7 @@ async function mountNetwork(host, { config, query, facet }) {
         if (!network.total) throw Object.assign(new Error("empty"), { empty: true });
         for (const person of network.data.people || []) {
           if (person.slug) person.href = profileHref(config, person.slug, { query });
+          if (person.image) person.image = apiUrl(person.image);
         }
         for (const entity of network.data.entities || []) {
           // Served under this app's API: the same path the People list uses.
@@ -300,11 +265,6 @@ async function mountNetwork(host, { config, query, facet }) {
     graphEl.outerHTML = error.empty ? emptyHtml(config, query) : errorHtml(error);
     return null;
   }
-}
-
-function tidyTabs(host) {
-  const tabs = host.querySelector(".tabs");
-  if (tabs) overflowTabs(tabs);
 }
 
 function connectionHtml(config, item, query) {
@@ -412,6 +372,7 @@ async function mountMostConnectedNetwork(config, state, stats, body) {
           : "";
         if (!network.total) throw Object.assign(new Error("empty"), { empty: true });
         for (const person of network.data.people || []) {
+          if (person.image) person.image = apiUrl(person.image);
           if (person.slug) {
             person.href = searchHref(config, {
               query,
@@ -427,7 +388,6 @@ async function mountMostConnectedNetwork(config, state, stats, body) {
         }
         return network;
       },
-      { distance: 4 },
     );
   } catch (error) {
     if (!body.isConnected) return null;
@@ -442,11 +402,10 @@ async function mountConnections(host, { config, state }) {
   const { query, facet, display } = state;
   host.innerHTML = `
     <div class="results${display === "network" ? " results-network" : ""}">
-      ${tabsHtml(config, { ...state, view: "connections" })}
-      <p class="stats">Finding connections…</p>
+      ${resultsHeaderHtml(config, { ...state, view: "connections" }, "Finding connections…")}
       <div class="connections-body"></div>
     </div>`;
-  tidyTabs(host);
+  wireResultsHeader(host);
   const stats = host.querySelector(".stats");
   const body = host.querySelector(".connections-body");
   let slug = "";
@@ -482,13 +441,13 @@ async function mountConnections(host, { config, state }) {
           if (!network.total) throw Object.assign(new Error("empty"), { person: network.person });
           for (const person of network.data.people || []) {
             if (person.slug) person.href = profileHref(config, person.slug, { query });
+            if (person.image) person.image = apiUrl(person.image);
           }
           for (const entity of network.data.entities || []) {
             if (entity.image) entity.image = apiUrl(entity.image);
           }
           return network;
         },
-        { distance: 2 },
       );
     } catch (error) {
       if (!body.isConnected) return null;
@@ -514,15 +473,17 @@ export async function mountResults(host, { config, params }) {
   const state = resultsState(params, config.app?.default_results_view ?? "");
   const { query, facet, view, display } = state;
   const requestedPage = state.page;
+  // List / Network, in the topbar beside the search box (as Resume / Graph on a profile).
+  const topbarEnd = displaySwitch(config, state);
 
   if (view === "connections") {
     const dispose = await mountConnections(host, { config, state });
-    return { showTopbarSearch: true, query, teardown: dispose || undefined };
+    return { showTopbarSearch: true, query, topbarEnd, teardown: dispose || undefined };
   }
 
   if (display === "network") {
     const dispose = await mountNetwork(host, { config, query, facet });
-    return { showTopbarSearch: true, query, teardown: dispose || undefined };
+    return { showTopbarSearch: true, query, topbarEnd, teardown: dispose || undefined };
   }
 
   host.innerHTML = `<div class="results"><p class="stats">Searching…</p></div>`;
@@ -531,7 +492,7 @@ export async function mountResults(host, { config, params }) {
     payload = await fetchSearch({ query, facet, page: requestedPage });
   } catch (error) {
     host.innerHTML = `<div class="results">${errorHtml(error)}</div>`;
-    return { showTopbarSearch: true, query };
+    return { showTopbarSearch: true, query, topbarEnd };
   }
 
   const tokens = payload.tokens || [];
@@ -543,17 +504,20 @@ export async function mountResults(host, { config, params }) {
 
   host.innerHTML = `
     <div class="results">
-      ${tabsHtml(config, { query, facet: payload.facet, view, display })}
-      <p class="stats">${statsText(payload)}${
-        query ? ` for “${escapeHtml(query)}”` : ""
-      }${payload.facet ? ` in ${escapeHtml(payload.facet)}` : ""}</p>
+      ${resultsHeaderHtml(
+        config,
+        { query, facet: payload.facet, view, display },
+        `${statsText(payload)}${query ? ` for “${escapeHtml(query)}”` : ""}${
+          payload.facet ? ` in ${escapeHtml(payload.facet)}` : ""
+        }`,
+      )}
       ${noticeHtml}
       ${bodyHtml(config, results, tokens, query, payload.facet, display)}
       ${pagerHtml(config, payload, query, view)}
     </div>`;
-  tidyTabs(host);
+  wireResultsHeader(host);
   // Not awaited: the list is already on screen.
-  if (results.length) prefetchNetwork(host, query, payload.facet);
+  if (results.length) prefetchNetwork(topbarEnd, query, payload.facet);
 
-  return { showTopbarSearch: true, query };
+  return { showTopbarSearch: true, query, topbarEnd };
 }
