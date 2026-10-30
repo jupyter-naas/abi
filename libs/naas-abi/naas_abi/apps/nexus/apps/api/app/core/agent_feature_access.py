@@ -71,9 +71,7 @@ async def caller_usable_agents(
         return usable
     may = await authz.allowed_ids("UseAgent", user=user, workspace=workspace_id, ids=built)
     return [
-        agent
-        for agent in usable
-        if scope_of(agent) is not None or getattr(agent, "id", "") in may
+        agent for agent in usable if scope_of(agent) is not None or getattr(agent, "id", "") in may
     ]
 
 

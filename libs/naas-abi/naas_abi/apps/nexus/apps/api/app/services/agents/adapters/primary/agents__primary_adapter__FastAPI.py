@@ -34,10 +34,8 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.remote.port import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.agents.scopes import (
     agent_class_label,
-    agent_scope,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
-from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares
 from naas_abi.apps.nexus.apps.api.app.services.registry import (
     ServiceRegistry,
@@ -929,7 +927,9 @@ async def _enriched_workspace_agents(
 
     return [
         _enrich_agent(agent, class_name_to_agent_class)
-        for agent in await _visible_to_caller(await served_agents(agent_list), current_user, workspace_id)
+        for agent in await _visible_to_caller(
+            await served_agents(agent_list), current_user, workspace_id
+        )
     ]
 
 

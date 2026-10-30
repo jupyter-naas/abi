@@ -293,7 +293,9 @@ def test_a_type_lists_only_patterns_that_name_its_resources(listed):
 
 
 def test_the_modules_are_read_only_for_a_caller_iam_answers_and_through_the_cache(
-    listed, audit, monkeypatch
+    listed,
+    audit,  # noqa: F811 - an imported pytest fixture
+    monkeypatch,
 ):
     """A refused request reads no module (no NATS round trip before any
     authorization); the module types come through the listers' cache, one read

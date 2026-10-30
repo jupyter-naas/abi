@@ -150,7 +150,15 @@ def test_scopes():
     assert validate_scope(below(ORG)) == ORG + "/*"
     assert is_below(ORG + "/*") and not is_below(ORG)
     assert container_of_scope(ORG + "/*") == ORG
-    for bad in ("abi:-:-", "abi:org-1:*", "abi:*", "abi:*:*", ORG + "/x", "abi:/*", ORG + "/*/*"):
+    for bad in (
+        "abi:-:-",
+        "abi:org-1:*",
+        "abi:*",
+        "abi:*:*",
+        ORG + "/x",
+        "abi:/*",
+        ORG + "/*/*",
+    ):
         with pytest.raises(ValueError):
             validate_scope(bad)
     assert validate_owner_scope(WS) == WS
