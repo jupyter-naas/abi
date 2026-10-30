@@ -9,6 +9,7 @@ from naas_abi_core.services.iam.adapters.secondary.IAMStorePostgreSQL import (
 )
 from naas_abi_core.services.iam.tests.iam__secondary_adapter__generic_test import (
     IAMStoreContract,
+    run_a_container_registered_meanwhile_by_another_process,
     user,
 )
 
@@ -245,3 +246,14 @@ def test_writes_wait_for_each_other_on_the_state_row(schema):
         store.update_policy(replace(child, parent_id=parent.id), 1)
     store.close()
     engine.dispose()
+
+
+@pytest.mark.integration
+def test_a_container_registered_meanwhile_by_another_process(schema):
+    dsn, name = schema
+    store, other = IAMStorePostgreSQL(dsn, name), IAMStorePostgreSQL(dsn, name)
+    try:
+        run_a_container_registered_meanwhile_by_another_process(store, other)
+    finally:
+        store.close()
+        other.close()

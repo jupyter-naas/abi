@@ -5,6 +5,7 @@ from naas_abi_core.services.iam.adapters.secondary.IAMStoreSQLite import IAMStor
 from naas_abi_core.services.iam.IAMPorts import new_id
 from naas_abi_core.services.iam.tests.iam__secondary_adapter__generic_test import (
     IAMStoreContract,
+    run_a_container_registered_meanwhile_by_another_process,
     user,
 )
 
@@ -178,3 +179,13 @@ def test_a_catalog_stored_before_the_format_reads_as_format_one(tmp_path):
         )
     (found,) = IAMStoreSQLite(path).list_catalogs()
     assert found.format == 1 and not found.flags_known
+
+
+def test_a_container_registered_meanwhile_by_another_process(tmp_path):
+    path = str(tmp_path / "iam.sqlite")
+    store, other = IAMStoreSQLite(path), IAMStoreSQLite(path)
+    try:
+        run_a_container_registered_meanwhile_by_another_process(store, other)
+    finally:
+        store.close()
+        other.close()

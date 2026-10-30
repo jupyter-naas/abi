@@ -1402,15 +1402,25 @@ class IAMStoreSQL(IAMStore):
             & (containers.c.type == record.type)
             & (containers.c.id == record.id)
         )
-        with self._read() as conn:
-            row = conn.execute(select(containers).where(key)).first()
-        if row is not None:
+
+        def same(row: Any) -> None:
             if row.parent != record.parent:
                 raise IAMConflictError(
                     f"{record.service}:{record.type}/{record.id} is in {row.parent}"
                 )
+
+        with self._read() as conn:
+            row = conn.execute(select(containers).where(key)).first()
+        if row is not None:
+            same(row)
             return
         with self._change() as conn:
+            # Read again under the write lock: another process may have registered
+            # it since, and the same registration twice is no conflict.
+            row = conn.execute(select(containers).where(key)).first()
+            if row is not None:
+                same(row)
+                return
             conn.execute(
                 insert(containers).values(
                     service=record.service,

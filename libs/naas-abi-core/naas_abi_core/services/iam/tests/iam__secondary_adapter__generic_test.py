@@ -913,3 +913,42 @@ class _Rewriter(NameRewriter):
     def placement(self, placement: LegacyPlacement) -> str:
         self.seen.append(placement)
         return self._container(placement.scope)
+
+
+def run_a_container_registered_meanwhile_by_another_process(store, other) -> None:
+    """Two processes register one container at once: the second finds no row
+    when it reads, the first inserts it, then the second writes. Both succeed;
+    a different parent registered meanwhile is still a conflict. ``store`` and
+    ``other`` are SQL stores on one database (``_read`` is theirs)."""
+    from contextlib import contextmanager
+
+    ws = ContainerRecord("nexus", "workspace", "ws-1", ORG)
+    store.put_container(ContainerRecord("nexus", "organization", "org-1"))
+    read = store._read
+
+    def racing(meanwhile: ContainerRecord):
+        done: list[bool] = []
+
+        @contextmanager
+        def racing_read():
+            with read() as conn:
+                yield conn
+            if not done:
+                done.append(True)
+                other.put_container(meanwhile)
+
+        return racing_read
+
+    store._read = racing(ws)
+    try:
+        store.put_container(ws)
+    finally:
+        store._read = read
+    assert store.get_container("nexus", "workspace", "ws-1") == ws
+    moved = ContainerRecord("nexus", "workspace", "ws-2", ORG)
+    store._read = racing(ContainerRecord("nexus", "workspace", "ws-2"))
+    try:
+        with pytest.raises(IAMConflictError):
+            store.put_container(moved)
+    finally:
+        store._read = read
