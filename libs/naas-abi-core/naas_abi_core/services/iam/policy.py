@@ -186,8 +186,8 @@ def check_owned_document(document: PolicyDocument, owner: str) -> None:
     )
     raise PolicyValidationError(
         [
-            f"A policy of {owner} names only resources under ${{scope}}: "
-            f"{pattern!r} is not"
+            f"A policy of {owner} names only ${{scope}} and resources under "
+            f"${{scope}}/, and {pattern!r} is not"
             for pattern in outside
         ]
     )

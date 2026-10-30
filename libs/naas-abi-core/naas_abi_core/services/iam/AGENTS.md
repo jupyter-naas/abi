@@ -278,7 +278,12 @@ is registered ("Containers"). A policy owned by a container:
 - is attached only at its owner or at a container below it, always at a scope
   (`names.within_owner`): an organisation's at the organisation, below it or at any of its
   workspaces, a workspace's at that workspace or at a container inside it. No unscoped
-  attachment of it exists.
+  attachment of it exists. An owner or a scope of the grammar before container paths
+  (`abi:<org>:<ws>`, which only the start-up moves write until the names are rewritten)
+  follows the old rules (an organisation's `abi:<org>:-` at it, `abi:<org>:*` and its
+  workspaces; a workspace's at that workspace), and is never within a name of the other
+  grammar, nor is anything within `names.UNRESOLVED`: the moves' own mistakes are refused,
+  as anyone's.
 
 A refusal names the owner to whoever may read the policy or the group, and is "not
 found" for anyone else.

@@ -1891,7 +1891,7 @@ class IAMService(IIAMService, PolicySource):
             # Evaluation would ignore the rest at those scopes: say so instead.
             raise ValueError(
                 f"{policy_id} is attached at a scope: every Allow resource must "
-                "start with ${scope}:"
+                "be ${scope} or start with ${scope}/"
             )
         reparented = parent_id != current.parent_id
         changed = reparented or updated.document != current.document
@@ -2050,7 +2050,7 @@ class IAMService(IIAMService, PolicySource):
         below: Sequence[tuple[Policy, list[Policy]]],
     ) -> None:
         """A change that gives a policy, or one below it, a chain that denies
-        beyond ``${scope}:`` is that policy attached anew where it is attached
+        beyond ``${scope}/`` is that policy attached anew where it is attached
         or invited at a scope: only whoever may attach it unscoped there (the
         platform admin) makes it (``_require_attach``)."""
         for held, above in [(updated, []), *below]:
@@ -2113,7 +2113,7 @@ class IAMService(IIAMService, PolicySource):
 
     def _denies_beyond_scope(self, policy: Policy, *, fresh: bool = True) -> bool:
         """Whether a Deny of the policy or of its chain names anything outside
-        ``${scope}:``: it refuses beyond the scope it is attached at. Read from
+        ``${scope}/``: it refuses beyond the scope it is attached at. Read from
         the store (a write's check), or from the cache (a list's)."""
         chain, _whole = self._chain(policy, fresh=fresh)
         return denies_beyond_scope([policy.document, *(p.document for p in chain)])
@@ -2294,7 +2294,7 @@ class IAMService(IIAMService, PolicySource):
         """``iam:AttachPolicy`` on the attachment, for ``attach_policy``,
         ``create_pending_grant`` and ``bind_idp_group``.
 
-        A policy confined to ``${scope}:`` but not wholly within it (a Deny
+        A policy confined to ``${scope}/`` but not wholly within it (a Deny
         naming anything, which a scope does not narrow) is attached at a scope
         only by whoever may attach it unscoped, the platform admin: a scope's
         admin or owner could otherwise impose that Deny on anyone, in any org.
@@ -2318,14 +2318,14 @@ class IAMService(IIAMService, PolicySource):
 
     def _require_unscoped_attach(self, policy_id: str, principal_id: str) -> None:
         """``iam:AttachPolicy`` on the unscoped attachment: what attaching, at a
-        scope, a policy whose chain denies beyond ``${scope}:`` takes."""
+        scope, a policy whose chain denies beyond ``${scope}/`` takes."""
         unscoped = attachment_resource(policy_id, principal_id, None)
         if not self.authorize("iam:AttachPolicy", unscoped).allowed:
             raise PermissionDeniedError(
                 "iam:AttachPolicy",
                 unscoped,
                 message=(
-                    f"{policy_id} denies beyond ${{scope}}: only whoever may "
+                    f"{policy_id} denies beyond ${{scope}}, so only whoever may "
                     "attach it unscoped (the platform admin) attaches it at a scope"
                 ),
             )
@@ -2378,7 +2378,7 @@ class IAMService(IIAMService, PolicySource):
         if scope is not None and not policy.document.confined_to_scope:
             # A scope only fills ${scope}: anything else would reach past it.
             raise ValueError(
-                f"{policy.id} names resources outside ${{scope}}: "
+                f"{policy.id} names resources outside ${{scope}}, and "
                 "only a policy confined to its scope is attached at one"
             )
 

@@ -150,7 +150,7 @@ def test_scopes():
     assert validate_scope(below(ORG)) == ORG + "/*"
     assert is_below(ORG + "/*") and not is_below(ORG)
     assert container_of_scope(ORG + "/*") == ORG
-    for bad in ("abi:-:-", "abi:org-1:*", "abi:*", "abi:*:*", ORG + "/x", "abi:/*"):
+    for bad in ("abi:-:-", "abi:org-1:*", "abi:*", "abi:*:*", ORG + "/x", "abi:/*", ORG + "/*/*"):
         with pytest.raises(ValueError):
             validate_scope(bad)
     assert validate_owner_scope(WS) == WS
@@ -174,6 +174,27 @@ def test_within_and_owners():
     assert within_owner(PLATFORM, WS)
     assert owner_ancestors(PROJECT) == [WS, ORG, PLATFORM]
     assert owner_ancestors(PLATFORM) == []
+
+
+def test_within_an_owner_of_the_grammar_before_container_paths():
+    """The start-up moves write the old grammar until the names are rewritten:
+    it follows its own rules, and an owner of one grammar never holds a scope of
+    the other (both were ``UNRESOLVED``, so always within each other)."""
+    assert within_owner("abi:o1:-", "abi:o1:-")
+    assert within_owner("abi:o1:-", "abi:o1:*")
+    assert within_owner("abi:o1:-", "abi:o1:w1")
+    assert within_owner("abi:o1:w1", "abi:o1:w1")
+    assert not within_owner("abi:o1:-", "abi:o2:w")
+    assert not within_owner("abi:o1:-", "abi:o2:-")
+    assert not within_owner("abi:o1:w1", "abi:o1:w2")
+    assert not within_owner("abi:o1:w1", "abi:o1:-")
+    assert not within_owner("abi:o1:w1", "abi:o1:*")
+    assert within_owner("abi:-:-", "abi:o2:w")
+    # Never across grammars, and nothing is within UNRESOLVED.
+    assert not within_owner("abi:o1:-", WS)
+    assert not within_owner(ORG, "abi:o1:w1")
+    assert not within_owner(UNRESOLVED, UNRESOLVED)
+    assert not within_owner(ORG, UNRESOLVED)
 
 
 def test_the_wildcards_table():

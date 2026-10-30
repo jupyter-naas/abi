@@ -178,7 +178,7 @@ module's configured key (`naas_abi_marketplace.applications.github`), `<name>` t
 agent's `NAME`, the app's folder, or the workflow's name (`workflow.<slug>`,
 `pipeline.<slug>` for a `Workflow` or `Pipeline` class). Workspace admins and owners
 hold every one; viewers and members hold none until a policy grants it, for example
-`module:UseAgent` on `${scope}:module:agent/naas_abi_marketplace.applications.github/GitHub`
+`module:UseAgent` on `${scope}/module:agent/naas_abi_marketplace.applications.github/GitHub`
 attached at the workspace. Nexus checks it in chat, `/v1`, the agent pickers, the Apps
 page, app links and workspace workflows; an agent's sub-agents and its tools from a
 module's workflows and pipelines are bounded by the user's scopes too. A module has
@@ -209,7 +209,7 @@ ABIModule.get_instance().require_action("ExportReport", "report", ["q3"])
 ```
 
 The resource is placed in the workspace of the call (`abi:<org>:<ws>:<service>:report/q3`):
-a user needs `<service>:ExportReport` on `${scope}:<service>:report/*` there.
+a user needs `<service>:ExportReport` on `${scope}/<service>:report/*` there.
 
 ## Discovery cheat sheet
 

@@ -330,7 +330,7 @@ def validate_scope(scope: str) -> str:
     if not isinstance(scope, str) or not scope.startswith(PREFIX):
         raise ValueError(f"A scope is a container's name or abi:: {scope!r}")
     container = container_of_scope(scope)
-    if container == PLATFORM or (scope.endswith(BELOW) and container + BELOW != scope):
+    if container == PLATFORM:
         raise ValueError(f"Invalid scope {scope!r}")
     try:
         parse_container(container)
@@ -351,12 +351,29 @@ def within_owner(owner: str, scope: str | None) -> bool:
     """Whether an attachment at ``scope`` is at ``owner`` or below it: the
     platform's anywhere (unscoped included), a container's at it, below it or at
     any container inside it."""
-    if owner == PLATFORM:
+    if owner in (PLATFORM, _OLD_PLATFORM):
         return True
     if scope is None:
         return False
-    # The grammar before container paths: both in UNRESOLVED until rewritten.
-    return within(as_container(container_of_scope(scope)), as_container(owner))
+    if is_old_scope(owner) or is_old_scope(scope):
+        # The grammar before container paths, which only the start-up moves write
+        # until the names are rewritten: its own rules, never across grammars.
+        return is_old_scope(owner) and is_old_scope(scope) and _old_within(owner, scope)
+    container = container_of_scope(scope)
+    if UNRESOLVED in (owner, container):
+        return False
+    if not (is_container_name(owner) and is_container_name(container)):
+        return False
+    return within(container, owner)
+
+
+def _old_within(owner: str, scope: str) -> bool:
+    """``within_owner`` in the grammar before container paths: an organisation's
+    (``abi:<org>:-``) at it, organisation-wide and at each of its workspaces; a
+    workspace's (``abi:<org>:<ws>``) at that workspace only."""
+    owner_org, owner_ws = owner.removeprefix(PREFIX).split(":")
+    org, ws = scope.removeprefix(PREFIX).split(":")
+    return org == owner_org and (owner_ws in ("-", "*") or ws == owner_ws)
 
 
 def owner_ancestors(container: str) -> list[str]:
