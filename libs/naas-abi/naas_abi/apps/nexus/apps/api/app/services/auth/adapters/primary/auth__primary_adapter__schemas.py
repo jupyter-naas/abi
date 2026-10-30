@@ -2,12 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
-
 from naas_abi.apps.nexus.apps.api.app.services.auth.profile_links import (
     normalize_github_handle,
     normalize_linkedin_profile_url,
 )
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class UserBase(BaseModel):

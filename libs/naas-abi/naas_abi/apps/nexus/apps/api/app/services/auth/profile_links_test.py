@@ -1,5 +1,4 @@
 import pytest
-
 from naas_abi.apps.nexus.apps.api.app.services.auth.profile_links import (
     normalize_github_handle,
     normalize_linkedin_profile_url,
