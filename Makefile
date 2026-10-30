@@ -653,6 +653,11 @@ hello:
 # Master check target - runs all code quality checks
 check: deps check-core check-marketplace check-nexus
 
+# Build every published package and fail when a wheel or sdist is over the
+# per-file budget (PACKAGE_SIZE_BUDGET_MIB, 10 MiB by default)
+check-package-size:
+	@ scripts/check_package_size.sh
+
 # Build Nexus web app to catch frontend build errors before commit
 check-nexus: deps
 	@echo ""
@@ -1086,7 +1091,7 @@ clean:
 # =============================================================================
 # Declare all targets as phony to avoid conflicts with files of the same name
 
-.PHONY: ollama-models test test-local-embedded-core test-integration-core chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-up-legacy local-down dev-up dev-down dev-status dev-up-legacy container-up container-down model-up model-down model-status airgap dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize create-module create-agent create-integration create-workflow create-pipeline create-ontology
+.PHONY: ollama-models check-package-size test test-local-embedded-core test-integration-core chat-abi-agent chat-naas-agent chat-ontology-agent chat-support-agent chat-qwen-agent chat-deepseek-agent chat-gemma-agent api sh lock add abi-add help uv oxigraph-up oxigraph-down oxigraph-status local-up local-up-legacy local-down dev-up dev-down dev-status dev-up-legacy container-up container-down model-up model-down model-status airgap dagster-dev dagster-up dagster-down dagster-ui dagster-logs dagster-status dagster-materialize create-module create-agent create-integration create-workflow create-pipeline create-ontology
 
 .PHONY: test-sdk demo-sdk
 test-sdk:
