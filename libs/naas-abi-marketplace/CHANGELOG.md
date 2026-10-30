@@ -2,6 +2,40 @@
 
 <!-- version list -->
 
+## v3.63.0 (2026-10-30)
+
+### Features
+
+- **auth,linkedin**: Add owner_linkedin_url support and profile links
+  ([`cb75a36`](https://github.com/jupyter-naas/abi/commit/cb75a362bebc608b001214ced4faa265aaf51c30))
+
+- **linkedin**: Add extensive LinkedIn ontology and related modules
+  ([`497dd6a`](https://github.com/jupyter-naas/abi/commit/497dd6a65c8726ea26db48a4d165538a776eaec5))
+
+- **linkedin**: Align act of connection with the 7 Buckets people vocabulary
+  ([`5562fde`](https://github.com/jupyter-naas/abi/commit/5562fde650da82d04683ca32fd86b63707552f18))
+
+- **people**: Add connections network API and graph payload
+  ([`00a4d91`](https://github.com/jupyter-naas/abi/commit/00a4d91b94e53a068bc436fd5888675313d2f98c))
+
+- **people**: Add sorting by connections count to people search and connections
+  ([`ea7fe94`](https://github.com/jupyter-naas/abi/commit/ea7fe94affdfd64d9337d6d933af27cc15bcf337))
+
+- **people**: Connections tab, list/network toggle and LinkedIn import button
+  ([`a851fdf`](https://github.com/jupyter-naas/abi/commit/a851fdfffc5bf807b22dc4a8c3dbae98a8797bb9))
+
+- **people**: Enhance graph layout and visualization options
+  ([`44ecce2`](https://github.com/jupyter-naas/abi/commit/44ecce2cc9c3bd809b073a710e7aedc5acb3a052))
+
+- **people**: Serve LinkedIn connections from the people datasets
+  ([`af2eaa7`](https://github.com/jupyter-naas/abi/commit/af2eaa776127c02406a9fdf57baa852fc183b36d))
+
+### Refactoring
+
+- **linkedin**: Remove Naas integration references and related code
+  ([`c695145`](https://github.com/jupyter-naas/abi/commit/c6951455d816eb222770691a2d15c4030b4a14f7))
+
+
 ## v3.62.0 (2026-10-26)
 
 ### Bug Fixes
