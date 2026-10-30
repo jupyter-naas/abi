@@ -126,10 +126,12 @@ ModuleTypes = Callable[[], Awaitable[Mapping[str, Collection[str]]]]
 
 
 async def _module_types() -> Mapping[str, Collection[str]]:
-    """What every module exposes, from Nexus's module listing (``modules/scopes.py``)."""
+    """What every module exposes, from Nexus's module listing (``modules/scopes.py``),
+    read through the listers' cache (``listers.MODULE_ITEMS``): not once per request."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.listers import MODULE_ITEMS
     from naas_abi.apps.nexus.apps.api.app.services.modules import scopes
 
-    return scopes.exposed_types(await scopes.gather())
+    return scopes.exposed_types(await MODULE_ITEMS.modules())
 
 
 class IamAdminService:
@@ -269,20 +271,24 @@ class IamAdminService:
         types, their actions and what the caller may grant of each at ``scope``,
         and whether a type's resources are listed (``GET /resources``). Only what
         the caller may grant: a type, or a publisher, with nothing of it is left
-        out. About the caller, like ``grantable``, and within ``parent`` as it is."""
+        out. About the caller, like ``grantable``, and within ``parent`` as it is.
+        IAM answers first: the modules are read only for a caller it answers."""
+        grantable = await self._read(
+            user, lambda session: session.grantable(scope, parent=parent, derive=derive)
+        )
         modules = await self._modules()
 
-        def read(session: IIAMService) -> dict[str, Any]:
+        def read() -> dict[str, Any]:
             found = by_publisher(
                 self._gateway.catalogs().all(),
-                session.grantable(scope, parent=parent, derive=derive),
+                grantable,
                 modules=modules,
                 listable=self._gateway.listable,
                 scope=scope,
             )
             return {"scope": scope, "publishers": [views.publisher_view(p) for p in found]}
 
-        return await self._read(user, read)
+        return await run_in_threadpool(read)
 
     async def resources(
         self,

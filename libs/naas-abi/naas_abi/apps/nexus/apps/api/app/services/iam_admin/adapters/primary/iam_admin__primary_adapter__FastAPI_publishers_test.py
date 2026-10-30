@@ -290,3 +290,50 @@ def test_a_type_lists_only_patterns_that_name_its_resources(listed):
     assert "organization" not in types
     for action in types["workspace"]["actions"]:
         assert all("nexus:organization" not in r for r in action["resources"]), action["resources"]
+
+
+def test_the_modules_are_read_only_for_a_caller_iam_answers_and_through_the_cache(
+    listed, audit, monkeypatch
+):
+    """A refused request reads no module (no NATS round trip before any
+    authorization); the module types come through the listers' cache, one read
+    for many requests."""
+    import asyncio
+
+    from naas_abi.apps.nexus.apps.api.app.services.iam_admin import service as admin_service
+
+    reads: list[str] = []
+
+    async def gather():
+        reads.append("gather")
+        return [{"module": "p", "agents": [{"name": "A"}]}]
+
+    monkeypatch.setattr(listers, "MODULE_ITEMS", listers.ModuleItems(gather))
+    previous = runtime.configure(lambda: IamAdminService(EngineIamGateway(), audit))
+    try:
+        with as_service_account("engine"):
+            o_access = listed.nexus.iam.create_policy(
+                "O access",
+                {
+                    "version": "2026-10-13",
+                    "statements": [
+                        {
+                            "effect": "Allow",
+                            "actions": ["module:UseAgent"],
+                            "resources": ["${scope}/module:agent/p/*"],
+                        }
+                    ],
+                },
+            )
+        at = quote(WS1, safe="")
+        listed.nexus.grant("wsadmin", "admin", WS1)
+        refused = get(listed, f"/publishers?scope={at}&parent={o_access.id}", "wsadmin")
+        assert refused.status_code == 403
+        assert reads == []
+        for _ in range(3):
+            assert get(listed, f"/publishers?scope={at}", "admin").status_code == 200
+        assert reads == ["gather"]
+        assert dict(asyncio.run(admin_service._module_types())) == {"p": ["agent"]}
+        assert reads == ["gather"]
+    finally:
+        runtime.configure(previous)

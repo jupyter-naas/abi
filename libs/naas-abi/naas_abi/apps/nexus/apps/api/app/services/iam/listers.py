@@ -193,7 +193,8 @@ class ModuleItems:
         self._cached: tuple[float, list[dict[str, Any]]] | None = None
         self._lock = threading.Lock()
 
-    async def _modules(self) -> list[dict[str, Any]]:
+    async def modules(self) -> list[dict[str, Any]]:
+        """``scopes.gather``'s entries, read at most once per ``MODULES_SECONDS``."""
         now = time.monotonic()
         with self._lock:
             cached = self._cached
@@ -216,7 +217,7 @@ class ModuleItems:
 
         async def items(query: ListingQuery) -> list[ListedResource]:
             found: list[ListedResource] = []
-            for entry in await self._modules():
+            for entry in await self.modules():
                 module = entry["module"]
                 if query.module and module != query.module:
                     continue
@@ -236,9 +237,14 @@ class ModuleItems:
         return items
 
 
+# The modules' items this process lists: the listers' and the policy builder's
+# publishers (``iam_admin``) share one read of the modules.
+MODULE_ITEMS = ModuleItems()
+
+
 def listers(loop: asyncio.AbstractEventLoop) -> dict[tuple[str, str], ResourceLister]:
     """naas_abi's listers, by ``(service, type)``, their queries run on ``loop``."""
-    modules = ModuleItems()
+    modules = MODULE_ITEMS
     found: dict[tuple[str, str], ResourceLister] = {
         (names.SERVICE, names.ORGANIZATION): OnLoop(loop, organizations),
         (names.SERVICE, names.WORKSPACE): OnLoop(loop, workspaces),
@@ -266,4 +272,4 @@ async def register() -> list[tuple[str, str]]:
     return register_listers(runtime.iam(), [_Offer()])
 
 
-__all__ = ["OnLoop", "listers", "register", "feature_items", "ModuleItems"]
+__all__ = ["OnLoop", "listers", "register", "feature_items", "ModuleItems", "MODULE_ITEMS"]
