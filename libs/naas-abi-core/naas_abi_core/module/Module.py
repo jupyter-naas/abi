@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import glob
 import os
-from typing import Generic, Self, cast
+from typing import Any, ClassVar, Generic, Self, cast
 
 from fastapi import FastAPI
 from naas_abi_core import logger
@@ -21,7 +21,7 @@ from naas_abi_core.orchestrations.Orchestrations import Orchestrations
 from naas_abi_core.pipeline.pipeline import Pipeline
 from naas_abi_core.utils.Expose import Expose
 from naas_abi_core.workflow.workflow import Workflow
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationError
 from typing_extensions import TypeVar
 
 
@@ -75,6 +75,11 @@ class BaseModule(JobsMixin, Generic[TConfig]):
     logo_url: str = ""
     slug: str = ""
     tags: list[str] = []
+    # Marketplace keys that must not block Engine.load. Do not put
+    # ``{{ secret.NAME }}`` in YAML for these: the loader reads them here.
+    # Configuration fields listed in ``secret_fields`` must have defaults.
+    optional_secrets: ClassVar[bool] = False
+    secret_fields: ClassVar[dict[str, str]] = {}
 
     _engine: EngineProxy
     _configuration: TConfig
@@ -127,6 +132,41 @@ class BaseModule(JobsMixin, Generic[TConfig]):
     def get_dependencies(cls) -> list[str]:
         """Return the list of module dependencies."""
         return getattr(cls, "dependencies", [])
+
+    @classmethod
+    def build_configuration(
+        cls,
+        global_config: GlobalConfig,
+        raw: dict[str, Any] | None = None,
+        secrets: Any | None = None,
+    ) -> TConfig:
+        """Build ``Configuration`` at module load.
+
+        When ``optional_secrets`` is set, missing marketplace keys become the
+        field default instead of failing ``Engine.load``. ``secret_fields``
+        maps a config field to a secret name; a present value is copied in.
+        """
+        values = dict(raw or {})
+        if secrets is not None:
+            for field, key in cls.secret_fields.items():
+                if values.get(field):
+                    continue
+                value = secrets.get(key)
+                if value:
+                    values[field] = value
+        configuration_cls: type[TConfig] = cls.Configuration  # type: ignore[attr-defined]
+        try:
+            return configuration_cls(global_config=global_config, **values)
+        except ValidationError as exc:
+            if not cls.optional_secrets:
+                raise ValueError(
+                    f"Error loading configuration for module {cls.__module__}: {exc}"
+                ) from exc
+            logger.warning(
+                f"{cls.__module__}: optional secrets missing; "
+                f"loading with defaults ({exc})"
+            )
+            return configuration_cls(global_config=global_config)
 
     @classmethod
     def get_instance(cls) -> Self:

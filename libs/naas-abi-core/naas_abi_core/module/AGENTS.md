@@ -29,6 +29,8 @@
 2. `on_initialized`: `instantiate_all` on workflow, pipeline, and tool classes. Call `super().on_initialized()` if you override this hook.
 3. Kernel `_load_runtime_routes`: agents via `New()` + `as_api`; processes via `mount_module_processes`.
 
+Optional marketplace keys belong on the module, not in `{{ secret.NAME }}` YAML. Set `optional_secrets = True` and `secret_fields = {"config_field": "ENV_NAME"}`. `EngineModuleLoader` calls `ABIModule.build_configuration` at load: a present secret is copied in, a missing one uses the field default, and `Engine.load` continues. `{{ secret.NAME }}` in YAML still fails the whole engine when the key is absent.
+
 A class that needs constructor config we cannot supply is skipped and logged. That is intentional. Do not invent a fake instance.
 
 ## Jobs
@@ -68,6 +70,7 @@ In NATS mode with `nats.workflows.bridge` (default `true`), `Engine` declares ea
 ## Tests
 
 ```bash
+uv run pytest libs/naas-abi-core/naas_abi_core/module/Module_optional_secrets_test.py -v
 uv run pytest libs/naas-abi-core/naas_abi_core/module/ModuleComponentLoader_test.py -v
 uv run pytest libs/naas-abi-core/naas_abi_core/module/ModuleModelLoader_test.py -v
 uv run pytest libs/naas-abi-core/naas_abi_core/module/workflows_test.py -v

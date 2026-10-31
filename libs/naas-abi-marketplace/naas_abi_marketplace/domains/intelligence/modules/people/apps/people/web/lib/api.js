@@ -97,7 +97,6 @@ export function fetchLinkedInOwners() {
   return getJson("/linkedin/owners");
 }
 
-/** Start an import: ``form`` holds ``owner_id`` and the export's ``files``. */
 /** The Connections tab's network before a person is chosen: the most connected. */
 export function fetchMostConnectedNetwork({ query = "", facet = "" } = {}) {
   const params = new URLSearchParams();
@@ -113,4 +112,14 @@ export function startLinkedInImport(form) {
 
 export function fetchLinkedInImport(runId) {
   return getJson(`/linkedin/imports/${encodeURIComponent(runId)}`);
+}
+
+export async function cancelLinkedInImport(runId) {
+  return readJson(
+    `/linkedin/imports/${encodeURIComponent(runId)}/cancel`,
+    await fetch(apiPath(`/linkedin/imports/${encodeURIComponent(runId)}/cancel`), {
+      method: "POST",
+      headers: nexusAuthHeaders(),
+    }),
+  );
 }

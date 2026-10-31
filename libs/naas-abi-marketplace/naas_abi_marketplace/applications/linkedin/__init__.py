@@ -23,14 +23,20 @@ class _Configuration(ModuleConfiguration):
         linkedin_profile_url: "https://demo.example/profiles/demo"
     """
 
-    li_at: str
-    JSESSIONID: str
-    linkedin_profile_url: str
+    li_at: str = ""
+    JSESSIONID: str = ""
+    linkedin_profile_url: str = ""
     datastore_path: str = "linkedin"
 
 
 class ABIModule(BaseModule[_Configuration]):
     Configuration = _Configuration
+    optional_secrets = True
+    secret_fields = {
+        "li_at": "LINKEDIN_LI_AT",
+        "JSESSIONID": "LINKEDIN_JSESSIONID",
+        "linkedin_profile_url": "LINKEDIN_PROFILE_URL",
+    }
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[
             "naas_abi_marketplace.applications.google_search",

@@ -10,6 +10,11 @@ from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreSe
 
 
 class ABIModule(BaseModule):
+    optional_secrets = True
+    secret_fields = {
+        "google_custom_search_api_key": "GOOGLE_CUSTOM_SEARCH_API_KEY",
+        "google_custom_search_engine_id": "GOOGLE_CUSTOM_SEARCH_ENGINE_ID",
+    }
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[],
         services=[ObjectStorageService, TripleStoreService],
@@ -25,6 +30,6 @@ class ABIModule(BaseModule):
             google_custom_search_api_key: "{{ secret.GOOGLE_CUSTOM_SEARCH_API_KEY }}"
             google_custom_search_engine_id: "{{ secret.GOOGLE_CUSTOM_SEARCH_ENGINE_ID }}"
         """
-        google_custom_search_api_key: str
-        google_custom_search_engine_id: str
+        google_custom_search_api_key: str = ""
+        google_custom_search_engine_id: str = ""
         datastore_path: str = "google_search"
