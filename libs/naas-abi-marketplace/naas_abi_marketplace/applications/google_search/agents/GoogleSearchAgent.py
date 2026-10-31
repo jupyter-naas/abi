@@ -94,33 +94,35 @@ Your primary mission is to help users find information on the web by performing 
 
         tools: list = []
 
-        google_programmable_search_engine_integration_config = (
-            GoogleProgrammableSearchEngineIntegrationConfiguration(
-                api_key=google_custom_search_api_key,
-                search_engine_id=google_custom_search_engine_id,
+        # Empty keys stay optional: the agent loads, the live search tools do not.
+        if google_custom_search_api_key and google_custom_search_engine_id:
+            google_programmable_search_engine_integration_config = (
+                GoogleProgrammableSearchEngineIntegrationConfiguration(
+                    api_key=google_custom_search_api_key,
+                    search_engine_id=google_custom_search_engine_id,
+                )
             )
-        )
-        tools += as_tools(google_programmable_search_engine_integration_config)
+            tools += as_tools(google_programmable_search_engine_integration_config)
 
-        search_linkedin_profile_page_workflow_config = (
-            SearchLinkedInProfilePageWorkflowConfiguration(
-                integration_config=google_programmable_search_engine_integration_config
+            search_linkedin_profile_page_workflow_config = (
+                SearchLinkedInProfilePageWorkflowConfiguration(
+                    integration_config=google_programmable_search_engine_integration_config
+                )
             )
-        )
-        search_linkedin_profile_page_workflow = SearchLinkedInProfilePageWorkflow(
-            search_linkedin_profile_page_workflow_config
-        )
-        tools += search_linkedin_profile_page_workflow.as_tools()
+            search_linkedin_profile_page_workflow = SearchLinkedInProfilePageWorkflow(
+                search_linkedin_profile_page_workflow_config
+            )
+            tools += search_linkedin_profile_page_workflow.as_tools()
 
-        search_linkedin_organization_page_workflow_config = (
-            SearchLinkedInOrganizationPageWorkflowConfiguration(
-                integration_config=google_programmable_search_engine_integration_config
+            search_linkedin_organization_page_workflow_config = (
+                SearchLinkedInOrganizationPageWorkflowConfiguration(
+                    integration_config=google_programmable_search_engine_integration_config
+                )
             )
-        )
-        search_linkedin_organization_page_workflow = SearchLinkedInOrganizationPageWorkflow(
-            search_linkedin_organization_page_workflow_config
-        )
-        tools += search_linkedin_organization_page_workflow.as_tools()
+            search_linkedin_organization_page_workflow = SearchLinkedInOrganizationPageWorkflow(
+                search_linkedin_organization_page_workflow_config
+            )
+            tools += search_linkedin_organization_page_workflow.as_tools()
 
         intents: list = [
             Intent(

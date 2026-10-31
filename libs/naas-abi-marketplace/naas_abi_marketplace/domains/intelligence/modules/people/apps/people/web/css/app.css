@@ -2539,6 +2539,83 @@ body.is-ontology-view main > .ontology-page {
   display: none;
 }
 
+.linkedin-import-log {
+  max-height: 160px;
+  overflow: auto;
+  margin: 0 0 12px;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.linkedin-import-log[hidden] {
+  display: none;
+}
+
+.linkedin-import-running {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.linkedin-import-toast {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 80;
+  width: min(320px, calc(100vw - 32px));
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 8px;
+  background: var(--surface, #fff);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.linkedin-import-toast[hidden] {
+  display: none;
+}
+
+.linkedin-import-toast-kicker {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.linkedin-import-toast-title {
+  display: block;
+  margin-top: 2px;
+  font-weight: 600;
+}
+
+.linkedin-import-toast-stage {
+  display: block;
+  margin: 6px 0 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.linkedin-import-toast-bar {
+  display: block;
+  height: 4px;
+  background: var(--empty-surface, #f4f4f4);
+}
+
+.linkedin-import-toast-bar span {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
 /* The Connections tab before a person is chosen: say what to do, and make the
    way into someone's connections the card's main link. */
 .connections-intro {
