@@ -3,6 +3,7 @@ import importlib.util
 import os
 from pathlib import Path
 
+import pydantic_core
 from naas_abi_core import logger
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     EngineConfiguration,
@@ -346,14 +347,15 @@ class EngineModuleLoader:
                         f"Module {module_config.module} Configuration must be a subclass of ModuleConfiguration"
                     )
 
-                    secret_service = None
-                    if getattr(module.ABIModule, "optional_secrets", False):
-                        secret_service = getattr(engine.services, "secret", None)
-                    cfg = module.ABIModule.build_configuration(
-                        self.__configuration.global_config,
-                        module_config.config,
-                        secrets=secret_service,
-                    )
+                    try:
+                        cfg = module.ABIModule.Configuration(
+                            global_config=self.__configuration.global_config,
+                            **module_config.config,
+                        )
+                    except pydantic_core._pydantic_core.ValidationError as e:
+                        raise ValueError(
+                            f"Error loading configuration for module {module_config.module}: {e}"
+                        ) from e
 
                     # This effectively creates a new instance of the module.
                     # It will call the constructor of the ABIModule class inside the module.

@@ -9,6 +9,15 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
+from naas_abi_marketplace.applications.optional_module_secrets import (
+    hydrate_configuration_from_secrets,
+)
+
+_LINKEDIN_SECRET_FIELDS = {
+    "li_at": "LINKEDIN_LI_AT",
+    "JSESSIONID": "LINKEDIN_JSESSIONID",
+    "linkedin_profile_url": "LINKEDIN_PROFILE_URL",
+}
 
 
 class _Configuration(ModuleConfiguration):
@@ -31,12 +40,6 @@ class _Configuration(ModuleConfiguration):
 
 class ABIModule(BaseModule[_Configuration]):
     Configuration = _Configuration
-    optional_secrets = True
-    secret_fields = {
-        "li_at": "LINKEDIN_LI_AT",
-        "JSESSIONID": "LINKEDIN_JSESSIONID",
-        "linkedin_profile_url": "LINKEDIN_PROFILE_URL",
-    }
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[
             "naas_abi_marketplace.applications.google_search",
@@ -44,6 +47,10 @@ class ABIModule(BaseModule[_Configuration]):
         ],
         services=[ObjectStorageService, TripleStoreService, Secret, VectorStoreService],
     )
+
+    def on_load(self):
+        super().on_load()
+        hydrate_configuration_from_secrets(self, _LINKEDIN_SECRET_FIELDS)
 
     def on_initialized(self):
         super().on_initialized()
