@@ -63,7 +63,9 @@ nats:
   contracts from `naas-abi-proto`), and modules reach services through NATS
   facades, even in one process.
 - The bus is NATS JetStream; module jobs (`naas_abi_core.module.jobs`: `@job`,
-  `Cron`, `Every`, `OnEvent`) run scheduled and event-driven work.
+  `Cron`, `Every`, `OnEvent`) run scheduled and event-driven work, and durable
+  workflows (`naas_abi_core.module.workflows`: `@workflow`) add a typed input and
+  output and checkpointed steps. See [Workflow](#workflow).
 - One engine serves per NATS account (`nats.engine.role`, `ABI_ROLLOUT_ID` for
   handovers); discovery registers remote modules.
 - Agent memory and the activity log live in the Document Service.
@@ -358,7 +360,7 @@ class MyPipelineParameters(PipelineParameters):
 class MyPipeline(Pipeline):
     def __init__(self, configuration: MyPipelineConfiguration):
         super().__init__(configuration)
-    
+
     def run(self, parameters: MyPipelineParameters) -> Graph:
         # Fetch data from integration
         # Transform to RDF
@@ -366,24 +368,29 @@ class MyPipeline(Pipeline):
         graph = Graph()
         # ... add triples to graph
         return graph
-    
-    def trigger(self, event, ontology_name, triple) -> Graph:
-        # Event-driven pipeline execution
-        return self.run(MyPipelineParameters(source="event"))
 ```
+
+A module finds the `Pipeline` subclasses under its `pipelines/` folder and builds them in
+`on_initialized` (`New()`, or an empty `<Name>PipelineConfiguration`). One with a live
+`run()` that takes a parameters model gets `POST /pipelines/<slug>` on the REST API, and,
+in NATS mode, is published as the durable workflow `pipeline.<slug>` (see
+[Workflow](#workflow)): one attempt, since a retry would write the triples twice, and one
+run at a time. `trigger(event, ontology_name, triple)` is an optional hook for code that
+subscribes to triple-store events (`triple_store.subscribe`); nothing calls it by default.
+
+A remote module writes the same class on `naas_abi_sdk.pipeline` (`naas-abi-sdk[workflows,rdf]`),
+with an `async def run`: see the [SDK README](../naas-abi-sdk/README.md#workflows-pipelines-and-integrations).
 
 ### Workflow
 
-Workflows leverage the ontological layer to implement business logic and provide data to consumers. They can be used by:
-- Large Language Models (LLMs)
-- Remote APIs and services
-- Other automated processes
+Workflows leverage the ontological layer to implement business logic and provide data to
+consumers: agents (as tools), other modules, scripts and schedules. A workflow takes one of
+two forms.
 
-**Example:**
+**A class.** `Workflow[P]` under the module's `workflows/` folder, with a sync `run`:
 
 ```python
 from naas_abi_core.workflow.workflow import Workflow, WorkflowConfiguration, WorkflowParameters
-from pydantic import BaseModel
 
 class MyWorkflowParameters(WorkflowParameters):
     input_data: str
@@ -392,16 +399,61 @@ class MyWorkflowConfiguration(WorkflowConfiguration):
     processing_option: str
 
 class MyWorkflow(Workflow[MyWorkflowParameters]):
+    """Processes input data: an agent reads this to decide when to call it."""
+
     def __init__(self, configuration: MyWorkflowConfiguration):
         super().__init__(configuration)
-    
+
     def run(self, parameters: MyWorkflowParameters):
-        # Implement business logic
-        # Query knowledge graph
-        # Process data
-        # Return results
+        # Query the knowledge graph, call integrations, return results
         return {"result": "processed"}
 ```
+
+The module builds it in `on_initialized`. `as_tools()` gives agents its tools, and a live
+`run()` that takes a parameters model gets `POST /workflows/<slug>` (the class name in snake
+case). A remote module writes the same class on `naas_abi_sdk.workflow` (`naas-abi-sdk[workflows]`),
+with an `async def run`; the kernel REST API does not mount it.
+
+**A durable workflow.** A module method decorated with `@workflow`: a job with a typed input
+and output whose steps are journaled, so a retried run skips the steps that finished. A sync
+method runs in a worker thread with a `SyncFlowContext`; an `async` one gets the SDK's
+`FlowContext`. NATS mode only.
+
+```python
+from naas_abi_core.module.jobs import Cron
+from naas_abi_core.module.workflows import SyncFlowContext, workflow
+
+class ABIModule(BaseModule):
+    @workflow(max_attempts=3, triggers=(Cron("0 0 2 * * *", input={"table": "orders"}),))
+    def report(self, ctx: SyncFlowContext, inp: ReportInput) -> ReportOutput:
+        rows = ctx.step("load", self.load, inp.table)  # journaled: a retry skips it
+        ctx.map_call("push", "acme.sink", "push", [{"row": r} for r in rows])
+        return ReportOutput(count=len(rows))
+```
+
+- `ctx.step` (journaled), `ctx.map` (in-process fan-out), `ctx.call` / `ctx.map_call` (child
+  runs of any module's workflows). Step keys are unique per run and stable across attempts; a
+  step result is JSON, at most 256 KiB.
+- An invalid input fails the run without a retry. A workflow that calls itself is refused
+  (`SelfCall`). Delivery is at least once: a run must be safe to repeat.
+- Triggers are `Cron` / `Every` (with `input=`) and `OnEvent`; limits are `max_attempts`,
+  `max_concurrency` and `timeout`.
+- Callers: `self.get_workflow(name)`, `self.engine.modules[id].get_workflow(name)`,
+  `self.engine.get_workflow(module_id, name)` (any module, engine or remote, declared as a
+  dependency). `.run(input)` returns the output; `.start(input, idempotency_key=)` a
+  `WorkflowRun` (`status`, `wait`, `result`, `steps`, `cancel`). Both are coroutines.
+
+**The bridge.** In NATS mode, with `nats.workflows.bridge` (default `true`), the engine
+publishes every `Workflow` and `Pipeline` instance with a live typed sync `run()` as a one-step
+durable workflow, `workflow.<slug>` / `pipeline.<slug>`, with `max_attempts=1` and
+`max_concurrency=1`. A graph result becomes Turtle with its triple count; a result over
+60 KiB is cut. The class, its agent tools and its REST route do not change.
+
+Durable runs show in Nexus under System › Jobs (launch form, steps, child runs) and are
+served to scripts at `/api/workflows`. The reference is
+[`naas_abi_core/module/AGENTS.md`](naas_abi_core/module/AGENTS.md) (Workflows, Workflow/Pipeline
+bridge); the guides are on docs.naas.ai: [Workflows](https://docs.naas.ai/capabilities/build/workflows/overview)
+and [Write a durable workflow](https://docs.naas.ai/capabilities/build/workflows/write-a-durable-workflow).
 
 ### Agent
 
@@ -437,13 +489,13 @@ class MyAgent(Agent):
 
 ### REST API
 
-FastAPI-based REST API that automatically exposes all agents, workflows, and pipelines.
+FastAPI-based REST API that exposes the agents, workflows and pipelines of the engine's modules. A remote module's workflows and pipelines are not mounted: start them as durable workflows instead.
 
 **Features:**
 - OpenAPI/Swagger documentation
 - OAuth2 authentication
 - CORS support
-- Automatic endpoint generation from agents/workflows/pipelines
+- Endpoints generated from agents, and from workflows and pipelines with a live typed `run()`
 
 **Usage:**
 
@@ -459,8 +511,8 @@ api()
 - `GET /docs` - Swagger UI documentation
 - `GET /redoc` - ReDoc documentation
 - `POST /agents/{agent_name}/completion` - Agent completion endpoint
-- `POST /workflows/{workflow_name}/run` - Workflow execution endpoint
-- `POST /pipelines/{pipeline_name}/run` - Pipeline execution endpoint
+- `POST /workflows/{slug}` - Run a workflow class in process (the class name in snake case)
+- `POST /pipelines/{slug}` - Run a pipeline class in process; the graph comes back as Turtle
 
 ### Terminal Agent
 
@@ -494,6 +546,13 @@ python -m naas_abi_core.apps.mcp.mcp_server
 # Or with HTTP transport
 MCP_TRANSPORT=http python -m naas_abi_core.apps.mcp.mcp_server
 ```
+
+### Dagster (legacy)
+
+`naas_abi_core.apps.dagster` runs Dagster orchestrations (`abi new orchestration`) for a
+project without NATS. It is legacy, installed with the `dagster` extra, and removed in the
+next major. In NATS mode, schedule with module jobs (`@job`) and durable workflows
+(`@workflow`, or `job = JobSettings(...)` on a remote module's class).
 
 ## Configuration
 
@@ -583,13 +642,14 @@ All services follow the Hexagonal Architecture pattern:
 - **Lifecycle Hooks**: `on_load()` and `on_initialized()` for setup
 - **Isolation**: Modules can be developed and tested independently
 
-### Event-Driven Pipelines
+### Running Pipelines
 
-Pipelines can be triggered by:
-- Manual execution via API or code
-- Ontology events (triple insertions/updates)
-- Scheduled jobs
-- Workflow triggers
+Pipelines can be run by:
+- A direct call: code, an agent tool, or `POST /pipelines/<slug>`
+- A durable start of `pipeline.<slug>` (NATS mode): System › Jobs, `/api/workflows`,
+  `get_workflow(...)`, or `ctx.call` in another workflow
+- A module job or a `@workflow` with `Cron`, `Every` or `OnEvent` triggers
+- Your own triple-store subscription, through `trigger`
 
 ## Development
 
@@ -627,6 +687,7 @@ MIT License
 - [Quickstart](https://docs.naas.ai/user-guide/get-started/quickstart)
 - [Configuration](https://docs.naas.ai/user-guide/get-started/configuration)
 - [Module jobs and scheduling](https://docs.naas.ai/user-guide/build/modules/module-jobs)
+- [Workflows](https://docs.naas.ai/capabilities/build/workflows/overview) and [Pipelines](https://docs.naas.ai/capabilities/build/pipelines/overview)
 - [Architecture](https://docs.naas.ai/developer-guide/architecture/nats)
 - [Contribute to ABI](https://docs.naas.ai/developer-guide/contributing/overview)
 - [Testing](https://docs.naas.ai/developer-guide/contributing/testing)

@@ -19,6 +19,8 @@ Discovery rule:
 1. Find the closest `AGENTS.md` walking up from your working file.
 2. If none exists for the scope you're modifying, create one following the structure of the service files below.
 
+Workflows, pipelines and jobs (`@job`, durable `@workflow`, `Workflow` / `Pipeline` classes in engine and remote modules, and the `workflow.<slug>` / `pipeline.<slug>` bridge) are documented in [`libs/naas-abi-sdk/README.md`](libs/naas-abi-sdk/README.md) (Jobs › Workflows; Workflows, pipelines and integrations) and [`libs/naas-abi-core/naas_abi_core/module/AGENTS.md`](libs/naas-abi-core/naas_abi_core/module/AGENTS.md) (Jobs, Workflows, Workflow/Pipeline bridge).
+
 ## Service Map
 
 Core services live under `libs/naas-abi-core/naas_abi_core/services/`. Each has its own `AGENTS.md`:
@@ -52,7 +54,7 @@ The marketplace (`libs/naas-abi-marketplace/`) is a registry of pluggable module
 | AI provider modules | Claude, ChatGPT, Gemini, Grok, Mistral, Llama, Qwen, DeepSeek, Gemma, Perplexity, Bedrock | `libs/naas-abi-marketplace/naas_abi_marketplace/ai/` |
 | Application integrations | GitHub, LinkedIn, Postgres, Notion, Salesforce, Slack, … (47 apps) | `libs/naas-abi-marketplace/naas_abi_marketplace/applications/` |
 | Domain expert agents | Software Engineer, Accountant, DevOps, Data Engineer, … (24 roles) | `libs/naas-abi-marketplace/naas_abi_marketplace/domains/` |
-| Reference scaffolds | Demo agents, workflows, Streamlit apps, Dagster orchestration | `libs/naas-abi-marketplace/naas_abi_marketplace/__demo__/` |
+| Reference scaffolds | Demo agents, workflows, Streamlit apps, and a legacy Dagster orchestration (projects without NATS only; NATS projects schedule with `@job` and `@workflow` triggers) | `libs/naas-abi-marketplace/naas_abi_marketplace/__demo__/` |
 
 ## Extra Rules Discovery
 
