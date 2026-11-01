@@ -2568,7 +2568,7 @@ body.is-ontology-view main > .ontology-page {
   margin: 0;
   padding: 12px 14px;
   border: 1px solid var(--border, #ddd);
-  border-radius: 8px;
+  border-radius: 0;
   background: var(--surface, #fff);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   text-align: left;
