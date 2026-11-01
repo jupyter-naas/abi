@@ -9,15 +9,6 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
-from naas_abi_marketplace.applications.optional_module_secrets import (
-    hydrate_configuration_from_secrets,
-)
-
-_LINKEDIN_SECRET_FIELDS = {
-    "li_at": "LINKEDIN_LI_AT",
-    "JSESSIONID": "LINKEDIN_JSESSIONID",
-    "linkedin_profile_url": "LINKEDIN_PROFILE_URL",
-}
 
 
 class _Configuration(ModuleConfiguration):
@@ -26,10 +17,13 @@ class _Configuration(ModuleConfiguration):
 
     module: naas_abi_marketplace.applications.linkedin
     enabled: true
-    config:
-        li_at: "{{ secret.li_at }}"
-        JSESSIONID: "{{ secret.JSESSIONID }}"
-        linkedin_profile_url: "https://demo.example/profiles/demo"
+    config: {}
+
+    Optional overrides (empty defaults keep Engine.load working without keys):
+
+        li_at: "..."
+        JSESSIONID: "..."
+        linkedin_profile_url: "https://www.linkedin.com/in/..."
     """
 
     li_at: str = ""
@@ -47,10 +41,6 @@ class ABIModule(BaseModule[_Configuration]):
         ],
         services=[ObjectStorageService, TripleStoreService, Secret, VectorStoreService],
     )
-
-    def on_load(self):
-        super().on_load()
-        hydrate_configuration_from_secrets(self, _LINKEDIN_SECRET_FIELDS)
 
     def on_initialized(self):
         super().on_initialized()
