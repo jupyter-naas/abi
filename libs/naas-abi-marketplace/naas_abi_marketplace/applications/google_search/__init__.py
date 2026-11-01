@@ -6,6 +6,7 @@ from naas_abi_core.module.Module import (
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
+from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_marketplace.applications.optional_module_secrets import (
     hydrate_configuration_from_secrets,
@@ -20,7 +21,7 @@ _GOOGLE_SEARCH_SECRET_FIELDS = {
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[],
-        services=[ObjectStorageService, TripleStoreService],
+        services=[ObjectStorageService, TripleStoreService, Secret],
     )
 
     class Configuration(ModuleConfiguration):

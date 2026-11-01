@@ -12,7 +12,11 @@ def hydrate_configuration_from_secrets(
     field_map: dict[str, str],
 ) -> None:
     """Copy present secrets into empty config fields without YAML interpolation."""
-    secret = getattr(module.engine.services, "secret", None)
+    try:
+        secret = module.engine.services.secret
+    except ValueError:
+        # Module did not declare Secret in ModuleDependencies.services.
+        return
     if secret is None:
         return
     cfg = module.configuration
