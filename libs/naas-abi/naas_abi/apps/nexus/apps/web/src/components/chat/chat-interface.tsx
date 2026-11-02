@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Plus, Bot, AlertCircle, Brain, ChevronDown, X, ArrowUp, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square, Columns2 } from 'lucide-react';
+import { Send, Plus, Bot, AlertCircle, Brain, ChevronDown, X, ArrowUp, ExternalLink, HardDrive, RefreshCw, Mic, Check, Loader2, Wrench, Copy, FileText, ThumbsUp, ThumbsDown, Volume2, Square, Columns2, Phone, PhoneOff } from 'lucide-react';
 import Image from 'next/image';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
@@ -84,10 +84,53 @@ import { ContextUsageMeter } from './context-usage-meter';
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 import { getLogoUrl } from '@/lib/logo-url';
 import { activeSuggestions, type ChatSuggestion } from '@/lib/suggestion-row';
+import { VoiceCallBar, type VoiceCallState } from './voice-call-bar';
+import { elapsedSecondsSince } from './execution-time';
+import {
+  SentenceAggregator,
+  TEN_VAD_CONFIG,
+  DEFAULT_CALL_SETTINGS,
+  type SpokenSentence,
+  buildDomainVocabularyPrompt,
+  interruptedMessageContent,
+  isNearDuplicateTranscript,
+  spokenTextForTurn,
+  callSpeechOptions,
+  classifyTurnState,
+  parseCallSettings,
+  resolveCallLanguage,
+  type CallSettings,
+  cleanSentenceForSpeech,
+  computeSpeechBandRms,
+  isBackchannelOnly,
+  isForeignScriptNoise,
+  isLikelyNoiseUtterance,
+  isSilenceHallucination,
+  judgeInterjection,
+  shouldCommitBargeIn,
+} from './voice-call-engine';
 
 const getApiBase = () => getApiUrl();
 
 // Max file size for chat uploads (10MB)
+const CALL_SETTINGS_STORAGE_KEY = 'nexus.voiceCall.settings';
+
+function callAudioConstraints(deviceId: string): MediaTrackConstraints {
+  return {
+    ...(deviceId ? { deviceId: { ideal: deviceId } } : {}),
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+  };
+}
+
+function readMessageContent(conversationId: string, messageId: string | null): string | undefined {
+  if (!messageId) return undefined;
+  return useWorkspaceStore
+    .getState()
+    .conversations.find((c) => c.id === conversationId)
+    ?.messages.find((m) => m.id === messageId)?.content;
+}
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 const SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 const SUPPORTED_DOCUMENT_EXTENSIONS = ['pdf', 'docx', 'pptx', 'txt', 'md', 'json', 'csv'];
@@ -585,6 +628,8 @@ export function ChatInterface({
   const [input, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [requestSentAt, setRequestSentAt] = useState<number | null>(null);
+  // handleSubmit outlives renders, so its timing must read the send time from a ref, not state.
+  const requestSentAtRef = useRef<number | null>(null);
   const isSubmittingRef = useRef(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const streamControllerRef = useRef<AbortController | null>(null);
@@ -706,6 +751,62 @@ export function ChatInterface({
   const analyserRef = useRef<AnalyserNode | null>(null);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Full-duplex Live Voice Call state (TEN-VAD + TEN Turn Detection + Streaming TTS)
+  const [callActive, setCallActive] = useState(false);
+  const callActiveRef = useRef(false);
+  const [callSettings, setCallSettings] = useState<CallSettings>(() =>
+    typeof window === 'undefined'
+      ? DEFAULT_CALL_SETTINGS
+      : parseCallSettings(window.localStorage.getItem(CALL_SETTINGS_STORAGE_KEY)),
+  );
+  const callSettingsRef = useRef(callSettings);
+  callSettingsRef.current = callSettings;
+  const [callState, setCallState] = useState<VoiceCallState>('listening');
+  const callStateRef = useRef<VoiceCallState>('listening');
+  const [callMuted, setCallMuted] = useState(false);
+  const callMutedRef = useRef(false);
+  const [callSeconds, setCallSeconds] = useState(0);
+  const [callPartialTranscript, setCallPartialTranscript] = useState('');
+  const [callLastUserTranscript, setCallLastUserTranscript] = useState('');
+  const [callCurrentSentence, setCallCurrentSentence] = useState('');
+  const [callActiveToolLabel, setCallActiveToolLabel] = useState<string | null>(null);
+  const callStreamRef = useRef<MediaStream | null>(null);
+  const callMicSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const callAudioCtxRef = useRef<AudioContext | null>(null);
+  const callAnalyserRef = useRef<AnalyserNode | null>(null);
+  const callOutputAnalyserRef = useRef<AnalyserNode | null>(null);
+  const callVadTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const callDurationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const callUtteranceRecorderRef = useRef<MediaRecorder | null>(null);
+  const callUtteranceChunksRef = useRef<Blob[]>([]);
+  const callUnfinishedBufferRef = useRef<string>('');
+  const callUnfinishedFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ttsQueueRef = useRef<
+    Array<{ text: string; turnId: number; blobPromise: Promise<Blob | null> }>
+  >([]);
+  const ttsPlayingRef = useRef(false);
+  const ttsCurrentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const ttsCurrentUrlRef = useRef<string | null>(null);
+  const ttsGenerationIdRef = useRef(0);
+  const ttsSpokenSentencesRef = useRef<SpokenSentence[]>([]);
+  const ttsCurrentSentenceRef = useRef<SpokenSentence | null>(null);
+  const callInterruptedDuringSpeechRef = useRef(false);
+  // The reply a call is currently on: its sentences and its bubble. Older turns are stale.
+  const callTurnRef = useRef<{ id: number; conversationId: string | null; messageId: string | null }>({
+    id: 0,
+    conversationId: null,
+    messageId: null,
+  });
+  // Bumped on every start and hang-up; a VAD loop or start from another session stops.
+  const callSessionRef = useRef(0);
+  const callStartingRef = useRef(false);
+  const lastCallTranscriptRef = useRef<{ text: string; at: number } | null>(null);
+
+  const setCallStateSync = useCallback((next: VoiceCallState) => {
+    callStateRef.current = next;
+    setCallState(next);
+  }, []);
+
   const router = useRouter();
 
   const storeActiveConversationId = useWorkspaceStore((s) => s.activeConversationId);
@@ -719,6 +820,7 @@ export function ChatInterface({
   const setSelectedAgent = useWorkspaceStore((s) => s.setSelectedAgent);
   const addMessage = useWorkspaceStore((s) => s.addMessage);
   const updateLastMessage = useWorkspaceStore((s) => s.updateLastMessage);
+  const updateMessage = useWorkspaceStore((s) => s.updateMessage);
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const loadConversationMessages = useWorkspaceStore((s) => s.loadConversationMessages);
 
@@ -946,9 +1048,10 @@ export function ChatInterface({
       ...(sheetsChatContext ?? {}),
       ...(codingChatContext ?? {}),
       ...(featurePaneContext ?? {}),
+      ...(callActive ? { voice_call: { active: true } } : {}),
     };
     return Object.keys(merged).length > 0 ? merged : null;
-  }, [slidesChatContext, documentsChatContext, sheetsChatContext, codingChatContext, featurePaneContext]);
+  }, [slidesChatContext, documentsChatContext, sheetsChatContext, codingChatContext, featurePaneContext, callActive]);
 
   useEffect(() => {
     if (!isPane) return;
@@ -962,10 +1065,11 @@ export function ChatInterface({
   }, [isPane, pathname]);
 
   useEffect(() => {
-    if (!mounted || isPane) return;
+    // A route change remounts this page and its unmount ends a live call: sync after hang-up.
+    if (!mounted || isPane || callActive) return;
     const target = nextChatUrl(pathname, currentWorkspaceId, activeConversationId);
     if (target) router.replace(target, { scroll: false });
-  }, [activeConversationId, mounted, currentWorkspaceId, router, pathname, isPane]);
+  }, [activeConversationId, mounted, currentWorkspaceId, router, pathname, isPane, callActive]);
 
   // Narrow selector: only the active conversation's title — avoids re-renders on every streaming token.
   const activeConversationTitle = useWorkspaceStore((s) => {
@@ -1692,8 +1796,13 @@ export function ChatInterface({
       if (currentConversationId) {
         formData.append('conversation_id', currentConversationId);
       }
+      const activeAgentObj = resolveAgent(readSurfaceAgent());
+      formData.append(
+        'prompt',
+        buildDomainVocabularyPrompt(activeAgentObj?.name || readSurfaceAgent()),
+      );
 
-      const response = await fetch(`${getApiBase()}/api/transcribe`, {
+      const response = await authFetch('/api/transcribe', {
         method: 'POST',
         body: formData,
       });
@@ -1786,6 +1895,863 @@ export function ChatInterface({
       stopVoiceStream();
     };
   }, [stopVoiceStream]);
+
+  // ---------- Full-Duplex Live Voice Call (TEN-VAD + TEN Turn Detection + Streaming TTS) ----------
+
+  const stopCallTtsPlayback = useCallback(
+    (markInterrupted = false) => {
+      const hadActiveSpeech =
+        ttsPlayingRef.current ||
+        ttsQueueRef.current.length > 0 ||
+        Boolean(ttsCurrentAudioRef.current);
+
+      ttsGenerationIdRef.current += 1;
+      ttsQueueRef.current = [];
+      ttsPlayingRef.current = false;
+      if (ttsCurrentAudioRef.current) {
+        try {
+          ttsCurrentAudioRef.current.pause();
+          ttsCurrentAudioRef.current.src = '';
+        } catch {
+          // ignore
+        }
+        ttsCurrentAudioRef.current = null;
+      }
+      if (ttsCurrentUrlRef.current) {
+        URL.revokeObjectURL(ttsCurrentUrlRef.current);
+        ttsCurrentUrlRef.current = null;
+      }
+
+      if (markInterrupted && hadActiveSpeech) {
+        const turn = callTurnRef.current;
+        const message = turn.conversationId && turn.messageId
+          ? useWorkspaceStore
+              .getState()
+              .conversations.find((c) => c.id === turn.conversationId)
+              ?.messages.find((m) => m.id === turn.messageId)
+          : undefined;
+        if (turn.conversationId && message && message.role === 'assistant') {
+          const spoken = spokenTextForTurn(
+            ttsSpokenSentencesRef.current,
+            turn.id,
+            ttsCurrentSentenceRef.current,
+          );
+          updateMessage(
+            turn.conversationId,
+            message.id,
+            interruptedMessageContent(spoken, message.content),
+          );
+        }
+      }
+      ttsCurrentSentenceRef.current = null;
+      setCallCurrentSentence('');
+    },
+    [updateMessage],
+  );
+
+  const drainCallTtsQueue = useCallback(
+    async (genId: number) => {
+      if (ttsPlayingRef.current) return;
+      if (!callActiveRef.current || genId !== ttsGenerationIdRef.current) return;
+
+      ttsPlayingRef.current = true;
+      try {
+        while (
+          ttsQueueRef.current.length > 0 &&
+          callActiveRef.current &&
+          genId === ttsGenerationIdRef.current
+        ) {
+          const item = ttsQueueRef.current.shift();
+          if (!item) break;
+
+          if (item.turnId !== callTurnRef.current.id) continue;
+          const blob = await item.blobPromise;
+          if (
+            !blob ||
+            !callActiveRef.current ||
+            genId !== ttsGenerationIdRef.current ||
+            item.turnId !== callTurnRef.current.id
+          ) {
+            continue;
+          }
+
+          const url = URL.createObjectURL(blob);
+          ttsCurrentUrlRef.current = url;
+          const audio = new Audio(url);
+          ttsCurrentAudioRef.current = audio;
+          const sentence: SpokenSentence = { turnId: item.turnId, text: item.text };
+          ttsCurrentSentenceRef.current = sentence;
+          setCallCurrentSentence(item.text);
+          setCallStateSync('speaking');
+
+          // A MediaElementSource only sounds through its context: route through the
+          // visualizer only when the context is running, else play the element directly.
+          let mediaSource: MediaElementAudioSourceNode | null = null;
+          const outCtx = callAudioCtxRef.current;
+          if (outCtx && callOutputAnalyserRef.current) {
+            if (outCtx.state === 'suspended') {
+              await outCtx.resume().catch(() => undefined);
+            }
+            if (outCtx.state === 'running') {
+              try {
+                mediaSource = outCtx.createMediaElementSource(audio);
+                mediaSource.connect(callOutputAnalyserRef.current);
+              } catch (err) {
+                console.warn('[voice-call] output visualizer unavailable', err);
+                mediaSource = null;
+              }
+            } else {
+              console.warn(`[voice-call] AudioContext is ${outCtx.state}; playing TTS directly`);
+            }
+          }
+
+          await new Promise<void>((resolve) => {
+            const finish = (completedNaturally: boolean) => {
+              if (mediaSource) {
+                try {
+                  mediaSource.disconnect();
+                } catch {
+                  // ignore
+                }
+                mediaSource = null;
+              }
+              if (completedNaturally && genId === ttsGenerationIdRef.current) {
+                ttsSpokenSentencesRef.current.push(sentence);
+              }
+              if (ttsCurrentSentenceRef.current === sentence) {
+                ttsCurrentSentenceRef.current = null;
+                setCallCurrentSentence('');
+              }
+              if (ttsCurrentUrlRef.current === url) {
+                URL.revokeObjectURL(url);
+                ttsCurrentUrlRef.current = null;
+              }
+              if (ttsCurrentAudioRef.current === audio) {
+                ttsCurrentAudioRef.current = null;
+              }
+              resolve();
+            };
+            audio.onended = () => finish(true);
+            audio.onerror = () => finish(false);
+            void audio.play().catch((err) => {
+              console.warn('[voice-call] TTS playback failed', err);
+              finish(false);
+            });
+          });
+        }
+      } finally {
+        if (genId === ttsGenerationIdRef.current) {
+          ttsPlayingRef.current = false;
+          setCallCurrentSentence('');
+          if (callActiveRef.current && !isSubmittingRef.current) {
+            setCallStateSync(
+              callUnfinishedBufferRef.current ? 'unfinished_hold' : 'listening',
+            );
+          }
+        }
+      }
+    },
+    [setCallStateSync],
+  );
+
+  const enqueueCallTtsSentence = useCallback(
+    (rawSentence: string, turnId: number) => {
+      if (!callActiveRef.current || turnId !== callTurnRef.current.id) return;
+      const cleaned = cleanSentenceForSpeech(rawSentence);
+      if (!cleaned) return;
+
+      const genId = ttsGenerationIdRef.current;
+      const blobPromise = authFetch('/api/speech', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: cleaned,
+          fast: true,
+          ...callSpeechOptions(callSettingsRef.current, cleaned.length),
+        }),
+      })
+        .then((res) => {
+          if (res.ok) return res.blob();
+          console.warn(`[voice-call] TTS failed (${res.status}); sentence skipped`);
+          return null;
+        })
+        .catch((err) => {
+          console.warn('[voice-call] TTS request error', err);
+          return null;
+        });
+
+      ttsQueueRef.current.push({ text: cleaned, turnId, blobPromise });
+      void drainCallTtsQueue(genId);
+    },
+    [drainCallTtsQueue],
+  );
+
+  // Silences the current reply and waits for its stream to unwind, so the next
+  // turn starts alone; the client abort also cancels the agent on the server.
+  const abortCallReply = useCallback(async () => {
+    stopCallTtsPlayback(true);
+    if (!isSubmittingRef.current) return;
+    stopRequestedRef.current = true;
+    streamControllerRef.current?.abort();
+    for (let waited = 0; isSubmittingRef.current && waited < 5000; waited += 50) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }, [stopCallTtsPlayback]);
+
+  const submitVoiceCallTurn = useCallback(
+    async (fullTurnText: string) => {
+      const text = fullTurnText.trim();
+      if (!text || !callActiveRef.current) return;
+      if (callUnfinishedFlushTimerRef.current) {
+        clearTimeout(callUnfinishedFlushTimerRef.current);
+        callUnfinishedFlushTimerRef.current = null;
+      }
+      callUnfinishedBufferRef.current = '';
+      setCallPartialTranscript('');
+      setCallLastUserTranscript(text);
+      setCallActiveToolLabel(null);
+      setCallStateSync('thinking');
+      await abortCallReply();
+      if (!callActiveRef.current) return;
+
+      const agentAtSend = readSurfaceAgent();
+      const convId = readSurfaceConversationId() ?? undefined;
+      await handleSubmitRef.current(undefined, text, agentAtSend, convId);
+      setCallActiveToolLabel(null);
+    },
+    [abortCallReply, readSurfaceAgent, readSurfaceConversationId, setCallStateSync],
+  );
+
+  // `tentative`: captured while a reply was in flight. It leaves the call state
+  // alone and only takes the floor if its transcript passes `judgeInterjection`.
+  const processCallUtteranceBlob = useCallback(
+    async (blob: Blob, wasBargeIn: boolean, tentative = false) => {
+      if (!callActiveRef.current || blob.size < 256) {
+        if (callActiveRef.current && !tentative && !ttsPlayingRef.current) {
+          setCallStateSync(callUnfinishedBufferRef.current ? 'unfinished_hold' : 'listening');
+        }
+        return;
+      }
+
+      if (!tentative) setCallStateSync('transcribing');
+      try {
+        const extension = blob.type.includes('mp4')
+          ? 'mp4'
+          : blob.type.includes('ogg')
+            ? 'ogg'
+            : 'webm';
+        const file = new File([blob], `call-turn.${extension}`, { type: blob.type });
+        const formData = new FormData();
+        formData.append('audio', file);
+        const currentConvId = readSurfaceConversationId();
+        if (currentConvId) {
+          formData.append('conversation_id', currentConvId);
+        }
+        const activeAgentObj = resolveAgent(readSurfaceAgent());
+        formData.append(
+          'prompt',
+          buildDomainVocabularyPrompt(activeAgentObj?.name || readSurfaceAgent()),
+        );
+        const recentUserTexts = (
+          useWorkspaceStore.getState().conversations.find((c) => c.id === currentConvId)
+            ?.messages ?? []
+        )
+          .filter((m) => m.role === 'user')
+          .map((m) => m.content);
+        const languageHint = resolveCallLanguage(
+          callSettingsRef.current.language,
+          recentUserTexts,
+          typeof navigator !== 'undefined' ? navigator.language : null,
+        );
+        if (languageHint) {
+          formData.append('language', languageHint);
+        }
+
+        const res = await authFetch('/api/transcribe', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!res.ok) {
+          console.warn(`[voice-call] transcription failed (${res.status}); turn dropped`);
+        }
+        if (!res.ok || !callActiveRef.current) {
+          if (callActiveRef.current && !tentative) {
+            setCallStateSync(callUnfinishedBufferRef.current ? 'unfinished_hold' : 'listening');
+          }
+          return;
+        }
+
+        const data = (await res.json()) as { text?: string };
+        const transcript = (data.text || '').trim();
+
+        const arrivedAt = Date.now();
+        if (transcript && isNearDuplicateTranscript(lastCallTranscriptRef.current, transcript, arrivedAt)) {
+          console.debug(`[voice-call] dropped repeat transcript ${JSON.stringify(transcript)}`);
+          if (callActiveRef.current && !tentative && !isSubmittingRef.current && !ttsPlayingRef.current) {
+            setCallStateSync(callUnfinishedBufferRef.current ? 'unfinished_hold' : 'listening');
+          }
+          return;
+        }
+        if (transcript) lastCallTranscriptRef.current = { text: transcript, at: arrivedAt };
+
+        if (tentative) {
+          if (judgeInterjection(transcript, languageHint) === 'drop') {
+            console.debug(
+              `[voice-call] kept the reply going over ${JSON.stringify(transcript)}`,
+            );
+            return;
+          }
+          await abortCallReply();
+          if (!callActiveRef.current) return;
+        }
+
+        if (
+          !transcript ||
+          isSilenceHallucination(transcript) ||
+          isForeignScriptNoise(transcript, languageHint)
+        ) {
+          if (transcript) {
+            console.debug(`[voice-call] dropped noise transcript ${JSON.stringify(transcript)}`);
+          }
+          if (callActiveRef.current) {
+            setCallStateSync(callUnfinishedBufferRef.current ? 'unfinished_hold' : 'listening');
+          }
+          return;
+        }
+
+        // Ignore brief listener backchannels ("uh-huh", "okay", "yeah") when interrupting
+        if (wasBargeIn && isBackchannelOnly(transcript) && !callUnfinishedBufferRef.current) {
+          setCallStateSync('listening');
+          return;
+        }
+
+        // TEN 3-state Turn Detection ('finished' | 'unfinished' | 'wait')
+        const turnState = classifyTurnState(transcript);
+
+        if (turnState === 'wait') {
+          // Explicit stop/wait/hold command: silence agent and stay in listening mode
+          stopCallTtsPlayback(true);
+          stopRequestedRef.current = true;
+          streamControllerRef.current?.abort();
+          if (callUnfinishedFlushTimerRef.current) {
+            clearTimeout(callUnfinishedFlushTimerRef.current);
+            callUnfinishedFlushTimerRef.current = null;
+          }
+          callUnfinishedBufferRef.current = '';
+          setCallPartialTranscript('');
+          setCallStateSync('listening');
+          return;
+        }
+
+        if (turnState === 'unfinished') {
+          const combined = callUnfinishedBufferRef.current
+            ? `${callUnfinishedBufferRef.current} ${transcript}`
+            : transcript;
+          callUnfinishedBufferRef.current = combined;
+          setCallPartialTranscript(combined);
+          setCallStateSync('unfinished_hold');
+
+          if (callUnfinishedFlushTimerRef.current) {
+            clearTimeout(callUnfinishedFlushTimerRef.current);
+          }
+          callUnfinishedFlushTimerRef.current = setTimeout(() => {
+            callUnfinishedFlushTimerRef.current = null;
+            const buffered = callUnfinishedBufferRef.current.trim();
+            if (buffered && callActiveRef.current) {
+              void submitVoiceCallTurn(buffered);
+            }
+          }, TEN_VAD_CONFIG.UNFINISHED_WAIT_MS);
+          return;
+        }
+
+        // 'finished': combine with any held unfinished clause and dispatch immediately
+        const combinedTurn = callUnfinishedBufferRef.current
+          ? `${callUnfinishedBufferRef.current} ${transcript}`
+          : transcript;
+        await submitVoiceCallTurn(combinedTurn);
+      } catch (err) {
+        console.warn('[voice-call] utterance processing failed', err);
+        if (callActiveRef.current && !tentative) {
+          setCallStateSync(callUnfinishedBufferRef.current ? 'unfinished_hold' : 'listening');
+        }
+      }
+    },
+    [
+      abortCallReply,
+      readSurfaceConversationId,
+      setCallStateSync,
+      stopCallTtsPlayback,
+      submitVoiceCallTurn,
+    ],
+  );
+
+  const endVoiceCall = useCallback(() => {
+    callSessionRef.current += 1;
+    callStartingRef.current = false;
+    lastCallTranscriptRef.current = null;
+    callActiveRef.current = false;
+    setCallActive(false);
+    callMutedRef.current = false;
+    setCallMuted(false);
+    setCallSeconds(0);
+    setCallPartialTranscript('');
+    setCallLastUserTranscript('');
+    setCallCurrentSentence('');
+    setCallActiveToolLabel(null);
+    callUnfinishedBufferRef.current = '';
+
+    if (callUnfinishedFlushTimerRef.current) {
+      clearTimeout(callUnfinishedFlushTimerRef.current);
+      callUnfinishedFlushTimerRef.current = null;
+    }
+    if (callVadTimerRef.current) {
+      clearInterval(callVadTimerRef.current);
+      callVadTimerRef.current = null;
+    }
+    if (callDurationTimerRef.current) {
+      clearInterval(callDurationTimerRef.current);
+      callDurationTimerRef.current = null;
+    }
+    if (
+      callUtteranceRecorderRef.current &&
+      callUtteranceRecorderRef.current.state !== 'inactive'
+    ) {
+      try {
+        callUtteranceRecorderRef.current.onstop = null;
+        callUtteranceRecorderRef.current.stop();
+      } catch {
+        // ignore
+      }
+    }
+    callUtteranceRecorderRef.current = null;
+    callUtteranceChunksRef.current = [];
+
+    if (callStreamRef.current) {
+      callStreamRef.current.getTracks().forEach((t) => t.stop());
+      callStreamRef.current = null;
+    }
+    if (callAudioCtxRef.current) {
+      void callAudioCtxRef.current.close().catch(() => undefined);
+      callAudioCtxRef.current = null;
+    }
+    callMicSourceRef.current = null;
+    callAnalyserRef.current = null;
+    callOutputAnalyserRef.current = null;
+    stopCallTtsPlayback();
+  }, [stopCallTtsPlayback]);
+
+  const interruptCallAgent = useCallback(() => {
+    stopCallTtsPlayback(true);
+    stopRequestedRef.current = true;
+    streamControllerRef.current?.abort();
+    if (callActiveRef.current) {
+      setCallStateSync('listening');
+    }
+  }, [setCallStateSync, stopCallTtsPlayback]);
+
+  const toggleCallMute = useCallback(() => {
+    const next = !callMutedRef.current;
+    callMutedRef.current = next;
+    setCallMuted(next);
+    if (callStreamRef.current) {
+      callStreamRef.current.getAudioTracks().forEach((t) => {
+        t.enabled = !next;
+      });
+    }
+  }, []);
+
+  // Swaps the mic under the running analyser; recorders read callStreamRef per utterance.
+  const switchCallInputDevice = useCallback(async (deviceId: string) => {
+    const ctx = callAudioCtxRef.current;
+    const analyser = callAnalyserRef.current;
+    if (!callActiveRef.current || !ctx || !analyser) return;
+    try {
+      const next = await navigator.mediaDevices.getUserMedia({
+        audio: callAudioConstraints(deviceId),
+      });
+      if (!callActiveRef.current) {
+        next.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      next.getAudioTracks().forEach((t) => {
+        t.enabled = !callMutedRef.current;
+      });
+      callMicSourceRef.current?.disconnect();
+      const source = ctx.createMediaStreamSource(next);
+      source.connect(analyser);
+      callMicSourceRef.current = source;
+      callStreamRef.current?.getTracks().forEach((t) => t.stop());
+      callStreamRef.current = next;
+    } catch (err) {
+      console.warn('[voice-call] microphone switch failed', err);
+      setVoiceError('Could not switch to that microphone.');
+    }
+  }, []);
+
+  const updateCallSettings = useCallback(
+    (patch: Partial<CallSettings>) => {
+      const next = { ...callSettingsRef.current, ...patch };
+      callSettingsRef.current = next;
+      setCallSettings(next);
+      try {
+        window.localStorage.setItem(CALL_SETTINGS_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // Private mode: settings last for this page only.
+      }
+      if (patch.inputDeviceId !== undefined) {
+        void switchCallInputDevice(patch.inputDeviceId);
+      }
+    },
+    [switchCallInputDevice],
+  );
+
+  useEffect(() => {
+    if (!callActive) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      const state = callStateRef.current;
+      if (state !== 'speaking' && state !== 'thinking') return;
+      e.preventDefault();
+      interruptCallAgent();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [callActive, interruptCallAgent]);
+
+  const startVoiceCall = useCallback(async () => {
+    if (callActiveRef.current) {
+      endVoiceCall();
+      return;
+    }
+    // A second click while the mic opens would start a second VAD loop on the same mic.
+    if (callStartingRef.current) return;
+    if (voiceMode !== 'idle') {
+      cancelVoiceRecording();
+    }
+    setVoiceError(null);
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setVoiceError('Microphone is not supported in this browser.');
+      return;
+    }
+
+    callStartingRef.current = true;
+    const session = ++callSessionRef.current;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: callAudioConstraints(callSettingsRef.current.inputDeviceId),
+      });
+      if (session !== callSessionRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      callStreamRef.current = stream;
+
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) {
+        throw new Error('WebAudio API is not available in this browser.');
+      }
+      const ctx = new AudioCtx();
+      callAudioCtxRef.current = ctx;
+      // A suspended context feeds the mic analyser flat silence, so the VAD never fires.
+      if (ctx.state === 'suspended') {
+        await ctx.resume().catch((err) => {
+          console.warn('[voice-call] AudioContext resume failed', err);
+        });
+      }
+      if (session !== callSessionRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        void ctx.close().catch(() => undefined);
+        return;
+      }
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.25;
+      source.connect(analyser);
+      callMicSourceRef.current = source;
+      callAnalyserRef.current = analyser;
+
+      const outputAnalyser = ctx.createAnalyser();
+      outputAnalyser.fftSize = 512;
+      outputAnalyser.smoothingTimeConstant = 0.35;
+      outputAnalyser.connect(ctx.destination);
+      callOutputAnalyserRef.current = outputAnalyser;
+
+      const mimeCandidates = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4',
+        'audio/ogg;codecs=opus',
+      ];
+      const supportedMimeType = mimeCandidates.find(
+        (m) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m),
+      );
+
+      callActiveRef.current = true;
+      setCallActive(true);
+      callMutedRef.current = false;
+      setCallMuted(false);
+      setCallSeconds(0);
+      setCallPartialTranscript('');
+      setCallLastUserTranscript('');
+      setCallCurrentSentence('');
+      setCallActiveToolLabel(null);
+      callUnfinishedBufferRef.current = '';
+      setCallStateSync('listening');
+
+      callDurationTimerRef.current = setInterval(() => {
+        setCallSeconds((s) => s + 1);
+      }, 1000);
+
+      const timeDomain = new Uint8Array(analyser.fftSize);
+      const freqDomain = new Uint8Array(analyser.frequencyBinCount);
+      let onsetCount = 0;
+      let silenceMs = 0;
+      let utteranceMs = 0;
+      let bargeInSpeechMs = 0;
+      let isRecordingUtterance = false;
+      let voicedMs = 0;
+      let voicedRmsSum = 0;
+      let voicedFrames = 0;
+      let utteranceTentative = false;
+      let bargeInRmsSum = 0;
+      let bargeInFrames = 0;
+      let vadDebugPeak = 0;
+      let vadDebugFrames = 0;
+
+      const startUtteranceSegment = (fromBargeIn: boolean, tentative = false) => {
+        if (isRecordingUtterance || !callStreamRef.current) return;
+        try {
+          const recorder = new MediaRecorder(
+            callStreamRef.current,
+            supportedMimeType ? { mimeType: supportedMimeType } : undefined,
+          );
+          // Each recorder owns its chunks: a late onstop must not read the next clip's audio.
+          const chunks: Blob[] = [];
+          callUtteranceChunksRef.current = chunks;
+          callInterruptedDuringSpeechRef.current = fromBargeIn;
+          recorder.ondataavailable = (ev) => {
+            if (ev.data && ev.data.size > 0) {
+              chunks.push(ev.data);
+            }
+          };
+          recorder.start(100);
+          callUtteranceRecorderRef.current = recorder;
+          isRecordingUtterance = true;
+          silenceMs = 0;
+          utteranceMs = 0;
+          voicedMs = 0;
+          voicedRmsSum = 0;
+          voicedFrames = 0;
+          utteranceTentative = tentative;
+          if (tentative) return;
+          if (callUnfinishedFlushTimerRef.current) {
+            clearTimeout(callUnfinishedFlushTimerRef.current);
+            callUnfinishedFlushTimerRef.current = null;
+          }
+          setCallStateSync('user_speaking');
+        } catch {
+          isRecordingUtterance = false;
+        }
+      };
+
+      const finishUtteranceSegment = () => {
+        const recorder = callUtteranceRecorderRef.current;
+        callUtteranceRecorderRef.current = null;
+        isRecordingUtterance = false;
+        onsetCount = 0;
+        silenceMs = 0;
+        utteranceMs = 0;
+        const wasBargeIn = callInterruptedDuringSpeechRef.current;
+        callInterruptedDuringSpeechRef.current = false;
+        const tentative = utteranceTentative;
+        utteranceTentative = false;
+        const stats = {
+          voicedMs,
+          avgVoicedRms: voicedFrames > 0 ? voicedRmsSum / voicedFrames : 0,
+        };
+
+        if (!recorder) return;
+        if (isLikelyNoiseUtterance(stats)) {
+          console.debug(
+            `[voice-call] dropped noise clip: voiced ${stats.voicedMs}ms, avg rms ${stats.avgVoicedRms.toFixed(4)} (need ${TEN_VAD_CONFIG.MIN_VOICED_MS}ms, ${TEN_VAD_CONFIG.MIN_AVG_VOICED_RMS})`,
+          );
+          recorder.onstop = null;
+          try {
+            if (recorder.state !== 'inactive') recorder.stop();
+          } catch {
+            // ignore
+          }
+          callUtteranceChunksRef.current = [];
+          if (callActiveRef.current && !tentative && !ttsPlayingRef.current) {
+            setCallStateSync(callUnfinishedBufferRef.current ? 'unfinished_hold' : 'listening');
+          }
+          return;
+        }
+        const mimeType = recorder.mimeType || supportedMimeType || 'audio/webm';
+        const chunks = callUtteranceChunksRef.current;
+        callUtteranceChunksRef.current = [];
+        let dispatched = false;
+        const dispatch = () => {
+          if (dispatched) return;
+          dispatched = true;
+          void processCallUtteranceBlob(new Blob(chunks, { type: mimeType }), wasBargeIn, tentative);
+        };
+        if (recorder.state === 'inactive') {
+          dispatch();
+          return;
+        }
+        recorder.onstop = dispatch;
+        try {
+          recorder.stop();
+        } catch {
+          dispatch();
+        }
+      };
+
+      // 16ms TEN-VAD frame loop
+      if (callVadTimerRef.current) clearInterval(callVadTimerRef.current);
+      const vadTimer = setInterval(() => {
+        if (session !== callSessionRef.current) {
+          clearInterval(vadTimer);
+          return;
+        }
+        if (!callActiveRef.current || callMutedRef.current || !callAnalyserRef.current) {
+          return;
+        }
+
+        callAnalyserRef.current.getByteTimeDomainData(timeDomain);
+        callAnalyserRef.current.getByteFrequencyData(freqDomain);
+        const rms = computeSpeechBandRms(timeDomain, freqDomain, ctx.sampleRate);
+        if (process.env.NODE_ENV !== 'production') {
+          vadDebugPeak = Math.max(vadDebugPeak, rms);
+          vadDebugFrames += 1;
+          if (vadDebugFrames >= 60) {
+            console.debug(
+              `[voice-call] mic peak rms ${vadDebugPeak.toFixed(4)} (threshold ${TEN_VAD_CONFIG.SPEECH_RMS_THRESHOLD}) ctx=${ctx.state} state=${callStateRef.current}`,
+            );
+            vadDebugPeak = 0;
+            vadDebugFrames = 0;
+          }
+        }
+
+        const agentAudible = ttsPlayingRef.current || callStateRef.current === 'speaking';
+        const replyInFlight = isSubmittingRef.current || callStateRef.current === 'thinking';
+
+        // 1. Adaptive Barge-In & Reversible Volume Ducking while ABI is speaking
+        if (agentAudible && !isRecordingUtterance) {
+          const restoreVolume = () => {
+            bargeInSpeechMs = 0;
+            bargeInRmsSum = 0;
+            bargeInFrames = 0;
+            if (ttsCurrentAudioRef.current) {
+              ttsCurrentAudioRef.current.volume = 1.0;
+            }
+          };
+          if (rms >= TEN_VAD_CONFIG.BARGE_IN_RMS_THRESHOLD) {
+            bargeInSpeechMs += TEN_VAD_CONFIG.HOP_INTERVAL_MS;
+            bargeInRmsSum += rms;
+            bargeInFrames += 1;
+            if (
+              bargeInSpeechMs >= TEN_VAD_CONFIG.DUCKING_HOLD_MS &&
+              ttsCurrentAudioRef.current
+            ) {
+              // Reversible volume ducking at 150ms
+              ttsCurrentAudioRef.current.volume = 0.2;
+            }
+            if (bargeInSpeechMs >= TEN_VAD_CONFIG.BARGE_IN_COMMIT_MS) {
+              const burst = { voicedMs: bargeInSpeechMs, avgVoicedRms: bargeInRmsSum / bargeInFrames };
+              if (!shouldCommitBargeIn(burst)) {
+                restoreVolume();
+                return;
+              }
+              // Full barge-in commit at 380ms: cut TTS + abort LLM stream + capture user speech
+              bargeInSpeechMs = 0;
+              bargeInRmsSum = 0;
+              bargeInFrames = 0;
+              stopCallTtsPlayback(true);
+              stopRequestedRef.current = true;
+              streamControllerRef.current?.abort();
+              startUtteranceSegment(true);
+            }
+          } else if (bargeInSpeechMs > 0) {
+            // Restore volume if user only coughed or gave a <380ms micro-backchannel
+            restoreVolume();
+          }
+          return;
+        }
+
+        // 2. Normal Listening / Utterance Capture. While a reply is in flight
+        // (nothing audible yet) speech is captured tentatively and only aborts the
+        // reply once its transcript is judged real.
+        if (callStateRef.current === 'transcribing') {
+          return;
+        }
+
+        const isSpeechFrame =
+          rms >=
+          (agentAudible
+            ? TEN_VAD_CONFIG.BARGE_IN_RMS_THRESHOLD
+            : TEN_VAD_CONFIG.SPEECH_RMS_THRESHOLD);
+
+        if (!isRecordingUtterance) {
+          if (isSpeechFrame) {
+            onsetCount += 1;
+            if (onsetCount >= TEN_VAD_CONFIG.ONSET_FRAMES) {
+              startUtteranceSegment(false, replyInFlight);
+            }
+          } else {
+            onsetCount = Math.max(0, onsetCount - 1);
+          }
+        } else {
+          utteranceMs += TEN_VAD_CONFIG.HOP_INTERVAL_MS;
+          if (isSpeechFrame) {
+            silenceMs = 0;
+            voicedMs += TEN_VAD_CONFIG.HOP_INTERVAL_MS;
+            voicedRmsSum += rms;
+            voicedFrames += 1;
+          } else {
+            silenceMs += TEN_VAD_CONFIG.HOP_INTERVAL_MS;
+          }
+
+          if (
+            silenceMs >= TEN_VAD_CONFIG.FINISHED_SILENCE_MS ||
+            utteranceMs >= TEN_VAD_CONFIG.MAX_UTTERANCE_MS
+          ) {
+            finishUtteranceSegment();
+          }
+        }
+      }, TEN_VAD_CONFIG.HOP_INTERVAL_MS);
+      callVadTimerRef.current = vadTimer;
+    } catch (err) {
+      if (session !== callSessionRef.current) return;
+      const name = (err as { name?: string })?.name;
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        setVoiceError('Microphone access was denied. Please allow it in your browser settings.');
+      } else {
+        setVoiceError(err instanceof Error ? err.message : 'Unable to start voice call');
+      }
+      endVoiceCall();
+    } finally {
+      if (session === callSessionRef.current) callStartingRef.current = false;
+    }
+  }, [
+    cancelVoiceRecording,
+    endVoiceCall,
+    processCallUtteranceBlob,
+    setCallStateSync,
+    stopCallTtsPlayback,
+    voiceMode,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      endVoiceCall();
+    };
+  }, [endVoiceCall]);
 
   // Panel resize — global pointer handlers so the drag keeps working even when
   // the cursor leaves the handle strip.
@@ -2041,9 +3007,22 @@ export function ChatInterface({
     setPendingFileAttachments([]); // Clear file attachments after adding to message
     setImageError(null);
     // setSearchEnabled(false); // Reset search toggle after sending
-    setRequestSentAt(Date.now());
+    const sentAt = Date.now();
+    requestSentAtRef.current = sentAt;
+    setRequestSentAt(sentAt);
     stopRequestedRef.current = false;
     setIsLoading(true);
+
+    // Spoken or typed, a send on a call is a new turn: the last reply goes quiet
+    // and only this turn's sentences may play.
+    let callTurnId = 0;
+    if (callActiveRef.current) {
+      stopCallTtsPlayback(true);
+      callTurnId = callTurnRef.current.id + 1;
+      callTurnRef.current = { id: callTurnId, conversationId, messageId: null };
+      ttsSpokenSentencesRef.current = [];
+      setCallStateSync('thinking');
+    }
 
     try {
       // Get provider for current agent
@@ -2129,6 +3108,12 @@ export function ChatInterface({
           const lastMsg = convNow?.messages[convNow.messages.length - 1];
           assistantMessageIdRef = lastMsg?.id || null;
         }
+        const bindCallTurnMessage = (messageId: string | null) => {
+          if (callTurnId && callTurnRef.current.id === callTurnId) {
+            callTurnRef.current = { ...callTurnRef.current, messageId };
+          }
+        };
+        bindCallTurnMessage(assistantMessageIdRef);
         // Setup connecting indicator
         gotFirstTokenRef.current = false;
         setShowConnecting(false);
@@ -2372,6 +3357,7 @@ export function ChatInterface({
               const input = getStringValue(payload.input, payload.data) || undefined;
               handleToolStartEvent(rawTool, input);
               streamActivityLine = formatToolName(rawTool);
+              if (callActiveRef.current) setCallActiveToolLabel(streamActivityLine);
               hasDetailedActivity = true;
               return true;
             }
@@ -2385,6 +3371,7 @@ export function ChatInterface({
               const question = getStringValue(payload.question);
               if (!question) return false;
               streamActivityLine = `Question: ${truncateLine(singleLine(question), 110)}`;
+              if (callActiveRef.current) setCallActiveToolLabel(streamActivityLine);
               hasDetailedActivity = true;
               return true;
             }
@@ -2405,6 +3392,7 @@ export function ChatInterface({
               lastEventWasToolResponse = false;
               handleAgentStepEvent('call_model', rawAgent, callModelLabel);
               streamActivityLine = callModelLabel;
+              if (callActiveRef.current) setCallActiveToolLabel(streamActivityLine);
               hasDetailedActivity = true;
               return true;
             }
@@ -2415,6 +3403,7 @@ export function ChatInterface({
               if (!agentName) return false;
               handleAgentStepEvent('agent_routing', rawAgent);
               streamActivityLine = `Routing to ${agentName}`;
+              if (callActiveRef.current) setCallActiveToolLabel(streamActivityLine);
               hasDetailedActivity = true;
               return true;
             }
@@ -2433,8 +3422,11 @@ export function ChatInterface({
             ? `${contentBody || '▌'}${contentBody ? '▌' : ''}`
             : `${contentBody}`;
 
-          updateLastMessage(
+          // After a stop, buffered frames must not overwrite the "[interrupted]" text.
+          if (stopRequestedRef.current) return;
+          updateMessage(
             conversationId!,
+            assistantMessageIdRef,
             assembled.trimEnd() || '▌',
             undefined,
             streamSources.length > 0 ? streamSources : undefined,
@@ -2447,6 +3439,10 @@ export function ChatInterface({
           const controller = new AbortController();
           streamControllerRef.current = controller;
           if (stopRequestedRef.current) controller.abort();
+          const effectiveRequestContext = callActiveRef.current
+            ? { ...(chatRequestContext ?? {}), voice_call: { active: true } }
+            : chatRequestContext;
+          const sentenceAggregator = new SentenceAggregator();
           const response = await fetch(`${getApiBase()}/api/chat/stream`, {
           method: 'POST',
           headers: { 
@@ -2466,7 +3462,7 @@ export function ChatInterface({
             system_prompt: systemPrompt,
             search_enabled: false,
             regenerate_of: regenerateOf ?? null,
-            ...(chatRequestContext ? { context: chatRequestContext } : {}),
+            ...(effectiveRequestContext ? { context: effectiveRequestContext } : {}),
             // search_enabled: searchEnabled,
           }),
         });
@@ -2523,6 +3519,7 @@ export function ChatInterface({
                       backendId,
                     );
                     assistantMessageIdRef = backendId;
+                    bindCallTurnMessage(backendId);
                   }
                 }
 
@@ -2586,11 +3583,17 @@ export function ChatInterface({
                   // Regular response content
                   responseContent += token;
                   renderStreamingMessage(true);
+                  if (callActiveRef.current && !stopRequestedRef.current) {
+                    const readySentences = sentenceAggregator.push(token);
+                    for (const sentence of readySentences) {
+                      enqueueCallTtsSentence(sentence, callTurnId);
+                    }
+                  }
                 }
                 if (parsed.error) {
                   // Show error in current message and throw to trigger modal
                   fullContent = `Error: ${parsed.error}`;
-                  updateLastMessage(conversationId!, fullContent);
+                  updateMessage(conversationId!, assistantMessageIdRef, fullContent);
                   throw new Error(parsed.error);
                 }
               } catch (parseError) {
@@ -2605,9 +3608,14 @@ export function ChatInterface({
             if (done) break;
           }
         }
+        if (callActiveRef.current && !stopRequestedRef.current) {
+          for (const tailSentence of sentenceAggregator.flush()) {
+            enqueueCallTtsSentence(tailSentence, callTurnId);
+          }
+        }
         // Final: store full content with thinking duration
         const thinkingDuration = (Date.now() - thinkingStartTime) / 1000;
-        const executionTime = requestSentAt ? (Date.now() - requestSentAt) / 1000 : undefined;
+        const executionTime = elapsedSecondsSince(requestSentAtRef.current);
         const finalBody = thinkingContent
           ? `<think>${thinkingContent}</think>\n\n${responseContent}`
           : responseContent;
@@ -2620,9 +3628,12 @@ export function ChatInterface({
         if (!finalContent && !(finalToolCalls && finalToolCalls.length > 0) && assistantMessageIdRef) {
           useWorkspaceStore.getState().removeMessage(conversationId!, assistantMessageIdRef);
         } else {
-          updateLastMessage(
+          // A barge-in that landed as the stream ended already wrote what was heard.
+          const shownContent = readMessageContent(conversationId!, assistantMessageIdRef);
+          updateMessage(
             conversationId!,
-            finalContent,
+            assistantMessageIdRef,
+            callTurnId && shownContent?.endsWith('[interrupted]') ? shownContent : finalContent,
             thinkingDuration,
             streamSources.length > 0 ? streamSources : undefined,
             hasDetailedActivity ? streamActivityLine : null,
@@ -2663,11 +3674,20 @@ export function ChatInterface({
           const finalBody = thinkingContent
             ? `<think>${thinkingContent}</think>\n\n${responseContent}`
             : responseContent;
-          const finalContent = finalBody.trim();
+          const rawTrimmed = finalBody.trim();
+          const shownContent = conversationId
+            ? readMessageContent(conversationId, assistantMessageIdRef)
+            : undefined;
+          const finalContent = !callTurnId
+            ? rawTrimmed
+            : shownContent?.endsWith('[interrupted]')
+              ? shownContent
+              : interruptedMessageContent('', rawTrimmed);
           streamToolCalls.forEach((t) => { if (t.status === 'running') t.status = 'done'; });
           if (conversationId) {
-            updateLastMessage(
+            updateMessage(
               conversationId,
+              assistantMessageIdRef,
               finalContent,
               undefined,
               streamSources.length > 0 ? streamSources : undefined,
@@ -2693,6 +3713,9 @@ export function ChatInterface({
         const controller = new AbortController();
         streamControllerRef.current = controller;
         if (stopRequestedRef.current) controller.abort();
+        const effectiveRequestContext = callActiveRef.current
+          ? { ...(chatRequestContext ?? {}), voice_call: { active: true } }
+          : chatRequestContext;
 
         const response = await fetch(`${getApiBase()}/api/chat/complete`, {
           signal: controller.signal,
@@ -2712,7 +3735,7 @@ export function ChatInterface({
             llm_model: llmModel,
             system_prompt: systemPrompt,
             regenerate_of: regenerateOf ?? null,
-            ...(chatRequestContext ? { context: chatRequestContext } : {}),
+            ...(effectiveRequestContext ? { context: effectiveRequestContext } : {}),
           }),
         });
 
@@ -2729,9 +3752,29 @@ export function ChatInterface({
           agent: effectiveAgent,
           modelId: llmModel,
           thinkingDuration,
+          executionTime: elapsedSecondsSince(requestSentAtRef.current),
           sources: data.context_used?.length > 0 ? data.context_used : undefined,
           ...(regenerateOf ? { regenerateOf } : {}),
         });
+
+        if (callTurnId && callTurnRef.current.id === callTurnId) {
+          const replyMessages = useWorkspaceStore
+            .getState()
+            .conversations.find((c) => c.id === conversationId)?.messages;
+          callTurnRef.current = {
+            ...callTurnRef.current,
+            messageId: replyMessages?.[replyMessages.length - 1]?.id ?? null,
+          };
+        }
+        if (callActiveRef.current && typeof data?.message?.content === 'string') {
+          const nonStreamAggregator = new SentenceAggregator();
+          for (const s of [
+            ...nonStreamAggregator.push(data.message.content),
+            ...nonStreamAggregator.flush(),
+          ]) {
+            enqueueCallTtsSentence(s, callTurnId);
+          }
+        }
       }
     } catch (error) {
       // console.error('Chat API error:', error);
@@ -2830,6 +3873,15 @@ export function ChatInterface({
       isSubmittingRef.current = false;
       streamControllerRef.current = null;
       useSlidesStore.getState().setAgentWriting(false);
+      if (
+        callTurnId &&
+        callActiveRef.current &&
+        callStateRef.current === 'thinking' &&
+        !ttsPlayingRef.current &&
+        ttsQueueRef.current.length === 0
+      ) {
+        setCallStateSync('listening');
+      }
     }
   };
 
@@ -3179,6 +4231,27 @@ export function ChatInterface({
               </div>
             )}
 
+            {/* Live full-duplex voice call card */}
+            {callActive && (
+              <VoiceCallBar
+                agentName={selectedAgentData?.name || selectedAgent}
+                agentLogoUrl={selectedAgentData?.logoUrl ?? undefined}
+                callState={callState}
+                muted={callMuted}
+                seconds={callSeconds}
+                analyser={callAnalyserRef.current}
+                outputAnalyser={callOutputAnalyserRef.current}
+                partialTranscript={callPartialTranscript}
+                lastUserTranscript={callLastUserTranscript}
+                currentAgentSentence={callCurrentSentence}
+                activeToolLabel={callActiveToolLabel}
+                settings={callSettings}
+                onChangeSettings={updateCallSettings}
+                onToggleMute={toggleCallMute}
+                onEndCall={endVoiceCall}
+              />
+            )}
+
             {voiceMode === 'idle' ? (
             <div
               className={cn(
@@ -3438,12 +4511,30 @@ export function ChatInterface({
                     <button
                       type="button"
                       onClick={startVoiceRecording}
-                      disabled={isLoading}
+                      disabled={isLoading || callActive}
                       className="chat-composer-action"
                       title="Record voice message (Ctrl+M)"
                       aria-label="Record voice message (Ctrl+M)"
                     >
                       <Mic size={18} />
+                    </button>
+
+                    {/* Live full-duplex phone call with the selected agent */}
+                    <button
+                      type="button"
+                      onClick={() => void startVoiceCall()}
+                      className={cn(
+                        'chat-composer-action chat-composer-action-call',
+                        callActive && 'chat-composer-action-call-active',
+                      )}
+                      title={
+                        callActive
+                          ? 'End live voice call'
+                          : `Call ${selectedAgentData?.name || selectedAgent || 'ABI'} (live voice call)`
+                      }
+                      aria-label={callActive ? 'End voice call' : 'Start voice call'}
+                    >
+                      {callActive ? <PhoneOff size={17} /> : <Phone size={17} />}
                     </button>
 
                     {/* Side-by-side: same prompt → both surfaces (main composer only) */}
@@ -4686,7 +5777,7 @@ function ReadAloudButton({ messageId, content }: { messageId: string; content: s
 
     setState('loading');
     try {
-      const response = await fetch(`${getApiBase()}/api/speech`, {
+      const response = await authFetch('/api/speech', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),

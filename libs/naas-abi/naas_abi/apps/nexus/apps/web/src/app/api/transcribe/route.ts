@@ -40,6 +40,16 @@ export async function POST(request: NextRequest) {
       outgoingForm.append('conversation_id', conversationId);
     }
 
+    const bodyPrompt = incomingForm.get('prompt');
+    if (typeof bodyPrompt === 'string' && bodyPrompt.trim()) {
+      outgoingForm.append('prompt', bodyPrompt.trim());
+    }
+
+    const bodyLanguage = incomingForm.get('language');
+    if (typeof bodyLanguage === 'string' && bodyLanguage.trim()) {
+      outgoingForm.append('language', bodyLanguage.trim());
+    }
+
     const apiBase =
       process.env.NEXUS_API_URL ||
       process.env.NEXT_PUBLIC_API_URL ||
