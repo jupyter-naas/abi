@@ -364,7 +364,7 @@ function wireDialog(label) {
         .map(
           (user) =>
             `<option value="${escapeHtml(user.id)}"${user.id === owners.me ? " selected" : ""}>${escapeHtml(
-              user.id === owners.me ? `${user.name} (me)` : user.name,
+              `${user.name}${user.email ? ` (${user.email})` : ""}${user.id === owners.me ? " (me)" : ""}`,
             )}</option>`,
         )
         .join("");
