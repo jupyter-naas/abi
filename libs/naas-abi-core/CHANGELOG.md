@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v3.2.0 (2026-11-02)
+
+### Features
+
+- **module**: Load optional marketplace secrets without failing Engine.load
+  ([`553749a`](https://github.com/jupyter-naas/abi/commit/553749a0b8e2cf6c0070b809bc5376a9d7470281))
+
+### Refactoring
+
+- **marketplace**: Hydrate optional secrets in module on_load
+  ([`a1ed7df`](https://github.com/jupyter-naas/abi/commit/a1ed7dfe5113573112419b70b4e3b6a9707632f1))
+
+
 ## v3.1.0 (2026-10-26)
 
 ### Bug Fixes
