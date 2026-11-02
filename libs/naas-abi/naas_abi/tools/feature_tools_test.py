@@ -53,6 +53,71 @@ def test_graph_defaults_to_the_open_graph() -> None:
     assert graph_tools._resolve_graph("", _GRAPHS).id == "hr"
 
 
+class _FakeGraphService:
+    """GraphService stand-in: refuses reads without a scope, like the real one."""
+
+    def __init__(self, scope=None) -> None:
+        self.access_scope = scope
+
+    def _get_catalog_store(self) -> str:
+        return "catalog"
+
+    def for_scope(self, scope) -> _FakeGraphService:
+        return _FakeGraphService(scope)
+
+    async def list_graphs(self, *, workspace_id: str):
+        if self.access_scope is None:
+            raise RuntimeError("A workspace graph scope is required")
+        assert workspace_id == self.access_scope.workspace_id
+        return [SimpleNamespace(role_label="Workspace", graphs=_GRAPHS)]
+
+
+def _patch_graph_scope(monkeypatch, role="member"):
+    import asyncio
+
+    from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary import (
+        workspace_policy,
+    )
+
+    loads: list[tuple] = []
+
+    async def _member(db, user_id, workspace_id):
+        return role
+
+    async def _load(db, store, workspace_id, role):
+        loads.append((store, workspace_id, role))
+        return SimpleNamespace(workspace_id=workspace_id)
+
+    monkeypatch.setattr(graph_tools, "_service", _FakeGraphService)
+    monkeypatch.setattr(graph_tools, "require_member", _member)
+    monkeypatch.setattr(graph_tools, "run_db", lambda fn: asyncio.run(fn(None)))
+    monkeypatch.setattr(graph_tools, "run", asyncio.run)
+    monkeypatch.setattr(workspace_policy, "load_workspace_scope", _load)
+    return loads
+
+
+def test_graph_tools_read_through_the_callers_workspace_scope(monkeypatch) -> None:
+    loads = _patch_graph_scope(monkeypatch)
+    tools = {t.name: t for t in graph_tools.graph_tools()}
+
+    out = tools["list_workspace_graphs"].invoke({})
+
+    assert loads == [("catalog", "ws-1", "member")]
+    assert [g["id"] for g in out["packs"][0]["graphs"]] == ["sales", "hr"]
+
+
+def test_graph_tools_stop_at_the_membership_check(monkeypatch) -> None:
+    loads = _patch_graph_scope(
+        monkeypatch, role={"error": "You do not have access to this workspace."}
+    )
+    tools = {t.name: t for t in graph_tools.graph_tools()}
+
+    out = tools["search_graph"].invoke({"query": "Tesla"})
+
+    assert out == {"error": "You do not have access to this workspace."}
+    assert loads == []
+
+
 # ── Files: drive comes from the open item, never guessed wrong ───────────────
 
 
