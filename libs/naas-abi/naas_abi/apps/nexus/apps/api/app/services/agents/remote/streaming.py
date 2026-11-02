@@ -11,9 +11,9 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.remote.port import (
     RemoteAgentUnavailable,
 )
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
+    AgentEventChunks,
     Message,
     ProviderConfig,
-    agent_event_chunk,
 )
 
 logger = logging.getLogger(__name__)
@@ -88,6 +88,7 @@ async def remote_agent_chunks(
 
     emitted = done = False
     final_replay: list[str] = []
+    to_chunk = AgentEventChunks()
     try:
         async for event in directory.stream(
             config.model, prompt, thread_id=thread_id, invocation_id=invocation_id
@@ -105,7 +106,7 @@ async def remote_agent_chunks(
                 if text.strip():
                     final_replay.append(text.strip())
                 continue
-            chunk = agent_event_chunk(name, text, chat_source=event.get("chat_source"))
+            chunk = to_chunk(name, text, chat_source=event.get("chat_source"))
             if chunk is not None:
                 emitted = emitted or isinstance(chunk, str)
                 yield chunk
