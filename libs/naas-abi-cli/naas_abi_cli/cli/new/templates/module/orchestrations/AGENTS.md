@@ -4,7 +4,13 @@
 
 ## What goes here
 
-> Legacy: Dagster serves projects without NATS (no `nats:` block in the config) and will be removed in the next major. It needs the `naas-abi-core[dagster]` extra. A NATS project schedules with module jobs instead.
+> Legacy: Dagster serves projects without NATS (no `nats:` block in the config) and will be removed in the next major. It needs the `naas-abi-core[dagster]` extra.
+>
+> **NATS project?** Leave this folder empty and schedule on the module class (`../__init__.py`) instead:
+> - `@job(triggers=(Cron(...),))` from `naas_abi_core.module.jobs` for scheduled or event-driven work (`Cron`, `Every`, `OnEvent`);
+> - `@workflow(triggers=(...))` from `naas_abi_core.module.workflows` for work with a typed input and output and checkpointed steps (`ctx.step`, `ctx.map`, `ctx.call`), where a retry skips the steps that finished.
+>
+> Both show in Nexus under System → Jobs. Workflow and pipeline classes are published as durable workflows already (`workflow.<slug>`, `pipeline.<slug>`). The runtime is described in `naas_abi_core/module/AGENTS.md` (Jobs, Workflows) in the ABI repository, and on https://docs.naas.ai/capabilities/build/workflows/schedule-a-workflow.
 
 **Dagster** orchestration units. An orchestration bundles `assets`, `jobs`, `schedules`, and `sensors` into a single `dg.Definitions` and lets the engine run scheduled / triggered work.
 
