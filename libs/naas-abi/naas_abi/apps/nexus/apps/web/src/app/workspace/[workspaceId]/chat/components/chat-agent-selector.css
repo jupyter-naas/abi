@@ -363,6 +363,270 @@
   padding: 8px 12px;
 }
 
+.chat-composer-action-call {
+  position: relative;
+  color: var(--foreground-hex);
+  background: color-mix(in srgb, #10b981 12%, transparent);
+  border: 1px solid color-mix(in srgb, #10b981 30%, transparent);
+}
+
+.chat-composer-action-call:hover:not(:disabled) {
+  background: color-mix(in srgb, #10b981 22%, transparent);
+  color: #10b981;
+}
+
+.chat-composer-action-call-active {
+  background: #ef4444 !important;
+  border-color: #ef4444 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 3px rgb(239 68 68 / 0.22);
+}
+
+/* Live call card above the composer: square blocks around the harmonic ring orb */
+.chat-voice-call-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 8px 12px 10px;
+  border: 1px solid color-mix(in srgb, #10b981 28%, var(--border-hex));
+  border-radius: 0;
+  background:
+    radial-gradient(
+      90% 80% at 50% 38%,
+      color-mix(in srgb, #10b981 9%, transparent) 0%,
+      transparent 70%
+    ),
+    var(--card-hex);
+  box-shadow: 0 8px 24px -14px rgb(0 0 0 / 0.35);
+  transition: border-color 0.25s ease;
+}
+
+.chat-voice-call-stage[data-call-state='unfinished_hold'] {
+  border-color: color-mix(in srgb, #f59e0b 40%, var(--border-hex));
+}
+
+.chat-voice-call-stage[data-call-state='thinking'],
+.chat-voice-call-stage[data-call-state='transcribing'] {
+  border-color: color-mix(in srgb, #6366f1 36%, var(--border-hex));
+}
+
+.chat-voice-call-stage-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chat-voice-call-wave {
+  height: 18px;
+  width: min(42%, 180px);
+  color: var(--muted-foreground-hex);
+}
+
+.chat-voice-call-stage[data-call-state='speaking'] .chat-voice-call-wave {
+  color: #10b981;
+}
+
+.chat-voice-call-stage[data-call-state='user_speaking'] .chat-voice-call-wave {
+  color: var(--foreground-hex);
+}
+
+.chat-voice-call-stage-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.chat-voice-call-orb-wrap {
+  position: relative;
+  display: flex;
+  height: 124px;
+  width: 124px;
+  margin: -4px 0 -2px;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-voice-call-orb-canvas {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  width: 100%;
+  pointer-events: none;
+}
+
+.chat-voice-call-stage-avatar {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  height: 58px;
+  width: 58px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--workspace-accent, #10b981);
+  color: #ffffff;
+  border: 2px solid color-mix(in srgb, #ffffff 24%, transparent);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.24);
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease;
+}
+
+.chat-voice-call-stage-avatar.is-speaking {
+  transform: scale(1.05);
+  box-shadow: 0 0 0 5px rgb(16 185 129 / 0.2), 0 8px 22px rgb(16 185 129 / 0.26);
+}
+
+.chat-voice-call-stage-avatar.is-user-speaking {
+  transform: scale(1.03);
+  box-shadow: 0 0 0 4px rgb(34 197 94 / 0.2);
+}
+
+.chat-voice-call-stage-avatar.is-holding {
+  box-shadow: 0 0 0 4px rgb(245 158 11 / 0.22);
+}
+
+.chat-voice-call-tool-pill {
+  margin-top: 4px;
+  display: inline-flex;
+  max-width: min(90%, 420px);
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: var(--muted-foreground-hex);
+  border: 1px solid color-mix(in srgb, var(--border-hex) 80%, transparent);
+}
+
+.chat-voice-call-subtitle {
+  margin-top: 4px;
+  max-width: min(94%, 560px);
+  padding: 4px 10px;
+  border-left: 2px solid color-mix(in srgb, #10b981 55%, transparent);
+  background: color-mix(in srgb, var(--muted-bg-hex) 55%, transparent);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--foreground-hex);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.chat-voice-call-subtitle-speaker {
+  font-weight: 600;
+  color: var(--muted-foreground-hex);
+}
+
+.chat-voice-call-controls {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 6px;
+}
+
+.chat-voice-call-control-btn {
+  display: inline-flex;
+  height: 100%;
+  min-width: 68px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px 12px;
+  border-radius: 0;
+  border: 1px solid color-mix(in srgb, var(--border-hex) 85%, transparent);
+  background: color-mix(in srgb, var(--muted-bg-hex) 70%, var(--card-hex));
+  color: var(--foreground-hex);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.chat-voice-call-control-btn:hover {
+  background: var(--muted-bg-hex);
+  border-color: color-mix(in srgb, var(--foreground-hex) 22%, var(--border-hex));
+}
+
+.chat-voice-call-control-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--foreground-hex) 55%, transparent);
+  outline-offset: 1px;
+}
+
+.chat-voice-call-control-btn.is-active {
+  border-color: color-mix(in srgb, #10b981 45%, var(--border-hex));
+  color: #10b981;
+}
+
+.chat-voice-call-control-btn.is-danger {
+  background: color-mix(in srgb, #ef4444 14%, var(--card-hex));
+  border-color: color-mix(in srgb, #ef4444 42%, var(--border-hex));
+  color: #ef4444;
+}
+
+.chat-voice-call-control-btn.is-hangup {
+  background: #ef4444;
+  border-color: #ef4444;
+  color: #ffffff;
+}
+
+.chat-voice-call-control-btn.is-hangup:hover {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+.chat-voice-call-control-label {
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+/* Anchored to the card, so it opens over the thread rather than the orb */
+.chat-voice-call-settings {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  display: flex;
+  width: 240px;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 0;
+  border: 1px solid var(--border-hex);
+  background: var(--card-hex);
+  box-shadow: 0 12px 32px -12px rgb(0 0 0 / 0.45);
+}
+
+.chat-voice-call-settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--muted-foreground-hex);
+}
+
+.chat-voice-call-settings-field select {
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 0;
+  border: 1px solid var(--border-hex);
+  background: var(--background-hex);
+  color: var(--foreground-hex);
+  font-size: 12px;
+}
+
+.chat-voice-call-settings-field select:disabled {
+  opacity: 0.5;
+}
+
+.chat-voice-call-settings-hint {
+  font-size: 10.5px;
+  color: var(--muted-foreground-hex);
+}
+
 /* Slides pane: shared Suggestions / Files drawer above the composer */
 .chat-slides-composer-chrome {
   display: flex;

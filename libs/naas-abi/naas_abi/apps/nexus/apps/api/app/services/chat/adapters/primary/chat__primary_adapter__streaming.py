@@ -344,6 +344,7 @@ async def stream_chat_response(
                 # nested awaits and the Thread spawned by Agent.stream_invoke
                 # (which uses copy_context) inherit them.
                 from naas_abi_core.services.agent.context import (
+                    agent_answer_holdback_chars,
                     agent_chat_id,
                     agent_user_email,
                     agent_user_id,
@@ -397,6 +398,13 @@ async def stream_chat_response(
 
                 # Bind open Slides deck or Documents file + Coder sidecar.
                 client_ctx = request.context if isinstance(request.context, dict) else {}
+                from naas_abi.apps.nexus.apps.api.app.services.chat.service import (
+                    VOICE_CALL_ANSWER_HOLDBACK_CHARS,
+                    voice_call_active,
+                )
+
+                if voice_call_active(client_ctx):
+                    agent_answer_holdback_chars.set(VOICE_CALL_ANSWER_HOLDBACK_CHARS)
                 slides_ctx = client_ctx.get("slides") if isinstance(client_ctx, dict) else None
                 documents_ctx = (
                     client_ctx.get("documents") if isinstance(client_ctx, dict) else None

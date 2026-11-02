@@ -19,6 +19,7 @@ import { useAuthStore } from './auth';
 import { useDocumentsStore } from './documents';
 import { useSlidesStore } from './slides';
 import { getApiUrl } from '@/lib/config';
+import { updateMessageInList } from '@/lib/message-target';
 
 export type NavigationItem =
   | 'maps'
@@ -322,6 +323,17 @@ interface WorkspaceState {
   addMessage: (conversationId: string, message: Omit<Message, 'id' | 'timestamp'>) => void;
   updateLastMessage: (
     conversationId: string,
+    content: string,
+    thinkingDuration?: number,
+    sources?: string[],
+    activityLine?: string | null,
+    toolCalls?: ToolCall[] | null,
+    executionTime?: number,
+  ) => void;
+  /** Like `updateLastMessage`, for the message with `messageId` (the last one when null). */
+  updateMessage: (
+    conversationId: string,
+    messageId: string | null,
     content: string,
     thinkingDuration?: number,
     sources?: string[],
@@ -840,6 +852,27 @@ export const useWorkspaceStore = create<WorkspaceState>()(
               ),
               // Content-only stream chunk: keep updatedAt (addMessage already bumped it
               // for this turn) so conversation-list metadata stays referentially stable.
+            }
+          : conv
+      ),
+    }));
+  },
+
+  updateMessage: (conversationId, messageId, content, thinkingDuration, sources, activityLine, toolCalls, executionTime) => {
+    set((state) => ({
+      conversations: state.conversations.map((conv) =>
+        conv.id === conversationId
+          ? {
+              ...conv,
+              messages: updateMessageInList(conv.messages, messageId, (msg) => ({
+                ...msg,
+                content,
+                ...(thinkingDuration !== undefined && { thinkingDuration }),
+                ...(sources !== undefined && { sources }),
+                ...(activityLine !== undefined && { activityLine: activityLine || undefined }),
+                ...(toolCalls !== undefined && { toolCalls: toolCalls || undefined }),
+                ...(executionTime !== undefined && { executionTime }),
+              })),
             }
           : conv
       ),

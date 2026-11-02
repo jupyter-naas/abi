@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import time
 from typing import Any
 
 import httpx
@@ -27,6 +28,12 @@ OPENROUTER_NARRATION_MODEL_FAST = "microsoft/mai-voice-2-flash"
 # Native OpenAI fallback.
 OPENAI_TTS_MODEL = "tts-1"
 OPENAI_TTS_VOICE = "alloy"
+
+# Live calls (fast=True) cannot wait on a congested provider queue: OpenRouter's
+# Kokoro has been seen taking 70s to first byte. Each attempt gets this budget,
+# then the next backend is tried and the slow model is skipped for a cooldown.
+FAST_ATTEMPT_TIMEOUT_S = 6.0
+FAST_MODEL_COOLDOWN_S = 600.0
 
 MAX_INPUT_CHARS = 3500
 # Upgrade off Kokoro when the reply is long enough to feel like narration.
@@ -107,12 +114,28 @@ _EN_WORDS = frozenset(
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
+_http_client: httpx.AsyncClient | None = None
+_slow_model_until: dict[str, float] = {}
+
+
+def _get_http_client() -> httpx.AsyncClient:
+    """Return a shared warm AsyncClient with keep-alive pooling for sentence-by-sentence TTS."""
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        _http_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=10.0, read=180.0, write=60.0, pool=30.0),
+            limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+            follow_redirects=True,
+        )
+    return _http_client
+
 
 class SpeechRequest(BaseModel):
     text: str = Field(..., min_length=1)
     voice: str | None = None
     model: str | None = None
     language: str | None = None
+    fast: bool = False
 
 
 def _secret(name: str) -> str | None:
@@ -285,11 +308,15 @@ def resolve_model_and_voice_for_text(
     explicit_model: str | None,
     explicit_voice: str | None,
     explicit_language: str | None,
+    fast: bool = False,
 ) -> tuple[str, str, str]:
     """Return (model, voice, lang).
 
     Kokoro is fine for short English chat. French storytelling needs a
     narration-grade model: Kokoro's only French voice is trained on <11h.
+    When ``fast=True`` (live voice call sentence synthesis), always prefer
+    ``narration_fast`` (``microsoft/mai-voice-2-flash``) over the heavier
+    ``narration_model`` even if a sentence exceeds ``NARRATION_MIN_CHARS``.
     """
     lang = normalize_speech_language(explicit_language, text)
     auto_raw = (_secret("OPENROUTER_TTS_AUTO_LANGUAGE") or "1").strip().lower()
@@ -308,8 +335,9 @@ def resolve_model_and_voice_for_text(
         ).strip()
         needs_narration = lang in NARRATION_LANGS or len(text) >= NARRATION_MIN_CHARS
         if needs_narration:
-            # Long-form uses the fuller MAI model; short FR chat uses Flash.
-            model = narration_model if len(text) >= NARRATION_MIN_CHARS else narration_fast
+            # Live voice calls (fast=True) always use Flash for ultra-low TTFA;
+            # long-form read-aloud uses the fuller MAI model.
+            model = narration_fast if fast or len(text) < NARRATION_MIN_CHARS else narration_model
         else:
             model = default_model
 
@@ -320,6 +348,125 @@ def resolve_model_and_voice_for_text(
     else:
         voice = resolve_voice_for_model(model, lang, default_voice)
     return model, voice, lang
+
+
+SpeechAttempt = tuple[str, str, str, str]
+
+
+def fast_speech_attempts(primary: SpeechAttempt, lang: str) -> list[SpeechAttempt]:
+    """Ordered (url, api_key, model, voice) backends for live-call synthesis.
+
+    The routed model goes first, then OpenRouter's MAI Flash, then native OpenAI.
+    Models still cooling down after a stall are skipped while another is left.
+    """
+    url, api_key, model, _voice = primary
+    attempts: list[SpeechAttempt] = [primary]
+    if "openrouter.ai" in url:
+        flash = (
+            _secret("OPENROUTER_NARRATION_MODEL_FAST") or OPENROUTER_NARRATION_MODEL_FAST
+        ).strip()
+        if flash != model:
+            attempts.append(
+                (url, api_key, flash, resolve_voice_for_model(flash, lang, MAI_LANG_VOICES["en"]))
+            )
+    if url != OPENAI_SPEECH_URL:
+        for key in (_secret("OPENAI_SPEECH_API_KEY"), _secret("OPENAI_API_KEY")):
+            if key and not key.startswith("sk-or-"):
+                attempts.append(
+                    (
+                        OPENAI_SPEECH_URL,
+                        key,
+                        _secret("OPENAI_TTS_MODEL") or OPENAI_TTS_MODEL,
+                        _secret("OPENAI_TTS_VOICE") or OPENAI_TTS_VOICE,
+                    )
+                )
+                break
+
+    now = time.monotonic()
+    ready = [a for a in attempts if _slow_model_until.get(a[2], 0.0) <= now]
+    return ready or attempts
+
+
+def _speech_request(
+    attempt: SpeechAttempt, prepared: str, lang: str, fast: bool
+) -> tuple[str, dict[str, str], dict[str, Any]]:
+    url, api_key, model, voice = attempt
+    headers: dict[str, str] = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    if "openrouter.ai" in url:
+        from naas_abi.apps.nexus.apps.api.app.services.openrouter_attribution import (
+            openrouter_attribution_headers,
+        )
+
+        headers.update(openrouter_attribution_headers())
+
+    payload: dict[str, Any] = {
+        "model": model,
+        "input": prepared,
+        "voice": voice,
+        "response_format": "mp3",
+    }
+    # MAI-Voice supports expressive delivery via provider passthrough.
+    if (
+        not fast
+        and "mai-voice" in model.lower()
+        and (lang in NARRATION_LANGS or len(prepared) >= NARRATION_MIN_CHARS)
+    ):
+        payload["provider"] = {"style": "narration", "styledegree": 1.3}
+        payload["speed"] = 0.95
+    return url, headers, payload
+
+
+def _audio_response(response: httpx.Response, model: str, voice: str, lang: str) -> Response:
+    return Response(
+        content=response.content,
+        media_type=response.headers.get("content-type") or "audio/mpeg",
+        headers={
+            "Cache-Control": "no-store",
+            "X-TTS-Model": model,
+            "X-TTS-Voice": voice,
+            "X-TTS-Language": lang,
+        },
+    )
+
+
+async def _synthesize_fast(attempts: list[SpeechAttempt], prepared: str, lang: str) -> Response:
+    client = _get_http_client()
+    last_error: JSONResponse | None = None
+    for attempt in attempts:
+        model, voice = attempt[2], attempt[3]
+        url, headers, payload = _speech_request(attempt, prepared, lang, fast=True)
+        try:
+            response = await client.post(
+                url, headers=headers, json=payload, timeout=FAST_ATTEMPT_TIMEOUT_S
+            )
+        except httpx.TimeoutException:
+            _slow_model_until[model] = time.monotonic() + FAST_MODEL_COOLDOWN_S
+            last_error = JSONResponse(
+                {"error": f"Speech request timed out ({model})"}, status_code=504
+            )
+            continue
+        except httpx.HTTPError as exc:
+            last_error = JSONResponse(
+                {"error": str(exc) or "Network error while calling speech API"}, status_code=502
+            )
+            continue
+        if response.status_code >= 400:
+            if response.status_code == 429 or response.status_code >= 500:
+                _slow_model_until[model] = time.monotonic() + FAST_MODEL_COOLDOWN_S
+            last_error = JSONResponse(
+                {
+                    "error": f"Speech synthesis failed ({response.status_code})",
+                    "detail": response.text or "",
+                },
+                status_code=response.status_code,
+            )
+            continue
+        _slow_model_until.pop(model, None)
+        return _audio_response(response, model, voice, lang)
+    return last_error or JSONResponse({"error": "No speech backend available"}, status_code=502)
 
 
 @router.post("", include_in_schema=True)
@@ -349,36 +496,19 @@ async def synthesize_speech(body: SpeechRequest) -> Response:
         explicit_model=(body.model or "").strip() or None,
         explicit_voice=(body.voice or "").strip() or None,
         explicit_language=(body.language or "").strip() or None,
+        fast=body.fast,
     )
 
-    headers: dict[str, str] = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    if "openrouter.ai" in url:
-        from naas_abi.apps.nexus.apps.api.app.services.openrouter_attribution import (
-            openrouter_attribution_headers,
-        )
+    if body.fast:
+        attempts = fast_speech_attempts((url, api_key, model, voice), lang)
+        return await _synthesize_fast(attempts, prepared, lang)
 
-        headers.update(openrouter_attribution_headers())
-
-    payload: dict[str, Any] = {
-        "model": model,
-        "input": prepared,
-        "voice": voice,
-        "response_format": "mp3",
-    }
-    # MAI-Voice supports expressive delivery via provider passthrough.
-    if "mai-voice" in model.lower() and (
-        lang in NARRATION_LANGS or len(prepared) >= NARRATION_MIN_CHARS
-    ):
-        payload["provider"] = {"style": "narration", "styledegree": 1.3}
-        payload["speed"] = 0.95
-
-    timeout = httpx.Timeout(connect=10.0, read=180.0, write=60.0, pool=30.0)
+    url, headers, payload = _speech_request(
+        (url, api_key, model, voice), prepared, lang, fast=False
+    )
     try:
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            response = await client.post(url, headers=headers, json=payload)
+        client = _get_http_client()
+        response = await client.post(url, headers=headers, json=payload)
     except httpx.TimeoutException:
         return JSONResponse({"error": "Speech request timed out"}, status_code=504)
     except httpx.HTTPError as exc:
@@ -398,14 +528,4 @@ async def synthesize_speech(body: SpeechRequest) -> Response:
             status_code=response.status_code,
         )
 
-    content_type = response.headers.get("content-type") or "audio/mpeg"
-    return Response(
-        content=response.content,
-        media_type=content_type,
-        headers={
-            "Cache-Control": "no-store",
-            "X-TTS-Model": model,
-            "X-TTS-Voice": voice,
-            "X-TTS-Language": lang,
-        },
-    )
+    return _audio_response(response, model, voice, lang)
