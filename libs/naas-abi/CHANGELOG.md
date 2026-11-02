@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.6.1 (2026-11-02)
+
+### Bug Fixes
+
+- **nexus**: Shrink public image assets to cut package size
+  ([`e28debd`](https://github.com/jupyter-naas/abi/commit/e28debd7110eedecca87caa8201327757747c358))
+
+
 ## v3.6.0 (2026-10-30)
 
 ### Bug Fixes
