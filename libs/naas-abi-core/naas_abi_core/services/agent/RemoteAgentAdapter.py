@@ -66,10 +66,13 @@ class RemoteAgentAdapter:
                 agent_shared_state=AgentSharedState(thread_id=context.thread_id)
             )
             for event in agent.stream_invoke(prompt):
-                if not context.cancelled.is_set():
-                    asyncio.run_coroutine_threadsafe(
-                        deliver(_wire_event(event)), loop
-                    ).result()
+                if context.cancelled.is_set():
+                    # Stop the model too; the loop drains what the turn still emits.
+                    agent.cancel()
+                    continue
+                asyncio.run_coroutine_threadsafe(
+                    deliver(_wire_event(event)), loop
+                ).result()
 
         task = asyncio.create_task(asyncio.to_thread(produce))
         try:

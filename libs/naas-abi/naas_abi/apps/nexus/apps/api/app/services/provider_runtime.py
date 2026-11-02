@@ -1481,34 +1481,42 @@ def _prune_inprocess_subagents_for_roster(agent: Any, allowed: frozenset[str]) -
         return class_name in allowed
 
     pruned = [sub for sub in subagents if keep(sub)]
-    if len(pruned) == len(subagents):
-        return
-
-    agent._agents = pruned
+    if len(pruned) != len(subagents):
+        agent._agents = pruned
     for sub in pruned:
         _prune_inprocess_subagents_for_roster(sub, allowed)
 
     if type(agent).__name__ == "AbiAgent":
+        import dataclasses
+        import re
+
         from naas_abi.agents.AbiAgent import AbiAgent
 
         agent._intents = AbiAgent.get_intents(agents=pruned)
-        configuration = getattr(agent, "configuration", None)
+        configuration = getattr(agent, "_configuration", None)
         agents_section = (
             "\n".join(f"- {sub.name}: {sub.description}" for sub in pruned) or ""
         )
-        if configuration is not None and hasattr(configuration, "system_prompt"):
-            import re
-
-            configuration.system_prompt = re.sub(
-                r"(<agents>)(.*?)(</agents>)",
-                rf"\1\n{agents_section}\n\3",
-                configuration.system_prompt,
-                count=1,
-                flags=re.DOTALL,
+        if dataclasses.is_dataclass(configuration) and isinstance(
+            getattr(configuration, "system_prompt", None), str
+        ):
+            # The configuration is shared with the cached template and every
+            # other turn: rewrite a copy, never the shared object.
+            agent._configuration = dataclasses.replace(
+                configuration,
+                system_prompt=re.sub(
+                    r"(<agents>)(.*?)(</agents>)",
+                    lambda m: f"{m.group(1)}\n{agents_section}\n{m.group(3)}",
+                    configuration.system_prompt,
+                    count=1,
+                    flags=re.DOTALL,
+                ),
             )
 
 
-def _duplicate_inprocess_agent(template: Any, thread_id: str | None) -> Any:
+def _duplicate_inprocess_agent(
+    template: Any, thread_id: str | None, allowed: frozenset[str] | None = None
+) -> Any:
     """Return a per-request copy of the cached template agent.
 
     The resolver caches a single shared instance per factory. Running requests
@@ -1519,6 +1527,9 @@ def _duplicate_inprocess_agent(template: Any, thread_id: str | None) -> Any:
     forward. ``Agent.duplicate`` propagates the new state recursively to
     every sub-agent, so dropping ``supervisor_agent`` here would strip the
     supervision flag from every sub-agent and break routing/handoff.
+
+    With ``allowed`` (the caller's enabled roster), sub-agents outside it are
+    not duplicated, so the model is not sent their handoff tools.
     """
     from queue import Queue
 
@@ -1537,6 +1548,12 @@ def _duplicate_inprocess_agent(template: Any, thread_id: str | None) -> Any:
         # current_active_agent=current_active_agent,
     )
     fresh_queue: Queue = Queue()
+    if allowed:
+        return template.duplicate(
+            queue=fresh_queue,
+            agent_shared_state=fresh_state,
+            keep_agent=lambda sub: _inprocess_agent_class_name(sub) in allowed,
+        )
     return template.duplicate(queue=fresh_queue, agent_shared_state=fresh_state)
 
 
@@ -1624,6 +1641,43 @@ def agent_event_chunk(
     return chunk
 
 
+class AgentEventChunks:
+    """``agent_event_chunk`` for one turn, with token streaming.
+
+    The agent streams an answer as ``ai_message_delta`` events, then sends the
+    same message whole as ``ai_message``. Deltas become text as they come; the
+    ``ai_message`` that closes them adds only what they did not carry, so the
+    text of the turn is said once. A streamed answer that follows other text of
+    the turn starts on a new paragraph.
+    """
+
+    def __init__(self) -> None:
+        self._streamed = ""
+        self._said = False
+
+    def __call__(
+        self, event_name: str, text: str, *, chat_source: object = None
+    ) -> str | dict[str, Any] | None:
+        if event_name == "ai_message_delta":
+            if not text:
+                return None
+            lead = "\n\n" if self._said and not self._streamed else ""
+            self._streamed += text
+            self._said = True
+            return lead + text
+        if event_name == "ai_message" and self._streamed:
+            streamed, self._streamed = self._streamed, ""
+            rest = text[len(streamed) :] if text.startswith(streamed) else ""
+            return rest or None
+        if event_name == "tool_usage":
+            # Text streamed before a tool call stays; the answer is a new one.
+            self._streamed = ""
+        chunk = agent_event_chunk(event_name, text, chat_source=chat_source)
+        if isinstance(chunk, str):
+            self._said = True
+        return chunk
+
+
 async def stream_with_abi_inprocess(
     messages: list[Message],
     config: ProviderConfig,
@@ -1694,12 +1748,12 @@ async def stream_with_abi_inprocess(
     # (the previous behaviour) caused cross-conversation response leakage when
     # two requests overlapped — see jupyter-naas/abi#991.
     assert thread_id is not None, "thread_id is required"
-    agent = await asyncio.to_thread(
-        _duplicate_inprocess_agent, template_agent, thread_id
-    )
     from naas_abi_core.services.agent.context import agent_workspace_enabled_class_names
 
     allowed = agent_workspace_enabled_class_names.get()
+    agent = await asyncio.to_thread(
+        _duplicate_inprocess_agent, template_agent, thread_id, allowed
+    )
     if allowed:
         _prune_inprocess_subagents_for_roster(agent, allowed)
     if llm_model:
@@ -1761,40 +1815,49 @@ async def stream_with_abi_inprocess(
     stream_iter = iter(agent.stream_invoke(latest_user_message))
     emitted = False
     final_replay: list[str] = []
+    to_chunk = AgentEventChunks()
+    finished = False
 
-    while True:
-        try:
-            event = await asyncio.to_thread(next, stream_iter)
-        except StopIteration:
-            break
-        except Exception as exc:
-            logger.error(f"In-process ABI streaming error: {exc}")
-            yield f"\n\n**Error:** Failed to stream ABI agent response: {str(exc)}"
-            break
-
-        if isinstance(event, dict):
-            event_name = str(event.get("event", "")).strip()
-            data = event.get("data", "")
-            text = "" if data is None else str(data)
-
-            if text == "[DONE]" or event_name == "done":
+    try:
+        while True:
+            try:
+                event = await asyncio.to_thread(next, stream_iter)
+            except StopIteration:
+                break
+            except Exception as exc:
+                logger.error(f"In-process ABI streaming error: {exc}")
+                yield f"\n\n**Error:** Failed to stream ABI agent response: {str(exc)}"
                 break
 
-            # Prefer live ai_message deltas. The closing "message" replay is the
-            # only text when the graph errors before an assistant token (for
-            # example a recursion-limit stop).
-            if event_name == "message" and text.strip():
-                final_replay.append(text.strip())
-                continue
-            chunk = agent_event_chunk(
-                event_name, text, chat_source=event.get("chat_source")
-            )
-            if chunk is not None:
-                emitted = emitted or isinstance(chunk, str)
-                yield chunk
-        elif isinstance(event, str) and event.strip():
-            emitted = True
-            yield event
+            if isinstance(event, dict):
+                event_name = str(event.get("event", "")).strip()
+                data = event.get("data", "")
+                text = "" if data is None else str(data)
+
+                if text == "[DONE]" or event_name == "done":
+                    break
+
+                # Prefer live ai_message deltas. The closing "message" replay is
+                # the only text when the graph errors before an assistant token
+                # (for example a recursion-limit stop).
+                if event_name == "message" and text.strip():
+                    final_replay.append(text.strip())
+                    continue
+                chunk = to_chunk(event_name, text, chat_source=event.get("chat_source"))
+                if chunk is not None:
+                    emitted = emitted or isinstance(chunk, str)
+                    yield chunk
+            elif isinstance(event, str) and event.strip():
+                emitted = True
+                yield event
+        finished = True
+    finally:
+        # The client left (abort, closed call): stop the model, not just the
+        # reader. ``next`` may still be running in its thread, so the generator
+        # cannot be closed from here.
+        cancel = getattr(agent, "cancel", None)
+        if not finished and callable(cancel):
+            cancel()
 
     if not emitted and final_replay:
         yield "\n".join(final_replay)

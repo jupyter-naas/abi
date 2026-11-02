@@ -335,9 +335,12 @@ class OpencodeAgent(Expose):
             return int(assigned)
 
     def duplicate(
-        self, queue: Any | None = None, agent_shared_state: Any | None = None
+        self,
+        queue: Any | None = None,
+        agent_shared_state: Any | None = None,
+        keep_agent: Any | None = None,
     ):
-        del queue
+        del queue, keep_agent
         return self.__class__(
             configuration=self.conf,
             agent_shared_state=agent_shared_state or self.state,

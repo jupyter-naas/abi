@@ -57,6 +57,44 @@ build_graph(patcher=None)                       # construct LangGraph StateGraph
 workflow -> StateGraph                          # compiled workflow
 ```
 
+## Token streaming
+
+Decision: `call_model` streams the model (`chat_model.stream`) and publishes
+the answer's text as `ai_message_delta` events (`AIMessageDeltaEvent`) while
+it is written. The `ai_message` of the same message still follows with the
+whole text, so a consumer that ignores deltas is unchanged; one that shows
+deltas adds only what the deltas did not carry (Nexus: `AgentEventChunks` in
+`provider_runtime.py`, used by the in-process and remote paths). The deltas of
+a message are always a prefix of its `ai_message` text.
+
+- What is not an answer is not streamed. `AnswerReleaseGate` holds text until
+  `answer_holdback_chars` (160) visible characters arrived with no tool call:
+  the line a model writes before a tool call or handoff ("One moment.") stays
+  hidden, as it was under `invoke`. A tool-call chunk or `[tool_call` /
+  `<tool_call` markup stops release for that reply; `<think>` blocks do not
+  count toward the holdback. A reply shorter than the holdback arrives whole in
+  its `ai_message`.
+- Sub-agents share the supervisor's queue, so a sub-agent's answer after a
+  handoff streams like the supervisor's own.
+- `invoke` is still used for Documents/Slides turns (90 s cap), with
+  `markdown_pretty_display`, and when `stream_answers = False`. The formatting
+  pass rewrites the whole answer with a second model call, so an agent that
+  keeps it cannot stream its own answers. `IntentAgent` and `CoordinatorAgent`
+  default it on; `AbiAgent` and feature agents turn it off. A model that
+  cannot stream (`NotImplementedError`, RPC `UNIMPLEMENTED`) is invoked. An
+  error after text was shown ends the answer with the error line.
+- Cancellation: `Agent.cancel()` (any thread) sets `AgentSharedState.cancelled`
+  across the tree; the model stream closes at its next chunk and the graph ends
+  with what was shown. `stream_invoke` cancels when its consumer leaves early;
+  Nexus calls `cancel()` when the client disconnects, `RemoteAgentAdapter` when
+  the host cancels. The next `stream_invoke` on the same agent drops what the
+  abandoned turn still queued.
+- In NATS mode the model is a `ChatModelProxy`; its `stream` already crosses
+  NATS (`model_registry_nats` `stream_open/next/close`), so no new RPC is needed.
+
+Tests: `Agent_token_stream_test.py`; Nexus side
+`apps/nexus/apps/api/app/services/provider_runtime_streaming_test.py`.
+
 ## Subclass Hooks
 
 Override these on an agent that inherits from `Agent` to observe the
@@ -184,6 +222,7 @@ uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/Agent_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/Agent_routing_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/Agent_events_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/Agent_hooks_test.py
+uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/Agent_token_stream_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/IntentAgent_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/OpencodeAgent_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/agent/OpencodeSessionService_test.py

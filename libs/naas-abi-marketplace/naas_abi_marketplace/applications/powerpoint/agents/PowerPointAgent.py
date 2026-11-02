@@ -737,6 +737,7 @@ High
         self,
         queue: Queue | None = None,
         agent_shared_state: AgentSharedState | None = None,
+        keep_agent: Callable[[Agent], bool] | None = None,
     ) -> Agent:
         """Create a new instance of the agent with the same configuration.
 
@@ -755,7 +756,9 @@ High
         # We duplicated each agent and add them as tools.
         # This will be recursively done for each sub agents.
         agents: list[Agent] = [
-            agent.duplicate(queue, shared_state) for agent in self._original_agents
+            agent.duplicate(queue, shared_state, keep_agent=keep_agent)
+            for agent in self._original_agents
+            if keep_agent is None or keep_agent(agent)
         ]
 
         new_agent = self.__class__(
