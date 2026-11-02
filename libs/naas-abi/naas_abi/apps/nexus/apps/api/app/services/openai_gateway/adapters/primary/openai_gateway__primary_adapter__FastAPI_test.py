@@ -146,6 +146,89 @@ def test_gateway_turn_carries_the_caller_profile_onto_the_agent_prompt(
     assert agent.prompt.endswith("hi")
 
 
+def _voice_client(
+    monkeypatch: pytest.MonkeyPatch, *, enabled: bool = True
+) -> tuple[TestClient, list[dict]]:
+    calls: list[dict] = []
+
+    async def _fake_chunks(
+        model, messages, thread_id, ws_base=None, ws_secret=None, user_context_preamble=None
+    ):
+        calls.append({"thread_id": thread_id, "preamble": user_context_preamble})
+        for chunk in [
+            {"event": "tool_usage", "tool": "kg_sparql_query"},
+            {"event": "tool_response", "output": "42 rows"},
+            "You have **42** contacts.",
+            " See [the list](https://x.io).",
+        ]:
+            yield chunk
+
+    monkeypatch.setattr(shim, "_stream_agent_chunks", _fake_chunks)
+    monkeypatch.setattr(shim.settings, "voice_gateway_enabled", enabled)
+    app = FastAPI()
+    app.include_router(shim.router, prefix="/v1")
+    app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
+        id="user-1", email="user@example.com", name="User One"
+    )
+    return TestClient(app), calls
+
+
+def _streamed_text(body: str) -> str:
+    out = []
+    for line in body.splitlines():
+        if line.startswith("data: ") and "[DONE]" not in line:
+            out.append(json.loads(line[6:])["choices"][0]["delta"].get("content", ""))
+    return "".join(out)
+
+
+def test_voice_route_is_off_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    client, calls = _voice_client(monkeypatch, enabled=False)
+    resp = client.post(
+        "/v1/voice/chat/completions",
+        json={"model": "aia", "messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert resp.status_code == 404
+    assert calls == []
+
+
+def test_voice_route_streams_only_speakable_sentences(monkeypatch: pytest.MonkeyPatch) -> None:
+    client, calls = _voice_client(monkeypatch)
+    resp = client.post(
+        "/v1/voice/chat/completions",
+        headers={"X-Voice-Session": "call-7"},
+        json={"model": "aia", "stream": True, "messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert resp.status_code == 200, resp.text
+    text = _streamed_text(resp.text)
+    assert text == "One moment, let me check. You have 42 contacts. See the list. "
+    for spoken_noise in ("```", "**", "🔧", "http", "abi-chat", "42 rows"):
+        assert spoken_noise not in text
+    assert calls[0]["thread_id"] == "voice-user-1-call-7"
+    assert calls[0]["preamble"].startswith("You are speaking on a live voice call.")
+    assert "User One" in calls[0]["preamble"]
+
+
+def test_voice_route_keeps_one_thread_per_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    client, calls = _voice_client(monkeypatch)
+    for _ in range(2):
+        client.post(
+            "/v1/voice/chat/completions",
+            headers={"X-Voice-Session": "call-7"},
+            json={"model": "aia", "messages": [{"role": "user", "content": "hi"}]},
+        )
+    assert calls[0]["thread_id"] == calls[1]["thread_id"]
+
+
+def test_voice_route_non_streaming(monkeypatch: pytest.MonkeyPatch) -> None:
+    client, _ = _voice_client(monkeypatch)
+    resp = client.post(
+        "/v1/voice/chat/completions",
+        json={"model": "aia", "messages": [{"role": "user", "content": "hi"}]},
+    )
+    content = resp.json()["choices"][0]["message"]["content"]
+    assert content == "One moment, let me check. You have 42 contacts. See the list."
+
+
 def test_format_tool_event_renders_calls_and_results() -> None:
     # tool call -> a visible markdown header with the tool name
     call = shim._format_tool_event({"event": "tool_usage", "tool": "kg_sparql_query"})
