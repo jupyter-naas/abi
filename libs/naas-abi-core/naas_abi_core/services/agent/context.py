@@ -49,7 +49,11 @@ agent_workspace_id: ContextVar[str | None] = event_actor_workspace_id
 agent_workspace_enabled_class_names: ContextVar[frozenset[str] | None] = ContextVar(
     "agent_workspace_enabled_class_names", default=None
 )
-
+# Per-turn override of ``Agent.answer_holdback_chars``. A live voice call sets
+# it lower so the first sentence reaches speech sooner.
+agent_answer_holdback_chars: ContextVar[int | None] = ContextVar(
+    "agent_answer_holdback_chars", default=None
+)
 # Coding-workspace bridge: base URL + bearer secret of the exec sidecar running
 # inside the caller's Coder coding workspace. Set at the request boundary (the
 # OpenAI shim, from the per-workspace token claims) and read by the workspace

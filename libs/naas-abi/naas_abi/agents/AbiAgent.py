@@ -342,4 +342,8 @@ Respond only based on what your available agents and tools can actually deliver.
             memory=None,
             state=agent_shared_state,
             configuration=agent_configuration,
+            # The formatting pass rewrites the answer after the model wrote it:
+            # one more model call per answer, and nothing could stream (voice
+            # waits for the whole reply). Abi's prompt already asks for Markdown.
+            markdown_pretty_display=False,
         )

@@ -7,6 +7,7 @@ import json
 import os
 import re
 import threading
+import time
 import uuid
 from collections.abc import Callable, Generator, Sequence
 from contextvars import copy_context
@@ -46,12 +47,14 @@ if TYPE_CHECKING:
 
 from langchain_core.messages import (
     AIMessage,
+    AIMessageChunk,
     AnyMessage,
     BaseMessage,
     HumanMessage,
     SystemMessage,
     ToolCall,
     ToolMessage,
+    message_chunk_to_message,
 )
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, StateGraph
@@ -64,6 +67,7 @@ from naas_abi_core.engine.context import (
 from naas_abi_core.services.agent.context import (
     DOCUMENTS_RECURSION_LIMIT,
     SLIDES_RECURSION_LIMIT,
+    agent_answer_holdback_chars,
     agent_chat_id,
     agent_user_id,
     agent_workspace_id,
@@ -228,6 +232,95 @@ def _invoke_office_chat_model(chat_model: Any, messages: list[Any]) -> BaseMessa
             ) from exc
     finally:
         pool.shutdown(wait=False, cancel_futures=True)
+
+
+_TEXT_TOOL_MARKERS = ("[tool_call", "<tool_call")
+_THINK_BLOCK = re.compile(r"<think>.*?</think>", flags=re.DOTALL | re.IGNORECASE)
+
+
+def _visible_chars(text: str) -> int:
+    """Characters outside ``<think>`` blocks; an unclosed block counts as hidden."""
+    visible = _THINK_BLOCK.sub("", text)
+    open_at = visible.lower().find("<think>")
+    if open_at != -1:
+        visible = visible[:open_at]
+    return len(visible.strip())
+
+
+def _marker_prefix_len(text: str) -> int:
+    """Length of the tail of ``text`` that may be the start of a text tool call."""
+    lower = text.lower()
+    for size in range(min(len(lower), max(map(len, _TEXT_TOOL_MARKERS))), 0, -1):
+        tail = lower[-size:]
+        if any(marker.startswith(tail) for marker in _TEXT_TOOL_MARKERS):
+            return size
+    return 0
+
+
+class AnswerReleaseGate:
+    """Decides which streamed text of one model reply is the user's answer.
+
+    A model that is about to call a tool (or hand off) often writes a short line
+    first ("Let me check."). That line is not an answer: under ``invoke`` it never
+    reached the user. Text is therefore held until ``holdback_chars`` visible
+    characters arrived without a tool call; from then on it is released as it
+    comes. A tool-call chunk or text tool-call markup stops release for the rest
+    of the reply. ``<think>`` blocks do not count toward the holdback.
+    """
+
+    def __init__(self, holdback_chars: int):
+        self.holdback_chars = max(0, holdback_chars)
+        self.text = ""
+        self.released = ""
+        self.blocked = False
+
+    def block(self) -> None:
+        self.blocked = True
+
+    def feed(self, delta: str) -> str:
+        """Add ``delta``; return the text that may be shown now."""
+        self.text += delta
+        if self.blocked:
+            return ""
+        lower = self.text.lower()
+        if any(marker in lower for marker in _TEXT_TOOL_MARKERS):
+            self.blocked = True
+            return ""
+        if not self.released and _visible_chars(self.text) < self.holdback_chars:
+            return ""
+        end = len(self.text) - _marker_prefix_len(self.text)
+        out = self.text[len(self.released) : end]
+        self.released += out
+        return out
+
+    def finish(self, final_text: str) -> str:
+        """The rest of a completed answer, once some of it was released."""
+        if self.blocked or not self.released:
+            return ""
+        if not final_text.startswith(self.released):
+            return ""
+        out = final_text[len(self.released) :]
+        self.released = final_text
+        return out
+
+
+def _chunk_has_tool_calls(chunk: Any) -> bool:
+    if getattr(chunk, "tool_call_chunks", None) or getattr(chunk, "tool_calls", None):
+        return True
+    if pd.get(chunk, "additional_kwargs.tool_calls"):
+        return True
+    content = getattr(chunk, "content", None)
+    return isinstance(content, list) and any(
+        isinstance(block, dict) and block.get("type") in ("tool_use", "tool_call")
+        for block in content
+    )
+
+
+def _streaming_unsupported(exc: BaseException) -> bool:
+    """Whether ``exc`` says the model cannot stream (so ``invoke`` may work)."""
+    return isinstance(exc, NotImplementedError) or (
+        getattr(exc, "code", None) == "UNIMPLEMENTED"
+    )
 
 
 # View-only shrink of prior ToolMessages before invoke. Not Claude Code /compact
@@ -476,6 +569,15 @@ class AgentSharedState:
         self._supervisor_agent = supervisor_agent
         self._requesting_help = False
         self._active_agent_by_thread = {thread_id: current_active_agent}
+        self._cancelled = threading.Event()
+
+    @property
+    def cancelled(self) -> threading.Event:
+        """Set when the caller abandoned the turn; the model stream stops."""
+        event = getattr(self, "_cancelled", None)
+        if event is None:
+            event = self._cancelled = threading.Event()
+        return event
 
     @property
     def thread_id(self) -> str:
@@ -549,6 +651,14 @@ class ToolResponseEvent(Event):
 
 @dataclass
 class AIMessageEvent(Event):
+    agent_name: str
+
+
+@dataclass
+class AIMessageDeltaEvent(Event):
+    """Text of an answer while the model writes it. The ``AIMessageEvent`` of
+    the same message follows and carries the whole text."""
+
     agent_name: str
 
 
@@ -635,6 +745,14 @@ class Agent(Expose):
     # per-request copy in ``duplicate`` can carry it over. 0 means "leave
     # LangGraph's default alone", which is why every read guards on ``> 0``.
     recursion_limit: int = 0
+
+    # Answers are streamed from the model and surfaced as ``ai_message_delta``
+    # events. ``answer_holdback_chars``: visible characters held before the first
+    # delta, so the line a model writes before a tool call is not shown (see
+    # ``AnswerReleaseGate``). The ``agent_answer_holdback_chars`` context var
+    # overrides it for one turn. Set ``stream_answers = False`` to call ``invoke``.
+    stream_answers: bool = True
+    answer_holdback_chars: int = 160
 
     _name: str
     _description: str
@@ -906,33 +1024,7 @@ class Agent(Expose):
         if hasattr(base_chat_model, "output_version"):
             self._chat_model_output_version = base_chat_model.output_version
 
-        self._chat_model_with_tools = base_chat_model
-        # Variant bound WITHOUT context-gated tools (e.g. coding-workspace tools),
-        # used when the current request is not tied to a workspace so the model
-        # never sees tools it cannot use. Falls back to the full model when there
-        # are no gated tools to strip.
-        self._chat_model_without_workspace_tools = base_chat_model
-        if self._tools or self._native_tools:
-            tools_to_bind: list[Tool | BaseTool | dict] = []
-            tools_to_bind.extend(self._structured_tools)
-            tools_to_bind.extend(self._native_tools)
-
-            # Test if the chat model can bind tools by trying with a default tool first
-            if can_bind_tools(base_chat_model):
-                self._chat_model_with_tools = base_chat_model.bind_tools(tools_to_bind)
-                gated = [t for t in tools_to_bind if not Agent._requires_workspace(t)]
-                self._chat_model_without_workspace_tools = (
-                    base_chat_model.bind_tools(gated)
-                    if len(gated) != len(tools_to_bind)
-                    else self._chat_model_with_tools
-                )
-            else:
-                logger.warning(
-                    f"Chat model {type(base_chat_model).__name__} does not support tool calling. Tools will not be available for agent '{self._name}'."
-                )
-                # Keep the original model without tools
-                self._chat_model_with_tools = base_chat_model
-                self._chat_model_without_workspace_tools = base_chat_model
+        self._bind_tools_to_chat_model()
 
         # Use provided memory or create based on environment
         if memory is None:
@@ -2006,13 +2098,91 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             cleaned.pop()
         return cleaned
 
+    def _emit_answer_delta(self, text: str) -> None:
+        if text:
+            self._event_queue.put(
+                AIMessageDeltaEvent(payload=text, agent_name=self._name)
+            )
+
+    def _stream_chat_model(self, chat_model: Any, messages: list[Any]) -> BaseMessage:
+        """Call the model as a stream and publish its answer's text as it comes.
+
+        Returns the message ``invoke`` would have returned. Deltas are released
+        through an ``AnswerReleaseGate``; whatever was released is a prefix of the
+        returned text, the rest follows as a last delta. A model that cannot
+        stream falls back to ``invoke``. An error after text was shown ends the
+        answer with the error line, so what was shown stays a prefix.
+        """
+        holdback = agent_answer_holdback_chars.get()
+        gate = AnswerReleaseGate(
+            self.answer_holdback_chars if holdback is None else holdback
+        )
+        merged: AIMessageChunk | None = None
+        whole: BaseMessage | None = None
+        chunks = 0
+        started = time.monotonic()
+        first_chunk_s: float | None = None
+        first_text_s: float | None = None
+        stream = chat_model.stream(messages)
+        try:
+            for chunk in stream:
+                chunks += 1
+                if first_chunk_s is None:
+                    first_chunk_s = round(time.monotonic() - started, 2)
+                if self._state.cancelled.is_set():
+                    break
+                if not isinstance(chunk, AIMessageChunk):
+                    # A runnable without a native stream yields the whole message.
+                    if isinstance(chunk, BaseMessage):
+                        whole = chunk
+                    continue
+                merged = chunk if merged is None else merged + chunk
+                if _chunk_has_tool_calls(chunk):
+                    gate.block()
+                delta = self._content_to_text(chunk.content)
+                if first_text_s is None and delta:
+                    first_text_s = round(time.monotonic() - started, 2)
+                self._emit_answer_delta(gate.feed(delta))
+        except Exception as exc:
+            if not gate.released:
+                if merged is None and whole is None and _streaming_unsupported(exc):
+                    logger.info(
+                        f"Model of agent '{self._name}' does not stream; invoking"
+                    )
+                    return chat_model.invoke(messages)
+                raise
+            logger.error(f"Model stream failed for agent '{self._name}': {exc}")
+            error = "\n\n" + _friendly_model_invoke_error(exc)
+            self._emit_answer_delta(error)
+            return AIMessage(content=gate.released + error)
+        finally:
+            close = getattr(stream, "close", None)
+            if callable(close):
+                close()
+            logger.debug(
+                f"Model stream of agent '{self._name}' "
+                f"({type(chat_model).__name__}): {chunks} chunks, "
+                f"{len(gate.released)} chars shown, blocked={gate.blocked}, "
+                f"whole={whole is not None}, first chunk {first_chunk_s}s, "
+                f"first text {first_text_s}s, done {time.monotonic() - started:.2f}s"
+            )
+
+        if self._state.cancelled.is_set():
+            return AIMessage(content=gate.released)
+        if merged is None:
+            return whole if whole is not None else AIMessage(content="")
+        response = message_chunk_to_message(merged)
+        if not self._has_tool_calls(response):
+            self._emit_answer_delta(
+                gate.finish(self._content_to_text(response.content))
+            )
+        return response
+
     def call_model(
         self,
         state: ABIAgentState,
     ) -> Command[Literal["call_tools", "__end__", "current_active_agent"]]:
         self._state.set_current_active_agent(self.name)
-        logger.debug(f"🧠 Calling model for agent '{self._name}'")
-        self._notify_call_model(self._name)
 
         # Persist routing into the checkpointed graph state so that the next
         # HTTP turn (which rebuilds the agent tree from scratch) restores who is
@@ -2023,6 +2193,11 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             "current_active_agent": self._state.current_active_agent,
             "supervisor_agent": self._state.supervisor_agent,
         }
+        if self._state.cancelled.is_set():
+            return Command(goto="__end__", update=routing_update)
+
+        logger.debug(f"🧠 Calling model for agent '{self._name}'")
+        self._notify_call_model(self._name)
 
         # Inserting system prompt before messages.
         messages = state["messages"]
@@ -2053,6 +2228,8 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         try:
             if documents_turn_active() or slides_turn_active():
                 response = _invoke_office_chat_model(chat_model, messages)
+            elif self.stream_answers and not self._markdown_pretty_display:
+                response = self._stream_chat_model(chat_model, messages)
             else:
                 response = chat_model.invoke(messages)
         except Exception as e:  # noqa: BLE001
@@ -2069,6 +2246,14 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                 },
             )
         logger.debug(f"Model response: {response}")
+
+        if self._state.cancelled.is_set():
+            # Keep in memory what the user saw of the answer, nothing more.
+            text = self._content_to_text(getattr(response, "content", ""))
+            update: dict[str, Any] = dict(routing_update)
+            if text.strip() and not self._has_tool_calls(response):
+                update["messages"] = [AIMessage(content=text)]
+            return Command(goto="__end__", update=update)
 
         # Normalize freshly returned tool inputs so the next turn (and Bedrock
         # re-serialization) always sees a JSON object for toolUse.input.
@@ -2956,6 +3141,36 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
 
         return tools
 
+    def _bind_tools_to_chat_model(self) -> None:
+        base_chat_model = self._chat_model
+        self._chat_model_with_tools = base_chat_model
+        # Variant bound WITHOUT context-gated tools (e.g. coding-workspace tools),
+        # used when the current request is not tied to a workspace so the model
+        # never sees tools it cannot use. Falls back to the full model when there
+        # are no gated tools to strip.
+        self._chat_model_without_workspace_tools = base_chat_model
+        if self._tools or self._native_tools:
+            tools_to_bind: list[Tool | BaseTool | dict] = []
+            tools_to_bind.extend(self._structured_tools)
+            tools_to_bind.extend(self._native_tools)
+
+            # Test if the chat model can bind tools by trying with a default tool first
+            if can_bind_tools(base_chat_model):
+                self._chat_model_with_tools = base_chat_model.bind_tools(tools_to_bind)
+                gated = [t for t in tools_to_bind if not Agent._requires_workspace(t)]
+                self._chat_model_without_workspace_tools = (
+                    base_chat_model.bind_tools(gated)
+                    if len(gated) != len(tools_to_bind)
+                    else self._chat_model_with_tools
+                )
+            else:
+                logger.warning(
+                    f"Chat model {type(base_chat_model).__name__} does not support tool calling. Tools will not be available for agent '{self._name}'."
+                )
+                # Keep the original model without tools
+                self._chat_model_with_tools = base_chat_model
+                self._chat_model_without_workspace_tools = base_chat_model
+
     def _populate_duplicate_shell(self, clone: Agent) -> None:
         """Copy subclass-specific fields onto a shell duplicate before ``build_graph``."""
 
@@ -3002,6 +3217,9 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         clone._structured_tools = structured_tools
         clone._agents = runtime_agents
         clone._tools_by_name = {tool.name: tool for tool in structured_tools}
+        if len(duplicated_children) != len(self._original_agents):
+            # The template's bound model carries a handoff tool per sub-agent.
+            clone._bind_tools_to_chat_model()
 
         if getattr(clone, "sequential_supervisor", False):
             for sub_agent in clone._agents:
@@ -3017,12 +3235,16 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         self,
         queue: Queue | None = None,
         agent_shared_state: AgentSharedState | None = None,
+        keep_agent: Callable[[Agent], bool] | None = None,
     ) -> Agent:
         """Create a new instance of the agent with the same configuration.
 
         This method creates a deep copy of the agent with the same configuration
         but with its own independent state. This is useful when you need to run
         multiple instances of the same agent concurrently.
+
+        ``keep_agent`` drops sub-agents, at every depth, for which it returns
+        False: they are not duplicated and get no handoff tool.
 
         Returns:
             Agent: A new Agent instance with the same configuration
@@ -3033,7 +3255,9 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             queue = Queue()
 
         duplicated_children: list[Agent] = [
-            agent.duplicate(queue, shared_state) for agent in self._original_agents
+            agent.duplicate(queue, shared_state, keep_agent=keep_agent)
+            for agent in self._original_agents
+            if keep_agent is None or keep_agent(agent)
         ]
 
         new_agent = self._duplicate_shell(queue, shared_state, duplicated_children)
@@ -3120,6 +3344,18 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             dict: Event data formatted for SSE
         """
 
+        abandoned = getattr(self, "_abandoned_turn", None)
+        if abandoned is not None:
+            # A consumer left the previous turn: its last events are not ours.
+            abandoned.join()
+            self._abandoned_turn = None
+            while True:
+                try:
+                    self._event_queue.get_nowait()
+                except Empty:
+                    break
+        self._set_cancelled(False)
+
         # Start a thread to run the invoke and put results in queue
         def run_invoke():
             try:
@@ -3136,6 +3372,8 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                     f"Agent invoke thread error for '{self._name}': {e}"
                 )
                 final_state = _friendly_model_invoke_error(e)
+            # A cancel lasts for the turn it stopped.
+            self._set_cancelled(False)
             self._event_queue.put(FinalStateEvent(payload=final_state))
 
         from threading import Thread
@@ -3147,11 +3385,65 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         thread = Thread(target=ctx.run, args=(run_invoke,))
         thread.start()
 
-        final_state = None
+        finished = False
+        try:
+            final_state = yield from self._drain_events(thread)
+            finished = True
+        finally:
+            # The consumer left before the turn ended (client abort): stop it.
+            if not finished:
+                self._abandoned_turn = thread
+                if thread.is_alive():
+                    self.cancel()
+
+        response = self._content_to_text(final_state)
+        logger.debug(f"Response: {response}")
+
+        # Use a buffer to handle text chunks
+        buffer = ""
+        for char in response:
+            buffer += char
+            if char in ["\n", "\r"]:
+                # if buffer.strip():  # Only send non-empty lines
+                yield {"event": "message", "data": buffer.rstrip()}
+                buffer = ""
+
+        # Don't forget remaining text
+        if buffer.strip():
+            yield {"event": "message", "data": buffer}
+
+        yield {"event": "done", "data": "[DONE]"}
+
+    def _set_cancelled(self, value: bool, seen: set[int] | None = None) -> None:
+        seen = seen if seen is not None else set()
+        if id(self) in seen:
+            return
+        seen.add(id(self))
+        if value:
+            self._state.cancelled.set()
+        else:
+            self._state.cancelled.clear()
+        for agent in getattr(self, "_agents", None) or []:
+            agent._set_cancelled(value, seen)
+
+    def cancel(self) -> None:
+        """Stop the running ``stream_invoke`` turn. Safe from any thread.
+
+        The model stream is closed at its next chunk and the graph ends without
+        another model call; the part of the answer already shown is kept in
+        memory. A tool that is running finishes first. ``stream_invoke`` calls
+        it when its consumer stops reading before the turn ended.
+        """
+        self._set_cancelled(True)
+
+    def _drain_events(self, thread: Any) -> Generator[dict[str, Any], None, Any]:
+        """SSE events from the queue; returns the worker's final state."""
         while True:
             try:
                 message = self._event_queue.get(timeout=0.05)
-                if isinstance(message, ToolUsageEvent):
+                if isinstance(message, AIMessageDeltaEvent):
+                    yield {"event": "ai_message_delta", "data": str(message.payload)}
+                elif isinstance(message, ToolUsageEvent):
                     yield {
                         "event": "tool_usage",
                         "data": str(message.payload.tool_calls[0]["name"]),
@@ -3181,8 +3473,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                         "data": str(message.payload),
                     }
                 elif isinstance(message, FinalStateEvent):
-                    final_state = message.payload
-                    break
+                    return message.payload
             except Empty:
                 # An empty queue is the only state in which a dead worker can be
                 # observed reliably: if `run_invoke` died before queueing a
@@ -3192,33 +3483,11 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                 # spun forever instead of reporting the dead thread.
                 # `empty()` is re-checked to close the race where the worker
                 # queues an event and exits between the timeout and `is_alive()`.
-                if (
-                    not thread.is_alive()
-                    and self._event_queue.empty()
-                    and final_state is None
-                ):
+                if not thread.is_alive() and self._event_queue.empty():
                     # We have a problem.
                     raise RuntimeError(
                         "Agent thread has died and no final state event was received."
                     )
-
-        response = self._content_to_text(final_state)
-        logger.debug(f"Response: {response}")
-
-        # Use a buffer to handle text chunks
-        buffer = ""
-        for char in response:
-            buffer += char
-            if char in ["\n", "\r"]:
-                # if buffer.strip():  # Only send non-empty lines
-                yield {"event": "message", "data": buffer.rstrip()}
-                buffer = ""
-
-        # Don't forget remaining text
-        if buffer.strip():
-            yield {"event": "message", "data": buffer}
-
-        yield {"event": "done", "data": "[DONE]"}
 
     @property
     def tools(self) -> list[Tool | BaseTool]:
