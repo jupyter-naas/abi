@@ -14,6 +14,7 @@ import { createContext, useContext, useEffect, useState, useCallback } from 'rea
 import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from '@/stores/auth';
 import { getApiUrl, getWebsocketPath } from '@/lib/config';
+import { classifySocketConnectError } from '@/lib/socket-connect-error';
 
 interface PresenceUser {
   user_id: string;
@@ -59,7 +60,9 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionDelay: 1000,
-      reconnectionAttempts: 5
+      reconnectionDelayMax: 10000,
+      // An API restart can outlast a handful of retries; keep trying (backoff caps at 10s).
+      reconnectionAttempts: Infinity
     });
 
     socketInstance.on('connect', () => {
@@ -73,24 +76,20 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     });
 
     socketInstance.on('connect_error', (error: Error & { data?: { status?: number } }) => {
-      const message = error.message.toLowerCase();
-      const status = error.data?.status;
-      const isAuthError =
-        status === 401 ||
-        status === 403 ||
-        message.includes('401') ||
-        message.includes('403') ||
-        message.includes('unauthorized') ||
-        message.includes('forbidden');
+      const kind = classifySocketConnectError(error.message, error.data?.status);
 
       // Stop retry loop on auth failures; reconnect will happen when token changes.
-      if (isAuthError) {
+      if (kind === 'auth') {
         socketInstance.io.opts.reconnection = false;
         socketInstance.disconnect();
         useAuthStore.getState().logout();
         if (typeof window !== 'undefined') {
           window.location.href = '/auth/login';
         }
+        return;
+      }
+      if (kind === 'transient') {
+        console.warn(`WebSocket unreachable (${error.message}); retrying.`);
         return;
       }
       console.error('WebSocket connection error:', error);
