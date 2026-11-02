@@ -64,6 +64,19 @@ jobs:
         working-directory: libs/naas-abi-cli
         run: uv run pytest -q
 
+  # Every published package stays under the per-file budget, so naas-abi stays
+  # well under PyPI's 10 GiB project limit (see the root AGENTS.md).
+  package-size:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: '3.12'
+      - name: Check wheel and sdist sizes
+        run: make check-package-size
+
   check:
     runs-on: ubuntu-latest
     strategy:
