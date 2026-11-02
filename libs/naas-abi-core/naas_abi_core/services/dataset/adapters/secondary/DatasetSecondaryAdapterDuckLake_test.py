@@ -1009,6 +1009,10 @@ def test_clean_up_deletes_replaced_files_and_keeps_every_snapshot(
     adapter.compact("messages")
     compacted = _files(adapter, tmp_path / "datasets")
 
+    # A SQLite catalog keeps the schedule time as text and compares it as
+    # text: a grace reaching back to the day before (00:00-01:00 UTC) leaves
+    # every file of today, so the test runs without one.
+    monkeypatch.setattr(ducklake_module, "CLEANUP_GRACE", timedelta(0))
     dry = adapter.clean_up(dry_run=True)
     assert dry == {
         "dry_run": True,
@@ -1018,8 +1022,6 @@ def test_clean_up_deletes_replaced_files_and_keeps_every_snapshot(
     }
     assert _files(adapter, tmp_path / "datasets") == compacted
 
-    # A SQLite catalog does not honour the grace (local catalogs only).
-    monkeypatch.setattr(ducklake_module, "CLEANUP_GRACE", timedelta(0))
     report = adapter.clean_up()
 
     cleaned = _files(adapter, tmp_path / "datasets")
