@@ -174,6 +174,22 @@ Which sections are **process-shaped** (ActOfWorking / ActOfStudying / ActOfCerti
   search words, a slug that matched `SLUG_PATTERN`, or a facet value read back
   out of the people table.
 
+## Page loading
+
+- Page renderers are imported on navigation through `web/lib/registry.js`.
+  Opening the directory must not load the ontology canvas or profile renderer.
+  Instance boot may call `preloadPage` for the configured route while the shell
+  loads. `loadAppConfig` shares both in-flight and completed reads per workspace.
+- Canonicalize the initial hash through `history.replaceState`: changing
+  `location.hash` during startup dispatches another render and duplicates reads.
+- A results list does not prefetch its network. Building that network reads
+  graphs and runs bound queries; request it when the viewer chooses Network.
+- Publish the results controls through `onState` before awaiting data, and draw
+  the tabs in the loading state. Keep the footer until the page has loaded so
+  it does not move out of the viewport when results arrive.
+- Instances may load their own font stylesheet early. `applyBrand` reuses an
+  existing stylesheet rather than inserting a duplicate.
+
 ## Naming
 
 Python package `people` · catalog id `people` · API prefix

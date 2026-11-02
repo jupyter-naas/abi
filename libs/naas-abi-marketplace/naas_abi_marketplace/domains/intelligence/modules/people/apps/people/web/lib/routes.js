@@ -40,6 +40,20 @@ export function landingHref(config) {
   return `#/${page.url}`;
 }
 
+/** Canonicalize the initial URL without triggering a second page/data load. */
+export function syncLandingHash(config) {
+  const raw = window.location.hash.replace(/^#/, "") || "/";
+  if (raw.split("?")[0].split("/").filter(Boolean).length) return;
+  const target = landingHref(config);
+  if (window.location.hash !== target) {
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${window.location.pathname}${window.location.search}${target}`,
+    );
+  }
+}
+
 /**
  * The results page for a search. ``view`` is the tab ("" People, "connections"),
  * ``display`` how it is drawn ("" the list, "network"), ``person`` whose

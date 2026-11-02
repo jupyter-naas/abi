@@ -11,7 +11,7 @@ import { applyBrand, applyTheme, loadAppConfig, logoHtml } from "../lib/config.j
 import { escapeHtml } from "../lib/dom.js";
 import { syncContentAlign, watchContentAlign } from "../lib/layout.js";
 import { mountPage } from "../lib/registry.js";
-import { landingHref, parseRoute } from "../lib/routes.js";
+import { parseRoute, syncLandingHash } from "../lib/routes.js";
 
 const view = document.getElementById("view");
 const topbar = document.getElementById("topbar");
@@ -116,7 +116,17 @@ async function render() {
   watchContentAlign();
   delete state.keepTopbarEnd;
   try {
-    state = (await mountPage(route.pageId, view, { config, ...route })) || state;
+    state = (await mountPage(route.pageId, view, {
+      config,
+      ...route,
+      // A page can publish its controls before waiting for its data.
+      onState: (nextState) => {
+        if (renderId === renderCount) {
+          renderTopbar(nextState);
+          watchContentAlign();
+        }
+      },
+    })) || state;
   } catch (error) {
     if (renderId !== renderCount) return;
     view.innerHTML = `<div class="results"><div class="empty-state error-block">
@@ -160,21 +170,10 @@ document.addEventListener("keydown", (event) => {
 window.addEventListener("hashchange", render);
 window.addEventListener("resize", syncContentAlign);
 
-function syncLandingHash() {
-  const raw = window.location.hash.replace(/^#/, "") || "/";
-  if (raw.split("?")[0].split("/").filter(Boolean).length) return;
-  const target = landingHref(config);
-  if (window.location.hash !== target) {
-    window.location.replace(
-      `${window.location.pathname}${window.location.search}${target}`,
-    );
-  }
-}
-
 (async function start() {
   try {
     config = await loadAppConfig();
-    syncLandingHash();
+    syncLandingHash(config);
   } catch (error) {
     view.innerHTML = `<div class="results"><div class="empty-state error-block">
       <h2>This app is not configured</h2>
