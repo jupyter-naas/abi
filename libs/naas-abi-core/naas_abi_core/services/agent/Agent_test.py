@@ -440,8 +440,8 @@ def test_strip_removes_orphan_tool_use_block_in_list_content():
 
 
 def test_strip_keeps_visible_text_but_drops_tool_use_block():
-    """When the transfer message also has real text, keep the text and strip
-    only the tool_use block (and its tool_calls entry)."""
+    """When a past turn's transfer message also has real text, keep the text and
+    strip only the tool_use block (and its tool_calls entry)."""
     from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
     tid = "toolu_X"
@@ -474,17 +474,130 @@ def test_strip_keeps_visible_text_but_drops_tool_use_block():
             tool_call_id=tid,
             id="tm1",
         ),
+        HumanMessage(content="thanks", id="h2"),
     ]
 
     cleaned = _strip(sub, messages)
 
-    assert [type(m).__name__ for m in cleaned] == ["HumanMessage", "AIMessage"]
+    assert [type(m).__name__ for m in cleaned] == [
+        "HumanMessage",
+        "AIMessage",
+        "HumanMessage",
+    ]
     ai = cleaned[1]
     assert ai.tool_calls == []
     assert all(
         not (isinstance(b, dict) and b.get("type") == "tool_use") for b in ai.content
     )
     assert any(isinstance(b, dict) and b.get("type") == "text" for b in ai.content)
+
+
+def _spoken_handoff(sub, tid, text="Sure thing, let me pull that up for you."):
+    """A supervisor handoff as OpenAI-compatible models return it: text, the
+    parsed ``tool_calls`` and the raw call in ``additional_kwargs``."""
+    from langchain_core.messages import AIMessage, ToolMessage
+
+    raw = {
+        "id": tid,
+        "type": "function",
+        "index": 0,
+        "function": {"name": f"transfer_to_{sub}", "arguments": "{}"},
+    }
+    return [
+        AIMessage(
+            content=text,
+            tool_calls=[
+                {"name": f"transfer_to_{sub}", "args": {}, "id": tid, "type": "tool_call"}
+            ],
+            additional_kwargs={"tool_calls": [raw], "refusal": None},
+            id=f"ai-{tid}",
+        ),
+        ToolMessage(
+            content=f"__handoff__:{sub}",
+            name=f"transfer_to_{sub}",
+            tool_call_id=tid,
+            id=f"tm-{tid}",
+        ),
+    ]
+
+
+def test_strip_drops_raw_openai_tool_calls_of_a_spoken_handoff():
+    """Regression: a supervisor that talks while it hands off keeps its text,
+    but OpenAI-compatible models also carry the call in
+    ``additional_kwargs["tool_calls"]``. With ``tool_calls`` empty,
+    langchain_openai re-sends that raw call, and Anthropic (via OpenRouter)
+    rejects the sub-agent's history: 'tool_use ids were found without
+    tool_result blocks'.
+    """
+    from langchain_core.messages import HumanMessage
+    from langchain_openai.chat_models.base import _convert_message_to_dict
+
+    messages = [
+        HumanMessage(content="Latest news.", id="h1"),
+        *_spoken_handoff("Search", "toolu_SPOKEN"),
+        HumanMessage(content="And the weather?", id="h2"),
+    ]
+
+    cleaned = _strip("Search", messages)
+
+    assert [type(m).__name__ for m in cleaned] == [
+        "HumanMessage",
+        "AIMessage",
+        "HumanMessage",
+    ]
+    ai = cleaned[1]
+    assert ai.content == "Sure thing, let me pull that up for you."
+    assert "tool_calls" not in ai.additional_kwargs
+    assert ai.additional_kwargs["refusal"] is None
+    assert "tool_calls" not in _convert_message_to_dict(ai)
+
+
+def test_strip_ends_on_the_user_turn_after_a_spoken_handoff():
+    """Regression: the supervisor's spoken handoff must not be the last message
+    the sub-agent sends, or models without assistant prefill (Claude Sonnet 5)
+    reject it: 'The conversation must end with a user message.'"""
+    from langchain_core.messages import HumanMessage
+    from langchain_openai.chat_models.base import _convert_message_to_dict
+
+    messages = [
+        HumanMessage(content="Latest news.", id="h1"),
+        *_spoken_handoff("Search", "toolu_SPOKEN"),
+    ]
+
+    cleaned = _strip("Search", messages)
+
+    assert [m.content for m in cleaned] == ["Latest news."]
+    assert _convert_message_to_dict(cleaned[-1])["role"] == "user"
+
+
+def test_strip_keeps_raw_tool_calls_that_are_not_inbound_handoffs():
+    from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+
+    sub = "Search"
+    handoff = {"name": f"transfer_to_{sub}", "args": {}, "id": "t-in", "type": "tool_call"}
+    other = {"name": "get_time_date", "args": {}, "id": "t-own", "type": "tool_call"}
+    messages = [
+        HumanMessage(content="hi", id="h1"),
+        AIMessage(
+            content="One moment.",
+            tool_calls=[handoff, other],
+            additional_kwargs={
+                "tool_calls": [
+                    {"id": "t-in", "type": "function", "function": {"name": handoff["name"], "arguments": "{}"}},
+                    {"id": "t-own", "type": "function", "function": {"name": other["name"], "arguments": "{}"}},
+                ]
+            },
+            id="ai1",
+        ),
+        ToolMessage(content=f"__handoff__:{sub}", name=handoff["name"], tool_call_id="t-in", id="tm1"),
+        ToolMessage(content="12:00", name=other["name"], tool_call_id="t-own", id="tm2"),
+    ]
+
+    cleaned = _strip(sub, messages)
+
+    ai = cleaned[1]
+    assert [tc["id"] for tc in ai.tool_calls] == ["t-own"]
+    assert [tc["id"] for tc in ai.additional_kwargs["tool_calls"]] == ["t-own"]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
