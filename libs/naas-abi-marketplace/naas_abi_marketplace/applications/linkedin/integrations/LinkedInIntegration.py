@@ -74,6 +74,18 @@ class LinkedInIntegration(Integration):
         }
 
         self.profile_url = self.__configuration.linkedin_url
+        # Fetched on first use. Empty cookies at boot must not call LinkedIn.
+        self._profile_public_id: str | None = None
+
+    @property
+    def profile_public_id(self) -> str:
+        if self._profile_public_id is not None:
+            return self._profile_public_id
+        if not self.profile_url:
+            raise RuntimeError(
+                "LinkedIn profile URL is not configured. Set LINKEDIN_PROFILE_URL "
+                "to use this feature."
+            )
         profile_public_id_result = self.get_profile_public_id(self.profile_url)
         public_id_error = profile_public_id_result.get("error")
         if public_id_error:
@@ -85,7 +97,8 @@ class LinkedInIntegration(Integration):
             raise RuntimeError(
                 f"LinkedIn profile public ID is empty for URL '{self.profile_url}'"
             )
-        self.profile_public_id = profile_public_id
+        self._profile_public_id = profile_public_id
+        return profile_public_id
 
     def _flatten_dict(
         self, data: dict | Any, parent_key: str = "", sep: str = "_"

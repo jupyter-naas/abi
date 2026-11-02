@@ -17,15 +17,18 @@ class _Configuration(ModuleConfiguration):
 
     module: naas_abi_marketplace.applications.linkedin
     enabled: true
-    config:
-        li_at: "{{ secret.li_at }}"
-        JSESSIONID: "{{ secret.JSESSIONID }}"
-        linkedin_profile_url: "https://demo.example/profiles/demo"
+    config: {}
+
+    Optional overrides (empty defaults keep Engine.load working without keys):
+
+        li_at: "..."
+        JSESSIONID: "..."
+        linkedin_profile_url: "https://www.linkedin.com/in/..."
     """
 
-    li_at: str
-    JSESSIONID: str
-    linkedin_profile_url: str
+    li_at: str = ""
+    JSESSIONID: str = ""
+    linkedin_profile_url: str = ""
     datastore_path: str = "linkedin"
 
 

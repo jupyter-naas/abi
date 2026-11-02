@@ -79,9 +79,8 @@ function resultHtml(config, hit, tokens, query, facet = "", display = "", { conn
 /** The tabs of a search; each can be drawn as a list or as a network. */
 export const VIEWS = TABS;
 
-// The network of each search asked for in this page's lifetime. The People view
-// starts it in the background, so the Network tab is ready, or on its way,
-// when it is opened; the first build of a search can take seconds.
+// The network of each search opened in this page's lifetime. Building it costs
+// graph reads and bound queries: a list should never start that work unasked.
 const networkRequests = new Map();
 
 function loadNetwork(query, facet) {
@@ -93,15 +92,6 @@ function loadNetwork(query, facet) {
     networkRequests.set(key, request);
   }
   return networkRequests.get(key);
-}
-
-/** Mark the topbar's Network option as loading until the search's network has arrived. */
-function prefetchNetwork(displaySwitchEl, query, facet) {
-  const tab = displaySwitchEl?.querySelector('[data-display="network"]');
-  tab?.classList.add("is-loading");
-  loadNetwork(query, facet)
-    .catch(() => {})
-    .finally(() => tab?.classList.remove("is-loading"));
 }
 
 export function viewOf(value) {
@@ -469,12 +459,13 @@ async function mountConnections(host, { config, state }) {
   return null;
 }
 
-export async function mountResults(host, { config, params }) {
+export async function mountResults(host, { config, params, onState }) {
   const state = resultsState(params, config.app?.default_results_view ?? "");
   const { query, facet, view, display } = state;
   const requestedPage = state.page;
   // List / Network, in the topbar beside the search box (as Resume / Graph on a profile).
   const topbarEnd = displaySwitch(config, state);
+  onState?.({ showTopbarSearch: true, query, topbarEnd });
 
   if (view === "connections") {
     const dispose = await mountConnections(host, { config, state });
@@ -486,7 +477,10 @@ export async function mountResults(host, { config, params }) {
     return { showTopbarSearch: true, query, topbarEnd, teardown: dispose || undefined };
   }
 
-  host.innerHTML = `<div class="results"><p class="stats">Searching…</p></div>`;
+  host.innerHTML = `<div class="results">${resultsHeaderHtml(
+    config, { query, facet, view, display }, "Searching…",
+  )}</div>`;
+  wireResultsHeader(host);
   let payload;
   try {
     payload = await fetchSearch({ query, facet, page: requestedPage });
@@ -516,8 +510,5 @@ export async function mountResults(host, { config, params }) {
       ${pagerHtml(config, payload, query, view)}
     </div>`;
   wireResultsHeader(host);
-  // Not awaited: the list is already on screen.
-  if (results.length) prefetchNetwork(topbarEnd, query, payload.facet);
-
   return { showTopbarSearch: true, query, topbarEnd };
 }
