@@ -459,6 +459,42 @@ def _render_coding_context_block(client_context: dict | None) -> str:
     )
 
 
+# Visible characters held before a voice-call answer starts streaming (160 in
+# text mode). Lower speaks sooner; the line a model says before a tool call is
+# still held as long as it is shorter.
+VOICE_CALL_ANSWER_HOLDBACK_CHARS = 60
+
+
+def voice_call_active(client_context: dict | None) -> bool:
+    if not isinstance(client_context, dict):
+        return False
+    voice_call = client_context.get("voice_call")
+    if not voice_call:
+        return False
+    return not (isinstance(voice_call, dict) and not voice_call.get("active", True))
+
+
+def _render_voice_call_context_block(client_context: dict | None) -> str:
+    """Inject spoken-cadence directives when the user is on a live voice call."""
+    if not voice_call_active(client_context):
+        return ""
+    return (
+        "\n\n## Live Voice Call Mode\n"
+        "You are currently speaking with the user on a real-time phone call. "
+        "Your response is synthesized into speech sentence-by-sentence as you stream.\n"
+        "- Brevity applies to the spoken answer only, never to tool use. Hand off to "
+        "sub-agents and call tools exactly as you would in text mode: a question that "
+        "needs the web, the knowledge graph, files or any other capability goes to the "
+        "agent or tool that has it. Never answer that you lack a tool an agent of yours has.\n"
+        "- Before a handoff or a tool call, say one short filler sentence (for example "
+        "\"Let me check that.\"), then make the call in the same turn.\n"
+        "- Respond in natural, warm, conversational spoken prose (1 to 3 concise sentences by default).\n"
+        "- Do NOT use markdown formatting, bulleted lists, numbered lists, headers, tables, code blocks, or URLs.\n"
+        "- Speak directly to the user as if on a live phone call, keeping turns punchy and easy to interrupt.\n"
+        "- Summarize what the tools or agents return conversationally.\n"
+    )
+
+
 class UserProfile(Protocol):
     """The fields the profile block reads, on whatever record carries them.
 
@@ -552,6 +588,9 @@ class ChatService:
         feature_block = render_feature_context_block(client_context)
         if feature_block:
             system_prompt += feature_block
+        voice_block = _render_voice_call_context_block(client_context)
+        if voice_block:
+            system_prompt += voice_block
 
         has_prior_assistant = any(getattr(m, "role", None) == "assistant" for m in prior_messages)
         if has_prior_assistant:
@@ -601,6 +640,10 @@ class ChatService:
         feature_block = render_feature_context_block(client_context)
         if feature_block.strip():
             parts.append(feature_block.strip())
+
+        voice_block = _render_voice_call_context_block(client_context)
+        if voice_block.strip():
+            parts.append(voice_block.strip())
 
         has_prior_assistant = any(getattr(m, "role", None) == "assistant" for m in prior_messages)
         if has_prior_assistant:

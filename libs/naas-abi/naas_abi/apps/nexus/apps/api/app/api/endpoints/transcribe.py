@@ -15,8 +15,44 @@ OPENAI_TRANSCRIBE_URL = "https://api.openai.com/v1/audio/transcriptions"
 OPENROUTER_TRANSCRIBE_URL = "https://openrouter.ai/api/v1/audio/transcriptions"
 OPENAI_TRANSCRIBE_MODEL = "gpt-4o-transcribe"
 OPENROUTER_TRANSCRIBE_MODEL = "openai/gpt-4o-transcribe"
+DEFAULT_DOMAIN_VOCABULARY = "ABI, NaasAI, Nexus, Ontology, BFO, SPARQL, Oxigraph, Qdrant, TEN"
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
+
+_http_client: httpx.AsyncClient | None = None
+
+
+def _get_http_client() -> httpx.AsyncClient:
+    """Return a shared warm AsyncClient with keep-alive pooling for low-latency turns."""
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        _http_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=10.0, read=180.0, write=60.0, pool=30.0),
+            limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+            follow_redirects=True,
+        )
+    return _http_client
+
+
+def build_transcription_prompt(custom_prompt: str | None = None) -> str:
+    """Combine default platform domain vocabulary with optional caller vocabulary hints."""
+    extra = (custom_prompt or "").strip()
+    if not extra:
+        return DEFAULT_DOMAIN_VOCABULARY
+    if DEFAULT_DOMAIN_VOCABULARY.lower() in extra.lower():
+        return extra
+    return f"{DEFAULT_DOMAIN_VOCABULARY}, {extra}"
+
+
+def normalize_transcription_language(raw: str | None) -> str | None:
+    """Return an ISO-639-1 code from a hint like ``fr-FR``, or None when unusable.
+
+    Without a language, Whisper-family models guess one from noise (often Chinese).
+    """
+    code = (raw or "").strip().lower().replace("_", "-").split("-", 1)[0]
+    if len(code) == 2 and code.isalpha():
+        return code
+    return None
 
 
 def _secret(name: str) -> str | None:
@@ -58,6 +94,8 @@ def resolve_transcription_backend() -> tuple[str, str, str] | None:
 async def transcribe_audio(
     audio: UploadFile = File(...),
     conversation_id: str | None = Form(default=None, alias="conversation_id"),
+    prompt: str | None = Form(default=None, alias="prompt"),
+    language: str | None = Form(default=None, alias="language"),
 ) -> JSONResponse:
     if not audio.filename:
         filename = "recording.webm"
@@ -82,6 +120,7 @@ async def transcribe_audio(
 
     url, api_key, model = backend
     preserved_conversation_id = (conversation_id or "").strip() or None
+    effective_prompt = build_transcription_prompt(prompt)
 
     headers = {"Authorization": f"Bearer {api_key}"}
     if "openrouter.ai" in url:
@@ -91,21 +130,29 @@ async def transcribe_audio(
 
         headers.update(openrouter_attribution_headers())
 
-    timeout = httpx.Timeout(connect=10.0, read=180.0, write=60.0, pool=30.0)
+    form: dict[str, str] = {
+        "model": model,
+        "response_format": "json",
+        "prompt": effective_prompt,
+    }
+    language_code = normalize_transcription_language(language)
+    if language_code:
+        form["language"] = language_code
+
     try:
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            response = await client.post(
-                url,
-                headers=headers,
-                data={"model": model, "response_format": "json"},
-                files={
-                    "file": (
-                        filename,
-                        content,
-                        audio.content_type or "application/octet-stream",
-                    )
-                },
-            )
+        client = _get_http_client()
+        response = await client.post(
+            url,
+            headers=headers,
+            data=form,
+            files={
+                "file": (
+                    filename,
+                    content,
+                    audio.content_type or "application/octet-stream",
+                )
+            },
+        )
     except httpx.TimeoutException:
         return JSONResponse(
             {

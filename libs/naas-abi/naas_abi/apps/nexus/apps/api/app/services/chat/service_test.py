@@ -24,6 +24,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.service import (
     ResolvedProvider,
     _render_documents_context_block,
     _render_slides_context_block,
+    _render_voice_call_context_block,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.port import (
     RequestContext,
@@ -1527,3 +1528,26 @@ async def test_build_user_context_addendum_empty_when_lookup_fails() -> None:
     )
 
     assert addendum == ""
+
+
+def test_render_voice_call_context_block_active() -> None:
+    block = _render_voice_call_context_block({"voice_call": {"active": True}})
+    assert "## Live Voice Call Mode" in block
+    assert "Do NOT use markdown formatting" in block
+
+
+def test_voice_call_brevity_does_not_cut_tool_use() -> None:
+    # Told to keep answers short, Abi answered "I have no web search tool"
+    # instead of handing off to Search.
+    block = _render_voice_call_context_block({"voice_call": {"active": True}})
+    assert "Brevity applies to the spoken answer only, never to tool use" in block
+    assert "exactly as you would in text mode" in block
+    assert "Never answer that you lack a tool an agent of yours has" in block
+    assert "short filler sentence" in block
+
+
+def test_render_voice_call_context_block_inactive() -> None:
+    assert _render_voice_call_context_block(None) == ""
+    assert _render_voice_call_context_block({}) == ""
+    assert _render_voice_call_context_block({"voice_call": {"active": False}}) == ""
+
