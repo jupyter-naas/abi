@@ -23,7 +23,7 @@
     },
     "predefined_graphs": [
       {
-        "name": "nexus_voice",
+        "name": "abi_voice",
         "auto_start": true,
         "graph": {
           "nodes": [
@@ -68,12 +68,11 @@
               "addon": "openai_llm2_python",
               "extension_group": "chatgpt",
               "property": {
-                "base_url": "${env:TEN_LLM_BASE_URL|https://api.openai.com/v1}",
+                "base_url": "${env:TEN_LLM_BASE_URL}",
                 "api_key": "${env:TEN_LLM_API_KEY}",
-                "frequency_penalty": 0.9,
-                "model": "${env:TEN_LLM_MODEL|gpt-4o-mini}",
+                "model": "${env:TEN_LLM_MODEL|AbiAgent}",
                 "max_tokens": 512,
-                "prompt": "You are a concise voice assistant. Reply in one or two short spoken sentences.",
+                "prompt": "",
                 "greeting": "Hi, I am listening.",
                 "max_memory_length": 10,
                 "custom_headers": {

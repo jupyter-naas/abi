@@ -17,23 +17,17 @@ import json
 import re
 import time
 import uuid
-from collections.abc import AsyncGenerator, AsyncIterable
+from collections.abc import AsyncGenerator
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
 )
-from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.services.auth.service import decode_token
 from naas_abi.apps.nexus.apps.api.app.services.chat.service import render_user_context_block
-from naas_abi.apps.nexus.apps.api.app.services.openai_gateway.voice import (
-    speakable,
-    voice_preamble,
-    voice_thread_id,
-)
 from naas_abi_core.services.agent.context import (
     coder_workspace_base,
     coder_workspace_secret,
@@ -122,27 +116,7 @@ async def _stream_agent_text(
     ws_secret: str | None = None,
     user_context_preamble: str | None = None,
 ) -> AsyncGenerator[str, None]:
-    """Invoke an abi agent in-process and yield text, tool activity as markdown."""
-    async for chunk in _stream_agent_chunks(
-        model, messages, thread_id, ws_base, ws_secret, user_context_preamble
-    ):
-        if isinstance(chunk, str) and chunk:
-            yield chunk
-        elif isinstance(chunk, dict):
-            piece = _format_tool_event(chunk)
-            if piece:
-                yield piece
-
-
-async def _stream_agent_chunks(
-    model: str,
-    messages: list[ChatMessage],
-    thread_id: str,
-    ws_base: str | None = None,
-    ws_secret: str | None = None,
-    user_context_preamble: str | None = None,
-) -> AsyncGenerator[str | dict, None]:
-    """Invoke an abi agent in-process and yield its raw text and event chunks."""
+    """Invoke an abi agent in-process and yield text deltas only."""
     from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
         Message,
         ProviderConfig,
@@ -158,10 +132,17 @@ async def _stream_agent_chunks(
 
     pr_messages = [Message(role=_coerce_role(m.role), content=m.content) for m in messages]
     config = ProviderConfig(id="abi", name="abi", type="abi", enabled=True, model=model)
+    # Stream the agent's text AND its tool activity (calls + results) as it happens,
+    # so the client shows what the agent is doing instead of just the final answer.
     async for chunk in stream_with_abi_inprocess(
         pr_messages, config, thread_id, user_context_preamble=user_context_preamble
     ):
-        yield chunk
+        if isinstance(chunk, str) and chunk:
+            yield chunk
+        elif isinstance(chunk, dict):
+            piece = _format_tool_event(chunk)
+            if piece:
+                yield piece
 
 
 def _list_agent_model_ids() -> list[str]:
@@ -203,11 +184,17 @@ def _chunk(
 async def _sse(
     completion_id: str,
     model: str,
-    deltas: AsyncIterable[str],
+    messages: list[ChatMessage],
+    thread_id: str,
+    ws_base: str | None = None,
+    ws_secret: str | None = None,
     marker: str = "",
+    user_context_preamble: str | None = None,
 ) -> AsyncGenerator[str, None]:
     yield f"data: {json.dumps(_chunk(completion_id, model, role='assistant'))}\n\n"
-    async for delta in deltas:
+    async for delta in _stream_agent_text(
+        model, messages, thread_id, ws_base, ws_secret, user_context_preamble
+    ):
         yield f"data: {json.dumps(_chunk(completion_id, model, content=delta))}\n\n"
     if marker:
         yield f"data: {json.dumps(_chunk(completion_id, model, content=marker))}\n\n"
@@ -285,51 +272,32 @@ async def chat_completions(
     ws_base, ws_secret = _workspace_target(request)
     preamble = _user_context_preamble(current_user, body.messages)
 
-    deltas = _stream_agent_text(body.model, body.messages, thread_id, ws_base, ws_secret, preamble)
     if body.stream:
         return StreamingResponse(
-            _sse(completion_id, body.model, deltas, marker),
+            _sse(
+                completion_id,
+                body.model,
+                body.messages,
+                thread_id,
+                ws_base,
+                ws_secret,
+                marker,
+                preamble,
+            ),
             media_type="text/event-stream",
         )
-    text = "".join([delta async for delta in deltas]) + marker
-    return _completion(completion_id, body.model, text)
 
-
-@router.post("/voice/chat/completions", response_model=None)
-async def voice_chat_completions(
-    body: ChatCompletionRequest,
-    request: Request,
-    current_user: User = Depends(get_current_user_required),
-) -> StreamingResponse | dict:
-    """Chat completions for a voice engine: speakable sentences only.
-
-    Point TEN Agent's ``openai_llm2_python`` at ``<api>/api/v1/voice`` with the
-    caller's Nexus token as ``api_key`` and a per-call ``X-Voice-Session``
-    header. No hidden chat marker: a voice engine would speak it.
-    """
-    if not settings.voice_gateway_enabled:
-        raise HTTPException(status_code=404, detail="Voice gateway is disabled")
-    completion_id = f"chatcmpl-{uuid.uuid4().hex}"
-    session = request.headers.get("x-voice-session") or body.user
-    thread_id = voice_thread_id(session, str(current_user.id))
-    preamble = voice_preamble(_user_context_preamble(current_user, body.messages))
-    deltas = speakable(
-        _stream_agent_chunks(body.model, body.messages, thread_id, user_context_preamble=preamble)
-    )
-    if body.stream:
-        return StreamingResponse(
-            _sse(completion_id, body.model, deltas), media_type="text/event-stream"
-        )
-    text = "".join([delta async for delta in deltas]).strip()
-    return _completion(completion_id, body.model, text)
-
-
-def _completion(completion_id: str, model: str, text: str) -> dict:
+    text = ""
+    async for delta in _stream_agent_text(
+        body.model, body.messages, thread_id, ws_base, ws_secret, preamble
+    ):
+        text += delta
+    text += marker
     return {
         "id": completion_id,
         "object": "chat.completion",
         "created": int(time.time()),
-        "model": model,
+        "model": body.model,
         "choices": [
             {
                 "index": 0,

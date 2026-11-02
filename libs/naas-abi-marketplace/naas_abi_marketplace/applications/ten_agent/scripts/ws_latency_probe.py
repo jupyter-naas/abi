@@ -1,6 +1,6 @@
 """Stream a 16 kHz mono PCM utterance into TEN's websocket_server and time the reply.
 
-Usage: python ws_latency_probe.py question.pcm
+Usage: <runtime_dir>/venv/bin/python ws_latency_probe.py question.pcm (needs ``websockets``)
 Make one with: say -v Samantha --data-format=LEI16@16000 -o q.wav "..." (then strip the WAV header).
 """
 
@@ -59,6 +59,7 @@ async def main(pcm: bytes, port: int = 8765) -> None:
             await asyncio.sleep(0.02)
         await asyncio.sleep(8)
         task.cancel()
+    assert speech_end is not None
     for k in ("asr_final", "first_llm_text", "first_audio", "last_audio"):
         if k in marks:
             print(f"{k}: +{marks[k] - speech_end:.2f}s after end of speech")

@@ -1,6 +1,6 @@
 """Time OpenAI Realtime speech-to-speech: end of speech to first audio, plus a tool turn.
 
-Usage: OPENAI_API_KEY=... python realtime_latency_probe.py a.pcm chitchat b.pcm tool
+Usage: OPENAI_API_KEY=... <runtime_dir>/venv/bin/python realtime_latency_probe.py a.pcm chitchat b.pcm tool
 Input: 24 kHz mono s16le PCM. RT_MODEL picks the model; RT_TD overrides turn_detection as JSON,
 e.g. RT_TD='{"type":"server_vad","silence_duration_ms":300}'.
 """

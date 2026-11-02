@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
-from naas_abi.apps.nexus.apps.api.app.services.openai_gateway.voice import (
+from naas_abi_marketplace.applications.ten_agent.domain.speech import (
     DEFAULT_FILLER,
     VOICE_STYLE,
     SpeechStream,
@@ -15,7 +15,9 @@ from naas_abi.apps.nexus.apps.api.app.services.openai_gateway.voice import (
 )
 
 
-def _spoken(chunks: list[str | dict[str, Any]], filler: str | None = DEFAULT_FILLER) -> list[str]:
+def _spoken(
+    chunks: Sequence[str | dict[str, Any]], filler: str | None = DEFAULT_FILLER
+) -> list[str]:
     async def source() -> AsyncIterator[str | dict[str, Any]]:
         for chunk in chunks:
             yield chunk
@@ -53,7 +55,11 @@ def test_sentences_are_released_as_soon_as_they_end() -> None:
 
 
 def test_fenced_tool_output_is_never_spoken() -> None:
-    chunks = ["Here it is.\n```\nSELECT ?s WHERE", " { ?s ?p ?o }\n```\n", "Three rows."]
+    chunks = [
+        "Here it is.\n```\nSELECT ?s WHERE",
+        " { ?s ?p ?o }\n```\n",
+        "Three rows.",
+    ]
     assert _spoken(chunks) == ["Here it is. ", "Three rows. "]
 
 
@@ -74,7 +80,9 @@ def test_no_filler_when_the_agent_already_spoke() -> None:
         "Done.",
     ]
     assert _spoken(chunks) == ["Let me look. ", "Done. "]
-    assert _spoken([{"event": "tool_usage", "tool": "x"}, "Ok."], filler=None) == ["Ok. "]
+    assert _spoken([{"event": "tool_usage", "tool": "x"}, "Ok."], filler=None) == [
+        "Ok. "
+    ]
 
 
 def test_voice_thread_is_stable_per_session_and_scoped_to_the_user() -> None:

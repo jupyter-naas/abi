@@ -641,10 +641,6 @@ class Settings(BaseSettings):
     rate_limit_ip_attempts: int = 20  # Max attempts per client IP per window
     rate_limit_window_seconds: int = 300  # 5-minute window
 
-    # /api/v1/voice/chat/completions: speech-safe OpenAI-compatible stream for
-    # an external voice engine (TEN Agent). Off until a voice engine is deployed.
-    voice_gateway_enabled: bool = False
-
     def model_post_init(self, __context: Any) -> None:
         """Adjust settings based on environment after initialization (pydantic v2 hook)."""
         # Make Ollama autostart opt-in and local-only
