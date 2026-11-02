@@ -2,6 +2,38 @@
 
 <!-- version list -->
 
+## v3.64.0 (2026-11-02)
+
+### Bug Fixes
+
+- **google_search**: Declare Secret so optional key hydration can boot
+  ([`daeb1fd`](https://github.com/jupyter-naas/abi/commit/daeb1fd9c0a71781b66431a0b3de9bc2b7a3e655))
+
+### Code Style
+
+- **people**: Square corners on LinkedIn import toast
+  ([`def1cb3`](https://github.com/jupyter-naas/abi/commit/def1cb38eee6f843f082c85a93ac6a3c12dd1402))
+
+### Features
+
+- **LinkedInImport**: Enhance user option display with email and me label
+  ([`0abd74a`](https://github.com/jupyter-naas/abi/commit/0abd74a4cd5042c3fe5f6d6a2d626a113b41a321))
+
+- **module**: Load optional marketplace secrets without failing Engine.load
+  ([`553749a`](https://github.com/jupyter-naas/abi/commit/553749a0b8e2cf6c0070b809bc5376a9d7470281))
+
+- **people/web**: Enhance results page and shell behavior
+  ([`2353150`](https://github.com/jupyter-naas/abi/commit/2353150755c035c9fb9f74060915fab6305db055))
+
+### Refactoring
+
+- **marketplace**: Hydrate optional secrets in module on_load
+  ([`a1ed7df`](https://github.com/jupyter-naas/abi/commit/a1ed7dfe5113573112419b70b4e3b6a9707632f1))
+
+- **marketplace**: Rely on empty config defaults for optional keys
+  ([`0d982cb`](https://github.com/jupyter-naas/abi/commit/0d982cb5b353a513df6b85fb343e5ffa702f8de5))
+
+
 ## v3.63.0 (2026-10-30)
 
 ### Features
