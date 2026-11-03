@@ -24,36 +24,6 @@
   background-color: var(--muted-bg-hex);
 }
 
-.account-security-2fa-button {
-  flex-shrink: 0;
-  padding: var(--space-2) var(--space-4);
-  border: none;
-  border-radius: var(--org-border-radius, 0px);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-sm);
-  cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
-}
-
-.account-security-2fa-button-enable {
-  background-color: var(--color-primary);
-  color: var(--color-primary-foreground);
-}
-
-.account-security-2fa-button-enable:hover {
-  background-color: var(--color-primary-hover);
-}
-
-.account-security-2fa-button-disable {
-  background-color: var(--color-destructive-subtle);
-  color: var(--destructive-hex);
-}
-
-.account-security-2fa-button-disable:hover {
-  background-color: var(--color-destructive-muted);
-}
-
 /* Active sessions */
 .account-security-sessions-title {
   margin: 0 0 var(--space-4);
