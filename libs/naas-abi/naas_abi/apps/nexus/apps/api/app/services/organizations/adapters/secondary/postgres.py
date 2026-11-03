@@ -25,7 +25,7 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
     OrganizationWorkspaceRecord,
     UserRecord,
 )
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 AsyncSessionGetter = Callable[[], AsyncSession | None]
@@ -438,6 +438,16 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             verified_at=row.verified_at,
             provider=row.provider,
         )
+
+    async def lock_organization(self, org_id: str) -> bool:
+        # A write takes the row (PostgreSQL) or the database (SQLite) for this
+        # transaction: a workspace inserted in the organization waits for it.
+        result = await self.db.execute(
+            update(OrganizationModel)
+            .where(OrganizationModel.id == org_id)
+            .values(updated_at=OrganizationModel.updated_at)
+        )
+        return bool(result.rowcount)
 
     async def delete_organization(self, org_id: str) -> bool:
         row = (

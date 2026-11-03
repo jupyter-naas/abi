@@ -31,6 +31,8 @@ move get new ones, which allow nothing. Nobody gains or loses access.
 from __future__ import annotations
 
 import json
+import re
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from typing import Any, Protocol
@@ -186,9 +188,14 @@ class SqlDefaultsStore:
         await self.db.flush()
 
     async def delete_within(self, container: str) -> None:
+        # A prefix compared as text, never a LIKE pattern: ids may hold ``_`` or ``%``.
+        prefix = container + "/"
         await self.db.execute(
-            text("DELETE FROM container_defaults WHERE container = :c OR container LIKE :below"),
-            {"c": container, "below": container.replace("%", r"\%") + "/%"},
+            text(
+                "DELETE FROM container_defaults "
+                "WHERE container = :c OR substr(container, 1, :n) = :prefix"
+            ),
+            {"c": container, "n": len(prefix), "prefix": prefix},
         )
         await self.db.flush()
 
@@ -210,18 +217,117 @@ def _as_api(work: Callable[[Any], Any]) -> Any:
         return work(iam)
 
 
-def make_org(iam: Any, org_id: str, label: str) -> DefaultsRecord:
-    """ "<O> access" (platform, nothing) attached to "<O> admins" below the org, and
-    the two groups. As ``api``."""
-    container = org_container(org_id)
-    access = iam.create_policy(
-        access_name(label),
-        nothing_document(),
-        description=ORG_ACCESS.format(label=label),
+def moves_pending() -> bool:
+    """While the sets' or the names' move is not recorded, nothing is made: the move
+    makes the access policies, and ``migrate`` adopts them at the start that follows."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import container_names, policy_tree
+
+    return policy_tree.pending() or container_names.pending()
+
+
+def _pages(listing: Callable[..., Any], **kwargs: Any) -> list[Any]:
+    found: list[Any] = []
+    after: str | None = None
+    while True:
+        page = listing(limit=500, after=after, **kwargs)
+        found += list(page.items)
+        after = page.next_after
+        if not after:
+            return found
+
+
+def _own_groups(iam: Any, container: str) -> dict[str, str]:
+    """``{name: id}`` of the live groups ``container`` owns."""
+    return {
+        str(g.name): str(g.id)
+        for g in _pages(iam.list_groups, scope=container)
+        if g.owner_scope == container and g.status != "deleted"
+    }
+
+
+def _access_made_before(
+    iam: Any, owner: str, name: str, description: str, *, scope: str | None
+) -> str | None:
+    """An access policy an earlier attempt made and never recorded (it stopped
+    before its record was written): found by owner, name and description."""
+    for policy in _pages(iam.list_policies, scope=scope):
+        if (policy.owner_scope, policy.name, policy.description) == (owner, name, description):
+            return str(policy.id)
+    return None
+
+
+def _undo(iam: Any, made: list[tuple[str, Any]]) -> None:
+    """Take back, last first, what one attempt made, so a failure leaves nothing
+    behind that no record names."""
+    for kind, what in reversed(made):
+        try:
+            if kind == "attachment":
+                iam.detach_policy(*what)
+            elif kind == "group":
+                iam.delete_group(what)
+            else:
+                iam.delete_policy(what)
+        except Exception:  # noqa: BLE001 - the original failure is what is raised
+            logger.exception(f"Could not take back the {kind} {what}")
+
+
+def _ensure(
+    iam: Any,
+    *,
+    container: str,
+    label: str,
+    access: str | None,
+    make_access: Callable[[], str],
+    find_access: Callable[[], str | None],
+    attach_at: str | None,
+) -> DefaultsRecord:
+    """The access policy (``access``, else one made before and unrecorded, else a new
+    one), the two groups (found by name, else made) and, with ``attach_at``, the
+    access policy attached to the admins group there. On a failure, what this call
+    made is taken back."""
+    made: list[tuple[str, Any]] = []
+    try:
+        if access is None:
+            access = find_access()
+        if access is None:
+            access = make_access()
+            made.append(("policy", access))
+        groups = _own_groups(iam, container)
+        ids: list[str] = []
+        for name in (members_name(label), admins_name(label)):
+            if name not in groups:
+                groups[name] = str(iam.create_group(name, scope=container).id)
+                made.append(("group", groups[name]))
+            ids.append(groups[name])
+        members, admins = ids
+        if attach_at is not None and not any(
+            (a.policy_id, a.scope) == (access, attach_at)
+            for a in iam.list_attachments(principal_id=admins)
+        ):
+            iam.attach_policy(access, admins, attach_at)
+            made.append(("attachment", (access, admins, attach_at)))
+    except Exception:
+        _undo(iam, made)
+        raise
+    return DefaultsRecord(container, access, members, admins)
+
+
+def make_org(iam: Any, org_id: str, label: str, *, adopt: str | None = None) -> DefaultsRecord:
+    """ "<O> access" (the platform's, allowing nothing) attached to "<O> admins"
+    below the organization, and the two groups; with ``adopt``, that policy instead,
+    attached to nothing. Idempotent, and a failure leaves nothing. As ``api``."""
+    name, description = access_name(label), ORG_ACCESS.format(label=label)
+    return _ensure(
+        iam,
+        container=org_container(org_id),
+        label=label,
+        access=adopt,
+        make_access=lambda: str(
+            iam.create_policy(name, nothing_document(), description=description).id
+        ),
+        find_access=lambda: _access_made_before(iam, PLATFORM, name, description, scope=None),
+        attach_at=None if adopt else org_below(org_id),
     )
-    members, admins = _make_groups(iam, container, label)
-    iam.attach_policy(access.id, admins, org_below(org_id))
-    return DefaultsRecord(container, access.id, members, admins)
 
 
 def make_workspace(
@@ -231,51 +337,78 @@ def make_workspace(
     label: str,
     *,
     parent: str | None,
+    adopt: str | None = None,
 ) -> DefaultsRecord:
-    """ "<W> access" (W's, nothing, a sub-policy of ``parent``: the org's access)
-    attached to "<W> admins" at W, and the two groups. As ``api``."""
+    """ "<W> access" (the workspace's, allowing nothing, a sub-policy of ``parent``:
+    the organization's access) attached to "<W> admins" at the workspace, and the two
+    groups; with ``adopt``, that policy instead, attached to nothing. Idempotent, and a
+    failure leaves nothing. As ``api``."""
     container = workspace_container(org_id, workspace_id)
-    access = iam.create_policy(
-        access_name(label),
-        nothing_document(),
-        description=(WORKSPACE_ACCESS if org_id else ORGLESS_WORKSPACE_ACCESS).format(label=label),
-        scope=container,
-        parent=parent,
+    name = access_name(label)
+    description = (WORKSPACE_ACCESS if org_id else ORGLESS_WORKSPACE_ACCESS).format(label=label)
+    return _ensure(
+        iam,
+        container=container,
+        label=label,
+        access=adopt,
+        make_access=lambda: str(
+            iam.create_policy(
+                name, nothing_document(), description=description, scope=container, parent=parent
+            ).id
+        ),
+        find_access=lambda: _access_made_before(iam, container, name, description, scope=container),
+        attach_at=None if adopt else container,
     )
-    members, admins = _make_groups(iam, container, label)
-    iam.attach_policy(access.id, admins, container)
-    return DefaultsRecord(container, access.id, members, admins)
 
 
-def _make_groups(iam: Any, container: str, label: str) -> tuple[str, str]:
-    members = iam.create_group(members_name(label), scope=container)
-    admins = iam.create_group(admins_name(label), scope=container)
-    return str(members.id), str(admins.id)
+def forget_made(iam: Any, record: DefaultsRecord) -> None:
+    """Take back the IAM side of a record that could not be written (its groups, its
+    access policy). As ``api``."""
+    made: list[tuple[str, Any]] = []
+    if record.access_policy_id:
+        made.append(("policy", record.access_policy_id))
+    for group in (record.members_group_id, record.admins_group_id):
+        if group:
+            made.append(("group", group))
+    for attachment in (
+        iam.list_attachments(principal_id=record.admins_group_id) if record.admins_group_id else []
+    ):
+        made.append(
+            ("attachment", (attachment.policy_id, record.admins_group_id, attachment.scope))
+        )
+    _undo(iam, made)
 
 
-def role_holders(iam: Any, container: str) -> dict[str, set[str]]:
-    """``{principal: roles}`` of the users holding a built-in role at ``container``
-    itself (an org-wide mirror below an organization is not "there")."""
-    held: dict[str, set[str]] = {}
+Holders = dict[str, set[str]]
+
+
+def is_user(principal_id: str) -> bool:
+    """Roles are for users (``usr_`` ids): never a group or a service account."""
+    return principal_id.startswith("usr_")
+
+
+def holders_by_container(iam: Any) -> dict[str, Holders]:
+    """``{container: {user principal: roles}}`` of every built-in role held at a
+    container itself (an org-wide mirror below an organization is not "at" it), in one
+    pass over the four roles' attachments."""
+    found: dict[str, Holders] = {}
     for role in ROLES:
         for attachment in iam.list_attachments(policy_id=f"builtin.{role}"):
-            if attachment.scope == container:
-                held.setdefault(attachment.principal_id, set()).add(role)
-    users: dict[str, set[str]] = {}
-    for principal_id, roles_held in held.items():
-        try:
-            if iam.get_principal(principal_id).kind == "user":
-                users[principal_id] = roles_held
-        except (IAMNotFoundError, ResourceNotFoundError):
-            continue
-    return users
+            if attachment.scope and is_user(attachment.principal_id):
+                found.setdefault(attachment.scope, {}).setdefault(
+                    attachment.principal_id, set()
+                ).add(role)
+    return found
 
 
-def sync(iam: Any, record: DefaultsRecord) -> tuple[int, int]:
-    """Make the groups' members the role holders: every one of them in "<X>
-    members", the admins and owners in "<X> admins". As ``api``. Returns
-    ``(added, removed)``."""
-    holders = role_holders(iam, record.container)
+def role_holders(iam: Any, container: str) -> Holders:
+    return holders_by_container(iam).get(container, {})
+
+
+def sync(iam: Any, record: DefaultsRecord, holders: Holders) -> tuple[int, int]:
+    """Make the groups' members the role holders (``holders``: ``{principal: roles}``
+    at the container): every one of them in "<X> members", the admins and owners in
+    "<X> admins". As ``api``. Returns ``(added, removed)``."""
     wanted = {
         record.members_group_id: set(holders),
         record.admins_group_id: {p for p, held in holders.items() if held & ADMIN_ROLES},
@@ -303,29 +436,51 @@ def sync(iam: Any, record: DefaultsRecord) -> tuple[int, int]:
 
 # -- the service ----------------------------------------------------------------------
 
+# How long a container with no record is taken to have none before the database is
+# read again (one made in another process since is followed after that).
+MISS_SECONDS = 60.0
+
 
 @dataclass
 class ContainerDefaults:
     """Makes, keeps in step and forgets the defaults of organizations and workspaces.
-    Remembers each record it saw (``_known``); one it never saw is read from the
-    database (``session_factory``, set at start) when its roles change."""
+    Remembers each record it saw (``_known``), and for ``MISS_SECONDS`` a container it
+    found none for (``_missing``); one it never saw is read from the database
+    (``session_factory``, set at start) when its roles change."""
 
     session_factory: Callable[[], Any] | None = None
     _known: dict[str, DefaultsRecord] = field(default_factory=dict)
+    _missing: dict[str, float] = field(default_factory=dict)
 
     def forget_all(self) -> None:
         self._known.clear()
+        self._missing.clear()
+
+    def remember(self, record: DefaultsRecord) -> None:
+        self._known[record.container] = record
+        self._missing.pop(record.container, None)
+
+    async def _record(
+        self, store: DefaultsStore, make: Callable[[Any], DefaultsRecord]
+    ) -> DefaultsRecord:
+        record = await run_in_threadpool(lambda: _as_api(make))
+        try:
+            await store.put(record)
+        except Exception:
+            await run_in_threadpool(lambda: _as_api(lambda iam: forget_made(iam, record)))
+            raise
+        self.remember(record)
+        await self.sync_scope(record.container)
+        return record
 
     async def org_created(
         self, store: DefaultsStore | None, org_id: str, label: str
     ) -> DefaultsRecord | None:
-        if store is None:
+        """None with no store (a test's adapter), or while the moves are pending: the
+        start after them gives the organization its own."""
+        if store is None or moves_pending():
             return None
-        record = await run_in_threadpool(lambda: _as_api(lambda iam: make_org(iam, org_id, label)))
-        await store.put(record)
-        self._known[record.container] = record
-        await self.sync_scope(record.container)
-        return record
+        return await self._record(store, lambda iam: make_org(iam, org_id, label))
 
     async def workspace_created(
         self,
@@ -334,7 +489,7 @@ class ContainerDefaults:
         workspace_id: str,
         label: str,
     ) -> DefaultsRecord | None:
-        if store is None:
+        if store is None or moves_pending():
             return None
         parent = None
         if org_id:
@@ -346,15 +501,9 @@ class ContainerDefaults:
                 )
             else:
                 parent = org_record.access_policy_id
-        record = await run_in_threadpool(
-            lambda: _as_api(
-                lambda iam: make_workspace(iam, org_id, workspace_id, label, parent=parent)
-            )
+        return await self._record(
+            store, lambda iam: make_workspace(iam, org_id, workspace_id, label, parent=parent)
         )
-        await store.put(record)
-        self._known[record.container] = record
-        await self.sync_scope(record.container)
-        return record
 
     async def dropped(self, store: DefaultsStore | None, container: str) -> None:
         """After IAM deleted the container (with what it owned): forget its records
@@ -384,23 +533,34 @@ class ContainerDefaults:
         found = self._known.get(container)
         if found is not None or self.session_factory is None:
             return found
+        missed = self._missing.get(container)
+        if missed is not None and time.monotonic() - missed < MISS_SECONDS:
+            return None
         async with self.session_factory() as db:
             found = await SqlDefaultsStore(db).get(container)
-        if found is not None:
-            self._known[container] = found
+        if found is None:
+            self._missing[container] = time.monotonic()
+        else:
+            self.remember(found)
         return found
 
     async def sync_scope(self, scope: str) -> None:
         """Keep the default groups of ``scope`` (an organization's or a workspace's
-        container) in step with the roles held there. Never fails the change that
-        asked: a failure is logged."""
+        container) in step with the roles held there (``MEMBERSHIPS.members``). Never
+        fails the change that asked: a failure is logged."""
         if not (is_org_container(scope) or is_workspace_container(scope)):
             return
         try:
             record = await self.record_of(scope)
             if record is None:
                 return
-            await run_in_threadpool(lambda: _as_api(lambda iam: sync(iam, record)))
+            from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+
+            holders: Holders = {}
+            for member in await MEMBERSHIPS.members(scope):
+                if is_user(member.principal_id):
+                    holders[member.principal_id] = {member.role}
+            await run_in_threadpool(lambda: _as_api(lambda iam: sync(iam, record, holders)))
         except Exception:  # noqa: BLE001 - the role change stands; the groups follow at the next one
             logger.exception(f"The default groups of {scope} are not in step with its roles")
 
@@ -423,33 +583,28 @@ class Report:
         return json.dumps(asdict(self), sort_keys=True)
 
 
-def _org_access_made_by_move(policy: Policy, org_id: str) -> bool:
-    from naas_abi.apps.nexus.apps.api.app.services.iam.policy_tree import made_by_move
+_ORG_MADE = re.compile(r"^What organization (\S+) uses:")
+_WORKSPACE_MADE = re.compile(r"^What workspace (\S+) uses, within its organization's:")
 
-    return (
-        made_by_move(policy)
-        and policy.owner_scope == PLATFORM
-        and str(policy.description).startswith(f"What organization {org_id} uses:")
+
+def made_by_move(iam: Any) -> tuple[dict[str, Policy], dict[str, Policy]]:
+    """The access policies the sets' move made, by organization and by workspace id
+    (found by their description)."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.policy_tree import (
+        made_by_move as by_move,
     )
 
-
-def _workspace_access_made_by_move(policy: Policy, workspace_id: str) -> bool:
-    from naas_abi.apps.nexus.apps.api.app.services.iam.policy_tree import made_by_move
-
-    return made_by_move(policy) and str(policy.description).startswith(
-        f"What workspace {workspace_id} uses, within its organization's:"
-    )
-
-
-def _all_policies(iam: Any) -> list[Policy]:
-    found: list[Policy] = []
-    after: str | None = None
-    while True:
-        page = iam.list_policies(limit=500, after=after)
-        found += list(page.items)
-        after = page.next_after
-        if not after:
-            return found
+    orgs: dict[str, Policy] = {}
+    workspaces: dict[str, Policy] = {}
+    for policy in _pages(iam.list_policies):
+        if not by_move(policy):
+            continue
+        description = str(policy.description)
+        if (found := _ORG_MADE.match(description)) and policy.owner_scope == PLATFORM:
+            orgs.setdefault(found.group(1), policy)
+        elif found := _WORKSPACE_MADE.match(description):
+            workspaces.setdefault(found.group(1), policy)
+    return orgs, workspaces
 
 
 def _below_owned_by(iam: Any, policy: Policy) -> list[str]:
@@ -471,7 +626,7 @@ def adopt_workspace_access(iam: Any, policy: Policy, container: str, report: Rep
     """Move the sets' move's "<W> access" to W, with what is below it that W's
     organization (or, in none, the platform) owned. As ``api``."""
     if policy.owner_scope == container:
-        return policy.id
+        return str(policy.id)
     owners = {policy.id: container, **dict.fromkeys(_below_owned_by(iam, policy), container)}
     try:
         iam.move_policies(owners)
@@ -479,9 +634,9 @@ def adopt_workspace_access(iam: Any, policy: Policy, container: str, report: Rep
         report.notes.append(
             f"{policy.id} ({policy.name}) stays {policy.owner_scope}'s, not {container}'s: {exc}"
         )
-        return policy.id
+        return str(policy.id)
     report.moved[container] = sorted(owners)
-    return policy.id
+    return str(policy.id)
 
 
 def plan_and_apply(
@@ -491,42 +646,38 @@ def plan_and_apply(
     known: Mapping[str, DefaultsRecord],
 ) -> tuple[list[DefaultsRecord], Report]:
     """For each organization (``{id: name}``) and workspace (``{id: (org, name)}``)
-    with no record yet, adopt what the sets' move made or make new defaults, then
+    with no record yet, adopt what the sets' move made or make new defaults (what an
+    earlier attempt made and did not record is found again, never made twice), then
     put the groups in step with the roles. As ``api``; pure of the database."""
     report = Report(notes=list(NOTES))
-    policies = _all_policies(iam)
+    missing_orgs = [o for o in sorted(orgs) if org_container(o) not in known]
+    missing_workspaces = [
+        w for w in sorted(workspaces) if workspace_container(workspaces[w][0], w) not in known
+    ]
+    if not missing_orgs and not missing_workspaces:
+        return [], report
+    org_made, workspace_made = made_by_move(iam)
     records: dict[str, DefaultsRecord] = dict(known)
     made: list[DefaultsRecord] = []
-    for org_id, label in sorted(orgs.items()):
+    for org_id in missing_orgs:
         container = org_container(org_id)
-        if container in records:
-            continue
         try:
-            found = next((p for p in policies if _org_access_made_by_move(p, org_id)), None)
-            if found is not None:
-                members, admins = _make_groups(iam, container, label)
-                record = DefaultsRecord(container, found.id, members, admins)
-                report.adopted.append(container)
-            else:
-                record = make_org(iam, org_id, label)
-                report.made.append(container)
+            adopted = org_made.get(org_id)
+            record = make_org(iam, org_id, orgs[org_id], adopt=str(adopted.id) if adopted else None)
+            (report.adopted if adopted else report.made).append(container)
             records[container] = record
             made.append(record)
         except Exception as exc:  # noqa: BLE001 - the others go on; this one at the next start
             logger.exception(f"No access policy and groups for {container}")
             report.failed.append(f"{container}: {exc}")
-    for workspace_id, (org_id, label) in sorted(workspaces.items()):
+    for workspace_id in missing_workspaces:
+        org_id, label = workspaces[workspace_id]
         container = workspace_container(org_id, workspace_id)
-        if container in records:
-            continue
         try:
-            found = next(
-                (p for p in policies if _workspace_access_made_by_move(p, workspace_id)), None
-            )
+            found = workspace_made.get(workspace_id)
             if found is not None:
                 access = adopt_workspace_access(iam, found, container, report)
-                members, admins = _make_groups(iam, container, label)
-                record = DefaultsRecord(container, access, members, admins)
+                record = make_workspace(iam, org_id, workspace_id, label, parent=None, adopt=access)
                 report.adopted.append(container)
             else:
                 org_record = records.get(org_container(org_id)) if org_id else None
@@ -545,9 +696,10 @@ def plan_and_apply(
         except Exception as exc:  # noqa: BLE001 - the others go on; this one at the next start
             logger.exception(f"No access policy and groups for {container}")
             report.failed.append(f"{container}: {exc}")
+    holders = holders_by_container(iam) if made else {}
     for record in made:
         try:
-            sync(iam, record)
+            sync(iam, record, holders.get(record.container, {}))
         except Exception as exc:  # noqa: BLE001 - the groups follow at the next role change
             logger.exception(f"The groups of {record.container} are not in step")
             report.failed.append(f"{record.container}: {exc}")
@@ -574,13 +726,23 @@ async def read_nexus(
     return orgs, workspaces
 
 
+MOVES = ("policy_tree_v1", "container_names_v1")
+
+
 async def migrate(db: AsyncSession, defaults: ContainerDefaults = CONTAINER_DEFAULTS) -> Report:
     """Give every organization and workspace with none its access policy and default
     groups (adopting what the sets' move made), then record ``container_defaults_v1``
-    once nothing failed. Runs at every start: only what has no record is touched."""
+    once nothing failed. Runs at every start, after the moves, under their lock
+    (``main``): only what has no record is touched, and nothing at all while a move is
+    not recorded (it is the move that makes the access policies to adopt)."""
     from naas_abi.apps.nexus.apps.api.app.services.iam.container_names import recorded
 
     store = SqlDefaultsStore(db)
+    for move in MOVES:
+        if not await recorded(db, move):
+            report = Report()
+            report.notes.append(f"Waits for {move}: nothing made")
+            return report
     orgs, workspaces = await read_nexus(db)
     known = {record.container: record for record in await store.all()}
     made, report = await run_in_threadpool(
@@ -598,7 +760,7 @@ async def migrate(db: AsyncSession, defaults: ContainerDefaults = CONTAINER_DEFA
         )
     await db.commit()
     for record in [*known.values(), *made]:
-        defaults._known[record.container] = record
+        defaults.remember(record)
     if made:
         logger.info(
             f"Access policies and default groups: {len(report.made)} made, "
@@ -625,6 +787,8 @@ __all__ = [
     "make_workspace",
     "members_name",
     "migrate",
+    "moves_pending",
     "nothing_document",
+    "role_holders",
     "sync",
 ]

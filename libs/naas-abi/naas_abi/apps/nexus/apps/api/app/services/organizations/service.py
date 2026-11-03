@@ -316,9 +316,17 @@ class OrganizationService:
         with workspaces is refused (``OrganizationHasWorkspacesError``, naming them):
         deleting their data with it is not this call's to decide. The route checked
         ``DeleteOrganization`` on the organization."""
+        # Held first, so a workspace made in it meanwhile waits for this transaction,
+        # then finds it gone, never survives it with no organization.
+        if not await self.adapter.lock_organization(org_id=org_id):
+            return False
         workspaces = await self.adapter.list_workspaces_for_org(org_id=org_id)
         if workspaces:
             raise OrganizationHasWorkspacesError(org_id, [(w.id, w.name) for w in workspaces])
+        # Deleting the container deletes those inside it: none may be left there.
+        inside = await self.memberships.containers_in(org_id)
+        if inside:
+            raise OrganizationHasWorkspacesError(org_id, [(name, name) for name in inside])
         deleted = await self.adapter.delete_organization(org_id=org_id)
         if deleted:
             await self.memberships.drop_scope(org_id, None)

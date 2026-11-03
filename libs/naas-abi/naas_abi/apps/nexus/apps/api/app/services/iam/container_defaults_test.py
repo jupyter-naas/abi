@@ -456,3 +456,188 @@ async def _recorded(db) -> bool:
     from naas_abi.apps.nexus.apps.api.app.services.iam.container_names import recorded
 
     return await recorded(db, container_defaults.MIGRATION_NAME)
+
+
+# -- review: failures, idempotency, races ------------------------------------------------
+
+
+async def _moves_recorded(nexus_db, *names: str) -> None:
+    from sqlalchemy import text
+
+    async with nexus_db() as db:
+        await db.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS iam_migrations (name VARCHAR(128) PRIMARY KEY, "
+                "applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, report TEXT)"
+            )
+        )
+        for name in names:
+            await db.execute(
+                text("INSERT INTO iam_migrations (name, report) VALUES (:n, '{}')"), {"n": name}
+            )
+        await db.commit()
+
+
+async def _unrecorded_org(world, nexus_db, org_id: str = "acme") -> None:
+    """An organization and a workspace with no record (made before this version)."""
+    from naas_abi.apps.nexus.apps.api.app.models import OrganizationModel, WorkspaceModel
+
+    async with nexus_db() as db:
+        await _users(db, "olivia")
+        db.add(OrganizationModel(id=org_id, name="Acme", slug=org_id, owner_id="olivia"))
+        await db.flush()
+        db.add(
+            WorkspaceModel(
+                id="alpha", name="Alpha", slug="alpha", owner_id="olivia", organization_id=org_id
+            )
+        )
+        await db.commit()
+    world.workspace(org_id, "alpha")
+
+
+def _named(nexus: NexusIam, name: str) -> list:
+    with as_service_account("engine"):
+        return [p for p in nexus.iam._all_policies() if p.name == name]
+
+
+def _groups_of(nexus: NexusIam, container: str) -> list[str]:
+    with as_service_account("api"):
+        return sorted(
+            g.name
+            for g in nexus.iam.list_groups(scope=container, limit=500).items
+            if g.owner_scope == container and g.status != "deleted"
+        )
+
+
+@pytest.mark.asyncio
+async def test_records_of_an_organization_are_forgotten_by_prefix_not_pattern(nexus_db):
+    """``_`` and ``%`` in an id are characters, never wildcards."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import DefaultsRecord
+
+    async with nexus_db() as db:
+        store = SqlDefaultsStore(db)
+        for org in ("my_org", "myXorg", "my%org"):
+            await store.put(DefaultsRecord(org_container(org), "p", "m", "a"))
+            await store.put(DefaultsRecord(workspace_container(org, "w"), "p", "m", "a"))
+        await store.delete_within(org_container("my_org"))
+        left = sorted(r.container for r in await store.all())
+    assert left == sorted(
+        [
+            org_container("myXorg"),
+            workspace_container("myXorg", "w"),
+            org_container("my%org"),
+            workspace_container("my%org", "w"),
+        ]
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_failure_part_way_leaves_nothing_and_the_next_start_makes_it_once(
+    world, nexus_db, monkeypatch
+):
+    await _unrecorded_org(world, nexus_db)
+    await _moves_recorded(nexus_db, *container_defaults.MOVES)
+    calls = {"n": 0}
+    real = world.iam.create_group
+
+    def failing(name, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise RuntimeError("the store went away")
+        return real(name, **kwargs)
+
+    monkeypatch.setattr(world.iam, "create_group", failing)
+    async with nexus_db() as db:
+        report = await container_defaults.migrate(db)
+        assert report.failed and not await _recorded(db)
+    # The organization's attempt took back its "Acme access" and its first group.
+    assert _named(world, "Acme access") == []
+    assert _groups_of(world, org_container("acme")) == []
+    monkeypatch.setattr(world.iam, "create_group", real)
+    async with nexus_db() as db:
+        report = await container_defaults.migrate(db)
+        assert not report.failed and await _recorded(db)
+    assert len(_named(world, "Acme access")) == 1 and len(_named(world, "Alpha access")) == 1
+    assert _groups_of(world, ALPHA) == ["Alpha admins", "Alpha members"]
+
+
+@pytest.mark.asyncio
+async def test_what_a_start_made_and_did_not_record_is_found_again(world, nexus_db):
+    """A start that stopped between IAM's writes and its record: the next one finds
+    the policies and groups by name and makes none twice."""
+    await _unrecorded_org(world, nexus_db)
+    await _moves_recorded(nexus_db, *container_defaults.MOVES)
+    with as_service_account("api"):
+        container_defaults.plan_and_apply(
+            world.iam, {"acme": "Acme"}, {"alpha": ("acme", "Alpha")}, {}
+        )
+    async with nexus_db() as db:
+        report = await container_defaults.migrate(db)
+        records = {r.container: r for r in await SqlDefaultsStore(db).all()}
+    assert not report.failed
+    assert len(_named(world, "Acme access")) == 1 and len(_named(world, "Alpha access")) == 1
+    assert _groups_of(world, org_container("acme")) == ["Acme admins", "Acme members"]
+    assert _groups_of(world, ALPHA) == ["Alpha admins", "Alpha members"]
+    assert records[ALPHA].access_policy_id == _named(world, "Alpha access")[0].id
+
+
+@pytest.mark.asyncio
+async def test_nothing_is_made_while_a_move_is_not_recorded(world, nexus_db, monkeypatch):
+    """The sets' move makes the access policies: before it, neither the start nor a
+    route makes any (it would leave the move's to no one)."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import policy_tree
+
+    await _unrecorded_org(world, nexus_db)
+    await _moves_recorded(nexus_db, "policy_tree_v1")
+    async with nexus_db() as db:
+        report = await container_defaults.migrate(db)
+        assert report.made == [] and not await _recorded(db)
+    assert _named(world, "Acme access") == []
+    monkeypatch.setattr(policy_tree, "_pending", True)
+    async with nexus_db() as db:
+        await _users(db, "bob")
+        orgs = OrganizationService(adapter=OrganizationSecondaryAdapterPostgres(db=db))
+        await orgs.create_organization(
+            name="Later", slug="later", owner_id="bob", now=NOW, org_id="later"
+        )
+        assert await SqlDefaultsStore(db).get(org_container("later")) is None
+    assert _named(world, "Later access") == []
+
+
+@pytest.mark.asyncio
+async def test_a_failed_creation_leaves_no_access_policy(world, nexus_db, monkeypatch):
+    real = world.iam.create_group
+
+    def failing(name, **kwargs):
+        if name.endswith("admins"):
+            raise RuntimeError("the store went away")
+        return real(name, **kwargs)
+
+    monkeypatch.setattr(world.iam, "create_group", failing)
+    async with nexus_db() as db:
+        await _users(db, "olivia")
+        orgs = OrganizationService(adapter=OrganizationSecondaryAdapterPostgres(db=db))
+        with pytest.raises(RuntimeError):
+            await orgs.create_organization(
+                name="Acme", slug="acme", owner_id="olivia", now=NOW, org_id="acme"
+            )
+    assert _named(world, "Acme access") == []
+    with as_service_account("api"):
+        assert world.iam.container("nexus", "organization", "acme") is None
+
+
+@pytest.mark.asyncio
+async def test_an_organization_holding_a_container_in_iam_is_not_deleted(world, nexus_db):
+    """A workspace IAM registers in it (made meanwhile, or a module's container)
+    would go with it: refused, naming it."""
+    await _acme(nexus_db)
+    async with nexus_db() as db:
+        workspaces = WorkspaceService(adapter=WorkspaceSecondaryAdapterPostgres(db=db))
+        assert await workspaces.delete_workspace("alpha")
+        await db.commit()
+    stray = world.workspace("acme", "stray")  # in IAM, no row
+    async with nexus_db() as db:
+        orgs = OrganizationService(adapter=OrganizationSecondaryAdapterPostgres(db=db))
+        with pytest.raises(OrganizationHasWorkspacesError, match="stray"):
+            await orgs.delete_organization("acme")
+    assert stray

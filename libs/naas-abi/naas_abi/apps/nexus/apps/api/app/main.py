@@ -404,12 +404,19 @@ async def _prepare_iam() -> None:
 
 
 async def _container_defaults_after_seeds() -> None:
-    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
-    from naas_abi.apps.nexus.apps.api.app.services.iam import container_defaults
+    """The seeds' organizations and workspaces get theirs, once the moves are
+    recorded (before, the move makes their access policies, which ``migrate``
+    adopts at the start that follows), under the moves' lock, so two API processes
+    never make the same container's twice."""
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal, async_engine
+    from naas_abi.apps.nexus.apps.api.app.services.iam import container_defaults, container_names
 
+    if container_defaults.moves_pending():
+        return
     try:
-        async with AsyncSessionLocal() as db:
-            await container_defaults.migrate(db)
+        async with container_names.moves_lock(async_engine):
+            async with AsyncSessionLocal() as db:
+                await container_defaults.migrate(db)
     except Exception:  # noqa: BLE001 - made at the next start; nobody gains anything meanwhile
         logging.getLogger(__name__).exception(
             "Access policies and default groups of the seeded organizations and workspaces"

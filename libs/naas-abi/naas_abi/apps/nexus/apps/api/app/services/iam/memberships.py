@@ -36,6 +36,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
     is_org_container,
     is_workspace_container,
     org_below,
+    org_container,
     org_of,
     workspace_container,
     workspace_of,
@@ -514,6 +515,16 @@ class Memberships:
         return await self._run(
             lambda iam: iam.register_container(SERVICE, ORGANIZATION, org_id).name
         )
+
+    async def containers_in(self, org_id: str) -> list[str]:
+        """The names of the containers IAM registers inside an organization (its
+        workspaces, and any a module put there)."""
+        container = org_container(org_id)
+
+        def work(iam: Any) -> list[str]:
+            return sorted(c.name for c in iam.list_containers() if c.parent == container)
+
+        return await self._run(work)
 
     async def drop_scope(self, org_id: str | None, workspace_id: str | None) -> None:
         """Forget a deleted workspace (or, with no workspace, organization): IAM

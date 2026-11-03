@@ -330,6 +330,13 @@ class OrganizationPermissionPort(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def lock_organization(self, org_id: str) -> bool:
+        """Hold the organization's row for writing until the transaction ends (a
+        workspace made in it meanwhile waits, then finds it gone); False when there
+        is none."""
+        raise NotImplementedError
+
+    @abstractmethod
     async def delete_organization_domain(self, org_id: str, domain_id: str) -> bool:
         raise NotImplementedError
 

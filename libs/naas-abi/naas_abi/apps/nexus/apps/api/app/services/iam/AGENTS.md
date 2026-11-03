@@ -69,7 +69,10 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
   and the platform admin) is refused with 409 while it has workspaces, naming each ("Organization O still has
   workspaces: Alpha (ws-…). Delete them first"): deleting their data with it is not this route's to decide. Otherwise
   its row goes (members and domains with it), then its IAM container with what it owns (`drop_scope`), then its
-  access policy, the platform's (`ContainerDefaults.dropped`).
+  access policy, the platform's (`ContainerDefaults.dropped`). The row is held for writing first
+  (`lock_organization`): a workspace made in it meanwhile waits for the transaction, then finds the organization
+  gone, never survives with no organization while its container goes with the organization's. A container IAM still
+  registers inside it (a workspace with no row, a module's) refuses it too (`Memberships.containers_in`), named.
 - **A create that fails after the row exists removes it** (and its IAM container): see `OrganizationService.create_organization`
   and `WorkspaceService.create_workspace`. A new workspace places its own resources with `on_workspace_created`, never
   `place_existing`; placing failing removes the workspace and its placements (`placements.forget_workspace`). Its
@@ -242,10 +245,22 @@ policy tree of issue #1413's journeys:
   member joins carries no grant meant for some: the ceiling is the access policy, never a group.
 - **The record.** IAM holds the policies and groups; `container_defaults` (container name → access policy, members
   group, admins group) says which they are, written in the creating request's transaction. A role changed in another
-  process's container is followed by reading the table (`session_factory`, set at start).
-- **Made at start too.** `migrate` runs after the moves (`_prepare_iam`) and again after the configuration seeds
-  (`_container_defaults_after_seeds`): an organization or workspace with no record gets its own (a seed's, an
-  import's). It never touches one that has a record.
+  process's container is followed by reading the table (`session_factory`, set at start; a container with no record
+  is not asked again for a minute, `MISS_SECONDS`). The groups follow `MEMBERSHIPS.members(scope)`.
+- **Nothing left behind, nothing made twice.** `make_org` / `make_workspace` find before they make: the groups by
+  name among those the container owns, an access policy an earlier attempt made and never recorded by owner, name and
+  description. What one attempt made is taken back when a later step fails, and what could not be recorded
+  (`store.put`) too, so no orphan "<O> access" stays at the platform. A start that stopped between IAM's writes and its
+  record finds them again.
+- **Made at start too, after the moves.** `migrate` runs after the moves (`_prepare_iam`) and again after the
+  configuration seeds (`_container_defaults_after_seeds`), both under the moves' lock (`container_names.moves_lock`,
+  so two API processes never make the same container's), and does nothing while `policy_tree_v1` or
+  `container_names_v1` is not recorded: the sets' move makes the access policies it adopts. A route creating an
+  organization or a workspace while a move is pending makes none either (`moves_pending`); the start after the moves
+  gives it its own. An organization or workspace with no record gets its own (a seed's, an import's); one with a
+  record is never touched.
+- **Names.** The access policy and the groups keep the name the organization or workspace had when they were made:
+  renaming it renames neither (IAM groups have no rename; a policy may be renamed by hand).
 
 ### The upgrade (`container_defaults_v1`)
 
