@@ -184,3 +184,12 @@
 .access-builder-service > .access-builder-types {
   padding-left: var(--space-3);
 }
+
+/* A closed publisher or service group: the lists above set their own display. */
+.access-builder [hidden] {
+  display: none;
+}
+
+.access-builder-group[data-open='false'] {
+  padding-bottom: 0;
+}

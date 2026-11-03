@@ -363,7 +363,7 @@ export function PolicyEditor({
           {policy?.managed
             ? null
             : readOnly
-              ? 'You may not change its policies, so it is read-only here.'
+              ? 'You may not change policies there, so it is read-only here.'
               : 'You edit it at its owner: the builder offers what you may grant there.'}
           {ownerLink && (
             <>

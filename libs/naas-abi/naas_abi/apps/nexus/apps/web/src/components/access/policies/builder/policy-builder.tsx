@@ -541,7 +541,12 @@ export function PolicyBuilder({
         const open = isOpen('publishers', publisher.id);
         const groups = serviceGroups(publisher.types);
         return (
-          <fieldset key={publisher.id} className="access-builder-group" data-builder-publisher={publisher.id}>
+          <fieldset
+            key={publisher.id}
+            className="access-builder-group"
+            data-builder-publisher={publisher.id}
+            data-open={open ? 'true' : 'false'}
+          >
             <legend className="access-builder-legend">
               <button
                 type="button"
