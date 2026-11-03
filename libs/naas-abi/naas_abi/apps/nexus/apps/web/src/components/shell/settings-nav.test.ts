@@ -3,7 +3,10 @@ import {
   SETTINGS_GROUPS,
   settingsItemFor,
   settingsItemShown,
+  settingsLandingPath,
+  settingsPageOpens,
   visibleSettingsGroups,
+  workspaceSettingsAccess,
 } from '@/components/shell/settings-nav';
 import { describeModuleResources, type WorkspaceResources } from '@/lib/workspace-resources';
 
@@ -83,5 +86,33 @@ describe('workspace settings nav', () => {
     expect(
       describeModuleResources({ module: 'p', agents: 2, apps: 1, workflows: 0, pipelines: 1 })
     ).toBe('2 agents · 1 app · 1 pipeline');
+  });
+});
+
+
+describe('who opens a workspace\'s settings (UJ-W1)', () => {
+  it('opens every page to whoever the role there brings the settings, at once', () => {
+    const access = workspaceSettingsAccess({ settingsByRole: true, holdsIam: false, accessSettled: false });
+    expect(access).toBe('all');
+    expect(settingsPageOpens(access, '/workspace/ws-1/settings/general')).toBe(true);
+    expect(settingsLandingPath(access)).toBe('/settings/general');
+  });
+
+  it('opens Roles & permissions alone to someone IAM shows a section of it', () => {
+    const access = workspaceSettingsAccess({ settingsByRole: false, holdsIam: true, accessSettled: true });
+    expect(access).toBe('iam');
+    expect(settingsPageOpens(access, '/workspace/ws-1/settings/permissions')).toBe(true);
+    expect(settingsPageOpens(access, '/workspace/ws-1/settings/general')).toBe(false);
+    expect(settingsLandingPath(access)).toBe('/settings/permissions');
+  });
+
+  it('opens nothing to a member with neither (Dave), and decides nothing before the access is read', () => {
+    expect(workspaceSettingsAccess({ settingsByRole: false, holdsIam: false, accessSettled: false })).toBe('unknown');
+    expect(settingsPageOpens('unknown', '/workspace/ws-1/settings/general')).toBeNull();
+    const access = workspaceSettingsAccess({ settingsByRole: false, holdsIam: false, accessSettled: true });
+    expect(access).toBe('none');
+    for (const page of ['general', 'members', 'permissions', 'agents']) {
+      expect(settingsPageOpens(access, `/workspace/ws-1/settings/${page}`)).toBe(false);
+    }
   });
 });

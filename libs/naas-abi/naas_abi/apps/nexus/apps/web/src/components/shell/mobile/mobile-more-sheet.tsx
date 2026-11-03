@@ -11,6 +11,7 @@ import { useFeature } from '@/hooks/use-feature';
 import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 import { getWorkspacePath } from '../sidebar/utils';
 import { shellTokens } from '../tokens';
+import { useOpensWorkspaceSettings } from '@/hooks/use-workspace-settings-access';
 
 type MoreItem = {
   id: string;
@@ -52,7 +53,7 @@ export function MobileMoreSheet({ open, onClose }: MobileMoreSheetProps) {
   const canDatasets = useFeature('datasets');
   const canSlides = useFeature('slides');
   const canMarketplace = useFeature('marketplace');
-  const canSettings = useFeature('settings.workspace');
+  const canSettings = useOpensWorkspaceSettings();
 
   useEffect(() => setMounted(true), []);
 

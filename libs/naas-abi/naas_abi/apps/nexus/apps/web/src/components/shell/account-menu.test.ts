@@ -38,8 +38,7 @@ afterEach(async () => {
 async function menuFor(user: string, orgRole: string): Promise<string> {
   state.user = user;
   state.answers = {
-    '/api/organizations': [{ id: 'acme' }],
-    '/api/organizations/acme': { current_user_role: orgRole },
+    '/api/organizations': [{ id: 'acme', current_user_role: orgRole }],
     [ACCESS_ACME]: { actions: { 'iam:ListPolicies': false } },
   };
   mounted = await mount(AccountMenuPanel, { user: { name: user, email: `${user}@example.com` }, onClose: () => undefined });

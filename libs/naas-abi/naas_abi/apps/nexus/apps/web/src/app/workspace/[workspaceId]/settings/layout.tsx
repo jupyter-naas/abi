@@ -1,10 +1,18 @@
 'use client';
 
-import { useCallback, useMemo } from 'react';
-import { useParams, usePathname } from 'next/navigation';
+import { useCallback, useEffect, useMemo } from 'react';
+import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { Header } from '@/components/shell/header';
-import { SETTINGS_GROUPS, settingsItemFor, settingsItemShown } from '@/components/shell/settings-nav';
+import {
+  SETTINGS_GROUPS,
+  settingsItemFor,
+  settingsItemShown,
+  settingsLandingPath,
+  settingsPageOpens,
+} from '@/components/shell/settings-nav';
+import { SettingsNoAccess } from '@/components/settings/settings-no-access';
+import { useWorkspaceSettingsAccess } from '@/hooks/use-workspace-settings-access';
 import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
 import { reloadWorkspaceResources, useWorkspaceResources } from '@/hooks/use-workspace-resources';
 import { SettingsReloadProvider } from '@/components/settings/settings-reload';
@@ -44,11 +52,24 @@ export default function SettingsLayout({
   const { resources } = useWorkspaceResources(workspaceId, { refresh: true });
   const item = settingsItemFor(pathname ?? '');
   const outsideSet = Boolean(item && resources && !settingsItemShown(item, resources));
-  const page = outsideSet && item && resources ? (
-    <NotInWorkspace label={item.label} />
-  ) : (
-    children
-  );
+  // Who may open these pages at all: the dock's rule (useWorkspaceSettingsAccess). Someone
+  // who holds only `iam:` rights here goes to Roles & permissions; anyone else is told no.
+  const access = useWorkspaceSettingsAccess();
+  const opens = settingsPageOpens(access, pathname ?? '');
+  const router = useRouter();
+  useEffect(() => {
+    if (access === 'iam' && opens === false && workspaceId) {
+      router.replace(`/workspace/${workspaceId}${settingsLandingPath(access)}`);
+    }
+  }, [access, opens, workspaceId, router]);
+  const page =
+    opens === null || (access === 'iam' && opens === false) ? null : opens === false ? (
+      <SettingsNoAccess of="workspace" />
+    ) : outsideSet && item && resources ? (
+      <NotInWorkspace label={item.label} />
+    ) : (
+      children
+    );
 
   return (
     <div className="flex h-full flex-col">

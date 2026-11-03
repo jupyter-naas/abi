@@ -45,6 +45,8 @@ export interface Organization {
   name: string;
   slug: string;
   ownerId: string;
+  /** The caller's role there (IAM's), as `GET /api/organizations` lists it; null for none. */
+  currentUserRole?: string | null;
   logoUrl?: string;
   logoRectangleUrl?: string;
   logoEmoji?: string;
@@ -325,6 +327,7 @@ export const useOrganizationStore = create<OrganizationState>()((set, get) => ({
         defaultTheme: org.default_theme || undefined,
         createdAt: org.created_at,
         updatedAt: org.updated_at,
+        currentUserRole: org.current_user_role ?? null,
       }));
 
       set({ organizations });

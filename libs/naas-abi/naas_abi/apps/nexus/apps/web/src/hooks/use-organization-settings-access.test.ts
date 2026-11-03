@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createOrganizationSettingsAccessStore,
   fetchOrganizationSettingsAccess,
+  openableOrganizations,
   opensOrganizationSettings,
 } from './use-organization-settings-access';
 
@@ -37,32 +38,66 @@ describe('opensOrganizationSettings', () => {
   });
 });
 
+const access = (org: string) =>
+  `/api/iam/admin/access?scope=${encodeURIComponent(`abi:nexus:organization/${org}`)}`;
+
 describe('fetchOrganizationSettingsAccess', () => {
-  it('asks the access only when the role does not open it, and stops at the first that does', async () => {
+  it('decides from the list alone when a role there is owner or admin', async () => {
     const seen: string[] = [];
     const opens = await fetchOrganizationSettingsAccess(
       fetcher(
         {
-          '/api/organizations': [{ id: 'acme' }, { id: 'beta' }, { id: 'gamma' }],
-          '/api/organizations/acme': { current_user_role: 'member' },
-          [ACCESS_ACME]: NOTHING,
-          '/api/organizations/beta': { current_user_role: 'admin' },
+          '/api/organizations': [
+            { id: 'acme', current_user_role: 'member' },
+            { id: 'beta', current_user_role: 'admin' },
+          ],
         },
         seen
       )
     );
     expect(opens).toBe(true);
-    expect(seen).toEqual(['/api/organizations', '/api/organizations/acme', ACCESS_ACME, '/api/organizations/beta']);
+    expect(seen).toEqual(['/api/organizations']);
   });
   it('a workspace owner who is a member of the organization gets nothing', async () => {
     const opens = await fetchOrganizationSettingsAccess(
       fetcher({
-        '/api/organizations': [{ id: 'acme' }],
-        '/api/organizations/acme': { current_user_role: 'member' },
+        '/api/organizations': [{ id: 'acme', current_user_role: 'member' }],
         [ACCESS_ACME]: NOTHING,
       })
     );
     expect(opens).toBe(false);
+  });
+  it('reads the access of every organization, in batches, with no cap', async () => {
+    const orgs = Array.from({ length: 30 }, (_, i) => ({ id: `org-${i}`, current_user_role: 'member' }));
+    const seen: string[] = [];
+    const opens = await fetchOrganizationSettingsAccess(
+      fetcher({ '/api/organizations': orgs, [access('org-29')]: IAM }, seen)
+    );
+    expect(opens).toBe(true);
+    expect(seen.filter((url) => url.startsWith('/api/iam/admin/access'))).toHaveLength(30);
+  });
+  it('stops after the first batch that opens one', async () => {
+    const orgs = Array.from({ length: 20 }, (_, i) => ({ id: `org-${i}`, current_user_role: null }));
+    const seen: string[] = [];
+    const opens = await fetchOrganizationSettingsAccess(
+      fetcher({ '/api/organizations': orgs, [access('org-3')]: IAM }, seen)
+    );
+    expect(opens).toBe(true);
+    expect(seen.filter((url) => url.startsWith('/api/iam/admin/access'))).toHaveLength(8);
+  });
+});
+
+describe('openableOrganizations (the /organizations picker)', () => {
+  it('keeps owners\' and admins\' organizations and those whose access opens, in order', async () => {
+    const seen: string[] = [];
+    const orgs = [
+      { id: 'acme', currentUserRole: 'admin' },
+      { id: 'beta', currentUserRole: 'member' },
+      { id: 'gamma', currentUserRole: 'member' },
+    ];
+    const opened = await openableOrganizations(orgs, fetcher({ [access('gamma')]: IAM }, seen));
+    expect(opened.map((org) => org.id)).toEqual(['acme', 'gamma']);
+    expect(seen).toEqual([access('beta'), access('gamma')]);
   });
 });
 
@@ -74,9 +109,9 @@ describe('the store', () => {
       if (url === '/api/organizations') {
         calls += 1;
         if (fail) throw new Error('down');
-        return new Response(JSON.stringify([{ id: 'acme' }]), { status: 200 });
+        return new Response(JSON.stringify([{ id: 'acme', current_user_role: 'admin' }]), { status: 200 });
       }
-      return new Response(JSON.stringify({ current_user_role: 'admin' }), { status: 200 });
+      return new Response('{}', { status: 403 });
     });
     await Promise.all([store.getState().load('olivia'), store.getState().load('olivia')]);
     expect(calls).toBe(1);

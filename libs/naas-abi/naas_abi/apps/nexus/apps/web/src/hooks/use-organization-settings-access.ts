@@ -15,20 +15,24 @@ type Fetcher = (url: string) => Promise<Response>;
  *  attachment) and, when it is no admin's, what `GET /access` answers at its container. */
 export type OrganizationAccess = { role: string | null; access: AccessView | null };
 
-/** At most this many organizations are asked about. */
-export const MAX_ORGANIZATIONS = 25;
+/** How many organizations' access is read at once. */
+export const ACCESS_BATCH = 8;
 
-function opensOne({ role, access }: OrganizationAccess): boolean {
+/**
+ * Whether Organization settings opens for the caller in one organization: they are its
+ * owner or admin there, or IAM shows them a Roles & permissions section at its scope.
+ * The organization settings pages decide with it too.
+ */
+export function opensOrganization({ role, access }: OrganizationAccess): boolean {
   return role === 'owner' || role === 'admin' || opensRolesAndPermissions(access);
 }
 
 /**
  * Whether Organization settings opens a section for the caller in one of their
- * organizations: they are its owner or admin there, or IAM shows them a Roles &
- * permissions section at its scope. Never a workspace's role.
+ * organizations. Never a workspace's role.
  */
 export function opensOrganizationSettings(orgs: OrganizationAccess[]): boolean {
-  return orgs.some(opensOne);
+  return orgs.some(opensOrganization);
 }
 
 async function json<T>(fetcher: Fetcher, url: string): Promise<T | null> {
@@ -39,20 +43,51 @@ async function json<T>(fetcher: Fetcher, url: string): Promise<T | null> {
   return (await response.json()) as T;
 }
 
-/** Asks only as needed: an organization's role first, its access when the role does
- *  not open it; stops at the first organization that does. */
+/** The access a caller has at an organization's container (`GET /access`), or null. */
+export function fetchOrganizationAccess(orgId: string, fetcher: Fetcher = authFetch): Promise<AccessView | null> {
+  const scope = encodeURIComponent(organizationContainer(orgId));
+  return json<AccessView>(fetcher, `/api/iam/admin/access?scope=${scope}`);
+}
+
+/** One list (`GET /api/organizations` carries the caller's role in each); the access is
+ *  read only for the organizations where the role does not open it, `ACCESS_BATCH` at a
+ *  time, stopping at the first batch that opens one. Every organization counts. */
 export async function fetchOrganizationSettingsAccess(fetcher: Fetcher = authFetch): Promise<boolean> {
-  const orgs = (await json<{ id: string }[]>(fetcher, '/api/organizations')) ?? [];
-  for (const org of orgs.slice(0, MAX_ORGANIZATIONS)) {
-    const id = encodeURIComponent(org.id);
-    const detail = await json<{ current_user_role?: string | null }>(fetcher, `/api/organizations/${id}`);
-    const role = detail?.current_user_role ?? null;
-    if (opensOne({ role, access: null })) return true;
-    const scope = encodeURIComponent(organizationContainer(org.id));
-    const access = await json<AccessView>(fetcher, `/api/iam/admin/access?scope=${scope}`);
-    if (opensOne({ role, access })) return true;
+  type Listed = { id: string; current_user_role?: string | null };
+  const orgs = (await json<Listed[]>(fetcher, '/api/organizations')) ?? [];
+  if (orgs.some((org) => opensOrganization({ role: org.current_user_role ?? null, access: null }))) {
+    return true;
+  }
+  for (let start = 0; start < orgs.length; start += ACCESS_BATCH) {
+    const batch = orgs.slice(start, start + ACCESS_BATCH);
+    const accesses = await Promise.all(batch.map((org) => fetchOrganizationAccess(org.id, fetcher)));
+    if (accesses.some((access) => opensRolesAndPermissions(access))) return true;
   }
   return false;
+}
+
+/** The organizations whose settings open for the caller, in the order given: owners' and
+ *  admins' from the list, the others' once their access is read (`ACCESS_BATCH` at a time). */
+export async function openableOrganizations<T extends { id: string; currentUserRole?: string | null }>(
+  orgs: T[],
+  fetcher: Fetcher = authFetch
+): Promise<T[]> {
+  const opens = new Set<string>();
+  const rest = orgs.filter((org) => {
+    if (opensOrganization({ role: org.currentUserRole ?? null, access: null })) {
+      opens.add(org.id);
+      return false;
+    }
+    return true;
+  });
+  for (let start = 0; start < rest.length; start += ACCESS_BATCH) {
+    const batch = rest.slice(start, start + ACCESS_BATCH);
+    const accesses = await Promise.all(batch.map((org) => fetchOrganizationAccess(org.id, fetcher)));
+    batch.forEach((org, i) => {
+      if (opensRolesAndPermissions(accesses[i])) opens.add(org.id);
+    });
+  }
+  return orgs.filter((org) => opens.has(org.id));
 }
 
 export interface OrganizationSettingsAccessState {

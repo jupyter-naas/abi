@@ -90,6 +90,9 @@ export function workspaceOrganization(workspace: { organizationId?: string } | n
 /** First settings item, used as the default landing for /settings. */
 export const DEFAULT_SETTINGS_PATH = SETTINGS_GROUPS[0].items[0].href;
 
+/** Roles & permissions, the page whoever holds only `iam:` rights in a workspace opens. */
+export const PERMISSIONS_SETTINGS_PATH = '/settings/permissions';
+
 /**
  * Whether the workspace has what an entry manages. With the workspace's resources
  * unknown (still loading, or the caller may not read them), the caller's own
@@ -133,6 +136,46 @@ export function visibleSettingsGroups(
       ),
     }))
     .filter((group) => group.items.length > 0);
+}
+
+/**
+ * Whether a workspace's settings open for the caller, the rule the dock, the mobile sheet and
+ * the settings pages share: `all` when their role there brings the settings
+ * (`settings.workspace`, its owners and admins), `iam` when it does not but IAM shows them a
+ * section of Roles & permissions there (that page alone), `none` otherwise (no page: they
+ * say so), `unknown` until the access is read.
+ */
+export type WorkspaceSettingsAccess = 'all' | 'iam' | 'none' | 'unknown';
+
+export function workspaceSettingsAccess({
+  settingsByRole,
+  holdsIam,
+  accessSettled,
+}: {
+  settingsByRole: boolean;
+  holdsIam: boolean;
+  accessSettled: boolean;
+}): WorkspaceSettingsAccess {
+  if (settingsByRole) return 'all';
+  if (!accessSettled) return 'unknown';
+  return holdsIam ? 'iam' : 'none';
+}
+
+/** Whether the settings page at `path` opens under `access`: null while unknown. */
+export function settingsPageOpens(
+  access: WorkspaceSettingsAccess,
+  path: string,
+  groups: SettingsNavGroup[] = SETTINGS_GROUPS
+): boolean | null {
+  if (access === 'unknown') return null;
+  if (access === 'all') return true;
+  if (access === 'none') return false;
+  return settingsItemFor(path, groups)?.needs === 'iam';
+}
+
+/** Where the settings land for `access`: General, or Roles & permissions for an `iam:` holder. */
+export function settingsLandingPath(access: WorkspaceSettingsAccess): string {
+  return access === 'iam' ? PERMISSIONS_SETTINGS_PATH : DEFAULT_SETTINGS_PATH;
 }
 
 /** The entry a settings path belongs to (`/settings/apps/...` is Apps), if any. */

@@ -419,7 +419,10 @@ async def list_organizations(
     service: OrganizationService = Depends(get_organization_service),
 ) -> list[Organization]:
     rows = await service.list_organizations(user_id=current_user.id)
-    return [_to_schema(row) for row in rows]
+    # Each organization with the caller's role there, read once from IAM: the account
+    # menu decides Organization Settings from this one answer.
+    roles = await service.memberships.scopes_of(current_user.id, level="org")
+    return [Organization(**row.__dict__, current_user_role=roles.get(row.id)) for row in rows]
 
 
 @router.get("/{org_id}", dependencies=[guard("GetOrganization", workspace=None, org="org_id")])

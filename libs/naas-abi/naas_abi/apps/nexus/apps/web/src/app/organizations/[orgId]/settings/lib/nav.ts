@@ -39,22 +39,48 @@ export function isOrgAdminRole(role: string | null | undefined): boolean {
   return role === 'owner' || role === 'admin';
 }
 
+/**
+ * Whether Organization settings opens for the caller here, as the account menu decides
+ * it (`hooks/use-organization-settings-access.ts`, `opensOrganization`): `admin` for its
+ * owners and admins (every section), `iam` for someone else IAM shows a Roles & permissions
+ * section (that section alone), `none` for anyone else (no section: the pages say so),
+ * `unknown` until the role (and, for a non-admin, the access) is read.
+ */
+export type OrgSettingsAccess = 'admin' | 'iam' | 'none' | 'unknown';
+
+export function orgSettingsAccess({
+  role,
+  roleKnown,
+  holdsIam,
+  accessSettled,
+}: {
+  role: string | null | undefined;
+  roleKnown: boolean;
+  holdsIam: boolean;
+  accessSettled: boolean;
+}): OrgSettingsAccess {
+  if (isOrgAdminRole(role)) return 'admin';
+  if (!roleKnown || !accessSettled) return 'unknown';
+  return holdsIam ? 'iam' : 'none';
+}
+
 export function orgSettingsNavForRole(
   role: string | null | undefined,
   { holdsIam = false }: { holdsIam?: boolean } = {}
 ): OrgSettingsNavItem[] {
+  const admin = isOrgAdminRole(role);
   return orgSettingsNav.filter(
-    (item) =>
-      !item.hidden &&
-      (item.needs === 'iam' ? holdsIam : !item.adminOnly || isOrgAdminRole(role))
+    (item) => !item.hidden && (item.needs === 'iam' ? holdsIam : admin)
   );
 }
 
 /**
- * Where a section someone may not open sends them: General, or null to stay. Nothing is
- * decided before the role is known and, for the IAM item, before the caller's access was read
- * (``accessSettled``): an org member who holds `iam:` rights through a group is not bounced
- * off Roles & permissions while that read is in flight.
+ * Where a section someone may not open sends them, or null to stay: an organization's
+ * owners and admins stay anywhere; someone who holds only `iam:` rights there goes to Roles
+ * & permissions; anyone else stays, and the layout shows that they have no access. Nothing
+ * is decided before the role is known and, for a non-admin, before the access was read
+ * (``accessSettled``): a member who holds `iam:` rights through a group is not bounced off
+ * Roles & permissions while that read is in flight.
  */
 export function orgSectionRedirect({
   section,
@@ -67,12 +93,8 @@ export function orgSectionRedirect({
   holdsIam: boolean;
   accessSettled: boolean;
 }): string | null {
-  if (!section || role === null || isOrgAdminRole(role)) return null;
-  const item = orgSettingsNav.find((entry) => entry.slug === section);
-  if (item?.needs === 'iam' && !accessSettled) return null;
-  return orgSettingsNavForRole(role, { holdsIam }).some((entry) => entry.slug === section)
-    ? null
-    : 'general';
+  if (!section || role === null || isOrgAdminRole(role) || !accessSettled) return null;
+  return holdsIam && section !== 'roles' ? 'roles' : null;
 }
 
 export function orgSettingsIndexPath(orgId: string): string {

@@ -24,6 +24,7 @@ import { useAppsStore } from '@/stores/apps';
 import { useFilesStore } from '@/stores/files';
 import { officeCreateKindFromHref, pushOfficeCreate } from '@/components/office/office-create-state';
 import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
+import { useOpensWorkspaceSettings } from '@/hooks/use-workspace-settings-access';
 
 export function QuickOpen() {
   const router = useRouter();
@@ -64,7 +65,7 @@ export function QuickOpen() {
   const canCode = useFeature('code');
   const canSlides = useFeature('slides');
   const canDocuments = useFeature('documents');
-  const canSettingsWorkspace = useFeature('settings.workspace');
+  const canSettingsWorkspace = useOpensWorkspaceSettings();
 
   const featureOn: Record<string, boolean> = {
     apps: canApps,
