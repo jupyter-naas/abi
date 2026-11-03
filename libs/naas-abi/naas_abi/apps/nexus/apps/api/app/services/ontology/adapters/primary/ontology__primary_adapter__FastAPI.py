@@ -42,6 +42,7 @@ from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology__schema import 
     OntologyPathNotFoundError,
     OntologyServiceUnavailableError,
 )
+from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology_access import readable_paths
 from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology_icons import (
     OntologyIconsService,
     valid_resource_iri,
@@ -96,10 +97,19 @@ def _edge_to_schema(edge) -> OntologyOverviewGraphEdge:
 
 async def ontology_catalog_scope(
     workspace_id: str = Query(..., min_length=1),
+    current_user: User = Depends(get_current_user_required),
+    ontology_service: OntologyService = Depends(get_ontology_service),
 ) -> list[str]:
-    """The workspace's ontology assignments. The route's own guard has already
-    authorized the caller for the workspace (it runs before this)."""
-    return await _catalog_refs_for_workspace(workspace_id)
+    """What the caller reads of the workspace's ontologies: its enabled files that
+    IAM lets them get (``GetOntology`` on each, ``ontology_access.readable_paths``),
+    as their paths. Every route reads through it, so a Deny on one ontology takes
+    it out of every list, dictionary and overview, and a path outside it is not
+    found. The route's own guard has already authorized the caller for the
+    workspace (it runs before this)."""
+    refs = await _catalog_refs_for_workspace(workspace_id)
+    files = await ontology_service.list_ontology_files(catalog_refs=refs)
+    readable = await readable_paths(current_user, workspace_id, [f.path for f in files])
+    return [f.path for f in files if f.path in readable]
 
 
 async def _catalog_refs_for_workspace(workspace_id: str) -> list[str]:

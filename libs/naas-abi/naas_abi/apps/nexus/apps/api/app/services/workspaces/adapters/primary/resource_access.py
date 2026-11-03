@@ -1,6 +1,9 @@
 """Admin assignment editor. Saved graph assignments are applied to IAM, which
 the graph APIs (through the kernel) enforce; ontology assignments are read by
-the ontology APIs."""
+the ontology APIs. Each editor offers only what the caller may assign, plus what
+the workspace already holds: a graph they may drop, an ontology they may assign
+there (``AssignOntology`` in the workspace's organization,
+``services/ontology/ontology_access.py``)."""
 
 from __future__ import annotations
 
@@ -31,6 +34,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.workspac
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ as authz
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import guard
+from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology_access import assignable_paths
 from naas_abi.apps.nexus.apps.api.app.services.registry import (
     ServiceRegistry,
     get_service_registry,
@@ -98,17 +102,8 @@ def _graph_catalog(service: Any, workspace_id: str, user_id: str, held: set[str]
     ]
 
 
-async def assignment_catalog(
-    kind: Kind,
-    workspace_id: str,
-    ontologies: Any,
-    graphs: Any,
-    *,
-    user_id: str,
-    held: set[str],
-) -> list[dict]:
-    if kind == "graphs":
-        return await asyncio.to_thread(_graph_catalog, graphs, workspace_id, user_id, held)
+async def _ontology_entries(ontologies: Any) -> list[dict]:
+    """Every ontology file of the deployment, as the editor names it."""
     items = await ontologies.list_ontology_files()
     identifiers = [
         normalize_ontology_ref(f"{item.module_name}:{Path(item.path).name}") for item in items
@@ -125,6 +120,30 @@ async def assignment_catalog(
             "available": True,
         }
         for item, identifier in zip(items, identifiers, strict=True)
+    ]
+
+
+async def assignment_catalog(
+    kind: Kind,
+    workspace_id: str,
+    ontologies: Any,
+    graphs: Any,
+    *,
+    user_id: str,
+    held: set[str],
+    enabled: list[str] | None = None,
+) -> list[dict]:
+    """What ``user_id`` may assign to the workspace, plus what it holds already:
+    ``held`` graphs, the ``enabled`` ontology refs."""
+    if kind == "graphs":
+        return await asyncio.to_thread(_graph_catalog, graphs, workspace_id, user_id, held)
+    entries = await _ontology_entries(ontologies)
+    assignable = await assignable_paths(user_id, workspace_id, [e["path"] for e in entries])
+    return [
+        entry
+        for entry in entries
+        if entry["path"] in assignable
+        or ontology_matches_seed(entry["path"], entry["module"], enabled or [])
     ]
 
 
@@ -189,6 +208,10 @@ def _held(kind: Kind, data: dict) -> set[str]:
     return set(data["read"]) | set(data["write"]) if kind == "graphs" else set()
 
 
+def _enabled(kind: Kind, data: dict) -> list[str]:
+    return list(data["enabled"]) if kind == "ontologies" else []
+
+
 # The editor payload carries the assignments and the catalog they are chosen
 # from, so reading it is as much the administrators' as saving it is.
 @router.get(
@@ -205,7 +228,13 @@ async def get_assignments(
 ):
     saved = await load_resource_policy(db, workspace_id, kind)
     catalog = await assignment_catalog(
-        kind, workspace_id, ontologies, graphs, user_id=user.id, held=_held(kind, saved.data)
+        kind,
+        workspace_id,
+        ontologies,
+        graphs,
+        user_id=user.id,
+        held=_held(kind, saved.data),
+        enabled=_enabled(kind, saved.data),
     )
     return editor_payload(kind, saved, catalog)
 
@@ -225,7 +254,13 @@ async def save_assignments(
 ):
     current = await load_resource_policy(db, workspace_id, kind)
     catalog = await assignment_catalog(
-        kind, workspace_id, ontologies, graphs, user_id=user.id, held=_held(kind, current.data)
+        kind,
+        workspace_id,
+        ontologies,
+        graphs,
+        user_id=user.id,
+        held=_held(kind, current.data),
+        enabled=_enabled(kind, current.data),
     )
     try:
         data = validate_policy(kind, body.policy)
@@ -234,6 +269,16 @@ async def save_assignments(
             added = set(data["enabled"]) - set(current.data["enabled"])
         else:
             added = _held(kind, data) - _held(kind, current.data)
+        if kind == "ontologies" and added - known:
+            # An ontology of the deployment the caller may not assign here.
+            existing = {entry["id"] for entry in await _ontology_entries(ontologies)}
+            refused = sorted((added - known) & existing)
+            if refused:
+                raise HTTPException(
+                    403,
+                    f"You may not assign {', '.join(refused)} to this workspace: "
+                    "an administrator of its organization may (nexus:AssignOntology).",
+                )
         if added - known:
             raise ValueError("Select resources from the available catalog.")
         if kind == "graphs":

@@ -179,6 +179,95 @@ async def test_a_workspace_without_the_ontology_feature_is_closed(ontology_app) 
             assert (await admin.get(_url("/ontologies", "ws-1"))).status_code == 200
 
 
+@pytest.mark.asyncio
+async def test_a_deny_on_one_ontology_takes_it_out_of_every_read(team) -> None:
+    """Bob may not get the Agent ontology (a Deny at his workspace): it is not
+    listed, its path is not found, and the routes that read every enabled
+    ontology read the others only. The simulator's answer is what every route
+    applies."""
+    from naas_abi_core.engine.call_context import as_service_account
+    from naas_abi_core.services.iam.policy import POLICY_VERSION
+
+    bfo, agent = "/o/ontologies/modules/BFO.ttl", "/o/ontologies/modules/AgentOntology.ttl"
+
+    def file(path: str, name: str) -> SimpleNamespace:
+        return SimpleNamespace(
+            path=path,
+            name=name,
+            module_name="core",
+            submodule_name=None,
+            description=None,
+            license=None,
+            contributors=[],
+            date=None,
+            imports=[],
+        )
+
+    files = {bfo: file(bfo, "BFO core"), agent: file(agent, "Agent")}
+
+    async def list_ontology_files(catalog_refs=None):
+        refs = catalog_refs if catalog_refs is not None else list(files)
+        # A ref is a path, or ``<module>:<file>`` (``ontology_matches_seed``).
+        named = {r.rsplit(":", 1)[-1].lower() for r in refs}
+        return [
+            item for path, item in files.items() if path in refs or Path(path).name.lower() in named
+        ]
+
+    async def list_classes(ontology_path, catalog_refs=None):
+        known = [f.path for f in await list_ontology_files(catalog_refs)]
+        if ontology_path is not None and ontology_path not in known:
+            raise ontology.OntologyPathNotFoundError(ontology_path)
+        return []
+
+    service = SimpleNamespace(
+        list_ontology_files=AsyncMock(side_effect=list_ontology_files),
+        list_classes=AsyncMock(side_effect=list_classes),
+        workspace_dictionary=AsyncMock(return_value={}),
+        list_items=AsyncMock(return_value=[]),
+    )
+    app = FastAPI()
+    app.include_router(http.router, prefix="/api/ontology")
+    app.dependency_overrides[get_ontology_service] = lambda: service
+    acting_as_header(app)
+    with as_service_account("engine"):
+        deny = team.iam.create_policy(
+            "Bob: BFO only",
+            {
+                "version": POLICY_VERSION,
+                "statements": [
+                    {
+                        "effect": "Deny",
+                        "actions": ["nexus:GetOntology", "nexus:ExportOntology"],
+                        "resources": ["${scope}/nexus:ontology/*AgentOntology.ttl"],
+                    }
+                ],
+            },
+        )
+        team.iam.attach_policy(deny.id, team.principal("member"), team.workspace("org-1", "ws-1"))
+    enabled = ["core:bfo.ttl", "core:agentontology.ttl"]
+    with patch.object(http, "_catalog_refs_for_workspace", new=AsyncMock(return_value=enabled)):
+        async with client(app, "member") as bob:
+            listed = await bob.get(_url("/ontologies", "ws-1"))
+            assert [i["path"] for i in listed.json()["items"]] == [bfo]
+            denied = await bob.get(_url(f"/classes?ontology_path={agent}", "ws-1"))
+            assert denied.status_code == 404, denied.text
+            assert (
+                await bob.get(_url(f"/overview/stats?ontology_path={agent}", "ws-1"))
+            ).status_code == 403
+            assert (await bob.get(_url(f"/classes?ontology_path={bfo}", "ws-1"))).status_code == 200
+            for route in ("", "/dictionary", "/classes"):
+                assert (await bob.get(_url(route, "ws-1"))).status_code == 200, route
+        # Every read went through the readable files only.
+        for method in (service.list_classes, service.workspace_dictionary, service.list_items):
+            assert all(call.kwargs["catalog_refs"] == [bfo] for call in method.await_args_list), (
+                method
+            )
+        # Another member, not denied, reads both.
+        async with client(app, "member2") as other:
+            listed = await other.get(_url("/ontologies", "ws-2"))
+            assert [i["path"] for i in listed.json()["items"]] == [bfo, agent]
+
+
 class HttpScopeTests(unittest.IsolatedAsyncioTestCase):
     async def test_saved_empty_assignments_deny(self) -> None:
         from unittest.mock import MagicMock
@@ -265,10 +354,11 @@ class HttpScopeTests(unittest.IsolatedAsyncioTestCase):
                     },
                 )
                 self.assertEqual(response.status_code, 200, response.text)
+                # The workspace's enabled files the caller may get, by path.
                 handler.assert_awaited_once_with(
                     class_iris=["urn:child"],
                     ontology_path="/allowed.ttl",
-                    catalog_refs=["fixture:Public.ttl"],
+                    catalog_refs=["/allowed.ttl"],
                 )
 
 
@@ -298,6 +388,17 @@ class ImportBoundaryTests(unittest.IsolatedAsyncioTestCase):
     def tearDown(self) -> None:
         clear_catalog_import_caches()
         self.temp.cleanup()
+
+    async def test_a_path_names_exactly_its_file_as_a_catalog_ref(self) -> None:
+        """``ontology_catalog_scope`` narrows a workspace's refs to the paths the
+        caller may read: a path selects its file alone."""
+        every = await self.service.list_ontology_files(
+            catalog_refs=["fixture:Public.ttl", "fixture:Private.ttl", "fixture:Shared.ttl"]
+        )
+        self.assertEqual(len(every), 3)
+        only = await self.service.list_ontology_files(catalog_refs=[str(self.public)])
+        self.assertEqual([item.path for item in only], [str(self.public)])
+        self.assertEqual(await self.service.list_ontology_files(catalog_refs=[]), [])
 
     def write(self, name: str, content: str) -> Path:
         path = self.root / f"{name}.ttl"

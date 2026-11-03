@@ -2,6 +2,7 @@
 
 import unittest
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 from fastapi import FastAPI
@@ -206,6 +207,14 @@ class ResourceAccessTests(unittest.IsolatedAsyncioTestCase):
                 ]
             )
         )
+
+        # The caller may assign every file: this is about the ids.
+        async def every(user, workspace, paths):
+            return set(paths)
+
+        patcher = patch.object(http, "assignable_paths", new=every)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         catalog = await http.assignment_catalog(
             "ontologies", "a", ontologies, None, user_id="admin", held=set()
         )
@@ -310,3 +319,99 @@ class ResourceAccessTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual((await other.get(uri)).status_code, 403, user)
                     self.assertEqual((await other.put(uri, json=body)).status_code, 403, user)
             self.assertEqual(catalog.await_count, calls)
+
+    async def test_an_ontology_is_assigned_only_by_whoever_may_assign_it_there(self):
+        """A workspace's admin is offered the ontologies they may assign
+        (``AssignOntology`` in its organization) plus those it holds, and saving
+        another is refused; an organization's admins and the platform admin assign
+        any."""
+        from naas_abi.apps.nexus.apps.api.app.services.graph.testing import (
+            acting_as_header,
+            knowledge_team,
+        )
+        from naas_abi.apps.nexus.apps.api.app.services.graph.testing import (
+            client as client_of,
+        )
+        from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary import (
+            resource_access as http,
+        )
+        from naas_abi_core.services.iam.names import encode_segment
+
+        bfo, agent = "/o/ontologies/modules/BFO.ttl", "/o/ontologies/modules/Agent.ttl"
+        files = [
+            SimpleNamespace(path=bfo, name="BFO core", module_name="core"),
+            SimpleNamespace(path=agent, name="Agent", module_name="core"),
+        ]
+        app = FastAPI()
+        app.include_router(http.router, prefix="/api/workspaces")
+
+        async def get_db():
+            async with self.sessions() as db:
+                yield db
+
+        app.dependency_overrides[http.get_db] = get_db
+        app.dependency_overrides[http.get_ontology_service] = lambda: SimpleNamespace(
+            list_ontology_files=AsyncMock(return_value=files)
+        )
+        app.dependency_overrides[http.get_graph_service] = lambda: SimpleNamespace()
+        acting_as_header(app)
+        async with self.sessions() as db:
+            db.add(
+                WorkspaceModel(
+                    id="ws-1", name="W", slug="ws-1", owner_id="admin", organization_id="org"
+                )
+            )
+            await db.commit()
+        uri = "/api/workspaces/ws-1/resource-access/ontologies"
+
+        async def offered(user: str) -> list[str]:
+            async with client_of(app, user) as http_client:
+                response = await http_client.get(uri)
+            self.assertEqual(response.status_code, 200, response.text)
+            return [item["name"] for item in response.json()["catalog"]]
+
+        async def save(user: str, enabled: list[str]) -> Any:
+            async with client_of(app, user) as http_client:
+                current = (await http_client.get(uri)).json()
+                return await http_client.put(
+                    uri, json={"revision": current["revision"], "policy": {"enabled": enabled}}
+                )
+
+        with knowledge_team() as nexus:
+            org = nexus.org("org-1")
+            nexus.grant("orgadmin", "admin", org)
+            # The workspace's admin assigns nothing by their role there.
+            self.assertEqual(await offered("admin"), [])
+            refused = await save("admin", ["core:bfo.ttl"])
+            self.assertEqual(refused.status_code, 403, refused.text)
+            self.assertIn("core:bfo.ttl", refused.json()["detail"])
+            self.assertIn("AssignOntology", refused.json()["detail"])
+            # A policy at the workspace cannot grant it: it names the workspace's level.
+            nexus.allow(
+                "admin",
+                ["nexus:AssignOntology"],
+                ["${scope}/nexus:ontology/*"],
+                nexus.workspace("org-1", "ws-1"),
+            )
+            self.assertEqual(await offered("admin"), [])
+            # One at the organization does, for what it names.
+            nexus.allow(
+                "admin",
+                ["nexus:AssignOntology"],
+                [f"${{scope}}/nexus:ontology/{encode_segment(bfo)}"],
+                org,
+            )
+            self.assertEqual(await offered("admin"), ["BFO core"])
+            saved = await save("admin", ["core:bfo.ttl"])
+            self.assertEqual(saved.status_code, 200, saved.text)
+            self.assertEqual(
+                (await save("admin", ["core:bfo.ttl", "core:agent.ttl"])).status_code, 403
+            )
+            # An organization's admins and the platform admin assign any.
+            self.assertEqual(await offered("orgadmin"), ["BFO core", "Agent"])
+            self.assertEqual(await offered("root"), ["BFO core", "Agent"])
+            agent_saved = await save("orgadmin", ["core:bfo.ttl", "core:agent.ttl"])
+            self.assertEqual(agent_saved.status_code, 200, agent_saved.text)
+            # What the workspace holds stays offered to its admin, to keep or remove.
+            self.assertEqual(await offered("admin"), ["BFO core", "Agent"])
+            self.assertEqual((await save("admin", ["core:bfo.ttl"])).status_code, 200)

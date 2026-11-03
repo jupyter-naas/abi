@@ -90,20 +90,16 @@ export function ResourceAccessEditor({
         body: body ? JSON.stringify(body) : undefined,
       });
       if (!response.ok) {
-        if (response.status === 403)
-          throw new Error(
-            'Only workspace owners and admins can manage assignments.',
-          );
         if (response.status === 409)
           throw new Error(
             'Another admin saved changes. Reload the assignments before editing again.',
           );
         const payload = await response.json().catch(() => ({}));
-        throw new Error(
-          typeof payload.detail === 'string'
-            ? payload.detail
-            : 'Could not save or load assignments.',
-        );
+        const detail = typeof payload.detail === 'string' ? payload.detail : null;
+        // A refusal that names what may not be assigned (an ontology, a graph) says so.
+        if (response.status === 403)
+          throw new Error(detail ?? 'Only workspace owners and admins can manage assignments.');
+        throw new Error(detail ?? 'Could not save or load assignments.');
       }
       const data: Snapshot = await response.json();
       if (controller.signal.aborted)

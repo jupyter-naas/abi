@@ -92,6 +92,7 @@ def test_every_type_naas_abi_lists_has_a_lister(loop):
         ("nexus", "workspace"),
         ("nexus", "member"),
         ("nexus", "feature"),
+        ("nexus", "ontology"),
         ("module", "agent"),
         ("module", "app"),
         ("module", "workflow"),
@@ -100,9 +101,7 @@ def test_every_type_naas_abi_lists_has_a_lister(loop):
 
 
 @pytest.mark.asyncio
-async def test_organizations_workspaces_and_members_come_from_the_database(
-    nexus_db, monkeypatch
-):
+async def test_organizations_workspaces_and_members_come_from_the_database(nexus_db, monkeypatch):
     from naas_abi.apps.nexus.apps.api.app.core import database
 
     monkeypatch.setattr(database, "AsyncSessionLocal", nexus_db)
@@ -150,3 +149,59 @@ async def test_organizations_workspaces_and_members_come_from_the_database(
     ]
     at_ws = await listers.members(ListingQuery("nexus", "member", WS1))
     assert [(i.id, i.description) for i in at_ws] == [("u-2", "bob@example.com")]
+
+
+def test_ontologies_are_listed_every_one_above_a_workspace_and_its_enabled_ones_in_it(
+    loop, monkeypatch
+):
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+
+    from naas_abi.apps.nexus.apps.api.app.core import database
+    from naas_abi.apps.nexus.apps.api.app.services import registry
+    from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary import (
+        resource_access_postgres,
+    )
+    from naas_abi_core.services.iam.names import PLATFORM
+
+    files = [
+        SimpleNamespace(path="/o/ontologies/BFO.ttl", name="BFO core", module_name="core"),
+        SimpleNamespace(path="/o/ontologies/Agent.ttl", name="Agent", module_name="core"),
+    ]
+    asked: list[object] = []
+
+    async def list_ontology_files(catalog_refs=None):
+        asked.append(catalog_refs)
+        return files if catalog_refs is None else [f for f in files if f.path in catalog_refs]
+
+    service = SimpleNamespace(ontology=SimpleNamespace(list_ontology_files=list_ontology_files))
+    monkeypatch.setattr(registry.ServiceRegistry, "instance", classmethod(lambda cls: service))
+
+    @asynccontextmanager
+    async def session():
+        yield None
+
+    async def load(db, workspace, kind):
+        assert (workspace, kind) == ("ws-1", "ontologies")
+        return SimpleNamespace(data={"enabled": ["/o/ontologies/BFO.ttl"]})
+
+    monkeypatch.setattr(database, "AsyncSessionLocal", session)
+    monkeypatch.setattr(resource_access_postgres, "load_resource_policy", load)
+    lister = listers.OnLoop(loop, listers.ontologies)
+    at_org = lister.list_resources(ListingQuery("nexus", "ontology", ORG))
+    assert [(i.name, i.label) for i in at_org.items] == [
+        (f"{ORG}/nexus:ontology/%2Fo%2Fontologies%2FAgent.ttl", "Agent"),
+        (f"{ORG}/nexus:ontology/%2Fo%2Fontologies%2FBFO.ttl", "BFO core"),
+    ]
+    assert [
+        i.id for i in lister.list_resources(ListingQuery("nexus", "ontology", PLATFORM)).items
+    ] == [
+        "/o/ontologies/Agent.ttl",
+        "/o/ontologies/BFO.ttl",
+    ]
+    in_ws = lister.list_resources(ListingQuery("nexus", "ontology", WS1))
+    assert [i.id for i in in_ws.items] == ["/o/ontologies/BFO.ttl"]
+    assert asked == [None, None, ["/o/ontologies/BFO.ttl"]]
+    # Another module's container holds no ontology.
+    project = f"{WS1}/crm:project/p1"
+    assert lister.list_resources(ListingQuery("nexus", "ontology", project)).items == ()

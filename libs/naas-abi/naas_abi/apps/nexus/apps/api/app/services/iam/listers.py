@@ -162,6 +162,38 @@ async def members(query: ListingQuery) -> list[ListedResource]:
     return found
 
 
+async def ontologies(query: ListingQuery) -> list[ListedResource]:
+    """The ontology files, by path, named in the container asked: a workspace's
+    enabled ones there (what ``GetOntology`` reads), every file of the deployment
+    at an organization or the platform (what ``AssignOntology`` brings into its
+    workspaces); none in another module's container."""
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    from naas_abi.apps.nexus.apps.api.app.services.registry import ServiceRegistry
+    from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.resource_access_postgres import (  # noqa: E501
+        load_resource_policy,
+    )
+
+    workspace = names.workspace_of(query.container)
+    if workspace is None and not (
+        query.container == PLATFORM or names.is_org_container(query.container)
+    ):
+        return []
+    refs: list[str] | None = None
+    if workspace is not None:
+        async with AsyncSessionLocal() as db:
+            refs = list((await load_resource_policy(db, workspace, "ontologies")).data["enabled"])
+    files = await ServiceRegistry.instance().ontology.list_ontology_files(catalog_refs=refs)
+    return [
+        ListedResource(
+            names.nexus_resource("ontology", container=query.container, id=item.path),
+            item.path,
+            label=item.name,
+            description=item.module_name,
+        )
+        for item in files
+    ]
+
+
 def enabled_features() -> list[str]:
     from naas_abi.apps.nexus.apps.api.app.core.feature_flags import enabled_feature_catalog
     from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
@@ -250,6 +282,8 @@ def listers(loop: asyncio.AbstractEventLoop) -> dict[tuple[str, str], ResourceLi
         (names.SERVICE, names.WORKSPACE): OnLoop(loop, workspaces),
         (names.SERVICE, "member"): OnLoop(loop, members),
         (names.SERVICE, "feature"): OnLoop(loop, features),
+        # Each listing parses the files: given the modules' time.
+        (names.SERVICE, "ontology"): OnLoop(loop, ontologies, timeout=TIMEOUT_SECONDS * 3),
     }
     for type_name in module_scopes.TYPES:
         found[(module_scopes.SERVICE, type_name)] = OnLoop(
@@ -272,4 +306,12 @@ async def register() -> list[tuple[str, str]]:
     return register_listers(runtime.iam(), [_Offer()])
 
 
-__all__ = ["OnLoop", "listers", "register", "feature_items", "ModuleItems", "MODULE_ITEMS"]
+__all__ = [
+    "OnLoop",
+    "listers",
+    "register",
+    "feature_items",
+    "ontologies",
+    "ModuleItems",
+    "MODULE_ITEMS",
+]

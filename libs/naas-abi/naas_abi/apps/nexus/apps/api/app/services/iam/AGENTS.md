@@ -429,6 +429,22 @@ chain from an old-grammar world (`testing.LegacyNexusIam`) through their move an
   container paths (`feature_overrides`, `role_features`, `policy_tree`) still read and write the old grammar
   (`legacy_names`) until the move of the names (`container_names`) rewrites it; `migrate_role_data` and
   `sync_org_wide_roles` run after that move, in the new grammar.
+- **Ontologies are decided per ontology file.** *Decision:* a `nexus:ontology` is an ontology file, named by
+  its path. Reading one (`GetOntology`, `ExportOntology`) is decided in the workspace, on
+  `<workspace>/nexus:ontology/<path>`: every ontology route reads through `ontology_catalog_scope`, the
+  workspace's enabled files narrowed to those the caller may get (`ontology/ontology_access.readable_paths`), so
+  a Deny on one ontology takes it out of every list, the dictionary, the classes, the relationships and the
+  overviews, and its path is not found there. Enabling one in a workspace (`AssignOntology`, admin level) is
+  decided in the workspace's organization, on `<organization>/nexus:ontology/<path>` (the platform's for a
+  workspace in none): Workspace settings › Ontologies offers only what the caller may assign plus what the
+  workspace already enables, and its save refuses another, naming it. naas_abi lists ontologies for the
+  builder (`listers.ontologies`): every file of the deployment at an organization or the platform, a
+  workspace's enabled ones there. *Consequences:* an organization's admins and owners assign any ontology to
+  its workspaces by their role there (an admin-level action in their container), and the platform admin
+  everywhere; a workspace's admins assign only what a policy at the organization or the platform grants them
+  (one at the workspace names the workspace's level, which the check does not read), where before they could
+  enable any file of the deployment. What a workspace already enables stays, and its admins may still remove
+  it.
 
 ## Tests
 
