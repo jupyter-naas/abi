@@ -133,6 +133,7 @@ from naas_abi_core.services.iam.names import (
 )
 from naas_abi_core.services.iam.policy import (
     MAX_DEPTH,
+    SCOPE_PREFIX,
     PolicyDocument,
     PolicyValidationError,
     Statement,
@@ -2669,7 +2670,12 @@ class IAMService(IIAMService, PolicySource):
         allows for none of the statement's actions. Refused (``ValueError``),
         naming it and that policy. Only what is certain is refused: a pattern of
         the chain naming another variable, or wildcards on both sides, count as
-        allowing. A first-party account writing for no user is not checked (the
+        allowing. Attached below its owner, the sub-policy and its chain read
+        ``${scope}`` at each container under it (the evaluator's ``_scopes``):
+        two patterns written from ``${scope}`` meet at the owner exactly when
+        they meet there, and a pattern of the chain that names no ``${scope}``
+        counts as allowing a resource written from it when it may name that
+        resource at some container under the owner (``grants.overlaps``). A first-party account writing for no user is not checked (the
         moves of an upgrade). With ``previous`` (an update of the document), only
         what the edit adds: an action or a resource no Allow of ``previous`` wrote,
         so a name its parent stopped allowing since never blocks an edit. A
@@ -2694,11 +2700,37 @@ class IAMService(IIAMService, PolicySource):
                 return True
             return matches(held, written) or matches(written, held)
 
-        def resource_meets(held: str, name: str) -> bool:
+        def resource_meets(held: str, name: str, rest: str | None) -> bool:
             bound = substitute(held, values)
             if bound is None or variables(bound):
                 return True  # another variable, or ${scope} unknown: may allow it
-            return matches(bound, name)
+            if matches(bound, name):
+                return True
+            if rest is None or "${scope}" in held or owner == PLATFORM_SCOPE:
+                return False
+            # Below the owner, ``rest`` is named at each container under it too:
+            # among the names of its type that can exist (a `*` there crosses
+            # container steps only).
+            try:
+                return grants.overlaps(bound, [f"{owner}/*/{rest}"], universe_of(name))
+            except grants.Exhausted:
+                return True
+
+        def universe_of(name: str) -> grants.Universe:
+            try:
+                parsed = parse_resource_name(name)
+            except ValueError:
+                return grants.EVERYTHING
+            catalog = self._registry.get(parsed.service)
+            declared = (
+                catalog.resource_type(parsed.type) if catalog is not None else None
+            )
+            return grants.universe(
+                parsed.service,
+                parsed.type,
+                self._registry.container_types(),
+                declared.parents if declared else (),
+            )
 
         kept_actions: set[str] = set()
         kept_resources: set[str] = set()
@@ -2736,9 +2768,14 @@ class IAMService(IIAMService, PolicySource):
                 name = substitute(pattern, values)
                 if name is None or has_wildcard(name) or variables(name):
                     continue
+                rest = (
+                    pattern.removeprefix(SCOPE_PREFIX)
+                    if pattern.startswith(SCOPE_PREFIX)
+                    else None
+                )
                 for policy, allows in levels:
                     if not any(
-                        action_meets(a, action) and resource_meets(r, name)
+                        action_meets(a, action) and resource_meets(r, name, rest)
                         for s in allows
                         for a in s.actions
                         for action in statement.actions

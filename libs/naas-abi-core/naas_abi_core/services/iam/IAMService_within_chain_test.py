@@ -191,3 +191,36 @@ def test_a_new_parent_is_checked_against_the_whole_document(h):
         )
         with pytest.raises(ValueError, match="people/recruiter"):
             h.iam.update_policy(child.id, expected_revision=1, parent=other.id)
+
+
+def test_a_name_its_parent_allows_only_in_a_container_under_the_owner_is_kept(h):
+    """A sub-policy of an organization attached below it names its resources at each
+    container under it (the evaluator fills ``${scope}`` with each): a platform
+    parent naming one workspace's agents allows Recruiter there, so the sub-policy
+    naming Recruiter grants something and is kept. One it allows nowhere is still
+    refused."""
+    from naas_abi_core.services.iam.tests.iam_harness import org
+
+    h.iam._register_catalog(module_scopes.CATALOG)
+    h.register("ws-1")
+    root = h.user("root")
+    h.attach("builtin.platform_admin", root.id)
+    org1 = org("org-1")
+    parent = h.admin(
+        "create_policy",
+        "ws-1's people",
+        document(statement("Allow", [USE], [f"{WS1}/module:agent/people/*"])),
+    )
+    with h.as_(root):
+        child = h.iam.create_policy(
+            "Recruiter", _agents("people/recruiter"), scope=org1, parent=parent.id
+        )
+        with pytest.raises(ValueError, match="grant nothing"):
+            h.iam.create_policy(
+                "Pricer", _agents("market/pricer"), scope=org1, parent=parent.id
+            )
+    bob = h.user("bob")
+    h.attach(child.id, bob.id, f"{org1}/*")
+    recruiter = f"{WS1}/module:agent/people/recruiter"
+    assert h.allowed(USE, recruiter, bob)
+    assert not h.allowed(USE, f"{org1}/module:agent/people/recruiter", bob)

@@ -1290,8 +1290,14 @@ who may not derive from it learns nothing more of it (its owner, its chain):
   which pol_… (Acme access), above it, does not allow for module:UseAgent: it would grant
   nothing"). Only the certain is refused: a wildcard stays bounded by the chain (a
   sub-policy of every agent under a parent of two is fine), and a pattern of the chain
-  naming another variable, or wildcards on both sides of an action, count as allowing. A
-  first-party account writing for no user (an upgrade's move) is not checked. Narrowing a
+  naming another variable, or wildcards on both sides of an action, count as allowing.
+  Attached below its owner, a sub-policy and its chain read `${scope}` at each container
+  under it, the same for both (the evaluator's `_scopes`): two patterns written from
+  `${scope}` meet at the owner exactly when they meet there; a pattern of the chain that
+  names no `${scope}` (a platform parent naming one workspace's agents) counts as allowing
+  a resource written from `${scope}` when it may name it at some container under the
+  owner, among the names of its type that can exist (`grants.overlaps`, "may" past the
+  budget). A first-party account writing for no user (an upgrade's move) is not checked. Narrowing a
   parent later never refuses what is below it.
 
 **Derive only from what you hold.** A caller makes a policy a sub-policy of P only if P is
