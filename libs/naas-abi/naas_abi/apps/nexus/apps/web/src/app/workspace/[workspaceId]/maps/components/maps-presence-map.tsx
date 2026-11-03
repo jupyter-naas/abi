@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import type { Map as LeafletMap, Marker } from 'leaflet';
-import { attachMapsZoomControl, observeMapsLeafletSize } from '../lib/leaflet-map';
+import { attachMapsZoomControl, guardMapsLeafletZoomTeardown, observeMapsLeafletSize } from '../lib/leaflet-map';
 import { MAPS_TILE_LIGHT, MAPS_TILE_ATTR } from '../lib/leaflet-tiles';
 
 export interface PresencePin {
@@ -42,6 +42,7 @@ export function MapsPresenceMap({ pins }: MapsPresenceMapProps) {
           zoomControl: false,
           attributionControl: true,
         });
+        guardMapsLeafletZoomTeardown(map);
         attachMapsZoomControl(L, map);
         L.tileLayer(MAPS_TILE_LIGHT, {
           className: 'maps-basemap',
