@@ -37,9 +37,12 @@ def get_api_key() -> str:
 
 async def fetch_openapi_spec() -> dict[str, Any]:
     """Fetch the OpenAPI specification to discover available agents"""
+    # The API serves its schema to API key holders when its docs pages are off.
+    api_key = os.environ.get("ABI_API_KEY")
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(f"{ABI_API_BASE}/openapi.json")
+            response = await client.get(f"{ABI_API_BASE}/openapi.json", headers=headers)
             response.raise_for_status()
             return response.json()
     except Exception as e:  # noqa: BLE001
