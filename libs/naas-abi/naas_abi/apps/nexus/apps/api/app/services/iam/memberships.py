@@ -206,31 +206,44 @@ class Memberships:
 
     async def members(self, scope: str) -> list[Member]:
         """Who holds a role at ``scope``, each with the highest they hold."""
+        return await self._run(lambda iam: self.members_by_scope(iam, scope).get(scope, []))
 
-        def work(iam: Any) -> list[Member]:
-            held: dict[str, list[str]] = {}
-            since: dict[str, datetime] = {}
-            for role, policy in _POLICY_OF.items():
-                for attachment in iam.list_attachments(policy_id=policy):
-                    if attachment.scope == scope:
-                        held.setdefault(attachment.principal_id, []).append(role)
-                        if attachment.created_at is not None:
-                            since[attachment.principal_id] = min(
-                                attachment.created_at,
-                                since.get(attachment.principal_id, attachment.created_at),
-                            )
-            found = []
-            for principal_id, names in held.items():
-                try:
-                    user_id = self._user_id(iam, principal_id)
-                except (IAMNotFoundError, ResourceNotFoundError):
+    def members_by_scope(self, iam: Any, scope: str | None = None) -> dict[str, list[Member]]:
+        """Who holds a role at each container (at ``scope`` alone when given), each
+        with the highest they hold there, in one pass over the roles' attachments: the
+        one reading of who holds what, for ``members`` and the default groups
+        (``container_defaults``). A principal Nexus cannot name is left out. In IAM's
+        thread (``iam`` is the service)."""
+        held: dict[tuple[str, str], list[str]] = {}
+        since: dict[tuple[str, str], datetime] = {}
+        for role, policy in _POLICY_OF.items():
+            for attachment in iam.list_attachments(policy_id=policy):
+                if attachment.scope is None or (scope is not None and attachment.scope != scope):
                     continue
-                found.append(
-                    Member(user_id, best(names) or "viewer", principal_id, since.get(principal_id))
+                key = (attachment.scope, attachment.principal_id)
+                held.setdefault(key, []).append(role)
+                if attachment.created_at is not None:
+                    since[key] = min(attachment.created_at, since.get(key, attachment.created_at))
+        users: dict[str, str | None] = {}
+        found: dict[str, list[Member]] = {}
+        for (where, principal_id), names in held.items():
+            if principal_id not in users:
+                try:
+                    users[principal_id] = self._user_id(iam, principal_id)
+                except (IAMNotFoundError, ResourceNotFoundError):
+                    users[principal_id] = None
+            user_id = users[principal_id]
+            if user_id is None:
+                continue
+            found.setdefault(where, []).append(
+                Member(
+                    user_id, best(names) or "viewer", principal_id, since.get((where, principal_id))
                 )
-            return sorted(found, key=lambda m: (-_RANK[m.role], m.user_id))
-
-        return await self._run(work)
+            )
+        return {
+            where: sorted(members, key=lambda m: (-_RANK[m.role], m.user_id))
+            for where, members in found.items()
+        }
 
     async def platform_admins(self) -> set[str]:
         """The users who hold ``builtin.platform_admin``, by the id Nexus names them."""

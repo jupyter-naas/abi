@@ -52,12 +52,18 @@ NOW = datetime(2026, 1, 1)
 USE = "module:UseAgent"
 
 
+def _forget_all() -> None:
+    """What this process remembers of the records, as a new process would start."""
+    CONTAINER_DEFAULTS._known.clear()
+    CONTAINER_DEFAULTS._missing.clear()
+
+
 @pytest.fixture(autouse=True)
 def _fresh_defaults():
-    CONTAINER_DEFAULTS.forget_all()
+    _forget_all()
     CONTAINER_DEFAULTS.session_factory = None
     yield
-    CONTAINER_DEFAULTS.forget_all()
+    _forget_all()
     CONTAINER_DEFAULTS.session_factory = None
 
 
@@ -191,7 +197,7 @@ async def test_the_groups_follow_the_roles(world, nexus_db):
 @pytest.mark.asyncio
 async def test_a_role_changed_in_another_process_is_followed_from_the_database(world, nexus_db):
     _org, _ws, _org_record, ws_record = await _acme(nexus_db)
-    CONTAINER_DEFAULTS.forget_all()  # this process never saw Alpha made
+    _forget_all()  # this process never saw Alpha made
     CONTAINER_DEFAULTS.session_factory = nexus_db
     await MEMBERSHIPS.grant("bob", "admin", ALPHA)
     assert "bob" in _members(world, ws_record.admins_group_id)
@@ -431,7 +437,7 @@ async def _check_upgrade(nexus, nexus_db) -> None:
             )
             # The groups hold the role holders.
             alpha = records[workspace_container("org-1", "ws-a")]
-            holders = container_defaults.role_holders(nexus.iam, alpha.container)
+            holders = container_defaults.holders_by_container(nexus.iam).get(alpha.container, {})
             assert set(nexus.iam.list_group_members(alpha.members_group_id)) == set(holders)
             assert nexus.principal("bob") in set(nexus.iam.list_group_members(made.admins_group_id))
         # Again: nothing more.
@@ -673,3 +679,82 @@ async def test_two_organizations_with_one_name_get_two_access_policies(world, ne
     with as_service_account("api"):
         again = container_defaults.make_org(world.iam, "acme-2", "Acme")
     assert again.access_policy_id == second.access_policy_id
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_of_an_organization_with_no_record_is_under_its_access(
+    world, nexus_db, monkeypatch
+):
+    """Acme was made while the moves were pending (no record), the moves were
+    recorded since, then Beta is made in it: Acme gets its defaults first, and
+    Beta's access is a sub-policy of Acme's, so narrowing Acme narrows Beta."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import policy_tree
+
+    beta = workspace_container("acme", "beta")
+    monkeypatch.setattr(policy_tree, "_pending", True)
+    async with nexus_db() as db:
+        await _users(db, "olivia", "bob", "root")
+        orgs = OrganizationService(adapter=OrganizationSecondaryAdapterPostgres(db=db))
+        await orgs.create_organization(
+            name="Acme", slug="acme", owner_id="olivia", now=NOW, org_id="acme"
+        )
+        await db.commit()
+        assert await SqlDefaultsStore(db).get(org_container("acme")) is None
+    monkeypatch.setattr(policy_tree, "_pending", False)
+    async with nexus_db() as db:
+        workspaces = WorkspaceService(adapter=WorkspaceSecondaryAdapterPostgres(db=db))
+        await workspaces.create_workspace(
+            WorkspaceCreateInput(
+                name="Beta", slug="beta", owner_id="olivia", organization_id="acme", id="beta"
+            )
+        )
+        await db.commit()
+        store = SqlDefaultsStore(db)
+        org_record, ws_record = await store.get(org_container("acme")), await store.get(beta)
+    assert org_record is not None and ws_record is not None
+    with as_service_account("api"):
+        assert world.iam.get_policy(ws_record.access_policy_id).parent_id == (
+            org_record.access_policy_id
+        )
+    assert _named(world, "Acme access") and len(_named(world, "Acme access")) == 1
+    # Narrowing Acme narrows Beta.
+    await MEMBERSHIPS.grant("bob", "owner", beta)
+    world.platform_admin("root")
+    with use_call_context(NexusIam.context("root")):
+        world.iam.update_policy(
+            org_record.access_policy_id, expected_revision=1, document=_agents("recruiter", "coach")
+        )
+    with use_call_context(NexusIam.context("olivia")):
+        world.iam.update_policy(
+            ws_record.access_policy_id, expected_revision=1, document=_agents("recruiter", "coach")
+        )
+    assert _uses(world, "bob", _agent(beta, "coach"))
+    with use_call_context(NexusIam.context("root")):
+        world.iam.update_policy(
+            org_record.access_policy_id, expected_revision=2, document=_agents("recruiter")
+        )
+    assert not _uses(world, "bob", _agent(beta, "coach"))
+    assert _uses(world, "bob", _agent(beta, "recruiter"))
+
+
+@pytest.mark.asyncio
+async def test_a_recorded_workspace_access_with_no_parent_is_put_under_its_organization(
+    world, nexus_db
+):
+    """A "<W> access" an earlier version made with no parent (its organization had no
+    record then) is put under the organization's at the next start, once."""
+    _org, _ws, org_record, ws_record = await _acme(nexus_db)
+    with as_service_account("api"):
+        policy = world.iam.get_policy(ws_record.access_policy_id)
+        world.iam.update_policy(policy.id, expected_revision=policy.revision, parent="")
+        assert world.iam.get_policy(policy.id).parent_id is None
+    await _moves_recorded(nexus_db, "policy_tree_v1", "container_names_v1")
+    async with nexus_db() as db:
+        report = await container_defaults.migrate(db)
+    assert report.reparented == [ALPHA] and report.failed == []
+    with as_service_account("api"):
+        assert world.iam.get_policy(ws_record.access_policy_id).parent_id == (
+            org_record.access_policy_id
+        )
+    async with nexus_db() as db:
+        assert (await container_defaults.migrate(db)).reparented == []
