@@ -288,6 +288,9 @@ class ApiConfiguration(BaseModel):
     logo_path: str = "assets/logo.png"
     favicon_path: str = "assets/favicon.ico"
     cors_origins: list[str] = ["http://localhost:9879"]
+    # Serve /openapi.json, /docs and /redoc. Unset: on for local development
+    # only (ENV unset, local or dev). Off, /openapi.json needs the API key.
+    docs_enabled: bool | None = None
     # Uvicorn's auto-reload on changes under src/: for local development only.
     # The reloader rescans src/ all the time, and in NATS mode it keeps an
     # engine that lost NATS for good running (naas_abi_sdk.lifeline is off).
