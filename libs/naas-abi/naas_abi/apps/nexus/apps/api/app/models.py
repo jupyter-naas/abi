@@ -306,8 +306,14 @@ class WorkspaceModel(Base):
         "GraphEdgeModel", back_populates="workspace", cascade="all, delete-orphan"
     )
     secrets = relationship("SecretModel", back_populates="workspace", cascade="all, delete-orphan")
+    # No migration creates ``abi_servers`` (``core/platform_tables.py``): deleting a
+    # workspace leaves its rows, if any, to the foreign key's ON DELETE CASCADE
+    # rather than reading a table that is not there.
     abi_servers = relationship(
-        "ABIServerModel", back_populates="workspace", cascade="all, delete-orphan"
+        "ABIServerModel",
+        back_populates="workspace",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
     inference_servers = relationship(
         "InferenceServerModel", back_populates="workspace", cascade="all, delete-orphan"
