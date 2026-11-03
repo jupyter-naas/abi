@@ -12,6 +12,8 @@ import {
   grantsOn,
   refusedTypes,
   scopedName,
+  searchPublishers,
+  serviceGroups,
   splitStatements,
   wildcardProblem,
   type Choices,
@@ -259,5 +261,51 @@ describe('patterns', () => {
     expect(atScope('${scope}', WS)).toBe(WS);
     expect(atScope('${scope}/triple_store:graph/*', `${ORG}/*`)).toBe(`${ORG}/triple_store:graph/*`);
     expect(atScope('${scope}/nexus:feature/chat', 'abi:')).toBe('abi:nexus:feature/chat');
+  });
+});
+
+describe('grouping and search', () => {
+  const view: PublishersView = {
+    scope: WS,
+    publishers: [
+      {
+        id: 'engine',
+        kind: 'engine',
+        types: [
+          publishedType('cache', 'service', [['cache:Flush', ['${scope}/*']]]),
+          publishedType('activity_log', 'actor', [['activity_log:ListEvents', ['${scope}/*']]]),
+          publishedType('cache', 'key', [['cache:Get', ['${scope}/*']]]),
+          publishedType('document', 'document', [['document:Write', ['${scope}/*']]]),
+          publishedType('document', 'collection', [['document:Read', ['${scope}/*']]], { container: true }),
+        ],
+      },
+      {
+        id: 'naas_abi_marketplace.ai.chatgpt',
+        kind: 'module',
+        types: [publishedType('module', 'agent', [['module:UseAgent', ['${scope}/*']]], { module: 'naas_abi_marketplace.ai.chatgpt' })],
+      },
+    ],
+  };
+  const publishers = builderPublishers(view);
+
+  it('groups a publisher’s types by service, by name, containers first in each', () => {
+    const groups = serviceGroups(publishers[0].types);
+    expect(groups.map((g) => [g.service, g.types.map((t) => t.key)])).toEqual([
+      ['activity_log', ['activity_log:actor']],
+      ['cache', ['cache:key', 'cache:service']],
+      ['document', ['document:collection', 'document:document']],
+    ]);
+  });
+
+  it('searches publishers, types, labels, actions and modules', () => {
+    const found = (text: string) => searchPublishers(publishers, text).map((p) => [p.id, p.types.map((t) => t.key)]);
+    expect(found('')).toHaveLength(2);
+    expect(found('chatgpt')).toEqual([['naas_abi_marketplace.ai.chatgpt', ['module:agent@naas_abi_marketplace.ai.chatgpt']]]);
+    expect(found('cache:')).toEqual([['engine', ['cache:service', 'cache:key']]]);
+    expect(found('Collections')).toEqual([['engine', ['document:collection']]]);
+    expect(found('listevents')).toEqual([['engine', ['activity_log:actor']]]);
+    expect(found('engine')).toEqual([['engine', publishers[0].types.map((t) => t.key)]]);
+    expect(found('UseAgent')).toEqual([['naas_abi_marketplace.ai.chatgpt', ['module:agent@naas_abi_marketplace.ai.chatgpt']]]);
+    expect(found('nothing like it')).toEqual([]);
   });
 });

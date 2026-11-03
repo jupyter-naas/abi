@@ -1,13 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Plus, X } from 'lucide-react';
 import { IamAdminError, type IamAdminApi } from '@/lib/iam-admin/api';
 import type { ListedResource } from '@/lib/iam-admin/types';
 import { POLICY_VERSION } from '../policy-editor-model';
 import {
+  allTypes,
   grantableOn,
   scopedName,
+  searchPublishers,
+  serviceGroups,
   wildcardProblem,
   type BuilderPublisher,
   type BuilderType,
@@ -18,6 +21,11 @@ import './policy-builder.css';
 
 const SEARCH_DELAY_MS = 250;
 const PAGE = 25;
+/** A builder offering at most this many types opens every publisher and group; a larger one opens
+ *  only those with choices. */
+const OPEN_UP_TO = 12;
+/** A search finding at most this many types opens them (each lists its resources). */
+const SEARCH_OPENS_UP_TO = 8;
 
 function message(error: unknown): string {
   return error instanceof IamAdminError || error instanceof Error ? error.message : String(error);
@@ -173,6 +181,8 @@ function TypeSection({
   choice,
   onChange,
   refused,
+  open,
+  onToggle,
   delayMs,
 }: {
   api: IamAdminApi;
@@ -183,16 +193,14 @@ function TypeSection({
   choice: Choice;
   onChange: (choice: Choice) => void;
   refused?: string;
+  open: boolean;
+  onToggle: () => void;
   delayMs: number;
 }) {
   const chosen = choice.actions.length + choice.resources.length > 0;
-  const [open, setOpen] = useState(chosen || !!refused);
   const [search, setSearch] = useState('');
   const { listing, more } = useListing(api, scope, type, open, search, delayMs);
   const title = publisher.kind === 'module' ? `${publisher.label} ${type.label}` : type.label;
-  useEffect(() => {
-    if (refused) setOpen(true);
-  }, [refused]);
 
   const toggleAction = (action: string, on: boolean) =>
     onChange({ ...choice, actions: on ? [...choice.actions, action] : choice.actions.filter((a) => a !== action) });
@@ -229,7 +237,7 @@ function TypeSection({
         className="access-builder-type-header"
         aria-expanded={open}
         aria-label={`${open ? 'Close' : 'Open'} ${title}`}
-        onClick={() => setOpen(!open)}
+        onClick={onToggle}
       >
         {open ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
         <span className="access-builder-type-label">{title}</span>
@@ -372,12 +380,42 @@ function TypeSection({
   );
 }
 
+/** Whether a type has a choice: an action or a resource picked. */
+function hasChoice(choices: Choices, key: string): boolean {
+  const choice = choices[key];
+  return !!choice && choice.actions.length + choice.resources.length > 0;
+}
+
+const groupKey = (publisher: string, service: string) => `${publisher}/${service}`;
+
+/** What is open, by key: publishers, their service groups and their types. */
+type Opened = { publishers: Record<string, boolean>; groups: Record<string, boolean>; types: Record<string, boolean> };
+
+/** What opens on load: a small builder's publishers and groups; else those with choices (or
+ *  IAM's refusal); the types with choices. */
+function initiallyOpen(publishers: BuilderPublisher[], choices: Choices, refused: Record<string, string>): Opened {
+  const few = allTypes(publishers).length <= OPEN_UP_TO;
+  const marked = (key: string) => hasChoice(choices, key) || key in refused;
+  const opened: Opened = { publishers: {}, groups: {}, types: {} };
+  for (const publisher of publishers) {
+    opened.publishers[publisher.id] = few || publishers.length === 1 || publisher.types.some((t) => marked(t.key));
+    for (const group of serviceGroups(publisher.types)) {
+      opened.groups[groupKey(publisher.id, group.service)] = few || publisher.types.length <= OPEN_UP_TO || group.types.some((t) => marked(t.key));
+    }
+    for (const type of publisher.types) opened.types[type.key] = marked(type.key);
+  }
+  return opened;
+}
+
 /**
  * What the caller may grant at the scope, by publisher (the engine, naas_abi, then the modules):
  * per resource type its actions, then its resources, picked from the listing or written as a
- * wildcard under `${scope}/`. ``refused`` holds IAM's refusal of a type's choice, shown beside
- * it. ``kept`` counts the statements the builder cannot show (they stay in the policy: the
- * Statements view edits them).
+ * wildcard under `${scope}/`. Each publisher, and each service group of one with types of several
+ * services (the engine's), opens and closes; one search filters the whole builder (publishers,
+ * `service:type`, labels, actions, modules) and opens what it finds, and clearing it restores
+ * what was open. Choices stay whatever is shown. ``refused`` holds IAM's refusal of a type's
+ * choice, shown beside it (and opened). ``kept`` counts the statements the builder cannot show
+ * (they stay in the policy: the Statements view edits them).
  */
 export function PolicyBuilder({
   api,
@@ -402,6 +440,55 @@ export function PolicyBuilder({
   refused?: Record<string, string>;
   delayMs?: number;
 }) {
+  const [opened, setOpened] = useState<Opened>(() => initiallyOpen(publishers, choices, refused));
+  const [search, setSearch] = useState('');
+  // What is opened or closed while searching: dropped with the search.
+  const [searchOpened, setSearchOpened] = useState<Opened>({ publishers: {}, groups: {}, types: {} });
+  const searching = search.trim() !== '';
+  const shown = useMemo(() => searchPublishers(publishers, search), [publishers, search]);
+  const opensTypes = allTypes(shown).length <= SEARCH_OPENS_UP_TO;
+  const refusedKeys = Object.keys(refused).sort().join('\n');
+
+  // A refusal opens its type, and what holds it.
+  useEffect(() => {
+    const keys = Object.keys(refused);
+    if (keys.length === 0) return;
+    setOpened((current) => {
+      const next: Opened = {
+        publishers: { ...current.publishers },
+        groups: { ...current.groups },
+        types: { ...current.types },
+      };
+      for (const publisher of publishers) {
+        for (const type of publisher.types.filter((t) => keys.includes(t.key))) {
+          next.publishers[publisher.id] = true;
+          next.groups[groupKey(publisher.id, type.service)] = true;
+          next.types[type.key] = true;
+        }
+      }
+      return next;
+    });
+    // Read through their keys.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refusedKeys]);
+
+  const changeSearch = (text: string) => {
+    setSearch(text);
+    setSearchOpened({ publishers: {}, groups: {}, types: {} });
+  };
+  const isOpen = (kind: keyof Opened, key: string): boolean => {
+    const stored = opened[kind][key] ?? (kind === 'groups');
+    if (!searching) return stored;
+    const forced = kind === 'types' ? opensTypes || stored : true;
+    return searchOpened[kind][key] ?? forced;
+  };
+  const toggle = (kind: keyof Opened, key: string) => {
+    const next = !isOpen(kind, key);
+    const write = (current: Opened): Opened => ({ ...current, [kind]: { ...current[kind], [key]: next } });
+    if (searching) setSearchOpened(write);
+    else setOpened(write);
+  };
+
   if (publishers.length === 0) {
     return (
       <p className="access-policy-notice" role="status">
@@ -409,40 +496,100 @@ export function PolicyBuilder({
       </p>
     );
   }
+
+  const typeSection = (publisher: BuilderPublisher, type: BuilderType) => (
+    <TypeSection
+      key={type.key}
+      api={api}
+      scope={scope}
+      validateAt={validateAt}
+      publisher={publisher}
+      type={type}
+      choice={choices[type.key] ?? { actions: [], resources: [] }}
+      onChange={(choice) => onChange(type.key, choice)}
+      refused={refused[type.key]}
+      open={isOpen('types', type.key)}
+      onToggle={() => toggle('types', type.key)}
+      delayMs={delayMs}
+    />
+  );
+  const chosenOf = (types: BuilderType[]) => types.filter((t) => choices[t.key]?.actions.length && choices[t.key]?.resources.length).length;
+
   return (
     <div className="access-builder" aria-label="Policy builder">
+      <input
+        type="search"
+        className="access-policy-input access-builder-search"
+        aria-label="Search the builder"
+        placeholder="Search publishers, resource types and actions"
+        value={search}
+        onChange={(event) => changeSearch(event.target.value)}
+      />
       {kept > 0 && (
         <p className="access-policy-muted">
           {kept} other statement{kept === 1 ? '' : 's'} stay{kept === 1 ? 's' : ''} as written (Statements view).
         </p>
       )}
-      {publishers.map((publisher) => {
-        const chosen = publisher.types.filter((t) => choices[t.key]?.actions.length && choices[t.key]?.resources.length).length;
+      {shown.length === 0 && (
+        <p className="access-policy-muted" role="status" data-builder-nothing="">
+          Nothing matches.
+        </p>
+      )}
+      {shown.map((publisher) => {
+        // Counted on all the publisher's types, whatever the search shows.
+        const all = publishers.find((p) => p.id === publisher.id)?.types ?? publisher.types;
+        const open = isOpen('publishers', publisher.id);
+        const groups = serviceGroups(publisher.types);
         return (
           <fieldset key={publisher.id} className="access-builder-group" data-builder-publisher={publisher.id}>
             <legend className="access-builder-legend">
-              <span>{publisher.label}</span>
-              <span className="access-policy-muted">
+              <button
+                type="button"
+                className="access-builder-toggle"
+                aria-expanded={open}
+                aria-label={`${open ? 'Close' : 'Open'} ${publisher.label}`}
+                onClick={() => toggle('publishers', publisher.id)}
+              >
+                {open ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
+                <span>{publisher.label}</span>
+              </button>
+              <span className="access-policy-muted" data-builder-count="">
                 {publisher.kind === 'module' ? 'module' : publisher.kind === 'engine' ? 'kernel services' : 'Nexus'} ·{' '}
-                {chosen} of {publisher.types.length} chosen
+                {chosenOf(all)} of {all.length} chosen
               </span>
             </legend>
-            <ul className="access-builder-types">
-              {publisher.types.map((type) => (
-                <TypeSection
-                  key={type.key}
-                  api={api}
-                  scope={scope}
-                  validateAt={validateAt}
-                  publisher={publisher}
-                  type={type}
-                  choice={choices[type.key] ?? { actions: [], resources: [] }}
-                  onChange={(choice) => onChange(type.key, choice)}
-                  refused={refused[type.key]}
-                  delayMs={delayMs}
-                />
-              ))}
-            </ul>
+            <div hidden={!open}>
+              {groups.length > 1 ? (
+                groups.map((group) => {
+                  const key = groupKey(publisher.id, group.service);
+                  const groupOpen = isOpen('groups', key);
+                  const chosen = chosenOf(group.types);
+                  return (
+                    <div key={group.service} className="access-builder-service" data-builder-service={group.service}>
+                      <button
+                        type="button"
+                        className="access-builder-toggle access-builder-service-header"
+                        aria-expanded={groupOpen}
+                        aria-label={`${groupOpen ? 'Close' : 'Open'} ${publisher.label} ${group.service}`}
+                        onClick={() => toggle('groups', key)}
+                      >
+                        {groupOpen ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
+                        <code>{group.service}</code>
+                        <span className="access-policy-muted">
+                          {group.types.length} type{group.types.length === 1 ? '' : 's'}
+                          {chosen > 0 ? ` · ${chosen} chosen` : ''}
+                        </span>
+                      </button>
+                      <ul className="access-builder-types" hidden={!groupOpen}>
+                        {group.types.map((type) => typeSection(publisher, type))}
+                      </ul>
+                    </div>
+                  );
+                })
+              ) : (
+                <ul className="access-builder-types">{groups.flatMap((g) => g.types).map((type) => typeSection(publisher, type))}</ul>
+              )}
+            </div>
           </fieldset>
         );
       })}

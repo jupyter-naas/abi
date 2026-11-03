@@ -153,3 +153,34 @@
   white-space: normal;
   overflow-wrap: anywhere;
 }
+
+/* A publisher's or a service group's header: opens and closes what it holds. */
+.access-builder-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.access-builder-search {
+  width: 100%;
+}
+
+.access-builder-service + .access-builder-service {
+  margin-top: var(--space-1);
+}
+
+.access-builder-service-header {
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  font-size: var(--font-size-sm);
+}
+
+.access-builder-service > .access-builder-types {
+  padding-left: var(--space-3);
+}

@@ -108,6 +108,45 @@ export function allTypes(publishers: BuilderPublisher[]): BuilderType[] {
   return publishers.flatMap((p) => p.types);
 }
 
+/** A publisher's types of one service, under a heading of their own. */
+export type ServiceGroup = { service: string; types: BuilderType[] };
+
+/** A publisher's types by service, the services by name; in each, its containers first (what
+ *  holds the rest), then by type name. The API lists them interleaved. */
+export function serviceGroups(types: BuilderType[]): ServiceGroup[] {
+  const byService = new Map<string, BuilderType[]>();
+  for (const type of types) byService.set(type.service, [...(byService.get(type.service) ?? []), type]);
+  return [...byService]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([service, found]) => ({
+      service,
+      types: [...found].sort((a, b) => Number(b.container) - Number(a.container) || a.type.localeCompare(b.type)),
+    }));
+}
+
+/** What the builder's search reads of a type: its `service:type` and label, its module, and its
+ *  actions' names. */
+function typeText(type: BuilderType): string {
+  return [`${type.service}:${type.type}`, type.label, type.module ?? '', ...type.actions.flatMap((a) => [a.action, a.name])]
+    .join(' ')
+    .toLowerCase();
+}
+
+/** The publishers and types the builder's search ``text`` finds: a publisher whose id or label
+ *  matches with all its types, any other with the types whose name, label, module or action
+ *  names match. Empty text: everything. */
+export function searchPublishers(publishers: BuilderPublisher[], text: string): BuilderPublisher[] {
+  const wanted = text.trim().toLowerCase();
+  if (!wanted) return publishers;
+  return publishers
+    .map((publisher) =>
+      `${publisher.id} ${publisher.label}`.toLowerCase().includes(wanted)
+        ? publisher
+        : { ...publisher, types: publisher.types.filter((type) => typeText(type).includes(wanted)) },
+    )
+    .filter((publisher) => publisher.types.length > 0);
+}
+
 // -- resources -----------------------------------------------------------------------------
 
 /** A resource named canonically (`<container>/<service>:<type>/<id>`, as the listing names it)
