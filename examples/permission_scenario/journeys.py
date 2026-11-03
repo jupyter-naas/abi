@@ -157,6 +157,13 @@ def access_policy(api: Api, scope: str, owner: str, name: str) -> dict:
     raise SystemExit(f"no policy {name!r} owned by {owner}")
 
 
+def keeping_nothing(document: dict, current: dict) -> dict:
+    """``document`` with the ``Nothing`` statement of a new access policy kept, as the
+    builder keeps a statement it does not show when it adds the first types."""
+    kept = [s for s in current["statements"] if s.get("sid") == "Nothing"]
+    return {**document, "statements": [*kept, *document["statements"]]}
+
+
 def put_document(api: Api, email: str, policy_id: str, document: dict) -> dict:
     """Replace a policy's document as ``email``: ``{"status", "body"|"detail"}``."""
     current = api.get(ADMIN, f"/api/iam/admin/policies/{policy_id}")
@@ -473,11 +480,22 @@ def journeys(api: Api, grammar: Grammar, report: Report, facts: dict[str, Any]) 
     entitled = access_document(
         agents=list(PEOPLE_AGENTS), apps=["Directory", "Prices"], features=ACME_FEATURES
     )
-    set_alpha = put_document(api, olivia, alpha_access["id"], entitled)
+    # The first widening keeps "Nothing", as the builder does.
+    set_alpha = put_document(
+        api,
+        olivia,
+        alpha_access["id"],
+        keeping_nothing(entitled, alpha_access["document"]),
+    )
     bravo_doc = access_document(
         agents=[], apps=["Prices"], features=["chat", "apps"], export=False
     )
-    set_bravo = put_document(api, olivia, bravo_access["id"], bravo_doc)
+    set_bravo = put_document(
+        api,
+        olivia,
+        bravo_access["id"],
+        keeping_nothing(bravo_doc, bravo_access["document"]),
+    )
     check(
         "UJ-O3",
         "Olivia gives Alpha the four dev.people agents and both apps, Bravo Prices only",
