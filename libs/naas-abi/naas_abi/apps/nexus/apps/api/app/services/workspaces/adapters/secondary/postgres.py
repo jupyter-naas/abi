@@ -18,6 +18,7 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     UserModel,
     WorkspaceModel,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import SqlDefaultsStore
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
     InferenceServerCreateInput,
     InferenceServerRecord,
@@ -51,6 +52,11 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
         if db is None:
             raise RuntimeError("No database session bound in ServiceRegistry context")
         return db
+
+    def container_defaults(self) -> SqlDefaultsStore:
+        """Where the access policy and default groups of what this adapter creates
+        are recorded: this adapter's session, so in the same transaction."""
+        return SqlDefaultsStore(self.db)
 
     async def list_all_workspaces(self) -> list[WorkspaceRecord]:
         result = await self.db.execute(select(WorkspaceModel).order_by(WorkspaceModel.name))

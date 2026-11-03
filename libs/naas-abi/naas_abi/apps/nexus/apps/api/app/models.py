@@ -939,6 +939,25 @@ class InvitationModel(Base):
 
 
 # ============================================
+# Each organization's and workspace's access policy and default groups
+# ============================================
+
+
+class ContainerDefaultModel(Base):
+    """The IAM access policy and default groups ("<X> members", "<X> admins") of
+    an organization or a workspace, by its IAM container name
+    (``services/iam/container_defaults.py``). IAM holds them; this says which."""
+
+    __tablename__ = "container_defaults"
+
+    container = Column(String(512), primary_key=True)
+    access_policy_id = Column(String(64), nullable=True)
+    members_group_id = Column(String(64), nullable=True)
+    admins_group_id = Column(String(64), nullable=True)
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+
+
+# ============================================
 # Workflow runs started from a workspace
 # ============================================
 

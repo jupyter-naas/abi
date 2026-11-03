@@ -6,6 +6,11 @@ from typing import Any
 from uuid import uuid4
 
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ, Authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
+    CONTAINER_DEFAULTS,
+    ContainerDefaults,
+    defaults_store_of,
+)
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
     MEMBERSHIPS,
     ROLE_NAMES,
@@ -34,6 +39,16 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
     UserRecord,
 )
 from naas_abi_core import logger
+
+
+class OrganizationHasWorkspacesError(Exception):
+    """An organization is deleted once it has no workspace: these are left."""
+
+    def __init__(self, org_id: str, workspaces: list[tuple[str, str]]) -> None:
+        names = ", ".join(f"{name} ({ws_id})" for ws_id, name in workspaces)
+        super().__init__(f"Organization {org_id} still has workspaces: {names}. Delete them first")
+        self.org_id = org_id
+        self.workspaces = workspaces
 
 
 @dataclass
@@ -182,10 +197,12 @@ class OrganizationService:
         adapter: OrganizationPermissionPort,
         memberships: Memberships = MEMBERSHIPS,
         authz: Authz | None = None,
+        defaults: ContainerDefaults = CONTAINER_DEFAULTS,
     ):
         self.adapter = adapter
         self.memberships = memberships
         self._authz = authz or AUTHZ
+        self.defaults = defaults
 
     async def get_organization_role(self, user_id: str, org_id: str) -> str | None:
         return await self.memberships.role_at(user_id, org_container(org_id))
@@ -285,14 +302,33 @@ class OrganizationService:
         try:
             scope = await self.memberships.register_org(record.id)
             await self.memberships.grant(owner_id, "owner", scope)
+            # Its access policy (nothing, the platform admin widens it) and its
+            # members and admins groups, the owner in both.
+            await self.defaults.org_created(defaults_store_of(self.adapter), record.id, name)
         except Exception:
             await self._undo_create(record.id)
             raise
         return record
 
+    async def delete_organization(self, org_id: str) -> bool:
+        """Delete an organization that has no workspace left: its row, then its IAM
+        container with what it owns (``drop_scope``), then its access policy. One
+        with workspaces is refused (``OrganizationHasWorkspacesError``, naming them):
+        deleting their data with it is not this call's to decide. The route checked
+        ``DeleteOrganization`` on the organization."""
+        workspaces = await self.adapter.list_workspaces_for_org(org_id=org_id)
+        if workspaces:
+            raise OrganizationHasWorkspacesError(org_id, [(w.id, w.name) for w in workspaces])
+        deleted = await self.adapter.delete_organization(org_id=org_id)
+        if deleted:
+            await self.memberships.drop_scope(org_id, None)
+            await self.defaults.dropped(defaults_store_of(self.adapter), org_container(org_id))
+        return deleted
+
     async def _undo_create(self, org_id: str) -> None:
         for undo in (
             lambda: self.memberships.drop_scope(org_id, None),
+            lambda: self.defaults.dropped(defaults_store_of(self.adapter), org_container(org_id)),
             lambda: self.adapter.delete_organization(org_id=org_id),
         ):
             try:

@@ -46,6 +46,7 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
 from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
     LastOwnerError,
     OrganizationDomainAlreadyExistsError,
+    OrganizationHasWorkspacesError,
     OrganizationMemberAlreadyExistsError,
     OrganizationService,
     OrganizationSlugAlreadyExistsError,
@@ -506,6 +507,33 @@ async def update_organization(
     if row is None:
         raise HTTPException(status_code=404, detail="Organization not found")
     return _to_schema(row)
+
+
+@router.delete(
+    "/{org_id}",
+    dependencies=[
+        guard(
+            "DeleteOrganization",
+            workspace=None,
+            org="org_id",
+            denied="Only the organization's owners and the platform administrators can delete it",
+        )
+    ],
+)
+async def delete_organization(
+    org_id: str,
+    current_user: User = Depends(get_current_user_required),
+    service: OrganizationService = Depends(get_organization_service),
+) -> dict[str, str]:
+    """Delete an organization that has no workspace left (409 naming those it still
+    has): its row, its IAM container with what it owns, its access policy."""
+    try:
+        deleted = await service.delete_organization(org_id)
+    except OrganizationHasWorkspacesError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    return {"status": "deleted", "id": org_id}
 
 
 @router.post(

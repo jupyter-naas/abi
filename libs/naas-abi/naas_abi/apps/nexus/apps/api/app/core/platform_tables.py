@@ -106,6 +106,12 @@ _ENTRIES: list[PlatformTableEntry] = [
             "IAM migrations",
             "One-time moves of Nexus role data into IAM, with when they ran and their report.",
         ),
+        (
+            "container_defaults",
+            "Access policies and default groups",
+            "Each organization's and workspace's IAM access policy and its members and "
+            "admins groups, by container.",
+        ),
     ),
     *_section(
         "Chat, agents & models",

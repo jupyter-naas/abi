@@ -27,6 +27,7 @@ from typing import Any, TypeVar
 
 from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ, Authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import CONTAINER_DEFAULTS
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
     ORGANIZATION,
     PLATFORM,
@@ -124,6 +125,9 @@ class Memberships:
         await self._notify(scope)
 
     async def _notify(self, scope: str, *, dropped: bool = False) -> None:
+        if not dropped:
+            # "<X> members" and "<X> admins" follow the roles held at X.
+            await CONTAINER_DEFAULTS.sync_scope(scope)
         workspace = workspace_of(scope) if is_workspace_container(scope) else None
         if workspace is None:
             return

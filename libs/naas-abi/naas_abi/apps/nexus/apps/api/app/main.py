@@ -346,6 +346,7 @@ async def _prepare_iam() -> None:
     from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal, async_engine
     from naas_abi.apps.nexus.apps.api.app.services.iam import (
         bootstrap,
+        container_defaults,
         container_names,
         policy_tree,
     )
@@ -354,6 +355,9 @@ async def _prepare_iam() -> None:
 
     log = logging.getLogger(__name__)
     MEMBERSHIPS.known_user = bootstrap.nexus_user_exists
+    # A role changed in another process's organization or workspace: its default
+    # groups are read from the database.
+    container_defaults.CONTAINER_DEFAULTS.session_factory = AsyncSessionLocal
     # Refused until the moves below say the sets are policies and the names
     # container paths: never wider.
     policy_tree.set_pending(True)
@@ -392,8 +396,24 @@ async def _prepare_iam() -> None:
                     log.info("Organization-wide roles given to %d owner(s) and admin(s)", made)
                 # Nothing left to move: say so to a start that skipped the moves.
                 await policy_tree.migrate_sets(db)
+                # Each organization and workspace has its access policy and its
+                # members and admins groups (made once for those that predate them).
+                await container_defaults.migrate(db)
     except Exception:
         log.exception("Nexus could not set up its authorization in IAM: every request is refused")
+
+
+async def _container_defaults_after_seeds() -> None:
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    from naas_abi.apps.nexus.apps.api.app.services.iam import container_defaults
+
+    try:
+        async with AsyncSessionLocal() as db:
+            await container_defaults.migrate(db)
+    except Exception:  # noqa: BLE001 - made at the next start; nobody gains anything meanwhile
+        logging.getLogger(__name__).exception(
+            "Access policies and default groups of the seeded organizations and workspaces"
+        )
 
 
 _upgrade_watch_task: asyncio.Task[None] | None = None
@@ -547,6 +567,9 @@ async def _startup(app: FastAPI) -> None:
     # resources Nexus keeps for each are placed in it, which is what lets its
     # members' roles reach them.
     await _place_workspace_resources()
+    # The organizations and workspaces the seeds made get their access policy
+    # and default groups (those the routes create get them at once).
+    await _container_defaults_after_seeds()
 
     # Maps feeds, layers and basemaps declared by modules (artifacts/maps/{layers/**,basemaps/*}/manifest.json),
     # then config Maps ids (workspaces[].maps) that nothing provides. Both only
