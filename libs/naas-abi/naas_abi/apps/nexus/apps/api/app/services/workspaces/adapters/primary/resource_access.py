@@ -132,12 +132,15 @@ async def assignment_catalog(
     user_id: str,
     held: set[str],
     enabled: list[str] | None = None,
+    entries: list[dict] | None = None,
 ) -> list[dict]:
     """What ``user_id`` may assign to the workspace, plus what it holds already:
-    ``held`` graphs, the ``enabled`` ontology refs."""
+    ``held`` graphs, the ``enabled`` ontology refs. ``entries``: every ontology file,
+    when the caller listed them already (``_ontology_entries``)."""
     if kind == "graphs":
         return await asyncio.to_thread(_graph_catalog, graphs, workspace_id, user_id, held)
-    entries = await _ontology_entries(ontologies)
+    if entries is None:
+        entries = await _ontology_entries(ontologies)
     assignable = await assignable_paths(user_id, workspace_id, [e["path"] for e in entries])
     return [
         entry
@@ -253,6 +256,8 @@ async def save_assignments(
     graphs: Any = Depends(get_graph_service),
 ):
     current = await load_resource_policy(db, workspace_id, kind)
+    # Every ontology file, listed once: the catalog, and the words of a refusal.
+    entries = await _ontology_entries(ontologies) if kind == "ontologies" else None
     catalog = await assignment_catalog(
         kind,
         workspace_id,
@@ -261,6 +266,7 @@ async def save_assignments(
         user_id=user.id,
         held=_held(kind, current.data),
         enabled=_enabled(kind, current.data),
+        entries=entries,
     )
     try:
         data = validate_policy(kind, body.policy)
@@ -271,7 +277,7 @@ async def save_assignments(
             added = _held(kind, data) - _held(kind, current.data)
         if kind == "ontologies" and added - known:
             # An ontology of the deployment the caller may not assign here.
-            existing = {entry["id"] for entry in await _ontology_entries(ontologies)}
+            existing = {entry["id"] for entry in entries or []}
             refused = sorted((added - known) & existing)
             if refused:
                 raise HTTPException(
