@@ -70,7 +70,8 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
   workspaces: Alpha (ws-…). Delete them first"): deleting their data with it is not this route's to decide. Otherwise
   its row goes (members and domains with it), then its IAM container with what it owns (`drop_scope`), then its
   access policy, the platform's (`ContainerDefaults.dropped`). The row is held for writing first
-  (`lock_organization`): a workspace made in it meanwhile waits for the transaction, then finds the organization
+  (`lock_organization`: `SELECT … FOR UPDATE` on PostgreSQL, which a workspace insert's foreign key check waits for;
+  a write on SQLite, which takes the database): a workspace made in it meanwhile waits for the transaction, then finds the organization
   gone, never survives with no organization while its container goes with the organization's. A container IAM still
   registers inside it (a workspace with no row, a module's) refuses it too (`Memberships.containers_in`), named.
 - **A create that fails after the row exists removes it** (and its IAM container): see `OrganizationService.create_organization`
@@ -259,6 +260,9 @@ policy tree of issue #1413's journeys:
   organization or a workspace while a move is pending makes none either (`moves_pending`); the start after the moves
   gives it its own. An organization or workspace with no record gets its own (a seed's, an import's); one with a
   record is never touched.
+- **Unique to its container.** An organization's access policy names the organization's id in its description, so
+  one made and never recorded is found again for that organization only: two organizations of the same name never share
+  one (a workspace's is found by its owner, the workspace).
 - **Names.** The access policy and the groups keep the name the organization or workspace had when they were made:
   renaming it renames neither (IAM groups have no rename; a policy may be renamed by hand).
 

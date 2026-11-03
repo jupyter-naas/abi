@@ -64,8 +64,11 @@ ROLES = ("owner", "admin", "member", "viewer")
 ADMIN_ROLES = frozenset({"owner", "admin"})
 NOTHING_SID = "Nothing"
 
+# The organization's id is part of it: names are not unique, and an access policy made
+# before and never recorded is found again by owner, name and description
+# (``_access_made_before``), never another organization's of the same name.
 ORG_ACCESS = (
-    "What organization {label} may use. The platform administrators widen it; its "
+    "What organization {label} ({org_id}) may use. The platform administrators widen it; its "
     'admins and owners hold it below the organization (through "{label} admins"). '
     "Its workspaces' access policies are sub-policies of it."
 )
@@ -316,7 +319,7 @@ def make_org(iam: Any, org_id: str, label: str, *, adopt: str | None = None) -> 
     """ "<O> access" (the platform's, allowing nothing) attached to "<O> admins"
     below the organization, and the two groups; with ``adopt``, that policy instead,
     attached to nothing. Idempotent, and a failure leaves nothing. As ``api``."""
-    name, description = access_name(label), ORG_ACCESS.format(label=label)
+    name, description = access_name(label), ORG_ACCESS.format(label=label, org_id=org_id)
     return _ensure(
         iam,
         container=org_container(org_id),

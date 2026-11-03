@@ -440,14 +440,25 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
         )
 
     async def lock_organization(self, org_id: str) -> bool:
-        # A write takes the row (PostgreSQL) or the database (SQLite) for this
-        # transaction: a workspace inserted in the organization waits for it.
-        result = await self.db.execute(
+        # PostgreSQL: FOR UPDATE conflicts with the FOR KEY SHARE a workspace
+        # insert's foreign key check takes, so the insert waits for this
+        # transaction, then fails its key once the organization is gone (a plain
+        # UPDATE takes FOR NO KEY UPDATE, which does not stop it).
+        found = (
+            await self.db.execute(
+                select(OrganizationModel.id).where(OrganizationModel.id == org_id).with_for_update()
+            )
+        ).first()
+        if found is None:
+            return False
+        # SQLite has no row locks (FOR UPDATE is not emitted): a write takes the
+        # database for this transaction, so another writer waits for it.
+        await self.db.execute(
             update(OrganizationModel)
             .where(OrganizationModel.id == org_id)
             .values(updated_at=OrganizationModel.updated_at)
         )
-        return bool(result.rowcount)
+        return True
 
     async def delete_organization(self, org_id: str) -> bool:
         row = (

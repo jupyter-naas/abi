@@ -641,3 +641,35 @@ async def test_an_organization_holding_a_container_in_iam_is_not_deleted(world, 
         with pytest.raises(OrganizationHasWorkspacesError, match="stray"):
             await orgs.delete_organization("acme")
     assert stray
+
+
+@pytest.mark.asyncio
+async def test_two_organizations_with_one_name_get_two_access_policies(world, nexus_db):
+    """Names are not unique: an organization never adopts another's access policy,
+    and widening one reaches nobody of the other."""
+    async with nexus_db() as db:
+        await _users(db, "olivia", "paul", "root")
+        orgs = OrganizationService(adapter=OrganizationSecondaryAdapterPostgres(db=db))
+        await orgs.create_organization(
+            name="Acme", slug="acme-1", owner_id="olivia", now=NOW, org_id="acme-1"
+        )
+        await orgs.create_organization(
+            name="Acme", slug="acme-2", owner_id="paul", now=NOW, org_id="acme-2"
+        )
+        await db.commit()
+        store = SqlDefaultsStore(db)
+        first = await store.get(org_container("acme-1"))
+        second = await store.get(org_container("acme-2"))
+    assert first.access_policy_id != second.access_policy_id
+    world.workspace("acme-2", "w2")
+    world.platform_admin("root")
+    with use_call_context(NexusIam.context("root")):
+        world.iam.update_policy(
+            first.access_policy_id, expected_revision=1, document=_agents("recruiter")
+        )
+    assert _uses(world, "olivia", _agent(workspace_container("acme-1", "w1"), "recruiter"))
+    assert not _uses(world, "paul", _agent(workspace_container("acme-2", "w2"), "recruiter"))
+    # An unrecorded one is found again for its own organization only.
+    with as_service_account("api"):
+        again = container_defaults.make_org(world.iam, "acme-2", "Acme")
+    assert again.access_policy_id == second.access_policy_id
