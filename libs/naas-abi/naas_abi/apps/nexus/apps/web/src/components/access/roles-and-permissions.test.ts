@@ -8,7 +8,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AccessView } from '@/lib/iam-admin/types';
 import { mount, type Mounted } from '@/lib/testing/mount';
-import { fakeApi, fakeDirectory, orgScope, wsScope } from './access-fixtures';
+import { fakeApi, fakeDirectory, orgScope, readerPolicy, wsScope } from './access-fixtures';
 import { PLATFORM_ACCESS_SCOPE, type AccessScope } from './access-scope';
 import { ACCESS_SECTIONS, opensRolesAndPermissions, parseAccessSection } from './access-sections';
 import { RolesAndPermissions } from './roles-and-permissions';
@@ -186,5 +186,20 @@ describe('Roles & permissions, one UI for every level', () => {
     await mounted.flush();
     expect(api.access).toHaveBeenLastCalledWith('abi:nexus:organization/acme/nexus:workspace/ws-1');
     expect(sections()).toEqual(['people', 'groups', 'policies']);
+  });
+});
+
+describe('Roles & permissions opened from a link', () => {
+  afterEach(() => window.history.replaceState({}, '', '/'));
+
+  it('opens the section and the policy the address names', async () => {
+    window.history.replaceState({}, '', '/settings/roles?section=policies&policy=pol_1');
+    const api = apiFor('platform admin');
+    (api as unknown as Record<string, unknown>).listPolicies = vi.fn().mockResolvedValue({ items: [readerPolicy], next_after: null });
+    mounted = await mount(RolesAndPermissions, { scopes: [PLATFORM_ACCESS_SCOPE], api, directory: fakeDirectory([]) });
+    await mounted.flush();
+    await mounted.flush();
+    expect(document.querySelector('[data-section="policies"]')?.getAttribute('aria-current')).toBe('page');
+    expect(document.querySelector('[aria-label="Policy Graph reader"]')).not.toBeNull();
   });
 });

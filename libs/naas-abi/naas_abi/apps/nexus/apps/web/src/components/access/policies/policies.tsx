@@ -5,10 +5,10 @@ import { CornerDownRight, Plus, Trash2 } from 'lucide-react';
 import { IamAdminError } from '@/lib/iam-admin/api';
 import type { PolicyView } from '@/lib/iam-admin/types';
 import type { AccessViewProps } from '../access-props';
-import { PLATFORM, ownedHere } from '../access-scope';
-import { scopeLabel } from '../attachments/attachments-model';
+import { PLATFORM, ownerOf } from '../access-scope';
 import { roleOfPolicy } from '../roles/role-change';
 import { PolicyEditor } from './policy-editor';
+import { ownerHref, usePolicyOwners } from './policy-owners';
 import { policyTree } from './policy-tree';
 import './policies.css';
 
@@ -21,11 +21,15 @@ function message(error: unknown): string {
 /**
  * The policies of the scope, as a tree of parents and their sub-policies: those it owns, which
  * its admins create (with the builder, from what they may grant here, or as a sub-policy of one
- * they hold), edit and delete, and those of higher levels that may be attached here, read-only.
+ * they hold), edit and delete, and those of other levels listed here (attachable from above, or
+ * every level's at the platform). A policy is edited at its owner, wherever it is listed: by
+ * whoever IAM lets update policies there (`GET /access?scope=<owner>`), with what they may grant
+ * there; for anyone else it is read-only, naming its owner and linking to the owner's page.
  * Managed policies (built-in roles, approved module manifests) are read-only. Whoever may create
- * policies here and not list them still builds one.
+ * policies here and not list them still builds one. ``openPolicy`` opens one by its id once the
+ * list is read (a link from another level's page).
  */
-export function PoliciesView({ api, can, scope, nonce = 0 }: AccessViewProps) {
+export function PoliciesView({ api, can, scope, nonce = 0, openPolicy: opening }: AccessViewProps & { openPolicy?: string | null }) {
   const lists = can('iam:ListPolicies');
   const [policies, setPolicies] = useState<PolicyView[] | null>(lists ? null : []);
   const [next, setNext] = useState<string | null>(null);
@@ -36,6 +40,14 @@ export function PoliciesView({ api, can, scope, nonce = 0 }: AccessViewProps) {
   const [refusals, setRefusals] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState('');
   const listedAt = scope.value ?? undefined;
+  const here = ownerOf(scope);
+  // The listed policies' owners, and that of one opened by its id (a parent, a link).
+  const owners = usePolicyOwners(
+    api,
+    [...(policies ?? []), ...(selection?.kind === 'policy' ? [selection.policy] : [])].map((p) => p.owner_scope),
+    here,
+    can,
+  );
 
   const load = useCallback(async () => {
     if (!lists) return;
@@ -91,6 +103,15 @@ export function PoliciesView({ api, can, scope, nonce = 0 }: AccessViewProps) {
     }
   };
 
+  // A link names a policy to open: once, when the list is read.
+  const [opened, setOpened] = useState(false);
+  useEffect(() => {
+    if (!opening || opened || policies === null) return;
+    setOpened(true);
+    void openPolicy(opening);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opening, opened, policies]);
+
   if (error && policies === null) return <p className="access-policy-error" role="alert">{error}</p>;
   if (policies === null) return <p className="access-empty">Loading…</p>;
 
@@ -99,8 +120,14 @@ export function PoliciesView({ api, can, scope, nonce = 0 }: AccessViewProps) {
   const rows = wanted
     ? policies.filter((p) => `${p.name} ${p.id}`.toLowerCase().includes(wanted)).map((policy) => ({ policy, depth: 0 }))
     : policyTree(policies);
-  // A policy owned above this scope is attached here, never changed here.
-  const editable = (policy: PolicyView) => !policy.managed && ownedHere(scope, policy.owner_scope);
+  // What the caller may do with a policy: IAM's answer at its owner (this level's is ``can``).
+  const ownerOfPolicy = (policy: PolicyView) => owners[policy.owner_scope ?? PLATFORM];
+  const mayUpdate = (policy: PolicyView) => !policy.managed && !!ownerOfPolicy(policy)?.canUpdate;
+  const mayDelete = (policy: PolicyView) => !policy.managed && !!ownerOfPolicy(policy)?.canDelete;
+  const linkTo = (policy: PolicyView) => {
+    const owner = ownerOfPolicy(policy);
+    return owner?.opens ? ownerHref(owner.scope, policy.id) : null;
+  };
 
   return (
     <div className="access-policies">
@@ -158,11 +185,19 @@ export function PoliciesView({ api, can, scope, nonce = 0 }: AccessViewProps) {
                 <td>
                   <code>{policy.id}</code>
                 </td>
-                <td>{scopeLabel(policy.owner_scope ?? PLATFORM)}</td>
+                <td data-policy-owner="">
+                  {linkTo(policy) ? (
+                    <a className="access-policy-link" href={linkTo(policy)!}>
+                      {ownerOfPolicy(policy)?.label}
+                    </a>
+                  ) : (
+                    ownerOfPolicy(policy)?.label
+                  )}
+                </td>
                 <td>{policy.document.statements.length}</td>
                 <td>{policy.revision}</td>
                 <td className="access-policy-row-actions">
-                  {editable(policy) && can('iam:DeletePolicy') && (
+                  {mayDelete(policy) && (
                     confirming === policy.id ? (
                       <span className="access-policy-confirm">
                         Delete {policy.name}?{' '}
@@ -218,7 +253,9 @@ export function PoliciesView({ api, can, scope, nonce = 0 }: AccessViewProps) {
           scope={scope}
           roles={policies.filter((p) => roleOfPolicy(p.id))}
           parents={policies}
-          readOnly={selection.kind === 'policy' && (!editable(selection.policy) || !can('iam:UpdatePolicy'))}
+          readOnly={selection.kind === 'policy' && !mayUpdate(selection.policy)}
+          owner={selection.kind === 'policy' ? ownerOfPolicy(selection.policy) ?? null : null}
+          ownerLink={selection.kind === 'policy' ? linkTo(selection.policy) : null}
           onSaved={(saved) => {
             setSelection({ kind: 'policy', policy: saved });
             void load();

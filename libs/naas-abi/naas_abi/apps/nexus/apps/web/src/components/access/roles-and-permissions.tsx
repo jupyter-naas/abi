@@ -3,7 +3,7 @@
 import './access-base.css';
 import './access.css';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createIamAdminApi, type IamAdminApi } from '@/lib/iam-admin/api';
 import type { InviteProviders } from '@/lib/invitations';
 import { useIamAccess } from '@/lib/iam-admin/use-access';
@@ -35,12 +35,22 @@ export type RolesAndPermissionsProps = {
  * says what the caller may do at the scope (`GET /api/iam/admin/access?scope=`) and that
  * alone decides the sections and buttons: People & roles, Groups, Policies, and what the
  * platform administers (service accounts, module approvals, the simulator, the audit). A caller who may do nothing there sees no section.
+ * The page's address may name a section and a policy to open (`?section=policies&policy=<id>`:
+ * a link from another level's Policies, ``policy-owners.ownerHref``).
  */
 export function RolesAndPermissions({ scopes, nonce = 0, api, directory, loadProviders }: RolesAndPermissionsProps) {
   const client = useMemo(() => api ?? createIamAdminApi(), [api]);
   const people = useMemo(() => directory ?? createAccessDirectory(), [directory]);
   const [index, setIndex] = useState(0);
   const [section, setSection] = useState<string | null>(null);
+  const [linkedPolicy, setLinkedPolicy] = useState<string | null>(null);
+  // Read after the first render, so the server's render and the browser's agree.
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    const named = query.get('section');
+    if (named) setSection(named);
+    setLinkedPolicy(query.get('policy'));
+  }, []);
   const picked = scopes[Math.min(index, scopes.length - 1)];
   const pickedKey = JSON.stringify(picked ?? null);
   // The sections reload on a change of scope, not on a new array of the same scopes.
@@ -84,7 +94,7 @@ export function RolesAndPermissions({ scopes, nonce = 0, api, directory, loadPro
     const views: Record<AccessSection, React.ReactNode> = {
       people: <PeopleView {...props} />,
       groups: <GroupsView {...props} loadProviders={loadProviders} />,
-      policies: <PoliciesView {...props} />,
+      policies: <PoliciesView {...props} openPolicy={linkedPolicy} />,
       'service-accounts': <ServiceAccountsView {...props} />,
       approvals: <ApprovalsView {...props} />,
       simulator: <SimulatorView {...props} />,

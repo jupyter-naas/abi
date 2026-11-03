@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { IamAdminError, type IamAdminApi } from '@/lib/iam-admin/api';
 import type { PolicyRef, PolicySource, PolicyStatement, PolicyView, Publisher } from '@/lib/iam-admin/types';
-import { PLATFORM_ACCESS_SCOPE, ownerOf, type AccessScope } from '../access-scope';
+import { PLATFORM, PLATFORM_ACCESS_SCOPE, ownerOf, type AccessScope } from '../access-scope';
 import { ROLE_LABELS, roleOfPolicy } from '../roles/role-change';
 import {
   allTypes,
@@ -26,6 +26,7 @@ import {
   type EditorStatement,
   type TextFormat,
 } from './policy-editor-model';
+import { ownedBy, ownerLabel, type PolicyOwner } from './policy-owners';
 import { PolicyText } from './policy-text';
 import { StatementEditor } from './statement-editor';
 import { usePolicyValidation, VALIDATION_DELAY_MS } from './use-policy-validation';
@@ -56,12 +57,12 @@ function parentOf(policy: PolicyView | null): { id: string; name: string | null 
 }
 
 /**
- * Creates a policy (``policy`` null) owned by ``scope``, or edits one. The builder offers what
- * the caller may grant there by publisher (`GET /publishers`), within the parent of a
- * sub-policy: a new policy may be a sub-policy of one of ``parents`` (IAM accepts only one the
+ * Creates a policy (``policy`` null) owned by ``scope``, or edits one at its owner, wherever it
+ * is listed (``owner`` names it when it is another level's). The builder offers what the caller
+ * may grant there by publisher (`GET /publishers`), within the parent of a sub-policy: a new policy may be a sub-policy of one of ``parents`` (IAM accepts only one the
  * caller holds there), or start from a built-in role. The statement editor and the text view
  * (YAML or JSON) are the advanced modes. IAM validates the document as it changes, as a policy
- * of that scope, and a refusal at save that names a type's choice is shown beside it. A managed
+ * of its owner, and a refusal at save that names a type's choice is shown beside it. A managed
  * policy is shown read-only.
  */
 export function PolicyEditor({
@@ -74,6 +75,8 @@ export function PolicyEditor({
   onSaved,
   onCancel,
   onOpen,
+  owner: ownerInfo = null,
+  ownerLink = null,
   validationDelayMs = VALIDATION_DELAY_MS,
 }: {
   api: IamAdminApi;
@@ -88,6 +91,10 @@ export function PolicyEditor({
   onCancel: () => void;
   /** Opens another policy (a parent or a sub-policy) by its id. */
   onOpen?: (id: string) => void;
+  /** Who owns the policy, as the list names it. */
+  owner?: PolicyOwner | null;
+  /** The owner's Roles & permissions page, on this policy, when the caller may open it. */
+  ownerLink?: string | null;
   validationDelayMs?: number;
 }) {
   const [name, setName] = useState(policy?.name ?? '');
@@ -114,7 +121,10 @@ export function PolicyEditor({
   const [kept, setKept] = useState<PolicyStatement[]>([]);
   // Bumped by Retry: what may be granted is read again.
   const [attempt, setAttempt] = useState(0);
-  const owner = scope.value ?? undefined;
+  // Where the policy is written: an existing one at its owner, a new one at this page's level.
+  const where = policy ? policy.owner_scope ?? PLATFORM : ownerOf(scope);
+  const owner = where === PLATFORM ? undefined : where;
+  const elsewhere = !!policy && where !== ownerOf(scope);
   const parentId = policy ? parent?.id ?? null : newParent || null;
 
   const doc = useMemo(() => toDocument(statements, version), [statements, version]);
@@ -128,7 +138,7 @@ export function PolicyEditor({
     setGrantable({ state: 'loading' });
     // A new sub-policy asks IAM's verdict on its parent as creating it would: derive, owner, depth.
     api
-      .publishers(ownerOf(scope), parentId, { derive: !policy && !!parentId })
+      .publishers(where, parentId, { derive: !policy && !!parentId })
       .then((view) => {
         if (!cancelled) setGrantable({ state: 'ready', publishers: view.publishers, builder: builderPublishers(view) });
       })
@@ -142,7 +152,7 @@ export function PolicyEditor({
     };
     // An existing policy's parent is read once with it; the policy itself does not change here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, scope, parentId, readOnly, attempt]);
+  }, [api, where, parentId, readOnly, attempt]);
 
   // A policy read one by one names its parent and its sub-policies.
   useEffect(() => {
@@ -295,7 +305,7 @@ export function PolicyEditor({
         message: text,
         errors: error instanceof IamAdminError ? error.errors : [],
         conflict: error instanceof IamAdminError && error.status === 409 && !!policy,
-        refused: builder ? refusedTypes(builder, choices, text, ownerOf(scope)) : [],
+        refused: builder ? refusedTypes(builder, choices, text, where) : [],
       });
     } finally {
       setSaving(false);
@@ -347,6 +357,24 @@ export function PolicyEditor({
           </span>
         )}
       </header>
+      {elsewhere && (
+        <p className="access-policy-owner" aria-label="Policy owner" data-policy-owner-note="">
+          {ownedBy(ownerInfo?.label ?? ownerLabel(where))}.{' '}
+          {policy?.managed
+            ? null
+            : readOnly
+              ? 'You may not change its policies, so it is read-only here.'
+              : 'You edit it at its owner: the builder offers what you may grant there.'}
+          {ownerLink && (
+            <>
+              {' '}
+              <a className="access-policy-link" href={ownerLink}>
+                Open it in its owner’s Roles &amp; permissions
+              </a>
+            </>
+          )}
+        </p>
+      )}
       {parent && (
         <p className="access-policy-parent" aria-label="Parent policy">
           Sub-policy of{' '}
@@ -467,7 +495,7 @@ export function PolicyEditor({
       ) : mode === 'builder' && builder ? (
         <PolicyBuilder
           api={api}
-          scope={ownerOf(scope)}
+          scope={where}
           validateAt={owner}
           publishers={builder}
           choices={choices}
@@ -481,7 +509,7 @@ export function PolicyEditor({
           statements={statements}
           onChange={setStatements}
           api={api}
-          scope={ownerOf(scope)}
+          scope={where}
           publishers={publishers}
           readOnly={readOnly}
         />

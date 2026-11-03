@@ -156,6 +156,13 @@
   color: var(--muted-foreground-hex);
 }
 
+/* Who owns a policy edited, or shown read-only, from another level's page. */
+.access-policy-owner {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--foreground-hex);
+}
+
 .access-policy-parent {
   display: flex;
   flex-wrap: wrap;

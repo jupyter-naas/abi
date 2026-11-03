@@ -568,3 +568,137 @@ describe('PoliciesView, no leak', () => {
     expect(resources).toHaveBeenLastCalledWith(expect.objectContaining({ service: 'module', type: 'agent', module: 'acme.people', q: '' }));
   });
 });
+
+describe('PoliciesView: a policy owned at another level', () => {
+  /** Alpha (ws-1 of Acme) owns it; the platform lists it. */
+  const wsOwned = { ...readerPolicy, id: 'pol_w', name: 'Carol uses A', owner_scope: WS };
+  /** The containers' names, as the caller lists them at each container. */
+  const named = (query: ResourceQuery) => {
+    if (query.scope === WS && query.type === 'workspace') {
+      return Promise.resolve({ ...resourcePage('nexus', 'workspace', []), items: [{ name: WS, id: 'ws-1', label: 'Alpha', description: '' }] });
+    }
+    if (query.scope === ORG && query.type === 'organization') {
+      return Promise.resolve({ ...resourcePage('nexus', 'organization', []), items: [{ name: ORG, id: 'acme', label: 'Acme', description: '' }] });
+    }
+    return Promise.resolve(listing(query));
+  };
+  /** What the caller may do at each owner, as `access` answers. */
+  const accessAt = (held: Record<string, string[]>) =>
+    vi.fn((scope?: string) =>
+      Promise.resolve({ actions: Object.fromEntries((held[scope ?? 'abi:'] ?? []).map((a) => [a, true])) }),
+    );
+  const openRow = async (id: string) => {
+    await mounted!.click(document.querySelector(`[data-policy="${id}"] button`));
+    await validated();
+  };
+  const ownerNote = () => document.querySelector('[data-policy-owner-note]');
+
+  it('names its owner in the list, linked to the owner’s Policies on it', async () => {
+    await open(() => true, {
+      listPolicies: vi.fn().mockResolvedValue({ items: [wsOwned], next_after: null }),
+      resources: vi.fn(named),
+      access: accessAt({ [WS]: ['iam:ListPolicies'] }),
+    });
+    await validated();
+    const owner = document.querySelector('[data-policy="pol_w"] [data-policy-owner]');
+    expect(owner?.textContent).toBe('Workspace Alpha (Acme)');
+    expect(owner?.querySelector('a')?.getAttribute('href')).toBe('/workspace/ws-1/settings/permissions?section=policies&policy=pol_w');
+  });
+
+  it('is edited by the platform admin from Platform settings, at its owner', async () => {
+    const updatePolicy = vi.fn((_id: string, input: { document: PolicyDocument }) =>
+      Promise.resolve({ ...wsOwned, revision: 4, document: input.document }),
+    );
+    const api = await open(() => true, {
+      listPolicies: vi.fn().mockResolvedValue({ items: [wsOwned], next_after: null }),
+      resources: vi.fn(named),
+      access: accessAt({ [WS]: ['iam:ListPolicies', 'iam:UpdatePolicy', 'iam:DeletePolicy'] }),
+      updatePolicy,
+    });
+    await validated();
+    expect(document.querySelector('[aria-label="Delete Carol uses A"]')).not.toBeNull();
+    await openRow('pol_w');
+    expect(ownerNote()?.textContent).toContain('Owned by workspace Alpha (Acme).');
+    expect(ownerNote()?.textContent).toContain('You edit it at its owner');
+    expect(mounted!.host.textContent).not.toContain('Read only');
+    // The builder, the listing and the validation ask at the owner, not at the platform.
+    expect(api.publishers).toHaveBeenCalledWith(WS, null, { derive: false });
+    expect(button('Builder')).not.toBeUndefined();
+    expect(api.validatePolicy).toHaveBeenLastCalledWith(expect.anything(), WS);
+    await mounted!.type(field('Policy description'), ' and more');
+    await validated();
+    await mounted!.click(button('Save changes') ?? null);
+    await mounted!.flush();
+    expect(updatePolicy).toHaveBeenCalledWith('pol_w', expect.objectContaining({ expected_revision: 3 }));
+  });
+
+  it('as a sub-policy edited from above, still offers only what its parent allows', async () => {
+    const sub = { ...wsOwned, id: 'pol_sub', name: 'W analysts', parent_id: 'pol_parent', sub_policies: [] };
+    const withinParent: PublishersView = {
+      scope: WS,
+      publishers: [
+        {
+          id: 'acme.people',
+          kind: 'module',
+          types: [publishedType('module', 'agent', [['module:UseAgent', ['${scope}/module:agent/acme.people/A']]], { module: 'acme.people' })],
+        },
+      ],
+    };
+    const publishers = vi.fn((_scope: string, parent: string | null) => Promise.resolve(parent ? withinParent : adminPublishers));
+    await open(() => true, {
+      listPolicies: vi.fn().mockResolvedValue({ items: [sub], next_after: null }),
+      resources: vi.fn(named),
+      access: accessAt({ [WS]: ['iam:UpdatePolicy'] }),
+      publishers,
+    });
+    await validated();
+    await openRow('pol_sub');
+    expect(publishers).toHaveBeenCalledWith(WS, 'pol_parent', { derive: false });
+    expect(publishers).not.toHaveBeenCalledWith('abi:', expect.anything(), expect.anything());
+    await mounted!.click(button('Builder') ?? null);
+    const offered = [...document.querySelectorAll('[data-builder-publisher]')].map((e) => e.getAttribute('data-builder-publisher'));
+    expect(offered).toEqual(['acme.people']);
+  });
+
+  it('is read-only, naming its owner and linking there, for a caller who may not update it there', async () => {
+    const api = await open(() => true, {
+      listPolicies: vi.fn().mockResolvedValue({ items: [wsOwned], next_after: null }),
+      resources: vi.fn(named),
+      access: accessAt({ [WS]: ['iam:ListPolicies'] }),
+    });
+    await validated();
+    expect(document.querySelector('[aria-label="Delete Carol uses A"]')).toBeNull();
+    await openRow('pol_w');
+    expect(mounted!.host.textContent).toContain('Read only');
+    expect(button('Save changes')).toBeUndefined();
+    expect(ownerNote()?.textContent).toContain('Owned by workspace Alpha (Acme).');
+    expect(ownerNote()?.textContent).toContain('read-only here');
+    expect(ownerNote()?.querySelector('a')?.getAttribute('href')).toBe(
+      '/workspace/ws-1/settings/permissions?section=policies&policy=pol_w',
+    );
+    expect(api.publishers).not.toHaveBeenCalled();
+  });
+
+  it('links nowhere for a caller who may manage nothing at its owner, and names it by id unlisted', async () => {
+    await open(() => true, {
+      listPolicies: vi.fn().mockResolvedValue({ items: [wsOwned], next_after: null }),
+      resources: vi.fn((query: ResourceQuery) => Promise.resolve(listing(query))),
+      access: accessAt({}),
+    });
+    await validated();
+    const owner = document.querySelector('[data-policy="pol_w"] [data-policy-owner]');
+    expect(owner?.textContent).toBe('Workspace ws-1 (acme)');
+    expect(owner?.querySelector('a')).toBeNull();
+    await openRow('pol_w');
+    expect(ownerNote()?.textContent).toContain('read-only here');
+    expect(ownerNote()?.querySelector('a')).toBeNull();
+  });
+
+  it('opens the policy a link names, once the list is read', async () => {
+    await mounted?.unmount();
+    const api = fake({ listPolicies: vi.fn().mockResolvedValue({ items: [readerPolicy], next_after: null }) });
+    mounted = await mount(PoliciesView, { api, can: () => true, scope: PLATFORM_ACCESS_SCOPE, directory: EMPTY_DIRECTORY, openPolicy: 'pol_1' });
+    await validated();
+    expect(document.querySelector('[aria-label="Policy Graph reader"]')).not.toBeNull();
+  });
+});
