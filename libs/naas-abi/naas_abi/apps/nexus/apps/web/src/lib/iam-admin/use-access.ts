@@ -27,37 +27,32 @@ export type IamAccessOptions = {
  */
 export function useIamAccess(scope?: string, api?: IamAdminApi, { skip = false, reload = 0 }: IamAccessOptions = {}): IamAccess {
   const client = useMemo(() => api ?? createIamAdminApi(), [api]);
-  const [access, setAccess] = useState<AccessView | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(!skip);
+  // What is asked: the scope (and the reload), none while skipped. An answer counts only
+  // for the question it answered, so a new scope is loading from its first render on,
+  // never the previous scope's access, nor "no access" before the read starts.
+  const asked = skip ? null : `${scope ?? ''}\n${reload}`;
+  const [answer, setAnswer] = useState<{ asked: string; access: AccessView | null; error: string | null } | null>(null);
 
   useEffect(() => {
-    if (skip) {
-      setAccess(null);
-      setError(null);
-      setLoading(false);
-      return;
-    }
+    if (asked === null) return;
     let cancelled = false;
-    setLoading(true);
     client
       .access(scope)
-      .then((view) => {
-        if (cancelled) return;
-        setAccess(view);
-        setError(null);
-      })
+      .then((view) => !cancelled && setAnswer({ asked, access: view, error: null }))
       .catch((e: unknown) => {
-        if (cancelled) return;
-        setAccess(null);
-        setError(e instanceof Error ? e.message : String(e));
-      })
-      .finally(() => !cancelled && setLoading(false));
+        if (!cancelled) setAnswer({ asked, access: null, error: e instanceof Error ? e.message : String(e) });
+      });
     return () => {
       cancelled = true;
     };
-  }, [client, scope, skip, reload]);
+    // The scope and the reload are read through ``asked``.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, asked]);
 
+  const settled = asked !== null && answer?.asked === asked;
+  const access = settled ? answer.access : null;
+  const error = settled ? answer.error : null;
+  const loading = asked !== null && !settled;
   const can = useCallback((action: string) => access?.actions[action] === true, [access]);
   return { access, loading, error, can };
 }

@@ -77,23 +77,26 @@ export function orgSettingsNavForRole(
 /**
  * Where a section someone may not open sends them, or null to stay: an organization's
  * owners and admins stay anywhere; someone who holds only `iam:` rights there goes to Roles
- * & permissions; anyone else stays, and the layout shows that they have no access. Nothing
- * is decided before the role is known and, for a non-admin, before the access was read
- * (``accessSettled``): a member who holds `iam:` rights through a group is not bounced off
- * Roles & permissions while that read is in flight.
+ * & permissions, with a role below admin or with none (a platform admin who is no member);
+ * anyone else stays, and the layout shows that they have no access. Nothing is decided
+ * before the role is known (``roleKnown``: read, or refused, which is no role) and, for a
+ * non-admin, before the access was read (``accessSettled``): a member who holds `iam:`
+ * rights through a group is not bounced off Roles & permissions while that read is in flight.
  */
 export function orgSectionRedirect({
   section,
   role,
+  roleKnown,
   holdsIam,
   accessSettled,
 }: {
   section: string | null;
   role: string | null;
+  roleKnown: boolean;
   holdsIam: boolean;
   accessSettled: boolean;
 }): string | null {
-  if (!section || role === null || isOrgAdminRole(role) || !accessSettled) return null;
+  if (!section || !roleKnown || isOrgAdminRole(role) || !accessSettled) return null;
   return holdsIam && section !== 'roles' ? 'roles' : null;
 }
 

@@ -59,4 +59,44 @@ describe('useIamAccess', () => {
     expect(access).toHaveBeenCalledWith(undefined);
     expect(mounted.host.textContent).toBe('ready|nope|false|false');
   });
+
+  it("is loading for a new scope from its first render, never the previous scope's access", async () => {
+    let answer: (value: unknown) => void = () => undefined;
+    const access = vi.fn((scope?: string) =>
+      scope === 'abi:nexus:organization/owned'
+        ? Promise.resolve({ actions: { 'iam:AttachPolicy': true } })
+        : new Promise((resolve) => {
+            answer = resolve;
+          }),
+    );
+    const api = { access } as unknown as IamAdminApi;
+    const host = document.createElement('div');
+    document.body.append(host);
+    const { createRoot } = await import('react-dom/client');
+    const { act } = await import('react');
+    const root = createRoot(host);
+    const seen: string[] = [];
+    const Recorder = ({ scope, skip }: { scope: string; skip?: boolean }) => {
+      const { can, loading } = useIamAccess(scope, api, { skip });
+      seen.push(`${scope}:${loading ? 'loading' : 'ready'}:${can('iam:AttachPolicy')}`);
+      return null;
+    };
+    await act(async () => root.render(createElement(Recorder, { scope: 'abi:nexus:organization/owned' })));
+    expect(seen.at(-1)).toBe('abi:nexus:organization/owned:ready:true');
+    seen.length = 0;
+    await act(async () => root.render(createElement(Recorder, { scope: 'abi:nexus:organization/other' })));
+    // The first render of the new scope already waits, holding nothing of the old one.
+    expect(seen[0]).toBe('abi:nexus:organization/other:loading:false');
+    expect(seen).not.toContain('abi:nexus:organization/other:ready:true');
+    await act(async () => answer({ actions: {} }));
+    expect(seen.at(-1)).toBe('abi:nexus:organization/other:ready:false');
+    // Skipped, then asked: loading from the render that stops skipping.
+    seen.length = 0;
+    await act(async () => root.render(createElement(Recorder, { scope: 'abi:nexus:organization/third', skip: true })));
+    expect(seen.at(-1)).toBe('abi:nexus:organization/third:ready:false');
+    await act(async () => root.render(createElement(Recorder, { scope: 'abi:nexus:organization/third' })));
+    expect(seen.at(-1)?.split(':').at(-2)).toBe('loading');
+    await act(async () => root.unmount());
+    host.remove();
+  });
 });

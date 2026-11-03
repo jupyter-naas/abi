@@ -58,18 +58,23 @@ describe('orgSettingsAccess', () => {
 
 describe('orgSectionRedirect', () => {
   it('waits for the access read before deciding for a non-admin', () => {
-    expect(orgSectionRedirect({ section: 'general', role: 'member', holdsIam: false, accessSettled: false })).toBeNull();
-    expect(orgSectionRedirect({ section: 'roles', role: 'member', holdsIam: false, accessSettled: false })).toBeNull();
+    expect(orgSectionRedirect({ section: 'general', role: 'member', roleKnown: true, holdsIam: false, accessSettled: false })).toBeNull();
+    expect(orgSectionRedirect({ section: 'roles', role: 'member', roleKnown: true, holdsIam: false, accessSettled: false })).toBeNull();
   });
   it('sends an iam: holder to Roles & permissions, and lets anyone else stay (the layout refuses)', () => {
-    expect(orgSectionRedirect({ section: 'general', role: 'member', holdsIam: true, accessSettled: true })).toBe('roles');
-    expect(orgSectionRedirect({ section: 'users', role: 'member', holdsIam: true, accessSettled: true })).toBe('roles');
-    expect(orgSectionRedirect({ section: 'roles', role: 'member', holdsIam: true, accessSettled: true })).toBeNull();
-    expect(orgSectionRedirect({ section: 'general', role: 'member', holdsIam: false, accessSettled: true })).toBeNull();
+    expect(orgSectionRedirect({ section: 'general', role: 'member', roleKnown: true, holdsIam: true, accessSettled: true })).toBe('roles');
+    expect(orgSectionRedirect({ section: 'users', role: 'member', roleKnown: true, holdsIam: true, accessSettled: true })).toBe('roles');
+    expect(orgSectionRedirect({ section: 'roles', role: 'member', roleKnown: true, holdsIam: true, accessSettled: true })).toBeNull();
+    expect(orgSectionRedirect({ section: 'general', role: 'member', roleKnown: true, holdsIam: false, accessSettled: true })).toBeNull();
   });
   it('never moves owners and admins, and nothing before the role is known', () => {
-    expect(orgSectionRedirect({ section: 'users', role: 'admin', holdsIam: false, accessSettled: false })).toBeNull();
-    expect(orgSectionRedirect({ section: 'roles', role: null, holdsIam: true, accessSettled: true })).toBeNull();
+    expect(orgSectionRedirect({ section: 'users', role: 'admin', roleKnown: true, holdsIam: false, accessSettled: false })).toBeNull();
+    expect(orgSectionRedirect({ section: 'roles', role: null, roleKnown: true, holdsIam: true, accessSettled: true })).toBeNull();
+    // No role there, IAM rights (a platform admin who is no member): sent to Roles & permissions.
+    expect(orgSectionRedirect({ section: 'users', role: null, roleKnown: true, holdsIam: true, accessSettled: true })).toBe('roles');
+    expect(orgSectionRedirect({ section: 'branding', role: null, roleKnown: true, holdsIam: true, accessSettled: true })).toBe('roles');
+    // Nothing is decided before the role is read.
+    expect(orgSectionRedirect({ section: 'users', role: null, roleKnown: false, holdsIam: true, accessSettled: true })).toBeNull();
   });
 });
 

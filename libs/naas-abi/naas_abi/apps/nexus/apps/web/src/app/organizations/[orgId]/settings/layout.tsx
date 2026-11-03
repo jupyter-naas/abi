@@ -60,9 +60,12 @@ export default function OrganizationSettingsLayout({
   const router = useRouter();
   const params = useParams();
   const orgId = params.orgId as string;
-  const [viewerRole, setViewerRole] = useState<string | null>(null);
+  // The caller's role, for the organization it was read for: a client-side move to
+  // another organization knows no role there until its own read answers.
+  const [viewer, setViewer] = useState<{ orgId: string; role: string | null } | null>(null);
   // Whether the organization was read (its answer, or a refusal): the role is known.
-  const [roleKnown, setRoleKnown] = useState(false);
+  const roleKnown = !!orgId && viewer?.orgId === orgId;
+  const viewerRole = roleKnown ? viewer.role : null;
   // Roles & permissions is shown to whoever would see a section of it at the organization.
   const { access, loading: accessLoading } = useIamAccess(orgId ? organizationContainer(orgId) : undefined, undefined, {
     skip: !orgId,
@@ -107,8 +110,7 @@ export default function OrganizationSettingsLayout({
         if (response.ok) {
           const data = await response.json();
           setOrgName(data.name);
-          setViewerRole(data.current_user_role ?? null);
-          setRoleKnown(true);
+          setViewer({ orgId, role: data.current_user_role ?? null });
           const radius = data.loginBorderRadius ?? data.login_border_radius ?? '0';
           setBorderRadius(radius);
           setOrgColors({
@@ -126,7 +128,7 @@ export default function OrganizationSettingsLayout({
         console.error('Failed to fetch organization:', error);
       } finally {
         // A refused or failed read leaves no role: decided as no role.
-        setRoleKnown(true);
+        setViewer((current) => (current?.orgId === orgId ? current : { orgId, role: null }));
       }
     };
 
@@ -148,11 +150,12 @@ export default function OrganizationSettingsLayout({
     const target = orgSectionRedirect({
       section,
       role: viewerRole,
+      roleKnown,
       holdsIam,
       accessSettled: !accessLoading,
     });
     if (target) router.replace(orgSettingsSectionPath(orgId, target));
-  }, [orgId, viewerRole, section, holdsIam, accessLoading, router]);
+  }, [orgId, viewerRole, roleKnown, section, holdsIam, accessLoading, router]);
 
   const workspaceHref = useWorkspaceReturnPath(
     currentWorkspaceId ? `/workspace/${currentWorkspaceId}/maps` : '/',
