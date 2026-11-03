@@ -8,6 +8,7 @@ import {
   legacySystemTabPath,
   systemViewPath,
 } from '../system/system-tabs';
+import { PLATFORM_ORGANIZATIONS_PATH } from '../organizations/organizations-model';
 import {
   LEGACY_WORKSPACE_SETTINGS_SLUGS,
   PLATFORM_TABLES_PATH,
@@ -21,6 +22,7 @@ const OLD_MODULES_PATH = '/settings/modules';
 export const PLATFORM_SETTINGS_SECTIONS: readonly string[] = [
   PLATFORM_TABLES_PATH,
   SYSTEM_PATH,
+  PLATFORM_ORGANIZATIONS_PATH,
   ROLES_PATH,
 ].map((path) => path.split('/')[2]);
 

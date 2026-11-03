@@ -77,7 +77,14 @@ describe('old System links', () => {
 
 describe('PLATFORM_SETTINGS_SECTIONS', () => {
   it('is the first segment of each section path', () => {
-    expect(PLATFORM_SETTINGS_SECTIONS).toEqual(['tables', 'system', 'roles']);
+    expect(PLATFORM_SETTINGS_SECTIONS).toEqual(['tables', 'system', 'organizations', 'roles']);
+  });
+
+  it('serves Organizations, never redirected to the organizations table', () => {
+    expect(platformSettingsRedirect('/settings/organizations')).toBeNull();
+    expect(platformSettingsRedirect('/settings/organization_members')).toBe(
+      '/settings/tables/organization_members'
+    );
   });
 });
 
@@ -87,6 +94,7 @@ describe('isPlatformSettingsPath', () => {
     expect(isPlatformSettingsPath('/settings/tables/users')).toBe(true);
     expect(isPlatformSettingsPath('/settings/system/events')).toBe(true);
     expect(isPlatformSettingsPath('/settings/roles')).toBe(true);
+    expect(isPlatformSettingsPath('/settings/organizations')).toBe(true);
     expect(isPlatformSettingsPath('/settings/modules')).toBe(false);
     expect(isPlatformSettingsPath('/settings/members')).toBe(false);
     expect(isPlatformSettingsPath('/settings/tablesx')).toBe(false);

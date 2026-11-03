@@ -33,8 +33,13 @@ const ids = (actions: PlatformActions | null) =>
   visiblePlatformSettingsGroups(actions).flatMap((group) => group.items.map((item) => item.id));
 
 describe('platformSettingsGroups', () => {
-  it('is Database (Nexus tables), then System, then Access (Roles & permissions)', () => {
-    expect(platformSettingsGroups.map((group) => group.label)).toEqual(['Database', 'System', 'Access']);
+  it('is Database (Nexus tables), then System, then Tenancy (Organizations), then Access (Roles & permissions)', () => {
+    expect(platformSettingsGroups.map((group) => group.label)).toEqual([
+      'Database',
+      'System',
+      'Tenancy',
+      'Access',
+    ]);
     expect(platformSettingsGroups[0].items.map((item) => [item.label, item.href])).toEqual([
       ['Nexus tables', '/settings/tables'],
     ]);
@@ -51,6 +56,9 @@ describe('platformSettingsGroups', () => {
       ['Events', '/settings/system/events'],
     ]);
     expect(platformSettingsGroups[2].items.map((item) => [item.label, item.href])).toEqual([
+      ['Organizations', '/settings/organizations'],
+    ]);
+    expect(platformSettingsGroups[3].items.map((item) => [item.label, item.href])).toEqual([
       ['Roles & permissions', '/settings/roles'],
     ]);
   });
@@ -61,20 +69,25 @@ describe('platformSettingsGroups', () => {
     expect(new Set(labels).size).toBe(labels.length);
   });
 
-  it('needs nexus:ReadSystem for the tables and System, any iam: action for Roles & permissions', () => {
-    for (const item of [...platformSettingsGroups[0].items, ...platformSettingsGroups[1].items]) {
+  it('needs nexus:ReadSystem for the tables, System and Organizations, any iam: action for Roles & permissions', () => {
+    for (const item of [
+      ...platformSettingsGroups[0].items,
+      ...platformSettingsGroups[1].items,
+      ...platformSettingsGroups[2].items,
+    ]) {
       expect(item.needs).toEqual({ action: 'nexus:ReadSystem' });
     }
-    expect(platformSettingsGroups[2].items[0].needs).toEqual({ anyOf: 'iam' });
+    expect(platformSettingsGroups[3].items[0].needs).toEqual({ anyOf: 'iam' });
   });
 });
 
 describe('what the caller sees', () => {
   it('shows a platform admin everything', () => {
-    expect(ids(platformAdmin)).toHaveLength(12);
+    expect(ids(platformAdmin)).toHaveLength(13);
     expect(visiblePlatformSettingsGroups(platformAdmin).map((group) => group.label)).toEqual([
       'Database',
       'System',
+      'Tenancy',
       'Access',
     ]);
     expect(firstPlatformSettingsPath(platformAdmin)).toBe('/settings/tables');
@@ -93,7 +106,8 @@ describe('what the caller sees', () => {
     expect(ids(systemReader)).toContain('tables');
     expect(ids(systemReader)).toContain('system-events');
     const groups = visiblePlatformSettingsGroups(systemReader);
-    expect(groups.map((group) => group.label)).toEqual(['Database', 'System']);
+    expect(ids(systemReader)).toContain('organizations');
+    expect(groups.map((group) => group.label)).toEqual(['Database', 'System', 'Tenancy']);
     expect(groups[0].items.map((item) => item.label)).toEqual(['Nexus tables']);
   });
 
@@ -145,6 +159,7 @@ describe('parsePlatformSettingsRoute', () => {
     expect(parsePlatformSettingsRoute('/settings/system/jobs').item?.id).toBe('system-jobs');
     expect(parsePlatformSettingsRoute('/settings/system/events').item?.id).toBe('system-events');
     expect(parsePlatformSettingsRoute('/settings/roles').item?.id).toBe('roles');
+    expect(parsePlatformSettingsRoute('/settings/organizations').item?.id).toBe('organizations');
     expect(parsePlatformSettingsRoute('/settings/system/jobs').table).toBeNull();
   });
 

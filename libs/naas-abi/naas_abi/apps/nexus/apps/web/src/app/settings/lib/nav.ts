@@ -3,6 +3,7 @@ import {
   Activity,
   Blocks,
   Bot,
+  Building2,
   Database,
   Gauge,
   KeyRound,
@@ -19,6 +20,7 @@ import {
   systemViewPath,
   type SystemView,
 } from '../system/system-tabs';
+import { PLATFORM_ORGANIZATIONS_PATH } from '../organizations/organizations-model';
 import { PLATFORM_TABLES_PATH } from './tables';
 import { safeDecode } from './page-helpers';
 
@@ -75,6 +77,14 @@ export const NEXUS_TABLES_ITEM: PlatformSettingsNavItem = {
   needs: READ_SYSTEM,
 };
 
+export const ORGANIZATIONS_ITEM: PlatformSettingsNavItem = {
+  id: 'organizations',
+  label: 'Organizations',
+  href: PLATFORM_ORGANIZATIONS_PATH,
+  icon: Building2,
+  needs: READ_SYSTEM,
+};
+
 export const ROLES_ITEM: PlatformSettingsNavItem = {
   id: 'roles',
   label: 'Roles & permissions',
@@ -95,6 +105,7 @@ export const platformSettingsGroups: PlatformSettingsNavGroup[] = [
       needs: READ_SYSTEM,
     })),
   },
+  { label: 'Tenancy', items: [ORGANIZATIONS_ITEM] },
   { label: 'Access', items: [ROLES_ITEM] },
 ];
 
