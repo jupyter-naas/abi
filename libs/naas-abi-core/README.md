@@ -573,6 +573,9 @@ api:
   description: "API for my AI system"
   cors_origins:
     - "http://localhost:9879"
+  # /openapi.json, /docs and /redoc. Unset: on for local development
+  # (ENV unset, local or dev), off for deployed stacks.
+  docs_enabled: true
 
 global_config:
   ai_mode: "cloud"  # or "local" or "airgap"
