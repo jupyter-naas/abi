@@ -1953,6 +1953,67 @@ class IAMService(IIAMService, PolicySource):
         allowed = set(self.filter("iam:ListPolicies", names.values()).allowed)
         return [p for p in found if names[p.id] in allowed]
 
+    def move_policies(self, owners: Mapping[str, str]) -> list[Policy]:
+        """Give policies other owners (``{policy id: owner}``), as one change; in
+        process only (the module that owns a container moves what it made there).
+
+        The caller may update each where it is (``iam:UpdatePolicy``) and create
+        it where it goes (``iam:CreatePolicy``), a container IAM knows or the
+        platform. Refused, nothing moved (``ValueError``): a document not written
+        for its new owner; an owner outside its parent's, as the parent will be
+        owned after the move; a sub-policy, moved or not, owned outside its
+        parent's new owner; an attachment or an invitation beyond the new owner.
+        A managed policy never moves (``IAMConflictError``). Nothing a policy
+        grants changes: no decision reads its owner, only who administers it."""
+        if not owners:
+            return []
+        current = {pid: self._require_policy("iam:UpdatePolicy", pid) for pid in owners}
+        after: dict[str, str] = {}
+        for policy_id, owner in owners.items():
+            policy = current[policy_id]
+            if policy.managed:
+                raise IAMConflictError(f"{policy_id} is managed: only IAM rewrites it")
+            new_owner = self._owner_checked(owner)
+            self.require("iam:CreatePolicy", policy_resource(policy_id, new_owner))
+            self._check_owner_known(new_owner)
+            check_owned_document(policy.document, new_owner)
+            after[policy_id] = new_owner
+
+        def owner_of(policy: Policy) -> str:
+            return after.get(policy.id, policy.owner_scope)
+
+        for policy_id, new_owner in after.items():
+            policy = current[policy_id]
+            parent = self._load_policy(policy.parent_id) if policy.parent_id else None
+            if parent is not None and not within_owner(owner_of(parent), new_owner):
+                raise ValueError(
+                    f"A sub-policy of {parent.id} is owned by {owner_of(parent)} or "
+                    f"below it: {policy_id} cannot move to {new_owner}"
+                )
+            for sub in self.store.list_sub_policies(policy_id):
+                if not within_owner(new_owner, owner_of(sub)):
+                    raise ValueError(
+                        f"{sub.id}, a sub-policy of {policy_id}, is owned by "
+                        f"{owner_of(sub)}, outside {new_owner}: move it with it"
+                    )
+            beyond = [
+                a.scope
+                for a in self.store.list_attachments(policy_id=policy_id)
+                if not within_owner(new_owner, a.scope)
+            ] + [
+                g.scope
+                for g in self.store.list_pending_grants(policy_id=policy_id)
+                if not within_owner(new_owner, g.scope)
+            ]
+            if beyond:
+                raise ValueError(
+                    f"{policy_id} is attached or invited at {beyond[0] or 'no scope'}, "
+                    f"beyond {new_owner}: it cannot belong there"
+                )
+        moved = self.store.move_policies(after)
+        self._changed()
+        return moved
+
     def delete_policy(self, policy_id: str) -> None:
         """``IAMConflictError`` while the policy is attached, is a parent, or
         when it is managed."""
@@ -2562,9 +2623,12 @@ class IAMService(IIAMService, PolicySource):
         try:
             self._require_derivable(parent, owner)
         except PermissionDeniedError:
-            if not self.authorize(
-                "iam:GetPolicy", policy_resource(parent.id, parent.owner_scope)
-            ).allowed:
+            if not (
+                self.authorize(
+                    "iam:GetPolicy", policy_resource(parent.id, parent.owner_scope)
+                ).allowed
+                or self._edits_sub_policy_of(parent.id, owner)
+            ):
                 raise
         above, whole = self._chain(parent, fresh=True)
         if not whole:
@@ -2573,6 +2637,19 @@ class IAMService(IIAMService, PolicySource):
                 f"parent missing, a cycle or deeper than {MAX_DEPTH} policies)"
             )
         return [p.document.statements for p in (parent, *above)]
+
+    def _edits_sub_policy_of(self, parent_id: str, owner: str) -> bool:
+        """Whether the caller may update a sub-policy of ``parent_id`` owned by
+        ``owner``: its editor is offered what it may hold there, within the
+        chain (met with what the caller holds, so nothing of the parent beyond
+        that is said)."""
+        return any(
+            sub.owner_scope == owner
+            and self.authorize(
+                "iam:UpdatePolicy", policy_resource(sub.id, sub.owner_scope)
+            ).allowed
+            for sub in self.store.list_sub_policies(parent_id)
+        )
 
     def _require_held(
         self,

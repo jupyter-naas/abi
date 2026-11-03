@@ -597,12 +597,19 @@ def run_grantable_within_a_parent(iam: IAMService, as_user: AsUser):
         assert _granted(session.grantable(WS1, parent=s.child.id)) == {
             USE: tuple(agents("a", "b"))
         }
-    # Ws-1's admin may not derive from P: refused, naming it, as at create.
+    # Ws-1's admin may not derive from P: a new sub-policy of it is refused,
+    # naming it, as at create.
     with as_user(t.admin) as session:
         with pytest.raises(PermissionDeniedError, match=s.parent.id):
-            session.grantable(WS1, parent=s.parent.id)
+            session.grantable(WS1, parent=s.parent.id, derive=True)
         with pytest.raises(IAMNotFoundError):
             session.grantable(WS1, parent="pol_missing")
+        # They edit S (ws-1's, a sub-policy of P): offered what they hold there
+        # within P, which is nothing of P's agents (no role holds a module scope).
+        assert USE not in _granted(session.grantable(WS1, parent=s.parent.id))
+        # At ws-2, where they edit nothing under P, refused as before.
+        with pytest.raises(PermissionDeniedError, match=s.parent.id):
+            session.grantable(WS2, parent=s.parent.id)
     # The platform admin derives from any policy.
     with as_user(t.root) as session:
         assert _granted(session.grantable(WS1, parent=s.parent.id)) == {

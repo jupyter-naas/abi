@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -1177,6 +1177,23 @@ class IAMStoreSQL(IAMStore):
                     .order_by(policies.c.id)
                 )
             ]
+
+    def move_policies(self, owners: Mapping[str, str]) -> list[Policy]:
+        with self._change() as conn:
+            now = _now()
+            for policy_id, owner in owners.items():
+                result = conn.execute(
+                    update(policies)
+                    .where(policies.c.id == policy_id)
+                    .values(
+                        owner_scope=owner,
+                        revision=policies.c.revision + 1,
+                        updated_at=now,
+                    )
+                )
+                if result.rowcount == 0:
+                    raise IAMNotFoundError(f"Policy {policy_id} not found")
+        return [self.get_policy(policy_id) for policy_id in owners]
 
     @staticmethod
     def _require_parent(conn: Connection, parent_id: str | None) -> None:

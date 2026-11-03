@@ -626,6 +626,13 @@ class IAMStore(ABC):
         """The policies whose parent is ``policy_id``, by ascending id."""
 
     @abstractmethod
+    def move_policies(self, owners: Mapping[str, str]) -> list[Policy]:
+        """Give each policy (``{policy id: new owner scope}``) its new owner, all
+        in one transaction; the revision of each goes up by one. Nothing else of
+        a policy changes. ``IAMNotFoundError`` (and nothing moved) when one does
+        not exist. The policies come back in the order given."""
+
+    @abstractmethod
     def put_managed_policy(self, policy: Policy) -> Policy:
         """Create or replace a managed policy, with no parent. The revision goes
         up only when its name, description or document changed."""

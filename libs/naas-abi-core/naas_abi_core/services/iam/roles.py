@@ -588,6 +588,21 @@ def api_policy(registry: CatalogRegistry | None = None) -> Policy:
             resources=("*",),
             sid="SharedGraphPolicies",
         ),
+        # Each organization and workspace has an access policy and two groups
+        # whose members follow the roles held there (Nexus keeps them in step).
+        Statement(
+            effect="Allow",
+            actions=(
+                "iam:CreateGroup",
+                "iam:GetGroup",
+                "iam:ListGroups",
+                "iam:DeleteGroup",
+                "iam:AddGroupMember",
+                "iam:RemoveGroupMember",
+            ),
+            resources=("*",),
+            sid="ContainerAccessAndGroups",
+        ),
         # Unchecked dataset SQL reads files on the engine host: never Nexus's.
         Statement(
             effect="Deny",

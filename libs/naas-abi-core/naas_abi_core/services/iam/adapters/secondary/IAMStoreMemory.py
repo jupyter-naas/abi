@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import threading
 import uuid
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 
@@ -305,6 +305,22 @@ class IAMStoreMemory(IAMStore):
             self._write()
             self._policies[policy.id] = stored
             return stored
+
+    def move_policies(self, owners: Mapping[str, str]) -> list[Policy]:
+        with self._lock:
+            for policy_id in owners:
+                self.get_policy(policy_id)  # every one exists, or none moves
+            self._write()
+            now = _now()
+            for policy_id, owner in owners.items():
+                current = self._policies[policy_id]
+                self._policies[policy_id] = replace(
+                    current,
+                    owner_scope=owner,
+                    revision=current.revision + 1,
+                    updated_at=now,
+                )
+            return [self._policies[policy_id] for policy_id in owners]
 
     def put_managed_policy(self, policy: Policy) -> Policy:
         with self._lock:

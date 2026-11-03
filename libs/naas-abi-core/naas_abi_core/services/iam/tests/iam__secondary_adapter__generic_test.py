@@ -327,6 +327,31 @@ class IAMStoreContract(ABC):
             store.update_policy(replace(freed, parent_id=new_id("pol")), 3)
         assert store.get_policy(child.id).revision == 3
 
+    def test_policies_move_to_other_owners_together(self, store: IAMStore):
+        from dataclasses import replace
+
+        parent = store.create_policy(replace(policy(), owner_scope="abi:x:org/o"))
+        child = store.create_policy(
+            replace(policy(), owner_scope="abi:x:org/o", parent_id=parent.id)
+        )
+        moved = store.move_policies(
+            {parent.id: "abi:x:org/o/x:ws/w", child.id: "abi:x:org/o/x:ws/w"}
+        )
+        assert [(p.id, p.owner_scope, p.revision) for p in moved] == [
+            (parent.id, "abi:x:org/o/x:ws/w", 2),
+            (child.id, "abi:x:org/o/x:ws/w", 2),
+        ]
+        kept = store.get_policy(child.id)
+        assert (kept.parent_id, kept.document, kept.name) == (
+            parent.id,
+            child.document,
+            child.name,
+        )
+        # One that does not exist: nothing moves.
+        with pytest.raises(IAMNotFoundError):
+            store.move_policies({parent.id: "abi:", new_id("pol"): "abi:"})
+        assert store.get_policy(parent.id).owner_scope == "abi:x:org/o/x:ws/w"
+
     def test_a_parent_with_sub_policies_cannot_be_deleted(self, store: IAMStore):
         from dataclasses import replace
 
