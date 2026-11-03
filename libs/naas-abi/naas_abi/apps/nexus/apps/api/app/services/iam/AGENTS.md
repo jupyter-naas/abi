@@ -27,6 +27,7 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
 | `feature_overrides.py` | Startup, once: the per-workspace feature overrides of earlier versions (`migrate_feature_overrides`, `iam_migrations` `workspace_feature_sets_v1`) |
 | `policy_tree.py` | Startup, once: the sets and the workspace toggles become access policies and their sub-policies (`migrate_sets`, `iam_migrations` `policy_tree_v1`); `pending()` until it is recorded |
 | `container_names.py` | Startup, once, after `policy_tree_v1`: organizations and workspaces registered as IAM containers, and every name IAM stored in the old grammar rewritten to container paths (`LegacyNames`, `migrate_names`, `iam_migrations` `container_names_v1`); `pending()` until it is recorded |
+| `container_defaults.py` | Each organization's and workspace's access policy and its members and admins groups ("Access policies and default groups"): made with it (`ContainerDefaults.org_created`, `workspace_created`, in the creating request's transaction through the adapters' `container_defaults()`), kept in step with the roles (`sync_scope`, from `MEMBERSHIPS`), forgotten with it (`dropped`); recorded in the table `container_defaults`; `migrate` gives those that predate them theirs, at every start, once recorded as `container_defaults_v1` |
 | `runtime.py` | Where Nexus gets IAM (the engine's); tests install their own with `configure` |
 | `testing.py`, `../../conftest.py` | `NexusIam` (a real IAM on the memory store) and the `nexus_iam` / `team` / `nexus_db` fixtures |
 | `route_matrix_test.py` | Every route declares its action; write methods never authorize only a read; every `guard` is decided by level for viewer, member, admin, owner, stranger |
@@ -64,6 +65,11 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
   decision of `AUTHZ`; never rebuild a context for the same user without it.
 - **The IdP admin app is not a role's:** the platform viewer and member policies and a module's bootstrap Deny
   `discovery:OpenApp` on `app/*/idp/admin`. Do not widen `OpenApp` for a role without it.
+- **Deleting an organization** (`DELETE /api/organizations/{org}`, `DeleteOrganization` on its container: its owners
+  and the platform admin) is refused with 409 while it has workspaces, naming each ("Organization O still has
+  workspaces: Alpha (ws-…). Delete them first"): deleting their data with it is not this route's to decide. Otherwise
+  its row goes (members and domains with it), then its IAM container with what it owns (`drop_scope`), then its
+  access policy, the platform's (`ContainerDefaults.dropped`).
 - **A create that fails after the row exists removes it** (and its IAM container): see `OrganizationService.create_organization`
   and `WorkspaceService.create_workspace`. A new workspace places its own resources with `on_workspace_created`, never
   `place_existing`; placing failing removes the workspace and its placements (`placements.forget_workspace`). Its
@@ -201,6 +207,65 @@ a catalog, run the route matrix.
   `role_features` type) have no route and authorize nothing: IAM refuses a catalog version dropping an action a
   policy still names, which would stop Nexus's start, so they are kept, deprecated. `GET /access` reports
   neither.
+
+## Access policies and default groups
+
+Every organization and every workspace has its own access policy and two groups (`container_defaults.py`), the
+policy tree of issue #1413's journeys:
+
+| What | Owner | Parent | Made with | Attached |
+|---|---|---|---|---|
+| "<O> access" | the platform | none | allows nothing (`Nothing`, an Allow no name matches) | to "<O> admins", below the organization (`<O>/*`) |
+| "<W> access" | the workspace | "<O> access"; none for a workspace in no organization | allows nothing | to "<W> admins", at the workspace |
+| "<X> members" | X | | every user holding a role at X itself | nothing by default |
+| "<X> admins" | X | | its admins and owners | the access policy |
+
+- **"<O> access" is what an organization may use**: the platform admin widens it (agents of chosen modules, apps,
+  features). Its admins and owners hold it in every workspace of the organization and derive from it.
+- **"<W> access" is what a workspace makes available to its people**, within its organization's. Whoever holds more
+  widens it (an org admin, or a workspace owner given more from above); its owners and admins narrow it to hide an
+  agent, an app or a feature from everyone below it at once. The policies made in the workspace for its people
+  ("Alpha analysts", "Alpha minimal") are sub-policies of it, so narrowing it narrows each of them at the next
+  decision. Its admins edit it with the builder within "<O> access" (core's `grantable` answers the editor of a
+  sub-policy), and every change is checked as any: they give only what they hold. A workspace in no organization has
+  no organization's to be within: its access has no parent and allows nothing until the platform admin widens it.
+- **Who sees a hidden item.** Each person uses what their own policies give them, whatever their role. Hiding an item
+  in "<W> access" takes it from whoever holds it through "<W> access" or below it ("<W> admins", member policies).
+  Whoever holds it from above keeps it: the org's admins and owners (through "<O> access" below the organization), a
+  workspace owner an org admin gave "<O> access" at the workspace, the platform admin. That is also who may show it
+  again: someone who holds an item may give it back to the workspace; someone who lost it with it may not.
+- **The groups follow the roles** held at the container itself (an org-wide mirror below an organization is not
+  "at" its workspaces): `MEMBERSHIPS._notify` calls `ContainerDefaults.sync_scope` after every grant, seed, revoke and
+  claimed invitation (`invites/runtime.py` names the organization too), which makes the groups' members the role
+  holders (a member added by hand is removed). The joins and leaves are written as `api` for no user, after the role
+  change they follow was authorized, as the org-wide mirror is (core's "Writes made for no user"). A group every
+  member joins carries no grant meant for some: the ceiling is the access policy, never a group.
+- **The record.** IAM holds the policies and groups; `container_defaults` (container name → access policy, members
+  group, admins group) says which they are, written in the creating request's transaction. A role changed in another
+  process's container is followed by reading the table (`session_factory`, set at start).
+- **Made at start too.** `migrate` runs after the moves (`_prepare_iam`) and again after the configuration seeds
+  (`_container_defaults_after_seeds`): an organization or workspace with no record gets its own (a seed's, an
+  import's). It never touches one that has a record.
+
+### The upgrade (`container_defaults_v1`)
+
+At the first start of this version, every organization and workspace gets its access policy and groups, nobody
+gaining or losing access (`container_defaults_test.py`: every decision of `policy_tree_test`'s world, after the sets'
+and the names' moves, is the same before and after, and again changes nothing):
+
+- **Kept.** The "<O> access" and "<W> access" the sets' move made (`policy_tree`, found by their description) are
+  kept. Each "<W> access" moves from its organization to the workspace with what is below it that its organization
+  owned ("<W> modules (admins and owners)", the splits of customer policies), through core's `move_policies`; a tree
+  that cannot move (an attachment beyond the workspace) stays its organization's and is named in the report.
+- **Not attached.** Neither the kept "<O> access" nor "<W> access" is attached to the admins group: it holds the
+  features the move kept from roles, so attaching it would widen. The report's notes say so; an administrator
+  attaches it to let admins and owners use it and derive from it. The admins and owners keep what the move gave them
+  ("<W> modules (admins and owners)", "Features of <role>").
+- **Made.** An organization or workspace made after the sets' move (none of these) gets new ones, which allow nothing,
+  so attaching them changes nothing.
+- **Groups.** Made for every one, their members the role holders.
+- **Recorded** in `iam_migrations` once nothing failed; a failure (logged, named in the report's `failed`) is tried
+  again at the next start, the rest kept.
 
 ## The upgrade: sets and toggles become policies
 
@@ -446,11 +511,32 @@ chain from an old-grammar world (`testing.LegacyNexusIam`) through their move an
   enable any file of the deployment. What a workspace already enables stays, and its admins may still remove
   it.
 
+- **Every organization and workspace has an access policy and default groups.** *Decision* (the owner, for issue
+  #1413): "<O> access" (the platform's) and "<W> access" (the workspace's, a sub-policy of its organization's) are made
+  with each, allowing nothing, and attached to "<X> admins"; "<X> members" and "<X> admins" follow the roles held
+  there. Each person uses and gives only what their own policies hold: the admin role brings no use. *Consequences:*
+  a new organization uses nothing until the platform admin widens its access, a new workspace until someone holding
+  more widens its; hiding an item there takes it from everyone below "<W> access" at once, and whoever lost it with it
+  cannot show it again (who holds it from above can). Member policies are sub-policies of "<W> access". The admins of
+  a workspace made after the upgrade use what "<W> access" allows; those of an upgraded one keep what the move gave
+  them until an administrator attaches it. #414 had left groups made with a workspace out of scope; the owner brought
+  them in.
+- **An organization with workspaces is not deleted.** *Decision:* `DELETE /api/organizations/{org}` refuses (409) one
+  that still has workspaces, naming them, rather than deleting them with it. The issue left it open (UJ-P1); this is
+  the default until the owner says otherwise. *Consequences:* its owners delete its workspaces first (`DeleteWorkspace`,
+  owner-only); the platform admin may too.
+
 ## Tests
 
 ```bash
 uv run pytest libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/iam -q --no-cov
 ```
+
+`container_defaults_test.py`: an organization and a workspace made through the services get their access policies and
+groups; the groups follow the roles (and a role changed in another process); the ceiling narrows a member policy at
+once, and who lost an item cannot show it again; a workspace admin's builder within the organization's; an
+organization with a workspace is refused, then deleted with its access policy; the delete route by role; the upgrade
+on `policy_tree_test`'s world, every decision the same.
 
 Drive real routers with the `team` fixture (`ws-1` of `org-1`: `owner`, `admin`, `member`, `viewer`, `stranger`) and
 fake services; never mock `authz`.

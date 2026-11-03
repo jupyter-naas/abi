@@ -180,6 +180,15 @@ below a container, `<container>/*`. Nexus builds them with `services/iam/names.p
   `GRANT_NOT_HELD`), 404, 409, 422 with IAM's message. Consequences: the editor shows a policy's parent and keeps it
   on save (it leaves `parent` out of the `PUT`); choosing a parent and the tree of policies are the builder's
   (a later change).
+- **A workspace's admins edit its access policy at the workspace.** *Decision:* "<W> access" is owned by the workspace
+  (`../iam/AGENTS.md`, "Access policies and default groups"), so Workspace settings › Roles & permissions › Policies
+  lists it as the workspace's own, with its sub-policies below it, and opens it in the editor with the builder within
+  "<O> access": `/publishers?scope=<W>&parent=<O access>` answers its editors (core's `grantable` for whoever may update
+  a sub-policy of the parent at the scope), though they may neither read "<O> access" nor derive from it.
+  *Consequences:* the builder offers what the editor holds within the organization's access (a feature the organization
+  does not have is not offered); a statement written by hand naming what the parent allows nowhere is a 422 with IAM's
+  words ("… which pol_… (Acme access), above it, does not allow …: it would grant nothing"), never a policy that grants
+  less than it says; a widening beyond what the editor holds is a 403 (`GRANT_NOT_HELD`).
 - **The routes take a session only** (the `/api/iam/` prefix): an API key cannot administer permissions.
 - A user holding a custom role with only `iam:ListPolicies` gets exactly that page; a stranger gets 403 on all of
   them. Group and service-account deletion keep the id (IAM's rule); the lists hide deleted ones.

@@ -1088,8 +1088,11 @@ attachment per scope.
   enumerated: one statement per service, each with a `sid` saying what needs it. The
   engine holds IAM's administration and the kernel services; `api` holds `nexus:*`, the
   kernel services it calls for its users (each user bounds the call), the sign-in identity
-  actions, `iam:ExchangeToken` and the IAM actions that keep memberships, scopes and
-  placements, and denies `dataset:QueryUnchecked`; `builtin.job` is what the account
+  actions, `iam:ExchangeToken`, the IAM actions that keep memberships, scopes and
+  placements, those of the policies it keeps (shared graphs, each container's access
+  policy) and of the groups it keeps (`ContainerAccessAndGroups`: each organisation's and
+  workspace's members and admins groups, Nexus `services/iam/AGENTS.md`), and denies
+  `dataset:QueryUnchecked`; `builtin.job` is what the account
   `job/<module_id>` of an engine module's jobs holds. The three hold every module scope,
   `module:*` and each module's own catalog (`<service>:*`, generated as modules
   register), on behalf of users who must hold it too. Nobody holds `*` but the platform
@@ -1272,7 +1275,19 @@ who may not derive from it learns nothing more of it (its owner, its chain):
 - an **owner** outside the parent's: a sub-policy is owned by its parent's owner or a
   container below it (`names.within_owner(parent owner, child owner)`): a platform
   policy's by the platform or any container; an organisation's by it or a container in it
-  (one of its workspaces); a workspace's by it or a container inside it.
+  (one of its workspaces); a workspace's by it or a container inside it;
+- a statement naming, **written out, what its chain allows nowhere**
+  (`IAMService._require_within_chain`, at create and when an update changes the document):
+  an action with no wildcard that a policy of the chain allows on nothing, or a resource
+  with no wildcard once `${scope}` is the owner that a policy of the chain allows for none
+  of the statement's actions. It would grant nothing, silently; the refusal names it and
+  the policy above ("statements[0] (Agents) allows <W>/module:agent/dev.market/Pricer,
+  which pol_… (Acme access), above it, does not allow for module:UseAgent: it would grant
+  nothing"). Only the certain is refused: a wildcard stays bounded by the chain (a
+  sub-policy of every agent under a parent of two is fine), and a pattern of the chain
+  naming another variable, or wildcards on both sides of an action, count as allowing. A
+  first-party account writing for no user (an upgrade's move) is not checked. Narrowing a
+  parent later never refuses what is below it.
 
 **Derive only from what you hold.** A caller makes a policy a sub-policy of P only if P is
 attached to them, or to one of their groups (static or carried in the token's `grp`), at the
@@ -1376,7 +1391,8 @@ scope, `policy.within_scope` applied first). Every action it matches must be all
 caller, on every resource it matches. For a sub-policy, only the resources an Allow of each
 policy of its chain also matches for that action count (`first_uncovered(parents=)`, the
 chain's patterns in the same product search, their `${scope}` the same scope): the grant is
-its effective one, its own within its parent's. An action the chain allows nowhere is not
+its effective one, its own within its parent's. An action the chain allows nowhere (written
+out, it is refused before: "Sub-policies", `_require_within_chain`) is not
 granted, and needs no cover. An action kept as a pattern (a wildcard of a service with no
 catalog) is bounded by every Allow of the chain whose actions may meet it. Its actions (`Holdings._actions`):
 
@@ -1489,9 +1505,12 @@ met with what the caller holds (`grants._meet`: the patterns of either side the 
 so it may say less than the chain lets through, never more; a pattern naming a variable other
 than `${scope}` is left out), each then checked as the caller's own are (a Deny of theirs that
 covers it drops it). The parent is checked first. It answers only for a parent the caller may
-derive from at `scope` (`_require_derivable`, whose refusal it keeps) or may read
-(`iam:GetPolicy`, so whoever edits an existing sub-policy sees what it may hold): what a parent
-allows is said to no one else. With `derive=True` (`GrantableRequest.derive`, for a new
+derive from at `scope` (`_require_derivable`, whose refusal it keeps), may read
+(`iam:GetPolicy`, so whoever edits an existing sub-policy sees what it may hold), or may update
+one of its sub-policies owned at `scope` (`iam:UpdatePolicy` on it, `_edits_sub_policy_of`: a
+workspace's admins edit their workspace's access policy within their organisation's, which
+they may neither read nor derive from; what they learn is met with what they hold): what a
+parent allows is said to no one else. With `derive=True` (`GrantableRequest.derive`, for a new
 sub-policy), reading is not enough: `_new_chain`'s verdict, as `create_policy` gives it (the
 derive rule, the owner within the parent's, the depth). A parent that does not exist is not
 found, as one the caller may not read; a chain that cannot be read whole is
@@ -1509,6 +1528,7 @@ stands for. They are:
 | The mirror below an organisation (`Memberships.mirror_org_wide`, `sync_org_wide_roles`) | It mirrors an org role the route just granted, checked as the user at the organisation itself, or the seeding below. |
 | Seeding: `Memberships.seed`, `org_seed.sync_platform_admins`, the owner of a new org or workspace (`grant(by=None)`) | The configuration's `users:`, the migration of old memberships, and the creator of what `nexus:CreateOrganization` / `CreateWorkspace` let them create. |
 | Placements (`put_placement`, `PLACEMENT_WRITER`) | They place resources; they grant nothing. |
+| Each organisation's and workspace's access policy and default groups (Nexus `services/iam/container_defaults.py`) | Made with the container its creator was allowed to create, allowing nothing; the groups' members follow role changes that were authorized, or the configuration's seeds, as the org-wide mirror does. The upgrade's `move_policies` changes owners only. |
 | Shared graph grants (`graph_grants.py`, `workspace.<ws>.graphs.*`) | Behind `nexus:UpdateResourceAccess` on the workspace, which offers only graphs the workspace holds, gives writing only to whoever may drop the graph, and sharing every graph only to platform administrators (`resource_access.py`). |
 | `abi iam` | The operator holding the project's IAM store and config. |
 | The move of the workspace feature overrides (Nexus `services/iam/feature_overrides.migrate_feature_overrides`, once at start) | Features an override gave every role of a workspace, kept for the people who held a role there then, so nobody's features change (a workspace policy attached at the workspace). |
@@ -1621,6 +1641,20 @@ mappings. Then it detaches every attachment left at them (below them included), 
 its policy, so nothing grants at a container that is gone or comes back under the same id;
 a user left with no attachment within the top container leaves its groups. It needs the
 type's `deletes` action on the container.
+
+**Moving a policy to another owner.** `move_policies({policy id: owner})` (in process only,
+like `rewrite_names`: the module that owns a container moves what it made there; Nexus moves
+each workspace's access policy from its organisation to the workspace once, Nexus
+`services/iam/AGENTS.md`, "Access policies and default groups") gives policies other owners
+as one change, in one store transaction (`IAMStore.move_policies`), each revision bumped. The
+caller may update each where it is (`iam:UpdatePolicy`) and create it where it goes
+(`iam:CreatePolicy` on its new name), a container IAM knows or the platform. Refused, nothing
+moved (`ValueError`): a document not written for its new owner (`check_owned_document`); an
+owner outside its parent's, as the parent will be owned after the move; a sub-policy, moved
+or not, owned outside its parent's new owner (move it with it); an attachment or an
+invitation beyond the new owner. A managed policy never moves (`IAMConflictError`). Nothing a
+policy grants changes (no decision reads an owner), only who administers it. Not over NATS
+nor in the SDK. No store schema change: the owner was a column already.
 
 Names: `principal_resource`, `group_resource(id, owner_scope)`,
 `policy_resource(id, owner_scope)`, `attachment_resource` (at its scope's container; at the
@@ -2382,6 +2416,45 @@ the parent (name and owner, read as Nexus, never its document), and deriving fro
 parent is decided by the caller's own attachments as before. Attaching it again at O, or
 the platform admin listing it, brings it back. Deciding the rule takes one store read per
 page of a list (`attachments_of`), whatever the number of organisations.
+
+**A sub-policy naming what its chain allows nowhere is refused, not a silent no-op.**
+*Decision.* Writing a sub-policy (create, or an update changing its document) whose
+statement names, with no wildcard, an action or a resource that a policy of its chain
+allows nowhere is refused with `ValueError`, naming the statement, what it names and the
+policy above (`_require_within_chain`). Issue #1413 asks that what is denied upstream
+"fail clearly (disabled control or explicit error, never a silent no-op)": the builder
+already offers only what the parent allows (`grantable(parent=)`), and an API caller now
+gets the error instead of a policy that grants less than it says. Refusing every pattern
+that overlaps nothing of the chain would need an automaton product per pattern, and the
+`within_chain` meet says less than the truth, so it would refuse what is valid: only what
+is written out is refused, which is what a person writes by hand.
+*Consequences.* A wildcard is still bounded silently (`${scope}/module:agent/*` under a
+parent of two agents grants those two), as before. A platform admin writing a sub-policy
+is refused too. Narrowing a parent never refuses what is below it, so a sub-policy may
+come to name what its parent no longer allows; it grants nothing of it, as before. The
+upgrades' moves, written as a first-party account for no user, are not checked. Nexus
+answers the refusal with 422 and IAM's words (`iam_admin`).
+
+**The editor of a sub-policy is offered what it may hold within its parent.**
+*Decision.* `grantable(scope, parent=P)` also answers a caller who may update a
+sub-policy of `P` owned at `scope` (`_edits_sub_policy_of`), besides one who may derive
+from `P` or read it. A workspace's owners and admins edit "<W> access", owned by the
+workspace and a sub-policy of "<O> access" (Nexus), which they may neither read (the
+platform's) nor derive from (attached below the organisation, to its admins). The answer
+is met with what the caller holds, so it tells them nothing of the parent beyond that.
+*Consequences.* The builder works at a workspace for "<W> access" and anything else of
+the workspace below a policy owned above it. A new sub-policy (`derive=True`) is decided as
+before, by `create_policy`'s own rule.
+
+**Policies move between owners in process.**
+*Decision.* `move_policies` re-owns policies, checked as an update where they are and a
+create where they go, refusing any result `create_policy` and `attach_policy` would refuse
+(the owner within the parent's, sub-policies within their parent's, attachments within the
+owner). In process only: the module that defines a container moves what it made there
+(Nexus moves the sets' move's "<W> access" from the organisation to the workspace).
+*Consequences.* No decision changes: evaluation never reads an owner. Who administers the
+policy does (a workspace's admins manage what their workspace owns). No SDK or NATS
+operation, so `make demo-sdk` is unchanged.
 
 ## Known limits and open questions
 

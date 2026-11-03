@@ -7,8 +7,8 @@ end in `abi dev up`, without Docker and without a model.
 
 | Module | Package | What it exposes |
 |---|---|---|
-| P, `dev.people` | `scenario_people` | agents `Recruiter` (A) and `Scout` (B); its own catalog `dev_people` with `ExportReport` on `report`, and a container type, `project` (`GetProject`, `CreateProject`, `DeleteProject`), registered inside a workspace |
-| M, `dev.market` | `scenario_market` | app `prices` (`apps/prices`) |
+| P, `dev.people` | `scenario_people` | agents `Recruiter` (A) and `Scout` (B), `Onboarder` and `Coach`; app `directory` (`apps/directory`); its own catalog `dev_people` with `ExportReport` on `report`, and a container type, `project` (`GetProject`, `CreateProject`, `DeleteProject`), registered inside a workspace |
+| M, `dev.market` | `scenario_market` | agent `Pricer`; app `prices` (`apps/prices`) |
 
 The agents answer without a model. `Recruiter` acts for the user it runs for:
 
@@ -32,6 +32,7 @@ user is checked on both sides).
 | `scenario_people/`, `scenario_market/` | the modules (`python -m <package>`) |
 | `launch.py` | runs a module as `abi dev up` starts it (`ABI_SERVICE_KEY`, `ABI_NATS_URL`, `ABI_DISCOVERY_PROJECT`) |
 | `runner.py` | the scenario: over REST as each person (signed in with the code the built-in provider mails, `scripts/cli_smoke_checks.py`), over NATS through `Recruiter` |
+| `journeys.py` | the user journeys of issue #1413 with the issue's cast, one or more checks per journey ID and per cross-cutting rule and layer (below) |
 | `../../config.scenario.yaml` | the repository's `config.yaml` plus both modules under `dev.modules` |
 
 ## Run
@@ -102,3 +103,36 @@ on purpose is the platform admin reaching what a workspace had turned off
 
 The UI parts (the builder by publisher, sub-policies, the settings pages) are checked in a
 browser against the same database.
+
+## The #1413 journeys (`journeys.py`)
+
+```bash
+ENV=scenario uv run abi dev up -d
+.venv/bin/python examples/permission_scenario/journeys.py --api $API --mail storage/email --out journeys.json
+```
+
+Every journey ID of issue #1413 (UJ-P1 to P4, O1 to O5, W1 to W5, A1, PE1 to PE3) is checked with the issue's cast,
+each check with its evidence, and the issue's cross-cutting rules (parent bounds child, feature off means absent,
+visibility and IAM agree, reduction never widens) at the platform, organization, workspace and member layers
+(`rule:<rule>:<layer>`; "reduction never widens" compares IAM's simulator for every person, agent, app and feature in
+Alpha and Bravo before and after each narrowing). The output names each journey and rule with whether all of its
+checks passed. Every name carries a tag: the run may start again on the same database.
+
+The cast: Root (the platform admin, `admin@example.com`); Acme, whose access ("Acme access", made with it) Root
+widens to `dev.people`'s agents, apps Directory and Prices, and eight features; Alpha and Bravo, made by Olivia (Acme's
+org admin), Alpha given the four agents and both apps, Bravo Prices only; Bob (Alpha's owner, given "Acme access" at
+Alpha by Olivia, so he may show again what Alpha hides), Carol (Alpha's admin, in group "Alpha analysts"), Dave
+(invited by Bob, in group "Alpha minimal": Recruiter, Prices, chat and Home, a Deny of BaseMap), Eve (an Acme member),
+Frank (an Acme member, Alpha viewer), Gina (an existing user of Bravo, added by Carol: PE2 b); Beta Corp with Paul,
+renamed, refused deletion while it has a workspace (409), then deleted.
+
+Nexus has no Home, BaseMap or Workflows feature, and `tasks` is not in the repository configuration's
+`enabled_features` (so it exists nowhere): the run uses `search` for Home, `graph` for BaseMap, `documents` for Tasks
+and `datasets` for Workflows (`FEATURE_OF`). An agent is used in a chat, so "Alpha minimal" grants `chat` with
+Recruiter. An organization role is owner, admin or member: Frank's read-only is his Alpha role (viewer); Bob becomes
+Alpha's owner through the members route (an org invitation gives a workspace role up to admin).
+
+Where the run follows the owner's rule rather than the issue's words (each person acts only on what they hold): Bob,
+who holds Acme's grant at Alpha, still sees the agents Alpha hides (UJ-W3, "nobody sees Onboarder or Coach" holds for
+everyone below "Alpha access"); Carol cannot expose Onboarder herself (UJ-PE3), Bob does. UI journeys (O1, W1, the
+builder narrowing "<W> access") are checked in a browser against the same database.
