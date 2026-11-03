@@ -115,15 +115,19 @@ from naas_abi_core.services.iam.names import (
     as_container,
     container_name,
     container_of_scope,
+    has_wildcard,
     is_below,
     is_old_scope,
+    matches,
     owner_ancestors,
     parse_container,
     parse_resource_name,
     resource_name,
+    substitute,
     top_container,
     validate_owner_scope,
     validate_scope,
+    variables,
     within,
     within_owner,
 )
@@ -1689,6 +1693,7 @@ class IAMService(IIAMService, PolicySource):
         chain: list[Policy] = []
         if parent:
             chain = self._new_chain(policy_id, owner, parent, height=1)
+            self._require_within_chain(parsed, owner, chain)
         self._require_held(
             parsed,
             _written_for(owner),
@@ -1919,6 +1924,8 @@ class IAMService(IIAMService, PolicySource):
             )
         else:
             chain, _whole = self._chain(updated, fresh=True)
+        if updated.document != current.document:
+            self._require_within_chain(updated.document, current.owner_scope, chain)
         if changed:
             self._check_unscoped_chain(updated, chain, below)
             self._check_new_denies(current, updated, chain, below)
@@ -2637,6 +2644,78 @@ class IAMService(IIAMService, PolicySource):
                 f"parent missing, a cycle or deeper than {MAX_DEPTH} policies)"
             )
         return [p.document.statements for p in (parent, *above)]
+
+    def _require_within_chain(
+        self, document: PolicyDocument, owner: str, chain: Sequence[Policy]
+    ) -> None:
+        """A sub-policy names nothing its chain allows nowhere, which it would grant
+        silently not at all ("Sub-policies"): an action written out (no wildcard)
+        that a policy of the chain allows on nothing, or a resource written out
+        (no wildcard once ``${scope}`` is its owner) that a policy of the chain
+        allows for none of the statement's actions. Refused (``ValueError``),
+        naming it and that policy. Only what is certain is refused: a pattern of
+        the chain naming another variable, or wildcards on both sides, count as
+        allowing. A first-party account writing for no user is not checked (the
+        moves of an upgrade)."""
+        if not chain:
+            return
+        ctx = current_call_context()
+        if ctx.on_behalf_of is None and self._first_party(ctx.principal):
+            return
+        values: dict[str, str | None] = {
+            "scope": owner if owner != PLATFORM_SCOPE else None
+        }
+        levels = [
+            (policy, [s for s in policy.document.statements if s.effect == "Allow"])
+            for policy in chain
+        ]
+
+        def action_meets(held: str, written: str) -> bool:
+            if has_wildcard(held) and has_wildcard(written):
+                return True
+            return matches(held, written) or matches(written, held)
+
+        def resource_meets(held: str, name: str) -> bool:
+            bound = substitute(held, values)
+            if bound is None or variables(bound):
+                return True  # another variable, or ${scope} unknown: may allow it
+            return matches(bound, name)
+
+        for index, statement in enumerate(document.statements):
+            if statement.effect != "Allow":
+                continue
+            where = f"statements[{index}]" + (
+                f" ({statement.sid})" if statement.sid else ""
+            )
+            for action in statement.actions:
+                if has_wildcard(action):
+                    continue
+                for policy, allows in levels:
+                    if not any(
+                        action_meets(a, action) for s in allows for a in s.actions
+                    ):
+                        raise ValueError(
+                            f"{where} allows {action}, which {policy.id} "
+                            f"({policy.name}), above it, allows on nothing: it would "
+                            "grant nothing"
+                        )
+            for pattern in statement.resources:
+                name = substitute(pattern, values)
+                if name is None or has_wildcard(name) or variables(name):
+                    continue
+                for policy, allows in levels:
+                    if not any(
+                        action_meets(a, action) and resource_meets(r, name)
+                        for s in allows
+                        for a in s.actions
+                        for action in statement.actions
+                        for r in s.resources
+                    ):
+                        raise ValueError(
+                            f"{where} allows {name}, which {policy.id} ({policy.name}), "
+                            f"above it, does not allow for {', '.join(statement.actions)}: "
+                            "it would grant nothing"
+                        )
 
     def _edits_sub_policy_of(self, parent_id: str, owner: str) -> bool:
         """Whether the caller may update a sub-policy of ``parent_id`` owned by

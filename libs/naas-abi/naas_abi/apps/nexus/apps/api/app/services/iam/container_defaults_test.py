@@ -220,16 +220,22 @@ async def test_a_new_workspace_exposes_nothing_until_widened_and_narrows_below_i
     # Olivia, an admin of Acme, uses what Acme may in every workspace of it.
     assert _uses(world, "olivia", _agent(ALPHA, "coach"))
     assert not _uses(world, "bob", _agent(ALPHA, "recruiter"))
-    # Olivia makes Alpha expose two of them: its owners and admins use those.
-    with use_call_context(NexusIam.context("olivia")):
+    # Pricer is outside Acme's: naming it in Alpha's is refused, never a silent no-op.
+    with use_call_context(NexusIam.context("olivia")), pytest.raises(ValueError, match="pricer"):
         world.iam.update_policy(
             ws_record.access_policy_id,
             expected_revision=1,
             document=_agents("recruiter", "scout", "pricer"),
         )
+    # Olivia makes Alpha expose two of them: its owners and admins use those.
+    with use_call_context(NexusIam.context("olivia")):
+        world.iam.update_policy(
+            ws_record.access_policy_id,
+            expected_revision=1,
+            document=_agents("recruiter", "scout"),
+        )
     assert _uses(world, "bob", _agent(ALPHA, "recruiter"))
     assert not _uses(world, "bob", _agent(ALPHA, "coach"))
-    # Pricer is outside Acme's: Alpha's access names it, and it grants nothing.
     assert not _uses(world, "bob", _agent(ALPHA, "pricer"))
     # Bob makes "Alpha minimal" under Alpha's access, and gives it to Dave.
     with use_call_context(NexusIam.context("bob")):
