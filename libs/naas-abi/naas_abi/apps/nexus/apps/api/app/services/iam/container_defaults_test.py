@@ -351,16 +351,51 @@ async def test_the_delete_route_is_the_owners_and_refuses_while_workspaces_remai
 # -- the upgrade --------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_the_upgrade_gives_each_its_defaults_and_nobody_gains_or_loses(nexus_db):
+async def _check_upgrade(nexus, nexus_db) -> None:
     """A database the sets' move and the names' move made (``policy_tree_test``'s
-    world): each organization keeps its "<O> access", each workspace's "<W> access"
-    becomes its own with what its organization owned below it, groups are made and
+    world), plus an organization and a workspace made after them: each organization
+    keeps its "<O> access", each workspace's "<W> access" becomes its own with what
+    its organization owned below it, the later ones get new ones, groups are made and
     filled, and every decision stays the same."""
-    nexus = previous._world()
+    from naas_abi.apps.nexus.apps.api.app.models import OrganizationModel, WorkspaceModel
+
     with nexus.installed():
         subjects = previous._subjects(nexus)
         await previous._upgrade(nexus, nexus_db)
+        # Made after the sets' move, before this version: no access policy of its own.
+        async with nexus_db() as db:
+            db.add(
+                OrganizationModel(
+                    id="org-late",
+                    name="Late",
+                    slug="late",
+                    owner_id="alice",
+                    created_at=NOW,
+                    updated_at=NOW,
+                )
+            )
+            await db.flush()
+            db.add(
+                WorkspaceModel(
+                    id="ws-late",
+                    name="Late W",
+                    slug="late-w",
+                    owner_id="alice",
+                    organization_id="org-late",
+                    created_at=NOW,
+                    updated_at=NOW,
+                )
+            )
+            await db.commit()
+        late = workspace_container("org-late", "ws-late")
+        with as_service_account("api"):
+            nexus.iam.register_container("nexus", "organization", "org-late")
+            nexus.iam.register_container(
+                "nexus", "workspace", "ws-late", parent=org_container("org-late")
+            )
+        nexus.grant("bob", "admin", late)
+        late_agent = _agent(late, "recruiter")
+        assert not _uses(nexus, "bob", late_agent)
         before = previous._iam_decisions(nexus, subjects)
         async with nexus_db() as db:
             report = await container_defaults.migrate(db)
@@ -369,8 +404,10 @@ async def test_the_upgrade_gives_each_its_defaults_and_nobody_gains_or_loses(nex
         nexus.iam.invalidate()
         after = previous._iam_decisions(nexus, subjects)
         assert {k: v for k, v in after.items() if before[k] != v} == {}
-        assert not report.failed and not report.made
-        assert set(report.adopted) == set(records)
+        assert not _uses(nexus, "bob", late_agent)
+        assert not report.failed
+        assert sorted(report.made) == sorted([org_container("org-late"), late])
+        assert set(report.adopted) | set(report.made) == set(records)
         with as_service_account("engine"):
             for ws, org in previous.WORKSPACES.items():
                 record = records[workspace_container(org, ws)]
@@ -383,14 +420,36 @@ async def test_the_upgrade_gives_each_its_defaults_and_nobody_gains_or_loses(nex
                     assert access.parent_id == records[org_container(org)].access_policy_id
                 # Not attached to the admins group: that would give what the move kept.
                 assert nexus.iam.list_attachments(principal_id=record.admins_group_id) == []
+            # The later workspace's, made now, is attached: it allows nothing.
+            made = records[late]
+            assert [
+                a.policy_id for a in nexus.iam.list_attachments(principal_id=made.admins_group_id)
+            ] == [made.access_policy_id]
+            assert (
+                nexus.iam.get_policy(made.access_policy_id).parent_id
+                == records[org_container("org-late")].access_policy_id
+            )
             # The groups hold the role holders.
             alpha = records[workspace_container("org-1", "ws-a")]
             holders = container_defaults.role_holders(nexus.iam, alpha.container)
             assert set(nexus.iam.list_group_members(alpha.members_group_id)) == set(holders)
+            assert nexus.principal("bob") in set(nexus.iam.list_group_members(made.admins_group_id))
         # Again: nothing more.
         async with nexus_db() as db:
             again = await container_defaults.migrate(db)
         assert again.made == again.adopted == []
+
+
+@pytest.mark.asyncio
+async def test_the_upgrade_gives_each_its_defaults_and_nobody_gains_or_loses(nexus_db):
+    await _check_upgrade(previous._world(), nexus_db)
+
+
+@pytest.mark.asyncio
+async def test_the_upgrade_on_the_sqlite_store(nexus_db, tmp_path):
+    from naas_abi_core.services.iam.adapters.secondary.IAMStoreSQLite import IAMStoreSQLite
+
+    await _check_upgrade(previous._world(IAMStoreSQLite(str(tmp_path / "iam.sqlite"))), nexus_db)
 
 
 async def _recorded(db) -> bool:
