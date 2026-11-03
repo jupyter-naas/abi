@@ -1,4 +1,5 @@
 """P, People Intelligence's stand-in: agents A (``Recruiter``) and B (``Scout``),
+``Onboarder`` and ``Coach`` (the cast of issue #1413), app ``directory``,
 an action of its own, ``dev_people:ExportReport`` on a ``report``, and a
 container type of its own, ``dev_people:project``: a project inside a workspace,
 whose reports a policy attached at the project reaches, and nothing else of the
@@ -202,6 +203,9 @@ class ABIModule(BaseModule):
     agents = (
         AgentDescriptor("Recruiter", "Agent A of P", capabilities=AGENT_INVOKE),
         AgentDescriptor("Scout", "Agent B of P", capabilities=AGENT_INVOKE),
+        # The rest of the #1413 cast: four agents in all, and app ``directory``.
+        AgentDescriptor("Onboarder", "An agent of P", capabilities=AGENT_INVOKE),
+        AgentDescriptor("Coach", "An agent of P", capabilities=AGENT_INVOKE),
     )
 
     async def on_initialized(self) -> None:
