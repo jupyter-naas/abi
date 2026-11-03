@@ -1924,8 +1924,17 @@ class IAMService(IIAMService, PolicySource):
             )
         else:
             chain, _whole = self._chain(updated, fresh=True)
-        if updated.document != current.document:
+        if reparented:
+            # A new chain: the whole document is checked against it, as at create.
             self._require_within_chain(updated.document, current.owner_scope, chain)
+        elif updated.document != current.document:
+            # What the edit adds: names a parent narrowed since stay as they were.
+            self._require_within_chain(
+                updated.document,
+                current.owner_scope,
+                chain,
+                previous=current.document,
+            )
         if changed:
             self._check_unscoped_chain(updated, chain, below)
             self._check_new_denies(current, updated, chain, below)
@@ -2646,7 +2655,12 @@ class IAMService(IIAMService, PolicySource):
         return [p.document.statements for p in (parent, *above)]
 
     def _require_within_chain(
-        self, document: PolicyDocument, owner: str, chain: Sequence[Policy]
+        self,
+        document: PolicyDocument,
+        owner: str,
+        chain: Sequence[Policy],
+        *,
+        previous: PolicyDocument | None = None,
     ) -> None:
         """A sub-policy names nothing its chain allows nowhere, which it would grant
         silently not at all ("Sub-policies"): an action written out (no wildcard)
@@ -2656,7 +2670,12 @@ class IAMService(IIAMService, PolicySource):
         naming it and that policy. Only what is certain is refused: a pattern of
         the chain naming another variable, or wildcards on both sides, count as
         allowing. A first-party account writing for no user is not checked (the
-        moves of an upgrade)."""
+        moves of an upgrade). With ``previous`` (an update of the document), only
+        what the edit adds: an action or a resource no Allow of ``previous`` wrote,
+        so a name its parent stopped allowing since never blocks an edit. A
+        resource naming an encoded NUL (``%00``) names nothing that exists, the way
+        a policy allows nothing (``Nothing``): never checked, nor the actions of a
+        statement that names only such resources."""
         if not chain:
             return
         ctx = current_call_context()
@@ -2681,14 +2700,26 @@ class IAMService(IIAMService, PolicySource):
                 return True  # another variable, or ${scope} unknown: may allow it
             return matches(bound, name)
 
+        kept_actions: set[str] = set()
+        kept_resources: set[str] = set()
+        for old in previous.statements if previous is not None else ():
+            if old.effect == "Allow":
+                kept_actions.update(old.actions)
+                kept_resources.update(old.resources)
+
+        def names_nothing(pattern: str) -> bool:
+            return "%00" in pattern
+
         for index, statement in enumerate(document.statements):
-            if statement.effect != "Allow":
+            if statement.effect != "Allow" or all(
+                names_nothing(r) for r in statement.resources
+            ):
                 continue
             where = f"statements[{index}]" + (
                 f" ({statement.sid})" if statement.sid else ""
             )
             for action in statement.actions:
-                if has_wildcard(action):
+                if has_wildcard(action) or action in kept_actions:
                     continue
                 for policy, allows in levels:
                     if not any(
@@ -2700,6 +2731,8 @@ class IAMService(IIAMService, PolicySource):
                             "grant nothing"
                         )
             for pattern in statement.resources:
+                if pattern in kept_resources or names_nothing(pattern):
+                    continue
                 name = substitute(pattern, values)
                 if name is None or has_wildcard(name) or variables(name):
                     continue

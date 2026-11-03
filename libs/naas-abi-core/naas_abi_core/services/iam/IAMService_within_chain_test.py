@@ -105,3 +105,89 @@ def test_a_first_party_account_writing_for_nobody_is_not_checked(h):
             "moved", _agents("market/pricer"), scope=WS1, parent=parent.id
         )
     assert made.parent_id == parent.id
+
+
+def test_a_name_the_parent_stopped_allowing_never_blocks_an_edit(h):
+    """(a) The parent is narrowed below a sub-policy: narrowing the sub-policy, or
+    any edit that adds nothing new, goes through."""
+    root, parent = _parent(h)
+    with h.as_(root):
+        child = h.iam.create_policy(
+            "Alpha access",
+            _agents("people/recruiter", "people/scout"),
+            scope=WS1,
+            parent=parent.id,
+        )
+        h.iam.update_policy(
+            parent.id,
+            expected_revision=1,
+            document=document(
+                statement("Allow", [USE], ["${scope}/module:agent/people/scout"])
+            ),
+        )
+        h.iam.update_policy(
+            child.id, expected_revision=1, document=_agents("people/recruiter")
+        )
+        # What the edit adds is still checked.
+        with pytest.raises(ValueError, match="people/coach"):
+            h.iam.update_policy(
+                child.id,
+                expected_revision=2,
+                document=_agents("people/recruiter", "people/coach"),
+            )
+
+
+NOTHING = statement("Allow", [USE], ["${scope}/module:agent/%00"], sid="Nothing")
+
+
+def test_the_nothing_sentinel_never_blocks_widening(h):
+    """(b) A new access policy allows nothing (``%00``); the builder keeps that
+    statement while it adds the first types, under a parent that allows specific
+    agents only, or no agent at all."""
+    h.iam._register_catalog(module_scopes.CATALOG)
+    h.register("ws-1")
+    root = h.user("root")
+    h.attach("builtin.platform_admin", root.id)
+    some = h.admin(
+        "create_policy",
+        "Acme access",
+        document(statement("Allow", [USE], ["${scope}/module:agent/people/recruiter"])),
+    )
+    none = h.admin(
+        "create_policy",
+        "Beta access",
+        document(statement("Allow", [OPEN], ["${scope}/module:app/market/prices"])),
+    )
+    for parent, added in (
+        (some, statement("Allow", [USE], ["${scope}/module:agent/people/recruiter"])),
+        (none, statement("Allow", [OPEN], ["${scope}/module:app/market/prices"])),
+    ):
+        with as_service_account("api"):
+            access = h.iam.create_policy(
+                "W access", document(NOTHING), scope=WS1, parent=parent.id
+            )
+        with h.as_(root):
+            widened = h.iam.update_policy(
+                access.id, expected_revision=1, document=document(NOTHING, added)
+            )
+        assert widened.revision == 2
+        # Created by hand with it, the sentinel is not checked either.
+        with h.as_(root):
+            h.iam.create_policy(
+                "by hand", document(NOTHING), scope=WS1, parent=parent.id
+            )
+
+
+def test_a_new_parent_is_checked_against_the_whole_document(h):
+    """Re-parenting with the same document is checked as a create is."""
+    root, parent = _parent(h)
+    with h.as_(root):
+        other = h.iam.create_policy(
+            "Market access",
+            document(statement("Allow", [USE], ["${scope}/module:agent/market/*"])),
+        )
+        child = h.iam.create_policy(
+            "Alpha access", _agents("people/recruiter"), scope=WS1, parent=parent.id
+        )
+        with pytest.raises(ValueError, match="people/recruiter"):
+            h.iam.update_policy(child.id, expected_revision=1, parent=other.id)

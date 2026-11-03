@@ -1277,7 +1277,12 @@ who may not derive from it learns nothing more of it (its owner, its chain):
   policy's by the platform or any container; an organisation's by it or a container in it
   (one of its workspaces); a workspace's by it or a container inside it;
 - a statement naming, **written out, what its chain allows nowhere**
-  (`IAMService._require_within_chain`, at create and when an update changes the document):
+  (`IAMService._require_within_chain`): at create and at a change of parent, the whole
+  document; at an update of the document, only what the edit adds (an action or a
+  resource no Allow of the current document writes), so a name its parent stopped
+  allowing since never blocks an edit; a resource naming an encoded NUL (`%00`) names
+  nothing that exists (how a new access policy allows nothing, `Nothing`) and is never
+  checked, nor the actions of a statement naming only such resources:
   an action with no wildcard that a policy of the chain allows on nothing, or a resource
   with no wildcard once `${scope}` is the owner that a policy of the chain allows for none
   of the statement's actions. It would grant nothing, silently; the refusal names it and
@@ -2429,7 +2434,10 @@ that overlaps nothing of the chain would need an automaton product per pattern, 
 `within_chain` meet says less than the truth, so it would refuse what is valid: only what
 is written out is refused, which is what a person writes by hand.
 *Consequences.* A wildcard is still bounded silently (`${scope}/module:agent/*` under a
-parent of two agents grants those two), as before. A platform admin writing a sub-policy
+parent of two agents grants those two), as before. An edit is checked for what it adds
+only: a parent narrowed since never blocks its sub-policies' edits, and the `%00`
+sentinel of an access policy that allows nothing never blocks its first widening. A
+change of parent is checked whole, as a create. A platform admin writing a sub-policy
 is refused too. Narrowing a parent never refuses what is below it, so a sub-policy may
 come to name what its parent no longer allows; it grants nothing of it, as before. The
 upgrades' moves, written as a first-party account for no user, are not checked. Nexus
