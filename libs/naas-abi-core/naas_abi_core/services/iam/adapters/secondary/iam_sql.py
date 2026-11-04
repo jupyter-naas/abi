@@ -897,20 +897,19 @@ class IAMStoreSQL(IAMStore):
         if kind is not None:
             query = query.where(principals.c.kind == kind)
         if text:
-            # A substring in any case (every letter lower-cased, as the other stores):
-            # LIKE's own wildcards in the text are literal.
+            # A substring in any case: the text and each column folded by the same
+            # function on the server, so both sides always fold alike. SQLite's is
+            # ``abi_lower`` (every letter, Python's ``str.lower``); PostgreSQL's
+            # ``lower()`` folds non-ASCII letters as the database's locale does
+            # (``LC_CTYPE``: ASCII only under ``C``). LIKE's own wildcards in the text
+            # are literal.
             lower = (
                 getattr(func, LOWER_FUNCTION)
                 if self._engine.dialect.name == "sqlite"
                 else func.lower
             )
-            escaped = (
-                text.lower()
-                .replace("\\", "\\\\")
-                .replace("%", "\\%")
-                .replace("_", "\\_")
-            )
-            pattern = f"%{escaped}%"
+            escaped = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            pattern = lower(literal(f"%{escaped}%", String))
             query = query.where(
                 or_(
                     *(
