@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.6.2 (2026-11-04)
+
+### Bug Fixes
+
+- **nexus/maps**: Ignore Leaflet zoom transition end after map teardown
+  ([`223c174`](https://github.com/jupyter-naas/abi/commit/223c174f8b85169884cd309ba4aac3b252d4dd77))
+
+
 ## v3.6.1 (2026-11-02)
 
 ### Bug Fixes
