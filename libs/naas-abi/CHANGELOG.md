@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.6.3 (2026-11-04)
+
+### Bug Fixes
+
+- **nexus/apps**: List remote module apps as installed
+  ([`deedc33`](https://github.com/jupyter-naas/abi/commit/deedc33ee29505ca12fade86c54b512630815588))
+
+
 ## v3.6.2 (2026-11-04)
 
 ### Bug Fixes
