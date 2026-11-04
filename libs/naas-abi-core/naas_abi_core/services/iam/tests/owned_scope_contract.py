@@ -444,6 +444,89 @@ def run_the_attach_list_follows_the_right_to_attach(
         session.attach_policy(ws_policy.id, ws2_group.id, WS1)
 
 
+def run_a_persons_access_is_listed_as_the_viewer_may(
+    iam: IAMService, as_user: AsUser
+) -> None:
+    """One person's access at every level, as each viewer may list it: their
+    attachments (``list_attachments(principal_id=)``, each filtered by
+    ``iam:ListAttachments`` on it) and their groups (``list_principal_groups``,
+    each filtered by ``iam:GetGroup``). The platform admin sees everything, an
+    organisation's admin what is inside it, a workspace's admin what IAM lets
+    them list, a member nothing."""
+    t = team(iam)
+    with as_service_account("engine"):
+        root = iam.ensure_user("https://idp.example", "root")
+        iam.attach_policy(roles.PLATFORM_ADMIN, root.id)
+        ws2_admin = iam.ensure_user("https://idp.example", "ws-2-admin")
+        iam.attach_policy(roles.ADMIN, ws2_admin.id, WS2)
+        bob = iam.ensure_user(
+            "https://idp.example", "bob", email="bob@example.com", display_name="Bob"
+        )
+        iam.attach_policy(roles.MEMBER, bob.id, ORG_SCOPE)
+        iam.attach_policy(roles.MEMBER, bob.id, WS2)
+        iam.attach_policy(roles.MEMBER, bob.id, OTHER_ORG)
+        own = iam.create_policy("bob: ws-2 graphs", reader(), scope=WS2)
+        iam.attach_policy(own.id, bob.id, WS2)
+        iam.attach_policy(t.ws2_policy, t.ws2_group, WS2)
+        iam.add_group_member(t.ws2_group, bob.id)
+        elsewhere = iam.create_group("ws-9 team", scope=OTHER_ORG)
+        theirs = iam.create_policy("ws-9 readers", reader(), scope=OTHER_ORG)
+        iam.attach_policy(theirs.id, elsewhere.id, OTHER_ORG)
+        iam.add_group_member(elsewhere.id, bob.id)
+
+    def held(who: PrincipalRecord) -> set[tuple[str, str | None]]:
+        with as_user(who) as session:
+            return {
+                (a.policy_id, a.scope)
+                for a in session.list_attachments(principal_id=bob.id)
+            }
+
+    def groups(who: PrincipalRecord) -> set[str]:
+        with as_user(who) as session:
+            return {g.id for g in session.list_principal_groups(bob.id)}
+
+    everything = held(root)
+    assert {
+        (roles.MEMBER, ORG_SCOPE),
+        (roles.MEMBER, WS2),
+        (roles.MEMBER, OTHER_ORG),
+        (own.id, WS2),
+    } <= everything
+    assert groups(root) == {t.ws2_group, elsewhere.id}
+    # The organisation's admin: inside org-1, at it and below.
+    inside = {(p, s) for p, s in everything if s and s.startswith(ORG_SCOPE)}
+    assert held(t.org_admin) == inside
+    assert (roles.MEMBER, OTHER_ORG) not in inside
+    assert groups(t.org_admin) == {t.ws2_group}
+    # ws-2's admin: what IAM lets them list, ws-2's.
+    assert {(own.id, WS2), (roles.MEMBER, WS2)} <= held(ws2_admin)
+    assert all(s == WS2 for _, s in held(ws2_admin))
+    assert groups(ws2_admin) == {t.ws2_group}
+    # ws-1's admin and a member: nothing of it.
+    assert held(t.ws_admin) == set() and groups(t.ws_admin) == set()
+    assert held(t.member) == set() and groups(t.member) == set()
+    # The group's attachments, as its page lists them, at every level.
+    with as_user(t.org_admin) as session:
+        assert {
+            a.policy_id for a in session.list_attachments(principal_id=t.ws2_group)
+        } == {t.ws2_policy}
+    # Someone the viewer may not list is a principal without groups, not an error.
+    with as_user(t.member) as session:
+        assert session.list_principal_groups("usr_nobody") == []
+
+    # The platform finds a person by a search text: id, name, email or display
+    # name, any case; whoever may list no principal finds no one.
+    with as_user(root) as session:
+        for text in ("BOB@example", "bob", bob.id):
+            found = session.list_principals("user", text=text).items
+            assert bob.id in {p.id for p in found}, text
+        assert session.list_principals("user", text="nobody-at-all").items == []
+        only_bob = session.list_principals("user", text="bob@", limit=1)
+        assert [p.id for p in only_bob.items] == [bob.id]
+    with as_user(t.org_admin) as session:
+        assert session.list_principals("user", text="bob").items == []
+
+
 def _assert_allowed(
     iam: IAMService, user: PrincipalRecord, action: str, name: str
 ) -> None:
@@ -468,4 +551,5 @@ SCENARIOS = (
     run_platform_denies_at_a_scope,
     run_another_containers_policies_are_not_listed,
     run_the_attach_list_follows_the_right_to_attach,
+    run_a_persons_access_is_listed_as_the_viewer_may,
 )

@@ -178,8 +178,11 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
         *,
         limit: int = 100,
         after: str | None = None,
+        text: str | None = None,
     ) -> Page:
-        response = self._request("list_principals", kind=kind, limit=limit, after=after)
+        response = self._request(
+            "list_principals", kind=kind, limit=limit, after=after, text=text
+        )
         return Page(
             [codec.principal_from_pb(p) for p in response.principals],
             response.next_after if response.HasField("next_after") else None,
@@ -233,6 +236,10 @@ class IAMSecondaryAdapterNATSClient(NatsRPCClient, IIAMService):
 
     def list_group_members(self, group_id: str) -> list[str]:
         return list(self._request("list_group_members", group_id=group_id).member_ids)
+
+    def list_principal_groups(self, principal_id: str) -> list[PrincipalRecord]:
+        response = self._request("list_principal_groups", principal_id=principal_id)
+        return [codec.principal_from_pb(g) for g in response.groups]
 
     def map_idp_group(
         self, provider: str, claim_value: str, group_id: str

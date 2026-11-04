@@ -547,9 +547,11 @@ class IAMStore(ABC):
         limit: int = 100,
         after: str | None = None,
         owner_scopes: Sequence[str] | None = None,
+        text: str | None = None,
     ) -> Page:
         """Principals by ascending id, strictly after ``after``; with
-        ``owner_scopes``, only those owned by one of them."""
+        ``owner_scopes``, only those owned by one of them; with ``text``, only
+        those whose id, name, email or display name holds it, in any case."""
 
     @abstractmethod
     def update_principal(self, record: PrincipalRecord) -> PrincipalRecord:
@@ -1206,7 +1208,11 @@ class IIAMService(ABC):
         *,
         limit: int = 100,
         after: str | None = None,
-    ) -> Page: ...
+        text: str | None = None,
+    ) -> Page:
+        """The principals the caller may list (``iam:ListPrincipals``); with
+        ``text``, those whose id, name, email or display name holds it, in any
+        case: how the platform finds a person."""
 
     @abstractmethod
     def suspend_principal(self, principal_id: str) -> PrincipalRecord: ...
@@ -1246,6 +1252,12 @@ class IIAMService(ABC):
 
     @abstractmethod
     def list_group_members(self, group_id: str) -> list[str]: ...
+
+    @abstractmethod
+    def list_principal_groups(self, principal_id: str) -> list[PrincipalRecord]:
+        """The groups ``principal_id`` is a member of that the caller may read
+        (``iam:GetGroup``, as reading the group's members takes), at every
+        level: none for a principal the caller may see nothing of."""
 
     @abstractmethod
     def map_idp_group(

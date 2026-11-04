@@ -433,6 +433,8 @@ message ListPrincipalsRequest {
   optional string kind = 2;
   int32 limit = 3;
   optional string after = 4;
+  // Only those whose id, name, email or display name holds it, in any case.
+  optional string text = 5;
 }
 message ListPrincipalsResponse {
   abi.common.v1.CallError error = 1;
@@ -541,6 +543,17 @@ message ListGroupMembersRequest {
 message ListGroupMembersResponse {
   abi.common.v1.CallError error = 1;
   repeated string member_ids = 2;
+}
+
+// The groups a principal is a member of that the caller may read (iam:GetGroup),
+// at every level.
+message ListPrincipalGroupsRequest {
+  abi.common.v1.CallContext context = 1;
+  string principal_id = 2;
+}
+message ListPrincipalGroupsResponse {
+  abi.common.v1.CallError error = 1;
+  repeated Principal groups = 2;
 }
 
 message MapIdpGroupRequest {

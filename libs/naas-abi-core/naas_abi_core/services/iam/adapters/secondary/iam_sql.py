@@ -67,6 +67,7 @@ from sqlalchemy import (
     insert,
     inspect,
     literal,
+    or_,
     select,
     text,
     update,
@@ -883,11 +884,34 @@ class IAMStoreSQL(IAMStore):
         limit: int = 100,
         after: str | None = None,
         owner_scopes: Sequence[str] | None = None,
+        text: str | None = None,
     ) -> Page:
         _check_limit(limit)
         query = select(principals).order_by(principals.c.id).limit(limit + 1)
         if kind is not None:
             query = query.where(principals.c.kind == kind)
+        if text:
+            # A substring in any case: LIKE's own wildcards in the text are literal.
+            escaped = (
+                text.lower()
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_")
+            )
+            pattern = f"%{escaped}%"
+            query = query.where(
+                or_(
+                    *(
+                        func.lower(column).like(pattern, escape="\\")
+                        for column in (
+                            principals.c.id,
+                            principals.c.name,
+                            principals.c.email,
+                            principals.c.display_name,
+                        )
+                    )
+                )
+            )
         if owner_scopes is not None:
             query = query.where(principals.c.owner_scope.in_(list(owner_scopes)))
         if after is not None:

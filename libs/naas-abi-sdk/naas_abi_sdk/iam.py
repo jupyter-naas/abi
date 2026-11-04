@@ -136,6 +136,13 @@ class IamClient:
             "abi.iam.v1.list_group_members", request, pb.ListGroupMembersResponse
         )
 
+    async def list_principal_groups(
+        self, request: pb.ListPrincipalGroupsRequest
+    ) -> pb.ListPrincipalGroupsResponse:
+        return await self._transport.call(
+            "abi.iam.v1.list_principal_groups", request, pb.ListPrincipalGroupsResponse
+        )
+
     async def map_idp_group(
         self, request: pb.MapIdpGroupRequest
     ) -> pb.MapIdpGroupResponse:

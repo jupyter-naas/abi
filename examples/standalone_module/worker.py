@@ -920,6 +920,7 @@ class ABIModule(BaseModule):
             "add_group_member": {"group_id": group, "member_id": user},
             "remove_group_member": {"group_id": group, "member_id": user},
             "list_group_members": {"group_id": group},
+            "list_principal_groups": {"principal_id": user},
             "map_idp_group": {
                 "provider": "acme",
                 "claim_value": "Sales",

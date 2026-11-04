@@ -1346,10 +1346,11 @@ class IAMService(IIAMService, PolicySource):
         *,
         limit: int = 100,
         after: str | None = None,
+        text: str | None = None,
     ) -> Page:
         return self._filtered_page(
             lambda size, cursor: self.store.list_principals(
-                kind, limit=size, after=cursor
+                kind, limit=size, after=cursor, text=text or None
             ),
             "iam:ListPrincipals",
             lambda record: principal_resource(record.id),
@@ -1544,6 +1545,22 @@ class IAMService(IIAMService, PolicySource):
     def list_group_members(self, group_id: str) -> list[str]:
         self._require_group("iam:GetGroup", group_id)
         return self.store.list_group_members(group_id)
+
+    def list_principal_groups(self, principal_id: str) -> list[PrincipalRecord]:
+        """The groups of ``principal_id`` the caller may read: each decided as
+        ``list_group_members`` decides it, so a membership is shown to whoever
+        may see the group's members, and to no one else."""
+        found = [
+            group
+            for group in (
+                self._find_group(group_id)
+                for group_id in self.store.groups_of(principal_id)
+            )
+            if group is not None and group.status != "deleted"
+        ]
+        names = {g.id: group_resource(g.id, g.owner_scope) for g in found}
+        allowed = set(self.filter("iam:GetGroup", names.values()).allowed)
+        return [g for g in found if names[g.id] in allowed]
 
     def map_idp_group(
         self, provider: str, claim_value: str, group_id: str

@@ -80,6 +80,7 @@ OPERATIONS = {
         "add_group_member",
         "remove_group_member",
         "list_group_members",
+        "list_principal_groups",
         "map_idp_group",
         "unmap_idp_group",
         "list_idp_group_mappings",

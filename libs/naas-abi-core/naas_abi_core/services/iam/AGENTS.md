@@ -1590,11 +1590,17 @@ Administration (each needs its `iam:*` action): `ensure_user`, `link_user`
 identity, `iam_identity_links`, which `find_user` answers first, so its principal, roles, groups and keys follow it
 to an identity provider; the user a first sign-in made for that identity is merged into it, retired, and one
 holding keys refuses the link; `identity_at(principal, issuer)` names the subject by which a provider knows a
-user, its own or linked), `create_service_account`, `get_principal`, `list_principals`,
+user, its own or linked), `create_service_account`, `get_principal`, `list_principals`
+(`text=`: only those whose id, name, email or display name holds it, in any case, `LIKE`'s
+wildcards taken literally: how the platform finds a person; filtered by `iam:ListPrincipals`
+like the list),
 `suspend_principal`, `resume_principal`, `delete_principal` (keeps the id, drops
 attachments and memberships), groups (`create_group`, `add_group_member`,
 `map_idp_group`, ...; groups cannot contain groups; `create_group(name, scope=)`, its
-owner a container or the platform), policies (`create_policy(name, document, scope=, parent=)`
+owner a container or the platform; `list_principal_groups(principal_id)`: the groups a
+principal is a member of, at every level, each kept only where the caller may
+`iam:GetGroup` it, as reading its members takes, so it tells no one a membership they could
+not read from the group: a principal the caller sees nothing of has none), policies (`create_policy(name, document, scope=, parent=)`
 validated against the registered catalogs, `update_policy(expected_revision=, parent=)`,
 `list_sub_policies`: "Sub-policies"; managed policies are IAM's alone), `attach_policy`/`detach_policy` (idempotent;
 a policy naming `${scope}` needs a scoped attachment, and only a policy whose
@@ -2146,7 +2152,11 @@ refused key). Sub-policies: `CreatePolicyRequest.parent`, `UpdatePolicyRequest.p
 (absent keeps it, `""` removes it), `Policy.parent_id` (empty: none), `list_sub_policies`
 (`ListSubPoliciesRequest`, needing what the in-process call needs); `attachable_policies`
 (`AttachablePoliciesRequest`: `scope` and `principal_id` absent for unscoped and for anyone),
-offered by the broker to whoever may `iam:AttachPolicy`; the same refusals,
+offered by the broker to whoever may `iam:AttachPolicy`; `list_principal_groups`
+(`ListPrincipalGroupsRequest`, `ListPrincipalGroupsResponse.groups`) and the search text of
+`list_principals` (`ListPrincipalsRequest.text`, absent for every principal), each offered by
+the broker as the other lists, to whoever holds its action (`iam:GetGroup`,
+`iam:ListPrincipals`); the same refusals,
 with the same codes and messages, in process, over NATS and through the SDK. There is no
 set operation (the sets are gone: `get_set`, `effective_set`, `list_sets`, `put_set` and
 their messages were removed; IAM's catalog 7 drops `iam:GetSet` and `iam:PutSet`). Containers:

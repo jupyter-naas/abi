@@ -134,6 +134,27 @@ def test_what_the_caller_may_attach_at_a_scope():
     assert not sent.HasField("scope") and not sent.HasField("principal_id")
 
 
+def test_a_persons_groups_and_a_search_for_principals():
+    client = AsyncMock()
+    client.list_principal_groups.return_value = pb.ListPrincipalGroupsResponse(
+        groups=[pb.Principal(id="grp_g", kind="group", status="active", name="G")]
+    )
+    client.list_principals.return_value = pb.ListPrincipalsResponse(
+        principals=[pb.Principal(id="usr_bob", kind="user", status="active")]
+    )
+    iam = IAMService(client)
+    groups = run(iam.list_principal_groups("usr_bob"))
+    assert [(g["id"], g["name"]) for g in groups] == [("grp_g", "G")]
+    assert client.list_principal_groups.call_args.args[0].principal_id == "usr_bob"
+    page = run(iam.list_principals("user", text="bob@"))
+    assert [p["id"] for p in page["principals"]] == ["usr_bob"]
+    sent = client.list_principals.call_args.args[0]
+    assert (sent.kind, sent.text) == ("user", "bob@")
+    # No text: unset on the wire, every principal.
+    run(iam.list_principals())
+    assert not client.list_principals.call_args.args[0].HasField("text")
+
+
 def test_wire_errors_become_portable_exceptions():
     client = AsyncMock()
     client.get_principal.side_effect = RPCError("NOT_FOUND", "Principal x not found")

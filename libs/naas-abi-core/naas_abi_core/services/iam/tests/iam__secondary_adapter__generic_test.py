@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -175,6 +176,32 @@ class IAMStoreContract(ABC):
         assert len(store.list_principals(limit=10).items) == 6
         with pytest.raises(ValueError):
             store.list_principals(limit=0)
+
+    def test_list_principals_finds_a_search_text(self, store: IAMStore):
+        bob = store.create_principal(
+            replace(user("bob"), email="Bob.Smith@example.com", display_name="Bob")
+        )
+        ann = store.create_principal(
+            replace(user("ann"), email="ann_lee@example.com", display_name="Ann 50%")
+        )
+        team = store.create_principal(group("Bob's team"))
+        store.create_principal(service_account("module/acme/people"))
+
+        def found(text: str, kind=None) -> set[str]:
+            return {p.id for p in store.list_principals(kind, text=text).items}
+
+        assert found("bob.smith@EXAMPLE") == {bob.id}
+        assert found("BOB") == {bob.id, team.id}
+        assert found("bob", "user") == {bob.id}
+        assert found(ann.id) == {ann.id}
+        assert found("acme/people") == {
+            p.id for p in store.list_principals("service_account").items
+        }
+        # LIKE's wildcards are plain characters in the text.
+        assert found("_lee") == {ann.id} and found("50%") == {ann.id}
+        assert found("a_n") == set() and found("%") == {ann.id}
+        page = store.list_principals(text="example", limit=1)
+        assert len(page.items) == 1 and page.next_after is not None
 
     # -- groups -------------------------------------------------------------------
 

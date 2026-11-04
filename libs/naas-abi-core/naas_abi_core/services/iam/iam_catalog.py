@@ -106,7 +106,7 @@ CATALOG = ActionCatalog(
         _action("ListManifests", "list", ("manifest",), "list_manifests"),
         _action("ListPlacements", "list", ("placement",), "list_placements"),
         _action("GetPrincipal", "read", ("principal",), "get_principal"),
-        _action("GetGroup", "read", ("group",), "get_group"),
+        _action("GetGroup", "read", ("group",), "get_group", "list_principal_groups"),
         _action("GetPolicy", "read", ("policy",), "get_policy"),
         _action("GetManifest", "read", ("manifest",), "get_manifest"),
         _action("Explain", "read", ("principal",), "explain"),

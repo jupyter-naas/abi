@@ -237,7 +237,10 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
         self, req: pb.ListPrincipalsRequest
     ) -> pb.ListPrincipalsResponse:
         page = self._iam.list_principals(
-            _opt(req, "kind"), limit=req.limit or 100, after=_opt(req, "after")
+            _opt(req, "kind"),
+            limit=req.limit or 100,
+            after=_opt(req, "after"),
+            text=_opt(req, "text"),
         )
         return pb.ListPrincipalsResponse(
             principals=[codec.principal_to_pb(p) for p in page.items],
@@ -304,6 +307,16 @@ class IAMPrimaryAdapterNATS(ServicePrimary):
     ) -> pb.ListGroupMembersResponse:
         return pb.ListGroupMembersResponse(
             member_ids=self._iam.list_group_members(req.group_id)
+        )
+
+    def _call_list_principal_groups(
+        self, req: pb.ListPrincipalGroupsRequest
+    ) -> pb.ListPrincipalGroupsResponse:
+        return pb.ListPrincipalGroupsResponse(
+            groups=[
+                codec.principal_to_pb(g)
+                for g in self._iam.list_principal_groups(req.principal_id)
+            ]
         )
 
     def _call_map_idp_group(self, req: pb.MapIdpGroupRequest) -> pb.MapIdpGroupResponse:

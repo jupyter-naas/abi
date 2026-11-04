@@ -74,6 +74,7 @@ OPERATIONS = {
     "add_group_member": "AddGroupMember",
     "remove_group_member": "RemoveGroupMember",
     "list_group_members": "ListGroupMembers",
+    "list_principal_groups": "ListPrincipalGroups",
     "map_idp_group": "MapIdpGroup",
     "unmap_idp_group": "UnmapIdpGroup",
     "list_idp_group_mappings": "ListIdpGroupMappings",

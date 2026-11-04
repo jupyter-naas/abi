@@ -567,16 +567,18 @@ class GetPrincipalResponse(_message.Message):
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., principal: _Optional[_Union[Principal, _Mapping]] = ...) -> None: ...
 
 class ListPrincipalsRequest(_message.Message):
-    __slots__ = ("context", "kind", "limit", "after")
+    __slots__ = ("context", "kind", "limit", "after", "text")
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     KIND_FIELD_NUMBER: _ClassVar[int]
     LIMIT_FIELD_NUMBER: _ClassVar[int]
     AFTER_FIELD_NUMBER: _ClassVar[int]
+    TEXT_FIELD_NUMBER: _ClassVar[int]
     context: _common_pb2.CallContext
     kind: str
     limit: int
     after: str
-    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., kind: _Optional[str] = ..., limit: _Optional[int] = ..., after: _Optional[str] = ...) -> None: ...
+    text: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., kind: _Optional[str] = ..., limit: _Optional[int] = ..., after: _Optional[str] = ..., text: _Optional[str] = ...) -> None: ...
 
 class ListPrincipalsResponse(_message.Message):
     __slots__ = ("error", "principals", "next_after")
@@ -757,6 +759,22 @@ class ListGroupMembersResponse(_message.Message):
     error: _common_pb2.CallError
     member_ids: _containers.RepeatedScalarFieldContainer[str]
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., member_ids: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class ListPrincipalGroupsRequest(_message.Message):
+    __slots__ = ("context", "principal_id")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    PRINCIPAL_ID_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    principal_id: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., principal_id: _Optional[str] = ...) -> None: ...
+
+class ListPrincipalGroupsResponse(_message.Message):
+    __slots__ = ("error", "groups")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    GROUPS_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    groups: _containers.RepeatedCompositeFieldContainer[Principal]
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., groups: _Optional[_Iterable[_Union[Principal, _Mapping]]] = ...) -> None: ...
 
 class MapIdpGroupRequest(_message.Message):
     __slots__ = ("context", "provider", "claim_value", "group_id")

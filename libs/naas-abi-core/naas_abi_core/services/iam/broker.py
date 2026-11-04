@@ -125,6 +125,7 @@ IAM_OPERATIONS = (
     "list_pending_grants",
     "list_placements",
     "list_policies",
+    "list_principal_groups",
     "list_principals",
     "list_resources",
     "list_sub_policies",

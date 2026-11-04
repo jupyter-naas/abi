@@ -146,7 +146,17 @@ class IAMStoreMemory(IAMStore):
         limit: int = 100,
         after: str | None = None,
         owner_scopes: Sequence[str] | None = None,
+        text: str | None = None,
     ) -> Page:
+        wanted = text.casefold() if text else None
+
+        def matches(p: PrincipalRecord) -> bool:
+            return wanted is None or any(
+                wanted in value.casefold()
+                for value in (p.id, p.name, p.email, p.display_name)
+                if value
+            )
+
         with self._lock:
             ids = sorted(
                 p.id
@@ -154,6 +164,7 @@ class IAMStoreMemory(IAMStore):
                 if (kind is None or p.kind == kind)
                 and (after is None or p.id > after)
                 and (owner_scopes is None or p.owner_scope in owner_scopes)
+                and matches(p)
             )
             return _page([self._principals[i] for i in ids], limit)
 

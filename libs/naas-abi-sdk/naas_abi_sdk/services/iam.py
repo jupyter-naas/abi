@@ -208,11 +208,17 @@ class IAMService(ServiceProxy):
         return await self._request("get_principal", principal_id=principal_id)
 
     async def list_principals(
-        self, kind: str | None = None, *, limit: int = 100, after: str | None = None
+        self,
+        kind: str | None = None,
+        *,
+        limit: int = 100,
+        after: str | None = None,
+        text: str | None = None,
     ) -> dict[str, Any]:
-        """``{"principals": [...], "next_after": ...}``."""
+        """``{"principals": [...], "next_after": ...}``; with ``text``, those
+        whose id, name, email or display name holds it, in any case."""
         return await self._request(
-            "list_principals", kind=kind, limit=limit, after=after
+            "list_principals", kind=kind, limit=limit, after=after, text=text
         )
 
     async def suspend_principal(self, principal_id: str) -> dict[str, Any]:
@@ -254,6 +260,11 @@ class IAMService(ServiceProxy):
 
     async def list_group_members(self, group_id: str) -> list[str]:
         return await self._request("list_group_members", group_id=group_id)
+
+    async def list_principal_groups(self, principal_id: str) -> list[dict[str, Any]]:
+        """The groups ``principal_id`` is a member of that the caller may read,
+        at every level."""
+        return await self._request("list_principal_groups", principal_id=principal_id)
 
     async def map_idp_group(
         self, provider: str, claim_value: str, group_id: str
