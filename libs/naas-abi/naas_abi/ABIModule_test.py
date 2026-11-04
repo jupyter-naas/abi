@@ -69,6 +69,32 @@ def test_documents_picker_overrides_survive_the_trip_into_nexus_settings() -> No
     assert settings.documents_hidden_template_ids == ["abi/article-light-v1"]
 
 
+def test_a_seed_user_profile_survives_the_trip_into_nexus_settings() -> None:
+    """Organization and job title in `users:` have to reach the Nexus seeder.
+
+    Nexus renamed company and role to organization and job_title; a seed user
+    declared with the new names must not fail the boot on this side.
+    """
+    from naas_abi.apps.nexus.apps.api.app.core.config import Settings
+
+    dumped = NexusConfig(
+        users=[
+            {
+                "email": "alex@example.com",
+                "name": "Alex Rivera",
+                "organization": "NaasAI",
+                "job_title": "Key Account Manager",
+            }
+        ]
+    ).model_dump(exclude_none=True)
+
+    settings = Settings(**dumped)
+
+    (user,) = settings.users
+    assert user.organization == "NaasAI"
+    assert user.job_title == "Key Account Manager"
+
+
 def test_a_slides_template_source_cannot_claim_the_abi_namespace() -> None:
     """Refused on the boot, before a picker can serve the wrong deck.
 
