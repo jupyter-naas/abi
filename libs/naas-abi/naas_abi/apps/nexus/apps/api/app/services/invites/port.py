@@ -191,6 +191,14 @@ class InvitationPersistencePort(ABC):
     async def mark_revoked(self, invitation_id: str, *, now: datetime) -> bool: ...
 
     @abstractmethod
+    async def record_provisioned(
+        self, provider: str, subject: str, email: str, *, now: datetime
+    ) -> None:
+        """Remember an account the invitation made at ``provider`` (``provisioned_identities``):
+        Platform Settings > Users changes and deletes only those there
+        (``services/accounts``). Recording one twice is no change."""
+
+    @abstractmethod
     async def provider_for_domain(self, domain: str, organization_id: str | None) -> str | None:
         """The provider a verified domain of the organization (else any
         organization) routes to."""

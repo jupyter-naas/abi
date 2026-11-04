@@ -9,6 +9,7 @@ from datetime import datetime
 from naas_abi.apps.nexus.apps.api.app.models import (
     InvitationModel,
     OrganizationDomainModel,
+    ProvisionedIdentityModel,
     UserModel,
     WorkspaceModel,
 )
@@ -192,6 +193,18 @@ class InvitationSecondaryAdapterPostgres(InvitationPersistencePort):
 
     async def mark_revoked(self, invitation_id: str, *, now: datetime) -> bool:
         return await self._transition(invitation_id, status="revoked", updated_at=now)
+
+    async def record_provisioned(
+        self, provider: str, subject: str, email: str, *, now: datetime
+    ) -> None:
+        known = await self.db.get(ProvisionedIdentityModel, (provider, subject))
+        if known is None:
+            self.db.add(
+                ProvisionedIdentityModel(
+                    provider=provider, subject=subject, email=email.lower(), created_at=now
+                )
+            )
+            await self.db.flush()
 
     async def provider_for_domain(self, domain: str, organization_id: str | None) -> str | None:
         """The provider the organization routes ``domain`` to: a domain it verified

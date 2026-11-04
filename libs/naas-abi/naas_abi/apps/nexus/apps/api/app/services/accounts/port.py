@@ -86,6 +86,8 @@ class Provider:
     name: str
     display_name: str
     managed_in_provider: bool
+    # ABI's own provider (``provisioning: builtin``): every account there is ABI's.
+    own: bool = False
 
 
 @dataclass(frozen=True)
@@ -220,6 +222,12 @@ class AccountStorePort(ABC):
     @abstractmethod
     async def retired_identity(self, provider: str, subject: str) -> bool:
         """Whether a deleted account is bound to this identity at a provider."""
+
+    @abstractmethod
+    async def made_by_abi(self, provider: str, subject: str) -> bool:
+        """Whether an invitation made this account at ``provider``
+        (``provisioned_identities``): only such an account, or one at ABI's own
+        provider, is changed or deleted there with the person's Nexus account."""
 
     @abstractmethod
     async def rename(self, user_id: str, name: str, *, now: datetime) -> None: ...

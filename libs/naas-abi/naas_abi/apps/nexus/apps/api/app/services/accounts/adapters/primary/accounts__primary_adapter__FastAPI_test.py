@@ -88,6 +88,11 @@ class Idp(DirectoryGateway, IdentityGateway):
         # What provisioning raises (a provider down, an address it refuses).
         self.provision_fails: Exception | None = None
         self.delete_fails = False
+        # ABI's own provider (every account there is ABI's); False: a shared realm
+        # (Keycloak, Zitadel) where ABI changes only the accounts it made.
+        self.own = True
+        # What a lookup at the provider raises (a provider briefly down).
+        self.find_fails: Exception | None = None
 
     def subject_of(self, email: str) -> str:
         return self.people[email].subject
@@ -109,11 +114,13 @@ class Idp(DirectoryGateway, IdentityGateway):
 
     # -- the directory's side
     async def providers(self) -> list[Provider]:
-        return [Provider("builtin", "Built-in", managed_in_provider=self.managed)]
+        return [Provider("builtin", "Built-in", managed_in_provider=self.managed, own=self.own)]
 
     async def find(self, provider: str, email: str, *, by: str) -> ProviderAccount | None:
         if self.managed:
             raise ProviderManaged("managed")
+        if self.find_fails is not None:
+            raise self.find_fails
         person = self.people.get(email)
         if person is None:
             return None
@@ -602,3 +609,101 @@ async def test_a_refused_superadmin_change_leaves_the_name_as_it_was(api, team):
         assert (await db.get(UserModel, "root")).name == "Root"
     assert api.idp.people["root@example.com"].name == "Root"
     assert _phases(api.audit, "rename_user") == []
+
+
+# -- a shared realm: only what ABI made is ABI's ------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_at_a_shared_realm_an_account_abi_did_not_make_stays_the_persons(api, team):
+    """Eve's account existed in the realm when she was invited (the provider found it,
+    created nothing): deleting her invitation, or refusing to deactivate it, never
+    touches it. Member signed in with an account ABI never made: deactivating and
+    deleting end their access to ABI and leave that account as it is."""
+    api.idp.own = False
+    api.idp.people["eve@example.com"] = Person("sub-eve", "Eve")
+    async with api.as_("root") as http:
+        invited = await http.post("/api/admin/users/invite", json={"email": "eve@example.com"})
+        assert invited.status_code == 200, invited.text
+        assert invited.json()["user_created"] is False
+        eve = quote("invited:eve@example.com", safe="")
+        refused = await http.post(f"/api/admin/users/{eve}/deactivate")
+        assert refused.status_code == 400
+        assert "theirs, not ABI's" in refused.json()["detail"]
+        assert not api.idp.people["eve@example.com"].disabled
+        plan = (await http.get(f"/api/admin/users/{eve}/deletion")).json()
+        assert plan["goes"]["provider_account"] is None
+        assert "stays as it is" in plan["warning"]
+        gone = await http.delete(f"/api/admin/users/{eve}?confirm=eve@example.com")
+        assert gone.status_code == 200, gone.text
+        assert "eve@example.com" in api.idp.people
+        assert "theirs, not ABI's" in gone.json()["warning"]
+
+        off = await http.post("/api/admin/users/member/deactivate")
+        assert off.status_code == 200, off.text
+        assert off.json()["deactivated"] is True and _status(team, "member") == "suspended"
+        assert not api.idp.people["member@example.com"].disabled
+        assert "theirs, not ABI's" in off.json()["warning"]
+        plan = (await http.get("/api/admin/users/member/deletion")).json()
+        assert plan["goes"]["provider_account"] is None
+        assert "could not sign in with it" in plan["warning"]
+        gone = await http.delete("/api/admin/users/member?confirm=member@example.com")
+        assert gone.status_code == 200, gone.text
+    assert _status(team, "member") == "deleted"
+    assert "member@example.com" in api.idp.people
+
+
+@pytest.mark.asyncio
+async def test_at_a_shared_realm_an_account_abi_made_is_disabled_and_deleted(api):
+    """Carl had no account in the realm: the invitation made it, so it is ABI's to
+    disable and to delete, as at ABI's own provider."""
+    api.idp.own = False
+    async with api.as_("root") as http:
+        invited = await http.post("/api/admin/users/invite", json={"email": "carl@example.com"})
+        assert invited.json()["user_created"] is True
+        carl = quote("invited:carl@example.com", safe="")
+        off = await http.post(f"/api/admin/users/{carl}/deactivate")
+        assert off.status_code == 200, off.text
+        assert api.idp.people["carl@example.com"].disabled
+        plan = (await http.get(f"/api/admin/users/{carl}/deletion")).json()
+        assert plan["goes"]["provider_account"]["provider"] == "builtin"
+        gone = await http.delete(f"/api/admin/users/{carl}?confirm=carl@example.com")
+        assert gone.status_code == 200, gone.text
+    assert "carl@example.com" not in api.idp.people
+
+
+@pytest.mark.asyncio
+async def test_a_lookup_that_failed_is_said_on_delete_and_rename(api, team):
+    """Viewer never signed in (no subject): their account is looked up by email. The
+    provider is down for the lookup: the change goes on in ABI, and says it."""
+    api.idp.find_fails = ProviderUnreachable("the provider is down")
+    async with api.as_("root") as http:
+        renamed = await http.patch("/api/admin/users/viewer", json={"name": "Vera"})
+        assert renamed.status_code == 200, renamed.text
+        assert "could not be asked" in renamed.json()["warning"]
+        gone = await http.delete("/api/admin/users/viewer?confirm=viewer@example.com")
+        assert gone.status_code == 200, gone.text
+        assert "could not be asked" in gone.json()["warning"]
+    assert _status(team, "viewer") == "deleted"
+
+
+@pytest.mark.asyncio
+async def test_a_superadmin_change_made_before_a_failed_rename_is_answered(api, team, monkeypatch):
+    """The superadmin change is made, the rename fails after it: the answer is the
+    account as it now is, saying the name is not changed, never a "nothing changed"."""
+    from naas_abi.apps.nexus.apps.api.app.services.accounts.adapters.secondary import (
+        postgres as store,
+    )
+
+    async def failing(self, user_id, name, *, now):
+        raise RuntimeError("the store went away")
+
+    monkeypatch.setattr(store.AccountStorePostgres, "rename", failing)
+    async with api.as_("root") as http:
+        answer = await http.patch(
+            "/api/admin/users/member", json={"name": "Mia", "is_superadmin": True}
+        )
+        assert answer.status_code == 200, answer.text
+        body = answer.json()
+        assert body["is_superadmin"] is True
+        assert "the name is not changed" in body["warning"]

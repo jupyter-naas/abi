@@ -966,6 +966,19 @@ class ContainerDefaultModel(Base):
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
 
 
+class ProvisionedIdentityModel(Base):
+    """An account ABI made at an identity provider (an invitation's provisioning,
+    ``services/invites``): only those are changed or deleted there by Platform
+    Settings > Users (``services/accounts``)."""
+
+    __tablename__ = "provisioned_identities"
+
+    provider = Column(String(255), primary_key=True)
+    subject = Column(String(255), primary_key=True)
+    email = Column(String(255), nullable=False)
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+
+
 # ============================================
 # Workflow runs started from a workspace
 # ============================================

@@ -217,6 +217,12 @@ class InvitationService:
             provisioned, skipped = await self._provision(
                 choice, email, name, organization_id, invited_by
             )
+            if provisioned is not None and provisioned.created and provisioned.subject:
+                # ABI made this account: only such an account is changed or deleted
+                # at the provider with the person's Nexus account (services/accounts).
+                await self.persistence.record_provisioned(
+                    choice.name, provisioned.subject, email, now=now
+                )
             if existing is None:
                 invitation = await self.persistence.add(
                     Invitation(

@@ -227,7 +227,15 @@ class EngineIdentityGateway(IdentityGateway):
             found = await _as_api(service.list_providers)
         except ProviderUnavailableError:
             return []
-        return [Provider(p.name, p.display_name, p.provisioning == "none") for p in found]
+        return [
+            Provider(
+                p.name,
+                p.display_name,
+                p.provisioning == "none",
+                own=p.provisioning == "builtin",
+            )
+            for p in found
+        ]
 
     async def find(self, provider: str, email: str, *, by: str) -> ProviderAccount | None:
         user = await self._call(lambda s: s.find_provisioned_user(provider, email), by=by)

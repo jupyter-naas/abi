@@ -13,7 +13,7 @@ Settings › Users (web: `apps/web/src/app/settings/users/`, Nexus `AGENTS.md`, 
 - **Invite** through Nexus's invitations (`services/invites`), the one way someone is invited: an invitation to
   the platform alone (no organization, no role, no grant). The provider makes the person exist; their access is
   attached once they have an account (Roles & permissions).
-- **Rename** (Nexus's row and the provider's account: a sign-in refreshes the name from the provider), and
+- **Rename** (Nexus's row and the provider's account ABI made: a sign-in refreshes the name from the provider), and
   **superadmin** on or off.
 - **Deactivate / reactivate**: IAM suspends the user (no sign-in through `identity.authenticate`, no API call: a
   session ends within 5 s, a key is refused, the kernel denies), the provider disables the account (no sign-in
@@ -87,8 +87,18 @@ at the provider).
   `suspend_user`, `resume_user`, `delete_user`, each `requested` then `succeeded` or `failed`, with the actor, the
   account's id and its email. Roles & permissions › Audit shows them.
 - **IAM first, then the provider.** Deactivating, reactivating and deleting an account change IAM first (its
-  refusal stops everything); the provider follows, and what it could not do is the answer's `warning`. An
-  invitee has no IAM user: the provider is the change, and its refusal stops it.
+  refusal stops everything); the provider follows, and what it could not do is the answer's `warning`, as is a
+  lookup of the person's account at a provider that failed (it was not changed there). An invitee has no IAM
+  user: the provider is the change, and its refusal stops it.
+- **Only an account ABI made is changed at the provider.** At ABI's own provider (`provisioning: builtin`)
+  every account is ABI's. At a shared realm (Keycloak, Zitadel), an invitation may find an account that already
+  existed there (`ensure_user`'s existing-account path: nothing created); only one an invitation created is
+  recorded (`provisioned_identities`, migration `0068`, written by `services/invites`) and is ABI's
+  (`AccountService._split`). Renaming, deactivating and deleting change ABI's accounts only: the person's own
+  account stays as it is, used by their other applications, and the answer and the deletion plan say so ("Their
+  account at <provider> is theirs, not ABI's"); their access to ABI is what ends (IAM, sessions, keys). An
+  invitee whose only account is theirs is not deactivated (there is nothing of ABI's to stop: delete the
+  invitation). Accounts invitations made before `0068` are not recorded: they count as the person's.
 - **One operation at a time on the request's session.** The store and the invitations share the request's
   `AsyncSession`, which takes one operation at a time (asyncpg refuses a second): their reads are awaited in
   turn; only IAM's and the providers' calls run together (`asyncio.gather`). The route test wraps the session
@@ -116,6 +126,12 @@ at the provider).
   stays. The row gets `deleted_at` and a released email. *Consequences:* the same address can be invited again
   (a new IdP account, a new `(issuer, sub)`, a new row); `services/auth` and the sign-in never find a retired row;
   the raw `users` table (Nexus tables) still shows it.
+- **ABI changes at a provider only what ABI made there.** *Decision:* an account found at a shared realm when
+  the person was invited is theirs; deleting or deactivating their Nexus account ends their access to ABI and
+  never deletes or disables that account (`provisioned_identities`). *Consequences:* deleting someone at a
+  shared realm can leave their account there, which then cannot sign in to ABI again with that address (the
+  identity stays with the deleted account), and the plan says so; the owner may decide otherwise (deleting the
+  person in the realm too), which would make the plan say it plainly instead.
 - **Lifecycle at the provider is the provisioning port's.** *Decision:* the engine's identity service changes and
   deletes the person at their provider (`update_provisioned_user`, `delete_provisioned_user`, keyed by the
   provider's subject; core `services/identity/AGENTS.md`). *Consequences:* the built-in IdP disables (its sessions

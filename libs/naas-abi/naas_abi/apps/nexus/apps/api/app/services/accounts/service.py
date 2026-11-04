@@ -294,7 +294,18 @@ class AccountService:
         if is_superadmin is not None:
             account = await self.set_superadmin(account_id, is_superadmin, actor=actor)
         if name is not None:
-            account = await self.rename(account_id, name, actor=actor)
+            try:
+                account = await self.rename(account_id, name, actor=actor)
+            except Exception as exc:
+                if account is None:
+                    raise
+                # The superadmin change is made: answered as it now is, with why the
+                # name is not, never as if nothing had changed.
+                logger.warning(f"Renaming {account_id} failed after its superadmin change: {exc}")
+                return replace(
+                    account,
+                    warning=f"The superadmin change is made; the name is not changed: {exc}",
+                )
         assert account is not None, "nothing to change"
         return account
 
@@ -305,18 +316,32 @@ class AccountService:
         email = user.email if user is not None else invitations[0].email
 
         async def change() -> str | None:
-            found = await self._provider_accounts(user, invitations, actor=actor)
+            problems: list[str] = []
+            found = await self._provider_accounts(user, invitations, actor=actor, problems=problems)
+            ours, theirs = await self._split(found)
             if user is not None:
                 await self.store.rename(user.id, name, now=self._clock())
                 await self.store.commit()
-            elif not found:
+            elif not ours:
                 raise AccountChangeRefused(
-                    "Their identity provider has no account for them yet: nothing to rename"
+                    _theirs_refused(theirs, "rename")
+                    if theirs
+                    else "Their identity provider has no account for them yet: nothing to rename"
                 )
-            # Sign-in refreshes the name from the provider: it is changed there too.
-            return await self._at_each(
-                found, lambda a: self.identity.update(a.provider, a.subject, name=name, by=actor)
+            # Sign-in refreshes the name from the provider: it is changed there too, on
+            # an account ABI made; one that is the person's own keeps its name there.
+            problems.append(
+                await self._at_each(
+                    ours, lambda a: self.identity.update(a.provider, a.subject, name=name, by=actor)
+                )
+                or ""
             )
+            problems += [
+                f"Their account at {a.provider} is theirs, not ABI's: its name stays, and their "
+                "next sign-in brings it back here"
+                for a in theirs
+            ]
+            return _joined(problems)
 
         warning = await self._audited(actor, "rename_user", account_id, f"{email} → {name}", change)
         if user is None:
@@ -363,14 +388,18 @@ class AccountService:
 
         async def change() -> str | None:
             if user is None:
-                # No IAM user yet: their provider's account is all there is to stop.
+                # No IAM user yet: their provider's account is all there is to stop,
+                # and only one ABI made.
                 found = await self._provider_accounts(None, invitations, actor=actor, strict=True)
-                if not found:
+                ours, theirs = await self._split(found)
+                if not ours:
                     raise AccountChangeRefused(
-                        "Their identity provider has no account for them yet: "
+                        _theirs_refused(theirs, "deactivate")
+                        if theirs
+                        else "Their identity provider has no account for them yet: "
                         "delete the invitation instead"
                     )
-                for account in found:
+                for account in ours:
                     await self.identity.update(
                         account.provider, account.subject, disabled=not active, by=actor
                     )
@@ -382,13 +411,22 @@ class AccountService:
                 await self.access.suspend(principal.id, by=actor)
                 await self.store.end_sessions(user.id, now=self._clock())
                 await self.store.commit()
-            found = await self._provider_accounts(user, [], actor=actor)
-            return await self._at_each(
-                found,
-                lambda a: self.identity.update(
-                    a.provider, a.subject, disabled=not active, by=actor
-                ),
+            problems: list[str] = []
+            found = await self._provider_accounts(user, [], actor=actor, problems=problems)
+            ours, theirs = await self._split(found)
+            problems.append(
+                await self._at_each(
+                    ours,
+                    lambda a: self.identity.update(
+                        a.provider, a.subject, disabled=not active, by=actor
+                    ),
+                )
+                or ""
             )
+            # The person's own account at a realm ABI shares: their access to ABI is
+            # what changes (IAM, sessions), never their account there.
+            problems += [_theirs_stays(a.provider) for a in theirs]
+            return _joined(problems)
 
         warning = await self._audited(
             actor, "resume_user" if active else "suspend_user", account_id, email, change
@@ -410,11 +448,13 @@ class AccountService:
             found = await self._at_providers(
                 account.email, sorted({i.provider for i in invitations}), actor=actor, quiet=True
             )
+            ours, theirs = await self._split(found)
             return DeletionPlan(
                 account=account,
-                warning=None,
+                # An account ABI did not make is the person's: it stays.
+                warning=_joined([_theirs_stays(a.provider) for a in theirs]),
                 blocked=None,
-                provider_account=_provider(found, invitations[0].provider, providers),
+                provider_account=_provider(ours, None, providers) if ours else None,
                 iam_user=None,
                 attachments=0,
                 memberships=(),
@@ -445,6 +485,7 @@ class AccountService:
                         "make someone else an owner there first"
                     )
         found = await self._provider_accounts(user, [], actor=actor, quiet=True)
+        ours, theirs = await self._split(found)
         pending = [i for i in await self.invitations.pending() if i.email == user.email.lower()]
         roles = holdings.roles if holdings is not None else ()
         labels = await self._labels([scope for scope, _ in roles])
@@ -454,10 +495,21 @@ class AccountService:
             if is_workspace_container(scope) and (ws := workspace_of(scope)) is not None
         ]
         names = await self.store.workspace_names(workspace_ids)
-        provider_account = _provider(found, user.idp_provider, providers)
+        # Only an account ABI made goes with them; theirs stays (``_split``).
+        provider_account = (
+            _provider(ours, None, providers)
+            if ours
+            else None
+            if theirs
+            else _provider(found, user.idp_provider, providers)
+        )
         warning = None
         if user.signed_in and provider_account is not None and provider_account.managed_in_provider:
             warning = _kept_identity(provider_account.display_name)
+        if theirs:
+            warning = _joined(
+                [warning or "", *(_theirs_stays(a.provider, bound=user.signed_in) for a in theirs)]
+            )
         return DeletionPlan(
             account=account,
             blocked=blocked,
@@ -495,11 +547,14 @@ class AccountService:
                 found = await self._provider_accounts(
                     None, invitations, actor=actor, strict=True, managed="skip"
                 )
-                for account in found:
+                ours, theirs = await self._split(found)
+                for account in ours:
                     await self.identity.delete(account.provider, account.subject, by=actor)
                 await self._revoke(invitations)
-                return None
-            found = await self._provider_accounts(user, [], actor=actor)
+                return _joined([_theirs_stays(a.provider) for a in theirs])
+            lookups: list[str] = []
+            found = await self._provider_accounts(user, [], actor=actor, problems=lookups)
+            found, theirs = await self._split(found)
             principal = await self.access.principal(user.id)
             # IAM decides first: refused, nothing else goes. A principal a failed
             # attempt already deleted is done: the rest goes on, so a retry finishes.
@@ -516,7 +571,11 @@ class AccountService:
             kept = plan.warning or (
                 _kept_identity("Their identity provider") if problems and user.signed_in else None
             )
-            return "; ".join(w for w in (problems, kept) if w) or None
+            if theirs and not plan.warning:
+                kept = _joined(
+                    [kept or "", *(_theirs_stays(a.provider, bound=user.signed_in) for a in theirs)]
+                )
+            return _joined([*lookups, problems or "", kept or ""])
 
         return await self._audited(actor, "delete_user", account_id, email, change)
 
@@ -579,9 +638,11 @@ class AccountService:
         strict: bool = False,
         quiet: bool = False,
         managed: Literal["refuse", "skip"] = "refuse",
+        problems: list[str] | None = None,
     ) -> list[ProviderAccount]:
         """The person's accounts at their providers: the one they signed in with, else
-        the one each provider holds for their email."""
+        the one each provider holds for their email. ``problems`` collects a lookup
+        that failed (not ``strict``), for the change's answer."""
         if user is not None and user.idp_provider and user.idp_subject:
             return [ProviderAccount(user.idp_provider, user.idp_subject)]
         email = user.email if user is not None else invitations[0].email
@@ -589,7 +650,13 @@ class AccountService:
             p.name for p in await self.identity.providers() if not p.managed_in_provider
         ]
         return await self._at_providers(
-            email, names, actor=actor, strict=strict, quiet=quiet, managed=managed
+            email,
+            names,
+            actor=actor,
+            strict=strict,
+            quiet=quiet,
+            managed=managed,
+            problems=problems,
         )
 
     async def _at_providers(
@@ -601,9 +668,12 @@ class AccountService:
         strict: bool = False,
         quiet: bool = False,
         managed: Literal["refuse", "skip"] = "refuse",
+        problems: list[str] | None = None,
     ) -> list[ProviderAccount]:
         """``strict``: a refusal or an unreachable provider stops the change, and so
-        does a provider that manages its people, unless ``managed="skip"``."""
+        does a provider that manages its people, unless ``managed="skip"``. Else a
+        lookup that failed is logged (unless ``quiet``) and said in ``problems``: the
+        account there, if any, was not changed."""
         found: list[ProviderAccount] = []
         for name in providers:
             try:
@@ -619,10 +689,32 @@ class AccountService:
                     raise
                 if not quiet:
                     logger.warning(f"Could not look {email} up at {name}: {exc}")
+                if problems is not None:
+                    problems.append(
+                        f"{name} could not be asked for their account ({exc}): "
+                        "do the same there if they have one"
+                    )
                 continue
             if account is not None:
                 found.append(account)
         return found
+
+    async def _split(
+        self, accounts: Sequence[ProviderAccount]
+    ) -> tuple[list[ProviderAccount], list[ProviderAccount]]:
+        """``(ABI's, theirs)``: an account at ABI's own provider, or one an invitation
+        made (``provisioned_identities``), is ABI's to change and delete; any other
+        (one that already existed in a shared realm when they were invited) is the
+        person's, used by other applications, and stays as it is."""
+        own = {p.name for p in await self.identity.providers() if p.own}
+        ours: list[ProviderAccount] = []
+        theirs: list[ProviderAccount] = []
+        for account in accounts:
+            made = account.provider in own or await self.store.made_by_abi(
+                account.provider, account.subject
+            )
+            (ours if made else theirs).append(account)
+        return ours, theirs
 
     @staticmethod
     async def _at_each(
@@ -701,6 +793,34 @@ def _valid_name(name: str) -> str:
     if not name or len(name) > MAX_NAME:
         raise AccountChangeRefused(f"A name is 1 to {MAX_NAME} characters")
     return name
+
+
+def _joined(parts: Iterable[str]) -> str | None:
+    return "; ".join(p for p in parts if p) or None
+
+
+def _theirs_stays(provider: str, *, bound: bool = False) -> str:
+    """What happens to an account ABI did not make at a shared provider. ``bound``: a
+    deleted account they signed in with keeps that identity, so it cannot sign in to
+    ABI again (``_not_a_retired_identity``)."""
+    said = (
+        f"Their account at {provider} is theirs, not ABI's (it existed when they were "
+        "invited): it stays as it is, and only their access to ABI changes"
+    )
+    if bound:
+        said += (
+            "; invited again with this address, they could not sign in with it "
+            "(that identity stays with the deleted account)"
+        )
+    return said
+
+
+def _theirs_refused(accounts: Sequence[ProviderAccount], verb: str) -> str:
+    providers = ", ".join(sorted({a.provider for a in accounts}))
+    return (
+        f"Their account at {providers} is theirs, not ABI's: ABI does not {verb} it. "
+        "Delete the invitation to end what ABI gave them"
+    )
 
 
 def _kept_identity(provider: str) -> str:

@@ -112,6 +112,12 @@ _ENTRIES: list[PlatformTableEntry] = [
             "Each organization's and workspace's IAM access policy and its members and "
             "admins groups, by container.",
         ),
+        (
+            "provisioned_identities",
+            "Accounts ABI made at identity providers",
+            "The accounts an invitation created at a provider: only those are deactivated or "
+            "deleted there with the person's Nexus account.",
+        ),
     ),
     *_section(
         "Chat, agents & models",

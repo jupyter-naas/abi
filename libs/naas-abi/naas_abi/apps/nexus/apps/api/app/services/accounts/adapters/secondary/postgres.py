@@ -10,6 +10,7 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     AuthSessionModel,
     OrganizationMemberModel,
     OrganizationModel,
+    ProvisionedIdentityModel,
     UserModel,
     WorkspaceMemberModel,
     WorkspaceModel,
@@ -88,6 +89,9 @@ class AccountStorePostgres(AccountStorePort):
             .limit(1)
         )
         return row.first() is not None
+
+    async def made_by_abi(self, provider: str, subject: str) -> bool:
+        return await self.db.get(ProvisionedIdentityModel, (provider, subject)) is not None
 
     async def rename(self, user_id: str, name: str, *, now: datetime) -> None:
         await self.db.execute(

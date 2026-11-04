@@ -41,6 +41,8 @@ class Store(InvitationPersistencePort):
         self.commits = 0
         self.rollbacks = 0
         self.fail_commit = False
+        # (provider, subject) of the accounts an invitation made.
+        self.provisioned: set[tuple[str, str]] = set()
 
     async def add(self, invitation, *, now):
         self.rows[invitation.id] = replace(invitation, created_at=now)
@@ -107,6 +109,9 @@ class Store(InvitationPersistencePort):
             return False
         self.rows[invitation_id] = replace(row, status="accepted", accepted_user_id=user_id)
         return True
+
+    async def record_provisioned(self, provider, subject, email, *, now):
+        self.provisioned.add((provider, subject))
 
     async def mark_revoked(self, invitation_id, *, now):
         row = self.rows[invitation_id]
