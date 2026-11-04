@@ -1,4 +1,5 @@
-"""Invitations: an email is invited to an organization and/or a workspace.
+"""Invitations: an email is invited to an organization and/or a workspace, or
+to the platform alone (no role: Platform Settings > Users).
 
 The invited person may not exist yet, so nothing is attached to an account:
 
@@ -136,6 +137,11 @@ class InvitationService:
         """Invite ``email`` and send the invitation. Inviting again someone
         already invited here renews the invitation (new roles, a new email).
 
+        With no organization and no workspace it is an invitation to the platform
+        (Platform Settings > Users): no role and no grant, the provider makes the
+        person exist and the mail says where to sign in; their access is attached
+        once they have an account.
+
         ``may_grant_owner``: the inviting person is an owner. The grants are
         written as Nexus's own, so IAM's rule that only an owner makes an owner
         cannot see who asked: the route says it, and nobody else gets ``owner``.
@@ -161,8 +167,16 @@ class InvitationService:
         grants wait for the person's sign-in, as with a provider that manages its people.
         """
         email = email.lower().strip()
-        if org_role is None and workspace_role is None:
+        platform = organization_id is None and workspace_id is None
+        if org_role is None and workspace_role is None and not platform:
             raise ValueError("An invitation names a role in an organization or a workspace")
+        if platform and (org_role is not None or workspace_role is not None):
+            raise ValueError("A role needs an organization or a workspace")
+        if platform and policy_ids:
+            raise InvalidPolicyError(
+                "An invitation to the platform carries no policy: attach them once "
+                "the person has an account (Roles & permissions)"
+            )
         choice = await self.choose(email, provider, organization_id)
         existing = await self.persistence.find_pending(
             email=email,

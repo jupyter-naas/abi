@@ -19,6 +19,10 @@ email, through one identity provider, does three things:
    code, no secret), and, at the first sign-in, makes the memberships Nexus still stores
    (`claim`).
 
+An invitation to the **platform alone** (Platform Settings › Users, `services/accounts`) names no organization,
+no workspace and no role: no grant, no policy; the provider makes the person exist and the mail says where to
+sign in, and their access is attached once they have an account. It is the same `invite`, the one invite path.
+
 IdP group bindings are the same idea for a whole group of a provider: the members of
 `group` hold `role` at a scope (`IAMService.bind_idp_group`).
 

@@ -14,6 +14,7 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
     GrantMade,
     GrantsGateway,
     IdpBindingView,
+    InvalidPolicyError,
     Invitation,
     InvitationMail,
     InvitationMailer,
@@ -312,6 +313,42 @@ async def test_an_invitation_names_a_role_somewhere():
         await Harness().invite(org_role=None, workspace_role=None)
     with pytest.raises(ValueError):
         await Harness().invite(organization_id=None, workspace_id=None)
+
+
+@pytest.mark.asyncio
+async def test_an_invitation_to_the_platform_alone_makes_the_person_and_grants_nothing():
+    """Platform Settings > Users: no organization, no workspace, no role. The provider
+    makes the person; their access is attached once they have an account."""
+    h = Harness()
+    outcome = await h.invite(
+        organization_id=None,
+        org_role=None,
+        workspace_id=None,
+        workspace_role=None,
+        organization_name=None,
+        workspace_name=None,
+    )
+    invitation = outcome.invitation
+    assert (invitation.organization_id, invitation.workspace_id, invitation.grant_ids) == (
+        None,
+        None,
+        (),
+    )
+    assert h.grants.live == {} and outcome.user_created
+    assert h.directory.provisioned == [("builtin", "bob@example.com", None)]
+    assert h.mailer.sent[0].to_email == "bob@example.com"
+    # Inviting again renews it; a policy is refused (nothing to attach it at).
+    assert (
+        await h.invite(organization_id=None, org_role=None, workspace_id=None, workspace_role=None)
+    ).renewed
+    with pytest.raises(InvalidPolicyError):
+        await h.invite(
+            organization_id=None,
+            org_role=None,
+            workspace_id=None,
+            workspace_role=None,
+            policy_ids=["pol_x"],
+        )
 
 
 @pytest.mark.asyncio

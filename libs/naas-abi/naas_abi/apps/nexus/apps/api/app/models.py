@@ -180,6 +180,9 @@ class UserModel(Base):
     idp_subject = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+    # A deleted account (Platform Settings > Users): the row stays as the author of
+    # what the person wrote, its email released (migration 0067, services/accounts).
+    deleted_at = Column(DateTime(timezone=False), nullable=True)
 
     __table_args__ = (UniqueConstraint("idp_issuer", "idp_subject", name="uq_users_idp_identity"),)
 

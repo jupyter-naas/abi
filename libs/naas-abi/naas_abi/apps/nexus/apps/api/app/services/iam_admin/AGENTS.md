@@ -27,7 +27,9 @@ Nexus adds no role check of its own.
 
 - `GET /access?scope=` the actions the caller may do (platform, or attachments and that level's policies and groups
   at `scope`; at a scope, what the platform alone administers is false; no role feature defaults exist to
-  report: no role brings a feature, a policy does);
+  report: no role brings a feature, a policy does; at the platform also `nexus:ReadSystem` and the accounts'
+  `nexus:ListUsers`, `InviteUser`, `UpdateUser`, `SuspendUser`, `ResumeUser`, `DeleteUser`, on
+  `abi:nexus:user/-` as their routes ask them, false at a scope: `services/accounts`);
   `GET /catalogs?scope=&parent=` (only the actions the caller may grant
   at `scope`, the platform by default, and the types they name: a catalog with none is left out; with `parent`,
   within that policy, as `/grantable`)
@@ -146,7 +148,9 @@ below a container, `<container>/*`. Nexus builds them with `services/iam/names.p
   exception type only) follows. IAM's records are the rows `iam.<operation>` (`SqlAdminAuditLog` takes the action
   prefix), with the actor, the operation, the resource and a short detail (a name, a scope), never a key's value
   or a policy's text. A refused attempt is a record too. Membership changes made from the Users page
-  (`MEMBERSHIPS`) and invitations are audited by their own routes, not by this log.
+  (`MEMBERSHIPS`) and invitations are audited by their own routes, not by this log; the platform's accounts
+  (`services/accounts`: inviting, renaming, superadmin, suspending, resuming, deleting a user) write theirs here,
+  so the Audit section shows them beside IAM's.
 - **Policies are edited visually or as text, and IAM validates both.** The editor autocompletes actions from the
   registered catalogs and resources from the name grammar; the text view takes YAML or JSON. `POST
   /policies/validate` returns every error IAM lists (and the normalized document), so the editor shows them as the

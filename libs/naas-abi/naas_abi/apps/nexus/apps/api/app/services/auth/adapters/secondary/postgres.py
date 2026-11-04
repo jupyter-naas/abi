@@ -49,14 +49,19 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
         )
 
     async def get_user_by_id(self, user_id: str) -> AuthUserRecord | None:
-        result = await self.db.execute(select(UserModel).where(UserModel.id == user_id))
+        # A deleted account (``services/accounts``) is a retired row: it is nobody.
+        result = await self.db.execute(
+            select(UserModel).where(UserModel.id == user_id, UserModel.deleted_at.is_(None))
+        )
         row = result.scalar_one_or_none()
         if row is None:
             return None
         return self._to_user_record(row)
 
     async def get_user_by_email(self, email: str) -> AuthUserRecord | None:
-        result = await self.db.execute(select(UserModel).where(UserModel.email == email))
+        result = await self.db.execute(
+            select(UserModel).where(UserModel.email == email, UserModel.deleted_at.is_(None))
+        )
         row = result.scalar_one_or_none()
         if row is None:
             return None
@@ -102,7 +107,9 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
         return self._to_user_record(user)
 
     async def list_users(self) -> list[AuthUserRecord]:
-        result = await self.db.execute(select(UserModel).order_by(UserModel.email))
+        result = await self.db.execute(
+            select(UserModel).where(UserModel.deleted_at.is_(None)).order_by(UserModel.email)
+        )
         return [self._to_user_record(user) for user in result.scalars().all()]
 
     async def count_superadmins(self) -> int:

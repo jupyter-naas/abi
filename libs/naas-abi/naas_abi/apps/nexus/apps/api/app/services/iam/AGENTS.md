@@ -148,6 +148,7 @@ module per router family:
 | `files.py`, `datasets.py`, `office.py` | `file` (drive + path), `my_file`, `user_storage`, `root_storage`; `dataset`; `project` (slides, documents, sheets) |
 | `knowledge.py`, `search.py` | `view`, `graph_cache`, `ontology`, `icon`, `layout`, `layer`, `feed_layer`, `basemap`, `maps_catalog`, `maps_access`; `search`, `topic`, `search_scope` |
 | `code.py`, `settings.py`, `platform.py`, `realtime.py` | `code`, `code_settings`; `secret`, `provider_model`, `abi_server`; `analytics`, `system`; `presence`, `speech` |
+| `users.py` | `user` (platform: the platform's accounts, Platform Settings › Users, `services/accounts`): `ListUsers`, `InviteUser`, `UpdateUser`, `SuspendUser`, `ResumeUser`, `DeleteUser`; no role reaches it, the platform admin holds it |
 
 The kernel services have catalogs of their own (core's `iam_catalog.py` of each service); a route that
 only forwards to the kernel declares the kernel action. Choices that differ from "viewers read, members

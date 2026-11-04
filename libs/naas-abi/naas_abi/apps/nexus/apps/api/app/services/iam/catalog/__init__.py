@@ -29,6 +29,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.catalog import (
     search,
     settings,
     tasks,
+    users,
     workflows,
     workspaces,
 )
@@ -43,7 +44,8 @@ from naas_abi_core.services.iam.catalog import (
 SERVICE = "nexus"
 # Raise when the catalog changes; IAM keeps the highest version it has seen.
 # 9: published by naas_abi (``publisher``).
-VERSION = 9
+# 10: the platform's accounts (``user``: Platform Settings > Users).
+VERSION = 10
 
 _MODULES = (
     organizations,
@@ -62,6 +64,7 @@ _MODULES = (
     tasks,
     settings,
     platform,
+    users,
     realtime,
 )
 

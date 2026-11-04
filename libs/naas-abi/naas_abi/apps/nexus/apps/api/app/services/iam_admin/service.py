@@ -119,6 +119,15 @@ _PLATFORM_ONLY = frozenset(
     }
 )
 ACCESS_ACTIONS: tuple[str, ...] = (*_WILDCARD_TYPE, *_ATTACHMENT_ACTIONS, *_KEY_ACTIONS)
+# The platform's accounts (Platform Settings > Users): answered at the platform only.
+ACCOUNT_ACTIONS: tuple[str, ...] = (
+    "nexus:ListUsers",
+    "nexus:InviteUser",
+    "nexus:UpdateUser",
+    "nexus:SuspendUser",
+    "nexus:ResumeUser",
+    "nexus:DeleteUser",
+)
 
 # Each module's key and the ``module`` catalog types it exposes (its agents, apps,
 # workflows, pipelines), for ``publishers``.
@@ -221,11 +230,13 @@ class IamAdminService:
                     result[action] = session.authorize(action, key_resource("*", "*")).allowed
             return result
 
-        actions, reads_system = await asyncio.gather(
+        actions, reads_system, accounts = await asyncio.gather(
             self._read(user, decide),
             self._reads_system(user) if scope is None else _false(),
+            self._account_actions(user) if scope is None else _none_of(ACCOUNT_ACTIONS),
         )
         actions["nexus:ReadSystem"] = reads_system
+        actions.update(accounts)
         return {"actions": actions}
 
     async def grantable(
@@ -330,6 +341,16 @@ class IamAdminService:
         from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 
         return await AUTHZ.allowed("ReadSystem", user=user)
+
+    async def _account_actions(self, user: Any) -> dict[str, bool]:
+        """Platform Settings > Users (``services/accounts``): each ``nexus`` action on
+        the platform's accounts, as its routes ask it (``abi:nexus:user/-``)."""
+        from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+
+        held = await asyncio.gather(
+            *(AUTHZ.allowed(a.removeprefix("nexus:"), user=user, id="-") for a in ACCOUNT_ACTIONS)
+        )
+        return dict(zip(ACCOUNT_ACTIONS, held, strict=True))
 
     # -- catalogs and validation ------------------------------------------------------
 
@@ -994,6 +1015,10 @@ def _owner_of(scope: str | None) -> str:
 
 async def _false() -> bool:
     return False
+
+
+async def _none_of(actions: tuple[str, ...]) -> dict[str, bool]:
+    return dict.fromkeys(actions, False)
 
 
 def _actor_id(user: Any) -> str:

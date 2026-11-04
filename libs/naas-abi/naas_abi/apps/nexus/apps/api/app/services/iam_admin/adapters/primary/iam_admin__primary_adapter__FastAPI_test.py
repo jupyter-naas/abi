@@ -178,6 +178,28 @@ def test_access_at_a_scope_follows_the_attachment_rules(world):
     assert get(world, "/access?scope=nonsense", "admin").status_code == 422
 
 
+ACCOUNT_ACTIONS = (
+    "nexus:ListUsers",
+    "nexus:InviteUser",
+    "nexus:UpdateUser",
+    "nexus:SuspendUser",
+    "nexus:ResumeUser",
+    "nexus:DeleteUser",
+)
+
+
+def test_access_says_who_manages_the_platforms_accounts(world):
+    """Platform Settings > Users shows for these, decided by IAM: the platform admin
+    holds them; an organization's admin, a delegated IAM lister and a stranger do not."""
+    root = get(world, "/access").json()["actions"]
+    assert all(root[action] for action in ACCOUNT_ACTIONS)
+    for user in ("admin", "owner", "lister", "stranger"):
+        actions = get(world, "/access", user).json()["actions"]
+        assert not any(actions[action] for action in ACCOUNT_ACTIONS), user
+    scoped = get(world, f"/access?scope={org_container('org-1')}").json()["actions"]
+    assert not any(scoped[action] for action in ACCOUNT_ACTIONS)
+
+
 PLATFORM_ONLY = (
     "iam:ListPrincipals",
     "iam:CreateServiceAccount",
