@@ -25,7 +25,8 @@ export interface AdminUser {
   status: 'signed_in' | 'invited';
   deactivated: boolean;
   is_superadmin: boolean;
-  created_at: string;
+  /** Null for an invitation the API knows no date of. */
+  created_at: string | null;
   organizations: AdminUserOrganization[];
   provider: string | null;
   /** What the identity provider could not follow, after a change. */
@@ -101,6 +102,8 @@ export const ACTIVE = 'Active';
 export const SUPERADMIN = 'Superadmin';
 export const NOT_SUPERADMIN = 'Not superadmin';
 export const NO_ORGANIZATION = 'No organization';
+/** The Created column's value for an invitation with no date. */
+export const NO_DATE = 'No date';
 export const NO_IAM_ID = 'None yet';
 
 export function statusLabel(user: AdminUser): string {
@@ -109,8 +112,10 @@ export function statusLabel(user: AdminUser): string {
 
 /** `YYYY-MM-DD`, or the text as it came when it is not a date. */
 export function createdDay(user: AdminUser): string {
+  // No date is no date: never `new Date(null)`, the epoch (1970-01-01).
+  if (!user.created_at) return '';
   const at = new Date(user.created_at);
-  return Number.isNaN(at.getTime()) ? user.created_at || '' : at.toISOString().slice(0, 10);
+  return Number.isNaN(at.getTime()) ? user.created_at : at.toISOString().slice(0, 10);
 }
 
 /** The texts of a cell, as the column filters and their facets see them. */
@@ -129,7 +134,7 @@ export function cellValues(user: AdminUser, column: ColumnId): string[] {
         ? [...new Set(user.organizations.map((o) => o.name || o.id))].sort((a, b) => a.localeCompare(b))
         : [NO_ORGANIZATION];
     case 'created':
-      return [createdDay(user)];
+      return [createdDay(user) || NO_DATE];
   }
 }
 
@@ -151,12 +156,16 @@ function sortText(user: AdminUser, column: ColumnId): string {
   return cellValues(user, column).join(' ').toLowerCase();
 }
 
-/** The rows sorted by a column, then by email, so equal cells keep one order. */
+/** The rows sorted by a column, then by email, so equal cells keep one order. A row with no
+ *  creation date sorts last, either way. */
 export function sortUsers(users: AdminUser[], column: ColumnId, dir: SortDir): AdminUser[] {
   const sign = dir === 'asc' ? 1 : -1;
+  const undated = (user: AdminUser) => (column === 'created' && !user.created_at ? 1 : 0);
   return [...users].sort(
     (a, b) =>
-      sign * sortText(a, column).localeCompare(sortText(b, column)) || a.email.localeCompare(b.email)
+      undated(a) - undated(b) ||
+      sign * sortText(a, column).localeCompare(sortText(b, column)) ||
+      a.email.localeCompare(b.email)
   );
 }
 

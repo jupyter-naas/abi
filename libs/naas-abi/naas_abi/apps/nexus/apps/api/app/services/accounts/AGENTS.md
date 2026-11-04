@@ -75,6 +75,10 @@ at the provider).
   `iam:DeletePrincipal`, the attachment of `builtin.platform_admin`, and the provider's `identity:ProvisionUser`,
   `identity:FindProvisionedUser`, `identity:UpdateProvisionedUser`, `identity:DeleteProvisionedUser` (as `api` on
   behalf of the caller: `builtin.api` holds them, the caller must too). A refusal is a 403 and changes nothing.
+- **The page's buttons assume a grant on every account.** `access` answers the page's actions once, on
+  `abi:nexus:user/-` (`iam_admin.service._account_actions`), while each route decides on the account's own
+  name (`abi:nexus:user/<id>`). They agree for the platform admin and for a policy on `abi:nexus:user/*`; a
+  policy naming one account shows the buttons on every row, and the route refuses the others (403).
 - **Nothing on yourself.** Renaming, superadmin, deactivating and deleting one's own account are refused (one's
   profile is the account page); the plan says it as `blocked`.
 - **Never the last active platform admin.** Demoting, deactivating or deleting a platform admin is refused when no

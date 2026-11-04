@@ -79,6 +79,15 @@ describe('sortUsers', () => {
     const same = [user({ id: 'z', email: 'z@x' }), user({ id: 'y', email: 'y@x' })];
     expect(sortUsers(same, 'status', 'asc').map((u) => u.id)).toEqual(['y', 'z']);
   });
+
+  it('shows an invitation with no date as none, never 1970, and sorts it last either way', () => {
+    const undated = user({ id: 'i', kind: 'invitation', email: 'i@x', created_at: null });
+    const dated = [user({ id: 'old', email: 'o@x', created_at: '2026-01-01T00:00:00' }), user({ id: 'new', email: 'n@x' })];
+    expect(cellValues(undated, 'created')).toEqual(['No date']);
+    expect(exportRow(undated)[EXPORT_HEADERS.indexOf('Created')]).toBe('');
+    expect(sortUsers([undated, ...dated], 'created', 'asc').map((u) => u.id)).toEqual(['old', 'new', 'i']);
+    expect(sortUsers([undated, ...dated], 'created', 'desc').map((u) => u.id)).toEqual(['new', 'old', 'i']);
+  });
 });
 
 describe('export', () => {
