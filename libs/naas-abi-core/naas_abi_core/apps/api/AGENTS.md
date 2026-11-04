@@ -43,11 +43,16 @@ If `as_api` adds no routes, the kernel registers `POST /{class_slug}` only when:
 uv run pytest libs/naas-abi-core/naas_abi_core/utils/process_api_test.py -v
 uv run pytest libs/naas-abi-core/naas_abi_core/module/ModuleComponentLoader_test.py -v
 uv run pytest libs/naas-abi-core/naas_abi_core/apps/api/api_test.py -v
+uv run pytest libs/naas-abi-core/naas_abi_core/apps/api/api_docs_test.py -v
 ```
 
 `process_api_test.py` uses fixture workflows, pipelines, and tools. It does not invent customer agents.
 
 `api_test.py` boots the real engine. It needs a working local config. If ABI services are missing, report that rather than weakening the test.
+
+## API reference pages
+
+`/openapi.json`, `/docs` and `/redoc` are public only when `api_docs_enabled` is true: `api.docs_enabled` when the config sets it, otherwise on for local development (`ENV` unset, `local` or `dev`) and off for any other `ENV`. When they are off, `/docs` and `/redoc` are not mounted and `/openapi.json` asks for the API key, which the MCP server sends to list the agents.
 
 ## Local curl
 
