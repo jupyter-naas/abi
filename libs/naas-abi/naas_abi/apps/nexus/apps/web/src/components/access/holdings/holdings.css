@@ -1,0 +1,42 @@
+/* components/access/holdings — a person's, a group's or a policy's access at every level */
+
+.access-holding-table code.access-holding-id {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground-hex);
+  word-break: break-all;
+}
+
+.access-holding-link {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  color: var(--primary-hex, var(--foreground-hex));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.access-holding-badge {
+  margin-left: var(--space-2);
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border-hex);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--muted-foreground-hex);
+}
+
+.access-holding-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.access-holding-empty {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--muted-foreground-hex);
+}

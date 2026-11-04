@@ -8,7 +8,10 @@ export type HeldPolicy = { id: string; name: string };
 /** Who holds what at a scope: their built-in role, the policies attached to them there, and
  *  what reaches them through a group holding policies there. */
 export type PersonRow = {
+  /** As the scope's members name them (the membership routes), else their IAM id. */
   id: string;
+  /** Their IAM id: their page lists what IAM holds for it. */
+  principalId: string;
   kind: PrincipalKind;
   label: string;
   email: string;
@@ -41,10 +44,10 @@ function higher(a: BuiltInRole | null, b: BuiltInRole | null): BuiltInRole | nul
  */
 export function peopleAt(attachments: AttachmentView[], members: ScopeMember[], groups: GroupView[]): PersonRow[] {
   const rows = new Map<string, PersonRow>();
-  const row = (id: string, init: () => Omit<PersonRow, 'direct' | 'withRole' | 'viaGroups'>): PersonRow => {
+  const row = (id: string, init: () => Omit<PersonRow, 'principalId' | 'direct' | 'withRole' | 'viaGroups'>): PersonRow => {
     let found = rows.get(id);
     if (!found) {
-      found = { ...init(), direct: [], withRole: [], viaGroups: [] };
+      found = { ...init(), principalId: id, direct: [], withRole: [], viaGroups: [] };
       rows.set(id, found);
     }
     return found;
@@ -79,6 +82,7 @@ export function peopleAt(attachments: AttachmentView[], members: ScopeMember[], 
       inherited: false,
       member: false,
     }));
+    holder.principalId = a.principal_id;
     const role = kind === 'user' ? roleOfPolicy(a.policy_id) : null;
     if (role) {
       // The directory's role is the effective one; an attachment alone (the platform) says it.
@@ -106,6 +110,7 @@ export function peopleAt(attachments: AttachmentView[], members: ScopeMember[], 
         inherited: false,
         member: false,
       }));
+      person.principalId = m.id;
       person.viaGroups.push({ groupId: group.id, groupLabel, policies: held });
     }
   }

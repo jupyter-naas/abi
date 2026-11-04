@@ -29,7 +29,7 @@ function message(error: unknown): string {
  * policies here and not list them still builds one. ``openPolicy`` opens one by its id once the
  * list is read (a link from another level's page).
  */
-export function PoliciesView({ api, can, scope, nonce = 0, openPolicy: opening }: AccessViewProps & { openPolicy?: string | null }) {
+export function PoliciesView({ api, can, scope, nonce = 0, open, openPolicy: opening }: AccessViewProps & { openPolicy?: string | null }) {
   const lists = can('iam:ListPolicies');
   const [policies, setPolicies] = useState<PolicyView[] | null>(lists ? null : []);
   const [next, setNext] = useState<string | null>(null);
@@ -262,6 +262,8 @@ export function PoliciesView({ api, can, scope, nonce = 0, openPolicy: opening }
           }}
           onCancel={() => setSelection(null)}
           onOpen={(id) => void openPolicy(id)}
+          can={can}
+          open={open}
         />
       )}
     </div>

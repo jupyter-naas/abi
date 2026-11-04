@@ -4,7 +4,6 @@ import { mount, type Mounted } from '@/lib/testing/mount';
 import { attachment, fakeApi } from '../access-fixtures';
 import { AttachForm } from './attach-form';
 import { scopeLabel } from './attachments-model';
-import { AttachmentTable } from './attachments-table';
 
 let mounted: Mounted | null = null;
 afterEach(async () => {
@@ -138,22 +137,5 @@ describe('AttachForm', () => {
     await mounted.flush();
 
     expect(document.querySelector('[role="alert"]')?.textContent).toContain('do not hold');
-  });
-});
-
-describe('AttachmentTable', () => {
-  it('detaches after a confirmation', async () => {
-    const onDetach = vi.fn();
-    mounted = await mount(AttachmentTable, { items: [attachment()], canDetach: true, onDetach });
-    expect(document.querySelector('[data-attachment="att_1"]')?.textContent).toContain('Organization acme');
-    await mounted.click(document.querySelector('[aria-label="Detach Graph reader from Ada"]'));
-    expect(onDetach).not.toHaveBeenCalled();
-    await mounted.click(button('Confirm detach') ?? null);
-    expect(onDetach).toHaveBeenCalledWith(attachment());
-  });
-
-  it('shows no detach without the right', async () => {
-    mounted = await mount(AttachmentTable, { items: [attachment()], canDetach: false, onDetach: vi.fn() });
-    expect(button('Detach')).toBeUndefined();
   });
 });

@@ -360,10 +360,20 @@ async def detach(
 async def list_principals(
     kind: PrincipalKindName | None = None,
     after: str | None = None,
+    q: str | None = None,
     user: User = Signed,
     service: IamAdminService = Service,
 ) -> dict[str, Any]:
-    return await _call(service.list_principals(user, kind, after))
+    """``q``: a search text, IAM's (id, name, email or display name, any case)."""
+    return await _call(service.list_principals(user, kind, after, q))
+
+
+@router.get("/principals/{principal_id}/groups", dependencies=[declares("iam:GetGroup")])
+async def principal_groups(
+    principal_id: str, user: User = Signed, service: IamAdminService = Service
+) -> dict[str, Any]:
+    """The groups of a principal the caller may read, at every level."""
+    return await _call(service.principal_groups(user, principal_id))
 
 
 @router.get("/principals/{principal_id}", dependencies=[declares("iam:GetPrincipal")])

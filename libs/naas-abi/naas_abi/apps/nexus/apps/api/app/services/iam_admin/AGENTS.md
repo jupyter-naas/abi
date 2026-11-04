@@ -54,8 +54,14 @@ Nexus adds no role check of its own.
   name read as `api` for the id the caller sees, null fields when it cannot be) and `sub_policies` (those below
   it the caller may list, IAM's `list_sub_policies`). `PUT` takes `parent`: absent keeps it, `null` or `""`
   removes it, an id sets it. Deleting a parent that has sub-policies is a 409 naming them
-- `GET|POST|DELETE /attachments` (`?scope=`, `?principal_id=`, `?policy_id=`), `GET /attachable-policies?scope=`
-- `GET /principals`, `GET /principals/{id}`, `POST /principals/{id}/suspend|resume`
+- `GET|POST|DELETE /attachments` (`?scope=`, `?principal_id=`, `?policy_id=`; without `scope`, at every level, each
+  attachment kept by IAM where the caller may `iam:ListAttachments` it), `GET /attachable-policies?scope=`. An
+  attachment carries `policy_owner_scope` (where its policy is owned, read as `api` for the id the caller sees), so a
+  page links each row to the policy at its owner
+- `GET /principals` (`?kind=&after=&q=`: `q` is IAM's search text, `list_principals(text=)`), `GET /principals/{id}`,
+  `GET /principals/{id}/groups` (IAM's `list_principal_groups`: the groups of the principal the caller may
+  `iam:GetGroup`, at every level; empty, not a 403, for a principal they see nothing of),
+  `POST /principals/{id}/suspend|resume`
 - `GET|POST /groups` (`?scope=`; the body's `scope`, or `org` alone, which names that organization's container, is the owner), `GET|DELETE /groups/{id}`, `PUT|DELETE /groups/{id}/members/{member}`,
   `PUT|DELETE /groups/{id}/idp-mappings`
 - `GET|POST /service-accounts`, `DELETE /service-accounts/{id}`, `GET|POST /service-accounts/{id}/keys`,
@@ -189,6 +195,13 @@ below a container, `<container>/*`. Nexus builds them with `services/iam/names.p
   does not have is not offered); a statement written by hand naming what the parent allows nowhere is a 422 with IAM's
   words ("… which pol_… (Acme access), above it, does not allow …: it would grant nothing"), never a policy that grants
   less than it says; a widening beyond what the editor holds is a 403 (`GRANT_NOT_HELD`).
+- **A principal's and a policy's access at every level are IAM's lists.** *Decision:* the person's page, the group's page
+  and a policy's attachments (Nexus `AGENTS.md`, "Roles & permissions UI module") read `/attachments?principal_id=` and
+  `?policy_id=` without a scope, `/principals/{id}/groups` and, at the platform, `/principals?q=`; the filtering is
+  IAM's (`list_attachments`, `list_principal_groups`, `list_principals(text=)`, in process, over NATS and in the
+  SDK), Nexus adds none. *Consequences:* the platform admin sees everything a person holds, an organization's admin
+  what is inside the organization, a workspace's admin what IAM lets them list, a member nothing (a 403 on the
+  attachments, no group); the search finds no one for whoever may not list principals (a 403, as the list).
 - **The routes take a session only** (the `/api/iam/` prefix): an API key cannot administer permissions.
 - A user holding a custom role with only `iam:ListPolicies` gets exactly that page; a stranger gets 403 on all of
   them. Group and service-account deletion keep the id (IAM's rule); the lists hide deleted ones.
@@ -204,6 +217,11 @@ The route tests run a real IAM on the memory store (`team` fixture: `owner`, `ad
 `abi:iam:policy/*` and `abi:*/iam:policy/*`, every policy wherever it is owned). The `ws2` fixture adds `ws-2` of `org-1` with
 `ws2admin` and `colleague`, and `outsider` in another org: a workspace admin's and an org admin's policies
 and groups.
+
+`adapters/primary/iam_admin__primary_adapter__FastAPI_access_views_test.py` runs a person's access as each viewer may list
+it (Bob, a member of org-1, of its ws-2 and of another organisation's "Ontology demo", with a policy there and a
+group's policy at ws-2): the platform admin, org-1's admin, ws-2's admin and a member; a policy's attachments; the
+search.
 
 `adapters/primary/iam_admin__primary_adapter__FastAPI_publishers_test.py` runs `/publishers`, `/resources` and the
 narrowed `/catalogs` on the same world, with listers registered for graphs, workspaces and features (`listed`

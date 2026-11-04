@@ -365,3 +365,18 @@
   padding: 0;
   list-style: none;
 }
+
+/* Where a policy is attached, at every level */
+
+.access-policy-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.access-policy-subheading {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground-hex);
+}

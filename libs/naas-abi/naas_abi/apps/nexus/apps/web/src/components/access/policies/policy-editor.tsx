@@ -26,6 +26,8 @@ import {
   type EditorStatement,
   type TextFormat,
 } from './policy-editor-model';
+import type { AccessNavigation } from '../access-props';
+import { PolicyAttachments } from './policy-attachments';
 import { ownedBy, ownerLabel, type PolicyOwner } from './policy-owners';
 import { PolicyText } from './policy-text';
 import { StatementEditor } from './statement-editor';
@@ -78,6 +80,8 @@ export function PolicyEditor({
   owner: ownerInfo = null,
   ownerLink = null,
   validationDelayMs = VALIDATION_DELAY_MS,
+  can,
+  open,
 }: {
   api: IamAdminApi;
   policy: PolicyView | null;
@@ -96,6 +100,11 @@ export function PolicyEditor({
   /** The owner's Roles & permissions page, on this policy, when the caller may open it. */
   ownerLink?: string | null;
   validationDelayMs?: number;
+  /** What the caller may do at the page's scope: with it, the editor lists where the policy is
+   *  attached, at every level IAM lets the caller list. */
+  can?: (action: string) => boolean;
+  /** Opens a person's or a group's page from where the policy is attached. */
+  open?: AccessNavigation;
 }) {
   const [name, setName] = useState(policy?.name ?? '');
   const [description, setDescription] = useState(policy?.description ?? '');
@@ -406,6 +415,10 @@ export function PolicyEditor({
             ))}
           </ul>
         </div>
+      )}
+
+      {policy && can && (
+        <PolicyAttachments api={api} policyId={policy.id} here={ownerOf(scope)} can={can} open={open} />
       )}
 
       <div className="access-policy-row">

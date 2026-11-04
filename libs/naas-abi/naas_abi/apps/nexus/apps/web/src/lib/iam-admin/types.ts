@@ -248,6 +248,9 @@ export type AttachmentView = {
   id: string;
   policy_id: string;
   policy_name: string | null;
+  /** Who owns the policy (`abi:`, a container): the row links to the policy there. Null
+   *  when it cannot be read. */
+  policy_owner_scope?: string | null;
   principal_id: string;
   principal: PrincipalView | null;
   /** A container (`abi:nexus:organization/<org>`, `.../nexus:workspace/<ws>`), below one

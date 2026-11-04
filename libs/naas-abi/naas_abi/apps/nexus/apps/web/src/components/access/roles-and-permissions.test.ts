@@ -202,4 +202,39 @@ describe('Roles & permissions opened from a link', () => {
     expect(document.querySelector('[data-section="policies"]')?.getAttribute('aria-current')).toBe('page');
     expect(document.querySelector('[aria-label="Policy Graph reader"]')).not.toBeNull();
   });
+
+  function linkedApi() {
+    const api = apiFor('platform admin') as unknown as Record<string, unknown>;
+    const g = { id: 'grp_g', kind: 'group', status: 'active', name: 'G', email: null, display_name: null, provider: null, org: null, owner_id: null, created_at: null, owner_scope: 'abi:' };
+    Object.assign(api, {
+      principalGroups: vi.fn().mockResolvedValue({ items: [g] }),
+      getPrincipal: vi.fn().mockRejectedValue(new Error('no')),
+      getGroup: vi.fn().mockResolvedValue({ ...g, members: [], idp_mappings: [] }),
+      resources: vi.fn().mockResolvedValue({ items: [] }),
+    });
+    return api as unknown as ReturnType<typeof apiFor>;
+  }
+
+  it('opens a person’s page the address names, and their group’s page from it', async () => {
+    window.history.replaceState({}, '', '/settings/roles?section=people&person=usr_bob');
+    const api = linkedApi();
+    mounted = await mount(RolesAndPermissions, { scopes: [PLATFORM_ACCESS_SCOPE], api, directory: fakeDirectory([]) });
+    await mounted.flush();
+    await mounted.flush();
+    expect(document.querySelector('[data-person-page="usr_bob"]')).not.toBeNull();
+    expect(api.listAttachments).toHaveBeenCalledWith({ principal_id: 'usr_bob' });
+
+    await mounted.click(document.querySelector('[data-group-of="grp_g"] button'));
+    await mounted.flush();
+    expect(document.querySelector('[data-section="groups"]')?.getAttribute('aria-current')).toBe('page');
+    expect(document.querySelector('[data-group-detail="grp_g"]')).not.toBeNull();
+    expect(window.location.search).toBe('?section=groups&group=grp_g');
+
+    // A section's tab closes the page, and the address follows.
+    await mounted.click(document.querySelector('[data-section="people"]'));
+    await mounted.flush();
+    expect(document.querySelector('[data-person-page]')).toBeNull();
+    expect(window.location.search).toBe('?section=people');
+  });
 });
+

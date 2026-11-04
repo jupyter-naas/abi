@@ -4,7 +4,7 @@
  * may do with the owner's policies (`GET /access?scope=<owner>`), and the owner's own Roles &
  * permissions page, opened on the policy. A policy is edited at its owner, wherever it is listed.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { IamAdminApi } from '@/lib/iam-admin/api';
 import { PLATFORM, parseScope, type ContainerStep } from '../access-scope';
 
@@ -81,13 +81,14 @@ export function ownerHref(scope: string | null | undefined, policyId?: string): 
   return `${path}?${query.toString()}`;
 }
 
-/** The containers to name for ``owners``: each step of each, once. */
-function containersOf(owners: string[]): { container: string; step: ContainerStep }[] {
+/** The containers to name for ``scopes``: each step of each, once (a scope below a container,
+ *  `<container>/*`, names that container's steps). */
+function containersOf(scopes: string[]): { container: string; step: ContainerStep }[] {
   const found = new Map<string, ContainerStep>();
-  for (const owner of owners) {
-    const parsed = parseScope(owner);
-    if (!parsed || parsed.below) continue;
-    parsed.containers.forEach((step, i) => found.set(containerAt(parsed.containers, i, owner), step));
+  for (const scope of scopes) {
+    const parsed = parseScope(scope);
+    if (!parsed) continue;
+    parsed.containers.forEach((step, i) => found.set(containerAt(parsed.containers, i, scope), step));
   }
   return [...found].map(([container, step]) => ({ container, step }));
 }
@@ -102,20 +103,91 @@ async function nameOf(api: IamAdminApi, container: string, step: ContainerStep):
   }
 }
 
-type Rights = { update: boolean; delete: boolean; any: boolean };
+/** The key of a scope for ``useActionsAt``: the platform (`abi:`) and an attachment made
+ *  everywhere (null) are both answered on the platform. */
+export function actionsKey(scope: string | null | undefined): string {
+  return scope ?? PLATFORM;
+}
 
-async function rightsAt(api: IamAdminApi, owner: string): Promise<Rights> {
+async function actionsAt(api: IamAdminApi, scope: string): Promise<Record<string, boolean>> {
   try {
-    const view = await api.access(owner === PLATFORM ? undefined : owner);
-    const actions = view?.actions ?? {};
-    return {
-      update: !!actions['iam:UpdatePolicy'],
-      delete: !!actions['iam:DeletePolicy'],
-      any: Object.values(actions).some(Boolean),
-    };
+    const view = await api.access(scope === PLATFORM ? undefined : scope);
+    return view?.actions ?? {};
   } catch {
-    return { update: false, delete: false, any: false };
+    return {};
   }
+}
+
+const sorted = (scopes: (string | null | undefined)[]) => [...new Set(scopes.map(actionsKey))].sort();
+
+/**
+ * The names of the containers ``scopes`` are made of (container → name), as the caller may
+ * list them (`GET /resources` at each): for ``ownerLabel`` and ``levelLabel``. Each container
+ * is asked once; one the caller may not list stays unnamed (its id is shown).
+ */
+export function useContainerNames(api: IamAdminApi, scopes: (string | null | undefined)[]): Record<string, string> {
+  const wanted = useMemo(() => sorted(scopes), [scopes]);
+  const key = wanted.join('\n');
+  const [names, setNames] = useState<Record<string, string>>({});
+  const asked = useRef(new Set<string>());
+  useEffect(() => {
+    let cancelled = false;
+    for (const { container, step } of containersOf(wanted)) {
+      if (asked.current.has(container)) continue;
+      asked.current.add(container);
+      void nameOf(api, container, step).then((name) => {
+        if (!cancelled && name) setNames((current) => ({ ...current, [container]: name }));
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+    // Asked again only for a container not asked yet.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, key]);
+  return names;
+}
+
+/**
+ * What the caller may do at each of ``scopes`` (`GET /access?scope=`, by ``actionsKey``), but
+ * at ``here``, the page's own scope, whose answer is the page's ``can``. Unknown (not asked yet,
+ * or refused) is an empty record: no button shows before IAM says it will answer.
+ */
+export function useActionsAt(
+  api: IamAdminApi,
+  scopes: (string | null | undefined)[],
+  here: string,
+  can: (action: string) => boolean,
+): (scope: string | null | undefined) => Record<string, boolean> {
+  const wanted = useMemo(() => sorted(scopes), [scopes]);
+  const key = wanted.join('\n');
+  const [found, setFound] = useState<Record<string, Record<string, boolean>>>({});
+  const asked = useRef(new Set<string>());
+  useEffect(() => {
+    let cancelled = false;
+    for (const scope of wanted) {
+      if (scope === here || asked.current.has(scope)) continue;
+      asked.current.add(scope);
+      void actionsAt(api, scope).then((actions) => {
+        if (!cancelled) setFound((current) => ({ ...current, [scope]: actions }));
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+    // Asked again only for a scope not asked yet.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, key, here]);
+  return useCallback(
+    (scope: string | null | undefined) => {
+      const at = actionsKey(scope);
+      if (at === here) {
+        return new Proxy({}, { get: (_target, action: string) => can(action) }) as Record<string, boolean>;
+      }
+      return found[at] ?? {};
+    },
+    [found, here, can],
+  );
 }
 
 /**
@@ -128,47 +200,23 @@ export function usePolicyOwners(
   here: string,
   can: (action: string) => boolean,
 ): Record<string, PolicyOwner> {
-  const owners = useMemo(() => [...new Set(scopes.map((s) => s ?? PLATFORM))].sort(), [scopes]);
-  const key = owners.join('\n');
-  const [names, setNames] = useState<Record<string, string>>({});
-  const [rights, setRights] = useState<Record<string, Rights>>({});
-
-  useEffect(() => {
-    let cancelled = false;
-    for (const { container, step } of containersOf(owners)) {
-      if (container in names) continue;
-      void nameOf(api, container, step).then((name) => {
-        if (!cancelled && name) setNames((current) => ({ ...current, [container]: name }));
-      });
-    }
-    for (const owner of owners) {
-      if (owner === here || owner in rights) continue;
-      void rightsAt(api, owner).then((found) => {
-        if (!cancelled) setRights((current) => ({ ...current, [owner]: found }));
-      });
-    }
-    return () => {
-      cancelled = true;
-    };
-    // Asked again only for an owner, or a container, not asked yet.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, key, here]);
+  const owners = useMemo(() => sorted(scopes), [scopes]);
+  const names = useContainerNames(api, owners);
+  const at = useActionsAt(api, owners, here, can);
 
   return useMemo(() => {
     const found: Record<string, PolicyOwner> = {};
     for (const owner of owners) {
-      const atOwner =
-        owner === here
-          ? { update: can('iam:UpdatePolicy'), delete: can('iam:DeletePolicy'), any: true }
-          : rights[owner] ?? { update: false, delete: false, any: false };
+      const actions = at(owner);
+      const any = owner === here || Object.values(actions).some(Boolean);
       found[owner] = {
         scope: owner,
         label: ownerLabel(owner, names),
-        opens: owner !== here && atOwner.any && ownerHref(owner) !== null,
-        canUpdate: atOwner.update,
-        canDelete: atOwner.delete,
+        opens: owner !== here && any && ownerHref(owner) !== null,
+        canUpdate: !!actions['iam:UpdatePolicy'],
+        canDelete: !!actions['iam:DeletePolicy'],
       };
     }
     return found;
-  }, [owners, here, can, rights, names]);
+  }, [owners, here, at, names]);
 }

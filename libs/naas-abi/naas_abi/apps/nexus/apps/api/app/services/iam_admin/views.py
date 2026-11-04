@@ -101,11 +101,15 @@ def attachment_view(
     attachment: Attachment,
     policy_name: str | None,
     principal: PrincipalRecord | None,
+    policy_owner_scope: str | None = None,
 ) -> dict[str, Any]:
+    """``policy_owner_scope``: where the policy is owned (``abi:``, a container), so a
+    page links the row to the policy at its owner; None when it cannot be read."""
     return {
         "id": attachment.id,
         "policy_id": attachment.policy_id,
         "policy_name": policy_name,
+        "policy_owner_scope": policy_owner_scope,
         "principal_id": attachment.principal_id,
         "principal": principal_view(principal) if principal is not None else None,
         "scope": attachment.scope,

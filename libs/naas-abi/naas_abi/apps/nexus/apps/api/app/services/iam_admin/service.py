@@ -516,22 +516,23 @@ class IamAdminService:
             self._listing(session, "iam:ListAttachments", attachment_resource("*", "*", scope))(
                 found
             )
-            policies: dict[str, str | None] = {}
+            policies: dict[str, Policy | None] = {}
             principals: dict[str, Any] = {}
             items = []
             for attachment in found:
                 if attachment.policy_id not in policies:
-                    policy = self._gateway.policy(attachment.policy_id)
-                    policies[attachment.policy_id] = policy.name if policy else None
+                    policies[attachment.policy_id] = self._gateway.policy(attachment.policy_id)
                 if attachment.principal_id not in principals:
                     principals[attachment.principal_id] = self._gateway.principal(
                         attachment.principal_id
                     )
+                policy = policies[attachment.policy_id]
                 items.append(
                     views.attachment_view(
                         attachment,
-                        policies[attachment.policy_id],
+                        policy.name if policy else None,
                         principals[attachment.principal_id],
+                        policy.owner_scope if policy else None,
                     )
                 )
             return {"items": items}
@@ -588,6 +589,7 @@ class IamAdminService:
                 attachment,
                 policy.name if policy else None,
                 self._gateway.principal(principal_id),
+                policy.owner_scope if policy else None,
             )
 
         return await self._change(
@@ -617,10 +619,17 @@ class IamAdminService:
     # -- principals -------------------------------------------------------------------
 
     async def list_principals(
-        self, user: Any, kind: PrincipalKind | None = None, after: str | None = None
+        self,
+        user: Any,
+        kind: PrincipalKind | None = None,
+        after: str | None = None,
+        text: str | None = None,
     ) -> dict[str, Any]:
+        """The principals the caller may list; with ``text``, IAM's search (id, name,
+        email or display name): how Platform settings finds a person."""
+
         def read(session: IIAMService) -> dict[str, Any]:
-            page = session.list_principals(kind, after=after)
+            page = session.list_principals(kind, after=after, text=text or None)
             self._listing(session, "iam:ListPrincipals", self._wildcard("principal"))(page.items)
             return {
                 "items": [views.principal_view(p) for p in page.items if p.status != "deleted"],
@@ -628,6 +637,17 @@ class IamAdminService:
             }
 
         return await self._read(user, read)
+
+    async def principal_groups(self, user: Any, principal_id: str) -> dict[str, Any]:
+        """The groups ``principal_id`` belongs to that the caller may read, at every
+        level (IAM's ``list_principal_groups``): empty, not refused, for a principal
+        the caller sees nothing of, since the answer says no more than that."""
+        return await self._read(
+            user,
+            lambda s: {
+                "items": [views.principal_view(g) for g in s.list_principal_groups(principal_id)]
+            },
+        )
 
     async def get_principal(self, user: Any, principal_id: str) -> dict[str, Any]:
         return await self._read(user, lambda s: views.principal_view(s.get_principal(principal_id)))

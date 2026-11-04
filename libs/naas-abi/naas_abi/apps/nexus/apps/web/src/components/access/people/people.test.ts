@@ -158,4 +158,70 @@ describe('PeopleView', () => {
     expect(button('Attach policy')).toBeUndefined();
     expect(api.attachable).not.toHaveBeenCalled();
   });
+
+  it('opens a person’s page from their row, by their IAM id and the account the members name', async () => {
+    const linked = member({ userId: 'user-1', name: 'Dev Admin', email: 'admin@example.com', role: 'admin' });
+    const held = attachment({ id: 'att_l', policy_id: 'pol_r', policy_name: 'Recruiters', principal_id: 'usr_1', principal: principal({ id: 'usr_1', email: 'admin@example.com' }), scope: wsScope.value });
+    const api = peopleApi({ listAttachments: vi.fn().mockResolvedValue({ items: [held, recruiters, groupHolds] }) });
+    const open = { person: vi.fn(), group: vi.fn() };
+    mounted = await mount(PeopleView, { api, can: () => true, scope: wsScope, directory: fakeDirectory([bob, linked]), open, changeRole: vi.fn() });
+    await mounted.flush();
+
+    await mounted.click(field('Open Dev Admin'));
+    expect(open.person).toHaveBeenLastCalledWith('usr_1', 'Dev Admin', 'user-1');
+    await mounted.click(field('Open Bob'));
+    expect(open.person).toHaveBeenLastCalledWith('usr_bob', 'Bob', undefined);
+    await mounted.click(field('Open Analysts'));
+    expect(open.group).toHaveBeenLastCalledWith('grp_1', 'Analysts');
+  });
+
+  it('shows the person’s page in place of the table', async () => {
+    const api = peopleApi({
+      principalGroups: vi.fn().mockResolvedValue({ items: [] }),
+      listAttachments: vi.fn().mockResolvedValue({ items: [recruiters] }),
+      resources: vi.fn().mockResolvedValue({ items: [] }),
+      access: vi.fn().mockResolvedValue({ actions: {} }),
+    });
+    const onClosePerson = vi.fn();
+    mounted = await mount(PeopleView, { api, can: () => true, scope: wsScope, directory: fakeDirectory([bob]), person: { id: 'usr_bob', label: 'Bob' }, onClosePerson });
+    await mounted.flush();
+    await mounted.flush();
+    expect(document.querySelector('[data-person-page="usr_bob"]')).not.toBeNull();
+    expect(api.listAttachments).toHaveBeenCalledWith({ principal_id: 'usr_bob' });
+    await mounted.click(button('People & roles') ?? null);
+    expect(onClosePerson).toHaveBeenCalled();
+  });
+
+  it('finds anyone at the platform, by a search IAM answers, not only those holding something there', async () => {
+    const root = attachment({ id: 'att_root', policy_id: 'builtin.platform_admin', principal_id: 'usr_root', principal: principal({ id: 'usr_root', display_name: 'Root' }), scope: null });
+    const carol = principal({ id: 'usr_carol', display_name: 'Carol', email: 'carol@example.com' });
+    const api = peopleApi({
+      listAttachments: vi.fn().mockResolvedValue({ items: [root] }),
+      listPrincipals: vi.fn().mockResolvedValue({ items: [carol], next_after: null }),
+    });
+    const open = { person: vi.fn(), group: vi.fn() };
+    mounted = await mount(PeopleView, { api, can: () => true, scope: PLATFORM_ACCESS_SCOPE, directory: fakeDirectory([]), open, searchDelayMs: 0 });
+    await mounted.flush();
+    await mounted.type(field('Filter people'), 'car');
+    await mounted.flush();
+    await mounted.flush();
+    expect(api.listPrincipals).toHaveBeenCalledWith('user', undefined, 'car');
+    expect(document.querySelector('[data-found="usr_carol"]')?.textContent).toContain('carol@example.com');
+    await mounted.click(field('Open Carol'));
+    expect(open.person).toHaveBeenCalledWith('usr_carol', 'Carol');
+  });
+
+  it('searches nothing for whoever may not list principals, nor below the platform', async () => {
+    const api = peopleApi({ listPrincipals: vi.fn() });
+    mounted = await mount(PeopleView, { api, can: (a) => a !== 'iam:ListPrincipals', scope: PLATFORM_ACCESS_SCOPE, directory: fakeDirectory([]), searchDelayMs: 0 });
+    await mounted.flush();
+    await mounted.type(field('Filter people'), 'carol');
+    await mounted.flush();
+    await mounted.unmount();
+    mounted = await mount(PeopleView, { api, can: () => true, scope: wsScope, directory: fakeDirectory([bob]), searchDelayMs: 0, changeRole: vi.fn() });
+    await mounted.flush();
+    await mounted.type(field('Filter people'), 'carol');
+    await mounted.flush();
+    expect(api.listPrincipals).not.toHaveBeenCalled();
+  });
 });

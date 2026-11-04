@@ -198,12 +198,17 @@ export function createIamAdminApi(fetcher: Fetcher = authFetch) {
       ),
 
     // principals
-    listPrincipals: (kind?: PrincipalKind, after?: string) =>
+    /** ``text``: IAM's search (id, name, email or display name, any case): how the
+     *  platform finds a person. */
+    listPrincipals: (kind?: PrincipalKind, after?: string, text?: string) =>
       read<Page<PrincipalView>>(
         fetcher,
-        path('principals') + query({ kind, after }),
+        path('principals') + query({ kind, after, q: text }),
         'Could not load the principals.',
       ),
+    /** The groups a principal is a member of that the caller may read, at every level. */
+    principalGroups: (id: string) =>
+      read<{ items: PrincipalView[] }>(fetcher, path('principals', id, 'groups'), 'Could not load the groups.'),
     getPrincipal: (id: string) =>
       read<PrincipalView>(fetcher, path('principals', id), 'Could not load the principal.'),
     suspend: (id: string) =>

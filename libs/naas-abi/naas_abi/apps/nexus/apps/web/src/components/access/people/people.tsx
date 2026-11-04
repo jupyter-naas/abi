@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
-import type { AttachmentView } from '@/lib/iam-admin/types';
+import type { AttachmentView, PrincipalView } from '@/lib/iam-admin/types';
 import { useAuthStore } from '@/stores/auth';
 import type { ScopeMember } from '../access-directory';
 import type { AccessViewProps } from '../access-props';
@@ -15,15 +15,28 @@ import {
   type BuiltInRole,
   type RoleTarget,
 } from '../roles/role-change';
+import { principalLabel } from '../attachments/attachments-model';
 import { groupHolders, peopleAt, type PersonRow } from './people-model';
+import { PersonView } from './person';
 import './people.css';
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+/** The person whose page is open: their IAM id, and how the page that opened it named them. */
+export type PersonFocus = { id: string; label?: string; memberId?: string };
+
 type Props = AccessViewProps & {
   /** Changes a member's role (tests pass a fake); the membership routes by default. */
   changeRole?: (target: RoleTarget, userId: string, role: BuiltInRole) => Promise<void>;
+  /** A person's page, open instead of the table. */
+  person?: PersonFocus | null;
+  onClosePerson?: () => void;
+  /** How long the search waits for the typing to stop (tests pass 0). */
+  searchDelayMs?: number;
 };
+
+/** Whom the platform's search asks IAM for: a text this long or longer. */
+const SEARCH_MIN = 2;
 
 function roleTarget(scope: AccessViewProps['scope']): RoleTarget | null {
   if (scope.level === 'workspace' && scope.workspaceId) return { level: 'workspace', workspaceId: scope.workspaceId };
@@ -39,7 +52,18 @@ function roleTarget(scope: AccessViewProps['scope']): RoleTarget | null {
  * memberships (`changeMemberRole`, the code Members uses), other policies are attached and
  * detached here; IAM decides every call.
  */
-export function PeopleView({ api, can, scope, directory, nonce = 0, changeRole = changeMemberRole }: Props) {
+export function PeopleView({
+  api,
+  can,
+  scope,
+  directory,
+  nonce = 0,
+  open,
+  changeRole = changeMemberRole,
+  person,
+  onClosePerson,
+  searchDelayMs = 250,
+}: Props) {
   const selfId = useAuthStore((s) => s.user?.id ?? null);
   const [attachments, setAttachments] = useState<AttachmentView[] | null>(null);
   const [members, setMembers] = useState<ScopeMember[]>([]);
@@ -49,6 +73,28 @@ export function PeopleView({ api, can, scope, directory, nonce = 0, changeRole =
   const [notices, setNotices] = useState<string[]>([]);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
+  // The platform finds anyone IAM lets the caller list (`GET /principals?q=`), not only
+  // those who hold something at the platform.
+  const searches = scope.level === 'platform' && can('iam:ListPrincipals');
+  const [found, setFound] = useState<PrincipalView[]>([]);
+  const wanted = filter.trim();
+  useEffect(() => {
+    if (!searches || wanted.length < SEARCH_MIN || person) {
+      setFound([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      api
+        .listPrincipals('user', undefined, wanted)
+        .then((page) => !cancelled && setFound(page.items))
+        .catch(() => !cancelled && setFound([]));
+    }, searchDelayMs);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [api, searches, wanted, searchDelayMs, person]);
 
   const load = useCallback(async () => {
     try {
@@ -108,12 +154,34 @@ export function PeopleView({ api, can, scope, directory, nonce = 0, changeRole =
     }
   };
 
+  if (person) {
+    return (
+      <PersonView
+        api={api}
+        can={can}
+        scope={scope}
+        directory={directory}
+        nonce={nonce}
+        open={open}
+        personId={person.id}
+        label={person.label}
+        memberId={person.memberId}
+        onClose={() => onClosePerson?.()}
+        changeRole={changeRole}
+      />
+    );
+  }
+
   if (attachments === null) {
     return error ? <p className="access-source-note" role="alert">{error}</p> : <p className="access-empty">Loading…</p>;
   }
 
   const query = filter.trim().toLowerCase();
-  const shown = rows.filter((r) => !query || `${r.label} ${r.email} ${r.id}`.toLowerCase().includes(query));
+  const shown = rows.filter((r) => !query || `${r.label} ${r.email} ${r.id} ${r.principalId}`.toLowerCase().includes(query));
+  const listed = new Set(rows.flatMap((r) => [r.id, r.principalId]));
+  const others = found.filter((p) => !listed.has(p.id));
+  const openPerson = (row: PersonRow) =>
+    open?.person(row.principalId, row.label, row.member && row.id !== row.principalId ? row.id : undefined);
 
   return (
     <div className="access-people">
@@ -122,7 +190,7 @@ export function PeopleView({ api, can, scope, directory, nonce = 0, changeRole =
           type="search"
           className="access-input access-input-grow"
           aria-label="Filter people"
-          placeholder="Filter by name, email or id"
+          placeholder={searches ? 'Find a person by name, email or id' : 'Filter by name, email or id'}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
@@ -154,7 +222,27 @@ export function PeopleView({ api, can, scope, directory, nonce = 0, changeRole =
               return (
                 <tr key={person.id} className="access-table-row" data-person={person.id}>
                   <td>
-                    <span className="access-people-name">{person.label}</span>
+                    {open && person.kind !== 'group' ? (
+                      <button
+                        type="button"
+                        className="access-people-open"
+                        aria-label={`Open ${person.label}`}
+                        onClick={() => openPerson(person)}
+                      >
+                        {person.label}
+                      </button>
+                    ) : open && person.kind === 'group' ? (
+                      <button
+                        type="button"
+                        className="access-people-open"
+                        aria-label={`Open ${person.label}`}
+                        onClick={() => open.group(person.principalId, person.label)}
+                      >
+                        {person.label}
+                      </button>
+                    ) : (
+                      <span className="access-people-name">{person.label}</span>
+                    )}
                     {person.kind !== 'user' && <span className="access-people-kind">{person.kind.replace('_', ' ')}</span>}
                     {person.email && person.email !== person.label && <span className="access-people-sub">{person.email}</span>}
                   </td>
@@ -237,14 +325,21 @@ export function PeopleView({ api, can, scope, directory, nonce = 0, changeRole =
                   <td>
                     {person.viaGroups.map((g) => (
                       <p key={g.groupId} className="access-people-via" data-via={g.groupId}>
-                        <strong>{g.groupLabel}</strong>: {g.policies.map((p) => p.name).join(', ')}
+                        {open ? (
+                          <button type="button" className="access-holding-link" onClick={() => open.group(g.groupId, g.groupLabel)}>
+                            <strong>{g.groupLabel}</strong>
+                          </button>
+                        ) : (
+                          <strong>{g.groupLabel}</strong>
+                        )}
+                        : {g.policies.map((p) => p.name).join(', ')}
                       </p>
                     ))}
                   </td>
                 </tr>
               );
             })}
-            {shown.length === 0 && (
+            {shown.length === 0 && others.length === 0 && (
               <tr>
                 <td colSpan={4} className="access-empty">
                   {query ? 'Nobody matches.' : 'Nobody holds a role or a policy here.'}
@@ -254,6 +349,25 @@ export function PeopleView({ api, can, scope, directory, nonce = 0, changeRole =
           </tbody>
         </table>
       </div>
+      {others.length > 0 && (
+        <section className="access-person-section" aria-label="Others found">
+          <h4 className="access-person-heading">Others found: they hold nothing at the platform</h4>
+          <ul className="access-person-groups">
+            {others.map((p) => (
+              <li key={p.id} data-found={p.id}>
+                {open ? (
+                  <button type="button" className="access-people-open" aria-label={`Open ${principalLabel(p, p.id)}`} onClick={() => open.person(p.id, principalLabel(p, p.id))}>
+                    {principalLabel(p, p.id)}
+                  </button>
+                ) : (
+                  principalLabel(p, p.id)
+                )}{' '}
+                {p.email && p.email !== principalLabel(p, p.id) && <span className="access-people-sub">{p.email}</span>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {mayAttach && <AttachForm api={api} scope={scope.value} principals={choices} onAttached={() => void load()} />}
     </div>
   );

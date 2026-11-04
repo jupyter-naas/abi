@@ -75,3 +75,84 @@
   font-size: var(--font-size-xs);
   color: var(--muted-foreground-hex);
 }
+
+/* A person's page */
+
+.access-person {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.access-person-back {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: var(--font-size-sm);
+  color: var(--muted-foreground-hex);
+  cursor: pointer;
+}
+
+.access-person-back:hover {
+  color: var(--foreground-hex);
+}
+
+.access-person-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
+}
+
+.access-person-name,
+.access-person-heading {
+  margin: 0;
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground-hex);
+}
+
+.access-person-name {
+  font-size: var(--font-size-lg, 1.125rem);
+}
+
+.access-person-heading {
+  font-size: var(--font-size-sm);
+}
+
+.access-person-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.access-person-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--font-size-sm);
+}
+
+.access-people-open {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: var(--font-weight-medium);
+  text-align: left;
+  color: var(--foreground-hex);
+  text-decoration: underline;
+  text-decoration-color: var(--border-hex);
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.access-people-open:hover {
+  text-decoration-color: currentColor;
+}
