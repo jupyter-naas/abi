@@ -190,7 +190,33 @@ export function attachMapsZoomControl(L: typeof import('leaflet'), map: LeafletM
 
 type LeafletMapInternal = LeafletMap & {
   _mapPane?: HTMLElement | null;
+  _animatingZoom?: boolean;
+  _onZoomTransitionEnd?: () => void;
+  _mapsZoomTeardownGuard?: boolean;
 };
+
+/**
+ * Leaflet 1.9 schedules `_onZoomTransitionEnd` with an uncancellable 250ms
+ * `setTimeout` on every animated zoom. `map.remove()` deletes `_mapPane` but
+ * leaves the timer, so leaving a map mid-zoom (route change, Strict Mode
+ * remount, layout switch) runs `_move` → `_getMapPanePos` on a torn-down map
+ * and throws `Cannot read properties of undefined (reading '_leaflet_pos')`.
+ * Wrap the instance method so the late callback is a no-op after teardown.
+ */
+export function guardMapsLeafletZoomTeardown(map: LeafletMap): void {
+  const internal = map as LeafletMapInternal;
+  const original = internal._onZoomTransitionEnd;
+  if (typeof original !== 'function' || internal._mapsZoomTeardownGuard) return;
+  internal._mapsZoomTeardownGuard = true;
+  internal._onZoomTransitionEnd = function guardedZoomTransitionEnd(this: LeafletMapInternal) {
+    const self = this ?? internal;
+    if (!self._mapPane) {
+      self._animatingZoom = false;
+      return;
+    }
+    original.call(self);
+  };
+}
 
 /**
  * True when the map still has a live container and initialized map pane.
@@ -299,6 +325,7 @@ export async function createMapsLeaflet(
     zoomControl: false,
     attributionControl: true,
   });
+  guardMapsLeafletZoomTeardown(map);
   attachMapsZoomControl(L, map);
   map.setView(
     [view.center?.lat ?? MAPS_DEFAULT_CAMERA.lat, view.center?.lng ?? MAPS_DEFAULT_CAMERA.lng],
