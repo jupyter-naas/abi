@@ -147,6 +147,7 @@ def _member_record(
         email=user.email,
         name=user.name,
         created_at=member.since,
+        principal_id=member.principal_id,
         bio=profile.bio if profile.bio is not None else user.bio,
         avatar=profile.avatar,
         organization=profile.organization,

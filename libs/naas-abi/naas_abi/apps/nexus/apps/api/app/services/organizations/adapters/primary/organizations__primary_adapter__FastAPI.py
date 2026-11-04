@@ -223,6 +223,9 @@ class OrganizationMember(BaseModel):
     service_line: str | None = None
     country: str | None = None
     interest: str | None = None
+    # Their IAM principal, which the access pages link to (an account linked from
+    # the old login has another id there).
+    principal_id: str | None = None
     user_created: bool = False
     sign_in_email_sent: bool = False
     workspace_member_id: str | None = None

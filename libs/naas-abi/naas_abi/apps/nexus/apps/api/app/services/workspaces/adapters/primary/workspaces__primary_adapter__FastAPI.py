@@ -220,6 +220,9 @@ class WorkspaceMember(BaseModel):
     name: str | None = None
     created_at: datetime | None = None
     source: str = "workspace"
+    # Their IAM principal, which the access pages link to (an account linked from
+    # the old login has another id there).
+    principal_id: str | None = None
 
 
 class WorkspaceMemberInvite(BaseModel):
@@ -681,6 +684,7 @@ async def list_workspace_members(
             name=row.name,
             created_at=row.created_at,
             source=row.source,
+            principal_id=row.principal_id,
         )
         for row in rows
     ]

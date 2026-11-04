@@ -76,5 +76,9 @@ describe('the directory', () => {
     expect(toMembers([{ name: 'no id' }, { user_id: 'u2', role: 'nope' }])).toEqual([
       { userId: 'u2', name: '', email: '', role: null, inherited: false },
     ]);
+    // Their IAM principal, when the member routes say it (an upgraded account's differs).
+    expect(toMembers([{ user_id: 'user-olivia', principal_id: 'usr_olivia', role: 'admin' }])).toEqual([
+      { userId: 'user-olivia', principalId: 'usr_olivia', name: '', email: '', role: 'admin', inherited: false },
+    ]);
   });
 });

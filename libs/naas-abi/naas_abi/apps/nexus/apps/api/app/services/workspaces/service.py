@@ -254,6 +254,7 @@ class WorkspaceService:
                 email=users[member.user_id].email,
                 name=users[member.user_id].name,
                 created_at=member.since,
+                principal_id=member.principal_id,
             )
             for member in members
             if member.user_id in users
@@ -269,6 +270,7 @@ class WorkspaceService:
                     name=users[member.user_id].name,
                     created_at=None,
                     source="organization",
+                    principal_id=member.principal_id,
                 )
                 for member in inherited
                 if member.user_id in users

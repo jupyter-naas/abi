@@ -127,6 +127,9 @@ class OrganizationMemberRecord:
     service_line: str | None = None
     country: str | None = None
     interest: str | None = None
+    # Their IAM principal (``Member.principal_id``): an account linked from the old
+    # login has another id in IAM than in Nexus. What the access pages link to.
+    principal_id: str | None = None
 
 
 @dataclass

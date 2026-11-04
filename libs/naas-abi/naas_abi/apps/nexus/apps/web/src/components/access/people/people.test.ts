@@ -175,6 +175,30 @@ describe('PeopleView', () => {
     expect(open.group).toHaveBeenLastCalledWith('grp_1', 'Analysts');
   });
 
+  it('opens an upgraded account’s page by its IAM id, with only an inherited role here', async () => {
+    // An account linked from the old login: Nexus names it user-olivia, IAM usr_olivia. On a
+    // workspace page she holds nothing attached here (her role is the organization's).
+    const olivia = member({ userId: 'user-olivia', principalId: 'usr_olivia', name: 'Olivia', email: 'olivia@example.com', role: 'admin', inherited: true });
+    const api = peopleApi({ listAttachments: vi.fn().mockResolvedValue({ items: [] }) });
+    const open = { person: vi.fn(), group: vi.fn() };
+    mounted = await mount(PeopleView, { api, can: () => true, scope: wsScope, directory: fakeDirectory([olivia]), open, changeRole: vi.fn() });
+    await mounted.flush();
+    await mounted.click(field('Open Olivia'));
+    expect(open.person).toHaveBeenLastCalledWith('usr_olivia', 'Olivia');
+    // A member whose IAM id nothing says is named, never linked by their Nexus id.
+    await mounted.unmount();
+    mounted = await mount(PeopleView, {
+      api,
+      can: () => true,
+      scope: wsScope,
+      directory: fakeDirectory([member({ userId: 'user-x', name: 'Xavier', email: 'x@example.com' })]),
+      open,
+      changeRole: vi.fn(),
+    });
+    await mounted.flush();
+    expect(field('Open Xavier')).toBeNull();
+  });
+
   it('shows the person’s page in place of the table', async () => {
     const api = peopleApi({
       principalGroups: vi.fn().mockResolvedValue({ items: [] }),

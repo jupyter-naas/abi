@@ -177,10 +177,11 @@ export function PeopleView({
 
   const query = filter.trim().toLowerCase();
   const shown = rows.filter((r) => !query || `${r.label} ${r.email} ${r.id} ${r.principalId}`.toLowerCase().includes(query));
-  const listed = new Set(rows.flatMap((r) => [r.id, r.principalId]));
+  const listed = new Set(rows.flatMap((r) => [r.id, r.principalId]).filter(Boolean));
   const others = found.filter((p) => !listed.has(p.id));
   // A person's page takes their IAM id; a group's, its id.
-  const opens = (row: PersonRow) => (row.kind === 'group' ? open?.group : open?.person);
+  // A row opens its page only by its IAM id: never a member's Nexus id.
+  const opens = (row: PersonRow) => (!row.principalId ? undefined : row.kind === 'group' ? open?.group : open?.person);
 
   return (
     <div className="access-people">

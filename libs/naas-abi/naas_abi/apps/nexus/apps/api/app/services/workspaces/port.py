@@ -97,6 +97,9 @@ class WorkspaceMemberRecord:
     # "workspace": explicit membership row. "organization": no row, the role is
     # inherited from being an owner/admin of the workspace's organization.
     source: str = "workspace"
+    # Their IAM principal (``Member.principal_id``): an account linked from the old
+    # login has another id in IAM than in Nexus. What the access pages link to.
+    principal_id: str | None = None
 
 
 @dataclass

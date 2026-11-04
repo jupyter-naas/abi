@@ -584,3 +584,15 @@ async def test_assigning_workspaces_is_checked_at_each_workspace(api, team, nexu
         assert granted.status_code == 200, granted.text
         assert granted.json()["added"] == ["ws-2"]
     assert await role("member", ws2) == "admin"
+
+
+@pytest.mark.asyncio
+async def test_the_member_lists_name_each_members_iam_principal(api, team) -> None:
+    """The access pages link a member by their IAM id, which differs from their Nexus id
+    for an account linked from the old login (as every user here): both lists say it."""
+    async with api("owner") as http:
+        members = (await http.get("/api/workspaces/ws-1/members")).json()
+        org_members = (await http.get("/api/organizations/org-1/members")).json()
+    assert members and org_members
+    for row in [*members, *org_members]:
+        assert row["principal_id"] == team.principal(row["user_id"]) != row["user_id"]
