@@ -8,7 +8,7 @@ import type { AttachmentView, PrincipalView } from '@/lib/iam-admin/types';
 import { PLATFORM, parseScope } from '../access-scope';
 import { principalLabel } from '../attachments/attachments-model';
 import { ownerLabel } from '../policies/policy-owners';
-import { isRoleCompanion, roleOfPolicy, type BuiltInRole, type RoleTarget } from '../roles/role-change';
+import { isRoleCompanion, principalKindOf, roleOfPolicy, type BuiltInRole, type RoleTarget } from '../roles/role-change';
 
 export type HoldingRow = {
   attachment: AttachmentView;
@@ -58,7 +58,8 @@ function depth(scope: string | null): number {
 }
 
 function row(attachment: AttachmentView, via: HoldingRow['via']): HoldingRow {
-  const user = (attachment.principal?.kind ?? 'user') === 'user';
+  // A principal whose record could not be read is told by its id's prefix.
+  const user = (attachment.principal?.kind ?? principalKindOf(attachment.principal_id)) === 'user';
   return {
     attachment,
     via,

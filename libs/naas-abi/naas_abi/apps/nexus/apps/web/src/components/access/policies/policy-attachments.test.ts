@@ -2,7 +2,6 @@
 import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { IamAdminError } from '@/lib/iam-admin/api';
 import { mount, type Mounted } from '@/lib/testing/mount';
 import { ORG, WS, attachment, fakeApi, readerPolicy, wsScope } from '../access-fixtures';
 import { principal } from '../service-fixtures';
@@ -63,11 +62,25 @@ describe('Where a policy is attached', () => {
   });
 
   it('says so when IAM lets the caller list none of it', async () => {
-    const client = api({ listAttachments: vi.fn().mockRejectedValue(new IamAdminError('You do not have permission to do this.', 403)) });
+    // Across levels IAM answers what the caller may list: here, nothing.
+    const client = api({ listAttachments: vi.fn().mockResolvedValue({ items: [] }) });
     mounted = await mount(PolicyAttachments, { api: client, policyId: 'pol_w', here: 'abi:', can: () => false });
     await mounted.flush();
-    expect(mounted.host.textContent).toContain('You may not list where it is attached.');
+    expect(mounted.host.textContent).toContain('Attached nowhere you may list.');
     expect(document.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('detaches a role a group holds, a plain attachment, and tells an unread principal by its id', async () => {
+    // The group's record could not be read: its id says it is a group.
+    const held = attachment({ id: 'a_g', policy_id: 'builtin.member', principal_id: 'grp_unread', principal: null, scope: WS });
+    const client = api({ listAttachments: vi.fn().mockResolvedValue({ items: [held] }) });
+    const open = { person: vi.fn(), group: vi.fn() };
+    mounted = await mount(PolicyAttachments, { api: client, policyId: 'builtin.member', here: WS, can: () => true, open });
+    await mounted.flush();
+    expect(document.querySelector('[aria-label^="Detach"]')).not.toBeNull();
+    await mounted.click(document.querySelector('[data-attached="grp_unread"] button'));
+    expect(open.group).toHaveBeenCalledWith('grp_unread', 'grp_unread');
+    expect(open.person).not.toHaveBeenCalled();
   });
 
   it('never detaches a role by hand: a role is a membership', async () => {

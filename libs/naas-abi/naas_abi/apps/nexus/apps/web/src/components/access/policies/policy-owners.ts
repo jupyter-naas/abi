@@ -153,8 +153,10 @@ function useAnswers<T>(
     for (const key of keys) {
       if (asked.current.has(key)) continue;
       asked.current.add(key);
+      // An answer from before a reload never overwrites a newer one.
+      const asking = round.current;
       void fetch(key).then((answer) => {
-        if (!mounted.current) return;
+        if (!mounted.current || round.current !== asking) return;
         if (answer === null) {
           asked.current.delete(key);
           return;

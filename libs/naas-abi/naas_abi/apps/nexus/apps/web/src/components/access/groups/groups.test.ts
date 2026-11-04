@@ -212,7 +212,8 @@ describe('A group’s page', () => {
 
   it('says so when IAM lets the caller list none of its attachments', async () => {
     const api = groupApi();
-    (api as unknown as Record<string, unknown>).listAttachments = vi.fn(() => Promise.reject(new IamAdminError('You do not have permission to do this.', 403)));
+    // Across levels IAM answers what the caller may list: here, nothing.
+    (api as unknown as Record<string, unknown>).listAttachments = vi.fn().mockResolvedValue({ items: [] });
     mounted = await mount(GroupsView, { api, can: allowAll, scope: PLATFORM_ACCESS_SCOPE, directory: EMPTY_DIRECTORY, focus: 'grp_g', loadProviders: () => Promise.resolve(providers) });
     await mounted.flush();
     await mounted.flush();

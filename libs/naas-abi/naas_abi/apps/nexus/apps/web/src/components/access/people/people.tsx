@@ -76,19 +76,21 @@ export function PeopleView({
   // The platform finds anyone IAM lets the caller list (`GET /principals?q=`), not only
   // those who hold something at the platform.
   const searches = scope.level === 'platform' && can('iam:ListPrincipals');
-  const [found, setFound] = useState<PrincipalView[]>([]);
+  // The results of a search, for the text they answer: while the next one is pending, the
+  // previous text's are not shown, nor clicked.
+  const [found, setFound] = useState<{ text: string; items: PrincipalView[] }>({ text: '', items: [] });
   const wanted = filter.trim();
   useEffect(() => {
     if (!searches || wanted.length < SEARCH_MIN || person) {
-      setFound([]);
+      setFound({ text: '', items: [] });
       return;
     }
     let cancelled = false;
     const timer = setTimeout(() => {
       api
         .listPrincipals('user', undefined, wanted)
-        .then((page) => !cancelled && setFound(page.items))
-        .catch(() => !cancelled && setFound([]));
+        .then((page) => !cancelled && setFound({ text: wanted, items: page.items }))
+        .catch(() => !cancelled && setFound({ text: wanted, items: [] }));
     }, searchDelayMs);
     return () => {
       cancelled = true;
@@ -178,7 +180,7 @@ export function PeopleView({
   const query = filter.trim().toLowerCase();
   const shown = rows.filter((r) => !query || `${r.label} ${r.email} ${r.id} ${r.principalId}`.toLowerCase().includes(query));
   const listed = new Set(rows.flatMap((r) => [r.id, r.principalId]).filter(Boolean));
-  const others = found.filter((p) => !listed.has(p.id));
+  const others = found.text === wanted ? found.items.filter((p) => !listed.has(p.id)) : [];
   // A person's page takes their IAM id; a group's, its id.
   // A row opens its page only by its IAM id: never a member's Nexus id.
   const opens = (row: PersonRow) => (!row.principalId ? undefined : row.kind === 'group' ? open?.group : open?.person);

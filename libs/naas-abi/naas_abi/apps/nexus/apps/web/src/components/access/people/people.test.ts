@@ -235,6 +235,25 @@ describe('PeopleView', () => {
     expect(open.person).toHaveBeenCalledWith('usr_carol', 'Carol');
   });
 
+  it('shows no previous search’s people while the next one is pending', async () => {
+    const carol = principal({ id: 'usr_carol', display_name: 'Carol', email: 'carol@example.com' });
+    const api = peopleApi({
+      listAttachments: vi.fn().mockResolvedValue({ items: [] }),
+      listPrincipals: vi.fn((_kind: string, _after: unknown, text: string) =>
+        Promise.resolve({ items: text === 'car' ? [carol] : [], next_after: null }),
+      ),
+    });
+    mounted = await mount(PeopleView, { api, can: () => true, scope: PLATFORM_ACCESS_SCOPE, directory: fakeDirectory([]), open: { person: vi.fn() }, searchDelayMs: 30 });
+    await mounted.flush();
+    await mounted.type(field('Filter people'), 'car');
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    await mounted.flush();
+    expect(document.querySelector('[data-found="usr_carol"]')).not.toBeNull();
+    // The next text is pending: Carol, found for "car", is no longer offered.
+    await mounted.type(field('Filter people'), 'carx');
+    expect(document.querySelector('[data-found="usr_carol"]')).toBeNull();
+  });
+
   it('searches nothing for whoever may not list principals, nor below the platform', async () => {
     const api = peopleApi({ listPrincipals: vi.fn() });
     mounted = await mount(PeopleView, { api, can: (a) => a !== 'iam:ListPrincipals', scope: PLATFORM_ACCESS_SCOPE, directory: fakeDirectory([]), searchDelayMs: 0 });

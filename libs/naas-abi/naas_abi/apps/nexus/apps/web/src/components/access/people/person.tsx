@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
-import { IamAdminError } from '@/lib/iam-admin/api';
 import type { AttachmentView, PrincipalView } from '@/lib/iam-admin/types';
 import { useAuthStore } from '@/stores/auth';
 import type { AccessViewProps } from '../access-props';
@@ -16,7 +15,6 @@ import { changeMemberRole, type BuiltInRole, type RoleTarget } from '../roles/ro
 import './people.css';
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
-const refused = (e: unknown) => e instanceof IamAdminError && e.status === 403;
 
 type Props = AccessViewProps & {
   /** The person's IAM id. */
@@ -31,8 +29,6 @@ type Props = AccessViewProps & {
 type Loaded = {
   direct: AttachmentView[];
   groups: GroupHoldings[];
-  /** IAM let the viewer list nothing this person holds. */
-  refused: boolean;
   notices: string[];
   profile: PrincipalView | null;
 };
@@ -96,12 +92,13 @@ export function PersonView({
 
   const load = useCallback(async () => {
     const notices: string[] = [];
+    // Across levels IAM answers what the viewer may list: an empty list, never a refusal.
     const [direct, groups] = await Promise.all([
       api.listAttachments({ principal_id: personId }).then(
-        (page) => ({ items: page.items, refused: false }),
+        (page) => page.items,
         (e: unknown) => {
-          if (!refused(e)) notices.push(`What they hold could not be read (${message(e)}).`);
-          return { items: [] as AttachmentView[], refused: refused(e) };
+          notices.push(`What they hold could not be read (${message(e)}).`);
+          return [] as AttachmentView[];
         },
       ),
       api.principalGroups(personId).then(
@@ -117,17 +114,15 @@ export function PersonView({
         api.listAttachments({ principal_id: group.id }).then(
           (page) => ({ group, attachments: page.items }),
           (e: unknown) => {
-            if (!refused(e)) {
-              notices.push(`What ${principalLabel(group, group.id)} gives could not be read (${message(e)}).`);
-            }
+            notices.push(`What ${principalLabel(group, group.id)} gives could not be read (${message(e)}).`);
             return { group, attachments: [] as AttachmentView[] };
           },
         ),
       ),
     );
-    let profile = direct.items.find((a) => a.principal)?.principal ?? null;
+    let profile = direct.find((a) => a.principal)?.principal ?? null;
     if (!profile) profile = await api.getPrincipal(personId).catch(() => null);
-    setLoaded({ direct: direct.items, groups: held, refused: direct.refused && groups.length === 0, notices, profile });
+    setLoaded({ direct, groups: held, notices, profile });
   }, [api, personId]);
 
   useEffect(() => {
@@ -219,11 +214,7 @@ export function PersonView({
                 selfId,
                 change: (target, memberId, role) => void run(() => changeRole(target, memberId, role)),
               }}
-              empty={
-                loaded.refused
-                  ? 'You may not list what this person holds.'
-                  : 'They hold nothing you may list.'
-              }
+              empty="They hold nothing you may list."
             />
           </section>
           <section className="access-person-section" aria-label="Groups">

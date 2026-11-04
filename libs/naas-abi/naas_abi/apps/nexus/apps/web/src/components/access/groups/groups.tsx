@@ -234,15 +234,15 @@ function GroupDetail({
   const [claim, setClaim] = useState('');
   const mapsIdp = can('iam:MapIdpGroup') || can('iam:UnmapIdpGroup');
 
-  // Every attachment of the group, at every level: IAM lists those the caller may (a 403
-  // when none), whatever the level of this page.
+  // Every attachment of the group, at every level: IAM lists those the caller may (an
+  // empty list when none), whatever the level of this page.
   const loadHeld = useCallback(async () => {
     try {
       const found = await api.listAttachments({ principal_id: groupId });
       setHeld(found.items);
     } catch (e) {
       setHeld([]);
-      if (!(e instanceof IamAdminError && e.status === 403)) setError(message(e));
+      setError(message(e));
     }
   }, [api, groupId]);
   const rows = useMemo(() => holdingRows(held ?? [], []), [held]);

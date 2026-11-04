@@ -1,7 +1,7 @@
 import type { AttachmentView, GroupView, PrincipalKind } from '@/lib/iam-admin/types';
 import type { ScopeMember } from '../access-directory';
 import { principalLabel } from '../attachments/attachments-model';
-import { isRoleCompanion, roleOfPolicy, type BuiltInRole } from '../roles/role-change';
+import { isRoleCompanion, principalKindOf, roleOfPolicy, type BuiltInRole } from '../roles/role-change';
 
 export type HeldPolicy = { id: string; name: string };
 
@@ -79,7 +79,7 @@ export function peopleAt(attachments: AttachmentView[], members: ScopeMember[], 
     (rows.has(principalId) || kind !== 'user' || !email ? principalId : (byEmail.get(email.toLowerCase()) ?? principalId));
 
   for (const a of attachments) {
-    const kind = a.principal?.kind ?? 'user';
+    const kind = a.principal?.kind ?? principalKindOf(a.principal_id);
     const holder = row(rowId(a.principal_id, kind, a.principal?.email), () => ({
       id: a.principal_id,
       kind,
