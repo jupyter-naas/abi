@@ -448,3 +448,17 @@ def test_deleting_a_user_ends_their_sessions_and_refresh_tokens(service):
         service.delete_user(user.id)
     # The address is free again: inviting it later makes a new user.
     assert service.create_user("alice@example.com").id != user.id
+
+
+def test_a_code_mailed_before_the_delete_opens_nothing_after_it(service, mailer):
+    """Codes are kept per address: one mailed just before the delete must not open
+    the account the address gets next (a sign-up, a new invitation)."""
+    service.configuration.signup_enabled = True
+    user = service.create_user("alice@example.com")
+    assert service.request_code("alice@example.com", None)
+    stale = mailer.last_code("alice@example.com")
+    service.delete_user(user.id)
+    again = service.create_user("alice@example.com")
+    assert again.id != user.id
+    with pytest.raises(InvalidCode):
+        service.verify_code("alice@example.com", stale, None)
