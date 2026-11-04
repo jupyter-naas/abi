@@ -8,11 +8,11 @@ import { LEGACY_WORKSPACE_SETTINGS_SLUGS } from './tables';
 
 describe('old table pages', () => {
   it('go to the same table under /settings/tables', () => {
-    expect(platformSettingsRedirect('/settings/users')).toBe('/settings/tables/users');
     expect(platformSettingsRedirect('/settings/workspace_members')).toBe(
       '/settings/tables/workspace_members'
     );
     expect(platformSettingsRedirect('/settings/users/user-1')).toBe('/settings/tables/users/user-1');
+    expect(platformSettingsRedirect('/settings/users/usr_1', '?x=1')).toBe('/settings/tables/users/usr_1?x=1');
     expect(platformSettingsRedirect('/settings/workspace_resource_policies/ws-1~maps')).toBe(
       '/settings/tables/workspace_resource_policies/ws-1~maps'
     );
@@ -77,7 +77,13 @@ describe('old System links', () => {
 
 describe('PLATFORM_SETTINGS_SECTIONS', () => {
   it('is the first segment of each section path', () => {
-    expect(PLATFORM_SETTINGS_SECTIONS).toEqual(['tables', 'system', 'organizations', 'roles']);
+    expect(PLATFORM_SETTINGS_SECTIONS).toEqual(['tables', 'system', 'organizations', 'users', 'roles']);
+  });
+
+  it('serves Users, never redirected to the users table (its rows still are)', () => {
+    expect(platformSettingsRedirect('/settings/users')).toBeNull();
+    expect(platformSettingsRedirect('/settings/users/')).toBeNull();
+    expect(isPlatformSettingsPath('/settings/users')).toBe(true);
   });
 
   it('serves Organizations, never redirected to the organizations table', () => {

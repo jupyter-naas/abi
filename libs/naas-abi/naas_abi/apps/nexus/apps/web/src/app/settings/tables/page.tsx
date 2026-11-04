@@ -16,11 +16,11 @@ import {
 import {
   downloadJsonExport,
   downloadWorkbookExport,
-} from '@/app/organizations/[orgId]/settings/users/users-table-export';
+} from '@/components/settings/users-table/users-table-export';
 import { ColumnFilterPopover } from '@/components/graph/explore/ColumnFilterPopover';
 import { isBlank } from '@/lib/graph-query/filters';
 import type { FacetBucket } from '@/lib/graph-query/types';
-import { rowMatchesColumnFilter } from '@/app/organizations/[orgId]/settings/users/users-table-filter';
+import { rowMatchesColumnFilter } from '@/components/settings/users-table/users-table-filter';
 import { authFetch } from '@/stores/auth';
 import { OrgSettingsPageHeader } from '@/app/organizations/[orgId]/settings/components/org-settings-page-header';
 import { matchesSearch } from '../lib/search';

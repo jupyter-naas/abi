@@ -11,6 +11,7 @@ import {
   Radio,
   Server,
   Table2,
+  Users,
   Waypoints,
   Workflow,
 } from 'lucide-react';
@@ -21,6 +22,7 @@ import {
   type SystemView,
 } from '../system/system-tabs';
 import { PLATFORM_ORGANIZATIONS_PATH } from '../organizations/organizations-model';
+import { PLATFORM_USERS_PATH } from '../users/users-model';
 import { PLATFORM_TABLES_PATH } from './tables';
 import { safeDecode } from './page-helpers';
 
@@ -85,6 +87,14 @@ export const ORGANIZATIONS_ITEM: PlatformSettingsNavItem = {
   needs: READ_SYSTEM,
 };
 
+export const USERS_ITEM: PlatformSettingsNavItem = {
+  id: 'users',
+  label: 'Users',
+  href: PLATFORM_USERS_PATH,
+  icon: Users,
+  needs: { action: 'nexus:ListUsers' },
+};
+
 export const ROLES_ITEM: PlatformSettingsNavItem = {
   id: 'roles',
   label: 'Roles & permissions',
@@ -105,7 +115,7 @@ export const platformSettingsGroups: PlatformSettingsNavGroup[] = [
       needs: READ_SYSTEM,
     })),
   },
-  { label: 'Tenancy', items: [ORGANIZATIONS_ITEM] },
+  { label: 'Tenancy', items: [ORGANIZATIONS_ITEM, USERS_ITEM] },
   { label: 'Access', items: [ROLES_ITEM] },
 ];
 
