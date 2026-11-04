@@ -202,6 +202,14 @@ class IAMStoreContract(ABC):
         assert found("a_n") == set() and found("%") == {ann.id}
         page = store.list_principals(text="example", limit=1)
         assert len(page.items) == 1 and page.next_after is not None
+        # Beyond ASCII, any case, on every store (SQLite's own lower() folds ASCII only).
+        emile = store.create_principal(
+            replace(
+                user("emile"), email="emile@example.com", display_name="Émile Ørsted"
+            )
+        )
+        assert found("émile") == {emile.id}
+        assert found("ÉMILE ØRSTED") == {emile.id}
 
     # -- groups -------------------------------------------------------------------
 

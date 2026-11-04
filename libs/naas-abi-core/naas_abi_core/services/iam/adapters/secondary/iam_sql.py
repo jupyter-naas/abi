@@ -499,6 +499,12 @@ def _check_limit(limit: int) -> None:
         raise ValueError("limit must be between 1 and 1000")
 
 
+# The SQL function the principal search lower-cases with on SQLite, registered on each
+# connection (``IAMStoreSQLite``): Python's ``str.lower``, every letter, where SQLite's
+# own ``lower()`` folds ASCII only. PostgreSQL's ``lower()`` already folds every letter.
+LOWER_FUNCTION = "abi_lower"
+
+
 class IAMStoreSQL(IAMStore):
     """Subclasses pass an engine; ``_write_options`` selects the write transaction."""
 
@@ -891,7 +897,13 @@ class IAMStoreSQL(IAMStore):
         if kind is not None:
             query = query.where(principals.c.kind == kind)
         if text:
-            # A substring in any case: LIKE's own wildcards in the text are literal.
+            # A substring in any case (every letter lower-cased, as the other stores):
+            # LIKE's own wildcards in the text are literal.
+            lower = (
+                getattr(func, LOWER_FUNCTION)
+                if self._engine.dialect.name == "sqlite"
+                else func.lower
+            )
             escaped = (
                 text.lower()
                 .replace("\\", "\\\\")
@@ -902,7 +914,7 @@ class IAMStoreSQL(IAMStore):
             query = query.where(
                 or_(
                     *(
-                        func.lower(column).like(pattern, escape="\\")
+                        lower(column).like(pattern, escape="\\")
                         for column in (
                             principals.c.id,
                             principals.c.name,

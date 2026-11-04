@@ -1591,8 +1591,10 @@ identity, `iam_identity_links`, which `find_user` answers first, so its principa
 to an identity provider; the user a first sign-in made for that identity is merged into it, retired, and one
 holding keys refuses the link; `identity_at(principal, issuer)` names the subject by which a provider knows a
 user, its own or linked), `create_service_account`, `get_principal`, `list_principals`
-(`text=`: only those whose id, name, email or display name holds it, in any case, `LIKE`'s
-wildcards taken literally: how the platform finds a person; filtered by `iam:ListPrincipals`
+(`text=`: only those whose id, name, email or display name holds it, in any case, every
+letter lower-cased alike on every store (Python's `str.lower`; SQLite through a registered
+`abi_lower`, its own `lower()` folding ASCII only), `LIKE`'s wildcards taken literally: how the
+platform finds a person; filtered by `iam:ListPrincipals`
 like the list),
 `suspend_principal`, `resume_principal`, `delete_principal` (keeps the id, drops
 attachments and memberships), groups (`create_group`, `add_group_member`,

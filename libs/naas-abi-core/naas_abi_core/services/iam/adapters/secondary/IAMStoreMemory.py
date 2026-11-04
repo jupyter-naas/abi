@@ -148,11 +148,11 @@ class IAMStoreMemory(IAMStore):
         owner_scopes: Sequence[str] | None = None,
         text: str | None = None,
     ) -> Page:
-        wanted = text.casefold() if text else None
+        wanted = text.lower() if text else None
 
         def matches(p: PrincipalRecord) -> bool:
             return wanted is None or any(
-                wanted in value.casefold()
+                wanted in value.lower()
                 for value in (p.id, p.name, p.email, p.display_name)
                 if value
             )
