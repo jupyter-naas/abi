@@ -5,7 +5,8 @@ import { IamAdminError, type IamAdminApi } from '@/lib/iam-admin/api';
 import type { AttachmentView } from '@/lib/iam-admin/types';
 import type { AccessNavigation } from '../access-props';
 import { principalLabel } from '../attachments/attachments-model';
-import { holdingRows, levelLabel } from '../holdings/holdings-model';
+import { ConfirmDetach } from '../holdings/confirm-detach';
+import { byLevel, levelLabel } from '../holdings/holdings-model';
 import '../holdings/holdings.css';
 import { isRoleCompanion, roleOfPolicy } from '../roles/role-change';
 import { useActionsAt, useContainerNames } from './policy-owners';
@@ -24,6 +25,7 @@ export function PolicyAttachments({
   here,
   can,
   open,
+  nonce = 0,
 }: {
   api: IamAdminApi;
   policyId: string;
@@ -31,6 +33,8 @@ export function PolicyAttachments({
   here: string;
   can: (action: string) => boolean;
   open?: AccessNavigation;
+  /** Bumped by the page's refresh button: read again, rights included. */
+  nonce?: number;
 }) {
   const [items, setItems] = useState<AttachmentView[] | null>(null);
   const [refused, setRefused] = useState(false);
@@ -50,13 +54,13 @@ export function PolicyAttachments({
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, nonce]);
 
   // Ordered from the top level down, as on a person's page.
-  const rows = useMemo(() => holdingRows(items ?? [], []).map((r) => r.attachment), [items]);
+  const rows = useMemo(() => [...(items ?? [])].sort(byLevel), [items]);
   const scopes = useMemo(() => rows.map((a) => a.scope), [rows]);
-  const names = useContainerNames(api, scopes);
-  const actionsAt = useActionsAt(api, scopes, here, can);
+  const names = useContainerNames(api, scopes, nonce);
+  const actionsAt = useActionsAt(api, scopes, here, can, nonce);
   const membership = !!roleOfPolicy(policyId) || isRoleCompanion(policyId);
 
   const detach = async (a: AttachmentView) => {
@@ -97,7 +101,8 @@ export function PolicyAttachments({
                 const who = principalLabel(a.principal, a.principal_id);
                 const kind = a.principal?.kind ?? 'user';
                 const level = levelLabel(a.scope, names);
-                const go = open ? () => (kind === 'group' ? open.group(a.principal_id, who) : open.person(a.principal_id, who)) : null;
+                const target = kind === 'group' ? open?.group : open?.person;
+                const go = target ? () => target(a.principal_id, who) : null;
                 return (
                   <tr key={a.id} className="access-table-row" data-attached={a.principal_id} data-level={a.scope ?? ''}>
                     <td>
@@ -112,34 +117,18 @@ export function PolicyAttachments({
                     </td>
                     <td title={a.scope ?? ''}>{level}</td>
                     <td className="access-holding-actions">
-                      {!membership &&
-                        actionsAt(a.scope)['iam:DetachPolicy'] &&
-                        (confirming === a.id ? (
-                          <span>
-                            <button
-                              type="button"
-                              className="access-policy-button access-policy-button-danger"
-                              onClick={() => {
-                                setConfirming(null);
-                                void detach(a);
-                              }}
-                            >
-                              Confirm detach
-                            </button>{' '}
-                            <button type="button" className="access-policy-button" onClick={() => setConfirming(null)}>
-                              Keep
-                            </button>
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            className="access-policy-button"
-                            aria-label={`Detach from ${who} at ${level}`}
-                            onClick={() => setConfirming(a.id)}
-                          >
-                            Detach
-                          </button>
-                        ))}
+                      {!membership && actionsAt(a.scope)['iam:DetachPolicy'] && (
+                        <ConfirmDetach
+                          label={`Detach from ${who} at ${level}`}
+                          confirming={confirming === a.id}
+                          onAsk={() => setConfirming(a.id)}
+                          onKeep={() => setConfirming(null)}
+                          onConfirm={() => {
+                            setConfirming(null);
+                            void detach(a);
+                          }}
+                        />
+                      )}
                     </td>
                   </tr>
                 );

@@ -159,7 +159,7 @@ describe('PeopleView', () => {
     expect(api.attachable).not.toHaveBeenCalled();
   });
 
-  it('opens a person’s page from their row, by their IAM id and the account the members name', async () => {
+  it('opens a person’s page from their row, by their IAM id', async () => {
     const linked = member({ userId: 'user-1', name: 'Dev Admin', email: 'admin@example.com', role: 'admin' });
     const held = attachment({ id: 'att_l', policy_id: 'pol_r', policy_name: 'Recruiters', principal_id: 'usr_1', principal: principal({ id: 'usr_1', email: 'admin@example.com' }), scope: wsScope.value });
     const api = peopleApi({ listAttachments: vi.fn().mockResolvedValue({ items: [held, recruiters, groupHolds] }) });
@@ -168,9 +168,9 @@ describe('PeopleView', () => {
     await mounted.flush();
 
     await mounted.click(field('Open Dev Admin'));
-    expect(open.person).toHaveBeenLastCalledWith('usr_1', 'Dev Admin', 'user-1');
+    expect(open.person).toHaveBeenLastCalledWith('usr_1', 'Dev Admin');
     await mounted.click(field('Open Bob'));
-    expect(open.person).toHaveBeenLastCalledWith('usr_bob', 'Bob', undefined);
+    expect(open.person).toHaveBeenLastCalledWith('usr_bob', 'Bob');
     await mounted.click(field('Open Analysts'));
     expect(open.group).toHaveBeenLastCalledWith('grp_1', 'Analysts');
   });
@@ -223,5 +223,16 @@ describe('PeopleView', () => {
     await mounted.type(field('Filter people'), 'carol');
     await mounted.flush();
     expect(api.listPrincipals).not.toHaveBeenCalled();
+  });
+
+  it('names no link where the section it opens is not shown to the caller', async () => {
+    const api = peopleApi();
+    mounted = await mount(PeopleView, { api, can: () => true, scope: wsScope, directory: fakeDirectory([bob]), open: { person: vi.fn() }, changeRole: vi.fn() });
+    await mounted.flush();
+    expect(field('Open Bob')).not.toBeNull();
+    // No Groups section here: the group is named, not linked.
+    expect(field('Open Analysts')).toBeNull();
+    expect(row('grp_1')?.textContent).toContain('Analysts');
+    expect(row('usr_bob')?.querySelector('[data-via] button')).toBeNull();
   });
 });

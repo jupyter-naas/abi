@@ -82,6 +82,7 @@ export function PolicyEditor({
   validationDelayMs = VALIDATION_DELAY_MS,
   can,
   open,
+  nonce = 0,
 }: {
   api: IamAdminApi;
   policy: PolicyView | null;
@@ -105,6 +106,8 @@ export function PolicyEditor({
   can?: (action: string) => boolean;
   /** Opens a person's or a group's page from where the policy is attached. */
   open?: AccessNavigation;
+  /** Bumped by the page's refresh button. */
+  nonce?: number;
 }) {
   const [name, setName] = useState(policy?.name ?? '');
   const [description, setDescription] = useState(policy?.description ?? '');
@@ -418,7 +421,7 @@ export function PolicyEditor({
       )}
 
       {policy && can && (
-        <PolicyAttachments api={api} policyId={policy.id} here={ownerOf(scope)} can={can} open={open} />
+        <PolicyAttachments api={api} policyId={policy.id} here={ownerOf(scope)} can={can} open={open} nonce={nonce} />
       )}
 
       <div className="access-policy-row">

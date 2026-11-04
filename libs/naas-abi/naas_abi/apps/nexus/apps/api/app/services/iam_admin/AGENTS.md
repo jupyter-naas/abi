@@ -83,7 +83,10 @@ below a container, `<container>/*`. Nexus builds them with `services/iam/names.p
   request field. `api` is not widened for this: it stays out of IAM's administration.
 - **Name the action with `declares`.** The route matrix needs it; the check is IAM's, inside the call. A read that
   travels as POST or a caller-only route goes in the matrix's allowlists with its reason.
-- **A list that comes back empty for a caller who may list nothing is a 403** (`_listing`), not an empty page.
+- **A list that comes back empty for a caller who may list nothing is a 403** (`_listing`), not an empty page. One
+  principal's or one policy's attachments across levels (`/attachments?principal_id=` or `?policy_id=`, no `scope`)
+  are not: IAM kept each attachment the caller may list, so an empty answer says only that there is none to show
+  them, and a 403 would be decided at the platform, where an organisation's or a workspace's admin never holds it.
 - **Audit before the change** (`_change`): no record, no change; the record names the actor, the operation, the
   resource and a short detail, never a key's value or a policy's text. A new change operation goes through `_change`.
 - **Keys:** the value is in `created_key`'s answer only (`Cache-Control: no-store`); never log or audit it.
@@ -200,8 +203,9 @@ below a container, `<container>/*`. Nexus builds them with `services/iam/names.p
   `?policy_id=` without a scope, `/principals/{id}/groups` and, at the platform, `/principals?q=`; the filtering is
   IAM's (`list_attachments`, `list_principal_groups`, `list_principals(text=)`, in process, over NATS and in the
   SDK), Nexus adds none. *Consequences:* the platform admin sees everything a person holds, an organization's admin
-  what is inside the organization, a workspace's admin what IAM lets them list, a member nothing (a 403 on the
-  attachments, no group); the search finds no one for whoever may not list principals (a 403, as the list).
+  what is inside the organization, a workspace's admin what IAM lets them list, a member nothing (empty lists: across
+  levels nothing is refused, each row is kept or not); a workspace's policy attached nowhere reads as attached nowhere
+  to its admin; the search finds no one for whoever may not list principals (a 403, as the list).
 - **The routes take a session only** (the `/api/iam/` prefix): an API key cannot administer permissions.
 - A user holding a custom role with only `iam:ListPolicies` gets exactly that page; a stranger gets 403 on all of
   them. Group and service-account deletion keep the id (IAM's rule); the lists hide deleted ones.
@@ -220,8 +224,8 @@ and groups.
 
 `adapters/primary/iam_admin__primary_adapter__FastAPI_access_views_test.py` runs a person's access as each viewer may list
 it (Bob, a member of org-1, of its ws-2 and of another organisation's "Ontology demo", with a policy there and a
-group's policy at ws-2): the platform admin, org-1's admin, ws-2's admin and a member; a policy's attachments; the
-search.
+group's policy at ws-2): the platform admin, org-1's admin, ws-2's admin and a member; a policy's attachments, an
+unattached one and a person holding nothing as empty lists to ws-2's and org-1's admins; the search.
 
 `adapters/primary/iam_admin__primary_adapter__FastAPI_publishers_test.py` runs `/publishers`, `/resources` and the
 narrowed `/catalogs` on the same world, with listers registered for graphs, workspaces and features (`listed`

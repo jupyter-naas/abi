@@ -6,9 +6,10 @@ import { IamAdminError } from '@/lib/iam-admin/api';
 import type { AttachmentView, PrincipalView } from '@/lib/iam-admin/types';
 import { useAuthStore } from '@/stores/auth';
 import type { AccessViewProps } from '../access-props';
-import { PLATFORM, ownerOf } from '../access-scope';
+import type { AccessDirectory } from '../access-directory';
+import { PLATFORM, organizationAccessScope, ownerOf, workspaceAccessScope } from '../access-scope';
 import { principalLabel } from '../attachments/attachments-model';
-import { holdingRows, levelLabel, scopesOf, type GroupHoldings } from '../holdings/holdings-model';
+import { holdingRows, levelLabel, roleTargetOf, scopesOf, type GroupHoldings } from '../holdings/holdings-model';
 import { HoldingsTable } from '../holdings/holdings-table';
 import { useActionsAt, useContainerNames } from '../policies/policy-owners';
 import { changeMemberRole, type BuiltInRole, type RoleTarget } from '../roles/role-change';
@@ -22,9 +23,6 @@ type Props = AccessViewProps & {
   personId: string;
   /** Their name as the page that opened this one shows it, until IAM's is read. */
   label?: string | null;
-  /** Their account as the membership routes name it, when it is not their IAM id (an account
-   *  linked from the old login); the IAM id otherwise. */
-  memberId?: string | null;
   onClose: () => void;
   /** Changes a role (tests pass a fake); the membership routes by default. */
   changeRole?: (target: RoleTarget, userId: string, role: BuiltInRole) => Promise<void>;
@@ -39,13 +37,46 @@ type Loaded = {
   profile: PrincipalView | null;
 };
 
+const targetKey = (target: RoleTarget) =>
+  target.level === 'workspace' ? `workspace/${target.workspaceId}` : `organization/${target.organizationId}`;
+
+/**
+ * The person as the members of ``target`` name them, as People & roles joins them
+ * (`people-model.peopleAt`): their IAM id, else, for an account linked from the old login, the
+ * member with their email. Null when they are not found there, or their role there is the
+ * organization's (read-only), or the members cannot be read: the role is then not changed here.
+ */
+async function memberAt(
+  directory: AccessDirectory,
+  target: RoleTarget,
+  personId: string,
+  email: string | null | undefined,
+): Promise<string | null> {
+  const scope =
+    target.level === 'workspace'
+      ? workspaceAccessScope(null, target.workspaceId)
+      : organizationAccessScope(target.organizationId);
+  try {
+    const members = await directory.members(scope);
+    const wanted = email?.toLowerCase();
+    const found =
+      members.find((m) => m.userId === personId) ??
+      (wanted ? members.find((m) => m.email && m.email.toLowerCase() === wanted) : undefined);
+    return found && !found.inherited ? found.userId : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * A person's page: every role, policy and group they hold, at every level IAM lets the viewer
  * list (`GET /attachments?principal_id=`, `GET /principals/{id}/groups` and each group's
  * attachments), whatever the level of the page it is opened from. Each row names its level as
  * the Owner column does, says whether it is direct or through which group, links to the policy
  * at its owner, and offers the detach (or, for a role, the change of role, as on Members) where
- * IAM says the viewer may. Nexus decides nothing here.
+ * IAM says the viewer may. A role changes through the membership route of its organization or
+ * workspace, for the person as its members name them (``memberAt``), whatever opened the page.
+ * Nexus decides nothing here.
  */
 export function PersonView({
   api,
@@ -53,9 +84,9 @@ export function PersonView({
   scope,
   nonce = 0,
   open,
+  directory,
   personId,
   label,
-  memberId,
   onClose,
   changeRole = changeMemberRole,
 }: Props) {
@@ -109,8 +140,31 @@ export function PersonView({
     [rows, loaded],
   );
   const here = ownerOf(scope);
-  const names = useContainerNames(api, scopes);
-  const actionsAt = useActionsAt(api, scopes, here, can);
+  const names = useContainerNames(api, scopes, nonce);
+  const actionsAt = useActionsAt(api, scopes, here, can, nonce);
+
+  // Each organization and workspace they hold a role at: who they are among its members.
+  const [members, setMembers] = useState<Record<string, string | null>>({});
+  const email = loaded?.profile?.email ?? null;
+  const targets = useMemo(() => {
+    const found = new Map<string, RoleTarget>();
+    for (const row of rows) {
+      const target = row.role ? roleTargetOf(row.attachment.scope) : null;
+      if (target) found.set(targetKey(target), target);
+    }
+    return found;
+  }, [rows]);
+  useEffect(() => {
+    let cancelled = false;
+    for (const [key, target] of targets) {
+      void memberAt(directory, target, personId, email).then((id) => {
+        if (!cancelled) setMembers((current) => ({ ...current, [key]: id }));
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [directory, targets, personId, email, nonce]);
 
   const run = async (call: () => Promise<unknown>) => {
     try {
@@ -123,7 +177,7 @@ export function PersonView({
   };
 
   const name = loaded?.profile ? principalLabel(loaded.profile, personId) : label || personId;
-  const email = loaded?.profile?.email && loaded.profile.email !== name ? loaded.profile.email : null;
+  const shownEmail = email && email !== name ? email : null;
 
   return (
     <div className="access-person" data-person-page={personId}>
@@ -132,7 +186,7 @@ export function PersonView({
       </button>
       <header className="access-person-header">
         <h3 className="access-person-name">{name}</h3>
-        {email && <span className="access-people-sub">{email}</span>}
+        {shownEmail && <span className="access-people-sub">{shownEmail}</span>}
         <code className="access-mono">{personId}</code>
       </header>
       {error && (
@@ -159,11 +213,11 @@ export function PersonView({
               onDetach={(a) =>
                 void run(() => api.detach({ policy_id: a.policy_id, principal_id: a.principal_id, scope: a.scope }))
               }
-              onOpenGroup={open ? (id, groupLabel) => open.group(id, groupLabel) : undefined}
+              onOpenGroup={open?.group}
               roles={{
-                userId: memberId || personId,
+                memberAt: (target) => members[targetKey(target)] ?? null,
                 selfId,
-                change: (target, role) => void run(() => changeRole(target, memberId || personId, role)),
+                change: (target, memberId, role) => void run(() => changeRole(target, memberId, role)),
               }}
               empty={
                 loaded.refused
@@ -180,11 +234,11 @@ export function PersonView({
               <ul className="access-person-groups">
                 {loaded.groups.map(({ group }) => (
                   <li key={group.id} data-group-of={group.id}>
-                    {open ? (
+                    {open?.group ? (
                       <button
                         type="button"
                         className="access-holding-link"
-                        onClick={() => open.group(group.id, principalLabel(group, group.id))}
+                        onClick={() => open.group?.(group.id, principalLabel(group, group.id))}
                       >
                         {principalLabel(group, group.id)}
                       </button>

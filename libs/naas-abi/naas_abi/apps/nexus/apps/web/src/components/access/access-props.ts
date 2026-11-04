@@ -3,10 +3,11 @@ import type { AccessDirectory } from './access-directory';
 import type { AccessScope } from './access-scope';
 
 /** Opens a person's or a group's page (`?section=people&person=<id>`,
- *  `?section=groups&group=<id>`), from wherever a section names them. */
+ *  `?section=groups&group=<id>`), from wherever a section names them. Each is absent where the
+ *  caller is not shown its section (People & roles, Groups): a name is then not a link. */
 export type AccessNavigation = {
-  person: (id: string, label?: string, memberId?: string) => void;
-  group: (id: string, label?: string) => void;
+  person?: (id: string, label?: string) => void;
+  group?: (id: string, label?: string) => void;
 };
 
 /** What every section gets: the API, the scope it manages, the people there, and which

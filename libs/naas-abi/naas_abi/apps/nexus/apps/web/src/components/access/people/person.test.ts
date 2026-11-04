@@ -9,7 +9,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { IamAdminError } from '@/lib/iam-admin/api';
 import type { AttachmentView } from '@/lib/iam-admin/types';
 import { mount, type Mounted } from '@/lib/testing/mount';
-import { ORG, WS, attachment, fakeApi, fakeDirectory } from '../access-fixtures';
+import { useAuthStore } from '@/stores/auth';
+import type { AccessDirectory } from '../access-directory';
+import { ORG, WS, attachment, fakeApi, member } from '../access-fixtures';
 import { PLATFORM_ACCESS_SCOPE, organizationAccessScope, workspaceAccessScope } from '../access-scope';
 import { principal } from '../service-fixtures';
 import { PersonView } from './person';
@@ -18,7 +20,21 @@ let mounted: Mounted | null = null;
 afterEach(async () => {
   await mounted?.unmount();
   mounted = null;
+  useAuthStore.setState({ user: null });
 });
+
+/** Bob among the members of acme and of ws-1, as `userId` there (his IAM id unless linked). */
+function bobMember(userId = 'usr_bob'): AccessDirectory & { asked: string[] } {
+  const asked: string[] = [];
+  return {
+    asked,
+    members: (scope) => {
+      asked.push(scope.workspaceId ?? scope.organizationId ?? 'platform');
+      const there = scope.organizationId === 'acme' || scope.workspaceId === 'ws-1';
+      return Promise.resolve(there ? [member({ userId, email: 'bob-9a4bcd@example.com' })] : []);
+    },
+  };
+}
 
 const DEMO_ORG = 'abi:nexus:organization/demo-org';
 const DEMO = `${DEMO_ORG}/nexus:workspace/demo`;
@@ -42,9 +58,7 @@ function apiFor(rows: AttachmentView[], groups: (typeof g)[], rights: Record<str
     listAttachments: vi.fn(({ principal_id }: { principal_id: string }) =>
       principal_id === g.id
         ? Promise.resolve({ items: groups.length ? [analysts] : [] })
-        : rows.length
-          ? Promise.resolve({ items: rows })
-          : Promise.reject(new IamAdminError('You do not have permission to do this.', 403)),
+        : Promise.resolve({ items: rows }),
     ),
     principalGroups: vi.fn().mockResolvedValue({ items: groups }),
     getPrincipal: vi.fn().mockRejectedValue(new IamAdminError('Not found.', 404)),
@@ -72,7 +86,7 @@ async function show(api: ReturnType<typeof apiFor>, can: (a: string) => boolean,
     api,
     can,
     scope,
-    directory: fakeDirectory([]),
+    directory: bobMember(),
     open,
     personId: bob.id,
     label: 'bob',
@@ -149,7 +163,7 @@ describe('A person’s page', () => {
   it('shows a member nothing', async () => {
     const api = apiFor([], [], {});
     await show(api, () => false, organizationAccessScope('acme'));
-    expect(mounted!.host.textContent).toContain('You may not list what this person holds.');
+    expect(mounted!.host.textContent).toContain('They hold nothing you may list.');
     expect(mounted!.host.textContent).toContain('In no group you may see.');
     expect(document.querySelector('[data-holding]')).toBeNull();
     expect(document.querySelectorAll('select, [aria-label^="Detach"]')).toHaveLength(0);
@@ -157,10 +171,29 @@ describe('A person’s page', () => {
     expect(document.querySelector('.access-person-name')?.textContent).toBe('bob');
   });
 
-  it('changes a role through the account the members name, when it is not the IAM id', async () => {
+  it('changes the role of an account linked from the old login as its members name it, whatever opened the page', async () => {
     const api = apiFor([memberAtW], [], { [WS]: ADMIN });
-    const { changeRole } = await show(api, (a) => ADMIN.includes(a), workspaceAccessScope('acme', 'ws-1'), { memberId: 'user-7' });
+    const directory = bobMember('user-7');
+    const { changeRole } = await show(api, (a) => ADMIN.includes(a), workspaceAccessScope('acme', 'ws-1'), { directory });
+    // Found among ws-1's members by his email: the membership route takes that account.
+    expect(directory.asked).toEqual(['ws-1']);
     await mounted!.select(field('Role at Workspace W (Acme)'), 'viewer');
     expect(changeRole).toHaveBeenCalledWith({ level: 'workspace', workspaceId: 'ws-1' }, 'user-7', 'viewer');
+  });
+
+  it('offers no change of one’s own role, linked account included', async () => {
+    useAuthStore.setState({ user: { id: 'user-7' } as never });
+    const api = apiFor([memberAtW], [], { [WS]: ADMIN });
+    await show(api, (a) => ADMIN.includes(a), workspaceAccessScope('acme', 'ws-1'), { directory: bobMember('user-7') });
+    expect(row('builtin.member', WS)).not.toBeNull();
+    expect(field('Role at Workspace W (Acme)')).toBeNull();
+  });
+
+  it('changes no role where the person is not found among the members', async () => {
+    const api = apiFor([memberAtW], [], { [WS]: ADMIN });
+    const nobody: AccessDirectory = { members: () => Promise.resolve([]) };
+    await show(api, (a) => ADMIN.includes(a), workspaceAccessScope('acme', 'ws-1'), { directory: nobody });
+    expect(row('builtin.member', WS)).not.toBeNull();
+    expect(field('Role at Workspace W (Acme)')).toBeNull();
   });
 });

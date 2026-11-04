@@ -93,11 +93,12 @@ function containersOf(scopes: string[]): { container: string; step: ContainerSte
   return [...found].map(([container, step]) => ({ container, step }));
 }
 
-/** A container's name, as the caller lists it at the container itself; none when they may not. */
+/** A container's name, as the caller lists it at the container itself: empty when they may not
+ *  list it (its id is shown), null when the listing failed (asked again later). */
 async function nameOf(api: IamAdminApi, container: string, step: ContainerStep): Promise<string | null> {
   try {
     const page = await api.resources({ scope: container, service: step.service, type: step.type, q: step.id, limit: 5 });
-    return page.items.find((item) => item.name === container)?.label || null;
+    return page.items.find((item) => item.name === container)?.label || '';
   } catch {
     return null;
   }
@@ -109,75 +110,96 @@ export function actionsKey(scope: string | null | undefined): string {
   return scope ?? PLATFORM;
 }
 
-async function actionsAt(api: IamAdminApi, scope: string): Promise<Record<string, boolean>> {
+/** IAM's answer at a scope, or null when it could not be read (asked again later). */
+async function actionsAt(api: IamAdminApi, scope: string): Promise<Record<string, boolean> | null> {
   try {
     const view = await api.access(scope === PLATFORM ? undefined : scope);
     return view?.actions ?? {};
   } catch {
-    return {};
+    return null;
   }
 }
 
 const sorted = (scopes: (string | null | undefined)[]) => [...new Set(scopes.map(actionsKey))].sort();
 
 /**
+ * Ask ``fetch`` once for each of ``keys`` while the component lives, again for all of them when
+ * ``reload`` changes (the page's Refresh), and again for one whose answer was null (a failure)
+ * the next time the keys or ``reload`` change. An answer arriving after the keys changed is kept:
+ * it is still the answer for its key.
+ */
+function useAnswers<T>(
+  keys: string[],
+  fetch: (key: string) => Promise<T | null>,
+  reload: number,
+  deps: unknown[],
+): Record<string, T> {
+  const [found, setFound] = useState<Record<string, T>>({});
+  const asked = useRef(new Set<string>());
+  const round = useRef(reload);
+  const mounted = useRef(true);
+  useEffect(
+    () => () => {
+      mounted.current = false;
+    },
+    [],
+  );
+  useEffect(() => {
+    mounted.current = true;
+    if (round.current !== reload) {
+      round.current = reload;
+      asked.current.clear();
+    }
+    for (const key of keys) {
+      if (asked.current.has(key)) continue;
+      asked.current.add(key);
+      void fetch(key).then((answer) => {
+        if (!mounted.current) return;
+        if (answer === null) {
+          asked.current.delete(key);
+          return;
+        }
+        setFound((current) => ({ ...current, [key]: answer }));
+      });
+    }
+    // Asked again only for a key not asked yet, or on a reload.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keys.join('\n'), reload, ...deps]);
+  return found;
+}
+
+/**
  * The names of the containers ``scopes`` are made of (container → name), as the caller may
  * list them (`GET /resources` at each): for ``ownerLabel`` and ``levelLabel``. Each container
  * is asked once; one the caller may not list stays unnamed (its id is shown).
  */
-export function useContainerNames(api: IamAdminApi, scopes: (string | null | undefined)[]): Record<string, string> {
-  const wanted = useMemo(() => sorted(scopes), [scopes]);
-  const key = wanted.join('\n');
-  const [names, setNames] = useState<Record<string, string>>({});
-  const asked = useRef(new Set<string>());
-  useEffect(() => {
-    let cancelled = false;
-    for (const { container, step } of containersOf(wanted)) {
-      if (asked.current.has(container)) continue;
-      asked.current.add(container);
-      void nameOf(api, container, step).then((name) => {
-        if (!cancelled && name) setNames((current) => ({ ...current, [container]: name }));
-      });
-    }
-    return () => {
-      cancelled = true;
-    };
-    // Asked again only for a container not asked yet.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, key]);
-  return names;
+export function useContainerNames(
+  api: IamAdminApi,
+  scopes: (string | null | undefined)[],
+  reload = 0,
+): Record<string, string> {
+  const containers = useMemo(() => new Map(containersOf(sorted(scopes)).map((c) => [c.container, c.step])), [scopes]);
+  const keys = useMemo(() => [...containers.keys()], [containers]);
+  const found = useAnswers(keys, (container) => nameOf(api, container, containers.get(container)!), reload, [api]);
+  // A container the caller may not list keeps its id: no name for it.
+  return useMemo(() => Object.fromEntries(Object.entries(found).filter(([, name]) => name)), [found]);
 }
 
 /**
  * What the caller may do at each of ``scopes`` (`GET /access?scope=`, by ``actionsKey``), but
  * at ``here``, the page's own scope, whose answer is the page's ``can``. Unknown (not asked yet,
- * or refused) is an empty record: no button shows before IAM says it will answer.
+ * or not read) is an empty record: no button shows before IAM says it will answer. ``reload``
+ * (the page's Refresh) asks every level again.
  */
 export function useActionsAt(
   api: IamAdminApi,
   scopes: (string | null | undefined)[],
   here: string,
   can: (action: string) => boolean,
+  reload = 0,
 ): (scope: string | null | undefined) => Record<string, boolean> {
-  const wanted = useMemo(() => sorted(scopes), [scopes]);
-  const key = wanted.join('\n');
-  const [found, setFound] = useState<Record<string, Record<string, boolean>>>({});
-  const asked = useRef(new Set<string>());
-  useEffect(() => {
-    let cancelled = false;
-    for (const scope of wanted) {
-      if (scope === here || asked.current.has(scope)) continue;
-      asked.current.add(scope);
-      void actionsAt(api, scope).then((actions) => {
-        if (!cancelled) setFound((current) => ({ ...current, [scope]: actions }));
-      });
-    }
-    return () => {
-      cancelled = true;
-    };
-    // Asked again only for a scope not asked yet.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, key, here]);
+  const keys = useMemo(() => sorted(scopes).filter((scope) => scope !== here), [scopes, here]);
+  const found = useAnswers(keys, (scope) => actionsAt(api, scope), reload, [api]);
   return useCallback(
     (scope: string | null | undefined) => {
       const at = actionsKey(scope);
@@ -199,10 +221,11 @@ export function usePolicyOwners(
   scopes: (string | null | undefined)[],
   here: string,
   can: (action: string) => boolean,
+  reload = 0,
 ): Record<string, PolicyOwner> {
   const owners = useMemo(() => sorted(scopes), [scopes]);
-  const names = useContainerNames(api, owners);
-  const at = useActionsAt(api, owners, here, can);
+  const names = useContainerNames(api, owners, reload);
+  const at = useActionsAt(api, owners, here, can, reload);
 
   return useMemo(() => {
     const found: Record<string, PolicyOwner> = {};

@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { act, createElement } from 'react';
+import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { IamAdminError } from '@/lib/iam-admin/api';
 import { mount, type Mounted } from '@/lib/testing/mount';
@@ -97,4 +99,37 @@ describe('Where a policy is attached', () => {
     expect(document.querySelector('[aria-label="Where it is attached"]')).not.toBeNull();
     expect(client.listAttachments).toHaveBeenCalledWith({ policy_id: 'pol_1' });
   });
+
+  it('says a policy of the workspace attached nowhere is attached nowhere, to the workspace’s admin', async () => {
+    const client = api({ listAttachments: vi.fn().mockResolvedValue({ items: [] }) });
+    mounted = await mount(PolicyAttachments, { api: client, policyId: 'pol_new', here: WS, can: () => true });
+    await mounted.flush();
+    expect(mounted.host.textContent).toContain('Attached nowhere you may list.');
+    expect(mounted.host.textContent).not.toContain('You may not list');
+  });
+
+  it('asks again on the page’s Refresh, a failed answer included', async () => {
+    // Rendered again in place with a new nonce, as the page's Refresh does: no remount.
+    const host = document.createElement('div');
+    document.body.append(host);
+    const root = createRoot(host);
+    const flush = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    const access = vi.fn().mockRejectedValueOnce(new Error('network')).mockResolvedValue({ actions: { 'iam:DetachPolicy': true } });
+    const props = { api: api({ listAttachments: vi.fn().mockResolvedValue({ items: [toGroup] }), access }), policyId: 'pol_w', here: 'abi:', can: () => false };
+    try {
+      await act(async () => root.render(createElement(PolicyAttachments, { ...props, nonce: 0 })));
+      await flush();
+      await flush();
+      expect(host.querySelector('[aria-label^="Detach from G"]')).toBeNull();
+      await act(async () => root.render(createElement(PolicyAttachments, { ...props, nonce: 1 })));
+      await flush();
+      await flush();
+      expect(host.querySelector('[aria-label^="Detach from G"]')).not.toBeNull();
+      expect(access).toHaveBeenCalledTimes(2);
+    } finally {
+      await act(async () => root.unmount());
+      host.remove();
+    }
+  });
 });
+

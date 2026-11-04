@@ -10,15 +10,17 @@ import {
   type BuiltInRole,
   type RoleTarget,
 } from '../roles/role-change';
+import { ConfirmDetach } from './confirm-detach';
 import { levelLabel, roleTargetOf, type HoldingRow } from './holdings-model';
 import './holdings.css';
 
 export type RoleRules = {
-  /** The person, as the membership routes name them. */
-  userId: string;
-  /** Who is looking: nobody changes their own role. */
+  /** The person as the membership routes of ``target`` name them (the member of that
+   *  organization or workspace), or null when not known there: the role is then read-only. */
+  memberAt: (target: RoleTarget) => string | null;
+  /** Who is looking, as the members name them: nobody changes their own role. */
   selfId: string | null;
-  change: (target: RoleTarget, role: BuiltInRole) => void;
+  change: (target: RoleTarget, memberId: string, role: BuiltInRole) => void;
 };
 
 type Props = {
@@ -65,17 +67,20 @@ export function HoldingsTable({ rows, names, actionsAt, here, onDetach, onOpenGr
             const name = a.policy_name ?? a.policy_id;
             const level = levelLabel(a.scope, names);
             const owner = a.policy_owner_scope;
-            const href = !role && !companion && owner !== undefined && opens(owner) ? ownerHref(owner, a.policy_id) : null;
+            // An owner that could not be read (null) names nowhere to link to.
+            const href = !role && !companion && owner != null && opens(owner) ? ownerHref(owner, a.policy_id) : null;
             const target = role ? roleTargetOf(a.scope) : null;
             const choices = target ? assignableRoles(target.level) : [];
             const at = actionsAt(a.scope);
+            const memberId = roles && target ? roles.memberAt(target) : null;
             const changeable =
               !!roles &&
               !!target &&
               !!role &&
+              !!memberId &&
               choices.length > 0 &&
               !!at['iam:AttachPolicy'] &&
-              roleChangeable({ role, inherited: false, userId: roles.userId, selfId: roles.selfId });
+              roleChangeable({ role, inherited: false, userId: memberId, selfId: roles.selfId });
             const detachable = !role && !companion && !via && !!at['iam:DetachPolicy'];
             return (
               <tr key={`${via?.id ?? ''}/${a.id}`} className="access-table-row" data-holding={a.policy_id} data-level={a.scope ?? ''} data-via={via?.id ?? ''}>
@@ -111,12 +116,12 @@ export function HoldingsTable({ rows, names, actionsAt, here, onDetach, onOpenGr
                   )}
                 </td>
                 <td className="access-holding-actions">
-                  {changeable && target && role ? (
+                  {changeable && target && role && memberId ? (
                     <select
                       className="access-input"
                       aria-label={`Role at ${level}`}
                       value={role}
-                      onChange={(e) => roles!.change(target, e.target.value as BuiltInRole)}
+                      onChange={(e) => roles!.change(target, memberId, e.target.value as BuiltInRole)}
                     >
                       {!choices.includes(role) && <option value={role}>{ROLE_LABELS[role]}</option>}
                       {choices.map((choice) => (
@@ -126,32 +131,16 @@ export function HoldingsTable({ rows, names, actionsAt, here, onDetach, onOpenGr
                       ))}
                     </select>
                   ) : detachable ? (
-                    confirming === a.id ? (
-                      <span>
-                        <button
-                          type="button"
-                          className="access-button access-att-button-danger"
-                          onClick={() => {
-                            setConfirming(null);
-                            onDetach(a);
-                          }}
-                        >
-                          Confirm detach
-                        </button>{' '}
-                        <button type="button" className="access-button" onClick={() => setConfirming(null)}>
-                          Keep
-                        </button>
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        className="access-button"
-                        aria-label={`Detach ${name} at ${level}`}
-                        onClick={() => setConfirming(a.id)}
-                      >
-                        Detach
-                      </button>
-                    )
+                    <ConfirmDetach
+                      label={`Detach ${name} at ${level}`}
+                      confirming={confirming === a.id}
+                      onAsk={() => setConfirming(a.id)}
+                      onKeep={() => setConfirming(null)}
+                      onConfirm={() => {
+                        setConfirming(null);
+                        onDetach(a);
+                      }}
+                    />
                   ) : null}
                 </td>
               </tr>

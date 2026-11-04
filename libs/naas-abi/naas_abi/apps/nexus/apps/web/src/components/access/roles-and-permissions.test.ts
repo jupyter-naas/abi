@@ -236,5 +236,79 @@ describe('Roles & permissions opened from a link', () => {
     expect(document.querySelector('[data-person-page]')).toBeNull();
     expect(window.location.search).toBe('?section=people');
   });
+
+  describe('an account linked from the old login', () => {
+    const WS1 = 'abi:nexus:organization/acme/nexus:workspace/ws-1';
+    // IAM knows Bob as usr_bob; ws-1's members, as user-7 (his account of the old login).
+    const bob = { id: 'usr_bob', kind: 'user', status: 'active', name: null, email: 'bob@example.com', display_name: 'Bob', provider: null, org: null, owner_id: null, created_at: null };
+    const g = { ...bob, id: 'grp_g', kind: 'group', name: 'G', email: null, display_name: null, owner_scope: WS1 };
+    const role = { id: 'a_w', policy_id: 'builtin.member', policy_name: 'Member', policy_owner_scope: 'abi:', principal_id: 'usr_bob', principal: bob, scope: WS1, created_at: null };
+    const members = fakeDirectory([{ userId: 'user-7', name: 'Bob', email: 'bob@example.com', role: 'member', inherited: false }]);
+
+    function linkedWorld() {
+      const api = apiFor('workspace admin') as unknown as Record<string, unknown>;
+      Object.assign(api, {
+        listAttachments: vi.fn(({ principal_id }: { principal_id?: string } = {}) =>
+          Promise.resolve({ items: principal_id === 'usr_bob' ? [role] : [] }),
+        ),
+        principalGroups: vi.fn().mockResolvedValue({ items: [g] }),
+        getPrincipal: vi.fn().mockRejectedValue(new Error('no')),
+        getGroup: vi.fn().mockResolvedValue({ ...g, members: [bob], idp_mappings: [] }),
+        listGroups: vi.fn().mockResolvedValue({ items: [g] }),
+        resources: vi.fn().mockResolvedValue({ items: [] }),
+      });
+      return api as unknown as ReturnType<typeof apiFor>;
+    }
+
+    async function changeAt(start: string, changeRole: ReturnType<typeof vi.fn>) {
+      window.history.replaceState({}, '', start);
+      mounted = await mount(RolesAndPermissions, { scopes: [wsScope], api: linkedWorld(), directory: members, changeRole });
+      for (let i = 0; i < 4; i++) await mounted.flush();
+    }
+
+    it('changes his role as the members name him, opened by URL', async () => {
+      const changeRole = vi.fn().mockResolvedValue(undefined);
+      await changeAt('/workspace/ws-1/settings/permissions?section=people&person=usr_bob', changeRole);
+      await mounted!.select(document.querySelector('[aria-label="Role at Workspace ws-1 (acme)"]'), 'viewer');
+      expect(changeRole).toHaveBeenCalledWith({ level: 'workspace', workspaceId: 'ws-1' }, 'user-7', 'viewer');
+    });
+
+    it('changes his role as the members name him, opened from a group’s members', async () => {
+      const changeRole = vi.fn().mockResolvedValue(undefined);
+      await changeAt('/workspace/ws-1/settings/permissions?section=groups&group=grp_g', changeRole);
+      await mounted!.click(document.querySelector('[aria-label="Open Bob"]'));
+      for (let i = 0; i < 4; i++) await mounted!.flush();
+      expect(document.querySelector('[data-person-page="usr_bob"]')).not.toBeNull();
+      await mounted!.select(document.querySelector('[aria-label="Role at Workspace ws-1 (acme)"]'), 'viewer');
+      expect(changeRole).toHaveBeenCalledWith({ level: 'workspace', workspaceId: 'ws-1' }, 'user-7', 'viewer');
+    });
+  });
+
+  it('closes the open page when the scope changes, and the address follows', async () => {
+    window.history.replaceState({}, '', '/organizations/acme/settings/roles?section=groups&group=grp_g');
+    const api = linkedApi();
+    mounted = await mount(RolesAndPermissions, { scopes: [orgScope, wsScope], api, directory: fakeDirectory([]) });
+    await mounted.flush();
+    await mounted.flush();
+    expect(document.querySelector('[data-group-detail="grp_g"]')).not.toBeNull();
+    await mounted.select(document.querySelector('[aria-label="Scope"]'), '1');
+    await mounted.flush();
+    await mounted.flush();
+    expect(document.querySelector('[data-group-detail]')).toBeNull();
+    expect(window.location.search).toBe('?section=groups');
+  });
+
+  it('links a group only where the caller is shown Groups', async () => {
+    window.history.replaceState({}, '', '/settings/roles?section=people&person=usr_bob');
+    const api = linkedApi() as unknown as Record<string, unknown>;
+    // May list attachments, not groups: People & roles alone.
+    api.access = vi.fn(() => Promise.resolve(answer(['iam:ListAttachments'])));
+    mounted = await mount(RolesAndPermissions, { scopes: [PLATFORM_ACCESS_SCOPE], api: api as never, directory: fakeDirectory([]) });
+    await mounted.flush();
+    await mounted.flush();
+    expect(sections()).toEqual(['people']);
+    expect(document.querySelector('[data-group-of="grp_g"]')?.textContent).toContain('G');
+    expect(document.querySelector('[data-group-of="grp_g"] button')).toBeNull();
+  });
 });
 

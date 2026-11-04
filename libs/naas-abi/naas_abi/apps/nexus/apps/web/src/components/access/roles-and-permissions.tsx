@@ -15,6 +15,7 @@ import { ApprovalsView } from './approvals/approvals';
 import { AuditView } from './audit/audit';
 import { GroupsView } from './groups/groups';
 import { PeopleView, type PersonFocus } from './people/people';
+import type { BuiltInRole, RoleTarget } from './roles/role-change';
 import { PoliciesView } from './policies/policies';
 import { ServiceAccountsView } from './service-accounts/service-accounts';
 import { SimulatorView } from './simulator/simulator';
@@ -29,6 +30,8 @@ export type RolesAndPermissionsProps = {
   api?: IamAdminApi;
   directory?: AccessDirectory;
   loadProviders?: () => Promise<InviteProviders>;
+  /** Changes a member's role (tests pass a fake); the membership routes by default. */
+  changeRole?: (target: RoleTarget, userId: string, role: BuiltInRole) => Promise<void>;
 };
 
 /**
@@ -42,7 +45,7 @@ export type RolesAndPermissionsProps = {
  * group's page show what IAM lets the caller list at every level, whatever the page's own; the
  * sections link to them, and the address follows, so a page can be shared.
  */
-export function RolesAndPermissions({ scopes, nonce = 0, api, directory, loadProviders }: RolesAndPermissionsProps) {
+export function RolesAndPermissions({ scopes, nonce = 0, api, directory, loadProviders, changeRole }: RolesAndPermissionsProps) {
   const client = useMemo(() => api ?? createIamAdminApi(), [api]);
   const people = useMemo(() => directory ?? createAccessDirectory(), [directory]);
   const [index, setIndex] = useState(0);
@@ -60,23 +63,6 @@ export function RolesAndPermissions({ scopes, nonce = 0, api, directory, loadPro
     if (personId) setPerson({ id: personId });
     setGroup(query.get('group'));
   }, []);
-  const navigate: AccessNavigation = useMemo(
-    () => ({
-      person: (id, label, memberId) => {
-        setPerson({ id, label, memberId });
-        setGroup(null);
-        setSection('people');
-        writeAddress({ section: 'people', person: id, group: null, policy: null });
-      },
-      group: (id) => {
-        setGroup(id);
-        setPerson(null);
-        setSection('groups');
-        writeAddress({ section: 'groups', group: id, person: null, policy: null });
-      },
-    }),
-    [],
-  );
   const picked = scopes[Math.min(index, scopes.length - 1)];
   const pickedKey = JSON.stringify(picked ?? null);
   // The sections reload on a change of scope, not on a new array of the same scopes.
@@ -85,12 +71,53 @@ export function RolesAndPermissions({ scopes, nonce = 0, api, directory, loadPro
   // Refresh asks IAM again too: a grant or a revoke made elsewhere changes the sections.
   const { access, loading, error, can } = useIamAccess(scope?.value ?? undefined, client, { reload: nonce });
 
+  // A person's or a group's page opens in its section: a name links to it only where the
+  // caller is shown that section here (People & roles, Groups).
+  const shown = visibleSections(access).map((s) => s.id);
+  const showsPeople = shown.includes('people');
+  const showsGroups = shown.includes('groups');
+  const navigate: AccessNavigation = useMemo(
+    () => ({
+      person: showsPeople
+        ? (id, label) => {
+            setPerson({ id, label });
+            setGroup(null);
+            setLinkedPolicy(null);
+            setSection('people');
+            writeAddress({ section: 'people', person: id, group: null, policy: null });
+          }
+        : undefined,
+      group: showsGroups
+        ? (id) => {
+            setGroup(id);
+            setPerson(null);
+            setLinkedPolicy(null);
+            setSection('groups');
+            writeAddress({ section: 'groups', group: id, person: null, policy: null });
+          }
+        : undefined,
+    }),
+    [showsPeople, showsGroups],
+  );
+  /** Leave whatever page is open (a person, a group, a linked policy): another section or
+   *  another scope shows its own list. */
+  const closePages = (changes: Record<string, string | null> = {}) => {
+    setPerson(null);
+    setGroup(null);
+    setLinkedPolicy(null);
+    writeAddress({ person: null, group: null, policy: null, ...changes });
+  };
+
   if (!scope) return null;
 
   const picker = scopes.length > 1 && (
     <label className="access-scope-picker">
       <span>Manage</span>
-      <select className="access-input" aria-label="Scope" value={index} onChange={(e) => setIndex(Number(e.target.value))}>
+      <select className="access-input" aria-label="Scope" value={index} onChange={(e) => {
+          setIndex(Number(e.target.value));
+          // The pages open were judged at the scope left: none stays open at the next one.
+          closePages();
+        }}>
         {scopes.map((s, i) => (
           <option key={s.value ?? 'platform'} value={i}>
             {s.label}
@@ -121,6 +148,7 @@ export function RolesAndPermissions({ scopes, nonce = 0, api, directory, loadPro
       people: (
         <PeopleView
           {...props}
+          {...(changeRole ? { changeRole } : {})}
           person={person}
           onClosePerson={() => {
             setPerson(null);
@@ -157,9 +185,7 @@ export function RolesAndPermissions({ scopes, nonce = 0, api, directory, loadPro
               data-section={s.id}
               onClick={() => {
                 setSection(s.id);
-                setPerson(null);
-                setGroup(null);
-                writeAddress({ section: s.id, person: null, group: null, policy: null });
+                closePages({ section: s.id });
               }}
             >
               {s.label}

@@ -47,6 +47,7 @@ export function PoliciesView({ api, can, scope, nonce = 0, open, openPolicy: ope
     [...(policies ?? []), ...(selection?.kind === 'policy' ? [selection.policy] : [])].map((p) => p.owner_scope),
     here,
     can,
+    nonce,
   );
 
   const load = useCallback(async () => {
@@ -264,6 +265,7 @@ export function PoliciesView({ api, can, scope, nonce = 0, open, openPolicy: ope
           onOpen={(id) => void openPolicy(id)}
           can={can}
           open={open}
+          nonce={nonce}
         />
       )}
     </div>

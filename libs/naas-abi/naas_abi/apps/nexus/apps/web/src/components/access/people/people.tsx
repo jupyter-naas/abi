@@ -23,7 +23,7 @@ import './people.css';
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /** The person whose page is open: their IAM id, and how the page that opened it named them. */
-export type PersonFocus = { id: string; label?: string; memberId?: string };
+export type PersonFocus = { id: string; label?: string };
 
 type Props = AccessViewProps & {
   /** Changes a member's role (tests pass a fake); the membership routes by default. */
@@ -165,7 +165,6 @@ export function PeopleView({
         open={open}
         personId={person.id}
         label={person.label}
-        memberId={person.memberId}
         onClose={() => onClosePerson?.()}
         changeRole={changeRole}
       />
@@ -180,8 +179,8 @@ export function PeopleView({
   const shown = rows.filter((r) => !query || `${r.label} ${r.email} ${r.id} ${r.principalId}`.toLowerCase().includes(query));
   const listed = new Set(rows.flatMap((r) => [r.id, r.principalId]));
   const others = found.filter((p) => !listed.has(p.id));
-  const openPerson = (row: PersonRow) =>
-    open?.person(row.principalId, row.label, row.member && row.id !== row.principalId ? row.id : undefined);
+  // A person's page takes their IAM id; a group's, its id.
+  const opens = (row: PersonRow) => (row.kind === 'group' ? open?.group : open?.person);
 
   return (
     <div className="access-people">
@@ -222,21 +221,12 @@ export function PeopleView({
               return (
                 <tr key={person.id} className="access-table-row" data-person={person.id}>
                   <td>
-                    {open && person.kind !== 'group' ? (
+                    {opens(person) ? (
                       <button
                         type="button"
                         className="access-people-open"
                         aria-label={`Open ${person.label}`}
-                        onClick={() => openPerson(person)}
-                      >
-                        {person.label}
-                      </button>
-                    ) : open && person.kind === 'group' ? (
-                      <button
-                        type="button"
-                        className="access-people-open"
-                        aria-label={`Open ${person.label}`}
-                        onClick={() => open.group(person.principalId, person.label)}
+                        onClick={() => opens(person)?.(person.principalId, person.label)}
                       >
                         {person.label}
                       </button>
@@ -325,8 +315,8 @@ export function PeopleView({
                   <td>
                     {person.viaGroups.map((g) => (
                       <p key={g.groupId} className="access-people-via" data-via={g.groupId}>
-                        {open ? (
-                          <button type="button" className="access-holding-link" onClick={() => open.group(g.groupId, g.groupLabel)}>
+                        {open?.group ? (
+                          <button type="button" className="access-holding-link" onClick={() => open.group?.(g.groupId, g.groupLabel)}>
                             <strong>{g.groupLabel}</strong>
                           </button>
                         ) : (
@@ -355,8 +345,8 @@ export function PeopleView({
           <ul className="access-person-groups">
             {others.map((p) => (
               <li key={p.id} data-found={p.id}>
-                {open ? (
-                  <button type="button" className="access-people-open" aria-label={`Open ${principalLabel(p, p.id)}`} onClick={() => open.person(p.id, principalLabel(p, p.id))}>
+                {open?.person ? (
+                  <button type="button" className="access-people-open" aria-label={`Open ${principalLabel(p, p.id)}`} onClick={() => open.person?.(p.id, principalLabel(p, p.id))}>
                     {principalLabel(p, p.id)}
                   </button>
                 ) : (

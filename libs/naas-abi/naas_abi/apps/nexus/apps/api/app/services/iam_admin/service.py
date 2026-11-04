@@ -509,13 +509,19 @@ class IamAdminService:
         if scope is not None:
             validate_scope(scope)
 
+        # One principal's or one policy's attachments across levels: IAM keeps each one the
+        # caller may list, so an empty answer says only that there is none to show them. A
+        # level's list, or every attachment, stays refused to whoever may list none there.
+        across_levels = scope is None and (principal_id is not None or policy_id is not None)
+
         def read(session: IIAMService) -> dict[str, Any]:
             found = session.list_attachments(principal_id=principal_id, policy_id=policy_id)
             if scope is not None:
                 found = [a for a in found if a.scope == scope]
-            self._listing(session, "iam:ListAttachments", attachment_resource("*", "*", scope))(
-                found
-            )
+            if not across_levels:
+                self._listing(session, "iam:ListAttachments", attachment_resource("*", "*", scope))(
+                    found
+                )
             policies: dict[str, Policy | None] = {}
             principals: dict[str, Any] = {}
             items = []

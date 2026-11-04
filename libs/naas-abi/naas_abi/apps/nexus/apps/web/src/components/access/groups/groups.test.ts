@@ -219,5 +219,15 @@ describe('A group’s page', () => {
     expect(mounted.host.textContent).toContain('Nothing you may list is attached to this group.');
     expect(document.querySelector('[role="alert"]')).toBeNull();
   });
+
+  it('opens from a link though the scope’s list of groups cannot be read', async () => {
+    const api = groupApi();
+    (api as unknown as Record<string, unknown>).listGroups = vi.fn(() => Promise.reject(new IamAdminError('IAM is not available on this server.', 503)));
+    mounted = await mount(GroupsView, { api, can: allowAll, scope: PLATFORM_ACCESS_SCOPE, directory: EMPTY_DIRECTORY, focus: 'grp_g', loadProviders: () => Promise.resolve(providers) });
+    await mounted.flush();
+    await mounted.flush();
+    expect(document.querySelector('[data-group-detail="grp_g"]')).not.toBeNull();
+    expect(document.querySelector('[data-holding="pol_w"]')).not.toBeNull();
+  });
 });
 

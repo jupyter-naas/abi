@@ -125,10 +125,29 @@ def test_a_workspaces_admin_sees_what_iam_lets_them_list(world, bob):  # noqa: F
 
 
 def test_a_member_sees_nothing(world, bob):  # noqa: F811
-    assert get(world, f"/attachments?principal_id={bob.id}", "member").status_code == 403
+    # Across levels, IAM keeps each attachment the caller may list: none for a member.
+    assert held(world, bob, "member") == set()
     assert groups(world, bob, "member") == set()
-    assert get(world, f"/attachments?policy_id={bob.analysts}", "member").status_code == 403
+    rows = get(world, f"/attachments?policy_id={bob.analysts}", "member")
+    assert rows.status_code == 200 and rows.json()["items"] == []
     assert get(world, "/principals?kind=user&q=bob", "member").status_code == 403
+    # The lists of a level, and the whole list, stay refused to whoever may list none.
+    assert get(world, f"/attachments?scope={WS2}", "member").status_code == 403
+    assert get(world, "/attachments", "member").status_code == 403
+
+
+def test_nothing_held_across_levels_is_an_empty_list_not_a_refusal(world, bob):  # noqa: F811
+    """A workspace's or an organisation's admin holds no right on the platform's
+    attachments: a policy of theirs attached nowhere, or a person holding nothing
+    they may list, is an empty list."""
+    with as_service_account("engine"):
+        unattached = world.nexus.iam.create_policy("W readers", READER, scope=WS2)
+        loner = world.nexus.iam.ensure_user(LEGACY_NEXUS_ISSUER, "loner", provider="nexus")
+    for user in ("ws2admin", "admin"):
+        answer = get(world, f"/attachments?policy_id={unattached.id}", user)
+        assert answer.status_code == 200 and answer.json()["items"] == [], (user, answer.text)
+        answer = get(world, f"/attachments?principal_id={loner.id}", user)
+        assert answer.status_code == 200 and answer.json()["items"] == [], (user, answer.text)
 
 
 def test_a_policys_page_lists_where_it_is_attached_and_to_whom(world, bob):  # noqa: F811
@@ -137,8 +156,8 @@ def test_a_policys_page_lists_where_it_is_attached_and_to_whom(world, bob):  # n
         assert [(a["principal_id"], a["principal"]["kind"], a["scope"]) for a in rows] == [
             (bob.group, "group", WS2)
         ], user
-    # Another organisation's policy is not listed to org-1's admin.
-    assert get(world, f"/attachments?policy_id={bob.bfo}", "admin").status_code == 403
+    # Another organisation's policy is not listed to org-1's admin: none of its rows.
+    assert get(world, f"/attachments?policy_id={bob.bfo}", "admin").json()["items"] == []
 
 
 def test_the_platform_finds_a_person_by_a_search_text(world, bob):  # noqa: F811

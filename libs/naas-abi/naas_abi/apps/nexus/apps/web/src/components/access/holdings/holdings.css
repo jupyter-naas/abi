@@ -40,3 +40,13 @@
   font-size: var(--font-size-sm);
   color: var(--muted-foreground-hex);
 }
+
+.access-holding-confirm {
+  display: inline-flex;
+  gap: var(--space-1);
+}
+
+.access-holding-danger {
+  border-color: #b91c1c;
+  color: #b91c1c;
+}

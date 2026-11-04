@@ -67,6 +67,14 @@ function row(attachment: AttachmentView, via: HoldingRow['via']): HoldingRow {
   };
 }
 
+/** Attachments from the top level down: everywhere and the platform first, then each
+ *  container, a level's own before what is below it. */
+export function byLevel(a: AttachmentView, b: AttachmentView): number {
+  return depth(a.scope) - depth(b.scope) || (a.scope ?? '').localeCompare(b.scope ?? '');
+}
+
+const byName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' });
+
 /**
  * The rows of a principal's access: ``direct`` (attached to them) and what each of their
  * ``groups`` holds, from the top level down; at a level, roles, then their own policies, then
@@ -83,14 +91,9 @@ export function holdingRows(direct: AttachmentView[], groups: GroupHoldings[]): 
   const rank = (r: HoldingRow) => (r.companion ? 0 : r.role ? 1 : r.via ? 3 : 2);
   return rows.sort(
     (a, b) =>
-      depth(a.attachment.scope) - depth(b.attachment.scope) ||
-      (a.attachment.scope ?? '').localeCompare(b.attachment.scope ?? '') ||
+      byLevel(a.attachment, b.attachment) ||
       rank(a) - rank(b) ||
-      (a.attachment.policy_name ?? a.attachment.policy_id).localeCompare(
-        b.attachment.policy_name ?? b.attachment.policy_id,
-        undefined,
-        { sensitivity: 'base' },
-      ),
+      byName(a.attachment.policy_name ?? a.attachment.policy_id, b.attachment.policy_name ?? b.attachment.policy_id),
   );
 }
 

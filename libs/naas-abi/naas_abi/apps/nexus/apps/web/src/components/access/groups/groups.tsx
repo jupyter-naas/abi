@@ -85,14 +85,11 @@ export function GroupsView({
     }
   };
 
-  if (groups === null) {
-    return error ? <p className="access-source-note" role="alert">{error}</p> : <p className="access-empty">Loading…</p>;
-  }
-
   if (selected) {
     // Listed here, or reached by a link from another page (a person's, a policy's): a group
-    // owned elsewhere is shown as IAM lets the caller read it, never changed here.
-    const listed = groups.find((g) => g.id === selected);
+    // owned elsewhere is shown as IAM lets the caller read it, never changed here. The page
+    // needs only the group and its attachments: it opens whether the list was read or not.
+    const listed = groups?.find((g) => g.id === selected);
     return (
       <div className="access-group">
         <button type="button" className="access-person-back" onClick={() => setSelected(null)}>
@@ -104,6 +101,7 @@ export function GroupsView({
           can={can}
           scope={scope}
           directory={directory}
+          nonce={nonce}
           open={open}
           groupId={selected}
           owned={!!listed && ownedHere(scope, listed.owner_scope)}
@@ -112,6 +110,10 @@ export function GroupsView({
         />
       </div>
     );
+  }
+
+  if (groups === null) {
+    return error ? <p className="access-source-note" role="alert">{error}</p> : <p className="access-empty">Loading…</p>;
   }
 
   return (
@@ -209,12 +211,13 @@ function GroupDetail({
   can,
   scope,
   directory,
+  nonce = 0,
   open,
   groupId,
   owned,
   loadProviders,
   onChanged,
-}: Omit<AccessViewProps, 'nonce'> & {
+}: AccessViewProps & {
   groupId: string;
   /** Owned by this scope: its members change here. One owned above is only attached to. */
   owned: boolean;
@@ -245,8 +248,8 @@ function GroupDetail({
   const rows = useMemo(() => holdingRows(held ?? [], []), [held]);
   const scopes = useMemo(() => [...scopesOf(rows), group?.owner_scope ?? PLATFORM], [rows, group]);
   const here = ownerOf(scope);
-  const names = useContainerNames(api, scopes);
-  const actionsAt = useActionsAt(api, scopes, here, can);
+  const names = useContainerNames(api, scopes, nonce);
+  const actionsAt = useActionsAt(api, scopes, here, can, nonce);
 
   useEffect(() => {
     let cancelled = false;
@@ -274,7 +277,7 @@ function GroupDetail({
     return () => {
       cancelled = true;
     };
-  }, [api, can, directory, scope, groupId, loadHeld, loadProviders, mapsIdp]);
+  }, [api, can, directory, scope, groupId, loadHeld, loadProviders, mapsIdp, nonce]);
 
   const run = async (call: () => Promise<GroupView>) => {
     try {
@@ -318,8 +321,8 @@ function GroupDetail({
           {group.members.map((m) => (
             <li key={m.id} className="access-group-item" data-member={m.id}>
               <span>
-                {open && m.kind !== 'group' ? (
-                  <button type="button" className="access-holding-link" aria-label={`Open ${principalLabel(m)}`} onClick={() => open.person(m.id, principalLabel(m))}>
+                {open?.person && m.kind !== 'group' ? (
+                  <button type="button" className="access-holding-link" aria-label={`Open ${principalLabel(m)}`} onClick={() => open.person?.(m.id, principalLabel(m))}>
                     {principalLabel(m)}
                   </button>
                 ) : (
