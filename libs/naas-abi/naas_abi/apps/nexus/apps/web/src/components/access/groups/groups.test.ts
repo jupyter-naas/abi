@@ -139,6 +139,7 @@ describe('GroupsView at a workspace', () => {
 
     expect(api.listAttachments).toHaveBeenCalledWith({ principal_id: 'grp_ws', scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1' });
     expect(document.querySelector('[aria-label="Policies of the group"]')?.textContent).toContain('Graph reader');
+    await mounted!.select(document.querySelector('[aria-label="Policy to attach"]'), 'pol_1');
     await mounted!.click(buttonNamed('Attach policy'));
     expect(api.attach).toHaveBeenCalledWith({ policy_id: 'pol_1', principal_id: 'grp_ws', scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1' });
 

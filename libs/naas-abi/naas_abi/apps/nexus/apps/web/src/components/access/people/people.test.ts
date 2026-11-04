@@ -108,6 +108,7 @@ describe('PeopleView', () => {
     await mounted.flush();
     expect([...(field('Role of Bob') as HTMLSelectElement).options].map((o) => o.value)).toEqual(['member', 'admin']);
     await mounted.type(field('Principal to attach to'), 'usr_bob');
+    await mounted.select(field('Policy to attach'), 'pol_r');
     await mounted.click(button('Attach policy') ?? null);
     expect(api.attach).toHaveBeenCalledWith({ policy_id: 'pol_r', principal_id: 'usr_bob', scope: 'abi:nexus:organization/acme' });
   });

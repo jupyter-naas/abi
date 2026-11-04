@@ -8,13 +8,30 @@ import './attachments.css';
 
 export type PrincipalChoice = { id: string; label: string; kind?: PrincipalKind };
 
+/** The built-in policies of IAM's own service accounts and jobs (core `roles.py`). */
+const SERVICE_ACCOUNT_POLICIES = new Set([
+  'builtin.api',
+  'builtin.engine',
+  'builtin.idp',
+  'builtin.job',
+  'builtin.module_bootstrap',
+]);
+
+/** A policy made for a service account: one of IAM's own accounts', or a module's approved
+ *  manifest (`module.<project>.<module>`). */
+export function isServiceAccountPolicy(policyId: string): boolean {
+  return SERVICE_ACCOUNT_POLICIES.has(policyId) || policyId.startsWith('module.');
+}
+
 /** A user's built-in role is a membership (People & roles' role column, Members), never a bare
  *  attachment; a group or a service account takes one. What comes with a role (its platform
- *  companions) is IAM's to attach, offered to nobody. A principal not among the known
+ *  companions) is IAM's to attach, offered to nobody. A service account's policy is offered
+ *  only to a service account, never to a person or a group. A principal not among the known
  *  ones is told by its id. */
 export function offeredTo(policy: AttachablePolicy, principal: PrincipalChoice | undefined): boolean {
   if (isRoleCompanion(policy.id)) return false;
   const kind = principal?.kind ?? (principal ? principalKindOf(principal.id) : 'user');
+  if (isServiceAccountPolicy(policy.id) && kind !== 'service_account') return false;
   return !(roleOfPolicy(policy.id) && kind === 'user');
 }
 
@@ -67,7 +84,8 @@ export function AttachForm({
   }, [api, scope]);
 
   const offered = useMemo(() => (policies ?? []).filter((p) => offeredTo(p, principal)), [policies, principal]);
-  const chosen = offered.some((p) => p.id === policyId) ? policyId : (offered[0]?.id ?? '');
+  // Nothing is chosen until the caller picks a policy: one click never attaches the first.
+  const chosen = offered.some((p) => p.id === policyId) ? policyId : '';
 
   const submit = async () => {
     setBusy(true);
@@ -101,6 +119,7 @@ export function AttachForm({
           disabled={!offered.length}
           onChange={(event) => setPolicyId(event.target.value)}
         >
+          {offered.length > 0 && <option value="">Choose a policy</option>}
           {offered.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name} ({p.id})

@@ -15,7 +15,10 @@ afterEach(async () => {
 const button = (text: string) =>
   [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === text) as HTMLButtonElement | undefined;
 const field = (label: string) => document.querySelector(`[aria-label="${label}"]`);
-const options = () => [...document.querySelectorAll('[aria-label="Policy to attach"] option')].map((o) => (o as HTMLOptionElement).value);
+const options = () =>
+  [...document.querySelectorAll('[aria-label="Policy to attach"] option')]
+    .map((o) => (o as HTMLOptionElement).value)
+    .filter(Boolean);
 const reader = { id: 'pol_1', name: 'Graph reader', description: '', managed: false };
 const viewer = { id: 'builtin.viewer', name: 'Viewer', description: '', managed: true };
 
@@ -62,6 +65,10 @@ describe('AttachForm', () => {
     expect(api.attachable).toHaveBeenCalledWith('abi:nexus:organization/acme/nexus:workspace/ws-1');
 
     await mounted.type(field('Principal to attach to'), 'usr_bob');
+    // Nothing is chosen at first: the button attaches nothing.
+    expect((field('Policy to attach') as HTMLSelectElement).value).toBe('');
+    expect(button('Attach policy')?.disabled).toBe(true);
+    await mounted.select(field('Policy to attach'), 'pol_1');
     await mounted.click(button('Attach policy') ?? null);
     await mounted.flush();
 
@@ -91,11 +98,32 @@ describe('AttachForm', () => {
     expect(options()).toEqual(['builtin.viewer', 'pol_1']);
   });
 
+  it('offers a service account’s policy to a service account only, never to a person or a group', async () => {
+    const service = (id: string, name: string) => ({ id, name, description: '', managed: true });
+    const api = formApi({
+      attachable: vi.fn().mockResolvedValue({
+        items: [service('builtin.api', 'Nexus API'), service('builtin.engine', 'Engine'), service('module.abi.dev.people', 'Module'), reader],
+      }),
+    });
+    mounted = await mount(AttachForm, { api, scope: null, principals, onAttached: vi.fn() });
+    await mounted.flush();
+    // Nobody typed yet: what a person may be given.
+    expect(options()).toEqual(['pol_1']);
+    expect((field('Policy to attach') as HTMLSelectElement).value).toBe('');
+    for (const who of ['usr_bob', 'grp_1']) {
+      await mounted.type(field('Principal to attach to'), who);
+      expect(options()).toEqual(['pol_1']);
+    }
+    await mounted.type(field('Principal to attach to'), 'sa_ci');
+    expect(options()).toEqual(['builtin.api', 'builtin.engine', 'module.abi.dev.people', 'pol_1']);
+  });
+
   it('attaches to a fixed principal, platform-wide without a scope', async () => {
     const api = formApi();
     mounted = await mount(AttachForm, { api, scope: null, principals: [], principalId: 'grp_1', onAttached: vi.fn() });
     await mounted.flush();
     expect(field('Principal to attach to')).toBeNull();
+    await mounted.select(field('Policy to attach'), 'builtin.viewer');
     await mounted.click(button('Attach policy') ?? null);
     expect(api.attach).toHaveBeenCalledWith({ policy_id: 'builtin.viewer', principal_id: 'grp_1', scope: null });
   });
@@ -105,6 +133,7 @@ describe('AttachForm', () => {
     mounted = await mount(AttachForm, { api, scope: 'abi:nexus:organization/acme', principals, onAttached: vi.fn() });
     await mounted.flush();
     await mounted.type(field('Principal to attach to'), 'grp_1');
+    await mounted.select(field('Policy to attach'), 'pol_1');
     await mounted.click(button('Attach policy') ?? null);
     await mounted.flush();
 
