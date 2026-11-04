@@ -60,6 +60,8 @@ def test_remote_module_apps_join_the_catalog(monkeypatch: pytest.MonkeyPatch) ->
     assert info.app_id == "remote/acme.research:console"
     assert info.module_path == "remote/acme.research"
     assert info.url == "/app-html/remote/acme.research/console/index.html"
+    # Both Nexus app pages list only installed apps: a READY remote app is one.
+    assert info.installed is True
     assert (info.name, info.category, info.icon_emoji) == ("Console", "operations", "🛰")
 
 

@@ -344,6 +344,9 @@ def _remote_app_info(app: Any) -> AppInfo:
         description=app.description,
         url=app.url,
         icon_emoji=app.icon_emoji or None,
+        # Listed only while its module is READY in discovery: installed, like a
+        # loaded module's app. The app pages show installed apps only.
+        installed=True,
     )
 
 
