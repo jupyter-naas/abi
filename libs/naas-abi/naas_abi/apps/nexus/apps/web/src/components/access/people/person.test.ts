@@ -11,7 +11,7 @@ import type { AttachmentView } from '@/lib/iam-admin/types';
 import { mount, type Mounted } from '@/lib/testing/mount';
 import { useAuthStore } from '@/stores/auth';
 import type { AccessDirectory } from '../access-directory';
-import { ORG, WS, attachment, fakeApi, member } from '../access-fixtures';
+import { ORG, WS, attachment, fakeApi, member, wsScope } from '../access-fixtures';
 import { PLATFORM_ACCESS_SCOPE, organizationAccessScope, workspaceAccessScope } from '../access-scope';
 import { principal } from '../service-fixtures';
 import { PersonView } from './person';
@@ -113,7 +113,10 @@ describe('A person’s page', () => {
     expect(row('builtin.member', ORG)?.textContent).toContain('Organization Acme');
     expect(row('builtin.member', WS)?.textContent).toContain('Workspace W (Acme)');
     expect(row('builtin.member', DEMO)?.textContent).toContain('Workspace Ontology demo (Demo org)');
-    expect(row('builtin.platform.member', null)?.textContent).toContain('With the role');
+    // What comes with a role says which: Member at each workspace brings Platform member.
+    expect(row('builtin.platform.member', null)?.textContent).toContain(
+      'Comes with Member at Workspace W (Acme), Member at Workspace Ontology demo (Demo org)',
+    );
     // A policy links to itself at its owner.
     const link = row('pol_bfo', DEMO)?.querySelector('a');
     expect(link?.getAttribute('href')).toBe('/workspace/demo/settings/permissions?section=policies&policy=pol_bfo');
@@ -132,6 +135,45 @@ describe('A person’s page', () => {
     expect(field('Detach Platform member at Everywhere')).toBeNull();
     await mounted!.select(field('Role at Organization Acme'), 'admin');
     expect(changeRole).toHaveBeenCalledWith({ level: 'organization', organizationId: 'acme' }, 'usr_bob', 'admin');
+  });
+
+  it('attaches a policy to them at the page’s level, or at another level they belong to', async () => {
+    const api = apiFor([memberAtOrg, memberAtW, bfo, platformMember], [], { 'abi:': ADMIN, [ORG]: ADMIN, [WS]: ADMIN });
+    const offered = [
+      { id: 'pol_x', name: 'Readers', description: '', managed: false },
+      { id: 'builtin.viewer', name: 'Viewer', description: '', managed: true },
+      { id: 'builtin.api', name: 'Nexus API', description: '', managed: true },
+    ];
+    const extra = api as unknown as Record<string, unknown>;
+    extra.attachable = vi.fn().mockResolvedValue({ items: offered });
+    extra.attach = vi.fn().mockResolvedValue(undefined);
+    await show(api, () => true);
+    // This page's level first, then the platform's and each where they hold a role, where the
+    // viewer may attach (not Ontology demo: no right there).
+    const levels = [...(field('Attach at') as HTMLSelectElement).options].map((o) => o.value);
+    expect(levels).toEqual(['abi:', ORG, WS]);
+    expect(extra.attachable).toHaveBeenLastCalledWith('');
+    // The person is fixed, as a user: no built-in role (a membership), no service account's policy.
+    expect(field('Principal to attach to')).toBeNull();
+    const policies = () =>
+      [...(field('Policy to attach') as HTMLSelectElement).options].map((o) => o.value).filter(Boolean);
+    expect(policies()).toEqual(['pol_x']);
+    await mounted!.select(field('Attach at'), WS);
+    await mounted!.flush();
+    expect(extra.attachable).toHaveBeenLastCalledWith(WS);
+    await mounted!.select(field('Policy to attach'), 'pol_x');
+    const before = (api.listAttachments as ReturnType<typeof vi.fn>).mock.calls.length;
+    await mounted!.click(button('Attach policy') ?? null);
+    await mounted!.flush();
+    expect(extra.attach).toHaveBeenCalledWith({ policy_id: 'pol_x', principal_id: bob.id, scope: WS });
+    // The page reads what they hold again: the new row shows at once.
+    expect((api.listAttachments as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(before);
+  });
+
+  it('offers no attach where the viewer may attach nowhere they belong', async () => {
+    const api = apiFor([memberAtW], [], { [WS]: ['iam:ListAttachments'] });
+    await show(api, () => false, wsScope);
+    expect(document.querySelector('[aria-label="Attach a policy to them"]')).toBeNull();
   });
 
   it('shows an organization’s admin what is inside it, from the workspace’s page too', async () => {

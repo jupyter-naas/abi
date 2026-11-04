@@ -6,7 +6,8 @@ import type { AttachmentView, PrincipalView } from '@/lib/iam-admin/types';
 import { useAuthStore } from '@/stores/auth';
 import type { AccessViewProps } from '../access-props';
 import type { AccessDirectory } from '../access-directory';
-import { PLATFORM, organizationAccessScope, ownerOf, workspaceAccessScope } from '../access-scope';
+import { PLATFORM, organizationAccessScope, ownerOf, parseScope, workspaceAccessScope } from '../access-scope';
+import { AttachForm } from '../attachments/attach-form';
 import { principalLabel } from '../attachments/attachments-model';
 import { holdingRows, levelLabel, roleTargetOf, scopesOf, type GroupHoldings } from '../holdings/holdings-model';
 import { HoldingsTable } from '../holdings/holdings-table';
@@ -70,7 +71,9 @@ async function memberAt(
  * attachments), whatever the level of the page it is opened from. Each row names its level as
  * the Owner column does, says whether it is direct or through which group, links to the policy
  * at its owner, and offers the detach (or, for a role, the change of role, as on Members) where
- * IAM says the viewer may. A role changes through the membership route of its organization or
+ * IAM says the viewer may. A policy is attached to them here too (the person fixed), at the
+ * page's level by default or at another one they belong to: the platform, or an organization
+ * or a workspace where they hold a role; only where IAM lets the viewer attach. A role changes through the membership route of its organization or
  * workspace, for the person as its members name them (``memberAt``), whatever opened the page.
  * Nexus decides nothing here.
  */
@@ -130,11 +133,21 @@ export function PersonView({
   }, [load, nonce]);
 
   const rows = useMemo(() => (loaded ? holdingRows(loaded.direct, loaded.groups) : []), [loaded]);
-  const scopes = useMemo(
-    () => [...scopesOf(rows), ...(loaded?.groups ?? []).map((g) => g.group.owner_scope ?? PLATFORM)],
-    [rows, loaded],
-  );
   const here = ownerOf(scope);
+  // Where a policy may be attached to them: this page's level, the platform, and each
+  // organization or workspace they hold a role at (its container, not below it).
+  const levels = useMemo(() => {
+    const found = here === PLATFORM ? [PLATFORM] : [here, PLATFORM];
+    for (const row of rows) {
+      const at = row.role && !row.via ? row.attachment.scope : null;
+      if (at && !parseScope(at)?.below && !found.includes(at)) found.push(at);
+    }
+    return found;
+  }, [rows, here]);
+  const scopes = useMemo(
+    () => [...scopesOf(rows), ...(loaded?.groups ?? []).map((g) => g.group.owner_scope ?? PLATFORM), ...levels],
+    [rows, loaded, levels],
+  );
   const names = useContainerNames(api, scopes, nonce);
   const actionsAt = useActionsAt(api, scopes, here, can, nonce);
 
@@ -160,6 +173,11 @@ export function PersonView({
       cancelled = true;
     };
   }, [directory, targets, personId, email, nonce]);
+
+  // The levels the viewer may attach at, this page's first; the one picked, else the first.
+  const attachable = levels.filter((level) => actionsAt(level)['iam:AttachPolicy']);
+  const [attachPick, setAttachPick] = useState<string | null>(null);
+  const attachAt = attachPick && attachable.includes(attachPick) ? attachPick : (attachable[0] ?? null);
 
   const run = async (call: () => Promise<unknown>) => {
     try {
@@ -217,6 +235,38 @@ export function PersonView({
               empty="They hold nothing you may list."
             />
           </section>
+          {attachAt !== null && (
+            <section className="access-person-section" aria-label="Attach a policy to them">
+              <h4 className="access-person-heading">Attach a policy</h4>
+              {attachable.length > 1 && (
+                <label className="access-att-field">
+                  <span>At</span>
+                  <select
+                    className="access-input"
+                    aria-label="Attach at"
+                    value={attachAt}
+                    onChange={(event) => setAttachPick(event.target.value)}
+                  >
+                    {attachable.map((level) => (
+                      <option key={level} value={level}>
+                        {levelLabel(level === PLATFORM ? null : level, names)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <AttachForm
+                key={attachAt}
+                api={api}
+                // The platform's level is an attachment everywhere (no scope), as on People & roles.
+                scope={attachAt === PLATFORM ? null : attachAt}
+                principals={[]}
+                principalId={personId}
+                principalKind="user"
+                onAttached={() => void load()}
+              />
+            </section>
+          )}
           <section className="access-person-section" aria-label="Groups">
             <h4 className="access-person-heading">Groups</h4>
             {loaded.groups.length === 0 ? (

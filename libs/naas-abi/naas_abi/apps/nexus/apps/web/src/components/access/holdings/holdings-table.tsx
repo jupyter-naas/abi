@@ -7,6 +7,7 @@ import {
   ROLE_LABELS,
   assignableRoles,
   roleChangeable,
+  roleOfPolicy,
   type BuiltInRole,
   type RoleTarget,
 } from '../roles/role-change';
@@ -63,7 +64,7 @@ export function HoldingsTable({ rows, names, actionsAt, here, onDetach, onOpenGr
           </tr>
         </thead>
         <tbody>
-          {rows.map(({ attachment: a, via, role, companion }) => {
+          {rows.map(({ attachment: a, via, role, companion, broughtBy }) => {
             const name = a.policy_name ?? a.policy_id;
             const level = levelLabel(a.scope, names);
             const owner = a.policy_owner_scope;
@@ -96,7 +97,7 @@ export function HoldingsTable({ rows, names, actionsAt, here, onDetach, onOpenGr
                   ) : (
                     <span>{name}</span>
                   )}
-                  {companion && <span className="access-holding-badge">with a role</span>}
+                  {companion && <span className="access-holding-badge">comes with a role</span>}
                   {!role && <code className="access-holding-id">{a.policy_id}</code>}
                 </td>
                 <td title={a.scope ?? ''}>{level}</td>
@@ -110,7 +111,14 @@ export function HoldingsTable({ rows, names, actionsAt, here, onDetach, onOpenGr
                       via.label
                     )
                   ) : companion ? (
-                    'With the role'
+                    // Why they hold it: the roles it comes with, each at its level.
+                    <span data-brought-by="">
+                      {broughtBy.length
+                        ? `Comes with ${broughtBy
+                            .map((b) => `${ROLE_LABELS[roleOfPolicy(b.policy_id)!]} at ${levelLabel(b.scope, names)}`)
+                            .join(', ')}`
+                        : 'Comes with a role at a workspace'}
+                    </span>
                   ) : (
                     'Direct'
                   )}

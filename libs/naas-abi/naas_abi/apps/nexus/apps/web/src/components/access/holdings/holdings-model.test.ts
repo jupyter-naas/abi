@@ -59,3 +59,28 @@ describe('holdingRows', () => {
     expect(row.role).toBeNull();
   });
 });
+
+describe('what a companion comes with', () => {
+  const bob = principal({ id: 'usr_bob', display_name: 'Bob' });
+  const at = (id: string, policy_id: string, scope: string | null) =>
+    attachment({ id, policy_id, principal_id: bob.id, principal: bob, scope });
+
+  it('names the person’s roles that bring it: a workspace’s, or below a container, never an organization’s own', () => {
+    const rows = holdingRows(
+      [
+        at('pm', 'builtin.platform.member', null),
+        at('pv', 'builtin.platform.viewer', null),
+        at('org', 'builtin.admin', ORG),
+        at('ws', 'builtin.member', WS),
+        at('wide', 'builtin.owner', `${ORG}/*`),
+        at('view', 'builtin.viewer', WS),
+      ],
+      [],
+    );
+    const of = (id: string) => rows.find((r) => r.attachment.id === id)!.broughtBy.map((a) => a.id);
+    expect(of('pm')).toEqual(['wide', 'ws']);
+    expect(of('pv')).toEqual(['view']);
+    // Not a companion: nothing.
+    expect(of('org')).toEqual([]);
+  });
+});

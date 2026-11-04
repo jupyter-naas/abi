@@ -18,6 +18,10 @@ export type HoldingRow = {
   role: BuiltInRole | null;
   /** What IAM attaches with a role and removes with it: never detached by hand. */
   companion: boolean;
+  /** For a companion, the roles it comes with (the person's role attachments that bring it):
+   *  `builtin.platform.member` with a member, admin or owner role at a workspace (or below a
+   *  container), `builtin.platform.viewer` with a viewer one. */
+  broughtBy: AttachmentView[];
 };
 
 /** A group, and what IAM lets the viewer list of its attachments. */
@@ -65,7 +69,26 @@ function row(attachment: AttachmentView, via: HoldingRow['via']): HoldingRow {
     via,
     role: user && !via ? roleOfPolicy(attachment.policy_id) : null,
     companion: !via && isRoleCompanion(attachment.policy_id),
+    broughtBy: [],
   };
+}
+
+const COMPANION_OF: Record<BuiltInRole, string> = {
+  owner: 'builtin.platform.member',
+  admin: 'builtin.platform.member',
+  member: 'builtin.platform.member',
+  viewer: 'builtin.platform.viewer',
+};
+
+/** Whether a role attachment brings ``companion``: a role of the companion's kind at a
+ *  workspace, or below a container (core IAM's rule, for Nexus's containers). */
+function brings(companion: string, role: AttachmentView): boolean {
+  const held = roleOfPolicy(role.policy_id);
+  if (!held || COMPANION_OF[held] !== companion) return false;
+  const parsed = parseScope(role.scope);
+  if (!parsed) return false;
+  const last = parsed.containers[parsed.containers.length - 1];
+  return parsed.below || (last?.service === 'nexus' && last.type === 'workspace');
 }
 
 /** Attachments from the top level down: everywhere and the platform first, then each
@@ -90,12 +113,19 @@ export function holdingRows(direct: AttachmentView[], groups: GroupHoldings[]): 
     }),
   ];
   const rank = (r: HoldingRow) => (r.companion ? 0 : r.role ? 1 : r.via ? 3 : 2);
-  return rows.sort(
+  rows.sort(
     (a, b) =>
       byLevel(a.attachment, b.attachment) ||
       rank(a) - rank(b) ||
       byName(a.attachment.policy_name ?? a.attachment.policy_id, b.attachment.policy_name ?? b.attachment.policy_id),
   );
+  // What brings each companion, from the top level down: the person's own role attachments
+  // (a group's role brings none).
+  const roles = rows.filter((r) => r.role && !r.via).map((r) => r.attachment);
+  for (const r of rows) {
+    if (r.companion) r.broughtBy = roles.filter((role) => brings(r.attachment.policy_id, role));
+  }
+  return rows;
 }
 
 /** The scopes the rows name: where each is attached and where each policy is owned. */

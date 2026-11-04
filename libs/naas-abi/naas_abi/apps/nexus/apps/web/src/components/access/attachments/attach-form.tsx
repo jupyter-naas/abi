@@ -38,19 +38,22 @@ export function offeredTo(policy: AttachablePolicy, principal: PrincipalChoice |
 /**
  * Attach a policy to a principal at a scope (null: platform-wide). The policies offered are
  * those IAM lets the caller attach there (`attachable`). The principal is picked from
- * ``principals`` or typed as an IAM id; with ``principalId`` it is fixed (a group's page).
+ * ``principals`` or typed as an IAM id; with ``principalId`` it is fixed (a group's page, a
+ * person's), of ``principalKind`` (a group by default).
  */
 export function AttachForm({
   api,
   scope,
   principals,
   principalId: fixed,
+  principalKind: fixedKind = 'group',
   onAttached,
 }: {
   api: IamAdminApi;
   scope: string | null;
   principals: PrincipalChoice[];
   principalId?: string;
+  principalKind?: PrincipalKind;
   onAttached: () => void;
 }) {
   const [policies, setPolicies] = useState<AttachablePolicy[] | null>(null);
@@ -63,8 +66,8 @@ export function AttachForm({
   const principal = useMemo<PrincipalChoice | undefined>(
     () =>
       principals.find((p) => p.id === target) ??
-      (target ? { id: target, label: target, kind: fixed ? 'group' : principalKindOf(target) } : undefined),
-    [principals, target, fixed],
+      (target ? { id: target, label: target, kind: fixed ? fixedKind : principalKindOf(target) } : undefined),
+    [principals, target, fixed, fixedKind],
   );
 
   useEffect(() => {
