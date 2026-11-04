@@ -117,6 +117,17 @@ describe('AttachForm', () => {
     expect(options()).toEqual(['builtin.api', 'builtin.engine', 'module.abi.dev.people', 'pol_1']);
   });
 
+  it('never offers Self to a person or a group: every user holds it already', async () => {
+    const self = { id: 'builtin.self', name: 'Self', description: '', managed: true };
+    const api = formApi({ attachable: vi.fn().mockResolvedValue({ items: [self, reader] }) });
+    mounted = await mount(AttachForm, { api, scope: null, principals, onAttached: vi.fn() });
+    await mounted.flush();
+    for (const who of ['usr_bob', 'grp_1']) {
+      await mounted.type(field('Principal to attach to'), who);
+      expect(options()).toEqual(['pol_1']);
+    }
+  });
+
   it('attaches to a fixed principal, platform-wide without a scope', async () => {
     const api = formApi();
     mounted = await mount(AttachForm, { api, scope: null, principals: [], principalId: 'grp_1', onAttached: vi.fn() });

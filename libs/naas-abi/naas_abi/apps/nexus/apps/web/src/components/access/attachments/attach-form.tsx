@@ -26,12 +26,16 @@ export function isServiceAccountPolicy(policyId: string): boolean {
 /** A user's built-in role is a membership (People & roles' role column, Members), never a bare
  *  attachment; a group or a service account takes one. What comes with a role (its platform
  *  companions) is IAM's to attach, offered to nobody. A service account's policy is offered
- *  only to a service account, never to a person or a group. A principal not among the known
+ *  only to a service account, never to a person or a group, and `builtin.self`, which every
+ *  user holds already, to neither. A principal not among the known
  *  ones is told by its id. */
 export function offeredTo(policy: AttachablePolicy, principal: PrincipalChoice | undefined): boolean {
   if (isRoleCompanion(policy.id)) return false;
   const kind = principal?.kind ?? (principal ? principalKindOf(principal.id) : 'user');
   if (isServiceAccountPolicy(policy.id) && kind !== 'service_account') return false;
+  // Every user holds it already, with no attachment (core `roles.SELF`): to a person or a
+  // group, attaching it would change nothing.
+  if (policy.id === 'builtin.self' && kind !== 'service_account') return false;
   return !(roleOfPolicy(policy.id) && kind === 'user');
 }
 
