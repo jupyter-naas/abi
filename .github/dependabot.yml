@@ -1,0 +1,46 @@
+# Dependency updates. Security updates (for known CVEs) additionally need
+# "Dependabot security updates" enabled in the repository settings; this file
+# only takes effect once it is on the default branch.
+version: 2
+
+updates:
+  - package-ecosystem: uv
+    directories:
+      - "/"
+      - "/libs/naas-abi-core"
+      - "/libs/naas-abi"
+      - "/libs/naas-abi-cli"
+      - "/libs/naas-abi-marketplace"
+      - "/libs/naas-abi-platform"
+      - "/libs/naas-abi/naas_abi/apps/nexus/apps/api"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      python-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directories:
+      - "/libs/naas-abi/naas_abi/apps/nexus"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      js-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directories:
+      - "/docker/images"
+      - "/libs/naas-abi/naas_abi/apps/nexus"
+    schedule:
+      interval: weekly
