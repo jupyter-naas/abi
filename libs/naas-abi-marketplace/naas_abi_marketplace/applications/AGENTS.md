@@ -74,6 +74,7 @@ In the table below: **A** = agent, **I** = integration wrapper, **W** = workflow
 |---|:---:|---|
 | [`instagram/`](instagram/) | A | Instagram |
 | [`spotify/`](spotify/) | A | Music search, playlists |
+| [`ten_agent/`](ten_agent/) | I | Real-time voice calls over ABI agents (TEN Agent engine, `/api/v1/voice` route) |
 | [`twilio/`](twilio/) | A | SMS / voice |
 | [`whatsapp_business/`](whatsapp_business/) | A | WhatsApp Business messaging |
 | [`youtube/`](youtube/) | A | Video search and metadata |
@@ -93,7 +94,7 @@ In the table below: **A** = agent, **I** = integration wrapper, **W** = workflow
 | [`sanax/`](sanax/) | AO | Sanax data source |
 | [`sec_gov/`](sec_gov/) | I | SEC EDGAR filings |
 
-Total: **47 application modules**.
+Total: **48 application modules**.
 
 ## Module shape (recap)
 

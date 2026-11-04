@@ -1,0 +1,164 @@
+{
+  "ten": {
+    "log": {
+      "handlers": [
+        {
+          "matchers": [
+            {
+              "level": "info"
+            }
+          ],
+          "formatter": {
+            "type": "plain",
+            "colored": true
+          },
+          "emitter": {
+            "type": "console",
+            "config": {
+              "stream": "stdout"
+            }
+          }
+        }
+      ]
+    },
+    "predefined_graphs": [
+      {
+        "name": "abi_voice",
+        "auto_start": true,
+        "graph": {
+          "nodes": [
+            {
+              "type": "extension",
+              "name": "websocket_server",
+              "addon": "websocket_server",
+              "extension_group": "default",
+              "property": {
+                "port": 8765,
+                "host": "127.0.0.1",
+                "sample_rate": 16000,
+                "channels": 1,
+                "bytes_per_sample": 2
+              }
+            },
+            {
+              "type": "extension",
+              "name": "stt",
+              "addon": "openai_asr_python",
+              "extension_group": "stt",
+              "property": {
+                "params": {
+                  "api_key": "${env:OPENAI_API_KEY}",
+                  "input_audio_format": "pcm16",
+                  "input_audio_transcription": {
+                    "model": "gpt-4o-transcribe",
+                    "language": "en"
+                  },
+                  "turn_detection": {
+                    "type": "server_vad",
+                    "threshold": 0.5,
+                    "prefix_padding_ms": 300,
+                    "silence_duration_ms": 500
+                  }
+                }
+              }
+            },
+            {
+              "type": "extension",
+              "name": "llm",
+              "addon": "openai_llm2_python",
+              "extension_group": "chatgpt",
+              "property": {
+                "base_url": "${env:TEN_LLM_BASE_URL}",
+                "api_key": "${env:TEN_LLM_API_KEY}",
+                "model": "${env:TEN_LLM_MODEL|AbiAgent}",
+                "max_tokens": 512,
+                "prompt": "",
+                "greeting": "Hi, I am listening.",
+                "max_memory_length": 10,
+                "custom_headers": {
+                  "X-Voice-Session": "${env:TEN_VOICE_SESSION|}"
+                }
+              }
+            },
+            {
+              "type": "extension",
+              "name": "tts",
+              "addon": "openai_tts2_python",
+              "extension_group": "tts",
+              "property": {
+                "dump": false,
+                "params": {
+                  "api_key": "${env:OPENAI_API_KEY}",
+                  "model": "gpt-4o-mini-tts",
+                  "voice": "coral",
+                  "response_format": "pcm"
+                }
+              }
+            },
+            {
+              "type": "extension",
+              "name": "main_control",
+              "addon": "main_python",
+              "extension_group": "control",
+              "property": {
+                "greeting": "Hi, I am listening."
+              }
+            }
+          ],
+          "connections": [
+            {
+              "extension": "main_control",
+              "data": [
+                {
+                  "name": "asr_result",
+                  "source": [
+                    {
+                      "extension": "stt"
+                    }
+                  ]
+                },
+                {
+                  "name": "metrics",
+                  "source": [
+                    {
+                      "extension": "stt"
+                    }
+                  ]
+                },
+                {
+                  "name": "tts_flush_end",
+                  "source": [
+                    {
+                      "extension": "tts"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "extension": "websocket_server",
+              "audio_frame": [
+                {
+                  "name": "pcm_frame",
+                  "dest": [
+                    {
+                      "extension": "stt"
+                    }
+                  ]
+                },
+                {
+                  "name": "pcm_frame",
+                  "source": [
+                    {
+                      "extension": "tts"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
