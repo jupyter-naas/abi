@@ -529,6 +529,9 @@ def api_policy(registry: CatalogRegistry | None = None) -> Policy:
                 # Invitations: the provider makes the person the invitation names.
                 "identity:ProvisionUser",
                 "identity:FindProvisionedUser",
+                # The platform's Users page: rename, disable and delete them there.
+                "identity:UpdateProvisionedUser",
+                "identity:DeleteProvisionedUser",
             ),
             resources=("abi:identity:provider/*",),
             sid="SignInThroughProviders",

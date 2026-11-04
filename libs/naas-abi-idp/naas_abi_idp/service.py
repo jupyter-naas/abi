@@ -214,6 +214,16 @@ class IdPService:
             self._revoke_user_refresh_tokens(user_id)
         return user
 
+    def delete_user(self, user_id: str) -> None:
+        """Delete the user: their sessions end and their refresh tokens are revoked
+        first, so nothing they signed in with outlives the account. The address
+        is free again afterwards (a new invitation makes a new user, another id)."""
+        if self.store.get(USERS, user_id) is None:
+            raise NotFound(f"User {user_id} not found")
+        self._end_user_sessions(user_id)
+        self._revoke_user_refresh_tokens(user_id)
+        self.store.delete(USERS, user_id)
+
     def _update_user(self, user_id: str, change: Callable[[User], User]) -> User:
         for _ in range(_ATTEMPTS):
             doc = self.store.get(USERS, user_id)

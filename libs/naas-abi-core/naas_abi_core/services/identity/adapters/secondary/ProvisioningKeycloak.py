@@ -107,7 +107,66 @@ class ProvisioningKeycloak(ProvisioningPort):
             warning=warning,
         )
 
+    def update_user(
+        self,
+        subject: str,
+        *,
+        name: str | None = None,
+        disabled: bool | None = None,
+    ) -> ProvisionedUser | None:
+        path = self._user_path(subject)
+        status, body, _ = self._http.request("GET", path)
+        if status == 404:
+            return None
+        if status != 200 or not isinstance(body, dict):
+            raise self._failure("read the user", status, body)
+        change: dict[str, Any] = {}
+        if name:
+            change["firstName"], change["lastName"] = _names(
+                body.get("email") or "", name
+            )
+        if disabled is not None:
+            # A disabled Keycloak user cannot sign in, and its sessions are refused.
+            change["enabled"] = not disabled
+        if change:
+            status, answer, _ = self._http.request("PUT", path, json_body=change)
+            if status == 404:
+                return None
+            if status >= 300:
+                raise self._failure("update the user", status, answer)
+            body = {**body, **change}
+            if disabled:
+                self._logout(subject)
+        return self._user(body, str(body.get("email") or ""), created=False)
+
+    def delete_user(self, subject: str) -> bool:
+        status, body, _ = self._http.request("DELETE", self._user_path(subject))
+        if status == 404:
+            return False
+        if status >= 300:
+            raise self._failure("delete the user", status, body)
+        return True
+
     # -- plumbing ---------------------------------------------------------------------
+
+    def _user_path(self, subject: str) -> str:
+        return f"/admin/realms/{self._realm}/users/{quote(subject, safe='')}"
+
+    def _logout(self, subject: str) -> None:
+        """End the disabled user's Keycloak sessions now rather than at their next
+        refresh. Keycloak refuses a disabled user's refresh anyway: a failure here
+        is logged, not raised."""
+        try:
+            status, _, _ = self._http.request(
+                "POST", f"{self._user_path(subject)}/logout"
+            )
+        except ProviderUnavailableError as exc:
+            logger.warning(f"Keycloak did not end the sessions of {subject}: {exc}")
+            return
+        if status >= 300:
+            logger.warning(
+                f"Keycloak did not end the sessions of {subject}: HTTP {status}"
+            )
 
     def _mail_actions(self, user_id: str, email: str) -> str | None:
         """Keycloak's own invitation mail. The user exists and the invitation

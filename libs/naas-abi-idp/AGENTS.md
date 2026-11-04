@@ -114,7 +114,9 @@ A sign-in challenge, a refresh token, a counter: one document each, changed with
 | `admin` | services over NATS (`abi.app.v1` requests to the app, as every module app) | discovery's `discovery:OpenApp` on `abi:discovery:app/<project>/idp/admin`, **and the app itself**: only the engine's own accounts (`api`, `engine`: `admin.ADMIN_ACCOUNTS`) acting for nobody; a user, a module account or a CI account is refused whatever discovery allowed |
 
 The admin API (JSON): `GET/POST /users`, `GET /users/{id}`, `GET /users/by-email`,
-`PATCH /users/{id}`, `POST /users/{id}/disable|enable`, `GET/POST /groups`,
+`PATCH /users/{id}`, `DELETE /users/{id}` (204: their sessions end and their refresh
+tokens are revoked first; the address is free again), `POST /users/{id}/disable|enable`
+(disabling ends their sessions and refresh tokens too), `GET/POST /groups`,
 `DELETE /groups/{id}`, `PUT/DELETE /groups/{group}/members/{user_id}`,
 `GET/POST /clients`, `POST /clients/{id}/disable|enable`, `POST /keys/rotate`.
 Errors are `{"error": <code>, "message": ...}` (400, 404, 409). `OpenApp` is a

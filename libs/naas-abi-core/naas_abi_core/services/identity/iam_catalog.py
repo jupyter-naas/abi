@@ -29,7 +29,8 @@ def _action(name: str, level: str, *subjects: str, description: str = "") -> Act
 CATALOG = ActionCatalog(
     service=SERVICE,
     # 2: ProvisionUser and FindProvisionedUser.
-    version=2,
+    # 3: UpdateProvisionedUser and DeleteProvisionedUser (the platform's Users page).
+    version=3,
     resource_types=(
         ResourceType(
             "provider",
@@ -76,5 +77,23 @@ CATALOG = ActionCatalog(
             ),
         ),
         _action("FindProvisionedUser", "read", "find_provisioned_user"),
+        _action(
+            "UpdateProvisionedUser",
+            "admin",
+            "update_provisioned_user",
+            description=(
+                "Rename a person at the provider, or disable or enable their sign-in "
+                "there. Nexus checks the administrator's rights, then calls as api."
+            ),
+        ),
+        _action(
+            "DeleteProvisionedUser",
+            "admin",
+            "delete_provisioned_user",
+            description=(
+                "Delete a person's account at the provider. Nexus checks the "
+                "administrator's rights, then calls as api."
+            ),
+        ),
     ),
 )

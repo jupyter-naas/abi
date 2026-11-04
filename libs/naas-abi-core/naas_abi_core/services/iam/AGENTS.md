@@ -1088,7 +1088,10 @@ attachment per scope.
   enumerated: one statement per service, each with a `sid` saying what needs it. The
   engine holds IAM's administration and the kernel services; `api` holds `nexus:*`, the
   kernel services it calls for its users (each user bounds the call), the sign-in identity
-  actions, `iam:ExchangeToken`, the IAM actions that keep memberships, scopes and
+  actions and those of a person at their provider (`identity:ProvisionUser`,
+  `FindProvisionedUser`, `UpdateProvisionedUser`, `DeleteProvisionedUser`: invitations and the
+  platform's Users page, called on behalf of the administrator, whose rights bound them),
+  `iam:ExchangeToken`, the IAM actions that keep memberships, scopes and
   placements, those of the policies it keeps (shared graphs, each container's access
   policy) and of the groups it keeps (`ContainerAccessAndGroups`: each organisation's and
   workspace's members and admins groups, Nexus `services/iam/AGENTS.md`), and denies

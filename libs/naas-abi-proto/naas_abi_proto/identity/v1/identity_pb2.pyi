@@ -326,3 +326,43 @@ class FindProvisionedUserResponse(_message.Message):
     error: _common_pb2.CallError
     user: ProvisionedUser
     def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., user: _Optional[_Union[ProvisionedUser, _Mapping]] = ...) -> None: ...
+
+class UpdateProvisionedUserRequest(_message.Message):
+    __slots__ = ("context", "provider", "subject", "name", "disabled")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    PROVIDER_FIELD_NUMBER: _ClassVar[int]
+    SUBJECT_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    DISABLED_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    provider: str
+    subject: str
+    name: str
+    disabled: bool
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., provider: _Optional[str] = ..., subject: _Optional[str] = ..., name: _Optional[str] = ..., disabled: bool = ...) -> None: ...
+
+class UpdateProvisionedUserResponse(_message.Message):
+    __slots__ = ("error", "user")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    USER_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    user: ProvisionedUser
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., user: _Optional[_Union[ProvisionedUser, _Mapping]] = ...) -> None: ...
+
+class DeleteProvisionedUserRequest(_message.Message):
+    __slots__ = ("context", "provider", "subject")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    PROVIDER_FIELD_NUMBER: _ClassVar[int]
+    SUBJECT_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    provider: str
+    subject: str
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., provider: _Optional[str] = ..., subject: _Optional[str] = ...) -> None: ...
+
+class DeleteProvisionedUserResponse(_message.Message):
+    __slots__ = ("error", "deleted")
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    DELETED_FIELD_NUMBER: _ClassVar[int]
+    error: _common_pb2.CallError
+    deleted: bool
+    def __init__(self, error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ..., deleted: bool = ...) -> None: ...

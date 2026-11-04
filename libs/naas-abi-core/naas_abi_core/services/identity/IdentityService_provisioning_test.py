@@ -76,6 +76,24 @@ class Recorder(ProvisioningPort):
         self.calls.append(("find", email, None))
         return None
 
+    def update_user(
+        self,
+        subject: str,
+        *,
+        name: str | None = None,
+        disabled: bool | None = None,
+    ) -> ProvisionedUser | None:
+        self.calls.append(("update", subject, f"{name}|{disabled}"))
+        if subject != "sub-1":
+            return None
+        return ProvisionedUser(
+            "p", "bob@example.com", subject, name, disabled=bool(disabled)
+        )
+
+    def delete_user(self, subject: str) -> bool:
+        self.calls.append(("delete", subject, None))
+        return subject == "sub-1"
+
 
 def service_with(iam: IAMService, *adapters: tuple[str, ProvisioningPort | None]):
     providers = [
@@ -166,6 +184,58 @@ def test_a_caller_that_may_only_sign_in_cannot_provision(iam):
     assert adapter.calls == []
 
 
+def test_updating_and_deleting_a_provisioned_user_are_checked_on_the_provider(iam):
+    adapter = Recorder()
+    service = service_with(iam, ("acme", adapter))
+    with as_service_account("api"):
+        renamed = service.update_provisioned_user("acme", " sub-1 ", name=" Bob B ")
+        assert renamed is not None and renamed.name == "Bob B"
+        off = service.update_provisioned_user("acme", "sub-1", disabled=True)
+        assert off is not None and off.disabled is True
+        assert (
+            service.update_provisioned_user("acme", "missing", disabled=False) is None
+        )
+        assert service.delete_provisioned_user("acme", "sub-1") is True
+        assert service.delete_provisioned_user("acme", "missing") is False
+        for bad in ("", "  ", "a/b", "a?b", "a b", "x" * 256):
+            with pytest.raises(ValueError):
+                service.update_provisioned_user("acme", bad, disabled=True)
+            with pytest.raises(ValueError):
+                service.delete_provisioned_user("acme", bad)
+    assert adapter.calls == [
+        ("update", "sub-1", "Bob B|None"),
+        ("update", "sub-1", "None|True"),
+        ("update", "missing", "None|False"),
+        ("delete", "sub-1", None),
+        ("delete", "missing", None),
+    ]
+
+
+def test_a_caller_that_may_provision_may_not_disable_or_delete_for_it(iam):
+    adapter = Recorder()
+    service = service_with(iam, ("acme", adapter))
+    with as_service_account("engine"):
+        account = iam.create_service_account("module/acme/inviter")
+        policy = iam.create_policy(
+            "invite",
+            document(
+                statement(
+                    "Allow",
+                    ["identity:ProvisionUser", "identity:FindProvisionedUser"],
+                    ["abi:identity:provider/*"],
+                )
+            ),
+        )
+        iam.attach_policy(policy.id, account.id)
+    with as_service_account("module/acme/inviter"):
+        service.provision_user("acme", "bob@example.com")
+        with pytest.raises(PermissionDeniedError):
+            service.update_provisioned_user("acme", "sub-1", disabled=True)
+        with pytest.raises(PermissionDeniedError):
+            service.delete_provisioned_user("acme", "sub-1")
+    assert [c[0] for c in adapter.calls] == ["ensure"]
+
+
 def test_a_provider_managed_in_the_provider_raises_not_implemented(iam):
     service = service_with(iam, ("okta", None))
     with as_service_account(CALLER):
@@ -173,6 +243,10 @@ def test_a_provider_managed_in_the_provider_raises_not_implemented(iam):
             service.provision_user("okta", "bob@example.com")
         with pytest.raises(NotImplementedError):
             service.find_provisioned_user("okta", "bob@example.com")
+        with pytest.raises(NotImplementedError):
+            service.update_provisioned_user("okta", "sub-1", disabled=True)
+        with pytest.raises(NotImplementedError):
+            service.delete_provisioned_user("okta", "sub-1")
     assert (
         service.get_provider.__self__ is service
     )  # unaffected: it is still a provider
@@ -223,6 +297,27 @@ def test_the_builtin_adapter_creates_the_user_in_the_idp(builtin):
     assert adapter.find_user("nobody@example.com") is None
     with pytest.raises(ValueError):
         adapter.ensure_user("not an email")
+
+
+def test_the_builtin_adapter_renames_disables_and_deletes_the_user(builtin):
+    idp, adapter = builtin
+    user = idp.create_user("bob@example.com", name="Bob")
+    cookie, _ = idp.create_session(user, ["otp"])
+    renamed = adapter.update_user(user.id, name="Bob Builder")
+    assert renamed is not None and renamed.name == "Bob Builder"
+    assert renamed.disabled is False and idp.get_session(cookie) is not None
+    off = adapter.update_user(user.id, disabled=True)
+    assert off is not None and off.disabled is True and off.subject == user.id
+    assert idp.get_user(user.id).disabled and idp.get_session(cookie) is None
+    assert idp.request_code("bob@example.com", None) is False
+    on = adapter.update_user(user.id, disabled=False)
+    assert on is not None and on.disabled is False
+    unchanged = adapter.update_user(user.id)
+    assert unchanged is not None and unchanged.email == "bob@example.com"
+    assert adapter.update_user("u_missing", disabled=True) is None
+    assert adapter.delete_user(user.id) is True
+    assert idp.find_user("bob@example.com") is None
+    assert adapter.delete_user(user.id) is False
 
 
 def test_the_builtin_adapter_finds_the_user_who_registered_themselves(builtin):
@@ -289,6 +384,21 @@ class FakeKeycloak:
         if request.method == "PUT" and path.endswith("/execute-actions-email"):
             assert json.loads(request.content) == ["VERIFY_EMAIL", "UPDATE_PASSWORD"]
             return httpx.Response(self.mail_status)
+        if request.method == "POST" and path.endswith("/logout"):
+            user_id = path.removesuffix("/logout").rsplit("/", 1)[-1]
+            return httpx.Response(204 if user_id in self.users else 404)
+        if path.startswith(f"{base}/"):
+            user_id = path[len(base) + 1 :]
+            if user_id not in self.users:
+                return httpx.Response(404, json={"error": "User not found"})
+            if request.method == "GET":
+                return httpx.Response(200, json=self.users[user_id])
+            if request.method == "PUT":
+                self.users[user_id].update(json.loads(request.content))
+                return httpx.Response(204)
+            if request.method == "DELETE":
+                del self.users[user_id]
+                return httpx.Response(204)
         return httpx.Response(404)
 
 
@@ -335,6 +445,27 @@ def test_keycloak_creates_an_unverified_user_and_mails_the_actions():
     assert again.created is False and again.subject == "kc-1"
     assert adapter.find_user("nobody@example.com") is None
     assert fake.token_requests == 1  # one token served every call
+
+
+def test_keycloak_renames_disables_and_deletes_the_user():
+    fake = FakeKeycloak()
+    adapter = keycloak(fake, send_actions=False)
+    created = adapter.ensure_user("bob@example.com", name="Bob")
+    renamed = adapter.update_user(created.subject, name="Bob Builder")
+    assert renamed is not None and renamed.name == "Bob Builder"
+    assert (fake.users["kc-1"]["firstName"], fake.users["kc-1"]["lastName"]) == (
+        "Bob",
+        "Builder",
+    )
+    off = adapter.update_user(created.subject, disabled=True)
+    assert off is not None and off.disabled is True
+    assert fake.users["kc-1"]["enabled"] is False
+    assert ("POST", "/kc/admin/realms/acme/users/kc-1/logout") in fake.requests
+    on = adapter.update_user(created.subject, disabled=False)
+    assert on is not None and on.disabled is False and fake.users["kc-1"]["enabled"]
+    assert adapter.update_user("kc-9", disabled=True) is None
+    assert adapter.delete_user(created.subject) is True
+    assert fake.users == {} and adapter.delete_user(created.subject) is False
 
 
 def test_keycloak_without_a_mail_server_still_provisions_and_says_so():
@@ -439,6 +570,82 @@ def test_an_admin_path_cannot_name_another_host():
         http.request("GET", "https://evil.example.com/x")
     http.request("GET", "//evil.example.com/x")  # a path of the base host
     assert hosts == ["id.example.com"]
+
+
+# -- Zitadel (unit; the pinned binary runs in tests/zitadel_provisioning_test.py) ----------
+
+
+class FakeZitadel:
+    """Zitadel's v2 user endpoints the adapter uses to change and delete a user."""
+
+    def __init__(self) -> None:
+        self.users: dict[str, dict[str, Any]] = {
+            "z-1": {
+                "userId": "z-1",
+                "state": "USER_STATE_ACTIVE",
+                "human": {
+                    "profile": {"displayName": "Bob"},
+                    "email": {"email": "bob@example.com"},
+                },
+            }
+        }
+        self.requests: list[tuple[str, str]] = []
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        method, path = request.method, request.url.path
+        self.requests.append((method, path))
+        user_id = path.removeprefix("/v2/users/human/").removeprefix("/v2/users/")
+        user_id, _, verb = user_id.partition("/")
+        user = self.users.get(user_id)
+        if user is None:
+            return httpx.Response(404, json={"message": "User could not be found"})
+        if method == "GET":
+            return httpx.Response(200, json={"user": user})
+        if method == "PUT" and path.startswith("/v2/users/human/"):
+            profile = json.loads(request.content)["profile"]
+            user["human"]["profile"]["displayName"] = profile["displayName"]
+            return httpx.Response(200, json={})
+        if method == "POST" and verb in ("deactivate", "reactivate"):
+            wanted = (
+                "USER_STATE_INACTIVE" if verb == "deactivate" else "USER_STATE_ACTIVE"
+            )
+            if user["state"] == wanted:
+                return httpx.Response(412, json={"message": "already"})
+            user["state"] = wanted
+            return httpx.Response(200, json={})
+        if method == "DELETE":
+            del self.users[user_id]
+            return httpx.Response(200, json={})
+        return httpx.Response(405)
+
+
+def test_zitadel_renames_deactivates_and_deletes_the_user():
+    from naas_abi_core.services.identity.adapters.secondary.ProvisioningZitadel import (
+        ProvisioningZitadel,
+    )
+
+    fake = FakeZitadel()
+    adapter = ProvisioningZitadel(
+        "zit",
+        AdminHttp(
+            "https://zit.example.com",
+            client=httpx.Client(transport=httpx.MockTransport(fake.handler)),
+        ),
+    )
+    renamed = adapter.update_user("z-1", name="Bob Builder")
+    assert renamed is not None and renamed.name == "Bob Builder"
+    assert renamed.email == "bob@example.com" and renamed.disabled is False
+    off = adapter.update_user("z-1", disabled=True)
+    assert off is not None and off.disabled is True
+    # Already inactive: nothing is sent that Zitadel would refuse.
+    again = adapter.update_user("z-1", disabled=True)
+    assert again is not None and again.disabled is True
+    assert fake.requests.count(("POST", "/v2/users/z-1/deactivate")) == 1
+    on = adapter.update_user("z-1", disabled=False)
+    assert on is not None and on.disabled is False
+    assert adapter.update_user("z-9", disabled=True) is None
+    assert adapter.delete_user("z-1") is True
+    assert adapter.delete_user("z-1") is False
 
 
 # -- configuration ------------------------------------------------------------------------

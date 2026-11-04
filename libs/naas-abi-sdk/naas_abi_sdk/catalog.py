@@ -134,6 +134,8 @@ OPERATIONS = {
         "end_session_url",
         "provision_user",
         "find_provisioned_user",
+        "update_provisioned_user",
+        "delete_provisioned_user",
     ],
     "keyvalue": [
         "get",

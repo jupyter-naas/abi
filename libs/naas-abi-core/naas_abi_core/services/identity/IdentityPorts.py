@@ -307,6 +307,28 @@ class ProvisioningPort(ABC):
     def find_user(self, email: str) -> ProvisionedUser | None:
         """The provider's user with this email, if there is one."""
 
+    @abstractmethod
+    def update_user(
+        self,
+        subject: str,
+        *,
+        name: str | None = None,
+        disabled: bool | None = None,
+    ) -> ProvisionedUser | None:
+        """Change the provider's user ``subject`` (their id there, the ``sub`` of
+        their tokens): their name, and whether they may sign in (``None``: left as
+        it is). Disabling ends their sign-in at the provider. ``None`` when the
+        provider has no such user; the same errors as ``ensure_user``."""
+
+    @abstractmethod
+    def delete_user(self, subject: str) -> bool:
+        """Delete the provider's user ``subject``; False when it had none."""
+
+
+_MANAGED = (
+    "Users of provider {!r} are managed in the identity provider (provisioning: none)"
+)
+
 
 class ProvisioningNone(ProvisioningPort):
     """``provisioning: none``: the provider's users are managed in the provider.
@@ -325,10 +347,19 @@ class ProvisioningNone(ProvisioningPort):
         )
 
     def find_user(self, email: str) -> ProvisionedUser | None:
-        raise NotImplementedError(
-            f"Users of provider {self._provider!r} are managed in the identity "
-            "provider (provisioning: none)"
-        )
+        raise NotImplementedError(_MANAGED.format(self._provider))
+
+    def update_user(
+        self,
+        subject: str,
+        *,
+        name: str | None = None,
+        disabled: bool | None = None,
+    ) -> ProvisionedUser | None:
+        raise NotImplementedError(_MANAGED.format(self._provider))
+
+    def delete_user(self, subject: str) -> bool:
+        raise NotImplementedError(_MANAGED.format(self._provider))
 
 
 class IIdentityService(ABC):
@@ -423,6 +454,24 @@ class IIdentityService(ABC):
         self, provider: str, email: str
     ) -> ProvisionedUser | None:
         """The provider's user with this email, if there is one."""
+
+    @abstractmethod
+    def update_provisioned_user(
+        self,
+        provider: str,
+        subject: str,
+        *,
+        name: str | None = None,
+        disabled: bool | None = None,
+    ) -> ProvisionedUser | None:
+        """Rename the provider's user ``subject``, or disable (enable) their
+        sign-in there; ``None`` when the provider has no such user.
+        ``NotImplementedError`` when its users are managed in the provider."""
+
+    @abstractmethod
+    def delete_provisioned_user(self, provider: str, subject: str) -> bool:
+        """Delete the provider's user ``subject``: False when it had none.
+        ``NotImplementedError`` when its users are managed in the provider."""
 
 
 def claim_values(value: Any) -> tuple[str, ...]:

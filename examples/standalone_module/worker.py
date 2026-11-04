@@ -1082,6 +1082,12 @@ class ABIModule(BaseModule):
             "end_session_url": {"provider": "acme"},
             "provision_user": {"provider": "acme", "email": "bob@example.com"},
             "find_provisioned_user": {"provider": "acme", "email": "bob@example.com"},
+            "update_provisioned_user": {
+                "provider": "acme",
+                "subject": "sub-1",
+                "disabled": True,
+            },
+            "delete_provisioned_user": {"provider": "acme", "subject": "sub-1"},
         }
         for operation, fields in refused.items():
             try:

@@ -12,6 +12,7 @@ invitation attach.
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import quote
 
 from naas_abi_core.services.identity.adapters.secondary.AdminHttp import AdminHttp
 from naas_abi_core.services.identity.IdentityPorts import (
@@ -86,7 +87,85 @@ class ProvisioningZitadel(ProvisioningPort):
             created=True,
         )
 
+    def update_user(
+        self,
+        subject: str,
+        *,
+        name: str | None = None,
+        disabled: bool | None = None,
+    ) -> ProvisionedUser | None:
+        found = self._get(subject)
+        if found is None:
+            return None
+        path = f"/v2/users/{quote(subject, safe='')}"
+        if name:
+            given, family = _names("", name)
+            status, body, _ = self._http.request(
+                "PUT",
+                f"/v2/users/human/{quote(subject, safe='')}",
+                headers=self._org,
+                json_body={
+                    # Zitadel keeps the display name unless it is sent too.
+                    "profile": {
+                        "givenName": given,
+                        "familyName": family,
+                        "displayName": name,
+                    }
+                },
+            )
+            if status == 404:
+                return None
+            if status >= 300:
+                raise self._failure("rename the user", status, body)
+        if disabled is not None and disabled != _inactive(found):
+            # Zitadel refuses deactivating an inactive user (and the reverse), so
+            # only a change is sent. A deactivated user cannot sign in.
+            status, body, _ = self._http.request(
+                "POST",
+                f"{path}/{'deactivate' if disabled else 'reactivate'}",
+                headers=self._org,
+                json_body={},
+            )
+            if status == 404:
+                return None
+            if status >= 300:
+                raise self._failure(
+                    "deactivate the user" if disabled else "reactivate the user",
+                    status,
+                    body,
+                )
+        updated = self._get(subject)
+        return (
+            None
+            if updated is None
+            else self._user(updated, _email_of(updated), created=False)
+        )
+
+    def delete_user(self, subject: str) -> bool:
+        status, body, _ = self._http.request(
+            "DELETE", f"/v2/users/{quote(subject, safe='')}", headers=self._org
+        )
+        if status == 404:
+            return False
+        if status >= 300:
+            raise self._failure("delete the user", status, body)
+        return True
+
     # -- plumbing ---------------------------------------------------------------------
+
+    def _get(self, subject: str) -> dict[str, Any] | None:
+        status, body, _ = self._http.request(
+            "GET", f"/v2/users/{quote(subject, safe='')}", headers=self._org
+        )
+        if status == 404:
+            return None
+        if (
+            status != 200
+            or not isinstance(body, dict)
+            or not isinstance(body.get("user"), dict)
+        ):
+            raise self._failure("read the user", status, body)
+        return body["user"]
 
     def _user(
         self, found: dict[str, Any], email: str, *, created: bool
@@ -98,7 +177,7 @@ class ProvisioningZitadel(ProvisioningPort):
             subject=found.get("userId"),
             name=profile.get("displayName"),
             created=created,
-            disabled=found.get("state") in ("USER_STATE_INACTIVE", "USER_STATE_LOCKED"),
+            disabled=_inactive(found),
         )
 
     @staticmethod
@@ -109,6 +188,14 @@ class ProvisioningZitadel(ProvisioningPort):
         return ProvisioningError(
             f"Zitadel could not {what} (HTTP {status}{': ' + message if message else ''})"
         )
+
+
+def _inactive(found: dict[str, Any]) -> bool:
+    return found.get("state") in ("USER_STATE_INACTIVE", "USER_STATE_LOCKED")
+
+
+def _email_of(found: dict[str, Any]) -> str:
+    return str(((found.get("human") or {}).get("email") or {}).get("email") or "")
 
 
 def _names(email: str, name: str | None) -> tuple[str, str]:

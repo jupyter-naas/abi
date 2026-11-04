@@ -125,3 +125,29 @@ class IdentityService(ServiceProxy):
         return await self._request(
             "find_provisioned_user", provider=provider, email=email
         )
+
+    async def update_provisioned_user(
+        self,
+        provider: str,
+        subject: str,
+        *,
+        name: str | None = None,
+        disabled: bool | None = None,
+    ) -> dict[str, Any] | None:
+        """Rename the provider's user ``subject``, or disable (enable) their
+        sign-in there; ``None`` when the provider has no such user."""
+        return await self._request(
+            "update_provisioned_user",
+            provider=provider,
+            subject=subject,
+            name=name,
+            disabled=disabled,
+        )
+
+    async def delete_provisioned_user(self, provider: str, subject: str) -> bool:
+        """Delete the provider's user ``subject``: False when it had none."""
+        return bool(
+            await self._request(
+                "delete_provisioned_user", provider=provider, subject=subject
+            )
+        )
