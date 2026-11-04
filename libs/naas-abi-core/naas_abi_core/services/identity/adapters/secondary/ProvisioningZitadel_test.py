@@ -10,6 +10,7 @@ import pytest
 
 from naas_abi_core.services.identity.adapters.secondary.ProvisioningZitadel import (
     INACTIVE,
+    INITIAL,
     LOCKED,
     ProvisioningZitadel,
 )
@@ -41,6 +42,8 @@ class Recorded:
             self.state = INACTIVE
         elif step == "reactivate" and self.state == INACTIVE:
             self.state = ACTIVE
+        elif step == "lock" and self.state in (ACTIVE, INITIAL):
+            self.state = LOCKED
         else:  # as Zitadel answers a change the state does not allow
             return 400, {"message": f"cannot {step} a user in {self.state}"}, {}
         return 200, {}, {}
@@ -59,6 +62,10 @@ def _steps(http: Recorded) -> list[str]:
         (ACTIVE, True, ["deactivate"], INACTIVE),
         (ACTIVE, False, [], ACTIVE),
         (INACTIVE, True, [], INACTIVE),
+        # Never set up (made elsewhere): Zitadel refuses /deactivate ("can only be
+        # deleted"), so it is locked; reactivating unlocks it, and Zitadel makes it
+        # active (as the pinned binary does).
+        (INITIAL, True, ["lock"], LOCKED),
     ],
 )
 def test_each_state_is_changed_the_way_zitadel_takes_it(state, disabled, steps, after):

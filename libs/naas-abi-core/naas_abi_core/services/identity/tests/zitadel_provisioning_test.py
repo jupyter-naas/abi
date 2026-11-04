@@ -90,6 +90,35 @@ def test_a_user_is_renamed_deactivated_reactivated_and_deleted(zitadel):
     assert provisioning.find_user(address) is None
 
 
+def test_a_user_never_set_up_is_locked_to_deactivate_it(zitadel):
+    """A user still initial (made elsewhere, here through the v1 API, never set up):
+    Zitadel refuses /deactivate for it, so it is locked; reactivating unlocks it."""
+    address = email()
+    made = zitadel.api(
+        "POST",
+        "/management/v1/users/human",
+        {
+            "userName": address,
+            "profile": {"firstName": "Ini", "lastName": "Tial"},
+            "email": {"email": address},
+        },
+    )
+    subject = made["userId"]
+    assert (
+        zitadel.api("GET", f"/v2/users/{subject}")["user"]["state"]
+        == "USER_STATE_INITIAL"
+    )
+    provisioning = adapter(zitadel)
+    off = provisioning.update_user(subject, disabled=True)
+    assert off is not None and off.disabled is True
+    assert (
+        zitadel.api("GET", f"/v2/users/{subject}")["user"]["state"]
+        == "USER_STATE_LOCKED"
+    )
+    on = provisioning.update_user(subject, disabled=False)
+    assert on is not None and on.disabled is False
+
+
 def test_a_name_may_be_a_single_word(zitadel):
     provisioning = adapter(zitadel)
     assert provisioning.ensure_user(email(), name="Cher").created is True

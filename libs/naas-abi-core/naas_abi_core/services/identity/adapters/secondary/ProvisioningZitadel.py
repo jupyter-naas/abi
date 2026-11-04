@@ -122,12 +122,17 @@ class ProvisioningZitadel(ProvisioningPort):
             # only a change is sent. A deactivated user cannot sign in. A locked one
             # (too many failed sign-ins) is unlocked, not reactivated: Zitadel
             # refuses /reactivate for it; deactivating one unlocks it first, so it
-            # stays deactivated once the lock would have been lifted.
+            # stays deactivated once the lock would have been lifted. A user still
+            # initial (made elsewhere, never set up) cannot be deactivated, only
+            # deleted: it is locked instead, which stops its sign-in the same way,
+            # and reactivating unlocks it (Zitadel then makes it active).
             state = found.get("state")
             steps: list[str] = []
-            if state == LOCKED:
+            if disabled and state == INITIAL:
+                steps.append("lock")
+            elif state == LOCKED:
                 steps.append("unlock")
-            if disabled and state != INACTIVE:
+            if disabled and state not in (INACTIVE, INITIAL):
                 steps.append("deactivate")
             elif not disabled and state == INACTIVE:
                 steps.append("reactivate")
@@ -197,6 +202,7 @@ class ProvisioningZitadel(ProvisioningPort):
 
 INACTIVE = "USER_STATE_INACTIVE"
 LOCKED = "USER_STATE_LOCKED"
+INITIAL = "USER_STATE_INITIAL"
 
 
 def _inactive(found: dict[str, Any]) -> bool:

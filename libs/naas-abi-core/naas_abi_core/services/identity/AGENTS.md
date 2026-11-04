@@ -197,7 +197,9 @@ IdP ends their sessions and revokes their refresh tokens (`POST /users/{id}/disa
 are logged out) or deleted; Zitadel's is deactivated (only a change is sent: Zitadel refuses
 deactivating an inactive user) or deleted, and a locked one (too many failed sign-ins, shown as
 disabled) is unlocked to reactivate it (Zitadel refuses `/reactivate` for it) and unlocked then
-deactivated to deactivate it (`ProvisioningZitadel_test.py`). Over NATS a refusal of a provider that
+deactivated to deactivate it; one still initial (made elsewhere, never set up), which Zitadel only
+deletes, is locked to deactivate it and unlocked to reactivate it (Zitadel then makes it active)
+(`ProvisioningZitadel_test.py`, and the pinned binary in `tests/zitadel_provisioning_test.py`). Over NATS a refusal of a provider that
 cannot be provisioned is the wire code `UNIMPLEMENTED` (`NotImplementedError`).
 
 Step-by-step guides for Okta, Entra ID, Zitadel and Keycloak are user documentation:
