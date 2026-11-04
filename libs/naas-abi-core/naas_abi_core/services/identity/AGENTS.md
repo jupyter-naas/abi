@@ -195,7 +195,9 @@ verifies by mailing a code at every sign-in. Disabling or deleting a user: the b
 IdP ends their sessions and revokes their refresh tokens (`POST /users/{id}/disable`,
 `DELETE /users/{id}` of its admin app); Keycloak's user is set `enabled: false` (its sessions
 are logged out) or deleted; Zitadel's is deactivated (only a change is sent: Zitadel refuses
-deactivating an inactive user) or deleted. Over NATS a refusal of a provider that
+deactivating an inactive user) or deleted, and a locked one (too many failed sign-ins, shown as
+disabled) is unlocked to reactivate it (Zitadel refuses `/reactivate` for it) and unlocked then
+deactivated to deactivate it (`ProvisioningZitadel_test.py`). Over NATS a refusal of a provider that
 cannot be provisioned is the wire code `UNIMPLEMENTED` (`NotImplementedError`).
 
 Step-by-step guides for Okta, Entra ID, Zitadel and Keycloak are user documentation:

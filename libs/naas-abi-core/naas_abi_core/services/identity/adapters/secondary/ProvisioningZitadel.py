@@ -117,23 +117,28 @@ class ProvisioningZitadel(ProvisioningPort):
                 return None
             if status >= 300:
                 raise self._failure("rename the user", status, body)
-        if disabled is not None and disabled != _inactive(found):
+        if disabled is not None:
             # Zitadel refuses deactivating an inactive user (and the reverse), so
-            # only a change is sent. A deactivated user cannot sign in.
-            status, body, _ = self._http.request(
-                "POST",
-                f"{path}/{'deactivate' if disabled else 'reactivate'}",
-                headers=self._org,
-                json_body={},
-            )
-            if status == 404:
-                return None
-            if status >= 300:
-                raise self._failure(
-                    "deactivate the user" if disabled else "reactivate the user",
-                    status,
-                    body,
+            # only a change is sent. A deactivated user cannot sign in. A locked one
+            # (too many failed sign-ins) is unlocked, not reactivated: Zitadel
+            # refuses /reactivate for it; deactivating one unlocks it first, so it
+            # stays deactivated once the lock would have been lifted.
+            state = found.get("state")
+            steps: list[str] = []
+            if state == LOCKED:
+                steps.append("unlock")
+            if disabled and state != INACTIVE:
+                steps.append("deactivate")
+            elif not disabled and state == INACTIVE:
+                steps.append("reactivate")
+            for step in steps:
+                status, body, _ = self._http.request(
+                    "POST", f"{path}/{step}", headers=self._org, json_body={}
                 )
+                if status == 404:
+                    return None
+                if status >= 300:
+                    raise self._failure(f"{step} the user", status, body)
         updated = self._get(subject)
         return (
             None
@@ -190,8 +195,13 @@ class ProvisioningZitadel(ProvisioningPort):
         )
 
 
+INACTIVE = "USER_STATE_INACTIVE"
+LOCKED = "USER_STATE_LOCKED"
+
+
 def _inactive(found: dict[str, Any]) -> bool:
-    return found.get("state") in ("USER_STATE_INACTIVE", "USER_STATE_LOCKED")
+    """Whether the user cannot sign in: deactivated, or locked out."""
+    return found.get("state") in (INACTIVE, LOCKED)
 
 
 def _email_of(found: dict[str, Any]) -> str:
