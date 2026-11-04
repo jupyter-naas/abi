@@ -42,6 +42,23 @@ describe('buildLayoutEntries', () => {
     const [entry] = buildLayoutEntries([ds('fleet', 'Custom')], [], [], { customIds: new Set(['fleet']) });
     expect(entry.combinable).toBe(true);
   });
+
+  it('keeps a graph layer color from the catalog unless the workspace overrides it', () => {
+    const fromCatalog = buildLayoutEntries(
+      [],
+      [{ ...ds('sites', 'Custom'), graphUri: 'http://g', color: '#112233' }],
+      [],
+    );
+    expect(fromCatalog[0]?.color).toBe('#112233');
+
+    const overridden = buildLayoutEntries(
+      [],
+      [{ ...ds('sites', 'Custom'), graphUri: 'http://g', color: '#112233' }],
+      [],
+      { colors: { sites: '#abcdef' } },
+    );
+    expect(overridden[0]?.color).toBe('#abcdef');
+  });
 });
 
 describe('stored feeds (object storage)', () => {

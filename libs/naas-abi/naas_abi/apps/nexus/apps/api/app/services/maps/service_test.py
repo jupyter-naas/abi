@@ -21,6 +21,38 @@ def test_catalog_and_feed_enforce_graph_grants_before_query():
     feed.assert_not_called()
     scope = GraphAccessScope("workspace", frozenset({"urn:allowed"}), frozenset())
     assert catalog.list_layers(scope)[0]["id"] == "example-offices"
+    assert "color" not in catalog.list_layers(scope)[0]
     store = Mock()
     assert catalog.feed("example-offices", scope, store)["features"] == []
     feed.assert_called_once_with(store)
+
+
+def test_catalog_lists_optional_layer_color():
+    catalog = MapsCatalog()
+    catalog.register(
+        GraphMapLayer(
+            "painted",
+            "Painted",
+            "Has a module color",
+            "urn:allowed",
+            Mock(return_value={"pins": []}),
+            color="#112233",
+        )
+    )
+    scope = GraphAccessScope("workspace", frozenset({"urn:allowed"}), frozenset())
+    assert catalog.list_layers(scope)[0]["color"] == "#112233"
+
+
+def test_catalog_rejects_a_non_hex_layer_color():
+    catalog = MapsCatalog()
+    with pytest.raises(ValueError, match="hex"):
+        catalog.register(
+            GraphMapLayer(
+                "bad-color",
+                "Bad",
+                "Not a hex color",
+                "urn:allowed",
+                Mock(),
+                color="orange",
+            )
+        )

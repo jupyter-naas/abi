@@ -33,6 +33,8 @@ export interface MapsDataset {
   order: number;
   /** Optional brand logo for sidebar and legend (HTTPS or /api/…). */
   layerLogoUrl?: string;
+  /** Optional #rgb / #rrggbb from the module catalog (graph layers). */
+  color?: string;
 }
 
 /**

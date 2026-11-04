@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 import type { MapsPinMarker } from '../lib/leaflet-map';
-import { layerPinColor } from '../lib/maps-layer-colors';
+import { layerPaintColor } from '../lib/maps-layer-colors';
 import { layerFeedPins, styleLayerPin } from '../lib/maps-layer-class-styles';
 import { layerCountsForFeedLoad } from '../lib/maps-layer-counts';
 import { layoutPinSource } from '../lib/layout-sources';
@@ -90,9 +90,9 @@ export function MapsAllLayers({ layerIds }: { layerIds: string[] }) {
     const next: Record<string, LayerLegendStatus> = {};
     results.forEach((result, index) => {
       const entry = layers[index];
-      const color = layerPinColor(entry);
       if (result.status === 'fulfilled') {
         const layerPins = layerFeedPins(result.value.pins, entry.classLabels);
+        const color = layerPaintColor(entry, layerPins);
         const fetchedAt = new Date().toISOString();
         const layerStyle = {
           id: entry.id,

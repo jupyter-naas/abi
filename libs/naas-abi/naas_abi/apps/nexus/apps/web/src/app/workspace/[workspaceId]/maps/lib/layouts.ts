@@ -172,7 +172,7 @@ export function buildLayoutEntries(
       ...dataset,
       kind: 'builtin',
       combinable: true,
-      color: colors[dataset.id],
+      color: colors[dataset.id] ?? dataset.color,
       feedId: dataset.id,
       feedTitle: dataset.title,
     });
@@ -183,7 +183,8 @@ export function buildLayoutEntries(
       group: layer.group?.trim() || DEFAULT_LAYER_GROUP,
       kind: 'graph',
       combinable: true,
-      color: colors[layer.id],
+      // Workspace Settings → Maps wins; otherwise keep the catalog hex.
+      color: colors[layer.id] ?? layer.color,
       feedId: layer.id,
       feedTitle: layer.title,
     });
