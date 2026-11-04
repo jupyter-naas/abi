@@ -156,7 +156,7 @@ its own `document`/`dataset` namespace, the secrets named `<module id>/...`,
 every action of the other services it declares (sending only for `email`, and no
 `source_control:AddCollaborator`), the agents, models and apps of
 the modules it depends on, and its own jobs. Bus topics are never derived:
-declare `bus:Publish` and `bus:Consume` on `abi:-:-:bus:topic/<topic>` yourself.
+declare `bus:Publish` and `bus:Consume` on `abi:bus:topic/<topic>` yourself.
 
 ```python
 class Research(BaseModule):
@@ -168,7 +168,7 @@ class Research(BaseModule):
             {
                 "effect": "Allow",
                 "actions": ["document:Get", "document:Put"],
-                "resources": ["abi:-:-:document:document/${module.id}/*"],
+                "resources": ["abi:document:document/${module.id}/*"],
             }
         ],
     }
@@ -798,12 +798,13 @@ access, then forwards the request without the user's credential.
 
 `request.scope["abi"]` holds `user_id` (the user the caller's verified credential
 acts for, empty for a caller acting for nobody), `principal` (`id`, `kind`, `name`:
-whoever holds the credential, which may act for that user) and `workspace_id`
-(the Nexus workspace the user opened the app from, one where it is enabled;
-empty without a `user_id`). The app host takes the user and the principal from
+whoever holds the credential, which may act for that user), `container` (the name
+of the container the user opened the app from, `abi:...`, the one its calls for the
+user are made in; empty without a `user_id`) and `workspace_id` (the Nexus workspace
+id of that container, kept for the apps that read it; empty without a `user_id`). The app host takes the user and the principal from
 discovery's verification of the caller's token, never from the request, so
 another module can call an app, but never on behalf of a user it does not act
-for. Keep each workspace's data apart with `workspace_id`. A lifespan's state (`yield {...}`) reaches each request
+for. Keep each container's data apart with `container`. A lifespan's state (`yield {...}`) reaches each request
 (`request.state`).
 
 The page runs sandboxed, in an opaque origin, apart from the Nexus session. The

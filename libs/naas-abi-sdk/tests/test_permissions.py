@@ -14,32 +14,43 @@ def test_defaults_reach_the_modules_own_namespaces_and_declared_services():
     )
     statements = _by_sid(manifest)
     assert statements["UseDocument"]["resources"] == [
-        "abi:-:-:document:namespace/${module.id}",
-        "abi:-:-:document:collection/${module.id}/*",
-        "abi:-:-:document:document/${module.id}/*",
+        "abi:document:namespace/${module.id}",
+        "abi:document:collection/${module.id}/*",
+        "abi:document:document/${module.id}/*",
     ]
     assert statements["UseDataset"]["actions"] == ["dataset:*"]
     # Where the SDK's dataset facade writes (a module id is no dataset identifier).
     assert statements["UseDataset"]["resources"] == [
-        "abi:-:-:dataset:namespace/default",
-        "abi:-:-:dataset:dataset/default/*",
-        "abi:-:-:dataset:catalog/-",
+        "abi:dataset:namespace/default",
+        "abi:dataset:dataset/default/*",
+        "abi:dataset:catalog/-",
     ]
     assert statements["NoDatasetAdmin"]["effect"] == "Deny"
     assert statements["NoDatasetAdmin"]["actions"] == ["dataset:QueryUnchecked"]
+    assert statements["NoDatasetAdmin"]["resources"] == [
+        "abi:dataset:*",
+        "abi:*/dataset:*",
+    ]
     # Never every secret: the ones named after the module.
     assert statements["UseSecret"]["resources"] == [
-        "abi:-:-:secret:secret/${module.id}%2F*"
+        "abi:secret:secret/${module.id}%2F*"
     ]
     assert statements["UseKeyvalue"]["actions"] == ["keyvalue:*"]
+    assert statements["UseKeyvalue"]["resources"] == [
+        "abi:keyvalue:*",
+        "abi:*/keyvalue:*",
+    ]
     assert statements["UseTripleStore"]["resources"] == [
-        "abi:*:*:triple_store:graph/*",
-        "abi:*:*:triple_store:view/*",
+        # The platform's and those of every container (core's names.anywhere).
+        "abi:triple_store:graph/*",
+        "abi:*/triple_store:graph/*",
+        "abi:triple_store:view/*",
+        "abi:*/triple_store:view/*",
     ]
     # Its own ontologies only: a source names the module that loads it.
     assert statements["OwnOntologies"]["actions"] == ["triple_store:LoadSchema"]
     assert statements["OwnOntologies"]["resources"] == [
-        "abi:-:-:triple_store:schema/module/${module.id}/*"
+        "abi:triple_store:schema/module/${module.id}/*"
     ]
     # Bus topics are declared, never defaulted.
     assert not any("bus:" in a for s in manifest["statements"] for a in s["actions"])
@@ -65,12 +76,12 @@ def test_module_dependencies_reach_those_modules_only():
         default_manifest(ModuleDependencies(modules=("demo.research",)))
     )
     assert (
-        "abi:-:-:discovery:agent/${module.project}/demo.research/*"
+        "abi:discovery:agent/${module.project}/demo.research/*"
         in (statements["UseDependencies"]["resources"])
     )
     assert statements["FollowOwnRuns"]["resources"] == [
-        "abi:-:-:discovery:run/${principal.id}/*",
-        "abi:-:-:discovery:run/${user.id}/*",
+        "abi:discovery:run/${principal.id}/*",
+        "abi:discovery:run/${user.id}/*",
     ]
 
 
@@ -106,9 +117,9 @@ def test_a_module_with_jobs_names_each_of_them():
 
     statements = _by_sid(module_manifest(Ingest))
     assert statements["OwnJobs"]["resources"] == [
-        "abi:-:-:discovery:job/${module.project}/${module.id}/backfill",
-        "abi:-:-:discovery:job/${module.project}/${module.id}/nightly",
-        "abi:-:-:discovery:job_run/${module.project}/${module.id}/*",
+        "abi:discovery:job/${module.project}/${module.id}/backfill",
+        "abi:discovery:job/${module.project}/${module.id}/nightly",
+        "abi:discovery:job_run/${module.project}/${module.id}/*",
     ]
     assert "OwnJobs" not in _by_sid(default_manifest(ModuleDependencies()))
 
@@ -120,14 +131,16 @@ def test_depending_on_the_identity_provider_never_asks_for_its_admin_app():
     )
     assert deny["effect"] == "Deny"
     assert deny["actions"] == ["discovery:OpenApp"]
-    assert deny["resources"] == ["abi:-:-:discovery:app/${module.project}/idp/admin"]
+    assert deny["resources"] == ["abi:discovery:app/${module.project}/idp/admin"]
     other = default_manifest(ModuleDependencies(modules=("people",)))
     assert all(s["sid"] != "NoIdentityProviderAdmin" for s in other["statements"])
 
 
 REPORTS = {
     "resource_types": [{"name": "report", "id": "path"}],
-    "actions": [{"name": "ExportReport", "level": "read", "resource_types": ["report"]}],
+    "actions": [
+        {"name": "ExportReport", "level": "read", "resource_types": ["report"]}
+    ],
 }
 
 

@@ -18,6 +18,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints import (
     view,
     websocket,
 )
+from naas_abi.apps.nexus.apps.api.app.services.accounts.handlers import router as accounts_router
 from naas_abi.apps.nexus.apps.api.app.services.agents.handlers import router as agents_router
 from naas_abi.apps.nexus.apps.api.app.services.api_keys.handlers import router as api_keys_router
 from naas_abi.apps.nexus.apps.api.app.services.apps.handlers import router as apps_router
@@ -143,6 +144,8 @@ api_router.include_router(transcribe.router, prefix="/transcribe", tags=["transc
 api_router.include_router(speech.router, prefix="/speech", tags=["speech"])
 api_router.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
+# Platform Settings > Users: every account and its lifecycle.
+api_router.include_router(accounts_router, prefix="/admin/users", tags=["admin"])
 api_router.include_router(sysadmin_router, prefix="/admin/system", tags=["sysadmin"])
 api_router.include_router(workflows_router, prefix="/workflows", tags=["workflows"])
 api_router.include_router(

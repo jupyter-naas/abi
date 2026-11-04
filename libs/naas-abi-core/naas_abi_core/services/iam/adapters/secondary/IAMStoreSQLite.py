@@ -10,7 +10,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from naas_abi_core.services.iam.adapters.secondary.iam_sql import IAMStoreSQL
+from naas_abi_core.services.iam.adapters.secondary.iam_sql import (
+    LOWER_FUNCTION,
+    IAMStoreSQL,
+)
 from sqlalchemy import create_engine, event
 from sqlalchemy.pool import StaticPool
 
@@ -43,6 +46,14 @@ class IAMStoreSQLite(IAMStoreSQL):
             if path != ":memory:":
                 cursor.execute("PRAGMA journal_mode=WAL")
             cursor.close()
+            # SQLite's lower() folds ASCII only: the principal search lower-cases
+            # every letter, as the other stores do (``iam_sql.LOWER_FUNCTION``).
+            dbapi_connection.create_function(
+                LOWER_FUNCTION,
+                1,
+                lambda value: value.lower() if isinstance(value, str) else value,
+                deterministic=True,
+            )
 
         @event.listens_for(engine, "begin")
         def _begin(connection: Any) -> None:

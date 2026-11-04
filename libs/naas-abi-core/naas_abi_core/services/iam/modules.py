@@ -24,7 +24,7 @@ from typing import Any
 import yaml
 
 from naas_abi_core.services.iam.catalog import ActionCatalog
-from naas_abi_core.services.iam.names import encode_segment
+from naas_abi_core.services.iam.names import anywhere, encode_segment
 from naas_abi_core.services.iam.policy import (
     MODULE_VARIABLES,
     PolicyDocument,
@@ -136,7 +136,7 @@ def own_catalog_statement(catalog: ActionCatalog) -> Statement:
     return Statement(
         effect="Allow",
         actions=(f"{catalog.service}:*",),
-        resources=(f"abi:*:*:{catalog.service}:*",),
+        resources=tuple(anywhere(f"{catalog.service}:*")),
         sid=OWN_CATALOG,
     )
 

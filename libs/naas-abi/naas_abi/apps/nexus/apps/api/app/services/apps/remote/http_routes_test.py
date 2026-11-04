@@ -48,13 +48,13 @@ def engine_iam():
 @pytest.fixture(autouse=True)
 def workspaces(monkeypatch) -> list[tuple[str, str, str | None]]:
     """The workspace a grant names (access.py checks it in the database):
-    the one asked for, else "ws-first"; "ws-off" enables no app."""
+    the one asked for, else "ws-first"; in "ws-off" IAM lets the user open no app."""
     asked: list[tuple[str, str, str | None]] = []
 
     async def remote_app_workspace(user_id: str, app_id: str, workspace_id: str | None) -> str:
         asked.append((user_id, app_id, workspace_id))
         if workspace_id == "ws-off":
-            raise HTTPException(status_code=403, detail="This app is not enabled in this workspace")
+            raise HTTPException(status_code=403, detail="You may not use this app here")
         return workspace_id or "ws-first"
 
     monkeypatch.setattr(http.access, "remote_app_workspace", remote_app_workspace)
@@ -229,7 +229,7 @@ def test_the_catalog_url_redirects_to_a_fresh_grant(monkeypatch, forwarded, work
     # It opens this app and does nothing else at the kernel.
     scope = granted.scope
     assert scope is not None and scope[0]["actions"] == ["discovery:OpenApp"]
-    assert scope[0]["resources"] == ["abi:-:-:discovery:app/*/acme.research/console"]
+    assert scope[0]["resources"] == ["abi:discovery:app/*/acme.research/console"]
     # IAM keeps it hashed: eight hours at most.
     assert claims["key"].kind == "grant" and claims["key"].audience == "abi:delegated:app"
     assert claims["exp"] <= (datetime.now(UTC) + timedelta(hours=8)).timestamp() + 1

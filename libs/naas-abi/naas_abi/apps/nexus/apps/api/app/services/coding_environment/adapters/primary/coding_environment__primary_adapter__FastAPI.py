@@ -507,6 +507,7 @@ async def create_repo(
         await db.execute(select(WorkspaceModel).where(WorkspaceModel.id == body.workspace_id))
     ).scalar_one_or_none()
     taken = HTTPException(status_code=409, detail="That repository name is taken.")
+    container = await authz.AUTHZ.container_of(body.workspace_id)
 
     def create() -> Repo:
         # Created in the workspace's own call context, so the kernel places the
@@ -516,7 +517,7 @@ async def create_repo(
         # in any letter case, so nothing that existed is ever placed here or
         # granted.
         context = current_call_context()
-        with use_call_context(replace(context, workspace_id=body.workspace_id)):
+        with use_call_context(replace(context, container=container)):
             return source_control.create_repo(
                 owner=_repo_owner(),
                 name=body.name,
@@ -910,12 +911,13 @@ async def provision_environment(
     )
     params["abi_api_base"] = settings.coding_agent_api_base
     params["abi_agents"] = ",".join(await run_in_threadpool(_continue_agent_ids))
+    container = await authz.AUTHZ.container_of(body.workspace_id)
 
     def provision() -> WorkspaceStatus:
         # In the workspace's own call context (it is carried by the body, which
         # the identity middleware does not read), so the kernel places the new
         # environment in this workspace.
-        with use_call_context(replace(current_call_context(), workspace_id=body.workspace_id)):
+        with use_call_context(replace(current_call_context(), container=container)):
             return service.provision(
                 user_id=user_id,
                 template_id=body.template_id,

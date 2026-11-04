@@ -7,7 +7,8 @@ sibling workspace names can: a prefix placement ends at a ``/``, and the kernel
 refuses ``.`` and ``..`` segments, so ``<ws>-2`` and ``<ws>/../<other>`` are
 never inside ``<ws>``. Every other tree (the platform drive, the migration and
 scaffolding markers, the analytics) belongs to the platform, and a user's own
-drives are reached through the platform-level types of ``roles.PLATFORM_TYPES``.
+drives are reached through the rows of the roles' platform companions: the
+kernel's (``roles.PLATFORM_TYPES``) and the ``nexus`` catalog's ``PLATFORM_ACCESS``.
 
 Placed at startup for the workspaces that exist (``place_existing``), when a
 workspace's drive is written (``place_workspace_drive_sync``) and, as a safety
@@ -22,6 +23,8 @@ from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.drive_roots im
     workspace_drive_root,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam import placements, runtime
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import SERVICE as NEXUS
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import WORKSPACE
 from naas_abi.apps.nexus.apps.api.app.services.iam.placements import (
     Placement,
     placement_source,
@@ -85,10 +88,10 @@ def place_workspace_drive_sync(workspace_id: str) -> bool:
     not know the workspace yet: the first request places it then."""
     iam = runtime.iam()
     with as_service_account("api"):
-        org = iam.workspace_org(workspace_id)
-        if org is None:
+        container = iam.container(NEXUS, WORKSPACE, workspace_id)
+        if container is None:
             return False
         for placement in workspace_drive_placements(workspace_id):
-            iam.put_placement(placement.service, placement.id_key(), org, workspace_id)
+            iam.put_placement(placement.service, placement.id_key(), container)
     _PLACED.add(workspace_id)
     return True

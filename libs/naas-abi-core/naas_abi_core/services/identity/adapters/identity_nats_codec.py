@@ -47,6 +47,8 @@ OPERATIONS = {
     "end_session_url": "EndSessionUrl",
     "provision_user": "ProvisionUser",
     "find_provisioned_user": "FindProvisionedUser",
+    "update_provisioned_user": "UpdateProvisionedUser",
+    "delete_provisioned_user": "DeleteProvisionedUser",
 }
 
 

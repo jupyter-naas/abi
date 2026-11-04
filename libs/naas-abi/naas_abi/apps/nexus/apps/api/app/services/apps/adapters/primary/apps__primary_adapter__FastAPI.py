@@ -1,20 +1,16 @@
 """Apps FastAPI primary adapter.
 
-Discovers apps shipped by every module the engine has loaded, hydrates
-each result with the workspace's enable state (via ``AppsService``), and
-exposes both the catalog and a CRUD surface for per-workspace app
-configuration over HTTP.
+Discovers apps shipped by every module the engine has loaded (and by READY
+remote modules) and lists, in a workspace, those the caller may open there:
+IAM's ``module:OpenApp`` alone decides, there is no per-workspace switch.
 
 Routes
 ------
-* ``GET    /api/apps/?workspace_id=…``         — catalog of the workspace's set (with enable state)
-* ``POST   /api/apps/access-token``            — scoped JWT for ``/app-html/``
+* ``GET    /api/apps/?workspace_id=…``         — the apps the caller may open in the workspace
+* ``POST   /api/apps/access-token``            — scoped link for ``/app-html/``
+* ``POST   /api/apps/remote-grant``            — open a remote module's app
+* ``POST   /api/apps/remote-grant/revoke``     — end the caller's remote app grants
 * ``POST   /api/apps/sso-token``               — HMAC handshake for a Pages portal
-* ``GET    /api/apps/{ws}``                    — list configs for workspace
-* ``POST   /api/apps/{ws}``                    — create config
-* ``GET    /api/apps/{ws}/{app_id:path}``      — get one config
-* ``PATCH  /api/apps/{ws}/{app_id:path}``      — update / enable / disable
-* ``DELETE /api/apps/{ws}/{app_id:path}``      — delete (reverts to default)
 
 Discovery mirrors the pattern used by the agents adapter
 (``agents__primary_adapter__FastAPI._get_agent_class_registry``): we walk
@@ -29,21 +25,17 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import Awaitable, Callable, Iterator
-from dataclasses import asdict
-from functools import lru_cache, partial
+from collections.abc import Iterator
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
 )
 from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
-from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
-    resolve_app_enabled,
-)
 from naas_abi.apps.nexus.apps.api.app.services.apps import links
 from naas_abi.apps.nexus.apps.api.app.services.apps.app_html_access import (
     mint_app_html_access_token,
@@ -53,11 +45,6 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.pages_sso import (
     mint_pages_sso_token,
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.port import (
-    AppConfigCreate,
-    AppConfigCreateInput,
-    AppConfigRecord,
-    AppConfigUpdate,
-    AppConfigUpdateInput,
     AppInfo,
     AppPricing,
     AppsResponse,
@@ -67,24 +54,14 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import (
     MODULE_ID_PATTERN,
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.scopes import app_scope
-from naas_abi.apps.nexus.apps.api.app.services.apps.service import (
-    AppAlreadyConfiguredError,
-    AppsService,
-)
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
-from naas_abi.apps.nexus.apps.api.app.services.iam import sets as scope_sets
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
-from naas_abi.apps.nexus.apps.api.app.services.registry import (
-    ServiceRegistry,
-    get_service_registry,
-)
 from naas_abi.apps.nexus.apps.api.app.utils.public_urls import (
     resolve_public_module_asset_url,
 )
 from naas_abi_core.services.iam.module_scopes import APP
 from pydantic import BaseModel, Field
-from sqlalchemy import select
 
 _log = logging.getLogger(__name__)
 
@@ -100,29 +77,6 @@ def _live_settings():
     # ``on_initialized`` replaces ``nexus_config.settings``. Do not bind the
     # module-level ``settings = get_settings()`` snapshot from import time.
     return nexus_config.settings
-
-
-async def _workspace_slug(workspace_id: str) -> str | None:
-    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
-    from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
-
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(WorkspaceModel.slug).where(WorkspaceModel.id == workspace_id)
-        )
-        return result.scalar_one_or_none()
-
-
-async def _workspace_catalog_seed(workspace_id: str) -> dict | None:
-    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
-    from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import parse_catalog_seed
-    from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
-
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(WorkspaceModel.catalog_seed).where(WorkspaceModel.id == workspace_id)
-        )
-        return parse_catalog_seed(result.scalar_one_or_none())
 
 
 def _fallback_name(dir_name: str) -> str:
@@ -437,91 +391,6 @@ def loaded_modules() -> list[Any]:
     return list(_iter_loaded_modules())
 
 
-async def _app_exists(app_id: str) -> bool:
-    """In the catalog ``list_apps`` returns: a loaded module's app, or a
-    remote module's app (``remote/<module_id>:<app>``) that discovery lists."""
-    if any(a.app_id == app_id for a in _scan_apps_catalog()):
-        return True
-    if not app_id.startswith("remote/"):
-        return False
-    return any(a.app_id == app_id for a in await _remote_apps_catalog())
-
-
-# ---------------------------------------------------------------------------
-# HTTP helpers
-# ---------------------------------------------------------------------------
-
-
-def get_apps_service(
-    registry: ServiceRegistry = Depends(get_service_registry),
-) -> AppsService:
-    return registry.apps
-
-
-def _serialize_record(record: AppConfigRecord) -> dict:
-    data = asdict(record)
-    data["created_at"] = record.created_at.isoformat()
-    data["updated_at"] = record.updated_at.isoformat()
-    return data
-
-
-async def _ensure_app_exists(
-    app_id: str,
-    configured: Callable[[], Awaitable[AppConfigRecord | None]] | None = None,
-) -> None:
-    """404 unless the catalog lists ``app_id``. A remote app's existing config
-    row (``configured``) stays reachable while its module is down, so it can
-    be read, disabled or deleted; creating or enabling one needs discovery."""
-    if await _app_exists(app_id):
-        return
-    if configured is not None and app_id.startswith("remote/") and await configured():
-        return
-    raise HTTPException(status_code=404, detail=f"Unknown app_id: {app_id}")
-
-
-def _existing_config(
-    apps_service: AppsService, workspace_id: str, app_id: str
-) -> Callable[[], Awaitable[AppConfigRecord | None]]:
-    return partial(apps_service.get_app_config, workspace_id, app_id)
-
-
-async def _may_switch(current_user: User, workspace_id: str, app_id: str) -> bool:
-    """Whether the caller turns this app on and off in the workspace (``UpdateApp``
-    on it, as the toggle asks): they alone list it while it is off, to turn it
-    back on."""
-    return await authz.allowed("UpdateApp", user=current_user, workspace=workspace_id, id=app_id)
-
-
-async def _switchable(
-    current_user: User, workspace_id: str, app_ids: list[str]
-) -> Callable[[Any], Awaitable[bool]]:
-    """``filter_scopes``'s ``include_hidden`` for a listing: an app turned off is
-    listed to who may turn that one back on (``UpdateApp`` on it), all asked in
-    one call, made only when an app is turned off."""
-    may: set[str] | None = None
-
-    async def switchable(app_id: str) -> bool:
-        nonlocal may
-        if may is None:
-            may = await authz.allowed_ids(
-                "UpdateApp", user=current_user, workspace=workspace_id, ids=app_ids
-            )
-        return app_id in may
-
-    return switchable
-
-
-async def _ensure_in_set(workspace_id: str, app_id: str) -> None:
-    """403 for an app outside the workspace's set: what a workspace has is chosen
-    on the organization's Modules & features page, never here."""
-    if not await scope_sets.within_set([app_id], workspace=workspace_id, scope_of=app_scope):
-        raise HTTPException(
-            status_code=403,
-            detail="This app is not in the workspace's set: its organization adds it "
-            "on the Modules & features page",
-        )
-
-
 class AppsFastAPIPrimaryAdapter:
     def __init__(self) -> None:
         self.router = router
@@ -655,7 +524,7 @@ async def create_remote_app_grant(
 ) -> RemoteAppGrantResponse:
     """The app's root under a grant: the page runs sandboxed, from the API
     origin, and the grant in its path is its only credential. IAM must let the
-    user use the app in the workspace, and the app be enabled in it.
+    user use the app in the workspace.
 
     The grant lasts ``remote_app_grant_expire_minutes`` (eight hours at most),
     not as long as the access token it was asked with (minutes, refreshed in the
@@ -759,18 +628,12 @@ async def create_pages_sso_token(
     dependencies=[guard("ListApps", literal="-")],
 )
 async def list_apps(
-    request: Request,
     workspace_id: str,
-    apps_service: AppsService = Depends(get_apps_service),
     current_user: User = Depends(get_current_user_required),
 ) -> AppsResponse:
-    """Return the apps of the loaded modules and of READY remote modules in the
-    workspace's set that the caller may open there (``module:OpenApp``).
-
-    Results carry the workspace's enable state. Apps without a stored record
-    default to ``enabled=False``. One turned off is refused to everyone and
-    listed only to who may turn it back on (``UpdateApp``).
-    """
+    """The apps of the loaded modules and of READY remote modules that the caller
+    may open in the workspace (``module:OpenApp``): IAM's decision alone, no
+    per-workspace switch."""
     try:
         from naas_abi import ABIModule
 
@@ -779,29 +642,16 @@ async def list_apps(
         loaded_modules = {}
 
     found = (*_scan_apps_catalog(), *await _remote_apps_catalog())
-    switchable = await _switchable(current_user, workspace_id, [a.app_id for a in found])
     catalog = await authz.filter_scopes(
         found,
         user=current_user,
         workspace=workspace_id,
         scope_of=lambda app: app_scope(app.app_id),
-        include_hidden=lambda app: switchable(app.app_id),
-        within_set=True,
     )
-    workspace_slug = await _workspace_slug(workspace_id)
-
-    enabled_by_app_id = await apps_service.get_enabled_states(workspace_id)
-    seed_apps: set[str] = set()
-    if workspace_id:
-        from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import (
-            effective_seed_apps,
-        )
-
-        seed_apps = effective_seed_apps(workspace_slug, await _workspace_catalog_seed(workspace_id))
 
     results: list[AppInfo] = []
     for app in catalog:
-        update: dict = {"enabled": resolve_app_enabled(app.app_id, enabled_by_app_id, seed_apps)}
+        update: dict = {}
 
         # Manifest values take precedence; only fall back to runtime config
         # when the manifest omits the credential.
@@ -822,116 +672,3 @@ async def list_apps(
 
     results.sort(key=lambda a: (a.category, a.name.lower()))
     return AppsResponse(apps=results)
-
-
-@router.get("/{workspace_id}", dependencies=[guard("ListApps", literal="-")])
-async def list_app_configs(
-    workspace_id: str,
-    apps_service: AppsService = Depends(get_apps_service),
-    current_user: User = Depends(get_current_user_required),
-) -> list[dict]:
-    """List the stored app configs of a workspace, for the apps of its set the
-    caller may open (those turned off, for who may turn them on)."""
-    found = await apps_service.list_app_configs(workspace_id)
-    switchable = await _switchable(current_user, workspace_id, [r.app_id for r in found])
-    records = await authz.filter_scopes(
-        found,
-        user=current_user,
-        workspace=workspace_id,
-        scope_of=lambda record: app_scope(record.app_id),
-        include_hidden=lambda record: switchable(record.app_id),
-        within_set=True,
-    )
-    return [_serialize_record(r) for r in records]
-
-
-@router.post("/{workspace_id}", status_code=201, dependencies=[declares("InstallApp")])
-async def create_app_config(
-    workspace_id: str,
-    body: AppConfigCreate,
-    current_user: User = Depends(get_current_user_required),
-    apps_service: AppsService = Depends(get_apps_service),
-) -> dict:
-    """Create a new app config row (errors if one already exists), for an app of
-    the workspace's set."""
-    await authz.require("InstallApp", user=current_user, workspace=workspace_id, id=body.app_id)
-    await _ensure_app_exists(body.app_id)
-    if body.enabled:
-        await _ensure_in_set(workspace_id, body.app_id)
-    try:
-        record = await apps_service.create_app_config(
-            AppConfigCreateInput(
-                workspace_id=workspace_id,
-                app_id=body.app_id,
-                enabled=body.enabled,
-            )
-        )
-    except AppAlreadyConfiguredError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return _serialize_record(record)
-
-
-@router.get("/{workspace_id}/{app_id:path}", dependencies=[guard("GetApp", id="app_id")])
-async def get_app_config(
-    workspace_id: str,
-    app_id: str,
-    apps_service: AppsService = Depends(get_apps_service),
-    current_user: User = Depends(get_current_user_required),
-) -> dict:
-    """Get a single app config row, of an app the caller may open (one turned
-    off, for who may turn it on)."""
-    scope = app_scope(app_id)
-    if scope is not None and not await authz.allowed_scope(
-        scope,
-        user=current_user,
-        workspace=workspace_id,
-        include_hidden=await _may_switch(current_user, workspace_id, app_id),
-    ):
-        raise HTTPException(status_code=404, detail="App config not found")
-    await _ensure_app_exists(app_id, _existing_config(apps_service, workspace_id, app_id))
-    record = await apps_service.get_app_config(workspace_id, app_id)
-    if record is None:
-        raise HTTPException(status_code=404, detail="App config not found")
-    return _serialize_record(record)
-
-
-@router.patch("/{workspace_id}/{app_id:path}", dependencies=[guard("UpdateApp", id="app_id")])
-async def update_app_config(
-    workspace_id: str,
-    app_id: str,
-    updates: AppConfigUpdate,
-    apps_service: AppsService = Depends(get_apps_service),
-) -> dict:
-    """Update an app config (e.g. enable/disable).
-
-    Idempotent: if no row exists yet, one is created with the supplied
-    values. This lets the UI toggle simply call PATCH without a prior POST.
-    Turning one on needs it in the workspace's set; off, any.
-    """
-    await _ensure_app_exists(
-        app_id,
-        None if updates.enabled else _existing_config(apps_service, workspace_id, app_id),
-    )
-    if updates.enabled:
-        await _ensure_in_set(workspace_id, app_id)
-
-    record = await apps_service.upsert_app_config(
-        workspace_id=workspace_id,
-        app_id=app_id,
-        updates=AppConfigUpdateInput(enabled=updates.enabled),
-    )
-    return _serialize_record(record)
-
-
-@router.delete("/{workspace_id}/{app_id:path}", dependencies=[guard("UninstallApp", id="app_id")])
-async def delete_app_config(
-    workspace_id: str,
-    app_id: str,
-    apps_service: AppsService = Depends(get_apps_service),
-) -> dict[str, str]:
-    """Delete the app config (reverts to the default ``enabled=False``)."""
-    await _ensure_app_exists(app_id, _existing_config(apps_service, workspace_id, app_id))
-    deleted = await apps_service.delete_app_config(workspace_id, app_id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="App config not found")
-    return {"status": "deleted"}

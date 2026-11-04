@@ -9,7 +9,6 @@ import {
   KeyRound,
   Server,
   Boxes,
-  Blocks,
 } from 'lucide-react';
 
 export type OrgSettingsNavItem = {
@@ -27,8 +26,6 @@ export const orgSettingsNav: OrgSettingsNavItem[] = [
   { slug: 'general', label: 'General', icon: Building2 },
   { slug: 'branding', label: 'Branding', icon: Paintbrush, adminOnly: true },
   { slug: 'workspaces', label: 'Workspaces', icon: FolderKanban },
-  // Not admin-only: IAM decides who reads the sets, and the page says when the caller may not.
-  { slug: 'modules', label: 'Modules & features', icon: Blocks },
   { slug: 'users', label: 'Users', icon: Users, adminOnly: true },
   // IAM decides (the access of the organization's scope), not the membership role.
   { slug: 'roles', label: 'Roles & permissions', icon: KeyRound, needs: 'iam' },
@@ -42,40 +39,65 @@ export function isOrgAdminRole(role: string | null | undefined): boolean {
   return role === 'owner' || role === 'admin';
 }
 
+/**
+ * Whether Organization settings opens for the caller here, as the account menu decides
+ * it (`hooks/use-organization-settings-access.ts`, `opensOrganization`): `admin` for its
+ * owners and admins (every section), `iam` for someone else IAM shows a Roles & permissions
+ * section (that section alone), `none` for anyone else (no section: the pages say so),
+ * `unknown` until the role (and, for a non-admin, the access) is read.
+ */
+export type OrgSettingsAccess = 'admin' | 'iam' | 'none' | 'unknown';
+
+export function orgSettingsAccess({
+  role,
+  roleKnown,
+  holdsIam,
+  accessSettled,
+}: {
+  role: string | null | undefined;
+  roleKnown: boolean;
+  holdsIam: boolean;
+  accessSettled: boolean;
+}): OrgSettingsAccess {
+  if (isOrgAdminRole(role)) return 'admin';
+  if (!roleKnown || !accessSettled) return 'unknown';
+  return holdsIam ? 'iam' : 'none';
+}
+
 export function orgSettingsNavForRole(
   role: string | null | undefined,
   { holdsIam = false }: { holdsIam?: boolean } = {}
 ): OrgSettingsNavItem[] {
+  const admin = isOrgAdminRole(role);
   return orgSettingsNav.filter(
-    (item) =>
-      !item.hidden &&
-      (item.needs === 'iam' ? holdsIam : !item.adminOnly || isOrgAdminRole(role))
+    (item) => !item.hidden && (item.needs === 'iam' ? holdsIam : admin)
   );
 }
 
 /**
- * Where a section someone may not open sends them: General, or null to stay. Nothing is
- * decided before the role is known and, for the IAM item, before the caller's access was read
- * (``accessSettled``): an org member who holds `iam:` rights through a group is not bounced
- * off Roles & permissions while that read is in flight.
+ * Where a section someone may not open sends them, or null to stay: an organization's
+ * owners and admins stay anywhere; someone who holds only `iam:` rights there goes to Roles
+ * & permissions, with a role below admin or with none (a platform admin who is no member);
+ * anyone else stays, and the layout shows that they have no access. Nothing is decided
+ * before the role is known (``roleKnown``: read, or refused, which is no role) and, for a
+ * non-admin, before the access was read (``accessSettled``): a member who holds `iam:`
+ * rights through a group is not bounced off Roles & permissions while that read is in flight.
  */
 export function orgSectionRedirect({
   section,
   role,
+  roleKnown,
   holdsIam,
   accessSettled,
 }: {
   section: string | null;
   role: string | null;
+  roleKnown: boolean;
   holdsIam: boolean;
   accessSettled: boolean;
 }): string | null {
-  if (!section || role === null || isOrgAdminRole(role)) return null;
-  const item = orgSettingsNav.find((entry) => entry.slug === section);
-  if (item?.needs === 'iam' && !accessSettled) return null;
-  return orgSettingsNavForRole(role, { holdsIam }).some((entry) => entry.slug === section)
-    ? null
-    : 'general';
+  if (!section || !roleKnown || isOrgAdminRole(role) || !accessSettled) return null;
+  return holdsIam && section !== 'roles' ? 'roles' : null;
 }
 
 export function orgSettingsIndexPath(orgId: string): string {
@@ -84,10 +106,4 @@ export function orgSettingsIndexPath(orgId: string): string {
 
 export function orgSettingsSectionPath(orgId: string, slug: string): string {
   return `/organizations/${orgId}/settings/${slug}`;
-}
-
-/** The organization's Modules & features page, scrolled to one workspace's column when given. */
-export function orgModulesPath(orgId: string, workspaceId?: string | null): string {
-  const path = orgSettingsSectionPath(orgId, 'modules');
-  return workspaceId ? `${path}?workspace=${encodeURIComponent(workspaceId)}` : path;
 }

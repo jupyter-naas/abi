@@ -1,16 +1,36 @@
 import pytest
 
 from naas_abi_core.services.iam.names import (
+    PLATFORM,
+    UNRESOLVED,
+    anywhere,
+    as_container,
+    below,
+    container_name,
+    container_of_scope,
     encode_id,
+    expand_scope,
+    is_below,
     literal_prefix,
     matches,
+    owner_ancestors,
+    parent_of,
+    parse_container,
     parse_resource_name,
     path_parts,
     resource_name,
     split_action,
     substitute,
+    top_container,
+    validate_owner_scope,
     validate_scope,
+    within,
+    within_owner,
 )
+
+ORG = container_name("nexus", "organization", "org-1")
+WS = container_name("nexus", "workspace", "ws-2", parent=ORG)
+PROJECT = container_name("crm", "project", "p-9", parent=WS)
 
 
 def test_ids_are_percent_encoded_by_kind():
@@ -28,49 +48,80 @@ def test_ids_are_percent_encoded_by_kind():
         encode_id("")
 
 
-def test_object_paths_join_prefix_and_key():
-    parts = path_parts("/workspaces/ws-1/files/") + ["q3 report.pdf"]
-    assert resource_name("object_storage", "object", parts, kind="path") == (
-        "abi:-:-:object_storage:object/workspaces/ws-1/files/q3%20report.pdf"
-    )
+def test_containers_are_steps_of_a_path():
+    assert ORG == "abi:nexus:organization/org-1"
+    assert WS == "abi:nexus:organization/org-1/nexus:workspace/ws-2"
+    assert PROJECT == WS + "/crm:project/p-9"
+    # An id with a "/" or a ":" never breaks the path.
+    odd = container_name("crm", "project", "a/b:c", parent=WS)
+    assert odd == WS + "/crm:project/a%2Fb%3Ac"
+    assert parse_container(odd)[-1].id == "a%2Fb%3Ac"
+    assert parse_container(odd)[-1].value == "a/b:c"
+    assert parse_container(PLATFORM) == ()
+    assert [step.type for step in parse_container(PROJECT)] == [
+        "organization",
+        "workspace",
+        "project",
+    ]
+    assert parent_of(PROJECT) == WS
+    assert parent_of(ORG) == PLATFORM
+    assert top_container(PROJECT) == ORG
+    assert top_container(PLATFORM) == PLATFORM
 
 
-def test_names_round_trip():
-    name = resource_name(
+def test_names_round_trip_at_every_level():
+    graph = resource_name("triple_store", "graph", "http://x/g", container=WS)
+    assert graph == WS + "/triple_store:graph/http%3A%2F%2Fx%2Fg"
+    parsed = parse_resource_name(graph)
+    assert (parsed.service, parsed.type, parsed.id) == (
         "triple_store",
         "graph",
-        "http://x/g",
-        org="org-1a2b3c4d5e6f",
-        workspace="ws-0f1e2d3c4b5a",
-    )
-    assert (
-        name
-        == "abi:org-1a2b3c4d5e6f:ws-0f1e2d3c4b5a:triple_store:graph/http%3A%2F%2Fx%2Fg"
-    )
-    parsed = parse_resource_name(name)
-    assert (parsed.org, parsed.workspace, parsed.service, parsed.type) == (
-        "org-1a2b3c4d5e6f",
-        "ws-0f1e2d3c4b5a",
-        "triple_store",
-        "graph",
+        "http%3A%2F%2Fx%2Fg",
     )
     assert parsed.segments == ("http://x/g",)
-    assert parsed.scope == "abi:org-1a2b3c4d5e6f:ws-0f1e2d3c4b5a"
-    assert str(parsed) == name
-    assert parse_resource_name("abi:-:-:cache:service/-").segments == ()
+    assert parsed.container == WS
+    assert str(parsed) == graph
+    platform = resource_name("model_registry", "model", "gpt-x")
+    assert platform == "abi:model_registry:model/gpt-x"
+    assert parse_resource_name(platform).container == PLATFORM
+    assert parse_resource_name("abi:cache:service/-").segments == ()
+    member = resource_name("nexus", "member", "u-7", container=ORG)
+    assert member == "abi:nexus:organization/org-1/nexus:member/u-7"
+    # A container's own name is its resource name, placed in its parent.
+    assert parse_resource_name(WS).container == ORG
+    assert parse_resource_name(WS).type == "workspace"
+
+
+def test_every_id_kind():
+    path = resource_name(
+        "document", "document", ["people", "c", "a b"], kind="path", container=PROJECT
+    )
+    assert path == PROJECT + "/document:document/people/c/a%20b"
+    assert parse_resource_name(path).segments == ("people", "c", "a b")
+    assert parse_resource_name(path).container == PROJECT
+    single = resource_name("cache", "service", (), kind="singleton", container=WS)
+    assert single == WS + "/cache:service/-"
+    parts = path_parts("/workspaces/ws-1/files/") + ["q3 report.pdf"]
+    assert resource_name("object_storage", "object", parts, kind="path") == (
+        "abi:object_storage:object/workspaces/ws-1/files/q3%20report.pdf"
+    )
 
 
 @pytest.mark.parametrize(
     "bad",
     [
-        "arn:x",
-        "abi:-:-:graph/x",
-        "abi:ORG:-:svc:type/x",
-        "abi:-:-:svc:type",
-        "abi:-:-:svc:type/a b",
-        "abi:-:-:svc:type/a*",
-        "abi:-:-:svc:type/%2a",
-        "abi:-:-:Svc:type/x",
+        "",
+        "abi:",
+        "abi:graph/x",
+        "abi:triple_store:graph",
+        "abi:triple_store:graph/",
+        "abi:Triple:graph/x",
+        "abi:triple_store:graph/a b",
+        "abi:triple_store:graph/*",
+        "abi:nexus:organization/a/b/triple_store:graph/x",  # a path id before the last step
+        "abi:nexus:organization//triple_store:graph/x",  # an empty container id
+        "abi:-:-:triple_store:graph/x",  # the grammar before container paths
+        "urn:triple_store:graph/x",
     ],
 )
 def test_malformed_names_are_refused(bad):
@@ -78,136 +129,175 @@ def test_malformed_names_are_refused(bad):
         parse_resource_name(bad)
 
 
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "abi:-:-",
+        "abi:org-1:ws-2",
+        "abi:nexus:organization",
+        "abi:x:y/a/b",
+        PROJECT + "/*/",
+    ],
+)
+def test_malformed_containers_are_refused(bad):
+    with pytest.raises(ValueError):
+        parse_container(bad)
+
+
 def test_scopes():
-    for scope in ("abi:org-1:ws-1", "abi:org-1:-", "abi:org-1:*", "abi:-:-"):
-        assert validate_scope(scope) == scope
-    for bad in ("abi:-:ws-1", "org-1:ws-1", "abi:org-1", "abi:*:*"):
+    assert validate_scope(WS) == WS
+    assert validate_scope(PLATFORM) == PLATFORM
+    assert validate_scope(below(ORG)) == ORG + "/*"
+    assert is_below(ORG + "/*") and not is_below(ORG)
+    assert container_of_scope(ORG + "/*") == ORG
+    for bad in (
+        "abi:-:-",
+        "abi:org-1:*",
+        "abi:*",
+        "abi:*:*",
+        ORG + "/x",
+        "abi:/*",
+        ORG + "/*/*",
+    ):
         with pytest.raises(ValueError):
             validate_scope(bad)
+    assert validate_owner_scope(WS) == WS
+    assert validate_owner_scope(PLATFORM) == PLATFORM
+    with pytest.raises(ValueError):
+        validate_owner_scope(ORG + "/*")
+
+
+def test_within_and_owners():
+    assert within(PROJECT, WS) and within(WS, WS) and within(WS, PLATFORM)
+    assert not within(ORG, WS)
+    assert not within(container_name("nexus", "organization", "org-10"), ORG)
+    # An owner's attachments: at it or at a container below it, below one too.
+    assert within_owner(ORG, ORG)
+    assert within_owner(ORG, below(ORG))
+    assert within_owner(ORG, WS)
+    assert within_owner(ORG, below(PROJECT))
+    assert not within_owner(WS, ORG)
+    assert not within_owner(WS, None)
+    assert within_owner(PLATFORM, None)
+    assert within_owner(PLATFORM, WS)
+    assert owner_ancestors(PROJECT) == [WS, ORG, PLATFORM]
+    assert owner_ancestors(PLATFORM) == []
+
+
+def test_within_an_owner_of_the_grammar_before_container_paths():
+    """The start-up moves write the old grammar until the names are rewritten:
+    it follows its own rules, and an owner of one grammar never holds a scope of
+    the other (both were ``UNRESOLVED``, so always within each other)."""
+    assert within_owner("abi:o1:-", "abi:o1:-")
+    assert within_owner("abi:o1:-", "abi:o1:*")
+    assert within_owner("abi:o1:-", "abi:o1:w1")
+    assert within_owner("abi:o1:w1", "abi:o1:w1")
+    assert not within_owner("abi:o1:-", "abi:o2:w")
+    assert not within_owner("abi:o1:-", "abi:o2:-")
+    assert not within_owner("abi:o1:w1", "abi:o1:w2")
+    assert not within_owner("abi:o1:w1", "abi:o1:-")
+    assert not within_owner("abi:o1:w1", "abi:o1:*")
+    assert within_owner("abi:-:-", "abi:o2:w")
+    # Never across grammars, and nothing is within UNRESOLVED.
+    assert not within_owner("abi:o1:-", WS)
+    assert not within_owner(ORG, "abi:o1:w1")
+    assert not within_owner(UNRESOLVED, UNRESOLVED)
+    assert not within_owner(ORG, UNRESOLVED)
+
+
+def test_the_wildcards_table():
+    graph = resource_name("triple_store", "graph", "g", container=WS)
+    deal = resource_name("crm", "deal", "d-1", container=PROJECT)
+    org_member = resource_name("nexus", "member", "u-7", container=ORG)
+    ws_member = resource_name("nexus", "member", "u-8", container=WS)
+    other_org_graph = resource_name(
+        "triple_store",
+        "graph",
+        "g",
+        container=container_name(
+            "nexus",
+            "workspace",
+            "ws-3",
+            parent=container_name("nexus", "organization", "org-10"),
+        ),
+    )
+    everything = [graph, deal, org_member, ws_member, other_org_graph, WS, ORG]
+
+    def matched(pattern):
+        return {name for name in everything if matches(pattern, name)}
+
+    # Everything in ws-2, what its projects hold included.
+    assert matched(WS + "/*") == {graph, deal, ws_member}
+    # Everything in org-1 and in all its workspaces.
+    assert matched(ORG + "/*") == {graph, deal, org_member, ws_member, WS}
+    # A type stays at its level: org-1's members only.
+    assert matched(ORG + "/nexus:member/*") == {org_member}
+    # Every graph anywhere under org-1.
+    assert matched(ORG + "/*/triple_store:graph/*") == {graph}
+    # The container itself.
+    assert matched(ORG) == {ORG}
+    # "Anywhere": the platform's and every container's.
+    assert set(anywhere("triple_store:graph/g")) == {
+        "abi:triple_store:graph/g",
+        "abi:*/triple_store:graph/g",
+    }
+    assert {
+        n for n in everything for p in anywhere("triple_store:graph/*") if matches(p, n)
+    } == {
+        graph,
+        other_org_graph,
+    }
+
+
+def test_expanding_scope():
+    assert expand_scope("${scope}/triple_store:graph/*", WS) == (
+        WS + "/triple_store:graph/*"
+    )
+    assert expand_scope("${scope}", WS) == WS
+    # At the platform, "${scope}/" reads "abi:" and "${scope}" alone matches nothing.
+    assert expand_scope("${scope}/triple_store:graph/*", PLATFORM) == (
+        "abi:triple_store:graph/*"
+    )
+    assert expand_scope("${scope}", PLATFORM) is None
+    assert expand_scope("abi:x:y/1", PLATFORM) == "abi:x:y/1"
+    assert (
+        substitute(
+            "${scope}/module:agent/${principal.id}",
+            {
+                "scope": PLATFORM,
+                "principal.id": "usr_1",
+            },
+        )
+        == "abi:module:agent/usr_1"
+    )
+
+
+def test_old_names_resolve_nowhere():
+    assert as_container("abi:org-1:ws-2") == UNRESOLVED
+    assert as_container("abi:-:-") == PLATFORM
+    assert as_container(WS) == WS
+    assert as_container(PLATFORM) == PLATFORM
+    parse_container(UNRESOLVED)  # a valid name nobody registers
 
 
 def test_wildcards():
-    assert matches("*", "anything")
-    assert matches("abi:org-1:*", "abi:org-1:ws-1:svc:t/x")
-    assert not matches("abi:org-1:*", "abi:org-10:ws-1:svc:t/x")
-    assert matches("abi:-:-:svc:t/a?c", "abi:-:-:svc:t/abc")
-    assert not matches("abi:-:-:svc:t/a?c", "abi:-:-:svc:t/ac")
-    assert matches("triple_store:List*", "triple_store:ListGraphs")
-    assert not matches("triple_store:list*", "triple_store:ListGraphs")
-    # Regex characters are literal.
-    assert not matches("abi:-:-:svc:t/a.c", "abi:-:-:svc:t/abc")
-    assert matches("a+b(c)[d]", "a+b(c)[d]")
-    assert literal_prefix("abi:org-1:*:x") == "abi:org-1:"
-    assert literal_prefix("abi:-:-:t/a?") == "abi:-:-:t/a"
-    assert literal_prefix("*") == ""
+    assert matches("*", "abi:anything")
+    assert matches(WS + "/*", WS + "/triple_store:graph/x")
+    assert not matches(WS + "/*", WS)
+    assert matches("abi:nexus:organization/org-?", ORG)
+    assert literal_prefix(WS + "/triple_store:graph/sales-*") == (
+        WS + "/triple_store:graph/sales-"
+    )
 
 
 def test_variables():
-    values = {"scope": "abi:org-1:ws-1", "principal.id": "usr_1", "user.id": None}
-    assert substitute("${scope}:svc:t/*", values) == "abi:org-1:ws-1:svc:t/*"
-    assert (
-        substitute("abi:-:-:svc:t/${principal.id}/*", values) == "abi:-:-:svc:t/usr_1/*"
+    assert substitute("${scope}/x:y/${user.id}", {"scope": WS, "user.id": "u1"}) == (
+        WS + "/x:y/u1"
     )
-    assert substitute("abi:-:-:svc:t/${user.id}", values) is None
-    assert substitute("abi:-:-:svc:t/${nope}", values) is None
+    assert substitute("${scope}/x:y/${user.id}", {"scope": WS, "user.id": None}) is None
 
 
 def test_actions():
-    assert split_action("triple_store:ListGraphs") == ("triple_store", "ListGraphs")
-    for bad in ("triple_store", "Triple:Get", "svc:get", "svc:Get*"):
-        with pytest.raises(ValueError):
-            split_action(bad)
-
-
-def test_every_workspace_of_an_org_has_its_own_name():
-    from naas_abi_core.services.iam.names import ALL_WORKSPACES
-
-    name = resource_name(
-        "iam",
-        "attachment",
-        ["p", "u"],
-        kind="path",
-        org="acme",
-        workspace=ALL_WORKSPACES,
-    )
-    assert name == "abi:acme:%2A:iam:attachment/p/u"
-    assert parse_resource_name(name).workspace == ALL_WORKSPACES
-    assert matches("abi:acme:*", name)
-    assert not matches("abi:acme:-:*", name)
+    assert split_action("triple_store:Query") == ("triple_store", "Query")
     with pytest.raises(ValueError):
-        resource_name("svc", "t", "x", workspace=ALL_WORKSPACES)
-
-
-def test_every_workspace_is_refused_outside_iam_attachments():
-    from naas_abi_core.services.iam.names import ALL_WORKSPACES
-
-    for service, type_ in (
-        ("iam", "scope"),
-        ("iam", "placement"),
-        ("document", "attachment"),
-    ):
-        with pytest.raises(ValueError):
-            resource_name(service, type_, "x", org="acme", workspace=ALL_WORKSPACES)
-        with pytest.raises(ValueError):
-            parse_resource_name(f"abi:acme:%2A:{service}:{type_}/x")
-
-
-def test_every_org_is_a_name_for_unscoped_attachments_only():
-    from naas_abi_core.services.iam.names import ALL_ORGS, ALL_WORKSPACES
-
-    name = resource_name(
-        "iam",
-        "attachment",
-        ["p", "u"],
-        kind="path",
-        org=ALL_ORGS,
-        workspace=ALL_WORKSPACES,
-    )
-    assert name == "abi:%2A:%2A:iam:attachment/p/u"
-    assert parse_resource_name(name).org == ALL_ORGS
-    # No ${scope} expansion reaches it; only grants for every org do.
-    for scope in ("abi:-:-", "abi:acme:-", "abi:acme:*", "abi:acme:ws1"):
-        assert not matches(f"{scope}:iam:attachment/*", name)
-    assert matches("*", name) and matches("abi:*:iam:attachment/*", name)
-    for org, workspace, type_ in (
-        (ALL_ORGS, "-", "attachment"),
-        (ALL_ORGS, "ws1", "attachment"),
-        (ALL_ORGS, ALL_WORKSPACES, "scope"),
-    ):
-        with pytest.raises(ValueError):
-            resource_name("iam", type_, "x", org=org, workspace=workspace)
-
-
-def test_every_org_names_the_platforms_policies_and_groups():
-    from naas_abi_core.services.iam.names import ALL_ORGS, ALL_WORKSPACES
-
-    for type_ in ("policy", "group"):
-        name = resource_name("iam", type_, "x", org=ALL_ORGS, workspace=ALL_WORKSPACES)
-        assert parse_resource_name(name).org == ALL_ORGS
-        for scope in ("abi:-:-", "abi:acme:-", "abi:acme:*", "abi:acme:ws1"):
-            assert not matches(f"{scope}:iam:{type_}/*", name)
-        assert matches("abi:*:*:iam:" + type_ + "/*", name)
-        # Never an org's every workspace: a policy or group is owned by one level.
-        with pytest.raises(ValueError):
-            resource_name("iam", type_, "x", org="acme", workspace=ALL_WORKSPACES)
-
-
-def test_owner_scopes():
-    from naas_abi_core.services.iam.names import (
-        owner_ancestors,
-        validate_owner_scope,
-        within_owner,
-    )
-
-    assert owner_ancestors("abi:acme:ws1") == ["abi:acme:-", "abi:-:-"]
-    assert owner_ancestors("abi:acme:-") == ["abi:-:-"]
-    assert owner_ancestors("abi:-:-") == []
-    with pytest.raises(ValueError):
-        validate_owner_scope("abi:acme:*")
-    assert within_owner("abi:-:-", None)
-    assert within_owner("abi:acme:-", "abi:acme:*")
-    assert within_owner("abi:acme:-", "abi:acme:ws1")
-    assert not within_owner("abi:acme:-", None)
-    assert not within_owner("abi:acme:ws1", "abi:acme:ws2")
-    assert not within_owner("abi:acme:ws1", "abi:acme:-")
-    assert not within_owner("abi:acme:-", "abi:other:ws1")
+        split_action("triple_store:query")

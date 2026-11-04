@@ -75,8 +75,9 @@ modules:
         ontology_base_uri: "http://ontology.naas.ai/"
 
         # Q: Which features are on, and who gets access to each?
-        # A: List active features, then set the default access per role.
-        #    owner/admin = everything | member = chat + files | viewer = chat + files
+        # A: List the features this deployment has. No role brings one: a policy
+        #    grants each (a workspace's "Features of member", say, which an
+        #    invitation can carry), in Settings > Access.
         feature_flags:
           enabled_features:
             - chat
@@ -88,12 +89,6 @@ modules:
             - ontology
             - graph
             - settings
-          role_baseline:
-            owner:  [chat, files, agents, apps, marketplace, search, ontology, graph, settings]
-            admin:  [chat, files, agents, apps, marketplace, search, ontology, graph, settings]
-            member: [chat, apps, marketplace]
-            viewer: [chat, apps, marketplace]
-          workspace_overrides: {}
 
         # Q: How do users sign in?
         # A: At the engine's identity provider (`identity.providers`): the built-in one

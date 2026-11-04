@@ -37,7 +37,8 @@ def test_namespace_is_bound_for_collection_and_document_operations(service, adap
     adapter.delete.assert_called_once_with("my.module", "records", "id", 5)
     service.drop_collection("records")
     adapter.drop_collection.assert_called_once_with("my.module", "records")
-    service.collections()
+    adapter.collections.return_value = ["records"]
+    assert service.collections() == ["records"]
     adapter.collections.assert_called_once_with("my.module")
 
 
@@ -139,7 +140,8 @@ def test_engine_root_lists_namespaces_and_binds_them_publicly(adapter):
 
     assert root.namespaces() == ["a.module", "b.module"]
     scoped = root.for_namespace("a.module")
-    scoped.collections()
+    adapter.collections.return_value = []
+    assert scoped.collections() == []
     adapter.collections.assert_called_once_with("a.module")
     assert root._for_namespace("b.module").namespace == "b.module"
 

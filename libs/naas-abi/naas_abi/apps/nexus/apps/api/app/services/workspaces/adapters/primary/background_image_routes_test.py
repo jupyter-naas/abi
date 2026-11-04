@@ -66,10 +66,6 @@ def client_for(tmp_path, monkeypatch, team):
         # The user holds ``role`` in ws-1 through IAM (the ``team`` fixture).
         workspaces = _FakeWorkspaces(role)
 
-        async def no_override(org_id, org_service):
-            return None
-
-        monkeypatch.setattr(ws_api, "_load_org_role_override", no_override)
         app = FastAPI()
         app.include_router(ws_api.router, prefix="/api/workspaces")
         app.dependency_overrides[ws_api.get_current_user_required] = lambda: SimpleNamespace(

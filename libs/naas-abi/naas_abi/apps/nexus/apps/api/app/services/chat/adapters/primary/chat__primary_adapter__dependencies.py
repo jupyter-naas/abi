@@ -126,10 +126,8 @@ async def authorize_agent_use(
     for one the workspace built.
 
     A chat turn runs the agent with its workspace's provider settings, so the
-    agent's own workspace decides, not the workspace the client names. One its
-    workspace turned off is refused to everyone: a module's agent by the rule of
-    its scope (``authz.require_scope``: hidden when none of the workspace's rows
-    of it is on, as the roster shows it), one the workspace built by its row. An id
+    agent's own workspace decides, not the workspace the client names. IAM's
+    decision is the whole answer: no workspace switch turns an agent off. An id
     that is no workspace agent (an in-process agent named directly) has no row
     to ask about: the in-process runtime runs only the agents the caller may
     use where the turn is stored (``caller_usable_agents``).
@@ -150,9 +148,6 @@ async def authorize_agent_use(
         id=agent.id,
         feature="chat",
     )
-    if not agent.enabled:
-        # Turned off in its workspace, by its admins: for everyone.
-        raise HTTPException(status_code=403, detail="This agent is turned off in this workspace")
 
 
 async def authorize_turn(

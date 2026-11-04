@@ -89,8 +89,7 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
       const t = new Date(conv.updatedAt).getTime();
       if (t > (lastUsedAt.get(conv.agent) ?? 0)) lastUsedAt.set(conv.agent, t);
     }
-    return safeAgents
-      .filter((agent) => agent.enabled)
+    return [...safeAgents]
       .sort((a, b) => {
         if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1;
         const usedDiff = (lastUsedAt.get(b.id) ?? 0) - (lastUsedAt.get(a.id) ?? 0);
@@ -148,8 +147,8 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   const handleChatHeaderNavigate = useCallback(() => {
     if (!agentExplicitlySelected) {
       const defaultAgent =
-        safeAgents.find((a) => a.isDefault && a.enabled) ??
-        safeAgents.find((a) => a.enabled);
+        safeAgents.find((a) => a.isDefault) ??
+        safeAgents[0];
       if (defaultAgent) setSelectedAgent(defaultAgent.id);
     }
     setActiveConversation(null);

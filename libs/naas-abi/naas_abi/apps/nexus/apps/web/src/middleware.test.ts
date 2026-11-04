@@ -75,9 +75,15 @@ describe('middleware auth redirects', () => {
     process.env.NODE_ENV = 'production';
 
     const cookies = { 'nexus-auth-flag': 'true' };
-    const users = middleware(requestFor('/settings/users', cookies));
+    const users = middleware(requestFor('/settings/workspace_members', cookies));
     expect(users.status).toBe(307);
-    expect(users.headers.get('location')).toBe('https://nexus.example.com/settings/tables/users');
+    expect(users.headers.get('location')).toBe(
+      'https://nexus.example.com/settings/tables/workspace_members',
+    );
+    const userRow = middleware(requestFor('/settings/users/usr_1', cookies));
+    expect(userRow.headers.get('location')).toBe('https://nexus.example.com/settings/tables/users/usr_1');
+    // The Users page itself: no redirect.
+    expect(middleware(requestFor('/settings/users', cookies)).headers.get('location')).toBeNull();
     const secrets = middleware(requestFor('/settings/secrets_table/s-1', cookies));
     expect(secrets.headers.get('location')).toBe(
       'https://nexus.example.com/settings/tables/secrets/s-1',

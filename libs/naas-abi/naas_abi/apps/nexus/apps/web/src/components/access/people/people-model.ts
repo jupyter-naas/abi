@@ -1,14 +1,19 @@
 import type { AttachmentView, GroupView, PrincipalKind } from '@/lib/iam-admin/types';
 import type { ScopeMember } from '../access-directory';
 import { principalLabel } from '../attachments/attachments-model';
-import { isRoleCompanion, roleOfPolicy, type BuiltInRole } from '../roles/role-change';
+import { isRoleCompanion, principalKindOf, roleOfPolicy, type BuiltInRole } from '../roles/role-change';
 
 export type HeldPolicy = { id: string; name: string };
 
 /** Who holds what at a scope: their built-in role, the policies attached to them there, and
  *  what reaches them through a group holding policies there. */
 export type PersonRow = {
+  /** As the scope's members name them (the membership routes), else their IAM id. */
   id: string;
+  /** Their IAM id: their page lists what IAM holds for it. Empty for a member whose IAM id
+   *  is not known (the member routes did not say it, nothing here names it): no page then,
+   *  as a Nexus id names nobody in IAM for an account linked from the old login. */
+  principalId: string;
   kind: PrincipalKind;
   label: string;
   email: string;
@@ -19,7 +24,7 @@ export type PersonRow = {
   member: boolean;
   /** Attached to them here; a user's role attachment is their `role`, not listed. */
   direct: AttachmentView[];
-  /** What IAM attached with the role (its features, the platform companions): shown with it,
+  /** What IAM attached with the role (the platform companions): shown with it,
    *  never detached by hand. */
   withRole: AttachmentView[];
   viaGroups: { groupId: string; groupLabel: string; policies: HeldPolicy[] }[];
@@ -41,17 +46,17 @@ function higher(a: BuiltInRole | null, b: BuiltInRole | null): BuiltInRole | nul
  */
 export function peopleAt(attachments: AttachmentView[], members: ScopeMember[], groups: GroupView[]): PersonRow[] {
   const rows = new Map<string, PersonRow>();
-  const row = (id: string, init: () => Omit<PersonRow, 'direct' | 'withRole' | 'viaGroups'>): PersonRow => {
+  const row = (id: string, init: () => Omit<PersonRow, 'principalId' | 'direct' | 'withRole' | 'viaGroups'>): PersonRow => {
     let found = rows.get(id);
     if (!found) {
-      found = { ...init(), direct: [], withRole: [], viaGroups: [] };
+      found = { ...init(), principalId: id, direct: [], withRole: [], viaGroups: [] };
       rows.set(id, found);
     }
     return found;
   };
 
   for (const m of members) {
-    row(m.userId, () => ({
+    const member = row(m.userId, () => ({
       id: m.userId,
       kind: 'user',
       label: m.name || m.email || m.userId,
@@ -60,16 +65,21 @@ export function peopleAt(attachments: AttachmentView[], members: ScopeMember[], 
       inherited: m.inherited,
       member: true,
     }));
+    // Their page is their IAM principal's: an account linked from the old login has
+    // another id in IAM than in Nexus, which a link must never name.
+    member.principalId = m.principalId ?? '';
   }
 
-  // A member's account id is their IAM id, except an account linked from the old login,
-  // whose IAM user is found by its email: one person, one row.
+  // A member's row, found by their IAM id (the member routes say it), else by their
+  // email (a member listed without it): one person, one row.
+  const byPrincipal = new Map(members.filter((m) => m.principalId).map((m) => [m.principalId!, m.userId]));
   const byEmail = new Map(members.filter((m) => m.email).map((m) => [m.email.toLowerCase(), m.userId]));
   const rowId = (principalId: string, kind: PrincipalKind, email: string | null | undefined) =>
-    rows.has(principalId) || kind !== 'user' || !email ? principalId : (byEmail.get(email.toLowerCase()) ?? principalId);
+    byPrincipal.get(principalId) ??
+    (rows.has(principalId) || kind !== 'user' || !email ? principalId : (byEmail.get(email.toLowerCase()) ?? principalId));
 
   for (const a of attachments) {
-    const kind = a.principal?.kind ?? 'user';
+    const kind = a.principal?.kind ?? principalKindOf(a.principal_id);
     const holder = row(rowId(a.principal_id, kind, a.principal?.email), () => ({
       id: a.principal_id,
       kind,
@@ -79,6 +89,7 @@ export function peopleAt(attachments: AttachmentView[], members: ScopeMember[], 
       inherited: false,
       member: false,
     }));
+    holder.principalId = a.principal_id;
     const role = kind === 'user' ? roleOfPolicy(a.policy_id) : null;
     if (role) {
       // The directory's role is the effective one; an attachment alone (the platform) says it.
@@ -106,6 +117,7 @@ export function peopleAt(attachments: AttachmentView[], members: ScopeMember[], 
         inherited: false,
         member: false,
       }));
+      person.principalId = m.id;
       person.viaGroups.push({ groupId: group.id, groupLabel, policies: held });
     }
   }

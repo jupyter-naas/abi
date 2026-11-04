@@ -67,7 +67,6 @@ class IdentityMembership:
 class IdentityAppConfig:
     workspace_id: str
     app_id: str
-    enabled: bool
 
 
 @dataclass(frozen=True)
@@ -79,7 +78,6 @@ class IdentityAgentConfig:
     module_path: str | None = None
     model_id: str | None = None
     provider: str | None = None
-    enabled: bool = False
     is_default: bool = False
 
 
@@ -100,11 +98,6 @@ class PlatformSnapshot:
     host: str
     applied_at: datetime.datetime
     enabled_features: list[str] = field(default_factory=list)
-    role_baseline: dict[str, list[str]] = field(default_factory=dict)
-    # workspace slug -> feature -> enabled
-    workspace_overrides: dict[str, dict[str, bool]] = field(default_factory=dict)
-    # organization id -> role -> features (config overlays and organization_role_features rows)
-    organization_overrides: dict[str, dict[str, list[str]]] = field(default_factory=dict)
     tenant: dict[str, Any] = field(default_factory=dict)
     settings: dict[str, str] = field(default_factory=dict)
     # workspace slug -> seed
@@ -122,8 +115,6 @@ class IdentitySnapshot:
     organization_memberships: list[IdentityOrganizationMembership] = field(default_factory=list)
     app_configs: list[IdentityAppConfig] = field(default_factory=list)
     agent_configs: list[IdentityAgentConfig] = field(default_factory=list)
-    # organization id -> role -> features, from organization_role_features
-    organization_role_features: dict[str, dict[str, list[str]]] = field(default_factory=dict)
     platform: PlatformSnapshot | None = None
 
 

@@ -197,7 +197,7 @@ export function AppsSection({ collapsed, detailOnly }: { collapsed: boolean; det
     authFetch(url)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((data: AppsResponse) => {
-        setApps(data.apps.filter((a) => a.installed && a.url && a.enabled).map(toRecord));
+        setApps(data.apps.filter((a) => a.installed && a.url).map(toRecord));
       })
       .catch(() => { /* fail silently */ })
       .finally(() => setPanelLoading(false));

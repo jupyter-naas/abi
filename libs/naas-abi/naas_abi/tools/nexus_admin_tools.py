@@ -16,8 +16,9 @@ from datetime import datetime
 from typing import Any, TypeVar
 
 from langchain_core.tools import BaseTool, tool
-from naas_abi_core.services.agent.context import agent_user_id, agent_workspace_id
+from naas_abi_core.services.agent.context import agent_user_id
 
+from naas_abi.agents.feature.context import turn_workspace_id
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MembershipDenied
 
 T = TypeVar("T")
@@ -325,7 +326,7 @@ def nexus_admin_tools() -> list[BaseTool]:
         user_id = _require_user_id()
         if isinstance(user_id, dict):
             return user_id
-        workspace_id = (workspace_id or "").strip() or (agent_workspace_id.get() or "")
+        workspace_id = (workspace_id or "").strip() or turn_workspace_id()
         if not workspace_id:
             return {"error": "workspace_id is required"}
 
@@ -369,7 +370,7 @@ def nexus_admin_tools() -> list[BaseTool]:
         if isinstance(user_id, dict):
             return user_id
         email = (email or "").strip().lower()
-        workspace_id = (workspace_id or "").strip() or (agent_workspace_id.get() or "")
+        workspace_id = (workspace_id or "").strip() or turn_workspace_id()
         role = (role or "member").strip().lower()
         display_name = (name or "").strip() or None
         if not email or not workspace_id:
@@ -436,7 +437,7 @@ def nexus_admin_tools() -> list[BaseTool]:
         if isinstance(user_id, dict):
             return user_id
         target = (user_id_to_remove or "").strip()
-        workspace_id = (workspace_id or "").strip() or (agent_workspace_id.get() or "")
+        workspace_id = (workspace_id or "").strip() or turn_workspace_id()
         if not target or not workspace_id:
             return {"error": "user_id_to_remove and workspace_id are required"}
         if target == user_id:
@@ -480,7 +481,7 @@ def nexus_admin_tools() -> list[BaseTool]:
         if isinstance(user_id, dict):
             return user_id
         target = (user_id_to_update or "").strip()
-        workspace_id = (workspace_id or "").strip() or (agent_workspace_id.get() or "")
+        workspace_id = (workspace_id or "").strip() or turn_workspace_id()
         role = (role or "").strip().lower()
         if not target or not workspace_id or not role:
             return {"error": "user_id_to_update, role, and workspace_id are required"}

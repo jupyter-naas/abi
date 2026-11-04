@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from datetime import datetime
 from uuid import uuid4
@@ -10,10 +9,10 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     OrganizationDomainModel,
     OrganizationMemberModel,
     OrganizationModel,
-    OrganizationRoleFeaturesModel,
     UserModel,
     WorkspaceModel,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import SqlDefaultsStore
 from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
     OrganizationCreateInput,
     OrganizationDomainCreateInput,
@@ -22,12 +21,11 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
     OrganizationMemberProfileRecord,
     OrganizationPermissionPort,
     OrganizationRecord,
-    OrganizationRoleFeaturesRecord,
     OrganizationUpdateInput,
     OrganizationWorkspaceRecord,
     UserRecord,
 )
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 AsyncSessionGetter = Callable[[], AsyncSession | None]
@@ -48,6 +46,11 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
         if db is None:
             raise RuntimeError("No database session bound in ServiceRegistry context")
         return db
+
+    def container_defaults(self) -> SqlDefaultsStore:
+        """Where the access policy and default groups of what this adapter creates
+        are recorded: this adapter's session, so in the same transaction."""
+        return SqlDefaultsStore(self.db)
 
     async def list_all_organizations(self) -> list[OrganizationRecord]:
         result = await self.db.execute(select(OrganizationModel).order_by(OrganizationModel.name))
@@ -436,6 +439,27 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             provider=row.provider,
         )
 
+    async def lock_organization(self, org_id: str) -> bool:
+        # PostgreSQL: FOR UPDATE conflicts with the FOR KEY SHARE a workspace
+        # insert's foreign key check takes, so the insert waits for this
+        # transaction, then fails its key once the organization is gone (a plain
+        # UPDATE takes FOR NO KEY UPDATE, which does not stop it).
+        found = (
+            await self.db.execute(
+                select(OrganizationModel.id).where(OrganizationModel.id == org_id).with_for_update()
+            )
+        ).first()
+        if found is None:
+            return False
+        # SQLite has no row locks (FOR UPDATE is not emitted): a write takes the
+        # database for this transaction, so another writer waits for it.
+        await self.db.execute(
+            update(OrganizationModel)
+            .where(OrganizationModel.id == org_id)
+            .values(updated_at=OrganizationModel.updated_at)
+        )
+        return True
+
     async def delete_organization(self, org_id: str) -> bool:
         row = (
             await self.db.execute(select(OrganizationModel).where(OrganizationModel.id == org_id))
@@ -459,76 +483,3 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
         await self.db.delete(row)
         await self.db.flush()
         return True
-
-    @staticmethod
-    def _decode_role_baseline(raw: str) -> dict[str, list[str]]:
-        try:
-            parsed = json.loads(raw)
-        except json.JSONDecodeError:
-            return {}
-        if not isinstance(parsed, dict):
-            return {}
-        decoded: dict[str, list[str]] = {}
-        for role, features in parsed.items():
-            if not isinstance(role, str) or not isinstance(features, list):
-                continue
-            decoded[role] = [str(feature) for feature in features]
-        return decoded
-
-    def _to_role_features_record(
-        self, row: OrganizationRoleFeaturesModel
-    ) -> OrganizationRoleFeaturesRecord:
-        return OrganizationRoleFeaturesRecord(
-            organization_id=row.organization_id,
-            role_baseline=self._decode_role_baseline(row.role_baseline),
-            updated_by=row.updated_by,
-            created_at=row.created_at,
-            updated_at=row.updated_at,
-        )
-
-    async def get_organization_role_features(
-        self, org_id: str
-    ) -> OrganizationRoleFeaturesRecord | None:
-        result = await self.db.execute(
-            select(OrganizationRoleFeaturesModel).where(
-                OrganizationRoleFeaturesModel.organization_id == org_id
-            )
-        )
-        row = result.scalar_one_or_none()
-        if row is None:
-            return None
-        return self._to_role_features_record(row)
-
-    async def upsert_organization_role_features(
-        self,
-        org_id: str,
-        role_baseline: dict[str, list[str]],
-        updated_by: str | None,
-        now: datetime,
-    ) -> OrganizationRoleFeaturesRecord:
-        payload = json.dumps(
-            {role: list(features) for role, features in role_baseline.items()},
-            separators=(",", ":"),
-            sort_keys=True,
-        )
-        result = await self.db.execute(
-            select(OrganizationRoleFeaturesModel).where(
-                OrganizationRoleFeaturesModel.organization_id == org_id
-            )
-        )
-        row = result.scalar_one_or_none()
-        if row is None:
-            row = OrganizationRoleFeaturesModel(
-                organization_id=org_id,
-                role_baseline=payload,
-                updated_by=updated_by,
-                created_at=now,
-                updated_at=now,
-            )
-            self.db.add(row)
-        else:
-            row.role_baseline = payload
-            row.updated_by = updated_by
-            row.updated_at = now
-        await self.db.flush()
-        return self._to_role_features_record(row)

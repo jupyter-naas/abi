@@ -30,7 +30,7 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.workspac
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.testing import knowledge_team
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_scope
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary import (
     resource_access_postgres as saved_policies,
 )
@@ -136,7 +136,7 @@ async def test_a_graph_a_workspace_creates_is_placed_in_it(world) -> None:
     assert graph_iam.owned_by("ws-1") == {created.uri}
     assert graph_iam.owned_by("ws-2") == set()
     placement = world.nexus.iam.placement_of("triple_store", graph_iam.graph_id(created.uri))
-    assert (placement.org, placement.workspace) == ("org-1", "ws-1")
+    assert placement.container == workspace_container("org-1", "ws-1")
     # Nexus's own record of it is the application graph, not an ownership triple.
     with as_service_account("api"):
         triples = world.store.query(
@@ -214,8 +214,8 @@ async def test_members_write_and_only_admins_clear_or_drop(world) -> None:
 
 @pytest.mark.asyncio
 async def test_a_user_in_two_workspaces_sees_one_workspaces_graphs_at_a_time(world, team) -> None:
-    team.grant("both", "member", workspace_scope("org-1", "ws-1"))
-    team.grant("both", "member", workspace_scope("org-1", "ws-2"))
+    team.grant("both", "member", workspace_container("org-1", "ws-1"))
+    team.grant("both", "member", workspace_container("org-1", "ws-2"))
     first = await world.create("both", "ws-1", "One")
     second = await world.create("both", "ws-2", "Two")
     assert (await world.view("both", "ws-1")).readable == {first.uri}
@@ -309,18 +309,18 @@ async def test_the_shared_grant_follows_the_workspaces_members(world, team) -> N
     config = WorkspaceGraphPolicyConfig(read=[shared.uri], write=[shared.uri])
     await world.share("ws-2", config)
     # A new member holds it once the workspace's holders are synced.
-    team.grant("newcomer", "viewer", workspace_scope("org-1", "ws-2"))
+    team.grant("newcomer", "viewer", workspace_container("org-1", "ws-2"))
     with pytest.raises(Exceptions.GraphNotFoundError):
         world.select("newcomer", shared.uri)
     await GRANTS.sync_members("ws-2")
     assert world.select("newcomer", shared.uri)
     # A promoted viewer may write what is shared for writing.
-    team.grant("newcomer", "member", workspace_scope("org-1", "ws-2"))
+    team.grant("newcomer", "member", workspace_container("org-1", "ws-2"))
     await GRANTS.sync_members("ws-2")
     with world.acting("newcomer"):
         world.store.insert(Graph(), URIRef(shared.uri))
     # A removed member loses it.
-    await MEMBERSHIPS.revoke("newcomer", workspace_scope("org-1", "ws-2"))
+    await MEMBERSHIPS.revoke("newcomer", workspace_container("org-1", "ws-2"))
     await GRANTS.sync_members("ws-2")
     with pytest.raises(Exceptions.GraphNotFoundError):
         world.select("newcomer", shared.uri)
@@ -340,7 +340,7 @@ async def test_a_workspace_that_may_not_create_graphs_creates_none(world) -> Non
     from naas_abi_core.engine.call_context import current_call_context
 
     with world.acting("member"):
-        ctx = replace(current_call_context(), workspace_id="ws-1")
+        ctx = replace(current_call_context(), container=workspace_container("org-1", "ws-1"))
         with use_call_context(ctx), pytest.raises(PermissionDeniedError):
             world.store.create_graph(URIRef("urn:graph:sneaky"))
 
@@ -412,11 +412,11 @@ async def test_reading_the_whole_catalog_never_reaches_another_tenants_graphs(wo
     platform's), not what other organizations, or other people's personal
     workspaces, keep."""
     team.workspace("org-2", "ws-9")
-    team.grant("other", "owner", workspace_scope("org-2", "ws-9"))
+    team.grant("other", "owner", workspace_container("org-2", "ws-9"))
     team.workspace(None, "solo-1")
-    team.grant("solo1", "owner", workspace_scope(None, "solo-1"))
+    team.grant("solo1", "owner", workspace_container(None, "solo-1"))
     team.workspace(None, "solo-2")
-    team.grant("solo2", "owner", workspace_scope(None, "solo-2"))
+    team.grant("solo2", "owner", workspace_container(None, "solo-2"))
     mine = await world.create("member", "ws-1")
     foreign = await world.create("other", "ws-9")
     private = await world.create("solo1", "solo-1")
@@ -446,7 +446,7 @@ async def test_a_graph_recorded_for_another_workspace_is_not_swept_in_before_it_
     """At boot assignments are applied before IAM places the graphs the application
     graph records: those are their workspace's already."""
     team.workspace("org-2", "ws-9")
-    team.grant("other", "owner", workspace_scope("org-2", "ws-9"))
+    team.grant("other", "owner", workspace_container("org-2", "ws-9"))
     foreign = await world.create("other", "ws-9")
     world.put(foreign.uri)
     with as_service_account("api"):  # the placement a restart has not made yet

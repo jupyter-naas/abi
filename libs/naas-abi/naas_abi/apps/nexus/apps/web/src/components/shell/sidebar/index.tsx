@@ -31,6 +31,7 @@ import { ColumnResizeHandle, useColumnResize } from '../column-resize-handle';
 import { DockProfile } from './dock-profile';
 import { prefetchSectionPanel } from './section-panel';
 import { WorkspaceSwitcher } from '../workspace-switcher';
+import { useOpensWorkspaceSettings } from '@/hooks/use-workspace-settings-access';
 
 type SectionDef = {
   id: SidebarSection;
@@ -144,7 +145,8 @@ export function Sidebar() {
   const canDocuments = useFeature('documents');
   const canSheets = useFeature('sheets');
   const canTasks = useFeature('tasks');
-  const canSettingsWorkspace = useFeature('settings.workspace');
+  // The workspace's settings: the role there brings them, or IAM shows a Roles & permissions section.
+  const canSettingsWorkspace = useOpensWorkspaceSettings();
 
   useEffect(() => {
     setMounted(true);

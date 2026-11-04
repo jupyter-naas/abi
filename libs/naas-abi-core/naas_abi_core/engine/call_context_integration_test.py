@@ -128,13 +128,15 @@ pytestmark = pytest.mark.skipif(
     nats_server_binary() is None, reason="nats-server is not installed"
 )
 
+# The container a call is made in: request data, carried as is.
+WS = "abi:nexus:organization/org-1/nexus:workspace/ws-1"
 # What every kernel endpoint accepts: a service's token, or a delegation.
 SECRET = TEST_TOKENS.verifier
 # Nexus serving a signed-in user: "api on behalf of the user".
 CALLER = CallContext(
     principal=service_account("api"),
     on_behalf_of=user("usr-ada"),
-    workspace_id="ws-1",
+    container=WS,
     trace_id="trace-1",
 )
 

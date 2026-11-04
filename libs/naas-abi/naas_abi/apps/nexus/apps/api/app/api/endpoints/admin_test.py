@@ -6,23 +6,15 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from naas_abi.apps.nexus.apps.api.app.api.endpoints.admin import (
-    get_organization_service,
-    router,
-)
+from naas_abi.apps.nexus.apps.api.app.api.endpoints.admin import router
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
-    get_auth_service,
     get_current_user_required,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__schemas import (
     User,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthUserRecord
-from naas_abi.apps.nexus.apps.api.app.services.auth.service import SuperadminChangeError
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
-from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
-    UserOrganizationMembershipRecord,
-)
 
 NOW = datetime(2026, 1, 1)
 IAM: dict[str, NexusIam] = {}
@@ -35,18 +27,13 @@ def iam(nexus_iam: NexusIam) -> NexusIam:
     return nexus_iam
 
 
-def _client(*, superadmin: bool, auth_service, organization_service=None) -> TestClient:
+def _client(*, superadmin: bool, auth_service=None) -> TestClient:
     (IAM["nexus"].platform_admin if superadmin else IAM["nexus"].user)("user-1")
     app = FastAPI()
     app.include_router(router, prefix="/api/admin")
     app.dependency_overrides[get_current_user_required] = lambda: User(
         id="user-1", email="me@example.com", name="Me", is_superadmin=superadmin, created_at=NOW
     )
-    app.dependency_overrides[get_auth_service] = lambda: auth_service
-    if organization_service is None:
-        organization_service = AsyncMock()
-        organization_service.list_all_memberships.return_value = []
-    app.dependency_overrides[get_organization_service] = lambda: organization_service
     return TestClient(app)
 
 
@@ -58,67 +45,6 @@ def _record(user_id: str, *, is_superadmin: bool) -> AuthUserRecord:
         created_at=NOW,
         is_superadmin=is_superadmin,
     )
-
-
-def test_non_superadmins_cannot_list_or_change_users() -> None:
-    service = AsyncMock()
-    client = _client(superadmin=False, auth_service=service)
-
-    assert client.get("/api/admin/users").status_code == 403
-    assert client.patch("/api/admin/users/user-2", json={"is_superadmin": True}).status_code == 403
-    service.set_superadmin.assert_not_called()
-
-
-def test_superadmin_lists_users_with_organizations_and_no_password_hashes() -> None:
-    service = AsyncMock()
-    service.list_users.return_value = [
-        _record("user-2", is_superadmin=False),
-        _record("user-3", is_superadmin=False),
-    ]
-    organizations = AsyncMock()
-    organizations.list_all_memberships.return_value = [
-        UserOrganizationMembershipRecord(
-            user_id="user-2",
-            organization_id="org-1",
-            organization_name="Forvis Mazars",
-            role="admin",
-        )
-    ]
-    client = _client(superadmin=True, auth_service=service, organization_service=organizations)
-
-    response = client.get("/api/admin/users")
-
-    assert response.status_code == 200
-    first, second = response.json()
-    assert first["email"] == "user-2@example.com"
-    assert "hashed_password" not in first
-    assert first["organizations"] == [{"id": "org-1", "name": "Forvis Mazars", "role": "admin"}]
-    assert second["organizations"] == []
-
-
-def test_superadmin_promotes_a_user() -> None:
-    service = AsyncMock()
-    service.set_superadmin.return_value = _record("user-2", is_superadmin=True)
-    client = _client(superadmin=True, auth_service=service)
-
-    response = client.patch("/api/admin/users/user-2", json={"is_superadmin": True})
-
-    assert response.status_code == 200
-    assert response.json()["is_superadmin"] is True
-    service.set_superadmin.assert_awaited_once_with(
-        actor_id="user-1", user_id="user-2", is_superadmin=True
-    )
-
-
-def test_refused_changes_return_400() -> None:
-    service = AsyncMock()
-    service.set_superadmin.side_effect = SuperadminChangeError(reason="last_superadmin")
-    client = _client(superadmin=True, auth_service=service)
-
-    response = client.patch("/api/admin/users/user-2", json={"is_superadmin": False})
-
-    assert response.status_code == 400
-    assert "at least one superadmin" in response.json()["detail"]
 
 
 def test_tables_are_superadmin_only() -> None:

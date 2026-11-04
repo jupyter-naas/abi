@@ -12,6 +12,8 @@ from naas_abi_sdk.services.errors import DocumentNotFound, VersionConflict
 from naas_abi_sdk.services.models import Document
 from naas_abi_sdk.transport import RPCError
 
+WORKSPACE = "abi:nexus:organization/o-1/nexus:workspace/ws-1"
+
 
 class Documents:
     def __init__(self):
@@ -1026,16 +1028,16 @@ def test_a_streaming_handler_that_raises_fails_the_run():
     asyncio.run(scenario())
 
 
-def test_a_delegated_run_is_in_the_workspace_of_its_submit():
+def test_a_delegated_run_is_in_the_container_of_its_submit():
     async def scenario():
         seen = Seen()
         owner = host(Documents(), seen)
         submit = _delegated_request(_delegation_token())
-        submit.context.workspace_id = "ws-1"
+        submit.context.container = WORKSPACE
         await owner._submit("agent", "key", "caller", submit)
         await owner.runs["key"].task
         [context] = seen.contexts
-        assert context.workspace_id == "ws-1" and context.user is not None
+        assert context.container == WORKSPACE and context.user is not None
 
     asyncio.run(scenario())
 

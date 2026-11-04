@@ -111,7 +111,8 @@ Resource type: `secret/<key>` (`opaque`, so `/` is `%2F`), placed by key prefix.
   also `Get`.
 * Seals (`SEALS`): `idp/` keys belong to the built-in IdP and `iam/` keys to
   the engine (the sealed `iam/` secrets hold IAM's signing keys), wherever a
-  placement puts them (`abi:*:*:secret:secret/idp%2F*`); no policy opens them to
+  placement puts them (`abi:secret:secret/idp%2F*` and `abi:*/secret:secret/idp%2F*`,
+  `names.anywhere`); no policy opens them to
   anyone else.
 * The endpoint's allowlist (`NATS RPC adapters` below) is checked first, so
   a module granted `secret:*` still reaches only its own prefix.
@@ -145,9 +146,9 @@ it answers a refusal itself) and hands that `CallContext`
 token's identity; the user it acts for is named by the token itself: a
 delegated token (`abi:delegated:agent`, `act` the acting service, `sub` the user)
 made by IAM's token exchange, never a header (the old `Abi-On-Behalf-Of` header is
-refused); trace and target workspace come from the request's `context`. Never read identity from request fields
+refused); trace and container come from the request's `context`. Never read identity from request fields
 (`principal_id` and `tenant_id` are reserved). Clients of `api` and `engine` send a
-delegation for the current call's user, and the call's trace and workspace. The domain service then authorizes per key (see
+delegation for the current call's user, and the call's trace and container. The domain service then authorizes per key (see
 "Authorization"), and the endpoint stays an allowlist, a layer before IAM
 (`secret_nats_contract.may_use`, answered `PERMISSION_DENIED`): `engine` reaches every name but `idp/...`, `idp` its own,
 any other service account only the names under its own prefix (`<module id>/...`

@@ -17,7 +17,6 @@ import re
 from typing import Any
 
 from langchain_core.tools import BaseTool, tool
-from naas_abi_core.services.agent.context import agent_workspace_id
 
 from naas_abi.agents.feature.context import (
     active_feature_errors,
@@ -28,6 +27,7 @@ from naas_abi.tools.nexus_admin_tools import (
     _run_async,
     _with_db,
     _workspace_service,
+    turn_workspace_id,
 )
 
 APP_PROJECT_RESOURCE_KIND = "app_project"
@@ -63,7 +63,7 @@ def _caller() -> tuple[str, str, Any] | dict[str, str]:
     user_id = _require_user_id()
     if isinstance(user_id, dict):
         return user_id
-    workspace_id = (agent_workspace_id.get() or "").strip()
+    workspace_id = turn_workspace_id()
     if not workspace_id:
         return {
             "error": "No workspace on this session. Open the chat pane from a workspace."

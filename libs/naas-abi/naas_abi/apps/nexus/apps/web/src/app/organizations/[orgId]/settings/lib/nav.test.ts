@@ -1,16 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { isOrgAdminRole, orgModulesPath, orgSectionRedirect, orgSettingsNavForRole } from './nav';
+import { isOrgAdminRole, orgSectionRedirect, orgSettingsAccess, orgSettingsNavForRole } from './nav';
 import { orgSettingsRedirect } from './redirects';
 
 describe('org settings nav', () => {
-  it('hides admin sections from members', () => {
+  it('gives a member no section, and one holding iam: rights there Roles & permissions alone', () => {
     expect(isOrgAdminRole('member')).toBe(false);
-    expect(orgSettingsNavForRole('member').map((item) => item.slug)).toEqual([
-      'general',
-      'workspaces',
-      'modules',
-    ]);
+    expect(orgSettingsNavForRole('member')).toEqual([]);
+    expect(orgSettingsNavForRole(null)).toEqual([]);
+    expect(orgSettingsNavForRole('member', { holdsIam: true }).map((item) => item.slug)).toEqual(['roles']);
   });
 
   it('shows users to owners', () => {
@@ -32,7 +30,6 @@ describe('org settings nav', () => {
       'general',
       'branding',
       'workspaces',
-      'modules',
       'users',
       'roles',
     ]);
@@ -42,20 +39,42 @@ describe('org settings nav', () => {
   });
 });
 
-describe('orgSectionRedirect', () => {
-  it('waits for the access read before sending a member off Roles & permissions', () => {
-    // The org was read first (role known), /access is still in flight.
-    expect(orgSectionRedirect({ section: 'roles', role: 'member', holdsIam: false, accessSettled: false })).toBeNull();
-    // It answers: a delegated IAM admin stays, anyone else goes to General.
-    expect(orgSectionRedirect({ section: 'roles', role: 'member', holdsIam: true, accessSettled: true })).toBeNull();
-    expect(orgSectionRedirect({ section: 'roles', role: 'member', holdsIam: false, accessSettled: true })).toBe('general');
+describe('orgSettingsAccess', () => {
+  it('opens to owners and admins at once, by their role', () => {
+    for (const role of ['owner', 'admin']) {
+      expect(orgSettingsAccess({ role, roleKnown: true, holdsIam: false, accessSettled: false })).toBe('admin');
+    }
   });
+  it('waits for the role and the access before deciding for anyone else', () => {
+    expect(orgSettingsAccess({ role: null, roleKnown: false, holdsIam: false, accessSettled: true })).toBe('unknown');
+    expect(orgSettingsAccess({ role: 'member', roleKnown: true, holdsIam: false, accessSettled: false })).toBe('unknown');
+  });
+  it('gives Roles & permissions to an iam: holder, nothing to a member (Eve)', () => {
+    expect(orgSettingsAccess({ role: 'member', roleKnown: true, holdsIam: true, accessSettled: true })).toBe('iam');
+    expect(orgSettingsAccess({ role: 'member', roleKnown: true, holdsIam: false, accessSettled: true })).toBe('none');
+    expect(orgSettingsAccess({ role: null, roleKnown: true, holdsIam: false, accessSettled: true })).toBe('none');
+  });
+});
 
-  it('decides admin-only sections by role alone, and nothing before the role is known', () => {
-    expect(orgSectionRedirect({ section: 'users', role: 'member', holdsIam: false, accessSettled: false })).toBe('general');
-    expect(orgSectionRedirect({ section: 'users', role: 'admin', holdsIam: false, accessSettled: false })).toBeNull();
-    expect(orgSectionRedirect({ section: 'roles', role: null, holdsIam: false, accessSettled: true })).toBeNull();
-    expect(orgSectionRedirect({ section: 'general', role: 'member', holdsIam: false, accessSettled: true })).toBeNull();
+describe('orgSectionRedirect', () => {
+  it('waits for the access read before deciding for a non-admin', () => {
+    expect(orgSectionRedirect({ section: 'general', role: 'member', roleKnown: true, holdsIam: false, accessSettled: false })).toBeNull();
+    expect(orgSectionRedirect({ section: 'roles', role: 'member', roleKnown: true, holdsIam: false, accessSettled: false })).toBeNull();
+  });
+  it('sends an iam: holder to Roles & permissions, and lets anyone else stay (the layout refuses)', () => {
+    expect(orgSectionRedirect({ section: 'general', role: 'member', roleKnown: true, holdsIam: true, accessSettled: true })).toBe('roles');
+    expect(orgSectionRedirect({ section: 'users', role: 'member', roleKnown: true, holdsIam: true, accessSettled: true })).toBe('roles');
+    expect(orgSectionRedirect({ section: 'roles', role: 'member', roleKnown: true, holdsIam: true, accessSettled: true })).toBeNull();
+    expect(orgSectionRedirect({ section: 'general', role: 'member', roleKnown: true, holdsIam: false, accessSettled: true })).toBeNull();
+  });
+  it('never moves owners and admins, and nothing before the role is known', () => {
+    expect(orgSectionRedirect({ section: 'users', role: 'admin', roleKnown: true, holdsIam: false, accessSettled: false })).toBeNull();
+    expect(orgSectionRedirect({ section: 'roles', role: null, roleKnown: true, holdsIam: true, accessSettled: true })).toBeNull();
+    // No role there, IAM rights (a platform admin who is no member): sent to Roles & permissions.
+    expect(orgSectionRedirect({ section: 'users', role: null, roleKnown: true, holdsIam: true, accessSettled: true })).toBe('roles');
+    expect(orgSectionRedirect({ section: 'branding', role: null, roleKnown: true, holdsIam: true, accessSettled: true })).toBe('roles');
+    // Nothing is decided before the role is read.
+    expect(orgSectionRedirect({ section: 'users', role: null, roleKnown: false, holdsIam: true, accessSettled: true })).toBeNull();
   });
 });
 
@@ -67,13 +86,13 @@ describe('orgSettingsRedirect', () => {
     );
     expect(orgSettingsRedirect('/organizations/org-1/settings/roles')).toBeNull();
     expect(orgSettingsRedirect('/organizations/org-1/settings/users')).toBeNull();
-    expect(orgSettingsRedirect('/organizations/org-1/settings/constructor')).toBeNull();
   });
-});
 
-describe('orgModulesPath', () => {
-  it('opens Modules & features, at a workspace when given', () => {
-    expect(orgModulesPath('org-1')).toBe('/organizations/org-1/settings/modules');
-    expect(orgModulesPath('org-1', 'ws 1')).toBe('/organizations/org-1/settings/modules?workspace=ws%201');
+  it('sends Modules & features, removed with the sets, to Roles & permissions', () => {
+    expect(orgSettingsRedirect('/organizations/org-1/settings/modules')).toBe('/organizations/org-1/settings/roles');
+    expect(orgSettingsRedirect('/organizations/org-1/settings/modules', '?workspace=ws-1')).toBe(
+      '/organizations/org-1/settings/roles?workspace=ws-1'
+    );
+    expect(orgSettingsRedirect('/organizations/org-1/settings/constructor')).toBeNull();
   });
 });

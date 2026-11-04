@@ -34,6 +34,10 @@ ACTIONS = (
     action("RefreshGraphCache", "write", "graph_cache", feature="graph"),
     action("ListOntologies", "list", "ontology", feature="ontology"),
     action("GetOntology", "read", "ontology", feature="ontology"),
+    # Enabling an ontology file in a workspace, decided on the file named in the
+    # workspace's organization (``services/ontology/ontology_access.py``): granted
+    # at an organization or at the platform, never by the workspace's own admins.
+    action("AssignOntology", "admin", "ontology", feature="ontology"),
     action("ExportOntology", "read", "ontology", feature="ontology"),
     action("ImportOntology", "write", "ontology", feature="ontology"),
     action("CreateOntologyEntity", "write", "ontology", feature="ontology"),

@@ -17,6 +17,8 @@ import re
 from contextvars import ContextVar
 from typing import Any
 
+from naas_abi_core.services.agent.context import agent_container
+
 # Web FeatureKey values: "apps", "graph", "settings.workspace", ...
 _FEATURE_KEY_RE = re.compile(r"^[a-z]+(?:\.[a-z]+)?$")
 _CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]+")
@@ -31,6 +33,15 @@ _MAX_ERROR = 300
 nexus_feature_context: ContextVar[dict[str, Any] | None] = ContextVar(
     "nexus_feature_context", default=None
 )
+
+
+def turn_workspace_id() -> str:
+    """The Nexus workspace this turn is made in: the workspace whose container the
+    chat boundary set (``agent_container``, ``CallContext.container``); '' for none."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_of
+
+    container = agent_container.get()
+    return (workspace_of(container) or "") if container else ""
 
 
 def _clean(value: object, limit: int) -> str:

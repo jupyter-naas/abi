@@ -73,14 +73,14 @@ def remote_app_resource(module_id: str, app: str, workspace_id: str = "") -> str
 def remote_app_scope(module_id: str, app: str) -> tuple[dict[str, Any], ...]:
     """What opening a remote app asks of the kernel: ``discovery:OpenApp`` on
     that app, in any discovery project, and nothing else."""
-    from naas_abi_core.services.iam.names import encode_segment
+    from naas_abi_core.services.iam.names import PLATFORM, encode_segment
 
     return (
         {
             "effect": "Allow",
             "actions": ["discovery:OpenApp"],
             "resources": [
-                f"abi:-:-:discovery:app/*/{encode_segment(module_id)}/{encode_segment(app)}"
+                f"{PLATFORM}discovery:app/*/{encode_segment(module_id)}/{encode_segment(app)}"
             ],
         },
     )

@@ -5,18 +5,33 @@ import { Building2, ArrowRight, ArrowLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore } from '@/stores/workspace';
-import { useOrganizationStore } from '@/stores/organization';
+import { useOrganizationStore, type Organization } from '@/stores/organization';
+import { openableOrganizations } from '@/hooks/use-organization-settings-access';
 
 export default function OrganizationsPage() {
   const router = useRouter();
   const currentWorkspaceId = useWorkspaceStore((state) => state.currentWorkspaceId);
-  const { organizations, fetchOrganizations } = useOrganizationStore();
+  const fetchOrganizations = useOrganizationStore((state) => state.fetchOrganizations);
+  // Only the organizations whose settings open for the caller (the account menu's rule).
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
-      try { await fetchOrganizations(); } finally { setLoading(false); }
+      try {
+        await fetchOrganizations();
+        const opens = await openableOrganizations(useOrganizationStore.getState().organizations);
+        if (!cancelled) setOrganizations(opens);
+      } catch (error) {
+        console.error('Failed to read which organizations open:', error);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [fetchOrganizations]);
 
   // If user has only one org, redirect directly to its settings
@@ -76,7 +91,7 @@ export default function OrganizationsPage() {
             <Building2 size={48} className="mb-3 text-muted-foreground opacity-50" />
             <h2 className="mb-1 text-base font-semibold">No organizations found</h2>
             <p className="text-sm text-muted-foreground">
-              You don't have access to any organizations yet.
+              You have no organization to manage.
             </p>
           </div>
         ) : (

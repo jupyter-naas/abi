@@ -201,7 +201,7 @@ def test_admins_evict_a_live_instance_which_registers_again(broker):  # noqa: F8
                 "discovery:GetModule",
                 "discovery:ListModules",
             ],
-            ["abi:-:-:discovery:module/evict/research"],
+            ["abi:discovery:module/evict/research"],
         ),
     )
 

@@ -37,8 +37,6 @@ class ChatAgentRecord:
     class_name: str | None
     model_id: str | None
     provider: str | None
-    # Turned off in its workspace: refused to everyone.
-    enabled: bool = True
 
 
 @dataclass

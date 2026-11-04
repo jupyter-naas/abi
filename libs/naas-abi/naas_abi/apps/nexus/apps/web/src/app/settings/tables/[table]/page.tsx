@@ -19,11 +19,11 @@ import { ColumnFilterPopover } from '@/components/graph/explore/ColumnFilterPopo
 import { isBlank, type ColumnFilterState } from '@/lib/graph-query/filters';
 import type { FacetBucket } from '@/lib/graph-query/types';
 import { OrgSettingsPageHeader } from '@/app/organizations/[orgId]/settings/components/org-settings-page-header';
-import { rowMatchesColumnFilter } from '@/app/organizations/[orgId]/settings/users/users-table-filter';
+import { rowMatchesColumnFilter } from '@/components/settings/users-table/users-table-filter';
 import {
   downloadTableExport,
   type UsersExportFormat,
-} from '@/app/organizations/[orgId]/settings/users/users-table-export';
+} from '@/components/settings/users-table/users-table-export';
 import {
   cellText,
   compareCells,

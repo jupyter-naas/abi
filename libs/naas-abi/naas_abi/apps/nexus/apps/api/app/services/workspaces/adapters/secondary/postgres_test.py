@@ -152,3 +152,29 @@ async def test_a_workspace_abandoned_after_a_failed_flush_leaves_nothing(db) -> 
     memberships.drop_scope.assert_awaited_once_with("org-1", created.id)
     ids = (await db.execute(select(WorkspaceModel.id))).scalars().all()
     assert ids == ["ws-1"]
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_is_deleted_where_no_migration_made_abi_servers(nexus_db) -> None:
+    """The migrations never create ``abi_servers`` (``core/platform_tables.py``):
+    deleting a workspace must not read it."""
+    from sqlalchemy import select, text
+
+    async with nexus_db() as session:
+        await session.execute(text("DROP TABLE abi_servers"))
+        session.add(
+            UserModel(id="owner", email="o@example.com", name="o", created_at=NOW, updated_at=NOW)
+        )
+        session.add(
+            WorkspaceModel(
+                id="ws-x", name="X", slug="x", owner_id="owner", created_at=NOW, updated_at=NOW
+            )
+        )
+        await session.commit()
+        assert await WorkspaceSecondaryAdapterPostgres(db=session).delete_workspace(
+            workspace_id="ws-x"
+        )
+        await session.commit()
+        assert (
+            await session.execute(select(WorkspaceModel).where(WorkspaceModel.id == "ws-x"))
+        ).first() is None

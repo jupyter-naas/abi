@@ -16,7 +16,6 @@ describe('buildHomeFileMenuRows', () => {
         {
           app_id: 'maps',
           name: 'Maps',
-          enabled: true,
           installed: true,
           url: '/maps',
         },

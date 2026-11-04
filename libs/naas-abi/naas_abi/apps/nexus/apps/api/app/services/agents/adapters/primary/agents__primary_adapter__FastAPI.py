@@ -16,12 +16,11 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
 )
 from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
     caller_feature_flags,
+    caller_usable_agents,
     feature_keys_of,
-    filter_feature_agents,
 )
 from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
     resolve_agent_ref,
-    resolve_agent_refs,
 )
 from naas_abi.apps.nexus.apps.api.app.services.agents import (
     AgentCreateInput,
@@ -35,12 +34,8 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.remote.port import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.agents.scopes import (
     agent_class_label,
-    agent_scope,
-    scope_resolver,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
-from naas_abi.apps.nexus.apps.api.app.services.iam import sets as scope_sets
-from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares
 from naas_abi.apps.nexus.apps.api.app.services.registry import (
     ServiceRegistry,
@@ -88,10 +83,9 @@ def _workspace_sync_lock(workspace_id: str) -> asyncio.Lock:
 
 
 def _canonical_agent_sort_key(agent: AgentRecord) -> tuple:
-    """Prefer default, then enabled, then oldest row when collapsing duplicates."""
+    """Prefer default, then the oldest row when collapsing duplicates."""
     return (
         0 if agent.is_default else 1,
-        0 if agent.enabled else 1,
         agent.created_at,
         agent.id,
     )
@@ -188,54 +182,41 @@ async def _workspace_slug(workspace_id: str) -> str | None:
 async def _visible_to_caller(
     agents: list[AgentRecord], current_user: User, workspace_id: str
 ) -> list[AgentRecord]:
-    """The agents of ``workspace_id`` the caller may use: a module's agent must be
-    in the workspace's set and needs its module scope (``module:UseAgent``), an
-    office agent its feature too. One turned off (a module's hidden by the
-    workspace, or any row not enabled) is listed only to who may turn that one
-    back on."""
+    """The agents of ``workspace_id`` the caller may use (``caller_usable_agents``,
+    the rule a chat turn's roster follows too): a module's agent needs its module
+    scope (``module:UseAgent``), an office agent its feature too, an agent the
+    workspace built ``nexus:UseAgent`` on it (one turned off before is denied
+    there). IAM alone decides: there is no set and no on/off switch."""
     flags = await caller_feature_flags(current_user, workspace_id, feature_keys_of(agents))
-    classes = _get_agent_class_registry()
-
-    def scope_of(agent: AgentRecord) -> ModuleScope | None:
-        return agent_scope(agent, classes, _agent_class_modules)
-
-    # Who may turn each one back on (``UpdateAgent`` on it, as the toggle asks),
-    # in one call for the rows that are off.
-    switchable = await authz.allowed_ids(
-        "UpdateAgent",
-        user=current_user,
-        workspace=workspace_id,
-        ids=[agent.id for agent in agents if not agent.enabled],
-    )
-
-    async def may_switch(agent: AgentRecord) -> bool:
-        return agent.id in switchable
-
-    usable = await authz.filter_scopes(
-        filter_feature_agents(agents, flags),
-        user=current_user,
-        workspace=workspace_id,
-        scope_of=scope_of,
-        include_hidden=may_switch,
-        within_set=True,
-    )
-    return [agent for agent in usable if agent.enabled or agent.id in switchable]
+    return await caller_usable_agents(agents, current_user, workspace_id, flags)
 
 
-async def _ensure_in_set(agent: AgentRecord | AgentCreateInput) -> None:
-    """403 for a module's agent outside its workspace's set: what a workspace has
-    is chosen on the organization's Modules & features page, never here."""
-    resolve = scope_resolver()
+async def usable_roster(
+    agent_service: AgentService, current_user: User, workspace_id: str
+) -> tuple[list[AgentRecord], dict[str, bool]]:
+    """What a chat turn in ``workspace_id`` may pick from, and the caller's feature
+    flags there: the workspace's roster as the listing shows it to the caller (the
+    remote agents a READY module serves, and only those the caller may use).
 
-    def scope_of(found: Any) -> ModuleScope | None:
-        return resolve(found)
+    Whatever agent the turn falls back to (the default, Abi, the first) comes
+    from this list, so it never runs one the listing hides from the caller."""
+    roster = await served_agents(await workspace_roster(agent_service, workspace_id))
+    flags = await caller_feature_flags(current_user, workspace_id, feature_keys_of(roster))
+    return await caller_usable_agents(roster, current_user, workspace_id, flags), flags
 
-    if not await scope_sets.within_set([agent], workspace=agent.workspace_id, scope_of=scope_of):
-        raise HTTPException(
-            status_code=403,
-            detail="This agent is not in the workspace's set: its organization adds its "
-            "module on the Modules & features page",
-        )
+
+async def served_agents(agents: list[AgentRecord]) -> list[AgentRecord]:
+    """``agents`` but the remote ones whose module is not READY (discovery does
+    not list them); all of them when discovery cannot be read."""
+    if not any(agent.provider == REMOTE_PROVIDER for agent in agents):
+        return agents
+    remote = await _discovered_remote_agents()
+    if remote is None:
+        return agents
+    served = {agent.key for agent in remote}
+    return [
+        agent for agent in agents if agent.provider != REMOTE_PROVIDER or agent.class_name in served
+    ]
 
 
 async def _workspace_catalog_seed(workspace_id: str) -> dict | None:
@@ -301,24 +282,24 @@ def pick_workspace_chat_agent_id(
     agents: list[AgentRecord],
     requested_id: str | None,
 ) -> str | None:
-    """Use the requested agent only if it belongs to this workspace and is on.
+    """Use the requested agent only if it is among ``agents``, the ones the caller
+    may use in this workspace.
 
-    A leftover picker id from another workspace (or a disabled row) must not
-    run. Fall back to the workspace default, then Abi (the Nexus orchestrator),
-    then the first enabled agent.
+    A leftover picker id from another workspace (or an agent the caller may not
+    use) must not run. Fall back to the workspace default, then Abi (the Nexus
+    orchestrator), then the first usable agent.
     """
     if requested_id:
         requested = next((agent for agent in agents if agent.id == requested_id), None)
-        if requested is not None and requested.enabled:
+        if requested is not None:
             return requested.id
     default = next((agent for agent in agents if agent.is_default), None)
     if default is not None:
         return default.id
-    abi = next((agent for agent in agents if agent.enabled and _is_nexus_abi_agent(agent)), None)
+    abi = next((agent for agent in agents if _is_nexus_abi_agent(agent)), None)
     if abi is not None:
         return abi.id
-    enabled = next((agent for agent in agents if agent.enabled), None)
-    return enabled.id if enabled else None
+    return agents[0].id if agents else None
 
 
 def _is_nexus_abi_agent(agent: AgentRecord) -> bool:
@@ -336,13 +317,13 @@ def _is_nexus_slides_agent(agent: AgentRecord) -> bool:
 
 
 def pick_workspace_slides_agent_id(agents: list[AgentRecord]) -> str | None:
-    """Enabled Nexus Slides row, or None when the workspace did not list it.
+    """The Nexus Slides row among ``agents`` (those the caller may use), or None.
 
     Open-deck turns bind this agent. The workspace default stays the
     orchestrator for ordinary chat. A missing row is not a fallback to Abi.
     """
     for agent in agents:
-        if agent.enabled and _is_nexus_slides_agent(agent):
+        if _is_nexus_slides_agent(agent):
             return agent.id
     return None
 
@@ -355,9 +336,9 @@ def _is_nexus_documents_agent(agent: AgentRecord) -> bool:
 
 
 def pick_workspace_documents_agent_id(agents: list[AgentRecord]) -> str | None:
-    """Enabled Nexus Documents row, or None when the workspace did not list it."""
+    """The Nexus Documents row among ``agents`` (those the caller may use), or None."""
     for agent in agents:
-        if agent.enabled and _is_nexus_documents_agent(agent):
+        if _is_nexus_documents_agent(agent):
             return agent.id
     return None
 
@@ -370,24 +351,11 @@ def _is_nexus_sheets_agent(agent: AgentRecord) -> bool:
 
 
 def pick_workspace_sheets_agent_id(agents: list[AgentRecord]) -> str | None:
+    """The Nexus Sheets row among ``agents`` (those the caller may use), or None."""
     for agent in agents:
-        if agent.enabled and _is_nexus_sheets_agent(agent):
+        if _is_nexus_sheets_agent(agent):
             return agent.id
     return None
-
-
-def _workspace_agent_roster(
-    seeded_class_names: set[str] | None,
-    default_class_name: str | None,
-) -> set[str]:
-    """Explicit ``agents:`` list, or the engine default only.
-
-    A missing seed is not a wildcard. Class ``enabled_by_default`` must not
-    enable agents in a workspace that never declared a roster.
-    """
-    if seeded_class_names is not None:
-        return set(seeded_class_names)
-    return {default_class_name} if default_class_name else set()
 
 
 def _nexus_abi_class_name(class_names: Iterable[str]) -> str | None:
@@ -404,43 +372,6 @@ def _nexus_abi_class_name(class_names: Iterable[str]) -> str | None:
         ),
         None,
     )
-
-
-def _nexus_axi_class_name(class_names: Iterable[str]) -> str | None:
-    """Registry key of the axi Axi orchestrator when the axi module is loaded."""
-    return next(
-        (
-            class_name
-            for class_name in class_names
-            if class_name.endswith("/AxiAgent") and class_name.startswith("axi.")
-        ),
-        None,
-    )
-
-
-def _roster_alignment(
-    seeded_class_names: set[str] | None,
-    default_class_name: str | None,
-    class_names: Iterable[str],
-) -> tuple[set[str], bool]:
-    """The classes to enable, and whether to align existing rows to them.
-
-    Abi and Axi are added to the roster after the alignment decision, never as
-    their trigger. They are deployment orchestrators a workspace must not
-    switch off by omission. Adding them before the decision would turn a
-    workspace with no seed and no resolvable default into a tiny roster and
-    disable every other row — the very case the empty-roster guard exists to
-    protect.
-    """
-    roster = _workspace_agent_roster(seeded_class_names, default_class_name)
-    align_to_roster = bool(roster) or seeded_class_names is not None
-    abi_class_name = _nexus_abi_class_name(class_names)
-    if abi_class_name:
-        roster.add(abi_class_name)
-    axi_class_name = _nexus_axi_class_name(class_names)
-    if axi_class_name:
-        roster.add(axi_class_name)
-    return roster, align_to_roster
 
 
 def _extract_agent_suggestions(agent_cls: type) -> list[dict] | None:
@@ -699,7 +630,7 @@ async def _dedupe_agents_by_class_name(
 ) -> list[AgentRecord]:
     """Keep one row per non-empty class_name; delete the rest.
 
-    Prefer is_default, then enabled, then oldest created_at. Manual agents with
+    Prefer is_default, then the oldest created_at. Manual agents with
     no class_name are left alone (multiple custom rows are allowed).
     """
     by_class: dict[str, list[AgentRecord]] = defaultdict(list)
@@ -741,17 +672,6 @@ async def _discovered_remote_agents() -> list[RemoteAgent] | None:
         return None
 
 
-def _remote_agent_enabled(
-    class_name: str,
-    available: Iterable[str],
-    seeded_class_names: set[str] | None,
-) -> bool:
-    """Remote agents: on while their module is READY; an ``agents:`` roster restricts."""
-    if class_name not in available:
-        return False
-    return seeded_class_names is None or class_name in seeded_class_names
-
-
 async def _reconcile_workspace_agents(
     agent_service: AgentService,
     workspace_id: str,
@@ -770,15 +690,15 @@ async def _reconcile_workspace_agents(
     * **Create** records for newly discovered agent classes (idempotent under
       the partial unique index on workspace_id + class_name).
     * **Backfill** a missing ``module_path`` on existing records.
-    * **Align** ``enabled`` to the workspace roster on every sync: the
-      ``agents:`` seed when present, otherwise the engine default only, plus
-      Abi and Axi when loaded (see ``_roster_alignment``). An agent a user
-      toggled by hand (``enabled_override``) keeps that choice instead.
+    * **Mark** the workspace default (its seed's ``default_agent``, else the
+      engine's ``default_agent``, else Abi).
     * **Remote agents** (``remote_agents``, from NATS discovery) get rows with
-      ``provider="remote"`` and ``class_name="<module_id>/<Agent>"``. They are
-      enabled while their module is READY, restricted by an ``agents:`` roster,
-      and disabled, never deleted, while it is not. ``None`` means discovery
-      could not be read: remote rows are then left as they are.
+      ``provider="remote"`` and ``class_name="<module_id>/<Agent>"``, kept while
+      their module is not READY (the listing leaves them out meanwhile,
+      ``served_agents``).
+
+    The rows hold no on/off state: who uses each agent is IAM's
+    (``module:UseAgent`` on its module scope), decided where it is listed or used.
 
     Returns the reconciled agent list (deleted records removed, created ones
     appended, backfilled ones refreshed).
@@ -811,14 +731,8 @@ async def _reconcile_workspace_agents(
     slug = await _workspace_slug(workspace_id)
     catalog_seed = await _workspace_catalog_seed(workspace_id)
     from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import (
-        effective_seed_agents,
         effective_seed_default_agent,
     )
-
-    agent_refs = effective_seed_agents(slug, catalog_seed)
-    seeded_class_names: set[str] | None = None
-    if agent_refs is not None:
-        seeded_class_names = resolve_agent_refs(agent_refs, known_class_names)
 
     default_class_name = _resolve_workspace_default_class_name(known_class_names)
     seed_default_ref = effective_seed_default_agent(slug, catalog_seed)
@@ -827,26 +741,6 @@ async def _reconcile_workspace_agents(
         if seed_default:
             default_class_name = seed_default
 
-    # An empty roster from a missing seed plus a failed default resolve must
-    # not disable every row. That is how a workspace that exists in the DB
-    # but is absent from the loaded config lost its default and kept a leftover
-    # picker id from another workspace.
-    roster, align_enabled_to_roster = _roster_alignment(
-        seeded_class_names, default_class_name, class_name_to_agent_class
-    )
-
-    from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
-        feature_office_class_names_for_flags,
-        workspace_union_feature_flags,
-    )
-    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
-
-    async with AsyncSessionLocal() as db:
-        workspace_flags = await workspace_union_feature_flags(db, workspace_id)
-    roster.update(feature_office_class_names_for_flags(workspace_flags, known_class_names))
-    if roster:
-        align_enabled_to_roster = True
-
     # Persist any newly discovered agent classes to the database.
     for class_name, agent_cls in class_name_to_agent_class.items():
         if class_name in existing_agents_by_class_name:
@@ -854,7 +748,6 @@ async def _reconcile_workspace_agents(
 
         name = _get_agent_class_name(agent_cls)
         description = _get_agent_class_description(agent_cls)
-        enabled = class_name in roster
 
         logger.debug("Creating agent in nexus backend: {}", name)
         system_prompt = _get_agent_system_prompt(agent_cls)
@@ -867,7 +760,6 @@ async def _reconcile_workspace_agents(
                     class_name=class_name,
                     module_path=getattr(agent_cls, "__module__", None),
                     provider="abi",
-                    enabled=enabled,
                     system_prompt=system_prompt,
                 ),
             )
@@ -914,9 +806,6 @@ async def _reconcile_workspace_agents(
                     class_name=class_name,
                     module_path=remote.module_id,
                     provider=REMOTE_PROVIDER,
-                    enabled=_remote_agent_enabled(
-                        class_name, remote_by_class_name, seeded_class_names
-                    ),
                 ),
             )
         except IntegrityError:
@@ -945,39 +834,6 @@ async def _reconcile_workspace_agents(
                     continue
         reconciled.append(agent)
 
-    aligned: list[AgentRecord] = []
-    for agent in reconciled:
-        override = agent.enabled_override
-        if agent.provider == REMOTE_PROVIDER and agent.class_name:
-            if remote_agents is None:
-                aligned.append(agent)
-                continue
-            # A remote agent needs its module, whatever was chosen by hand.
-            if agent.class_name not in remote_by_class_name:
-                should_enable = False
-            elif override is not None:
-                should_enable = override
-            else:
-                should_enable = _remote_agent_enabled(
-                    agent.class_name, remote_by_class_name, seeded_class_names
-                )
-        elif override is not None and agent.class_name:
-            should_enable = override
-        elif not align_enabled_to_roster or not agent.class_name:
-            aligned.append(agent)
-            continue
-        else:
-            should_enable = agent.class_name in roster
-        if agent.enabled == should_enable:
-            aligned.append(agent)
-            continue
-        updated = await agent_service.update_agent(
-            agent_id=agent.id,
-            updates=AgentUpdateInput(enabled=should_enable),
-        )
-        aligned.append(updated if updated is not None else agent)
-    reconciled = aligned
-
     # The picker reads the stored name. A class rename would otherwise stay
     # stuck on the row created under the old name.
     renamed: list[AgentRecord] = []
@@ -994,19 +850,16 @@ async def _reconcile_workspace_agents(
         renamed.append(updated if updated is not None else agent)
     reconciled = renamed
 
-    # Ensure the workspace (or engine) default agent is enabled and marked.
+    # Ensure the workspace (or engine) default agent is marked.
     if default_class_name:
         default_agent = next(
             (agent for agent in reconciled if agent.class_name == default_class_name),
             None,
         )
-        if default_agent and (not default_agent.enabled or not default_agent.is_default):
+        if default_agent and not default_agent.is_default:
             updated = await agent_service.update_agent(
                 agent_id=default_agent.id,
-                updates=AgentUpdateInput(
-                    enabled=True if not default_agent.enabled else None,
-                    is_default=True if not default_agent.is_default else None,
-                ),
+                updates=AgentUpdateInput(is_default=True),
             )
             if updated is not None:
                 reconciled = [updated if agent.id == updated.id else agent for agent in reconciled]
@@ -1074,7 +927,9 @@ async def _enriched_workspace_agents(
 
     return [
         _enrich_agent(agent, class_name_to_agent_class)
-        for agent in await _visible_to_caller(agent_list, current_user, workspace_id)
+        for agent in await _visible_to_caller(
+            await served_agents(agent_list), current_user, workspace_id
+        )
     ]
 
 
@@ -1106,12 +961,11 @@ async def list_agents(
 ) -> list[AgentRecord]:
     """List a workspace's persisted agents, enriched for display.
 
-    Scoped to the caller: a module's agent outside the workspace's set or the
-    user holds no module scope for (``module:UseAgent`` in the workspace) is left
-    out, and so are the naas_abi office agents of a feature this user cannot open
-    (see ``core.agent_feature_access``), so two members of one workspace can get
-    different rosters. An agent turned off is listed only to who may turn it on
-    (``UpdateAgent``).
+    Exactly the agents the caller may use: a module's agent the user holds no
+    module scope for (``module:UseAgent`` in the workspace) is left out, and so
+    are the naas_abi office agents of a feature this user cannot open (see
+    ``core.agent_feature_access``), so two members of one workspace can get
+    different rosters. A remote agent is listed while its module is READY.
 
     When the workspace has no persisted agent rows yet, reconciles once with
     the code class registry (same work as ``POST /sync``) before returning,
@@ -1144,10 +998,9 @@ async def sync_agents(
     class no longer exists in the registry, and backfills missing metadata : then
     returns the reconciled, enriched list.
 
-    Reconciliation is workspace-wide (``enabled`` follows the ``agents:``
-    roster for everyone), but the list returned is scoped to the caller's
-    feature access, exactly like ``GET /``. A member syncing the workspace
-    therefore never narrows what an owner sees.
+    Reconciliation is workspace-wide, but the list returned is what the caller
+    may use, exactly like ``GET /``. A member syncing the workspace therefore
+    never narrows what an owner sees.
 
     A caller who may list agents but not change them (a viewer) gets the
     listing without any reconciliation: clients send this once per session
@@ -1174,9 +1027,6 @@ async def create_agent(
     agent_service: AgentService = Depends(get_agent_service),
 ) -> AgentRecord:
     await authz.require("CreateAgent", user=current_user, workspace=agent.workspace_id, id="-")
-    if agent.class_name:
-        # A module's agent: only one of the workspace's set.
-        await _ensure_in_set(agent)
     created_agent = await agent_service.create_agent(data=agent)
     logger.debug("Agent created: %s", created_agent)
     return created_agent
@@ -1200,11 +1050,7 @@ async def update_agent(
     current_user: User = Depends(get_current_user_required),
     agent_service: AgentService = Depends(get_agent_service),
 ) -> AgentRecord:
-    agent = await _load_agent(agent_service, current_user, "UpdateAgent", agent_id)
-    if updates.enabled:
-        # Turned on only within the workspace's set; off, always.
-        await _ensure_in_set(agent)
-
+    await _load_agent(agent_service, current_user, "UpdateAgent", agent_id)
     updated_agent = await agent_service.update_agent(
         agent_id=agent_id,
         updates=AgentUpdateInput(
@@ -1212,9 +1058,6 @@ async def update_agent(
             description=updates.description,
             system_prompt=updates.system_prompt,
             model_id=updates.model,
-            enabled=updates.enabled,
-            # A toggle by hand wins over the workspace roster on later syncs.
-            enabled_override=updates.enabled,
             is_default=updates.is_default,
         ),
     )
@@ -1241,9 +1084,9 @@ async def get_agent(
     agent_service: AgentService = Depends(get_agent_service),
 ) -> AgentRecord:
     agent = await _load_agent(agent_service, current_user, "GetAgent", agent_id)
-    # Same rule as the listing: an office agent the caller's features do not
-    # reach, or one turned off, is not addressable by id either, or the gate
-    # would only hide it.
+    # Same rule as the listing: an agent the caller may not use (its module
+    # scope, an office agent's feature) is not addressable by id either, or the
+    # gate would only hide it.
     if not await _visible_to_caller([agent], current_user, agent.workspace_id):
         raise HTTPException(status_code=404, detail="Agent not found")
     return agent

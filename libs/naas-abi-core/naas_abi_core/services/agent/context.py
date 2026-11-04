@@ -8,13 +8,14 @@ the agent's notification methods when publishing to the EventService.
 
 ``chat_id`` defaults to ``AgentSharedState.thread_id`` when unset, so the
 generic ``Agent.as_api`` endpoints already produce chat-tagged events without
-any extra wiring. ``user_id`` and ``workspace_id`` are auth-specific and must
-be populated by the integrator. Example::
+any extra wiring. ``user_id`` and ``container`` (the name of the container the
+call is made in, ``CallContext.container``) are auth-specific and must be
+populated by the integrator. Example::
 
     @router.middleware("http")
     async def attach_identity(request, call_next):
         agent_user_id.set(request.state.user.id)
-        agent_workspace_id.set(request.state.workspace.id)
+        agent_container.set(request.state.workspace.container)
         return await call_next(request)
 
 Propagating across raw thread spawns requires ``contextvars.copy_context()``;
@@ -29,8 +30,8 @@ from contextvars import ContextVar
 
 from naas_abi_core.services.event.context import (
     CallContextField,
+    event_actor_container,
     event_actor_user_id,
-    event_actor_workspace_id,
 )
 
 # The event service's views of the CallContext: identity set for an agent run
@@ -44,7 +45,8 @@ agent_user_id: CallContextField = event_actor_user_id
 agent_user_name: ContextVar[str | None] = ContextVar("agent_user_name", default=None)
 agent_user_email: ContextVar[str | None] = ContextVar("agent_user_email", default=None)
 agent_chat_id: ContextVar[str | None] = ContextVar("agent_chat_id", default=None)
-agent_workspace_id: CallContextField = event_actor_workspace_id
+# The container the turn is made in (its name, ``CallContext.container``).
+agent_container: CallContextField = event_actor_container
 # Enabled agent registry keys (``module/Class``) for the current chat turn after
 # workspace roster and per-caller feature gating. Abi uses this to attach only
 # the office sub-agents the user may reach.
@@ -119,8 +121,9 @@ def tool_scope_refused(tool: object) -> tuple[str, str, str] | None:
 # inside the caller's Coder coding workspace. Set at the request boundary (the
 # OpenAI shim, from the per-workspace token claims) and read by the workspace
 # filesystem/terminal tools so a server-side agent acts on the right user's
-# workspace. NOTE: distinct from ``agent_workspace_id`` (the Nexus tenant
-# workspace) — this targets the Coder container ``coder-<user>-<ws>``.
+# workspace. NOTE: distinct from ``agent_container`` (the container of the
+# call, e.g. a Nexus workspace) — this targets the Coder container
+# ``coder-<user>-<ws>``.
 coder_workspace_base: ContextVar[str | None] = ContextVar(
     "coder_workspace_base", default=None
 )

@@ -146,7 +146,7 @@ def test_org_admins_inherit_every_workspace_and_higher_roles_win() -> None:
 
 @pytest.mark.asyncio
 async def test_an_org_owner_and_admin_hold_the_role_in_every_workspace_of_the_org(team) -> None:
-    """The organization role is also held organization-wide (``abi:<org>:*``) for
+    """The organization role is also held below the organization (``<org>/*``) for
     owners and admins; members and viewers inherit nothing. IAM decides, so a
     workspace the user was never added to is theirs to use."""
     from naas_abi.apps.nexus.apps.api.app.services.iam import authz
@@ -205,7 +205,7 @@ async def test_every_membership_of_the_platform_is_read_from_iam(team) -> None:
     from naas_abi.apps.nexus.apps.api.app.services.organizations.port import OrganizationRecord
 
     team.org("org-2")
-    team.grant("member", "admin", "abi:org-2:-")
+    team.grant("member", "admin", "abi:nexus:organization/org-2")
     adapter = SimpleNamespace(
         list_all_organizations=AsyncMock(
             return_value=[

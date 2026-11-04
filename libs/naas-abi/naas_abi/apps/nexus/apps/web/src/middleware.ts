@@ -8,9 +8,9 @@ import { orgSettingsRedirect } from './app/organizations/[orgId]/settings/lib/re
  *
  * Routing hierarchy:
  *   /account/*                        -> authed
- *   /settings, /settings/{tables,system,roles,modules}/... -> authed, Platform Settings
- *   /settings/<table>, /workspace/[id]/admin/{system,events} -> redirected there (old links)
- *   /organizations/[orgId]/settings   -> authed (/settings/access -> /settings/roles)
+ *   /settings, /settings/{tables,system,roles}/... -> authed, Platform Settings
+ *   /settings/<table>, /settings/modules, /workspace/[id]/admin/{system,events} -> redirected there (old links)
+ *   /organizations/[orgId]/settings   -> authed (/settings/{access,modules} -> /settings/roles)
  *   /org/[orgSlug]/login              -> public, org-branded login
  *   /org/[orgSlug]/workspace/[id]/... -> authed, rewritten to /workspace/[id]/...
  *   /auth/login                       -> public

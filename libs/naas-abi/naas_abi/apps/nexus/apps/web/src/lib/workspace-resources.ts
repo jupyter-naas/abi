@@ -1,6 +1,6 @@
 import { authFetch } from '@/stores/auth';
 
-/** Module resources a workspace's set may hold, by their plural, as the API counts them. */
+/** Module resources the caller may use in a workspace, by their plural, as the API counts them. */
 export type ResourceKind = 'agents' | 'apps' | 'workflows' | 'pipelines';
 
 export interface ModuleResources {
@@ -12,13 +12,12 @@ export interface ModuleResources {
 }
 
 /**
- * What a workspace has: its effective set (its own within its organization's), read-only
- * (`GET /api/workspaces/{id}/resources`, for its admins). `can_edit_set`: whether the caller
- * changes it, on the organization's Modules & features page.
+ * What the caller may use in a workspace, read-only (`GET /api/workspaces/{id}/resources`):
+ * the enabled features they hold (IAM `UseFeature`) and, per module, the agents, apps,
+ * workflows and pipelines they may use.
  */
 export interface WorkspaceResources {
   organization_id: string | null;
-  can_edit_set: boolean;
   features: string[];
   modules: ModuleResources[];
   totals: Record<ResourceKind, number>;
@@ -51,7 +50,7 @@ export async function fetchWorkspaceResources(
   }
 }
 
-/** "2 agents · 1 app": a module's resources in the set, for General. */
+/** "2 agents · 1 app": what the caller may use of a module, for General. */
 export function describeModuleResources(entry: ModuleResources): string {
   const parts: string[] = [];
   const add = (count: number, noun: string) => {

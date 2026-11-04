@@ -214,6 +214,22 @@ class IdPService:
             self._revoke_user_refresh_tokens(user_id)
         return user
 
+    def delete_user(self, user_id: str) -> None:
+        """Delete the user: their sessions end, their refresh tokens are revoked and
+        the codes mailed to their address are dropped first, so nothing they signed
+        in with, or were about to, outlives the account (codes are kept per
+        address: one left would open the account the address gets next). A pending
+        authorization request holds no address and opens nothing without a code.
+        The address is free again afterwards (a new invitation makes a new user,
+        another id)."""
+        doc = self.store.get(USERS, user_id)
+        if doc is None:
+            raise NotFound(f"User {user_id} not found")
+        self._end_user_sessions(user_id)
+        self._revoke_user_refresh_tokens(user_id)
+        self.store.delete(CHALLENGES, _challenge_id(User.from_doc(doc.data).email))
+        self.store.delete(USERS, user_id)
+
     def _update_user(self, user_id: str, change: Callable[[User], User]) -> User:
         for _ in range(_ATTEMPTS):
             doc = self.store.get(USERS, user_id)

@@ -134,6 +134,27 @@ def test_provisioning_reaches_the_serving_engine_and_its_refusals_come_back(
         def find_user(self, email):
             return self.users.get(email)
 
+        def update_user(self, subject, *, name=None, disabled=None):
+            for email, known in self.users.items():
+                if known.subject == subject:
+                    self.users[email] = ProvisionedUser(
+                        "acme",
+                        email,
+                        subject,
+                        name or known.name,
+                        False,
+                        disabled=known.disabled if disabled is None else disabled,
+                    )
+                    return self.users[email]
+            return None
+
+        def delete_user(self, subject):
+            for email, known in list(self.users.items()):
+                if known.subject == subject:
+                    del self.users[email]
+                    return True
+            return False
+
     iam = bootstrapped_iam()
     service = IdentityService(
         [
@@ -176,9 +197,34 @@ def test_provisioning_reaches_the_serving_engine_and_its_refusals_come_back(
                 )
                 is None
             )
+            # Renamed, disabled (an explicit False travels too), then deleted.
+            off = await asyncio.to_thread(
+                api.update_provisioned_user,
+                "acme",
+                "sub-0",
+                name="Bob B",
+                disabled=True,
+            )
+            assert off is not None and (off.name, off.disabled) == ("Bob B", True)
+            on = await asyncio.to_thread(
+                api.update_provisioned_user, "acme", "sub-0", disabled=False
+            )
+            assert on is not None and (on.name, on.disabled) == ("Bob B", False)
+            assert (
+                await asyncio.to_thread(
+                    api.update_provisioned_user, "acme", "sub-9", disabled=True
+                )
+                is None
+            )
+            assert await asyncio.to_thread(api.delete_provisioned_user, "acme", "sub-0")
+            assert not await asyncio.to_thread(
+                api.delete_provisioned_user, "acme", "sub-0"
+            )
             # A provider managed in the provider: not implemented, over the wire.
             with pytest.raises(NotImplementedError):
                 await asyncio.to_thread(api.provision_user, "okta", "bob@example.com")
+            with pytest.raises(NotImplementedError):
+                await asyncio.to_thread(api.delete_provisioned_user, "okta", "sub-0")
             with pytest.raises(ValueError):
                 await asyncio.to_thread(api.provision_user, "acme", "nope")
             # A module with no identity grant cannot provision or even see it.
@@ -186,6 +232,12 @@ def test_provisioning_reaches_the_serving_engine_and_its_refusals_come_back(
                 await asyncio.to_thread(
                     module.provision_user, "acme", "eve@example.com"
                 )
+            with pytest.raises(UnknownProviderError):
+                await asyncio.to_thread(
+                    module.update_provisioned_user, "acme", "sub-0", disabled=True
+                )
+            with pytest.raises(UnknownProviderError):
+                await asyncio.to_thread(module.delete_provisioned_user, "acme", "sub-0")
         finally:
             api.close()
             module.close()

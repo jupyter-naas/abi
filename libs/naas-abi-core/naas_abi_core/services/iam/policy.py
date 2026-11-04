@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, Literal, cast
@@ -30,6 +30,9 @@ POLICY_VERSION = "2026-10-13"
 MAX_DOCUMENT_BYTES = 32 * 1024
 MAX_STATEMENTS = 100
 MAX_PATTERNS = 100
+# How deep a policy may sit under parents (AGENTS.md, "Sub-policies"): the root
+# of a chain is at depth 1.
+MAX_DEPTH = 8
 
 Effect = Literal["Allow", "Deny"]
 
@@ -38,8 +41,22 @@ Effect = Literal["Allow", "Deny"]
 # its manifest is approved; for any other principal they match nothing.
 MODULE_VARIABLES = frozenset({"module.id", "module.project"})
 POLICY_VARIABLES = frozenset({"scope", "principal.id", "user.id"}) | MODULE_VARIABLES
-# What a policy attached at a scope must start each resource pattern with.
-SCOPE_PREFIX = "${scope}:"
+# What a policy attached at a scope writes each resource pattern as: the
+# container itself, ``${scope}``, or what it holds, ``${scope}/...``.
+SCOPE = "${scope}"
+SCOPE_PREFIX = "${scope}/"
+
+
+# How the grammar before container paths wrote it: ``${scope}:<service>:...``.
+# A container's name is never followed by a ":" in a name, so such a pattern
+# names nothing until the move of the names rewrites it ("Migrating").
+OLD_SCOPE_PREFIX = "${scope}:"
+
+
+def under_scope(pattern: str) -> bool:
+    """Whether ``pattern`` names only the scope's container or what it holds."""
+    return pattern == SCOPE or pattern.startswith((SCOPE_PREFIX, OLD_SCOPE_PREFIX))
+
 
 _SID = re.compile(r"^[A-Za-z0-9]{1,64}$")
 _ACTION_PATTERN = re.compile(r"^(\*|[a-z?*][a-z0-9_?*]*:[A-Za-z0-9?*]+)$")
@@ -113,7 +130,7 @@ class PolicyDocument:
 
     @property
     def confined_to_scope(self) -> bool:
-        """Whether every Allow resource pattern starts with ``${scope}:``.
+        """Whether every Allow resource pattern is ``${scope}`` or ``${scope}/...``.
 
         Only such a policy may be attached at a scope: the scope fills
         ``${scope}`` and nothing else, so an Allow naming anything outside it
@@ -121,7 +138,7 @@ class PolicyDocument:
         narrows, so it may name anything.
         """
         return all(
-            pattern.startswith(SCOPE_PREFIX)
+            under_scope(pattern)
             for statement in self.statements
             if statement.effect == "Allow"
             for pattern in statement.resources
@@ -129,19 +146,32 @@ class PolicyDocument:
 
     @property
     def wholly_within_scope(self) -> bool:
-        """Whether every resource pattern, a Deny's included, starts with
-        ``${scope}:``: what a policy owned by an org or a workspace is, so that,
+        """Whether every resource pattern, a Deny's included, is ``${scope}``
+        or ``${scope}/...``: what a policy owned by a container is, so that,
         attached to anyone, it neither grants nor refuses beyond its scope."""
         return all(
-            pattern.startswith(SCOPE_PREFIX)
+            under_scope(pattern)
             for statement in self.statements
             for pattern in statement.resources
         )
 
 
+def denies_beyond_scope(documents: Iterable[PolicyDocument]) -> bool:
+    """Whether a Deny of one of ``documents`` (a policy and its chain) names
+    anything outside ``${scope}``: then it refuses beyond the scope it is
+    attached at, and only whoever may attach it unscoped attaches it at one."""
+    return any(
+        not under_scope(pattern)
+        for document in documents
+        for statement in document.statements
+        if statement.effect == "Deny"
+        for pattern in statement.resources
+    )
+
+
 def check_owned_document(document: PolicyDocument, owner: str) -> None:
-    """A policy owned by an org or a workspace (``owner``) is written for its
-    scope: its Allow and Deny patterns all start with ``${scope}:``, so it is
+    """A policy owned by a container (``owner``) is written for its scope: its
+    Allow and Deny patterns are all ``${scope}`` or ``${scope}/...``, so it is
     always attached at a scope and reaches nothing beyond it, whoever holds it.
     ``PolicyValidationError`` names each pattern that does not."""
     if owner == PLATFORM_SCOPE or document.wholly_within_scope:
@@ -151,13 +181,13 @@ def check_owned_document(document: PolicyDocument, owner: str) -> None:
             pattern
             for statement in document.statements
             for pattern in statement.resources
-            if not pattern.startswith(SCOPE_PREFIX)
+            if not under_scope(pattern)
         }
     )
     raise PolicyValidationError(
         [
-            f"A policy of {owner} names only resources under ${{scope}}: "
-            f"{pattern!r} is not"
+            f"A policy of {owner} names only ${{scope}} and resources under "
+            f"${{scope}}/, and {pattern!r} is not"
             for pattern in outside
         ]
     )
@@ -168,13 +198,13 @@ def within_scope(statement: Statement) -> Statement | None:
 
     Evaluation applies this to every statement reached through a scoped
     attachment, whatever the policy says now: an Allow keeps only its
-    ``${scope}:`` patterns, so a policy edited after it was attached, or an
+    ``${scope}`` and ``${scope}/`` patterns, so a policy edited after it was attached, or an
     attachment written to the store by other means, still cannot reach past
     its scope. A Deny is kept whole: it only narrows.
     """
     if statement.effect == "Deny":
         return statement
-    kept = tuple(r for r in statement.resources if r.startswith(SCOPE_PREFIX))
+    kept = tuple(r for r in statement.resources if under_scope(r))
     if not kept:
         return None
     if kept == statement.resources:

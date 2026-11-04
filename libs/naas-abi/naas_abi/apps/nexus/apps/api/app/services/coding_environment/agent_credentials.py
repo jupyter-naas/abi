@@ -26,6 +26,8 @@ from typing import Any
 
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import SERVICE as NEXUS
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import WORKSPACE
 from naas_abi_core import logger
 from naas_abi_core.engine.call_context import (
     CallContext,
@@ -35,7 +37,7 @@ from naas_abi_core.engine.call_context import (
     user,
 )
 from naas_abi_core.engine.nats_auth import CODING_AUDIENCE
-from naas_abi_core.services.iam.names import encode_segment
+from naas_abi_core.services.iam.names import PLATFORM, below
 
 MAX_DAYS = 365
 
@@ -44,13 +46,13 @@ class AgentCredentialsUnavailable(RuntimeError):
     """IAM is not there to make the agent's key (an engine-less process)."""
 
 
-def agent_scope(workspace_id: str | None, org: str | None) -> tuple[dict[str, Any], ...]:
-    """What an agent of ``workspace_id`` may do: everything in that workspace,
-    and use the platform's models and agents. A workspace IAM does not know has
-    the platform's only."""
-    resources = ["abi:-:-:model_registry:*", "abi:-:-:discovery:*"]
-    if workspace_id and org:
-        resources.insert(0, f"abi:{encode_segment(org)}:{encode_segment(workspace_id)}:*")
+def agent_scope(container: str | None) -> tuple[dict[str, Any], ...]:
+    """What an agent of a workspace (its ``container``) may do: everything in
+    that workspace, and use the platform's models and agents. A workspace IAM
+    does not know (None) has the platform's only."""
+    resources = [f"{PLATFORM}model_registry:*", f"{PLATFORM}discovery:*"]
+    if container:
+        resources[:0] = [container, below(container)]
     return ({"effect": "Allow", "actions": ["*"], "resources": resources},)
 
 
@@ -83,7 +85,7 @@ def mint_agent_key(
     made for the same environment are revoked first: one environment, one key."""
     iam = _iam()
     resource = environment_resource(user_id, sidecar_base)
-    org = iam.workspace_org(workspace_id) if workspace_id else None
+    container = iam.container(NEXUS, WORKSPACE, workspace_id) if workspace_id else None
     days = max(1, min(settings.coding_agent_token_days, MAX_DAYS))
     with use_call_context(_acting_for(user_id)):
         _revoke_for(iam, user_id, resource)
@@ -92,7 +94,7 @@ def mint_agent_key(
             description=f"coding agent: {label or resource}"[:200],
             audience=CODING_AUDIENCE,
             resource=resource,
-            scope=agent_scope(workspace_id, org),
+            scope=agent_scope(container),
             expires_at=datetime.now(UTC) + timedelta(days=days),
         )
     return created.value
