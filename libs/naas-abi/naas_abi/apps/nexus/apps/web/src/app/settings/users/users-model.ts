@@ -45,6 +45,8 @@ export interface Deletion {
   user: AdminUser;
   /** Why the account cannot be deleted (it alone owns an organization...), else null. */
   blocked: string | null;
+  /** What deleting leaves behind (a provider that keeps their account), else null. */
+  warning?: string | null;
   goes: {
     provider_account: { provider: string; display_name: string; managed_in_provider: boolean } | null;
     iam_user: string | null;

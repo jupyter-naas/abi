@@ -23,7 +23,6 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.port import (
     AuthPersistencePort,
     AuthUserRecord,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS, Memberships
 
 
 @dataclass
@@ -39,9 +38,8 @@ def now_utc_naive() -> datetime:
 
 
 class AuthService:
-    def __init__(self, adapter: AuthPersistencePort, memberships: Memberships = MEMBERSHIPS):
+    def __init__(self, adapter: AuthPersistencePort):
         self.adapter = adapter
-        self.memberships = memberships
 
     async def update_profile(
         self,

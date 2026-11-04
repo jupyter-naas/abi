@@ -159,6 +159,18 @@ class EngineAccessGateway(AccessGateway):
         return await self._as_caller(by, work)
 
     async def delete(self, principal_id: str, *, by: str) -> None:
+        """Idempotent: a principal already deleted (an earlier attempt that failed
+        after IAM's part) is left as it is."""
+
+        def deleted() -> bool:
+            try:
+                return str(runtime.iam().get_principal(principal_id).status) == "deleted"
+            except (IAMNotFoundError, ResourceNotFoundError):
+                return False
+
+        if await _as_api(deleted):
+            return
+
         def work(iam: Any) -> None:
             # Every token issued for them stops, and their keys (personal ones too).
             iam.revoke_tokens(principal_id, include_keys=True)

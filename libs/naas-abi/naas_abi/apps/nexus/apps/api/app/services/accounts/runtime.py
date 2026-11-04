@@ -5,12 +5,10 @@ another runtime."""
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime
 from typing import Any
 
 from fastapi import Depends
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
-from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.services.accounts.adapters.secondary.engine import (
     EngineAccessGateway,
     EngineIdentityGateway,
@@ -26,6 +24,7 @@ from naas_abi.apps.nexus.apps.api.app.services.accounts.port import (
     IdentityGateway,
 )
 from naas_abi.apps.nexus.apps.api.app.services.accounts.service import AccountService
+from naas_abi.apps.nexus.apps.api.app.services.auth.service import now_utc_naive
 from naas_abi.apps.nexus.apps.api.app.services.iam_admin.runtime import AUDIT_PREFIX
 from naas_abi.apps.nexus.apps.api.app.services.invites import runtime as invites_runtime
 from naas_abi.apps.nexus.apps.api.app.services.oidc.adapters.secondary.engine import (
@@ -36,10 +35,6 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.adapters.secondary.sql_a
 )
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import AdminAuditLog
 from sqlalchemy.ext.asyncio import AsyncSession
-
-
-def now_naive() -> datetime:
-    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def _audit() -> AdminAuditLog:
@@ -69,7 +64,7 @@ class AccountRuntime:
             self.identity,
             InvitationsAdapter(invites_runtime.RUNTIME.service(db)),
             self._audit(),
-            clock=now_naive,
+            clock=now_utc_naive,
         )
 
 

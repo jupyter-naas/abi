@@ -47,11 +47,16 @@ Access is not shown or changed here: a row opens the person's page in Roles & pe
 - `GET ""` → `[{id, kind: account|invitation, email, name, avatar, principal_id, status: signed_in|invited,
   deactivated, is_superadmin, created_at, organizations: [{id, name, role}], provider, warning}]` (`ListUsers`)
 - `POST /invite` `{email, name?, provider?}` → `{user, user_created, sign_in_email_sent, provisioning_skipped,
-  renewed, warning}` (`InviteUser`); 409 when an account holds the address, 400 no provider or a bad address
-- `PATCH /{id}` `{name?, is_superadmin?}` → the row (`UpdateUser`)
+  renewed, warning}` (`InviteUser`); 409 when an account holds the address, or when a deleted account is still
+  bound to the address's account at its provider; 400 no provider, or an address the provider will not take;
+  502 a provider that could not make the person (`invites.views.PROVIDER_FAILURES`, as the organization's and
+  the workspace's invitations answer it)
+- `PATCH /{id}` `{name?, is_superadmin?}` → the row (`UpdateUser`): every rule of both is checked before
+  either is made, and the superadmin change (IAM's) goes first, so a refusal leaves the name as it was
 - `POST /{id}/deactivate`, `POST /{id}/reactivate` → the row (`SuspendUser`, `ResumeUser`)
-- `GET /{id}/deletion` → `{user, blocked, goes: {provider_account, iam_user, attachments, memberships: [{scope,
-  label, role}], groups, sessions, api_keys, invitations}, stays: {workspaces: [{id, name}]}}` (`DeleteUser`)
+- `GET /{id}/deletion` → `{user, blocked, warning, goes: {provider_account, iam_user, attachments, memberships:
+  [{scope, label, role}], groups, sessions, api_keys, invitations}, stays: {workspaces: [{id, name}]}}`
+  (`DeleteUser`); `warning` says when the provider keeps the person's account (`provisioning: none`)
 - `DELETE /{id}?confirm=<email>` → `{deleted, warning}` (`DeleteUser`); 400 when the email typed back is not
   theirs, 409 when the plan is `blocked`
 
@@ -84,6 +89,18 @@ at the provider).
 - **IAM first, then the provider.** Deactivating, reactivating and deleting an account change IAM first (its
   refusal stops everything); the provider follows, and what it could not do is the answer's `warning`. An
   invitee has no IAM user: the provider is the change, and its refusal stops it.
+- **One operation at a time on the request's session.** The store and the invitations share the request's
+  `AsyncSession`, which takes one operation at a time (asyncpg refuses a second): their reads are awaited in
+  turn; only IAM's and the providers' calls run together (`asyncio.gather`). The route test wraps the session
+  so a second operation while one runs fails, as Postgres would.
+- **Deleting finishes on a retry.** A principal an earlier attempt already deleted (the row's retirement failed
+  after IAM's part) is not deleted again: the retirement goes on. An invitee at a provider that manages its
+  people has nothing to delete there: deleting revokes the invitations.
+- **An identity a deleted account keeps.** IAM keeps `(issuer, sub)` on the deleted user, so a provider account
+  that survives the deletion (`provisioning: none`, or a provider delete that failed) can never sign in again.
+  The plan's `warning` and the deletion's answer say so; inviting that address again is refused (409) where the
+  provider tells its account (`AccountStorePort.retired_identity`). Under `provisioning: none` it cannot tell:
+  the plan's warning is the only notice.
 - **One invitation path.** A platform invitation is `InvitationService.invite` with no organization, no workspace
   and no role (no grant, no policy: `InvalidPolicyError` for one); the address must have no account (409).
 

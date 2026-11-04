@@ -139,6 +139,11 @@ function DeletionSummary({ deletion }: { deletion: Deletion }) {
       ) : (
         <p data-list="stays">What they wrote anywhere stays: no workspace of theirs is deleted.</p>
       )}
+      {deletion.warning && (
+        <p className="platform-users-notice" role="note" data-field="deletion-warning">
+          {deletion.warning}
+        </p>
+      )}
     </div>
   );
 }
@@ -157,7 +162,8 @@ function UserRow({
   self: boolean;
   fetcher?: Fetcher;
   navigate: (href: string) => void;
-  onChanged: () => void;
+  /** The list changed; `notice` is what the provider could not follow, to show above it. */
+  onChanged: (notice?: string | null) => void;
   onReplaced: (user: AdminUser) => void;
 }) {
   const [panel, setPanel] = useState<Panel>({ mode: 'none' });
@@ -213,7 +219,8 @@ function UserRow({
       return;
     }
     setPanel({ mode: 'none' });
-    onChanged();
+    // The row is gone: what the provider kept is said above the table.
+    onChanged(answer.data.warning ? `${user.email}: ${answer.data.warning}` : null);
   };
 
   const actions = !self && (
@@ -590,7 +597,11 @@ export function PlatformUsers({
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [openFilter, setOpenFilter] = useState<{ id: ColumnId; left: number; top: number } | null>(null);
 
-  const reload = useCallback(() => setReloads((n) => n + 1), []);
+  const [pageNotice, setPageNotice] = useState<string | null>(null);
+  const reload = useCallback((notice?: string | null) => {
+    setPageNotice(notice ?? null);
+    setReloads((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     let live = true;
@@ -663,7 +674,7 @@ export function PlatformUsers({
           subtitle="Every account of the platform, and the people invited who have not signed in yet"
           actions={
             <>
-              <button type="button" className="org-settings-users-secondary-button" onClick={reload} title="Refresh">
+              <button type="button" className="org-settings-users-secondary-button" onClick={() => reload()} title="Refresh">
                 <RefreshCw size={16} />
               </button>
               <DropdownMenu.Root>
@@ -706,7 +717,15 @@ export function PlatformUsers({
           }
         />
 
-        {inviting && can(USER_ACTIONS.invite) && <InviteForm fetcher={fetcher} onInvited={reload} />}
+        {inviting && can(USER_ACTIONS.invite) && (
+          <InviteForm fetcher={fetcher} onInvited={() => reload()} />
+        )}
+
+        {pageNotice && (
+          <p className="platform-users-notice" role="status" data-field="page-notice">
+            {pageNotice}
+          </p>
+        )}
 
         {loadError && (
           <div className="org-settings-users-alert" role="alert">

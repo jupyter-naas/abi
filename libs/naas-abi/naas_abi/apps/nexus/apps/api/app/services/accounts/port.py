@@ -141,6 +141,9 @@ class DeletionPlan:
     """What deleting an account takes away, and what stays."""
 
     account: Account
+    # What deleting leaves behind that the admin should know (a provider that keeps
+    # the person's account, so the address cannot sign in again).
+    warning: str | None
     # Why it cannot be deleted (yourself, the last platform admin, an organization's
     # only owner).
     blocked: str | None
@@ -213,6 +216,10 @@ class AccountStorePort(ABC):
 
     @abstractmethod
     async def user_by_email(self, email: str) -> NexusUser | None: ...
+
+    @abstractmethod
+    async def retired_identity(self, provider: str, subject: str) -> bool:
+        """Whether a deleted account is bound to this identity at a provider."""
 
     @abstractmethod
     async def rename(self, user_id: str, name: str, *, now: datetime) -> None: ...

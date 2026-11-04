@@ -77,6 +77,18 @@ class AccountStorePostgres(AccountStorePort):
         ).scalar_one_or_none()
         return _user(row) if row is not None else None
 
+    async def retired_identity(self, provider: str, subject: str) -> bool:
+        row = await self.db.execute(
+            select(UserModel.id)
+            .where(
+                UserModel.deleted_at.is_not(None),
+                UserModel.idp_provider == provider,
+                UserModel.idp_subject == subject,
+            )
+            .limit(1)
+        )
+        return row.first() is not None
+
     async def rename(self, user_id: str, name: str, *, now: datetime) -> None:
         await self.db.execute(
             update(UserModel).where(UserModel.id == user_id).values(name=name, updated_at=now)

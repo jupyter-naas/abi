@@ -26,6 +26,7 @@ from naas_abi.apps.nexus.apps.api.app.services.accounts.runtime import get_accou
 from naas_abi.apps.nexus.apps.api.app.services.accounts.service import (
     AccountService,
     DeletionBlocked,
+    IdentityRetired,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
     get_current_user_required,
@@ -37,6 +38,10 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.guards import guard
 from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
     InvalidPolicyError,
     NoProviderError,
+)
+from naas_abi.apps.nexus.apps.api.app.services.invites.views import (
+    PROVIDER_FAILURES,
+    provider_failure,
 )
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import AuditUnavailable
 from pydantic import BaseModel, Field
@@ -123,6 +128,8 @@ class DeletionStays(BaseModel):
 class AdminUserDeletion(BaseModel):
     user: AdminUser
     blocked: str | None
+    # What deleting leaves behind (a provider that keeps the person's account).
+    warning: str | None = None
     goes: DeletionGoes
     stays: DeletionStays
 
@@ -157,6 +164,7 @@ def _deletion(plan: DeletionPlan) -> AdminUserDeletion:
     return AdminUserDeletion(
         user=admin_user(plan.account),
         blocked=plan.blocked,
+        warning=plan.warning,
         goes=DeletionGoes(
             provider_account=DeletionProvider(
                 provider=provider.name,
@@ -188,7 +196,7 @@ async def _answer(call: Any) -> Any:
         return await call
     except AccountNotFoundError as exc:
         raise HTTPException(status_code=404, detail="User not found") from exc
-    except DeletionBlocked as exc:
+    except (DeletionBlocked, IdentityRetired) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except AccountExistsError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -236,15 +244,21 @@ async def invite_user(
     email = body.email.strip().lower()
     if "@" not in email or email.startswith("@") or email.endswith("@"):
         raise HTTPException(status_code=400, detail="Enter a valid email address")
-    invited = await _answer(
-        service.invite(
-            actor=current_user.id,
-            actor_name=current_user.name,
-            email=email,
-            name=(body.name or "").strip() or None,
-            provider=body.provider or None,
+    try:
+        invited = await _answer(
+            service.invite(
+                actor=current_user.id,
+                actor_name=current_user.name,
+                email=email,
+                name=(body.name or "").strip() or None,
+                provider=body.provider or None,
+            )
         )
-    )
+    except PROVIDER_FAILURES as exc:
+        # As the organization's and the workspace's invitations answer them.
+        raise provider_failure(exc) from exc
+    except ValueError as exc:  # an address the provider will not take
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return AdminUserInvited(
         user=admin_user(invited.account),
         user_created=invited.user_created,
@@ -266,16 +280,15 @@ async def update_user(
     current_user: User = Depends(get_current_user_required),
     service: AccountService = Depends(get_account_service),
 ) -> AdminUser:
-    """Rename an account, and make it a platform admin or not."""
+    """Rename an account, and make it a platform admin or not: both are checked
+    before either is made, so a refused one leaves the other undone."""
     if body.name is None and body.is_superadmin is None:
         raise HTTPException(status_code=400, detail="Nothing to change")
-    account = None
-    if body.name is not None:
-        account = await _answer(service.rename(account_id, body.name, actor=current_user.id))
-    if body.is_superadmin is not None:
-        account = await _answer(
-            service.set_superadmin(account_id, body.is_superadmin, actor=current_user.id)
+    account = await _answer(
+        service.update(
+            account_id, name=body.name, is_superadmin=body.is_superadmin, actor=current_user.id
         )
+    )
     return admin_user(account)
 
 

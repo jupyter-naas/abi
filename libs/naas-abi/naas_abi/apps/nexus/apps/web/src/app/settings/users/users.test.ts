@@ -200,6 +200,7 @@ describe('PlatformUsers', () => {
     const deletion: Deletion = {
       user: BOB,
       blocked: null,
+      warning: 'Built-in keeps their account: delete it at the provider too',
       goes: {
         provider_account: { provider: 'builtin', display_name: 'Built-in', managed_in_provider: false },
         iam_user: 'usr_bob',
@@ -214,7 +215,10 @@ describe('PlatformUsers', () => {
     };
     const { fetcher, calls } = api({
       'GET /api/admin/users/usr_bob/deletion': () => ({ status: 200, body: deletion }),
-      'DELETE /api/admin/users/usr_bob?confirm=bob%40example.com': () => ({ status: 200, body: { deleted: true, warning: null } }),
+      'DELETE /api/admin/users/usr_bob?confirm=bob%40example.com': () => ({
+        status: 200,
+        body: { deleted: true, warning: 'builtin could not be reached' },
+      }),
     });
     await render({ fetcher });
     await mounted!.click(row('usr_bob').querySelector('[data-action="delete"]'));
@@ -227,6 +231,9 @@ describe('PlatformUsers', () => {
     expect(goes).toContain('member of Acme');
     expect(goes).toContain('2 signed-in sessions and 1 API key');
     expect(panel('usr_bob')!.querySelector('[data-list="stays"]')!.textContent).toContain('Research');
+    expect(panel('usr_bob')!.querySelector('[data-field="deletion-warning"]')!.textContent).toContain(
+      'keeps their account'
+    );
     const confirm = () => panel('usr_bob')!.querySelector('[data-action="confirm-delete"]') as HTMLButtonElement;
     expect(confirm().disabled).toBe(true);
     await mounted!.type(panel('usr_bob')!.querySelector('[data-field="confirm"]'), 'bob@example.com');
@@ -237,6 +244,10 @@ describe('PlatformUsers', () => {
       '/api/admin/users/usr_bob?confirm=bob%40example.com',
     ]);
     expect(calls.filter((c) => c.method === 'GET' && c.url === '/api/admin/users')).toHaveLength(2);
+    // The row is gone: what the provider could not do is said above the table.
+    expect(document.querySelector('[data-field="page-notice"]')?.textContent).toBe(
+      'bob@example.com: builtin could not be reached'
+    );
   });
 
   it('refuses a blocked delete with its reason and no confirmation', async () => {

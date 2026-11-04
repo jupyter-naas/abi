@@ -39,6 +39,7 @@ from naas_abi.apps.nexus.apps.api.app.services.accounts.port import (
     Provider,
     ProviderAccount,
     ProviderManaged,
+    ProviderUnreachable,
 )
 from naas_abi.apps.nexus.apps.api.app.services.accounts.service import AccountService
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
@@ -48,6 +49,9 @@ from naas_abi.apps.nexus.apps.api.app.services.iam_admin.testing import MemoryAu
 from naas_abi.apps.nexus.apps.api.app.services.invites.adapters.secondary.engine import (
     EngineGrantsGateway,
 )
+from naas_abi.apps.nexus.apps.api.app.services.invites.adapters.secondary.postgres import (
+    InvitationSecondaryAdapterPostgres,
+)
 from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
     Directory,
     DirectoryGateway,
@@ -55,9 +59,13 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
     Provisioned,
 )
 from naas_abi.apps.nexus.apps.api.app.services.invites.service import InvitationService
-from naas_abi.apps.nexus.apps.api.app.services.invites.service_test import Mailer, Store
+from naas_abi.apps.nexus.apps.api.app.services.invites.service_test import Mailer
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER
+from naas_abi_core.services.identity.IdentityPorts import (
+    ProviderUnavailableError,
+    ProvisioningError,
+)
 
 NOW = datetime(2026, 11, 4, 12, 0)
 BUILTIN = ProviderChoice("builtin", "Built-in", "builtin")
@@ -77,6 +85,9 @@ class Idp(DirectoryGateway, IdentityGateway):
     def __init__(self) -> None:
         self.people: dict[str, Person] = {}
         self.managed = False
+        # What provisioning raises (a provider down, an address it refuses).
+        self.provision_fails: Exception | None = None
+        self.delete_fails = False
 
     def subject_of(self, email: str) -> str:
         return self.people[email].subject
@@ -89,6 +100,8 @@ class Idp(DirectoryGateway, IdentityGateway):
         return Directory(providers=(BUILTIN,), default="builtin")
 
     async def provision(self, provider, email, name, *, by=None):
+        if self.provision_fails is not None:
+            raise self.provision_fails
         created = email not in self.people
         if created:
             self.people[email] = Person(f"sub-{email.split('@')[0]}", name or email)
@@ -118,6 +131,8 @@ class Idp(DirectoryGateway, IdentityGateway):
         return ProviderAccount(provider, subject, person.name, person.disabled)
 
     async def delete(self, provider, subject, *, by):
+        if self.delete_fails:
+            raise ProviderUnreachable("the provider is down")
         found = self.by_subject(subject)
         if found is None:
             return False
@@ -199,12 +214,12 @@ async def api(team, nexus_db):
         if user != "viewer":
             idp.people[f"{user}@example.com"] = Person(f"sub-{user}", user.title())
     audit = MemoryAudit()
-    invites_store = Store()
     access = EngineAccessGateway()
 
     def service(db) -> AccountService:
+        # As in production: the accounts and the invitations share the request's session.
         invitations = InvitationService(
-            invites_store,
+            InvitationSecondaryAdapterPostgres(db),
             idp,
             EngineGrantsGateway(lambda: team.iam),
             Mailer(),
@@ -233,7 +248,7 @@ async def api(team, nexus_db):
 
     async def account_service():
         async with nexus_db() as db:
-            yield service(db)
+            yield service(_one_at_a_time(db))
 
     app.dependency_overrides[accounts_runtime.get_account_service] = account_service
     app.dependency_overrides[get_current_user_required] = lambda: SimpleNamespace(
@@ -245,6 +260,25 @@ async def api(team, nexus_db):
         return AsyncClient(transport=ASGITransport(app=app), base_url="http://t")
 
     return SimpleNamespace(as_=as_, idp=idp, audit=audit, db=nexus_db)
+
+
+def _one_at_a_time(db):
+    """The request's session, refusing what Postgres (asyncpg) refuses: a second
+    operation while one is running. SQLite would let it through."""
+    running = {"now": False}
+    execute = db.execute
+
+    async def guarded(*args, **kwargs):
+        if running["now"]:
+            raise AssertionError("the session is used by two operations at once")
+        running["now"] = True
+        try:
+            return await execute(*args, **kwargs)
+        finally:
+            running["now"] = False
+
+    db.execute = guarded
+    return db
 
 
 def _status(team, user: str) -> str:
@@ -262,7 +296,9 @@ def _phases(audit: MemoryAudit, operation: str) -> list[str]:
 
 @pytest.mark.asyncio
 async def test_the_platform_admin_lists_every_account(api, team):
+    """The list reads Nexus's rows and invitations on one session, never at once."""
     async with api.as_("root") as http:
+        await http.post("/api/admin/users/invite", json={"email": "erin@example.com"})
         response = await http.get("/api/admin/users")
     assert response.status_code == 200, response.text
     rows = {row["id"]: row for row in response.json()}
@@ -484,3 +520,85 @@ async def test_deleting_needs_the_email_and_takes_the_account_away(api, team):
         assert row.deleted_at is not None and row.email == "member@deleted.internal"
         assert await db.get(AuthSessionModel, "s" * 64) is None
     assert _phases(api.audit, "delete_user") == ["requested", "succeeded"]
+
+
+# -- the review's cases -------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("failure", "status"),
+    [
+        (ProviderUnavailableError("down"), 502),
+        (ProvisioningError("refused"), 502),
+        (ValueError("not an address it takes"), 400),
+    ],
+)
+async def test_a_provider_failing_the_invitation_is_answered_not_a_500(api, failure, status):
+    api.idp.provision_fails = failure
+    async with api.as_("root") as http:
+        response = await http.post("/api/admin/users/invite", json={"email": "fay@example.com"})
+        ids = {row["id"] for row in (await http.get("/api/admin/users")).json()}
+    assert response.status_code == status, response.text
+    assert "invited:fay@example.com" not in ids
+
+
+@pytest.mark.asyncio
+async def test_an_invitee_at_a_provider_that_manages_its_people_is_deleted(api):
+    """Nothing to delete at the provider: the invitations go, as asked."""
+    async with api.as_("root") as http:
+        await http.post("/api/admin/users/invite", json={"email": "gus@example.com"})
+        api.idp.managed = True
+        account = quote("invited:gus@example.com", safe="")
+        plan = await http.get(f"/api/admin/users/{account}/deletion")
+        assert plan.status_code == 200 and plan.json()["blocked"] is None
+        gone = await http.delete(f"/api/admin/users/{account}?confirm=gus@example.com")
+        assert gone.status_code == 200, gone.text
+        ids = {row["id"] for row in (await http.get("/api/admin/users")).json()}
+    assert "invited:gus@example.com" not in ids
+
+
+@pytest.mark.asyncio
+async def test_a_deletion_that_failed_after_iam_finishes_on_retry(api, team):
+    """IAM deleted the principal, then retiring the row failed: deleting again retires it."""
+    with as_service_account("engine"):
+        team.iam.delete_principal(team.principal("member"))
+    async with api.as_("root") as http:
+        gone = await http.delete("/api/admin/users/member?confirm=member@example.com")
+        assert gone.status_code == 200, gone.text
+        ids = {row["id"] for row in (await http.get("/api/admin/users")).json()}
+    assert "member" not in ids
+
+
+@pytest.mark.asyncio
+async def test_a_provider_that_keeps_the_account_is_said_and_blocks_a_reinvitation(api):
+    async with api.as_("root") as http:
+        api.idp.managed = True
+        plan = (await http.get("/api/admin/users/viewer/deletion")).json()
+        assert plan["warning"] is None  # never signed in: no identity to keep
+        plan = (await http.get("/api/admin/users/member/deletion")).json()
+        assert "keeps their account" in plan["warning"]
+        api.idp.managed = False
+
+        api.idp.delete_fails = True
+        gone = await http.delete("/api/admin/users/member?confirm=member@example.com")
+        assert gone.status_code == 200, gone.text
+        assert "keeps their account" in gone.json()["warning"]
+        again = await http.post("/api/admin/users/invite", json={"email": "member@example.com"})
+    assert again.status_code == 409, again.text
+    assert "delete it at the provider first" in again.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_a_refused_superadmin_change_leaves_the_name_as_it_was(api, team):
+    _operator(team, ["nexus:UpdateUser"])
+    async with api.as_("operator") as http:
+        refused = await http.patch(
+            "/api/admin/users/root", json={"name": "Renamed", "is_superadmin": False}
+        )
+    assert refused.status_code == 400
+    assert "at least one active platform admin" in refused.json()["detail"]
+    async with api.db() as db:
+        assert (await db.get(UserModel, "root")).name == "Root"
+    assert api.idp.people["root@example.com"].name == "Root"
+    assert _phases(api.audit, "rename_user") == []

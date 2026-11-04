@@ -26,7 +26,7 @@ import asyncio
 from collections.abc import Awaitable, Callable, Iterable, Sequence
 from dataclasses import replace
 from datetime import datetime
-from typing import TypeVar
+from typing import Literal, TypeVar
 
 from naas_abi.apps.nexus.apps.api.app.services.accounts.port import (
     AccessGateway,
@@ -85,6 +85,10 @@ class ConfirmationMismatch(AccountChangeRefused):
     pass
 
 
+class IdentityRetired(AccountChangeRefused):
+    """The address's identity at its provider is bound to a deleted account."""
+
+
 class AccountService:
     def __init__(
         self,
@@ -108,12 +112,15 @@ class AccountService:
     # =========================================================================
 
     async def list(self, *, actor: str) -> list[Account]:
+        # Nexus's reads share the request's database session, which takes one
+        # operation at a time: they are awaited in turn. IAM's and the providers'
+        # calls (worker threads, NATS) run together.
         users = await self.store.list_users()
-        principals, admins, organizations, pending = await asyncio.gather(
+        organizations = await self.store.organizations()
+        pending = await self.invitations.pending()
+        principals, admins = await asyncio.gather(
             self.access.principals([u.id for u in users]),
             self.access.platform_admins(),
-            self.store.organizations(),
-            self.invitations.pending(),
         )
         accounts = [
             self._account(user, principals.get(user.id), admins, organizations) for user in users
@@ -132,10 +139,10 @@ class AccountService:
         return await self._account_of(user)
 
     async def _account_of(self, user: NexusUser, *, warning: str | None = None) -> Account:
-        principals, admins, organizations = await asyncio.gather(
+        organizations = await self.store.organizations()  # the session: on its own
+        principals, admins = await asyncio.gather(
             self.access.principals([user.id]),
             self.access.platform_admins(),
-            self.store.organizations(),
         )
         account = self._account(user, principals.get(user.id), admins, organizations)
         return replace(account, warning=warning)
@@ -221,6 +228,7 @@ class AccountService:
         email = email.lower().strip()
         if await self.store.user_by_email(email) is not None:
             raise AccountExistsError(f"{email} already has an account")
+        await self._not_a_retired_identity(email, provider, actor=actor)
         outcome = await self._audited(
             actor,
             "invite_user",
@@ -261,10 +269,37 @@ class AccountService:
     # Changes
     # =========================================================================
 
+    async def update(
+        self,
+        account_id: str,
+        *,
+        name: str | None = None,
+        is_superadmin: bool | None = None,
+        actor: str,
+    ) -> Account:
+        """Rename and/or change superadmin. Every rule of both is checked before
+        either is made; the superadmin change (IAM's) goes first, so its refusal
+        leaves the name as it was."""
+        user, _ = await self._target(account_id)
+        self._not_yourself(user, actor)
+        if name is not None:
+            _valid_name(name)
+        if is_superadmin is not None:
+            if user is None:
+                raise AccountChangeRefused(NOT_SIGNED_IN)
+            admins = await self.access.platform_admins()
+            if not is_superadmin and user.id in admins:
+                await self._admins_remain(user.id, admins)
+        account = None
+        if is_superadmin is not None:
+            account = await self.set_superadmin(account_id, is_superadmin, actor=actor)
+        if name is not None:
+            account = await self.rename(account_id, name, actor=actor)
+        assert account is not None, "nothing to change"
+        return account
+
     async def rename(self, account_id: str, name: str, *, actor: str) -> Account:
-        name = name.strip()
-        if not name or len(name) > MAX_NAME:
-            raise AccountChangeRefused(f"A name is 1 to {MAX_NAME} characters")
+        name = _valid_name(name)
         user, invitations = await self._target(account_id)
         self._not_yourself(user, actor)
         email = user.email if user is not None else invitations[0].email
@@ -377,6 +412,7 @@ class AccountService:
             )
             return DeletionPlan(
                 account=account,
+                warning=None,
                 blocked=None,
                 provider_account=_provider(found, invitations[0].provider, providers),
                 iam_user=None,
@@ -418,10 +454,15 @@ class AccountService:
             if is_workspace_container(scope) and (ws := workspace_of(scope)) is not None
         ]
         names = await self.store.workspace_names(workspace_ids)
+        provider_account = _provider(found, user.idp_provider, providers)
+        warning = None
+        if user.signed_in and provider_account is not None and provider_account.managed_in_provider:
+            warning = _kept_identity(provider_account.display_name)
         return DeletionPlan(
             account=account,
             blocked=blocked,
-            provider_account=_provider(found, user.idp_provider, providers),
+            warning=warning,
+            provider_account=provider_account,
             iam_user=principal.id if principal is not None else None,
             attachments=holdings.attachments if holdings is not None else 0,
             memberships=tuple(
@@ -448,26 +489,54 @@ class AccountService:
 
         async def change() -> str | None:
             if user is None:
-                # The provider first: refused there, the invitations are kept.
-                found = await self._provider_accounts(None, invitations, actor=actor, strict=True)
+                # The provider first: refused there, the invitations are kept. A
+                # provider that manages its people has nothing for ABI to delete:
+                # the invitations go, which is what is asked.
+                found = await self._provider_accounts(
+                    None, invitations, actor=actor, strict=True, managed="skip"
+                )
                 for account in found:
                     await self.identity.delete(account.provider, account.subject, by=actor)
                 await self._revoke(invitations)
                 return None
             found = await self._provider_accounts(user, [], actor=actor)
             principal = await self.access.principal(user.id)
-            # IAM decides first: refused, nothing else goes.
-            await self.access.delete(principal.id, by=actor)
+            # IAM decides first: refused, nothing else goes. A principal a failed
+            # attempt already deleted is done: the rest goes on, so a retry finishes.
+            if principal.status != "deleted":
+                await self.access.delete(principal.id, by=actor)
             await self.store.retire(user.id, now=self._clock())
             await self.store.commit()
             await self._revoke(
                 [i for i in await self.invitations.pending() if i.email == email.lower()]
             )
-            return await self._at_each(
+            problems = await self._at_each(
                 found, lambda a: self.identity.delete(a.provider, a.subject, by=actor)
             )
+            kept = plan.warning or (
+                _kept_identity("Their identity provider") if problems and user.signed_in else None
+            )
+            return "; ".join(w for w in (problems, kept) if w) or None
 
         return await self._audited(actor, "delete_user", account_id, email, change)
+
+    async def _not_a_retired_identity(
+        self, email: str, provider: str | None, *, actor: str
+    ) -> None:
+        """Refuse inviting an address whose account at a provider a deleted account is
+        still bound to (the provider's delete failed): IAM keeps that identity on the
+        deleted user, so the person could never sign in with it."""
+        names = (
+            [provider]
+            if provider
+            else [p.name for p in await self.identity.providers() if not p.managed_in_provider]
+        )
+        for account in await self._at_providers(email, names, actor=actor, quiet=True):
+            if await self.store.retired_identity(account.provider, account.subject):
+                raise IdentityRetired(
+                    f"{email} belonged to a deleted account, and {account.provider} still holds "
+                    "that account: delete it at the provider first, or they cannot sign in"
+                )
 
     async def _revoke(self, invitations: Iterable[PendingInvitation]) -> None:
         for invitation in invitations:
@@ -509,6 +578,7 @@ class AccountService:
         actor: str,
         strict: bool = False,
         quiet: bool = False,
+        managed: Literal["refuse", "skip"] = "refuse",
     ) -> list[ProviderAccount]:
         """The person's accounts at their providers: the one they signed in with, else
         the one each provider holds for their email."""
@@ -518,7 +588,9 @@ class AccountService:
         names = sorted({i.provider for i in invitations}) or [
             p.name for p in await self.identity.providers() if not p.managed_in_provider
         ]
-        return await self._at_providers(email, names, actor=actor, strict=strict, quiet=quiet)
+        return await self._at_providers(
+            email, names, actor=actor, strict=strict, quiet=quiet, managed=managed
+        )
 
     async def _at_providers(
         self,
@@ -528,13 +600,16 @@ class AccountService:
         actor: str,
         strict: bool = False,
         quiet: bool = False,
+        managed: Literal["refuse", "skip"] = "refuse",
     ) -> list[ProviderAccount]:
+        """``strict``: a refusal or an unreachable provider stops the change, and so
+        does a provider that manages its people, unless ``managed="skip"``."""
         found: list[ProviderAccount] = []
         for name in providers:
             try:
                 account = await self.identity.find(name, email, by=actor)
             except ProviderManaged:
-                if strict:
+                if strict and managed == "refuse":
                     raise AccountChangeRefused(
                         f"{name} manages its people itself: do it there, or delete the invitation"
                     ) from None
@@ -619,3 +694,19 @@ def _provider(
 
 def _text(value: object) -> str | None:
     return str(value) if value else None
+
+
+def _valid_name(name: str) -> str:
+    name = name.strip()
+    if not name or len(name) > MAX_NAME:
+        raise AccountChangeRefused(f"A name is 1 to {MAX_NAME} characters")
+    return name
+
+
+def _kept_identity(provider: str) -> str:
+    """What deleting an account leaves when its provider keeps the person's account."""
+    return (
+        f"{provider} keeps their account: invited again with this address, they could not "
+        "sign in with it (that identity stays with the deleted account). Delete it at the "
+        "provider too"
+    )
