@@ -73,3 +73,21 @@ async def read_secrets(engine: Any, names: dict[str, str]) -> dict[str, str]:
             (await secrets.get(secret_name, None) or "") if secret_name else ""
         )
     return values
+
+
+def schema_tool(fn: Any, schema: type) -> Any:
+    """A tool coroutine: validate the arguments against ``schema`` (defaults
+    filled in), then call ``fn`` with all of them and await the result.
+
+    In-engine tools were lambdas with positional parameters; LangChain passes
+    only the arguments the model gave, so an omitted optional one crashed them.
+    """
+
+    async def call(**arguments: Any) -> Any:
+        values = schema(**arguments).model_dump()
+        result = fn(**values)
+        if hasattr(result, "__await__"):
+            result = await result
+        return result
+
+    return call
