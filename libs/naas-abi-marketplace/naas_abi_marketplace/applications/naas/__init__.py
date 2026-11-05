@@ -1,3 +1,12 @@
+"""Naas (in-engine): the ontology YAML workflows and their triggers, which
+publish the ontologies to a Naas workspace for the in-engine
+``ontology_engineer``, with the integration they use.
+
+The Naas agent runs as the remote module ``naas_abi_apps.naas`` (module id
+``applications.naas``) from ``libs/naas-abi-marketplace-modules``; its
+in-engine version was removed (jupyter-naas/abi#1423).
+"""
+
 from naas_abi_core.module.Module import (
     BaseModule,
     ModuleConfiguration,

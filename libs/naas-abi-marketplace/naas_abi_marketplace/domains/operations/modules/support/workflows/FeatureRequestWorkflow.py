@@ -9,15 +9,15 @@ from naas_abi_core import logger
 from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_core.workflow import Workflow, WorkflowConfiguration
 from naas_abi_core.workflow.workflow import WorkflowParameters
-from naas_abi_marketplace.applications.github.integrations.GitHubGraphqlIntegration import (
+from naas_abi_marketplace.domains.operations.modules.support import ABIModule
+from naas_abi_marketplace.domains.operations.modules.support.integrations.GitHubGraphqlIntegration import (
     GitHubGraphqlIntegration,
     GitHubGraphqlIntegrationConfiguration,
 )
-from naas_abi_marketplace.applications.github.integrations.GitHubIntegration import (
+from naas_abi_marketplace.domains.operations.modules.support.integrations.GitHubIntegration import (
     GitHubIntegration,
     GitHubIntegrationConfiguration,
 )
-from naas_abi_marketplace.domains.operations.modules.support import ABIModule
 from pydantic import Field
 
 

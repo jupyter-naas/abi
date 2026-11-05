@@ -1,0 +1,223 @@
+# Built by the people module's ActOfConnectionsOnLinkedInExportPipeline from a
+# two-row Connections.csv (owner Alice Martin): what the templates query.
+@prefix abi: <http://ontology.naas.ai/abi/> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix linkedin: <http://ontology.naas.ai/abi/linkedin/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://ontology.naas.ai/abi/TemporalInstant/Person_00000000-0000-4000-8000-000000000001--li-jane-doe-connection-start-2025-10-23> a abi:TemporalInstant,
+        owl:NamedIndividual ;
+    rdfs:label "23/10/2025" ;
+    abi:instant_date "2025-10-23"^^xsd:date ;
+    dcterms:creator "linkedin_connections_export" .
+
+<http://ontology.naas.ai/abi/TemporalInstant/Person_00000000-0000-4000-8000-000000000001--li-john-smith-connection-start-2024-01-01> a abi:TemporalInstant,
+        owl:NamedIndividual ;
+    rdfs:label "01/01/2024" ;
+    abi:instant_date "2024-01-01"^^xsd:date ;
+    dcterms:creator "linkedin_connections_export" .
+
+<http://ontology.naas.ai/abi/TemporalRegion/Person_00000000-0000-4000-8000-000000000001--li-jane-doe-connection> a abi:TemporalRegion,
+        owl:NamedIndividual ;
+    rdfs:label "Since 23 Oct 2025" ;
+    abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/Person_00000000-0000-4000-8000-000000000001--li-jane-doe-connection-start-2025-10-23> ;
+    dcterms:creator "linkedin_connections_export" .
+
+<http://ontology.naas.ai/abi/TemporalRegion/Person_00000000-0000-4000-8000-000000000001--li-john-smith-connection> a abi:TemporalRegion,
+        owl:NamedIndividual ;
+    rdfs:label "Since 01 Jan 2024" ;
+    abi:hasFirstInstant <http://ontology.naas.ai/abi/TemporalInstant/Person_00000000-0000-4000-8000-000000000001--li-john-smith-connection-start-2024-01-01> ;
+    dcterms:creator "linkedin_connections_export" .
+
+<http://ontology.naas.ai/people/ActOfWorking/li-jane-doe-axa-chief-risk-officer> a abi:ActOfWorking,
+        owl:NamedIndividual ;
+    rdfs:label "Chief Risk Officer @ AXA" ;
+    abi:forOrganization <http://ontology.naas.ai/abi/Organization/axa> ;
+    abi:hasParticipant <http://ontology.naas.ai/abi/Person/linkedin-jane-doe> ;
+    abi:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/linkedin-jane-doe> ;
+    abi:realizes <http://ontology.naas.ai/people/OccupationRole/li-jane-doe-axa-chief-risk-officer> ;
+    dcterms:creator "linkedin_connections_export" .
+
+<http://ontology.naas.ai/people/ActOfWorking/li-john-smith-edf-engineer> a abi:ActOfWorking,
+        owl:NamedIndividual ;
+    rdfs:label "Engineer @ EDF" ;
+    abi:forOrganization <http://ontology.naas.ai/abi/Organization/edf> ;
+    abi:hasParticipant <http://ontology.naas.ai/abi/Person/linkedin-john-smith> ;
+    abi:isActOfWorkingOf <http://ontology.naas.ai/abi/Person/linkedin-john-smith> ;
+    abi:realizes <http://ontology.naas.ai/people/OccupationRole/li-john-smith-edf-engineer> ;
+    dcterms:creator "linkedin_connections_export" .
+
+<http://ontology.naas.ai/people/ProfileSummary/li-jane-doe> a abi:ProfileSummary,
+        owl:NamedIndividual ;
+    rdfs:label "Chief Risk Officer" ;
+    abi:headline_text "Chief Risk Officer" ;
+    abi:isProfileSummaryOf <http://ontology.naas.ai/abi/Person/linkedin-jane-doe> ;
+    dcterms:creator "linkedin_connections_export" .
+
+<http://ontology.naas.ai/people/ProfileSummary/li-john-smith> a abi:ProfileSummary,
+        owl:NamedIndividual ;
+    rdfs:label "Engineer" ;
+    abi:headline_text "Engineer" ;
+    abi:isProfileSummaryOf <http://ontology.naas.ai/abi/Person/linkedin-john-smith> ;
+    dcterms:creator "linkedin_connections_export" .
+
+<http://ontology.naas.ai/abi/Organization/axa> a abi:Organization,
+        owl:NamedIndividual ;
+    rdfs:label "AXA" ;
+    dcterms:creator "linkedin_connections_export" .
+
+<http://ontology.naas.ai/abi/Organization/edf> a abi:Organization,
+        owl:NamedIndividual ;
+    rdfs:label "EDF" ;
+    dcterms:creator "linkedin_connections_export" .
+
+<http://ontology.naas.ai/abi/linkedin/ActOfConnection/Person_00000000-0000-4000-8000-000000000001--li-jane-doe> a linkedin:ActOfConnection,
+        owl:NamedIndividual ;
+    rdfs:label "Alice Martin connected with Jane Doe" ;
+    abi:hasParticipant <http://ontology.naas.ai/abi/Person#00000000-0000-4000-8000-000000000001>,
+        <http://ontology.naas.ai/abi/Person/linkedin-jane-doe> ;
+    abi:hasSourceDocument <http://ontology.naas.ai/abi/linkedin/ConnectionsExportFile/Person_00000000-0000-4000-8000-000000000001> ;
+    linkedin:hasConnectedPerson <http://ontology.naas.ai/abi/Person/linkedin-jane-doe> ;
+    linkedin:hasConnectionOwner <http://ontology.naas.ai/abi/Person#00000000-0000-4000-8000-000000000001> ;
+    abi:occupiesTemporalRegion <http://ontology.naas.ai/abi/TemporalRegion/Person_00000000-0000-4000-8000-000000000001--li-jane-doe-connection> ;
+    abi:realizes <http://ontology.naas.ai/abi/linkedin/ConnectionRole/Person_00000000-0000-4000-8000-000000000001--li-jane-doe-connection>,
+        <http://ontology.naas.ai/abi/linkedin/ConnectionRole/Person_00000000-0000-4000-8000-000000000001--li-jane-doe-owner> ;
+    dcterms:creator "linkedin_connections_export" .
+
+<http://ontology.naas.ai/abi/linkedin/ActOfConnection/Person_00000000-0000-4000-8000-000000000001--li-john-smith> a linkedin:ActOfConnection,
+        owl:NamedIndividual ;
+    rdfs:label "Alice Martin connected with John Smith" ;
+    abi:hasParticipant <http://ontology.naas.ai/abi/Person#00000000-0000-4000-8000-000000000001>,
+        <http://ontology.naas.ai/abi/Person/linkedin-john-smith> ;
+    abi:hasSourceDocument <http://ontology.naas.ai/abi/linkedin/ConnectionsExportFile/Person_00000000-0000-4000-8000-000000000001> ;
+    linkedin:hasConnectedPerson <http://ontology.naas.ai/abi/Person/linkedin-john-smith> ;
+    linkedin:hasConnectionOwner <http://ontology.naas.ai/abi/Person#00000000-0000-4000-8000-000000000001> ;
+    abi:occupiesTemporalRegion <http://ontology.naas.ai/abi/TemporalRegion/Person_00000000-0000-4000-8000-000000000001--li-john-smith-connection> ;
+    abi:realizes <http://ontology.naas.ai/abi/linkedin/ConnectionRole/Person_00000000-0000-4000-8000-000000000001--li-john-smith-connection>,
+        <http://ontology.naas.ai/abi/linkedin/ConnectionRole/Person_00000000-0000-4000-8000-000000000001--li-john-smith-owner> ;
+    dcterms:creator "linkedin_connections_export" .
+
+<http://ontology.naas.ai/abi/linkedin/ConnectionRole/Person_00000000-0000-4000-8000-000000000001--li-jane-doe-connection> a linkedin:ConnectionRole,
+        owl:NamedIndividual ;
+    rdfs:label "LinkedIn connection - Jane Doe" ;
+    linkedin:isConnectionRoleOf <http://ontology.naas.ai/abi/Person/linkedin-jane-doe> ;
+    dcterms:creator "linkedin_connections_export" .
+
+<http://ontology.naas.ai/abi/linkedin/ConnectionRole/Person_00000000-0000-4000-8000-000000000001--li-jane-doe-owner> a linkedin:ConnectionRole,
+        owl:NamedIndividual ;
+    rdfs:label "LinkedIn connection - Alice Martin" ;
+    linkedin:isConnectionRoleOf <http://ontology.naas.ai/abi/Person#00000000-0000-4000-8000-000000000001> ;
+    dcterms:creator "linkedin_connections_export" .
+
+<http://ontology.naas.ai/abi/linkedin/ConnectionRole/Person_00000000-0000-4000-8000-000000000001--li-john-smith-connection> a linkedin:ConnectionRole,
+        owl:NamedIndividual ;
+    rdfs:label "LinkedIn connection - John Smith" ;
+    linkedin:isConnectionRoleOf <http://ontology.naas.ai/abi/Person/linkedin-john-smith> ;
+    dcterms:creator "linkedin_connections_export" .
+
+<http://ontology.naas.ai/abi/linkedin/ConnectionRole/Person_00000000-0000-4000-8000-000000000001--li-john-smith-owner> a linkedin:ConnectionRole,
+        owl:NamedIndividual ;
+    rdfs:label "LinkedIn connection - Alice Martin" ;
+    linkedin:isConnectionRoleOf <http://ontology.naas.ai/abi/Person#00000000-0000-4000-8000-000000000001> ;
+    dcterms:creator "linkedin_connections_export" .
+
+<http://ontology.naas.ai/people/Mission/li-jane-doe-axa-chief-risk-officer> a abi:Mission,
+        owl:NamedIndividual ;
+    rdfs:label "Chief Risk Officer" ;
+    abi:isMissionCarriedBy <http://ontology.naas.ai/abi/Person/linkedin-jane-doe> ;
+    abi:isMissionOf <http://ontology.naas.ai/people/OccupationRole/li-jane-doe-axa-chief-risk-officer> ;
+    abi:isSourcedFrom <http://ontology.naas.ai/abi/linkedin/ConnectionsExportFile/Person_00000000-0000-4000-8000-000000000001> ;
+    abi:mission_content "Chief Risk Officer" ;
+    dcterms:creator "linkedin_connections_export" .
+
+<http://ontology.naas.ai/people/Mission/li-john-smith-edf-engineer> a abi:Mission,
+        owl:NamedIndividual ;
+    rdfs:label "Engineer" ;
+    abi:isMissionCarriedBy <http://ontology.naas.ai/abi/Person/linkedin-john-smith> ;
+    abi:isMissionOf <http://ontology.naas.ai/people/OccupationRole/li-john-smith-edf-engineer> ;
+    abi:isSourcedFrom <http://ontology.naas.ai/abi/linkedin/ConnectionsExportFile/Person_00000000-0000-4000-8000-000000000001> ;
+    abi:mission_content "Engineer" ;
+    dcterms:creator "linkedin_connections_export" .
+
+<http://ontology.naas.ai/people/OccupationRole/li-jane-doe-axa-chief-risk-officer> a abi:OccupationRole,
+        owl:NamedIndividual ;
+    rdfs:label "Chief Risk Officer" ;
+    abi:hasMission <http://ontology.naas.ai/people/Mission/li-jane-doe-axa-chief-risk-officer> ;
+    abi:isOccupationRoleOf <http://ontology.naas.ai/abi/Person/linkedin-jane-doe> ;
+    abi:job_title "Chief Risk Officer" ;
+    dcterms:creator "linkedin_connections_export" .
+
+<http://ontology.naas.ai/people/OccupationRole/li-john-smith-edf-engineer> a abi:OccupationRole,
+        owl:NamedIndividual ;
+    rdfs:label "Engineer" ;
+    abi:hasMission <http://ontology.naas.ai/people/Mission/li-john-smith-edf-engineer> ;
+    abi:isOccupationRoleOf <http://ontology.naas.ai/abi/Person/linkedin-john-smith> ;
+    abi:job_title "Engineer" ;
+    dcterms:creator "linkedin_connections_export" .
+
+<http://ontology.naas.ai/abi/linkedin/ConnectionsExportFile/Person_00000000-0000-4000-8000-000000000001> a abi:ProfileDocument,
+        linkedin:ConnectionsExportFile,
+        owl:NamedIndividual ;
+    rdfs:label "LinkedIn connections export - Alice Martin" ;
+    abi:isProfileDocumentOf <http://ontology.naas.ai/abi/Person#00000000-0000-4000-8000-000000000001> ;
+    abi:source_url "uploads/linkedin/alice/Connections.csv" ;
+    dcterms:creator "linkedin_connections_export" .
+
+<http://ontology.naas.ai/abi/Person#00000000-0000-4000-8000-000000000001> a abi:Person,
+        owl:NamedIndividual ;
+    rdfs:label "Alice Martin" ;
+    abi:family_name "Martin"^^xsd:string ;
+    abi:first_name "Alice" ;
+    abi:full_name "Alice Martin" ;
+    abi:given_name "Alice"^^xsd:string ;
+    abi:hasProfileDocument <http://ontology.naas.ai/abi/linkedin/ConnectionsExportFile/Person_00000000-0000-4000-8000-000000000001> ;
+    abi:last_name "Martin" ;
+    linkedin:hasConnectionRole <http://ontology.naas.ai/abi/linkedin/ConnectionRole/Person_00000000-0000-4000-8000-000000000001--li-jane-doe-owner>,
+        <http://ontology.naas.ai/abi/linkedin/ConnectionRole/Person_00000000-0000-4000-8000-000000000001--li-john-smith-owner> ;
+    linkedin:isConnectionOwnerIn <http://ontology.naas.ai/abi/linkedin/ActOfConnection/Person_00000000-0000-4000-8000-000000000001--li-jane-doe>,
+        <http://ontology.naas.ai/abi/linkedin/ActOfConnection/Person_00000000-0000-4000-8000-000000000001--li-john-smith> ;
+    abi:profile_slug "alice"^^xsd:string ;
+    dcterms:creator "linkedin_connections_export" .
+
+<http://ontology.naas.ai/abi/Person/linkedin-jane-doe> a abi:Person,
+        owl:NamedIndividual ;
+    rdfs:label "Jane Doe" ;
+    abi:email_address "jane@example.org"^^xsd:string ;
+    abi:family_name "Doe"^^xsd:string ;
+    abi:first_name "Jane" ;
+    abi:full_name "Jane Doe" ;
+    abi:given_name "Jane"^^xsd:string ;
+    abi:hasActOfWorking <http://ontology.naas.ai/people/ActOfWorking/li-jane-doe-axa-chief-risk-officer> ;
+    abi:hasMissionCarried <http://ontology.naas.ai/people/Mission/li-jane-doe-axa-chief-risk-officer> ;
+    abi:hasOccupationRole <http://ontology.naas.ai/people/OccupationRole/li-jane-doe-axa-chief-risk-officer> ;
+    abi:hasProfileSummary <http://ontology.naas.ai/people/ProfileSummary/li-jane-doe> ;
+    abi:last_name "Doe" ;
+    linkedin:hasConnectionRole <http://ontology.naas.ai/abi/linkedin/ConnectionRole/Person_00000000-0000-4000-8000-000000000001--li-jane-doe-connection> ;
+    linkedin:isConnectedPersonIn <http://ontology.naas.ai/abi/linkedin/ActOfConnection/Person_00000000-0000-4000-8000-000000000001--li-jane-doe> ;
+    abi:linkedin_url "https://www.linkedin.com/in/jane-doe"^^xsd:anyURI ;
+    abi:profile_slug "li_jane_doe"^^xsd:string ;
+    abi:worksFor <http://ontology.naas.ai/abi/Organization/axa> ;
+    dcterms:creator "linkedin_connections_export" .
+
+<http://ontology.naas.ai/abi/Person/linkedin-john-smith> a abi:Person,
+        owl:NamedIndividual ;
+    rdfs:label "John Smith" ;
+    abi:family_name "Smith"^^xsd:string ;
+    abi:first_name "John" ;
+    abi:full_name "John Smith" ;
+    abi:given_name "John"^^xsd:string ;
+    abi:hasActOfWorking <http://ontology.naas.ai/people/ActOfWorking/li-john-smith-edf-engineer> ;
+    abi:hasMissionCarried <http://ontology.naas.ai/people/Mission/li-john-smith-edf-engineer> ;
+    abi:hasOccupationRole <http://ontology.naas.ai/people/OccupationRole/li-john-smith-edf-engineer> ;
+    abi:hasProfileSummary <http://ontology.naas.ai/people/ProfileSummary/li-john-smith> ;
+    abi:last_name "Smith" ;
+    linkedin:hasConnectionRole <http://ontology.naas.ai/abi/linkedin/ConnectionRole/Person_00000000-0000-4000-8000-000000000001--li-john-smith-connection> ;
+    linkedin:isConnectedPersonIn <http://ontology.naas.ai/abi/linkedin/ActOfConnection/Person_00000000-0000-4000-8000-000000000001--li-john-smith> ;
+    abi:linkedin_url "https://www.linkedin.com/in/john-smith"^^xsd:anyURI ;
+    abi:profile_slug "li_john_smith"^^xsd:string ;
+    abi:worksFor <http://ontology.naas.ai/abi/Organization/edf> ;
+    dcterms:creator "linkedin_connections_export" .
+
+

@@ -16,11 +16,11 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 
 load_dotenv()
 
-MODULE_NAME = "naas_abi_marketplace.applications.openrouter"
+MODULE_NAME = "naas_abi_marketplace.ai.openrouter"
 
 
 def _try_get_openrouter_module() -> BaseModule | None:
-    from naas_abi_marketplace.applications.openrouter import ABIModule
+    from naas_abi_marketplace.ai.openrouter import ABIModule
 
     try:
         return ABIModule.get_instance()

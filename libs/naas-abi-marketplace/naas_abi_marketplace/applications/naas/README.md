@@ -13,62 +13,34 @@ Key Features:
 - Asset upload and storage management
 - Image URL to asset pipeline for automatic asset creation
 
-## TL;DR
+## Where the agent went
 
-- Start the Naas agent:
-```bash
-make chat-naas-agent
-```
-- Or use the generic chat command:
-```bash
-make chat Agent=NaasAgent
-```
+The Naas agent runs as the remote module `applications.naas`
+(`python -m naas_abi_apps.naas`, in `libs/naas-abi-marketplace-modules`). This
+in-engine module keeps the integration, the ontology YAML workflows and their
+triggers (used by `ontology_engineer`), and the image-to-asset pipeline
+(jupyter-naas/abi#1423).
 
 ## Overview
 
 ### Structure
 
 ```
-src/marketplace/applications/naas/
-├── agents/                                        # AI agents
-│   └── NaasAgent.py                              # Main Naas management agent
-├── integrations/                                  # API integrations
-│   └── NaasIntegration.py                        # Complete Naas API integration
-├── pipelines/                                     # Data processing pipelines
-│   ├── ImageURLtoAssetPipeline.py                # Image URL to asset conversion
-│   └── ImageURLtoAssetPipeline_test.py           # Pipeline tests
-├── README.md                                      # This documentation
-└── naas_agent.md                                  # Detailed agent capabilities
+naas_abi_marketplace/applications/naas/
+├── integrations/
+│   └── NaasIntegration.py                        # Naas API integration
+├── pipelines/
+│   └── ImageURLtoAssetPipeline.py                # Image URL to asset conversion
+├── workflows/                                     # Ontology YAML workflows
+├── triggers.py                                    # Publish YAML on ontology inserts (production)
+└── README.md
 ```
 
 ### Core Components
 
-- **NaasAgent**: AI agent for natural language interaction with Naas services
-- **NaasIntegration**: Complete API integration with all Naas endpoints
+- **NaasIntegration**: API integration with the Naas endpoints
 - **ImageURLtoAssetPipeline**: Automated pipeline for converting image URLs to Naas assets
-
-## Agents
-
-### Naas Agent
-
-An AI agent that provides natural language interface for Naas workspace management:
-
-1. **Workspace Management**: Create, retrieve, update, and delete workspaces
-2. **Plugin Operations**: Manage plugins within workspaces
-3. **Ontology Handling**: Create and manage ontologies with different levels
-4. **User Management**: Invite users and manage roles/permissions
-5. **Secret Management**: Secure storage and retrieval of sensitive data
-6. **Storage Operations**: Manage storage spaces and assets
-
-```python
-from src.marketplace.applications.naas.agents.NaasAgent import create_agent
-
-# Create agent
-agent = create_agent()
-
-# Use agent for Naas operations
-# The agent provides natural language interface to all Naas services
-```
+- **Ontology YAML workflows**: convert classes and individuals of the graph to YAML and publish them to a workspace
 
 ## Integrations
 
@@ -142,8 +114,7 @@ result = pipeline.run(parameters)
 ### Workspace Management
 
 ```bash
-# Start Naas agent
-make chat-naas-agent
+# Ask the Naas agent (remote module applications.naas), e.g. in Nexus chat
 
 # Example conversations:
 # "Create a new workspace called 'Data Science Projects'"

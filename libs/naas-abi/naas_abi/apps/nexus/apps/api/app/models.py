@@ -761,7 +761,7 @@ class AppConfigModel(Base):
         String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
     )
     # Marketplace app identifier: "<module_path>:<app_name>" (e.g.
-    # "naas_abi_marketplace.applications.openrouter:dashboard").
+    # "naas_abi_marketplace.applications.x:x_proxy").
     app_id = Column(String(512), nullable=False, index=True)
     enabled = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)

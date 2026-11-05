@@ -13,15 +13,6 @@ from typing import Any
 import pytest
 from naas_abi_core.services.dataset.DatasetFactory import DatasetFactory
 from naas_abi_core.services.dataset.DatasetService import DatasetService
-from naas_abi_marketplace.applications.linkedin.integrations.LinkedInExportIntegration import (
-    read_connections_csv,
-)
-from naas_abi_marketplace.applications.linkedin.pipelines.ActOfConnectionsOnLinkedInExportPipeline import (
-    ActOfConnectionsOnLinkedInExportPipeline,
-    ActOfConnectionsOnLinkedInExportPipelineConfiguration,
-    ActOfConnectionsOnLinkedInExportPipelineParameters,
-    KnownPerson,
-)
 from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.config_loader import (
     load_config,
 )
@@ -39,6 +30,15 @@ from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.script
 )
 from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.people_resolver import (
     filter_graph_iris,
+)
+from naas_abi_marketplace.domains.intelligence.modules.people.pipelines.ActOfConnectionsOnLinkedInExportPipeline import (
+    ActOfConnectionsOnLinkedInExportPipeline,
+    ActOfConnectionsOnLinkedInExportPipelineConfiguration,
+    ActOfConnectionsOnLinkedInExportPipelineParameters,
+    KnownPerson,
+)
+from naas_abi_marketplace.domains.intelligence.modules.people.utils.linkedin_connections_csv import (
+    read_connections_csv,
 )
 from naas_abi_marketplace.domains.intelligence.modules.people.utils.paths import (
     DEMO_GRAPH_FILE,
