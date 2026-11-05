@@ -21,6 +21,13 @@ Repository = "https://github.com/jupyter-naas/abi/tree/main/libs/naas-abi-market
 [tool.uv.sources]
 naas-abi-proto = {path = "../naas-abi-proto", editable = true}
 naas-abi-core = { path = "../naas-abi-core", editable = true }
+torch = { index = "pytorch-cpu" }
+torchvision = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [tool.mypy]
 
@@ -192,4 +199,9 @@ domains-document = [
     "pymupdf>=1.27.2.2",
     "pymupdf4llm>=1.27.2.2",
     "docling>=2.0.0",
+    # Listed only so [tool.uv.sources] can pin them to the CPU-only PyTorch
+    # index: docling pulls them transitively, and the default PyPI wheels
+    # bring ~4.4 GB of CUDA libraries (nvidia-*, triton) we never use.
+    "torch",
+    "torchvision",
 ]
