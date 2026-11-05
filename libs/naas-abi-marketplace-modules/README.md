@@ -17,6 +17,7 @@ reaches the engine only over NATS with `naas-abi-sdk`. None imports
 | Naas | `naas_abi_apps.naas` | `applications.naas` | `Naas` (agent and integration only) | `naas_abi_marketplace.applications.naas` |
 | Nebari | `naas_abi_apps.nebari` | `applications.nebari` | `Nebari` (+ ontologies) | `naas_abi_marketplace.applications.nebari` |
 | Pennylane | `naas_abi_apps.pennylane` | `applications.pennylane` | `Pennylane` | `naas_abi_marketplace.applications.pennylane` |
+| PowerPoint | `naas_abi_apps.powerpoint` | `applications.powerpoint` | `PowerPoint`; workflow `create_presentation_from_template_workflow`, pipeline `add_power_point_presentation_pipeline` | `naas_abi_marketplace.applications.powerpoint` |
 | PostgreSQL | `naas_abi_apps.postgres` | `applications.postgres` | `PostgreSQL` | `naas_abi_marketplace.applications.postgres` |
 | PubMed | `naas_abi_apps.pubmed` | `applications.pubmed` | `PubMedAgent`; pipeline `pub_med_pipeline` | `naas_abi_marketplace.applications.pubmed` |
 | Sanax | `naas_abi_apps.sanax` | `applications.sanax` | `Sanax`; pipeline `sanax_linked_in_sales_navigator_extractor_pipeline` | `naas_abi_marketplace.applications.sanax` |

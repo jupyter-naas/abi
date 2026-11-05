@@ -55,6 +55,17 @@ jupyter-naas/abi#1423.
 3. Mark the in-engine module deprecated (docstring pointing here). It is
    removed in the cleanup phase of #1423, not in the port.
 
+## Decision (2026-11-05): powerpoint
+
+The in-engine PowerPoint agent never ran (it read an undefined
+`naas_api_key`; its template was not in the repository). The remote module ports
+the integration, the slide-import pipeline and the create-from-template workflow,
+with a plain agent using them as tools instead of the custom LangGraph. Its
+default template is generated: `templates/make_template.py` writes
+`TemplateMinimal.pptx` (title, content and two-column slides; each text shape's
+alt text says what goes in it). `template_path` points at a real template in
+object storage.
+
 ## Decision (2026-11-05): layout of the remote application modules
 
 **Context.** A remote module must not import `naas_abi_core`, and
@@ -78,10 +89,6 @@ per application and one Dockerfile parametrized by `APP`. Module ids are
 
 ## Not ported yet
 
-- `powerpoint`: the in-engine agent cannot be built (it reads
-  `configuration.naas_api_key`, which the module does not define) and its
-  template (`templates/TemplateNaasPPT.pptx`) is not in the repository.
-  Decision pending in #1423.
 - Of `naas`, only the agent and the integration are ported; its ontology YAML
   workflows (core's `OntologyYaml`) stay in-engine with `ontology_engineer`.
 

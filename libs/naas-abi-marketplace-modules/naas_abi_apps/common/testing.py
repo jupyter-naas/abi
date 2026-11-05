@@ -140,3 +140,11 @@ class FakeTripleStore:
 
     async def query(self, query: str) -> Any:
         return self.dataset.query(query)
+
+    async def get_subject_graph(self, subject: str, graph_name: str = "*") -> Any:
+        from rdflib import Graph, URIRef
+
+        graph = Graph()
+        for triple in self.dataset.triples((URIRef(subject), None, None)):
+            graph.add(triple)
+        return graph

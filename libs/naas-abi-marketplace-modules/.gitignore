@@ -8,3 +8,6 @@ dist/
 build/
 *.egg-info/
 .env
+
+# The bundled default template (the repository ignores *.pptx).
+!naas_abi_apps/powerpoint/templates/TemplateMinimal.pptx
