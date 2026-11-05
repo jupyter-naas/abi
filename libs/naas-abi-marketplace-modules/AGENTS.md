@@ -13,8 +13,11 @@ jupyter-naas/abi#1423.
   package: no `__init__.py` at its root.
 - `MODULE_ID = "applications.<app>"`. Never change it: discovery and agent
   memory are keyed by it.
-- Shared runtime (READY wait, signals, environment) is in
-  `naas_abi_apps/common/runtime.py`. `__main__.py` is three lines on top of it.
+- Shared code is in `naas_abi_apps/common/`: `runtime` (READY wait, signals,
+  configuration from the environment; `__main__.py` is three lines on top of
+  it), `agents` (`build_agent`, `read_secrets`, `tools_prompt`), `http`
+  (`HttpConfiguration`, `request`, `request_json` over httpx), `storage`
+  (`archive_json`) and `testing` (fake engine services, `no_core_import`).
 - Configuration: a `ModuleConfiguration` dataclass of plain settings, set from
   `<APP>_<FIELD>` variables. **Credentials are engine secrets**, read in
   `on_initialized` with `await self.engine.services.secret.get(name)`; the
@@ -32,6 +35,10 @@ jupyter-naas/abi#1423.
   `workflows/` / `pipelines/`. Dagster orchestrations become `@job` /
   `@workflow` methods. Ontologies are `.ttl` files under `ontologies/`.
 - Third-party dependencies go in the application's extra in `pyproject.toml`.
+- Blocking libraries (yfinance, ...) run in `asyncio.to_thread`, never on the
+  module's event loop.
+- A tool intent whose tool is absent (no credentials) is dropped. RAW intents
+  that say "I have no access to tools" are not ported when the agent has tools.
 - Tests are offline (`httpx.MockTransport`, fakes for engine services).
 
 ## Port checklist (per application)
@@ -61,3 +68,14 @@ per application and one Dockerfile parametrized by `APP`. Module ids are
   → naas, `organizations` → sec_gov, ...) must call it over NATS
   (`get_agent`, durable workflows) once its in-engine module is removed.
 - The placeholder agents (no tools) are not ported one by one: see #1423.
+
+## Not ported yet (decision pending, #1423)
+
+- `git`: its agent runs `git`, `make` and `gh` in the working directory of the
+  process, and `abi chat naas_abi_marketplace.applications.git GitAgent` loads
+  it in the CLI process (`make commit`, `make pr` in projects). A remote module
+  runs elsewhere (a container, another cwd) and needs a running stack.
+- `openrouter`: one agent per OpenRouter model, created at load. Nexus reads
+  each agent's `MODEL_ID` and provider logo, which an SDK `AgentDescriptor`
+  does not carry, and the agents go through the engine model registry
+  (`provider="openrouter"`).

@@ -9,7 +9,7 @@ license = { text = "MIT License" }
 # module's tests/module_test.py fail if one of them is imported.
 dependencies = [
     "naas-abi-proto>=0.1.0",
-    "naas-abi-sdk[agent,otel,workflows]>=0.2.0",
+    "naas-abi-sdk[agent,otel,workflows,rdf]>=0.2.0",
 ]
 
 [project.optional-dependencies]
@@ -17,9 +17,14 @@ dependencies = [
 agicap = ["httpx>=0.27,<1"]
 algolia = ["algoliasearch>=4.35,<5"]
 exchangeratesapi = ["httpx>=0.27,<1"]
+# No third-party dependency: the agent answers from its intents.
+nebari = []
 pennylane = ["httpx>=0.27,<1"]
+postgres = ["psycopg[binary]>=3.2,<4"]
+sec-gov = ["httpx>=0.27,<1"]
 sendgrid = ["httpx>=0.27,<1"]
-all = ["naas-abi-marketplace-modules[agicap,algolia,exchangeratesapi,pennylane,sendgrid]"]
+yahoofinance = ["yfinance==0.2.66", "yahooquery==2.4.1", "pandas>=2"]
+all = ["naas-abi-marketplace-modules[agicap,algolia,exchangeratesapi,nebari,pennylane,postgres,sec-gov,sendgrid,yahoofinance]"]
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff", "httpx>=0.27,<1"]

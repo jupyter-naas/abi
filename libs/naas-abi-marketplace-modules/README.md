@@ -6,14 +6,22 @@ Each one runs in its own process, registers itself through discovery, and
 reaches the engine only over NATS with `naas-abi-sdk`. None imports
 `naas_abi_core`, `naas_abi` or `naas_abi_marketplace`.
 
-| Application | Package | Module id | Agent | Replaces |
+| Application | Package | Module id | Agents / workflows | Replaces |
 |---|---|---|---|---|
+| Agicap | `naas_abi_apps.agicap` | `applications.agicap` | `Agicap` | `naas_abi_marketplace.applications.agicap` |
+| Algolia | `naas_abi_apps.algolia` | `applications.algolia` | `Algolia` | `naas_abi_marketplace.applications.algolia` |
+| ExchangeRatesAPI | `naas_abi_apps.exchangeratesapi` | `applications.exchangeratesapi` | `ExchangeRatesAPI` | `naas_abi_marketplace.applications.exchangeratesapi` |
+| Nebari | `naas_abi_apps.nebari` | `applications.nebari` | `Nebari` (+ ontologies) | `naas_abi_marketplace.applications.nebari` |
 | Pennylane | `naas_abi_apps.pennylane` | `applications.pennylane` | `Pennylane` | `naas_abi_marketplace.applications.pennylane` |
+| PostgreSQL | `naas_abi_apps.postgres` | `applications.postgres` | `PostgreSQL` | `naas_abi_marketplace.applications.postgres` |
+| SEC EDGAR | `naas_abi_apps.sec_gov` | `applications.sec_gov` | none; workflows `download_company_tickers_workflow`, `get_company_submissions_workflow` | `naas_abi_marketplace.applications.sec_gov` |
+| SendGrid | `naas_abi_apps.sendgrid` | `applications.sendgrid` | `SendGrid` | `naas_abi_marketplace.applications.sendgrid` |
+| Yahoo Finance | `naas_abi_apps.yahoofinance` | `applications.yahoofinance` | `YahooFinance` | `naas_abi_marketplace.applications.yahoofinance` |
 
 ## Run one
 
 ```bash
-uv sync --extra pennylane
+uv sync --extra pennylane      # the extra of the application (sec-gov for sec_gov)
 ABI_NATS_URL=nats://module:<NATS_MODULE_PASSWORD>@127.0.0.1:4222 \
 ABI_MODULE_KEY=$(abi module key applications.pennylane) \
 ABI_DISCOVERY_PROJECT=<project> \

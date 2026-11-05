@@ -1,3 +1,9 @@
+"""Agicap (in-engine). Deprecated: use the remote module
+``naas_abi_apps.agicap`` (module id ``applications.agicap``) from
+``libs/naas-abi-marketplace-modules``. This module is removed in the cleanup
+phase of jupyter-naas/abi#1423.
+"""
+
 from naas_abi_core.module.Module import (
     BaseModule,
     ModuleConfiguration,

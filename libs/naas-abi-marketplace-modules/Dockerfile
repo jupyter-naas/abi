@@ -17,7 +17,7 @@ COPY --from=abi_sdk . /build/naas-abi-sdk
 COPY pyproject.toml README.md /build/modules/
 COPY naas_abi_apps /build/modules/naas_abi_apps
 RUN test -n "$APP" \
-    && pip install /build/naas-abi-proto "/build/naas-abi-sdk[agent,otel,workflows]" \
+    && pip install /build/naas-abi-proto "/build/naas-abi-sdk[agent,otel,workflows,rdf]" \
        "/build/modules[${APP}]" \
     && rm -rf /build
 
