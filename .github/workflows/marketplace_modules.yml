@@ -1,0 +1,42 @@
+name: Marketplace remote modules
+on:
+  pull_request:
+    paths:
+      - 'libs/naas-abi-marketplace-modules/**'
+      - 'libs/naas-abi-proto/**'
+      - 'libs/naas-abi-sdk/**'
+      - '.github/workflows/marketplace_modules.yml'
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Lint
+        run: uvx ruff check libs/naas-abi-marketplace-modules
+      - name: Offline tests (no broker, no engine, APIs mocked)
+        run: uv run --project libs/naas-abi-marketplace-modules --all-extras --python '${{ matrix.python }}' pytest libs/naas-abi-marketplace-modules -q
+
+  images:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [pennylane]
+    steps:
+      - uses: actions/checkout@v4
+      # The build fails if naas_abi_core (or naas_abi, naas_abi_marketplace) is
+      # installed, or if the module cannot be imported without it.
+      - name: Build the SDK-only image
+        working-directory: libs
+        run: |
+          docker build -f naas-abi-marketplace-modules/Dockerfile \
+            --build-context abi_proto=naas-abi-proto \
+            --build-context abi_sdk=naas-abi-sdk \
+            --build-arg APP=${{ matrix.app }} \
+            -t abi-app-${{ matrix.app }}:ci naas-abi-marketplace-modules
