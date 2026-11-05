@@ -1,3 +1,9 @@
+"""OpenRouter (in-engine). Deprecated: OpenRouter models are served by
+``naas_abi_marketplace.ai.openrouter`` (models in the engine's model registry,
+the same API integration). This module and its per-model agents are not ported
+to a remote module and are removed in the cleanup phase of jupyter-naas/abi#1423.
+"""
+
 from naas_abi_core.module.Module import (
     BaseModule,
     ModuleConfiguration,

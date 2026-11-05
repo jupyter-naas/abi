@@ -69,13 +69,13 @@ per application and one Dockerfile parametrized by `APP`. Module ids are
   (`get_agent`, durable workflows) once its in-engine module is removed.
 - The placeholder agents (no tools) are not ported one by one: see #1423.
 
-## Not ported yet (decision pending, #1423)
+## Not ported (decided, #1423)
 
-- `git`: its agent runs `git`, `make` and `gh` in the working directory of the
-  process, and `abi chat naas_abi_marketplace.applications.git GitAgent` loads
-  it in the CLI process (`make commit`, `make pr` in projects). A remote module
-  runs elsewhere (a container, another cwd) and needs a running stack.
-- `openrouter`: one agent per OpenRouter model, created at load. Nexus reads
-  each agent's `MODEL_ID` and provider logo, which an SDK `AgentDescriptor`
-  does not carry, and the agents go through the engine model registry
-  (`provider="openrouter"`).
+- `git` stays in-engine. Its agent runs `git`, `make` and `gh` in the working
+  directory of the process, and `abi chat naas_abi_marketplace.applications.git
+  GitAgent` loads it in the CLI process (`make commit`, `make pr` in projects).
+  A remote module runs elsewhere (a container, another cwd).
+- `openrouter` is left to `naas_abi_marketplace.ai.openrouter`, which serves
+  the OpenRouter models through the engine's model registry with the same API
+  integration. The per-model agents of `applications.openrouter` are not
+  ported; the module is deprecated and removed in the cleanup phase.

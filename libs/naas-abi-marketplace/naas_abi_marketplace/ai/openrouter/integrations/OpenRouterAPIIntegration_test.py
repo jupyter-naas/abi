@@ -1,13 +1,13 @@
 import pytest
 from naas_abi_core.engine.Engine import Engine
-from naas_abi_marketplace.applications.openrouter import ABIModule
-from naas_abi_marketplace.applications.openrouter.integrations.OpenRouterAPIIntegration import (
+from naas_abi_marketplace.ai.openrouter import ABIModule
+from naas_abi_marketplace.ai.openrouter.integrations.OpenRouterAPIIntegration import (
     OpenRouterAPIIntegration,
     OpenRouterAPIIntegrationConfiguration,
 )
 
 engine = Engine()
-engine.load(module_names=["naas_abi_marketplace.applications.openrouter"])
+engine.load(module_names=["naas_abi_marketplace.ai.openrouter"])
 
 module = ABIModule.get_instance()
 openrouter_api_key = module.configuration.openrouter_api_key
