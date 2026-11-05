@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v3.64.1 (2026-11-05)
+
+### Bug Fixes
+
+- **marketplace**: Install CPU-only torch for docling
+  ([`384aeab`](https://github.com/jupyter-naas/abi/commit/384aeab7b2189bd23246b0a874d926b210686327))
+
+### Documentation
+
+- Point workflow documentation at durable workflows and remote classes
+  ([`029846a`](https://github.com/jupyter-naas/abi/commit/029846a2c7340f39e561be0de8e40d8b386f0021))
+
+
 ## v3.64.0 (2026-11-02)
 
 ### Bug Fixes
