@@ -94,14 +94,18 @@ async def run_until_signalled(work: Awaitable[T]) -> T | None:
 def configuration_from(
     configuration_class: type, prefix: str, env: Mapping[str, str]
 ) -> Any:
-    """The module configuration: each string field from ``<PREFIX>_<FIELD>``
-    when set, else its default. Secrets never come from here: modules read
-    them from the engine's ``secret`` service."""
-    values = {}
+    """The module configuration: each field from ``<PREFIX>_<FIELD>`` when set,
+    else its default (a ``bool`` field reads ``1/true/yes/on`` as true, any
+    other value as false). Secrets never come from here: modules read them
+    from the engine's ``secret`` service."""
+    values: dict[str, Any] = {}
     for field in dataclasses.fields(configuration_class):
         variable = f"{prefix}_{field.name}".upper()
         if variable in env:
-            values[field.name] = env[variable]
+            value: Any = env[variable]
+            if field.type in (bool, "bool"):
+                value = value.strip().lower() in ("1", "true", "yes", "on")
+            values[field.name] = value
     return configuration_class(**values)
 
 

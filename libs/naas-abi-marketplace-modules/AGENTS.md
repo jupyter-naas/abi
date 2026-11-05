@@ -55,6 +55,30 @@ jupyter-naas/abi#1423.
 3. Mark the in-engine module deprecated (docstring pointing here). It is
    removed in the cleanup phase of #1423, not in the port.
 
+## Decision (2026-11-05): linkedin and the people module
+
+**Context.** The in-engine `linkedin` application imported the people domain
+module (graph builders, privacy check, profile documents) for its
+`ActOfConnectionsOnLinkedInExportPipeline`, which turns a member's
+`Connections.csv` into acts of connection in the people graphs. A remote
+module cannot import a domain module.
+
+**Decision.** That pipeline is people work: it moved to
+`domains/intelligence/modules/people/pipelines/`, with the LinkedIn ontology it
+instantiates (`ontologies/modules/LinkedInOntology.*`, `ActOfConnectionProcess`,
+the generated classes) and the CSV reader (`utils/linkedin_connections_csv.py`).
+The remote `linkedin` module keeps what talks to LinkedIn (the Voyager API with
+the member's cookies, the Google page searches of `google_search`) and what
+reads the connections back: the query templates, rewritten for what the
+pipeline writes (`abi:Person`, `linkedin:hasConnectionOwner` /
+`hasConnectedPerson`; the in-engine ones queried `linkedin:involvesAgent`,
+which nothing wrote), and the name embeddings for the KG agent, as a durable
+workflow run once at start instead of at every engine load.
+
+**Not ported.** `LinkedInExportIntegration` (ZIP export reader) and the
+`LinkedInExportConnectionsPipeline` / `LinkedInExportProfilePipeline` (an older
+graph model, no caller): the people pipeline replaces them.
+
 ## Decision (2026-11-05): powerpoint
 
 The in-engine PowerPoint agent never ran (it read an undefined

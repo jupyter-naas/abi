@@ -1508,6 +1508,14 @@ google-search = [
     { name = "beautifulsoup4" },
     { name = "httpx" },
 ]
+linkedin = [
+    { name = "beautifulsoup4" },
+    { name = "httpx" },
+    { name = "jinja2" },
+    { name = "openpyxl" },
+    { name = "pandas" },
+    { name = "pydash" },
+]
 naas = [
     { name = "boto3" },
     { name = "httpx" },
@@ -1567,20 +1575,26 @@ requires-dist = [
     { name = "httpx", marker = "extra == 'exchangeratesapi'", specifier = ">=0.27,<1" },
     { name = "httpx", marker = "extra == 'github'", specifier = ">=0.27,<1" },
     { name = "httpx", marker = "extra == 'google-search'", specifier = ">=0.27,<1" },
+    { name = "httpx", marker = "extra == 'linkedin'", specifier = ">=0.27,<1" },
     { name = "httpx", marker = "extra == 'naas'", specifier = ">=0.27,<1" },
     { name = "httpx", marker = "extra == 'pennylane'", specifier = ">=0.27,<1" },
     { name = "httpx", marker = "extra == 'sec-gov'", specifier = ">=0.27,<1" },
     { name = "httpx", marker = "extra == 'sendgrid'", specifier = ">=0.27,<1" },
+    { name = "jinja2", marker = "extra == 'linkedin'", specifier = ">=3.1" },
     { name = "jinja2", marker = "extra == 'powerpoint'", specifier = ">=3.1" },
     { name = "jinja2", marker = "extra == 'sanax'", specifier = ">=3.1" },
-    { name = "naas-abi-marketplace-modules", extras = ["agicap", "algolia", "arxiv", "exchangeratesapi", "github", "google-search", "naas", "nebari", "pennylane", "powerpoint", "postgres", "pubmed", "sanax", "sec-gov", "sendgrid", "yahoofinance"], marker = "extra == 'all'" },
+    { name = "naas-abi-marketplace-modules", extras = ["agicap", "algolia", "arxiv", "exchangeratesapi", "github", "google-search", "linkedin", "naas", "nebari", "pennylane", "powerpoint", "postgres", "pubmed", "sanax", "sec-gov", "sendgrid", "yahoofinance"], marker = "extra == 'all'" },
+    { name = "naas-abi-marketplace-modules", extras = ["google-search"], marker = "extra == 'linkedin'" },
     { name = "naas-abi-marketplace-modules", extras = ["naas"], marker = "extra == 'powerpoint'" },
     { name = "naas-abi-proto", editable = "../naas-abi-proto" },
     { name = "naas-abi-sdk", extras = ["agent", "otel", "workflows", "rdf"], editable = "../naas-abi-sdk" },
+    { name = "openpyxl", marker = "extra == 'linkedin'", specifier = ">=3.1" },
     { name = "openpyxl", marker = "extra == 'sanax'", specifier = ">=3.1" },
+    { name = "pandas", marker = "extra == 'linkedin'", specifier = ">=2" },
     { name = "pandas", marker = "extra == 'sanax'", specifier = ">=2" },
     { name = "pandas", marker = "extra == 'yahoofinance'", specifier = ">=2" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'", specifier = ">=3.2,<4" },
+    { name = "pydash", marker = "extra == 'linkedin'", specifier = ">=8,<9" },
     { name = "pydash", marker = "extra == 'naas'", specifier = ">=8,<9" },
     { name = "pyjwt", marker = "extra == 'naas'", specifier = ">=2.10,<3" },
     { name = "pynacl", marker = "extra == 'github'", specifier = ">=1.5,<2" },
@@ -1590,7 +1604,7 @@ requires-dist = [
     { name = "yahooquery", marker = "extra == 'yahoofinance'", specifier = "==2.4.1" },
     { name = "yfinance", marker = "extra == 'yahoofinance'", specifier = "==0.2.66" },
 ]
-provides-extras = ["agicap", "algolia", "arxiv", "exchangeratesapi", "github", "google-search", "naas", "nebari", "pennylane", "powerpoint", "postgres", "pubmed", "sanax", "sec-gov", "sendgrid", "yahoofinance", "all"]
+provides-extras = ["agicap", "algolia", "arxiv", "exchangeratesapi", "github", "google-search", "linkedin", "naas", "nebari", "pennylane", "powerpoint", "postgres", "pubmed", "sanax", "sec-gov", "sendgrid", "yahoofinance", "all"]
 
 [package.metadata.requires-dev]
 dev = [

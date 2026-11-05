@@ -20,6 +20,8 @@ arxiv = ["arxiv>=2.1.3,<3", "httpx>=0.27,<1"]
 exchangeratesapi = ["httpx>=0.27,<1"]
 github = ["httpx>=0.27,<1", "pynacl>=1.5,<2"]
 google-search = ["httpx>=0.27,<1", "beautifulsoup4>=4.12,<5"]
+# The Google page searches come from the google_search module.
+linkedin = ["httpx>=0.27,<1", "pydash>=8,<9", "pandas>=2", "openpyxl>=3.1", "jinja2>=3.1", "naas-abi-marketplace-modules[google-search]"]
 naas = ["httpx>=0.27,<1", "pyjwt>=2.10,<3", "pydash>=8,<9", "boto3>=1.34,<2"]
 # No third-party dependency: the agent answers from its intents.
 nebari = []
@@ -31,7 +33,7 @@ sanax = ["pandas>=2", "openpyxl>=3.1", "jinja2>=3.1"]
 sec-gov = ["httpx>=0.27,<1"]
 sendgrid = ["httpx>=0.27,<1"]
 yahoofinance = ["yfinance==0.2.66", "yahooquery==2.4.1", "pandas>=2"]
-all = ["naas-abi-marketplace-modules[agicap,algolia,arxiv,exchangeratesapi,github,google-search,naas,nebari,pennylane,powerpoint,postgres,pubmed,sanax,sec-gov,sendgrid,yahoofinance]"]
+all = ["naas-abi-marketplace-modules[agicap,algolia,arxiv,exchangeratesapi,github,google-search,linkedin,naas,nebari,pennylane,powerpoint,postgres,pubmed,sanax,sec-gov,sendgrid,yahoofinance]"]
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff", "httpx>=0.27,<1"]

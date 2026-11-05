@@ -14,6 +14,7 @@ reaches the engine only over NATS with `naas-abi-sdk`. None imports
 | ExchangeRatesAPI | `naas_abi_apps.exchangeratesapi` | `applications.exchangeratesapi` | `ExchangeRatesAPI` | `naas_abi_marketplace.applications.exchangeratesapi` |
 | GitHub | `naas_abi_apps.github` | `applications.github` | `GitHub` | `naas_abi_marketplace.applications.github` |
 | Google Search | `naas_abi_apps.google_search` | `applications.google_search` | `Google_Search`; workflows `search_linked_in_profile_page_workflow`, `search_linked_in_organization_page_workflow` | `naas_abi_marketplace.applications.google_search` |
+| LinkedIn | `naas_abi_apps.linkedin` | `applications.linkedin` | `LinkedIn`, `LinkedIn_KG`; workflow `create_class_embeddings_workflow` | `naas_abi_marketplace.applications.linkedin` |
 | Naas | `naas_abi_apps.naas` | `applications.naas` | `Naas` (agent and integration only) | `naas_abi_marketplace.applications.naas` |
 | Nebari | `naas_abi_apps.nebari` | `applications.nebari` | `Nebari` (+ ontologies) | `naas_abi_marketplace.applications.nebari` |
 | Pennylane | `naas_abi_apps.pennylane` | `applications.pennylane` | `Pennylane` | `naas_abi_marketplace.applications.pennylane` |

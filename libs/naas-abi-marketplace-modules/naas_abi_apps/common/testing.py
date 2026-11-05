@@ -148,3 +148,69 @@ class FakeTripleStore:
         for triple in self.dataset.triples((URIRef(subject), None, None)):
             graph.add(triple)
         return graph
+
+
+class FakeVectorStore:
+    """In-memory collections behind the SDK facade's calls; ``search_similar``
+    ranks by cosine similarity."""
+
+    def __init__(self) -> None:
+        self.collections: dict[str, dict[str, tuple[list[float], dict]]] = {}
+        self.added: list[tuple[str, int]] = []
+
+    async def list_collections(self) -> list[str]:
+        return list(self.collections)
+
+    async def ensure_collection(
+        self, collection_name: str, dimension: int, distance_metric: str = "cosine"
+    ) -> None:
+        self.collections.setdefault(collection_name, {})
+
+    async def add_documents(self, collection_name, ids, vectors, metadata=None):
+        collection = self.collections[collection_name]
+        for i, (id_, vector) in enumerate(zip(ids, vectors)):
+            collection[id_] = (list(vector), (metadata or [{}] * len(ids))[i])
+        self.added.append((collection_name, len(ids)))
+
+    async def list_documents(self, collection_name, *, limit=100, cursor=None):
+        ids = sorted(self.collections[collection_name])
+        start = int(cursor or 0)
+        page = ids[start : start + limit]
+        return SimpleNamespace(
+            documents=[SimpleNamespace(id=i) for i in page],
+            next_cursor=str(start + limit) if start + limit < len(ids) else None,
+        )
+
+    async def search_similar(
+        self, collection_name, query_vector, k=10, include_metadata=True
+    ):
+        import math
+
+        def cosine(a: list[float], b: list[float]) -> float:
+            norm = math.hypot(*a) * math.hypot(*b)
+            return sum(x * y for x, y in zip(a, b)) / norm if norm else 0.0
+
+        scored = sorted(
+            (
+                SimpleNamespace(id=i, score=cosine(list(query_vector), v), metadata=m)
+                for i, (v, m) in self.collections[collection_name].items()
+            ),
+            key=lambda r: -r.score,
+        )
+        return scored[:k]
+
+
+class FakeCache:
+    """The cache service's ``get`` / ``set_json``: a miss raises, as the SDK's
+    ``CacheNotFoundError`` does."""
+
+    def __init__(self) -> None:
+        self.values: dict[str, Any] = {}
+
+    async def get(self, key: str, ttl: Any = None) -> Any:
+        if key not in self.values:
+            raise KeyError(key)
+        return self.values[key]
+
+    async def set_json(self, key: str, value: Any) -> None:
+        self.values[key] = value

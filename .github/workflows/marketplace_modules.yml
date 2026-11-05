@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        app: [agicap, algolia, arxiv, exchangeratesapi, github, google_search, naas, nebari, pennylane, postgres, powerpoint, pubmed, sanax, sec_gov, sendgrid, yahoofinance]
+        app: [agicap, algolia, arxiv, exchangeratesapi, github, google_search, linkedin, naas, nebari, pennylane, postgres, powerpoint, pubmed, sanax, sec_gov, sendgrid, yahoofinance]
     steps:
       - uses: actions/checkout@v4
       # The build fails if naas_abi_core (or naas_abi, naas_abi_marketplace) is
