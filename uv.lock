@@ -24,7 +24,7 @@ dependencies = [
     { name = "naas-abi" },
     { name = "naas-abi-cli" },
     { name = "naas-abi-core", extra = ["all", "dagster", "rabbitmq"] },
-    { name = "naas-abi-marketplace", extra = ["ai-chatgpt", "ai-claude", "ai-deepseek", "ai-gemini", "ai-gemma", "ai-grok", "ai-llama", "ai-mistral", "ai-perplexity", "ai-qwen", "applications-algolia", "applications-arxiv", "applications-bodo", "applications-github", "applications-gmail", "applications-googlesearch", "applications-linkedin", "applications-postgres", "applications-powerpoint", "applications-pubmed", "applications-twilio", "applications-x", "applications-yahoofinance", "domains-ontology-engineer"] },
+    { name = "naas-abi-marketplace", extra = ["ai-chatgpt", "ai-claude", "ai-deepseek", "ai-gemini", "ai-gemma", "ai-grok", "ai-llama", "ai-mistral", "ai-perplexity", "ai-qwen", "applications-algolia", "applications-arxiv", "applications-github", "applications-googlesearch", "applications-linkedin", "applications-postgres", "applications-powerpoint", "applications-pubmed", "applications-yahoofinance", "domains-ontology-engineer"] },
     { name = "openpyxl" },
     { name = "pymupdf" },
     { name = "pymupdf4llm" },
@@ -71,37 +71,22 @@ requires-dist = [
     { name = "naas-abi-marketplace", extras = ["ai-perplexity"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["ai-qwen"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["applications-agicap"], editable = "libs/naas-abi-marketplace" },
-    { name = "naas-abi-marketplace", extras = ["applications-airtable"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["applications-algolia"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["applications-arxiv"], editable = "libs/naas-abi-marketplace" },
-    { name = "naas-abi-marketplace", extras = ["applications-bodo"], editable = "libs/naas-abi-marketplace" },
-    { name = "naas-abi-marketplace", extras = ["applications-datagouv"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["applications-exchangeratesapi"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["applications-git"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["applications-github"], editable = "libs/naas-abi-marketplace" },
-    { name = "naas-abi-marketplace", extras = ["applications-gmail"], editable = "libs/naas-abi-marketplace" },
-    { name = "naas-abi-marketplace", extras = ["applications-google-calendar"], editable = "libs/naas-abi-marketplace" },
-    { name = "naas-abi-marketplace", extras = ["applications-google-drive"], editable = "libs/naas-abi-marketplace" },
-    { name = "naas-abi-marketplace", extras = ["applications-google-sheets"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["applications-googlesearch"], editable = "libs/naas-abi-marketplace" },
-    { name = "naas-abi-marketplace", extras = ["applications-hubspot"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["applications-linkedin"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["applications-naas"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["applications-nebari"], editable = "libs/naas-abi-marketplace" },
-    { name = "naas-abi-marketplace", extras = ["applications-newsapi"], editable = "libs/naas-abi-marketplace" },
-    { name = "naas-abi-marketplace", extras = ["applications-notion"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["applications-openrouter"], editable = "libs/naas-abi-marketplace" },
-    { name = "naas-abi-marketplace", extras = ["applications-openweathermap"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["applications-pennylane"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["applications-postgres"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["applications-powerpoint"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["applications-pubmed"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["applications-sanax"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["applications-sendgrid"], editable = "libs/naas-abi-marketplace" },
-    { name = "naas-abi-marketplace", extras = ["applications-sharepoint"], editable = "libs/naas-abi-marketplace" },
-    { name = "naas-abi-marketplace", extras = ["applications-spotify"], editable = "libs/naas-abi-marketplace" },
-    { name = "naas-abi-marketplace", extras = ["applications-twilio"], editable = "libs/naas-abi-marketplace" },
-    { name = "naas-abi-marketplace", extras = ["applications-worldbank"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["applications-x"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["applications-yahoofinance"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["domains-ontology-engineer"], editable = "libs/naas-abi-marketplace" },
@@ -239,18 +224,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/3c/5f/24155e30ba7f8c96918af1350eb0663e2430aad9e001c0489d89cd708ab1/aiohttp-3.13.3-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:fc353029f176fd2b3ec6cfc71be166aba1936fe5d73dd1992ce289ca6647a9aa", size = 1769801, upload-time = "2026-01-03T17:32:20.25Z" },
     { url = "https://files.pythonhosted.org/packages/eb/f8/7314031ff5c10e6ece114da79b338ec17eeff3a079e53151f7e9f43c4723/aiohttp-3.13.3-cp314-cp314t-win32.whl", hash = "sha256:2e41b18a58da1e474a057b3d35248d8320029f61d70a37629535b16a0c8f3767", size = 466523, upload-time = "2026-01-03T17:32:22.215Z" },
     { url = "https://files.pythonhosted.org/packages/b4/63/278a98c715ae467624eafe375542d8ba9b4383a016df8fdefe0ae28382a7/aiohttp-3.13.3-cp314-cp314t-win_amd64.whl", hash = "sha256:44531a36aa2264a1860089ffd4dce7baf875ee5a6079d5fb42e261c704ef7344", size = 499694, upload-time = "2026-01-03T17:32:24.546Z" },
-]
-
-[[package]]
-name = "aiohttp-retry"
-version = "2.9.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "aiohttp" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/9d/61/ebda4d8e3d8cfa1fd3db0fb428db2dd7461d5742cea35178277ad180b033/aiohttp_retry-2.9.1.tar.gz", hash = "sha256:8eb75e904ed4ee5c2ec242fefe85bf04240f685391c4879d8f541d6028ff01f1", size = 13608, upload-time = "2024-11-06T10:44:54.574Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/1a/99/84ba7273339d0f3dfa57901b846489d2e5c2cd731470167757f1935fffbd/aiohttp_retry-2.9.1-py3-none-any.whl", hash = "sha256:66d2759d1921838256a05a3f80ad7e724936f083e35be5abb5e16eed6be6dc54", size = 9981, upload-time = "2024-11-06T10:44:52.917Z" },
 ]
 
 [[package]]
@@ -596,15 +569,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/9a/6e/026678aa5a830e07cd9498a05d3e7e650a4f56a42f267a53d22bcda1bdc9/bidict-0.23.1.tar.gz", hash = "sha256:03069d763bc387bbd20e7d49914e75fc4132a41937fa3405417e1a5a2d006d71", size = 29093, upload-time = "2024-02-18T19:09:05.748Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/99/37/e8730c3587a65eb5645d4aba2d27aae48e8003614d6aaf15dda67f702f1f/bidict-0.23.1-py3-none-any.whl", hash = "sha256:5dae8d4d79b552a71cbabc7deb25dfe8ce710b17ff41711e13010ead2abfc3e5", size = 32764, upload-time = "2024-02-18T19:09:04.156Z" },
-]
-
-[[package]]
-name = "blinker"
-version = "1.9.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/21/28/9b3f50ce0e048515135495f198351908d99540d69bfdc8c1d15b73dc55ce/blinker-1.9.0.tar.gz", hash = "sha256:b4ce2265a7abece45e7cc896e98dbebe6cead56bcf805a3d23136d145f5445bf", size = 22460, upload-time = "2024-11-08T17:25:47.436Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/10/cb/f2ad4230dc2eb1a74edf38f1a38b9b52277f75bef262d8908e60d957e13c/blinker-1.9.0-py3-none-any.whl", hash = "sha256:ba0efaa9080b619ff2f3459d1d500c57bddea4a6b424b60a91141db6fd2f08bc", size = 8458, upload-time = "2024-11-08T17:25:46.184Z" },
 ]
 
 [[package]]
@@ -1610,23 +1574,6 @@ wheels = [
 ]
 
 [[package]]
-name = "flask"
-version = "3.1.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "blinker" },
-    { name = "click" },
-    { name = "itsdangerous" },
-    { name = "jinja2" },
-    { name = "markupsafe" },
-    { name = "werkzeug" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/dc/6d/cfe3c0fcc5e477df242b98bfe186a4c34357b4847e87ecaef04507332dab/flask-3.1.2.tar.gz", hash = "sha256:bf656c15c80190ed628ad08cdfd3aaa35beb087855e2f494910aa3774cc4fd87", size = 720160, upload-time = "2025-08-19T21:03:21.205Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/ec/f9/7f9263c5695f4bd0023734af91bedb2ff8209e8de6ead162f35d8dc762fd/flask-3.1.2-py3-none-any.whl", hash = "sha256:ca1d8112ec8a6158cc29ea4858963350011b5c846a414cdb7a954aa9e967d03c", size = 103308, upload-time = "2025-08-19T21:03:19.499Z" },
-]
-
-[[package]]
 name = "flatbuffers"
 version = "25.12.19"
 source = { registry = "https://pypi.org/simple" }
@@ -1820,36 +1767,6 @@ grpc = [
 ]
 
 [[package]]
-name = "google-api-python-client"
-version = "2.190.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "google-api-core" },
-    { name = "google-auth" },
-    { name = "google-auth-httplib2" },
-    { name = "httplib2" },
-    { name = "uritemplate" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/e4/8d/4ab3e3516b93bb50ed7814738ea61d49cba3f72f4e331dc9518ae2731e92/google_api_python_client-2.190.0.tar.gz", hash = "sha256:5357f34552e3724d80d2604c8fa146766e0a9d6bb0afada886fafed9feafeef6", size = 14111143, upload-time = "2026-02-12T00:38:03.37Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/07/ad/223d5f4b0b987669ffeb3eadd7e9f85ece633aa7fd3246f1e2f6238e1e05/google_api_python_client-2.190.0-py3-none-any.whl", hash = "sha256:d9b5266758f96c39b8c21d9bbfeb4e58c14dbfba3c931f7c5a8d7fdcd292dd57", size = 14682070, upload-time = "2026-02-12T00:38:00.974Z" },
-]
-
-[[package]]
-name = "google-api-python-client-stubs"
-version = "1.32.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "google-api-python-client" },
-    { name = "types-httplib2" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/4b/b6/c7a7266571fbf45230e46657b6229004034ebd0545b9c508cff3c32ccd3c/google_api_python_client_stubs-1.32.0.tar.gz", hash = "sha256:1c1840b12ec110019340a404558e270fc812a6365ad6888f632e16bb5e420a71", size = 2546474, upload-time = "2026-02-15T11:04:16.782Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/bf/99/29cb99791e5292b188dc52260150c82f565588086c8a537e37d88e746b01/google_api_python_client_stubs-1.32.0-py3-none-any.whl", hash = "sha256:d7024eb0fa3a66ee57f5949cd84b01b8138085e4f186b99747dc7b6c740d5e8f", size = 3533423, upload-time = "2026-02-15T11:04:18.087Z" },
-]
-
-[[package]]
 name = "google-auth"
 version = "2.48.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1861,19 +1778,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/0c/41/242044323fbd746615884b1c16639749e73665b718209946ebad7ba8a813/google_auth-2.48.0.tar.gz", hash = "sha256:4f7e706b0cd3208a3d940a19a822c37a476ddba5450156c3e6624a71f7c841ce", size = 326522, upload-time = "2026-01-26T19:22:47.157Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/83/1d/d6466de3a5249d35e832a52834115ca9d1d0de6abc22065f049707516d47/google_auth-2.48.0-py3-none-any.whl", hash = "sha256:2e2a537873d449434252a9632c28bfc268b0adb1e53f9fb62afc5333a975903f", size = 236499, upload-time = "2026-01-26T19:22:45.099Z" },
-]
-
-[[package]]
-name = "google-auth-httplib2"
-version = "0.3.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "google-auth" },
-    { name = "httplib2" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/d5/ad/c1f2b1175096a8d04cf202ad5ea6065f108d26be6fc7215876bde4a7981d/google_auth_httplib2-0.3.0.tar.gz", hash = "sha256:177898a0175252480d5ed916aeea183c2df87c1f9c26705d74ae6b951c268b0b", size = 11134, upload-time = "2025-12-15T22:13:51.825Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/99/d5/3c97526c8796d3caf5f4b3bed2b05e8a7102326f00a334e7a438237f3b22/google_auth_httplib2-0.3.0-py3-none-any.whl", hash = "sha256:426167e5df066e3f5a0fc7ea18768c08e7296046594ce4c8c409c2457dd1f776", size = 9529, upload-time = "2025-12-15T22:13:51.048Z" },
 ]
 
 [[package]]
@@ -2149,18 +2053,6 @@ wheels = [
 ]
 
 [[package]]
-name = "httplib2"
-version = "0.31.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pyparsing" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/c1/1f/e86365613582c027dda5ddb64e1010e57a3d53e99ab8a72093fa13d565ec/httplib2-0.31.2.tar.gz", hash = "sha256:385e0869d7397484f4eab426197a4c020b606edd43372492337c0b4010ae5d24", size = 250800, upload-time = "2026-01-23T11:04:44.165Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/2f/90/fd509079dfcab01102c0fdd87f3a9506894bc70afcf9e9785ef6b2b3aff6/httplib2-0.31.2-py3-none-any.whl", hash = "sha256:dbf0c2fa3862acf3c55c078ea9c0bc4481d7dc5117cae71be9514912cf9f8349", size = 91099, upload-time = "2026-01-23T11:04:42.78Z" },
-]
-
-[[package]]
 name = "httptools"
 version = "0.7.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2375,15 +2267,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/72/34/14ca021ce8e5dfedc35312d08ba8bf51fdd999c576889fc2c24cb97f4f10/iniconfig-2.3.0.tar.gz", hash = "sha256:c76315c77db068650d49c5b56314774a7804df16fee4402c1f19d6d15d8c4730", size = 20503, upload-time = "2025-10-18T21:55:43.219Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cb/b1/3846dd7f199d53cb17f49cba7e651e9ce294d8497c8c150530ed11865bb8/iniconfig-2.3.0-py3-none-any.whl", hash = "sha256:f631c04d2c48c52b84d0d0549c99ff3859c98df65b3101406327ecc7d53fbf12", size = 7484, upload-time = "2025-10-18T21:55:41.639Z" },
-]
-
-[[package]]
-name = "itsdangerous"
-version = "2.2.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/9c/cb/8ac0172223afbccb63986cc25049b154ecfb5e85932587206f42317be31d/itsdangerous-2.2.0.tar.gz", hash = "sha256:e0050c0b7da1eea53ffaf149c0cfbb5c6e2e2b69c4bef22c81fa6eb73e5f6173", size = 54410, upload-time = "2024-04-16T21:28:15.614Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/04/96/92447566d16df59b2a776c0fb82dbc4d9e07cd95062562af01e408583fc4/itsdangerous-2.2.0-py3-none-any.whl", hash = "sha256:c6242fc49e35958c8b15141343aa660db5fc54d4f13a1db01a3f5891b98700ef", size = 16234, upload-time = "2024-04-16T21:28:14.499Z" },
 ]
 
 [[package]]
@@ -3600,7 +3483,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi"
-version = "3.6.0"
+version = "3.6.3"
 source = { editable = "libs/naas-abi" }
 dependencies = [
     { name = "aiosqlite" },
@@ -3714,7 +3597,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-core"
-version = "3.1.0"
+version = "3.2.0"
 source = { editable = "libs/naas-abi-core" }
 dependencies = [
     { name = "click" },
@@ -3859,7 +3742,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-marketplace"
-version = "3.63.0"
+version = "3.64.1"
 source = { editable = "libs/naas-abi-marketplace" }
 dependencies = [
     { name = "ijson" },
@@ -3904,15 +3787,8 @@ applications-algolia = [
 applications-arxiv = [
     { name = "arxiv" },
 ]
-applications-bodo = [
-    { name = "boto3" },
-]
 applications-github = [
     { name = "pynacl" },
-]
-applications-gmail = [
-    { name = "google-api-python-client" },
-    { name = "google-api-python-client-stubs" },
 ]
 applications-googlesearch = [
     { name = "beautifulsoup4" },
@@ -3931,15 +3807,6 @@ applications-pubmed = [
     { name = "ratelimit" },
     { name = "ratelimit-types" },
 ]
-applications-twilio = [
-    { name = "flask" },
-    { name = "twilio" },
-    { name = "twilio-stubs" },
-    { name = "types-flask" },
-]
-applications-x = [
-    { name = "polars" },
-]
 applications-yahoofinance = [
     { name = "yahooquery" },
     { name = "yfinance" },
@@ -3954,12 +3821,9 @@ requires-dist = [
     { name = "algoliasearch", marker = "extra == 'applications-algolia'", specifier = ">=4.35.0" },
     { name = "arxiv", marker = "extra == 'applications-arxiv'", specifier = ">=2.1.3,<3" },
     { name = "beautifulsoup4", marker = "extra == 'applications-googlesearch'", specifier = ">=4.12.0" },
-    { name = "boto3", marker = "extra == 'applications-bodo'", specifier = ">=1.38.19,<2" },
+    { name = "bodo", marker = "extra == 'applications-bodo'", specifier = ">=2026.11" },
     { name = "docling", marker = "extra == 'domains-document'", specifier = ">=2.0.0" },
-    { name = "flask", marker = "extra == 'applications-twilio'", specifier = ">=3.1.2" },
     { name = "fuzzywuzzy-stubs", marker = "extra == 'domains-ontology-engineer'", specifier = "==0.0.1" },
-    { name = "google-api-python-client", marker = "extra == 'applications-gmail'", specifier = ">=2.188.0" },
-    { name = "google-api-python-client-stubs", marker = "extra == 'applications-gmail'", specifier = ">=1.31.0" },
     { name = "ijson", specifier = ">=3.2.0" },
     { name = "langchain-anthropic", marker = "extra == 'ai-claude'", specifier = ">=0.3.17" },
     { name = "langchain-aws", marker = "extra == 'ai-bedrock'", specifier = ">=0.2.10" },
@@ -3975,7 +3839,6 @@ requires-dist = [
     { name = "naas-abi-core", editable = "libs/naas-abi-core" },
     { name = "pandas", marker = "extra == 'applications-linkedin'", specifier = ">=2.3.3" },
     { name = "pdfplumber", marker = "extra == 'ai-chatgpt'", specifier = ">=0.11.8" },
-    { name = "polars", marker = "extra == 'applications-x'", specifier = ">=1.0.0" },
     { name = "psycopg2-binary", marker = "extra == 'applications-postgres'", specifier = ">=2.9.10,<3" },
     { name = "pymupdf", marker = "extra == 'domains-document'", specifier = ">=1.27.2.2" },
     { name = "pymupdf4llm", marker = "extra == 'domains-document'", specifier = ">=1.27.2.2" },
@@ -3985,14 +3848,13 @@ requires-dist = [
     { name = "ratelimit", marker = "extra == 'applications-pubmed'", specifier = ">=2.2.1" },
     { name = "ratelimit-types", marker = "extra == 'applications-pubmed'", specifier = "==0.0.3" },
     { name = "thefuzz", marker = "extra == 'domains-ontology-engineer'", specifier = "==0.22.1" },
-    { name = "twilio", marker = "extra == 'applications-twilio'", specifier = ">=9.10.0" },
-    { name = "twilio-stubs", marker = "extra == 'applications-twilio'", specifier = ">=0.2.0" },
-    { name = "types-flask", marker = "extra == 'applications-twilio'", specifier = ">=1.1.6" },
+    { name = "torch", marker = "extra == 'domains-document'", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torchvision", marker = "extra == 'domains-document'", index = "https://download.pytorch.org/whl/cpu" },
     { name = "types-psycopg2", marker = "extra == 'applications-postgres'", specifier = ">=2.9.21.20251012" },
     { name = "yahooquery", marker = "extra == 'applications-yahoofinance'", specifier = "==2.4.1" },
     { name = "yfinance", marker = "extra == 'applications-yahoofinance'", specifier = "==0.2.66" },
 ]
-provides-extras = ["ai-bedrock", "ai-chatgpt", "ai-claude", "ai-deepseek", "ai-gemini", "ai-gemma", "ai-grok", "ai-llama", "ai-mistral", "ai-ollama", "ai-openrouter", "ai-perplexity", "ai-qwen", "applications-agicap", "applications-airtable", "applications-algolia", "applications-arxiv", "applications-bodo", "applications-datagouv", "applications-exchangeratesapi", "applications-git", "applications-github", "applications-gmail", "applications-google-calendar", "applications-google-drive", "applications-google-sheets", "applications-googlesearch", "applications-hubspot", "applications-linkedin", "applications-naas", "applications-nebari", "applications-newsapi", "applications-notion", "applications-openrouter", "applications-openweathermap", "applications-pennylane", "applications-postgres", "applications-powerpoint", "applications-pubmed", "applications-sanax", "applications-sendgrid", "applications-sharepoint", "applications-spotify", "applications-twilio", "applications-worldbank", "applications-x", "applications-yahoofinance", "domains-ontology-engineer", "domains-document"]
+provides-extras = ["ai-bedrock", "ai-chatgpt", "ai-claude", "ai-deepseek", "ai-gemini", "ai-gemma", "ai-grok", "ai-llama", "ai-mistral", "ai-ollama", "ai-openrouter", "ai-perplexity", "ai-qwen", "applications-agicap", "applications-algolia", "applications-arxiv", "applications-bodo", "applications-exchangeratesapi", "applications-git", "applications-github", "applications-googlesearch", "applications-linkedin", "applications-naas", "applications-nebari", "applications-openrouter", "applications-pennylane", "applications-postgres", "applications-powerpoint", "applications-pubmed", "applications-sanax", "applications-sendgrid", "applications-x", "applications-yahoofinance", "domains-ontology-engineer", "domains-document"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -4777,34 +4639,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe6ef3fa267035b518369d9511ffab804f839851d2779/pluggy-1.6.0.tar.gz", hash = "sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3", size = 69412, upload-time = "2025-05-15T12:30:07.975Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl", hash = "sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746", size = 20538, upload-time = "2025-05-15T12:30:06.134Z" },
-]
-
-[[package]]
-name = "polars"
-version = "1.43.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "polars-runtime-32" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/89/13/3873f213304bcbaaf39e63c8b905ceb460a0524448d57f86a829f6d4d0fd/polars-1.43.2.tar.gz", hash = "sha256:c699671b99eb71ff53334d237917aaa3db5ad4dda480abcb6c80e0eaee7b677b", size = 750312, upload-time = "2026-08-01T06:28:30.872Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/2b/fe/0888040a24e4504098b85d8ad486b14cb01cf6b030bbe479dfc2dcffc2ac/polars-1.43.2-py3-none-any.whl", hash = "sha256:22aa0cb92a1ee2d60d6a15a638b2e8e0dd99aea21ac0cd8fb29da8e382e075a9", size = 847150, upload-time = "2026-08-01T06:27:15.543Z" },
-]
-
-[[package]]
-name = "polars-runtime-32"
-version = "1.43.2"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/d4/06/11b578eeef05f867e3ee31b2a2fdd8e7684c2aa47822c49935d1be789c38/polars_runtime_32-1.43.2.tar.gz", hash = "sha256:d7b7c486bccee75a6af0158b87077da3d054657e3c60036b28644f4e1c7fdbf7", size = 3095669, upload-time = "2026-08-01T06:28:32.315Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/59/fc/12e6d4ca34d820297651134cfa35f86c33e898539fc6629cbb35d0089697/polars_runtime_32-1.43.2-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:91abf205d4ec93f92ba95386b7f8776559ae3dfce425ed2e527efa75d117d04a", size = 53088908, upload-time = "2026-08-01T06:27:18.268Z" },
-    { url = "https://files.pythonhosted.org/packages/32/81/833b0853551deb810854f96b43dea342b6e6c9b0ea1afcccf774157d519d/polars_runtime_32-1.43.2-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:2cc3ff96fd44789b02eb5c15b98dfcb000101636b177d3034fae2feec19b118f", size = 47540529, upload-time = "2026-08-01T06:27:21.391Z" },
-    { url = "https://files.pythonhosted.org/packages/83/55/7b2a75af14c9294d97f3bec132dd3018ddcd988bef32b5d28322150b8c11/polars_runtime_32-1.43.2-cp310-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:10ed36e615ab362feb7406e6d084e124b445ad284caa73bd93ae7e65745ed894", size = 51366340, upload-time = "2026-08-01T06:27:24.776Z" },
-    { url = "https://files.pythonhosted.org/packages/62/60/64deacb3abc70c52e2d88a808a052d1621c86a48fe9194f2c065579ab1cd/polars_runtime_32-1.43.2-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:6d5a7ae004a2723ebf4427f6d6a639f30f86af4cf077075f6b35d04711154fc3", size = 57304599, upload-time = "2026-08-01T06:27:27.875Z" },
-    { url = "https://files.pythonhosted.org/packages/52/95/d6e3a236d7630e17c40d0ddee839bf2be9acf548fdc0e5ad65ed9ff0cac6/polars_runtime_32-1.43.2-cp310-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:09339eacc6d392206e78aabbaaa37d7276eb969b798f46cb1f367fd718798c60", size = 51520580, upload-time = "2026-08-01T06:27:30.913Z" },
-    { url = "https://files.pythonhosted.org/packages/b6/5a/2deb8eac70e9a2ac26d88a66ae7cf52612865026f4f4a5e7ab11ad9d52bf/polars_runtime_32-1.43.2-cp310-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:452b400e59e7f56e4c6437f435e796903272a9388feee12de2bea049ae87025e", size = 55204471, upload-time = "2026-08-01T06:27:33.886Z" },
-    { url = "https://files.pythonhosted.org/packages/29/9e/647401ae8a607bc0cc40ed7b8592d5b1be90ded0dc9b9d6d3aeb03f9524b/polars_runtime_32-1.43.2-cp310-abi3-win_amd64.whl", hash = "sha256:00e33c28e321410c8d66e814a90043101e3bdd9ed2c6dabda07565aa8adbbdf1", size = 52572176, upload-time = "2026-08-01T06:27:37.048Z" },
-    { url = "https://files.pythonhosted.org/packages/96/8d/60a50c3f36c85218a7ffcb48c6fe2ce1f7bec799152d68b8658ebed2179c/polars_runtime_32-1.43.2-cp310-abi3-win_arm64.whl", hash = "sha256:350a4868cae85bf8b3f81b33ba47927c15256bd9264dfc8c0753f1b927eac9d3", size = 46582513, upload-time = "2026-08-01T06:27:40.025Z" },
 ]
 
 [[package]]
@@ -7012,30 +6846,6 @@ wheels = [
 ]
 
 [[package]]
-name = "twilio"
-version = "9.10.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "aiohttp" },
-    { name = "aiohttp-retry" },
-    { name = "pyjwt" },
-    { name = "requests" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/b8/f0/19a7e5e349b1dccd1c5da99fae7d274513bf315dc3fec86a11b6b0559fd4/twilio-9.10.1.tar.gz", hash = "sha256:0934e8360a2f249f683c82f427cd4f109a77737a368a9e71f8755395d250f458", size = 1618203, upload-time = "2026-02-05T12:50:46.242Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/ec/cd/7ed6a38615e85e6d5821220afe750998ff28d35074c8f60ccc702b2bdc67/twilio-9.10.1-py2.py3-none-any.whl", hash = "sha256:14ecba426bea509c6422a139d5dc6b63c4e82271c665d0730f67db0225de5e1d", size = 2256299, upload-time = "2026-02-05T12:50:44.542Z" },
-]
-
-[[package]]
-name = "twilio-stubs"
-version = "0.2.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "twilio" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/d6/1b/2e4c6baee18623083ff33b89d266c1c0d0bf135b8078261c743958f49b4f/twilio-stubs-0.2.0.tar.gz", hash = "sha256:15638201295aef536451d31282133544406e334550ed276e40e63877e79b89b8", size = 113626, upload-time = "2023-02-15T10:54:49.902Z" }
-
-[[package]]
 name = "typer"
 version = "0.23.1"
 source = { registry = "https://pypi.org/simple" }
@@ -7069,59 +6879,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/18/24/5497a611f32cbaf4b9e1af35f56463e8f02e198ec513b68cb59a63f5a446/types_awscrt-0.31.2.tar.gz", hash = "sha256:dc79705acd24094656b8105b8d799d7e273c8eac37c69137df580cd84beb54f6", size = 18190, upload-time = "2026-02-16T02:33:53.135Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ab/3d/21a2212b5fcef9e8e9f368403885dc567b7d31e50b2ce393efad3cd83572/types_awscrt-0.31.2-py3-none-any.whl", hash = "sha256:3d6a29c1cca894b191be408f4d985a8e3a14d919785652dd3fa4ee558143e4bf", size = 43340, upload-time = "2026-02-16T02:33:52.109Z" },
-]
-
-[[package]]
-name = "types-click"
-version = "7.1.8"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/00/ff/0e6a56108d45c80c61cdd4743312d0304d8192482aea4cce96c554aaa90d/types-click-7.1.8.tar.gz", hash = "sha256:b6604968be6401dc516311ca50708a0a28baa7a0cb840efd7412f0dbbff4e092", size = 10015, upload-time = "2021-11-23T12:28:01.701Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/ee/ad/607454a5f991c5b3e14693a7113926758f889138371058a5f72f567fa131/types_click-7.1.8-py3-none-any.whl", hash = "sha256:8cb030a669e2e927461be9827375f83c16b8178c365852c060a34e24871e7e81", size = 12929, upload-time = "2021-11-23T12:27:59.493Z" },
-]
-
-[[package]]
-name = "types-flask"
-version = "1.1.6"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "types-click" },
-    { name = "types-jinja2" },
-    { name = "types-werkzeug" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/79/65/728a104973133a45fba50f3d1e1ee832287666ac74cfd47004cea8402ea3/types-Flask-1.1.6.tar.gz", hash = "sha256:aac777b3abfff9436e6b01f6d08171cf23ea6e5be71cbf773aaabb1c5763e9cf", size = 9829, upload-time = "2021-11-26T06:21:31.199Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/60/6c/a98a0c29c39d8a6283ac704f3d36f0d570d8dee931e9d46d6cc60d436bec/types_Flask-1.1.6-py3-none-any.whl", hash = "sha256:6ab8a9a5e258b76539d652f6341408867298550b19b81f0e41e916825fc39087", size = 13733, upload-time = "2021-11-26T06:21:30.365Z" },
-]
-
-[[package]]
-name = "types-httplib2"
-version = "0.31.2.20260125"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/c4/15/6a1b0c6e873af63f6fb5e3f12574e918d015887a9e164c36cbaf0fb4acae/types_httplib2-0.31.2.20260125.tar.gz", hash = "sha256:5bb567525c0a2cc3209c9c80016d43a8e69543090c8433993488a4637dc30300", size = 10646, upload-time = "2026-01-25T03:43:56.635Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/80/ec/f7a78d2cedf127a02b8a63bc634262a624fb614d904cf68db8a01d4af7fc/types_httplib2-0.31.2.20260125-py3-none-any.whl", hash = "sha256:dfec71909f7d624d25dfd1962fc543f9924337c39e5b24db6f7c300d686b7f65", size = 10651, upload-time = "2026-01-25T03:43:55.792Z" },
-]
-
-[[package]]
-name = "types-jinja2"
-version = "2.11.9"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "types-markupsafe" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/46/c4/b82309bfed8195de7997672deac301bd6f5bd5cbb6a3e392b7fe780d7852/types-Jinja2-2.11.9.tar.gz", hash = "sha256:dbdc74a40aba7aed520b7e4d89e8f0fe4286518494208b35123bcf084d4b8c81", size = 13302, upload-time = "2021-11-26T06:21:17.496Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/b7/b0/e79d84748f1d34304f13191424348a719c3febaa3493835370fe9528e1e6/types_Jinja2-2.11.9-py3-none-any.whl", hash = "sha256:60a1e21e8296979db32f9374d8a239af4cb541ff66447bb915d8ad398f9c63b2", size = 18190, upload-time = "2021-11-26T06:21:16.18Z" },
-]
-
-[[package]]
-name = "types-markupsafe"
-version = "1.1.10"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/39/31/b5f059142d058aec41e913d8e0eff0a967e7bc46f9a2ba2f31bc11cff059/types-MarkupSafe-1.1.10.tar.gz", hash = "sha256:85b3a872683d02aea3a5ac2a8ef590193c344092032f58457287fbf8e06711b1", size = 2986, upload-time = "2021-11-27T03:18:07.558Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/bc/d6/b8effb1c48539260a5eb4196afc55efac4ea1684a4991977555eb266b2ef/types_MarkupSafe-1.1.10-py3-none-any.whl", hash = "sha256:ca2bee0f4faafc45250602567ef38d533e877d2ddca13003b319c551ff5b3cc5", size = 3998, upload-time = "2021-11-27T03:18:06.398Z" },
 ]
 
 [[package]]
@@ -7197,15 +6954,6 @@ wheels = [
 ]
 
 [[package]]
-name = "types-werkzeug"
-version = "1.0.9"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/eb/43/161261d2ac1fc20e944aa108e48a98ff0d994e19b498d6fb19d6637caf05/types-Werkzeug-1.0.9.tar.gz", hash = "sha256:5cc269604c400133d452a40cee6397655f878fc460e03fde291b9e3a5eaa518c", size = 23909, upload-time = "2021-11-26T06:21:28.33Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/4a/c1/eaf8426126eafa46d649afb2fddede327043fbc2e84021b8b09a7fa15115/types_Werkzeug-1.0.9-py3-none-any.whl", hash = "sha256:194bd5715a13c598f05c63e8a739328657590943bce941e8a3619a6b5d4a54ec", size = 36186, upload-time = "2021-11-26T06:21:27.37Z" },
-]
-
-[[package]]
 name = "typing-extensions"
 version = "4.15.0"
 source = { registry = "https://pypi.org/simple" }
@@ -7255,15 +7003,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/dc/c6/6cc1b21d7a96b67923b43de91b1f42d9aa1e663b11d7dc32be54aa02441e/universal_pathlib-0.3.9.tar.gz", hash = "sha256:3a2225bc8cb0ca685a032ff885b945fdb0613b46e8c97d32df6afb6327c6c817", size = 260902, upload-time = "2026-01-31T22:35:35.183Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/85/23/1e5afa2ea865b2bf0d031a7a1eb4d11e5b3e1a70cffa7001112eb34c7805/universal_pathlib-0.3.9-py3-none-any.whl", hash = "sha256:e4c3bdfd7650f55fb47da0a8a48eae9da6ae7216ea628fe5e1cadcc82d591a0e", size = 83476, upload-time = "2026-01-31T22:35:33.377Z" },
-]
-
-[[package]]
-name = "uritemplate"
-version = "4.2.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/98/60/f174043244c5306c9988380d2cb10009f91563fc4b31293d27e17201af56/uritemplate-4.2.0.tar.gz", hash = "sha256:480c2ed180878955863323eea31b0ede668795de182617fef9c6ca09e6ec9d0e", size = 33267, upload-time = "2025-06-02T15:12:06.318Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a9/99/3ae339466c9183ea5b8ae87b34c0b897eda475d2aec2307cae60e5cd4f29/uritemplate-4.2.0-py3-none-any.whl", hash = "sha256:962201ba1c4edcab02e60f9a0d3821e82dfc5d2d6662a21abd533879bdb8a686", size = 11488, upload-time = "2025-06-02T15:12:03.405Z" },
 ]
 
 [[package]]
@@ -7569,18 +7308,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/a5/8f/aea9c71cc92bf9b6cc0f7f70df8f0b420636b6c96ef4feee1e16f80f75dd/websockets-16.0-pp311-pypy311_pp73-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:0298d07ee155e2e9fda5be8a9042200dd2e3bb0b8a38482156576f863a9d457c", size = 176968, upload-time = "2026-01-10T09:23:41.031Z" },
     { url = "https://files.pythonhosted.org/packages/9a/3f/f70e03f40ffc9a30d817eef7da1be72ee4956ba8d7255c399a01b135902a/websockets-16.0-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:a653aea902e0324b52f1613332ddf50b00c06fdaf7e92624fbf8c77c78fa5767", size = 178735, upload-time = "2026-01-10T09:23:42.259Z" },
     { url = "https://files.pythonhosted.org/packages/6f/28/258ebab549c2bf3e64d2b0217b973467394a9cea8c42f70418ca2c5d0d2e/websockets-16.0-py3-none-any.whl", hash = "sha256:1637db62fad1dc833276dded54215f2c7fa46912301a24bd94d45d46a011ceec", size = 171598, upload-time = "2026-01-10T09:23:45.395Z" },
-]
-
-[[package]]
-name = "werkzeug"
-version = "3.1.5"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "markupsafe" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/5a/70/1469ef1d3542ae7c2c7b72bd5e3a4e6ee69d7978fa8a3af05a38eca5becf/werkzeug-3.1.5.tar.gz", hash = "sha256:6a548b0e88955dd07ccb25539d7d0cc97417ee9e179677d22c7041c8f078ce67", size = 864754, upload-time = "2026-01-08T17:49:23.247Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/ad/e4/8d97cca767bcc1be76d16fb76951608305561c6e056811587f36cb1316a8/werkzeug-3.1.5-py3-none-any.whl", hash = "sha256:5111e36e91086ece91f93268bb39b4a35c1e6f1feac762c9c822ded0a4e322dc", size = 225025, upload-time = "2026-01-08T17:49:21.859Z" },
 ]
 
 [[package]]

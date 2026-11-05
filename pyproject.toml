@@ -29,7 +29,6 @@ dependencies = [
     "naas-abi-marketplace[applications-agicap]",
     "naas-abi-marketplace[applications-algolia]",
     "naas-abi-marketplace[applications-arxiv]",
-    "naas-abi-marketplace[applications-bodo]",
     "naas-abi-marketplace[applications-exchangeratesapi]",
     "naas-abi-marketplace[applications-git]",
     "naas-abi-marketplace[applications-github]",

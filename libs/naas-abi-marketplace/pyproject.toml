@@ -129,7 +129,8 @@ applications-arxiv = [
     "arxiv>=2.1.3,<3"
 ]
 applications-bodo = [
-    "boto3>=1.38.19,<2"
+    # The agent runs Python that imports bodo.pandas (was boto3: a typo).
+    "bodo>=2026.11",
 ]
 applications-exchangeratesapi = []
 applications-git = []
@@ -159,12 +160,7 @@ applications-pubmed = [
 ]
 applications-sanax = []
 applications-sendgrid = []
-applications-x = [
-    # The X app publishes its dashboard from a Parquet projection of the ingest
-    # envelopes rather than by re-querying the graph; polars is the engine that
-    # builds and reads it.
-    "polars>=1.0.0",
-]
+applications-x = []
 applications-yahoofinance = [
     "yfinance==0.2.66",
     "yahooquery==2.4.1"
