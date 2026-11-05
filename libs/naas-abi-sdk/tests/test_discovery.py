@@ -290,3 +290,67 @@ def test_rollout_is_registered_and_draining_wakes_the_runner():
 def test_rollout_configuration_rejects_a_cohort_without_an_id():
     with pytest.raises(ValueError, match="rollout id"):
         DiscoveryConfiguration(rollout_modules=("a",))
+
+
+def test_agent_presentation_round_trips_through_the_descriptor():
+    from naas_abi_sdk.discovery import (
+        AgentDescriptor,
+        AgentSuggestion,
+        _instance,
+        module_descriptor,
+    )
+
+    agent = AgentDescriptor(
+        "ACME_Account_Director",
+        "Answers from the ACME graph.",
+        capabilities=("agent.invoke.v1",),
+        display_name="ACME Account Director",
+        avatar_url="/modules/acme/assets/public/acme.png",
+        suggestions=(
+            AgentSuggestion("Brief", "Brief me on ACME.", "One screen"),
+            AgentSuggestion("Who leads?", "Who leads ACME?"),
+        ),
+    )
+
+    class Module:
+        package_version = "1.0.0"
+        contract_major = 1
+        agents = (agent,)
+
+    descriptor = module_descriptor(Module, "acme.accounts", ())
+    listed = _instance(
+        pb.Instance(descriptor=descriptor, instance_id="i", status="READY")
+    )
+
+    assert listed.agents == (agent,)
+    # Without presentation, an agent is what it was before (name only).
+    plain = AgentDescriptor("Echo", capabilities=("agent.invoke.v1",))
+    assert plain.to_pb() == pb.AgentDescriptor(
+        name="Echo", contract_major=1, capabilities=["agent.invoke.v1"]
+    )
+
+
+@pytest.mark.parametrize(
+    "presentation",
+    [
+        {"display_name": "x" * 129},
+        {"avatar_url": "http://insecure.example.com/a.png"},
+        {"avatar_url": "data:image/png;base64,AAAA"},
+        {"avatar_url": "assets/public/a.png"},
+        {"avatar_url": "/modules/acme/../secret.png"},
+    ],
+)
+def test_agent_presentation_is_checked_when_declared(presentation):
+    from naas_abi_sdk.discovery import AgentDescriptor
+
+    with pytest.raises(ValueError):
+        AgentDescriptor("Agent", **presentation)
+
+
+def test_suggestions_are_bounded():
+    from naas_abi_sdk.discovery import AgentDescriptor, AgentSuggestion
+
+    with pytest.raises(ValueError):
+        AgentSuggestion("", "value")
+    with pytest.raises(ValueError):
+        AgentDescriptor("Agent", suggestions=(AgentSuggestion("l", "v"),) * 9)

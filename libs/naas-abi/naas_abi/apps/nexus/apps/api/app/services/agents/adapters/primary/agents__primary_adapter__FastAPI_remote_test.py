@@ -15,6 +15,7 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.port import AgentRecord
 from naas_abi.apps.nexus.apps.api.app.services.agents.remote.port import (
     REMOTE_PROVIDER,
     RemoteAgent,
+    RemoteAgentSuggestion,
 )
 
 ZEN = "zen.agents.ZenAgent/ZenAgent"
@@ -319,3 +320,79 @@ def test_toggling_enabled_in_the_ui_records_an_override(monkeypatch):
 
     assert (captured[0].enabled, captured[0].enabled_override) == (True, True)
     assert captured[1].enabled_override is None  # renaming is not a toggle
+
+
+# Presentation: what the module publishes is what the workspace shows.
+
+PRESENTED = RemoteAgent(
+    "acme.accounts",
+    "ACME_Account_Director",
+    "Answers from the ACME account graph.",
+    display_name="ACME Account Director",
+    avatar_url="/modules/acme/assets/public/acme.png",
+    suggestions=(
+        RemoteAgentSuggestion("State of the account", "Brief me on ACME.", "One screen"),
+        RemoteAgentSuggestion("Who leads?", "Who leads the ACME account?"),
+    ),
+)
+
+
+def test_remote_rows_show_the_published_name_avatar_and_suggestions(monkeypatch):
+    monkeypatch.setattr(sync, "public_api_host", lambda: "https://api.example.com")
+    row = _record("r", PRESENTED.key, provider=REMOTE_PROVIDER)
+
+    shown = sync._enrich_agent(row, {}, {PRESENTED.key: PRESENTED})
+
+    assert shown.name == "ACME Account Director"
+    assert shown.logo_url == "https://api.example.com/modules/acme/assets/public/acme.png"
+    assert shown.suggestions == [
+        {
+            "label": "State of the account",
+            "value": "Brief me on ACME.",
+            "description": "One screen",
+        },
+        {"label": "Who leads?", "value": "Who leads the ACME account?"},
+    ]
+    assert shown.resolved_model_id is None
+    assert shown.module_path == "acme.accounts"
+
+
+def test_an_https_avatar_is_kept_and_anything_else_dropped():
+    assert (
+        sync._remote_avatar_url("https://cdn.example.com/a.png") == "https://cdn.example.com/a.png"
+    )
+    assert sync._remote_avatar_url("javascript:alert(1)") is None
+    assert sync._remote_avatar_url("") is None
+
+
+def test_a_remote_row_without_discovery_keeps_its_stored_name():
+    row = replace(
+        _record("r", PRESENTED.key, provider=REMOTE_PROVIDER), name="ACME Account Director"
+    )
+
+    shown = sync._enrich_agent(row, {}, {})
+
+    assert shown.name == "ACME Account Director"
+    assert shown.logo_url is None and shown.suggestions is None
+
+
+def test_presentation_is_read_from_discovery_only_when_stale_and_needed(monkeypatch):
+    from naas_abi.apps.nexus.apps.api.app.services.agents.remote import factory
+
+    calls = []
+
+    class _Directory:
+        async def list_agents(self):
+            calls.append(1)
+            return [PRESENTED]
+
+    monkeypatch.setattr(factory, "get_remote_agent_directory", lambda: _Directory())
+    monkeypatch.setattr(sync, "_remote_presentation", None)
+    local = [_record("zen", ZEN)]
+    remote = [_record("r", PRESENTED.key, provider=REMOTE_PROVIDER)]
+
+    assert asyncio.run(sync._remote_agents_by_key(local)) == {}
+    assert calls == []
+    assert asyncio.run(sync._remote_agents_by_key(remote)) == {PRESENTED.key: PRESENTED}
+    assert asyncio.run(sync._remote_agents_by_key(remote)) == {PRESENTED.key: PRESENTED}
+    assert calls == [1]

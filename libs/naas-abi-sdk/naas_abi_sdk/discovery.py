@@ -17,13 +17,116 @@ from nats.errors import Error as NATSError
 
 from naas_abi_sdk.transport import RPCError, Transport
 
+# Presentation bounds, the same the engine's discovery enforces: descriptors
+# travel in every registration and listing, and the registry snapshot that
+# holds every module is bounded (512 KiB). So an avatar is a reference, never
+# image bytes.
+MAX_DISPLAY_NAME_CHARS = 128
+MAX_AVATAR_URL_CHARS = 1024
+MAX_SUGGESTIONS = 8
+MAX_SUGGESTION_LABEL_CHARS = 128
+MAX_SUGGESTION_VALUE_CHARS = 1024
+MAX_SUGGESTION_DESCRIPTION_CHARS = 256
+_MODULE_ASSET = re.compile(r"/modules/[A-Za-z0-9_.\-]+(/[A-Za-z0-9_.\-]+)+")
+
+
+def valid_avatar_url(value: str) -> bool:
+    """Empty, an ``https://`` URL, or a ``/modules/<path>`` asset that an engine
+    module serves (Nexus resolves it against its public API host)."""
+    if not value:
+        return True
+    if len(value) > MAX_AVATAR_URL_CHARS or any(c.isspace() for c in value):
+        return False
+    if value.startswith("https://"):
+        return len(value) > len("https://")
+    return bool(_MODULE_ASSET.fullmatch(value)) and "/../" not in f"{value}/"
+
+
+@dataclass(frozen=True)
+class AgentSuggestion:
+    """A starter prompt shown under the agent: ``label`` is shown, ``value`` sent."""
+
+    label: str
+    value: str
+    description: str = ""
+
+    def __post_init__(self) -> None:
+        if not (0 < len(self.label) <= MAX_SUGGESTION_LABEL_CHARS):
+            raise ValueError("Suggestion label must have 1 to 128 characters")
+        if not (0 < len(self.value) <= MAX_SUGGESTION_VALUE_CHARS):
+            raise ValueError("Suggestion value must have 1 to 1024 characters")
+        if len(self.description) > MAX_SUGGESTION_DESCRIPTION_CHARS:
+            raise ValueError("Suggestion description must have at most 256 characters")
+
 
 @dataclass(frozen=True)
 class AgentDescriptor:
+    """An agent a module publishes. ``name`` is its key (``<module_id>/<name>``);
+    ``display_name``, ``avatar_url`` and ``suggestions`` are presentation only."""
+
     name: str
     description: str = ""
     contract_major: int = 1
     capabilities: tuple[str, ...] = ()
+    display_name: str = ""
+    avatar_url: str = ""
+    suggestions: tuple[AgentSuggestion, ...] = ()
+
+    def __post_init__(self) -> None:
+        if len(self.display_name) > MAX_DISPLAY_NAME_CHARS or (
+            self.display_name and not self.display_name.strip()
+        ):
+            raise ValueError("Agent display name must have at most 128 characters")
+        if not valid_avatar_url(self.avatar_url):
+            raise ValueError(
+                "Agent avatar must be an https:// URL or a /modules/<path> asset, "
+                f"of at most {MAX_AVATAR_URL_CHARS} characters"
+            )
+        if len(self.suggestions) > MAX_SUGGESTIONS:
+            raise ValueError(f"An agent has at most {MAX_SUGGESTIONS} suggestions")
+
+    def to_pb(self) -> pb.AgentDescriptor:
+        return pb.AgentDescriptor(
+            name=self.name,
+            description=self.description,
+            contract_major=self.contract_major,
+            capabilities=self.capabilities,
+            display_name=self.display_name,
+            avatar_url=self.avatar_url,
+            suggestions=[
+                pb.AgentSuggestion(
+                    label=s.label, value=s.value, description=s.description
+                )
+                for s in self.suggestions
+            ],
+        )
+
+    @classmethod
+    def from_pb(cls, value: pb.AgentDescriptor) -> AgentDescriptor:
+        # Built without validation: what the engine accepted is shown as is.
+        descriptor = object.__new__(cls)
+        fields = {
+            "name": value.name,
+            "description": value.description,
+            "contract_major": value.contract_major,
+            "capabilities": tuple(value.capabilities),
+            "display_name": value.display_name,
+            "avatar_url": value.avatar_url,
+            "suggestions": tuple(
+                _suggestion(s.label, s.value, s.description) for s in value.suggestions
+            ),
+        }
+        for key, item in fields.items():
+            object.__setattr__(descriptor, key, item)
+        return descriptor
+
+
+def _suggestion(label: str, value: str, description: str) -> AgentSuggestion:
+    suggestion = object.__new__(AgentSuggestion)
+    object.__setattr__(suggestion, "label", label)
+    object.__setattr__(suggestion, "value", value)
+    object.__setattr__(suggestion, "description", description)
+    return suggestion
 
 
 @dataclass(frozen=True)
@@ -60,12 +163,7 @@ def _instance(value: pb.Instance) -> ModuleInstance:
         d.contract_major,
         value.status,
         value.expires_at,
-        tuple(
-            AgentDescriptor(
-                a.name, a.description, a.contract_major, tuple(a.capabilities)
-            )
-            for a in d.agents
-        ),
+        tuple(AgentDescriptor.from_pb(a) for a in d.agents),
         _jobs(d),
         tuple((x.module_id, x.contract_major) for x in d.dependencies),
         tuple(ModelDescriptor(m.name, m.description, m.kind) for m in d.models),
@@ -504,15 +602,7 @@ def module_descriptor(
         dependencies=[
             pb.Dependency(module_id=d, contract_major=1) for d in dependencies
         ],
-        agents=[
-            pb.AgentDescriptor(
-                name=a.name,
-                description=a.description,
-                contract_major=a.contract_major,
-                capabilities=a.capabilities,
-            )
-            for a in module_type.agents
-        ],
+        agents=[a.to_pb() for a in module_type.agents],
         jobs=[j.to_pb() for j in getattr(module_type, "jobs", ())],
         models=[
             pb.ModelDescriptor(name=m.name, description=m.description, kind=m.kind)
