@@ -1,3 +1,9 @@
+"""Naas (in-engine). Deprecated for its agent and integration: use the remote
+module ``naas_abi_apps.naas`` (module id ``applications.naas``) from
+``libs/naas-abi-marketplace-modules``. The ontology YAML workflows stay here
+for the in-engine ``ontology_engineer`` and ``powerpoint`` (jupyter-naas/abi#1423).
+"""
+
 from naas_abi_core.module.Module import (
     BaseModule,
     ModuleConfiguration,

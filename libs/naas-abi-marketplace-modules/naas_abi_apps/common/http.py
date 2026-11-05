@@ -27,15 +27,18 @@ async def request(
     url: str,
     *,
     service: str,
+    raise_for_status: bool = True,
     **kwargs: Any,
 ) -> httpx.Response:
-    """One request; any HTTP failure is an ``IntegrationConnectionError``."""
+    """One request; any HTTP failure is an ``IntegrationConnectionError``
+    (``raise_for_status=False``: an error status is returned, not raised)."""
     try:
         async with httpx.AsyncClient(
             timeout=configuration.timeout, transport=configuration.transport
         ) as client:
             response = await client.request(method, url, **kwargs)
-            response.raise_for_status()
+            if raise_for_status:
+                response.raise_for_status()
             return response
     except httpx.HTTPError as exc:
         raise IntegrationConnectionError(
