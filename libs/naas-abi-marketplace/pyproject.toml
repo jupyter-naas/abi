@@ -122,7 +122,6 @@ ai-qwen = [
     "langchain-ollama>=0.3.4",
 ]
 applications-agicap = []
-applications-airtable = []
 applications-algolia = [
     "algoliasearch>=4.35.0"
 ]
@@ -132,32 +131,20 @@ applications-arxiv = [
 applications-bodo = [
     "boto3>=1.38.19,<2"
 ]
-applications-datagouv = []
 applications-exchangeratesapi = []
 applications-git = []
 applications-github = [
     "pynacl>=1.5.0,<2"
 ]
-applications-gmail = [
-    "google-api-python-client>=2.188.0",
-    "google-api-python-client-stubs>=1.31.0"
-]
-applications-google-calendar = []
-applications-google-drive = []
-applications-google-sheets = []
 applications-googlesearch = [
     "beautifulsoup4>=4.12.0",
 ]
-applications-hubspot = []
 applications-linkedin = [
     "pandas>=2.3.3",
 ]
 applications-naas = []
 applications-nebari = []
-applications-newsapi = []
-applications-notion = []
 applications-openrouter = []
-applications-openweathermap = []
 applications-pennylane = []
 applications-postgres = [
     "psycopg2-binary>=2.9.10,<3",
@@ -172,15 +159,6 @@ applications-pubmed = [
 ]
 applications-sanax = []
 applications-sendgrid = []
-applications-sharepoint = []
-applications-spotify = []
-applications-twilio = [
-    "flask>=3.1.2",
-    "types-flask>=1.1.6",
-    "twilio>=9.10.0",
-    "twilio-stubs>=0.2.0"
-]
-applications-worldbank = []
 applications-x = [
     # The X app publishes its dashboard from a Parquet projection of the ingest
     # envelopes rather than by re-querying the graph; polars is the engine that

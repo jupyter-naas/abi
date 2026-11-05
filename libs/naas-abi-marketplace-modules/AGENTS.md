@@ -73,7 +73,8 @@ per application and one Dockerfile parametrized by `APP`. Module ids are
 - In-engine consumers of an application (`support` → github, `ontology_engineer`
   → naas, `organizations` → sec_gov, ...) must call it over NATS
   (`get_agent`, durable workflows) once its in-engine module is removed.
-- The placeholder agents (no tools) are not ported one by one: see #1423.
+- The 27 placeholder agents (no tools) are not ported: they were removed from
+  the marketplace (#1423).
 
 ## Not ported yet
 

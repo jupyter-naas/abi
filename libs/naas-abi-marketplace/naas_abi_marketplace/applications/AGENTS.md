@@ -21,16 +21,7 @@ In the table below: **A** = agent, **I** = integration wrapper, **W** = workflow
 
 | Module | Caps | Description |
 |---|:---:|---|
-| [`airtable/`](airtable/) | A | Spreadsheet-database (records, bases, views) |
-| [`gmail/`](gmail/) | A | Google email (read, send, search) |
-| [`google_calendar/`](google_calendar/) | A | Calendar events and scheduling |
-| [`google_drive/`](google_drive/) | A | Drive files and folders |
-| [`google_sheets/`](google_sheets/) | A | Spreadsheet read/write |
 | [`google_search/`](google_search/) | AIWO | Programmable Search engine |
-| [`google_maps/`](google_maps/) | A | Maps, geocoding, places |
-| [`notion/`](notion/) | A | Notion databases and pages |
-| [`sharepoint/`](sharepoint/) | A | Microsoft SharePoint |
-| [`slack/`](slack/) | A | Workspace messaging |
 | [`powerpoint/`](powerpoint/) | AIWO | `.pptx` slide-deck generation/edit |
 
 ### Developer tools
@@ -40,8 +31,8 @@ In the table below: **A** = agent, **I** = integration wrapper, **W** = workflow
 | [`git/`](git/) | A | Local git operations |
 | [`github/`](github/) | AIO | GitHub REST + GraphQL (repos, issues, PRs, projects) |
 | [`postgres/`](postgres/) | AI | PostgreSQL — query, schema introspection |
-| [`aws/`](aws/) | A | AWS SDK surface |
 | [`nebari/`](nebari/) | AO | Nebari data-science platform |
+| [`x/`](x/) | AIWPO | X (Twitter) search ingestion, x_proxy app |
 | [`naas/`](naas/) | AIWO | Naas platform (workspaces, secrets, storage) |
 | [`openrouter/`](openrouter/) | AI | OpenRouter LLM router |
 
@@ -49,9 +40,6 @@ In the table below: **A** = agent, **I** = integration wrapper, **W** = workflow
 
 | Module | Caps | Description |
 |---|:---:|---|
-| [`hubspot/`](hubspot/) | A | HubSpot CRM |
-| [`salesforce/`](salesforce/) | A | Salesforce CRM |
-| [`zoho/`](zoho/) | A | Zoho CRM |
 | [`linkedin/`](linkedin/) | AIWO | Profiles, posts, company pages |
 | [`sendgrid/`](sendgrid/) | AI | Transactional / marketing email |
 
@@ -60,23 +48,9 @@ In the table below: **A** = agent, **I** = integration wrapper, **W** = workflow
 | Module | Caps | Description |
 |---|:---:|---|
 | [`agicap/`](agicap/) | AI | Cash-flow management |
-| [`mercury/`](mercury/) | A | Mercury banking |
 | [`pennylane/`](pennylane/) | AI | French accounting platform |
-| [`qonto/`](qonto/) | A | Qonto business banking |
-| [`stripe/`](stripe/) | A | Payments, customers, subscriptions |
 | [`exchangeratesapi/`](exchangeratesapi/) | AI | FX rates |
-| [`worldbank/`](worldbank/) | A | World Bank economic indicators |
 | [`yahoofinance/`](yahoofinance/) | AI | Public market data |
-
-### Communication & social
-
-| Module | Caps | Description |
-|---|:---:|---|
-| [`instagram/`](instagram/) | A | Instagram |
-| [`spotify/`](spotify/) | A | Music search, playlists |
-| [`twilio/`](twilio/) | A | SMS / voice |
-| [`whatsapp_business/`](whatsapp_business/) | A | WhatsApp Business messaging |
-| [`youtube/`](youtube/) | A | Video search and metadata |
 
 ### Research & data
 
@@ -85,15 +59,11 @@ In the table below: **A** = agent, **I** = integration wrapper, **W** = workflow
 | [`algolia/`](algolia/) | AI | Search-as-a-service |
 | [`arxiv/`](arxiv/) | AIWO | arXiv academic papers |
 | [`bodo/`](bodo/) | A | Bodo distributed compute |
-| [`datagouv/`](datagouv/) | A | data.gouv.fr open data |
-| [`newsapi/`](newsapi/) | A | News headlines |
-| [`openalex/`](openalex/) | A | OpenAlex scholarly graph |
-| [`openweathermap/`](openweathermap/) | A | Weather data |
 | [`pubmed/`](pubmed/) | AIO | PubMed biomedical literature |
 | [`sanax/`](sanax/) | AO | Sanax data source |
 | [`sec_gov/`](sec_gov/) | I | SEC EDGAR filings |
 
-Total: **47 application modules**.
+Total: **21 application modules**. The placeholder agents without tools (Airtable, Gmail, Slack, Stripe and 23 others) were removed (jupyter-naas/abi#1423); most modules are being ported to remote modules in `libs/naas-abi-marketplace-modules`.
 
 ## Module shape (recap)
 

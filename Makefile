@@ -54,51 +54,24 @@ help:
 	@echo ""
 	@echo "MARKETPLACE APPLICATION AGENTS:"
 	@echo "  chat-agicap-agent        Start Agicap integration agent"
-	@echo "  chat-airtable-agent      Start Airtable integration agent"
 	@echo "  chat-algolia-agent       Start Algolia integration agent"
 	@echo "  chat-arxiv-agent         Start ArXiv integration agent"
-	@echo "  chat-aws-agent           Start AWS integration agent"
 	@echo "  chat-bodo-agent          Start Bodo integration agent"
-	@echo "  chat-datagouv-agent      Start DataGouv integration agent"
 	@echo "  chat-exchangeratesapi-agent Start ExchangeRatesAPI integration agent"
 	@echo "  chat-github-agent        Start GitHub integration agent"
-	@echo "  chat-gmail-agent          Start Gmail integration agent"
-	@echo "  chat-google-analytics-agent Start Google Analytics integration agent"
-	@echo "  chat-google-calendar-agent Start Google Calendar integration agent"
-	@echo "  chat-google-drive-agent   Start Google Drive integration agent"
-	@echo "  chat-google-maps-agent   Start Google Maps integration agent"
 	@echo "  chat-google-search-agent Start Google Search integration agent"
-	@echo "  chat-google-sheets-agent  Start Google Sheets integration agent"
-	@echo "  chat-hubspot-agent        Start HubSpot integration agent"
-	@echo "  chat-instagram-agent     Start Instagram integration agent"
 	@echo "  chat-linkedin-agent      Start LinkedIn integration agent"
 	@echo "  chat-linkedin-kg-agent   Start LinkedIn Knowledge Graph agent"
-	@echo "  chat-mercury-agent       Start Mercury integration agent"
 	@echo "  chat-naas-agent          Start Naas platform integration agent"
 	@echo "  chat-nebari-agent        Start Nebari integration agent"
-	@echo "  chat-newsapi-agent        Start NewsAPI integration agent"
-	@echo "  chat-notion-agent        Start Notion integration agent"
-	@echo "  chat-openalex-agent      Start OpenAlex integration agent"
 	@echo "  chat-openrouter-agent    Start OpenRouter integration agent"
-	@echo "  chat-openweathermap-agent Start OpenWeatherMap integration agent"
 	@echo "  chat-pennylane-agent     Start Pennylane integration agent"
 	@echo "  chat-postgres-agent      Start PostgreSQL integration agent"
 	@echo "  chat-powerpoint-agent    Start PowerPoint integration agent"
 	@echo "  chat-pubmed-agent        Start PubMed integration agent"
-	@echo "  chat-qonto-agent         Start Qonto integration agent"
-	@echo "  chat-salesforce-agent    Start Salesforce integration agent"
 	@echo "  chat-sanax-agent         Start Sanax integration agent"
 	@echo "  chat-sendgrid-agent      Start SendGrid integration agent"
-	@echo "  chat-sharepoint-agent    Start SharePoint integration agent"
-	@echo "  chat-slack-agent         Start Slack integration agent"
-	@echo "  chat-spotify-agent       Start Spotify integration agent"
-	@echo "  chat-stripe-agent        Start Stripe integration agent"
-	@echo "  chat-twilio-agent        Start Twilio integration agent"
-	@echo "  chat-whatsapp-business-agent Start WhatsApp Business integration agent"
-	@echo "  chat-worldbank-agent     Start World Bank integration agent"
 	@echo "  chat-yahoofinance-agent  Start Yahoo Finance integration agent"
-	@echo "  chat-youtube-agent       Start YouTube integration agent"
-	@echo "  chat-zoho-agent          Start Zoho integration agent"
 	@echo "  pull-request-description Generate pull request description using AI"
 	@echo ""
 	@echo "MARKETPLACE DOMAIN AGENTS:"
@@ -334,23 +307,14 @@ chat-qwen-agent: deps
 chat-agicap-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.agicap AgicapAgent
 
-chat-airtable-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.airtable AirtableAgent
-
 chat-algolia-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.algolia AlgoliaAgent
 
 chat-arxiv-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.arxiv ArXivAgent
 
-chat-aws-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.aws AWSAgent
-
 chat-bodo-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.bodo BodoAgent
-
-chat-datagouv-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.datagouv DataGouvAgent
 
 chat-exchangeratesapi-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.exchangeratesapi ExchangeRatesAPIAgent
@@ -358,35 +322,8 @@ chat-exchangeratesapi-agent: deps
 chat-github-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.github GitHubAgent
 
-chat-gmail-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.gmail GmailAgent
-
-chat-gmail-draft-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.gmail GmailDraftAgent
-
-chat-google-analytics-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.google_analytics GoogleAnalyticsAgent
-
-chat-google-calendar-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.google_calendar GoogleCalendarAgent
-
-chat-google-drive-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.google_drive GoogleDriveAgent
-
-chat-google-maps-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.google_maps GoogleMapsAgent
-
 chat-google-search-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.google_search GoogleSearchAgent
-
-chat-google-sheets-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.google_sheets GoogleSheetsAgent
-
-chat-hubspot-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.hubspot HubSpotAgent
-
-chat-instagram-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.instagram InstagramAgent
 
 chat-linkedin-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.linkedin LinkedInAgent
@@ -394,29 +331,14 @@ chat-linkedin-agent: deps
 chat-linkedin-kg-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.linkedin LinkedInKGAgent
 
-chat-mercury-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.mercury MercuryAgent
-
 chat-naas-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.naas NaasAgent
 
 chat-nebari-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.nebari NebariAgent
 
-chat-newsapi-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.newsapi NewsAPIAgent
-
-chat-notion-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.notion NotionAgent
-
-chat-openalex-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.openalex OpenAlexAgent
-
 chat-openrouter-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.openrouter OpenRouterAgent
-
-chat-openweathermap-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.openweathermap OpenWeatherMapAgent
 
 chat-pennylane-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.pennylane PennylaneAgent
@@ -430,47 +352,14 @@ chat-powerpoint-agent: deps
 chat-pubmed-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.pubmed PubMedAgent
 
-chat-qonto-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.qonto QontoAgent
-
-chat-salesforce-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.salesforce SalesforceAgent
-
 chat-sanax-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.sanax SanaxAgent
 
 chat-sendgrid-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.sendgrid SendGridAgent
 
-chat-sharepoint-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.sharepoint SharePointAgent
-
-chat-slack-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.slack SlackAgent
-
-chat-spotify-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.spotify SpotifyAgent
-
-chat-stripe-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.stripe StripeAgent
-
-chat-twilio-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.twilio TwilioAgent
-
-chat-whatsapp-business-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.whatsapp_business WhatsAppBusinessAgent
-
-chat-worldbank-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.worldbank WorldBankAgent
-
 chat-yahoofinance-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.yahoofinance YfinanceAgent
-
-chat-youtube-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.youtube YouTubeAgent
-
-chat-zoho-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.zoho ZohoAgent
 
 # The Git agents need no module fabric: run them with NATS off, so they work
 # whether this project's broker is down or another project's holds its port
