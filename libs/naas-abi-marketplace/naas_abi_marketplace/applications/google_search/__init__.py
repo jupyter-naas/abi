@@ -1,3 +1,9 @@
+"""Google Search (in-engine). Deprecated: use the remote module
+``naas_abi_apps.google_search`` (module id ``applications.google_search``) from
+``libs/naas-abi-marketplace-modules``. The in-engine ``linkedin`` module still
+loads this one in-process until it is ported (#1423, tier 3).
+"""
+
 from naas_abi_core.module.Module import (
     BaseModule,
     ModuleConfiguration,
