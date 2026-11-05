@@ -73,6 +73,9 @@ class MemoryStorage:
     async def put_object(self, prefix: str, key: str, content: bytes) -> None:
         self.objects[(prefix, key)] = content
 
+    async def get_object(self, prefix: str, key: str) -> bytes:
+        return self.objects[(prefix, key)]
+
 
 def fake_engine(secrets: dict[str, str] | None = None, reply: str = "ok") -> Any:
     return SimpleNamespace(
@@ -121,7 +124,10 @@ class FakeTripleStore:
     def __init__(self) -> None:
         from rdflib import Dataset
 
-        self.dataset = Dataset()
+        # As the deployed Fuseki (tdb:unionDefaultGraph): a query without
+        # FROM/GRAPH sees every named graph. The embedded Oxigraph of local dev
+        # does not, so such templates find nothing there.
+        self.dataset = Dataset(default_union=True)
         self.inserts: list[tuple[str, int]] = []
 
     async def insert(self, triples: Any, graph_name: Any) -> None:
