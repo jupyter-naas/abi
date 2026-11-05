@@ -238,6 +238,19 @@ wheels = [
 ]
 
 [[package]]
+name = "arxiv"
+version = "2.4.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "feedparser" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/24/6e/647dd134e66d3ea6ff8aba2a177a37c74245625cfc58184e3aff99c8d8ec/arxiv-2.4.1.tar.gz", hash = "sha256:691606c1069bcca8316fcb082f5d15e65f1f24a021b0b87f01b9fa56347f63c8", size = 74975, upload-time = "2026-03-04T03:05:33.991Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3d/6a/297380dc42fa25dff095feda66d46f7abba77ba54579d079071a2459e8d3/arxiv-2.4.1-py3-none-any.whl", hash = "sha256:060d678410ffc224ada01089f877b7676f250e37f96c140bad6c287afadb15d8", size = 12106, upload-time = "2026-03-04T03:05:33.029Z" },
+]
+
+[[package]]
 name = "async-timeout"
 version = "5.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -581,6 +594,27 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/fc/f8/98eea607f65de6527f8a2e8885fc8015d3e6f5775df186e443e0964a11c3/distro-1.9.0.tar.gz", hash = "sha256:2fa77c6fd8940f116ee1d6b94a2f90b13b5ea8d019b98bc8bafdcabcdd9bdbed", size = 60722, upload-time = "2023-12-24T09:54:32.31Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/12/b3/231ffd4ab1fc9d679809f356cebee130ac7daa00d6d6f3206dd4fd137e9e/distro-1.9.0-py3-none-any.whl", hash = "sha256:7bffd925d65168f85027d8da9af6bddab658135b840670a223589bc0c8ef02b2", size = 20277, upload-time = "2023-12-24T09:54:30.421Z" },
+]
+
+[[package]]
+name = "feedparser"
+version = "6.0.14"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "feedparser-sgmllib" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/37/8a/a53da4a77352045d277978a2df322d5379369f9deb1707178899ff7e1121/feedparser-6.0.14.tar.gz", hash = "sha256:088679b0c4b543ee211a820dd544698c76a402122eae7473c04a43425f283d06", size = 286108, upload-time = "2026-07-30T14:07:40.491Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7f/61/f04912e63702e73fb2a378f9c0a1ad9eb17a334a11a6b3fe1daa593903c2/feedparser-6.0.14-py3-none-any.whl", hash = "sha256:e35e3f760151b0c3b22cac9684155cae186a233e16c49bcbc6c49e91e3131137", size = 80668, upload-time = "2026-07-30T14:07:39.175Z" },
+]
+
+[[package]]
+name = "feedparser-sgmllib"
+version = "2.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/da/df/38596299216e5c22d60ed7f97902bb2bc72cfb95f732400f4fa976fd2e62/feedparser_sgmllib-2.1.0.tar.gz", hash = "sha256:61facf2918c4389b5b00714f76c5e03431ffcd94cd1f51d657edd6cd7c396579", size = 26845, upload-time = "2026-08-02T21:27:53.891Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/85/a0/79a31f898092e145bd66e2b338fb0656979acb2bbbcae8220940fbfcd820/feedparser_sgmllib-2.1.0-py3-none-any.whl", hash = "sha256:2cab2d43b95a954f920f18aebce7a4dbbb3f539780b127e2aa114f579821e01d", size = 11652, upload-time = "2026-08-02T21:27:52.894Z" },
 ]
 
 [[package]]
@@ -1256,11 +1290,16 @@ algolia = [
 ]
 all = [
     { name = "algoliasearch" },
+    { name = "arxiv" },
     { name = "httpx" },
     { name = "pandas" },
     { name = "psycopg", extra = ["binary"] },
     { name = "yahooquery" },
     { name = "yfinance" },
+]
+arxiv = [
+    { name = "arxiv" },
+    { name = "httpx" },
 ]
 exchangeratesapi = [
     { name = "httpx" },
@@ -1293,12 +1332,14 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "algoliasearch", marker = "extra == 'algolia'", specifier = ">=4.35,<5" },
+    { name = "arxiv", marker = "extra == 'arxiv'", specifier = ">=2.1.3,<3" },
     { name = "httpx", marker = "extra == 'agicap'", specifier = ">=0.27,<1" },
+    { name = "httpx", marker = "extra == 'arxiv'", specifier = ">=0.27,<1" },
     { name = "httpx", marker = "extra == 'exchangeratesapi'", specifier = ">=0.27,<1" },
     { name = "httpx", marker = "extra == 'pennylane'", specifier = ">=0.27,<1" },
     { name = "httpx", marker = "extra == 'sec-gov'", specifier = ">=0.27,<1" },
     { name = "httpx", marker = "extra == 'sendgrid'", specifier = ">=0.27,<1" },
-    { name = "naas-abi-marketplace-modules", extras = ["agicap", "algolia", "exchangeratesapi", "nebari", "pennylane", "postgres", "sec-gov", "sendgrid", "yahoofinance"], marker = "extra == 'all'" },
+    { name = "naas-abi-marketplace-modules", extras = ["agicap", "algolia", "arxiv", "exchangeratesapi", "nebari", "pennylane", "postgres", "sec-gov", "sendgrid", "yahoofinance"], marker = "extra == 'all'" },
     { name = "naas-abi-proto", editable = "../naas-abi-proto" },
     { name = "naas-abi-sdk", extras = ["agent", "otel", "workflows", "rdf"], editable = "../naas-abi-sdk" },
     { name = "pandas", marker = "extra == 'yahoofinance'", specifier = ">=2" },
@@ -1306,7 +1347,7 @@ requires-dist = [
     { name = "yahooquery", marker = "extra == 'yahoofinance'", specifier = "==2.4.1" },
     { name = "yfinance", marker = "extra == 'yahoofinance'", specifier = "==0.2.66" },
 ]
-provides-extras = ["agicap", "algolia", "nebari", "exchangeratesapi", "pennylane", "postgres", "sec-gov", "sendgrid", "yahoofinance", "all"]
+provides-extras = ["agicap", "algolia", "arxiv", "exchangeratesapi", "nebari", "pennylane", "postgres", "sec-gov", "sendgrid", "yahoofinance", "all"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -2400,7 +2441,7 @@ wheels = [
 
 [[package]]
 name = "requests"
-version = "2.34.2"
+version = "2.32.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -2408,9 +2449,9 @@ dependencies = [
     { name = "idna" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ac/c3/e2a2b89f2d3e2179abd6d00ebd70bff6273f37fb3e0cc209f48b39d00cbf/requests-2.34.2.tar.gz", hash = "sha256:f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed", size = 142856, upload-time = "2026-05-14T19:25:27.735Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c9/74/b3ff8e6c8446842c3f5c837e9c3dfcfe2018ea6ecef224c710c85ef728f4/requests-2.32.5.tar.gz", hash = "sha256:dbba0bac56e100853db0ea71b82b4dfd5fe2bf6d3754a8893c3af500cec7d7cf", size = 134517, upload-time = "2025-08-18T20:46:02.573Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a0/f4/c67b0b3f1b9245e8d266f0f112c500d50e5b4e83cb6f3b71b6528104182a/requests-2.34.2-py3-none-any.whl", hash = "sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0", size = 73075, upload-time = "2026-05-14T19:25:26.443Z" },
+    { url = "https://files.pythonhosted.org/packages/1e/db/4254e3eabe8020b458f1a747140d32277ec7a271daf1d235b70dc0b4e6e3/requests-2.32.5-py3-none-any.whl", hash = "sha256:2462f94637a34fd532264295e186976db0f5d453d1cdd31473c85a6a161affb6", size = 64738, upload-time = "2025-08-18T20:46:00.542Z" },
 ]
 
 [[package]]

@@ -112,3 +112,25 @@ def no_core_import(*modules: str) -> str | None:
         check=True,
     )
     return result.stdout.strip() or None
+
+
+class FakeTripleStore:
+    """In-memory named graphs (rdflib Dataset) behind the SDK facade's
+    ``insert`` / ``query``: SPARQL runs for real, ``FROM <graph>`` included."""
+
+    def __init__(self) -> None:
+        from rdflib import Dataset
+
+        self.dataset = Dataset()
+        self.inserts: list[tuple[str, int]] = []
+
+    async def insert(self, triples: Any, graph_name: Any) -> None:
+        from rdflib import URIRef
+
+        graph = self.dataset.graph(URIRef(str(graph_name)))
+        for triple in triples:
+            graph.add(triple)
+        self.inserts.append((str(graph_name), len(triples)))
+
+    async def query(self, query: str) -> Any:
+        return self.dataset.query(query)
