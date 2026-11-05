@@ -17,53 +17,26 @@ In the table below: **A** = agent, **I** = integration wrapper, **W** = workflow
 
 ## Application index
 
-### Productivity & collaboration
+| Module | Caps | Description | Why in-engine |
+|---|:---:|---|---|
+| [`git/`](git/) | A | Local git operations | Runs `git`, `make` and `gh` in the CLI's working directory (`make commit`, `make pr`) |
+| [`bodo/`](bodo/) | A | Bodo distributed compute | Runs Python that imports `bodo.pandas` in the engine process |
+| [`naas/`](naas/) | IWO | Ontology YAML publishing to a Naas workspace | Workflows and triggers on the engine's triple store, used by `ontology_engineer` |
+| [`x/`](x/) | AIWPO | X (Twitter) search ingestion, x_proxy app | Port to a remote module tracked in sub-issues of #1423 |
 
-| Module | Caps | Description |
-|---|:---:|---|
-| [`google_search/`](google_search/) | AIWO | Programmable Search engine |
-| [`powerpoint/`](powerpoint/) | AIWO | `.pptx` slide-deck generation/edit |
+Every other application (GitHub, LinkedIn, Google Search, PostgreSQL,
+PowerPoint, Pennylane, Agicap, ArXiv, PubMed, SEC EDGAR, Sanax, Nebari, ...) is a
+**remote module** in [`libs/naas-abi-marketplace-modules`](../../../naas-abi-marketplace-modules/README.md):
+its own process, reaching the engine over NATS. The in-engine versions were
+removed (jupyter-naas/abi#1423); `applications.openrouter` was replaced by
+`naas_abi_marketplace.ai.openrouter`. The placeholder agents without tools
+(Airtable, Gmail, Slack, Stripe and 23 others) were removed too.
 
-### Developer tools
-
-| Module | Caps | Description |
-|---|:---:|---|
-| [`git/`](git/) | A | Local git operations |
-| [`github/`](github/) | AIO | GitHub REST + GraphQL (repos, issues, PRs, projects) |
-| [`postgres/`](postgres/) | AI | PostgreSQL — query, schema introspection |
-| [`nebari/`](nebari/) | AO | Nebari data-science platform |
-| [`x/`](x/) | AIWPO | X (Twitter) search ingestion, x_proxy app |
-| [`naas/`](naas/) | AIWO | Naas platform (workspaces, secrets, storage) |
-| [`openrouter/`](openrouter/) | AI | OpenRouter LLM router |
-
-### CRM, sales & marketing
-
-| Module | Caps | Description |
-|---|:---:|---|
-| [`linkedin/`](linkedin/) | AIWO | Profiles, posts, company pages |
-| [`sendgrid/`](sendgrid/) | AI | Transactional / marketing email |
-
-### Finance & accounting
-
-| Module | Caps | Description |
-|---|:---:|---|
-| [`agicap/`](agicap/) | AI | Cash-flow management |
-| [`pennylane/`](pennylane/) | AI | French accounting platform |
-| [`exchangeratesapi/`](exchangeratesapi/) | AI | FX rates |
-| [`yahoofinance/`](yahoofinance/) | AI | Public market data |
-
-### Research & data
-
-| Module | Caps | Description |
-|---|:---:|---|
-| [`algolia/`](algolia/) | AI | Search-as-a-service |
-| [`arxiv/`](arxiv/) | AIWO | arXiv academic papers |
-| [`bodo/`](bodo/) | A | Bodo distributed compute |
-| [`pubmed/`](pubmed/) | AIO | PubMed biomedical literature |
-| [`sanax/`](sanax/) | AO | Sanax data source |
-| [`sec_gov/`](sec_gov/) | I | SEC EDGAR filings |
-
-Total: **21 application modules**. The placeholder agents without tools (Airtable, Gmail, Slack, Stripe and 23 others) were removed (jupyter-naas/abi#1423); most modules are being ported to remote modules in `libs/naas-abi-marketplace-modules`.
+**Migration.** A project that loads one of the removed modules in `modules:`
+(e.g. `naas_abi_marketplace.applications.pennylane`) removes that entry and
+runs the remote module instead (`dev.modules`, or a container built from
+`libs/naas-abi-marketplace-modules/Dockerfile`; see its README). Credentials
+move from the module's `config:` to engine secrets of the same name.
 
 ## Module shape (recap)
 
@@ -84,14 +57,15 @@ applications/<app>/
 
 ```yaml
 modules:
-  - module: naas_abi_marketplace.applications.github
+  - module: naas_abi_marketplace.applications.git
     enabled: true
-    config:
-      github_access_token: "{{ secret.GITHUB_ACCESS_TOKEN }}"
-      datastore_path: "github"
 ```
 
 ## Adding a new application module
+
+A new third-party integration is a **remote module** in
+`libs/naas-abi-marketplace-modules` (see its `AGENTS.md`). Add one here only
+when it must run in the engine process, as the four above do:
 
 1. Scaffold `applications/<app>/` with `__init__.py` declaring:
    - `dependencies.modules` — usually one `ai.<provider>` module.
@@ -112,6 +86,6 @@ modules:
 
 ```bash
 uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/applications
-uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/applications/github
-uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/applications/github/agents/GitHubAgent_test.py -v
+uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/applications/x
+uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/applications/git/agents/GitAgent_test.py -v
 ```

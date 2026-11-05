@@ -26,26 +26,11 @@ dependencies = [
     "naas-abi-marketplace[ai-mistral]",
     "naas-abi-marketplace[ai-perplexity]",
     "naas-abi-marketplace[ai-qwen]",
-    "naas-abi-marketplace[applications-agicap]",
-    "naas-abi-marketplace[applications-algolia]",
-    "naas-abi-marketplace[applications-arxiv]",
-    "naas-abi-marketplace[applications-exchangeratesapi]",
     "naas-abi-marketplace[applications-git]",
-    "naas-abi-marketplace[applications-github]",
-    "naas-abi-marketplace[applications-googlesearch]",
-    "naas-abi-marketplace[applications-linkedin]",
     "naas-abi-marketplace[applications-naas]",
-    "naas-abi-marketplace[applications-nebari]",
-    "naas-abi-marketplace[applications-openrouter]",
-    "naas-abi-marketplace[applications-pennylane]",
-    "naas-abi-marketplace[applications-postgres]",
-    "naas-abi-marketplace[applications-powerpoint]",
-    "naas-abi-marketplace[applications-pubmed]",
-    "naas-abi-marketplace[applications-sanax]",
-    "naas-abi-marketplace[applications-sendgrid]",
     "naas-abi-marketplace[applications-x]",
-    "naas-abi-marketplace[applications-yahoofinance]",
     "naas-abi-marketplace[domains-ontology-engineer]",
+    "naas-abi-marketplace[domains-support]",
     # "requests[socks]>=2.32.3,<3",
     # "fastapi>=0.115.5,<0.116",
     # "uvicorn[standard]>=0.32.1,<0.33",
@@ -96,6 +81,9 @@ dependencies = [
     # "pandas-stubs>=2.3.2.250926",
     "pymupdf>=1.27.2.2",
     "pymupdf4llm>=1.27.2.2",
+    # The document module's HtmlToVectorPipeline (was pulled in by the
+    # google_search extra until that module moved to a remote module).
+    "beautifulsoup4>=4.12.0",
 ]
 
 [project.scripts]

@@ -6,7 +6,7 @@ Each one runs in its own process, registers itself through discovery, and
 reaches the engine only over NATS with `naas-abi-sdk`. None imports
 `naas_abi_core`, `naas_abi` or `naas_abi_marketplace`.
 
-| Application | Package | Module id | Agents / workflows | Replaces |
+| Application | Package | Module id | Agents / workflows | Replaces (removed) |
 |---|---|---|---|---|
 | Agicap | `naas_abi_apps.agicap` | `applications.agicap` | `Agicap` | `naas_abi_marketplace.applications.agicap` |
 | Algolia | `naas_abi_apps.algolia` | `applications.algolia` | `Algolia` | `naas_abi_marketplace.applications.algolia` |
@@ -71,7 +71,8 @@ services:
     networks: [abi-network]
 ```
 
-Then remove `naas_abi_marketplace.applications.pennylane` from `modules:`.
+and remove `naas_abi_marketplace.applications.pennylane` from `modules:` if an
+older configuration still lists it: the in-engine modules were removed.
 
 ## Develop
 

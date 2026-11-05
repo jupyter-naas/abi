@@ -2,9 +2,9 @@
 
 Runs in its own process (``python -m naas_abi_apps.google_search``) and reaches
 the engine only through NATS. Replaces the in-engine
-``naas_abi_marketplace.applications.google_search`` (still loaded in-process by
-the in-engine ``linkedin`` module until that one is ported). Credentials are
-engine secrets (``GOOGLE_CUSTOM_SEARCH_API_KEY``,
+``naas_abi_marketplace.applications.google_search`` (removed; the remote
+``linkedin`` module runs these LinkedIn page searches in its own process).
+Credentials are engine secrets (``GOOGLE_CUSTOM_SEARCH_API_KEY``,
 ``GOOGLE_CUSTOM_SEARCH_ENGINE_ID``), read at start. The LinkedIn page searches
 are also durable workflows other modules start by name,
 ``workflow.search_linked_in_profile_page_workflow`` and

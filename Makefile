@@ -53,25 +53,8 @@ help:
 	@echo "  chat-qwen-agent          Start Qwen-based agent"
 	@echo ""
 	@echo "MARKETPLACE APPLICATION AGENTS:"
-	@echo "  chat-agicap-agent        Start Agicap integration agent"
-	@echo "  chat-algolia-agent       Start Algolia integration agent"
-	@echo "  chat-arxiv-agent         Start ArXiv integration agent"
+	@echo "  (the others run as remote modules: libs/naas-abi-marketplace-modules)"
 	@echo "  chat-bodo-agent          Start Bodo integration agent"
-	@echo "  chat-exchangeratesapi-agent Start ExchangeRatesAPI integration agent"
-	@echo "  chat-github-agent        Start GitHub integration agent"
-	@echo "  chat-google-search-agent Start Google Search integration agent"
-	@echo "  chat-linkedin-agent      Start LinkedIn integration agent"
-	@echo "  chat-linkedin-kg-agent   Start LinkedIn Knowledge Graph agent"
-	@echo "  chat-naas-agent          Start Naas platform integration agent"
-	@echo "  chat-nebari-agent        Start Nebari integration agent"
-	@echo "  chat-openrouter-agent    Start OpenRouter integration agent"
-	@echo "  chat-pennylane-agent     Start Pennylane integration agent"
-	@echo "  chat-postgres-agent      Start PostgreSQL integration agent"
-	@echo "  chat-powerpoint-agent    Start PowerPoint integration agent"
-	@echo "  chat-pubmed-agent        Start PubMed integration agent"
-	@echo "  chat-sanax-agent         Start Sanax integration agent"
-	@echo "  chat-sendgrid-agent      Start SendGrid integration agent"
-	@echo "  chat-yahoofinance-agent  Start Yahoo Finance integration agent"
 	@echo "  pull-request-description Generate pull request description using AI"
 	@echo ""
 	@echo "MARKETPLACE DOMAIN AGENTS:"
@@ -304,62 +287,8 @@ chat-qwen-agent: deps
 # CHAT WITH MARKETPLACE APPLICATIONS AGENTS
 # =============================================================================
 
-chat-agicap-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.agicap AgicapAgent
-
-chat-algolia-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.algolia AlgoliaAgent
-
-chat-arxiv-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.arxiv ArXivAgent
-
 chat-bodo-agent: deps
 	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.bodo BodoAgent
-
-chat-exchangeratesapi-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.exchangeratesapi ExchangeRatesAPIAgent
-
-chat-github-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.github GitHubAgent
-
-chat-google-search-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.google_search GoogleSearchAgent
-
-chat-linkedin-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.linkedin LinkedInAgent
-
-chat-linkedin-kg-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.linkedin LinkedInKGAgent
-
-chat-naas-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.naas NaasAgent
-
-chat-nebari-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.nebari NebariAgent
-
-chat-openrouter-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.openrouter OpenRouterAgent
-
-chat-pennylane-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.pennylane PennylaneAgent
-
-chat-postgres-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.postgres PostgresAgent
-
-chat-powerpoint-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.powerpoint PowerPointAgent
-
-chat-pubmed-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.pubmed PubMedAgent
-
-chat-sanax-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.sanax SanaxAgent
-
-chat-sendgrid-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.sendgrid SendGridAgent
-
-chat-yahoofinance-agent: deps
-	@ LOG_LEVEL=$(log_level) uv run abi chat naas_abi_marketplace.applications.yahoofinance YfinanceAgent
 
 # The Git agents need no module fabric: run them with NATS off, so they work
 # whether this project's broker is down or another project's holds its port

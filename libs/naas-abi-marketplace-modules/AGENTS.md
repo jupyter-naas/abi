@@ -52,8 +52,33 @@ jupyter-naas/abi#1423.
 1. `naas_abi_apps/<app>/`: `__init__.py` (`ABIModule`), `__main__.py`,
    `agents/`, `integrations/`, `tests/module_test.py`, tests beside the code.
 2. Extra `<app>` in `pyproject.toml`; row in `README.md`.
-3. Mark the in-engine module deprecated (docstring pointing here). It is
-   removed in the cleanup phase of #1423, not in the port.
+3. Remove the in-engine module, its extra, its `naas_abi` soft dependency and
+   its `make chat-*` target. An in-engine module that needs its raw client gets
+   its own copy (as `support` → GitHub, `people` → LinkedIn export below).
+
+## Decision (2026-11-05): cleanup, no compatibility window
+
+**Context.** Decision 6 of #1423: keep the ported in-engine modules
+(deprecated) for a release, or remove them.
+
+**Decision.** Removed with the ports, in the same PR: the in-engine versions of
+the 17 applications above and `applications.openrouter`, their extras, their
+`naas_abi` soft dependencies, their `make chat-*` targets and their generated
+reference docs. Kept in-engine: `git`, `bodo`, `naas` (its ontology YAML
+workflows and triggers; the agent is removed) and `x` (not ported yet).
+In-engine code that used a removed client got its own copy:
+- `support` owns `GitHubIntegration` and `GitHubGraphqlIntegration`
+  (`domains/operations/modules/support/integrations/`; `pynacl` in the
+  `domains-support` extra). It needs the raw REST and GraphQL calls (project
+  fields, iterations), which the remote module exposes only through its agent;
+- `people` owns the LinkedIn connections import (decision above);
+- `organizations` dropped its unused `applications.sec_gov` soft dependency;
+- `config.remote.yaml` loads `ai.openrouter` instead of `applications.openrouter`.
+
+**Consequences.** A project that loads a removed module in `modules:` fails at
+load: it removes the entry and runs the remote module (README), with the
+credentials as engine secrets. The migration note is in
+`naas_abi_marketplace/applications/AGENTS.md`.
 
 ## Decision (2026-11-05): linkedin and the people module
 
@@ -105,14 +130,16 @@ per application and one Dockerfile parametrized by `APP`. Module ids are
 - One lockfile, one test run and one CI job for all ports, instead of 48
   repositories; each image still installs only its application's extra.
 - Each application is still its own process, deployable and restartable alone.
-- In-engine consumers of an application (`support` → github, `ontology_engineer`
-  → naas, `organizations` → sec_gov, ...) must call it over NATS
-  (`get_agent`, durable workflows) once its in-engine module is removed.
+- In-engine consumers of an application call it over NATS (`get_agent`,
+  durable workflows), or keep their own copy of a raw client (cleanup decision).
 - The 27 placeholder agents (no tools) are not ported: they were removed from
   the marketplace (#1423).
 
 ## Not ported yet
 
+- `x` (24k lines): its durable flows run on core's in-engine workflow host
+  and read its job records, its dataset is core's DuckLake service, and its
+  `x_proxy` app is served by the engine. Split into sub-issues of #1423.
 - Of `naas`, only the agent and the integration are ported; its ontology YAML
   workflows (core's `OntologyYaml`) stay in-engine with `ontology_engineer`.
 
@@ -125,4 +152,4 @@ per application and one Dockerfile parametrized by `APP`. Module ids are
 - `openrouter` is left to `naas_abi_marketplace.ai.openrouter`, which serves
   the OpenRouter models through the engine's model registry with the same API
   integration. The per-model agents of `applications.openrouter` are not
-  ported; the module is deprecated and removed in the cleanup phase.
+  ported; the module was removed.
