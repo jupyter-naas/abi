@@ -17,7 +17,13 @@ jupyter-naas/abi#1423.
   configuration from the environment; `__main__.py` is three lines on top of
   it), `agents` (`build_agent`, `read_secrets`, `tools_prompt`), `http`
   (`HttpConfiguration`, `request`, `request_json` over httpx), `storage`
-  (`archive_json`) and `testing` (fake engine services, `no_core_import`).
+  (`archive_json`), `graph` (core-free `ABIGraph`, `rows`, `sparql_string`),
+  `sparql_templates` (templatable SPARQL queries of `ontologies/*.ttl` as tools,
+  instead of core's `templatablesparqlquery`) and `testing` (fake engine
+  services, `FakeTripleStore` running real SPARQL, `no_core_import`).
+- In-engine tools that are lambdas with positional parameters become
+  `schema_tool(fn, Schema)` coroutines (arguments validated, defaults filled).
+- User input in SPARQL goes through `sparql_string`, never an f-string.
 - Configuration: a `ModuleConfiguration` dataclass of plain settings, set from
   `<APP>_<FIELD>` variables. **Credentials are engine secrets**, read in
   `on_initialized` with `await self.engine.services.secret.get(name)`; the
@@ -68,6 +74,15 @@ per application and one Dockerfile parametrized by `APP`. Module ids are
   → naas, `organizations` → sec_gov, ...) must call it over NATS
   (`get_agent`, durable workflows) once its in-engine module is removed.
 - The placeholder agents (no tools) are not ported one by one: see #1423.
+
+## Not ported yet
+
+- `powerpoint`: the in-engine agent cannot be built (it reads
+  `configuration.naas_api_key`, which the module does not define) and its
+  template (`templates/TemplateNaasPPT.pptx`) is not in the repository.
+  Decision pending in #1423.
+- Of `naas`, only the agent and the integration are ported; its ontology YAML
+  workflows (core's `OntologyYaml`) stay in-engine with `ontology_engineer`.
 
 ## Not ported (decided, #1423)
 
