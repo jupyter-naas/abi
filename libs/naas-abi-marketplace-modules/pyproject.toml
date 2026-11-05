@@ -14,8 +14,12 @@ dependencies = [
 
 [project.optional-dependencies]
 # One extra per application: its own third-party dependencies.
+agicap = ["httpx>=0.27,<1"]
+algolia = ["algoliasearch>=4.35,<5"]
+exchangeratesapi = ["httpx>=0.27,<1"]
 pennylane = ["httpx>=0.27,<1"]
-all = ["naas-abi-marketplace-modules[pennylane]"]
+sendgrid = ["httpx>=0.27,<1"]
+all = ["naas-abi-marketplace-modules[agicap,algolia,exchangeratesapi,pennylane,sendgrid]"]
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff", "httpx>=0.27,<1"]

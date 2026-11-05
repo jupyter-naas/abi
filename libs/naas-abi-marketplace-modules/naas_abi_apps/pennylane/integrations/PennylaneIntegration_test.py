@@ -7,20 +7,13 @@ import json
 
 import httpx
 import pytest
+from naas_abi_apps.common.testing import MemoryStorage
 from naas_abi_apps.pennylane.integrations.PennylaneIntegration import (
     PennylaneIntegration,
     PennylaneIntegrationConfiguration,
     as_tools,
 )
 from naas_abi_sdk.integration import IntegrationConnectionError
-
-
-class MemoryStorage:
-    def __init__(self) -> None:
-        self.objects: dict[tuple[str, str], bytes] = {}
-
-    async def put_object(self, prefix: str, key: str, content: bytes) -> None:
-        self.objects[(prefix, key)] = content
 
 
 def integration_for(handler, storage=None) -> PennylaneIntegration:

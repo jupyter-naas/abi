@@ -3,105 +3,46 @@
 from __future__ import annotations
 
 import asyncio
-from types import SimpleNamespace
 
-from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage
-from langchain_core.outputs import ChatGeneration, ChatResult
+from langgraph.checkpoint.memory import InMemorySaver
+from naas_abi_apps.common import agents as common_agents
+from naas_abi_apps.common.testing import bound_tool_names, fake_engine
 from naas_abi_apps.pennylane import ABIModule
 from naas_abi_apps.pennylane.agents.PennylaneAgent import NAME, create_agent
 from naas_abi_sdk.agent_host import InvocationContext
 
 
-class EchoModel(BaseChatModel):
-    tools: list = []
-
-    @property
-    def _llm_type(self) -> str:
-        return "echo"
-
-    def bind_tools(self, tools, **kwargs):
-        self.tools = list(tools)
-        return self
-
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-        return ChatResult(
-            generations=[ChatGeneration(message=AIMessage("Pennylane here"))]
-        )
-
-
-class Registry:
-    def __init__(self) -> None:
-        self.model = EchoModel()
-        self.asked: list[str] = []
-
-    async def get_default_chat_model(self):
-        self.asked.append("")
-        return SimpleNamespace(model=self.model)
-
-    async def get_chat_model(self, name: str):
-        self.asked.append(name)
-        return SimpleNamespace(model=self.model)
-
-
-class Documents:
-    async def ensure_collection(self, request) -> None:
-        return None
-
-
-class Secrets:
-    def __init__(self, values: dict[str, str]) -> None:
-        self.values = values
-
-    async def get(self, key: str, default=None):
-        return self.values.get(key, default)
-
-
-def engine(secrets: dict[str, str]) -> SimpleNamespace:
-    return SimpleNamespace(
-        services=SimpleNamespace(
-            model_registry=Registry(),
-            document=Documents(),
-            secret=Secrets(secrets),
-            object_storage=SimpleNamespace(),
-        )
-    )
-
-
 def test_on_initialized_exposes_the_agent_with_tools_from_the_secret() -> None:
-    fake = engine({"PENNYLANE_API_KEY": "token"})
-    module = ABIModule(fake, ABIModule.Configuration())
+    engine = fake_engine({"PENNYLANE_API_KEY": "token"})
+    module = ABIModule(engine, ABIModule.Configuration())
 
     asyncio.run(module.on_initialized())
 
     assert set(module._agent_handlers) == {NAME}
-    tool_names = {tool.name for tool in fake.services.model_registry.model.tools}
-    assert "pennylane_list_customers" in tool_names
+    assert "pennylane_list_customers" in bound_tool_names(engine)
 
 
 def test_without_the_secret_the_agent_has_no_pennylane_tools() -> None:
-    fake = engine({})
-    module = ABIModule(fake, ABIModule.Configuration(chat_model="some/model"))
+    engine = fake_engine()
+    module = ABIModule(engine, ABIModule.Configuration(chat_model="some/model"))
 
     asyncio.run(module.on_initialized())
 
-    assert fake.services.model_registry.asked == ["some/model"]
-    tool_names = {tool.name for tool in fake.services.model_registry.model.tools}
-    assert not any(name.startswith("pennylane_") for name in tool_names)
+    assert engine.services.model_registry.asked == ["some/model"]
+    assert not any(name.startswith("pennylane_") for name in bound_tool_names(engine))
 
 
 def test_the_agent_answers_through_its_handler(monkeypatch) -> None:
-    from langgraph.checkpoint.memory import InMemorySaver
-    from naas_abi_apps.pennylane.agents import PennylaneAgent
-
     async def in_memory(documents, agent_id):
         return InMemorySaver()
 
     # The Document Service checkpointer is the SDK's, tested there.
-    monkeypatch.setattr(PennylaneAgent, "document_memory", in_memory)
+    monkeypatch.setattr(common_agents, "document_memory", in_memory)
 
     async def scenario() -> str:
-        agent = await create_agent(engine({}), "applications.pennylane", api_key=None)
+        agent = await create_agent(
+            fake_engine(reply="Pennylane here"), "applications.pennylane", api_key=None
+        )
         return await agent.as_handler().invoke(
             "What is your name?", InvocationContext("inv", "t1", "caller")
         )

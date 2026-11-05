@@ -8,37 +8,26 @@ object storage under ``datastore_path`` when a storage is given.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
-from typing import Any, Protocol
+from dataclasses import dataclass
+from typing import Any
 
-import httpx
-from naas_abi_sdk.integration import (
-    Integration,
-    IntegrationConfiguration,
-    IntegrationConnectionError,
-)
+from naas_abi_apps.common.http import HttpConfiguration, request_json
+from naas_abi_apps.common.storage import ObjectStorage, archive_json
+from naas_abi_sdk.integration import Integration
 
 DEFAULT_BASE_URL = "https://app.pennylane.com/api/external"
 PAGE_SIZE = 100
 
 
-class ObjectStorage(Protocol):
-    """What the integration needs from ``engine.services.object_storage``."""
-
-    async def put_object(self, prefix: str, key: str, content: bytes) -> None: ...
-
-
 @dataclass
-class PennylaneIntegrationConfiguration(IntegrationConfiguration):
+class PennylaneIntegrationConfiguration(HttpConfiguration):
     """api_key: Pennylane API token. storage: where results are archived
-    (``None``: not archived). transport: an httpx transport, for tests."""
+    (``None``: not archived)."""
 
     api_key: str
     base_url: str = DEFAULT_BASE_URL
     datastore_path: str = "pennylane"
     storage: ObjectStorage | None = None
-    timeout: float = 60.0
-    transport: httpx.AsyncBaseTransport | None = field(default=None, repr=False)
 
 
 def _filter_suffix(filters: list[dict[str, Any]]) -> str:
@@ -64,21 +53,15 @@ class PennylaneIntegration(Integration):
         body: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        url = f"{self.configuration.base_url}/{endpoint}"
-        try:
-            async with httpx.AsyncClient(
-                timeout=self.configuration.timeout,
-                transport=self.configuration.transport,
-            ) as client:
-                response = await client.request(
-                    method, url, headers=self.headers, json=body, params=params
-                )
-                response.raise_for_status()
-                return response.json()
-        except httpx.HTTPError as exc:
-            raise IntegrationConnectionError(
-                f"Pennylane API request failed: {exc!s}"
-            ) from exc
+        return await request_json(
+            self.configuration,
+            method,
+            f"{self.configuration.base_url}/{endpoint}",
+            service="Pennylane",
+            headers=self.headers,
+            json=body,
+            params=params,
+        )
 
     async def _get_all_items(
         self, endpoint: str, params: dict[str, Any] | None = None
@@ -94,12 +77,12 @@ class PennylaneIntegration(Integration):
             params["cursor"] = page.get("next_cursor")
 
     async def _archive(self, value: Any, folder: str, file_name: str) -> None:
-        storage = self.configuration.storage
-        if storage is None:
-            return
-        prefix = f"{self.configuration.datastore_path}/{folder}"
-        content = json.dumps(value, indent=4, ensure_ascii=False).encode("utf-8")
-        await storage.put_object(prefix, file_name, content)
+        await archive_json(
+            self.configuration.storage,
+            f"{self.configuration.datastore_path}/{folder}",
+            file_name,
+            value,
+        )
 
     async def _list(
         self,

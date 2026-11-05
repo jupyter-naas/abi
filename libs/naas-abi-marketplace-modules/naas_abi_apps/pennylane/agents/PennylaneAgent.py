@@ -9,12 +9,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from naas_abi_apps.common.agents import build_agent
 from naas_abi_apps.pennylane.integrations.PennylaneIntegration import (
     PennylaneIntegrationConfiguration,
     as_tools,
 )
-from naas_abi_sdk.agents import Agent, AgentConfiguration
-from naas_abi_sdk.agents.hosting import agent_memory_id, document_memory
+from naas_abi_sdk.agents import Agent
 
 NAME = "Pennylane"
 DESCRIPTION = "A Pennylane Agent for managing accounting and financial operations."
@@ -48,23 +48,16 @@ async def create_agent(
 ) -> Agent:
     """``engine``: the module's ``self.engine`` (``model_registry``, ``document``
     and ``object_storage`` declared)."""
-    registry = engine.services.model_registry
-    chat = await (
-        registry.get_chat_model(chat_model)
-        if chat_model
-        else registry.get_default_chat_model()
-    )
-    return Agent(
+    return await build_agent(
+        engine,
+        module_id,
         name=NAME,
         description=DESCRIPTION,
-        chat_model=chat.model,
+        system_prompt=SYSTEM_PROMPT,
         tools=tools_for(
             api_key,
             datastore_path=datastore_path,
             storage=engine.services.object_storage,
         ),
-        memory=await document_memory(
-            engine.services.document, agent_memory_id(module_id, NAME)
-        ),
-        configuration=AgentConfiguration(system_prompt=SYSTEM_PROMPT),
+        chat_model=chat_model,
     )

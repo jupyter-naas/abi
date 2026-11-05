@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import os
-import subprocess
-import sys
-
 from naas_abi_apps.common.runtime import configuration_from, token_from
+from naas_abi_apps.common.testing import no_core_import
 from naas_abi_apps.pennylane import MODULE_ID, ABIModule
 from naas_abi_apps.pennylane.__main__ import ENV_PREFIX
 from naas_abi_apps.pennylane.agents.PennylaneAgent import NAME, tools_for
@@ -49,19 +46,11 @@ def test_the_module_calls_the_engine_as_its_module_id() -> None:
 
 def test_the_module_never_imports_abi_core() -> None:
     """A remote module reaches the engine only through NATS."""
-    code = (
-        "import sys, naas_abi_apps.pennylane, naas_abi_apps.pennylane.__main__, "
-        "naas_abi_apps.pennylane.integrations.PennylaneIntegration; "
-        "bad = [m for m in sys.modules if m.split('.')[0] in "
-        "('naas_abi_core', 'naas_abi', 'naas_abi_marketplace')]; "
-        "sys.exit(f'imports {bad[0]}' if bad else 0)"
+    assert (
+        no_core_import(
+            "naas_abi_apps.pennylane",
+            "naas_abi_apps.pennylane.__main__",
+            "naas_abi_apps.pennylane.integrations.PennylaneIntegration",
+        )
+        is None
     )
-    env = {**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)}
-    result = subprocess.run(
-        [sys.executable, "-c", code],
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr
