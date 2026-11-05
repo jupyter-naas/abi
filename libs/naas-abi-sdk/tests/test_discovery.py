@@ -354,3 +354,33 @@ def test_suggestions_are_bounded():
         AgentSuggestion("", "value")
     with pytest.raises(ValueError):
         AgentDescriptor("Agent", suggestions=(AgentSuggestion("l", "v"),) * 9)
+
+
+def test_an_app_publishes_the_tile_image_its_manifest_names(tmp_path):
+    import json
+
+    from naas_abi_sdk.apps import AppDescriptor, read_app
+    from naas_abi_sdk.discovery import _apps
+
+    def app(name, avatar):
+        folder = tmp_path / name
+        folder.mkdir()
+        (folder / "manifest.json").write_text(
+            json.dumps({"name": name, "icon_emoji": "👥", "avatar_url": avatar})
+        )
+        return read_app(folder)
+
+    served = app("people", "/modules/bob/assets/public/apps/people.svg")
+    hosted = app("deck", "https://cdn.example.com/deck.png")
+    # A path only an in-engine module serves: left out, the tile shows the emoji.
+    legacy = app(
+        "legacy", "intelligence/people_intelligence/assets/public/icons/people.svg"
+    )
+
+    assert served.avatar_url == "/modules/bob/assets/public/apps/people.svg"
+    assert hosted.avatar_url == "https://cdn.example.com/deck.png"
+    assert legacy.avatar_url == ""
+    (listed,) = _apps(pb.ModuleDescriptor(apps=[served.to_pb()]))
+    assert listed.avatar_url == served.avatar_url
+    with pytest.raises(ValueError):
+        AppDescriptor("bad", avatar_url="javascript:alert(1)")

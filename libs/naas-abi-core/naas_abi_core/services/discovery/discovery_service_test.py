@@ -1201,3 +1201,33 @@ def test_unbounded_or_unsafe_agent_presentation_is_refused(presentation):
             )
 
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    ("avatar_url", "accepted"),
+    [
+        ("/modules/acme/assets/public/console.svg", True),
+        ("https://cdn.example.com/console.png", True),
+        ("data:image/png;base64,AAAA", False),
+        ("intelligence/acme/assets/public/console.svg", False),
+    ],
+)
+def test_an_app_tile_image_is_a_reference(avatar_url, accepted):
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry())
+        req = registration("acme.apps", "apps-1")
+        req.descriptor.apps.append(
+            pb.AppDescriptor(
+                name="console",
+                contract_major=1,
+                entry="index.html",
+                avatar_url=avatar_url,
+            )
+        )
+        if accepted:
+            await service.register(req, "owner")
+        else:
+            with pytest.raises(DiscoveryError, match="INVALID_ARGUMENT"):
+                await service.register(req, "owner")
+
+    asyncio.run(scenario())

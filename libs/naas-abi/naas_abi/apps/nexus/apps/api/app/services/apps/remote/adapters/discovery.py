@@ -170,6 +170,7 @@ class DiscoveryRemoteAppDirectory:
                             app.icon_emoji,
                             app.entry or "index.html",
                             getattr(app, "max_upload_bytes", 0),
+                            getattr(app, "avatar_url", ""),
                         ),
                     )
                     instances.setdefault(key, []).append(instance.instance_id)

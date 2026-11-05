@@ -74,6 +74,9 @@ message AppDescriptor {
   uint32 contract_major = 7;
   // Largest request body Nexus forwards; zero: Nexus's default (1 GiB).
   uint64 max_upload_bytes = 8;
+  // The tile image, as an agent's avatar_url: a reference, never image bytes
+  // (an https:// URL or a /modules/<path> asset). Empty: icon_emoji.
+  string avatar_url = 9;
 }
 message ModuleDescriptor {
   string module_id = 1;

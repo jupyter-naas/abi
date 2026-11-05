@@ -191,6 +191,7 @@ def _valid_app(app: pb.AppDescriptor) -> bool:
         and len(app.description) <= 4096
         and len(app.category) <= 64
         and len(app.icon_emoji) <= 16
+        and _valid_avatar_url(app.avatar_url)
         and _app_entry(app.entry)
         and app.ByteSize() <= MAX_APP_BYTES
     )

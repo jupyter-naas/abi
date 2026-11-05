@@ -184,6 +184,7 @@ def _apps(descriptor: pb.ModuleDescriptor) -> tuple[Any, ...]:
             a.entry or "index.html",
             a.contract_major,
             a.max_upload_bytes,
+            avatar_url=a.avatar_url,
         )
         for a in descriptor.apps
     )

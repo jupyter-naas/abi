@@ -375,3 +375,26 @@ def test_a_configured_remote_app_stays_manageable_while_its_module_is_down(
     assert status(adapter.delete_app_config("ws1", stale, user, configs)) == 200
     assert status(adapter.get_app_config("ws1", stale, user, configs)) == 404
     assert status(patch("remote/acme.research:other", False)) == 404
+
+
+def test_a_remote_app_tile_shows_its_published_image(monkeypatch: pytest.MonkeyPatch) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import RemoteApp
+
+    monkeypatch.setattr(
+        adapter,
+        "resolve_public_module_asset_url",
+        lambda path, abi_module_path: "https://api.example.com" + path,
+    )
+    asset = RemoteApp(
+        "acme.research", "console", avatar_url="/modules/acme/assets/public/console.svg"
+    )
+    hosted = RemoteApp("acme.research", "deck", avatar_url="https://cdn.example.com/deck.png")
+    plain = RemoteApp("acme.research", "plain", icon_emoji="🛰")
+
+    assert (
+        adapter._remote_app_info(asset).avatar_url
+        == "https://api.example.com/modules/acme/assets/public/console.svg"
+    )
+    assert adapter._remote_app_info(hosted).avatar_url == "https://cdn.example.com/deck.png"
+    assert adapter._remote_app_info(plain).avatar_url is None
+    assert adapter._remote_app_info(plain).icon_emoji == "🛰"
