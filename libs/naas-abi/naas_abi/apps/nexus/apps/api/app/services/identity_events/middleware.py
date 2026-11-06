@@ -35,6 +35,17 @@ The workspace is the ``/workspaces/{id}`` path segment, else a
 (``CallContext.container``, ``abi:nexus:organization/<org>/nexus:workspace/<ws>``).
 Handlers that learn the workspace from the body (chat) set ``agent_container``
 themselves — a view of the same context.
+
+**A view** (``services/view_as``): a cookie session with a running view makes the
+request the person's, in the viewed workspace. The credential and the context become
+the person's together (user id, ``on_behalf_of``, and the identity provider groups
+the view recorded: IAM adds the stored ones), the call's container is the workspace's,
+``nexus_session`` stays the viewer's, and the view and the viewer are left on the
+request state (``nexus_view``, ``nexus_viewer``). ``iam:ViewAs`` is decided again at
+every request; a view past its end is ended and the request is the viewer's. A bearer
+credential never carries a view, and a view that cannot be verified names nobody
+(``nexus_view_unavailable``). The view's read-only and workspace limits are
+``services/view_as``'s ``ViewGuardMiddleware``.
 """
 
 from __future__ import annotations
@@ -150,13 +161,14 @@ async def request_call_context(scope: Scope) -> CallContext:
         state["nexus_credential"] = credential
     elif refused is not None:
         state["nexus_credential_refused"] = refused
+    cookie_session = None  # only a cookie session can carry a view
     if credential is None:
         from naas_abi.apps.nexus.apps.api.app.services.oidc.runtime import cookie_auth
 
         auth = await cookie_auth(scope)
         if auth is not None:
             if auth.session is not None:
-                state["nexus_session"] = auth.session
+                state["nexus_session"] = cookie_session = auth.session
                 state.pop("nexus_credential_refused", None)
                 credential = Credential(
                     kind="session",
@@ -167,6 +179,30 @@ async def request_call_context(scope: Scope) -> CallContext:
                 state["nexus_credential"] = credential
             elif auth.csrf_failed:
                 state["nexus_csrf_failed"] = True
+    view = None
+    if credential is not None and cookie_session is not None and scope["type"] == "http":
+        viewer = credential
+        try:
+            view = await _running_view(cookie_session)
+        except Exception as exc:  # noqa: BLE001 - fail closed: the request names nobody
+            _log.warning("A view could not be verified; the request names nobody: %s", exc)
+            state["nexus_view_unavailable"] = True
+            state.pop("nexus_credential", None)
+            credential = None
+        else:
+            if view is not None:
+                # The person's, whole: user id, groups and (below) the call's container.
+                credential = Credential(
+                    kind="session",
+                    user_id=view.person_id,
+                    groups=frozenset(view.group_ids),
+                    session=cookie_session,
+                )
+                state["nexus_credential"] = credential
+                state["nexus_view"] = view
+                state["nexus_viewer"] = Principal(
+                    id=viewer.user_id, kind="user", groups=viewer.groups
+                )
     named = (
         Principal(id=credential.user_id, kind="user", groups=credential.groups)
         if credential is not None
@@ -177,8 +213,17 @@ async def request_call_context(scope: Scope) -> CallContext:
         principal=service_account(NEXUS_IDENTITY) if named else ANONYMOUS.principal,
         on_behalf_of=named,
         scope=credential.scope if credential is not None else None,
-        container=await _workspace_container(
+        container=view.container
+        if view is not None
+        else await _workspace_container(
             workspace_id_from_request(scope.get("path", ""), scope.get("query_string", b""))
         ),
         triggered_via="api",
     )
+
+
+async def _running_view(session):
+    """The view the cookie session runs, or None."""
+    from naas_abi.apps.nexus.apps.api.app.services.view_as.runtime import running_view
+
+    return await running_view(session)

@@ -111,6 +111,7 @@ Where each part of the permission system lives (read the one you touch):
 | Nexus authorization on IAM: the `nexus` catalog, roles, features, memberships, placements | `apps/api/app/services/iam/AGENTS.md` |
 | Sign-in, sessions, CSRF, credential kinds, API keys, links, the old login's accounts | `apps/api/app/services/oidc/AGENTS.md` |
 | The IAM admin pages (policies, attachments, groups, service accounts, approvals, simulator, audit) | `apps/api/app/services/iam_admin/AGENTS.md` |
+| View as another person, read-only, in one workspace (the view on the server) | `apps/api/app/services/view_as/AGENTS.md` |
 | The platform's accounts: directory, platform invitations, deactivation, deletion (Platform Settings › Users) | `apps/api/app/services/accounts/AGENTS.md` |
 | Invitations and IdP group bindings | `apps/api/app/services/invites/AGENTS.md` |
 | Graph access (placements and shared graphs as IAM policies) | `apps/api/app/services/graph/AGENTS.md` |

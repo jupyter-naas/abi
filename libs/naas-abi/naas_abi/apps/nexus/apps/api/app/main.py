@@ -893,6 +893,14 @@ def _configure_middleware(app: FastAPI) -> None:
     )
 
     app.add_middleware(SettingsCacheMiddleware)
+    # During a view (services/view_as): read-only and confined to one workspace. Right
+    # outside the cache, which it must refuse before the cache answers anything, and
+    # inside CORS, so its refusals carry the headers the web app needs to read them.
+    from naas_abi.apps.nexus.apps.api.app.services.view_as.adapters.primary.view_as__primary_adapter__ASGI import (  # noqa: E501
+        ViewGuardMiddleware,
+    )
+
+    app.add_middleware(ViewGuardMiddleware)
     app.add_middleware(CORSMiddleware, **cors_kwargs)
     app.add_middleware(SecurityHeadersMiddleware)
 

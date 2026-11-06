@@ -328,11 +328,16 @@ def _to_schema(
 
 @router.get("", dependencies=[declares("ListWorkspaces")])
 async def list_workspaces(
+    request: Request,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
     org_service: OrganizationService = Depends(get_organization_service),
 ) -> list[Workspace]:
     rows = await service.list_workspaces(user_id=current_user.id)
+    view = getattr(request.state, "nexus_view", None)
+    if view is not None:
+        # A view (services/view_as) is of one workspace: the person's others are not part of it.
+        rows = [row for row in rows if row.id == view.workspace_id]
     roles = await service.effective_roles(current_user.id, rows)
     flags = await _feature_flags(current_user, list(rows)) or {}
     return [
@@ -367,12 +372,15 @@ async def get_workspace(
 @router.get("/slug/{slug}", dependencies=[declares("GetWorkspace")])
 async def get_workspace_by_slug(
     slug: str,
+    request: Request,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
     org_service: OrganizationService = Depends(get_organization_service),
 ) -> Workspace:
     row = await service.get_workspace_by_slug(slug=slug)
-    if row is None:
+    view = getattr(request.state, "nexus_view", None)
+    if row is None or (view is not None and row.id != view.workspace_id):
+        # A view (services/view_as) is of one workspace: another is not found.
         raise HTTPException(status_code=404, detail="Workspace not found")
     # The slug names the workspace: a caller who cannot see it learns nothing of it.
     await authz.require("GetWorkspace", user=current_user, workspace=row.id)

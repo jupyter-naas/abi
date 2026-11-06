@@ -4,7 +4,7 @@
 * ``POST /route``      the provider an email goes to (public).
 * ``GET  /login``      start a sign-in: 302 to the provider, with a browser-binding cookie.
 * ``GET  /callback``   the provider's redirect: the session cookie, then 302 to the web app.
-* ``GET  /session``    the signed-in user and the session's CSRF token.
+* ``GET  /session``    the signed-in user, the session's CSRF token and its view (or null).
 * ``POST /logout``     end the session (CSRF-checked like every cookie request).
 
 The session cookie is httpOnly, Secure (but on plain http on this machine) and SameSite; nothing the browser can
@@ -32,6 +32,8 @@ from naas_abi.apps.nexus.apps.api.app.services.oidc.service import (
     OidcLoginError,
     csrf_token,
 )
+from naas_abi.apps.nexus.apps.api.app.services.view_as import runtime as view_as_runtime
+from naas_abi.apps.nexus.apps.api.app.services.view_as.views import view_json
 from naas_abi_core import logger
 from naas_abi_core.services.identity.IdentityPorts import ProviderUnavailableError
 from pydantic import BaseModel, Field
@@ -175,11 +177,15 @@ async def get_session(request: Request, db: AsyncSession = Depends(get_db)) -> d
     record = await AuthSecondaryAdapterPostgres(db=db).get_user_by_id(session.user_id)
     if record is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not signed in")
+    view = getattr(request.state, "nexus_view", None)
     return {
         "user": (await to_signed_in_user(record)).model_dump(mode="json"),
         "csrf_token": csrf_token(secret),
         "provider": session.provider,
         "refresh_at": session.refresh_at.isoformat(),
+        # The view this session runs (services/view_as), or null. The user above is
+        # still the viewer's: the web app shows the person from the other routes.
+        "view": view_json(view) if view is not None else None,
     }
 
 
@@ -197,6 +203,9 @@ async def logout(request: Request, db: AsyncSession = Depends(get_db)) -> JSONRe
     if getattr(request.state, "nexus_csrf_failed", False):
         raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
     session = getattr(request.state, "nexus_session", None)
+    if session is not None:
+        # The sign-out ends the session's view with it (recorded as "sign-out").
+        await view_as_runtime.end_on_sign_out(session)
     end_session_url = await runtime.RUNTIME.service(db).logout(
         runtime.session_secret(request.headers),
         post_logout_redirect_uri=_frontend("/auth/login"),

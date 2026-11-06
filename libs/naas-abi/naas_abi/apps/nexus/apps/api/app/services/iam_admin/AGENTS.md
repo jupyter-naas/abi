@@ -150,7 +150,8 @@ below a container, `<container>/*`. Nexus builds them with `services/iam/names.p
   or a policy's text. A refused attempt is a record too. Membership changes made from the Users page
   (`MEMBERSHIPS`) and invitations are audited by their own routes, not by this log; the platform's accounts
   (`services/accounts`: inviting, renaming, superadmin, suspending, resuming, deleting a user) write theirs here,
-  so the Audit section shows them beside IAM's.
+  so the Audit section shows them beside IAM's. The start, stop and refused starts of a view as another person (`services/view_as`: `iam.view_as_start`,
+  `iam.view_as_stop`) are in the same log and show there too.
 - **Policies are edited visually or as text, and IAM validates both.** The editor autocompletes actions from the
   registered catalogs and resources from the name grammar; the text view takes YAML or JSON. `POST
   /policies/validate` returns every error IAM lists (and the normalized document), so the editor shows them as the
