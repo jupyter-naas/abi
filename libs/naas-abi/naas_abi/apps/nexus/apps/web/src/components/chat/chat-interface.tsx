@@ -67,7 +67,7 @@ import '@/app/workspace/[workspaceId]/chat/components/chat-agent-selector.css';
 import { TypingIndicator } from '@/components/typing-indicator';
 import { PdfViewer } from '@/components/files/pdf-viewer';
 
-import { humanizeChatProviderError } from '@/lib/chat-provider-error';
+import { chatFailureText, chatResponseError, humanizeChatProviderError } from '@/lib/chat-provider-error';
 import {
   buildContextUsage,
   parseStreamTokenUsage,
@@ -2477,7 +2477,7 @@ export function ChatInterface({
             window.location.href = '/auth/login';
             return;
           }
-          throw new Error(`API error: ${response.status}`);
+          throw await chatResponseError(response);
         }
 
         const reader = response.body?.getReader();
@@ -2716,7 +2716,7 @@ export function ChatInterface({
         });
 
         if (!response.ok) {
-          throw new Error(`API error: ${response.status}`);
+          throw await chatResponseError(response);
         }
 
         const data = await response.json();
@@ -2814,11 +2814,11 @@ export function ChatInterface({
         (error as { name?: string } | null)?.name === 'AbortError' || stopRequestedRef.current;
       if (conversationId && !wasAborted) {
           if (isStreaming) {
-            updateLastMessage(conversationId, `❌ Error: ${errorMessage}\n\nPlease try again or check your provider settings.`);
+            updateLastMessage(conversationId, chatFailureText(errorMessage));
           } else {
             addMessage(conversationId, {
               role: 'assistant',
-              content: `❌ Error: ${errorMessage}\n\nPlease try again or check your provider settings.`,
+              content: chatFailureText(errorMessage),
               agent: effectiveAgent,
             });
           }
