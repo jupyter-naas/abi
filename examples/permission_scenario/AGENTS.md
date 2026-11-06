@@ -33,6 +33,7 @@ user is checked on both sides).
 | `launch.py` | runs a module as `abi dev up` starts it (`ABI_SERVICE_KEY`, `ABI_NATS_URL`, `ABI_DISCOVERY_PROJECT`) |
 | `runner.py` | the scenario: over REST as each person (signed in with the code the built-in provider mails, `scripts/cli_smoke_checks.py`), over NATS through `Recruiter` |
 | `journeys.py` | the user journeys of issue #1413 with the issue's cast, one or more checks per journey ID and per cross-cutting rule and layer (below) |
+| `view_as.py` | the checks of "View as" (Nexus `services/view_as/AGENTS.md`), run after `journeys.py` on the same database, with its tag, cast and helpers (below) |
 | `../../config.scenario.yaml` | the repository's `config.yaml` plus both modules under `dev.modules` |
 
 ## Run
@@ -136,3 +137,59 @@ Where the run follows the owner's rule rather than the issue's words (each perso
 who holds Acme's grant at Alpha, still sees the agents Alpha hides (UJ-W3, "nobody sees Onboarder or Coach" holds for
 everyone below "Alpha access"); Carol cannot expose Onboarder herself (UJ-PE3), Bob does. UI journeys (O1, W1, the
 builder narrowing "<W> access") are checked in a browser against the same database.
+
+## View as (`view_as.py`)
+
+```bash
+ENV=scenario uv run abi dev up -d
+.venv/bin/python examples/permission_scenario/runner.py   run --api $API --mail storage/email --out results.json
+.venv/bin/python examples/permission_scenario/journeys.py --api $API --mail storage/email --out journeys.json
+.venv/bin/python examples/permission_scenario/view_as.py  --api $API --mail storage/email --journeys journeys.json --out view_as.json
+```
+
+`view_as.py` reads the tag, the cast (Root, Olivia, Bob, Carol, Dave, "Alpha minimal") and Alpha, Bravo and Acme from the
+`--out` of `journeys.py`, reuses its helpers (`agents_seen`, `module_apps`, `agent_ids`, `open_app`) and `runner.py`'s
+(`Api`, `Grammar`, `Report`, `flags`, `principals`), and writes each check with its evidence (the API's answers); it exits
+non-zero when one fails. It signs each viewer in once, on a session of its own (a view is kept on its session, and every
+`viewing` ends with Stop, so the session is the viewer's again afterwards). The identity provider limits sign-ins per
+address and per client for five minutes: a rate limited sign-in waits. The end of an app's link is read from IAM's keys
+(`--iam-database`, `storage/iam/iam.sqlite`, opened read only), as the grant's answer (`expires_in`) is the link's own
+lifetime, not the view's.
+
+| Step | What is checked, each with its evidence |
+|---|---|
+| `view-1` Root views as Carol | Alpha is offered for Carol, Bravo is not. The view answers as Carol: `/api/auth/me` is Carol, `/api/workspaces` lists Alpha only with her feature flags, her agents (`dev.people`'s, no Pricer) and apps (Directory, Prices), and every Alpha settings page she may open answers as it does for her (General, Members, and Roles & permissions: what she holds, policies, groups, attachments). The groups of Alpha are read by id. Bravo's pages and the platform's (workspace, agents, files, members, Acme's settings and members, policies, audit, users, system) are 403 "Outside this view: you are viewing as <name> in <workspace>". Carol holds a conversation, a secret, an API key and a My Drive file, and the view answers empty (a single item 404). Olivia, who reads a group of Bravo herself, is refused it in a view of Alpha. Stop. |
+| `view-2` Carol views as Dave | Dave's view is "Alpha minimal": Recruiter, Prices, chat and Home (`chat`, `search`), no BaseMap (the route is refused). A chat message and a saved setting (and the settings cache's refresh) are 403 "Read-only: you are viewing as Dave". Nothing changed: Dave's and Carol's conversations, Alpha's description, Alpha's secrets. |
+| `view-3` Refusals | Carol as Olivia: "Olivia holds Admin (builtin.admin), attached below <Acme>, which you do not hold: …". Carol as Bob: "… Owner (builtin.owner), attached at <Alpha>, which you do not hold: …". Carol and Olivia as Root: "… holds builtin.platform_admin: nobody views as the platform admin"; Root as Root: "You cannot view as yourself". None of them is offered a workspace. |
+| `view-4` Audit | Platform settings › Roles & permissions › Audit (`GET /api/iam/admin/audit`) shows, with who (the viewer's Nexus id), whom (the person's IAM id) and where (the workspace and the end time): each start and stop of Root's views, Carol's view of Dave, each refusal (`failed`, with its error), and the app opened. |
+| `view-5` Ending, and apps | The end is the start plus 15 minutes. After Stop the session has no view and is Root's: his own account and his workspaces. Prices opened in a view: its link (a key marked `view-as:`) ends no later than the view, a GET through it answers, a POST through it is 403 "Read-only: you are viewing as Carol", and after Stop the link is revoked (the key's `revoked_at`) and the app no longer opens. |
+
+The 15 minutes at the clock (a view that ends by itself) is a server test (`services/view_as/view_as_http_test.py`, with a
+clock), not a wait here.
+
+### In a browser
+
+Against the same database (the Nexus web at `abi dev ports`' `nexus-web`), signed in with the code the provider mails
+(`abi dev code`):
+
+1. Platform settings › Roles & permissions › People & roles › Carol: "View as Carol" and the picker (Alpha preselected).
+2. Start: the web loads Alpha's Home with the banner "Viewing as Carol (read-only) in Alpha · 15 min left · Stop", then a
+   workspace page, Alpha's settings (Roles & permissions, with the people, groups and policies Carol sees) and the account page.
+3. Private pages: the account's API keys ("Private to Carol"), Alpha's secrets, and the chat's history.
+4. Carol, signed in as herself, views as Dave from Alpha's Roles & permissions: a save of the account page and a chat message
+   are refused with "Read-only: you are viewing as Dave", in the bubble and as a notice.
+5. Stop: back to the person's page, and `GET /api/auth/oidc/session` has no `view`.
+
+### The acceptance run (#612)
+
+On fresh storage (`storage/` emptied, `ENV=scenario abi dev up -d`): `runner.py run` 35 checks, `journeys.py` 46 checks and
+`view_as.py` 33 checks, all passing. What the run found and fixed:
+
+- Alpha's Roles & permissions page (and the settings menu that reads it) read IAM's admin routes with `scope=<the
+  workspace's container>`, which a view refused: the page could not open. A GET under `/api/iam/admin/` that declares `scope` is
+  answered when every scope given is the viewed container or below, and a group is read by id held to the container
+  (Nexus `services/view_as/AGENTS.md`).
+- Start landed on `/workspace/<id>`, which has no page (404): it lands on the workspace's Home.
+- A chat message a view refused showed "API error: 403": it shows the server's message.
+
+Left open (`services/view_as/AGENTS.md`, "Not done"): the calls a workspace page makes that a view refuses, shown as notices.
