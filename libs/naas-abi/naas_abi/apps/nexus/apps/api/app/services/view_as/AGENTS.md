@@ -141,7 +141,7 @@ private to them (subtask 4), without asking the server.
 | What | Route | In a view |
 |---|---|---|
 | Conversations | `GET /api/chat/conversations`, `…/{id}`, `/api/chat/ingestion-jobs/{id}`; the export (POST) | `[]`; 404; refused read-only |
-| My Drive | `GET /api/files/…?scope=my_drive` (the list, a file, raw, PDF preview, archive: the slides, documents and sheets pages read it there) | an empty list; 404. The workspace's own drive is shown |
+| My Drive | `GET /api/files/…?scope=my_drive` (the list, a file, raw, PDF preview, archive: the slides, documents and sheets pages read it there) | an empty list; 404. The workspace's own drive is shown. **The system drive (`scope=system_drive`) is refused whole** (empty list, 404): its root is the entire storage tree, which holds the person's `naas_abi/my-drive/<id>` and `users/<id>` (their own rights reach them) and other workspaces' drives |
 | Coding environments | `GET /api/coding-environments?workspace_id=`, `…/{id}`, `…/logs`, `…/access` | `[]`; 404 |
 | Workflow runs | `GET /api/workspaces/{ws}/workflows/runs`, `…/{module}/runs/{id}` | `{"runs": []}`; 404 |
 | Secrets | `GET /api/secrets/{workspace_id}` (names and values) | `[]` |
@@ -288,4 +288,7 @@ coding_environment, workflows, maps and search.
 - The web (the banner, the picker, "Private to <name>" on the private pages) is subtask 4.
 - A view of the maps does not apply the deployment's seeds: a workspace that was never opened outside a view shows
   what is stored (no seeded layouts, basemaps or layers) until someone opens it.
+- The deck of a slides, documents or sheets project is read from the person's coding-environment sidecar
+  (`lookup_slides_sidecar(user_id=…)`): the project is the workspace's shared content, so it is served as is; serving the
+  stored deck in a view instead would be a refinement.
 - `/api/graph/analyze` (the import's upload) is refused in a view; its multipart body is not judged.

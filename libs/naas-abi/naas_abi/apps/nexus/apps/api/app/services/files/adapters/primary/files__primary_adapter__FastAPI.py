@@ -318,6 +318,11 @@ async def _authorize_system_drive_path(
     workspace_id: str | None,
     op: str,
 ) -> str:
+    if viewing():
+        # The system drive is the whole storage tree: it holds the person's My Drive
+        # (``naas_abi/my-drive/<id>``), their ``users/<id>`` data and other workspaces' drives,
+        # all of which the person's own rights reach. None of it is shown in a view.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     if not workspace_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -338,8 +343,7 @@ async def _authorize_system_drive_path(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="System drive is not enabled for this workspace",
         )
-    if not viewing():
-        await ensure_workspace_drive_placed(normalized_workspace)
+    await ensure_workspace_drive_placed(normalized_workspace)
     return scoped
 
 
@@ -415,8 +419,9 @@ async def list_files(
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
-    if viewing() and scope == SCOPE_MY_DRIVE:
-        # The person's My Drive is private to them: an empty one, the page still opens.
+    if viewing() and scope in (SCOPE_MY_DRIVE, SCOPE_SYSTEM_DRIVE):
+        # The person's My Drive is private to them, and the system drive holds it: an empty
+        # listing, the page still opens.
         return FileListResponse(files=[], path=path, total=0)
     scoped_path = await _authorize_path(
         current_user, path, workspace_id, scope, "list", files_service=files_service

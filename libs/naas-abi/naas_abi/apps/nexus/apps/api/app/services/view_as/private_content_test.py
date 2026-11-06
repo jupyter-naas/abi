@@ -16,6 +16,9 @@ from naas_abi.apps.nexus.apps.api.app.services.coding_environment.adapters.prima
     coding_environment__primary_adapter__FastAPI as coding_api,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files import placement
+from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary import (
+    files__primary_adapter__FastAPI as files_api,
+)
 from naas_abi.apps.nexus.apps.api.app.services.view_as.full_app_testing import (
     bind_database,
     build_full_app,
@@ -80,12 +83,19 @@ async def full(world, tmp_path, monkeypatch):
     storage = ObjectStorageService(ObjectStorageSecondaryAdapterFS(str(tmp_path / "storage")))
     storage.put_object("naas_abi/my-drive/dave", "diary.md", b"# Dave's diary")
     storage.put_object("naas_abi/workspace-drive/alpha", "shared.md", b"# shared")
+    storage.put_object("naas_abi/my-drive/carol", "diary.md", b"# Carol's diary")
+    storage.put_object("users/carol", "profile.json", b"{}")
     app.state.object_storage = storage
     coding, workflows = FakeCoding(), FakeWorkflows()
     app.dependency_overrides[coding_api._get_coding_environment_service] = lambda: coding
     monkeypatch.setattr(workflows_factory, "_service", workflows)
     app.dependency_overrides[workflows_api.get_workflows_service] = lambda: workflows
     placement._PLACED.clear()
+
+    async def drive_on(workspace_id: str, setting: str) -> bool:
+        return True  # the workspace switched the system drive on
+
+    monkeypatch.setattr(files_api, "workspace_setting", drive_on)
     world.app = app
     world.coding, world.workflows = coding, workflows
     everything = list(KNOWN_FEATURE_KEYS)
@@ -219,3 +229,31 @@ async def test_a_persons_personal_api_keys_are_private_to_them(full) -> None:
     # Nothing else of the keys is reachable: a key is made and revoked by a write.
     assert (await root.post("/api/iam/api-keys", json={"name": "x"})).status_code == 403
     assert (await root.get("/api/iam/token")).status_code in (403, 404, 405)
+
+
+@pytest.mark.asyncio
+async def test_the_system_drive_does_not_show_the_persons_my_drive_either(full) -> None:
+    """The system drive is the whole storage tree, My Drive and ``users/<id>`` included: an
+    admin viewed as another admin must not read it there."""
+    carol = await full.sign_in("carol")
+    base = f"workspace_id={ALPHA}&scope=system_drive"
+    mine = await carol.get(f"/api/files/?{base}&path=naas_abi/my-drive/carol")
+    assert mine.status_code == 200, mine.text
+    assert "diary.md" in [f["name"] for f in mine.json()["files"]]
+    own = await carol.get(f"/api/files/raw/naas_abi/my-drive/carol/diary.md?{base}")
+    assert own.status_code == 200 and b"diary" in own.content
+
+    root = await _as_viewer_of(full, "carol")
+
+    for path in ("", "naas_abi", "naas_abi/my-drive", "naas_abi/my-drive/carol", "users/carol"):
+        listed = await root.get(f"/api/files/?{base}&path={path}")
+        assert listed.status_code == 200 and listed.json()["files"] == [], path
+    for tail in (
+        "naas_abi/my-drive/carol/diary.md",
+        "users/carol/profile.json",
+        "naas_abi/my-drive/carol",
+    ):
+        for kind in ("", "raw/", "preview/pdf/", "archive/"):
+            answered = await root.get(f"/api/files/{kind}{tail}?{base}")
+            assert answered.status_code == 404, (kind, tail)
+            assert b"diary" not in answered.content
