@@ -29,6 +29,17 @@ on/off state of its own for an app.
   once and drops it). The `nexus` actions they asked (`GetApp`, `InstallApp`, `UpdateApp`, `UninstallApp`) stay
   declared, deprecated (`../iam/catalog/apps.py`).
 
+## In a view
+
+`access-token`, `remote-grant` and `app-projects/{slug}/preview-token` are reads sent by POST that a view allows
+(`../view_as/reads_by_post.py`); `sso-token` is refused. A link made in a view (`links.mint_link`, which reads the view of
+the request) is the person's and: ends no later than the view (`not_after`), is marked in its description
+(`OpenedLink.view`), is revoked when the view ends (`links.revoke_view_links`, asked by `ViewAsService`), is audited as
+`iam.view_as_open_app` (`view_as.runtime.audited_open`, fail-closed), and is forwarded by the remote proxy
+(`remote/http_routes.py`, at `/app-remote/…` and `/app-html/remote/…`) for GET and HEAD only: any other method is
+"Read-only: you are viewing as <name>" (403), and the fresh grant the catalog URL makes stays the view's. Details:
+`../view_as/AGENTS.md`, "Apps opened in a view".
+
 ## Tests
 
 ```bash

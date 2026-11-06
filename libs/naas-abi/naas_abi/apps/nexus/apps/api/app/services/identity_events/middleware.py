@@ -45,7 +45,9 @@ request state (``nexus_view``, ``nexus_viewer``). ``iam:ViewAs`` is decided agai
 every request; a view past its end is ended and the request is the viewer's. A bearer
 credential never carries a view, and a view that cannot be verified names nobody
 (``nexus_view_unavailable``). The view's read-only and workspace limits are
-``services/view_as``'s ``ViewGuardMiddleware``.
+``services/view_as``'s ``ViewGuardMiddleware``. The view is also set for the request
+(``view_as.active``: ``viewing()``), for the code that must do nothing, or answer nothing,
+in a view (private content, page loads that write, the activity log, the links of apps).
 """
 
 from __future__ import annotations
@@ -61,6 +63,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.credentials import (
     accepted_kinds,
     bearer_credential,
 )
+from naas_abi.apps.nexus.apps.api.app.services.view_as.active import use_view
 from naas_abi_core.engine.call_context import (
     ANONYMOUS,
     CallContext,
@@ -121,7 +124,9 @@ class RequestIdentityMiddleware:
         if scope["type"] not in ("http", "websocket"):
             await self.app(scope, receive, send)
             return
-        with use_call_context(await request_call_context(scope)):
+        context = await request_call_context(scope)
+        view = (scope.get("state") or {}).get("nexus_view")
+        with use_call_context(context), use_view(view):
             await self.app(scope, receive, send)
 
 

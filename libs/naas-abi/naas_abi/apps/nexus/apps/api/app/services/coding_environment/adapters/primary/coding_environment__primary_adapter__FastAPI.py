@@ -56,6 +56,7 @@ from naas_abi.apps.nexus.apps.api.app.services.coding_environment.repo_access im
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
+from naas_abi.apps.nexus.apps.api.app.services.view_as.active import viewing
 from naas_abi_core.engine.call_context import current_call_context, use_call_context
 from naas_abi_core.services.coding_environment.adapters.secondary.CoderAdapter import (
     _sanitize_coder_username,
@@ -433,7 +434,10 @@ def _to_template(template: WorkspaceTemplate) -> TemplateResponse:
 async def _orchestrator_user(service: CodingEnvironmentService, user: User) -> str:
     """The caller's orchestrator user, ensured: the service names an environment
     by its owner, which it finds again (after a restart) only once the owner's
-    orchestrator user is ensured."""
+    orchestrator user is ensured. In a view it is not: ensuring the person's user is a write
+    a page load must not make, and what it would find is private to them."""
+    if viewing():
+        return user.id
     return await run_in_threadpool(
         service.ensure_user,
         external_id=user.id,
@@ -808,6 +812,8 @@ async def list_environments(
     service: CodingEnvironmentService = Depends(_get_coding_environment_service),
     db: AsyncSession = Depends(get_db),
 ) -> list[EnvironmentResponse]:
+    if viewing():
+        return []  # the person's coding environments are private to them
     try:
         user_id = await _orchestrator_user(service, current_user)
         envs = await run_in_threadpool(service.list_environments, user_id=user_id)
@@ -1240,6 +1246,9 @@ async def get_environment(
     service: CodingEnvironmentService = Depends(_get_coding_environment_service),
     iam: IIAMService | None = Depends(get_iam),
 ) -> EnvironmentResponse:
+    if viewing():
+        # The person's coding environments are private to them: none is found.
+        raise HTTPException(status_code=404, detail="Environment not found")
     await authorize_environment(iam, environment_id, workspace_id)
     try:
         await _orchestrator_user(service, current_user)
@@ -1263,6 +1272,9 @@ async def get_environment_logs(
 ) -> LogsResponse:
     """Recent provisioning + startup log lines, polled by the IDE to show live
     progress while a workspace is being prepared."""
+    if viewing():
+        # The person's coding environments are private to them: none is found.
+        raise HTTPException(status_code=404, detail="Environment not found")
     await authorize_environment(iam, environment_id, workspace_id)
     try:
         await _orchestrator_user(service, current_user)
@@ -1356,6 +1368,9 @@ async def get_environment_access(
     service: CodingEnvironmentService = Depends(_get_coding_environment_service),
     iam: IIAMService | None = Depends(get_iam),
 ) -> EnvironmentAccessResponse:
+    if viewing():
+        # The person's coding environments are private to them: none is found.
+        raise HTTPException(status_code=404, detail="Environment not found")
     await authorize_environment(iam, environment_id, workspace_id)
     try:
         user_id = await _orchestrator_user(service, current_user)

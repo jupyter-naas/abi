@@ -13,6 +13,7 @@ end the view or the session without the verification that failed.
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 from naas_abi.apps.nexus.apps.api.app.services.view_as import confinement
@@ -35,6 +36,38 @@ async def _answer(send: Send, status: int, detail: str) -> None:
     await send({"type": "http.response.body", "body": body})
 
 
+async def _read_body(receive: Receive) -> bytes | None:
+    """The request's whole body, None past ``MAX_BODY``."""
+    chunks: list[bytes] = []
+    size = 0
+    while True:
+        message = await receive()
+        if message["type"] == "http.disconnect":
+            return None
+        chunk = message.get("body", b"")
+        size += len(chunk)
+        if size > confinement.MAX_BODY:
+            return None
+        chunks.append(chunk)
+        if not message.get("more_body", False):
+            return b"".join(chunks)
+
+
+def _replay(body: bytes) -> Receive:
+    """A ``receive`` that hands the app the body already read, then the client's end."""
+    sent = False
+
+    async def receive() -> dict:
+        nonlocal sent
+        if not sent:
+            sent = True
+            return {"type": "http.request", "body": body, "more_body": False}
+        await asyncio.Event().wait()  # no more: the client stays connected until the response
+        raise AssertionError("unreachable")
+
+    return receive
+
+
 class ViewGuardMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -55,11 +88,21 @@ class ViewGuardMiddleware:
         if view is None:
             await self.app(scope, receive, send)
             return
+        body: bytes | None = None
+        if confinement.needs_body(scope):
+            # A read sent by POST names its workspace in its body: read it (bounded), judge it,
+            # and hand the app the same bytes.
+            body = await _read_body(receive)
+            if body is None:
+                await _answer(send, 413, "Too large to be judged in a view")
+                return
+            receive = _replay(body)
         refusal = confinement.judge(
             scope,
             person=view.person_name,
             workspace_id=view.workspace_id,
             workspace_name=view.workspace_name,
+            body=body,
         )
         if refusal is not None:
             await _answer(send, refusal.status, refusal.detail)

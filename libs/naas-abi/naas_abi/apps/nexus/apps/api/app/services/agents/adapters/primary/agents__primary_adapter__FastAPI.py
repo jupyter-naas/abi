@@ -41,6 +41,7 @@ from naas_abi.apps.nexus.apps.api.app.services.registry import (
     ServiceRegistry,
     get_service_registry,
 )
+from naas_abi.apps.nexus.apps.api.app.services.view_as.active import viewing
 from naas_abi.apps.nexus.apps.api.app.utils.public_urls import (
     public_modules_url,
     resolve_abi_module_path,
@@ -905,9 +906,12 @@ async def _enriched_workspace_agents(
     """Load workspace agents, optionally reconcile, enrich, and apply feature scoping.
 
     ``may_sync`` is the caller's right to change the roster: without it the
-    listing is returned as stored, whatever ``always_reconcile`` says.
+    listing is returned as stored, whatever ``always_reconcile`` says. A view of
+    another person never changes it.
     """
     class_name_to_agent_class = _get_agent_class_registry()
+    if viewing():
+        may_sync = False  # in a view the roster is only listed, never reconciled
 
     async with _workspace_sync_lock(workspace_id):
         agent_list = await agent_service.list_workspace_agents(workspace_id=workspace_id)

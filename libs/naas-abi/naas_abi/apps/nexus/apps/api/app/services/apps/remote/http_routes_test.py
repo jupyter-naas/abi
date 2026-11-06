@@ -1237,3 +1237,70 @@ def test_the_apps_cookies_pass_as_sent(forwarded):
 
     assert response.status_code == 200
     assert dict(forwarded[0].headers)["cookie"] == 'theme="dark blue"; n=a%3Bb'
+
+
+# -- a link made in a view is read-only: the proxy forwards GET and HEAD only ------------------
+
+
+def _made_in_a_view(person: str = "Dave") -> str:
+    from naas_abi.apps.nexus.apps.api.app.services.view_as.port import LinkView
+
+    previous = credentials.configure_iam(lambda: IAM)
+    try:
+        return mint_remote_app_grant(
+            user_id="u-dave",
+            module_id="acme.research",
+            app="console",
+            view=LinkView(mark="abc123", person=person),
+        )
+    finally:
+        credentials.configure_iam(previous)
+
+
+def test_a_link_made_in_a_view_forwards_only_get_and_head(forwarded):
+    client = _client()
+    root = f"/app-remote/{_made_in_a_view()}/acme.research/console"
+
+    assert client.get(f"{root}/").status_code == 200
+    assert client.head(f"{root}/").status_code == 200
+    forwarded.clear()
+    for method in ("post", "put", "patch", "delete"):
+        refused = client.request(method.upper(), f"{root}/api/save", content=b"{}")
+        assert refused.status_code == 403, method
+        assert refused.json() == {"detail": "Read-only: you are viewing as Dave"}
+    assert forwarded == []  # no write ever reached the app
+
+
+def test_a_link_that_no_view_made_forwards_every_method(forwarded):
+    client = _client()
+
+    assert client.post(f"{ROOT}/api/save", content=b"{}").status_code == 200
+    assert read_remote_app_grant(GRANT).view is None
+
+
+def test_the_catalog_url_of_a_view_link_refuses_writes_and_hands_the_view_on(
+    monkeypatch, forwarded
+):
+    from naas_abi.apps.nexus.apps.api.app.services.view_as.port import LinkView
+
+    _presenting(monkeypatch, "u-dave")
+
+    async def presented_view(request):
+        return LinkView(mark="abc123", person="Dave")
+
+    monkeypatch.setattr(http, "_presented_view", presented_view)
+    client = _client()
+
+    refused = client.post(
+        "/app-html/remote/acme.research/console/api/save", content=b"{}", follow_redirects=False
+    )
+    opened = client.get("/app-html/remote/acme.research/console/", follow_redirects=False)
+
+    assert refused.status_code == 403
+    assert refused.json() == {"detail": "Read-only: you are viewing as Dave"}
+    assert opened.status_code == 307
+    _, _, claims = _grant_of(opened)
+    granted = read_remote_app_grant(claims["grant"])
+    # The fresh grant is the view's too: it cannot be used to write.
+    assert granted is not None and granted.view == LinkView(mark="abc123", person="Dave")
+    assert client.post(f"{opened.headers['location']}api/save", content=b"{}").status_code == 403

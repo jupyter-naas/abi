@@ -3,6 +3,7 @@ database and of IAM, and the errors the service raises."""
 
 from __future__ import annotations
 
+import hashlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -73,6 +74,57 @@ class ViewRecord:
     ended_at: datetime | None = None
 
 
+@dataclass(frozen=True)
+class LinkView:
+    """What a link made in a view carries: it is the person's, within the view's limits.
+
+    ``mark`` names the view that made it (to revoke the view's links when it ends),
+    ``person`` the name the read-only refusal gives, ``ends_at`` (naive UTC) the view's end
+    the link must not outlive; None for a link made from another link that was already
+    bound by it."""
+
+    mark: str
+    person: str
+    ends_at: datetime | None = None
+
+
+def view_mark(view: ViewRecord) -> str:
+    """The name of this view in the links it made: one per view, never the session's id."""
+    raw = f"{view.session_id}|{view.started_at.isoformat()}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def link_view_of(view: ViewRecord) -> LinkView:
+    return LinkView(mark=view_mark(view), person=view.person_name, ends_at=view.ends_at)
+
+
+# A link made in a view says so in its description (IAM keeps it with the key and
+# ``authenticate_user_key`` answers it): ``view-as:<mark> <person> | <what it opens>``.
+_LINK_TAG = "view-as:"
+_LINK_SEPARATOR = " | "
+
+
+def tag_description(view: LinkView, text: str) -> str:
+    person = view.person.replace(_LINK_SEPARATOR, " ")[:60]
+    return f"{_LINK_TAG}{view.mark} {person}{_LINK_SEPARATOR}{text}"[:200]
+
+
+def link_view_in(description: str) -> LinkView | None:
+    """The view a link was made in, read back from its description."""
+    if not description.startswith(_LINK_TAG):
+        return None
+    head, found, _ = description[len(_LINK_TAG) :].partition(_LINK_SEPARATOR)
+    mark, _, person = head.partition(" ")
+    if not found or not mark:
+        return None
+    return LinkView(mark=mark, person=person)
+
+
+def link_has_mark(description: str, mark: str) -> bool:
+    found = link_view_in(description)
+    return found is not None and found.mark == mark
+
+
 class ViewAsError(Exception):
     """A view that cannot start or run: ``status`` is the HTTP answer."""
 
@@ -132,6 +184,14 @@ class ViewStore(ABC):
 
     @abstractmethod
     async def commit(self) -> None: ...
+
+
+class ViewLinks(ABC):
+    """The links (to apps and previews) a view made: they end with it."""
+
+    @abstractmethod
+    async def revoke(self, person_user_id: str, view: ViewRecord) -> int:
+        """Revoke every link ``view`` made for the person; how many."""
 
 
 class ViewIam(ABC):

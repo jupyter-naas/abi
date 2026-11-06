@@ -26,6 +26,7 @@ from naas_abi.apps.nexus.apps.api.app.services.secrets.secrets__schema import (
     SecretUpdateInput,
 )
 from naas_abi.apps.nexus.apps.api.app.services.secrets.service import SecretsService
+from naas_abi.apps.nexus.apps.api.app.services.view_as.active import viewing
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -88,6 +89,8 @@ async def list_secrets(
     workspace_id: str,
     service: SecretsService = Depends(get_secrets_service),
 ) -> list[SecretResponse]:
+    if viewing():
+        return []  # the workspace's secrets, names and values, are not shown in a view
     rows = await service.list_secrets(workspace_id=workspace_id)
     return [_to_secret_response(row) for row in rows]
 

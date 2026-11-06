@@ -23,6 +23,9 @@ the workspace built is `nexus:UseAgent` and the roles. The rows hold each agent'
   caller may use: a module's agent by its module scope, the platform admin included (no role holds one by itself), an
   office agent also by its feature (`core/agent_feature_access`); an agent the workspace built is always listed (its
   use is `nexus:UseAgent`, checked by chat). A workspace that should not offer an agent denies it in a policy.
+- **A view never reconciles the roster.** `GET /` and `POST /sync` list and nothing else in a view of another person
+  (`viewing()` makes `may_sync` false: no seed, no deleted stale row, no backfill). `POST /sync` is on the reads sent by
+  POST a view allows (`../view_as/reads_by_post.py`).
 - **No on/off switch.** `agent_configs.enabled` and `enabled_override` are read and written by nothing here (the
   upgrade reads them once and drops them): `enabled` is no field of the record nor of `PATCH /{id}`, a sync aligns no
   row to the `agents:` seed (its `default_agent` still marks the default), and the pickers

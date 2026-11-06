@@ -11,6 +11,7 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     WorkspaceResourcePolicyModel,
     _utcnow,
 )
+from naas_abi.apps.nexus.apps.api.app.services.view_as.active import viewing
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.resource_access import (
     PolicyConflictError,
     ResourceAccessService,
@@ -127,6 +128,10 @@ async def load_resource_policy(
         if kind == "graphs"
         else {"enabled": list(getattr(seed, "ontologies", None) or [])}
     )
+    if viewing():
+        # The first read of a workspace stores its configured policy; a page load in a view
+        # writes nothing, and answers what that row would hold.
+        return ResourcePolicy(data, 1, None)
     return await ResourceAccessService(ResourcePolicyPostgres(db)).load(workspace_id, kind, data)
 
 

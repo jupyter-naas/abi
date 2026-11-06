@@ -35,6 +35,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.catalog import (
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import Declared, Guard
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
+from naas_abi.apps.nexus.apps.api.app.services.view_as.reads_by_post import READS_BY_POST
 
 # Signed-in routes about the caller's own account or the platform's login: no
 # workspace role applies. (method, path) -> why.
@@ -77,69 +78,9 @@ ACCOUNT_ROUTES: dict[tuple[str, str], str] = {
     ): "the caller's own presence; another user's is refused",
 }
 
-# Reads that travel as POST (a query body): a viewer may send them.
-READS_BY_POST: dict[tuple[str, str], str] = {
-    (
-        "POST",
-        "/api/graph/explorer/catalog",
-    ): "reads graphs: the body names the workspace and graphs",
-    (
-        "POST",
-        "/api/graph/explorer/overview",
-    ): "reads graphs: the body names the workspace and graphs",
-    (
-        "POST",
-        "/api/graph/explorer/instances",
-    ): "reads graphs: the body names the workspace and graphs",
-    (
-        "POST",
-        "/api/graph/explorer/network",
-    ): "reads graphs: the body names the workspace and graphs",
-    (
-        "POST",
-        "/api/graph/analyze",
-    ): "counts the triples of an uploaded file in memory; stores nothing",
-    ("POST", "/api/graph/discovery/relation-targets"): "reads graphs: the body names the filters",
-    ("POST", "/api/graph/discovery/properties"): "reads graphs: the body names the filters",
-    ("POST", "/api/graph/discovery/instances"): "reads graphs: the body names the filters",
-    ("POST", "/api/graph/discovery/instance-detail"): "reads graphs: the body names the individual",
-    ("POST", "/api/graph/discovery/relation-types"): "reads graphs: the body names the filters",
-    ("POST", "/api/graph/discovery/relations"): "reads graphs: the body names the filters",
-    (
-        "POST",
-        "/api/graph/discovery/triples-export",
-    ): "serializes the triples the body carries; reads nothing",
-    ("POST", "/api/graph/network/node-properties"): "reads graphs: the body names the node",
-    ("POST", "/api/graph/network/node-instances"): "reads graphs: the body names the node",
-    ("POST", "/api/graph/query"): "read-only query over graphs: the body carries the spec",
-    ("POST", "/api/graph/query/facets"): "read-only query over graphs: the body carries the spec",
-    (
-        "POST",
-        "/api/view/filters/preview",
-    ): "previews triples of graphs: the body carries the filters",
-    ("POST", "/api/datasets/{namespace}/query"): "read-only SQL: the body carries the query",
-    (
-        "POST",
-        "/api/search/private",
-    ): "a search of the workspace's sources: the body carries the query",
-    ("POST", "/api/iam/admin/simulate"): "explains a decision (iam:Explain): changes nothing",
-    ("POST", "/api/apps/access-token"): "mints a link to an app the caller may use",
-    ("POST", "/api/apps/remote-grant"): "mints a link to an app the caller may use",
-    ("POST", "/api/apps/sso-token"): "mints a sign-in token for a portal the caller may use",
-    ("POST", "/api/app-projects/{slug}/preview-token"): "mints a link to view a draft",
-    (
-        "POST",
-        "/api/chat/conversations/{conversation_id}/export",
-    ): "downloads a conversation the caller owns",
-    (
-        "POST",
-        "/api/v1/chat/completions",
-    ): "runs an agent for the caller (UseAgent); the gateway stores nothing",
-    ("POST", "/api/speech"): "synthesizes speech for the caller; stores nothing",
-    ("POST", "/api/speech/"): "synthesizes speech for the caller; stores nothing",
-    ("POST", "/api/transcribe"): "transcribes audio for the caller; stores nothing",
-    ("POST", "/api/transcribe/"): "transcribes audio for the caller; stores nothing",
-}
+# Reads that travel as POST (a query body): a viewer may send them. The list is app code
+# (``view_as.reads_by_post``): the read-only guard of a view reads it too.
+READS_BY_POST_ROUTES = {entry.key for entry in READS_BY_POST}
 
 WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 ROLES = ("viewer", "member", "admin", "owner")
@@ -220,14 +161,14 @@ def test_every_route_declares_the_action_it_authorizes(table) -> None:
 
 def test_the_allowlists_have_no_stale_entries(table) -> None:
     assert sorted(set(ACCOUNT_ROUTES) - set(table)) == []
-    assert sorted(set(READS_BY_POST) - set(table)) == []
+    assert sorted(set(READS_BY_POST_ROUTES) - set(table)) == []
     assert sorted(set(ACCOUNT_ROUTES) & set(PUBLIC_ROUTES)) == []
 
 
 def test_a_write_method_never_authorizes_only_a_read(table) -> None:
     offenders = []
     for key, calls in table.items():
-        if key[0] not in WRITE_METHODS or key in READS_BY_POST:
+        if key[0] not in WRITE_METHODS or key in READS_BY_POST_ROUTES:
             continue
         declared = _declared(calls)
         if declared and all(level_of(d.action) in ("list", "read") for d in declared):

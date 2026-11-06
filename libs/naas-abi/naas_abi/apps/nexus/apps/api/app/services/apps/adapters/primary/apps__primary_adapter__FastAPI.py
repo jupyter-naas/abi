@@ -57,6 +57,7 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.scopes import app_scope
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
+from naas_abi.apps.nexus.apps.api.app.services.view_as.runtime import audited_open
 from naas_abi.apps.nexus.apps.api.app.utils.public_urls import (
     resolve_public_module_asset_url,
 )
@@ -483,11 +484,14 @@ async def create_app_html_access_token(
         raise HTTPException(status_code=400, detail="Name the app: app_id or its path_prefix")
     await authz.require_scope(scope, user=current_user, workspace=body.workspace_id)
     try:
-        token, expires_in = await asyncio.to_thread(
-            mint_app_html_access_token,
-            user_id=current_user.id,
-            expires_minutes=body.expires_minutes,
-            path_prefix=path_prefix,
+        token, expires_in = await audited_open(
+            app_id,
+            lambda: asyncio.to_thread(
+                mint_app_html_access_token,
+                user_id=current_user.id,
+                expires_minutes=body.expires_minutes,
+                path_prefix=path_prefix,
+            ),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -545,13 +549,16 @@ async def create_remote_app_grant(
         current_user.id, RemoteApp(body.module_id, body.app).app_id, body.workspace_id
     )
     try:
-        path = await asyncio.to_thread(
-            remote_app_grant_url,
-            current_user.id,
-            body.module_id,
-            body.app,
-            None,
-            workspace_id,
+        path = await audited_open(
+            RemoteApp(body.module_id, body.app).app_id,
+            lambda: asyncio.to_thread(
+                remote_app_grant_url,
+                current_user.id,
+                body.module_id,
+                body.app,
+                None,
+                workspace_id,
+            ),
         )
     except LinkLimitReached as exc:
         raise HTTPException(status_code=429, detail=str(exc)) from exc

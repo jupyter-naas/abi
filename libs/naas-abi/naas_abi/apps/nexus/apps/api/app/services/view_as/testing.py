@@ -10,6 +10,7 @@ from naas_abi.apps.nexus.apps.api.app.services.view_as.port import (
     RecordedGroups,
     Viewer,
     ViewIam,
+    ViewLinks,
     ViewRecord,
     ViewStore,
     WorkspaceRef,
@@ -99,3 +100,17 @@ class FakeViewIam(ViewIam):
     async def allows(self, viewer: Viewer, principal_id: str, container: str) -> bool:
         self.one_check += 1
         return (principal_id, container) in self.allowed
+
+
+class FakeViewLinks(ViewLinks):
+    """Remembers the views whose links were revoked; ``fail`` makes it fail as a broken IAM does."""
+
+    def __init__(self) -> None:
+        self.revoked: list[tuple[str, ViewRecord]] = []
+        self.fail = False
+
+    async def revoke(self, person_user_id: str, view: ViewRecord) -> int:
+        if self.fail:
+            raise RuntimeError("IAM is down")
+        self.revoked.append((person_user_id, view))
+        return 1

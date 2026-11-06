@@ -59,6 +59,8 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 from naas_abi.apps.nexus.apps.api.app.services.iam.runtime import IAMUnavailableError
+from naas_abi.apps.nexus.apps.api.app.services.view_as.confinement import read_only_detail
+from naas_abi.apps.nexus.apps.api.app.services.view_as.port import LinkView
 from naas_abi_core.apps.api.abi_api_key_auth import (
     APP_HTML_TOKEN_COOKIE,
     extract_abi_api_token,
@@ -180,6 +182,18 @@ async def _presented_user(request: Request) -> tuple[str, datetime | None]:
     if link is not None and link.resource.startswith(links.APP_HTML_ROOT):
         return link.user_id, link.expires_at
     return "", None
+
+
+async def _presented_view(request: Request) -> LinkView | None:
+    """The view that made the link the request presents, if a view did (a session
+    is never a view's: the view's identity is the viewer's session, which an app never sees)."""
+    token = extract_abi_api_token(request)
+    if not token:
+        return None
+    link = await links.aopen_link(token, APP_AUDIENCE)
+    if link is not None and link.resource.startswith(links.APP_HTML_ROOT):
+        return link.view
+    return None
 
 
 def _is_forwarded(name: str) -> bool:
@@ -476,6 +490,15 @@ async def _granted(grant: str, module_id: str, app: str) -> RemoteAppGrant:
     return granted
 
 
+def _read_only_in_a_view(view: LinkView | None, request: Request) -> None:
+    """A link made in a view forwards only GET and HEAD: the app would otherwise write
+    as the person."""
+    if view is not None and request.method.upper() not in ("GET", "HEAD"):
+        raise HTTPException(
+            status_code=403, detail=read_only_detail(view.person), headers=SECURITY_HEADERS
+        )
+
+
 def _unavailable(module_id: str, app: str, exc: RemoteAppUnavailable) -> HTTPException:
     if exc.status >= 500:
         _log.warning("Remote app %s/%s: %s", module_id, app, exc.reason)
@@ -486,6 +509,7 @@ async def serve_remote_app(
     grant: str, module_id: str, app: str, path: str, request: Request
 ) -> Response:
     granted = await _granted(grant, module_id, app)
+    _read_only_in_a_view(granted.view, request)
     return await _forward(
         module_id,
         app,
@@ -606,6 +630,7 @@ def remote_app_grant_url(
     app: str,
     not_after: datetime | None = None,
     workspace_id: str = "",
+    view: LinkView | None = None,
 ) -> str:
     """The app's root under a fresh grant, ending with ``/``."""
     grant = mint_remote_app_grant(
@@ -615,6 +640,7 @@ def remote_app_grant_url(
         minutes=nexus_config.settings.remote_app_grant_expire_minutes,
         not_after=not_after,
         workspace_id=workspace_id,
+        view=view,
     )
     return grant_root(grant, module_id, app) + "/"
 
@@ -630,6 +656,8 @@ async def open_remote_app(module_id: str, app: str, request: Request, path: str 
     if not is_segment(module_id, app):
         raise HTTPException(status_code=404, detail="Not Found")
     user_id, expires = await _presented_user(request)
+    view = await _presented_view(request) if user_id else None
+    _read_only_in_a_view(view, request)  # a 307 keeps the method: no write gets a grant
     if not user_id:
         # No user: only the deployment's ABI_API_KEY (a script, not a browser).
         presented = extract_abi_api_token(request) or ""
@@ -658,7 +686,7 @@ async def open_remote_app(module_id: str, app: str, request: Request, path: str 
     )
     try:
         grant_url = await asyncio.to_thread(
-            remote_app_grant_url, user_id, module_id, app, expires, workspace_id
+            remote_app_grant_url, user_id, module_id, app, expires, workspace_id, view
         )
     except ValueError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc

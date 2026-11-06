@@ -17,9 +17,10 @@ request, whether a session has a view running.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import datetime, timedelta
+from typing import TypeVar
 
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import (
     AdminAction,
@@ -39,6 +40,7 @@ from naas_abi.apps.nexus.apps.api.app.services.view_as.port import (
     ViewAlreadyRunningError,
     Viewer,
     ViewIam,
+    ViewLinks,
     ViewRecord,
     ViewStore,
     WorkspaceRef,
@@ -46,9 +48,12 @@ from naas_abi.apps.nexus.apps.api.app.services.view_as.port import (
 
 _log = logging.getLogger(__name__)
 
+T = TypeVar("T")
+
 SERVICE = "iam"
 START = "view_as_start"
 END = "view_as_stop"
+OPEN_APP = "view_as_open_app"
 
 
 def now_naive() -> datetime:
@@ -66,7 +71,9 @@ class ViewAsService:
         *,
         clock: Callable[[], datetime] = now_naive,
         lifetime: timedelta = VIEW_LIFETIME,
+        links: ViewLinks | None = None,
     ) -> None:
+        self._links = links
         self._store = store
         self._iam = iam
         self._audit = audit
@@ -157,6 +164,7 @@ class ViewAsService:
             await self._store.commit()
             return None  # another request ended it first, and recorded it
         await self._store.commit()
+        await self._revoke_links(record)
         action = AdminAction(record.viewer_id, SERVICE, END, record.person_principal_id, reason)
         try:
             # The end happened: a record that cannot be written never keeps a view open.
@@ -164,6 +172,23 @@ class ViewAsService:
         except AuditUnavailable as exc:
             _log.warning("view as: the end of a view could not be recorded: %s", exc.reason)
         return replace(record, ended_at=ended)
+
+    async def _revoke_links(self, record: ViewRecord) -> None:
+        """The links the view made end with it (they never outlive its end time either)."""
+        if self._links is None:
+            return
+        try:
+            await self._links.revoke(record.person_id, record)
+        except Exception as exc:  # noqa: BLE001 - the view is over; a link ends at its time anyway
+            _log.warning("view as: the links of a view were not revoked: %s", exc)
+
+    async def open_app(self, view: ViewRecord, app: str, make: Callable[[], Awaitable[T]]) -> T:
+        """Audit the open of an app in the view (``iam.view_as_open_app``: the viewer, the
+        person, the app) around ``make``, which makes the link. Fail-closed like the start:
+        no record, no link."""
+        detail = f"app {app}; workspace {view.workspace_id}"
+        action = AdminAction(view.viewer_id, SERVICE, OPEN_APP, view.person_principal_id, detail)
+        return await run_audited(self._audit, action, make)
 
     async def _end_if_over(self, session_id: str) -> None:
         """Record the end of the session's view when its time has come."""

@@ -49,6 +49,7 @@ from naas_abi.apps.nexus.apps.api.app.services.files.placement import (
 from naas_abi.apps.nexus.apps.api.app.services.files.service import FilesService
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares
+from naas_abi.apps.nexus.apps.api.app.services.view_as.active import viewing
 from naas_abi_core.engine.call_context import as_service_account
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
@@ -232,6 +233,8 @@ def _migrate_legacy_layout(
 ) -> None:
     """Move a drive of the old layout, once. The legacy roots belong to nobody
     IAM knows, so the move is Nexus's own, after the caller was authorized."""
+    if viewing():
+        return  # a page load never moves anything in a view
     migrator = LegacyStorageMigrator(files_service)
     with as_service_account("api"):
         if workspace_id is not None:
@@ -254,7 +257,8 @@ async def _authorize_workspace_path(
         workspace=resolved_workspace_id,
         id=("workspace", *_below(resolved_path, workspace_drive_root(resolved_workspace_id))),
     )
-    await ensure_workspace_drive_placed(resolved_workspace_id)
+    if not viewing():  # placing a drive is a write
+        await ensure_workspace_drive_placed(resolved_workspace_id)
     if files_service is not None:
         _migrate_legacy_layout(files_service, workspace_id=resolved_workspace_id)
     return resolved_path
@@ -266,6 +270,9 @@ async def _authorize_my_drive_path(
     op: str,
     files_service: FilesService | None = None,
 ) -> str:
+    if viewing():
+        # My Drive is the person's alone: it is not shown, and nothing in it is found.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     resolved = _resolve_my_drive_scoped_path(path=path, user_id=current_user.id)
     await authz.require(
         _ACTIONS[op][2],
@@ -331,7 +338,8 @@ async def _authorize_system_drive_path(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="System drive is not enabled for this workspace",
         )
-    await ensure_workspace_drive_placed(normalized_workspace)
+    if not viewing():
+        await ensure_workspace_drive_placed(normalized_workspace)
     return scoped
 
 
@@ -407,6 +415,9 @@ async def list_files(
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
+    if viewing() and scope == SCOPE_MY_DRIVE:
+        # The person's My Drive is private to them: an empty one, the page still opens.
+        return FileListResponse(files=[], path=path, total=0)
     scoped_path = await _authorize_path(
         current_user, path, workspace_id, scope, "list", files_service=files_service
     )

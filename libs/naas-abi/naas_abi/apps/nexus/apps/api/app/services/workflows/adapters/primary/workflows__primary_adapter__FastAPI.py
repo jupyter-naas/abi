@@ -51,6 +51,7 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.jobs import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.port import SourceUnavailable
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import AuditUnavailable
+from naas_abi.apps.nexus.apps.api.app.services.view_as.active import viewing
 from naas_abi.apps.nexus.apps.api.app.services.workflows.factory import get_workflows_service
 from naas_abi.apps.nexus.apps.api.app.services.workflows.port import RunOwner
 from naas_abi.apps.nexus.apps.api.app.services.workflows.scopes import (
@@ -336,7 +337,10 @@ async def list_own_runs(
     service: WorkflowsService = Depends(get_workflows_service),
 ) -> Any:
     """The runs the caller started in the workspace, of the workflows and
-    pipelines whose runs they may still read there."""
+    pipelines whose runs they may still read there. In a view: none, the person's runs are
+    private to them."""
+    if viewing():
+        return {"runs": []}
     # Workflows' runs and pipelines' runs are read with different actions.
     by_action: dict[str, list[RunOwner]] = {}
     for owner in await _call(service.own_runs(user.id, workspace_id)):
@@ -367,7 +371,10 @@ async def get_own_run(
     user: User = Depends(get_current_user_required),
     service: WorkflowsService = Depends(get_workflows_service),
 ) -> Any:
-    """A run the caller started in the workspace: status, result, error, steps."""
+    """A run the caller started in the workspace: status, result, error, steps. In a view it is
+    the person's, and private to them: never found."""
+    if viewing():
+        raise _error(404, "workflows", "run not found")
     owner, view = await _call(service.own_run(user.id, workspace_id, module_id, run_id))
     scope = workflow_scope(owner.module_id, owner.workflow)
     await authz.require_scope(scope, user=user, workspace=workspace_id, action=runs_action(scope))

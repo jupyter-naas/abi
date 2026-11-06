@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 
 import pytest
 from naas_abi.apps.nexus.apps.api.app.services.iam_admin.testing import MemoryAudit
+from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import AuditUnavailable
 from naas_abi.apps.nexus.apps.api.app.services.view_as.port import (
     VIEW_LIFETIME,
     Person,
@@ -232,3 +233,64 @@ async def test_the_person_is_named_by_their_principal_id_whichever_id_was_given(
     assert [
         r.action.resource_id for r in audit.records if r.action.operation == "view_as_stop"
     ] == ["usr_carol"]
+
+
+@pytest.mark.asyncio
+async def test_the_links_a_view_made_are_revoked_whenever_it_ends(world) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.view_as.testing import FakeViewLinks
+
+    service, store, iam, audit, clock = world
+    links = FakeViewLinks()
+    service = ViewAsService(store, iam, audit, clock=clock, links=links)
+
+    started = await service.start(VIEWER, "usr_carol", "alpha")
+    await service.stop("s1")
+    assert [(who, view.session_id) for who, view in links.revoked] == [("carol", "s1")]
+    assert links.revoked[0][1].started_at == started.started_at
+
+    # Expired: the first request that sees the end revokes them too.
+    links.revoked.clear()
+    await service.start(VIEWER, "usr_carol", "alpha")
+    clock.now = NOW + timedelta(minutes=16)
+    assert await service.resolve(VIEWER) is None
+    assert len(links.revoked) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_view_ends_even_when_its_links_cannot_be_revoked(world) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.view_as.testing import FakeViewLinks
+
+    service, store, iam, audit, clock = world
+    links = FakeViewLinks()
+    links.fail = True
+    service = ViewAsService(store, iam, audit, clock=clock, links=links)
+    await service.start(VIEWER, "usr_carol", "alpha")
+
+    ended = await service.stop("s1")
+
+    assert ended is not None and ended.ended_at is not None  # a link ends at the view's time anyway
+    assert audit.phases("view_as_stop") == ["succeeded"]
+
+
+@pytest.mark.asyncio
+async def test_an_open_is_audited_around_the_link_and_fails_closed(world) -> None:
+    service, store, iam, audit, _ = world
+    view = await service.start(VIEWER, "usr_carol", "alpha")
+    made = []
+
+    async def make() -> str:
+        made.append(1)
+        return "link"
+
+    assert await service.open_app(view, "prices", make) == "link"
+
+    assert audit.phases("view_as_open_app") == ["requested", "succeeded"]
+    action = [r for r in audit.records if r.action.operation == "view_as_open_app"][0].action
+    assert (action.actor_id, action.resource_id) == ("root", "usr_carol")
+    assert "prices" in action.detail and "alpha" in action.detail
+
+    # No record, no link.
+    audit.broken = True
+    with pytest.raises(AuditUnavailable):
+        await service.open_app(view, "prices", make)
+    assert made == [1]

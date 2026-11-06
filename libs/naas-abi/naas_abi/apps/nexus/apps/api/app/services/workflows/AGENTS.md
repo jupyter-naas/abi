@@ -58,6 +58,9 @@ each.
 | `GET /{module_id}/runs/{run_id}` | A run the caller started here, as the platform route answers it; 404 for any other run (another user's, another workspace's, an old run under a reused id), 403 without `Read*Runs`. |
 | `GET /settings` | Workspace settings › Workflows (`nexus:ListWorkflowSettings`, admins): `{workflows: [{type, module_id, name, display_name, description}]}`, the workflows and pipelines the caller may run there, the jobs catalogs' and those an engine module's agents run as tools (`modules/scopes.workflows`). |
 
+**In a view** (`../view_as/AGENTS.md`): the runs are the person's and private to them. `GET /runs` answers
+`{"runs": []}` and `GET /{module_id}/runs/{run_id}` 404, without asking the run owners.
+
 **No on/off switch.** `PUT /settings` is gone (405): what a user lists, starts and an agent's tool runs is IAM's
 decision alone; a workspace that should not offer one denies it in a policy. `nexus:UpdateWorkflow` stays declared,
 deprecated (`../iam/catalog/workflows.py`). A user's runs stay readable by `Read*Runs`, whatever they may start now.
