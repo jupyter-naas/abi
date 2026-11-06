@@ -486,6 +486,21 @@ async def test_the_feature_flags_are_the_persons(world) -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_blank_workspace_beside_the_viewed_one_is_outside(world) -> None:
+    root = await world.sign_in("root")
+    assert (await start(root, world, "olivia")).status_code == 200
+
+    for query in (
+        f"workspace_id={ALPHA}&workspace_id=",
+        f"workspace_id=&workspace_id={ALPHA}",
+        "workspace_id=",
+    ):
+        refused = await root.get(f"/api/probe/in-query?{query}")
+        assert refused.status_code == 403, query
+        assert refused.json()["detail"].startswith("Outside this view"), query
+
+
+@pytest.mark.asyncio
 async def test_a_workspace_found_by_slug_is_the_viewed_one_only(world) -> None:
     root = await world.sign_in("root")
     assert (await start(root, world, "olivia")).status_code == 200  # Olivia reaches Bravo too
@@ -744,3 +759,55 @@ async def test_a_database_at_the_previous_state_upgrades(world) -> None:
         # What the database held before is intact: the session and its user.
         assert (await db.execute(text("SELECT COUNT(*) FROM auth_sessions"))).scalar_one() >= 1
     assert (await carol.get("/api/auth/me")).json()["id"] == "carol"
+
+
+# -- A view that cannot be verified ------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_stop_and_sign_out_end_what_they_own_while_the_view_cannot_be_verified(
+    world, monkeypatch
+) -> None:
+    root, other = await world.sign_in("root"), await world.sign_in("root")
+    assert (await start(root, world, "carol")).status_code == 200
+    assert (await start(other, world, "dave")).status_code == 200
+
+    async def broken(self, viewer, principal_id, container):
+        raise RuntimeError("IAM is down")
+
+    with monkeypatch.context() as down:
+        down.setattr(view_runtime.RUNTIME.iam.__class__, "allows", broken)
+
+        assert (await root.get("/api/auth/me")).status_code == 503
+        stopped = await root.delete("/api/iam/view-as")
+        out = await other.post("/api/auth/oidc/logout")
+
+    assert (stopped.status_code, stopped.json()) == (200, {"stopped": True})
+    assert out.status_code == 200, out.text
+    ended = await world.records("view_as_stop")
+    assert sorted(e.detail for e in ended) == ["sign-out", "stop"]
+    assert (await root.get("/api/auth/me")).json()["id"] == "root"  # the viewer's, no view left
+
+
+# -- The person, by any of their ids ---------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_the_nexus_id_of_an_account_finds_the_person_and_iam_is_asked_by_principal(
+    world,
+) -> None:
+    root = await world.sign_in("root")
+    carol_principal = world.principals["carol"]
+    assert carol_principal != "carol"
+
+    listed = await root.get("/api/iam/view-as/workspaces", params={"principal_id": "carol"})
+    started = await root.post(
+        "/api/iam/view-as", json={"principal_id": "carol", "workspace_id": ALPHA}
+    )
+
+    assert [w["id"] for w in listed.json()] == [ALPHA]
+    assert started.status_code == 200, started.text
+    assert started.json()["person"]["id"] == carol_principal
+    start_record = (await world.records("view_as_start"))[0]
+    assert start_record.resource_id == carol_principal
+    assert (await root.get("/api/auth/me")).json()["id"] == "carol"  # and the re-check holds

@@ -130,6 +130,9 @@ def test_every_workspace_named_must_be_the_viewed_one(app) -> None:
         (b"workspace_id=viewed&workspace_id=other", Verdict.OUTSIDE),
         (b"workspace_id=other", Verdict.OUTSIDE),
         (b"workspace_id=", Verdict.OUTSIDE),
+        # A blank value reaches the handler as "" (the last one): it is given, and not the viewed one.
+        (b"workspace_id=viewed&workspace_id=", Verdict.OUTSIDE),
+        (b"workspace_id=&workspace_id=viewed", Verdict.OUTSIDE),
         (b"", Verdict.OUTSIDE),
     ):
         assert classify("GET", route, {}, query, "viewed") is want, query

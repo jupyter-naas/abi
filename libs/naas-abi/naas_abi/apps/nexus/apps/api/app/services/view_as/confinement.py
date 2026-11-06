@@ -83,8 +83,15 @@ def outside_detail(person: str, workspace: str) -> str:
 
 
 def declared_workspace_query(route: APIRoute) -> bool:
-    """Whether the route takes a ``workspace_id`` query parameter."""
-    return any(p.alias == "workspace_id" for p in get_flat_dependant(route.dependant).query_params)
+    """Whether the route takes a ``workspace_id`` query parameter (worked out once per
+    route: it is asked on every request of a view)."""
+    known = route.__dict__.get("_view_as_workspace_query")
+    if known is None:
+        known = any(
+            p.alias == "workspace_id" for p in get_flat_dependant(route.dependant).query_params
+        )
+        route.__dict__["_view_as_workspace_query"] = known
+    return known
 
 
 def route_names_workspace(route: APIRoute) -> bool:
@@ -109,7 +116,10 @@ def classify(
     if "workspace_id" in route.param_convertors:
         named.append(str(path_params.get("workspace_id", "")))
     if declared_workspace_query(route):
-        named.extend(parse_qs(query_string.decode("latin-1")).get("workspace_id", []))
+        # Blank values count: ``?workspace_id=viewed&workspace_id=`` reaches the handler
+        # as "" (the last value), which a handler may read as "no workspace given".
+        given = parse_qs(query_string.decode("latin-1"), keep_blank_values=True)
+        named.extend(given.get("workspace_id", []))
     if named and all(value == viewed_workspace for value in named):
         return Verdict.NAMED
     return Verdict.OUTSIDE
@@ -130,6 +140,13 @@ def find_route(routes: list, scope: dict) -> tuple[APIRoute, dict[str, object]] 
     return partial
 
 
+def is_ending(scope: dict) -> bool:
+    """Whether the request is Stop or the sign-out: they only give access up."""
+    found = find_route(scope["app"].router.routes, scope)
+    method = str(scope.get("method", "GET")).upper()
+    return found is not None and (method, found[0].path) in ENDING_ROUTES
+
+
 def judge(scope: dict, *, person: str, workspace_id: str, workspace_name: str) -> Refusal | None:
     """The refusal a view gives the request, or None to answer it."""
     path = scope.get("path", "")
@@ -138,8 +155,7 @@ def judge(scope: dict, *, person: str, workspace_id: str, workspace_name: str) -
     method = str(scope.get("method", "GET")).upper()
     routes = scope["app"].router.routes
     if method not in READ_METHODS:
-        found = find_route(routes, scope)
-        if found is not None and (method, found[0].path) in ENDING_ROUTES:
+        if is_ending(scope):
             return None
         return Refusal(403, read_only_detail(person))
     found = find_route(routes, scope)

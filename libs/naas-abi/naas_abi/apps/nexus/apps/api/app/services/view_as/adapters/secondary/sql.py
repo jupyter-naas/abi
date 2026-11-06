@@ -116,7 +116,10 @@ class ViewAsSecondaryAdapterSql(ViewStore):
             async with self.db.begin_nested():
                 await self.db.execute(insert(VIEWS).values(**values))
         except IntegrityError:
-            return False  # a view of this session has not ended
+            current = await self.get(record.session_id)
+            if current is not None and current.ended_at is None:
+                return False  # a view of this session has not ended
+            raise
         return True
 
     async def end(self, session_id: str, at: datetime) -> bool:

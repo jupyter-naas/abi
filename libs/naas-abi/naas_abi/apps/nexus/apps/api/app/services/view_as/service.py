@@ -87,7 +87,7 @@ class ViewAsService:
             container = await self._iam.container_of(workspace.id)
             if container is None:
                 continue
-            verdict = await self._iam.verdict(viewer, principal_id, container, groups)
+            verdict = await self._iam.verdict(viewer, person.principal_id, container, groups)
             if verdict.allowed:
                 found.append(workspace)
         return found
@@ -108,7 +108,10 @@ class ViewAsService:
         groups, groups_from = await self._groups(person) if person else ((), None)
         source = f"recorded at {groups_from.isoformat()}" if groups_from else "none"
         detail = f"workspace {workspace_id}; ends {ends_at.isoformat()}; identity provider groups: {source}"
-        action = AdminAction(viewer.user_id, SERVICE, START, principal_id, detail)
+        # IAM and the audit name the person by their IAM principal id, whichever id was given
+        # (a Nexus id of an older account finds them too): the id every re-check uses.
+        subject = person.principal_id if person else principal_id
+        action = AdminAction(viewer.user_id, SERVICE, START, subject, detail)
 
         async def make() -> ViewRecord:
             if person is None:
@@ -118,7 +121,7 @@ class ViewAsService:
             container = await self._iam.container_of(workspace_id) if workspace else None
             if workspace is None or container is None:
                 raise UnknownWorkspaceError()
-            await self._iam.require(viewer, principal_id, container, groups)
+            await self._iam.require(viewer, person.principal_id, container, groups)
             record = ViewRecord(
                 session_id=viewer.session_id,
                 viewer_id=viewer.user_id,

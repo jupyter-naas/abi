@@ -73,9 +73,12 @@ the request state. A bearer credential (an API key, a session token) never carri
   it ends the view (recorded "no longer allowed") and the request is the viewer's.
 - **A view past its end is ended** by the first request that sees it (recorded "expired"), and that request
   runs as the viewer. `running` is the read that records nothing (the WebSocket handshake asks it).
+- **The person is named by their IAM principal id** everywhere (IAM calls, the audit resource, the re-check), whichever
+  id the route was given: a Nexus id of an account of the old login finds the same person.
 - **A view that cannot be verified names nobody** (IAM or the database failed): the request is `ANONYMOUS`, marked
   `nexus_view_unavailable`, and the guard answers every `/api` request 503. Never the viewer's request in its place:
-  a browser that believes it is in a view must not write as the viewer.
+  a browser that believes it is in a view must not write as the viewer. Stop and the sign-out still pass: they only give
+  access up, and need no verification (they end the view or the session by the session's id).
 
 `ViewGuardMiddleware` then judges every `/api` request (`confinement.judge`) before the settings cache:
 
@@ -122,6 +125,9 @@ settings › Roles & permissions › Audit, beside IAM's:
 - **One row per session.** Decision: the session id is the key; a view that ended is replaced by the next one
   (audit keeps the history). Consequences: "one view per session" is the database's (a conflicting insert fails),
   not a check that could race.
+- **The re-check is one `authorize`.** Decision: at every request IAM is asked `iam:ViewAs` on the person, as the viewer,
+  not the whole "holds no more than the viewer" rule. Consequences: what the person holds is judged at the start; a
+  grant made to them during the 15 minutes is not re-judged (the view ends at its end time at the latest).
 - **The person is a Nexus user.** Decision: a person with no `users` row (never signed in to Nexus) is no one to view:
   the list is empty and a start is 404. Consequences: the context's user id is the Nexus id, as for every request.
 

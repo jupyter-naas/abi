@@ -7,7 +7,8 @@ sits inside CORS, so a refusal carries the CORS headers the web app needs to rea
 
 Judging is ``confinement.judge``; the refusals are 403 ``{"detail": ...}``. A request
 whose view could not be verified (``nexus_view_unavailable``) is answered 503: it names
-nobody, and a write must not run as the viewer meanwhile.
+nobody, and a write must not run as the viewer meanwhile. Stop and the sign-out pass: they
+end the view or the session without the verification that failed.
 """
 
 from __future__ import annotations
@@ -46,8 +47,10 @@ class ViewGuardMiddleware:
         if state.get("nexus_view_unavailable") and scope.get("path", "").startswith(
             confinement.API_PREFIX
         ):
-            await _answer(send, 503, "The view could not be verified: try again")
-            return
+            # Stop and the sign-out only give access up: they need no verification.
+            if not confinement.is_ending(scope):
+                await _answer(send, 503, "The view could not be verified: try again")
+                return
         view = state.get("nexus_view")
         if view is None:
             await self.app(scope, receive, send)

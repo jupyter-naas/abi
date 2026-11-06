@@ -37,7 +37,7 @@ class Clock:
 @pytest.fixture
 def world():
     store, iam, audit, clock = MemoryViewStore(), FakeViewIam(), MemoryAudit(), Clock()
-    store.people["usr_carol"] = Person("carol", "usr_carol", "Carol")
+    store.people["usr_carol"] = store.people["carol"] = Person("carol", "usr_carol", "Carol")
     store.workspace_rows["alpha"] = WorkspaceRef("alpha", "Alpha", "acme", "Acme")
     store.workspace_rows["bravo"] = WorkspaceRef("bravo", "Bravo", "acme", "Acme")
     iam.containers = {"alpha": ALPHA, "bravo": BRAVO}
@@ -214,3 +214,21 @@ async def test_the_workspaces_are_those_iam_accepts(world) -> None:
     assert await service.workspaces(VIEWER, "usr_nobody") == []
     iam.allowed = set()
     assert await service.workspaces(VIEWER, "usr_carol") == []
+
+
+@pytest.mark.asyncio
+async def test_the_person_is_named_by_their_principal_id_whichever_id_was_given(world) -> None:
+    service, store, iam, audit, _ = world
+
+    found = await service.workspaces(VIEWER, "carol")  # the Nexus id of the account
+    view = await service.start(VIEWER, "carol", "alpha")
+
+    assert [w.id for w in found] == ["alpha"]
+    assert iam.checked == [("usr_carol", ALPHA)]
+    assert view.person_principal_id == "usr_carol"
+    assert audit.records[0].action.resource_id == "usr_carol"
+    assert await service.resolve(VIEWER) is not None  # the re-check asks about the same id
+    await service.stop("s1")
+    assert [
+        r.action.resource_id for r in audit.records if r.action.operation == "view_as_stop"
+    ] == ["usr_carol"]

@@ -187,7 +187,11 @@ async def request_call_context(scope: Scope) -> CallContext:
         except Exception as exc:  # noqa: BLE001 - fail closed: the request names nobody
             _log.warning("A view could not be verified; the request names nobody: %s", exc)
             state["nexus_view_unavailable"] = True
-            state.pop("nexus_credential", None)
+            if not scope.get("path", "").startswith("/api/"):
+                state.pop("nexus_credential", None)
+            # The call names nobody; the viewer's own credential stays on the state of an
+            # /api request only so Stop and the sign-out can end what they own: the guard
+            # answers every other route 503 (``ViewGuardMiddleware``).
             credential = None
         else:
             if view is not None:
