@@ -3,6 +3,7 @@
  * the small rules the web keeps for it. The server decides who may view whom and answers everything
  * as the person; the web starts and stops the view, reloads around it, and keeps nothing of it.
  */
+import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import { clearViewFlag, readViewFlag, setViewFlag } from './view-flag';
 import type { ViewAs, ViewableWorkspace } from './view-model';
@@ -99,3 +100,18 @@ export async function endView(view: ViewAs): Promise<void> {
   navigation.go(flag?.returnTo || personPagePath(view.person.id, { workspaceId: view.workspace.id }));
 }
 
+
+/**
+ * Whether the server's view has ended: its `/session` answers no view (or no session). A failed
+ * read says no: the browser's clock is not the server's, so the page reloads only on the server's word.
+ */
+export async function viewHasEnded(): Promise<boolean> {
+  try {
+    const response = await fetch(`${getApiUrl()}/api/auth/oidc/session`, { credentials: 'include', cache: 'no-store' });
+    if (response.status === 401) return true;
+    if (!response.ok) return false;
+    return parseView((await response.json())?.view) === null;
+  } catch {
+    return false;
+  }
+}

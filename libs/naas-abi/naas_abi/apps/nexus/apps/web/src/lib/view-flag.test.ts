@@ -9,6 +9,7 @@ import { NextRequest } from 'next/server';
 import { createDeferredStorage, discardDeferredStorage, flushDeferredStorage } from './deferred-storage';
 import { getSafeStorage, resetSafeStorageForTests } from './safe-storage';
 import {
+  FLAG_MARGIN_SECONDS,
   VIEW_FLAG_COOKIE,
   clearViewFlag,
   parseViewFlag,
@@ -42,14 +43,15 @@ describe('the view flag', () => {
     expect(viewFlagActive()).toBe(false);
   });
 
-  it('expires with the view', () => {
+  it('expires after the view, with a margin', () => {
     const written: string[] = [];
     const jar = vi.spyOn(document, 'cookie', 'set').mockImplementation((value) => void written.push(value));
     setViewFlag({ workspaceId: 'ws-1', returnTo: null }, new Date(1_000_000 + 90_000), 1_000_000);
     jar.mockRestore();
     expect(written).toHaveLength(1);
     expect(written[0]).toContain(`${VIEW_FLAG_COOKIE}=`);
-    expect(written[0]).toContain('max-age=90');
+    // the view's end, and a margin for a browser clock that runs ahead of the server's
+    expect(written[0]).toContain(`max-age=${90 + FLAG_MARGIN_SECONDS}`);
     expect(written[0]).toContain('path=/');
   });
 

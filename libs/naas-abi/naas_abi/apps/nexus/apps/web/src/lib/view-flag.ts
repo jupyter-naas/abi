@@ -75,10 +75,15 @@ export function viewFlagActive(): boolean {
   return readViewFlag() !== null;
 }
 
-/** Raise the flag until `endsAt` (the cookie expires with the view). */
+/** How long the flag outlives the end time the browser computes: the browser's clock may run ahead
+ *  of the server's, and the flag must not drop while the server's view still runs. A flag that
+ *  outlives the view is read as stale on the next load (`/session` says no view) and cleared. */
+export const FLAG_MARGIN_SECONDS = 15 * 60;
+
+/** Raise the flag until after `endsAt`; the server's `/session` and Stop clear it. */
 export function setViewFlag(flag: ViewFlag, endsAt: string | number | Date, now: number = Date.now()): void {
   if (typeof document === 'undefined') return;
-  const seconds = Math.max(1, Math.ceil((new Date(endsAt).getTime() - now) / 1000));
+  const seconds = Math.max(1, Math.ceil((new Date(endsAt).getTime() - now) / 1000)) + FLAG_MARGIN_SECONDS;
   const value = encodeURIComponent(JSON.stringify(flag));
   document.cookie = `${VIEW_FLAG_COOKIE}=${value}; path=/; max-age=${Number.isFinite(seconds) ? seconds : 900}; SameSite=Lax`;
 }

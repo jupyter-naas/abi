@@ -3,13 +3,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, Eye, X } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
-import { endView } from '@/lib/view-as';
+import { endView, viewHasEnded } from '@/lib/view-as';
+import { clearViewFlag } from '@/lib/view-flag';
 import { minutesLeft, navigation, onViewRefusal } from '@/lib/view-model';
 import './view-banner.css';
 
 /** How often the minutes left are redrawn. */
 const TICK_MS = 15_000;
 const TOAST_MS = 8_000;
+/** Between two reads of the session while the server's view still runs past the browser's end time. */
+const RETRY_MS = 5_000;
 
 type Toast = { id: number; message: string };
 let nextToast = 1;
@@ -35,9 +38,23 @@ export function ViewBanner() {
     if (!endsAt) return;
     setNow(Date.now());
     const tick = window.setInterval(() => setNow(Date.now()), TICK_MS);
+    // At the end the page reloads, on the server's word: the browser's clock may be ahead of the
+    // server's, and a reload while its view still runs would only come back here (a loop).
+    let end: number | undefined;
+    let gone = false;
+    const check = async () => {
+      if (await viewHasEnded()) {
+        if (gone) return;
+        clearViewFlag();
+        navigation.reload();
+      } else if (!gone) {
+        end = window.setTimeout(() => void check(), RETRY_MS);
+      }
+    };
     const left = new Date(endsAt).getTime() - Date.now();
-    const end = window.setTimeout(() => navigation.reload(), Math.min(Math.max(left, 0), 2 ** 31 - 1));
+    end = window.setTimeout(() => void check(), Math.min(Math.max(left, 0), 2 ** 31 - 1));
     return () => {
+      gone = true;
       window.clearInterval(tick);
       window.clearTimeout(end);
     };

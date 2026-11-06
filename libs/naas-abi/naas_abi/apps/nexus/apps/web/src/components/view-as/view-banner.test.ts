@@ -3,7 +3,7 @@
  * The banner of a view: who is viewed, where, the time left, the groups note, Stop, the reload by
  * itself at the end, and the server's refusals as toasts.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { mount, type Mounted } from '@/lib/testing/mount';
 import { clearViewFlag, readViewFlag, setViewFlag } from '@/lib/view-flag';
@@ -21,6 +21,11 @@ const view = (over: Partial<ViewAs> = {}): ViewAs => ({
   groups_from: '2026-11-05T09:00:00+00:00',
   ...over,
 });
+
+// `authFetch` loads this on its first call: load it here, so no test depends on the order of the others.
+beforeAll(async () => void (await import('@/stores/network-activity')));
+
+const session = (view: unknown) => new Response(JSON.stringify({ user: {}, csrf_token: 'c', view }), { status: 200 });
 
 let mounted: Mounted | null = null;
 let go: ReturnType<typeof vi.spyOn>;
@@ -73,13 +78,44 @@ describe('the banner', () => {
     expect(text()).toContain('without google groups');
   });
 
-  it('reloads by itself at the end', async () => {
+  it('reloads by itself at the end, once the server says the view is over', async () => {
     useAuthStore.setState({ view: view() });
+    const fetchMock = vi.fn(async () => session(null));
+    vi.stubGlobal('fetch', fetchMock);
     mounted = await mount(ViewBanner, {});
     await act(async () => void vi.advanceTimersByTime(12 * 60_000));
     expect(reload).not.toHaveBeenCalled();
-    await act(async () => void vi.advanceTimersByTime(31_000));
+    await act(async () => void (await vi.advanceTimersByTimeAsync(31_000)));
+    expect(String(fetchMock.mock.calls[0][0])).toBe('https://api.example.test/api/auth/oidc/session');
     expect(reload).toHaveBeenCalledOnce();
+    expect(readViewFlag()).toBeNull();
+  });
+
+  it('does not reload while the server’s view still runs (the browser’s clock is ahead)', async () => {
+    useAuthStore.setState({ view: view() });
+    setViewFlag({ workspaceId: 'ws-alpha', returnTo: null }, view().ends_at);
+    let running = true;
+    const fetchMock = vi.fn(async () => session(running ? view() : null));
+    vi.stubGlobal('fetch', fetchMock);
+    mounted = await mount(ViewBanner, {});
+    await act(async () => void (await vi.advanceTimersByTimeAsync(13 * 60_000)));
+    // reads the session at the end, then every few seconds: no reload, and the flag stays
+    await act(async () => void (await vi.advanceTimersByTimeAsync(20_000)));
+    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(3);
+    expect(reload).not.toHaveBeenCalled();
+    expect(readViewFlag()).not.toBeNull();
+    running = false;
+    await act(async () => void (await vi.advanceTimersByTimeAsync(6_000)));
+    expect(reload).toHaveBeenCalledOnce();
+    expect(readViewFlag()).toBeNull();
+  });
+
+  it('does not reload when the session cannot be read', async () => {
+    useAuthStore.setState({ view: view() });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 503 })));
+    mounted = await mount(ViewBanner, {});
+    await act(async () => void (await vi.advanceTimersByTimeAsync(13 * 60_000 + 12_000)));
+    expect(reload).not.toHaveBeenCalled();
   });
 
   it('Stop ends the view and loads the page it was started from', async () => {
@@ -89,6 +125,7 @@ describe('the banner', () => {
     vi.stubGlobal('fetch', fetchMock);
     mounted = await mount(ViewBanner, {});
     await mounted.click(mounted.host.querySelector('.view-banner-stop'));
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
     await settle();
     expect(fetchMock.mock.calls[0][0]).toBe('https://api.example.test/api/iam/view-as');
     expect(fetchMock.mock.calls[0][1].method).toBe('DELETE');
@@ -100,9 +137,11 @@ describe('the banner', () => {
   it('Stop falls back to the person’s page in the viewed workspace', async () => {
     useAuthStore.setState({ view: view() });
     setViewFlag({ workspaceId: 'ws-alpha', returnTo: null }, view().ends_at);
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 200 })));
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
     mounted = await mount(ViewBanner, {});
     await mounted.click(mounted.host.querySelector('.view-banner-stop'));
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
     await settle();
     expect(go).toHaveBeenCalledWith('/workspace/ws-alpha/settings/permissions?section=people&person=iam_dave');
   });
@@ -110,9 +149,11 @@ describe('the banner', () => {
   it('stays in the view and says why when Stop fails', async () => {
     useAuthStore.setState({ view: view() });
     setViewFlag({ workspaceId: 'ws-alpha', returnTo: '/x' }, view().ends_at);
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ detail: 'try again' }), { status: 503 })));
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ detail: 'try again' }), { status: 503 }));
+    vi.stubGlobal('fetch', fetchMock);
     mounted = await mount(ViewBanner, {});
     await mounted.click(mounted.host.querySelector('.view-banner-stop'));
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
     await settle();
     expect(go).not.toHaveBeenCalled();
     expect(readViewFlag()).not.toBeNull();
