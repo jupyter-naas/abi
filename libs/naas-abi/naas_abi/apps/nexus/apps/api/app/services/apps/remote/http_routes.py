@@ -180,20 +180,11 @@ async def _presented_user(request: Request) -> tuple[str, datetime | None]:
         return found.user_id, expires
     link = await links.aopen_link(token, APP_AUDIENCE)
     if link is not None and link.resource.startswith(links.APP_HTML_ROOT):
+        # The view that made the link, from this one lookup (``open_remote_app`` reads it).
+        if (state := getattr(request, "state", None)) is not None:
+            state.presented_view = link.view
         return link.user_id, link.expires_at
     return "", None
-
-
-async def _presented_view(request: Request) -> LinkView | None:
-    """The view that made the link the request presents, if a view did (a session
-    is never a view's: the view's identity is the viewer's session, which an app never sees)."""
-    token = extract_abi_api_token(request)
-    if not token:
-        return None
-    link = await links.aopen_link(token, APP_AUDIENCE)
-    if link is not None and link.resource.startswith(links.APP_HTML_ROOT):
-        return link.view
-    return None
 
 
 def _is_forwarded(name: str) -> bool:
@@ -656,7 +647,7 @@ async def open_remote_app(module_id: str, app: str, request: Request, path: str 
     if not is_segment(module_id, app):
         raise HTTPException(status_code=404, detail="Not Found")
     user_id, expires = await _presented_user(request)
-    view = await _presented_view(request) if user_id else None
+    view = getattr(getattr(request, "state", None), "presented_view", None)
     _read_only_in_a_view(view, request)  # a 307 keeps the method: no write gets a grant
     if not user_id:
         # No user: only the deployment's ABI_API_KEY (a script, not a browser).

@@ -37,7 +37,8 @@ the request) is the person's and: ends no later than the view (`not_after`), is 
 (`OpenedLink.view`), is revoked when the view ends (`links.revoke_view_links`, asked by `ViewAsService`), is audited as
 `iam.view_as_open_app` (`view_as.runtime.audited_open`, fail-closed), and is forwarded by the remote proxy
 (`remote/http_routes.py`, at `/app-remote/…` and `/app-html/remote/…`) for GET and HEAD only: any other method is
-"Read-only: you are viewing as <name>" (403), and the fresh grant the catalog URL makes stays the view's. Details:
+"Read-only: you are viewing as <name>" (403), and the fresh grant the catalog URL makes stays the view's. Consequences: each open in a view mints a grant key for the person, which counts toward their link quota
+(`LinkLimitReached`, 429); the links of a view are revoked with it, so the quota comes back. Details:
 `../view_as/AGENTS.md`, "Apps opened in a view".
 
 ## Tests

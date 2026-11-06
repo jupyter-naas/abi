@@ -415,3 +415,37 @@ class ResourceAccessTests(unittest.IsolatedAsyncioTestCase):
             # What the workspace holds stays offered to its admin, to keep or remove.
             self.assertEqual(await offered("admin"), ["BFO core", "Agent"])
             self.assertEqual((await save("admin", ["core:bfo.ttl"])).status_code, 200)
+
+    async def test_a_view_answers_what_the_first_read_would_store_and_stores_nothing(self):
+        from naas_abi.apps.nexus.apps.api.app.services.view_as.active import use_view
+        from naas_abi.apps.nexus.apps.api.app.services.view_as.testing import a_view
+
+        for kind in ("graphs", "ontologies"):
+            async with self.sessions() as db:
+                with use_view(a_view()):
+                    seen = await repo.load_resource_policy(db, "a", kind)
+                rows = (
+                    await db.execute(text("SELECT count(*) FROM workspace_resource_policies"))
+                ).scalar()
+                self.assertEqual(rows, 0)  # a page load in a view stores nothing
+            async with self.sessions() as db:
+                own = await repo.load_resource_policy(db, "a", kind)  # the person's: stores it
+            self.assertEqual(
+                (seen.data, seen.revision, seen.updated_by),
+                (own.data, own.revision, own.updated_by),
+            )
+            async with self.sessions() as db:
+                await db.execute(text("DELETE FROM workspace_resource_policies"))
+                await db.commit()
+
+    async def test_a_view_refuses_an_invalid_seed_as_the_first_read_does(self):
+        from naas_abi.apps.nexus.apps.api.app.services.view_as.active import use_view
+        from naas_abi.apps.nexus.apps.api.app.services.view_as.testing import a_view
+
+        self.seed.ontologies = [1]
+        async with self.sessions() as db:
+            with self.assertRaises(Exception) as outside:
+                await repo.load_resource_policy(db, "a", "ontologies")
+        async with self.sessions() as db:
+            with use_view(a_view()), self.assertRaises(type(outside.exception)):
+                await repo.load_resource_policy(db, "a", "ontologies")

@@ -17,6 +17,7 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.resource_access import
     ResourceAccessService,
     ResourceKind,
     ResourcePolicy,
+    validate_policy,
 )
 from naas_abi.apps.nexus.graph_policy_config import WorkspaceGraphPolicyConfig
 from sqlalchemy import select, update
@@ -131,7 +132,8 @@ async def load_resource_policy(
     if viewing():
         # The first read of a workspace stores its configured policy; a page load in a view
         # writes nothing, and answers what that row would hold.
-        return ResourcePolicy(data, 1, None)
+        # Validated as the first read validates it before it stores it.
+        return ResourcePolicy(validate_policy(kind, data), 1, None)
     return await ResourceAccessService(ResourcePolicyPostgres(db)).load(workspace_id, kind, data)
 
 

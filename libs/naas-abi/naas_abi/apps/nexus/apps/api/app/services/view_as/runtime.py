@@ -26,6 +26,7 @@ from naas_abi.apps.nexus.apps.api.app.services.view_as.adapters.secondary.sql im
 )
 from naas_abi.apps.nexus.apps.api.app.services.view_as.port import (
     SIGN_OUT,
+    ViewEndedError,
     Viewer,
     ViewIam,
     ViewLinks,
@@ -132,3 +133,5 @@ async def audited_open(app: str, make: Callable[[], Awaitable[T]]) -> T:
             return await service.open_app(view, app, make)
         except AuditUnavailable as exc:
             raise HTTPException(status_code=503, detail=f"No app opened: {exc}") from exc
+        except ViewEndedError as exc:
+            raise HTTPException(status_code=exc.status, detail=str(exc)) from exc

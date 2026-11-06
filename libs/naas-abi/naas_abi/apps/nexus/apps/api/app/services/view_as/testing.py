@@ -114,3 +114,22 @@ class FakeViewLinks(ViewLinks):
             raise RuntimeError("IAM is down")
         self.revoked.append((person_user_id, view))
         return 1
+
+
+def a_view(**overrides) -> ViewRecord:
+    """A running view of Carol in Alpha, for tests that need only that a view runs."""
+    values = {
+        "session_id": "s1",
+        "viewer_id": "root",
+        "person_id": "carol",
+        "person_principal_id": "usr_carol",
+        "person_name": "Carol",
+        "workspace_id": "alpha",
+        "workspace_name": "Alpha",
+        "container": "abi:nexus:organization/acme/nexus:workspace/alpha",
+        "group_ids": (),
+        "groups_from": None,
+        "started_at": datetime(2026, 11, 6, 10, 0, 0),
+        "ends_at": datetime(2026, 11, 6, 10, 15, 0),
+    }
+    return ViewRecord(**{**values, **overrides})

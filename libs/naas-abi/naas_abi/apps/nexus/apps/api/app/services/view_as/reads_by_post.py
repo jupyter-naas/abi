@@ -36,6 +36,8 @@ class ReadByPost:
     in_view: Literal["allowed", "refused"]
     why_in_view: str  # what a view does with it, and why
     workspace: Literal["body", "query"] | None = None  # allowed ones only
+    # The body field holding a resource that must lie inside the viewed workspace's container.
+    in_container: str | None = None
     method: str = "POST"
 
     @property
@@ -143,8 +145,11 @@ READS_BY_POST: tuple[ReadByPost, ...] = (
         "/api/iam/admin/simulate",
         "explains a decision (iam:Explain): changes nothing",
         "allowed",
-        "the person's own rights decide it, as everything else; it names no workspace",
+        "explains a decision as the person's own rights allow (iam:Explain); the resource it names "
+        "must lie inside the viewed workspace's container, so it never answers about another "
+        "workspace, the organization or the platform, whatever the person may explain there",
         None,
+        in_container="resource",
     ),
     ReadByPost(
         "/api/iam/admin/policies/validate",

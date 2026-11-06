@@ -113,6 +113,9 @@ def _scope(app, path: str, method: str = "POST", query: bytes = b"") -> dict:
     }
 
 
+CONTAINER = "abi:nexus:organization/acme/nexus:workspace/alpha"
+
+
 def _judge(app, path, body=None, query=b""):
     return confinement.judge(
         _scope(app, path, query=query),
@@ -120,6 +123,7 @@ def _judge(app, path, body=None, query=b""):
         workspace_id="alpha",
         workspace_name="Alpha",
         body=body,
+        container=CONTAINER,
     )
 
 
@@ -133,8 +137,12 @@ def _concrete(path: str) -> str:
 def test_an_allowed_read_answers_when_it_names_the_viewed_workspace(app, entry) -> None:
     path = _concrete(entry.path)
     scope = _scope(app, path, query=b"workspace_id=alpha")
-    assert confinement.needs_body(scope) is (entry.workspace == BODY)
-    body = json.dumps({"workspace_id": "alpha"}).encode()
+    assert confinement.needs_body(scope) is (
+        entry.workspace == BODY or entry.in_container is not None
+    )
+    body = json.dumps(
+        {"workspace_id": "alpha", "resource": CONTAINER + "/nexus:feature/chat"}
+    ).encode()
     assert _judge(app, path, body, b"workspace_id=alpha") is None
     if entry.workspace == BODY:
         other = json.dumps({"workspace_id": "bravo"}).encode()
@@ -244,3 +252,96 @@ async def test_the_guard_reads_the_body_judges_it_and_hands_it_on(app) -> None:
         )
         assert huge.status_code == 413
     assert len(tiny.state.echoed) == 1  # only the answered one reached the route
+
+
+@pytest.mark.asyncio
+async def test_a_client_that_leaves_mid_body_is_not_answered_and_one_that_stays_is_seen(
+    app,
+) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.view_as.adapters.primary import (
+        view_as__primary_adapter__ASGI as guard,
+    )
+
+    # Leaving before the body is complete: no answer at all, and no 413 message.
+    sent: list[dict] = []
+    messages = iter(
+        [
+            {"type": "http.request", "body": b'{"workspace_id": "al', "more_body": True},
+            {"type": "http.disconnect"},
+        ]
+    )
+
+    async def receive() -> dict:
+        return next(messages)
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    called = []
+
+    async def inner(scope, receive, send) -> None:
+        called.append(1)
+
+    middleware = guard.ViewGuardMiddleware(inner)
+    scope = _scope(app, "/api/graph/query")
+    scope["state"] = _guarded_state()
+    await middleware(scope, receive, send)
+    assert sent == [] and called == []
+
+    # After the body, the app's own receive() is the client's: it sees the disconnect.
+    body = b'{"workspace_id": "alpha"}'
+    events = iter(
+        [{"type": "http.request", "body": body, "more_body": False}, {"type": "http.disconnect"}]
+    )
+
+    async def client() -> dict:
+        return next(events)
+
+    seen: list[dict] = []
+
+    async def reading_app(scope, receive, send) -> None:
+        seen.append(await receive())
+        seen.append(await receive())  # a handler polling for the client leaving
+
+    scope = _scope(app, "/api/graph/query")
+    scope["state"] = _guarded_state()
+    await guard.ViewGuardMiddleware(reading_app)(scope, client, send)
+    assert [m["type"] for m in seen] == ["http.request", "http.disconnect"]
+    assert seen[0]["body"] == body
+
+
+def _guarded_state() -> dict:
+    return {"nexus_view": _view()}
+
+
+def _view() -> ViewRecord:
+    from naas_abi.apps.nexus.apps.api.app.services.view_as.testing import a_view
+
+    return a_view(workspace_id="alpha", person_name="Dave")
+
+
+@pytest.mark.parametrize(
+    "resource",
+    [
+        "abi:nexus:organization/acme/nexus:workspace/bravo/nexus:feature/chat",  # another workspace
+        "abi:nexus:organization/acme/nexus:workspace/alpha2/nexus:feature/chat",  # a name that starts alike
+        "abi:nexus:organization/acme",  # the organization above
+        "abi:",  # the platform
+        "",
+        None,
+        5,
+    ],
+)
+def test_a_simulation_never_answers_outside_the_viewed_workspace(app, resource) -> None:
+    body = json.dumps({"principal_id": "p", "action": "nexus:UseFeature", "resource": resource})
+    refusal = _judge(app, "/api/iam/admin/simulate", body.encode())
+    assert refusal is not None and refusal.detail.startswith("Outside this view")
+
+
+def test_a_simulation_inside_the_viewed_container_answers(app) -> None:
+    for resource in (CONTAINER, CONTAINER + "/nexus:feature/chat"):
+        body = json.dumps({"principal_id": "p", "action": "a", "resource": resource}).encode()
+        assert _judge(app, "/api/iam/admin/simulate", body) is None
+    # The guard reads the body of this read, though it names no workspace_id.
+    assert confinement.needs_body(_scope(app, "/api/iam/admin/simulate"))
+    assert not confinement.needs_body(_scope(app, "/api/iam/admin/policies/validate"))

@@ -121,8 +121,15 @@ what it reads (`reads`), and what a view does with it (`in_view`: `allowed` or `
   flow, whose multipart body the guard does not read).
 - **Held to the viewed workspace.** `workspace` says where an allowed read names it: `body` (a JSON object whose
   top-level `workspace_id` must be the viewed one; the guard reads the body, at most 8 MB, 413 beyond, and hands the
-  app the same bytes), `query` (judged as a GET is) or none (`simulate`, `validate`: IAM decides for the person
-  alone). A body that is not that object, names another workspace or none: "Outside this view".
+  app the same bytes; a client that leaves mid-body is not answered, and after the body the app's `receive()` is the
+  client's own, so a handler polling for a disconnect sees it), `query` (judged as a GET is) or none. A body that is
+  not that object, names another workspace or none: "Outside this view".
+- **`simulate` names a resource, held to the container.** Decision: `/api/iam/admin/simulate` names no workspace, but
+  its `resource` must be the viewed workspace's container or lie below it (`in_container`), else "Outside this view".
+  Consequences: a person who may `iam:Explain` beyond the workspace (an organization's admin viewed by the platform
+  admin) is still explained only inside it; `principal_id` is not held (a principal belongs to no container, and the
+  explanation concerns a resource of the workspace); `/api/iam/admin/policies/validate` reads and names nothing of any
+  workspace, so it needs no such hold.
 
 ## Private content
 
@@ -191,8 +198,16 @@ links of `apps/links.py`). The link is the person's, within these limits:
   `<mark>` is derived from the session and the start time, never the session's id. `open_link` reads it back
   (`OpenedLink.view`).
 - **Revoked when the view ends** (Stop, sign-out, expired, no longer allowed): `ViewAsService._end` asks `ViewLinks`
-  (`adapters/secondary/links.py` → `links.revoke_view_links`). A revocation that fails is logged and never keeps the
-  view open: the link ends at the view's time anyway.
+  (`adapters/secondary/links.py` → `links.revoke_view_links`). A revocation that fails is only logged and never keeps the
+  view open: the link then ends at its `not_after`, the view's end, at the latest.
+- **A link made while the view ends** (a request in flight when Stop came) is revoked again: `open_app` checks, after
+  the mint and inside the audited call, that the same view still runs, else revokes the view's links again and refuses
+  (403 "The view has ended", the audit record `failed`). The end is committed before it revokes, so a link made before
+  that check is seen by one revocation or the other. The fresh grant of the catalog URL (`/app-html/remote/…`) is not
+  audited and not re-checked: it ends at the time of the link it came from, the view's end at the latest.
+- **Only `/app-remote` enforces GET/HEAD.** `/app-html` access links and `/app-preview` links made in a view carry the
+  mark (`OpenedLink.view`), but those routes are GET-only today: a route that takes another method there must check
+  `OpenedLink.view`.
 - **Read-only at the proxy**: `apps/remote/http_routes.py` forwards only GET and HEAD for a link a view made, and
   answers anything else "Read-only: you are viewing as <name>" (403), at the grant (`/app-remote/…`) and at the catalog
   URL (`/app-html/remote/…`, whose 307 would keep the method and whose fresh grant stays the view's).

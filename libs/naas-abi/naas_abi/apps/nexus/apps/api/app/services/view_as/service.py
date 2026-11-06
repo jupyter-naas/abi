@@ -38,6 +38,7 @@ from naas_abi.apps.nexus.apps.api.app.services.view_as.port import (
     UnknownPersonError,
     UnknownWorkspaceError,
     ViewAlreadyRunningError,
+    ViewEndedError,
     Viewer,
     ViewIam,
     ViewLinks,
@@ -185,10 +186,23 @@ class ViewAsService:
     async def open_app(self, view: ViewRecord, app: str, make: Callable[[], Awaitable[T]]) -> T:
         """Audit the open of an app in the view (``iam.view_as_open_app``: the viewer, the
         person, the app) around ``make``, which makes the link. Fail-closed like the start:
-        no record, no link."""
+        no record, no link. A view that ended while the link was being made revokes it again
+        and refuses (``ViewEndedError``)."""
         detail = f"app {app}; workspace {view.workspace_id}"
         action = AdminAction(view.viewer_id, SERVICE, OPEN_APP, view.person_principal_id, detail)
-        return await run_audited(self._audit, action, make)
+
+        async def make_if_running() -> T:
+            result = await make()
+            # A request in flight when the view ended: the end revoked the links that existed
+            # then, not the one just made. The end is committed before it revokes, so a link
+            # made before this check is either seen by that revocation or by this one.
+            now = await self.running(view.session_id)
+            if now is None or now.started_at != view.started_at:  # not the same view
+                await self._revoke_links(view)
+                raise ViewEndedError()
+            return result
+
+        return await run_audited(self._audit, action, make_if_running)
 
     async def _end_if_over(self, session_id: str) -> None:
         """Record the end of the session's view when its time has come."""

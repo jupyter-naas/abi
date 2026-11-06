@@ -189,7 +189,11 @@ def needs_body(scope: dict) -> bool:
     if not str(scope.get("path", "")).startswith(API_PREFIX):
         return False
     entry = post_read(scope)
-    return entry is not None and entry.allowed and entry.workspace == BODY
+    return (
+        entry is not None
+        and entry.allowed
+        and (entry.workspace == BODY or entry.in_container is not None)
+    )
 
 
 def body_names_workspace(body: bytes, viewed_workspace: str) -> bool:
@@ -202,6 +206,19 @@ def body_names_workspace(body: bytes, viewed_workspace: str) -> bool:
     return isinstance(data, dict) and data.get("workspace_id") == viewed_workspace
 
 
+def body_resource_in(body: bytes, field: str, container: str | None) -> bool:
+    """Whether the JSON object the body carries has, in ``field``, a resource inside
+    ``container``: the container itself or something below it."""
+    if not container:
+        return False
+    try:
+        data = json.loads(body)
+    except ValueError:
+        return False
+    value = data.get(field) if isinstance(data, dict) else None
+    return isinstance(value, str) and (value == container or value.startswith(container + "/"))
+
+
 def judge(
     scope: dict,
     *,
@@ -209,9 +226,10 @@ def judge(
     workspace_id: str,
     workspace_name: str,
     body: bytes | None = None,
+    container: str | None = None,
 ) -> Refusal | None:
     """The refusal a view gives the request, or None to answer it. ``body`` is the
-    request's body when ``needs_body(scope)``."""
+    request's body when ``needs_body(scope)``, ``container`` the viewed workspace's."""
     path = scope.get("path", "")
     if not path.startswith(API_PREFIX):
         return None
@@ -226,7 +244,11 @@ def judge(
         if entry.workspace == BODY:
             if body is None or not body_names_workspace(body, workspace_id):
                 return Refusal(403, outside_detail(person, workspace_name))
-        elif entry.workspace == QUERY:
+        if entry.in_container is not None and (
+            body is None or not body_resource_in(body, entry.in_container, container)
+        ):
+            return Refusal(403, outside_detail(person, workspace_name))
+        if entry.workspace == QUERY:
             found = find_route(routes, scope)
             if found is None:
                 return Refusal(403, outside_detail(person, workspace_name))

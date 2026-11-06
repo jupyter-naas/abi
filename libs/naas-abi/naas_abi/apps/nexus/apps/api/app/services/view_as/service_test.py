@@ -294,3 +294,47 @@ async def test_an_open_is_audited_around_the_link_and_fails_closed(world) -> Non
     with pytest.raises(AuditUnavailable):
         await service.open_app(view, "prices", make)
     assert made == [1]
+
+
+@pytest.mark.asyncio
+async def test_a_link_made_while_the_view_ends_is_revoked_and_refused(world) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.view_as.port import ViewEndedError
+    from naas_abi.apps.nexus.apps.api.app.services.view_as.testing import FakeViewLinks
+
+    service, store, iam, audit, clock = world
+    links = FakeViewLinks()
+    service = ViewAsService(store, iam, audit, clock=clock, links=links)
+    view = await service.start(VIEWER, "usr_carol", "alpha")
+
+    async def stop_then_mint() -> str:
+        # The request resolved the view, then Stop ended it (and revoked what existed): the link
+        # is made after.
+        await service.stop("s1")
+        links.revoked.clear()
+        return "link"
+
+    with pytest.raises(ViewEndedError):
+        await service.open_app(view, "prices", stop_then_mint)
+
+    assert len(links.revoked) == 1  # revoked again, after the mint
+    assert audit.phases("view_as_open_app") == ["requested", "failed"]
+
+
+@pytest.mark.asyncio
+async def test_a_view_that_replaced_the_ended_one_does_not_keep_its_link(world) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.view_as.port import ViewEndedError
+    from naas_abi.apps.nexus.apps.api.app.services.view_as.testing import FakeViewLinks
+
+    service, store, iam, audit, clock = world
+    links = FakeViewLinks()
+    service = ViewAsService(store, iam, audit, clock=clock, links=links)
+    first = await service.start(VIEWER, "usr_carol", "alpha")
+
+    async def end_and_start_again() -> str:
+        await service.stop("s1")
+        clock.now = NOW + timedelta(minutes=1)
+        await service.start(VIEWER, "usr_carol", "alpha")
+        return "link"
+
+    with pytest.raises(ViewEndedError):
+        await service.open_app(first, "prices", end_and_start_again)

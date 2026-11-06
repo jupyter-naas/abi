@@ -1283,12 +1283,11 @@ def test_the_catalog_url_of_a_view_link_refuses_writes_and_hands_the_view_on(
 ):
     from naas_abi.apps.nexus.apps.api.app.services.view_as.port import LinkView
 
-    _presenting(monkeypatch, "u-dave")
+    async def presented(request):
+        request.state.presented_view = LinkView(mark="abc123", person="Dave")
+        return "u-dave", datetime.now(UTC) + timedelta(minutes=5)
 
-    async def presented_view(request):
-        return LinkView(mark="abc123", person="Dave")
-
-    monkeypatch.setattr(http, "_presented_view", presented_view)
+    monkeypatch.setattr(http, "_presented_user", presented)
     client = _client()
 
     refused = client.post(
@@ -1304,3 +1303,37 @@ def test_the_catalog_url_of_a_view_link_refuses_writes_and_hands_the_view_on(
     # The fresh grant is the view's too: it cannot be used to write.
     assert granted is not None and granted.view == LinkView(mark="abc123", person="Dave")
     assert client.post(f"{opened.headers['location']}api/save", content=b"{}").status_code == 403
+
+
+def test_a_presented_link_is_looked_up_once_and_its_view_is_read_from_it(monkeypatch, forwarded):
+    from naas_abi.apps.nexus.apps.api.app.services.apps import links
+    from naas_abi.apps.nexus.apps.api.app.services.view_as.port import LinkView
+    from naas_abi_core.engine.nats_auth import APP_AUDIENCE
+
+    grant, _ = links.mint_link(
+        user_id="u-dave",
+        audience=APP_AUDIENCE,
+        resource=links.APP_HTML_ROOT,
+        minutes=5,
+        view=LinkView(mark="abc123", person="Dave"),
+    )
+    lookups = []
+    original = links.aopen_link
+
+    async def counting(value, audience):
+        lookups.append(audience)
+        return await original(value, audience)
+
+    monkeypatch.setattr(links, "aopen_link", counting)
+    client = _client()
+
+    refused = client.post(
+        "/app-html/remote/acme.research/console/api/save",
+        content=b"{}",
+        headers={"Authorization": f"Bearer {grant}"},
+        follow_redirects=False,
+    )
+
+    assert refused.status_code == 403
+    assert refused.json() == {"detail": "Read-only: you are viewing as Dave"}
+    assert len(lookups) == 1  # one IAM round trip for the presented link

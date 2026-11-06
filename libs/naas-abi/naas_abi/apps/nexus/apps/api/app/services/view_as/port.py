@@ -145,6 +145,13 @@ class UnknownWorkspaceError(ViewAsError):
         super().__init__("No such workspace")
 
 
+class ViewEndedError(ViewAsError):
+    status = 403
+
+    def __init__(self) -> None:
+        super().__init__("The view has ended: nothing was opened")
+
+
 class ViewAlreadyRunningError(ViewAsError):
     status = 409
 
