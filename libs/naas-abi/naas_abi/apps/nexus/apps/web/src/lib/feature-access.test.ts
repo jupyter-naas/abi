@@ -73,7 +73,8 @@ describe('getFeatureForWorkspacePath', () => {
     // Roles & permissions is IAM's to open (GET /access), not a feature's: a member
     // holding only iam:ListPolicies there opens it without the settings feature.
     expect(getGatingFeatureForWorkspacePath('/workspace/ws1/settings/permissions')).toBe(null);
-    expect(getGatingFeatureForWorkspacePath('/workspace/ws1/settings/general')).toBe('settings.workspace');
+    // The settings layout decides every settings page (role, then IAM).
+    expect(getGatingFeatureForWorkspacePath('/workspace/ws1/settings/general')).toBe(null);
     expect(getFeatureForWorkspacePath('/workspace/ws1/marketplace')).toBe('marketplace');
     expect(getFeatureForWorkspacePath('/workspace/ws1/help')).toBe('settings');
   });

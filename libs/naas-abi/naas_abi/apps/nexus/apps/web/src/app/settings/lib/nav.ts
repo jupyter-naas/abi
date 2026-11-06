@@ -3,24 +3,26 @@ import {
   Activity,
   Blocks,
   Bot,
+  Building2,
   Database,
   Gauge,
   KeyRound,
-  LayoutGrid,
   Network,
   Radio,
   Server,
   Table2,
+  Users,
   Waypoints,
   Workflow,
 } from 'lucide-react';
 import {
-  MODULE_SETS_PATH,
   ROLES_PATH,
   SYSTEM_VIEWS,
   systemViewPath,
   type SystemView,
 } from '../system/system-tabs';
+import { PLATFORM_ORGANIZATIONS_PATH } from '../organizations/organizations-model';
+import { PLATFORM_USERS_PATH } from '../users/users-model';
 import { PLATFORM_TABLES_PATH } from './tables';
 import { safeDecode } from './page-helpers';
 
@@ -36,7 +38,6 @@ export type PlatformSettingsNeed = { action: string } | { anyOf: 'iam' };
 
 export const READ_SYSTEM: PlatformSettingsNeed = { action: 'nexus:ReadSystem' };
 export const ANY_IAM_ACTION: PlatformSettingsNeed = { anyOf: 'iam' };
-export const GET_SET: PlatformSettingsNeed = { action: 'iam:GetSet' };
 
 export type PlatformSettingsNavItem = {
   id: string;
@@ -47,8 +48,8 @@ export type PlatformSettingsNavItem = {
 };
 
 export type PlatformSettingsNavGroup = {
-  /** Shown above the items; the first group has no heading. */
-  label: string | null;
+  /** Shown above the items; every group has one. */
+  label: string;
   items: PlatformSettingsNavItem[];
 };
 
@@ -78,6 +79,22 @@ export const NEXUS_TABLES_ITEM: PlatformSettingsNavItem = {
   needs: READ_SYSTEM,
 };
 
+export const ORGANIZATIONS_ITEM: PlatformSettingsNavItem = {
+  id: 'organizations',
+  label: 'Organizations',
+  href: PLATFORM_ORGANIZATIONS_PATH,
+  icon: Building2,
+  needs: READ_SYSTEM,
+};
+
+export const USERS_ITEM: PlatformSettingsNavItem = {
+  id: 'users',
+  label: 'Users',
+  href: PLATFORM_USERS_PATH,
+  icon: Users,
+  needs: { action: 'nexus:ListUsers' },
+};
+
 export const ROLES_ITEM: PlatformSettingsNavItem = {
   id: 'roles',
   label: 'Roles & permissions',
@@ -86,16 +103,8 @@ export const ROLES_ITEM: PlatformSettingsNavItem = {
   needs: ANY_IAM_ACTION,
 };
 
-export const MODULE_SETS_ITEM: PlatformSettingsNavItem = {
-  id: 'modules',
-  label: 'Modules & features',
-  href: MODULE_SETS_PATH,
-  icon: LayoutGrid,
-  needs: GET_SET,
-};
-
 export const platformSettingsGroups: PlatformSettingsNavGroup[] = [
-  { label: null, items: [NEXUS_TABLES_ITEM] },
+  { label: 'Database', items: [NEXUS_TABLES_ITEM] },
   {
     label: 'System',
     items: SYSTEM_VIEWS.map((view) => ({
@@ -106,7 +115,8 @@ export const platformSettingsGroups: PlatformSettingsNavGroup[] = [
       needs: READ_SYSTEM,
     })),
   },
-  { label: 'Access', items: [ROLES_ITEM, MODULE_SETS_ITEM] },
+  { label: 'Tenancy', items: [ORGANIZATIONS_ITEM, USERS_ITEM] },
+  { label: 'Access', items: [ROLES_ITEM] },
 ];
 
 export const platformSettingsNav: PlatformSettingsNavItem[] = platformSettingsGroups.flatMap(

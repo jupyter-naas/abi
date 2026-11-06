@@ -5,8 +5,8 @@ a session is the cookie that sign-in sets, or an API key (``credentials.py``). N
 password, no one-time code, no token signed here: the code of those logins, and the
 tables they used, were removed.
 
-Who is a platform administrator is IAM's (``builtin.platform_admin``): the stored
-``is_superadmin`` flag is only what the account list shows, read from IAM.
+Who is a platform administrator is IAM's (``builtin.platform_admin``); the platform's
+directory of accounts and their lifecycle are ``services/accounts``.
 """
 
 from __future__ import annotations
@@ -23,7 +23,6 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.port import (
     AuthPersistencePort,
     AuthUserRecord,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS, Memberships
 
 
 @dataclass
@@ -34,22 +33,13 @@ class UserNotFoundError(ValueError):
         return "user_not_found"
 
 
-@dataclass
-class SuperadminChangeError(ValueError):
-    reason: str  # cannot_demote_self | last_superadmin
-
-    def __str__(self) -> str:
-        return self.reason
-
-
 def now_utc_naive() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
 class AuthService:
-    def __init__(self, adapter: AuthPersistencePort, memberships: Memberships = MEMBERSHIPS):
+    def __init__(self, adapter: AuthPersistencePort):
         self.adapter = adapter
-        self.memberships = memberships
 
     async def update_profile(
         self,
@@ -85,14 +75,6 @@ class AuthService:
         await self.adapter.commit()
         return updated
 
-    async def list_users(self) -> list[AuthUserRecord]:
-        """Every account, with ``is_superadmin`` as IAM holds it."""
-        admins = await self.memberships.platform_admins()
-        return [
-            replace(user, is_superadmin=user.id in admins)
-            for user in await self.adapter.list_users()
-        ]
-
     async def get_user(self, user_id: str) -> AuthUserRecord | None:
         return await self.adapter.get_user_by_id(user_id)
 
@@ -106,28 +88,3 @@ class AuthService:
             {field: getattr(user, field) for field in FALLBACK_FIELDS}, profiles
         )
         return replace(user, **effective)
-
-    async def set_superadmin(
-        self, *, actor_id: str, user_id: str, is_superadmin: bool
-    ) -> AuthUserRecord:
-        """Promote or demote a platform administrator: attach or detach IAM's
-        ``builtin.platform_admin`` for the user, as the actor (IAM checks that they
-        may). Never leaves the platform without one."""
-        user = await self.adapter.get_user_by_id(user_id)
-        if user is None:
-            raise UserNotFoundError(user_id=user_id)
-        admins = await self.memberships.platform_admins()
-        if (user_id in admins) == is_superadmin:
-            return replace(user, is_superadmin=is_superadmin)
-        if not is_superadmin:
-            if user_id == actor_id:
-                raise SuperadminChangeError(reason="cannot_demote_self")
-            if len(admins) <= 1:
-                raise SuperadminChangeError(reason="last_superadmin")
-        await self.memberships.set_platform_admin(user_id, is_superadmin, by=actor_id)
-        # The stored flag only bootstraps (config promotes on boot): keep it in step.
-        await self.adapter.set_user_superadmin(
-            user_id=user_id, is_superadmin=is_superadmin, now=now_utc_naive()
-        )
-        await self.adapter.commit()
-        return replace(user, is_superadmin=is_superadmin)

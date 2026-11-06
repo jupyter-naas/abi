@@ -91,8 +91,16 @@ This file covers `services/oidc/` (the sign-in and the session) and `services/au
 - Each request also checks that the IAM principal is active (cached 5 s): a suspension ends
   the session within 5 s, and the kernel denies the user's calls at once.
 - **Logout** (`POST /api/auth/oidc/logout`, CSRF-checked) ends the session, revokes its
-  refresh token at the provider, ends the user's remote-app grants, and returns the provider's
-  `end_session_url` when it has one.
+  refresh token at the provider, ends the user's remote-app grants, ends the session's view
+  (below, recorded "sign-out"), and returns the provider's `end_session_url` when it has one.
+- **A view on the session** ([`view_as/AGENTS.md`](../view_as/AGENTS.md)): an administrator's cookie
+  session can carry a read-only view of another person in one workspace, 15 minutes at most
+  (`view_as_views`, one row per session). While it runs, `RequestIdentityMiddleware` makes the request's
+  credential and `CallContext` the person's (user id, `on_behalf_of` and the recorded IdP groups together),
+  with the workspace's container; `request.state.nexus_session` stays the **viewer's** (so CSRF and `GET
+  /api/auth/oidc/session` are the viewer's; `/session` adds `view`, or null), and `nexus_view` and `nexus_viewer`
+  are on the state. Only a cookie session carries a view: a bearer credential never does, and a view that cannot be
+  verified names nobody. The WebSocket handshake of a session in a view is refused.
 - The request then runs as `api` acting on behalf of the principal, with the mapped IAM
   group ids (`RequestIdentityMiddleware`). A session whose signature, expiry or principal
   fails names nobody: the request is `ANONYMOUS`, never `api`.
@@ -173,7 +181,8 @@ belongs (`auth/credentials.py`, `accepted_kinds(path)`):
   that module (`api_host_token`), and the user. There is no `Abi-On-Behalf-Of` header.
 - Settings-cache keys are the verified user (`RequestIdentityMiddleware`'s credential). Only a plain
   session is cached (`kind == session`, no `scope`), apart per set of IdP groups; a key, a coding key or
-  a narrowed credential is answered live and never reads or fills a session's entries.
+  a narrowed credential is answered live and never reads or fills a session's entries. A request in a view
+  ([`view_as/AGENTS.md`](../view_as/AGENTS.md)) neither reads nor fills the cache.
 
 ## Accounts of the old login
 

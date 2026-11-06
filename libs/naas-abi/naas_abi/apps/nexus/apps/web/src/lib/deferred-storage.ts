@@ -1,4 +1,5 @@
 import type { PersistStorage, StorageValue } from 'zustand/middleware';
+import { viewFlagActive } from './view-flag';
 
 // zustand `persist` + createJSONStorage stringifies and writes the whole
 // partialized state on every `set()`. For big stores (agents, ontology,
@@ -86,6 +87,8 @@ export function createDeferredStorage<S>(
 ): PersistStorage<S> {
   return {
     getItem: (name) => {
+      // During a view ("View as") nothing the browser kept is read, and nothing is kept.
+      if (viewFlagActive()) return null;
       const queued = pending.get(name);
       // Round-trip so a rehydrate sees exactly what will be stored.
       const raw = queued ? JSON.stringify(queued.value) : resolve(backend)?.getItem(name) ?? null;
@@ -97,6 +100,7 @@ export function createDeferredStorage<S>(
       }
     },
     setItem: (name, value) => {
+      if (viewFlagActive()) return;
       const target = resolve(backend);
       if (!target) return;
       pending.set(name, { value, backend: target });

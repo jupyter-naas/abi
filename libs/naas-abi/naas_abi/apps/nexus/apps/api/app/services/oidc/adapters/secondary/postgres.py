@@ -166,6 +166,7 @@ class OidcSessionSecondaryAdapterPostgres(OidcSessionPersistencePort):
                     func.lower(UserModel.email) == email.lower(),
                     UserModel.principal_id.is_(None),
                     UserModel.idp_issuer.is_(None),
+                    UserModel.deleted_at.is_(None),
                 )
             )
         ).scalar_one_or_none()
@@ -176,7 +177,11 @@ class OidcSessionSecondaryAdapterPostgres(OidcSessionPersistencePort):
             (
                 await self.db.execute(
                     select(UserModel)
-                    .where(UserModel.principal_id.is_(None), UserModel.idp_issuer.is_(None))
+                    .where(
+                        UserModel.principal_id.is_(None),
+                        UserModel.idp_issuer.is_(None),
+                        UserModel.deleted_at.is_(None),
+                    )
                     .order_by(UserModel.email)
                 )
             )

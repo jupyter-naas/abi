@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { Blocks, FileCog, Package, SlidersHorizontal } from 'lucide-react';
+import { FileCog, Package, SlidersHorizontal } from 'lucide-react';
 import {
   SettingsEmpty,
   SettingsNotice,
@@ -10,7 +9,6 @@ import {
 } from '@/components/settings/settings-ui';
 import { authFetch } from '@/stores/auth';
 import { featureLabel } from '@/lib/feature-labels';
-import { orgModulesPath } from '@/app/organizations/[orgId]/settings/lib/nav';
 import { useWorkspaceResources } from '@/hooks/use-workspace-resources';
 import { describeModuleResources } from '@/lib/workspace-resources';
 
@@ -23,9 +21,7 @@ interface SeedRow {
 
 interface WorkspaceConfiguration {
   organization_id: string | null;
-  /** Whether the caller may change the workspace's set (Modules & features). */
-  can_edit_features: boolean;
-  /** The workspace's effective features. */
+  /** The deployment's enabled features. */
   features: string[];
   seeds: SeedRow[];
 }
@@ -46,11 +42,11 @@ const SEED_KIND_LABELS: Record<string, string> = {
 const byLabel = (a: string, b: string) => featureLabel(a).localeCompare(featureLabel(b));
 
 /**
- * Features, Modules and Config preseeding (Settings > General, admins). The features and the
- * modules are the workspace's set (its own within its organization's), read-only here: it is
- * edited on the organization's Modules & features page, linked when the caller may change it.
- * Who may use what is on Roles & permissions; turning each resource on or off for everyone is
- * on the Features pages (Agents, Apps, Workflows). The seeds are owned by
+ * Features, Modules and Config preseeding (Settings > General, admins), read-only. Features are
+ * the deployment's enabled ones (`/configuration`); Modules are what you may use here
+ * (`/resources`: each module with the agents, apps, workflows and pipelines IAM lets you use).
+ * Who may use what is decided by policies alone, on Roles & permissions: there is no workspace
+ * set and no on/off switch. The seeds are owned by
  * ``nexus_config.organizations[].workspaces[]`` in the config and follow it after an API restart.
  */
 export function WorkspaceConfiguration({ workspaceId }: { workspaceId: string }) {
@@ -85,10 +81,6 @@ export function WorkspaceConfiguration({ workspaceId }: { workspaceId: string })
   }, [workspaceId]);
 
   const features = [...(config?.features ?? [])].sort(byLabel);
-  const modulesHref =
-    config?.can_edit_features && config.organization_id
-      ? orgModulesPath(config.organization_id, workspaceId)
-      : null;
 
   return (
     <>
@@ -101,19 +93,7 @@ export function WorkspaceConfiguration({ workspaceId }: { workspaceId: string })
             Features
           </span>
         }
-        description={
-          modulesHref
-            ? 'What this workspace has. Its modules and features are set in the organization’s Modules & features.'
-            : 'What this workspace has. Organization owners and admins set its modules and features.'
-        }
-        actions={
-          modulesHref ? (
-            <Link href={modulesHref} className="workspace-general-modules-link">
-              <Blocks size={14} />
-              Modules & features
-            </Link>
-          ) : null
-        }
+        description="The features this deployment enables. Who may use each one here is decided by policies, on Roles & permissions."
       >
         {!config ? (
           !error && <p className="text-sm text-muted-foreground">Loading features...</p>
@@ -142,14 +122,14 @@ export function WorkspaceConfiguration({ workspaceId }: { workspaceId: string })
             Modules
           </span>
         }
-        description="The modules this workspace has, with their agents, apps, workflows and pipelines in its set."
+        description="What you may use here: each module with the agents, apps, workflows and pipelines you may use."
       >
         {resourcesStatus === 'loading' ? (
           <p className="text-sm text-muted-foreground">Loading modules...</p>
         ) : !resources ? (
-          <p className="text-sm text-muted-foreground">The workspace&rsquo;s modules could not be read.</p>
+          <p className="text-sm text-muted-foreground">What you may use here could not be read.</p>
         ) : resources.modules.length === 0 ? (
-          <span className="text-sm text-muted-foreground">No modules.</span>
+          <span className="text-sm text-muted-foreground">No module you may use here.</span>
         ) : (
           <ul className="workspace-general-modules">
             {resources.modules.map((entry) => (

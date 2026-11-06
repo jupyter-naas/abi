@@ -168,3 +168,30 @@ class IdentitySecondaryAdapterNATSClient(NatsRPCClient, IIdentityService):
             if response.HasField("user")
             else None
         )
+
+    def update_provisioned_user(
+        self,
+        provider: str,
+        subject: str,
+        *,
+        name: str | None = None,
+        disabled: bool | None = None,
+    ) -> ProvisionedUser | None:
+        response = self._request(
+            "update_provisioned_user",
+            provider=provider,
+            subject=subject,
+            name=name,
+            disabled=disabled,
+        )
+        return (
+            codec.provisioned_from_pb(response.user)
+            if response.HasField("user")
+            else None
+        )
+
+    def delete_provisioned_user(self, provider: str, subject: str) -> bool:
+        response = self._request(
+            "delete_provisioned_user", provider=provider, subject=subject
+        )
+        return response.deleted

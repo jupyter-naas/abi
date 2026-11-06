@@ -1499,7 +1499,7 @@ def _turn_copy(template_agent: Any, thread_id: str | None) -> Any | None:
 
 
 def _prune_inprocess_subagents_for_roster(agent: Any, allowed: frozenset[str]) -> None:
-    """Drop sub-agents absent from the caller's enabled workspace roster."""
+    """Drop sub-agents the caller may not use (absent from ``allowed``)."""
     from naas_abi.agents.feature.registry import spec_for_class_name
 
     subagents = getattr(agent, "_agents", None) or []

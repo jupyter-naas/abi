@@ -3,8 +3,14 @@
  * calls it before anything else.
  */
 
-/** Old sections and the section that replaced them: Access became Roles & permissions. */
-const MOVED_SECTIONS = new Map<string, string>([['access', 'roles']]);
+/**
+ * Old sections and the section that replaced them: Access became Roles & permissions, and
+ * Modules & features (the organization's set, removed) is decided there by policies.
+ */
+const MOVED_SECTIONS = new Map<string, string>([
+  ['access', 'roles'],
+  ['modules', 'roles'],
+]);
 
 const ORG_SETTINGS_SECTION = /^\/organizations\/([^/]+)\/settings\/([^/?#]+)(?:\/.*)?$/;
 

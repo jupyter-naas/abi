@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Simulation } from '@/lib/iam-admin/types';
 import { mount, type Mounted } from '@/lib/testing/mount';
-import { ada, catalogsView, fakeApi } from '../access-fixtures';
+import { WS, ada, catalogsView, fakeApi } from '../access-fixtures';
 import { headline, reasonText, statementFacts } from './simulator-model';
 import { SimulatorView } from './simulator';
 
@@ -20,7 +20,7 @@ const denied: Simulation = {
   allowed: false,
   reason: 'explicit_deny',
   action: 'triple_store:DropGraph',
-  resource: 'abi:acme:ws-1:triple_store:graph/main',
+  resource: `${WS}/triple_store:graph/main`,
   principal: ada,
   statement: {
     side: 'actor',
@@ -31,7 +31,7 @@ const denied: Simulation = {
     statement_index: 1,
     sid: 'NoDrop',
     attachment_id: 'att_4',
-    scope: 'abi:acme:ws-1',
+    scope: WS,
     via_group: 'grp_ops',
     statement: { sid: 'NoDrop', effect: 'Deny', actions: ['triple_store:DropGraph'], resources: ['*'] },
   },
@@ -48,7 +48,7 @@ async function ask(result: Simulation | Error) {
   await mounted.flush();
   await mounted.type(field('Principal'), ada.id);
   await mounted.type(field('Action'), 'triple_store:DropGraph');
-  await mounted.type(field('Resource'), 'abi:acme:ws-1:triple_store:graph/main');
+  await mounted.type(field('Resource'), `${WS}/triple_store:graph/main`);
   await mounted.click(button('Simulate') ?? null);
   await mounted.flush();
   return simulate;
@@ -58,9 +58,7 @@ describe('simulator wording', () => {
   it('says each reason in a sentence', () => {
     expect(reasonText('implicit_deny')).toContain('No statement allows it');
     expect(reasonText('explicit_deny')).toContain('explicit Deny always wins');
-    expect(reasonText('outside_set')).toBe(
-      'The organisation’s or workspace’s set leaves it out: a set bounds every user’s Allow on module scopes and features.',
-    );
+    expect(reasonText('sealed')).toContain('only its owner opens it');
     expect(headline({ allowed: true })).toBe('Allowed');
   });
 
@@ -80,7 +78,7 @@ describe('SimulatorView', () => {
     expect(simulate).toHaveBeenCalledWith({
       principal_id: ada.id,
       action: 'triple_store:DropGraph',
-      resource: 'abi:acme:ws-1:triple_store:graph/main',
+      resource: `${WS}/triple_store:graph/main`,
     });
 
     const result = document.querySelector('[aria-label="Decision"]');

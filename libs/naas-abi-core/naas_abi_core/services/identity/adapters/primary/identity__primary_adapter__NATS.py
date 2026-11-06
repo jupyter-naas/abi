@@ -191,3 +191,22 @@ class IdentityPrimaryAdapterNATS(ServicePrimary):
         if user is None:
             return pb.FindProvisionedUserResponse()
         return pb.FindProvisionedUserResponse(user=codec.provisioned_to_pb(user))
+
+    def _call_update_provisioned_user(
+        self, req: pb.UpdateProvisionedUserRequest
+    ) -> pb.UpdateProvisionedUserResponse:
+        user = self._identity.update_provisioned_user(
+            req.provider,
+            req.subject,
+            name=_opt(req, "name"),
+            disabled=_opt(req, "disabled"),
+        )
+        if user is None:
+            return pb.UpdateProvisionedUserResponse()
+        return pb.UpdateProvisionedUserResponse(user=codec.provisioned_to_pb(user))
+
+    def _call_delete_provisioned_user(
+        self, req: pb.DeleteProvisionedUserRequest
+    ) -> pb.DeleteProvisionedUserResponse:
+        deleted = self._identity.delete_provisioned_user(req.provider, req.subject)
+        return pb.DeleteProvisionedUserResponse(deleted=deleted)

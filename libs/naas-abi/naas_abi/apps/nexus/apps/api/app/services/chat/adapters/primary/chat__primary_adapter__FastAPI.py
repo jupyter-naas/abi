@@ -63,6 +63,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.chat_ingestion_worker import
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import check_ollama_status
+from naas_abi.apps.nexus.apps.api.app.services.view_as.active import viewing
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -103,6 +104,8 @@ async def list_conversations(
         workspace=workspace_id,
         id=(current_user.id, "-"),
     )
+    if viewing():
+        return []  # the person's conversations are private to them
     records = await chat_service.list_conversations(
         user_id=current_user.id,
         workspace_id=workspace_id,
@@ -307,6 +310,8 @@ async def get_ingestion_job_status(
     current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
 ) -> ChatIngestionJobStatusResponse:
+    if viewing():
+        raise HTTPException(status_code=404, detail="Ingestion job not found")
     jobs = ChatIngestionJobService(db)
     job = await jobs.get_job_for_user(job_id=job_id, user_id=current_user.id)
     if job is None:

@@ -12,8 +12,10 @@ here (``engine/AGENTS.md``, "The call context"):
   token (``abi:delegated:agent``) carries it. The ``Abi-On-Behalf-Of`` header
   of the earlier stage is gone, and a request that carries one is refused (a
   header naming a user can only narrow a call, so dropping it would widen it);
-* the trace id and the target workspace come from the request's ``context``
-  envelope: request data, not identity.
+* the trace id and the container of the call come from the request's
+  ``context`` envelope: request data, not identity. A request of SDK 0.2 that
+  names a workspace (``workspace_id``) and no container is refused
+  (``WorkspaceIdRefusedError``): it is never placed wider than before.
 
 ``CallContext.principal_id`` and ``tenant_id`` in the request are never read.
 """
@@ -106,16 +108,31 @@ def refusal(exc: InvalidServiceTokenError, invalid_token: str) -> str:
     return invalid_token
 
 
+class WorkspaceIdRefusedError(ValueError):
+    """A call of SDK 0.2 naming a workspace: this engine takes the container of
+    a call instead (``services/iam/AGENTS.md``, "Placements")."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "This engine takes the container of a call, not a workspace id: "
+            "upgrade the SDK (CallContext.workspace_id is refused)"
+        )
+
+
 def for_request(caller: CallContext, request: Any) -> CallContext:
-    """``caller`` with the trace id and target workspace of ``request``'s
-    ``context`` envelope, when it has one."""
+    """``caller`` with the trace id and the container of ``request``'s
+    ``context`` envelope, when it has one. ``WorkspaceIdRefusedError`` for an
+    envelope that names a workspace and no container (SDK 0.2)."""
     envelope = _envelope(request)
     if envelope is None:
         return caller
+    container = getattr(envelope, "container", "")
+    if envelope.workspace_id and not container:
+        raise WorkspaceIdRefusedError()
     return replace(
         caller,
         trace_id=envelope.trace_id or caller.trace_id,
-        workspace_id=envelope.workspace_id or caller.workspace_id,
+        container=container or caller.container,
     )
 
 

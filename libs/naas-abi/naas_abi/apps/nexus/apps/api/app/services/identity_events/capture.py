@@ -11,7 +11,7 @@ to SQLAlchemy ORM sessions rather than instrumenting each endpoint:
 - ``after_rollback``: they are dropped, so nothing that did not happen is logged.
 
 The actor (``created_by``) comes from the request-scoped identity ContextVars;
-``EventService.publish()`` stamps ``actor_user_id`` / ``actor_workspace_id`` /
+``EventService.publish()`` stamps ``actor_user_id`` / ``actor_container`` /
 ``triggered_via`` from the same ContextVars.
 
 Bulk ``update()`` / ``delete()`` statements bypass the ORM, so they cannot be
@@ -33,7 +33,6 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     AppConfigModel,
     OrganizationMemberModel,
     OrganizationModel,
-    OrganizationRoleFeaturesModel,
     UserModel,
     WorkspaceMemberModel,
     WorkspaceModel,
@@ -54,7 +53,6 @@ _KINDS: dict[type, str] = {
     UserModel: "user",
     OrganizationModel: "organization",
     OrganizationMemberModel: "organization_member",
-    OrganizationRoleFeaturesModel: "role_features",
     WorkspaceModel: "workspace",
     WorkspaceMemberModel: "workspace_member",
     AppConfigModel: "app",
@@ -234,20 +232,6 @@ def build_identity_event(
             label=EVENT_CLASSES[name]._name,
             target_workspace_id=workspace_id,
             **links,
-            **common,
-        )
-
-    if kind == "role_features":
-        organization_id = values["organization_id"]
-        try:
-            roles = sorted(json.loads(values.get("role_baseline") or "{}"))
-        except (TypeError, ValueError):
-            roles = []
-        return EVENT_CLASSES["ConfigureOrganizationRoleFeatures"](
-            label=EVENT_CLASSES["ConfigureOrganizationRoleFeatures"]._name,
-            target_organization_id=organization_id,
-            updates=[str(iris.feature_policy_iri(role, organization_id)) for role in roles]
-            or [str(iris.organization_profile_iri(organization_id))],
             **common,
         )
 

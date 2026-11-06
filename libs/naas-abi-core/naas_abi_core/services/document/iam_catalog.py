@@ -15,6 +15,7 @@ from naas_abi_core.services.iam.catalog import (
     service_action,
 )
 from naas_abi_core.services.iam.IAMPorts import Seal
+from naas_abi_core.services.iam.names import anywhere
 
 SERVICE = "document"
 SUBJECT_PREFIX = "abi.svc.document.v1"
@@ -31,11 +32,11 @@ CATALOG = ActionCatalog(
     service=SERVICE,
     version=1,
     resource_types=(
-        ResourceType(NAMESPACE, id="path", container=True, description="A namespace."),
+        ResourceType(NAMESPACE, id="path", id_prefix=True, description="A namespace."),
         ResourceType(
             COLLECTION,
             id="path",
-            container=True,
+            id_prefix=True,
             description="A collection, in its namespace.",
         ),
         ResourceType(DOCUMENT, id="path", description="A document, in its collection."),
@@ -67,7 +68,14 @@ CATALOG = ActionCatalog(
 # Sealed to the built-in IdP, wherever a placement puts it.
 IDP_NAMESPACE = "idp"
 SEALS: tuple[Seal, ...] = (
-    Seal(f"abi:*:*:document:namespace/{IDP_NAMESPACE}", "idp", module_id="idp"),
-    Seal(f"abi:*:*:document:collection/{IDP_NAMESPACE}/*", "idp", module_id="idp"),
-    Seal(f"abi:*:*:document:document/{IDP_NAMESPACE}/*", "idp", module_id="idp"),
+    # Sealed at any placement: the platform's and every container's.
+    *(
+        Seal(pattern, "idp", module_id="idp")
+        for rest in (
+            f"document:namespace/{IDP_NAMESPACE}",
+            f"document:collection/{IDP_NAMESPACE}/*",
+            f"document:document/{IDP_NAMESPACE}/*",
+        )
+        for pattern in anywhere(rest)
+    ),
 )

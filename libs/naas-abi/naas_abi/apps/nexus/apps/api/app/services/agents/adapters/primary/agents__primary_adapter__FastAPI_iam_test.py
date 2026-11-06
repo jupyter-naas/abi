@@ -1,4 +1,4 @@
-"""Who may list, sync, change and read agents: IAM decides, on the real router."""
+"""Who may list, sync, change and read agents: IAM decides alone, on the real router."""
 
 from __future__ import annotations
 
@@ -16,13 +16,14 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
     get_current_user_required,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 
 APPS = "naas_abi.agents.AppsAgent/AppsAgent"
 FILES = "naas_abi.agents.FilesAgent/FilesAgent"
 # Two agents of one module, P: ``agent/acme.p/A`` and ``agent/acme.p/B``.
 AGENT_A = "acme.p.agents.A/AAgent"
 AGENT_B = "acme.p.agents.B/BAgent"
-WS = "abi:org-1:ws-1"
+WS = workspace_container("org-1", "ws-1")
 
 
 def _agent(agent_id: str, workspace: str = "ws-1", class_name: str | None = None) -> AgentRecord:
@@ -32,7 +33,6 @@ def _agent(agent_id: str, workspace: str = "ws-1", class_name: str | None = None
         workspace_id=workspace,
         name=agent_id,
         description="",
-        enabled=True,
         class_name=class_name,
         module_path=None,
         system_prompt=None,
@@ -116,17 +116,17 @@ def _scope(module: str, name: str) -> ModuleScope:
 
 @pytest.mark.asyncio
 async def test_every_role_of_the_workspace_reads_the_roster_and_a_stranger_does_not(world) -> None:
-    # Zero trust: viewers and members see no module's agent, naas_abi's own
-    # included, until a policy grants it; admins and owners see them all.
-    for role in ("viewer", "member"):
+    # Zero trust: no role sees a module's agent, naas_abi's own included, until
+    # a policy grants it: an admin or owner of a workspace with no policy lists
+    # the agents the workspace built alone.
+    for role in ("viewer", "member", "admin", "owner"):
         async with world.as_(role) as http:
             response = await http.get("/?workspace_id=ws-1")
             assert response.status_code == 200, role
-            assert {a["id"] for a in response.json()} == {"plain"}
-    for role in ("admin", "owner"):
-        async with world.as_(role) as http:
-            response = await http.get("/?workspace_id=ws-1")
-            assert {a["id"] for a in response.json()} == {"plain", "apps", "files", "a", "b"}
+            assert {a["id"] for a in response.json()} == {"plain"}, role
+            assert all("enabled" not in a for a in response.json()), role
+            for module_agent in ("apps", "files", "a", "b"):
+                assert (await http.get(f"/{module_agent}")).status_code == 404, role
     async with world.as_("stranger") as http:
         assert (await http.get("/?workspace_id=ws-1")).status_code == 403
         assert (await http.get("/plain")).status_code == 403
@@ -155,9 +155,10 @@ async def test_an_office_agent_follows_the_features_the_caller_holds(world) -> N
         assert "apps" not in ids and "files" in ids
         assert (await http.get("/apps")).status_code == 404
         assert (await http.get("/files")).status_code == 200
+    world.team.allow_scope("admin", _scope("naas_abi", "AppsAgent"), WS)
     async with world.as_("admin") as http:
         ids = {a["id"] for a in (await http.get("/?workspace_id=ws-1")).json()}
-        assert {"apps", "files"} <= ids
+        assert "apps" in ids
         assert (await http.get("/apps")).status_code == 200
 
 
@@ -174,7 +175,7 @@ async def test_an_agent_of_another_workspace_is_out_of_reach(world) -> None:
 async def test_a_viewer_cannot_change_agents(world) -> None:
     async with world.as_("viewer") as http:
         assert (await http.post("/", json={"workspace_id": "ws-1", "name": "n"})).status_code == 403
-        assert (await http.patch("/plain", json={"enabled": False})).status_code == 403
+        assert (await http.patch("/plain", json={"name": "x"})).status_code == 403
         assert (await http.delete("/plain")).status_code == 403
     assert world.agents.calls == []
 
@@ -183,7 +184,7 @@ async def test_a_viewer_cannot_change_agents(world) -> None:
 async def test_changing_agents_needs_the_agents_section_and_a_writer(world) -> None:
     # A member writes, but the agents settings section is off for members.
     async with world.as_("member") as http:
-        refused = await http.patch("/plain", json={"enabled": False})
+        refused = await http.patch("/plain", json={"name": "x"})
         assert refused.status_code == 403
         assert "not available" in refused.json()["detail"]
     for role in ("admin", "owner"):
@@ -191,7 +192,7 @@ async def test_changing_agents_needs_the_agents_section_and_a_writer(world) -> N
             assert (
                 await http.post("/", json={"workspace_id": "ws-1", "name": "n"})
             ).status_code == 200
-            assert (await http.patch("/plain", json={"enabled": False})).status_code == 200
+            assert (await http.patch("/plain", json={"name": "x"})).status_code == 200
     assert world.agents.calls == ["create", "update", "create", "update"]
 
 
@@ -232,7 +233,7 @@ async def test_a_turn_in_a_fresh_workspace_seeds_its_roster_and_runs_for_an_owne
     team, monkeypatch
 ) -> None:
     """A workspace whose roster no listing reconciled has no rows: the turn seeds
-    it, so an owner (who holds every module scope) is not refused every agent."""
+    it, so an owner a policy grants the agent is not refused it."""
     from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import bind_usable_agents
     from naas_abi_core.services.agent.context import agent_workspace_enabled_class_names
 
@@ -251,6 +252,7 @@ async def test_a_turn_in_a_fresh_workspace_seeds_its_roster_and_runs_for_an_owne
     monkeypatch.setattr(adapter, "_discovered_remote_agents", no_remote)
     monkeypatch.setattr(adapter, "_get_agent_class_registry", lambda: {})
     monkeypatch.setattr(adapter, "_agent_class_modules", {AGENT_A: "acme.p"})
+    team.allow_scope("owner", _scope("acme.p", "AAgent"), WS)
     token = agent_workspace_enabled_class_names.set(None)
     try:
         allowed = await bind_usable_agents(agents, "owner", "ws-1")
@@ -263,56 +265,148 @@ async def test_a_turn_in_a_fresh_workspace_seeds_its_roster_and_runs_for_an_owne
         agent_workspace_enabled_class_names.reset(token)
 
 
-# -- the workspace's set and what it turned off ------------------------------------------
+# -- IAM alone: no set, no switch ---------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_a_workspace_lists_only_the_module_agents_of_its_set(world) -> None:
-    world.team.platform_admin("root")
-    world.team.put_set("org-1", "ws-1", modules=["agent/acme.p/AAgent"])
-    for who in ("admin", "owner", "root"):
-        async with world.as_(who) as http:
-            ids = {a["id"] for a in (await http.get("/?workspace_id=ws-1")).json()}
-            # An agent the workspace built is its own, never a module's.
-            assert ids == {"plain", "a"}, who
-            assert (await http.get("/b")).status_code == 404, who
+async def test_the_roster_is_exactly_what_iam_allows(world) -> None:
+    """A policy granting a module's agents lists them all; a Deny is how a
+    workspace stops offering one: gone from the roster and from its id."""
+    from naas_abi_core.engine.call_context import as_service_account
 
-
-@pytest.mark.asyncio
-async def test_no_module_agent_outside_the_set_is_turned_on_or_added(world) -> None:
-    world.team.put_set("org-1", "ws-1", modules=["acme.p"])
-    async with world.as_("admin") as http:
-        refused = await http.patch("/apps", json={"enabled": True})
-        assert refused.status_code == 403
-        assert "not in the workspace's set" in refused.json()["detail"]
-        added = {"workspace_id": "ws-1", "name": "n", "class_name": FILES, "provider": "abi"}
-        assert (await http.post("/", json=added)).status_code == 403
-        # Off, always; one of the set, on; one the workspace builds, added.
-        assert (await http.patch("/apps", json={"enabled": False})).status_code == 200
-        assert (await http.patch("/a", json={"enabled": True})).status_code == 200
-        assert (await http.post("/", json={"workspace_id": "ws-1", "name": "n"})).status_code == 200
-
-
-@pytest.mark.asyncio
-async def test_an_agent_turned_off_is_listed_to_who_turns_it_on_alone(world) -> None:
-    from naas_abi.apps.nexus.apps.api.app.services.agents.visibility import AgentsVisibility
-    from naas_abi.apps.nexus.apps.api.app.services.visibility.testing import (
-        visibility_installed,
+    world.team.allow(
+        "admin",
+        ["module:UseAgent"],
+        ["${scope}/module:agent/acme.p/*", "${scope}/module:agent/naas_abi/*"],
+        WS,
     )
+    async with world.as_("admin") as http:
+        ids = {a["id"] for a in (await http.get("/?workspace_id=ws-1")).json()}
+        assert ids == {"plain", "apps", "files", "a", "b"}
+    with as_service_account("engine"):
+        deny = world.team.iam.create_policy(
+            "no-b",
+            {
+                "version": "2026-10-13",
+                "statements": [
+                    {
+                        "effect": "Deny",
+                        "actions": ["module:UseAgent"],
+                        "resources": ["${scope}/module:agent/acme.p/BAgent"],
+                    }
+                ],
+            },
+        )
+        world.team.iam.attach_policy(deny.id, world.team.principal("admin"), WS)
+    async with world.as_("admin") as http:
+        ids = {a["id"] for a in (await http.get("/?workspace_id=ws-1")).json()}
+        assert ids == {"plain", "apps", "files", "a"}
+        assert (await http.get("/b")).status_code == 404
 
+
+@pytest.mark.asyncio
+async def test_the_on_off_switch_is_gone(world) -> None:
+    world.team.allow_scope("admin", _scope("acme.p", "AAgent"), WS)
+    async with world.as_("admin") as http:
+        # ``enabled`` is no field any more: a body naming it changes nothing.
+        assert (await http.patch("/a", json={"enabled": False})).status_code == 200
+        ids = {a["id"] for a in (await http.get("/?workspace_id=ws-1")).json()}
+        assert "a" in ids
+        # A module's agent is added without a set to check.
+        added = {"workspace_id": "ws-1", "name": "n", "class_name": FILES, "provider": "abi"}
+        assert (await http.post("/", json=added)).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_a_remote_agent_is_listed_while_its_module_serves_it(world, monkeypatch) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.agents.remote.port import REMOTE_PROVIDER
+
+    remote = _agent("remote", class_name="acme.r/RAgent")
+    remote.provider = REMOTE_PROVIDER
+    world.agents.records[remote.id] = remote
+    world.team.allow_scope("admin", _scope("acme.r", "RAgent"), WS)
+    async with world.as_("admin") as http:
+        # Discovery lists nothing: its module is not READY.
+        ids = {a["id"] for a in (await http.get("/?workspace_id=ws-1")).json()}
+        assert "remote" not in ids
+
+    async def served():
+        return [SimpleNamespace(key="acme.r/RAgent")]
+
+    monkeypatch.setattr(adapter, "_discovered_remote_agents", served)
+    async with world.as_("admin") as http:
+        ids = {a["id"] for a in (await http.get("/?workspace_id=ws-1")).json()}
+        assert "remote" in ids
+
+
+# -- A chat turn picks among what the listing shows ---------------------------------------
+
+
+def _deny_use_agent(team, user: str, agent_id: str) -> None:
+    from naas_abi_core.engine.call_context import as_service_account
+    from naas_abi_core.services.iam.policy import POLICY_VERSION
+
+    with as_service_account("engine"):
+        deny = team.iam.create_policy(
+            f"no-{agent_id}",
+            {
+                "version": POLICY_VERSION,
+                "statements": [
+                    {
+                        "effect": "Deny",
+                        "actions": ["nexus:UseAgent"],
+                        "resources": [f"${{scope}}/nexus:agent/{agent_id}"],
+                    }
+                ],
+            },
+        )
+        team.iam.attach_policy(deny.id, team.principal(user), WS)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("requested", [None, "stale-id", "plain"])
+async def test_a_turn_never_falls_back_to_a_built_agent_the_caller_may_not_use(
+    world, requested
+) -> None:
+    """The workspace's default, and only usable-looking, agent is one it built
+    and the caller is denied: a turn naming no agent, a stale id or that agent
+    picks none, as the listing shows none."""
+    world.agents.records["plain"].is_default = True
+    _deny_use_agent(world.team, "member", "plain")
+    async with world.as_("member") as http:
+        assert (await http.get("/?workspace_id=ws-1")).json() == []
+    roster, _ = await adapter.usable_roster(world.agents, "member", "ws-1")
+    assert roster == []
+    assert adapter.pick_workspace_chat_agent_id(roster, requested) is None
+    # Another member, not denied, still gets it as the default.
+    roster, _ = await adapter.usable_roster(world.agents, "admin", "ws-1")
+    assert adapter.pick_workspace_chat_agent_id(roster, requested) == "plain"
+
+
+@pytest.mark.asyncio
+async def test_a_turn_falls_back_past_a_denied_default_to_an_agent_the_caller_holds(
+    world,
+) -> None:
+    world.agents.records["plain"].is_default = True
+    _deny_use_agent(world.team, "member", "plain")
     world.team.allow_scope("member", _scope("acme.p", "AAgent"), WS)
-    world.agents.records["a"].enabled = False
-    world.agents.records["plain"].enabled = False
+    roster, _ = await adapter.usable_roster(world.agents, "member", "ws-1")
+    assert [agent.id for agent in roster] == ["a"]
+    for requested in (None, "stale-id", "plain", "b"):
+        assert adapter.pick_workspace_chat_agent_id(roster, requested) == "a"
 
-    async def rows(workspace_id):
-        return await world.agents.list_workspace_agents(workspace_id)
 
-    with visibility_installed({"agent": AgentsVisibility(rows)}):
-        async with world.as_("member") as http:
-            assert (await http.get("/?workspace_id=ws-1")).json() == []
-            assert (await http.get("/a")).status_code == 404
-            assert (await http.get("/plain")).status_code == 404
-        async with world.as_("admin") as http:
-            listed = {a["id"]: a["enabled"] for a in (await http.get("/?workspace_id=ws-1")).json()}
-            assert listed["a"] is False and listed["plain"] is False
-            assert (await http.get("/a")).status_code == 200
+@pytest.mark.asyncio
+async def test_a_turn_does_not_pick_a_remote_agent_whose_module_is_not_ready(
+    world, monkeypatch
+) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.agents.remote.port import REMOTE_PROVIDER
+
+    remote = _agent("remote", class_name="acme.r/RAgent")
+    remote.provider = REMOTE_PROVIDER
+    world.agents.records.pop("plain")
+    world.agents.records[remote.id] = remote
+    world.team.allow_scope("member", _scope("acme.r", "RAgent"), WS)
+    roster, _ = await adapter.usable_roster(world.agents, "member", "ws-1")
+    assert roster == []
+    assert adapter.pick_workspace_chat_agent_id(roster, None) is None

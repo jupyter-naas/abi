@@ -222,3 +222,32 @@ message FindProvisionedUserResponse {
   abi.common.v1.CallError error = 1;
   optional ProvisionedUser user = 2;
 }
+
+// -- the platform's Users page: an account at the provider, changed or deleted ------------
+
+// Rename the provider's user `subject`, or disable (disabled: true) or enable
+// their sign-in there; an absent field is left as it is. `user` is absent when
+// the provider has no such user. UNIMPLEMENTED for provisioning: none.
+message UpdateProvisionedUserRequest {
+  abi.common.v1.CallContext context = 1;
+  string provider = 2;
+  string subject = 3;
+  optional string name = 4;
+  optional bool disabled = 5;
+}
+message UpdateProvisionedUserResponse {
+  abi.common.v1.CallError error = 1;
+  optional ProvisionedUser user = 2;
+}
+
+// Delete the provider's user `subject`: `deleted` is false when it had none.
+// UNIMPLEMENTED for provisioning: none.
+message DeleteProvisionedUserRequest {
+  abi.common.v1.CallContext context = 1;
+  string provider = 2;
+  string subject = 3;
+}
+message DeleteProvisionedUserResponse {
+  abi.common.v1.CallError error = 1;
+  bool deleted = 2;
+}

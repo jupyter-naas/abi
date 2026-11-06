@@ -17,7 +17,7 @@ const entry = (over: Partial<AuditEntry> = {}): AuditEntry => ({
   actor: 'Ada',
   operation: 'attach_policy',
   resource_id: 'builtin.admin/usr_2',
-  detail: 'at abi:acme:-',
+  detail: 'at abi:nexus:organization/acme',
   phase: 'succeeded',
   error: '',
   ...over,

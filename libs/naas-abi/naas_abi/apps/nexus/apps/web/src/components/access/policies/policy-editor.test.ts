@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { IamAdminError } from '@/lib/iam-admin/api';
-import type { PolicyDocument, PolicyValidation } from '@/lib/iam-admin/types';
+import type { PolicyDocument, PolicyValidation, PublishersView } from '@/lib/iam-admin/types';
 import { mount, type Mounted } from '@/lib/testing/mount';
-import { catalogsView, fakeApi, managedPolicy, readerPolicy } from '../access-fixtures';
+import { WS, catalogsView, fakeApi, managedPolicy, publishedType, publishersOf, readerPolicy, resourcePage, wsScope } from '../access-fixtures';
 import { PolicyEditor } from './policy-editor';
 
 let mounted: Mounted | null = null;
@@ -32,23 +32,28 @@ function api(over: Record<string, unknown> = {}) {
         return Promise.resolve(valid(readerPolicy.document));
       }
     }),
+    publishers: vi.fn().mockResolvedValue(publishersOf(catalogsView)),
     ...over,
   });
 }
 
-async function open(props: Partial<Parameters<typeof PolicyEditor>[0]> = {}) {
+const tab = (label: string) => [...document.querySelectorAll('[role="tab"]')].find((t) => t.textContent === label) ?? null;
+
+/** The editor, in the Statements view unless ``builder``: a new policy opens in the builder. */
+async function open(props: Partial<Parameters<typeof PolicyEditor>[0]> = {}, { builder = false } = {}) {
   const onSaved = vi.fn();
   const onCancel = vi.fn();
   mounted = await mount(PolicyEditor, {
     api: api(),
     policy: null,
-    catalogs: catalogsView,
     onSaved,
     onCancel,
     validationDelayMs: 0,
     ...props,
   });
   await mounted.flush();
+  const statements = tab('Statements');
+  if (!builder && statements?.getAttribute('aria-selected') === 'false') await mounted.click(statements);
   return { onSaved, onCancel };
 }
 
@@ -76,11 +81,11 @@ describe('PolicyEditor autocomplete', () => {
     await mounted!.click(button('Add statement') ?? null);
     await mounted!.type(field('Add to actions of statement 1'), 'triple_store:Query');
     await mounted!.click(document.querySelector('[role="option"] button'));
-    await mounted!.type(field('Add to resources of statement 1'), 'abi:acme:ws-1:');
+    await mounted!.type(field('Add to resources of statement 1'), `${WS}/t`);
 
-    expect(suggestions()).toEqual(['abi:acme:ws-1:triple_store:']);
+    expect(suggestions()).toEqual([`${WS}/triple_store:`]);
     await mounted!.click(document.querySelector('[role="option"] button'));
-    expect((field('Add to resources of statement 1') as HTMLInputElement).value).toBe('abi:acme:ws-1:triple_store:');
+    expect((field('Add to resources of statement 1') as HTMLInputElement).value).toBe(`${WS}/triple_store:`);
   });
 });
 
@@ -95,8 +100,8 @@ describe('PolicyEditor document', () => {
     await mounted!.type(field('Sid of statement 1'), 'Read');
     await mounted!.type(field('Add to actions of statement 1'), 'triple_store:Query');
     await mounted!.click(document.querySelector('[role="option"] button'));
-    await mounted!.type(field('Add to resources of statement 1'), 'abi:acme:ws-1:triple_store:graph/*');
-    await mounted!.type(field('Add to resources of statement 1'), 'abi:acme:ws-1:triple_store:graph/*');
+    await mounted!.type(field('Add to resources of statement 1'), `${WS}/triple_store:graph/*`);
+    await mounted!.type(field('Add to resources of statement 1'), `${WS}/triple_store:graph/*`);
     field('Add to resources of statement 1')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     await mounted!.flush();
     await mounted!.flush();
@@ -113,7 +118,7 @@ describe('PolicyEditor document', () => {
             sid: 'Read',
             effect: 'Allow',
             actions: ['triple_store:Query'],
-            resources: ['abi:acme:ws-1:triple_store:graph/*'],
+            resources: [`${WS}/triple_store:graph/*`],
           },
         ],
       },
@@ -193,7 +198,7 @@ describe('PolicyEditor validation', () => {
 describe('PolicyEditor text view', () => {
   it('round-trips the document through the text view', async () => {
     await open({ policy: readerPolicy });
-    await mounted!.click([...document.querySelectorAll('[role="tab"]')][1]);
+    await mounted!.click(tab('YAML / JSON'));
     const text = (field('Policy document') as HTMLTextAreaElement).value;
     expect(JSON.parse(text)).toEqual(readerPolicy.document);
 
@@ -202,7 +207,7 @@ describe('PolicyEditor text view', () => {
       statements: [{ effect: 'Deny', actions: ['triple_store:DropGraph'], resources: ['*'] }],
     });
     await mounted!.type(field('Policy document'), edited);
-    await mounted!.click([...document.querySelectorAll('[role="tab"]')][0]);
+    await mounted!.click(tab('Statements'));
     await mounted!.flush();
 
     expect((field('Effect of statement 1') as HTMLSelectElement).value).toBe('Deny');
@@ -212,10 +217,10 @@ describe('PolicyEditor text view', () => {
   it('keeps a document IAM refuses in the text view, with its errors', async () => {
     const validatePolicy = vi.fn().mockResolvedValue({ valid: false, errors: ['not a policy'], document: null });
     await open({ api: api({ validatePolicy }), policy: readerPolicy });
-    await mounted!.click([...document.querySelectorAll('[role="tab"]')][1]);
+    await mounted!.click(tab('YAML / JSON'));
     await mounted!.type(field('Policy document'), '{ nope');
     await mounted!.flush();
-    await mounted!.click([...document.querySelectorAll('[role="tab"]')][0]);
+    await mounted!.click(tab('Statements'));
     await mounted!.flush();
 
     expect(field('Policy document')).not.toBeNull();
@@ -225,12 +230,56 @@ describe('PolicyEditor text view', () => {
 
   it('writes YAML on request', async () => {
     await open({ policy: readerPolicy });
-    await mounted!.click([...document.querySelectorAll('[role="tab"]')][1]);
+    await mounted!.click(tab('YAML / JSON'));
     (field('Text format') as HTMLSelectElement).value = 'yaml';
     field('Text format')?.dispatchEvent(new Event('change', { bubbles: true }));
     await mounted!.flush();
 
     expect((field('Policy document') as HTMLTextAreaElement).value).toContain('effect: Allow');
+  });
+});
+
+describe('PolicyEditor sub-policies', () => {
+  const subPolicy = {
+    ...readerPolicy,
+    parent_id: 'pol_parent',
+    parent: { id: 'pol_parent', name: 'Org access', owner_scope: 'abi:', managed: false },
+  };
+
+  it('shows the parent of a sub-policy and keeps it on save', async () => {
+    const updatePolicy = vi.fn((_id: string, input: { name?: string }) => Promise.resolve({ ...subPolicy, ...input }));
+    const { onSaved } = await open({ api: api({ updatePolicy }), policy: subPolicy });
+
+    expect(field('Parent policy')?.textContent).toContain('Sub-policy of Org access');
+    expect(field('Parent policy')?.textContent).toContain('pol_parent');
+    await mounted!.type(field('Policy name'), 'Analysts');
+    await mounted!.click(button('Save changes') ?? null);
+    await mounted!.flush();
+
+    expect(updatePolicy).toHaveBeenCalledWith('pol_1', expect.objectContaining({ name: 'Analysts', expected_revision: 3 }));
+    expect(updatePolicy.mock.calls[0][1]).not.toHaveProperty('parent');
+    expect(onSaved).toHaveBeenCalled();
+  });
+
+  it('names a parent it could not read by its id, and none for a policy without one', async () => {
+    await open({ policy: { ...readerPolicy, parent_id: 'pol_hidden' } });
+    expect(field('Parent policy')?.textContent).toContain('Sub-policy of pol_hidden');
+    await mounted!.unmount();
+    mounted = null;
+    await open({ policy: readerPolicy });
+    expect(field('Parent policy')).toBeNull();
+  });
+
+  it('shows the parent of the newer version after a reload', async () => {
+    const updatePolicy = vi.fn().mockRejectedValue(new IamAdminError('Revision conflict', 409));
+    const getPolicy = vi.fn().mockResolvedValue({ ...subPolicy, revision: 4, parent_id: null, parent: null });
+    await open({ api: api({ updatePolicy, getPolicy }), policy: subPolicy });
+    await mounted!.click(button('Save changes') ?? null);
+    await mounted!.flush();
+    await mounted!.click(button('Reload their version') ?? null);
+    await mounted!.flush();
+
+    expect(field('Parent policy')).toBeNull();
   });
 });
 
@@ -247,5 +296,74 @@ describe('PolicyEditor read-only', () => {
     expect(field('Remove statement 1')).toBeNull();
     expect(document.querySelector('[aria-label="Actions of statement 1"]')?.textContent).toContain('triple_store:Query');
     expect(validatePolicy).not.toHaveBeenCalled();
+  });
+});
+
+describe('PolicyEditor Statements view listing', () => {
+  /** Graphs listed at ws-1; the caller may grant Query on every graph but `secret`. */
+  const graphs: PublishersView = {
+    scope: WS,
+    publishers: [
+      {
+        id: 'engine',
+        kind: 'engine',
+        types: [
+          {
+            ...publishedType('triple_store', 'graph', [['triple_store:Query', ['${scope}/triple_store:graph/*']]]),
+            actions: [
+              {
+                action: 'triple_store:Query',
+                name: 'Query',
+                level: 'read',
+                description: '',
+                resources: ['${scope}/triple_store:graph/*'],
+                excluded: ['${scope}/triple_store:graph/secret'],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const resources = vi.fn(() => Promise.resolve(resourcePage('triple_store', 'graph', [['sales', 'Sales'], ['secret', 'Secret']])));
+
+  async function typed(text: string) {
+    await open({ api: api({ publishers: vi.fn().mockResolvedValue(graphs), resources }), scope: wsScope });
+    await mounted!.click(button('Add statement') ?? null);
+    await mounted!.type(field('Add to actions of statement 1'), 'triple_store:Query');
+    await mounted!.click(document.querySelector('[role="option"] button'));
+    await mounted!.type(field('Add to resources of statement 1'), text);
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await mounted!.flush();
+  }
+
+  it('suggests what the listing finds that the caller may grant, never what their Deny takes back', async () => {
+    await typed('${scope}/triple_store:graph/');
+    expect(suggestions()).toContain('${scope}/triple_store:graph/sales');
+    expect(suggestions()).not.toContain('${scope}/triple_store:graph/secret');
+  });
+
+  it('suggests no wildcard their Deny takes part of back, written at the scope or absolutely', async () => {
+    await typed('${scope}/triple_store:graph/');
+    expect(suggestions()).not.toContain('${scope}/triple_store:graph/*');
+    await mounted!.unmount();
+    mounted = null;
+    await typed(`${WS}/triple_store:graph/`);
+    expect(suggestions()).toContain(`${WS}/triple_store:graph/sales`);
+    expect(suggestions()).not.toContain(`${WS}/triple_store:graph/*`);
+  });
+
+  it('suggests a listed id only where it is named, not under any base typed', async () => {
+    await typed('abi:triple_store:graph/');
+    expect(suggestions().filter((s) => s?.endsWith('/sales'))).toEqual([]);
+    await mounted!.unmount();
+    mounted = null;
+    await typed(`\${scope}/nexus:workspace/other/triple_store:graph/`);
+    expect(suggestions().filter((s) => s?.endsWith('/sales'))).toEqual([]);
+    await mounted!.unmount();
+    mounted = null;
+    // Named in the scope's container, written absolutely: suggested.
+    await typed(`${WS}/triple_store:graph/`);
+    expect(suggestions()).toContain(`${WS}/triple_store:graph/sales`);
   });
 });

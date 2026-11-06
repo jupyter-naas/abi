@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 from naas_abi_core.services.identity.adapters.secondary.OIDCHttpBuiltinIdP import (
     AppAnswer,
@@ -58,7 +58,46 @@ class ProvisioningBuiltinIdP(ProvisioningPort):
             return None
         raise self._failure(answer)
 
+    def update_user(
+        self,
+        subject: str,
+        *,
+        name: str | None = None,
+        disabled: bool | None = None,
+    ) -> ProvisionedUser | None:
+        path = f"/users/{quote(subject, safe='')}"
+        answer = self._ask("GET", path)
+        if answer.status == 404:
+            return None
+        if answer.status != 200:
+            raise self._failure(answer)
+        if name:
+            answer = self._ask("PATCH", path, body=json.dumps({"name": name}).encode())
+            if answer.status != 200:
+                raise self._404_or_failure(answer)
+        if disabled is not None:
+            # Disabling ends the person's sessions and refresh tokens at the IdP.
+            answer = self._ask("POST", f"{path}/{'disable' if disabled else 'enable'}")
+            if answer.status != 200:
+                raise self._404_or_failure(answer)
+        return self._user(answer, created=False)
+
+    def delete_user(self, subject: str) -> bool:
+        answer = self._ask("DELETE", f"/users/{quote(subject, safe='')}")
+        if answer.status in (200, 204):
+            return True
+        if answer.status == 404:
+            return False
+        raise self._failure(answer)
+
     # -- plumbing ---------------------------------------------------------------------
+
+    def _404_or_failure(self, answer: AppAnswer) -> Exception:
+        if answer.status == 404:
+            return ProvisioningError(
+                "The user was deleted at the built-in IdP meanwhile"
+            )
+        return self._failure(answer)
 
     def _ask(
         self, method: str, path: str, *, query: str = "", body: bytes = b""

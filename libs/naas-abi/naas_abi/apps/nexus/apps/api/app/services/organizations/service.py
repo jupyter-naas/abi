@@ -6,6 +6,11 @@ from typing import Any
 from uuid import uuid4
 
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ, Authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
+    CONTAINER_DEFAULTS,
+    ContainerDefaults,
+    defaults_store_of,
+)
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
     MEMBERSHIPS,
     ROLE_NAMES,
@@ -15,8 +20,8 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
     nexus_resource,
-    org_scope,
-    workspace_scope,
+    org_container,
+    workspace_container,
 )
 from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
     OrganizationCreateInput,
@@ -27,7 +32,6 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
     OrganizationMemberRecord,
     OrganizationPermissionPort,
     OrganizationRecord,
-    OrganizationRoleFeaturesRecord,
     OrganizationUpdateInput,
     OrganizationWorkspaceMembershipRecord,
     OrganizationWorkspaceRecord,
@@ -35,6 +39,16 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
     UserRecord,
 )
 from naas_abi_core import logger
+
+
+class OrganizationHasWorkspacesError(Exception):
+    """An organization is deleted once it has no workspace: these are left."""
+
+    def __init__(self, org_id: str, workspaces: list[tuple[str, str]]) -> None:
+        names = ", ".join(f"{name} ({ws_id})" for ws_id, name in workspaces)
+        super().__init__(f"Organization {org_id} still has workspaces: {names}. Delete them first")
+        self.org_id = org_id
+        self.workspaces = workspaces
 
 
 @dataclass
@@ -106,6 +120,10 @@ class LastOwnerError(ValueError):
         return "last_owner"
 
 
+def new_org_id() -> str:
+    return f"org-{uuid4().hex[:12]}"
+
+
 def _member_id(org_id: str, user_id: str) -> str:
     return f"member-{org_id}-{user_id}"
 
@@ -129,6 +147,7 @@ def _member_record(
         email=user.email,
         name=user.name,
         created_at=member.since,
+        principal_id=member.principal_id,
         bio=profile.bio if profile.bio is not None else user.bio,
         avatar=profile.avatar,
         organization=profile.organization,
@@ -168,7 +187,8 @@ class OrganizationService:
     """Organizations and their members.
 
     Membership is IAM's: a member holds ``builtin.<role>`` at the organization's
-    scope (``abi:<org>:-``), and org membership never grants a workspace.
+    container (``abi:nexus:organization/<org>``), and org membership never grants a
+    workspace (owners and admins also hold theirs below it, which reaches each).
     ``by`` names the signed-in user making a change, whose own rights IAM checks
     (an admin can never grant, demote or remove an owner).
     """
@@ -178,13 +198,15 @@ class OrganizationService:
         adapter: OrganizationPermissionPort,
         memberships: Memberships = MEMBERSHIPS,
         authz: Authz | None = None,
+        defaults: ContainerDefaults = CONTAINER_DEFAULTS,
     ):
         self.adapter = adapter
         self.memberships = memberships
         self._authz = authz or AUTHZ
+        self.defaults = defaults
 
     async def get_organization_role(self, user_id: str, org_id: str) -> str | None:
-        return await self.memberships.role_at(user_id, org_scope(org_id))
+        return await self.memberships.role_at(user_id, org_container(org_id))
 
     async def require_organization_access(self, user_id: str, org_id: str) -> str:
         role = await self.get_organization_role(user_id=user_id, org_id=org_id)
@@ -199,7 +221,7 @@ class OrganizationService:
             "ListOrganizations",
             rows,
             user=user_id,
-            resource_of=lambda row: nexus_resource("organization", org=row.id),
+            resource_of=lambda row: org_container(row.id),
         )
 
     async def get_organization(self, org_id: str) -> OrganizationRecord | None:
@@ -236,11 +258,14 @@ class OrganizationService:
         secondary_logo_url: str | None = None,
         show_logo_separator: bool = False,
         default_theme: str | None = None,
+        org_id: str | None = None,
     ) -> OrganizationRecord:
+        """``org_id``: decided by the caller that checked the create on the new
+        organization's own name (``new_org_id``); made here when None."""
         if await self.adapter.organization_slug_exists(slug=slug):
             raise OrganizationSlugAlreadyExistsError(slug=slug)
 
-        org_id = f"org-{uuid4().hex[:12]}"
+        org_id = org_id or new_org_id()
         record = await self.adapter.create_organization(
             OrganizationCreateInput(
                 id=org_id,
@@ -278,14 +303,41 @@ class OrganizationService:
         try:
             scope = await self.memberships.register_org(record.id)
             await self.memberships.grant(owner_id, "owner", scope)
+            # Its access policy (nothing, the platform admin widens it) and its
+            # members and admins groups, the owner in both.
+            await self.defaults.org_created(defaults_store_of(self.adapter), record.id, name)
         except Exception:
             await self._undo_create(record.id)
             raise
         return record
 
+    async def delete_organization(self, org_id: str) -> bool:
+        """Delete an organization that has no workspace left: its row, then its IAM
+        container with what it owns (``drop_scope``), then its access policy. One
+        with workspaces is refused (``OrganizationHasWorkspacesError``, naming them):
+        deleting their data with it is not this call's to decide. The route checked
+        ``DeleteOrganization`` on the organization."""
+        # Held first, so a workspace made in it meanwhile waits for this transaction,
+        # then finds it gone, never survives it with no organization.
+        if not await self.adapter.lock_organization(org_id=org_id):
+            return False
+        workspaces = await self.adapter.list_workspaces_for_org(org_id=org_id)
+        if workspaces:
+            raise OrganizationHasWorkspacesError(org_id, [(w.id, w.name) for w in workspaces])
+        # Deleting the container deletes those inside it: none may be left there.
+        inside = await self.memberships.containers_in(org_id)
+        if inside:
+            raise OrganizationHasWorkspacesError(org_id, [(name, name) for name in inside])
+        deleted = await self.adapter.delete_organization(org_id=org_id)
+        if deleted:
+            await self.memberships.drop_scope(org_id, None)
+            await self.defaults.dropped(defaults_store_of(self.adapter), org_container(org_id))
+        return deleted
+
     async def _undo_create(self, org_id: str) -> None:
         for undo in (
             lambda: self.memberships.drop_scope(org_id, None),
+            lambda: self.defaults.dropped(defaults_store_of(self.adapter), org_container(org_id)),
             lambda: self.adapter.delete_organization(org_id=org_id),
         ):
             try:
@@ -307,7 +359,9 @@ class OrganizationService:
             "ListWorkspaces",
             rows,
             user=user_id,
-            resource_of=lambda row: nexus_resource("workspace", org=org_id, workspace=row.id),
+            resource_of=lambda row: nexus_resource(
+                "workspace", container=workspace_container(org_id, row.id)
+            ),
         )
 
     async def list_all_workspaces(self, org_id: str) -> list[OrganizationWorkspaceRecord]:
@@ -318,7 +372,7 @@ class OrganizationService:
     ) -> list[OrganizationWorkspaceMembershipRecord]:
         found: list[OrganizationWorkspaceMembershipRecord] = []
         for workspace in await self.adapter.list_workspaces_for_org(org_id=org_id):
-            members = await self.memberships.members(workspace_scope(org_id, workspace.id))
+            members = await self.memberships.members(workspace_container(org_id, workspace.id))
             found += [
                 OrganizationWorkspaceMembershipRecord(
                     user_id=member.user_id, workspace_id=workspace.id, role=member.role
@@ -337,12 +391,12 @@ class OrganizationService:
                 role=member.role,
             )
             for org in await self.adapter.list_all_organizations()
-            for member in await self.memberships.members(org_scope(org.id))
+            for member in await self.memberships.members(org_container(org.id))
         ]
         return sorted(found, key=lambda m: (m.user_id, m.organization_name))
 
     async def list_members(self, org_id: str) -> list[OrganizationMemberRecord]:
-        members = await self.memberships.members(org_scope(org_id))
+        members = await self.memberships.members(org_container(org_id))
         users = await self.adapter.get_users_by_ids([m.user_id for m in members])
         profiles = await self.adapter.list_organization_member_profiles(org_id)
         return [
@@ -373,7 +427,7 @@ class OrganizationService:
         user = await self.adapter.get_user_by_email(email=normalized_email)
         if user is None:
             return None
-        scope = org_scope(org_id)
+        scope = org_container(org_id)
         if await self.memberships.role_at(user.id, scope) is not None:
             raise OrganizationMemberAlreadyExistsError(org_id=org_id, user_id=user.id)
         await self.memberships.grant(user.id, role, scope, by=by)
@@ -397,7 +451,7 @@ class OrganizationService:
     ) -> OrganizationMemberRecord | None:
         if role not in ROLE_NAMES:
             return None
-        scope = org_scope(org_id)
+        scope = org_container(org_id)
         held = await self.memberships.role_at(user_id, scope)
         if held is None:
             return None
@@ -445,7 +499,7 @@ class OrganizationService:
         interest: str | None = None,
     ) -> OrganizationMemberRecord | None:
         """Edit the member's profile in this organization only (never the account)."""
-        if await self.memberships.role_at(user_id, org_scope(org_id)) is None:
+        if await self.memberships.role_at(user_id, org_container(org_id)) is None:
             return None
         await self.adapter.update_organization_member_profile(
             org_id=org_id,
@@ -462,7 +516,7 @@ class OrganizationService:
 
     async def set_member_avatar(self, org_id: str, user_id: str, avatar: str | None) -> str | None:
         """Set or clear the org avatar; returns the previous org avatar to clean up."""
-        if await self.memberships.role_at(user_id, org_scope(org_id)) is None:
+        if await self.memberships.role_at(user_id, org_container(org_id)) is None:
             return None
         return await self.adapter.set_organization_member_avatar(
             org_id=org_id, user_id=user_id, avatar=avatar
@@ -470,7 +524,7 @@ class OrganizationService:
 
     async def remove_member(self, org_id: str, user_id: str, *, by: Any) -> bool:
         """Drop the member's role; the owners are removed by changing their role first."""
-        scope = org_scope(org_id)
+        scope = org_container(org_id)
         held = await self.memberships.role_at(user_id, scope)
         if held is None or held == "owner":
             return False
@@ -528,21 +582,4 @@ class OrganizationService:
         caller checked that ``provider`` is one."""
         return await self.adapter.set_organization_domain_provider(
             org_id=org_id, domain_id=domain_id, provider=provider
-        )
-
-    async def get_role_features(self, org_id: str) -> OrganizationRoleFeaturesRecord | None:
-        return await self.adapter.get_organization_role_features(org_id=org_id)
-
-    async def upsert_role_features(
-        self,
-        org_id: str,
-        role_baseline: dict[str, list[str]],
-        updated_by: str | None,
-        now: datetime,
-    ) -> OrganizationRoleFeaturesRecord:
-        return await self.adapter.upsert_organization_role_features(
-            org_id=org_id,
-            role_baseline=role_baseline,
-            updated_by=updated_by,
-            now=now,
         )

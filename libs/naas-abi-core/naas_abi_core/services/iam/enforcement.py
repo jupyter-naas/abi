@@ -3,7 +3,7 @@
 See ``AGENTS.md``: "Placements", "Evaluation" and "Action catalogs".
 
 * Names are built from the request and placed by IAM (``name``), never taken
-  from it: the org and workspace come from placements.
+  from it: the container comes from placements.
 * ``require`` runs before the backend is touched and raises the §5.4 outcome:
   ``PermissionDeniedError`` when the caller can see the resource, the
   service's own not-found otherwise.
@@ -42,7 +42,12 @@ from naas_abi_core.services.iam.IAMPorts import (
     PermissionDeniedError,
     ResourceNotFoundError,
 )
-from naas_abi_core.services.iam.names import NONE, encode_id, resource_name
+from naas_abi_core.services.iam.names import (
+    PLATFORM,
+    UNRESOLVED,
+    encode_id,
+    resource_name,
+)
 
 if TYPE_CHECKING:
     from naas_abi_core.services.ServiceBase import ServiceBase
@@ -104,19 +109,14 @@ class ResourceGuard:
     def name(self, type: str, parts: Parts = ()) -> str:
         """The canonical name of a resource, where IAM places it."""
         resource_type = self._type(type)
-        org, workspace = NONE, NONE
+        container = PLATFORM
         iam = self.iam
         if iam is not None and resource_type.placement == "placed":
-            org, workspace = iam.resolve_placement(
+            container = iam.resolve_placement(
                 self.service, encode_id(parts, resource_type.id)
             )
         return resource_name(
-            self.service,
-            type,
-            parts,
-            kind=resource_type.id,
-            org=org,
-            workspace=workspace,
+            self.service, type, parts, kind=resource_type.id, container=container
         )
 
     # -- checks -----------------------------------------------------------------
@@ -227,10 +227,10 @@ class ResourceGuard:
         head = f"{self.service}:{type}/"
         prefixes: list[str] = []
         for hint in hints:
-            fields = hint.split(":", 3)
-            if len(fields) != 4 or fields[0] != "abi" or not fields[3].startswith(head):
+            rest = _past_step(hint, head)
+            if rest is None:
                 return None
-            prefixes.append(_decoded_prefix(fields[3][len(head) :]))
+            prefixes.append(_decoded_prefix(rest))
         if "" in prefixes:
             return None
         kept: list[str] = []
@@ -247,19 +247,19 @@ class ResourceGuard:
         type: str,
         parts: Parts,
         *,
-        container: tuple[str, Parts] | None = None,
+        prefix: tuple[str, Parts] | None = None,
         exists: Callable[[], bool] | None = None,
-        container_exists: Callable[[], bool] | None = None,
+        prefix_exists: Callable[[], bool] | None = None,
         not_found: NotFound = None,
     ) -> Callable[[], None]:
         """Authorize a create on the name as placed; returns ``commit()``.
 
         Call ``commit()`` once the backend has created the resource: it records
-        the placement the create decided, if any. ``container`` is the
-        top-level container the resource sits in (a document or dataset
-        namespace), placed with it when nothing places it yet. ``exists`` and
-        ``container_exists`` tell an existing resource, on which the target
-        workspace is ignored, from a new one.
+        the placement the create decided, if any. ``prefix`` is the top-level id
+        prefix the resource sits under (a document or dataset namespace), placed
+        with it when nothing places it yet. ``exists`` and ``prefix_exists``
+        tell an existing resource, on which the container of the call is
+        ignored, from a new one.
         """
         iam = self.iam
         if iam is None:
@@ -269,25 +269,25 @@ class ResourceGuard:
         if resource_type.placement == "platform":
             iam.require(qualified, self.name(type, parts), not_found=not_found)
             return _noop
-        target = current_call_context().workspace_id or None
-        unit_type, unit_parts = container if container is not None else (type, parts)
+        target = iam.call_container()
+        unit_type, unit_parts = prefix if prefix is not None else (type, parts)
         unit = self._type(unit_type)
         unit_id = encode_id(unit_parts, unit.id)
         placed = iam.placement_of(self.service, encode_id(parts, resource_type.id))
         if placed is None:
             existing = (
-                (container_exists is not None and container_exists())
-                if container is not None
+                (prefix_exists is not None and prefix_exists())
+                if prefix is not None
                 else (exists is not None and exists())
             )
-            if existing and not unit.container:
+            if existing and not unit.id_prefix:
                 # An existing top-level resource nothing placed: the platform's.
                 iam.require(qualified, self.name(type, parts), not_found=not_found)
                 return _noop
             if existing:
-                # An existing container nothing placed predates placements, so it
+                # An existing id prefix nothing placed predates placements, so it
                 # is the platform's (§13): record it so, and create inside it.
-                self._place(unit, unit_id, NONE, NONE, exact_only=False)
+                self._place(unit, unit_id, PLATFORM, exact_only=False)
                 placed = iam.placement_of(
                     self.service, encode_id(parts, resource_type.id)
                 )
@@ -297,37 +297,36 @@ class ResourceGuard:
                 type,
                 parts,
                 kind=resource_type.id,
-                org=placed.org,
-                workspace=placed.workspace,
+                container=placed.container,
             )
             iam.require(qualified, name, not_found=not_found)
-            if target is not None and target != placed.workspace:
-                # A child takes its container's placement; the target workspace
+            if target is not None and target != placed.container:
+                # A child takes its prefix's placement; the container of the call
                 # only decides for a new name, and never moves an existing one.
                 if exists is None or not exists():
                     raise PermissionDeniedError(
                         qualified,
                         name,
-                        message=f"{name} is not in workspace {target}",
+                        message=f"{name} is not in {target}",
                     )
             return _noop
-        org = (iam.workspace_org(target) or NONE) if target is not None else NONE
-        workspace = target or NONE
+        if target == UNRESOLVED:
+            # A container IAM does not know (or named under another path): the
+            # create is not found, whoever asks.
+            raise (
+                not_found()
+                if not_found is not None
+                else ResourceNotFoundError("", message="Resource not found")
+            )
+        container = PLATFORM if target is None else target
         name = resource_name(
-            self.service,
-            type,
-            parts,
-            kind=resource_type.id,
-            org=org,
-            workspace=workspace,
+            self.service, type, parts, kind=resource_type.id, container=container
         )
         iam.require(qualified, name, not_found=not_found)
 
         def commit() -> None:
-            if unit.container or workspace != NONE:
-                self._place(
-                    unit, unit_id, org, workspace, exact_only=not unit.container
-                )
+            if unit.id_prefix or container != PLATFORM:
+                self._place(unit, unit_id, container, exact_only=not unit.id_prefix)
 
         return commit
 
@@ -338,7 +337,7 @@ class ResourceGuard:
             return
         resource_type = self._type(type)
         canonical = encode_id(parts, resource_type.id)
-        keys = [canonical] + ([f"{canonical}/*"] if resource_type.container else [])
+        keys = [canonical] + ([f"{canonical}/*"] if resource_type.id_prefix else [])
         with internal_call():
             for key in keys:
                 iam.delete_placement(self.service, key)
@@ -347,8 +346,7 @@ class ResourceGuard:
         self,
         unit: ResourceType,
         unit_id: str,
-        org: str,
-        workspace: str,
+        container: str,
         *,
         exact_only: bool,
     ) -> None:
@@ -357,7 +355,7 @@ class ResourceGuard:
         keys = [unit_id] + ([] if exact_only else [f"{unit_id}/*"])
         with internal_call():
             for key in keys:
-                iam.put_placement(self.service, key, org, workspace)
+                iam.put_placement(self.service, key, container)
 
 
 def scan_allowed(
@@ -412,6 +410,24 @@ def scan_allowed(
     return keys, None
 
 
+def _past_step(hint: str, head: str) -> str | None:
+    """What a hint (a name's literal prefix) holds of the id past its last step,
+    ``head`` (``<service>:<type>/``), in any container; None when it stops
+    before that step or names another one."""
+    if not hint.startswith(PLATFORM):
+        return None
+    body = hint[len(PLATFORM) :]
+    if body.startswith(head):
+        rest = body[len(head) :]
+    else:
+        index = body.rfind("/" + head)
+        if index < 0:
+            return None
+        rest = body[index + 1 + len(head) :]
+    # A raw ":" is only ever a step's: past it, the hint names a step below.
+    return None if ":" in rest else rest
+
+
 def _longer(prefix: str, hint: str) -> str | None:
     """The narrower of two prefixes when one extends the other, else None."""
     if hint.startswith(prefix):
@@ -423,8 +439,8 @@ def _longer(prefix: str, hint: str) -> str | None:
 
 @contextmanager
 def internal_call(name: str = ENGINE) -> Iterator[CallContext]:
-    """Run a service's own bookkeeping as the engine, for no user and no
-    target workspace: its own storage in another service, its placements.
+    """Run a service's own bookkeeping as the engine, for no user and in no
+    container: its own storage in another service, its placements.
 
     The caller was authorized on the operation that needs it.
 
@@ -442,7 +458,7 @@ def internal_call(name: str = ENGINE) -> Iterator[CallContext]:
         audience=None,
         token_id=None,
         scope=None,
-        workspace_id=None,
+        container=None,
     )
     with use_call_context(context):
         yield context

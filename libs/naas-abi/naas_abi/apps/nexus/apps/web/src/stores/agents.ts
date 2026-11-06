@@ -66,7 +66,6 @@ export interface Agent {
   resolvedModelId?: string | null; // Effective model resolved by the backend (catalog/registry default when modelId is unset)
   modelIds?: string[]; // Chat models the agent class can load
   logoUrl: string | null; // URL to agent/provider logo
-  enabled: boolean; // Whether agent is available for chat
   suggestions?: Array<{ label: string; value: string }>; // Optional class-level prompt suggestions
   tools: string[]; // Array of enabled tool IDs
   capabilities: AgentCapabilities; // Agent capabilities (memory, reasoning, vision)
@@ -116,7 +115,6 @@ interface AgentsState {
   addAgent: (agent: Omit<Agent, 'id' | 'isDefault' | 'createdAt' | 'updatedAt'>) => Promise<string>;
   updateAgent: (id: string, updates: Partial<Omit<Agent, 'id' | 'isDefault' | 'createdAt'>>) => Promise<void>;
   deleteAgent: (id: string) => Promise<void>;
-  toggleAgent: (id: string) => Promise<void>; // Toggle enabled state
   setDefaultAgent: (id: string) => Promise<void>; // Promote one agent as workspace default
   setAgentProvider: (agentId: string, providerId: string | null) => void;
   getAgent: (id: string) => Agent | undefined;
@@ -221,7 +219,6 @@ export const useAgentsStore = create<AgentsState>()(
                 : undefined,
 
               logoUrl: a.logo_url || null, // Logo URL from API
-              enabled: a.enabled || false, // Whether agent is available for chat
               suggestions: Array.isArray(a.suggestions)
                 ? a.suggestions.filter(
                     (s: unknown): s is { label: string; value: string } =>
@@ -257,7 +254,7 @@ export const useAgentsStore = create<AgentsState>()(
             });
 
             // Pick the best agent to surface in the chat UI.
-            // Priority: workspace default → Abi → first enabled.
+            // Priority: workspace default → Abi → first listed (the API lists only usable agents).
             const { pickWorkspaceDefaultAgent } = await import(
               '@/lib/pick-workspace-default-agent'
             );
@@ -298,7 +295,7 @@ export const useAgentsStore = create<AgentsState>()(
             if (
               onDocuments &&
               !force &&
-              !formattedAgents.some((agent) => agent.enabled && isNexusDocumentsAgent(agent))
+              !formattedAgents.some((agent) => isNexusDocumentsAgent(agent))
             ) {
               await get().fetchAgents(workspaceId, true);
               return;
@@ -508,53 +505,6 @@ export const useAgentsStore = create<AgentsState>()(
         });
       },
 
-      toggleAgent: async (id) => {
-        const agent = get().agents.find(a => a.id === id);
-        if (!agent) return;
-        
-        const newEnabled = !agent.enabled;
-        
-        // Optimistic update - update UI immediately
-        set((state) => ({
-          agents: state.agents.map((a) =>
-            a.id === id ? { ...a, enabled: newEnabled, updatedAt: new Date() } : a
-          ),
-        }));
-        
-        // Update on backend
-        try {
-          const { authFetch } = await import('./auth');
-          const { getApiUrl } = await import('@/lib/config');
-          const API_BASE = getApiUrl();
-          
-          const response = await authFetch(`${API_BASE}/api/agents/${id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ enabled: newEnabled }),
-          });
-          
-          if (!response.ok) {
-            console.error('Failed to toggle agent on server');
-            // Rollback on failure
-            set((state) => ({
-              agents: state.agents.map((a) =>
-                a.id === id ? { ...a, enabled: !newEnabled } : a
-              ),
-            }));
-            alert('Failed to toggle agent status');
-          }
-        } catch (error) {
-          console.error('Failed to toggle agent on server:', error);
-          // Rollback on failure
-          set((state) => ({
-            agents: state.agents.map((a) =>
-              a.id === id ? { ...a, enabled: !newEnabled } : a
-            ),
-          }));
-          alert('Failed to toggle agent status: ' + error);
-        }
-      },
-
       setAgentProvider: (agentId, providerId) => {
         set((state) => ({
           agents: state.agents.map((a) =>
@@ -573,9 +523,7 @@ export const useAgentsStore = create<AgentsState>()(
         const agents = get().agents;
         const direct = agents.find((a) => a.id === id);
         if (direct) return direct;
-        const defaultAgent = agents.find((a) => a.isDefault && a.enabled);
-        if (defaultAgent) return defaultAgent;
-        return agents.find((a) => a.enabled);
+        return agents.find((a) => a.isDefault) ?? agents[0];
       },
 
       syncAgentsFromProviders: (enabledProviderIds, providerNames) => {
@@ -601,7 +549,6 @@ export const useAgentsStore = create<AgentsState>()(
                 provider: null,
                 modelId: null,
                 logoUrl: null,
-                enabled: true,
                 tools: DEFAULT_TOOLS,
                 capabilities: { ...DEFAULT_CAPABILITIES },
                 intentMappings: [],

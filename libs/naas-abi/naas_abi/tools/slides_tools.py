@@ -39,7 +39,6 @@ from naas_abi_core.services.agent.context import (
     agent_user_email,
     agent_user_id,
     agent_user_name,
-    agent_workspace_id,
     coder_workspace_base,
     note_slides_write,
     slides_active_mode,
@@ -53,6 +52,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     SourceControlError,
 )
 
+from naas_abi.agents.feature.context import turn_workspace_id
 from naas_abi.agents.slides import (
     derive_deck_title,
     is_placeholder_deck_title,
@@ -1109,7 +1109,7 @@ def _seed_deck_with_title(html: str, title: str) -> str:
 
 
 def _workspace_id() -> str | None:
-    value = (agent_workspace_id.get() or "").strip()
+    value = turn_workspace_id()
     return value or None
 
 

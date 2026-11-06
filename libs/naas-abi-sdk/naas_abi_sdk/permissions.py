@@ -27,7 +27,7 @@ code; otherwise it defaults from ``ModuleDependencies``:
 
 ``${module.id}`` and ``${module.project}`` are bound when the manifest is
 approved. Bus topics have no default: a module using the bus declares them,
-``bus:*`` on ``abi:-:-:bus:topic/<topic>``.
+``bus:*`` on ``abi:bus:topic/<topic>``.
 
 A module may also declare actions of its own (``BaseModule.iam_catalog``, or
 ``iam_catalog.yaml`` beside the module): a catalog of resource types and
@@ -55,25 +55,33 @@ MANIFEST_FILE = "permissions.yaml"
 CATALOG_FILE = "iam_catalog.yaml"
 _NOT_SERVICE = re.compile(r"[^a-z0-9_]+")
 _ALIASES = {"kv": "keyvalue", "events": "event"}
+
+
+def _anywhere(rest: str) -> tuple[str, str]:
+    """``rest`` at the platform and in any container (core's ``names.anywhere``):
+    ``abi:<rest>`` and ``abi:*/<rest>``."""
+    return (f"abi:{rest}", f"abi:*/{rest}")
+
+
 _OWN_NAMESPACES = {
     "document": (
-        "abi:-:-:document:namespace/${module.id}",
-        "abi:-:-:document:collection/${module.id}/*",
-        "abi:-:-:document:document/${module.id}/*",
+        "abi:document:namespace/${module.id}",
+        "abi:document:collection/${module.id}/*",
+        "abi:document:document/${module.id}/*",
     ),
-    "secret": ("abi:-:-:secret:secret/${module.id}%2F*",),
+    "secret": ("abi:secret:secret/${module.id}%2F*",),
     # The SDK's dataset facade writes to the namespace "default" (a dataset
     # namespace is an identifier, ^[A-Za-z][A-Za-z0-9_]*$, which a module id
     # need not be): granted until the SDK maps a module to a namespace of its own.
     "dataset": (
-        "abi:-:-:dataset:namespace/default",
-        "abi:-:-:dataset:dataset/default/*",
-        "abi:-:-:dataset:catalog/-",
+        "abi:dataset:namespace/default",
+        "abi:dataset:dataset/default/*",
+        "abi:dataset:catalog/-",
     ),
     # Graphs and views; the schemas it loads are its own (``OwnOntologies``).
     "triple_store": (
-        "abi:*:*:triple_store:graph/*",
-        "abi:*:*:triple_store:view/*",
+        *_anywhere("triple_store:graph/*"),
+        *_anywhere("triple_store:view/*"),
     ),
 }
 # What a service grants besides its default statement: (sid, actions, resources).
@@ -82,7 +90,7 @@ _ALSO = {
         (
             "OwnOntologies",
             ("triple_store:LoadSchema",),
-            ("abi:-:-:triple_store:schema/module/${module.id}/*",),
+            ("abi:triple_store:schema/module/${module.id}/*",),
         ),
     ),
 }
@@ -117,7 +125,7 @@ def default_manifest(
         {_ALIASES.get(s, s) for s in dependencies.services} - {"bus", "iam"}
     )
     for service in services:
-        resources = _OWN_NAMESPACES.get(service, (f"abi:*:*:{service}:*",))
+        resources = _OWN_NAMESPACES.get(service, _anywhere(f"{service}:*"))
         statements.append(
             _statement(
                 f"Use{_sid(service)}",
@@ -133,7 +141,7 @@ def default_manifest(
                     "sid": f"No{_sid(service)}Admin",
                     "effect": "Deny",
                     "actions": list(_NEVER[service]),
-                    "resources": [f"abi:*:*:{service}:*"],
+                    "resources": list(_anywhere(f"{service}:*")),
                 }
             )
     if dependencies.modules:
@@ -141,10 +149,10 @@ def default_manifest(
         reach = []
         for module_id in dependencies.modules:
             reach += [
-                f"abi:-:-:discovery:module/{project}/{module_id}",
-                f"abi:-:-:discovery:agent/{project}/{module_id}/*",
-                f"abi:-:-:discovery:model/{project}/{module_id}/*",
-                f"abi:-:-:discovery:app/{project}/{module_id}/*",
+                f"abi:discovery:module/{project}/{module_id}",
+                f"abi:discovery:agent/{project}/{module_id}/*",
+                f"abi:discovery:model/{project}/{module_id}/*",
+                f"abi:discovery:app/{project}/{module_id}/*",
             ]
         statements.append(
             _statement(
@@ -169,7 +177,7 @@ def default_manifest(
                     "sid": "NoIdentityProviderAdmin",
                     "effect": "Deny",
                     "actions": ["discovery:OpenApp"],
-                    "resources": [f"abi:-:-:discovery:app/{project}/idp/admin"],
+                    "resources": [f"abi:discovery:app/{project}/idp/admin"],
                 }
             )
         statements.append(
@@ -179,8 +187,8 @@ def default_manifest(
                 # Its own runs, and those of the user it acts for: a run started
                 # for a user is that user's.
                 [
-                    "abi:-:-:discovery:run/${principal.id}/*",
-                    "abi:-:-:discovery:run/${user.id}/*",
+                    "abi:discovery:run/${principal.id}/*",
+                    "abi:discovery:run/${user.id}/*",
                 ],
             )
         )
@@ -199,10 +207,10 @@ def default_manifest(
                 ],
                 [
                     *(
-                        f"abi:-:-:discovery:job/${{module.project}}/${{module.id}}/{name}"
+                        f"abi:discovery:job/${{module.project}}/${{module.id}}/{name}"
                         for name in names
                     ),
-                    "abi:-:-:discovery:job_run/${module.project}/${module.id}/*",
+                    "abi:discovery:job_run/${module.project}/${module.id}/*",
                 ],
             )
         )

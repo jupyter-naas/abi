@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from naas_abi_proto.app.v1 import app_pb2 as pb
+from naas_abi_proto.common.v1 import common_pb2
 from naas_abi_proto.discovery.v1 import discovery_pb2 as discovery_pb
 
 from naas_abi_sdk.app_host import AppHost, app_subject
@@ -16,6 +17,8 @@ from naas_abi_sdk.apps import AppDescriptor, discover_apps, read_app
 from naas_abi_sdk.discovery import module_descriptor
 from naas_abi_sdk.module import BaseModule
 from naas_abi_sdk.transport import RPCError
+
+WS = "abi:nexus:organization/o-1/nexus:workspace/ws-1"
 
 
 def _site(tmp_path, name="console", manifest=None):
@@ -224,9 +227,9 @@ def test_a_fastapi_backend_answers_other_paths(tmp_path):
     asyncio.run(scenario())
 
 
-def test_the_app_sees_the_verified_user_and_workspace(tmp_path):
-    """The user and the actor are discovery's; the workspace is kept only for a
-    verified user."""
+def test_the_app_sees_the_verified_user_and_container(tmp_path):
+    """The user and the actor are discovery's; the container (and the Nexus
+    workspace id) is kept only for a verified user."""
     fastapi = pytest.importorskip("fastapi")
     app = fastapi.FastAPI()
 
@@ -238,10 +241,16 @@ def test_the_app_sees_the_verified_user_and_workspace(tmp_path):
         host = _host(tmp_path / "user", app)
         answered = await _send(
             host,
-            _request("/api/whoami", user_id="forged", workspace_id="ws-1"),
+            _request(
+                "/api/whoami",
+                user_id="forged",
+                workspace_id="ws-1",
+                context=common_pb2.CallContext(container=WS),
+            ),
         )
         assert json.loads(answered.body) == {
             "user_id": "u-7",
+            "container": WS,
             "workspace_id": "ws-1",
             "principal": {
                 "id": "sa_api",
@@ -256,10 +265,17 @@ def test_the_app_sees_the_verified_user_and_workspace(tmp_path):
             caller_principal_name="module/acme/acme.billing",
         )
         anonymous = await _send(
-            module, _request("/api/whoami", user_id="u-7", workspace_id="ws-1")
+            module,
+            _request(
+                "/api/whoami",
+                user_id="u-7",
+                workspace_id="ws-1",
+                context=common_pb2.CallContext(container=WS),
+            ),
         )
         assert json.loads(anonymous.body) == {
             "user_id": "",
+            "container": "",
             "workspace_id": "",
             "principal": {
                 "id": "sa_billing",

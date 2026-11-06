@@ -7,10 +7,6 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.secondary.postgre
     AgentSecondaryAdapterPostgres,
 )
 from naas_abi.apps.nexus.apps.api.app.services.agents.service import AgentService
-from naas_abi.apps.nexus.apps.api.app.services.apps.adapters.secondary.postgres import (
-    AppSecondaryAdapterPostgres,
-)
-from naas_abi.apps.nexus.apps.api.app.services.apps.service import AppsService
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.secondary.postgres import (
     AuthSecondaryAdapterPostgres,
 )
@@ -60,7 +56,6 @@ def initialize_nexus_service_registry() -> ServiceRegistry:
     )
     search_service = SearchService()
     agents_service = AgentService(AgentSecondaryAdapterPostgres(db_getter=db_getter))
-    apps_service = AppsService(AppSecondaryAdapterPostgres(db_getter=db_getter))
     graph_service = GraphService()
     ontology_service = OntologyService()
 
@@ -70,7 +65,6 @@ def initialize_nexus_service_registry() -> ServiceRegistry:
             search=search_service,
             agents=agents_service,
             skills=skills_service,
-            apps=apps_service,
             workspaces=workspace_service,
             organizations=organization_service,
             graph=graph_service,

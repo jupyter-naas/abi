@@ -67,8 +67,10 @@ class MapsFeedLayerService:
         feeds: Sequence[MapsLayout],
         seeds: Sequence[MapsFeedLayer],
         revisions: Mapping[str, int],
+        seed: bool = True,
     ) -> list[MapsFeedLayer]:
-        """The workspace's stored layers, after syncing seeds and giving every feed one layer.
+        """The workspace's stored layers, after syncing seeds and giving every feed one layer
+        (``seed=False``: the stored layers, nothing written).
 
         Per feed: seeded layers whose revision is new are created, or overwrite
         their system copy (a deployment migration); once a feed has seeded
@@ -78,6 +80,8 @@ class MapsFeedLayerService:
         feed_ids = {feed.id for feed in feeds}
         feed_seeds = [seed for seed in seeds if seed.feed_id in feed_ids]
         stored = await self._store.list(workspace_id)
+        if not seed:
+            return stored
         settings = await self._settings.get(workspace_id)
 
         def pending_of(settings: MapsWorkspaceSettings) -> list[MapsFeedLayer]:
@@ -144,6 +148,7 @@ class MapsFeedLayerService:
         *,
         seeds: Sequence[MapsFeedLayer] = (),
         revisions: Mapping[str, int] | None = None,
+        seed: bool = True,
     ) -> list[MapsFeedLayer]:
         revisions = revisions or {}
         feeds = await self._feeds.visible(workspace_id)
@@ -151,7 +156,7 @@ class MapsFeedLayerService:
         own_ids = {feed.id for feed in own}
         layers = [
             layer
-            for layer in await self._ensure_layers(workspace_id, own, seeds, revisions)
+            for layer in await self._ensure_layers(workspace_id, own, seeds, revisions, seed)
             if layer.feed_id in own_ids
         ]
         taken = {layer.id for layer in layers}
@@ -159,23 +164,25 @@ class MapsFeedLayerService:
             if not feed.shared_from:
                 continue
             home = replace(feed, shared_from="")
-            for layer in await self._ensure_layers(feed.shared_from, [home], seeds, revisions):
+            for layer in await self._ensure_layers(
+                feed.shared_from, [home], seeds, revisions, seed
+            ):
                 if layer.feed_id == feed.id and layer.id not in taken:
                     layers.append(replace(layer, shared_from=feed.shared_from))
                     taken.add(layer.id)
         return sorted(layers, key=lambda layer: (layer.order, layer.title.lower()))
 
-    async def get(self, workspace_id: str, layer_id: str) -> MapsFeedLayer:
-        for layer in await self.list(workspace_id):
+    async def get(self, workspace_id: str, layer_id: str, *, seed: bool = True) -> MapsFeedLayer:
+        for layer in await self.list(workspace_id, seed=seed):
             if layer.id == layer_id:
                 return layer
         raise MapsFeedLayerNotFoundError(f"Map layer {layer_id!r} not found")
 
     async def data_source(
-        self, workspace_id: str, layer_id: str
+        self, workspace_id: str, layer_id: str, *, seed: bool = True
     ) -> tuple[MapsFeedLayer, MapsLayout]:
         """A layer the workspace may use and its feed, when its data is a stored object."""
-        layer = await self.get(workspace_id, layer_id)
+        layer = await self.get(workspace_id, layer_id, seed=seed)
         feed = await self._feeds.get(workspace_id, layer.feed_id)
         if feed.feed_type != FEED_OBJECT_STORAGE or not layer.storage_path:
             raise MapsFeedLayerNotFoundError(f"Map layer {layer_id!r} has no stored data")

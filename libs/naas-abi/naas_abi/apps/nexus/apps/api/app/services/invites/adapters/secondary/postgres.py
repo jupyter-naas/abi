@@ -9,6 +9,7 @@ from datetime import datetime
 from naas_abi.apps.nexus.apps.api.app.models import (
     InvitationModel,
     OrganizationDomainModel,
+    ProvisionedIdentityModel,
     UserModel,
     WorkspaceModel,
 )
@@ -52,6 +53,7 @@ def _invitation(model: InvitationModel) -> Invitation:
         accepted_at=model.accepted_at,
         accepted_user_id=model.accepted_user_id,
         profile=_profile(model.profile),
+        policy_ids=_grants(model.policy_ids),
     )
 
 
@@ -72,6 +74,7 @@ class InvitationSecondaryAdapterPostgres(InvitationPersistencePort):
                 invited_by=invitation.invited_by,
                 grant_ids=json.dumps(list(invitation.grant_ids)),
                 profile=json.dumps(invitation.profile) if invitation.profile else None,
+                policy_ids=json.dumps(list(invitation.policy_ids)),
                 status="pending",
                 created_at=now,
                 updated_at=now,
@@ -148,6 +151,7 @@ class InvitationSecondaryAdapterPostgres(InvitationPersistencePort):
         org_role: str | None,
         workspace_role: str | None,
         grant_ids: Sequence[str],
+        policy_ids: Sequence[str] = (),
         invited_by: str | None,
         now: datetime,
         profile: Mapping[str, str] | None = None,
@@ -156,6 +160,7 @@ class InvitationSecondaryAdapterPostgres(InvitationPersistencePort):
             "org_role": org_role,
             "workspace_role": workspace_role,
             "grant_ids": json.dumps(list(grant_ids)),
+            "policy_ids": json.dumps(list(policy_ids)),
             "invited_by": invited_by,
             "updated_at": now,
         }
@@ -188,6 +193,18 @@ class InvitationSecondaryAdapterPostgres(InvitationPersistencePort):
 
     async def mark_revoked(self, invitation_id: str, *, now: datetime) -> bool:
         return await self._transition(invitation_id, status="revoked", updated_at=now)
+
+    async def record_provisioned(
+        self, provider: str, subject: str, email: str, *, now: datetime
+    ) -> None:
+        known = await self.db.get(ProvisionedIdentityModel, (provider, subject))
+        if known is None:
+            self.db.add(
+                ProvisionedIdentityModel(
+                    provider=provider, subject=subject, email=email.lower(), created_at=now
+                )
+            )
+            await self.db.flush()
 
     async def provider_for_domain(self, domain: str, organization_id: str | None) -> str | None:
         """The provider the organization routes ``domain`` to: a domain it verified

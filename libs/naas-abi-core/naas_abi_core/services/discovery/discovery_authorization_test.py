@@ -25,11 +25,11 @@ from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
 from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER
 from naas_abi_core.services.iam.names import parse_resource_name
 from naas_abi_core.services.iam.tests.authorization_contract import contract_iam
-from naas_abi_core.services.iam.tests.iam_harness import IAMHarness, statement
+from naas_abi_core.services.iam.tests.iam_harness import NEXUS, IAMHarness, statement
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 
 PROVIDER = "provider-identity"
-MODULE = "abi:-:-:discovery:"
+MODULE = "abi:discovery:"
 
 
 def _provider() -> pb.RegisterRequest:
@@ -268,10 +268,12 @@ def test_members_and_modules_never_reach_each_others_runs():
 
     async def scenario():
         iam = contract_iam()
+        iam._register_catalog(NEXUS)
+        ws_1 = IAMHarness(iam).register("ws-1")
         for nexus_id in ("user-aaaaaaaaaaaa", "user-bbbbbbbbbbbb"):
             with as_service_account("engine"):
                 record = iam.ensure_user(LEGACY_NEXUS_ISSUER, nexus_id)
-                iam.attach_policy("builtin.member", record.id, "abi:org-1:ws-1")
+                iam.attach_policy("builtin.member", record.id, ws_1)
         service = DiscoveryService(MemoryRegistry(), iam=iam)
         req = await _ready(service)
         lease: dict[str, Any] = {

@@ -17,6 +17,7 @@ from uuid import uuid4
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 from nats.errors import Error as NATSError
 
+from naas_abi_sdk.listers import declared_listers
 from naas_abi_sdk.transport import RPCError, Transport
 
 
@@ -54,6 +55,8 @@ class ModuleInstance:
     # The registering service account as one subject token, set by discovery:
     # every hosting subject of the instance carries it (agent_subject, ...).
     service_account: str = ""
+    # The types of its catalog it lists (naas_abi_sdk.listers).
+    listers: tuple[str, ...] = ()
 
 
 def _instance(value: pb.Instance) -> ModuleInstance:
@@ -76,6 +79,7 @@ def _instance(value: pb.Instance) -> ModuleInstance:
         tuple(ModelDescriptor(m.name, m.description, m.kind) for m in d.models),
         _apps(d),
         value.service_account,
+        tuple(d.listers),
     )
 
 
@@ -538,6 +542,7 @@ def module_descriptor(
                 module_type.get_apps() if hasattr(module_type, "get_apps") else ()
             )
         ],
+        listers=sorted(declared_listers(module_type)),
     )
 
 

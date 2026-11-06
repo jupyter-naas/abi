@@ -61,23 +61,19 @@ def _enabled_modules(doc: dict) -> set[str]:
     return {m["module"] for m in doc["modules"] if m.get("enabled")}
 
 
-def test_code_enabled_for_admins_when_coding_included() -> None:
+def test_code_enabled_when_coding_included() -> None:
     ff = _render_feature_flags(include_coding=True)
 
     assert "code" in ff["enabled_features"]
-    assert "code" in ff["role_baseline"]["owner"]
-    assert "code" in ff["role_baseline"]["admin"]
-    # Members and viewers never get the coding section by default.
-    assert "code" not in ff["role_baseline"]["member"]
-    assert "code" not in ff["role_baseline"]["viewer"]
+    # No role brings a feature: a policy does.
+    assert set(ff) == {"enabled_features"}
 
 
 def test_code_absent_when_coding_not_included() -> None:
     ff = _render_feature_flags(include_coding=False)
 
     assert "code" not in ff["enabled_features"]
-    for role in ("owner", "admin", "member", "viewer"):
-        assert "code" not in ff["role_baseline"][role]
+    assert set(ff) == {"enabled_features"}
 
 
 @pytest.mark.parametrize("filename", _ALL_CONFIGS)

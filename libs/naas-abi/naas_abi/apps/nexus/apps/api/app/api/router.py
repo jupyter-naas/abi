@@ -18,6 +18,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints import (
     view,
     websocket,
 )
+from naas_abi.apps.nexus.apps.api.app.services.accounts.handlers import router as accounts_router
 from naas_abi.apps.nexus.apps.api.app.services.agents.handlers import router as agents_router
 from naas_abi.apps.nexus.apps.api.app.services.api_keys.handlers import router as api_keys_router
 from naas_abi.apps.nexus.apps.api.app.services.apps.handlers import router as apps_router
@@ -77,6 +78,9 @@ from naas_abi.apps.nexus.apps.api.app.services.skills.handlers import router as 
 from naas_abi.apps.nexus.apps.api.app.services.slides.handlers import router as slides_router
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.handlers import router as sysadmin_router
 from naas_abi.apps.nexus.apps.api.app.services.tasks.handlers import router as tasks_router
+from naas_abi.apps.nexus.apps.api.app.services.view_as.adapters.primary.view_as__primary_adapter__FastAPI import (  # noqa: E501
+    router as view_as_router,
+)
 from naas_abi.apps.nexus.apps.api.app.services.workflows.handlers import (
     router as workflows_router,
 )
@@ -95,6 +99,8 @@ api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
 api_router.include_router(api_keys_router, prefix="/iam", tags=["iam"])
 # The IAM admin pages: policies, attachments, groups, service accounts, approvals.
 api_router.include_router(iam_admin_router, prefix="/iam/admin", tags=["iam-admin"])
+# View as another person, read-only: session only like the rest of /iam.
+api_router.include_router(view_as_router, prefix="/iam/view-as", tags=["iam-view-as"])
 # Sign-in through the engine's identity providers, next to the built-in login.
 api_router.include_router(oidc_router, prefix="/auth/oidc", tags=["auth"])
 api_router.include_router(organizations.router, prefix="/organizations", tags=["organizations"])
@@ -143,6 +149,8 @@ api_router.include_router(transcribe.router, prefix="/transcribe", tags=["transc
 api_router.include_router(speech.router, prefix="/speech", tags=["speech"])
 api_router.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
+# Platform Settings > Users: every account and its lifecycle.
+api_router.include_router(accounts_router, prefix="/admin/users", tags=["admin"])
 api_router.include_router(sysadmin_router, prefix="/admin/system", tags=["sysadmin"])
 api_router.include_router(workflows_router, prefix="/workflows", tags=["workflows"])
 api_router.include_router(

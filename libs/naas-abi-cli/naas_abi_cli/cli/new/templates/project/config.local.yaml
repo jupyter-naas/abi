@@ -78,12 +78,12 @@ modules:
         frontend_url: "https://{{ secret.PUBLIC_WEB_HOST }}"
         database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@postgres:5432/nexus"
 {% endraw %}        feature_flags:
-          # The in-app coding workspaces (IDE + git/review, the "code" section)
-          # are gated by this feature flag. This project was generated
+          # The features this deployment has. No role brings one: a policy grants
+          # each (a workspace's "Features of member", say, which an invitation
+          # can carry). The in-app coding workspaces (IDE + git/review, the
+          # "code" section) are one: this project was generated
           # {% if include_coding %}WITH{% else %}WITHOUT{% endif %} the coding stack, so "code" is
-          # {% if include_coding %}enabled for workspace admins (owner + admin){% else %}left off for every role{% endif %} below.
-          # To change it, add/remove "code" in enabled_features AND the relevant
-          # role_baseline roles (members/viewers are intentionally left without it).
+          # {% if include_coding %}enabled{% else %}left out{% endif %} below.
           enabled_features:
             - chat
             - files
@@ -95,15 +95,7 @@ modules:
             - graph
             - settings
 {% if include_coding %}            - code
-{% endif %}          role_baseline:
-            # owner + admin are the workspace admins; they get "code" by default
-            # when this project is generated with the coding stack.
-            owner: [chat, files, agents, apps, marketplace, search, ontology, graph, settings{% if include_coding %}, code{% endif %}]
-            admin: [chat, files, agents, apps, marketplace, search, ontology, graph, settings{% if include_coding %}, code{% endif %}]
-            member: [chat, files]
-            viewer: [chat, files]
-          workspace_overrides: {}
-{% raw %}        # Nexus has no login of its own: people sign in at the built-in identity
+{% endif %}{% raw %}        # Nexus has no login of its own: people sign in at the built-in identity
         # provider (the `idp` service), which emails a sign-in code. The `users:`
         # below are made there when the API starts, and keep the roles configured here.
         # The name the emails Nexus sends (invitations) call the application:

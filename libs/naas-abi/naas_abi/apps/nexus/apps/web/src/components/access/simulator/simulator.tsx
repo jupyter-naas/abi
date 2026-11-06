@@ -40,7 +40,12 @@ export function SimulatorView({ api }: PlatformViewProps) {
     [action, catalogs],
   );
   const resourceSuggestions = useMemo(
-    () => suggestResources(resource, { catalogs, actions: action.trim() ? [action.trim()] : [] }),
+    () =>
+      suggestResources(resource, {
+        catalogs: catalogs?.catalogs ?? [],
+        variables: catalogs?.variables,
+        actions: action.trim() ? [action.trim()] : [],
+      }),
     [resource, catalogs, action],
   );
 
@@ -110,7 +115,7 @@ export function SimulatorView({ api }: PlatformViewProps) {
             onChange={setResource}
             suggestions={resourceSuggestions}
             onPick={(s) => setResource(s.value)}
-            placeholder="abi:<org>:<workspace>:<service>:<type>/<id>"
+            placeholder="abi:nexus:organization/<org>/nexus:workspace/<ws>/<service>:<type>/<id>"
           />
         </div>
         <button type="submit" className="access-policy-button access-policy-button-primary" disabled={!ready || running}>

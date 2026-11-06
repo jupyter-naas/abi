@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Brush, Camera, Check, Palette, Save, SlidersHorizontal, Trash2, X } from 'lucide-react';
+import { Brush, Camera, Check, Palette, Save, Trash2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { SettingsField, SettingsNotice, SettingsSection } from '@/components/settings/settings-ui';
@@ -10,8 +10,6 @@ import { authFetch } from '@/stores/auth';
 import { DEFAULT_THEME, PRESET_COLORS } from '@/stores/workspace';
 import { AccountPageHeader } from '@/app/account/components/account-page-header';
 import { AccountSectionCard } from '@/app/account/components/account-section-card';
-import { Checkbox } from '@/components/ui/checkbox';
-import { featureLabel } from '@/lib/feature-labels';
 import { orgSettingsSectionPath } from '../../lib/nav';
 import { WorkspaceGroupSelect } from '../workspace-group-select';
 import { WorkspaceOwnerSelect } from '../workspace-owner-select';
@@ -21,11 +19,6 @@ import {
   type CatalogSeedDraft,
 } from '../workspace-instances-section';
 import { useAuthStore } from '@/stores/auth';
-import {
-  featureChoices,
-  featuresPayload,
-  type WorkspaceFeatureCatalog,
-} from './features';
 import { slugify, WORKSPACE_SLUG } from './slug';
 import '@/app/account/profile/profile.css';
 import '@/app/workspace/[workspaceId]/settings/general/general.css';
@@ -53,10 +46,8 @@ async function readApiError(response: Response, fallback: string): Promise<strin
  * organization's groups, or typed as a new one. The logo is uploaded right
  * after the workspace exists, into the workspace drive
  * (``.settings/logos/logo.<ext>``); the desk wallpaper is set in General
- * once the workspace exists. Features: the new workspace's feature set,
- * picked among what the organization offers (all of it at first). Leaving
- * every one on records nothing, so the workspace follows its organization;
- * Modules & features changes it later.
+ * once the workspace exists. No feature is picked here: what people may use
+ * in it is what their policies grant (`nexus:UseFeature`), like agents.
  */
 export default function OrgCreateWorkspacePage() {
   const params = useParams();
@@ -75,9 +66,6 @@ export default function OrgCreateWorkspacePage() {
   const [accentColor, setAccentColor] = useState(DEFAULT_THEME.accentColor ?? '');
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState('');
-  const [featureCatalog, setFeatureCatalog] = useState<WorkspaceFeatureCatalog | null>(null);
-  const [checkedFeatures, setCheckedFeatures] = useState<Set<string> | null>(null);
-  const [featureCatalogFailed, setFeatureCatalogFailed] = useState(false);
   const [ownerId, setOwnerId] = useState('');
   const [catalogSeedDraft, setCatalogSeedDraft] = useState<CatalogSeedDraft>({});
   const [error, setError] = useState('');
@@ -138,32 +126,6 @@ export default function OrgCreateWorkspacePage() {
     if (currentUserId && !ownerId) setOwnerId(currentUserId);
   }, [currentUserId, ownerId]);
 
-  // The features the organization offers, for the Features section.
-  useEffect(() => {
-    if (!orgId) return;
-    let cancelled = false;
-    setFeatureCatalogFailed(false);
-    // No catalog: the workspace gets everything its organization has.
-    void authFetch(`/api/organizations/${orgId}/workspace-features`)
-      .then(async (res) => {
-        if (cancelled) return;
-        if (!res.ok) {
-          setFeatureCatalogFailed(true);
-          return;
-        }
-        const next = (await res.json()) as WorkspaceFeatureCatalog;
-        setFeatureCatalog(next);
-        // Everything the organization offers, until the user unchecks some.
-        setCheckedFeatures(new Set(featureChoices(next)));
-      })
-      .catch(() => {
-        if (!cancelled) setFeatureCatalogFailed(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [orgId]);
-
   useEffect(() => {
     if (!logoFile) {
       setLogoPreview('');
@@ -199,10 +161,6 @@ export default function OrgCreateWorkspacePage() {
     if (!canCreate) return;
     setError('');
     setCreating(true);
-    const features =
-      featureCatalog && checkedFeatures
-        ? featuresPayload(checkedFeatures, featureChoices(featureCatalog))
-        : null;
     const catalog_seed = catalogSeedPayload(catalogSeedDraft);
     try {
       const res = await authFetch('/api/workspaces', {
@@ -217,8 +175,6 @@ export default function OrgCreateWorkspacePage() {
           description: description.trim() || null,
           primary_color: primaryColor,
           accent_color: accentColor || null,
-          // null: every feature offered, so the workspace follows its organization.
-          features,
           catalog_seed,
         }),
       });
@@ -256,7 +212,7 @@ export default function OrgCreateWorkspacePage() {
     <div className="workspace-general org-create-workspace space-y-6">
       <AccountPageHeader
         title="Create workspace"
-        subtitle="Add a workspace to this organization. Pick an owner, features, and optional instances; org owners and admins reach every workspace."
+        subtitle="Add a workspace to this organization. Pick an owner and optional instances; org owners and admins reach every workspace."
         actions={
           <div className="org-create-workspace-actions">
             <button
@@ -425,51 +381,8 @@ export default function OrgCreateWorkspacePage() {
         </div>
       </AccountSectionCard>
 
-      <SettingsSection
-        title={
-          <span className="flex items-center gap-2">
-            <SlidersHorizontal size={16} className="text-muted-foreground" />
-            Features
-          </span>
-        }
-        description="What the new workspace may use, among the features of its organization. Change them later in Modules & features."
-      >
-        {featureCatalogFailed ? (
-          <p className="text-sm text-muted-foreground">
-            Features could not be loaded. The workspace will have every feature of its
-            organization; change them later in Modules & features.
-          </p>
-        ) : featureCatalog && checkedFeatures ? (
-          featureChoices(featureCatalog).length === 0 ? (
-            <p className="text-sm text-muted-foreground">The organization offers no feature.</p>
-          ) : (
-            <div className="org-create-workspace-features">
-              {featureChoices(featureCatalog).map((feature) => (
-                <Checkbox
-                  key={feature}
-                  label={featureLabel(feature)}
-                  checked={checkedFeatures.has(feature)}
-                  disabled={creating}
-                  onCheckedChange={(on) =>
-                    setCheckedFeatures((current) => {
-                      const next = new Set(current ?? []);
-                      if (on) next.add(feature);
-                      else next.delete(feature);
-                      return next;
-                    })
-                  }
-                />
-              ))}
-            </div>
-          )
-        ) : (
-          <p className="text-sm text-muted-foreground">Loading features...</p>
-        )}
-      </SettingsSection>
-
       <WorkspaceInstancesSection
         orgId={orgId}
-        features={checkedFeatures}
         draft={catalogSeedDraft}
         onDraftChange={setCatalogSeedDraft}
         disabled={creating}

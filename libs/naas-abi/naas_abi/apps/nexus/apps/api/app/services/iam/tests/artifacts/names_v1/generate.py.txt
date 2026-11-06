@@ -1,0 +1,296 @@
+"""Build an IAM store at the state before container paths, with the code of
+that state, and record its decisions: what the upgrade test compares with.
+
+Run from the repository root at the commit before the change:
+
+    uv run --frozen python make_names_v1_fixture.py <out dir>
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+from naas_abi.apps.nexus.apps.api.app.services.iam.bootstrap import shared_repo_grants
+from naas_abi.apps.nexus.apps.api.app.services.iam.catalog import NEXUS_CATALOG
+from naas_abi_core.engine.call_context import (
+    CallContext,
+    Principal,
+    as_service_account,
+    service_account,
+    use_call_context,
+)
+from naas_abi_core.services.iam.adapters.secondary.IAMStoreSQLite import IAMStoreSQLite
+from naas_abi_core.services.iam.catalog import ActionCatalog, ActionSpec, ResourceType
+from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER, IAMService
+from naas_abi_core.services.iam.kernel_catalogs import register_kernel_catalogs
+
+OUT = Path(sys.argv[1])
+OUT.mkdir(parents=True, exist_ok=True)
+DB = OUT / "iam.sqlite"
+if DB.exists():
+    DB.unlink()
+
+CRM = ActionCatalog(
+    service="crm",
+    version=1,
+    module="crm",
+    resource_types=(ResourceType("deal", module_scope=True),),
+    actions=(
+        ActionSpec("ReadDeal", "read", ("deal",)),
+        ActionSpec("CloseDeal", "write", ("deal",)),
+    ),
+)
+
+iam = IAMService(IAMStoreSQLite(str(DB)))
+iam.bootstrap()
+register_kernel_catalogs(iam)
+
+O1, O2, NONE_ORG = "org-aaaaaaaaaaa1", "org-bbbbbbbbbbb2", "_none"
+W1, W2, W3, W4 = "ws-aaaaaaaaaaa1", "ws-aaaaaaaaaaa2", "ws-bbbbbbbbbbb3", "ws-ccccccccccc4"
+WORKSPACES = {W1: O1, W2: O1, W3: O2, W4: NONE_ORG}
+
+
+def doc(*statements):
+    return {"version": "2026-10-13", "statements": list(statements)}
+
+
+def allow(actions, resources, effect="Allow"):
+    return {"effect": effect, "actions": list(actions), "resources": list(resources)}
+
+
+users: dict[str, str] = {}
+
+with as_service_account("engine"):
+    iam.register_catalog(NEXUS_CATALOG)
+    iam.register_catalog(CRM)
+    iam.set_platform_grants(shared_repo_grants("abi/monorepo"))
+
+with as_service_account("api"):
+    for org in (O1, O2, NONE_ORG):
+        iam.put_scope(org)
+    for ws, org in WORKSPACES.items():
+        iam.put_scope(org, ws)
+    # Placements: a workspace's prefixes, a module's namespace, a graph.
+    iam.put_placement("object_storage", "workspaces/" + W1 + "/*", O1, W1)
+    iam.put_placement("document", "nexus-" + W1, O1, W1)
+    iam.put_placement("document", "nexus-" + W1 + "/*", O1, W1)
+    iam.put_placement("triple_store", "http%3A%2F%2Fg%2Fw2", O1, W2)
+    iam.put_placement("document", "people", "-", "-")
+    iam.put_placement("document", "people/*", "-", "-")
+
+    def user(name: str) -> str:
+        principal = iam.ensure_user(LEGACY_NEXUS_ISSUER, name, provider="nexus")
+        users[name] = principal.id
+        return principal.id
+
+    def role(name: str, role_name: str, scope: str) -> None:
+        iam.attach_policy(f"builtin.{role_name}", users[name], scope)
+
+    for name in (
+        "padmin", "oowner", "oadmin", "omember", "oadminlevel", "wadmin", "wmember",
+        "wviewer", "gmember", "nown", "sub", "widecustom", "deny", "o2member", "nobody",
+    ):
+        user(name)
+    iam.attach_policy("builtin.platform_admin", users["padmin"])
+    role("oowner", "owner", f"abi:{O1}:-")
+    role("oowner", "owner", f"abi:{O1}:*")
+    role("oadmin", "admin", f"abi:{O1}:-")
+    role("oadmin", "admin", f"abi:{O1}:*")
+    role("omember", "member", f"abi:{O1}:-")
+    role("oadminlevel", "admin", f"abi:{O1}:-")
+    role("wadmin", "admin", f"abi:{O1}:{W1}")
+    role("wmember", "member", f"abi:{O1}:{W1}")
+    role("wviewer", "viewer", f"abi:{O1}:{W2}")
+    role("gmember", "member", f"abi:{O1}:{W2}")
+    role("nown", "owner", f"abi:{NONE_ORG}:{W4}")
+    role("sub", "member", f"abi:{O1}:{W1}")
+    role("widecustom", "viewer", f"abi:{O1}:{W1}")
+    role("deny", "member", f"abi:{O1}:{W1}")
+    role("o2member", "member", f"abi:{O2}:{W3}")
+
+with as_service_account("engine"):
+    # A platform policy: features and module items anywhere, a graph by name.
+    access = iam.create_policy(
+        "O access",
+        doc(
+            allow(["nexus:UseFeature"], ["${scope}:nexus:feature/chat", "${scope}:nexus:feature/files"]),
+            allow(["module:UseAgent"], ["${scope}:module:agent/m/*"]),
+            allow(["module:OpenApp"], ["${scope}:module:app/m/app1"]),
+            allow(["crm:ReadDeal"], ["${scope}:crm:deal/*"]),
+        ),
+    )
+    # A sub-policy owned by the org, attached at W1.
+    analysts = iam.create_policy(
+        "W analysts",
+        doc(
+            allow(["module:UseAgent"], ["${scope}:module:agent/m/a"]),
+            allow(["nexus:UseFeature"], ["${scope}:nexus:feature/chat"]),
+            allow(["crm:ReadDeal", "crm:CloseDeal"], ["${scope}:crm:deal/d1"]),
+        ),
+        scope=f"abi:{O1}:-",
+        parent=access.id,
+    )
+    iam.attach_policy(access.id, users["oadmin"], f"abi:{O1}:*")
+    iam.attach_policy(analysts.id, users["sub"], f"abi:{O1}:{W1}")
+    # An org-owned group holding an org-owned policy, attached at W2.
+    group = iam.create_group("G", scope=f"abi:{O1}:-")
+    iam.add_group_member(group.id, users["gmember"])
+    graphs = iam.create_policy(
+        "Org graphs",
+        doc(
+            allow(["triple_store:Query", "triple_store:Insert"], ["${scope}:triple_store:graph/*"]),
+            allow(["nexus:ListWorkspaceMembers"], ["${scope}:nexus:member/*"]),
+        ),
+        scope=f"abi:{O1}:-",
+    )
+    iam.attach_policy(graphs.id, group.id, f"abi:{O1}:{W2}")
+    # A platform policy attached org-wide: every workspace of O1 and its own level.
+    wide = iam.create_policy(
+        "Wide",
+        doc(
+            allow(["nexus:UseFeature"], ["${scope}:nexus:feature/*"]),
+            allow(["module:OpenApp"], ["${scope}:module:app/*"]),
+            allow(["nexus:*"], ["${scope}:nexus:workspace/*"]),
+            allow(["triple_store:Query"], ["${scope}:*"]),
+        ),
+    )
+    iam.attach_policy(wide.id, users["widecustom"], f"abi:{O1}:*")
+    # A workspace-owned policy with a Deny, at W1.
+    deny = iam.create_policy(
+        "No secret",
+        doc(
+            allow(["triple_store:*"], ["${scope}:triple_store:graph/*"]),
+            allow(["triple_store:DropGraph"], ["${scope}:triple_store:graph/secret"], effect="Deny"),
+        ),
+        scope=f"abi:{O1}:{W1}",
+    )
+    iam.attach_policy(deny.id, users["deny"], f"abi:{O1}:{W1}")
+    # Unscoped absolute patterns, attached to one user.
+    absolute = iam.create_policy(
+        "Absolute",
+        doc(
+            allow(["triple_store:Query"], [f"abi:*:*:triple_store:graph/shared"]),
+            allow(["triple_store:Insert"], [f"abi:{O2}:*:triple_store:graph/*"]),
+            allow(["nexus:GetWorkspace"], [f"abi:*:{W3}:nexus:workspace/-"]),
+            allow(["nexus:UpdateOrganization"], [f"abi:{O2}:-:nexus:organization/-"]),
+            allow(["document:Get"], ["abi:-:-:document:document/people/*"]),
+            allow(["iam:GetPolicy"], ["abi:%2A:%2A:iam:policy/*"]),
+        ),
+    )
+    iam.attach_policy(absolute.id, users["o2member"])
+    # Invitations and a binding.
+    iam.create_pending_grant("builtin", "carol@example.com", "builtin.member", f"abi:{O1}:{W1}")
+    iam.create_pending_grant("builtin", "carol@example.com", analysts.id, f"abi:{O1}:{W1}")
+    iam.bind_idp_group("acme", "Readers", "builtin.viewer", f"abi:{O1}:{W2}")
+    # A service account with a custom policy.
+    account = iam.create_service_account("ci/export")
+    users["ci"] = account.id
+    export = iam.create_policy(
+        "Export",
+        doc(allow(["triple_store:Query"], [f"abi:{O1}:{W1}:triple_store:graph/*", "abi:-:-:triple_store:view/*"])),
+    )
+    iam.attach_policy(export.id, account.id)
+    # A personal key narrowed to one workspace's graphs.
+    key = iam.create_key(
+        users["wmember"],
+        kind="personal",
+        scope=[allow(["triple_store:Query"], [f"abi:{O1}:{W1}:triple_store:graph/*"])],
+    )
+
+# The resources each decision is asked on, with the action.
+GRAPH = "triple_store:graph/g1"
+grid: list[tuple[str, str]] = []
+places = [(O1, W1), (O1, W2), (O2, W3), (NONE_ORG, W4)]
+for org, ws in places:
+    s = f"abi:{org}:{ws}"
+    grid += [
+        ("triple_store:Query", f"{s}:{GRAPH}"),
+        ("triple_store:Insert", f"{s}:{GRAPH}"),
+        ("triple_store:DropGraph", f"{s}:{GRAPH}"),
+        ("triple_store:DropGraph", f"{s}:triple_store:graph/secret"),
+        ("triple_store:Query", f"{s}:triple_store:graph/shared"),
+        ("nexus:GetWorkspace", f"{s}:nexus:workspace/-"),
+        ("nexus:UpdateWorkspace", f"{s}:nexus:workspace/-"),
+        ("nexus:DeleteWorkspace", f"{s}:nexus:workspace/-"),
+        ("nexus:ListWorkspaceMembers", f"{s}:nexus:member/u1"),
+        ("nexus:UseFeature", f"{s}:nexus:feature/chat"),
+        ("nexus:UseFeature", f"{s}:nexus:feature/files"),
+        ("nexus:UseFeature", f"{s}:nexus:feature/settings"),
+        ("module:UseAgent", f"{s}:module:agent/m/a"),
+        ("module:UseAgent", f"{s}:module:agent/m/b"),
+        ("module:OpenApp", f"{s}:module:app/m/app1"),
+        ("crm:ReadDeal", f"{s}:crm:deal/d1"),
+        ("crm:CloseDeal", f"{s}:crm:deal/d1"),
+        ("crm:ReadDeal", f"{s}:crm:deal/d2"),
+        ("iam:CreatePolicy", f"{s}:iam:policy/pol_x"),
+        ("iam:AttachPolicy", f"{s}:iam:attachment/builtin.member/usr_x"),
+        ("iam:AttachPolicy", f"{s}:iam:attachment/builtin.owner/usr_x"),
+        ("document:Get", f"{s}:document:document/nexus-{ws}/c/d"),
+    ]
+for org in (O1, O2):
+    s = f"abi:{org}:-"
+    grid += [
+        ("nexus:GetOrganization", f"{s}:nexus:organization/-"),
+        ("nexus:UpdateOrganization", f"{s}:nexus:organization/-"),
+        ("nexus:DeleteOrganization", f"{s}:nexus:organization/-"),
+        ("nexus:CreateWorkspace", f"{s}:nexus:organization/-"),
+        ("nexus:ListOrganizationMembers", f"{s}:nexus:member/u1"),
+        ("nexus:UseFeature", f"{s}:nexus:feature/chat"),
+        ("triple_store:Query", f"{s}:{GRAPH}"),
+        ("iam:CreatePolicy", f"{s}:iam:policy/pol_x"),
+        ("iam:AttachPolicy", f"abi:{org}:%2A:iam:attachment/builtin.admin/usr_x"),
+        ("iam:AttachPolicy", f"{s}:iam:attachment/builtin.admin/usr_x"),
+    ]
+grid += [
+    ("nexus:CreateOrganization", "abi:-:-:nexus:organization/-"),
+    ("triple_store:Query", f"abi:-:-:{GRAPH}"),
+    ("triple_store:QueryView", "abi:-:-:triple_store:view/v1"),
+    ("document:Get", "abi:-:-:document:document/people/c/d"),
+    ("model_registry:ChatCompletion", "abi:-:-:model_registry:model/gpt"),
+    ("discovery:InvokeAgent", "abi:-:-:discovery:agent/p/m/a"),
+    ("iam:GetPolicy", "abi:%2A:%2A:iam:policy/pol_y"),
+    ("iam:UpdatePolicy", "abi:%2A:%2A:iam:policy/pol_y"),
+    ("iam:AttachPolicy", "abi:%2A:%2A:iam:attachment/pol_y/usr_x"),
+]
+
+decisions = []
+for name, principal_id in users.items():
+    if name == "ci":
+        ctx = CallContext(principal=Principal(id=principal_id, kind="service_account", name="ci/export"))
+        on_behalf = None
+    else:
+        ctx = CallContext(
+            principal=service_account("api"),
+            on_behalf_of=Principal(id=principal_id, kind="user"),
+        )
+    for action, resource in grid:
+        try:
+            catalog = iam.catalogs()
+        except Exception:
+            catalog = None
+        with use_call_context(ctx):
+            decision = iam.authorize(action, resource)
+        decisions.append(
+            {"user": name, "action": action, "resource": resource, "allowed": decision.allowed}
+        )
+
+(OUT / "decisions.json").write_text(
+    json.dumps(
+        {
+            "users": users,
+            "key_id": key.record.key_id if hasattr(key, "record") else None,
+            "policies": {
+                "access": access.id, "analysts": analysts.id, "graphs": graphs.id,
+                "wide": wide.id, "deny": deny.id, "absolute": absolute.id, "export": export.id,
+                "group": group.id,
+            },
+            "decisions": decisions,
+        },
+        indent=1,
+    )
+)
+allowed = sum(1 for d in decisions if d["allowed"])
+print(f"{len(decisions)} decisions, {allowed} allowed")
+iam.close()

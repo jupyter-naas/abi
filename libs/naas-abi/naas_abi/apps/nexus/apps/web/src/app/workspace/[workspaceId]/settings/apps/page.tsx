@@ -6,7 +6,6 @@ import { AppWindow, Globe, Tag, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAppsStore, type AppItem } from '@/stores/apps';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   SettingsEmpty,
   SettingsLoading,
@@ -55,9 +54,8 @@ export default function AppsSettingsPage() {
   const [mounted, setMounted] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
 
-  const { apps, loading, fetchApps, toggleApp } = useAppsStore();
+  const { apps, loading, fetchApps } = useAppsStore();
 
   useEffect(() => {
     setMounted(true);
@@ -83,13 +81,10 @@ export default function AppsSettingsPage() {
     return installedApps
       .filter((a) => {
         if (categoryFilter !== 'all' && a.category !== categoryFilter) return false;
-        if (statusFilter === 'enabled' && !a.enabled) return false;
-        if (statusFilter === 'disabled' && a.enabled) return false;
         return !q || a.name.toLowerCase().includes(q) || (a.description ?? '').toLowerCase().includes(q);
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [installedApps, searchQuery, categoryFilter, statusFilter]);
-  const enabledCount = installedApps.filter((a) => a.enabled).length;
+  }, [installedApps, searchQuery, categoryFilter]);
 
   if (!mounted) {
     return <SettingsLoading label="Loading apps…" />;
@@ -99,8 +94,8 @@ export default function AppsSettingsPage() {
     <div className="space-y-6">
       <SettingsPageHeader
         title="Apps"
-        badge={`${enabledCount} enabled`}
-        description="Turn the apps of this workspace on or off for everyone in it"
+        badge={`${installedApps.length} ${installedApps.length === 1 ? 'app' : 'apps'}`}
+        description="The apps of this workspace you may open. Who opens each app is decided by policies, on Roles & permissions."
       />
 
       {loading && installedApps.length === 0 ? (
@@ -109,7 +104,7 @@ export default function AppsSettingsPage() {
         <SettingsEmpty
           icon={<AppWindow size={40} className="opacity-40" />}
           title="No apps in this workspace"
-          description="The modules of this workspace's set have no app. Organization owners and admins choose them on Modules & features."
+          description="No module of this workspace has an app you may open. Policies on Roles & permissions decide who opens which app."
         />
       ) : (
         <div className="space-y-4">
@@ -118,30 +113,18 @@ export default function AppsSettingsPage() {
             onSearchChange={setSearchQuery}
             searchPlaceholder="Search apps..."
             filters={
-              <>
-                <SettingsFilterSelect
-                  label="Category"
-                  value={categoryFilter}
-                  onChange={setCategoryFilter}
-                  options={[
-                    { value: 'all', label: 'All categories' },
-                    ...categories.map((category) => ({ value: category, label: category })),
-                  ]}
-                  className="capitalize"
-                />
-                <SettingsFilterSelect
-                  label="Status"
-                  value={statusFilter}
-                  onChange={setStatusFilter}
-                  options={[
-                    { value: 'all', label: 'All statuses' },
-                    { value: 'enabled', label: 'Enabled' },
-                    { value: 'disabled', label: 'Disabled' },
-                  ]}
-                />
-              </>
+              <SettingsFilterSelect
+                label="Category"
+                value={categoryFilter}
+                onChange={setCategoryFilter}
+                options={[
+                  { value: 'all', label: 'All categories' },
+                  ...categories.map((category) => ({ value: category, label: category })),
+                ]}
+                className="capitalize"
+              />
             }
-            meta={`${countLabel(filteredApps.length, installedApps.length, 'app')} · ${enabledCount} enabled`}
+            meta={countLabel(filteredApps.length, installedApps.length, 'app')}
           />
 
           <div className={settingsTable.wrapper}>
@@ -151,13 +134,12 @@ export default function AppsSettingsPage() {
                   <th className={settingsTable.th}>App</th>
                   <th className={settingsTable.th}>Category</th>
                   <th className={settingsTable.th}>Source</th>
-                  <th className={cn(settingsTable.th, 'w-24')}>Enabled</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredApps.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="p-8 text-center text-muted-foreground">
+                    <td colSpan={3} className="p-8 text-center text-muted-foreground">
                       No apps match the current search and filters
                     </td>
                   </tr>
@@ -199,14 +181,6 @@ export default function AppsSettingsPage() {
                       </td>
                       <td className={cn(settingsTable.td, 'truncate text-muted-foreground')}>
                         {app.maintainer || app.module_name || app.module_path}
-                      </td>
-                      <td className={settingsTable.td}>
-                        <Checkbox
-                          checked={app.enabled}
-                          onCheckedChange={() => toggleApp(app.app_id)}
-                          aria-label={app.enabled ? 'Disable app' : 'Enable app'}
-                          title={app.enabled ? 'Disable app' : 'Enable app'}
-                        />
                       </td>
                     </tr>
                   ))

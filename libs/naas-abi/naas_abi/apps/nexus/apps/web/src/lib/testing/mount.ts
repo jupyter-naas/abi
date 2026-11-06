@@ -7,6 +7,8 @@ export interface Mounted {
   click: (element: Element | null) => Promise<void>;
   /** Set an input's value the way a user would (React sees the change). */
   type: (element: Element | null, value: string) => Promise<void>;
+  /** Pick an option of a select the way a user would (React sees the change). */
+  select: (element: Element | null, value: string) => Promise<void>;
   /** Let pending promises and the renders they cause settle. */
   flush: () => Promise<void>;
   unmount: () => Promise<void>;
@@ -32,6 +34,14 @@ export async function mount<P extends object>(component: ComponentType<P>, props
       await act(async () => {
         setValue?.call(input, value);
         input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    },
+    select: async (element, value) => {
+      if (!element) throw new Error('nothing to select in');
+      const select = element as HTMLSelectElement;
+      await act(async () => {
+        select.value = value;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
       });
     },
     flush: async () => {

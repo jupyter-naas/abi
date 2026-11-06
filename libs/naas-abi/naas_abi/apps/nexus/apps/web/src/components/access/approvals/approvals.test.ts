@@ -65,7 +65,7 @@ describe('ApprovalsView', () => {
     await mounted.flush();
     await mounted.click(buttonNamed('Narrow…'));
     await mounted.click(document.querySelector('input[aria-label="triple_store:ListGraphs"]'));
-    await mounted.click(document.querySelector('input[aria-label="abi:-:-:triple_store:graph/b"]'));
+    await mounted.click(document.querySelector('input[aria-label="abi:triple_store:graph/b"]'));
     expect(document.querySelector('[role="status"]')?.textContent).toBe(
       '1 of 2 actions removed, 1 of 2 resources removed',
     );
@@ -80,7 +80,7 @@ describe('ApprovalsView', () => {
           {
             effect: 'Allow',
             actions: ['triple_store:Query'],
-            resources: ['abi:-:-:triple_store:graph/a'],
+            resources: ['abi:triple_store:graph/a'],
           },
           { effect: 'Deny', actions: ['triple_store:DropGraph'], resources: ['*'] },
         ],

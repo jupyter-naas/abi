@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
-from uuid import uuid4
 
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import (
@@ -19,6 +18,7 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     UserModel,
     WorkspaceModel,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import SqlDefaultsStore
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
     InferenceServerCreateInput,
     InferenceServerRecord,
@@ -29,6 +29,7 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
     WorkspaceRecord,
     WorkspaceStatsRecord,
     WorkspaceUpdateInput,
+    new_workspace_id,
 )
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -51,6 +52,11 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
         if db is None:
             raise RuntimeError("No database session bound in ServiceRegistry context")
         return db
+
+    def container_defaults(self) -> SqlDefaultsStore:
+        """Where the access policy and default groups of what this adapter creates
+        are recorded: this adapter's session, so in the same transaction."""
+        return SqlDefaultsStore(self.db)
 
     async def list_all_workspaces(self) -> list[WorkspaceRecord]:
         result = await self.db.execute(select(WorkspaceModel).order_by(WorkspaceModel.name))
@@ -157,7 +163,7 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
 
     async def create_workspace(self, workspace: WorkspaceCreateInput) -> WorkspaceRecord:
         now = datetime.now(UTC).replace(tzinfo=None)
-        workspace_id = f"ws-{uuid4().hex[:12]}"
+        workspace_id = workspace.id or new_workspace_id()
         workspace_model = WorkspaceModel(
             id=workspace_id,
             name=workspace.name,

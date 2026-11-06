@@ -9,8 +9,6 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agents__p
     _class_declared_model_ids,
     _nexus_abi_class_name,
     _resolve_workspace_default_class_name,
-    _roster_alignment,
-    _workspace_agent_roster,
     pick_workspace_chat_agent_id,
     pick_workspace_documents_agent_id,
     pick_workspace_slides_agent_id,
@@ -22,7 +20,6 @@ def _agent(
     *,
     agent_id: str,
     is_default: bool = False,
-    enabled: bool = False,
     created_offset_s: int = 0,
     name: str = "Abi",
     class_name: str = "naas_abi.agents.AbiAgent/AbiAgent",
@@ -33,7 +30,6 @@ def _agent(
         workspace_id="ws-test",
         name=name,
         description="",
-        enabled=enabled,
         class_name=class_name,
         module_path=class_name.split("/", 1)[0] if "/" in class_name else class_name,
         system_prompt=None,
@@ -46,16 +42,13 @@ def _agent(
     )
 
 
-def test_canonical_agent_sort_prefers_default_then_enabled_then_oldest() -> None:
-    disabled_new = _agent(agent_id="d", enabled=False, created_offset_s=30)
-    enabled_mid = _agent(agent_id="e", enabled=True, created_offset_s=20)
-    default_old = _agent(agent_id="a", is_default=True, enabled=True, created_offset_s=10)
-    enabled_old = _agent(agent_id="b", enabled=True, created_offset_s=5)
+def test_canonical_agent_sort_prefers_default_then_oldest() -> None:
+    newest = _agent(agent_id="d", created_offset_s=30)
+    middle = _agent(agent_id="e", created_offset_s=20)
+    default = _agent(agent_id="a", is_default=True, created_offset_s=10)
+    oldest = _agent(agent_id="b", created_offset_s=5)
 
-    ordered = sorted(
-        [disabled_new, enabled_mid, default_old, enabled_old],
-        key=_canonical_agent_sort_key,
-    )
+    ordered = sorted([newest, middle, default, oldest], key=_canonical_agent_sort_key)
     assert [agent.id for agent in ordered] == ["a", "b", "e", "d"]
 
 
@@ -79,26 +72,14 @@ def test_class_declared_model_ids_reads_getter_then_attr_then_single() -> None:
     assert _class_declared_model_ids(object) == []
 
 
-def test_workspace_agent_roster_uses_seed_when_present() -> None:
-    assert _workspace_agent_roster({"mod/Listed"}, "mod/Default") == {"mod/Listed"}
-    assert _workspace_agent_roster(set(), "mod/Default") == set()
-
-
-def test_workspace_agent_roster_unseeded_is_default_only() -> None:
-    assert _workspace_agent_roster(None, "mod/Default") == {"mod/Default"}
-
-
 def test_resolve_workspace_default_falls_back_to_abi() -> None:
     registry = {"naas_abi.agents.AbiAgent/AbiAgent": object()}
     assert _resolve_workspace_default_class_name(registry) == "naas_abi.agents.AbiAgent/AbiAgent"
 
 
 def test_nexus_abi_class_name_only_matches_our_orchestrator() -> None:
-    """Abi is force-enabled on every roster, so the match must not be loose.
-
-    An ``AbiAgent`` from another module would otherwise be switched on in a
-    workspace that never listed it.
-    """
+    """Abi is the default's fallback, so the match must not be loose: an
+    ``AbiAgent`` from another module is not the platform orchestrator."""
     assert (
         _nexus_abi_class_name(
             [
@@ -113,133 +94,71 @@ def test_nexus_abi_class_name_only_matches_our_orchestrator() -> None:
     assert _nexus_abi_class_name([]) is None
 
 
-ABI = "naas_abi.agents.AbiAgent/AbiAgent"
-AXI = "axi.agents.AxiAgent/AxiAgent"
-REGISTRY = [AXI, "naas_abi.agents.AppsAgent/AppsAgent", ABI]
-ORCHESTRATORS = {ABI, AXI}
-
-
-def test_roster_alignment_always_enables_the_orchestrator() -> None:
-    """Abi and Axi ride on every roster, whatever the workspace listed."""
-    roster, align = _roster_alignment({AXI}, None, REGISTRY)
-    assert roster == ORCHESTRATORS
-    assert align is True
-
-    roster, align = _roster_alignment(None, AXI, REGISTRY)
-    assert roster == ORCHESTRATORS
-    assert align is True
-
-
-def test_roster_alignment_keeps_the_empty_roster_guard() -> None:
-    """No seed and no resolvable default still means "touch nothing".
-
-    Orchestrators are added after the decision, so they must not turn this
-    case into a forced align that disables every other row.
-    """
-    roster, align = _roster_alignment(None, None, REGISTRY)
-    assert roster == ORCHESTRATORS
-    assert align is False
-
-
-def test_roster_alignment_still_empties_an_explicitly_empty_seed() -> None:
-    """``agents: []`` disables everything but the orchestrators."""
-    roster, align = _roster_alignment(set(), None, REGISTRY)
-    assert roster == ORCHESTRATORS
-    assert align is True
-
-
-def test_roster_alignment_without_abi_in_the_registry() -> None:
-    roster, align = _roster_alignment({AXI}, None, [AXI])
-    assert roster == {AXI}
-    assert align is True
-
-
-def test_pick_workspace_chat_agent_rejects_foreign_and_disabled_ids() -> None:
-    default = _agent(agent_id="default", is_default=True, enabled=False)
-    local = _agent(agent_id="local", enabled=True)
+def test_pick_workspace_chat_agent_rejects_ids_the_caller_may_not_use() -> None:
+    """``agents`` are those the caller may use: an id outside them (another
+    workspace's, one IAM refuses) falls back to the default."""
+    default = _agent(agent_id="default", is_default=True)
+    local = _agent(agent_id="local")
     agents = [default, local]
 
     assert pick_workspace_chat_agent_id(agents, "local") == "local"
     assert pick_workspace_chat_agent_id(agents, "stale-from-other-ws") == "default"
     assert pick_workspace_chat_agent_id(agents, None) == "default"
-    assert _workspace_agent_roster(None, None) == set()
+    assert pick_workspace_chat_agent_id([], "local") is None
 
 
 def test_pick_workspace_chat_agent_falls_back_to_abi_without_default() -> None:
     maps = _agent(
         agent_id="maps",
-        enabled=True,
         name="Maps",
         class_name="naas_abi.agents.MapsAgent/MapsAgent",
     )
-    abi = _agent(agent_id="abi", enabled=True)
+    abi = _agent(agent_id="abi")
     lookalike = _agent(
         agent_id="acme",
-        enabled=True,
         name="Acme",
         class_name="acme.agents.AbiAgent/AbiAgent",
     )
     default = _agent(
         agent_id="default",
         is_default=True,
-        enabled=True,
         name="Bob",
         class_name="bob.agents.BobAgent/BobAgent",
     )
 
     assert pick_workspace_chat_agent_id([maps, abi], None) == "abi"
     assert pick_workspace_chat_agent_id([maps, lookalike], None) == "maps"
-    assert pick_workspace_chat_agent_id([maps, _agent(agent_id="off")], None) == "maps"
+    assert pick_workspace_chat_agent_id([lookalike, maps], None) == "acme"
     assert pick_workspace_chat_agent_id([maps, abi, default], None) == "default"
 
 
-def test_pick_workspace_slides_agent_prefers_enabled_office_slides() -> None:
-    default = _agent(agent_id="default", is_default=True, enabled=True, name="Orchestrator")
+def test_pick_workspace_slides_agent_is_the_office_slides_the_caller_may_use() -> None:
+    default = _agent(agent_id="default", is_default=True, name="Orchestrator")
     slides = _agent(
         agent_id="slides",
-        enabled=True,
         name="Slides",
         class_name="naas_abi.agents.SlidesAgent/SlidesAgent",
     )
     other = _agent(
         agent_id="sheet",
-        enabled=True,
         name="Office Slides",
         class_name="acme.office.agents.SheetSlidesAgent/SheetSlidesAgent",
     )
-    disabled = _agent(
-        agent_id="off",
-        enabled=False,
-        name="Slides",
-        class_name="naas_abi.agents.SlidesAgent/SlidesAgent",
-    )
-
     assert pick_workspace_slides_agent_id([default, other, slides]) == "slides"
-    assert pick_workspace_slides_agent_id([default, other, disabled]) is None
     assert pick_workspace_slides_agent_id([default, other]) is None
 
 
-def test_pick_workspace_documents_agent_prefers_enabled_office_documents() -> None:
-    default = _agent(agent_id="default", is_default=True, enabled=True, name="Orchestrator")
+def test_pick_workspace_documents_agent_is_the_office_documents_the_caller_may_use() -> None:
+    default = _agent(agent_id="default", is_default=True, name="Orchestrator")
     documents = _agent(
         agent_id="documents",
-        enabled=True,
         name="Documents",
         class_name="naas_abi.agents.DocumentsAgent/DocumentsAgent",
     )
     other = _agent(
         agent_id="sheet",
-        enabled=True,
         name="Office Documents",
         class_name="acme.office.agents.SheetDocumentsAgent/SheetDocumentsAgent",
     )
-    disabled = _agent(
-        agent_id="off",
-        enabled=False,
-        name="Documents",
-        class_name="naas_abi.agents.DocumentsAgent/DocumentsAgent",
-    )
-
     assert pick_workspace_documents_agent_id([default, other, documents]) == "documents"
-    assert pick_workspace_documents_agent_id([default, other, disabled]) is None
     assert pick_workspace_documents_agent_id([default, other]) is None

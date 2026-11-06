@@ -36,7 +36,7 @@ ACTOR = "someone"
 
 
 def actor(actor_id: str) -> str:
-    return f"abi:-:-:activity_log:actor/{actor_id}"
+    return f"abi:activity_log:actor/{actor_id}"
 
 
 class ActivityLogContract(AuthorizationContract):

@@ -800,3 +800,13 @@ aside.glass :focus-visible {
   line-height: 19px;
   font-weight: 500;
 }
+
+/* A view ("View as") shows a banner above every shell: the page starts below it, and the shells,
+   which are as tall as the window, give it their height (`--view-banner-height`). */
+html[data-view-as] {
+  --view-banner-height: 2.25rem;
+}
+
+html[data-view-as] body {
+  padding-top: var(--view-banner-height);
+}

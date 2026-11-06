@@ -5,6 +5,11 @@ from typing import Any
 from uuid import uuid4
 
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ, Authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
+    CONTAINER_DEFAULTS,
+    ContainerDefaults,
+    defaults_store_of,
+)
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
     MEMBERSHIPS,
     ROLE_NAMES,
@@ -12,9 +17,10 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
     best,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
-    NO_ORG,
     nexus_resource,
-    workspace_scope,
+    org_below,
+    org_of,
+    workspace_container,
 )
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
     InferenceServerCreateInput,
@@ -28,7 +34,11 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
     WorkspaceUpdateInput,
 )
 from naas_abi_core import logger
-from naas_abi_core.services.iam.names import scope_fields
+
+
+def scope_of(record: WorkspaceRecord) -> str:
+    """The workspace's container, from its row."""
+    return workspace_container(record.organization_id, record.id)
 
 
 @dataclass
@@ -75,7 +85,7 @@ class WorkspaceService:
     """Workspaces and their members.
 
     Membership is IAM's: a member holds ``builtin.<role>`` at the workspace's
-    scope (``services/iam/memberships``). ``by`` names the signed-in user making
+    container (``services/iam/memberships``). ``by`` names the signed-in user making
     a change, whose own rights IAM checks (an admin can never touch an owner).
     """
 
@@ -84,24 +94,27 @@ class WorkspaceService:
         adapter: WorkspacePermissionPort,
         memberships: Memberships = MEMBERSHIPS,
         authz: Authz | None = None,
+        defaults: ContainerDefaults = CONTAINER_DEFAULTS,
     ):
         self.adapter = adapter
         self.memberships = memberships
         self._authz = authz or AUTHZ
+        self.defaults = defaults
 
     async def _scope(self, workspace_id: str) -> str | None:
-        org = await self._authz.org_of(workspace_id)
-        return workspace_scope(org, workspace_id) if org is not None else None
+        """The workspace's container, where its roles are attached."""
+        return await self._authz.container_of(workspace_id)
 
     async def get_workspace_role(self, user_id: str, workspace_id: str) -> str | None:
         """The highest role the user holds in the workspace: their own there, or the
-        organization-wide role their org role (owner, admin) carries."""
+        one below the organization their org role (owner, admin) carries."""
         scope = await self._scope(workspace_id)
         if scope is None:
             return None
-        org, _ = scope_fields(scope)
+        org = org_of(scope)
         held = await self.memberships.roles_of(user_id)
-        return best([r for r in (held.get(scope), held.get(f"abi:{org}:*")) if r])
+        wide = held.get(org_below(org)) if org is not None else None
+        return best([r for r in (held.get(scope), wide) if r])
 
     async def effective_roles(
         self, user_id: str, workspaces: list[WorkspaceRecord]
@@ -113,8 +126,8 @@ class WorkspaceService:
                 [
                     r
                     for r in (
-                        held.get(workspace_scope(row.organization_id, row.id)),
-                        held.get(f"abi:{row.organization_id or NO_ORG}:*"),
+                        held.get(workspace_container(row.organization_id, row.id)),
+                        held.get(org_below(row.organization_id)) if row.organization_id else None,
                     )
                     if r
                 ]
@@ -136,7 +149,7 @@ class WorkspaceService:
             rows,
             user=user_id,
             resource_of=lambda row: nexus_resource(
-                "workspace", org=row.organization_id or NO_ORG, workspace=row.id
+                "workspace", container=workspace_container(row.organization_id, row.id)
             ),
         )
 
@@ -163,12 +176,18 @@ class WorkspaceService:
         try:
             scope = await self.memberships.register_workspace(record.organization_id, record.id)
             await self.memberships.grant(workspace.owner_id, "owner", scope)
+            # Its access policy (nothing, a sub-policy of its organization's) and
+            # its members and admins groups, the owner in both.
+            await self.defaults.workspace_created(
+                defaults_store_of(self.adapter), record.organization_id, record.id, record.name
+            )
         except Exception:
             await self.adapter.delete_workspace(workspace_id=record.id)
             try:
-                await self.memberships.drop_scope(record.organization_id or NO_ORG, record.id)
+                await self.memberships.drop_scope(record.organization_id, record.id)
+                await self.defaults.dropped(defaults_store_of(self.adapter), scope_of(record))
             except Exception:  # noqa: BLE001 - the original failure is what is raised
-                logger.exception(f"Could not forget the scope of workspace {record.id}")
+                logger.exception(f"Could not forget the container of workspace {record.id}")
             raise
         return record
 
@@ -180,13 +199,16 @@ class WorkspaceService:
         try:
             await self.adapter.rollback()
         finally:
-            await self.memberships.drop_scope(record.organization_id or NO_ORG, record.id)
+            await self.memberships.drop_scope(record.organization_id, record.id)
+            # The rolled-back session holds no record: only the in-process one goes.
+            await self.defaults.dropped(None, scope_of(record))
 
     async def delete_workspace(self, workspace_id: str) -> bool:
         record = await self.adapter.get_workspace_by_id(workspace_id=workspace_id)
         deleted = await self.adapter.delete_workspace(workspace_id=workspace_id)
         if deleted and record is not None:
-            await self.memberships.drop_scope(record.organization_id or NO_ORG, workspace_id)
+            await self.memberships.drop_scope(record.organization_id, workspace_id)
+            await self.defaults.dropped(defaults_store_of(self.adapter), scope_of(record))
         return deleted
 
     async def update_workspace(
@@ -218,10 +240,8 @@ class WorkspaceService:
         if scope is None:
             return []
         members = await self.memberships.members(scope)
-        org = await self._authz.org_of(workspace_id)
-        inherited = (
-            await self.memberships.members(f"abi:{org}:*") if org not in (None, NO_ORG) else []
-        )
+        org = org_of(scope)
+        inherited = await self.memberships.members(org_below(org)) if org is not None else []
         explicit_ids = {m.user_id for m in members}
         inherited = [m for m in inherited if m.user_id not in explicit_ids]
         users = await self.adapter.get_users_by_ids([m.user_id for m in members + inherited])
@@ -234,6 +254,7 @@ class WorkspaceService:
                 email=users[member.user_id].email,
                 name=users[member.user_id].name,
                 created_at=member.since,
+                principal_id=member.principal_id,
             )
             for member in members
             if member.user_id in users
@@ -249,6 +270,7 @@ class WorkspaceService:
                     name=users[member.user_id].name,
                     created_at=None,
                     source="organization",
+                    principal_id=member.principal_id,
                 )
                 for member in inherited
                 if member.user_id in users

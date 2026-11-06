@@ -1,6 +1,6 @@
 """Request-scoped identity stamped on every published event.
 
-The actor, workspace and trigger of an event come from the call's
+The actor, container and trigger of an event come from the call's
 ``CallContext`` (``naas_abi_core.engine.call_context``), the one source of who
 is calling. ``EventService.publish()`` copies them onto any ``LogProcess`` that
 did not set its own, so services emitting events never plumb identity.
@@ -10,7 +10,8 @@ or sets them like ContextVars:
 
 * ``event_actor_user_id``: the call's user (``CallContext.user``); setting it
   sets ``on_behalf_of``;
-* ``event_actor_workspace_id``: ``CallContext.workspace_id``;
+* ``event_actor_container``: ``CallContext.container``, the name of the
+  container the call is made in;
 * ``event_triggered_via``: ``CallContext.triggered_via``.
 
 ``set`` returns a token that ``reset`` takes back, like a ContextVar's. A
@@ -95,9 +96,10 @@ def _user_id(context: CallContext) -> str | None:
 event_actor_user_id = CallContextField(
     "on_behalf_of", _user_id, lambda value: user(value) if value else None
 )
-# Id of the workspace/tenant the work happens in (e.g. the Nexus workspaces.id).
-event_actor_workspace_id = CallContextField(
-    "workspace_id", lambda context: context.workspace_id, lambda value: value or None
+# The container the work happens in: its name (``abi:...``), e.g. a Nexus
+# workspace's ``abi:nexus:organization/<org>/nexus:workspace/<ws>``.
+event_actor_container = CallContextField(
+    "container", lambda context: context.container, lambda value: value or None
 )
 # How the work was triggered: "api", "configuration", "system", ...
 event_triggered_via = CallContextField(

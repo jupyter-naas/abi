@@ -65,7 +65,7 @@ function pickDocumentsPaneAgentId(): string | null {
 
 /** Open the Documents pane beside the document so the next message can edit it.
  *
- * Binds Nexus Documents when that agent is enabled in this workspace. Falls
+ * Binds Nexus Documents when the caller may use that agent in this workspace. Falls
  * back to the workspace default only when Documents is not on the roster.
  * A new document always resets so a leftover picker choice cannot ride in.
  *
@@ -108,7 +108,7 @@ export function openDocumentsAgentPane(opts?: {
   if (!defaultId) return;
   const agents = useAgentsStore.getState().agents;
   const currentStillValid = Boolean(
-    ws.paneAgent && agents.some((a) => a.enabled && a.id === ws.paneAgent),
+    ws.paneAgent && agents.some((a) => a.id === ws.paneAgent),
   );
   // An open document always binds Documents. The workspace default has no
   // write_sections_* tools; keeping an explicit pick burns the step budget

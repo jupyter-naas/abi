@@ -67,7 +67,7 @@ import '@/app/workspace/[workspaceId]/chat/components/chat-agent-selector.css';
 import { TypingIndicator } from '@/components/typing-indicator';
 import { PdfViewer } from '@/components/files/pdf-viewer';
 
-import { humanizeChatProviderError } from '@/lib/chat-provider-error';
+import { chatFailureText, chatResponseError, humanizeChatProviderError } from '@/lib/chat-provider-error';
 import {
   buildContextUsage,
   parseStreamTokenUsage,
@@ -813,8 +813,8 @@ export function ChatInterface({
     if (useWorkspaceStore.getState().agentExplicitlySelected) return;
     const agents = useAgentsStore.getState().agents;
     const defaultAgent =
-      agents.find((a) => a.isDefault && a.enabled) ??
-      agents.find((a) => a.enabled);
+      agents.find((a) => a.isDefault) ??
+      agents[0];
     if (defaultAgent) setSelectedAgent(defaultAgent.id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialConversationId, isPane]);
@@ -954,7 +954,7 @@ export function ChatInterface({
     if (!isPane) return;
     const surface = officeSurfaceFromPath(pathname);
     if (!surface.onDocuments && !surface.onSlides && !surface.onSheets) return;
-    const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
+    const agents = useAgentsStore.getState().agents;
     const picked = pickPaneOfficeAgent(agents, surface);
     if (picked && useWorkspaceStore.getState().paneAgent !== picked.id) {
       useWorkspaceStore.getState().setPaneAgent(picked.id);
@@ -1844,7 +1844,7 @@ export function ChatInterface({
     // a real agent id. Route wins over a leftover Documents/Slides bind from
     // the other office surface.
     if (!effectiveAgent) {
-      const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
+      const agents = useAgentsStore.getState().agents;
       const resolved =
         officeSurface.onSlides || officeSurface.onDocuments || officeSurface.onSheets
           ? (pickPaneOfficeAgent(agents, officeSurface) ?? pickWorkspaceDefaultAgent(agents))
@@ -1864,7 +1864,7 @@ export function ChatInterface({
         }
       }
     } else if (officeSurface.onSheets) {
-      const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
+      const agents = useAgentsStore.getState().agents;
       const sheets = pickSheetsOfficeAgent(agents);
       if (sheets) {
         effectiveAgent = sheets.id;
@@ -1873,7 +1873,7 @@ export function ChatInterface({
         }
       }
     } else if (officeSurface.onSlides) {
-      const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
+      const agents = useAgentsStore.getState().agents;
       const slides = pickSlidesOfficeAgent(agents);
       if (slides) {
         effectiveAgent = slides.id;
@@ -1882,7 +1882,7 @@ export function ChatInterface({
         }
       }
     } else if (officeSurface.onDocuments) {
-      const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
+      const agents = useAgentsStore.getState().agents;
       const documents = pickDocumentsOfficeAgent(agents);
       if (documents) {
         effectiveAgent = documents.id;
@@ -2477,7 +2477,7 @@ export function ChatInterface({
             window.location.href = '/auth/login';
             return;
           }
-          throw new Error(`API error: ${response.status}`);
+          throw await chatResponseError(response);
         }
 
         const reader = response.body?.getReader();
@@ -2716,7 +2716,7 @@ export function ChatInterface({
         });
 
         if (!response.ok) {
-          throw new Error(`API error: ${response.status}`);
+          throw await chatResponseError(response);
         }
 
         const data = await response.json();
@@ -2814,11 +2814,11 @@ export function ChatInterface({
         (error as { name?: string } | null)?.name === 'AbortError' || stopRequestedRef.current;
       if (conversationId && !wasAborted) {
           if (isStreaming) {
-            updateLastMessage(conversationId, `❌ Error: ${errorMessage}\n\nPlease try again or check your provider settings.`);
+            updateLastMessage(conversationId, chatFailureText(errorMessage));
           } else {
             addMessage(conversationId, {
               role: 'assistant',
-              content: `❌ Error: ${errorMessage}\n\nPlease try again or check your provider settings.`,
+              content: chatFailureText(errorMessage),
               agent: effectiveAgent,
             });
           }

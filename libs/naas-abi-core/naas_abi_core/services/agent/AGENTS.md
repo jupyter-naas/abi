@@ -172,14 +172,14 @@ Request-scoped `ContextVar`s used to tag emitted events:
 ```python
 agent_user_id: ContextVar[str | None]       # set by auth middleware
 agent_chat_id: ContextVar[str | None]       # falls back to AgentSharedState.thread_id
-agent_workspace_id: ContextVar[str | None]  # workspace boundary
+agent_container: ContextVar[str | None]     # the container of the call (its name)
 ```
 
 Propagate across async tasks / raw threads with `contextvars.copy_context()`.
 
-`agent_user_id` and `agent_workspace_id` are views of the call's `CallContext`
+`agent_user_id` and `agent_container` are views of the call's `CallContext`
 (`engine/call_context.py`, through the event service's `event_actor_user_id` and
-`event_actor_workspace_id`): there is no second source of identity. The context
+`event_actor_container`): there is no second source of identity. The context
 decides what an agent run may do, because every kernel service the agent's tools
 call authorizes the call's principal (`services/iam/AGENTS.md`, "Enforcing in a
 domain service"). So:

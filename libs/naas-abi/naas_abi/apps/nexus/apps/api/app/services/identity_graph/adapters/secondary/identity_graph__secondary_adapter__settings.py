@@ -132,14 +132,6 @@ class PlatformConfigurationSourceSettings(PlatformConfigurationSourcePort):
             host=_host_of(settings.get("frontend_url")),
             applied_at=self._clock(),
             enabled_features=list(flags.get("enabled_features") or []),
-            role_baseline={k: list(v) for k, v in (flags.get("role_baseline") or {}).items()},
-            workspace_overrides={
-                k: dict(v) for k, v in (flags.get("workspace_overrides") or {}).items()
-            },
-            organization_overrides={
-                org: {role: list(features) for role, features in roles.items()}
-                for org, roles in (flags.get("organization_overrides") or {}).items()
-            },
             tenant={
                 k: v for k, v in (settings.get("tenant") or {}).items() if not _SECRET_KEY.search(k)
             },

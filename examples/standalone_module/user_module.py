@@ -230,8 +230,8 @@ class ABIModule(BaseModule):
         # module/default/demo.ergonomic), with no dependency declaration: its
         # approved manifest grants its own document namespace.
         iam = services.iam
-        own = "abi:-:-:document:collection/demo.ergonomic/runs"
-        other = "abi:-:-:document:collection/someone-else/runs"
+        own = "abi:document:collection/demo.ergonomic/runs"
+        other = "abi:document:collection/someone-else/runs"
         assert (await iam.authorize("document:Find", own)).allowed
         assert not (await iam.authorize("document:Find", other)).allowed
         assert (await iam.filter("document:Find", [other, own])).allowed == [own]

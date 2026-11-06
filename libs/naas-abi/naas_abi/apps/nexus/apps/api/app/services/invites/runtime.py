@@ -14,7 +14,7 @@ from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_scope
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container
 from naas_abi.apps.nexus.apps.api.app.services.invites.adapters.secondary.engine import (
     EngineDirectoryGateway,
     EngineGrantsGateway,
@@ -92,11 +92,15 @@ class InvitationRuntime:
             # An org owner or admin reaches every workspace of the organization.
             if any(invitation.org_role for invitation in accepted):
                 await MEMBERSHIPS.sync_org_wide_roles(user.id)
-            # What derives from who belongs to a workspace (shared graphs) follows.
+            # What derives from who belongs to an organization or a workspace
+            # (its default groups, shared graphs) follows.
             for invitation in accepted:
+                if invitation.organization_id and invitation.org_role:
+                    await MEMBERSHIPS.changed(org_container(invitation.organization_id))
                 if invitation.workspace_id:
-                    org = await AUTHZ.org_of(invitation.workspace_id)
-                    await MEMBERSHIPS.changed(workspace_scope(org, invitation.workspace_id))
+                    container = await AUTHZ.container_of(invitation.workspace_id)
+                    if container is not None:
+                        await MEMBERSHIPS.changed(container)
 
         return claim
 

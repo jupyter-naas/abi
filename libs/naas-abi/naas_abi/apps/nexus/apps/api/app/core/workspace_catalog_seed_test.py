@@ -6,7 +6,6 @@ from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
     parse_agent_ref,
     resolve_agent_ref,
     resolve_agent_refs,
-    resolve_app_enabled,
 )
 
 
@@ -25,10 +24,7 @@ def test_resolve_agent_ref_prefers_module_prefix() -> None:
         "naas_abi.agents.AbiAgent/AbiAgent": object(),
         "example.module.agents.ExampleAgent/ExampleAgent": object(),
     }
-    assert (
-        resolve_agent_ref("naas_abi AbiAgent", registry)
-        == "naas_abi.agents.AbiAgent/AbiAgent"
-    )
+    assert resolve_agent_ref("naas_abi AbiAgent", registry) == "naas_abi.agents.AbiAgent/AbiAgent"
     assert (
         resolve_agent_ref("example.module ExampleAgent", registry)
         == "example.module.agents.ExampleAgent/ExampleAgent"
@@ -38,18 +34,9 @@ def test_resolve_agent_ref_prefers_module_prefix() -> None:
 
 def test_resolve_agent_refs_skips_unknown() -> None:
     registry = {"naas_abi.agents.AbiAgent/AbiAgent": object()}
-    assert resolve_agent_refs(
-        ["naas_abi AbiAgent", "nope NopeAgent"], registry
-    ) == {"naas_abi.agents.AbiAgent/AbiAgent"}
-
-
-def test_resolve_app_enabled_prefers_db_then_seed() -> None:
-    seed = {"example.module:dashboard"}
-    stored = {"example.module:dashboard": False, "example.module:other": True}
-    assert resolve_app_enabled("example.module:dashboard", stored, seed) is False
-    assert resolve_app_enabled("example.module:other", stored, seed) is True
-    assert resolve_app_enabled("example.module:dashboard", {}, seed) is True
-    assert resolve_app_enabled("example.module:unknown", {}, seed) is False
+    assert resolve_agent_refs(["naas_abi AbiAgent", "nope NopeAgent"], registry) == {
+        "naas_abi.agents.AbiAgent/AbiAgent"
+    }
 
 
 def test_ontology_matches_seed_module_filename() -> None:
@@ -111,7 +98,9 @@ def test_workspace_seed_config_accepts_ontologies() -> None:
 def test_ontology_refs_do_not_match_partial_names_or_paths() -> None:
     path = "/repo/src/example/ontologies/modules/PrivateExample.ttl"
     assert not ontology_matches_seed(path, "example", ["Example.ttl"])
-    assert not ontology_matches_seed(path, "example", ["ample/ontologies/modules/PrivateExample.ttl"])
+    assert not ontology_matches_seed(
+        path, "example", ["ample/ontologies/modules/PrivateExample.ttl"]
+    )
     assert not ontology_matches_seed(path, "example", ["/modules/PrivateExample.ttl"])
     assert ontology_matches_seed(path, "example", ["example/ontologies/modules/PrivateExample.ttl"])
     assert ontology_matches_seed(path, "example", [path])

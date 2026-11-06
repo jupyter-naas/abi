@@ -12,7 +12,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.port import (
     AuthPersistencePort,
     AuthUserRecord,
 )
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 AsyncSessionGetter = Callable[[], AsyncSession | None]
@@ -49,14 +49,19 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
         )
 
     async def get_user_by_id(self, user_id: str) -> AuthUserRecord | None:
-        result = await self.db.execute(select(UserModel).where(UserModel.id == user_id))
+        # A deleted account (``services/accounts``) is a retired row: it is nobody.
+        result = await self.db.execute(
+            select(UserModel).where(UserModel.id == user_id, UserModel.deleted_at.is_(None))
+        )
         row = result.scalar_one_or_none()
         if row is None:
             return None
         return self._to_user_record(row)
 
     async def get_user_by_email(self, email: str) -> AuthUserRecord | None:
-        result = await self.db.execute(select(UserModel).where(UserModel.email == email))
+        result = await self.db.execute(
+            select(UserModel).where(UserModel.email == email, UserModel.deleted_at.is_(None))
+        )
         row = result.scalar_one_or_none()
         if row is None:
             return None
@@ -101,16 +106,6 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
         await self.db.refresh(user)
         return self._to_user_record(user)
 
-    async def list_users(self) -> list[AuthUserRecord]:
-        result = await self.db.execute(select(UserModel).order_by(UserModel.email))
-        return [self._to_user_record(user) for user in result.scalars().all()]
-
-    async def count_superadmins(self) -> int:
-        result = await self.db.execute(
-            select(func.count()).select_from(UserModel).where(UserModel.is_superadmin.is_(True))
-        )
-        return int(result.scalar_one())
-
     async def list_member_profiles(self, user_id: str) -> list[dict[str, str | None]]:
         rows = await self.db.execute(
             select(
@@ -148,19 +143,6 @@ class AuthSecondaryAdapterPostgres(AuthPersistencePort):
             return None
         organization, job_title, bio = row
         return {"organization": organization, "job_title": job_title, "bio": bio}
-
-    async def set_user_superadmin(
-        self, user_id: str, is_superadmin: bool, now: datetime
-    ) -> AuthUserRecord | None:
-        result = await self.db.execute(select(UserModel).where(UserModel.id == user_id))
-        user = result.scalar_one_or_none()
-        if user is None:
-            return None
-        user.is_superadmin = is_superadmin
-        user.updated_at = now
-        await self.db.flush()
-        await self.db.refresh(user)
-        return self._to_user_record(user)
 
     async def commit(self) -> None:
         await self.db.commit()

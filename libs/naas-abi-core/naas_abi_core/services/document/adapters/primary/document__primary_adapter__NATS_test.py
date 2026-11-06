@@ -73,10 +73,10 @@ def test_every_caller_gets_the_domain_answer(identity):
     "error, code",
     [
         (
-            PermissionDeniedError("document:Get", "abi:-:-:document:document/a/b/c"),
+            PermissionDeniedError("document:Get", "abi:document:document/a/b/c"),
             "PERMISSION_DENIED",
         ),
-        (ResourceNotFoundError("abi:-:-:document:namespace/a"), "NOT_FOUND"),
+        (ResourceNotFoundError("abi:document:namespace/a"), "NOT_FOUND"),
     ],
 )
 def test_authorization_outcomes_keep_their_code(error, code):

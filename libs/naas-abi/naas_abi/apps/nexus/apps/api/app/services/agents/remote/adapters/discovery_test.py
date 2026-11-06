@@ -54,8 +54,8 @@ class _Handle:
         from naas_abi_core.engine.call_context import current_call_context
 
         self.proxy, self.prompt, self.cancelled = proxy, prompt, False
-        # The context the submit was made in (its transport sends its workspace).
-        self.workspace = current_call_context().workspace_id
+        # The context the submit was made in (its transport sends its container).
+        self.workspace = current_call_context().container
 
     async def events(self, *, timeout=None):
         if self.prompt == "boom":
@@ -113,14 +113,16 @@ def test_runs_on_the_conversation_thread(directory):
     assert _Proxy.handles[0].proxy.thread_id == "conv-7"
 
 
-def test_the_submit_carries_the_workspace_of_the_turn(directory):
+def test_the_submit_carries_the_workspace_of_the_turn(directory, nexus_iam):
+    container = nexus_iam.workspace("org-1", "ws-1")
+
     async def run(**kwargs):
         return [e async for e in directory.stream(RESEARCHER.key, "q", thread_id="c", **kwargs)]
 
     asyncio.run(run(workspace_id="ws-1"))
     asyncio.run(run())
 
-    assert [h.workspace for h in _Proxy.handles] == ["ws-1", None]
+    assert [h.workspace for h in _Proxy.handles] == [container, None]
 
 
 def test_a_tool_response_keeps_its_chat_source_opt_out(directory):
