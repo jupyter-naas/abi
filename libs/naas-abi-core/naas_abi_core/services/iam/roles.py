@@ -80,6 +80,9 @@ PLATFORM_MEMBER_ROLES = frozenset({MEMBER, ADMIN, OWNER})
 SERVICE_ACCOUNTS: dict[str, str] = {"engine": ENGINE, "api": API, "idp": IDP}
 
 _ATTACHMENT_TYPE = ("iam", "attachment")
+# Viewing as a principal is its own statement, so that the statements the roles
+# held before stay as they were.
+_VIEW_AS_TYPE = ("iam", "view_as")
 # IAM administration (policies, groups, attachments at the scope) is the
 # admins' and owners': viewers and members get nothing of the iam catalog.
 _ADMIN_ONLY_SERVICES = frozenset({"iam"})
@@ -210,7 +213,7 @@ def _role_statements(role: str, catalog: ActionCatalog) -> list[Statement]:
     # container itself (``${scope}``: a container type is decided where it is)
     # and making a container in it (its create action).
     groups: dict[str, tuple[list[str], list[str]]] = {
-        kind: ([], []) for kind in ("", "personal", "container", "creates")
+        kind: ([], []) for kind in ("", "personal", "container", "creates", "view_as")
     }
     for resource_type in placed:
         base = f"${{scope}}/{catalog.service}:{resource_type.name}/"
@@ -235,7 +238,12 @@ def _role_statements(role: str, catalog: ActionCatalog) -> list[Statement]:
                 kind = "personal"
                 patterns = [f"{base}${{principal.id}}", f"{base}${{principal.id}}/*"]
             else:
-                kind, patterns = "", [f"{base}*"]
+                kind = (
+                    "view_as"
+                    if (catalog.service, resource_type.name) == _VIEW_AS_TYPE
+                    else ""
+                )
+                patterns = [f"{base}*"]
             actions, resources = groups[kind]
             if qualified not in actions:
                 actions.append(qualified)
@@ -560,6 +568,8 @@ def api_policy(registry: CatalogRegistry | None = None) -> Policy:
                 # A user of the built-in login signing in through the built-in
                 # identity provider for the first time keeps its roles (§13).
                 "iam:LinkUser",
+                # Nexus asks for the viewer: the viewer's own rights decide too.
+                "iam:ViewAs",
             ),
             resources=("*",),
             sid="MembershipsScopesPlacementsAndKeys",

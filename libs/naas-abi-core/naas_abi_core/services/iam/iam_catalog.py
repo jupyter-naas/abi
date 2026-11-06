@@ -1,9 +1,10 @@
 """IAM's own catalog and the seals.
 
 IAM authorizes its own operations with these actions, like any other service.
-Three resource types are named in a container: ``attachment``, in its
+Four resource types are named in a container: ``attachment``, in its
 attachment's scope's container, ``policy`` and ``group``, in the container that
-owns them, so the admins of a container manage its roles, policies and groups.
+owns them, so the admins of a container manage its roles, policies and groups, and
+``view_as``, the person a view is made of, in the container the view is of.
 The platform's own are named at the platform, where no ``${scope}`` reaches
 them. Every other type is platform-level.
 """
@@ -49,7 +50,8 @@ CATALOG = ActionCatalog(
     # 8: container paths: the registry of containers (``container``) and the
     # rewrite of the names before them (RewriteNames); PutScope and
     # DeleteScope authorize nothing but the reading of the legacy sets.
-    version=8,
+    # 9: viewing as a principal (``view_as``, ViewAs), in process only.
+    version=9,
     resource_types=(
         ResourceType("principal", id="opaque", placement="platform"),
         ResourceType(
@@ -69,6 +71,12 @@ CATALOG = ActionCatalog(
             id="path",
             placement="placed",
             description="attachment/<policy id>/<principal id>, at its scope.",
+        ),
+        ResourceType(
+            "view_as",
+            id="opaque",
+            placement="placed",
+            description="view_as/<principal id>, in the container the view is of.",
         ),
         ResourceType("key", id="path", placement="platform", personal=True),
         ResourceType("manifest", id="opaque", placement="platform"),
@@ -125,6 +133,10 @@ CATALOG = ActionCatalog(
         _action("SuspendPrincipal", "admin", ("principal",), "suspend_principal"),
         _action("ResumePrincipal", "admin", ("principal",), "resume_principal"),
         _action("LinkUser", "admin", ("principal",)),
+        # Seeing the product as another person, read-only: decided by
+        # ``IAMService.view_as_verdict`` with the rule that the person holds no
+        # more than the viewer. In process only: no subject.
+        _action("ViewAs", "admin", ("view_as",)),
         _action("CreateGroup", "admin", ("group",), "create_group", creates=True),
         _action("DeleteGroup", "admin", ("group",), "delete_group"),
         _action("AddGroupMember", "admin", ("group",), "add_group_member"),

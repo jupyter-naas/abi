@@ -38,7 +38,8 @@ model_registry, discovery, source_control, coding_environment) use
   [Sealed resources](#sealed-resources),
   [Built-in policies](#built-in-policies), [Module scopes](#module-scopes),
   [Sub-policies](#sub-policies),
-  [Grant only what you hold](#grant-only-what-you-hold)
+  [Grant only what you hold](#grant-only-what-you-hold),
+  [Viewing as a principal](#viewing-as-a-principal)
 - Using it: [Service API](#service-api),
   [Enforcing in a domain service](#enforcing-in-a-domain-service-guardpy),
   [Enforcing in a data service](#enforcing-in-a-data-service-enforcementpy)
@@ -90,6 +91,7 @@ model_registry, discovery, source_control, coding_environment) use
 | `tests/authorization_contract.py` | The contract every runtime service passes per operation: no policy, granted, denied, in process and over NATS |
 | `tests/data_service_contract.py` | The data services' contract: a table of cases for no policy, granted and denied principals, list filtering, in process and over NATS |
 | `tests/grant_contract.py` | Grant only what you hold: the refusals and what keeps working, in process and over NATS |
+| `tests/view_as_contract.py` | Viewing as a principal: the scenario's cast (Root, Acme, Alpha, Bravo, Olivia, Bob, Carol, Dave), what is allowed and refused, groups, the budget and what the roles give, in process |
 | `tests/sub_policy_contract.py` | Sub-policies: what they grant, live narrowing, inherited Denies, `explain`, the refusals, deriving, deleting, in process and over NATS |
 
 ## Ports
@@ -1037,8 +1039,8 @@ attachment per scope.
 |---|---|---|
 | `builtin.viewer` | every `list` and `read` action | every `policy_only` type; the whole `iam` catalog; every module scope type |
 | `builtin.member` | viewer, plus every `write` action | every `policy_only` type; the whole `iam` catalog; every module scope type |
-| `builtin.admin` | member, plus every `admin` action, except on the `iam` `attachment` type; the scope's policies and groups (`ListPolicies`, `GetPolicy`, `CreatePolicy`, `UpdatePolicy`, `DeletePolicy`, `ListGroups`, `GetGroup`, `CreateGroup`, `DeleteGroup`, `AddGroupMember`, `RemoveGroupMember` on `${scope}/iam:policy/*` and `${scope}/iam:group/*`); `iam:ListAttachments` on `${scope}/iam:attachment/*`, and `iam:AttachPolicy` and `iam:DetachPolicy` on `${scope}/iam:attachment/builtin.admin/*`, `…/builtin.member/*`, `…/builtin.viewer/*` and `…/pol_*/*` (customer policies: the scope's own and those above it, IAM refusing one owned elsewhere; one owned above is listed there only where it is attached at the scope or above, "Service API") | every `policy_only` type; every module scope type; anything on `attachment/builtin.owner/*` and the other managed policies; `iam:MapIdpGroup`, `iam:UnmapIdpGroup`; every `owner_only` action |
-| `builtin.owner` | admin, plus every action on every `attachment/…` (owner included) and every `owner_only` action | every `policy_only` type; every module scope type; `iam:MapIdpGroup`, `iam:UnmapIdpGroup` |
+| `builtin.admin` | member, plus every `admin` action, except on the `iam` `attachment` type; the scope's policies and groups (`ListPolicies`, `GetPolicy`, `CreatePolicy`, `UpdatePolicy`, `DeletePolicy`, `ListGroups`, `GetGroup`, `CreateGroup`, `DeleteGroup`, `AddGroupMember`, `RemoveGroupMember` on `${scope}/iam:policy/*` and `${scope}/iam:group/*`); `iam:ListAttachments` on `${scope}/iam:attachment/*`, and `iam:AttachPolicy` and `iam:DetachPolicy` on `${scope}/iam:attachment/builtin.admin/*`, `…/builtin.member/*`, `…/builtin.viewer/*` and `…/pol_*/*` (customer policies: the scope's own and those above it, IAM refusing one owned elsewhere; one owned above is listed there only where it is attached at the scope or above, "Service API"); `iam:ViewAs` on `${scope}/iam:view_as/*` (a statement of its own: "Viewing as a principal") | every `policy_only` type; every module scope type; anything on `attachment/builtin.owner/*` and the other managed policies; `iam:MapIdpGroup`, `iam:UnmapIdpGroup`; every `owner_only` action |
+| `builtin.owner` | admin (`iam:ViewAs` included), plus every action on every `attachment/…` (owner included) and every `owner_only` action | every `policy_only` type; every module scope type; `iam:MapIdpGroup`, `iam:UnmapIdpGroup` |
 | `builtin.platform_admin` | `*` on `*` (attached without scope) | sealed resources |
 | `builtin.self` | held implicitly by every user (no attachment row, unknown users included; `explain` shows it with no attachment id) | none |
 
@@ -1048,7 +1050,9 @@ attachment per scope.
   and groups and attach them there; attached below a container (an organisation's owners
   and admins, which Nexus mirrors), they manage those of every container under it too.
   They also see, in a list at their scope, what they may attach there from above (see
-  "Service API").
+  "Service API"). They alone hold `iam:ViewAs` on `${scope}/iam:view_as/*`, at the
+  container they are attached at, or at every container under it when attached below one:
+  who may view as whom is decided by "Viewing as a principal".
 - **Owner protection.** An admin cannot attach or detach `builtin.owner`; demoting or
   removing an owner means detaching their owner attachment, so only an owner can, at
   every container alike.
@@ -1091,7 +1095,7 @@ attachment per scope.
   actions and those of a person at their provider (`identity:ProvisionUser`,
   `FindProvisionedUser`, `UpdateProvisionedUser`, `DeleteProvisionedUser`: invitations and the
   platform's Users page, called on behalf of the administrator, whose rights bound them),
-  `iam:ExchangeToken`, the IAM actions that keep memberships, scopes and
+  `iam:ExchangeToken`, `iam:ViewAs` (Nexus asks it for the viewer: the viewer's own rights decide too), the IAM actions that keep memberships, scopes and
   placements, those of the policies it keeps (shared graphs, each container's access
   policy) and of the groups it keeps (`ContainerAccessAndGroups`: each organisation's and
   workspace's members and admins groups, Nexus `services/iam/AGENTS.md`), and denies
@@ -1555,6 +1559,66 @@ Invitations and IdP group bindings made from Nexus are written as `api` **on beh
 inviting person** (`invites/adapters/secondary/engine.py`), so they are checked like any
 grant; their reads and withdrawals stay `api`'s own.
 
+## Viewing as a principal
+
+Seeing the product as another person, read-only, to check the access given to them (Nexus
+asks; it adds no rule of its own). Core decides who may view as whom, and where, and nothing
+else: no view is kept here.
+
+- **The action and the name.** `iam:ViewAs` (level `admin`) on the type `view_as`, placed in
+  containers, whose id is a principal id: `<container>/iam:view_as/<principal id>`
+  (`view_as_resource(principal_id, container)`, beside `attachment_resource`). The container is
+  the one the view is of, a registered container (a workspace); the platform is none.
+- **Who holds it.** `builtin.admin` and `builtin.owner`, on `${scope}/iam:view_as/*`, in a
+  statement of their own (`AdminIamViewAs`), so every other statement of the roles is as it
+  was. Attached at a container they hold it there and nowhere else, not at a container above or
+  under it; attached below one (an organisation's admins and owners) at every container under
+  it, as for their other IAM actions. Viewers and members hold none of it. The platform admin
+  holds it through `*`. `api` holds it too (`builtin.api`), as Nexus asks on behalf of the viewer,
+  whose own rights bound the call.
+- **The decision.** `iam.view_as_verdict(principal_id, container, groups=())` answers a
+  `ViewAsVerdict`: `allowed`, or a `reason` and its `code`; `iam.require_view_as(...)` raises
+  `ViewAsRefused`, a `PermissionDeniedError` whose message is the reason and `code` the code.
+  `groups` are the person's identity provider groups (IAM group ids), taken with their stored
+  groups; an id that is not an active group lends nothing. The caller is the call's user (`api`
+  acting for a user: the user's rights, and `api`'s own, both decide), and a first-party account
+  acting for no user is checked like anyone.
+- **Refused**, in this order, each with its own message and code:
+
+| Code | Refused when |
+|---|---|
+| `not_allowed` | the caller lacks `iam:ViewAs` on `<container>/iam:view_as/<person>`: it says no more, whoever the person is |
+| `unknown_container` | the container is not a registered one, or is the platform (after the first: nobody learns which containers exist) |
+| `unknown_person` | there is no such principal |
+| `self` | the person is the caller |
+| `not_a_user` | the person is a group or a service account |
+| `inactive` | the person is suspended or deleted |
+| `platform_admin` | the person holds `builtin.platform_admin`: nobody views as the platform admin, another platform admin included |
+| `nothing_held` | the person holds nothing at that container |
+| `holds_more` | the person holds more than the caller there |
+
+- **The person holds no more than the caller.** What is checked is every attachment that
+  counts at the container, for the person or for one of their groups: at the container, below
+  it or below a container above it (`C/*` for `C` the container or above), at the platform
+  (`abi:`), or unscoped. An attachment at a container above, not below it, is at that level and
+  does not count (a role there stays at its level). Each must be held by the caller as
+  `attach_policy` checks a grant ("Grant only what you hold", `_require_held`): its policy at
+  that attachment's scope, and, for a sub-policy, within its chain. IAM's companions
+  (`builtin.platform.*`) are skipped as `add_group_member` skips them (`_companions`, kept per
+  holder), and `builtin.self`, which every user holds. A Deny of the caller that overlaps one
+  refuses; the budget rules of "Grant only what you hold" apply, so what is not proven is refused
+  ("too long to prove"). The message names the first attachment not held, in the order of the
+  person's own attachments before each group's: the policy, where it is attached (`at <scope>`,
+  `below <container>`, `at the platform`, `unscoped`), and the group it came through. A scope of
+  the grammar before container paths is not understood and is refused as unproven.
+- **What that gives.** The platform admin views as anyone who is not a platform admin; an
+  organisation's admin as the people of the organisation in its workspaces, as long as they hold
+  nothing the admin does not; a workspace admin as the members of the workspace, there only,
+  never as the organisation's admin nor as the workspace's owner, and not as someone given the
+  organisation's access policy at the workspace unless the admin holds what it grants there.
+- **In process only**, like `link_user`: Nexus calls it. The action has no subject: no NATS
+  endpoint, no SDK operation, and a remote module cannot ask.
+
 ## Service API
 
 ```python
@@ -1680,7 +1744,10 @@ invitation beyond the new owner. A managed policy never moves (`IAMConflictError
 policy grants changes (no decision reads an owner), only who administers it. Not over NATS
 nor in the SDK. No store schema change: the owner was a column already.
 
-Names: `principal_resource`, `group_resource(id, owner_scope)`,
+`view_as_verdict` and `require_view_as` ("Viewing as a principal", in process only like
+`link_user`: no NATS endpoint, no SDK operation).
+
+Names: `principal_resource`, `view_as_resource(principal id, container)`, `group_resource(id, owner_scope)`,
 `policy_resource(id, owner_scope)`, `attachment_resource` (at its scope's container; at the
 platform for a platform or unscoped one), `placement_resource`, `container_resource`,
 `catalog_resource`.
@@ -2487,6 +2554,22 @@ owner). In process only: the module that defines a container moves what it made 
 policy does (a workspace's admins manage what their workspace owns). No SDK or NATS
 operation, so `make demo-sdk` is unchanged.
 
+**Viewing as a person is IAM's decision, in process, and no one views as more than they hold.**
+*Decision.* `iam:ViewAs` (admin level) on `<container>/iam:view_as/<person>` says who may view
+as whom, where; `builtin.admin` and `builtin.owner` hold it at their container, at every one
+under it below one, the platform admin through `*`. A view is refused when the person holds
+more than the caller at the container (each attachment that counts there, checked as
+`attach_policy` checks a grant), when they are the caller, a group, a service account, not
+active, a platform admin (another's included), or hold nothing there. `groups` bring the person's
+identity provider groups into the check. The decision is on `IAMService` and the port, in
+process only: no NATS endpoint and no SDK operation.
+*Consequences.* A workspace admin cannot view as the organisation's admin or the workspace's
+owner, nor as someone with an organisation policy at the workspace they do not hold; an
+organisation's admin views as people of its workspaces; the platform admin as anyone but a
+platform admin. Nexus keeps the view and adds no role check of its own. `builtin.api` holds
+`iam:ViewAs` so that Nexus may ask for the viewer. IAM's catalog is version 9; the roles are
+regenerated and keep every other statement as it was.
+
 ## Known limits and open questions
 
 - **JetStream answers with fixed content where a module asks.** The server answers a module's
@@ -2503,6 +2586,9 @@ operation, so `make demo-sdk` is unchanged.
 - **Per-object sharing** of single conversations or files beyond personal resources is the
   relationship-based (OpenFGA) question: placement and identity policies cover workspace-level
   access; sharing one object means a statement naming it.
+- **A view counts attachments by their scope.** An attachment at a container above the viewed
+  one, not below it, does not count at it, even if its policy names `${scope}/*`, which reaches
+  every container under the one it is attached at. The roles never do; a customer policy might.
 - **Policy conditions** (`conditions`, reserved): IP ranges, time windows, MFA claims. Not needed yet.
 - **Federation.** Every ABI server trusting the same IdP issuer is enough for login; cross-server
   service accounts are not designed.

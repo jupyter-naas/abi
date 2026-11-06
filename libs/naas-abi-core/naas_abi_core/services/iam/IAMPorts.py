@@ -130,6 +130,31 @@ class GrantNotHeldError(PermissionDeniedError):
         super().__init__(action, resource, message=message)
 
 
+class ViewAsRefused(PermissionDeniedError):
+    """Viewing as a person is refused: the message names why. ``code`` is one of
+    ``ViewAsVerdict.CODES``. In process only, like ``link_user``: it has no wire
+    code."""
+
+    def __init__(
+        self, resource: str = "", *, code: str = "not_allowed", message: str
+    ) -> None:
+        self.code = code
+        super().__init__("iam:ViewAs", resource, message=message)
+
+
+@dataclass(frozen=True)
+class ViewAsVerdict:
+    """Whether the caller may view as a person in a container: allowed, or the
+    reason, with its ``code`` (``not_allowed``, ``unknown_container``,
+    ``unknown_person``, ``self``, ``not_a_user``, ``inactive``, ``platform_admin``,
+    ``nothing_held`` or ``holds_more``)."""
+
+    allowed: bool
+    code: str | None = None
+    reason: str | None = None
+    resource: str = ""
+
+
 class KeyRefusedError(IAMError):
     """A key that cannot be exchanged or connect: unknown, wrong, revoked,
     expired, of another kind, or of an inactive principal. One message for
@@ -1192,6 +1217,28 @@ class IIAMService(ABC):
         identity may already have made (a first sign-in) is merged into it.
         In process only."""
         raise NotImplementedError("link_user runs in the engine that holds IAM")
+
+    def view_as_verdict(
+        self, principal_id: str, container: str, groups: Iterable[str] = ()
+    ) -> ViewAsVerdict:
+        """Whether the caller may view as the person ``principal_id`` in
+        ``container``: allowed, or the reason ("Viewing as a principal"). ``groups``
+        are the person's identity provider groups (IAM group ids), taken with
+        their stored ones. In process only: no NATS endpoint, no SDK operation."""
+        raise NotImplementedError("view_as_verdict runs in the engine that holds IAM")
+
+    def require_view_as(
+        self, principal_id: str, container: str, groups: Iterable[str] = ()
+    ) -> None:
+        """``ViewAsRefused``, its message naming why, unless the caller may view as
+        ``principal_id`` in ``container``. In process only."""
+        verdict = self.view_as_verdict(principal_id, container, groups)
+        if not verdict.allowed:
+            raise ViewAsRefused(
+                verdict.resource,
+                code=verdict.code or "not_allowed",
+                message=verdict.reason or "Viewing as this person is refused",
+            )
 
     @abstractmethod
     def create_service_account(

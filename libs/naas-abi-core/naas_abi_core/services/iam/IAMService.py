@@ -106,6 +106,7 @@ from naas_abi_core.services.iam.IAMPorts import (
     Seal,
     Subject,
     TokenExchange,
+    ViewAsVerdict,
     new_id,
 )
 from naas_abi_core.services.iam.names import (
@@ -192,6 +193,15 @@ def attachment_resource(policy_id: str, principal_id: str, scope: str | None) ->
         [policy_id, principal_id],
         kind="path",
         container=container,
+    )
+
+
+def view_as_resource(principal_id: str, container: str) -> str:
+    """``<container>/iam:view_as/<principal id>``: viewing as a person in a
+    container, what ``iam:ViewAs`` is decided on. Named in the container the view
+    is of, so an admin's role at it, or below it, reaches it and no other."""
+    return resource_name(
+        "iam", "view_as", principal_id, container=as_container(container)
     )
 
 
@@ -2824,15 +2834,21 @@ class IAMService(IIAMService, PolicySource):
         *,
         policy_id: str,
         parents: Sequence[PolicyDocument] | None = (),
+        exempt_first_party: bool = True,
     ) -> None:
         """``GrantNotHeldError`` unless the caller holds, at each scope, what
         ``document`` allows there, within ``parents`` for a sub-policy (its
         chain, nearest first; None: a chain that cannot be read whole, refused
         with ``IAMConflictError``). A write a first-party account (``engine``, ``api``)
         makes for no user is its own: the route or the boot step that made it
-        authorized what it stands for."""
+        authorized what it stands for (``exempt_first_party=False``: not even
+        that, a view of a person being no write of its own)."""
         ctx = current_call_context()
-        if ctx.on_behalf_of is None and self._first_party(ctx.principal):
+        if (
+            exempt_first_party
+            and ctx.on_behalf_of is None
+            and self._first_party(ctx.principal)
+        ):
             return
         if parents is None:
             # Unchecked, it would grant what nobody was checked for once the
@@ -2928,6 +2944,165 @@ class IAMService(IIAMService, PolicySource):
             return False
         record = self._resolve(principal)
         return record is not None and record.name in FIRST_PARTY_ACCOUNTS
+
+    # =========================================================================
+    # Viewing as a principal (AGENTS.md, "Viewing as a principal")
+    # =========================================================================
+
+    def view_as_verdict(
+        self, principal_id: str, container: str, groups: Iterable[str] = ()
+    ) -> ViewAsVerdict:
+        """Whether the caller may view as the person ``principal_id`` in
+        ``container``: allowed, or the reason, with its code.
+
+        The caller needs ``iam:ViewAs`` on ``<container>/iam:view_as/<person>``,
+        and the person must hold no more than the caller there: every attachment
+        that counts at the container, for the person or for one of their groups
+        (their stored groups, and ``groups``, the ids of the identity provider's
+        groups they carry), is checked as ``attach_policy`` checks a grant. In
+        process only, like ``link_user``."""
+        try:
+            resource = view_as_resource(principal_id, container)
+        except ValueError:
+            return self._view_refused(
+                "unknown_container",
+                f"{container!r} is not a container: a view is of one container",
+                "",
+            )
+
+        def refuse(code: str, message: str) -> ViewAsVerdict:
+            return self._view_refused(code, message, resource)
+
+        if not self.authorize("iam:ViewAs", resource).allowed:
+            return refuse(
+                "not_allowed",
+                f"You may not view as {principal_id} in {container}: it needs "
+                f"iam:ViewAs on {resource}",
+            )
+        if container == PLATFORM_SCOPE or self._known_container(container) != container:
+            return refuse(
+                "unknown_container",
+                f"{container} is not a container of this installation: a view is "
+                "of one workspace",
+            )
+        try:
+            person = self._get_principal(principal_id)
+        except IAMNotFoundError:
+            return refuse("unknown_person", f"Principal {principal_id} not found")
+        label = _principal_label(person)
+        ctx = current_call_context()
+        viewer = ctx.on_behalf_of or ctx.principal
+        record = self._resolve(viewer)
+        if person.id in (viewer.id, record.id if record is not None else None):
+            return refuse("self", "You cannot view as yourself")
+        if person.kind != "user":
+            kind = "a group" if person.kind == "group" else "a service account"
+            return refuse("not_a_user", f"{label} is {kind}: a view is of a person")
+        if person.status != "active":
+            return refuse("inactive", f"{label} is {person.status}")
+        held = self._held_by(person, groups)
+        if any(a.policy_id == roles.PLATFORM_ADMIN for a, _ in held):
+            return refuse(
+                "platform_admin",
+                f"{label} holds {roles.PLATFORM_ADMIN}: nobody views as the "
+                "platform admin, another platform admin included",
+            )
+        counted = [
+            (attachment, via)
+            for attachment, via in held
+            if _reaches(attachment.scope, container)
+        ]
+        if not counted:
+            return refuse("nothing_held", f"{label} holds nothing in {container}")
+        problem = self._first_not_held(person, label, counted)
+        if problem is not None:
+            return refuse("holds_more", problem)
+        return ViewAsVerdict(True, resource=resource)
+
+    @staticmethod
+    def _view_refused(code: str, message: str, resource: str) -> ViewAsVerdict:
+        return ViewAsVerdict(False, code, message, resource)
+
+    def _held_by(
+        self, person: PrincipalRecord, groups: Iterable[str]
+    ) -> list[tuple[Attachment, str | None]]:
+        """What the person holds, wherever attached: their own attachments and
+        each active group's, stored or carried (``groups``), but IAM's companions
+        of their roles (``_companions``, kept per holder as the role sync keeps
+        them) and ``builtin.self``, which every user holds."""
+        holder = CallPrincipal(id=person.id, kind="user", groups=frozenset(groups))
+        found = self._held_attachments(holder, person)
+        by_holder: dict[str, list[Attachment]] = {}
+        for attachment, _via in found:
+            by_holder.setdefault(attachment.principal_id, []).append(attachment)
+        companions = {
+            holder_id: self._companions(attachments)
+            for holder_id, attachments in by_holder.items()
+        }
+        return [
+            (attachment, via)
+            for attachment, via in found
+            if attachment.policy_id != roles.SELF
+            and (attachment.policy_id, attachment.scope)
+            not in companions[attachment.principal_id]
+        ]
+
+    def _first_not_held(
+        self,
+        person: PrincipalRecord,
+        label: str,
+        attachments: Sequence[tuple[Attachment, str | None]],
+    ) -> str | None:
+        """The first attachment the caller does not hold, as a message naming the
+        policy, where it is attached and the group it came through: each policy
+        at its attachment's scope and within its chain, as ``attach_policy``
+        checks a grant, the budget of "Grant only what you hold" shared by all."""
+        ordered = sorted(
+            attachments,
+            key=lambda item: (
+                item[1] or "",
+                item[0].policy_id,
+                item[0].scope or "",
+            ),
+        )
+        with grants.budget():
+            for attachment, via in ordered:
+                policy = self._load_policy(attachment.policy_id)
+                if policy is None:
+                    continue
+                what = (
+                    f"{label} holds {_policy_label(policy)}, attached "
+                    f"{_attached(attachment.scope)}{self._through(via)}, "
+                    "which you do not hold"
+                )
+                if is_old_scope(attachment.scope):
+                    return (
+                        f"{what}: its scope is of the grammar before container "
+                        "paths, so it is not proven"
+                    )
+                try:
+                    self._require_held(
+                        policy.document,
+                        [attachment.scope],
+                        policy_id=policy.id,
+                        parents=self._parents(policy),
+                        exempt_first_party=False,
+                    )
+                except GrantNotHeldError as error:
+                    return (
+                        f"{what}: it allows {error.action} on {error.resource}, "
+                        f"and {error.reason}"
+                    )
+                except IAMConflictError as error:
+                    return f"{what}: {error}"
+        return None
+
+    def _through(self, group_id: str | None) -> str:
+        if group_id is None:
+            return ""
+        group = self._find_group(group_id)
+        name = group.name if group is not None and group.name else group_id
+        return f", through the group {name} ({group_id})"
 
     # =========================================================================
     # Companions: what IAM keeps in step with the roles.
@@ -4413,6 +4588,40 @@ def _companion_roles(
             continue
         if brings(attachment.scope):
             yield attachment.policy_id, attachment.scope
+
+
+def _principal_label(person: PrincipalRecord) -> str:
+    return person.display_name or person.email or person.name or person.id
+
+
+def _policy_label(policy: Policy) -> str:
+    return (
+        policy.id if policy.name in ("", policy.id) else f"{policy.name} ({policy.id})"
+    )
+
+
+def _attached(scope: str | None) -> str:
+    """Where an attachment is, as a message says it."""
+    if scope is None:
+        return "unscoped"
+    if scope == PLATFORM_SCOPE:
+        return "at the platform"
+    if is_below(scope):
+        return f"below {container_of_scope(scope)}"
+    return f"at {scope}"
+
+
+def _reaches(scope: str | None, container: str) -> bool:
+    """Whether an attachment at ``scope`` counts at ``container``: unscoped, at the
+    platform, at the container itself, or below it or below a container above it.
+    A role attached at a container above stays at its level, and is not one that
+    counts; a scope of the grammar before container paths is not understood, so it
+    counts everywhere (``_first_not_held`` refuses it)."""
+    if scope is None or scope == PLATFORM_SCOPE or is_old_scope(scope):
+        return True
+    if is_below(scope):
+        return within(container, container_of_scope(scope))
+    return scope == container
 
 
 def _retired_companions(
