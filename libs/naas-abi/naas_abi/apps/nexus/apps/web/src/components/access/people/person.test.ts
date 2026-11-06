@@ -92,6 +92,8 @@ async function show(api: ReturnType<typeof apiFor>, can: (a: string) => boolean,
     label: 'bob',
     onClose: vi.fn(),
     changeRole,
+    // The workspaces to view them in: none unless a test says (the server's answer, not fetched here).
+    viewable: () => Promise.resolve([]),
     ...more,
   });
   await mounted.flush();
@@ -237,5 +239,32 @@ describe('A person’s page', () => {
     await show(api, (a) => ADMIN.includes(a), workspaceAccessScope('acme', 'ws-1'), { directory: nobody });
     expect(row('builtin.member', WS)).not.toBeNull();
     expect(field('Role at Workspace W (Acme)')).toBeNull();
+  });
+});
+
+describe('View as, on a person’s page', () => {
+  const ALPHA = { id: 'ws-1', name: 'Alpha', organization: { id: 'acme', name: 'Acme' } };
+  const BRAVO = { id: 'ws-2', name: 'Bravo', organization: { id: 'acme', name: 'Acme' } };
+  const rights = { 'abi:': ADMIN, [WS]: ADMIN };
+
+  it('offers no button when the server lists no workspace to view them in', async () => {
+    await show(apiFor([memberAtW], [], rights), () => true, wsScope);
+    expect(button('View as Bob')).toBeUndefined();
+  });
+
+  it('offers the button, then the workspaces with the page’s workspace preselected', async () => {
+    await show(apiFor([memberAtW], [], rights), () => true, wsScope, { viewable: () => Promise.resolve([BRAVO, ALPHA]) });
+    expect(button('View as Bob')).toBeDefined();
+    expect(document.querySelector('[aria-label="Workspace to view"]')).toBeNull();
+    await mounted!.click(button('View as Bob')!);
+    const picker = field('Workspace to view') as HTMLSelectElement;
+    expect([...picker.options].map((o) => o.value)).toEqual(['ws-2', 'ws-1']);
+    expect(picker.value).toBe('ws-1');
+  });
+
+  it('asks about the person by their IAM id', async () => {
+    const viewable = vi.fn().mockResolvedValue([ALPHA]);
+    await show(apiFor([memberAtW], [], rights), () => true, PLATFORM_ACCESS_SCOPE, { viewable });
+    expect(viewable).toHaveBeenCalledWith('usr_bob');
   });
 });

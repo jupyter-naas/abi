@@ -12,6 +12,14 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import { discardDeferredStorage } from '@/lib/deferred-storage';
 import { clearAuthFlagCookie, mergeAuthPersistedState, setAuthFlagCookie } from '@/lib/auth-session';
 import { getSafeStorage } from '@/lib/safe-storage';
+import { clearViewFlag, setViewFlag, viewFlagActive, readViewFlag } from '@/lib/view-flag';
+import {
+  announceViewRefusal,
+  navigation,
+  parseView,
+  viewRefusalMessage,
+  type ViewAs,
+} from '@/lib/view-model';
 
 export interface User {
   id: string;
@@ -27,7 +35,14 @@ export interface User {
 
 export interface AuthState {
   // State
+  // Who the pages show: the signed-in user, or the person during a view.
   user: User | null;
+  // During a view: the view the server keeps on this session, and who is viewing.
+  // Null otherwise. The session (CSRF) stays the viewer's, `user` is the person's.
+  view: ViewAs | null;
+  viewer: User | null;
+  // The identity provider of the session (the banner names it when its groups are missing).
+  provider: string | null;
   // In memory: sent as X-CSRF-Token on every request that changes state.
   csrfToken: string | null;
   isAuthenticated: boolean;
@@ -61,6 +76,9 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       // Initial state
       user: null,
+      view: null,
+      viewer: null,
+      provider: null,
       csrfToken: null,
       isAuthenticated: false,
       isLoading: false,
@@ -69,6 +87,8 @@ export const useAuthStore = create<AuthState>()(
       // Logout - clears auth state and ALL persisted store data
       logout: () => {
         clearAuthFlagCookie();
+        // The sign-out ends the view on the server; the browser forgets it too.
+        clearViewFlag();
         const { csrfToken } = get();
         // The API ends the session; the provider may end its own too.
         void fetch(`${getApiUrl()}/api/auth/oidc/logout`, {
@@ -86,6 +106,9 @@ export const useAuthStore = create<AuthState>()(
 
         set({
           user: null,
+          view: null,
+          viewer: null,
+          provider: null,
           csrfToken: null,
           isAuthenticated: false,
           error: null,
@@ -103,8 +126,13 @@ export const useAuthStore = create<AuthState>()(
         ];
         // Queued deferred writes would otherwise re-create these keys.
         discardDeferredStorage(storeKeys);
+        // In a view `localStorage` is memory: the browser's own is kept aside for this clearing.
+        const browserStorage =
+          (typeof window !== 'undefined' &&
+            (window as { __nexusRealLocalStorage?: Storage }).__nexusRealLocalStorage) ||
+          undefined;
         for (const key of storeKeys) {
-          try { localStorage.removeItem(key); } catch { /* SSR safe */ }
+          try { (browserStorage ?? localStorage).removeItem(key); } catch { /* SSR safe */ }
         }
       },
 
@@ -152,9 +180,10 @@ export const useAuthStore = create<AuthState>()(
             cache: 'no-store',
           });
           if (response.status === 401) {
+            clearViewFlag();
             if (get().isAuthenticated) {
               clearAuthFlagCookie();
-              set({ user: null, csrfToken: null, isAuthenticated: false });
+              set({ user: null, view: null, viewer: null, csrfToken: null, isAuthenticated: false });
             }
             return false;
           }
@@ -162,9 +191,29 @@ export const useAuthStore = create<AuthState>()(
           const data = await response.json();
           const user = data.user ?? {};
           const normalizeAvatar = (a?: string) => (a && a.startsWith('/') ? `${apiBase}${a}` : a);
+          const signedIn = { ...user, avatar: normalizeAvatar(user.avatar) } as User;
+          const view = parseView(data.view);
           setAuthFlagCookie();
+          // The browser and the server must agree on a view before anything is shown: the stores read
+          // the flag when they are created, so a view the browser did not know (another tab, cleared
+          // cookies), or one that ended, is followed by a reload with the flag set or cleared.
+          const flag = readViewFlag();
+          if (view && !flag) {
+            setViewFlag({ workspaceId: view.workspace.id, returnTo: null }, view.ends_at);
+            navigation.reload();
+            return true;
+          }
+          if (!view && flag) {
+            clearViewFlag();
+            navigation.reload();
+            return true;
+          }
+          const shown = view ? await personOf(apiBase, view, normalizeAvatar) : signedIn;
           set({
-            user: { ...user, avatar: normalizeAvatar(user.avatar) },
+            user: shown,
+            view,
+            viewer: view ? signedIn : null,
+            provider: typeof data.provider === 'string' ? data.provider : null,
             csrfToken: typeof data.csrf_token === 'string' ? data.csrf_token : null,
             isAuthenticated: true,
             error: null,
@@ -184,8 +233,31 @@ export const useAuthStore = create<AuthState>()(
   )
 );
 
+/**
+ * The person of a view as the server answers them (`GET /api/auth/me` runs as the person in a view),
+ * or the little the view itself says when that fails: never the viewer.
+ */
+async function personOf(
+  apiBase: string,
+  view: ViewAs,
+  normalizeAvatar: (a?: string) => string | undefined,
+): Promise<User> {
+  try {
+    const response = await fetch(`${apiBase}/api/auth/me`, { credentials: 'include', cache: 'no-store' });
+    if (response.ok) {
+      const person = await response.json();
+      return { ...person, avatar: normalizeAvatar(person.avatar) } as User;
+    }
+  } catch {
+    // fall back to the view's own words
+  }
+  return { id: view.person.id, email: '', name: view.person.name, createdAt: new Date() };
+}
+
 /** What is persisted: the user only, never a token and never the CSRF token. */
 export function persistedAuthState(state: Pick<AuthState, 'user' | 'isAuthenticated'>) {
+  // During a view `user` is the person: nothing of them is written.
+  if (viewFlagActive()) return {};
   return { user: state.user, isAuthenticated: state.isAuthenticated };
 }
 
@@ -275,7 +347,12 @@ export async function authFetch(url: string, options: RequestInit = {}): Promise
   begin();
 
   try {
-    return await sessionFetch(method, makeRequest);
+    const response = await sessionFetch(method, makeRequest);
+    if (useAuthStore.getState().view) {
+      const refusal = await viewRefusalMessage(response);
+      if (refusal) announceViewRefusal(refusal);
+    }
+    return response;
   } finally {
     end();
   }
@@ -293,6 +370,8 @@ async function sessionFetch(
   if (response.status !== 401 && !(response.status === 403 && !SAFE_METHODS.has(method))) {
     return response;
   }
+  // The view's refusal is final: re-reading the session cannot change it.
+  if (response.status === 403 && (await viewRefusalMessage(response))) return response;
   if (await useAuthStore.getState().adoptCookieSession()) {
     const retried = await makeRequest();
     if (retried.status !== 401) return retried;

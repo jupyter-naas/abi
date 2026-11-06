@@ -1,5 +1,6 @@
 import { setAuthFlagCookie } from './auth-session';
 import { useAuthStore } from '@/stores/auth';
+import { viewFlagActive } from './view-flag';
 
 /**
  * Keep the session in step with the API, including after browser sleep and
@@ -10,7 +11,8 @@ export function startAuthSessionLifecycle(): () => void {
   const renew = () => {
     if (!useAuthStore.persist.hasHydrated()) return;
     const state = useAuthStore.getState();
-    if (!state.isAuthenticated) return;
+    // In a view the store starts empty (nothing is read from the browser): the session is read at once.
+    if (!state.isAuthenticated && !viewFlagActive()) return;
     setAuthFlagCookie();
     void state.adoptCookieSession();
   };

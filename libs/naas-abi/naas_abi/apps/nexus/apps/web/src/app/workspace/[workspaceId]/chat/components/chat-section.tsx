@@ -10,6 +10,7 @@ import { useWorkspaceConversationSummaries } from '@/stores/conversation-list-se
 import { useAgentsStore } from '@/stores/agents';
 import { useSkillsStore } from '@/stores/skills';
 import { useAuthStore } from '@/stores/auth';
+import { PrivateToPerson, usePrivateTo } from '@/components/view-as/private-to-person';
 import { CollapsibleSection } from '@/components/shell/sidebar/collapsible-section';
 import { SidebarNewItem } from '@/components/shell/sidebar/sidebar-new-item';
 import { getWorkspacePath } from '@/components/shell/sidebar/utils';
@@ -59,6 +60,7 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
   const skillsByWorkspace = useSkillsStore((s) => s.skillsByWorkspace);
   const deleteSkill = useSkillsStore((s) => s.deleteSkill);
   const currentUserId = useAuthStore((s) => s.user?.id);
+  const privateTo = usePrivateTo();
   const setPendingComposerText = useWorkspaceStore((s) => s.setPendingComposerText);
   const safeAgents = useMemo(() => (Array.isArray(agents) ? agents : []), [agents]);
 
@@ -475,8 +477,10 @@ export function ChatSection({ collapsed, detailOnly }: { collapsed: boolean; det
         </div>
       )}
 
-      {conversations.length === 0 && (
-        <p className="chat-section-empty">No conversations yet</p>
+      {privateTo ? (
+        <PrivateToPerson what="Chat history" />
+      ) : (
+        conversations.length === 0 && <p className="chat-section-empty">No conversations yet</p>
       )}
     </CollapsibleSection>
   );

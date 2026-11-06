@@ -156,3 +156,23 @@
 .access-people-open:hover {
   text-decoration-color: currentColor;
 }
+
+.access-view-as {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.access-view-as .access-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.access-view-as-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-2);
+}

@@ -13,6 +13,7 @@ import { holdingRows, levelLabel, roleTargetOf, scopesOf, type GroupHoldings } f
 import { HoldingsTable } from '../holdings/holdings-table';
 import { useActionsAt, useContainerNames } from '../policies/policy-owners';
 import { changeMemberRole, type BuiltInRole, type RoleTarget } from '../roles/role-change';
+import { ViewAsControl, type ViewableWorkspaces } from './view-as-control';
 import './people.css';
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -25,6 +26,8 @@ type Props = AccessViewProps & {
   onClose: () => void;
   /** Changes a role (tests pass a fake); the membership routes by default. */
   changeRole?: (target: RoleTarget, userId: string, role: BuiltInRole) => Promise<void>;
+  /** The workspaces to view them in (tests pass a fake); IAM's answer by default. */
+  viewable?: ViewableWorkspaces;
 };
 
 type Loaded = {
@@ -88,6 +91,7 @@ export function PersonView({
   label,
   onClose,
   changeRole = changeMemberRole,
+  viewable,
 }: Props) {
   const selfId = useAuthStore((s) => s.user?.id ?? null);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
@@ -201,6 +205,7 @@ export function PersonView({
         <h3 className="access-person-name">{name}</h3>
         {shownEmail && <span className="access-people-sub">{shownEmail}</span>}
         <code className="access-mono">{personId}</code>
+        <ViewAsControl personId={personId} name={name} workspaceId={scope.workspaceId} viewable={viewable} />
       </header>
       {error && (
         <p className="access-source-note" role="alert">

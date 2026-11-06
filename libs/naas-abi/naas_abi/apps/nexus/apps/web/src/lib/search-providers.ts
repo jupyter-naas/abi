@@ -85,6 +85,8 @@ const PROVIDERS: Record<string, Provider> = {
   chat: async (q, ctx) => {
     // The API returns only the signed-in user's conversations in this workspace;
     // the browser's conversation store is not a safe source (it may hold others).
+    // The person's conversations are private: a view asks for none.
+    if (useAuthStore.getState().view) return { hasMore: false, hits: [] };
     const userId = useAuthStore.getState().user?.id ?? 'anonymous';
     const conversations = await cachedList(`chat:${userId}:${ctx.workspaceId}`, () =>
       getJson<{ id: string; title: string; archived?: boolean; updated_at?: string | null }[]>(
