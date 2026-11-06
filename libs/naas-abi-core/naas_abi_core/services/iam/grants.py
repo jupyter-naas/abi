@@ -259,6 +259,8 @@ class Universe:
     # Per container (as ``containers``), those its own step may follow, as
     # ``after``; empty: any container in any (what IAM decides within).
     nested: tuple[frozenset[int] | None, ...] = ()
+    # The id of the final step is one segment (an opaque type's), never a path.
+    flat: bool = False
 
     def start(self) -> frozenset[object]:
         if self.final:
@@ -292,7 +294,7 @@ class Universe:
                 else:
                     after.add(("id0",) if which == 0 else ("seg0", which - 1))
             elif kind in ("id0", "id"):
-                if char != ":":
+                if char != ":" and not (self.flat and char == "/"):
                     after.add(("id",))
             elif kind in ("seg0", "seg"):
                 container: int = state[1]  # type: ignore[index]
@@ -340,13 +342,15 @@ def universe(
     containers: frozenset[tuple[str, str]] = frozenset(),
     parents: tuple[str, ...] = (),
     nesting: frozenset[tuple[str, tuple[str, ...]]] = frozenset(),
+    flat: bool = False,
 ) -> Universe:
     """The canonical names of a resource type: at the platform or in containers
     of ``containers`` (``(service, type)``, the registered container types); for
     a container type that names ``parents``, only in those. With ``nesting``
     (``("<service>:<type>", parents)`` of the containers that name theirs), each
     container's step only right after one of its parents too: the names that can
-    exist, for showing what a pattern names (``publishers``), never deciding."""
+    exist, for showing what a pattern names (``publishers``), never deciding. With
+    ``flat``, the id of the final step is one segment (an opaque type's)."""
     ordered = tuple(sorted(f"{s}:{t}/" for s, t in containers))
     named = dict(nesting)
     nested = (
@@ -359,6 +363,7 @@ def universe(
         containers=ordered,
         after=_parent_indexes(parents, ordered),
         nested=nested,
+        flat=flat,
     )
 
 
@@ -836,7 +841,11 @@ class Holdings:
             )
         return self._denies[key]
 
-    def _universes(self, action: str) -> list[Universe]:
+    def _universes(self, action: str, *, existing: bool = False) -> list[Universe]:
+        """The names of the types ``action`` is on; ``existing``: only those that can
+        exist, each container only in the containers its catalog names (no
+        organisation in a workspace), for asking what a pattern may name rather
+        than what a grant must cover."""
         try:
             service, name = split_action(action)
         except ValueError:
@@ -848,8 +857,25 @@ class Holdings:
         if spec is None or not spec.resource_types:
             return [EVERYTHING]
         containers = self.catalogs.container_types()
+        nesting = (
+            frozenset(
+                (f"{c.service}:{t.name}", tuple(t.parents))
+                for c in self.catalogs.all()
+                for t in c.resource_types
+                if t.container and t.parents
+            )
+            if existing
+            else frozenset()
+        )
         return [
-            universe(service, t, containers, declared.parents if declared else ())
+            universe(
+                service,
+                t,
+                containers,
+                declared.parents if declared else (),
+                nesting,
+                existing and declared is not None and declared.id != "path",
+            )
             for t in spec.resource_types
             for declared in [catalog.resource_type(t) if catalog is not None else None]
         ]
@@ -884,6 +910,20 @@ class Holdings:
             ):
                 found[pattern] = None
         return list(found)
+
+    def may_name(self, actions: Iterable[str], pattern: str, inside: str) -> bool:
+        """Whether a statement allowing ``actions`` on ``pattern`` may name a
+        resource matching ``inside``, among the names its actions have (an action
+        on workspaces names no resource of what a workspace holds), as they can
+        exist. Not proven within the budget is yes."""
+        for action in self._actions(actions):
+            for within in self._universes(action, existing=True):
+                try:
+                    if overlaps(pattern, (inside,), within):
+                        return True
+                except Exhausted:
+                    return True
+        return False
 
     # -- the rule ----------------------------------------------------------------
 

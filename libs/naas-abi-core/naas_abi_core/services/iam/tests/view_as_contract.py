@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import pytest
 from naas_abi_core.engine.call_context import (
@@ -30,7 +30,8 @@ from naas_abi_core.services.iam.IAMPorts import (
     ViewAsVerdict,
 )
 from naas_abi_core.services.iam.IAMService import IAMService, view_as_resource
-from naas_abi_core.services.iam.tests.grant_contract import NEXUS, features
+from naas_abi_core.services.iam.tests.grant_contract import NEXUS as _NEXUS
+from naas_abi_core.services.iam.tests.grant_contract import features
 from naas_abi_core.services.iam.tests.iam_harness import (
     below,
     document,
@@ -45,6 +46,19 @@ ACME_SCOPE, BETA_SCOPE = org(ACME), org(BETA)
 ACME_WIDE = below(ACME)
 ALPHA, BRAVO = workspace("alpha", ACME), workspace("bravo", ACME)
 BETA_WS = workspace("beta-ws", BETA)
+
+# Nexus's catalog, with the places its containers sit in as Nexus declares them: an
+# organisation at the platform, a workspace in one (so that a workspace holds no
+# workspace, and what a role may name at an organisation stays at its level).
+_PARENTS = {"organization": ("-",), "workspace": ("nexus:organization", "-")}
+NEXUS = replace(
+    _NEXUS,
+    version=_NEXUS.version + 1,
+    resource_types=tuple(
+        replace(t, parents=_PARENTS[t.name]) if t.name in _PARENTS else t
+        for t in _NEXUS.resource_types
+    ),
+)
 
 AsUser = Callable[[PrincipalRecord], AbstractContextManager[IAMService]]
 
@@ -295,6 +309,92 @@ def run_workspace_admin_for_someone_given_the_org_access_policy(iam, as_user) ->
     refused(as_user, c.bob, c.carol, "holds_more", c.alpha_access)
 
 
+def _member_with(iam, name: str, *attachments: tuple[str, str]) -> PrincipalRecord:
+    """A member of Alpha with more attached at a container above it:
+    ``(policy id, scope)`` each."""
+    with as_service_account("engine"):
+        user = iam.ensure_user(ISSUER, name)
+        iam.attach_policy(roles.MEMBER, user.id, ALPHA)
+        for policy_id, scope in attachments:
+            iam.attach_policy(policy_id, user.id, scope)
+    return user
+
+
+def run_a_policy_at_a_container_above_that_reaches_inside(iam, as_user) -> None:
+    """A policy attached at the organisation, not below it, with ``${scope}/*``
+    names everything under it: the viewed workspace too. The person holds it
+    there, so the viewer must."""
+    c = cast(iam)
+    with as_service_account("engine"):
+        # Every feature of every workspace of Acme, and anything else under it.
+        wide = iam.create_policy(
+            "Acme wide",
+            document(statement("Allow", ["nexus:UseFeature"], ["${scope}/*"])),
+            scope=ACME_SCOPE,
+        )
+        chat_anywhere = iam.create_policy(
+            "Acme chat anywhere",
+            document(
+                statement(
+                    "Allow", ["nexus:UseFeature"], ["${scope}/*/nexus:feature/chat"]
+                )
+            ),
+            scope=ACME_SCOPE,
+        )
+    eve2 = _member_with(iam, "eve2", (wide.id, ACME_SCOPE))
+    with as_user(eve2) as session:
+        # The policy does reach Alpha's features, at the organisation's level.
+        assert session.authorize(
+            "nexus:UseFeature", f"{ALPHA}/nexus:feature/maps"
+        ).allowed
+    # Carol holds chat and search at Alpha, not every feature: refused, the
+    # message naming the policy and where it is attached.
+    refused(
+        as_user,
+        c.carol,
+        eve2,
+        "holds_more",
+        "Acme wide",
+        wide.id,
+        f"attached at {ACME_SCOPE}",
+    )
+    # Olivia holds "Acme access" (three features), not every feature either.
+    refused(as_user, c.olivia, eve2, "holds_more", "Acme wide")
+    # The platform admin holds everything.
+    allowed(as_user, c.root, eve2)
+    # Chat in every workspace of Acme: Olivia holds chat below Acme, so she may;
+    # Carol holds it at Alpha only, and the policy gives it in Bravo too.
+    chatty = _member_with(iam, "chatty", (chat_anywhere.id, ACME_SCOPE))
+    allowed(as_user, c.olivia, chatty)
+    refused(as_user, c.carol, chatty, "holds_more", "Acme chat anywhere", ACME_SCOPE)
+
+
+def run_a_role_at_a_container_above_stays_at_its_level(iam, as_user) -> None:
+    """Acme's members hold their role at the organisation, which stays at that
+    level: no workspace admin is refused for it, and it alone makes no one
+    viewable in a workspace."""
+    c = cast(iam)
+    orgmember = _member_with(iam, "orgmember", (roles.MEMBER, ACME_SCOPE))
+    allowed(as_user, c.carol, orgmember)
+    allowed(as_user, c.olivia, orgmember)
+    # Only that, at the organisation (and, for another, a policy reaching inside
+    # it): nothing held at Alpha.
+    with as_service_account("engine"):
+        only = iam.ensure_user(ISSUER, "org-only")
+        iam.attach_policy(roles.MEMBER, only.id, ACME_SCOPE)
+        wide = iam.create_policy(
+            "Acme wide",
+            document(statement("Allow", ["nexus:UseFeature"], ["${scope}/*"])),
+            scope=ACME_SCOPE,
+        )
+        also = iam.ensure_user(ISSUER, "org-wide-only")
+        iam.attach_policy(roles.MEMBER, also.id, ACME_SCOPE)
+        iam.attach_policy(wide.id, also.id, ACME_SCOPE)
+    for person in (only, also):
+        refused(as_user, c.root, person, "nothing_held", ALPHA)
+        refused(as_user, c.carol, person, "nothing_held")
+
+
 def run_nobody_views_as_the_platform_admin(iam, as_user) -> None:
     c = cast(iam)
     for caller in (c.olivia, c.carol, c.bob):
@@ -489,6 +589,8 @@ SCENARIOS = [
     run_workspace_admin_for_the_org_admin,
     run_workspace_admin_for_the_workspace_owner,
     run_workspace_admin_for_someone_given_the_org_access_policy,
+    run_a_policy_at_a_container_above_that_reaches_inside,
+    run_a_role_at_a_container_above_stays_at_its_level,
     run_nobody_views_as_the_platform_admin,
     run_oneself_a_group_a_service_account,
     run_a_suspended_or_deleted_person,

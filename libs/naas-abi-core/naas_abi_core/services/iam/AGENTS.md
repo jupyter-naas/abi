@@ -1598,19 +1598,27 @@ else: no view is kept here.
 | `holds_more` | the person holds more than the caller there |
 
 - **The person holds no more than the caller.** What is checked is every attachment that
-  counts at the container, for the person or for one of their groups: at the container, below
+  reaches the container, for the person or for one of their groups: at the container, below
   it or below a container above it (`C/*` for `C` the container or above), at the platform
-  (`abi:`), or unscoped. An attachment at a container above, not below it, is at that level and
-  does not count (a role there stays at its level). Each must be held by the caller as
-  `attach_policy` checks a grant ("Grant only what you hold", `_require_held`): its policy at
-  that attachment's scope, and, for a sub-policy, within its chain. IAM's companions
+  (`abi:`), or unscoped; and an attachment at a container above it, not below it, when its
+  policy may name something inside the viewed container (an Allow pattern, its `${scope}`
+  filled and its other variables free, that shares a name with `<container>/*` among its
+  actions' names as they can exist: `${scope}/*`, `${scope}/*/nexus:feature/chat`;
+  `Holdings.may_name`; not proven is yes). A role there stays at its level and never does:
+  an organisation's member role gives nothing in its workspaces, so it neither blocks the
+  view nor, alone, makes the person viewable (`nothing_held` counts what the person holds
+  *at* the container: at it, below it, at the platform or unscoped, not an attachment at a
+  container above it alone). Each is held by the caller as `attach_policy` checks a grant
+  ("Grant only what you hold", `_require_held`) at the attachment's own scope: its policy
+  at that scope, and, for a sub-policy, within its chain. IAM's companions
   (`builtin.platform.*`) are skipped as `add_group_member` skips them (`_companions`, kept per
   holder), and `builtin.self`, which every user holds. A Deny of the caller that overlaps one
   refuses; the budget rules of "Grant only what you hold" apply, so what is not proven is refused
   ("too long to prove"). The message names the first attachment not held, in the order of the
-  person's own attachments before each group's: the policy, where it is attached (`at <scope>`,
-  `below <container>`, `at the platform`, `unscoped`), and the group it came through. A scope of
-  the grammar before container paths is not understood and is refused as unproven.
+  person's own attachments before each group's, then by policy id, then by scope: the policy,
+  where it is attached (`at <scope>`, `below <container>`, `at the platform`, `unscoped`), and
+  the group it came through. A scope of the grammar before container paths is not understood
+  and is refused as unproven.
 - **What that gives.** The platform admin views as anyone who is not a platform admin; an
   organisation's admin as the people of the organisation in its workspaces, as long as they hold
   nothing the admin does not; a workspace admin as the members of the workspace, there only,
@@ -1631,7 +1639,9 @@ iam.allows_every(action, "triple_store", "graph")  # a safe shortcut: False when
 iam.explain(action, resource, principal_id=...)  # needs iam:Explain on the principal
 iam.grantable(scope)  # what the caller may grant there (needs no permission)
 iam.grantable(scope, parent=policy_id)  # ... in a sub-policy of policy_id
-iam.grantable(scope, parent=policy_id, derive=True)  # ... in a new one (refused as create)
+iam.grantable(
+    scope, parent=policy_id, derive=True
+)  # ... in a new one (refused as create)
 iam.list_resources(
     "triple_store", "graph", scope=container, text="sales", cursor=None
 )  # ResourcePage: what the caller may list there (needs no permission)
@@ -2558,8 +2568,8 @@ operation, so `make demo-sdk` is unchanged.
 *Decision.* `iam:ViewAs` (admin level) on `<container>/iam:view_as/<person>` says who may view
 as whom, where; `builtin.admin` and `builtin.owner` hold it at their container, at every one
 under it below one, the platform admin through `*`. A view is refused when the person holds
-more than the caller at the container (each attachment that counts there, checked as
-`attach_policy` checks a grant), when they are the caller, a group, a service account, not
+more than the caller at the container (each attachment that reaches it, one above it too
+when its policy may name something inside, checked as `attach_policy` checks a grant), when they are the caller, a group, a service account, not
 active, a platform admin (another's included), or hold nothing there. `groups` bring the person's
 identity provider groups into the check. The decision is on `IAMService` and the port, in
 process only: no NATS endpoint and no SDK operation.
@@ -2586,9 +2596,6 @@ regenerated and keep every other statement as it was.
 - **Per-object sharing** of single conversations or files beyond personal resources is the
   relationship-based (OpenFGA) question: placement and identity policies cover workspace-level
   access; sharing one object means a statement naming it.
-- **A view counts attachments by their scope.** An attachment at a container above the viewed
-  one, not below it, does not count at it, even if its policy names `${scope}/*`, which reaches
-  every container under the one it is attached at. The roles never do; a customer policy might.
 - **Policy conditions** (`conditions`, reserved): IP ranges, time windows, MFA claims. Not needed yet.
 - **Federation.** Every ABI server trusting the same IdP issuer is enough for login; cross-server
   service accounts are not designed.

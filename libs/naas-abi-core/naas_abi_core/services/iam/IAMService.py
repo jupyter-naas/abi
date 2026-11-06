@@ -205,6 +205,9 @@ def view_as_resource(principal_id: str, container: str) -> str:
     )
 
 
+# A variable of a pattern but ``${scope}``: free, when asking what a pattern may name.
+_FREE_VARIABLE = re.compile(r"\$\{(?!scope\})[^}]+\}")
+
 _PROVIDER_NAME = re.compile(r"^[a-z0-9-]{1,32}$")
 
 
@@ -3014,7 +3017,16 @@ class IAMService(IIAMService, PolicySource):
         ]
         if not counted:
             return refuse("nothing_held", f"{label} holds nothing in {container}")
-        problem = self._first_not_held(person, label, counted)
+        # Held further than it counts as held there: a policy attached at a
+        # container above (not below it) whose patterns can name something inside
+        # this one (``${scope}/*``) gives the person that too.
+        checked = [
+            (attachment, via)
+            for attachment, via in held
+            if _reaches(attachment.scope, container)
+            or self._reaches_inside(attachment, container)
+        ]
+        problem = self._first_not_held(person, label, checked)
         if problem is not None:
             return refuse("holds_more", problem)
         return ViewAsVerdict(True, resource=resource)
@@ -3096,6 +3108,44 @@ class IAMService(IIAMService, PolicySource):
                 except IAMConflictError as error:
                     return f"{what}: {error}"
         return None
+
+    def _reaches_inside(self, attachment: Attachment, container: str) -> bool:
+        """Whether an attachment at a container above ``container``, not below
+        it, may name something inside it: some Allow pattern of its policy, its
+        ``${scope}`` filled and its other variables free, shares a name with
+        ``<container>/*`` among those of its actions (``${scope}/*``,
+        ``${scope}/*/<type>/x``). A role stays at its level and never does. Not
+        proven is yes."""
+        scope = attachment.scope
+        if (
+            scope is None
+            or scope == PLATFORM_SCOPE
+            or is_below(scope)
+            or scope == container
+            or not within(container, scope)
+        ):
+            return False
+        policy = self._load_policy(attachment.policy_id)
+        if policy is None:
+            return False
+        inside = f"{container}/*"
+        holdings = grants.Holdings((), self._registry)
+        with grants.budget():
+            for raw in policy.document.statements:
+                if raw.effect != "Allow":
+                    continue
+                statement = within_scope(raw)
+                if statement is None:
+                    continue
+                for pattern in statement.resources:
+                    bound = substitute(
+                        _FREE_VARIABLE.sub("*", pattern), {"scope": scope}
+                    )
+                    if bound is not None and holdings.may_name(
+                        statement.actions, bound, inside
+                    ):
+                        return True
+        return False
 
     def _through(self, group_id: str | None) -> str:
         if group_id is None:
@@ -4612,11 +4662,14 @@ def _attached(scope: str | None) -> str:
 
 
 def _reaches(scope: str | None, container: str) -> bool:
-    """Whether an attachment at ``scope`` counts at ``container``: unscoped, at the
-    platform, at the container itself, or below it or below a container above it.
-    A role attached at a container above stays at its level, and is not one that
-    counts; a scope of the grammar before container paths is not understood, so it
-    counts everywhere (``_first_not_held`` refuses it)."""
+    """Whether an attachment at ``scope`` counts as the person's holding something
+    at ``container`` (``nothing_held``): unscoped, at the platform, at the container
+    itself, or below it or below a container above it. One at a container above, not
+    below it, does not count: a role there stays at its level, and an org-level role
+    alone makes no one viewable. What such an attachment may still give inside the
+    container is checked all the same (``IAMService._reaches_inside``). A scope of
+    the grammar before container paths is not understood, so it counts everywhere
+    (``_first_not_held`` refuses it)."""
     if scope is None or scope == PLATFORM_SCOPE or is_old_scope(scope):
         return True
     if is_below(scope):
