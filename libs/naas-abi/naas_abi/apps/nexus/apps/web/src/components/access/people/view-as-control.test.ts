@@ -3,9 +3,11 @@
  * "View as <name>" on a person's page: shown when IAM accepts a view in at least one workspace,
  * a picker of them with this page's workspace preselected, Start.
  */
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount, type Mounted } from '@/lib/testing/mount';
-import { beginView } from '@/lib/view-as';
+import { beginView, viewLanding } from '@/lib/view-as';
 import { clearViewFlag, readViewFlag } from '@/lib/view-flag';
 import { navigation, type ViewableWorkspace } from '@/lib/view-model';
 import { useAuthStore } from '@/stores/auth';
@@ -105,6 +107,17 @@ describe('the picker', () => {
   });
 });
 
+describe('where a view lands', () => {
+  it('is the workspace Home: a page every workspace has, never the bare workspace address', () => {
+    expect(viewLanding('ws-alpha')).toBe('/workspace/ws-alpha/home');
+    expect(viewLanding('ws a/b')).toBe('/workspace/ws%20a%2Fb/home');
+    // `/workspace/<id>` has no page: a view that landed there would open a 404.
+    const root = path.join(process.cwd(), 'src/app/workspace/[workspaceId]');
+    expect(existsSync(path.join(root, 'home/page.tsx'))).toBe(true);
+    expect(existsSync(path.join(root, 'page.tsx'))).toBe(false);
+  });
+});
+
 describe('starting for real', () => {
   it('posts, raises the flag, then loads the workspace in the browser', async () => {
     useAuthStore.setState({ csrfToken: 'csrf' });
@@ -128,7 +141,7 @@ describe('starting for real', () => {
     expect(url).toBe('https://api.example.test/api/iam/view-as');
     expect(JSON.parse(init.body)).toEqual({ principal_id: 'iam_carol', workspace_id: 'ws-alpha' });
     expect(readViewFlag()).toEqual({ workspaceId: 'ws-alpha', returnTo: '/settings/roles?section=people&person=iam_carol' });
-    expect(go).toHaveBeenCalledWith('/workspace/ws-alpha');
+    expect(go).toHaveBeenCalledWith('/workspace/ws-alpha/home');
   });
 
   it('loads nothing and raises no flag when the server refuses', async () => {

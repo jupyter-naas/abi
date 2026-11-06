@@ -4,6 +4,7 @@
  * as the person; the web starts and stops the view, reloads around it, and keeps nothing of it.
  */
 import { getApiUrl } from '@/lib/config';
+import { getWorkspaceHomePath } from '@/lib/feature-access';
 import { authFetch } from '@/stores/auth';
 import { clearViewFlag, readViewFlag, setViewFlag } from './view-flag';
 import type { ViewAs, ViewableWorkspace } from './view-model';
@@ -66,9 +67,10 @@ export async function stopView(fetcher: typeof authFetch = authFetch): Promise<v
   if (!response.ok) throw await failure(response, 'Could not stop the view.');
 }
 
-/** Where the web lands in a view: the viewed workspace. */
+/** Where the web lands in a view: the viewed workspace's Home, a page every workspace has
+ *  (`/workspace/<id>` itself has none). */
 export function viewLanding(workspaceId: string): string {
-  return `/workspace/${encodeURIComponent(workspaceId)}`;
+  return getWorkspaceHomePath(encodeURIComponent(workspaceId));
 }
 
 /** The person's page, as the level the view was started from shows it. */
