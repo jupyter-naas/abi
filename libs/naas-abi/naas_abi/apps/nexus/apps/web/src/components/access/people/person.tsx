@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import type { AttachmentView, PrincipalView } from '@/lib/iam-admin/types';
+import { viewFlagActive } from '@/lib/view-flag';
 import { useAuthStore } from '@/stores/auth';
 import type { AccessViewProps } from '../access-props';
 import type { AccessDirectory } from '../access-directory';
@@ -128,7 +129,8 @@ export function PersonView({
       ),
     );
     let profile = direct.find((a) => a.principal)?.principal ?? null;
-    if (!profile) profile = await api.getPrincipal(personId).catch(() => null);
+    // A person read by id is outside a view (``view_as/AGENTS.md``): their rows name them, else the label does.
+    if (!profile && !viewFlagActive()) profile = await api.getPrincipal(personId).catch(() => null);
     setLoaded({ direct, groups: held, notices, profile });
   }, [api, personId]);
 

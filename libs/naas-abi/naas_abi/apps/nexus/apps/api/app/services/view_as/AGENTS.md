@@ -104,6 +104,25 @@ the request state. A bearer credential (an API key, a session token) never carri
   on `ANSWERED_WITHOUT_A_WORKSPACE`): its handler holds the group's owner to the container (`outside_this_view`), so a
   platform group or another workspace's is "Outside this view" even for a person who reads it themselves (an
   organization's admin).
+- **What the shell and the workspace's pages ask without naming a workspace** is answered as the person, each on
+  `ANSWERED_WITHOUT_A_WORKSPACE` with its reason and held to the viewed workspace by its handler:
+  - `GET /api/organizations/{org_id}` (the shell's theme and corners): the organization of the viewed workspace only
+    (`outside_this_organization`; another organization is "Outside this view", even for a person who reads it). Decided
+    as the person: one with no right on the organization gets the plain refusal they would get, which is no notice.
+  - `GET /api/providers/models` (the chat page's model picker): the platform's model catalog, the same for every
+    workspace and part of none, answered as the person (`ListProviderModels`).
+  - `GET /api/iam/admin/policies/{policy_id}` (a policy opened on the Roles & permissions page): a policy owned by the
+    viewed container or below, by a container above it (its organization) or by the platform, which the page lists
+    beside its own; another workspace's or organization's is "Outside this view" (`outside_this_view(owner, above=True)`).
+  - `GET /api/iam/admin/principals/{principal_id}/groups` (the person's page): the groups owned by the viewed container
+    only, as a group read by id is.
+- **What the web does not ask in a view** (the organization's people and the other workspaces are outside it, so the
+  web has nothing to show and asks nothing): the organization's members and workspaces (the Owner and Group pickers of
+  Settings › General show the current value: the owner is named from the workspace's own members, the group is the
+  workspace's), the organizations list and each organization's access (the account menu hides Organization settings),
+  a person read by id (`GET /api/iam/admin/principals/{id}`: the person's page names them by their rows) and the
+  analytics events (the viewer's page views are not the person's activity). They test `viewFlagActive()`, the cookie
+  that is up before the first request is answered.
 - **`GET /api/workspaces`** lists the viewed workspace only, and `…/slug/{slug}` finds it only.
 - **No WebSocket** (`websocket/runtime.py`): refused at the handshake, so no presence and no room.
 - **No settings cache**: neither read nor filled (`nexus_view` on the scope's state).
@@ -238,11 +257,18 @@ settings › Roles & permissions › Audit, beside IAM's:
 
 ## Decisions
 
+- **A refusal the person did not make is not stacked.** Decision: the shell and the pages' own reads either are answered
+  (above) or are not asked in a view; the banner shows an identical refusal once (the last call renews it), so a page
+  that still makes a refused read shows one notice, not one per call. A refusal of what the viewer did (a save, a
+  message) keeps its notice with the server's words. Consequences: opening Home, Chat, Settings › General, Roles &
+  permissions, an app, Files and the account pages shows no notice; the account menu has no Organization settings
+  entry in a view.
 - **The workspace's Roles & permissions pages name the workspace by `scope`.** Decision: an IAM admin read is held to
   the viewed workspace by its `scope` (the container or below), and a group read by id by its owner. Consequences: the
   page opens in a view with the tabs the person sees (People & roles, Groups, Policies) and decides every button as the
-  person; a read that names no container (the platform's people, a policy by id, the audit, service accounts) stays
-  outside, so the page shows what it cannot read as "Outside this view" ("Not done" below).
+  person; a read that names no container (the platform's people, the audit, service accounts) stays outside, so the page
+  shows what it cannot read as "Outside this view" ("Not done" below); a policy by id and a person's groups are answered
+  and held by their owner (above).
 - **The guard is its own middleware, inside CORS.** Decision: the identity (the person's credential and context)
   is `RequestIdentityMiddleware`'s, because it is who the request is; the read-only and workspace refusals are
   `ViewGuardMiddleware`, added right outside the settings cache and inside `CORSMiddleware`. Consequences: a
@@ -286,7 +312,7 @@ uv run pytest libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/view_as --
 ```
 
 `service_test.py` (the use cases on fakes, the links' revocation, the audit of an open), `confinement_test.py` (every
-route classified), `reads_by_post_test.py` (every read sent by POST classified, allowed ones held to the workspace,
+route classified), `shell_reads_test.py` (the reads the shell and the pages make, answered and held to the viewed workspace), `reads_by_post_test.py` (every read sent by POST classified, allowed ones held to the workspace,
 refused ones read-only, the body read and handed on whole), `view_as_http_test.py` (a real IAM, Nexus's migrations on
 SQLite, the identity and guard middleware and the routes: start, the workspaces, the person's identity and groups,
 confinement, read-only, the cache, the WebSocket, the end, the audit, the upgrade). Over the whole application
@@ -299,12 +325,10 @@ coding_environment, workflows, maps and search.
 
 ## Not done
 
-- The web asks, on every page of a workspace, for calls a view refuses: `GET /api/organizations/{org}` (the shell),
-  `GET /api/providers/models` (the chat page) and, on a settings page, the organization's members and workspaces: each
-  refusal is shown as a notice with the server's message ("Outside this view"), several times a page. Whether those
-  reads are answered (each with its reason on `ANSWERED_WITHOUT_A_WORKSPACE`) or the web stops asking in a view is
-  open. The same holds for the Roles & permissions reads that name no container (the platform's people, a policy by
-  id): the page shows what it cannot read as "Outside this view".
+- The Roles & permissions reads that name no container are still "Outside this view": the platform's people
+  (`GET /api/iam/admin/principals`), the audit, the service accounts and a person read by id. The pages that need them
+  are the platform's, outside a view; the person's page across levels (`GET /attachments?principal_id=` with no `scope`)
+  shows what it cannot read as "Outside this view".
 - A view of the maps does not apply the deployment's seeds: a workspace that was never opened outside a view shows
   what is stored (no seeded layouts, basemaps or layers) until someone opens it.
 - The deck of a slides, documents or sheets project is read from the person's coding-environment sidecar

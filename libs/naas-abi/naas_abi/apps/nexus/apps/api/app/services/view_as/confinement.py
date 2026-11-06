@@ -31,6 +31,7 @@ from urllib.parse import parse_qs
 
 from fastapi.dependencies.utils import get_flat_dependant
 from fastapi.routing import APIRoute
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_of
 from naas_abi.apps.nexus.apps.api.app.services.view_as.active import current_view
 from naas_abi.apps.nexus.apps.api.app.services.view_as.reads_by_post import (
     BODY,
@@ -38,6 +39,7 @@ from naas_abi.apps.nexus.apps.api.app.services.view_as.reads_by_post import (
     QUERY,
     ReadByPost,
 )
+from naas_abi_core.services.iam.names import PLATFORM_SCOPE
 from starlette.routing import Match
 
 READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
@@ -79,6 +81,24 @@ ANSWERED_WITHOUT_A_WORKSPACE: dict[tuple[str, str], str] = {
     ("GET", "/api/iam/admin/groups/{group_id}"): (
         "the workspace's Roles & permissions page reads each of its groups by id: the request names no "
         "workspace, so the handler holds the group's owner to the viewed container (outside_this_view)"
+    ),
+    ("GET", "/api/organizations/{org_id}"): (
+        "the shell of every workspace page reads its organization's record (its theme and corners): "
+        "its handler holds the organization to the viewed workspace's (outside_this_organization), "
+        "so no other organization is readable"
+    ),
+    ("GET", "/api/providers/models"): (
+        "the chat page's model picker: the platform's model catalog, the same for every workspace "
+        "and not part of any, answered as the person (ListProviderModels)"
+    ),
+    ("GET", "/api/iam/admin/policies/{policy_id}"): (
+        "the workspace's Roles & permissions page reads a policy by id when it opens one, a parent "
+        "or a sub-policy: the request names no workspace, so the handler holds the policy's owner "
+        "to the viewed container, what is above it and the platform's (outside_this_view)"
+    ),
+    ("GET", "/api/iam/admin/principals/{principal_id}/groups"): (
+        "the person's page of the workspace lists their groups: the request names no workspace, so "
+        "the handler keeps the groups owned by the viewed container, as a group read by id is (owner)"
     ),
     ("GET", "/api/tenant"): "branding of the shell; public, the same for everyone",
     ("GET", "/api/auth/avatar/{filename}"): "avatar images in <img> tags; public",
@@ -149,12 +169,35 @@ def in_container(value: object, container: str | None) -> bool:
     )
 
 
-def outside_this_view(owner_scope: str | None) -> str | None:
+def owned_here(owner_scope: str | None, container: str, *, above: bool = False) -> bool:
+    """Whether something owned by ``owner_scope`` belongs to the viewed ``container``: it is the
+    container or below it. With ``above``, also what the workspace's pages list beside its own:
+    the containers above it (its organization) and the platform's."""
+    if in_container(owner_scope, container):
+        return True
+    if not above:
+        return False
+    if owner_scope is None or owner_scope == PLATFORM_SCOPE:
+        return True
+    return container.startswith(f"{owner_scope}/")
+
+
+def outside_this_view(owner_scope: str | None, *, above: bool = False) -> str | None:
     """For a handler of a route answered without a workspace that reads something owned by a
     container: the refusal text when a view runs and ``owner_scope`` is not the viewed container
-    or something below it (the platform's, another workspace's), else None (also outside a view)."""
+    or something below it (the platform's, another workspace's), else None (also outside a view).
+    ``above``: what is owned above the container (its organization, the platform) is not outside."""
     view = current_view()
-    if view is None or in_container(owner_scope, view.container):
+    if view is None or owned_here(owner_scope, view.container, above=above):
+        return None
+    return outside_detail(view.person_name, view.workspace_name)
+
+
+def outside_this_organization(org_id: str) -> str | None:
+    """For a handler of a route that reads an organization by id: the refusal text when a view
+    runs and the organization is not the viewed workspace's, else None (also outside a view)."""
+    view = current_view()
+    if view is None or (org_id and org_of(view.container) == org_id):
         return None
     return outside_detail(view.person_name, view.workspace_name)
 

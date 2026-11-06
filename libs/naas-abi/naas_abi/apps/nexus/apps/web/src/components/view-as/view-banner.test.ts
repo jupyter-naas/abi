@@ -168,4 +168,26 @@ describe('the banner', () => {
     await act(async () => void vi.advanceTimersByTime(9_000));
     expect(mounted.host.querySelector('[data-view-toast]')).toBeNull();
   });
+
+  it('shows the same refusal once, however many calls the page made', async () => {
+    useAuthStore.setState({ view: view() });
+    mounted = await mount(ViewBanner, {});
+    const outside = 'Outside this view: you are viewing as Dave in Alpha';
+    await act(async () => {
+      announceViewRefusal(outside);
+      announceViewRefusal(outside);
+      announceViewRefusal(outside);
+    });
+    expect(mounted.host.querySelectorAll('[data-view-toast]')).toHaveLength(1);
+    // A different refusal is its own notice.
+    await act(async () => announceViewRefusal('Read-only: you are viewing as Dave'));
+    expect(mounted.host.querySelectorAll('[data-view-toast]')).toHaveLength(2);
+    // The same one again, while it still shows, stays one and lives on from the last call.
+    await act(async () => void vi.advanceTimersByTime(6_000));
+    await act(async () => announceViewRefusal(outside));
+    expect(mounted.host.querySelectorAll('[data-view-toast]')).toHaveLength(2);
+    await act(async () => void vi.advanceTimersByTime(6_000));
+    expect(mounted.host.querySelectorAll('[data-view-toast]')).toHaveLength(1);
+    expect(mounted.host.querySelector('[data-view-toast]')?.textContent).toBe(outside);
+  });
 });

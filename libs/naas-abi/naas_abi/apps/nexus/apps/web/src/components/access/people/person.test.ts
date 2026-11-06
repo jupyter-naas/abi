@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { IamAdminError } from '@/lib/iam-admin/api';
 import type { AttachmentView } from '@/lib/iam-admin/types';
 import { mount, type Mounted } from '@/lib/testing/mount';
+import { clearViewFlag, setViewFlag } from '@/lib/view-flag';
 import { useAuthStore } from '@/stores/auth';
 import type { AccessDirectory } from '../access-directory';
 import { ORG, WS, attachment, fakeApi, member, wsScope } from '../access-fixtures';
@@ -20,6 +21,7 @@ let mounted: Mounted | null = null;
 afterEach(async () => {
   await mounted?.unmount();
   mounted = null;
+  clearViewFlag();
   useAuthStore.setState({ user: null });
 });
 
@@ -266,5 +268,20 @@ describe('View as, on a person’s page', () => {
     const viewable = vi.fn().mockResolvedValue([ALPHA]);
     await show(apiFor([memberAtW], [], rights), () => true, PLATFORM_ACCESS_SCOPE, { viewable });
     expect(viewable).toHaveBeenCalledWith('usr_bob');
+  });
+
+  it('reads the person by id when their rows do not name them, but not in a view', async () => {
+    const nameless = [{ ...memberAtW, principal: null }];
+    const outside = apiFor(nameless, [], { [WS]: ADMIN });
+    await show(outside, (a) => ADMIN.includes(a), workspaceAccessScope('acme', 'ws-1'));
+    expect(outside.getPrincipal).toHaveBeenCalledWith('usr_bob');
+
+    await mounted?.unmount();
+    setViewFlag({ workspaceId: 'ws-1', returnTo: null }, Date.now() + 15 * 60_000);
+    const inView = apiFor(nameless, [], { [WS]: ADMIN });
+    await show(inView, (a) => ADMIN.includes(a), workspaceAccessScope('acme', 'ws-1'));
+    // A person read by id is outside the view: the page names them by its label.
+    expect(inView.getPrincipal).not.toHaveBeenCalled();
+    expect(document.querySelector('.access-person-name')?.textContent).toBe('bob');
   });
 });

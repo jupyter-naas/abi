@@ -12,6 +12,7 @@ import {
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { viewFlagActive } from '@/lib/view-flag';
 import { authFetch } from '@/stores/auth';
 import '@/components/shell/sidebar/ontology-picker.css';
 
@@ -29,13 +30,27 @@ function memberDetail(member: OrgMemberOption): string | undefined {
   return member.name ? member.email : undefined;
 }
 
+/**
+ * Where the owners to pick from are read: the organization's members, except in a view, where the
+ * organization's people are outside it (``view_as/AGENTS.md``) and the workspace's own members are
+ * read instead, so the current owner is still named.
+ */
+export function ownerMembersUrl(orgId: string, workspaceId?: string): string {
+  return viewFlagActive() && workspaceId
+    ? `/api/workspaces/${encodeURIComponent(workspaceId)}/members`
+    : `/api/organizations/${orgId}/members`;
+}
+
 export function WorkspaceOwnerSelect({
   orgId,
+  workspaceId,
   value,
   onChange,
   disabled,
 }: {
   orgId: string;
+  /** The workspace whose owner is picked: what a view reads the members of. */
+  workspaceId?: string;
   value: string;
   onChange: (userId: string) => void;
   disabled?: boolean;
@@ -61,7 +76,7 @@ export function WorkspaceOwnerSelect({
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    void authFetch(`/api/organizations/${orgId}/members`)
+    void authFetch(ownerMembersUrl(orgId, workspaceId))
       .then(async (res) => {
         if (!res.ok || cancelled) return;
         const rows: { user_id: string; email?: string; name?: string }[] = await res.json();
@@ -79,7 +94,7 @@ export function WorkspaceOwnerSelect({
     return () => {
       cancelled = true;
     };
-  }, [orgId]);
+  }, [orgId, workspaceId]);
 
   const options = useMemo(() => {
     const q = query.trim().toLowerCase();

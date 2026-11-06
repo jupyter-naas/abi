@@ -6,6 +6,7 @@ import { authFetch, useAuthStore } from '@/stores/auth';
 import { opensRolesAndPermissions } from '@/components/access/access-sections';
 import { organizationContainer } from '@/components/access/access-scope';
 import type { AccessView } from '@/lib/iam-admin/types';
+import { viewFlagActive } from '@/lib/view-flag';
 
 export type OrganizationSettingsAccessStatus = 'checking' | 'ready' | 'error';
 
@@ -45,6 +46,8 @@ async function json<T>(fetcher: Fetcher, url: string): Promise<T | null> {
 
 /** The access a caller has at an organization's container (`GET /access`), or null. */
 export function fetchOrganizationAccess(orgId: string, fetcher: Fetcher = authFetch): Promise<AccessView | null> {
+  // A view is one workspace: the organization's pages are outside it, so nothing is asked.
+  if (viewFlagActive()) return Promise.resolve(null);
   const scope = encodeURIComponent(organizationContainer(orgId));
   return json<AccessView>(fetcher, `/api/iam/admin/access?scope=${scope}`);
 }
@@ -53,6 +56,7 @@ export function fetchOrganizationAccess(orgId: string, fetcher: Fetcher = authFe
  *  read only for the organizations where the role does not open it, `ACCESS_BATCH` at a
  *  time, stopping at the first batch that opens one. Every organization counts. */
 export async function fetchOrganizationSettingsAccess(fetcher: Fetcher = authFetch): Promise<boolean> {
+  if (viewFlagActive()) return false;
   type Listed = { id: string; current_user_role?: string | null };
   const orgs = (await json<Listed[]>(fetcher, '/api/organizations')) ?? [];
   if (orgs.some((org) => opensOrganization({ role: org.current_user_role ?? null, access: null }))) {
@@ -72,6 +76,7 @@ export async function openableOrganizations<T extends { id: string; currentUserR
   orgs: T[],
   fetcher: Fetcher = authFetch
 ): Promise<T[]> {
+  if (viewFlagActive()) return [];
   const opens = new Set<string>();
   const rest = orgs.filter((org) => {
     if (opensOrganization({ role: org.currentUserRole ?? null, access: null })) {

@@ -30,6 +30,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam_admin.port import IamUnavaila
 from naas_abi.apps.nexus.apps.api.app.services.iam_admin.runtime import get_iam_admin_service
 from naas_abi.apps.nexus.apps.api.app.services.iam_admin.service import IamAdminService
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import AuditUnavailable
+from naas_abi.apps.nexus.apps.api.app.services.view_as.active import viewing
 from naas_abi.apps.nexus.apps.api.app.services.view_as.confinement import outside_this_view
 from naas_abi_core.services.iam.IAMPorts import (
     IAMConflictError,
@@ -264,7 +265,12 @@ async def list_policies(
 async def get_policy(
     policy_id: str, user: User = Signed, service: IamAdminService = Service
 ) -> dict[str, Any]:
-    return await _call(service.get_policy(user, policy_id))
+    policy = await _call(service.get_policy(user, policy_id))
+    if (outside := outside_this_view(policy.get("owner_scope"), above=True)) is not None:
+        # In a view the page of a workspace opens a policy by id: its own, its organization's or the
+        # platform's (what the page lists), not another workspace's (``view_as/AGENTS.md``).
+        raise HTTPException(status_code=403, detail=outside)
+    return policy
 
 
 @router.post("/policies", status_code=201, dependencies=[declares("iam:CreatePolicy")])
@@ -374,7 +380,13 @@ async def principal_groups(
     principal_id: str, user: User = Signed, service: IamAdminService = Service
 ) -> dict[str, Any]:
     """The groups of a principal the caller may read, at every level."""
-    return await _call(service.principal_groups(user, principal_id))
+    groups = await _call(service.principal_groups(user, principal_id))
+    if viewing():
+        # In a view only the groups owned by the viewed workspace are shown, as a group is read by id.
+        groups["items"] = [
+            g for g in groups["items"] if outside_this_view(g.get("owner_scope")) is None
+        ]
+    return groups
 
 
 @router.get("/principals/{principal_id}", dependencies=[declares("iam:GetPrincipal")])

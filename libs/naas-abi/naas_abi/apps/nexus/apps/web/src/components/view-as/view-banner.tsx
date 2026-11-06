@@ -65,7 +65,9 @@ export function ViewBanner() {
     () =>
       onViewRefusal((message) => {
         const id = nextToast++;
-        setToasts((all) => [...all.slice(-2), { id, message }]);
+        // The same refusal is one notice, however many calls of the page it answers: it is shown again
+        // from the last one, not stacked.
+        setToasts((all) => [...all.filter((t) => t.message !== message).slice(-2), { id, message }]);
         window.setTimeout(() => dismiss(id), TOAST_MS);
       }),
     [dismiss],

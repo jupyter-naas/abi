@@ -56,6 +56,9 @@ from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
     check_rate_limit,
     get_rate_limit_identifier,
 )
+from naas_abi.apps.nexus.apps.api.app.services.view_as.confinement import (
+    outside_this_organization,
+)
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.postgres import (
     WorkspaceSecondaryAdapterPostgres,
 )
@@ -434,6 +437,10 @@ async def get_organization(
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
 ) -> Organization:
+    if (outside := outside_this_organization(org_id)) is not None:
+        # In a view the shell reads the organization of the viewed workspace, and no other
+        # (``view_as/AGENTS.md``, "Confined to the workspace").
+        raise HTTPException(status_code=403, detail=outside)
     role = await service.get_organization_role(current_user.id, org_id)
     row = await service.get_organization(org_id=org_id)
     if row is None:

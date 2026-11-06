@@ -238,8 +238,8 @@ def test_the_scope_of_another_route_is_no_iam_scope(app) -> None:
     for path in (
         "/api/iam/admin/principals",
         "/api/iam/admin/audit",
-        "/api/iam/admin/policies/{policy_id}",
         "/api/iam/admin/service-accounts",
+        "/api/iam/admin/principals/{principal_id}",
     ):
         route = _route(app, "GET", path)
         assert classify("GET", route, {}, query, "viewed", CONTAINER) is Verdict.OUTSIDE, path
@@ -266,3 +266,82 @@ def test_outside_this_view_holds_what_is_owned_inside_the_container() -> None:
             assert confinement.outside_this_view(owner) == (
                 "Outside this view: you are viewing as Carol in Alpha"
             ), owner
+
+
+# What the shell and the workspace's pages ask that names no workspace: each is answered as the
+# person, and its handler holds it to the viewed workspace (or it is the platform's, the same
+# for every workspace). The pages' other calls of that kind are not asked in a view (the web).
+SHELL_READS = (
+    ("GET", "/api/organizations/{org_id}", "organization"),
+    ("GET", "/api/providers/models", "catalog"),
+    ("GET", "/api/iam/admin/policies/{policy_id}", "owner"),
+    ("GET", "/api/iam/admin/principals/{principal_id}/groups", "owner"),
+)
+
+
+def test_the_reads_the_shell_and_the_pages_make_are_answered_with_their_reason(app) -> None:
+    routes = _routes(app)
+    for method, path, why in SHELL_READS:
+        key = (method, path)
+        assert key in ANSWERED_WITHOUT_A_WORKSPACE, key
+        assert why in ANSWERED_WITHOUT_A_WORKSPACE[key], key
+        assert _verdict(method, routes[key]) is Verdict.LISTED, key
+
+
+def test_the_reads_that_would_list_the_organization_or_another_person_stay_outside(app) -> None:
+    """The members and the workspaces of the organization (the pickers of Settings › General),
+    a person read by id and the platform's people are not part of a view: the web does not ask."""
+    for path in (
+        "/api/organizations/{org_id}/members",
+        "/api/organizations/{org_id}/workspaces",
+        "/api/organizations",
+        "/api/iam/admin/principals",
+        "/api/iam/admin/principals/{principal_id}",
+    ):
+        route = _route(app, "GET", path)
+        assert _verdict("GET", route) is Verdict.OUTSIDE, path
+        assert ("GET", path) not in ANSWERED_WITHOUT_A_WORKSPACE, path
+
+
+def test_outside_this_view_can_hold_what_is_owned_above_the_container() -> None:
+    """A policy or a group of the organization (or the platform's policy) is what the page of
+    the workspace lists beside its own; another workspace's, or another organization's, is not."""
+    from naas_abi.apps.nexus.apps.api.app.services.view_as.active import use_view
+    from naas_abi.apps.nexus.apps.api.app.services.view_as.testing import a_view
+
+    here = "abi:nexus:organization/acme/nexus:workspace/alpha"
+    refusal = "Outside this view: you are viewing as Carol in Alpha"
+    assert (
+        confinement.outside_this_view("abi:nexus:organization/zeta", above=True) is None
+    )  # no view
+    with use_view(a_view(container=here)):
+        for owner in (here, f"{here}/dev_people:project/p1", "abi:nexus:organization/acme"):
+            assert confinement.outside_this_view(owner, above=True) is None, owner
+        assert confinement.outside_this_view(None, above=True) is None  # the platform's policies
+        assert confinement.outside_this_view("abi:", above=True) is None
+        for owner in (
+            "abi:nexus:organization/acme/nexus:workspace/bravo",
+            "abi:nexus:organization/zeta",
+            "abi:nexus:organization/zeta/nexus:workspace/alpha",
+            f"{here}x",
+        ):
+            assert confinement.outside_this_view(owner, above=True) == refusal, owner
+        # A group by id is not given the platform or the organization (``above`` is off).
+        assert confinement.outside_this_view("abi:nexus:organization/acme") == refusal
+
+
+def test_an_organization_is_held_to_the_viewed_workspaces() -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.view_as.active import use_view
+    from naas_abi.apps.nexus.apps.api.app.services.view_as.testing import a_view
+
+    here = "abi:nexus:organization/acme/nexus:workspace/alpha"
+    assert confinement.outside_this_organization("zeta") is None  # no view
+    with use_view(a_view(container=here)):
+        assert confinement.outside_this_organization("acme") is None
+        for org in ("zeta", "acm", "acme/x", ""):
+            assert confinement.outside_this_organization(org) == (
+                "Outside this view: you are viewing as Carol in Alpha"
+            ), org
+    # A workspace in no organization has none to read.
+    with use_view(a_view(container="abi:nexus:workspace/solo")):
+        assert confinement.outside_this_organization("acme") is not None

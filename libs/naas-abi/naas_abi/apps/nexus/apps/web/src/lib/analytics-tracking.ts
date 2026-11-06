@@ -25,6 +25,7 @@
 
 import type { AnalyticsEvent, EventName } from '@/app/analytics/lib/types';
 import { getApiUrl } from '@/lib/config';
+import { viewFlagActive } from '@/lib/view-flag';
 import { authCredentials, getAuthHeader, useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
 
@@ -157,6 +158,8 @@ export function trackEvent(
   context: TrackContext & { properties?: Record<string, unknown> } = {},
 ): void {
   if (typeof window === 'undefined') return;
+  // A view is not the person's activity, and the server refuses every POST of one.
+  if (viewFlagActive()) return;
 
   const user = getCurrentUser();
   const page_path = context.page_path ?? window.location.pathname;

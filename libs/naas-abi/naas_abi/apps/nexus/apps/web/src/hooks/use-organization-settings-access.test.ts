@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest';
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it } from 'vitest';
+import { clearViewFlag, setViewFlag } from '@/lib/view-flag';
 import {
   createOrganizationSettingsAccessStore,
   fetchOrganizationSettingsAccess,
@@ -121,5 +123,18 @@ describe('the store', () => {
     expect(store.getState()).toMatchObject({ status: 'ready', opens: true });
     await store.getState().load('bob');
     expect(store.getState()).toMatchObject({ status: 'error', opens: null, userId: 'bob' });
+  });
+});
+
+describe('in a view', () => {
+  afterEach(() => clearViewFlag());
+
+  it('never asks: the organizations\' pages are not part of a view, so none opens', async () => {
+    setViewFlag({ workspaceId: 'ws-alpha', returnTo: null }, Date.now() + 15 * 60_000);
+    const seen: string[] = [];
+    const answers = { '/api/organizations': [{ id: 'acme', current_user_role: 'admin' }], [ACCESS_ACME]: IAM };
+    expect(await fetchOrganizationSettingsAccess(fetcher(answers, seen))).toBe(false);
+    expect(await openableOrganizations([{ id: 'acme', currentUserRole: 'admin' }], fetcher(answers, seen))).toEqual([]);
+    expect(seen).toEqual([]);
   });
 });
