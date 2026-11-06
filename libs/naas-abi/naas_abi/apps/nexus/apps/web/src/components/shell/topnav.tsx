@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { PanelLeft, PanelRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore, isTransientPanelSection } from '@/stores/workspace';
@@ -11,6 +12,7 @@ import { QuickOpen } from './quick-open';
 import { useTopNavContent } from './topnav-content';
 import { SECTION_HOME_HREF, SECTION_LABELS } from './sidebar/section-labels';
 import { getWorkspacePath } from './sidebar/utils';
+import { isWorkspaceHome, panelSectionOnPage } from './home-route';
 
 /**
  * The one persistent topnav bar. Mounted once by WorkspaceLayout above the
@@ -29,10 +31,14 @@ export function TopNav() {
   const toggleSidebar = useWorkspaceStore((s) => s.toggleSidebar);
   const contextPanelOpen = useWorkspaceStore((s) => s.contextPanelOpen);
   const toggleContextPanel = useWorkspaceStore((s) => s.toggleContextPanel);
-  const activePanelSection = useWorkspaceStore((s) => s.activePanelSection);
+  const storedPanelSection = useWorkspaceStore((s) => s.activePanelSection);
   const setActivePanelSection = useWorkspaceStore((s) => s.setActivePanelSection);
   const lastActivePanelSection = useWorkspaceStore((s) => s.lastActivePanelSection);
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const pathname = usePathname();
+  // Home is a desk, not a column: no panel there and no toggle to open one.
+  const onHome = isWorkspaceHome(pathname, currentWorkspaceId);
+  const activePanelSection = panelSectionOnPage(storedPanelSection, pathname, currentWorkspaceId);
 
   useEffect(() => {
     setMounted(true);
@@ -77,7 +83,7 @@ export function TopNav() {
             </button>
           )}
 
-          {mounted && (
+          {mounted && !onHome && (
             <button
               type="button"
               onClick={() => setActivePanelSection(activePanelSection ? null : sectionToToggle)}
