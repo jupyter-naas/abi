@@ -25,6 +25,8 @@ from naas_abi.apps.nexus.apps.api.app.services.iam_admin.adapters.secondary.engi
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam_admin.service import IamAdminService
 from naas_abi.apps.nexus.apps.api.app.services.iam_admin.testing import MemoryAudit
+from naas_abi.apps.nexus.apps.api.app.services.view_as.active import use_view
+from naas_abi.apps.nexus.apps.api.app.services.view_as.testing import a_view
 from naas_abi_core.engine.call_context import (
     CallContext,
     Principal,
@@ -81,6 +83,16 @@ def world(team, audit):
     app = FastAPI()
     app.include_router(router, prefix="/api/iam/admin")
     app.dependency_overrides[get_current_user_required] = _signed_in_user
+
+    @app.middleware("http")
+    async def in_a_view(request: Request, call_next):
+        """A request with ``x-view-container`` runs in a view of that container (the identity
+        middleware does it in the application)."""
+        container = request.headers.get("x-view-container")
+        if not container:
+            return await call_next(request)
+        with use_view(a_view(container=container)):
+            return await call_next(request)
 
     @app.get("/me")
     async def me(user=_signed_in_dependency):  # noqa: B008
@@ -435,6 +447,28 @@ def test_a_group_has_members_and_an_idp_mapping(world):
     )
     assert get(world, f"/groups/{group['id']}").json()["status"] == "deleted"
     assert group["id"] not in [g["id"] for g in get(world, "/groups").json()["items"]]
+
+
+def test_in_a_view_a_group_is_read_inside_the_viewed_container_only(world):
+    """The workspace's Roles & permissions page reads each of its groups by id: in a view, only
+    those owned inside the viewed container (the platform's and another workspace's are outside)."""
+    here = world.nexus.workspace("org-1", "ws-1")
+    mine = post(world, "/groups", name="mine", scope=here).json()
+    other = post(
+        world, "/groups", name="other", scope=world.nexus.workspace("org-1", "ws-2")
+    ).json()
+    platform = post(world, "/groups", name="platform").json()
+
+    def read(group, viewing=True):
+        headers = {**as_("root"), **({"x-view-container": here} if viewing else {})}
+        return world.client.get(f"/api/iam/admin/groups/{group['id']}", headers=headers)
+
+    assert read(mine).status_code == 200
+    for group in (other, platform):
+        refused = read(group)
+        assert refused.status_code == 403, group["name"]
+        assert refused.json()["detail"] == ("Outside this view: you are viewing as Carol in Alpha")
+        assert read(group, viewing=False).status_code == 200  # outside a view: as before
 
 
 def test_group_changes_need_their_own_permission(world):

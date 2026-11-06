@@ -95,6 +95,15 @@ the request state. A bearer credential (an API key, a session token) never carri
   parameter **that its route declares** (a `workspace_id` in the query of a route that takes none names nothing),
   every one of them the viewed workspace; or when its route is on `ANSWERED_WITHOUT_A_WORKSPACE`, each entry with
   its reason. Anything else is 403 "Outside this view: you are viewing as <name> in <workspace>".
+- **Roles & permissions at the workspace.** The workspace's settings page reads IAM's admin routes with the
+  container it manages in `scope`, not a `workspace_id`: a GET under `/api/iam/admin/` that declares a `scope` query
+  parameter (`access`, `grantable`, `publishers`, `resources`, `catalogs`, `policies`, `attachments`,
+  `attachable-policies`, `groups`) is answered when every `scope` given is the viewed container or something below it
+  (`<container>/…`, which includes `<container>/*`). No `scope` is the platform's, and a sibling, the organization or a name
+  that merely starts like the container is outside. A group is read by id (`GET /api/iam/admin/groups/{group_id}`,
+  on `ANSWERED_WITHOUT_A_WORKSPACE`): its handler holds the group's owner to the container (`outside_this_view`), so a
+  platform group or another workspace's is "Outside this view" even for a person who reads it themselves (an
+  organization's admin).
 - **`GET /api/workspaces`** lists the viewed workspace only, and `…/slug/{slug}` finds it only.
 - **No WebSocket** (`websocket/runtime.py`): refused at the handshake, so no presence and no room.
 - **No settings cache**: neither read nor filled (`nexus_view` on the scope's state).
@@ -229,6 +238,11 @@ settings › Roles & permissions › Audit, beside IAM's:
 
 ## Decisions
 
+- **The workspace's Roles & permissions pages name the workspace by `scope`.** Decision: an IAM admin read is held to
+  the viewed workspace by its `scope` (the container or below), and a group read by id by its owner. Consequences: the
+  page opens in a view with the tabs the person sees (People & roles, Groups, Policies) and decides every button as the
+  person; a read that names no container (the platform's people, a policy by id, the audit, service accounts) stays
+  outside, so the page shows what it cannot read as "Outside this view" ("Not done" below).
 - **The guard is its own middleware, inside CORS.** Decision: the identity (the person's credential and context)
   is `RequestIdentityMiddleware`'s, because it is who the request is; the read-only and workspace refusals are
   `ViewGuardMiddleware`, added right outside the settings cache and inside `CORSMiddleware`. Consequences: a
@@ -285,7 +299,12 @@ coding_environment, workflows, maps and search.
 
 ## Not done
 
-- The web (the banner, the picker, "Private to <name>" on the private pages) is subtask 4.
+- The web asks, on every page of a workspace, for calls a view refuses: `GET /api/organizations/{org}` (the shell),
+  `GET /api/providers/models` (the chat page) and, on a settings page, the organization's members and workspaces: each
+  refusal is shown as a notice with the server's message ("Outside this view"), several times a page. Whether those
+  reads are answered (each with its reason on `ANSWERED_WITHOUT_A_WORKSPACE`) or the web stops asking in a view is
+  open. The same holds for the Roles & permissions reads that name no container (the platform's people, a policy by
+  id): the page shows what it cannot read as "Outside this view".
 - A view of the maps does not apply the deployment's seeds: a workspace that was never opened outside a view shows
   what is stored (no seeded layouts, basemaps or layers) until someone opens it.
 - The deck of a slides, documents or sheets project is read from the person's coding-environment sidecar

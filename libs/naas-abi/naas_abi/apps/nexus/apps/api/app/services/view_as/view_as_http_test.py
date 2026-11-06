@@ -133,6 +133,14 @@ def _probe_router() -> APIRouter:
     async def org_page(request: Request, org_id: str) -> dict:
         return seen(request)
 
+    @router.get("/iam/admin/probe")
+    async def iam_read(request: Request, scope: str | None = None) -> dict:
+        return seen(request)
+
+    @router.get("/admin/probe-scoped")
+    async def other_scope(request: Request, scope: str | None = None) -> dict:
+        return seen(request)
+
     @router.get("/admin/probe")
     async def platform_page(request: Request) -> dict:
         return seen(request)
@@ -557,6 +565,36 @@ async def test_only_the_viewed_workspace_is_answered(world) -> None:
     ):
         refused = await root.get(path)
         assert (refused.status_code, refused.json()) == (403, {"detail": outside}), path
+
+
+@pytest.mark.asyncio
+async def test_the_roles_and_permissions_reads_name_the_viewed_container_by_their_scope(
+    world,
+) -> None:
+    """The workspace's Roles & permissions pages read IAM's admin routes with ``scope=<the
+    container>``: they are answered as the person, and only for the viewed container or below."""
+    from urllib.parse import quote
+
+    root = await world.sign_in("root")
+    assert (await start(root, world, "carol")).status_code == 200
+    outside = "Outside this view: you are viewing as Carol in Alpha"
+
+    for scope in (world.alpha, f"{world.alpha}/*", f"{world.alpha}/dev_people:project/p1"):
+        answer = await root.get(f"/api/iam/admin/probe?scope={quote(scope, safe='')}")
+        assert answer.status_code == 200, scope
+        assert answer.json()["user"] == "carol" and answer.json()["container"] == world.alpha
+    for query in (
+        f"scope={quote(world.bravo, safe='')}",  # a sibling workspace
+        f"scope={quote(org_container(ORG), safe='')}",  # the organisation above
+        "scope=abi%3A",  # the platform
+        "",  # no scope: the platform's
+        f"scope={quote(world.alpha, safe='')}&scope=abi%3A",  # one of two is outside
+    ):
+        refused = await root.get(f"/api/iam/admin/probe?{query}")
+        assert (refused.status_code, refused.json()) == (403, {"detail": outside}), query
+    # Only IAM's admin reads are held by their scope.
+    other = await root.get(f"/api/admin/probe-scoped?scope={quote(world.alpha, safe='')}")
+    assert (other.status_code, other.json()) == (403, {"detail": outside})
 
 
 # -- Read-only -----------------------------------------------------------------------------

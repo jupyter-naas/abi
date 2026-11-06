@@ -161,3 +161,108 @@ def test_every_write_is_read_only_whatever_it_names(app) -> None:
     # The cache's own route is no route of the application: refused as any write.
     cache = {**scope, "path": "/api/settings-cache/refresh"}
     assert confinement.judge(cache, person="C", workspace_id="viewed", workspace_name="A")
+
+
+CONTAINER = "abi:nexus:organization/acme/nexus:workspace/viewed"
+# The reads of the workspace's Roles & permissions pages: they name the container they manage
+# by ``scope`` (IAM's own name of a place), not by ``workspace_id``.
+IAM_SCOPED_READS = {
+    "/api/iam/admin/access",
+    "/api/iam/admin/grantable",
+    "/api/iam/admin/publishers",
+    "/api/iam/admin/resources",
+    "/api/iam/admin/catalogs",
+    "/api/iam/admin/policies",
+    "/api/iam/admin/attachments",
+    "/api/iam/admin/attachable-policies",
+    "/api/iam/admin/groups",
+}
+
+
+def _scoped(app, scope: str | bytes, path: str = "/api/iam/admin/access") -> Verdict:
+    from urllib.parse import quote
+
+    query = scope if isinstance(scope, bytes) else f"scope={quote(scope, safe='')}".encode()
+    return classify("GET", _route(app, "GET", path), {}, query, "viewed", CONTAINER)
+
+
+def test_the_roles_and_permissions_reads_of_the_workspace_name_it_by_their_scope(app) -> None:
+    """Roles & permissions at a workspace reads IAM's admin routes with ``scope=<its container>``
+    (or something below it): those are the workspace's own pages, answered as the person."""
+    from fastapi.dependencies.utils import get_flat_dependant
+
+    declared = {
+        path
+        for (method, path), route in _routes(app).items()
+        if method == "GET"
+        and path.startswith("/api/iam/admin/")
+        and any(p.alias == "scope" for p in get_flat_dependant(route.dependant).query_params)
+    }
+    assert declared == IAM_SCOPED_READS  # a new scoped read is decided here, not by accident
+    for path in sorted(IAM_SCOPED_READS):
+        for scope in (CONTAINER, CONTAINER + "/*", CONTAINER + "/dev_people:project/p1"):
+            assert _scoped(app, scope, path) is Verdict.NAMED, (path, scope)
+
+
+def test_a_scope_outside_the_viewed_container_names_nothing(app) -> None:
+    for scope in (
+        "abi:",  # the platform
+        "abi:nexus:organization/acme",  # the organisation above
+        "abi:nexus:organization/acme/*",
+        "abi:nexus:organization/acme/nexus:workspace/other",  # a sibling
+        CONTAINER + "x",  # a name that merely starts like it
+        CONTAINER.upper(),
+        "",
+    ):
+        assert _scoped(app, scope) is Verdict.OUTSIDE, scope
+    assert _scoped(app, b"") is Verdict.OUTSIDE  # no scope: the platform's
+    from urllib.parse import quote
+
+    both = f"scope={quote(CONTAINER, safe='')}&scope=abi%3A".encode()
+    assert _scoped(app, both) is Verdict.OUTSIDE  # every scope named must be inside
+    assert (
+        classify("GET", _route(app, "GET", "/api/iam/admin/access"), {}, b"", "viewed", None)
+        is Verdict.OUTSIDE
+    )
+
+
+def test_the_scope_of_another_route_is_no_iam_scope(app) -> None:
+    """The files' ``scope`` is ``workspace`` or ``my_drive``: only IAM's admin reads are held
+    by an IAM scope, and a route that names none of the viewed workspace stays outside."""
+    from urllib.parse import quote
+
+    route = _route(app, "GET", "/api/files/")
+    query = f"scope={quote(CONTAINER, safe='')}".encode()
+    assert classify("GET", route, {}, query, "viewed", CONTAINER) is Verdict.OUTSIDE
+    # Reads of the platform's people, groups' members and policies by id name no container.
+    for path in (
+        "/api/iam/admin/principals",
+        "/api/iam/admin/audit",
+        "/api/iam/admin/policies/{policy_id}",
+        "/api/iam/admin/service-accounts",
+    ):
+        route = _route(app, "GET", path)
+        assert classify("GET", route, {}, query, "viewed", CONTAINER) is Verdict.OUTSIDE, path
+
+
+def test_a_group_is_read_by_id_in_a_view_and_held_to_the_container_by_its_handler(app) -> None:
+    """The Roles & permissions page reads each group of the workspace by id: no workspace in the
+    request, so the route is answered, and its handler holds the group's owner to the container."""
+    key = ("GET", "/api/iam/admin/groups/{group_id}")
+    assert key in ANSWERED_WITHOUT_A_WORKSPACE
+    assert "container" in ANSWERED_WITHOUT_A_WORKSPACE[key]
+
+
+def test_outside_this_view_holds_what_is_owned_inside_the_container() -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.view_as.active import use_view
+    from naas_abi.apps.nexus.apps.api.app.services.view_as.testing import a_view
+
+    here = "abi:nexus:organization/acme/nexus:workspace/alpha"
+    assert confinement.outside_this_view("abi:nexus:organization/acme") is None  # no view
+    with use_view(a_view(container=here)):
+        assert confinement.outside_this_view(here) is None
+        assert confinement.outside_this_view(f"{here}/dev_people:project/p1") is None
+        for owner in (None, "abi:", f"{here}x", "abi:nexus:organization/acme"):
+            assert confinement.outside_this_view(owner) == (
+                "Outside this view: you are viewing as Carol in Alpha"
+            ), owner

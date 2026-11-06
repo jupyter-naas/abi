@@ -30,6 +30,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam_admin.port import IamUnavaila
 from naas_abi.apps.nexus.apps.api.app.services.iam_admin.runtime import get_iam_admin_service
 from naas_abi.apps.nexus.apps.api.app.services.iam_admin.service import IamAdminService
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import AuditUnavailable
+from naas_abi.apps.nexus.apps.api.app.services.view_as.confinement import outside_this_view
 from naas_abi_core.services.iam.IAMPorts import (
     IAMConflictError,
     IAMNotFoundError,
@@ -411,7 +412,12 @@ async def list_groups(
 async def get_group(
     group_id: str, user: User = Signed, service: IamAdminService = Service
 ) -> dict[str, Any]:
-    return await _call(service.get_group(user, group_id))
+    group = await _call(service.get_group(user, group_id))
+    if (outside := outside_this_view(group.get("owner_scope"))) is not None:
+        # In a view the page of a workspace reads its groups by id: not the platform's nor another
+        # workspace's (``view_as/AGENTS.md``, "Confined to the workspace").
+        raise HTTPException(status_code=403, detail=outside)
+    return group
 
 
 @router.post("/groups", status_code=201, dependencies=[declares("iam:CreateGroup")])

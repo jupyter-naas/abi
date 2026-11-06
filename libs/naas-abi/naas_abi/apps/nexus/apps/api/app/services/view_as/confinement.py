@@ -31,6 +31,7 @@ from urllib.parse import parse_qs
 
 from fastapi.dependencies.utils import get_flat_dependant
 from fastapi.routing import APIRoute
+from naas_abi.apps.nexus.apps.api.app.services.view_as.active import current_view
 from naas_abi.apps.nexus.apps.api.app.services.view_as.reads_by_post import (
     BODY,
     BY_ROUTE,
@@ -41,6 +42,9 @@ from starlette.routing import Match
 
 READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 API_PREFIX = "/api/"
+# IAM's admin reads that take a ``scope`` (a place, by IAM's name): the workspace's Roles & permissions
+# pages call them with the container they manage.
+IAM_ADMIN_PREFIX = "/api/iam/admin/"
 
 # Writes that end the view, or the session it runs on: (method, route template).
 STOP_ROUTE = ("DELETE", "/api/iam/view-as")
@@ -71,6 +75,10 @@ ANSWERED_WITHOUT_A_WORKSPACE: dict[tuple[str, str], str] = {
     ("GET", "/api/iam/api-keys"): (
         "the account's keys page opens: the person's personal keys are private to them, "
         "answered empty in a view"
+    ),
+    ("GET", "/api/iam/admin/groups/{group_id}"): (
+        "the workspace's Roles & permissions page reads each of its groups by id: the request names no "
+        "workspace, so the handler holds the group's owner to the viewed container (outside_this_view)"
     ),
     ("GET", "/api/tenant"): "branding of the shell; public, the same for everyone",
     ("GET", "/api/auth/avatar/{filename}"): "avatar images in <img> tags; public",
@@ -122,6 +130,35 @@ def declared_workspace_query(route: APIRoute) -> bool:
     return known
 
 
+def declared_scope_query(route: APIRoute) -> bool:
+    """Whether the route takes a ``scope`` query parameter (worked out once per route)."""
+    known = route.__dict__.get("_view_as_scope_query")
+    if known is None:
+        known = any(p.alias == "scope" for p in get_flat_dependant(route.dependant).query_params)
+        route.__dict__["_view_as_scope_query"] = known
+    return known
+
+
+def in_container(value: object, container: str | None) -> bool:
+    """Whether ``value`` is the container or something below it (``<container>/...``, which
+    covers ``<container>/*``): a name that merely starts like it is not."""
+    return (
+        bool(container)
+        and isinstance(value, str)
+        and (value == container or value.startswith(f"{container}/"))
+    )
+
+
+def outside_this_view(owner_scope: str | None) -> str | None:
+    """For a handler of a route answered without a workspace that reads something owned by a
+    container: the refusal text when a view runs and ``owner_scope`` is not the viewed container
+    or something below it (the platform's, another workspace's), else None (also outside a view)."""
+    view = current_view()
+    if view is None or in_container(owner_scope, view.container):
+        return None
+    return outside_detail(view.person_name, view.workspace_name)
+
+
 def route_names_workspace(route: APIRoute) -> bool:
     """Whether the route can name a workspace: a path parameter or a query
     parameter called ``workspace_id``."""
@@ -134,8 +171,10 @@ def classify(
     path_params: dict[str, object],
     query_string: bytes,
     viewed_workspace: str,
+    container: str | None = None,
 ) -> Verdict:
-    """How a view treats a GET, HEAD or OPTIONS request that reached ``route``."""
+    """How a view treats a GET, HEAD or OPTIONS request that reached ``route``. ``container`` is
+    the viewed workspace's: the place an IAM admin read names by ``scope``."""
     if (method, route.path) in ANSWERED_WITHOUT_A_WORKSPACE or (
         method == "HEAD" and ("GET", route.path) in ANSWERED_WITHOUT_A_WORKSPACE
     ):
@@ -150,6 +189,17 @@ def classify(
         named.extend(given.get("workspace_id", []))
     if named and all(value == viewed_workspace for value in named):
         return Verdict.NAMED
+    if (
+        container
+        and route.path.startswith(IAM_ADMIN_PREFIX)
+        and declared_scope_query(route)
+        and not named
+    ):
+        # Roles & permissions at the workspace: every scope named is the container or below it
+        # (no scope is the platform's, which is outside).
+        scopes = parse_qs(query_string.decode("latin-1"), keep_blank_values=True).get("scope", [])
+        if scopes and all(in_container(value, container) for value in scopes):
+            return Verdict.NAMED
     return Verdict.OUTSIDE
 
 
@@ -216,7 +266,7 @@ def body_resource_in(body: bytes, field: str, container: str | None) -> bool:
     except ValueError:
         return False
     value = data.get(field) if isinstance(data, dict) else None
-    return isinstance(value, str) and (value == container or value.startswith(container + "/"))
+    return in_container(value, container)
 
 
 def judge(
@@ -254,14 +304,18 @@ def judge(
                 return Refusal(403, outside_detail(person, workspace_name))
             route, path_params = found
             query = scope.get("query_string", b"")
-            if classify(method, route, path_params, query, workspace_id) is Verdict.OUTSIDE:
+            if classify(method, route, path_params, query, workspace_id, container) is (
+                Verdict.OUTSIDE
+            ):
                 return Refusal(403, outside_detail(person, workspace_name))
         return None
     found = find_route(routes, scope)
     if found is None:
         return Refusal(403, outside_detail(person, workspace_name))
     route, path_params = found
-    verdict = classify(method, route, path_params, scope.get("query_string", b""), workspace_id)
+    verdict = classify(
+        method, route, path_params, scope.get("query_string", b""), workspace_id, container
+    )
     if verdict is Verdict.OUTSIDE:
         return Refusal(403, outside_detail(person, workspace_name))
     return None
