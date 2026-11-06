@@ -100,9 +100,14 @@ export function PersonView({
 
   const load = useCallback(async () => {
     const notices: string[] = [];
+    // A view is one workspace: what the person holds there is read at its container, and what they hold at
+    // the organization or the platform is outside it (``view_as/AGENTS.md``).
+    const inView = viewFlagActive();
+    const held = (principalId: string) =>
+      api.listAttachments(inView ? { principal_id: principalId, scope: ownerOf(scope) } : { principal_id: principalId });
     // Across levels IAM answers what the viewer may list: an empty list, never a refusal.
     const [direct, groups] = await Promise.all([
-      api.listAttachments({ principal_id: personId }).then(
+      held(personId).then(
         (page) => page.items,
         (e: unknown) => {
           notices.push(`What they hold could not be read (${message(e)}).`);
@@ -117,9 +122,9 @@ export function PersonView({
         },
       ),
     ]);
-    const held = await Promise.all(
+    const heldByGroups = await Promise.all(
       groups.map((group) =>
-        api.listAttachments({ principal_id: group.id }).then(
+        held(group.id).then(
           (page) => ({ group, attachments: page.items }),
           (e: unknown) => {
             notices.push(`What ${principalLabel(group, group.id)} gives could not be read (${message(e)}).`);
@@ -131,8 +136,8 @@ export function PersonView({
     let profile = direct.find((a) => a.principal)?.principal ?? null;
     // A person read by id is outside a view (``view_as/AGENTS.md``): their rows name them, else the label does.
     if (!profile && !viewFlagActive()) profile = await api.getPrincipal(personId).catch(() => null);
-    setLoaded({ direct, groups: held, notices, profile });
-  }, [api, personId]);
+    setLoaded({ direct, groups: heldByGroups, notices, profile });
+  }, [api, personId, scope]);
 
   useEffect(() => {
     void load();
@@ -143,10 +148,11 @@ export function PersonView({
   // Where a policy may be attached to them: this page's level, the platform, and each
   // organization or workspace they hold a role at (its container, not below it).
   const levels = useMemo(() => {
-    const found = here === PLATFORM ? [PLATFORM] : [here, PLATFORM];
+    // In a view the platform's level is outside it, and so is any other level.
+    const found = viewFlagActive() ? [here] : here === PLATFORM ? [PLATFORM] : [here, PLATFORM];
     for (const row of rows) {
       const at = row.role && !row.via ? row.attachment.scope : null;
-      if (at && !parseScope(at)?.below && !found.includes(at)) found.push(at);
+      if (at && !viewFlagActive() && !parseScope(at)?.below && !found.includes(at)) found.push(at);
     }
     return found;
   }, [rows, here]);

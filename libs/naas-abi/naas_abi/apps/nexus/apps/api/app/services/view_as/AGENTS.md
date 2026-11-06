@@ -121,8 +121,12 @@ the request state. A bearer credential (an API key, a session token) never carri
   Settings › General show the current value: the owner is named from the workspace's own members, the group is the
   workspace's), the organizations list and each organization's access (the account menu hides Organization settings),
   a person read by id (`GET /api/iam/admin/principals/{id}`: the person's page names them by their rows) and the
-  analytics events (the viewer's page views are not the person's activity). They test `viewFlagActive()`, the cookie
-  that is up before the first request is answered.
+  analytics events (the viewer's page views are not the person's activity). The Roles & permissions pages ask nothing
+  above the viewed workspace: the person's page reads their (and their groups') attachments with `scope` set to the
+  viewed container, asks the rights and the names of the containers below it only, and has no "View as" button (no view
+  starts inside a view). They test `viewFlagActive()`, the cookie that is up before the first request is answered. The
+  first load after Start, before the browser has the cookie, may still ask for what the viewer's own session last had
+  open; the web then reloads, and those calls show no notice.
 - **`GET /api/workspaces`** lists the viewed workspace only, and `…/slug/{slug}` finds it only.
 - **No WebSocket** (`websocket/runtime.py`): refused at the handshake, so no presence and no room.
 - **No settings cache**: neither read nor filled (`nexus_view` on the scope's state).
@@ -327,8 +331,8 @@ coding_environment, workflows, maps and search.
 
 - The Roles & permissions reads that name no container are still "Outside this view": the platform's people
   (`GET /api/iam/admin/principals`), the audit, the service accounts and a person read by id. The pages that need them
-  are the platform's, outside a view; the person's page across levels (`GET /attachments?principal_id=` with no `scope`)
-  shows what it cannot read as "Outside this view".
+  are the platform's, outside a view. On the person's page in a view, what they hold at the organization or the platform
+  is not shown (it is outside the view), and the containers above the workspace show by id, not by name.
 - A view of the maps does not apply the deployment's seeds: a workspace that was never opened outside a view shows
   what is stored (no seeded layouts, basemaps or layers) until someone opens it.
 - The deck of a slides, documents or sheets project is read from the person's coding-environment sidecar

@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { IamAdminApi } from '@/lib/iam-admin/api';
 import { PLATFORM, parseScope, type ContainerStep } from '../access-scope';
+import { viewFlagActive } from '@/lib/view-flag';
 
 export type PolicyOwner = {
   /** The owner's container, `abi:` for the platform. */
@@ -181,7 +182,8 @@ export function useContainerNames(
   reload = 0,
 ): Record<string, string> {
   const containers = useMemo(() => new Map(containersOf(sorted(scopes)).map((c) => [c.container, c.step])), [scopes]);
-  const keys = useMemo(() => [...containers.keys()], [containers]);
+  // A view is one workspace: the containers above it are outside it, and their names are not read.
+  const keys = useMemo(() => (viewFlagActive() ? [] : [...containers.keys()]), [containers]);
   const found = useAnswers(keys, (container) => nameOf(api, container, containers.get(container)!), reload, [api]);
   // A container the caller may not list keeps its id: no name for it.
   return useMemo(() => Object.fromEntries(Object.entries(found).filter(([, name]) => name)), [found]);
@@ -200,7 +202,15 @@ export function useActionsAt(
   can: (action: string) => boolean,
   reload = 0,
 ): (scope: string | null | undefined) => Record<string, boolean> {
-  const keys = useMemo(() => sorted(scopes).filter((scope) => scope !== here), [scopes, here]);
+  // In a view only what lies below the viewed workspace is asked about: the platform's and the
+  // organization's levels are outside it.
+  const keys = useMemo(
+    () =>
+      sorted(scopes).filter(
+        (scope) => scope !== here && (!viewFlagActive() || (!!scope && scope.startsWith(`${here}/`))),
+      ),
+    [scopes, here],
+  );
   const found = useAnswers(keys, (scope) => actionsAt(api, scope), reload, [api]);
   return useCallback(
     (scope: string | null | undefined) => {

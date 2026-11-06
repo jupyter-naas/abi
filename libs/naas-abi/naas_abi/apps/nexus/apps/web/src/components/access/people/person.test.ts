@@ -284,4 +284,21 @@ describe('View as, on a person’s page', () => {
     expect(inView.getPrincipal).not.toHaveBeenCalled();
     expect(document.querySelector('.access-person-name')?.textContent).toBe('bob');
   });
+
+  it('in a view reads what the person holds in the viewed workspace only, and asks nothing outside it', async () => {
+    setViewFlag({ workspaceId: 'ws-1', returnTo: null }, Date.now() + 15 * 60_000);
+    const api = apiFor([memberAtW], [g], { [WS]: ADMIN });
+    const viewable = vi.fn().mockResolvedValue([]);
+    await show(api, (a) => ADMIN.includes(a), workspaceAccessScope('acme', 'ws-1'), { viewable });
+
+    // The platform's and the organization's levels, and their names, are outside the view.
+    expect(api.listAttachments).toHaveBeenCalledWith({ principal_id: 'usr_bob', scope: WS });
+    expect(api.listAttachments).toHaveBeenCalledWith({ principal_id: 'grp_g', scope: WS });
+    expect(api.listAttachments).not.toHaveBeenCalledWith({ principal_id: 'usr_bob' });
+    for (const call of vi.mocked(api.access).mock.calls) expect(call[0]).toBe(WS);
+    for (const call of vi.mocked(api.resources).mock.calls) expect(String(call[0]?.scope)).toContain(WS);
+    // No view inside a view.
+    expect(viewable).not.toHaveBeenCalled();
+    expect(row('builtin.member', WS)).not.toBeNull();
+  });
 });

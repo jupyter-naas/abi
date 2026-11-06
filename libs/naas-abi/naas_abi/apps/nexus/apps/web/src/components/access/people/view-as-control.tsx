@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Eye } from 'lucide-react';
 import { beginView, listViewableWorkspaces } from '@/lib/view-as';
 import type { ViewableWorkspace } from '@/lib/view-model';
+import { viewFlagActive } from '@/lib/view-flag';
 
 export type ViewableWorkspaces = (personId: string) => Promise<ViewableWorkspace[]>;
 
@@ -47,6 +48,8 @@ export function ViewAsControl({
   useEffect(() => {
     let cancelled = false;
     setOpen(false);
+    // No view starts from inside a view (the server answers none), so nothing is asked.
+    if (viewFlagActive()) return;
     viewable(personId).then(
       (found) => !cancelled && setWorkspaces(found),
       () => !cancelled && setWorkspaces([]),
