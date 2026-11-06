@@ -128,6 +128,40 @@ def _valid_job(job: pb.JobDescriptor) -> bool:
     )
 
 
+# Agent presentation (display name, avatar, suggestions). The bounds are the
+# SDK's (naas_abi_sdk.discovery). An avatar is a reference, never image bytes:
+# every module's descriptor shares the bounded registry snapshot.
+MAX_AGENT_DISPLAY_NAME_CHARS = 128
+MAX_AGENT_AVATAR_URL_CHARS = 1024
+MAX_AGENT_SUGGESTIONS = 8
+_MODULE_ASSET = re.compile(r"/modules/[A-Za-z0-9_.\-]+(/[A-Za-z0-9_.\-]+)+")
+
+
+def _valid_avatar_url(value: str) -> bool:
+    if not value:
+        return True
+    if len(value) > MAX_AGENT_AVATAR_URL_CHARS or any(c.isspace() for c in value):
+        return False
+    if value.startswith("https://"):
+        return len(value) > len("https://")
+    return bool(_MODULE_ASSET.fullmatch(value)) and "/../" not in f"{value}/"
+
+
+def _valid_agent_presentation(agent: pb.AgentDescriptor) -> bool:
+    return (
+        len(agent.display_name) <= MAX_AGENT_DISPLAY_NAME_CHARS
+        and (not agent.display_name or bool(agent.display_name.strip()))
+        and _valid_avatar_url(agent.avatar_url)
+        and len(agent.suggestions) <= MAX_AGENT_SUGGESTIONS
+        and all(
+            0 < len(s.label) <= 128
+            and 0 < len(s.value) <= 1024
+            and len(s.description) <= 256
+            for s in agent.suggestions
+        )
+    )
+
+
 # Apps a module serves over NATS (docs/adr/20261012_remote-module-apps.md): few
 # and small, so they stay a minor part of the bounded registry snapshot.
 MAX_APPS = 16
@@ -157,6 +191,7 @@ def _valid_app(app: pb.AppDescriptor) -> bool:
         and len(app.description) <= 4096
         and len(app.category) <= 64
         and len(app.icon_emoji) <= 16
+        and _valid_avatar_url(app.avatar_url)
         and _app_entry(app.entry)
         and app.ByteSize() <= MAX_APP_BYTES
     )
@@ -406,6 +441,7 @@ class DiscoveryService:
                 and len(x.description) <= 4096
                 and len(x.capabilities) <= 32
                 and all(_name(c) for c in x.capabilities)
+                and _valid_agent_presentation(x)
                 for x in d.agents
             ),
             "INVALID_ARGUMENT",

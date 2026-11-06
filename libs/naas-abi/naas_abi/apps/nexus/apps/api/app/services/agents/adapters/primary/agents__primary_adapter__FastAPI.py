@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import time
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import replace
@@ -39,6 +40,7 @@ from naas_abi.apps.nexus.apps.api.app.services.registry import (
     get_service_registry,
 )
 from naas_abi.apps.nexus.apps.api.app.utils.public_urls import (
+    public_api_host,
     public_modules_url,
     resolve_abi_module_path,
     resolve_module_public_asset_path,
@@ -582,9 +584,46 @@ def _resolve_agent_model_id(agent: AgentRecord, agent_cls: type | None = None) -
     return _default_chat_model_id()
 
 
+def _remote_avatar_url(avatar_url: str) -> str | None:
+    """A remote agent's avatar: an https URL as is, a ``/modules/<path>`` asset
+    on this platform's public API host (relative when the host is unknown)."""
+    if not avatar_url:
+        return None
+    if avatar_url.startswith("https://"):
+        return avatar_url
+    if avatar_url.startswith("/modules/"):
+        host = public_api_host()
+        return f"{host}{avatar_url}" if host else avatar_url
+    return None
+
+
+def _enrich_remote_agent(agent: AgentRecord, remote: RemoteAgent | None) -> AgentRecord:
+    """Presentation of a remote agent, from what its module publishes in discovery."""
+    module_path = agent.module_path
+    if not module_path and agent.class_name and "/" in agent.class_name:
+        module_path = agent.class_name.rsplit("/", 1)[0] or None
+    # Same model fields as before remote presentation: its module picks the model.
+    common = {
+        "module_path": module_path,
+        "resolved_model_id": _resolve_agent_model_id(agent, None),
+        "model_ids": None,
+    }
+    if remote is None:
+        return replace(agent, suggestions=None, logo_url=None, intents=None, **common)
+    return replace(
+        agent,
+        name=remote.display_name or agent.name,
+        suggestions=[s.as_dict() for s in remote.suggestions] or None,
+        logo_url=_remote_avatar_url(remote.avatar_url),
+        intents=None,
+        **common,
+    )
+
+
 def _enrich_agent(
     agent: AgentRecord,
     class_name_to_agent_class: dict[str, type[Agent]],
+    remote_by_class_name: Mapping[str, RemoteAgent] | None = None,
 ) -> AgentRecord:
     """Return a copy of ``agent`` enriched with class-derived presentation fields.
 
@@ -595,6 +634,8 @@ def _enrich_agent(
     that backfill, and of a renamed class label, happens in
     :func:`_reconcile_workspace_agents`.
     """
+    if agent.provider == REMOTE_PROVIDER:
+        return _enrich_remote_agent(agent, (remote_by_class_name or {}).get(agent.class_name or ""))
     suggestions = None
     logo_url = None
     intents = None
@@ -675,15 +716,36 @@ async def _dedupe_agents_by_class_name(
     return kept
 
 
+# The last agents read from discovery, by key: remote rows take their display
+# name, avatar and suggestions from it. Refreshed by every reconcile, and when
+# older than REMOTE_PRESENTATION_SECONDS on a listing that has remote rows.
+REMOTE_PRESENTATION_SECONDS = 30.0
+_remote_presentation: tuple[float, dict[str, RemoteAgent]] | None = None
+
+
 async def _discovered_remote_agents() -> list[RemoteAgent] | None:
     """Agents published through NATS discovery; None when discovery cannot be read."""
+    global _remote_presentation
     from naas_abi.apps.nexus.apps.api.app.services.agents.remote import factory
 
     try:
-        return await factory.get_remote_agent_directory().list_agents()
+        agents = await factory.get_remote_agent_directory().list_agents()
     except Exception as exc:  # noqa: BLE001 - keep remote rows untouched on any error
         logger.warning("Remote agent discovery unavailable, leaving remote agents as is: %s", exc)
         return None
+    _remote_presentation = (time.monotonic(), {agent.key: agent for agent in agents})
+    return agents
+
+
+async def _remote_agents_by_key(agent_list: Iterable[AgentRecord]) -> dict[str, RemoteAgent]:
+    """Discovered remote agents by key, read again when stale and needed."""
+    if not any(agent.provider == REMOTE_PROVIDER for agent in agent_list):
+        return {}
+    cached = _remote_presentation
+    if cached is None or time.monotonic() - cached[0] > REMOTE_PRESENTATION_SECONDS:
+        await _discovered_remote_agents()
+        cached = _remote_presentation
+    return dict(cached[1]) if cached is not None else {}
 
 
 def _remote_agent_enabled(
@@ -861,7 +923,7 @@ async def _reconcile_workspace_agents(
             created_agent = await agent_service.create_agent(
                 context=context,
                 data=AgentCreateInput(
-                    name=remote.name,
+                    name=remote.display_name or remote.name,
                     description=remote.description,
                     workspace_id=workspace_id,
                     class_name=class_name,
@@ -1003,9 +1065,10 @@ async def _enriched_workspace_agents(
             )
 
     flags = await _caller_feature_flags(workspace_id, role)
+    visible = filter_feature_agents(agent_list, flags)
+    remote_by_class_name = await _remote_agents_by_key(visible)
     return [
-        _enrich_agent(agent, class_name_to_agent_class)
-        for agent in filter_feature_agents(agent_list, flags)
+        _enrich_agent(agent, class_name_to_agent_class, remote_by_class_name) for agent in visible
     ]
 
 

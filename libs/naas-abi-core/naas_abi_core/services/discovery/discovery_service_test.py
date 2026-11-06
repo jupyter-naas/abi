@@ -1141,3 +1141,93 @@ def test_an_instance_id_is_one_subject_token(instance_id):
             await service.register(registration("acme.c", instance_id), "acme.c")
 
     asyncio.run(scenario())
+
+
+def _with_presented_agent(agent):
+    req = registration("acme.accounts", "presented-1")
+    req.descriptor.agents.append(agent)
+    return req
+
+
+def _presented_agent(**presentation):
+    return pb.AgentDescriptor(
+        name="ACME_Account_Director",
+        contract_major=1,
+        capabilities=["agent.invoke.v1"],
+        **presentation,
+    )
+
+
+def test_agent_presentation_is_registered_and_listed():
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry())
+        agent = _presented_agent(
+            display_name="ACME Account Director",
+            avatar_url="/modules/acme/assets/public/acme.png",
+            suggestions=[
+                pb.AgentSuggestion(
+                    label="Brief", value="Brief me.", description="One screen"
+                )
+            ],
+        )
+        await _up(service, _with_presented_agent(agent))
+        listed = await service.list_modules(pb.ListModulesRequest(limit=10))
+        assert listed.instances[0].descriptor.agents[0] == agent
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    "presentation",
+    [
+        {"display_name": "x" * 129},
+        {"display_name": "   "},
+        {"avatar_url": "http://insecure.example.com/a.png"},
+        {"avatar_url": "data:image/png;base64,AAAA"},
+        {"avatar_url": "javascript:alert(1)"},
+        {"avatar_url": "/modules/acme/../../etc/passwd"},
+        {"avatar_url": "https://example.com/" + "a" * 1024},
+        {"suggestions": [pb.AgentSuggestion(label="l", value="v")] * 9},
+        {"suggestions": [pb.AgentSuggestion(label="", value="v")]},
+        {"suggestions": [pb.AgentSuggestion(label="l", value="v" * 1025)]},
+    ],
+)
+def test_unbounded_or_unsafe_agent_presentation_is_refused(presentation):
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry())
+        with pytest.raises(DiscoveryError, match="INVALID_ARGUMENT"):
+            await service.register(
+                _with_presented_agent(_presented_agent(**presentation)), "owner"
+            )
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    ("avatar_url", "accepted"),
+    [
+        ("/modules/acme/assets/public/console.svg", True),
+        ("https://cdn.example.com/console.png", True),
+        ("data:image/png;base64,AAAA", False),
+        ("intelligence/acme/assets/public/console.svg", False),
+    ],
+)
+def test_an_app_tile_image_is_a_reference(avatar_url, accepted):
+    async def scenario():
+        service = DiscoveryService(MemoryRegistry())
+        req = registration("acme.apps", "apps-1")
+        req.descriptor.apps.append(
+            pb.AppDescriptor(
+                name="console",
+                contract_major=1,
+                entry="index.html",
+                avatar_url=avatar_url,
+            )
+        )
+        if accepted:
+            await service.register(req, "owner")
+        else:
+            with pytest.raises(DiscoveryError, match="INVALID_ARGUMENT"):
+                await service.register(req, "owner")
+
+    asyncio.run(scenario())

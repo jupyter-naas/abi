@@ -49,6 +49,8 @@ class RemoteApp:
     icon_emoji: str = ""
     entry: str = "index.html"
     max_upload_bytes: int = 0  # 0: DEFAULT_MAX_UPLOAD_BYTES
+    # Tile image: an https:// URL or a /modules/<path> asset; "": icon_emoji.
+    avatar_url: str = ""
 
     @property
     def upload_limit(self) -> int:
