@@ -392,8 +392,8 @@ PyPI caps a project at 10 GiB in total (`MAX_PROJECT_SIZE` in `pypi/warehouse`).
 
 Decision:
 
-- Every file (wheel and sdist) of every package the Release job publishes (`naas-abi-proto`, `naas-abi-sdk`, `naas-abi-core`, `naas-abi-marketplace`, `naas-abi`, `naas-abi-cli`) stays under **10 MiB**.
-- `make check-package-size` (`scripts/check_package_size.sh`) builds the six packages, prints each file's size and fails, naming the file, when one is over budget. `PACKAGE_SIZE_BUDGET_MIB` overrides the budget. The `package-size` job in `.github/workflows/pull_request.yml` runs it on every pull request to `main`.
+- Every file (wheel and sdist) of every package the Release job publishes (`naas-abi-proto`, `naas-abi-sdk`, `naas-abi-idp`, `naas-abi-core`, `naas-abi-marketplace`, `naas-abi`, `naas-abi-cli`) stays under **10 MiB**.
+- `make check-package-size` (`scripts/check_package_size.sh`) builds the seven packages, prints each file's size and fails, naming the file, when one is over budget. `PACKAGE_SIZE_BUDGET_MIB` overrides the budget. The `package-size` job in `.github/workflows/pull_request.yml` runs it on every pull request to `main`.
 - Images under `api/public` are sized for display: avatars and organization logos ≤ 256 px, logos ≤ 512 px. The Nexus API serves them as `/avatars`, `/organizations` and `/logos`.
 
 Consequences:
