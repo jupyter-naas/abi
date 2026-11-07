@@ -125,6 +125,24 @@ def _fresh(template: Any) -> Any:
     )
 
 
+def _container_of(workspace_id: str) -> str:
+    """The workspace's container, as IAM registered it; without IAM (or for a
+    workspace it does not know), its name in no organization, which the tools
+    read the workspace from and IAM refuses."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
+    from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
+        SERVICE,
+        WORKSPACE,
+        workspace_container,
+    )
+
+    try:
+        found = runtime.iam().container(SERVICE, WORKSPACE, workspace_id)
+    except runtime.IAMUnavailableError:
+        found = None
+    return found or workspace_container(None, workspace_id)
+
+
 def ask(
     template: Any,
     question: CompetencyQuestion,
@@ -135,15 +153,16 @@ def ask(
 ) -> dict[str, Any]:
     """One question in a fresh request context; returns the graded record."""
     from naas_abi.agents.feature.context import nexus_feature_context
-    from naas_abi_core.services.agent.context import agent_user_id, agent_workspace_id
+    from naas_abi_core.services.agent.context import agent_container, agent_user_id
 
+    container = _container_of(workspace_id)
     agent = _fresh(template)
     tools: list[str] = []
     _watch_tools(agent, tools)
 
     def _run() -> tuple[str, str | None]:
         agent_user_id.set(user_id)
-        agent_workspace_id.set(workspace_id)
+        agent_container.set(container)
         nexus_feature_context.set(feature_context)
         try:
             return collect_stream(agent.stream_invoke(question.question)), None

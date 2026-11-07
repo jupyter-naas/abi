@@ -5,10 +5,8 @@ from datetime import datetime
 import pytest
 import pytest_asyncio
 from naas_abi.apps.nexus.apps.api.app.models import (
-    OrganizationMemberModel,
     OrganizationModel,
     UserModel,
-    WorkspaceMemberModel,
     WorkspaceModel,
 )
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.postgres import (
@@ -17,13 +15,7 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.pos
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 NOW = datetime(2026, 1, 1)
-TABLES = (
-    UserModel,
-    OrganizationModel,
-    OrganizationMemberModel,
-    WorkspaceModel,
-    WorkspaceMemberModel,
-)
+TABLES = (UserModel, OrganizationModel, WorkspaceModel)
 
 
 @pytest_asyncio.fixture
@@ -39,7 +31,6 @@ async def db():
                     id=uid,
                     email=f"{uid}@example.com",
                     name=uid,
-                    hashed_password="x",
                     created_at=NOW,
                     updated_at=NOW,
                 )
@@ -54,24 +45,6 @@ async def db():
                 updated_at=NOW,
             )
         )
-        session.add_all(
-            [
-                OrganizationMemberModel(
-                    id="om-1",
-                    organization_id="org-1",
-                    user_id="org-admin",
-                    role="admin",
-                    created_at=NOW,
-                ),
-                OrganizationMemberModel(
-                    id="om-2",
-                    organization_id="org-1",
-                    user_id="org-member",
-                    role="member",
-                    created_at=NOW,
-                ),
-            ]
-        )
         session.add(
             WorkspaceModel(
                 id="ws-1",
@@ -83,36 +56,9 @@ async def db():
                 updated_at=NOW,
             )
         )
-        session.add(
-            WorkspaceMemberModel(
-                id="wm-1", workspace_id="ws-1", user_id="ws-member", role="owner", created_at=NOW
-            )
-        )
         await session.commit()
         yield session
     await engine.dispose()
-
-
-@pytest.mark.asyncio
-async def test_members_include_org_owners_and_admins_as_inherited(db) -> None:
-    adapter = WorkspaceSecondaryAdapterPostgres(db=db)
-
-    members = await adapter.list_workspace_members("ws-1")
-
-    assert [(m.user_id, m.role, m.source) for m in members] == [
-        ("ws-member", "owner", "workspace"),
-        ("founder", "owner", "organization"),
-        ("org-admin", "admin", "organization"),
-    ]
-
-
-@pytest.mark.asyncio
-async def test_org_admin_lists_every_org_workspace(db) -> None:
-    adapter = WorkspaceSecondaryAdapterPostgres(db=db)
-
-    assert [w.id for w in await adapter.list_workspaces_for_user("org-admin")] == ["ws-1"]
-    assert await adapter.list_workspaces_for_user("org-member") == []
-    assert await adapter.get_workspace_role("org-admin", "ws-1") == "admin"
 
 
 @pytest.mark.asyncio
@@ -173,24 +119,62 @@ async def test_create_saves_the_description_and_a_trimmed_group(db) -> None:
     )
 
     ungrouped = await adapter.create_workspace(
-        WorkspaceCreateInput(
-            name="Three", slug="three", owner_id="founder", workspace_group="  "
-        )
+        WorkspaceCreateInput(name="Three", slug="three", owner_id="founder", workspace_group="  ")
     )
     assert ungrouped.workspace_group is None
 
 
 @pytest.mark.asyncio
-async def test_feature_overrides_are_saved_and_none_restores_the_config(db) -> None:
+async def test_a_workspace_abandoned_after_a_failed_flush_leaves_nothing(db) -> None:
+    """A create that fails at the flush that follows it: the session refuses
+    everything until rolled back, so the row goes with the rollback and the IAM
+    scope is dropped directly, never through a delete it would refuse."""
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import WorkspaceCreateInput
+    from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import WorkspaceService
+    from sqlalchemy import select
+    from sqlalchemy.exc import IntegrityError
+
     adapter = WorkspaceSecondaryAdapterPostgres(db=db)
+    memberships = SimpleNamespace(drop_scope=AsyncMock())
+    service = WorkspaceService(adapter=adapter, memberships=memberships)
+    created = await adapter.create_workspace(
+        WorkspaceCreateInput(name="Two", slug="two", owner_id="founder", organization_id="org-1")
+    )
+    db.add(WorkspaceModel(id=created.id, name="Dup", slug="dup", created_at=NOW, updated_at=NOW))
+    with pytest.raises(IntegrityError):
+        await db.flush()
 
-    saved = await adapter.set_workspace_feature_overrides("ws-1", {"maps": False, "graph": True})
-    assert saved.feature_overrides == {"graph": True, "maps": False}
-    assert (await adapter.get_workspace_by_id("ws-1")).feature_overrides == {
-        "graph": True,
-        "maps": False,
-    }
+    await service.abandon_workspace(created)
 
-    cleared = await adapter.set_workspace_feature_overrides("ws-1", None)
-    assert cleared.feature_overrides is None
-    assert await adapter.set_workspace_feature_overrides("ws-missing", {}) is None
+    memberships.drop_scope.assert_awaited_once_with("org-1", created.id)
+    ids = (await db.execute(select(WorkspaceModel.id))).scalars().all()
+    assert ids == ["ws-1"]
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_is_deleted_where_no_migration_made_abi_servers(nexus_db) -> None:
+    """The migrations never create ``abi_servers`` (``core/platform_tables.py``):
+    deleting a workspace must not read it."""
+    from sqlalchemy import select, text
+
+    async with nexus_db() as session:
+        await session.execute(text("DROP TABLE abi_servers"))
+        session.add(
+            UserModel(id="owner", email="o@example.com", name="o", created_at=NOW, updated_at=NOW)
+        )
+        session.add(
+            WorkspaceModel(
+                id="ws-x", name="X", slug="x", owner_id="owner", created_at=NOW, updated_at=NOW
+            )
+        )
+        await session.commit()
+        assert await WorkspaceSecondaryAdapterPostgres(db=session).delete_workspace(
+            workspace_id="ws-x"
+        )
+        await session.commit()
+        assert (
+            await session.execute(select(WorkspaceModel).where(WorkspaceModel.id == "ws-x"))
+        ).first() is None

@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { useWorkspaceStore } from './workspace';
-import { authFetch } from './auth';
+import { authFetch, useAuthStore } from './auth';
 import { isSystemPath } from '@/lib/system-files';
 
 // Helper to get current workspace ID
@@ -614,6 +614,21 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     const search = (options?.search ?? '').trim();
     const { gen, signal } = beginFilesRequest();
     const isCurrent = () => gen === filesRequestGen;
+
+    // My Drive is the person's own: in a view nothing of it is asked for or shown.
+    if (scope === 'my_drive' && useAuthStore.getState().view) {
+      set({
+        files: [],
+        currentPath: relativePath,
+        filesTotal: 0,
+        filesLimit: limit,
+        filesOffset: offset,
+        filesSearch: search,
+        loading: false,
+        error: null,
+      });
+      return;
+    }
 
     // The files API requires a workspace for workspace/platform-drive scopes.
     // During app bootstrap the workspace can still be null.

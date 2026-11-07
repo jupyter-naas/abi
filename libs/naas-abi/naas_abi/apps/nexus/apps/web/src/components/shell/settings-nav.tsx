@@ -7,18 +7,28 @@ import {
   Cpu,
   Download,
   HardDrive,
+  KeyRound,
   Shield,
   Users,
+  Workflow,
   Zap,
   Search,
   Map,
   type LucideIcon,
 } from 'lucide-react';
+import type { ResourceKind, WorkspaceResources } from '@/lib/workspace-resources';
 
 export type SettingsNavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
+  /** The Nexus feature the page manages: shown only when the caller holds it here. */
+  feature?: string;
+  /** The module resources the page lists: shown only when the caller may use one of them. */
+  kinds?: ResourceKind[];
+  /** `iam`: shown to whoever would see a section of Roles & permissions in the workspace
+   *  (IAM says, `GET /access`). */
+  needs?: 'iam';
 };
 
 export type SettingsNavGroup = {
@@ -33,8 +43,9 @@ export type SettingsNavGroup = {
  * Account and Organization live in standalone routes (linked from the
  * top-right user menu), and are not duplicated here.
  *
- * Visibility of this entire section is gated by the `settings.workspace`
- * feature flag (applied at the sidebar icon and the route guard).
+ * The Features group is what the caller may use here: an entry whose feature
+ * they do not hold, or whose module resources they may use none of, is hidden
+ * (`visibleSettingsGroups`), and its page says so.
  */
 export const SETTINGS_GROUPS: SettingsNavGroup[] = [
   {
@@ -42,6 +53,7 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
     items: [
       { href: '/settings/general', label: 'General', icon: SlidersHorizontal },
       { href: '/settings/members', label: 'Members', icon: Users },
+      { href: '/settings/permissions', label: 'Roles & permissions', icon: KeyRound, needs: 'iam' },
       { href: '/settings/secrets', label: 'Secrets', icon: Shield },
       { href: '/settings/export', label: 'Data Export', icon: Download },
     ],
@@ -49,18 +61,132 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
   {
     label: 'Features',
     items: [
-      { href: '/settings/agents', label: 'Agents', icon: Bot },
-      { href: '/settings/apps', label: 'Apps', icon: AppWindow },
-      { href: '/settings/drives', label: 'Drives', icon: HardDrive },
-      { href: '/settings/graphs', label: 'Graphs', icon: Network },
-      { href: '/settings/maps', label: 'Maps', icon: Map },
+      // Agents the workspace builds itself (a model and a prompt) need no module.
+      { href: '/settings/agents', label: 'Agents', icon: Bot, feature: 'agents' },
+      { href: '/settings/apps', label: 'Apps', icon: AppWindow, feature: 'apps', kinds: ['apps'] },
+      { href: '/settings/drives', label: 'Drives', icon: HardDrive, feature: 'files' },
+      { href: '/settings/graphs', label: 'Graphs', icon: Network, feature: 'graph' },
+      { href: '/settings/maps', label: 'Maps', icon: Map, feature: 'maps' },
       { href: '/settings/models', label: 'Models', icon: Cpu },
-      { href: '/settings/ontologies', label: 'Ontologies', icon: BrainCircuit },
-      { href: '/settings/search', label: 'Search', icon: Search },
-      { href: '/settings/skills', label: 'Skills', icon: Zap },
+      { href: '/settings/ontologies', label: 'Ontologies', icon: BrainCircuit, feature: 'ontology' },
+      { href: '/settings/search', label: 'Search', icon: Search, feature: 'search' },
+      { href: '/settings/skills', label: 'Skills', icon: Zap, feature: 'skills' },
+      {
+        href: '/settings/workflows',
+        label: 'Workflows',
+        icon: Workflow,
+        kinds: ['workflows', 'pipelines'],
+      },
     ],
   },
 ];
 
+/** The organization a workspace's IAM scope names: its own, or null for a personal workspace
+ *  (in no organization: `abi:nexus:workspace/<ws>`). */
+export function workspaceOrganization(workspace: { organizationId?: string } | null | undefined): string | null {
+  return workspace?.organizationId || null;
+}
+
 /** First settings item, used as the default landing for /settings. */
 export const DEFAULT_SETTINGS_PATH = SETTINGS_GROUPS[0].items[0].href;
+
+/** Roles & permissions, the page whoever holds only `iam:` rights in a workspace opens. */
+export const PERMISSIONS_SETTINGS_PATH = '/settings/permissions';
+
+/**
+ * Whether the workspace has what an entry manages. With the workspace's resources
+ * unknown (still loading, or the caller may not read them), the caller's own
+ * feature flags decide the feature, and module resources are assumed; so are those
+ * of a kind whose source did not answer (`unavailable`).
+ */
+export function settingsItemShown(
+  item: SettingsNavItem,
+  resources: WorkspaceResources | null,
+  flags?: Partial<Record<string, boolean>>
+): boolean {
+  if (resources) {
+    if (item.feature && !resources.features.includes(item.feature)) return false;
+    if (item.kinds) {
+      // A kind whose source did not answer may have items: never hidden for it.
+      const unknown = item.kinds.some((kind) => resources.unavailable?.includes(kind));
+      if (!unknown && !item.kinds.some((kind) => (resources.totals[kind] ?? 0) > 0)) return false;
+    }
+    return true;
+  }
+  if (item.feature && flags && flags[item.feature] === false) return false;
+  return true;
+}
+
+/**
+ * The groups with only the entries the workspace has, and the ones the caller may open: an
+ * entry that needs `iam` only for whoever would see a section of it there (`holdsIam`). An empty
+ * group is left out.
+ */
+export function visibleSettingsGroups(
+  resources: WorkspaceResources | null,
+  flags?: Partial<Record<string, boolean>>,
+  groups: SettingsNavGroup[] = SETTINGS_GROUPS,
+  { holdsIam = false }: { holdsIam?: boolean } = {}
+): SettingsNavGroup[] {
+  return groups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter(
+        (item) => (item.needs !== 'iam' || holdsIam) && settingsItemShown(item, resources, flags)
+      ),
+    }))
+    .filter((group) => group.items.length > 0);
+}
+
+/**
+ * Whether a workspace's settings open for the caller, the rule the dock, the mobile sheet and
+ * the settings pages share: `all` when their role there brings the settings
+ * (`settings.workspace`, its owners and admins), `iam` when it does not but IAM shows them a
+ * section of Roles & permissions there (that page alone), `none` otherwise (no page: they
+ * say so), `unknown` until the access is read.
+ */
+export type WorkspaceSettingsAccess = 'all' | 'iam' | 'none' | 'unknown';
+
+export function workspaceSettingsAccess({
+  settingsByRole,
+  holdsIam,
+  accessSettled,
+}: {
+  settingsByRole: boolean;
+  holdsIam: boolean;
+  accessSettled: boolean;
+}): WorkspaceSettingsAccess {
+  if (settingsByRole) return 'all';
+  if (!accessSettled) return 'unknown';
+  return holdsIam ? 'iam' : 'none';
+}
+
+/** Whether the settings page at `path` opens under `access`: null while unknown. */
+export function settingsPageOpens(
+  access: WorkspaceSettingsAccess,
+  path: string,
+  groups: SettingsNavGroup[] = SETTINGS_GROUPS
+): boolean | null {
+  if (access === 'unknown') return null;
+  if (access === 'all') return true;
+  if (access === 'none') return false;
+  return settingsItemFor(path, groups)?.needs === 'iam';
+}
+
+/** Where the settings land for `access`: General, or Roles & permissions for an `iam:` holder. */
+export function settingsLandingPath(access: WorkspaceSettingsAccess): string {
+  return access === 'iam' ? PERMISSIONS_SETTINGS_PATH : DEFAULT_SETTINGS_PATH;
+}
+
+/** The entry a settings path belongs to (`/settings/apps/...` is Apps), if any. */
+export function settingsItemFor(
+  path: string,
+  groups: SettingsNavGroup[] = SETTINGS_GROUPS
+): SettingsNavItem | undefined {
+  const at = path.indexOf('/settings/');
+  if (at < 0) return undefined;
+  const rest = path.slice(at);
+  return groups
+    .flatMap((group) => group.items)
+    .find((item) => rest === item.href || rest.startsWith(`${item.href}/`));
+}

@@ -10,7 +10,6 @@ import { authFetch } from '@/stores/auth';
 import { useAgentsStore } from '@/stores/agents';
 import { useIntegrationsStore } from '@/stores/integrations';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input, Textarea } from '@/components/ui/input';
 import {
   SettingsEmpty,
@@ -38,7 +37,6 @@ type ServiceAgent = {
   workspace_id: string;
   name: string;
   description: string;
-  enabled: boolean;
   class_name?: string | null;
   system_prompt?: string | null;
   model_id?: string | null;
@@ -56,7 +54,7 @@ export default function AgentEditPage() {
   const workspaceId = params.workspaceId as string;
   const agentId = params.agentId as string;
 
-  const { agents, fetchAgents, updateAgent, toggleAgent } = useAgentsStore();
+  const { agents, fetchAgents, updateAgent } = useAgentsStore();
   const { refreshProviders } = useIntegrationsStore();
 
   const [loading, setLoading] = useState(true);
@@ -71,7 +69,6 @@ export default function AgentEditPage() {
   const [provider, setProvider] = useState('');
   const [modelId, setModelId] = useState('');
   const [logoUrl, setLogoUrl] = useState('');
-  const [enabled, setEnabled] = useState(false);
 
   const storeAgent = useMemo(() => agents.find((agent) => agent.id === agentId), [agents, agentId]);
   const tools = storeAgent?.tools ?? [];
@@ -113,7 +110,6 @@ export default function AgentEditPage() {
         setProvider(selectedServiceAgent.provider || '');
         setModelId(selectedServiceAgent.model_id || '');
         setLogoUrl(selectedServiceAgent.logo_url || '');
-        setEnabled(Boolean(selectedServiceAgent.enabled));
 
       } catch (err) {
         console.error(err);
@@ -140,9 +136,6 @@ export default function AgentEditPage() {
         modelId: modelId || null,
         logoUrl: logoUrl || null,
       });
-      if (storeAgent.enabled !== enabled) {
-        await toggleAgent(storeAgent.id);
-      }
       setSaved(true);
     } catch (err) {
       console.error(err);
@@ -224,18 +217,10 @@ export default function AgentEditPage() {
         title="Edit Agent"
         description={serviceAgent.name}
         actions={
-          <>
-            <Checkbox
-              checked={enabled}
-              onCheckedChange={setEnabled}
-              label="Enabled"
-              title={enabled ? 'Disable agent' : 'Enable agent'}
-            />
-            <Button onClick={handleSave} disabled={saving}>
-              <Save size={16} />
-              {saving ? 'Saving...' : 'Save'}
-            </Button>
-          </>
+          <Button onClick={handleSave} disabled={saving}>
+            <Save size={16} />
+            {saving ? 'Saving...' : 'Save'}
+          </Button>
         }
       />
 
@@ -334,7 +319,6 @@ export default function AgentEditPage() {
               ['ID', serviceAgent.id, true],
               ['Workspace', serviceAgent.workspace_id, true],
               ['Class', serviceAgent.class_name || 'None', true],
-              ['Status', serviceAgent.enabled ? 'Enabled' : 'Disabled', false],
               ['Provider', serviceAgent.provider || 'None', false],
               ['Model', serviceAgent.model_id || 'None', false],
               ['Created', new Date(serviceAgent.created_at).toLocaleString(), false],

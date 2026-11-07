@@ -19,6 +19,7 @@ import {
 import { authFetch } from '@/stores/auth';
 import { useCodeStore, useEnsureSelectedRepo } from '@/stores/code';
 import { cn } from '@/lib/utils';
+import { PrivateGate } from '@/components/view-as/private-to-person';
 
 interface Environment {
   id: string;
@@ -108,7 +109,16 @@ function PhasePill({ phase, ready }: { phase: string; ready: boolean }) {
   );
 }
 
-export default function IdePage() {
+/** The person's coding environments are private in a view: none is asked for. */
+export default function CodeWorkspacesPage() {
+  return (
+    <PrivateGate what="Coding environments">
+      <IdePage />
+    </PrivateGate>
+  );
+}
+
+function IdePage() {
   const params = useParams();
   const workspaceId = typeof params?.workspaceId === 'string' ? params.workspaceId : '';
   const searchParams = useSearchParams();

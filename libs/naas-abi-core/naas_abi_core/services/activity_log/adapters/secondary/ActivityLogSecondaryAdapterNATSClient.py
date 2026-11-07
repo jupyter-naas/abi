@@ -9,10 +9,10 @@ Shared connection, token, timeout, and reply handling live in
 ``naas_abi_core.engine.nats_rpc.NatsRPCClient``. Calls are never replayed
 by the transport after failure; a timeout may hide a completed operation.
 
-Stage 1 auth model (see ``naas_abi_core.engine.nats_auth``): a JWT asserting
-``service_identity`` is issued once and attached on the ``Nats-Auth-Token``
-header of every request, reissued only when it is close to expiry rather
-than on every call. ``ActivityLogPrimaryAdapterNATS`` must read the token
+Auth (see ``naas_abi_core.engine.nats_auth``): the client's credentials
+(the engine's own tokens, or a service key's) put an ES256 engine token on
+the ``Nats-Auth-Token`` header of every request, renewed at half its
+life. ``ActivityLogPrimaryAdapterNATS`` must read the token
 from that exact header -- both sides read ``AUTH_HEADER`` from
 ``activity_log_nats_contract``, a neutral module neither adapter owns, so
 this file never has to import from the primary adapter's module (or vice
@@ -24,6 +24,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 
+from naas_abi_core.engine.nats_auth import TokenSource
 from naas_abi_core.engine.nats_rpc import NatsRPCClient
 from naas_abi_core.proto.activity_log.v1 import activity_log_pb2
 from naas_abi_core.proto.common.v1 import common_pb2
@@ -43,6 +44,7 @@ from naas_abi_core.services.activity_log.adapters.activity_log_stream_codec impo
     event_to_pb,
     pb_to_event,
 )
+from naas_abi_core.services.iam.guard import raise_authorization_error
 
 
 def _query_to_pb(query: ActivityLogQuery) -> activity_log_pb2.ActivityLogQueryFilter:
@@ -67,10 +69,12 @@ def _raise_for_error(error: common_pb2.CallError) -> None:
     """Raise the exception matching ``error.code``.
 
     Must stay exactly symmetric with how ``ActivityLogPrimaryAdapterNATS``
-    encodes errors. ``IActivityLogAdapter`` declares no domain-specific
-    exceptions, so every error code -- including "INTERNAL" -- surfaces as a
-    plain ``RuntimeError`` here; there is nothing more specific to raise.
+    encodes errors. ``PERMISSION_DENIED`` and ``NOT_FOUND`` map back to IAM's
+    errors; ``IActivityLogAdapter`` declares no domain-specific exceptions, so
+    every other code -- including "INTERNAL" -- surfaces as a plain
+    ``RuntimeError``.
     """
+    raise_authorization_error(error.code, error.message)
     raise RuntimeError(f"activity_log NATS RPC failed ({error.code}): {error.message}")
 
 
@@ -80,14 +84,12 @@ class ActivityLogSecondaryAdapterNATSClient(NatsRPCClient, IActivityLogAdapter):
     def __init__(
         self,
         nats_url: str,
-        jwt_secret: str,
-        service_identity: str,
+        credentials: TokenSource,
         timeout_seconds: float = 10.0,
     ) -> None:
         super().__init__(
             nats_url,
-            jwt_secret,
-            service_identity,
+            credentials,
             timeout_seconds,
             auth_header=AUTH_HEADER,
         )
@@ -125,10 +127,9 @@ class ActivityLogSecondaryAdapterNATSClient(NatsRPCClient, IActivityLogAdapter):
     def query_stream(
         self, actor_id: str, query: ActivityLogQuery | None = None
     ) -> Iterator[Iterator[ActivityEvent]]:
-        """Events fetched as the caller iterates, over a transfer stream
-        (docs/adr/20261003_nats-streamed-results.md). The snapshot is pinned
-        here, before the stream opens, so an event recorded after the block
-        opened is never included. Leaving the block closes the session."""
+        """Events fetched as the caller iterates, over a transfer stream. The
+        snapshot is pinned here, before the stream opens, so an event recorded
+        after the block opened is never included. Leaving the block closes the session."""
         pinned = pin_snapshot(self.query, actor_id, query)
         if pinned is None:
             yield iter(())

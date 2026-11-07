@@ -10,7 +10,8 @@ import logging
 import math
 import re
 import time
-from dataclasses import dataclass, field
+from contextlib import AbstractContextManager, nullcontext
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from functools import partial
 from typing import Any, Protocol
@@ -22,6 +23,11 @@ from naas_abi_proto.discovery.v1 import discovery_pb2 as discovery_pb
 from naas_abi_sdk import overflow
 from naas_abi_sdk.agent import TERMINAL, agent_subject
 from naas_abi_sdk.broker_flush import flush_to_broker
+from naas_abi_sdk.call_context import (
+    CallContext,
+    delegation_context,
+    use_call_context,
+)
 from naas_abi_sdk.concurrency import DEFAULT_LIMIT, ConcurrentCalls
 from naas_abi_sdk.messages import reply
 from naas_abi_sdk.services.errors import DocumentNotFound, VersionConflict
@@ -30,7 +36,7 @@ from naas_abi_sdk.telemetry import current_trace_id, internal_span, server_span
 from naas_abi_sdk.transport import RPCError
 
 # Where a submitter may ask for RunUpdates: its own inbox, never a service subject.
-UPDATES_INBOX = re.compile(r"(_INBOX|_INBOX_MODULES)\.[A-Za-z0-9_.-]{1,240}")
+UPDATES_INBOX = re.compile(r"_INBOX\.[A-Za-z0-9_.-]{1,240}")
 # Live executions in this process, shared by every agent it hosts.
 MAX_ACTIVE_RUNS = 200
 # Event data pushed inline up to this (and a quarter of the broker limit);
@@ -71,6 +77,69 @@ class _Run:
     cancel_reason: str = ""
     started: asyncio.Event = field(default_factory=asyncio.Event)
     watchers: set[str] = field(default_factory=set)  # inboxes receiving RunUpdates
+    # The user the run is for, when it acts for one: the handler's calls carry
+    # it, the host's own records (the run, its events, its claim) never do.
+    delegation: CallContext | None = None
+
+    def for_user(self) -> AbstractContextManager[Any]:
+        return use_call_context(self.delegation) if self.delegation else nullcontext()
+
+
+class _UserStream:
+    """A streaming handler's events, its whole stream consumed by one task made
+    in the run's user context (``_Run.for_user``): the handler keeps one context
+    from its first step to its last, what it sets across a ``yield`` included,
+    while the host stores each event as the module. One event at a time: the
+    handler resumes only once the host took the last."""
+
+    def __init__(self, run: _Run, stream_invoke: Any, prompt: Any) -> None:
+        self._queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=1)
+
+        async def produce() -> None:
+            stream = stream_invoke(prompt, run.context)
+            try:
+                async for event in stream:
+                    await self._queue.put(event)
+            finally:
+                if hasattr(stream, "aclose"):
+                    await stream.aclose()
+
+        with run.for_user():
+            self._producer = asyncio.create_task(produce())
+
+    async def next(self) -> dict | None:
+        """The next event; None once the stream ended. Raises the handler's error."""
+        if not self._queue.empty():
+            return self._queue.get_nowait()
+        getter = asyncio.ensure_future(self._queue.get())
+        try:
+            await asyncio.wait(
+                {getter, self._producer}, return_when=asyncio.FIRST_COMPLETED
+            )
+        except BaseException:
+            getter.cancel()
+            raise
+        if getter.done():
+            return getter.result()
+        getter.cancel()
+        if not self._queue.empty():
+            return self._queue.get_nowait()
+        self._producer.result()  # the handler's error, if it raised
+        return None
+
+    async def close(self) -> None:
+        """Stop the handler if it still runs (the run failed or was cancelled)."""
+        if not self._producer.done():
+            self._producer.cancel()
+        try:
+            await self._producer
+        except asyncio.CancelledError:
+            if not self._producer.cancelled():
+                raise
+        except Exception:  # next() raised it already, or the run failed
+            logging.getLogger(__name__).debug(
+                "Agent stream ended with an error", exc_info=True
+            )
 
 
 def _hash(*values: str) -> str:
@@ -152,8 +221,9 @@ class AgentHost:
         self.events_collection = agent_events_collection(session.client.project)
         self._membership = (0.0, set())
         self._membership_lock = asyncio.Lock()
-        # (caller token, agent) -> (reuse until, caller identity, caller admin)
-        self._authorized: dict[tuple[str, str], tuple[float, str, bool]] = {}
+        # (token, on-behalf-of, agent, operation, invocation, run owner) ->
+        # (reuse until, caller identity, whether discovery decided on the run)
+        self._authorized: dict[tuple, tuple[float, str, bool]] = {}
         self.runs: dict[str, _Run] = {}
         self.subscriptions = []
         self._bound_to = ""  # the instance id the subscriptions serve
@@ -185,12 +255,13 @@ class AgentHost:
                         await nc.subscribe(
                             agent_subject(
                                 self.session.client.project,
+                                self.session.service_account,
                                 self.session.instance_id,
                                 name,
                                 operation,
                             ),
                             cb=self.calls.callback(
-                                partial(self._handle, name, operation)
+                                partial(self._handle, name, operation), requests=True
                             ),
                         )
                     )
@@ -206,13 +277,22 @@ class AgentHost:
             await sub.drain()
 
     async def _authorize(
-        self, name: str, token: str, new_invocation: bool
+        self,
+        name: str,
+        headers: dict,
+        operation: str,
+        invocation_id: str = "",
+        run_owner: str = "",
     ) -> tuple[str, bool]:
-        """The caller's identity, and whether it is a platform administrator
-        (discovery's admin identities), as discovery vouches for both."""
+        """Discovery's answer for this caller: who owns the runs it starts, and
+        whether discovery decided on the run asked about (status, event,
+        cancel). Discovery verifies the caller's token and the user it acts
+        for, and asks IAM (discovery:InvokeAgent, GetAgentRun, CancelAgentRun)."""
+        token = headers.get("Nats-Auth-Token", "")
+        key = (token, name, operation, invocation_id, run_owner)
         now = asyncio.get_running_loop().time()
-        cached = self._authorized.get((token, name))
-        if not new_invocation and cached is not None and now < cached[0]:
+        cached = self._authorized.get(key)
+        if operation != "submit" and cached is not None and now < cached[0]:
             return cached[1], cached[2]
         response = await self.session.client._call(
             "authorize_agent",
@@ -221,26 +301,29 @@ class AgentHost:
                 lease_token=self.session.lease_token,
                 agent_name=name,
                 caller_token=token,
-                new_invocation=new_invocation,
+                new_invocation=operation == "submit",
+                operation=operation,
+                invocation_id=invocation_id,
+                run_owner=run_owner,
             ),
             discovery_pb.AuthorizeAgentResponse,
         )
-        self._remember(token, name, response.caller_identity, response.caller_admin)
-        return response.caller_identity, response.caller_admin
+        self._remember(key, token, response.caller_identity, response.run_authorized)
+        return response.caller_identity, response.run_authorized
 
-    def _remember(self, token: str, name: str, identity: str, admin: bool) -> None:
+    def _remember(self, key: tuple, token: str, identity: str, decided: bool) -> None:
         lifetime = min(AUTHORIZATION_SECONDS, _token_expiry(token) - time.time())
         if lifetime <= 0:
             return
         now = asyncio.get_running_loop().time()
-        self._authorized.pop((token, name), None)
+        self._authorized.pop(key, None)
         if len(self._authorized) >= MAX_AUTHORIZATIONS:
             self._authorized = {
-                key: value for key, value in self._authorized.items() if value[0] > now
+                k: value for k, value in self._authorized.items() if value[0] > now
             }
         while len(self._authorized) >= MAX_AUTHORIZATIONS:  # oldest first
             del self._authorized[next(iter(self._authorized))]
-        self._authorized[(token, name)] = (now + lifetime, identity, admin)
+        self._authorized[key] = (now + lifetime, identity, decided)
 
     async def _handle(self, name: str, operation: str, msg) -> None:
         # Runs started by a submit inherit this span (their task copies the context).
@@ -260,29 +343,30 @@ class AgentHost:
             req = cls.FromString(msg.data)
             if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", req.invocation_id):
                 raise _error("INVALID_ARGUMENT", "Invalid invocation ID")
-            caller, admin = await self._authorize(
-                name,
-                (msg.headers or {}).get("Nats-Auth-Token", ""),
-                operation == "submit",
-            )
+            headers = msg.headers or {}
+            key = _hash(name, req.invocation_id)
+            if operation == "submit":
+                caller, _ = await self._authorize(name, headers, operation)
+            else:
+                # The run's recorded owner is part of what discovery decides on:
+                # an unknown invocation and a run the caller may not see are
+                # the same INVOCATION_NOT_FOUND.
+                doc = await self.documents.get(self.runs_collection, key)
+                caller, decided = await self._authorize(
+                    name, headers, operation, req.invocation_id, doc.data["caller"]
+                )
+                # Without IAM's decision (a discovery wired with none), only
+                # the run's owner reaches it.
+                if not decided and doc.data["caller"] != caller:
+                    raise _error("INVOCATION_NOT_FOUND", "Invocation not found")
             if operation != "event" and req.output_format != 2:
                 raise _error(
                     "UPGRADE_REQUIRED",
                     "Agent output requires an SDK supporting output_format=2",
                 )
-            key = _hash(name, req.invocation_id)
             if operation == "submit":
                 doc = await self._submit(name, key, caller, req)
             else:
-                doc = await self.documents.get(self.runs_collection, key)
-                # Platform administrators may stop any run (the System app),
-                # never read another caller's output.
-                if doc.data["caller"] != caller and not (
-                    admin and operation == "cancel"
-                ):
-                    raise _error(
-                        "PERMISSION_DENIED", "Invocation belongs to another caller"
-                    )
                 if operation == "event":
                     last = doc.data.get(
                         "last_sequence", len(doc.data.get("events", []))
@@ -486,7 +570,7 @@ class AgentHost:
         ):
             raise _error("INVALID_ARGUMENT", "Invalid thread, prompt, mode or deadline")
         if req.updates_inbox and not UPDATES_INBOX.fullmatch(req.updates_inbox):
-            raise _error("INVALID_ARGUMENT", "Updates go to an inbox subject only")
+            raise _error("INVALID_ARGUMENT", "Updates go to an _INBOX subject only")
         fingerprint = _hash(
             caller, req.thread_id, req.prompt, req.mode, str(req.deadline_seconds)
         )
@@ -576,6 +660,18 @@ class AgentHost:
                 run.watchers.add(req.updates_inbox)
             run.progress_at = asyncio.get_running_loop().time()
             self.runs[key] = run
+            # The handler's calls are the module's, for the user: inside
+            # ``run.for_user()`` its transport sends the delegation. The
+            # host's records are the module's own, which no user holds.
+            run.delegation = delegation_context(
+                req.delegated_token, caller, self.session.service_account
+            )
+            if run.delegation is not None and req.context.container:
+                # The container of the turn: IAM places what the run does for
+                # the user there (``require_action``), as for any call made in it.
+                run.delegation = replace(
+                    run.delegation, container=req.context.container
+                )
             run.task = asyncio.create_task(self._execute(name, req, run))
             run.task.add_done_callback(self._observe_task)
             streamed = req.mode == "stream" and hasattr(
@@ -713,9 +809,9 @@ class AgentHost:
             if req.mode == "stream" and hasattr(handler, "stream_invoke"):
                 messages = []
                 done = False
-                stream = handler.stream_invoke(req.prompt, run.context)
+                feed = _UserStream(run, handler.stream_invoke, req.prompt)
                 try:
-                    async for event in stream:
+                    while (event := await feed.next()) is not None:
                         if done:
                             raise _error("INVALID_STREAM", "Agent emitted after done")
                         await self._event(run, event)
@@ -723,13 +819,13 @@ class AgentHost:
                             messages.append(event["data"])
                         done = event["event"] == "done"
                 finally:
-                    if hasattr(stream, "aclose"):
-                        await stream.aclose()
+                    await feed.close()
                 result = "\n".join(messages)
                 if not done:
                     await self._event(run, {"event": "done", "data": "[DONE]"})
             else:
-                result = await handler.invoke(req.prompt, run.context)
+                with run.for_user():
+                    result = await handler.invoke(req.prompt, run.context)
                 if not isinstance(result, str):
                     raise _error("OUTPUT_LIMIT", "Agent result must be text")
                 await self._event(run, {"event": "message", "data": result})

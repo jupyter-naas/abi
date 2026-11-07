@@ -360,3 +360,167 @@ def test_forwarded_headers_are_trusted_only_from_private_proxies(monkeypatch):
 
     monkeypatch.setenv("FORWARDED_ALLOW_IPS", "10.1.2.3")
     assert trusted_proxy_ips() == "10.1.2.3"
+
+
+def test_an_api_key_caller_acts_as_the_api_account():
+    """A verified ABI_API_KEY holder calls as ``api``,
+    and a request already acting for a signed-in user keeps its context."""
+    import contextvars
+
+    from naas_abi_core.apps.api.api import _call_as_api_key_holder
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        current_call_context,
+        service_account,
+        set_call_context,
+        user,
+    )
+
+    def anonymous() -> str | None:
+        _call_as_api_key_holder()
+        return current_call_context().principal.name
+
+    assert contextvars.copy_context().run(anonymous) == "api"
+
+    nexus = CallContext(principal=service_account("api"), on_behalf_of=user("u-1"))
+
+    def signed_in() -> CallContext:
+        set_call_context(nexus)
+        _call_as_api_key_holder()
+        return current_call_context()
+
+    assert contextvars.copy_context().run(signed_in) == nexus
+
+
+# -- keys of IAM stay off the core API's invocation routes (delegated tokens and API keys) ----------------------------
+
+ROUTER_PREFIXES = ("/agents", "/pipelines", "/workflows", "/tools")
+
+
+@pytest.fixture
+def keyed_api(monkeypatch):
+    """The four invocation routers, each with a route behind the real check, and
+    keys of a real IAM that its engine holds."""
+    from types import SimpleNamespace
+
+    from fastapi import APIRouter, FastAPI
+    from naas_abi_core.apps.api import api
+    from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import (
+        IAMStoreMemory,
+    )
+    from naas_abi_core.services.iam.IAMService import IAMService
+
+    iam = IAMService(IAMStoreMemory())
+    iam.bootstrap()
+    services = SimpleNamespace(iam_available=lambda: True, iam=iam)
+    monkeypatch.setattr(
+        api, "engine", SimpleNamespace(get=lambda: SimpleNamespace(services=services))
+    )
+    monkeypatch.setenv("ABI_API_KEY", "deployment-key")
+    app = FastAPI()
+    for router in (
+        api.agents_router,
+        api.pipelines_router,
+        api.workflows_router,
+        api.tools_router,
+    ):
+        # The router's own prefix and dependencies, with a route that records
+        # that it ran: whatever the check lets through.
+        copy = APIRouter(prefix=router.prefix, dependencies=router.dependencies)
+        copy.post("/thing")(lambda: {"ran": True})
+        app.include_router(copy)
+    return TestClient(app), iam
+
+
+def _post(client, prefix, token):
+    return client.post(f"{prefix}/thing", headers={"Authorization": f"Bearer {token}"})
+
+
+def test_every_invocation_route_is_behind_the_deployment_key_check():
+    from fastapi.routing import APIRoute
+    from naas_abi_core.apps.api import api
+
+    routes = [
+        route
+        for route in api.app.routes
+        if isinstance(route, APIRoute) and route.path.startswith(ROUTER_PREFIXES)
+    ]
+    for route in routes:
+        assert any(d.call is api.is_token_valid for d in route.dependant.dependencies), (
+            route.path
+        )
+
+
+def test_a_personal_key_is_refused_on_every_invocation_route(keyed_api):
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        as_service_account,
+        service_account,
+        use_call_context,
+        user,
+    )
+
+    client, iam = keyed_api
+    with as_service_account("engine"):
+        ada = iam.ensure_user("https://idp.example", "ada")
+    scope = ({"effect": "Allow", "actions": ["triple_store:Query"], "resources": ["*"]},)
+    with use_call_context(
+        CallContext(principal=service_account("api"), on_behalf_of=user(ada.id))
+    ):
+        full = iam.create_key(ada.id).value
+        read_only = iam.create_key(ada.id, scope=scope).value
+    for prefix in ROUTER_PREFIXES:
+        for key in (full, read_only):
+            assert _post(client, prefix, key).status_code == 401, prefix
+
+
+def test_a_modules_or_a_ci_accounts_service_key_is_refused_on_every_invocation_route(
+    keyed_api,
+):
+    from naas_abi_core.engine.call_context import as_service_account
+
+    client, iam = keyed_api
+    with as_service_account("engine"):
+        module = iam.create_service_account("module/acme/people")
+        ci = iam.create_service_account("ci/nightly")
+        keys = [iam.create_key(module.id).value, iam.create_key(ci.id).value]
+    for prefix in ROUTER_PREFIXES:
+        for key in keys:
+            assert _post(client, prefix, key).status_code == 401, prefix
+
+
+def test_a_coding_agents_key_and_garbage_are_refused_too(keyed_api):
+    from datetime import UTC, datetime, timedelta
+
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        as_service_account,
+        service_account,
+        use_call_context,
+        user,
+    )
+    from naas_abi_core.engine.nats_auth import CODING_AUDIENCE
+
+    client, iam = keyed_api
+    with as_service_account("engine"):
+        ada = iam.ensure_user("https://idp.example", "ada")
+    with use_call_context(
+        CallContext(principal=service_account("api"), on_behalf_of=user(ada.id))
+    ):
+        coding = iam.create_key(
+            ada.id,
+            audience=CODING_AUDIENCE,
+            resource="http://coder:8378",
+            expires_at=datetime.now(UTC) + timedelta(days=1),
+        ).value
+    for token in (coding, "abi_pk_aaaaaaaaaaaaaaaa_nope", "abi_sk_aaaaaaaaaaaaaaaa_nope", "x"):
+        for prefix in ROUTER_PREFIXES:
+            assert _post(client, prefix, token).status_code == 401, prefix
+
+
+def test_the_deployment_key_still_runs_on_every_invocation_route_as_api(keyed_api):
+    client, _ = keyed_api
+    for prefix in ROUTER_PREFIXES:
+        response = _post(client, prefix, "deployment-key")
+        assert (response.status_code, response.json()) == (200, {"ran": True}), prefix
+    assert client.post("/agents/thing").status_code == 401  # no credential at all

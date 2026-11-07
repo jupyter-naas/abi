@@ -1,14 +1,9 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from datetime import datetime
 
-from naas_abi.apps.nexus.apps.api.app.services.iam.authorization import (
-    ensure_scope,
-    ensure_workspace_access,
-)
-from naas_abi.apps.nexus.apps.api.app.services.iam.port import RequestContext
-from naas_abi.apps.nexus.apps.api.app.services.iam.service import IAMService
 from naas_abi.apps.nexus.apps.api.app.services.skills.port import (
     SKILL_SCOPES,
     SkillCreateInput,
@@ -46,35 +41,28 @@ class SkillPermissionError(PermissionError):
     pass
 
 
+@dataclass(frozen=True)
+class RequestContext:
+    """Who is asking: a user-scoped skill is private to its user. Authorization is
+    IAM's, decided by the router."""
+
+    actor_user_id: str
+
+
 class SkillService:
-    def __init__(self, adapter: SkillPersistencePort, iam_service: IAMService | None = None):
+    """Skills of a workspace.
+
+    Who may do what is decided by IAM at the route (``UpdateSkill``...). The
+    context only names the caller: a user-scoped skill is private to its
+    creator, whatever role anyone holds.
+    """
+
+    def __init__(self, adapter: SkillPersistencePort):
         self.adapter = adapter
-        self.iam_service = iam_service
-
-    def _ensure_scope(
-        self, context: RequestContext, required_scope: str, denied_message: str
-    ) -> None:
-        ensure_scope(
-            context=context,
-            required_scope=required_scope,
-            denied_message=denied_message,
-            iam_service=self.iam_service,
-        )
-
-    async def _ensure_workspace_access(self, context: RequestContext, workspace_id: str) -> None:
-        await ensure_workspace_access(
-            context=context,
-            workspace_id=workspace_id,
-            denied_message="Workspace access denied",
-            required_scope="workspace.read",
-            iam_service=self.iam_service,
-            workspace_service=None,
-        )
 
     def _ensure_can_modify(self, context: RequestContext, skill: SkillRecord) -> None:
         # User-scoped skills are private to their creator; wider scopes are
-        # editable by anyone with access to the skill's workspace (checked by
-        # the caller via _ensure_workspace_access).
+        # editable by anyone IAM lets update skills in the skill's workspace.
         if skill.scope == "user" and skill.user_id != context.actor_user_id:
             raise SkillPermissionError("Only the creator can modify this skill")
 
@@ -107,22 +95,15 @@ class SkillService:
         context: RequestContext,
         workspace_id: str,
     ) -> list[SkillRecord]:
-        self._ensure_scope(context, "skill.read", "Skill access denied")
-        await self._ensure_workspace_access(context, workspace_id)
         return await self.adapter.list_visible(workspace_id, context.actor_user_id)
 
     async def get_skill(self, context: RequestContext, skill_id: str) -> SkillRecord | None:
-        self._ensure_scope(context, "skill.read", "Skill access denied")
         skill = await self.adapter.get_by_id(skill_id)
-        if skill:
-            await self._ensure_workspace_access(context, skill.workspace_id)
-            if skill.scope == "user" and skill.user_id != context.actor_user_id:
-                raise SkillPermissionError("Skill access denied")
+        if skill and skill.scope == "user" and skill.user_id != context.actor_user_id:
+            raise SkillPermissionError("Skill access denied")
         return skill
 
-    async def create_skill(self, context: RequestContext, data: SkillCreateInput) -> SkillRecord:
-        self._ensure_scope(context, "skill.create", "Skill access denied")
-        await self._ensure_workspace_access(context, data.workspace_id)
+    async def create_skill(self, data: SkillCreateInput) -> SkillRecord:
         self._validate_scope(data.scope)
         if not data.name.strip():
             raise SkillValidationError("Name cannot be empty")
@@ -143,11 +124,9 @@ class SkillService:
         skill_id: str,
         updates: SkillUpdateInput,
     ) -> SkillRecord | None:
-        self._ensure_scope(context, "skill.update", "Skill access denied")
         existing = await self.adapter.get_by_id(skill_id)
         if not existing:
             return None
-        await self._ensure_workspace_access(context, existing.workspace_id)
         self._ensure_can_modify(context, existing)
         if updates.scope is not None:
             self._validate_scope(updates.scope)
@@ -166,18 +145,16 @@ class SkillService:
         skill_id: str,
         now: datetime,
     ) -> SkillRecord | None:
-        self._ensure_scope(context, "skill.read", "Skill access denied")
         existing = await self.adapter.get_by_id(skill_id)
         if not existing:
             return None
-        await self._ensure_workspace_access(context, existing.workspace_id)
+        if existing.scope == "user" and existing.user_id != context.actor_user_id:
+            raise SkillPermissionError("Skill access denied")
         return await self.adapter.mark_used(skill_id, now)
 
     async def delete_skill(self, context: RequestContext, skill_id: str) -> bool:
-        self._ensure_scope(context, "skill.delete", "Skill access denied")
         existing = await self.adapter.get_by_id(skill_id)
         if not existing:
             return False
-        await self._ensure_workspace_access(context, existing.workspace_id)
         self._ensure_can_modify(context, existing)
         return await self.adapter.delete(skill_id)

@@ -4,6 +4,7 @@ from unittest.mock import Mock
 import pytest
 import yaml
 from jinja2 import Environment, StrictUndefined
+from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     EngineConfiguration,
 )
@@ -14,8 +15,10 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_DocumentServi
 from naas_abi_core.engine.engine_loaders.EngineServiceLoader import EngineServiceLoader
 from naas_abi_core.engine.EngineProxy import EngineProxy
 from naas_abi_core.engine.IEngine import IEngine
+from naas_abi_core.engine.nats_test_tokens import TEST_SERVICE_KEY
 from naas_abi_core.module.Module import ModuleDependencies
 from naas_abi_core.services.document.DocumentPort import (
+    CollectionNotFound,
     CollectionSpec,
     DocumentNotFound,
     IDocumentAdapter,
@@ -30,6 +33,9 @@ global_config:
   ai_mode: local
 modules: []
 services:
+  iam:
+    store:
+      adapter: memory
   secret:
     secret_adapters: []
   document:
@@ -47,19 +53,23 @@ services:
     engine = Mock(services=services)
     one = EngineProxy(engine, "one.module", dependencies).services
     two = EngineProxy(engine, "two.module", dependencies).services
-    for proxy in (one, two):
-        assert proxy.document_available()
-        assert proxy.document is proxy.document
-        assert proxy.document.services_wired
-        assert proxy.document.services is services
-        with pytest.raises(PermissionError, match="namespace"):
-            proxy.document._for_namespace("unrelated.module")
-        proxy.document.ensure_collection(CollectionSpec(name="records"))
-    one.document.put("records", "id", {"owner": "one"})
-    assert one.document.get("records", "id").data == {"owner": "one"}
-    assert two.document.count("records") == 0
-    with pytest.raises(DocumentNotFound):
-        two.document.get("records", "id")
+    # In process a module acts as its caller; anonymous calls are denied.
+    with as_service_account("engine"):
+        for proxy in (one, two):
+            assert proxy.document_available()
+            assert proxy.document is proxy.document
+            assert proxy.document.services_wired
+            assert proxy.document.services is services
+            with pytest.raises(PermissionError, match="namespace"):
+                proxy.document._for_namespace("unrelated.module")
+            proxy.document.ensure_collection(CollectionSpec(name="records"))
+        one.document.put("records", "id", {"owner": "one"})
+        assert one.document.get("records", "id").data == {"owner": "one"}
+        assert two.document.count("records") == 0
+        with pytest.raises(DocumentNotFound):
+            two.document.get("records", "id")
+    with pytest.raises(CollectionNotFound):
+        one.document.find("records")  # anonymous
     denied = EngineProxy(
         engine, "denied", ModuleDependencies(modules=[], services=[])
     ).services
@@ -187,7 +197,7 @@ def test_nats_adapter_configuration_and_client_lifetime():
 
     adapter = DocumentAdapterConfiguration(
         adapter="nats_rpc",
-        config={"nats_url": "nats://unused:4222", "jwt_secret": "x" * 32},
+        config={"nats_url": "nats://unused:4222", "service_key": TEST_SERVICE_KEY},
     ).load()
     assert isinstance(adapter, DocumentSecondaryAdapterNATSClient)
     adapter.close()

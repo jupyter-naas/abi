@@ -1,4 +1,4 @@
-import { authFetch, useAuthStore } from '@/stores/auth';
+import { authFetch, hasSession, useAuthStore } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 
 /** The slice of organization branding the workspace shell applies. */
@@ -35,7 +35,7 @@ export function invalidateOrgBranding(orgId: string): void {
 }
 
 useAuthStore.subscribe((state, previous) => {
-  if (state.user?.id !== previous.user?.id || Boolean(state.token) !== Boolean(previous.token)) {
+  if (state.user?.id !== previous.user?.id || hasSession(state) !== hasSession(previous)) {
     clearOrgBrandingCache();
   }
 });

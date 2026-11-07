@@ -35,7 +35,7 @@ from naas_abi.apps.nexus.apps.api.app.services.workflows.workflows import (
 
 NOW = datetime(2026, 10, 2, 13, 0, 0, tzinfo=UTC)
 USER = Caller("user", "u1")
-KEY = Caller("api_key")
+KEY = Caller("api_key", "u1")
 
 
 def run(coro):
@@ -118,12 +118,12 @@ def test_a_start_returns_the_run_id_at_once_and_is_audited_with_how_the_caller_a
     ]
 
 
-def test_an_api_key_start_is_audited_without_a_user_id():
+def test_a_personal_key_start_is_audited_for_its_user():
     audit = InMemoryAuditLog()
 
     run(service(audit=audit).start(KEY, "acme.flows", "ingest", {"filter": "news"}))
 
-    assert {(r.action.actor_id, r.action.via) for r in audit.records} == {("", "api_key")}
+    assert {(r.action.actor_id, r.action.via) for r in audit.records} == {("u1", "api_key")}
 
 
 def test_an_input_that_does_not_match_the_schema_starts_nothing_and_audits_nothing():

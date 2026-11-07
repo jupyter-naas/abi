@@ -8,6 +8,7 @@ from naas_abi_core.engine.engine_loaders.EngineNATSDependencies import (
 )
 from naas_abi_core.engine.engine_loaders.EngineServiceLoader import EngineServiceLoader
 from naas_abi_core.engine.IEngine import IEngine
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.module.Module import ModuleDependencies
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.document.DocumentService import DocumentService
@@ -54,7 +55,7 @@ def _available(services: IEngine.Services) -> set[str]:
 def test_nats_mode_loads_every_service_without_module_dependencies(monkeypatch):
     # In NATS mode the engine is the service host for remote modules too, which
     # declare their dependencies at runtime, not in this engine's module list.
-    services = _loader(monkeypatch, {"jwt_secret": "test"}).load_services({})
+    services = _loader(monkeypatch, {}).load_services({})
 
     assert _available(services) == {*ON_DEMAND, "bus"}
 
@@ -72,7 +73,7 @@ def test_bus_telemetry_setting_survives_owner_and_dependency_wiring(monkeypatch)
         api={},
         global_config={"ai_mode": "local"},
         modules=[],
-        nats={"jwt_secret": "test"},
+        nats={},
         services={
             "bus": {
                 "emit_message_events": True,
@@ -87,7 +88,7 @@ def test_bus_telemetry_setting_survives_owner_and_dependency_wiring(monkeypatch)
     )
     bus = EngineServiceLoader(config)._load_bus()
     assert bus.emit_message_events
-    wiring = EngineNATSDependencies(config.nats)
+    wiring = EngineNATSDependencies(config.nats, TEST_TOKENS.source("engine"))
     try:
         dependencies = wiring.build(
             IEngine.Services(bus=BusService(MagicMock(), emit_message_events=True))
@@ -109,7 +110,7 @@ def _config(nats, services=None):
 
 
 def test_local_backends_cover_every_service_a_nats_engine_owns():
-    loader = EngineServiceLoader(_config({"jwt_secret": "test"}))
+    loader = EngineServiceLoader(_config({}))
 
     found = loader.local_backends({})
 
@@ -121,6 +122,7 @@ def test_local_backends_cover_every_service_a_nats_engine_owns():
         "dataset",
         "document",
         "event",
+        "iam",
         "kv",
         "object_storage",
         "source_control",
@@ -136,8 +138,8 @@ def test_local_backends_skip_services_this_engine_does_not_load():
         {"m": ModuleDependencies(modules=[], services=[DocumentService])}
     )
 
-    # Coding environment and source control always load.
-    assert set(found) == {"document", "coding_environment", "source_control"}
+    # IAM, coding environment and source control always load.
+    assert set(found) == {"document", "iam", "coding_environment", "source_control"}
 
 
 def test_an_activity_log_in_documents_loads_the_document_service(monkeypatch):

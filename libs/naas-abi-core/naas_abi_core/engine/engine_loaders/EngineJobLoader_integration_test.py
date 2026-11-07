@@ -16,14 +16,14 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     NATSJobsConfiguration,
 )
 from naas_abi_core.engine.engine_loaders.EngineJobLoader import EngineJobLoader
-from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.module.jobs import Every, JobsMixin, job
 from naas_abi_sdk.jobs import JobDescriptor, JobProxy, runs_collection
 from naas_abi_sdk.services.errors import DocumentNotFound, VersionConflict
 from naas_abi_sdk.services.models import Document
 from naas_abi_sdk.transport import Transport
 
-SECRET = "engine-job-integration-secret-32-bytes"
+SECRET = TEST_TOKENS.verifier
 PROJECT = "itest"
 pytestmark = pytest.mark.integration
 
@@ -140,9 +140,9 @@ def test_engine_hosts_scheduled_and_triggered_jobs_of_core_modules(broker):
     loader = EngineJobLoader(
         NATSConfiguration(
             nats_url=broker,
-            jwt_secret=SECRET,
             discovery=DiscoveryConfiguration(project=PROJECT),
         ),
+        credentials=TEST_TOKENS.source("engine"),
         documents_factory=lambda transport, module_id: docs,
         host_options={"fetch_timeout_seconds": 0.2},
     )
@@ -151,7 +151,7 @@ def test_engine_hosts_scheduled_and_triggered_jobs_of_core_modules(broker):
         _wait(lambda: any(r["status"] == "SUCCEEDED" for r in docs.runs("tick")))
 
         async def trigger():
-            transport = Transport(broker, issue_service_token("caller", SECRET))
+            transport = Transport(broker, TEST_TOKENS.token("caller"))
             try:
                 proxy = JobProxy(
                     transport, PROJECT, "acme.datasets", JobDescriptor("compact"), docs
@@ -203,10 +203,10 @@ def test_timed_out_sync_job_is_interrupted_and_never_overlaps_the_next_run(broke
     loader = EngineJobLoader(
         NATSConfiguration(
             nats_url=broker,
-            jwt_secret=SECRET,
             discovery=DiscoveryConfiguration(project=PROJECT),
             jobs=NATSJobsConfiguration(interrupt_grace_seconds=0.2),
         ),
+        credentials=TEST_TOKENS.source("engine"),
         documents_factory=lambda transport, module_id: docs,
         host_options={"fetch_timeout_seconds": 0.2},
     )
@@ -214,7 +214,7 @@ def test_timed_out_sync_job_is_interrupted_and_never_overlaps_the_next_run(broke
     try:
 
         async def trigger_two():
-            transport = Transport(broker, issue_service_token("caller", SECRET))
+            transport = Transport(broker, TEST_TOKENS.token("caller"))
             try:
                 proxy = JobProxy(
                     transport, PROJECT, "acme.stubborn", JobDescriptor("crunch"), docs

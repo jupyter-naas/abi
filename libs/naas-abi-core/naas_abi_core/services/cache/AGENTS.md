@@ -21,6 +21,7 @@ For explicit tier access, use `cache.hot.<method>` or `cache.cold.<method>`.
 | `CacheFactory.py` | Pre-wired service builders |
 | `adapters/secondary/` | Concrete adapters |
 | `ontologies/` | RDF event classes |
+| `iam_catalog.py` | IAM action catalog |
 
 ## Port (`CachePort.py`)
 
@@ -90,6 +91,47 @@ CacheFactory.CacheFS_find_storage(subpath="cache", needle="storage") -> CacheSer
 CacheFactory.CacheObjectStorage(object_storage, cache_prefix="cache") -> CacheService
 ```
 
+## Authorization
+
+Every operation is checked in the domain service against IAM
+(`ResourceGuard`, see "Enforcing in a data service" in
+[`../iam/AGENTS.md`](../iam/AGENTS.md)),
+for the caller of the current `CallContext`, so in process and over NATS answer
+the same. The catalog is `iam_catalog.py`, registered by the serving engine at
+boot. A caller who cannot see a resource gets `CacheNotFoundError` (`CACHE_NOT_FOUND`; `exists` is False); one who can see it but not
+act gets `PermissionDeniedError` (`PERMISSION_DENIED`). A service not wired into
+an engine with IAM (a library use, a NATS facade whose server checks) does not
+check. The contract test is `CacheService_authorization_test.py`: no policy, granted and denied
+principals, in process and over NATS.
+
+Resource types: `key/<key>` (`opaque`, placed by prefix) and `service/-`
+(singleton, platform).
+
+| Action | Level | Resource | Subject (`abi.svc.cache.v1.`) |
+|---|---|---|---|
+| `ListKeys` | list | each listed `key/<key>` | `list_keys`, `tier.<i>.list_keys` |
+| `Get` | read | `key/<key>` | `get`, `tier.<i>.get` |
+| `Exists` | read | `key/<key>` | `exists`, `tier.<i>.exists` |
+| `Set` | write | `key/<key>` | `set`, `tier.<i>.set` |
+| `SetIfAbsent` | write | `key/<key>` | `set_if_absent`, `tier.<i>.set_if_absent` |
+| `Delete` | write | `key/<key>` | `delete`, `tier.<i>.delete` |
+| `Describe` | admin | `service/-` | `describe` |
+
+The per-tier subjects are the engine's own: the broker grants them to `engine`
+only.
+
+* The checks run in the tier views (`hot`, `cold`, `tier_at`, which the NATS
+  tier endpoints serve) and in the multi-tier service. `delete` of a key the
+  caller may not see is a no-op, as for a missing one.
+* The decorator computes the result for a caller who may not read the key, and
+  caches nothing for one who may not write it.
+* The cache's own entries in the key-value or object storage service are used
+  as the engine (`own_storage`, from `CacheKeyValueAdapter` and
+  `CacheObjectStorageAdapter`): the caller was authorized on the cache key, not
+  on the backing store. `own_storage` wraps only the single call of the
+  service's own storage, never code a caller steers (see `internal_call` in
+  [`../iam/AGENTS.md`](../iam/AGENTS.md)).
+
 ## Tests
 
 ```bash
@@ -109,11 +151,22 @@ uv run pytest libs/naas-abi-core/naas_abi_core/services/cache/CacheService_test.
 protobuf endpoints. `adapters/secondary/CacheSecondaryAdapterNATSClient.py` implements the outbound
 port. Wire contracts live under `naas_abi_core/proto/cache/v1/`.
 
+Every primary runs its domain call as the verified caller: it authenticates the
+request with `nats_rpc.authenticate_request` (built on `engine/nats_identity.py`,
+it answers a refusal itself) and hands that `CallContext`
+(`engine/call_context.py`) to its dispatcher. The actor is the
+token's identity; the user it acts for is named by the token itself: a
+delegated token (`abi:delegated:agent`, `act` the acting service, `sub` the user)
+made by IAM's token exchange, never a header (the old `Abi-On-Behalf-Of` header is
+refused); trace and container come from the request's `context`. Never read identity from request fields
+(`principal_id` and `tenant_id` are reserved). Clients of `api` and `engine` send a
+delegation for the current call's user, and the call's trace and container. The domain service authorizes the call on that context (see "Authorization").
+
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception
 mapping in the adapter. Primaries use `respond_protobuf` for bounded replies.
 Requests and replies above the broker limit (8 MiB, or lower) overflow as
-transfer frames up to 256 MiB (docs/adr/20261003_nats-rpc-overflow.md); above
+transfer frames up to 256 MiB (`naas_abi_core/engine/nats_rpc.py`); above
 that, at the overflow host's capacity, or with an older peer, the call fails
 with non-retryable `PAYLOAD_TOO_LARGE`. Micro-service error headers raise
 instead of becoming an empty success. Overflowed values are held whole in
@@ -125,7 +178,7 @@ Run the colocated NATS tests with `--import-mode=importlib`; shared regressions
 are in `engine/nats_rpc_test.py` and `engine/nats_rpc_integration_test.py`.
 The latter uses a local `nats-server` executable without Docker.
 
-The engine exposes its cold-tier adapter under the cache v1 subject when NATS is
+The engine exposes its cold tier (`CacheService.cold`) under the cache v1 subject when NATS is
 configured. A cold tier already backed by a NATS client is not re-exposed. The SDK uses an authenticated `describe` endpoint on the canonical cache
 subject to discover tier order. Cache decorators remain process-local.
 `list_keys` is served on every cache subject (cold and `tier.<index>`); an
@@ -136,10 +189,16 @@ configuration matching object-storage cache configuration. It uses KV atomic
 set-if-not-exists and maps missing keys to CacheNotFoundError. This is distinct
 from the cache's direct Redis adapter. The loader includes required KV/storage
 services transitively. In NATS mode those dependencies are network facades.
-Every configured local tier also serves `abi.svc.cache.v1.tier.<index>.*`; cold's
+Every configured local tier also serves `abi.svc.cache.v1.tier.<index>.*`, through
+`CacheService.tier_at(index)` (by position: two tiers may share a name); cold's
 original endpoint remains compatible. `DescribeRequest`/`DescribeResponse` add
 tier discovery without changing existing request shapes.
 
-NATS mode rejects mixed local/remote tier configurations. Mutation audit events
-are emitted by each owning primary, including for SDK callers; remote facades
-must not emit a second copy. Endpoint helpers take an injected event publisher.
+NATS mode rejects mixed local/remote tier configurations. Each primary serves
+one tier through the `CacheService`'s view of it (`SingleTierCacheService`:
+`get_entry`, `put_entry`, `put_entry_if_absent`, `delete`, `exists`,
+`list_keys`), so every remote call reaches the domain service. That view emits
+the mutation audit events, once, including for SDK callers; remote facades
+must not emit a second copy. `put_entry_if_absent` keeps the adapter's own
+`set_if_absent`, with no fallback: the remote `SingleTierCacheService` falls
+back on its side.

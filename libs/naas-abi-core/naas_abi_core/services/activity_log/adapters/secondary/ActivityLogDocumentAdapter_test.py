@@ -127,7 +127,9 @@ def test_the_service_wires_its_adapter(root):
     adapter = ActivityLogDocumentAdapter()
     service = ActivityLogService(adapter)
 
-    service.set_services(SimpleNamespace(document=root))  # type: ignore[arg-type]
+    service.set_services(
+        SimpleNamespace(document=root, iam_available=lambda: False)  # type: ignore[arg-type]
+    )
     service.record(ActivityEvent(actor_id="user:a", event_type="x"))
 
     assert len(service.query("user:a")) == 1

@@ -21,6 +21,7 @@ BUDGET_BYTES=$((BUDGET_MIB * 1024 * 1024))
 PACKAGES=(
   naas-abi-proto
   naas-abi-sdk
+  naas-abi-idp
   naas-abi-core
   naas-abi-marketplace
   naas-abi

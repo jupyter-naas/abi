@@ -78,7 +78,10 @@ def _client(admin, *, is_superadmin=True):
     app = FastAPI()
     app.include_router(router, prefix="/api/admin/system")
     app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
-        id="u1", email="u1@example.com", name="U1", is_superadmin=is_superadmin
+        id="root" if is_superadmin else "u1",
+        email="u1@example.com",
+        name="U1",
+        is_superadmin=is_superadmin,
     )
     app.dependency_overrides[get_jobs_admin] = lambda: admin
     return TestClient(app)

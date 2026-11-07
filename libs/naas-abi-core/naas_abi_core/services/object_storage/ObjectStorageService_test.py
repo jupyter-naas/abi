@@ -24,9 +24,7 @@ def _make(tmp_path):
     storage = ObjectStorageService(
         adapter=ObjectStorageSecondaryAdapterFS(base_path=str(tmp_path / "storage"))
     )
-    events = EventService(
-        adapter=EventSQLiteAdapter(str(tmp_path / "events.sqlite"))
-    )
+    events = EventService(adapter=EventSQLiteAdapter(str(tmp_path / "events.sqlite")))
     services = IEngine.Services(object_storage=storage, events=events)
     services.wire_services()
     return storage, events
@@ -165,3 +163,20 @@ def test_list_objects_recursive_strips_the_storage_prefix_like_list_objects(tmp_
         "storage/papers"
     ) == storage.list_objects_recursive("papers")
     assert storage.list_objects("storage/papers") == storage.list_objects("papers")
+
+
+def test_only_a_leading_storage_prefix_is_stripped(tmp_path):
+    """``a/storage/b`` is a path of its own, and every operation, metadata
+    included, reads the object it names."""
+    storage, _ = _make(tmp_path)
+
+    storage.put_object("a/storage/b", "k", b"inner")
+    storage.put_object("a/b", "k", b"outer")
+
+    assert storage.get_object("a/storage/b", "k") == b"inner"
+    assert storage.get_object("storage/a/storage/b", "k") == b"inner"
+    assert storage.get_object_metadata("storage/a/b", "k").file_size_bytes == 5
+    assert storage.get_object_metadata("a/storage/b", "k").file_size_bytes == 5
+    assert storage.get_object_metadata("storage/a/storage/b", "k").file_size_bytes == 5
+    storage.delete_object("storage/a/storage/b", "k")
+    assert storage.get_object("a/b", "k") == b"outer"

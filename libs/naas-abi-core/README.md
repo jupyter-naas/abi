@@ -53,8 +53,10 @@ A top-level `nats:` block in the config switches the engine to NATS mode:
 
 ```yaml
 nats:
-  nats_url: "nats://abi:{{ secret.NATS_ABI_PASSWORD }}@127.0.0.1:4222"
-  jwt_secret: "{{ secret.NATS_JWT_SECRET }}"
+  nats_url: "nats://engine:{{ secret.NATS_ENGINE_PASSWORD }}@127.0.0.1:4222"
+  auth_callout:
+    nats_url: "nats://auth:{{ secret.NATS_AUTH_PASSWORD }}@127.0.0.1:4222"
+    issuer_seed: "{{ secret.NATS_AUTH_CALLOUT_SEED }}"
   discovery:
     project: "my_project"
 ```
@@ -576,8 +578,10 @@ global_config:
   ai_mode: "cloud"  # or "local" or "airgap"
 
 nats:
-  nats_url: "nats://abi:{{ secret.NATS_ABI_PASSWORD }}@127.0.0.1:4222"
-  jwt_secret: "{{ secret.NATS_JWT_SECRET }}"
+  nats_url: "nats://engine:{{ secret.NATS_ENGINE_PASSWORD }}@127.0.0.1:4222"
+  auth_callout:
+    nats_url: "nats://auth:{{ secret.NATS_AUTH_PASSWORD }}@127.0.0.1:4222"
+    issuer_seed: "{{ secret.NATS_AUTH_CALLOUT_SEED }}"
 
 services:
   triple_store:

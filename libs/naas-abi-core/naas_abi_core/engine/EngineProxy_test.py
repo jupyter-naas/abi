@@ -237,6 +237,57 @@ def test_locked_proxies_cannot_reach_the_document_root():
     backend.namespaces.assert_not_called()
 
 
+def test_the_document_root_answers_each_caller_with_what_iam_allows():
+    from unittest.mock import MagicMock
+
+    from naas_abi_core.engine.call_context import (
+        ANONYMOUS,
+        CallContext,
+        service_account,
+        use_call_context,
+    )
+    from naas_abi_core.services.document.DocumentPort import IDocumentAdapter
+    from naas_abi_core.services.document.DocumentService import DocumentService
+    from naas_abi_core.services.document.iam_catalog import CATALOG
+    from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import (
+        IAMStoreMemory,
+    )
+    from naas_abi_core.services.iam.enforcement import internal_call
+    from naas_abi_core.services.iam.IAMService import IAMService
+
+    iam = IAMService(IAMStoreMemory())
+    iam.bootstrap()
+    with internal_call():
+        iam.register_catalog(CATALOG)
+    backend = MagicMock(spec=IDocumentAdapter)
+    backend.namespaces.return_value = ["acme.module", "idp", "naas_abi"]
+    root = DocumentService._for_engine(backend)
+    root.set_services(IEngine.Services(document=root, iam=iam))
+    engine = _DummyEngine(services=IEngine.Services(document=root, iam=iam))
+    proxy = EngineProxy(
+        engine=engine,
+        module_name="naas_abi",
+        module_dependencies=ModuleDependencies(modules=[], services=[]),
+        unlocked=True,
+    )
+
+    # The platform proxy holds the root; IAM decides, for whoever calls.
+    with use_call_context(CallContext(principal=service_account("idp"))):
+        assert proxy.services.document_admin.namespaces() == ["idp"]
+    # Allowed everything else, the engine still never sees a sealed namespace.
+    with use_call_context(CallContext(principal=service_account("engine"))):
+        assert proxy.services.document_admin.namespaces() == [
+            "acme.module",
+            "naas_abi",
+        ]
+    with use_call_context(ANONYMOUS):
+        assert proxy.services.document_admin.namespaces() == []
+    # A caller IAM holds nothing for (a module without an approved manifest)
+    # sees no namespace at all.
+    with use_call_context(CallContext(principal=service_account("acme.module"))):
+        assert proxy.services.document_admin.namespaces() == []
+
+
 def test_engine_proxy_document_view_is_cached_and_rebound_when_root_changes():
     """The scoped per-module DocumentService view is expensive to recreate
     (it binds a namespace), so it must be cached across repeated access and
@@ -326,3 +377,48 @@ def test_engine_proxy_document_view_cache_is_thread_safe_under_contention():
     assert len({id(view) for view in results}) == 1
     assert call_count == 1
     assert results[0].namespace == "test_module"
+
+
+def test_engine_proxy_grants_identity_without_declared_dependency():
+    """Like IAM, identity is a kernel service that authorizes its own calls:
+    Nexus reads it through the proxy with no dependency declaration."""
+    identity = object()
+    engine = _DummyEngine(services=IEngine.Services(identity=identity))  # type: ignore[arg-type]
+
+    proxy = EngineProxy(
+        engine=engine,
+        module_name="test_module",
+        module_dependencies=ModuleDependencies(modules=[], services=[]),
+    )
+
+    assert proxy.services.identity_available()
+    assert proxy.services.identity is identity
+    assert not EngineProxy(
+        engine=_DummyEngine(services=IEngine.Services()),
+        module_name="test_module",
+        module_dependencies=ModuleDependencies(modules=[], services=[]),
+    ).services.identity_available()
+
+
+def test_only_the_unlocked_proxy_reaches_the_engines_service_credentials():
+    """Nexus signs its own NATS calls as ``api`` through the platform module's
+    proxy; any other module holds none of the engine's identities."""
+    engine = _DummyEngine(services=IEngine.Services())
+    asked: list = []
+    engine.service_credentials = lambda name, audience=None: (
+        asked.append(  # type: ignore[attr-defined]
+            (name, audience)
+        )
+        or "credentials"
+    )
+    deps = ModuleDependencies(modules=[], services=[])
+
+    unlocked = EngineProxy(
+        engine=engine, module_name="naas_abi", module_dependencies=deps, unlocked=True
+    )
+    assert unlocked.service_credentials("api", "abi:host:x") == "credentials"
+    assert asked == [("api", "abi:host:x")]
+    with pytest.raises(PermissionError):
+        EngineProxy(
+            engine=engine, module_name="other", module_dependencies=deps
+        ).service_credentials("api")

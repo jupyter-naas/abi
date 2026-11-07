@@ -30,8 +30,6 @@ from naas_abi_sdk.process_workflows import GRAPH_OUTPUT_SCHEMA, encode_process_r
 from pydantic import BaseModel
 from rdflib import RDF, Graph, Literal, URIRef
 
-SECRET = "bridge-test-secret-32-bytes-long-ok"
-
 
 class _NoTools:
     def as_tools(self):
@@ -102,7 +100,7 @@ class _Module(JobsMixin):
 
 
 def _config(**workflows):
-    return NATSConfiguration(jwt_secret=SECRET, workflows=workflows)
+    return NATSConfiguration(workflows=workflows)
 
 
 def _tweets():
@@ -180,9 +178,7 @@ def test_the_bridge_is_off_without_nats_and_with_the_switch():
 
 
 def test_the_bridge_switch_reads_from_the_nats_block():
-    config = NATSConfiguration.model_validate(
-        {"jwt_secret": SECRET, "workflows": {"bridge": False}}
-    )
+    config = NATSConfiguration.model_validate({"workflows": {"bridge": False}})
 
     assert config.workflows.bridge is False
 

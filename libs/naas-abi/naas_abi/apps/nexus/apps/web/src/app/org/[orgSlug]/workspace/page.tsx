@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
-import { useAuthStore } from '@/stores/auth';
+import { selectSession, useAuthStore } from '@/stores/auth';
 import { authFetch } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 
@@ -17,7 +17,8 @@ export default function OrgWorkspacePage() {
   const router = useRouter();
   const params = useParams();
   const orgSlug = params.orgSlug as string;
-  const { isAuthenticated, token } = useAuthStore();
+  const { isAuthenticated } = useAuthStore();
+  const token = useAuthStore(selectSession);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {

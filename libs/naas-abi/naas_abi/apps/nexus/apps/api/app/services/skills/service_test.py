@@ -43,17 +43,13 @@ def _record(**overrides) -> SkillRecord:
 
 
 def _context(user_id: str = "user-1"):
-    from naas_abi.apps.nexus.apps.api.app.services.iam.port import RequestContext, TokenData
+    from naas_abi.apps.nexus.apps.api.app.services.skills.service import RequestContext
 
-    return RequestContext(
-        token_data=TokenData(user_id=user_id, scopes={"*"}, is_authenticated=True)
-    )
+    return RequestContext(actor_user_id=user_id)
 
 
 def _service(adapter) -> SkillService:
-    service = SkillService(adapter)
-    service._ensure_workspace_access = AsyncMock()  # type: ignore[method-assign]
-    return service
+    return SkillService(adapter)
 
 
 def test_normalize_slug() -> None:
@@ -76,7 +72,6 @@ async def test_create_skill_normalizes_slug_and_creates() -> None:
     service = _service(adapter)
 
     created = await service.create_skill(
-        _context(),
         SkillCreateInput(
             workspace_id="ws-1",
             user_id="user-1",
@@ -98,7 +93,6 @@ async def test_create_skill_remaps_reserved_slug_then_rejects_duplicate() -> Non
     service = _service(adapter)
 
     created = await service.create_skill(
-        _context(),
         SkillCreateInput(
             workspace_id="ws-1",
             user_id="user-1",
@@ -112,7 +106,6 @@ async def test_create_skill_remaps_reserved_slug_then_rejects_duplicate() -> Non
     adapter.get_visible_by_slug = AsyncMock(return_value=_record(id="other"))
     with pytest.raises(SkillValidationError):
         await service.create_skill(
-            _context(),
             SkillCreateInput(
                 workspace_id="ws-1",
                 user_id="user-1",
@@ -130,7 +123,6 @@ async def test_create_skill_rejects_invalid_scope() -> None:
 
     with pytest.raises(SkillValidationError):
         await service.create_skill(
-            _context(),
             SkillCreateInput(
                 workspace_id="ws-1",
                 user_id="user-1",
@@ -181,6 +173,17 @@ async def test_delete_user_scoped_skill_rejected_for_non_creator() -> None:
 
     with pytest.raises(SkillPermissionError):
         await service.delete_skill(_context(user_id="someone-else"), "skill-1")
+
+
+@pytest.mark.asyncio
+async def test_marking_a_private_skill_used_is_refused_for_non_creator() -> None:
+    adapter = AsyncMock()
+    adapter.get_by_id = AsyncMock(return_value=_record(user_id="creator"))
+    service = _service(adapter)
+
+    with pytest.raises(SkillPermissionError):
+        await service.mark_skill_used(_context(user_id="someone-else"), "skill-1", datetime.now())
+    adapter.mark_used.assert_not_called()
 
 
 @pytest.mark.asyncio

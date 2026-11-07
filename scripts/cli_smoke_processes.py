@@ -6,14 +6,15 @@ library script cannot stand in for. It checks that discovery lists each class as
 a durable workflow (`workflow.<name>`, `pipeline.<name>`), runs both by name as
 another module does, and reads a started run's record and step.
 
-    ABI_NATS_URL=nats://module:<password>@127.0.0.1:4222 \
-    ABI_MODULE_KEY="$(abi module key my_project.research)" \
+    ABI_NATS_URL=nats://127.0.0.1:4222 \
+    ABI_SERVICE_KEY="$(abi iam key create module/my_project/my_project.research)" \
     python scripts/cli_smoke_processes.py --module-id my_project.research \
         --project my_project --workflow digest_workflow --pipeline catalog_pipeline
 
-The probe signs as the module itself (its own key): a module acts only as itself, so
-this starts the module's own workflows, as any module of the project may. The
-broker URL and the key come from ABI_NATS_URL and ABI_MODULE_KEY, like a module's.
+The probe is the module itself (a key of its own service account): its approved
+manifest lets it start its own workflows and read their runs. The broker URL and
+the key come from ABI_NATS_URL and ABI_SERVICE_KEY, like a module's; the broker's
+auth callout logs the key in.
 """
 
 from __future__ import annotations
@@ -26,7 +27,6 @@ import time
 from typing import Any
 
 from naas_abi_sdk.discovery import DiscoveryClient, ModuleProxy
-from naas_abi_sdk.service_token import ModuleToken
 from naas_abi_sdk.transport import Transport
 
 
@@ -57,10 +57,7 @@ async def wait(name: str, deadline: float, check: Any) -> Any:
 
 
 async def main(args: argparse.Namespace) -> None:
-    transport = Transport(
-        os.environ["ABI_NATS_URL"],
-        ModuleToken(args.module_id, os.environ["ABI_MODULE_KEY"]),
-    )
+    transport = Transport(os.environ["ABI_NATS_URL"], os.environ["ABI_SERVICE_KEY"])
     try:
         await probe(args, transport)
     finally:

@@ -1,0 +1,7 @@
+-- Migration: workflows and pipelines turned on or off in a workspace
+--
+-- Retired. The table workflow_visibility held what a workspace's admins turned
+-- off for everyone in it. Policies decide alone now: at start, Nexus turns what
+-- was turned off into Denies of each workspace's access policy, then drops the
+-- table (services/iam/policy_tree.py). A new database never makes it. The file
+-- stays so migration numbers keep their meaning; it has no statement.

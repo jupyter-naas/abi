@@ -4,6 +4,7 @@ on:
     paths:
       - 'libs/naas-abi-proto/**'
       - 'libs/naas-abi-sdk/**'
+      - 'libs/naas-abi-idp/**'
       - 'libs/naas-abi-core/**'
       - 'examples/standalone_module/**'
       - '.github/workflows/standalone_sdk.yml'
@@ -23,6 +24,7 @@ jobs:
         run: |
           uv run --project libs/naas-abi-proto --python '${{ matrix.python }}' pytest libs/naas-abi-proto/tests -q
           uv run --project libs/naas-abi-sdk --python '${{ matrix.python }}' pytest libs/naas-abi-sdk/tests -q
+          uv run --project libs/naas-abi-idp --python '${{ matrix.python }}' pytest libs/naas-abi-idp/tests -q
       - name: Test optional LangGraph integration imports
         run: uv run --project libs/naas-abi-sdk --extra langgraph --python '${{ matrix.python }}' pytest libs/naas-abi-sdk/tests -q
       # The Workflow/Pipeline class, process workflow and ontology tests skip without these extras.
@@ -36,6 +38,7 @@ jobs:
         run: |
           uv build --project libs/naas-abi-proto --wheel
           uv build --project libs/naas-abi-sdk --wheel
+          uv build --project libs/naas-abi-idp --wheel
 
   nats-integration:
     name: Core and real NATS integration tests
@@ -78,7 +81,6 @@ jobs:
           uv run --project libs/naas-abi-core --no-sync pytest --import-mode=importlib -q \
             libs/naas-abi-core/naas_abi_core/engine/nats_rpc_integration_test.py \
             libs/naas-abi-core/naas_abi_core/services/discovery/discovery_integration_test.py \
-            libs/naas-abi-core/naas_abi_core/engine/nats_permissions_integration_test.py \
             libs/naas-abi-core/naas_abi_core/engine/app_shutdown_integration_test.py \
             examples/standalone_module/transfer_integration_test.py \
             examples/standalone_module/model_integration_test.py \

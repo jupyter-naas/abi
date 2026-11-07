@@ -82,7 +82,6 @@ class SyncJobRunner:
         argument = self.context_factory(ctx, loop) if self.context_factory else ctx
         done: asyncio.Future[Any] = loop.create_future()
         state = _Thread()
-        context = contextvars.copy_context()
 
         def resolve(outcome: tuple[bool, Any]) -> None:
             if done.done():
@@ -99,7 +98,7 @@ class SyncJobRunner:
                 try:
                     with state.lock:
                         state.ident = threading.get_ident()
-                    outcome = (True, context.run(self.handler, argument))
+                    outcome = (True, self.handler(argument))
                 except BaseException as exc:  # noqa: BLE001 - handed to the awaiting task
                     outcome = (False, exc)
                 finally:
@@ -110,8 +109,13 @@ class SyncJobRunner:
             with contextlib.suppress(RuntimeError):  # loop closed on shutdown
                 loop.call_soon_threadsafe(resolve, outcome)
 
+        # The handler runs as the job's caller (its CallContext, its trace).
+        context = contextvars.copy_context()
         thread = threading.Thread(
-            target=target, name=f"abi-job-{ctx.run_id}", daemon=True
+            target=context.run,
+            args=(target,),
+            name=f"abi-job-{ctx.run_id}",
+            daemon=True,
         )
         thread.start()
 

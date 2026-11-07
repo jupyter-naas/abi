@@ -4,6 +4,7 @@ from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
@@ -12,15 +13,28 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
 )
 from naas_abi.apps.nexus.apps.api.app.core.config import OrganizationSeedConfig
 from naas_abi.apps.nexus.apps.api.app.services.auth.avatar_store_test import MemoryStorage
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary import (
     workspaces__primary_adapter__FastAPI as ws_api,
 )
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import WorkspaceRecord
+from naas_abi_core.engine.call_context import as_service_account
 
 NOW = datetime(2026, 1, 1)
 
 
-def _client(*, org_role: str | None = "member", ws_role: str = "admin", storage=None):
+@pytest.fixture(autouse=True)
+def _team(team):
+    return team
+
+
+@pytest.fixture(autouse=True)
+def _no_agent_seeding(monkeypatch):
+    """The roster of a new workspace is the agents service's own tests'."""
+    monkeypatch.setattr(ws_api, "seed_workspace_agents", AsyncMock())
+
+
+def _client(*, user: str = "admin", storage=None, org_role: str | None = "admin"):
     service = AsyncMock()
     service.get_workspace.return_value = SimpleNamespace(id="ws-1", logo_url=None)
     service.update_workspace_logo.return_value = SimpleNamespace(id="ws-1")
@@ -30,27 +44,28 @@ def _client(*, org_role: str | None = "member", ws_role: str = "admin", storage=
     app = FastAPI()
     app.include_router(ws_api.router, prefix="/api/workspaces")
     app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
-        id="user-1", email="me@example.com", name="Me"
+        id=user, email="me@example.com", name="Me"
     )
     app.dependency_overrides[ws_api.get_workspace_service] = lambda: service
+    app.dependency_overrides[ws_api.get_service_registry] = lambda: SimpleNamespace(agents=None)
     app.dependency_overrides[ws_api.get_organization_service] = lambda: org_service
     app.dependency_overrides[ws_api._get_object_storage] = lambda: storage or MemoryStorage()
-
-    async def role(user_id: str, workspace_id: str) -> str:
-        return ws_role
-
-    return TestClient(app), service, role
+    return TestClient(app, raise_server_exceptions=False), service
 
 
-def test_only_org_owners_and_admins_create_workspaces_in_their_org() -> None:
-    client, service, _ = _client(org_role="member")
+def test_only_org_owners_and_admins_create_workspaces_in_their_org(monkeypatch) -> None:
+    monkeypatch.setattr(ws_api.placements, "place_new_workspace", AsyncMock())
+    body = {"name": "Audit", "slug": "audit", "organization_id": "org-1"}
 
-    resp = client.post(
-        "/api/workspaces", json={"name": "Audit", "slug": "audit", "organization_id": "org-1"}
-    )
+    for user in ("member", "viewer", "stranger"):
+        client, service = _client(user=user)
+        assert client.post("/api/workspaces", json=body).status_code == 403, user
+        service.create_workspace.assert_not_called()
 
-    assert resp.status_code == 403
-    service.create_workspace.assert_not_called()
+    for user in ("admin", "owner"):
+        client, service = _client(user=user)
+        client.post("/api/workspaces", json=body)
+        service.create_workspace.assert_awaited_once()
 
 
 def _record(**fields) -> WorkspaceRecord:
@@ -59,12 +74,14 @@ def _record(**fields) -> WorkspaceRecord:
     )
 
 
-def test_create_saves_the_chosen_features() -> None:
-    client, service, _ = _client(org_role="admin")
+def test_the_create_form_chooses_no_feature(monkeypatch, team) -> None:
+    """A new workspace grants nothing: who uses a feature or a module's agent is
+    a policy's. A ``features`` field is not part of the request, and its
+    catalog seed only installs."""
+    monkeypatch.setattr(ws_api.placements, "place_new_workspace", AsyncMock())
+    client, service = _client(user="admin")
     service.create_workspace.return_value = _record()
-    service.set_workspace_feature_overrides.return_value = _record(
-        feature_overrides={"maps": False, "graph": True}
-    )
+    before = {p.id for p in team.iam._all_policies()}
 
     resp = client.post(
         "/api/workspaces",
@@ -72,66 +89,54 @@ def test_create_saves_the_chosen_features() -> None:
             "name": "Audit",
             "slug": "audit",
             "organization_id": "org-1",
-            "feature_overrides": {"maps": False, "graph": True},
+            "features": ["chat", "graph"],
+            "catalog_seed": {"agents": ["Abi"], "apps": ["naas_abi:kanban"]},
         },
     )
 
     assert resp.status_code == 200
-    service.set_workspace_feature_overrides.assert_awaited_once_with(
-        workspace_id="ws-1", overrides={"maps": False, "graph": True}
+    assert "features" not in ws_api.WorkspaceCreate.model_fields
+    assert {p.id for p in team.iam._all_policies()} == before
+
+
+def test_create_is_undone_when_placing_fails(monkeypatch, team) -> None:
+    forget = AsyncMock(return_value=0)
+    monkeypatch.setattr(
+        ws_api.placements, "place_new_workspace", AsyncMock(side_effect=RuntimeError("nats"))
     )
-    flags = resp.json()["feature_flags"]
-    assert flags["maps"] is False and flags["graph"] is True
-
-
-def test_create_without_features_keeps_the_role_defaults() -> None:
-    client, service, _ = _client(org_role="admin")
+    monkeypatch.setattr(ws_api.placements, "forget_workspace", forget)
+    client, service = _client(user="admin")
     service.create_workspace.return_value = _record()
 
     resp = client.post(
         "/api/workspaces", json={"name": "Audit", "slug": "audit", "organization_id": "org-1"}
     )
 
-    assert resp.status_code == 200
-    service.set_workspace_feature_overrides.assert_not_called()
+    assert resp.status_code == 500
+    forget.assert_awaited_once_with("ws-1")
+    service.abandon_workspace.assert_awaited_once_with(_record())
 
 
-def test_create_rejects_pinned_features_before_creating() -> None:
-    client, service, _ = _client(org_role="admin")
+@pytest.mark.asyncio
+async def test_placements_of_an_undone_workspace_are_forgotten(team) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.iam import placements
 
-    resp = client.post(
-        "/api/workspaces",
-        json={
-            "name": "Audit",
-            "slug": "audit",
-            "organization_id": "org-1",
-            "feature_overrides": {"settings": False},
-        },
+    ws2 = team.workspace("org-1", "ws-2")
+    with as_service_account("engine"):
+        team.iam.put_placement("files", "drive/ws-1/*", workspace_container("org-1", "ws-1"))
+        team.iam.put_placement("files", "drive/ws-2/*", ws2)
+
+    assert await placements.forget_workspace("ws-1") == 1
+    with as_service_account("engine"):
+        assert [p.container for p in team.iam.list_placements("files")] == [ws2]
+
+
+def test_configuration_lists_features_and_config_seeds(monkeypatch, team) -> None:
+    client, service = _client(user="admin")
+    service.get_workspace.return_value = _record()
+    monkeypatch.setattr(
+        ws_api.settings.feature_flags, "enabled_features", ["chat", "graph", "settings"]
     )
-
-    assert resp.status_code == 400
-    assert "settings" in resp.json()["detail"]
-    service.create_workspace.assert_not_called()
-
-
-def test_create_rejects_features_on_a_personal_workspace() -> None:
-    client, service, _ = _client(org_role=None)
-
-    resp = client.post(
-        "/api/workspaces",
-        json={"name": "Mine", "slug": "mine", "feature_overrides": {"maps": True}},
-    )
-
-    assert resp.status_code == 400
-    assert "organization" in resp.json()["detail"]
-    service.create_workspace.assert_not_called()
-    service.set_workspace_feature_overrides.assert_not_called()
-
-
-def test_configuration_lists_features_and_config_seeds(monkeypatch) -> None:
-    client, service, role = _client(ws_role="admin")
-    monkeypatch.setattr(ws_api, "require_workspace_access", role)
-    service.get_workspace.return_value = _record(feature_overrides={"maps": False})
     seeds = [
         OrganizationSeedConfig.model_validate(
             {"name": "Acme", "slug": "acme", "workspaces": [{"slug": "audit", "apps": ["kanban"]}]}
@@ -143,10 +148,9 @@ def test_configuration_lists_features_and_config_seeds(monkeypatch) -> None:
 
     assert resp.status_code == 200
     body = resp.json()
-    assert "maps" not in body["features"] and "chat" in body["features"]
-    assert body["feature_overrides"] == {"maps": False}
-    assert body["feature_overrides_source"] == "database"
-    assert body["pinned"] == ["settings"]
+    # The deployment's: no set narrows them, a policy gives each.
+    assert body["features"] == ["chat", "graph", "settings"]
+    assert not {"feature_overrides", "pinned", "can_edit_features"} & set(body)
     assert body["seeds"] == [
         {
             "kind": "app",
@@ -157,8 +161,7 @@ def test_configuration_lists_features_and_config_seeds(monkeypatch) -> None:
 
 
 def test_configuration_without_seed_is_empty(monkeypatch) -> None:
-    client, service, role = _client(ws_role="owner")
-    monkeypatch.setattr(ws_api, "require_workspace_access", role)
+    client, service = _client(user="owner")
     service.get_workspace.return_value = _record()
     monkeypatch.setattr(ws_api.settings, "organizations", [])
 
@@ -168,37 +171,15 @@ def test_configuration_without_seed_is_empty(monkeypatch) -> None:
     assert resp.json()["seeds"] == []
 
 
-def test_configuration_lets_org_admins_edit_features(monkeypatch) -> None:
-    client, service, role = _client(org_role="admin", ws_role="admin")
-    monkeypatch.setattr(ws_api, "require_workspace_access", role)
-    service.get_workspace.return_value = _record()
-
-    body = client.get("/api/workspaces/ws-1/configuration").json()
-
-    assert body["organization_id"] == "org-1"
-    assert body["can_edit_features"] is True
-
-
-def test_configuration_is_read_only_for_workspace_admins(monkeypatch) -> None:
-    # A workspace admin who is only an org member sees the features read-only.
-    client, service, role = _client(org_role="member", ws_role="admin")
-    monkeypatch.setattr(ws_api, "require_workspace_access", role)
-    service.get_workspace.return_value = _record()
-
-    assert client.get("/api/workspaces/ws-1/configuration").json()["can_edit_features"] is False
-
-
 def test_configuration_is_for_admins(monkeypatch) -> None:
-    client, _, role = _client(ws_role="member")
-    monkeypatch.setattr(ws_api, "require_workspace_access", role)
+    client, _ = _client(user="member")
 
     assert client.get("/api/workspaces/ws-1/configuration").status_code == 403
 
 
-def test_logo_upload_goes_to_the_workspace_drive(monkeypatch) -> None:
+def test_logo_upload_goes_to_the_workspace_drive() -> None:
     storage = MemoryStorage()
-    client, service, role = _client(storage=storage)
-    monkeypatch.setattr(ws_api, "get_workspace_role", role)
+    client, service = _client(storage=storage)
 
     resp = client.post(
         "/api/workspaces/ws-1/upload-logo", files={"file": ("logo.png", b"png", "image/png")}
@@ -215,10 +196,23 @@ def test_logo_upload_goes_to_the_workspace_drive(monkeypatch) -> None:
     assert served.content == b"png"
 
 
-def test_svg_logos_are_served_sandboxed(monkeypatch) -> None:
+def test_only_workspace_admins_change_the_logo() -> None:
+    storage = MemoryStorage()
+    for user in ("member", "viewer"):
+        client, service = _client(user=user, storage=storage)
+        upload = client.post(
+            "/api/workspaces/ws-1/upload-logo", files={"file": ("logo.png", b"png", "image/png")}
+        )
+        assert upload.status_code == 403, user
+        assert client.delete("/api/workspaces/ws-1/logo").status_code == 403, user
+        service.update_workspace_logo.assert_not_called()
+    assert storage.paths() == set()
+
+
+def test_svg_logos_are_served_sandboxed() -> None:
     storage = MemoryStorage()
     storage.put_object("naas_abi/workspace-drive/ws-1/.settings/logos", "logo.svg", b"<svg/>")
-    client, _, _ = _client(storage=storage)
+    client, _ = _client(storage=storage)
 
     served = client.get("/api/workspaces/ws-1/logo")
 
@@ -232,7 +226,7 @@ def test_logo_route_rejects_ids_that_are_not_plain_ids() -> None:
         is_safe_drive_id,
     )
 
-    client, _, _ = _client()
+    client, _ = _client()
     assert client.get("/api/workspaces/..%2E/logo").status_code == 404
     assert client.get("/api/workspaces/ws.1/logo").status_code == 404
     assert is_safe_drive_id("ws-319e131a833f")
@@ -249,3 +243,75 @@ def test_workspace_description_is_limited_to_200_characters() -> None:
     assert ws_api.WorkspaceUpdate(description="x" * 200).description == "x" * 200
     with pytest.raises(ValidationError):
         ws_api.WorkspaceUpdate(description="x" * 201)
+
+
+def test_resources_are_what_the_caller_may_use_there(monkeypatch, team) -> None:
+    """What IAM lets the caller use in the workspace: the features its policies
+    grant, and each module with the items it may use (Settings: which pages it
+    shows, General). An admin with no policy uses nothing."""
+    from naas_abi.apps.nexus.apps.api.app.services.modules import scopes as module_scopes
+
+    async def gathered(unavailable=None):
+        return module_scopes.build(
+            [
+                module_scopes.Exposed("agent", "acme.people", "A"),
+                module_scopes.Exposed("agent", "acme.people", "B"),
+                module_scopes.Exposed("app", "acme.market", "prices"),
+                module_scopes.Exposed("workflow", "acme.crm", "sync"),
+            ]
+        )
+
+    monkeypatch.setattr(module_scopes, "gather", gathered)
+    client, service = _client(user="admin")
+    service.get_workspace.return_value = _record()
+
+    body = client.get("/api/workspaces/ws-1/resources").json()
+    assert body["modules"] == []
+
+    team.allow(
+        "admin",
+        ["module:UseAgent", "module:OpenApp"],
+        ["${scope}/module:agent/acme.people/A", "${scope}/module:app/acme.market/*"],
+        "abi:nexus:organization/org-1/nexus:workspace/ws-1",
+    )
+    team.give_features(
+        team.principal("admin"), ["chat"], "abi:nexus:organization/org-1/nexus:workspace/ws-1"
+    )
+    body = client.get("/api/workspaces/ws-1/resources").json()
+
+    assert "chat" in body["features"]
+    assert "can_edit_set" not in body
+    assert body["modules"] == [
+        {"module": "acme.market", "agents": 0, "apps": 1, "workflows": 0, "pipelines": 0},
+        {"module": "acme.people", "agents": 1, "apps": 0, "workflows": 0, "pipelines": 0},
+    ]
+    assert body["totals"] == {"agents": 1, "apps": 1, "workflows": 0, "pipelines": 0}
+    assert body["unavailable"] == []
+    assert _client(user="member")[0].get("/api/workspaces/ws-1/resources").status_code == 403
+
+
+def test_resources_name_the_kinds_a_source_did_not_answer_for(monkeypatch, team) -> None:
+    """The jobs or discovery down: their kinds are named, so the settings never
+    take a short count for "the workspace has none"."""
+    from naas_abi.apps.nexus.apps.api.app.services.modules import scopes as module_scopes
+
+    async def jobs_down(service=None):
+        raise RuntimeError("no broker")
+
+    async def no_apps():
+        module_scopes._missing("apps")  # remote apps unreachable, in part
+        return []
+
+    monkeypatch.setattr(module_scopes, "engine_agents", lambda: [])
+    monkeypatch.setattr(module_scopes, "remote_agents", lambda: [])
+    monkeypatch.setattr(module_scopes, "apps", no_apps)
+    monkeypatch.setattr(module_scopes, "workflows", jobs_down)
+    monkeypatch.setattr(module_scopes, "declared_catalogs", lambda: [])
+    monkeypatch.setattr(module_scopes, "engine_modules", lambda: [])
+    client, service = _client(user="admin")
+    service.get_workspace.return_value = _record()
+
+    body = client.get("/api/workspaces/ws-1/resources").json()
+
+    assert body["unavailable"] == ["apps", "pipelines", "workflows"]
+    assert body["totals"] == {"agents": 0, "apps": 0, "workflows": 0, "pipelines": 0}

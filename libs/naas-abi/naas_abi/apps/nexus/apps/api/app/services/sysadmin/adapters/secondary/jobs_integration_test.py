@@ -259,7 +259,7 @@ def test_a_workflow_is_started_waited_for_followed_step_by_step_and_cancelled(br
                 validator=JsonSchemaValidator(),
             )
         )
-        caller = Caller("api_key")
+        caller = Caller("api_key", "u1")
         try:
             listed = (await service.list()).workflows
             ingest = next(w for w in listed if w.name == "ingest")
@@ -305,7 +305,7 @@ def test_a_workflow_is_started_waited_for_followed_step_by_step_and_cancelled(br
                 await asyncio.sleep(0.05)
             assert (await service.status(MODULE, slow.run_id)).run.status == "CANCELLED"
 
-            assert {(r.action.via, r.action.actor_id) for r in audit.records} == {("api_key", "")}
+            assert {(r.action.via, r.action.actor_id) for r in audit.records} == {("api_key", "u1")}
             assert [r.action.operation for r in audit.records].count("cancel") == 2
         finally:
             await host.close()

@@ -66,7 +66,10 @@ def _spec(sort: bool = False) -> ListSpec:
 
 def _service(store: IGraphQueryStore, owned: set[str] = frozenset({G})) -> GraphQueryService:
     return GraphQueryService(
-        store, owned_graphs=lambda _ws: set(owned), system_graphs=set(), now=lambda: "2026-06-16T00:00:00+00:00"
+        store,
+        owned_graphs=lambda _ws: set(owned),
+        system_graphs=set(),
+        now=lambda: "2026-06-16T00:00:00+00:00",
     )
 
 
@@ -116,7 +119,9 @@ def test_sorted_query_uses_offset_fallback() -> None:
 
 
 def test_node_cell_carries_uri() -> None:
-    rows: list[ResultRow] = [{"root": Binding(DOC + "u1", True), "col_chat": Binding(DOC + "c1", True)}]
+    rows: list[ResultRow] = [
+        {"root": Binding(DOC + "u1", True), "col_chat": Binding(DOC + "c1", True)}
+    ]
     store = _FakeStore(rows, total=1)
     service = _service(store)
     from naas_abi.apps.nexus.apps.api.app.services.graph.query.query__schema import Hop, NodeSource
@@ -124,7 +129,9 @@ def test_node_cell_carries_uri() -> None:
     spec = ListSpec(
         graph_uris=(G,),
         root=ClassAnchor((DOC + "User",)),
-        columns=(Column("chat", "iri", NodeSource(path=(Hop(DOC + "hasChat", "out"),), show="uri")),),
+        columns=(
+            Column("chat", "iri", NodeSource(path=(Hop(DOC + "hasChat", "out"),), show="uri")),
+        ),
     )
     result = asyncio.run(service.run_query(spec=spec, workspace_id="ws1", limit=10))
     assert result.rows[0]["chat"].value == DOC + "c1"
@@ -164,8 +171,12 @@ class _DictCache:
 
 def _cached_service(store: IGraphQueryStore, cache: _DictCache) -> GraphQueryService:
     return GraphQueryService(
-        store, owned_graphs=lambda _ws: {G}, system_graphs=set(),
-        count_cache=cache, page_cache=cache, now=lambda: "2026-06-16T00:00:00+00:00",
+        store,
+        owned_graphs=lambda _ws: {G},
+        system_graphs=set(),
+        count_cache=cache,
+        page_cache=cache,
+        now=lambda: "2026-06-16T00:00:00+00:00",
     )
 
 
@@ -185,7 +196,7 @@ def test_force_refresh_bypasses_cache() -> None:
     asyncio.run(service.run_query(spec=_spec(), workspace_id="ws1", limit=10))
     asyncio.run(service.run_query(spec=_spec(), workspace_id="ws1", limit=10, force_refresh=True))
     assert store.select_calls == 2  # force_refresh re-runs the page SPARQL…
-    assert store.count_calls == 2   # …and re-runs the count
+    assert store.count_calls == 2  # …and re-runs the count
 
 
 def test_no_cache_by_default_recomputes_every_time() -> None:
@@ -211,13 +222,20 @@ def test_column_discovery_is_cached() -> None:
     store = _CountingStore([], total=0)
     cache = _DictCache()
     service = GraphQueryService(
-        store, owned_graphs=lambda _ws: {G}, system_graphs=set(),
-        columns_cache=cache, now=lambda: "2026-06-16T00:00:00+00:00",
+        store,
+        owned_graphs=lambda _ws: {G},
+        system_graphs=set(),
+        columns_cache=cache,
+        now=lambda: "2026-06-16T00:00:00+00:00",
     )
-    cols1 = asyncio.run(service.discover_columns(workspace_id="ws1", graph_uris=[G], class_uris=[DOC + "User"]))
+    cols1 = asyncio.run(
+        service.discover_columns(workspace_id="ws1", graph_uris=[G], class_uris=[DOC + "User"])
+    )
     first = store.select_calls
     assert first > 0  # discovery ran its SPARQL the first time
-    cols2 = asyncio.run(service.discover_columns(workspace_id="ws1", graph_uris=[G], class_uris=[DOC + "User"]))
+    cols2 = asyncio.run(
+        service.discover_columns(workspace_id="ws1", graph_uris=[G], class_uris=[DOC + "User"])
+    )
     assert store.select_calls == first  # 2nd call served entirely from cache
     assert cols1 == cols2
 
@@ -234,10 +252,20 @@ def test_columns_cache_roundtrip_preserves_target_classes() -> None:
 
     cols = (
         DiscoveredColumn(
-            id="extracted_from_chunk", predicate_uri=DOC + "extracted_from_chunk", label="from chunk",
-            kind="relation", direction="out", datatype="iri", datatype_source="ontology-range",
-            source="data", instance_count=42, is_functional=True, facetable=False,
-            target_classes=(TargetClassData(uri=DOC + "Chunk", label="Chunk", instance_count=42, graph=G),),
+            id="extracted_from_chunk",
+            predicate_uri=DOC + "extracted_from_chunk",
+            label="from chunk",
+            kind="relation",
+            direction="out",
+            datatype="iri",
+            datatype_source="ontology-range",
+            source="data",
+            instance_count=42,
+            is_functional=True,
+            facetable=False,
+            target_classes=(
+                TargetClassData(uri=DOC + "Chunk", label="Chunk", instance_count=42, graph=G),
+            ),
         ),
     )
     assert _columns_from_cache(_columns_to_cache(cols)) == cols  # exact round-trip through JSON

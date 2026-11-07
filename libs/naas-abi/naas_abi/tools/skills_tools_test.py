@@ -6,9 +6,10 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from naas_abi_core.services.agent.context import agent_user_id, agent_workspace_id
+from naas_abi_core.services.agent.context import agent_container, agent_user_id
 
 from naas_abi.agents.feature.context import nexus_feature_context
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from naas_abi.apps.nexus.apps.api.app.services.skills.port import SkillRecord
 from naas_abi.tools import skills_tools as tools_module
 
@@ -45,8 +46,7 @@ class _FakeSkillsService:
         del context, workspace_id
         return list(self.skills)
 
-    async def create_skill(self, context, data):
-        del context
+    async def create_skill(self, data):
         self.created.append(data)
         return _skill(
             "skill-new",
@@ -86,12 +86,11 @@ def skills(monkeypatch) -> dict[str, Any]:
 
         return asyncio.run(fn(object()))
 
-    async def _require_member(db, user_id, workspace_id):
-        del db, user_id, workspace_id
-        return "owner"
+    async def _allowed(user_id, workspace_id, action, **_):
+        del user_id, workspace_id, action
 
     monkeypatch.setattr(tools_module, "run_db", _run_db)
-    monkeypatch.setattr(tools_module, "require_member", _require_member)
+    monkeypatch.setattr(tools_module, "require_action", _allowed)
     monkeypatch.setattr(tools_module, "request_context", lambda user_id: user_id)
     monkeypatch.setattr(
         tools_module, "bound_session", lambda db: contextlib.nullcontext()
@@ -102,7 +101,7 @@ def skills(monkeypatch) -> dict[str, Any]:
 
     tokens = [
         agent_user_id.set("user-1"),
-        agent_workspace_id.set("ws-1"),
+        agent_container.set(workspace_container(None, "ws-1")),
         nexus_feature_context.set(None),
     ]
     yield {
@@ -110,7 +109,7 @@ def skills(monkeypatch) -> dict[str, Any]:
         "tools": {t.name: t for t in tools_module.skills_tools()},
     }
     agent_user_id.reset(tokens[0])
-    agent_workspace_id.reset(tokens[1])
+    agent_container.reset(tokens[1])
     nexus_feature_context.reset(tokens[2])
 
 
@@ -225,3 +224,20 @@ def test_write_tools_are_the_ones_the_web_refreshes_on() -> None:
     block = web.read_text(encoding="utf-8").split("SKILL_WRITE_TOOLS = [", 1)[1]
     listed = set(block.split("]", 1)[0].replace("'", "").replace(" ", "").split(","))
     assert listed - {""} == set(tools_module.SKILL_WRITE_TOOLS)
+
+
+def test_a_refusal_of_iam_stops_every_tool(skills, monkeypatch) -> None:
+    asked: list[str] = []
+
+    async def refuse(user_id, workspace_id, action, **_):
+        asked.append(action)
+        return {"error": "You do not have access to this in this workspace."}
+
+    monkeypatch.setattr(tools_module, "require_action", refuse)
+    tools = skills["tools"]
+    assert "error" in tools["list_workspace_skills"].invoke({})
+    assert "error" in tools["create_skill"].invoke(
+        {"name": "Report", "prompt": "Run it."}
+    )
+    assert skills["service"].created == []
+    assert asked == ["ListSkills", "CreateSkill"]

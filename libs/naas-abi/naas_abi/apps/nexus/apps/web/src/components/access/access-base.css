@@ -1,0 +1,159 @@
+/* components/access — the base of every Roles & permissions section: tables, buttons, inputs, notes.
+   Self-contained, so the module renders the same in Platform, Organization and Workspace settings. */
+
+.access-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+}
+
+.access-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+  color: var(--foreground-hex);
+}
+
+.access-table th {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-hex);
+  background-color: var(--muted-bg-hex);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  text-align: left;
+  white-space: nowrap;
+  color: var(--muted-foreground-hex);
+}
+
+.access-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-hex);
+  vertical-align: top;
+}
+
+.access-table-row:last-child td {
+  border-bottom: none;
+}
+
+.access-table-detail > td {
+  padding: var(--space-3) var(--space-4) var(--space-4) var(--space-8);
+  background-color: var(--muted-bg-hex);
+}
+
+.access-table-nested {
+  border: 1px solid var(--border-hex);
+  background-color: var(--card-hex);
+}
+
+.access-num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.access-table th.access-num {
+  text-align: right;
+}
+
+.access-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--font-size-xs);
+  word-break: break-all;
+}
+
+.access-row-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  color: var(--foreground-hex);
+  cursor: pointer;
+}
+
+.access-row-toggle:disabled {
+  cursor: default;
+}
+
+.access-row-toggle-icon {
+  display: inline-flex;
+  width: 14px;
+  color: var(--muted-foreground-hex);
+}
+
+.access-source-note {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-hex);
+  border-left: 3px solid #D97706;
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--muted-bg-hex);
+  font-size: var(--font-size-sm);
+  color: var(--foreground-hex);
+}
+
+.access-button {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--card-hex);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--foreground-hex);
+  cursor: pointer;
+}
+
+.access-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.access-button-primary {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary);
+  color: var(--color-primary-foreground);
+}
+
+.access-button-primary:hover {
+  background-color: var(--color-primary-hover);
+}
+
+.access-input {
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--input-bg-hex);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--foreground-hex);
+  outline: none;
+}
+
+.access-input:focus {
+  box-shadow: var(--shadow-focus);
+}
+
+.access-input-grow {
+  flex: 1;
+  min-width: 220px;
+}
+
+.access-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+  color: var(--foreground-hex);
+}
+
+.access-empty {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--muted-foreground-hex);
+}
+
+.access-empty-cell {
+  color: var(--muted-foreground-hex);
+}

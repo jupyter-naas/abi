@@ -18,6 +18,12 @@ from types import SimpleNamespace
 import pytest
 
 pytest.importorskip("naas_abi_sdk")
+pytest.skip(
+    "written for tokens signed with a shared secret and a revocation table: Nexus now holds the "
+    "engine's credentials (``engine_credentials``) and grants are IAM's (``apps/links.py``); "
+    "http_routes_test.py covers the routes and sdk/tests/test_app_host.py the transport",
+    allow_module_level=True,
+)
 from fastapi import FastAPI, Request  # noqa: E402
 from fastapi.responses import StreamingResponse  # noqa: E402
 from naas_abi_core.engine.nats_test_server import (  # noqa: E402

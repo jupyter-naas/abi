@@ -1,0 +1,43 @@
+"""secret's action catalog and its seals.
+
+One ``secret/<key>`` per key, opaque, placed by key prefix. ``idp/`` keys are
+the built-in IdP's and ``iam/`` keys the engine's, sealed in code: no policy
+opens them to anyone else, wherever a placement puts them.
+"""
+
+from __future__ import annotations
+
+from naas_abi_core.services.iam.catalog import (
+    ActionCatalog,
+    ResourceType,
+    service_action,
+)
+from naas_abi_core.services.iam.IAMPorts import Seal
+from naas_abi_core.services.iam.names import anywhere
+
+SERVICE = "secret"
+SUBJECT_PREFIX = "abi.svc.secret.v1"
+SECRET = "secret"
+
+
+def _subject(name: str) -> str:
+    return f"{SUBJECT_PREFIX}.{name}"
+
+
+CATALOG = ActionCatalog(
+    service=SERVICE,
+    version=1,
+    resource_types=(ResourceType(SECRET, id="opaque", description="A secret key."),),
+    actions=(
+        service_action("List", "list", (SECRET,), _subject("list")),
+        service_action("Get", "read", (SECRET,), _subject("get")),
+        service_action("Set", "write", (SECRET,), _subject("set")),
+        service_action("Remove", "write", (SECRET,), _subject("remove")),
+    ),
+)
+
+SEALS: tuple[Seal, ...] = (
+    # Sealed at any placement: the platform's and every container's.
+    *(Seal(p, "idp", module_id="idp") for p in anywhere("secret:secret/idp%2F*")),
+    *(Seal(p, "engine") for p in anywhere("secret:secret/iam%2F*")),
+)

@@ -1,14 +1,17 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { PLATFORM_TABLE_SLUGS } from './app/settings/lib/tables';
+import { isPlatformSettingsPath, platformSettingsRedirect } from './app/settings/lib/redirects';
+import { orgSettingsRedirect } from './app/organizations/[orgId]/settings/lib/redirects';
+import { VIEW_FLAG_COOKIE, parseViewFlag } from './lib/view-flag';
 
 /**
  * Route protection, legacy redirects, and org-scoped routing.
  *
  * Routing hierarchy:
  *   /account/*                        -> authed
- *   /settings, /settings/<table slug> -> authed, Platform Settings (superadmins)
- *   /organizations/[orgId]/settings   -> authed
+ *   /settings, /settings/{tables,system,roles}/... -> authed, Platform Settings
+ *   /settings/<table>, /settings/modules, /workspace/[id]/admin/{system,events} -> redirected there (old links)
+ *   /organizations/[orgId]/settings   -> authed (/settings/{access,modules} -> /settings/roles)
  *   /org/[orgSlug]/login              -> public, org-branded login
  *   /org/[orgSlug]/workspace/[id]/... -> authed, rewritten to /workspace/[id]/...
  *   /auth/login                       -> public
@@ -22,38 +25,48 @@ import { PLATFORM_TABLE_SLUGS } from './app/settings/lib/tables';
 
 const CONFIGURED_DEFAULT = process.env.DEFAULT_WORKSPACE || 'primary';
 
+/** The flag of a running view ("View as"): the browser keeps nothing of it, and lands in its workspace. */
+function viewOf(request: NextRequest) {
+  return parseViewFlag(request.cookies.get(VIEW_FLAG_COOKIE)?.value);
+}
+
 function resolveDefaultWorkspace(request: NextRequest): string {
+  const view = viewOf(request);
+  if (view) return view.workspaceId || CONFIGURED_DEFAULT;
   return request.cookies.get('nexus-last-workspace')?.value || CONFIGURED_DEFAULT;
+}
+
+/** Remember the last workspace, except during a view: that cookie would outlive it. */
+function rememberWorkspace(request: NextRequest, workspaceId: string): NextResponse {
+  const res = NextResponse.next();
+  if (!viewOf(request)) {
+    res.cookies.set('nexus-last-workspace', workspaceId, { path: '/', maxAge: 60 * 60 * 24 * 30, sameSite: 'lax' });
+  }
+  return res;
 }
 
 const legacyRoutes = ['/home', '/maps', '/chat', '/search', '/lab', '/ontology', '/graph', '/apps', '/marketplace', '/help', '/files', '/settings'];
 
-// Platform Settings owns /settings (dashboard) and one page per table; any
-// other /settings/* path is a legacy workspace settings link and keeps redirecting.
-// Table slugs never reuse a legacy path (see platformTableSlug).
-const platformSettingsSections: readonly string[] = PLATFORM_TABLE_SLUGS;
+// Platform Settings owns /settings and its sections (Nexus tables, System, Roles &
+// permissions, isPlatformSettingsPath); old table pages and System links redirect
+// into them, and the legacy workspace settings links (/settings/members, ...) keep
+// redirecting to the workspace.
 
-function isPlatformSettingsRoute(pathname: string): boolean {
-  if (pathname === '/settings' || pathname === '/settings/') return true;
-  return platformSettingsSections.some(
-    (s) => pathname === `/settings/${s}` || pathname.startsWith(`/settings/${s}/`),
-  );
-}
-
-const authRoutes = [
-  '/auth/login',
-  '/auth/magic-link',
-  '/auth/register',
-  '/auth/forgot-password',
-  '/login',
-  '/register',
-];
+const authRoutes = ['/auth/login', '/login'];
 
 const orgWorkspaceRegex = /^\/org\/([^/]+)\/workspace\/([^/]+)(\/.*)?$/;
-const orgAuthRegex = /^\/org\/([^/]+)\/(login|register)(\/.*)?$/;
+const orgAuthRegex = /^\/org\/([^/]+)\/login(\/.*)?$/;
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Before the org rewrite: /org/<slug>/workspace/<id>/admin/system moved too.
+  const moved =
+    platformSettingsRedirect(pathname, request.nextUrl.search) ??
+    orgSettingsRedirect(pathname, request.nextUrl.search);
+  if (moved) {
+    return NextResponse.redirect(new URL(moved, request.url));
+  }
 
   if (pathname.match(orgAuthRegex)) {
     return NextResponse.next();
@@ -78,14 +91,14 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL(`/org/${orgSlug}/workspace`, request.url));
   }
 
-  if (pathname === '/login' || pathname === '/register') {
-    const newUrl = new URL(pathname === '/login' ? '/auth/login' : '/auth/register', request.url);
+  if (pathname === '/login') {
+    const newUrl = new URL('/auth/login', request.url);
     newUrl.search = request.nextUrl.search;
     return NextResponse.redirect(newUrl);
   }
 
   const isLegacyRoute =
-    !isPlatformSettingsRoute(pathname) &&
+    !isPlatformSettingsPath(pathname) &&
     legacyRoutes.some(r => pathname === r || pathname.startsWith(`${r}/`));
   if (isLegacyRoute) {
     const newUrl = new URL(`/workspace/${resolveDefaultWorkspace(request)}${pathname}`, request.url);
@@ -97,7 +110,7 @@ export function middleware(request: NextRequest) {
 
   // Custom Maps feeds are deployment-registered and may carry private data:
   // return 401 JSON (not a login redirect) when unauthenticated. Route handlers
-  // still require a real Bearer token; this blocks anonymous curl.
+  // still require a real session; this blocks anonymous curl.
   const isProtectedMapsApi = pathname.startsWith('/api/maps/custom/');
   if (isProtectedMapsApi && process.env.NODE_ENV !== 'development' && !hasAuthCookie) {
     return NextResponse.json(
@@ -117,7 +130,7 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/workspace/') ||
     pathname.startsWith('/organizations/') ||
     pathname.startsWith('/account/') ||
-    isPlatformSettingsRoute(pathname) ||
+    isPlatformSettingsPath(pathname) ||
     pathname === '/no-workspace' ||
     pathname.startsWith('/no-workspace/');
   const isAuthRoute = authRoutes.some(r => pathname === r || pathname.startsWith(`${r}/`));
@@ -126,11 +139,7 @@ export function middleware(request: NextRequest) {
   // production redirects work correctly after switching NODE_ENV.
   if (process.env.NODE_ENV === 'development') {
     const wsMatch = pathname.match(/^\/workspace\/([^/]+)/);
-    if (wsMatch) {
-      const res = NextResponse.next();
-      res.cookies.set('nexus-last-workspace', wsMatch[1], { path: '/', maxAge: 60 * 60 * 24 * 30, sameSite: 'lax' });
-      return res;
-    }
+    if (wsMatch) return rememberWorkspace(request, wsMatch[1]);
     return NextResponse.next();
   }
 
@@ -140,26 +149,12 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Let users finish magic-link confirmation even when a stale auth cookie exists.
-  // no-store also keeps the confirmation page out of shared and back/forward
-  // caches, so a resurrected copy can never replay an already-spent token.
-  const isMagicLinkRoute = pathname === '/auth/magic-link' || pathname.startsWith('/auth/magic-link/');
-  if (isMagicLinkRoute) {
-    const res = NextResponse.next();
-    res.headers.set('Cache-Control', 'no-store, must-revalidate');
-    return res;
-  }
-
   if (isAuthRoute && hasAuthCookie) {
     return NextResponse.redirect(new URL(`/workspace/${resolveDefaultWorkspace(request)}/chat`, request.url));
   }
 
   const wsMatch = pathname.match(/^\/workspace\/([^/]+)/);
-  if (wsMatch) {
-    const res = NextResponse.next();
-    res.cookies.set('nexus-last-workspace', wsMatch[1], { path: '/', maxAge: 60 * 60 * 24 * 30, sameSite: 'lax' });
-    return res;
-  }
+  if (wsMatch) return rememberWorkspace(request, wsMatch[1]);
 
   return NextResponse.next();
 }

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useTenant } from '@/contexts/tenant-context';
@@ -22,9 +22,8 @@ export default function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const {
-    login,
-    requestMagicLink,
-    verifyOtp,
+    routeLogin,
+    signInWithProvider,
     isLoading,
     error,
     clearError,
@@ -33,34 +32,33 @@ export default function LoginForm() {
   const tenant = useTenant();
 
   const [email, setEmail] = useState(searchParams.get('email') ?? '');
-  const [password, setPassword] = useState('');
-  const [otpCode, setOtpCode] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string; otp?: string }>({});
+  const [fieldError, setFieldError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
-  const [passwordAuthEnabled, setPasswordAuthEnabled] = useState<boolean | null>(() => {
-    if (typeof window === 'undefined') return null;
-    const cached = window.sessionStorage.getItem('nexus-password-auth-enabled');
-    if (cached === 'true') return true;
-    if (cached === 'false') return false;
-    return null;
-  });
-  const [codeSent, setCodeSent] = useState(false);
+  // The engine's identity providers: an email routes to one (its organization's
+  // verified domain, else the default), and each can be picked directly.
+  const [providers, setProviders] = useState<{ name: string; display_name: string }[]>([]);
+  const [defaultProvider, setDefaultProvider] = useState<string | null>(null);
+  const [providersLoaded, setProvidersLoaded] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
+  const ssoError = ssoErrorMessage(searchParams.get('sso_error'));
+  const nextPath = searchParams.get('redirect') ?? undefined;
+  // ?provider=<name> (an invitation's sign-in link): that provider, if configured.
+  const requestedProvider = searchParams.get('provider');
+  const linkedProvider =
+    requestedProvider && providers.some((p) => p.name === requestedProvider)
+      ? requestedProvider
+      : null;
 
   useEffect(() => {
     setMounted(true);
-    fetch(`${getApiUrl()}/api/auth/config`)
+    fetch(`${getApiUrl()}/api/auth/oidc/providers`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((d) => {
-        const enabled = Boolean(d.password_auth_enabled ?? false);
-        setPasswordAuthEnabled(enabled);
-        try {
-          window.sessionStorage.setItem('nexus-password-auth-enabled', String(enabled));
-        } catch {
-          // sessionStorage can be unavailable (private mode, SSR); ignore.
-        }
+        setProviders(Array.isArray(d.providers) ? d.providers : []);
+        setDefaultProvider(typeof d.default_provider === 'string' ? d.default_provider : null);
       })
-      .catch(() => setPasswordAuthEnabled((prev) => (prev === null ? false : prev)));
+      .catch(() => setProviders([]))
+      .finally(() => setProvidersLoaded(true));
   }, []);
 
   useEffect(() => {
@@ -73,53 +71,29 @@ export default function LoginForm() {
     e.preventDefault();
     clearError();
 
-    if (!passwordAuthEnabled && codeSent) {
-      const digits = otpCode.replace(/\D/g, '');
-      const errors: { otp?: string } = {};
-      if (digits.length !== 6) {
-        errors.otp = 'Enter the 6-digit code from your email';
-      }
-      setFieldErrors(errors);
-      if (Object.keys(errors).length > 0) return;
-
-      const workspaceId = await verifyOtp(email, digits);
-      if (workspaceId) {
-        router.push(`/workspace/${workspaceId}/chat`);
-      } else if (!useAuthStore.getState().error) {
-        router.push('/no-workspace');
-      }
+    const address = email.trim();
+    if (!address) {
+      setFieldError('Email is required');
       return;
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
+      setFieldError('Enter a valid email address');
+      return;
+    }
+    setFieldError(null);
 
-    const errors: { email?: string; password?: string } = {};
-    if (!email.trim()) {
-      errors.email = 'Email is required';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      errors.email = 'Enter a valid email address';
+    // An invitation's link names the provider: no routing by domain then. Else
+    // the organization's verified domain routes, else the default provider.
+    const provider = linkedProvider ?? (await routeLogin(address)) ?? defaultProvider;
+    if (!provider) {
+      setFieldError('Choose how to sign in with one of the providers below.');
+      return;
     }
-    if (passwordAuthEnabled && !password) {
-      errors.password = 'Password is required';
-    }
-    setFieldErrors(errors);
-    if (Object.keys(errors).length > 0) return;
-
-    if (passwordAuthEnabled) {
-      const workspaceId = await login(email, password);
-      if (workspaceId) {
-        router.push(`/workspace/${workspaceId}/chat`);
-      } else if (!useAuthStore.getState().error) {
-        router.push('/no-workspace');
-      }
-    } else {
-      const success = await requestMagicLink(email);
-      if (success) {
-        setCodeSent(true);
-        setOtpCode('');
-      }
-    }
+    setRedirecting(true);
+    signInWithProvider({ provider, email: address, next: nextPath });
   };
 
-  if (!mounted || passwordAuthEnabled === null) {
+  if (!mounted || !providersLoaded) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -211,6 +185,16 @@ export default function LoginForm() {
           <TypingWelcome textColor={textColor} mutedColor={mutedTextColor} />
         </div>
 
+        {ssoError && !error && (
+          <div
+            className="mb-6 flex items-center gap-2 bg-destructive/10 p-3 text-sm text-destructive"
+            style={{ borderRadius: cardRadius }}
+          >
+            <AlertCircle size={16} />
+            <span>{ssoError}</span>
+          </div>
+        )}
+
         {error && (
           <div
             className="mb-6 flex items-center gap-2 bg-destructive/10 p-3 text-sm text-destructive"
@@ -221,6 +205,15 @@ export default function LoginForm() {
           </div>
         )}
 
+        {providers.length === 0 ? (
+          <div
+            className="flex items-center gap-2 bg-destructive/10 p-3 text-sm text-destructive"
+            style={{ borderRadius: cardRadius }}
+          >
+            <AlertCircle size={16} />
+            <span>No identity provider is configured. Ask an administrator to set one up.</span>
+          </div>
+        ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <label
@@ -236,147 +229,35 @@ export default function LoginForm() {
               value={email}
               onChange={(e) => {
                 setEmail(e.target.value);
-                if (fieldErrors.email) setFieldErrors((fe) => ({ ...fe, email: undefined }));
+                if (fieldError) setFieldError(null);
               }}
               placeholder="you@example.com"
               required
-              disabled={isLoading || (!passwordAuthEnabled && codeSent)}
+              disabled={isLoading || redirecting}
               className={cn(
                 'flex h-11 w-full px-4 py-2 text-sm',
                 'focus:outline-none focus:ring-2 focus:ring-primary/20',
                 'disabled:cursor-not-allowed disabled:opacity-50'
               )}
-              aria-invalid={!!fieldErrors.email}
-              aria-describedby={fieldErrors.email ? 'email-error' : undefined}
+              aria-invalid={!!fieldError}
+              aria-describedby={fieldError ? 'email-error' : undefined}
               style={{
                 ...inputStyle,
-                ...(fieldErrors.email
+                ...(fieldError
                   ? { border: '1px solid #ef4444', backgroundColor: '#fee2e2' }
                   : {}),
               }}
             />
-            {fieldErrors.email && (
+            {fieldError && (
               <p id="email-error" className="text-xs text-destructive">
-                {fieldErrors.email}
+                {fieldError}
               </p>
             )}
           </div>
 
-          {passwordAuthEnabled && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label htmlFor="password" className="text-sm font-medium" style={{ color: textColor }}>
-                  Password
-                </label>
-                <Link href="/auth/forgot-password" className="text-sm hover:underline" style={{ color: primaryColor }}>
-                  Forgot password?
-                </Link>
-              </div>
-              <div className="relative">
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    if (fieldErrors.password) setFieldErrors((fe) => ({ ...fe, password: undefined }));
-                  }}
-                  placeholder="Enter your password"
-                  required
-                  disabled={isLoading}
-                  className={cn(
-                    'flex h-11 w-full px-4 py-2 pr-10 text-sm',
-                    'focus:outline-none focus:ring-2 focus:ring-primary/20',
-                    'disabled:cursor-not-allowed disabled:opacity-50'
-                  )}
-                  aria-invalid={!!fieldErrors.password}
-                  aria-describedby={fieldErrors.password ? 'password-error' : undefined}
-                  style={{
-                    ...inputStyle,
-                    ...(fieldErrors.password ? { border: '1px solid #ef4444', backgroundColor: '#fee2e2' } : {}),
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2"
-                  style={{ color: mutedTextColor }}
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-              {fieldErrors.password && (
-                <p id="password-error" className="text-xs text-destructive">{fieldErrors.password}</p>
-              )}
-            </div>
-          )}
-
-          {!passwordAuthEnabled && codeSent && (
-            <div className="space-y-2">
-              <p className="text-sm" style={{ color: mutedTextColor }}>
-                If an account exists for <strong style={{ color: textColor }}>{email}</strong>, enter
-                the 6-digit code from your email. You can also use the magic link in that email.
-              </p>
-              <label
-                htmlFor="otp"
-                className="text-sm font-medium"
-                style={{ color: textColor }}
-              >
-                Sign-in code
-              </label>
-              <input
-                id="otp"
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                pattern="[0-9]*"
-                maxLength={6}
-                value={otpCode}
-                onChange={(e) => {
-                  setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6));
-                  if (fieldErrors.otp) setFieldErrors((fe) => ({ ...fe, otp: undefined }));
-                }}
-                placeholder="123456"
-                required
-                disabled={isLoading}
-                className={cn(
-                  'flex h-11 w-full px-4 py-2 text-center text-lg tracking-[0.35em]',
-                  'focus:outline-none focus:ring-2 focus:ring-primary/20',
-                  'disabled:cursor-not-allowed disabled:opacity-50'
-                )}
-                aria-invalid={!!fieldErrors.otp}
-                aria-describedby={fieldErrors.otp ? 'otp-error' : undefined}
-                style={{
-                  ...inputStyle,
-                  ...(fieldErrors.otp
-                    ? { border: '1px solid #ef4444', backgroundColor: '#fee2e2' }
-                    : {}),
-                }}
-              />
-              {fieldErrors.otp && (
-                <p id="otp-error" className="text-xs text-destructive">
-                  {fieldErrors.otp}
-                </p>
-              )}
-              <button
-                type="button"
-                className="text-sm hover:underline"
-                style={{ color: primaryColor }}
-                disabled={isLoading}
-                onClick={() => {
-                  clearError();
-                  setCodeSent(false);
-                  setOtpCode('');
-                  setFieldErrors({});
-                }}
-              >
-                Use a different email
-              </button>
-            </div>
-          )}
-
           <button
             type="submit"
+            disabled={redirecting}
             className={cn(
               'flex h-11 w-full items-center justify-center px-4 text-sm font-medium text-white',
               'transition-all',
@@ -387,27 +268,45 @@ export default function LoginForm() {
               borderRadius: buttonRadius,
               '--tw-ring-color': primaryColor,
             } as React.CSSProperties}
-            onMouseEnter={(e) => { if (!isLoading) e.currentTarget.style.backgroundColor = accentColor; }}
+            onMouseEnter={(e) => { if (!redirecting) e.currentTarget.style.backgroundColor = accentColor; }}
             onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = primaryColor; }}
           >
-            {isLoading ? (
+            {redirecting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {passwordAuthEnabled
-                  ? 'Signing in...'
-                  : codeSent
-                    ? 'Verifying...'
-                    : 'Sending code...'}
+                Redirecting...
               </>
-            ) : passwordAuthEnabled ? (
-              'Sign in'
-            ) : codeSent ? (
-              'Verify code'
             ) : (
-              'Send sign-in code'
+              'Continue'
             )}
           </button>
         </form>
+        )}
+
+        {providers.length > 0 && (
+          <div className="mt-6 space-y-3">
+            <div className="flex items-center gap-3 text-xs" style={{ color: mutedTextColor }}>
+              <span className="h-px flex-1" style={{ backgroundColor: mutedTextColor, opacity: 0.3 }} />
+              or
+              <span className="h-px flex-1" style={{ backgroundColor: mutedTextColor, opacity: 0.3 }} />
+            </div>
+            {providers.map((provider) => (
+              <button
+                key={provider.name}
+                type="button"
+                disabled={redirecting}
+                onClick={() => {
+                  setRedirecting(true);
+                  signInWithProvider({ provider: provider.name, email: email.trim() || undefined, next: nextPath });
+                }}
+                className="flex h-11 w-full items-center justify-center px-4 text-sm font-medium transition-all disabled:opacity-50"
+                style={{ borderRadius: buttonRadius, border: `1px solid ${mutedTextColor}`, color: textColor }}
+              >
+                Continue with {provider.display_name}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       {tenant.show_terms_footer && (
         <p className="mt-8 text-center text-caption" style={{ color: subtitleColor }}>
@@ -433,6 +332,35 @@ export default function LoginForm() {
       )}
     </div>
   );
+}
+
+/** What the login page shows for an identity provider's sign-in that failed. */
+export function ssoErrorMessage(code: string | null): string | null {
+  if (!code) return null;
+  switch (code) {
+    case 'email_in_use':
+      return 'This email already belongs to another account. Ask an administrator to link them.';
+    case 'suspended':
+      return 'This account is suspended.';
+    case 'expired_request':
+      return 'The sign-in expired. Please try again.';
+    case 'browser_mismatch':
+      return 'The sign-in was started in another browser. Please try again here.';
+    case 'provider_unavailable':
+      return 'The identity provider cannot be reached right now.';
+    case 'no_provider':
+      return 'No identity provider is configured.';
+    case 'unknown_provider':
+      return 'That identity provider is not configured.';
+    case 'token_rejected':
+      return 'The identity provider\'s sign-in could not be verified. Please try again.';
+    case 'sign_in_failed':
+      return 'The sign-in failed. Please try again.';
+    case 'access_denied':
+      return 'The sign-in was cancelled.';
+    default:
+      return 'The sign-in failed. Please try again.';
+  }
 }
 
 const TYPING_WELCOME_PHRASES = [

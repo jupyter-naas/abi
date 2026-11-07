@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from naas_abi_proto.app.v1 import app_pb2 as pb
+from naas_abi_proto.common.v1 import common_pb2
 from naas_abi_proto.discovery.v1 import discovery_pb2 as discovery_pb
 
 from naas_abi_sdk.app_host import AppHost, app_subject
@@ -16,6 +17,8 @@ from naas_abi_sdk.apps import AppDescriptor, discover_apps, read_app
 from naas_abi_sdk.discovery import module_descriptor
 from naas_abi_sdk.module import BaseModule
 from naas_abi_sdk.transport import RPCError
+
+WS = "abi:nexus:organization/o-1/nexus:workspace/ws-1"
 
 
 def _site(tmp_path, name="console", manifest=None):
@@ -57,14 +60,21 @@ class FakeMsg:
         return pb.HttpResponse.FromString(self.sent[-1])
 
 
-def _session(caller="api"):
+def _session():
     call = AsyncMock(
-        return_value=discovery_pb.AuthorizeAppResponse(caller_identity=caller)
+        return_value=discovery_pb.AuthorizeAppResponse(
+            caller_identity="u-7",
+            caller_user_id="u-7",
+            caller_principal_id="sa_api",
+            caller_principal_kind="service_account",
+            caller_principal_name="api",
+        )
     )
     # The host reads the broker's limit to decide what travels inline.
     nc = SimpleNamespace(max_payload=8 * 1024 * 1024)
     return SimpleNamespace(
         instance_id="i-1",
+        service_account="sa1",
         lease_token="l" * 32,
         client=SimpleNamespace(
             _call=call,
@@ -74,9 +84,9 @@ def _session(caller="api"):
     )
 
 
-def _host(tmp_path, asgi=None, caller="api"):
+def _host(tmp_path, asgi=None):
     descriptor = read_app(_site(tmp_path))
-    return AppHost(_session(caller), {"console": (descriptor, asgi)})
+    return AppHost(_session(), {"console": (descriptor, asgi)})
 
 
 def _request(path="/", method="GET", **fields):
@@ -100,7 +110,10 @@ def _headers(response) -> dict[str, str]:
 
 
 def test_the_subject_is_instance_addressed():
-    assert app_subject("acme", "i-1", "console") == "abi.mod.acme.i-1.app.console.http"
+    assert (
+        app_subject("acme", "sa1", "i-1", "console")
+        == "abi.mod.acme.sa1.i-1.app.console.http"
+    )
 
 
 # -- static files -------------------------------------------------------------------
@@ -168,6 +181,7 @@ def test_a_fastapi_backend_answers_other_paths(tmp_path):
     async def whoami(request: fastapi.Request):
         return {
             "user": request.scope["abi"]["user_id"],
+            "principal": request.scope["abi"]["principal"],
             "q": request.query_params.get("q"),
             "url": str(request.url_for("whoami")),
         }
@@ -178,12 +192,27 @@ def test_a_fastapi_backend_answers_other_paths(tmp_path):
 
     async def scenario():
         host = _host(tmp_path, app)
+        # The request's user_id is data: the app sees the user discovery verified.
         response = await _send(
-            host, _request("/api/whoami", query="q=1", user_id="u-7")
+            host,
+            _request(
+                "/api/whoami",
+                query="q=1",
+                user_id="forged",
+                principal_id="forged",
+                principal_kind="user",
+                principal_name="api",
+            ),
         )
         assert response.status == 200, response.body
         body = json.loads(response.body)
         assert body["user"] == "u-7" and body["q"] == "1"
+        # So is the actor: the account that holds the credential.
+        assert body["principal"] == {
+            "id": "sa_api",
+            "kind": "service_account",
+            "name": "api",
+        }
         # URLs the app generates point back through Nexus.
         assert body["url"].endswith("/app-html/remote/acme.research/console/api/whoami")
         posted = _request("/api/echo", method="POST", body=b'{"a": 1}')
@@ -198,8 +227,9 @@ def test_a_fastapi_backend_answers_other_paths(tmp_path):
     asyncio.run(scenario())
 
 
-def test_only_nexus_calls_an_app_on_behalf_of_a_user(tmp_path):
-    """A module may call another module's app, but never as a user (A8)."""
+def test_the_app_sees_the_verified_user_and_container(tmp_path):
+    """The user and the actor are discovery's; the container (and the Nexus
+    workspace id) is kept only for a verified user."""
     fastapi = pytest.importorskip("fastapi")
     app = fastapi.FastAPI()
 
@@ -208,27 +238,50 @@ def test_only_nexus_calls_an_app_on_behalf_of_a_user(tmp_path):
         return request.scope["abi"]
 
     async def scenario():
-        nexus = _host(tmp_path / "nexus", app)
+        host = _host(tmp_path / "user", app)
         answered = await _send(
-            nexus, _request("/api/whoami", user_id="u-7", workspace_id="ws-1")
+            host,
+            _request(
+                "/api/whoami",
+                user_id="forged",
+                workspace_id="ws-1",
+                context=common_pb2.CallContext(container=WS),
+            ),
         )
         assert json.loads(answered.body) == {
             "user_id": "u-7",
+            "container": WS,
             "workspace_id": "ws-1",
-            "caller": "api",
+            "principal": {
+                "id": "sa_api",
+                "kind": "service_account",
+                "name": "api",
+            },
         }
-        module = _host(tmp_path / "module", app, caller="acme.billing")
-        forged = await _send(module, _request("/api/whoami", user_id="u-7"))
-        assert forged.error.code == "PERMISSION_DENIED"
-        # A15: nor in a workspace.
-        placed = await _send(module, _request("/api/whoami", workspace_id="ws-1"))
-        assert placed.error.code == "PERMISSION_DENIED"
-        assert "acme.billing" in forged.error.message
-        anonymous = await _send(module, _request("/api/whoami"))
+        module = _host(tmp_path / "module", app)
+        module.session.client._call.return_value = discovery_pb.AuthorizeAppResponse(
+            caller_principal_id="sa_billing",
+            caller_principal_kind="service_account",
+            caller_principal_name="module/acme/acme.billing",
+        )
+        anonymous = await _send(
+            module,
+            _request(
+                "/api/whoami",
+                user_id="u-7",
+                workspace_id="ws-1",
+                context=common_pb2.CallContext(container=WS),
+            ),
+        )
         assert json.loads(anonymous.body) == {
             "user_id": "",
+            "container": "",
             "workspace_id": "",
-            "caller": "acme.billing",
+            "principal": {
+                "id": "sa_billing",
+                "kind": "service_account",
+                "name": "module/acme/acme.billing",
+            },
         }
 
     asyncio.run(scenario())
@@ -307,7 +360,9 @@ def test_lifespan_runs_startup_and_shutdown(tmp_path):
             connect=AsyncMock(return_value=nc)
         )
         await host.start()
-        assert nc.subscribe.await_args.args[0] == "abi.mod.acme.i-1.app.console.http"
+        assert (
+            nc.subscribe.await_args.args[0] == "abi.mod.acme.sa1.i-1.app.console.http"
+        )
         await host.close()
 
     asyncio.run(scenario())

@@ -34,6 +34,7 @@ async def stream_with_remote_agent(
     user_context_preamble: str | None,
     invocation_id: str | None,
     directory: RemoteAgentDirectory | None = None,
+    workspace_id: str | None = None,
 ) -> AsyncGenerator[str | dict[str, Any], None]:
     """Same prompt and event contract as ``stream_with_abi_inprocess``.
 
@@ -52,6 +53,7 @@ async def stream_with_remote_agent(
             user_context_preamble=user_context_preamble,
             invocation_id=invocation_id,
             directory=directory,
+            workspace_id=workspace_id,
         ):
             yield chunk
     except NoUserMessage:
@@ -68,6 +70,7 @@ async def remote_agent_chunks(
     user_context_preamble: str | None,
     invocation_id: str | None,
     directory: RemoteAgentDirectory | None = None,
+    workspace_id: str | None = None,
 ) -> AsyncGenerator[str | dict[str, Any], None]:
     """The turn's text and step chunks. Raises ``NoUserMessage``, and
     ``RemoteAgentUnavailable`` when no module serves the agent or its run
@@ -90,7 +93,11 @@ async def remote_agent_chunks(
     final_replay: list[str] = []
     try:
         async for event in directory.stream(
-            config.model, prompt, thread_id=thread_id, invocation_id=invocation_id
+            config.model,
+            prompt,
+            thread_id=thread_id,
+            invocation_id=invocation_id,
+            workspace_id=workspace_id,
         ):
             name, text = event.get("event", ""), str(event.get("data") or "")
             if name == "done" or text == "[DONE]":

@@ -656,7 +656,7 @@ def test_load_schema_content_publishes_loaded_and_error_events():
             SimpleNamespace(
                 bus=_FakeBus(),
                 events_available=lambda: True,
-                events=SimpleNamespace(publish=events.append),
+                events=SimpleNamespace(emit=events.append),
             ),
         )
     )

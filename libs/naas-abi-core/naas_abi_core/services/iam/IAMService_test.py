@@ -1,0 +1,1798 @@
+"""IAMService: its own operations, authorized with ``iam:*``, caching and boot."""
+
+from __future__ import annotations
+
+import time
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
+
+import pytest
+
+from naas_abi_core.engine.call_context import as_service_account
+from naas_abi_core.services.iam import grants, roles
+from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import IAMStoreMemory
+from naas_abi_core.services.iam.catalog import ActionCatalog, ActionSpec, ResourceType
+from naas_abi_core.services.iam.IAMPorts import (
+    IAMConflictError,
+    IAMNotFoundError,
+    KeyRefusedError,
+    PermissionDeniedError,
+    ResourceNotFoundError,
+    RevisionConflictError,
+)
+from naas_abi_core.services.iam.IAMService import (
+    LEGACY_NEXUS_ISSUER,
+    IAMService,
+    attachment_resource,
+)
+from naas_abi_core.services.iam.names import PLATFORM, UNRESOLVED, anywhere
+from naas_abi_core.services.iam.policy import (
+    PolicyValidationError,
+    parse_policy_document,
+)
+from naas_abi_core.services.iam.tests.iam_harness import (
+    TRIPLE_STORE,
+    below,
+    document,
+    graph,
+    org,
+    statement,
+    workspace,
+)
+
+QUERY = "triple_store:Query"
+WS = workspace("ws-1")
+WS_2 = workspace("ws-2")
+
+
+# -- boot ---------------------------------------------------------------------------
+
+
+def test_bootstrap_is_idempotent_and_seeds_the_root_of_trust():
+    store = IAMStoreMemory()
+    service = IAMService(store)
+    service.bootstrap()
+    revision = store.revision()
+    service.bootstrap()
+    assert store.revision() == revision
+    for name, policy_id in roles.SERVICE_ACCOUNTS.items():
+        account = store.find_service_account(name)
+        assert account is not None
+        assert [
+            a.policy_id for a in store.list_attachments(principal_id=account.id)
+        ] == [policy_id]
+    managed = {p.id for p in store.list_policies(limit=1000).items}
+    assert {
+        roles.VIEWER,
+        roles.MEMBER,
+        roles.ADMIN,
+        roles.OWNER,
+        roles.PLATFORM_ADMIN,
+        roles.SELF,
+        roles.PLATFORM_VIEWER,
+        roles.PLATFORM_MEMBER,
+        roles.ENGINE,
+        roles.API,
+        roles.IDP,
+        roles.MODULE_BOOTSTRAP,
+    } <= managed
+    assert [c.service for c in store.list_catalogs()] == ["iam"]
+
+
+def test_nothing_is_allowed_before_bootstrap():
+    service = IAMService(IAMStoreMemory())
+    with as_service_account("engine"):
+        assert not service.authorize(QUERY, graph("a")).allowed
+        with pytest.raises(IAMNotFoundError):
+            service.create_policy("p", document(statement("Allow", ["iam:*"], ["*"])))
+
+
+def test_built_in_service_accounts_stay_active(h):
+    engine = h.iam.store.find_service_account("engine")
+    with as_service_account("engine"), pytest.raises(IAMConflictError):
+        h.iam.suspend_principal(engine.id)
+
+
+# -- IAM authorizes itself ------------------------------------------------------------
+
+
+def test_iam_operations_need_iam_actions(h):
+    bob = h.user()
+    doc = document(statement("Allow", [QUERY], ["*"]))
+    with h.as_(bob):
+        with pytest.raises(IAMNotFoundError):
+            h.iam.create_policy("mine", doc)
+        with pytest.raises(IAMNotFoundError):
+            h.iam.attach_policy(roles.PLATFORM_ADMIN, bob.id)
+        with pytest.raises(IAMNotFoundError):
+            h.iam.create_service_account("ci/x")
+        # bob can see himself (builtin.self), not suspend himself.
+        with pytest.raises(PermissionDeniedError):
+            h.iam.suspend_principal(bob.id)
+        assert h.iam.get_principal(bob.id).id == bob.id
+    h.grant(
+        bob.id,
+        statement(
+            # The platform's policies are named at the platform.
+            "Allow",
+            ["iam:CreatePolicy", "iam:GetPolicy"],
+            ["abi:iam:policy/*"],
+        ),
+        # What the policy allows: nobody writes a grant they do not hold.
+        statement("Allow", [QUERY], ["*"]),
+    )
+    with h.as_(bob):
+        created = h.iam.create_policy("mine", doc)
+        assert h.iam.get_policy(created.id).name == "mine"
+        with pytest.raises(PermissionDeniedError):
+            h.iam.delete_policy(created.id)
+
+
+def test_list_operations_return_only_allowed_items_and_page_after_filtering(h):
+    users = [h.user(f"u{i}") for i in range(6)]
+    visible = sorted(u.id for u in users[::2])
+    bob = h.user("bob")
+    h.grant(
+        bob.id,
+        statement(
+            "Allow",
+            ["iam:ListPrincipals"],
+            [f"abi:iam:principal/{i}" for i in visible],
+        ),
+    )
+    with h.as_(bob):
+        first = h.iam.list_principals("user", limit=2)
+        assert [p.id for p in first.items] == visible[:2]
+        assert first.next_after is not None
+        rest = h.iam.list_principals("user", limit=2, after=first.next_after)
+        assert [p.id for p in rest.items] == visible[2:]
+        assert rest.next_after is None
+
+
+# -- principals and groups --------------------------------------------------------------
+
+
+def test_ensure_user_creates_once_and_refreshes_the_profile(h):
+    first = h.user("bob", email="bob@example.com")
+    again = h.user("bob", email="bob@example.com")
+    assert again == first
+    renamed = h.user("bob", email="robert@example.com", display_name="Robert")
+    assert renamed.id == first.id
+    assert (renamed.email, renamed.display_name) == ("robert@example.com", "Robert")
+    assert h.user("bob2").id != first.id
+
+
+def test_legacy_nexus_users_resolve_by_their_nexus_id(h):
+    """Accounts of the old login keep their Nexus id on calls until they link."""
+    record = h.admin("ensure_user", LEGACY_NEXUS_ISSUER, "user-0123456789ab")
+    h.attach(roles.PLATFORM_ADMIN, record.id)
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        Principal,
+        use_call_context,
+    )
+
+    ctx = CallContext(
+        principal=Principal(id="api", kind="service_account", name="api"),
+        on_behalf_of=Principal(id="user-0123456789ab", kind="user"),
+    )
+    with use_call_context(ctx):
+        assert h.iam.authorize(QUERY, graph("a")).allowed
+
+
+def _nexus_call(user_id: str):
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        Principal,
+        use_call_context,
+    )
+
+    return use_call_context(
+        CallContext(
+            principal=Principal(id="api", kind="service_account", name="api"),
+            on_behalf_of=Principal(id=user_id, kind="user"),
+        )
+    )
+
+
+def _member(h, nexus_id: str, role: str = "member", scope: str = WS):
+    """A Nexus user holding ``role`` at ``scope``, named on calls by its Nexus id."""
+    record = h.admin("ensure_user", LEGACY_NEXUS_ISSUER, nexus_id)
+    h.attach(f"builtin.{role}", record.id, scope)
+    return record
+
+
+def test_a_nexus_user_holds_only_what_its_roles_grant(h):
+    """No implicit grant: Nexus calls as api on behalf of the user, and the user
+    reaches what their role attachments reach."""
+    graph_a = graph("a")
+    with _nexus_call("user-0123456789ab"):
+        assert not h.iam.authorize(QUERY, graph_a).allowed
+    _member(h, "user-0123456789ab", "viewer")
+    with _nexus_call("user-0123456789ab"):
+        assert h.iam.authorize(QUERY, graph_a).allowed
+        assert not h.iam.authorize("triple_store:Insert", graph_a).allowed
+        assert not h.iam.authorize(QUERY, graph("a", workspace="ws-2")).allowed
+        assert not h.iam.authorize("iam:ListPrincipals", "abi:iam:principal/x").allowed
+    _member(h, "user-0123456789ab", "member")
+    with _nexus_call("user-0123456789ab"):
+        assert h.iam.authorize("triple_store:Insert", graph_a).allowed
+
+
+def _approved_module(h, document_, name="module/default/research"):
+    account = h.service_account(name)
+    project, module_id = name.split("/")[1:]
+    with h.as_(account):
+        h.iam.submit_manifest(module_id, project, document_)
+    h.admin("approve_manifest", account.id)
+    return account
+
+
+def test_a_remote_module_cannot_evict_registrations(h):
+    """Its bootstrap registers its own module; no manifest grants eviction."""
+    account = _approved_module(h, document(statement("Allow", ["discovery:*"], ["*"])))
+    own = "abi:discovery:module/default/research"
+    other = "abi:discovery:module/default/other"
+    assert h.allowed("discovery:Register", own, account)
+    assert not h.allowed("discovery:Evict", own, account)
+    assert not h.allowed("discovery:Evict", other, account)
+
+
+RUN = "abi:discovery:run/{owner}/default/inv-1"
+
+
+@pytest.fixture
+def discovery(h):
+    from naas_abi_core.services.discovery.iam_catalog import CATALOG
+
+    h.iam._register_catalog(CATALOG)
+
+
+@pytest.mark.parametrize(
+    "action", ["discovery:GetAgentRun", "discovery:CancelAgentRun"]
+)
+def test_a_nexus_user_reaches_only_their_own_agent_runs(h, discovery, action):
+    """Regression: a workspace member reaches their own runs, never another's."""
+    _member(h, "user-aaaaaaaaaaaa")
+    _member(h, "user-bbbbbbbbbbbb")
+    with _nexus_call("user-aaaaaaaaaaaa"):
+        assert h.iam.authorize(action, RUN.format(owner="user-aaaaaaaaaaaa")).allowed
+        assert not h.iam.authorize(
+            action, RUN.format(owner="user-bbbbbbbbbbbb")
+        ).allowed
+        assert h.iam.authorize(
+            "discovery:InvokeAgent", "abi:discovery:agent/default/m/a"
+        ).allowed
+
+
+@pytest.mark.parametrize(
+    "action", ["discovery:GetAgentRun", "discovery:CancelAgentRun"]
+)
+def test_a_module_acting_for_a_user_follows_that_users_runs(h, discovery, action):
+    """A run started for a user is the user's: a module delegating for that
+    user (a delegated token) follows it, and still no one else's."""
+    from naas_abi_sdk.module import ModuleDependencies
+    from naas_abi_sdk.permissions import default_manifest
+
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        Principal,
+        use_call_context,
+    )
+
+    account = _approved_module(
+        h, default_manifest(ModuleDependencies(modules=("other",)))
+    )
+    ada = "user-aaaaaaaaaaaa"
+    _member(h, ada)
+    delegated = CallContext(
+        principal=Principal(id=account.id, kind="service_account", name=account.name),
+        on_behalf_of=Principal(id=ada, kind="user"),
+    )
+    with use_call_context(delegated):
+        assert h.iam.authorize(action, RUN.format(owner=ada)).allowed
+        assert not h.iam.authorize(
+            action, RUN.format(owner="user-bbbbbbbbbbbb")
+        ).allowed
+
+
+@pytest.mark.parametrize(
+    "action", ["discovery:GetAgentRun", "discovery:CancelAgentRun"]
+)
+def test_a_remote_module_reaches_only_its_own_agent_runs(h, action):
+    from naas_abi_sdk.module import ModuleDependencies
+    from naas_abi_sdk.permissions import default_manifest
+
+    account = _approved_module(
+        h, default_manifest(ModuleDependencies(modules=("other",)))
+    )
+    assert h.allowed(action, RUN.format(owner=account.id), account)
+    assert not h.allowed(action, RUN.format(owner="user-1"), account)
+    assert not h.allowed(action, RUN.format(owner="other"), account)
+
+
+def test_an_iam_user_holds_no_transitional_grant(h):
+    bob = h.user()
+    assert not h.allowed(
+        "model_registry:Chat",
+        "abi:model_registry:model/m",
+        actor="api",
+        on_behalf_of=bob,
+    )
+
+
+def test_an_explicit_deny_beats_the_users_role(h):
+    record = _member(h, "user-0123456789ab")
+    h.grant(record.id, statement("Deny", [QUERY], [graph("a")]))
+    with _nexus_call("user-0123456789ab"):
+        assert not h.iam.authorize(QUERY, graph("a")).allowed
+        assert h.iam.authorize(QUERY, graph("b")).allowed
+
+
+def test_deleting_a_principal_keeps_its_id_and_drops_its_grants(h):
+    bob = h.user()
+    sales = h.group()
+    h.admin("add_group_member", sales.id, bob.id)
+    h.grant(bob.id, statement("Allow", [QUERY], ["*"]))
+    deleted = h.admin("delete_principal", bob.id)
+    assert deleted.status == "deleted"
+    assert h.iam.store.get_principal(bob.id).status == "deleted"
+    assert h.iam.store.list_attachments(principal_id=bob.id) == []
+    assert h.iam.store.groups_of(bob.id) == []
+    assert not h.allowed(QUERY, graph("a"), bob)
+    with pytest.raises(IAMConflictError):
+        h.attach(roles.VIEWER, bob.id, WS)
+    with pytest.raises(IAMConflictError):
+        h.admin("resume_principal", bob.id)
+
+
+def test_groups_cannot_contain_groups(h):
+    outer, inner = h.group("outer"), h.group("inner")
+    with pytest.raises(ValueError):
+        h.admin("add_group_member", outer.id, inner.id)
+    with pytest.raises(IAMNotFoundError):
+        h.admin("get_group", h.user().id)
+
+
+def test_group_mappings_and_members_are_listed(h):
+    sales = h.group()
+    bob = h.user()
+    h.admin("add_group_member", sales.id, bob.id)
+    h.admin("map_idp_group", "acme", "Sales", sales.id)
+    assert h.admin("list_group_members", sales.id) == [bob.id]
+    assert [m.claim_value for m in h.admin("list_idp_group_mappings", sales.id)] == [
+        "Sales"
+    ]
+    assert h.admin("unmap_idp_group", "acme", "Sales", sales.id) is True
+    assert h.iam.resolve_idp_groups("acme", ["Sales"]) == []
+
+
+# -- policies ---------------------------------------------------------------------------------
+
+
+def test_policies_are_validated_against_the_registered_catalogs(h):
+    with pytest.raises(PolicyValidationError) as invalid:
+        h.admin(
+            "create_policy",
+            "bad",
+            document(
+                statement("Allow", ["triple_store:Teleport"], ["*"]),
+                statement("Allow", ["nothing:*"], ["*"]),
+                statement("Allow", [QUERY], ["graph/a"]),
+            ),
+        )
+    errors = " | ".join(invalid.value.errors)
+    assert "triple_store:Teleport" in errors
+    assert "nothing:*" in errors
+    assert "graph/a" in errors
+    created = h.admin(
+        "create_policy", "ok", document(statement("Allow", ["triple_store:Q*"], ["*"]))
+    )
+    assert created.revision == 1
+
+
+def test_updates_are_optimistic_and_managed_policies_are_iams_alone(h):
+    created = h.admin(
+        "create_policy", "p", document(statement("Allow", [QUERY], ["*"]))
+    )
+    updated = h.admin(
+        "update_policy",
+        created.id,
+        expected_revision=1,
+        document=document(statement("Allow", ["triple_store:Insert"], ["*"])),
+    )
+    assert updated.revision == 2
+    with pytest.raises(RevisionConflictError):
+        h.admin("update_policy", created.id, expected_revision=1, name="stale")
+    with pytest.raises(IAMConflictError):
+        h.admin("update_policy", roles.VIEWER, expected_revision=1, name="mine")
+    with pytest.raises(IAMConflictError):
+        h.admin("delete_policy", roles.VIEWER)
+
+
+def test_an_attached_policy_cannot_be_deleted(h):
+    bob = h.user()
+    policy = h.grant(bob.id, statement("Allow", [QUERY], ["*"]))
+    with pytest.raises(IAMConflictError):
+        h.admin("delete_policy", policy.id)
+    h.admin("detach_policy", policy.id, bob.id)
+    h.admin("delete_policy", policy.id)
+
+
+def test_a_policy_using_scope_needs_a_scoped_attachment(h):
+    bob = h.user()
+    with pytest.raises(ValueError):
+        h.attach(roles.VIEWER, bob.id)
+    with pytest.raises(ValueError):
+        h.attach(roles.VIEWER, bob.id, "org-1:ws-1")
+    first = h.attach(roles.VIEWER, bob.id, WS)
+    assert h.attach(roles.VIEWER, bob.id, WS) == first
+
+
+def test_attachment_names_sit_at_their_scope():
+    assert attachment_resource("builtin.viewer", "usr_x", WS) == (
+        WS + "/iam:attachment/builtin.viewer/usr_x"
+    )
+    # Below a container: in that container, where "Grant only what you hold"
+    # checks what it grants under it.
+    assert attachment_resource("p", "u", below("org-1")) == (
+        org("org-1") + "/iam:attachment/p/u"
+    )
+    # Unscoped and at the platform: at the platform, which only unscoped grants
+    # reach.
+    assert attachment_resource("p", "u", None) == "abi:iam:attachment/p/u"
+    assert attachment_resource("p", "u", PLATFORM) == "abi:iam:attachment/p/u"
+
+
+def test_list_attachments_is_filtered(h):
+    admin, bob = h.user("admin"), h.user("bob")
+    h.attach(roles.ADMIN, admin.id, WS)
+    h.attach(roles.VIEWER, bob.id, WS)
+    h.attach(roles.VIEWER, bob.id, WS_2)
+    with h.as_(admin):
+        listed = h.iam.list_attachments(principal_id=bob.id)
+    assert [a.scope for a in listed] == [WS]
+
+
+# -- catalogs ---------------------------------------------------------------------------------
+
+
+def test_registering_a_catalog_regenerates_the_roles(h):
+    bob = h.user()
+    h.attach(roles.VIEWER, bob.id, WS)
+    kv = WS + "/keyvalue:key/k"
+    assert not h.allowed("keyvalue:Get", kv, bob)
+    catalog = ActionCatalog(
+        service="keyvalue",
+        version=1,
+        resource_types=(ResourceType("key"),),
+        actions=(
+            ActionSpec("Get", "read", ("key",)),
+            ActionSpec("Set", "write", ("key",)),
+        ),
+    )
+    assert h.admin("register_catalog", catalog) is True
+    assert h.allowed("keyvalue:Get", kv, bob)
+    assert not h.allowed("keyvalue:Set", kv, bob)
+    explanation = h.iam.authorizer.explain(h.context(bob), "keyvalue:Get", kv)
+    assert explanation.statement is not None
+    assert explanation.statement.policy_id == roles.VIEWER
+
+
+def test_the_highest_catalog_version_wins(h):
+    v2 = ActionCatalog.from_dict({**TRIPLE_STORE.to_dict(), "version": 2})
+    assert h.admin("register_catalog", v2) is True
+    assert h.admin("register_catalog", TRIPLE_STORE) is False
+    assert h.iam.catalogs.get("triple_store") == v2
+    assert [
+        c.version for c in h.iam.store.list_catalogs() if c.service == "triple_store"
+    ] == [2]
+
+
+def test_a_catalog_cannot_drop_an_action_a_policy_names(h):
+    bob = h.user()
+    h.grant(bob.id, statement("Allow", ["triple_store:Insert"], ["*"]))
+    shrunk = ActionCatalog(
+        service="triple_store",
+        version=2,
+        resource_types=TRIPLE_STORE.resource_types,
+        actions=tuple(a for a in TRIPLE_STORE.actions if a.name != "Insert"),
+    )
+    with pytest.raises(IAMConflictError):
+        h.admin("register_catalog", shrunk)
+    assert h.iam.catalogs.get("triple_store") == TRIPLE_STORE
+
+
+def test_register_catalog_needs_the_action(h):
+    with h.as_(actor="some-module"), pytest.raises(IAMNotFoundError):
+        h.iam.register_catalog(TRIPLE_STORE)
+
+
+# -- placements and scopes ----------------------------------------------------------------------
+
+
+def test_placement_resolution(h):
+    h.admin("put_placement", "document", "nexus-ws-1", WS)
+    h.admin("put_placement", "document", "nexus-ws-1/*", WS)
+    h.admin("put_placement", "document", "nexus-ws-1/private/*", WS_2)
+    h.admin("put_placement", "document", "people", PLATFORM)
+    assert h.iam.resolve_placement("document", "nexus-ws-1") == WS
+    assert h.iam.resolve_placement("document", "nexus-ws-1/c/d") == WS
+    assert h.iam.resolve_placement("document", "nexus-ws-1/private/x") == WS_2
+    assert h.iam.resolve_placement("document", "elsewhere") == PLATFORM
+    assert h.iam.resolve_placement("dataset", "nexus-ws-1") == PLATFORM
+    assert h.admin("delete_placement", "document", "nexus-ws-1/private/*") is True
+    assert h.iam.resolve_placement("document", "nexus-ws-1/private/x") == WS
+    with pytest.raises(ValueError):
+        h.admin("put_placement", "document", "a*b")
+    # A placement is in a container, never below one nor in a pattern.
+    for container in (below("org-1"), "abi:*", "abi:org-1:ws-1"):
+        with pytest.raises(ValueError):
+            h.admin("put_placement", "document", "x", container)
+    assert len(h.admin("list_placements", "document")) == 3
+
+
+def test_containers_are_registered_under_their_parent(h):
+    with as_service_account("api"):
+        org_1 = h.iam.register_container("nexus", "organization", "org-1")
+        assert org_1.name == org("org-1") and org_1.parent == PLATFORM
+        ws = h.iam.register_container("nexus", "workspace", "ws-1", parent=org_1.name)
+        assert ws.name == WS
+        revision = h.iam.store.revision()
+        # Again under the same parent: nothing changes.
+        assert (
+            h.iam.register_container("nexus", "workspace", "ws-1", parent=org_1.name)
+            == ws
+        )
+        assert h.iam.store.revision() == revision
+        # A container never moves.
+        with pytest.raises(IAMConflictError):
+            h.iam.register_container("nexus", "workspace", "ws-1")
+        # Its parent is the platform or a registered container.
+        with pytest.raises(IAMNotFoundError):
+            h.iam.register_container("nexus", "workspace", "ws-2", parent=org("org-9"))
+        with pytest.raises(ValueError):
+            h.iam.register_container("nexus", "workspace", "ws-2", parent="abi:o:w")
+        # Only a container type of a registered catalog is one.
+        with pytest.raises(ValueError):
+            h.iam.register_container("triple_store", "graph", "g")
+        with pytest.raises(ValueError):
+            h.iam.register_container("crm", "project", "p-1", parent=WS)
+    assert h.iam.container("nexus", "workspace", "ws-1") == WS
+    assert h.iam.container("nexus", "organization", "org-1") == org("org-1")
+    assert h.iam.container("nexus", "workspace", "ws-2") is None
+    assert h.admin("list_containers") == [org_1, ws]
+
+
+FOLDERS = ActionCatalog(
+    service="crm",
+    version=1,
+    module="crm",
+    resource_types=(
+        # A project sits in a workspace; a folder anywhere.
+        ResourceType(
+            "project", container=True, module_scope=True, parents=("nexus:workspace",)
+        ),
+        ResourceType("folder", container=True, module_scope=True),
+    ),
+    actions=(
+        ActionSpec("CreateProject", "write", ("project",), creates=True),
+        ActionSpec("CreateFolder", "write", ("folder",), creates=True),
+    ),
+)
+
+
+def test_a_container_type_sits_in_its_parents_only(h):
+    h.register("ws-1", "org-1")
+    with as_service_account("engine"):
+        h.iam.register_catalog(FOLDERS)
+    with as_service_account("api"):
+        project = h.iam.register_container("crm", "project", "p-1", parent=WS)
+        assert project.name == f"{WS}/crm:project/p-1"
+        for parent in (PLATFORM, org("org-1"), project.name):
+            with pytest.raises(ValueError, match="sits in nexus:workspace"):
+                h.iam.register_container("crm", "project", "p-2", parent=parent)
+        # No parents named: anywhere, inside a project too.
+        h.iam.register_container("crm", "folder", "f-1", parent=project.name)
+        h.iam.register_container("crm", "folder", "f-2")
+
+
+def test_a_container_type_has_no_name_outside_its_parents():
+    """Grant only what you hold counts a project's names in a workspace only: a
+    project directly in an organisation, or at the platform, names nothing (so
+    granting it needs no cover); a folder, which sits anywhere, does."""
+    containers = frozenset({("nexus", "organization"), ("nexus", "workspace")})
+    projects = grants.universe("crm", "project", containers, ("nexus:workspace",))
+    folders = grants.universe("crm", "folder", containers)
+    for pattern in (f"{org('org-1')}/crm:project/*", "abi:crm:project/*"):
+        assert grants.covered(pattern, (), projects)
+        assert not grants.covered(pattern.replace("project", "folder"), (), folders)
+    assert not grants.covered(f"{WS}/crm:project/*", (), projects)
+
+
+def test_registering_a_container_needs_its_create_action_where_it_is_placed(h):
+    h.register("-", "org-1")
+    h.register("-", "org-2")
+    alice = h.user("alice")
+    # A role at an organisation creates workspaces in it, nowhere else.
+    h.attach(roles.MEMBER, alice.id, org("org-1"))
+    with h.as_(alice):
+        made = h.iam.register_container(
+            "nexus", "workspace", "ws-1", parent=org("org-1")
+        )
+        assert made.name == WS
+        with pytest.raises((PermissionDeniedError, ResourceNotFoundError)):
+            h.iam.register_container("nexus", "workspace", "ws-2", parent=org("org-2"))
+        with pytest.raises((PermissionDeniedError, ResourceNotFoundError)):
+            h.iam.register_container("nexus", "organization", "org-3")
+    assert h.iam.container("nexus", "workspace", "ws-2") is None
+    assert h.iam.container("nexus", "organization", "org-3") is None
+
+
+def test_deleting_a_container_drops_what_it_and_those_below_own(h):
+    h.register("ws-1")
+    h.register("ws-2")
+    other = h.register("ws-9", "org-2")
+    bob, alice, carol = h.user("bob"), h.user("alice"), h.user("carol")
+    h.attach(roles.MEMBER, bob.id, WS)
+    h.attach(roles.VIEWER, alice.id, below("org-1"))
+    h.attach(roles.MEMBER, carol.id, other)
+    read = document(statement("Allow", [QUERY], ["${scope}/triple_store:graph/*"]))
+    ws_policy = h.admin("create_policy", "ws", read, scope=WS)
+    org_policy = h.admin("create_policy", "org", read, scope=org("org-1"))
+    other_policy = h.admin("create_policy", "other", read, scope=other)
+    ws_group = h.admin("create_group", "ws team", scope=WS)
+    org_group = h.admin("create_group", "org team", scope=org("org-1"))
+    h.admin("add_group_member", org_group.id, bob.id)
+    h.admin("attach_policy", ws_policy.id, alice.id, WS)
+    invited = h.admin(
+        "create_pending_grant", "builtin", "dan@example.com", roles.MEMBER, WS
+    )
+    h.admin("put_placement", "document", "nexus-ws-1", WS)
+    h.admin("put_placement", "document", "nexus-ws-2", WS_2)
+    h.admin("put_placement", "document", "nexus-ws-9", other)
+    assert h.allowed(QUERY, graph("g"), bob)
+
+    # Deleting needs the type's delete action: a member holds none.
+    with h.as_(bob), pytest.raises((PermissionDeniedError, ResourceNotFoundError)):
+        h.iam.delete_container("nexus", "workspace", "ws-1")
+    assert h.iam.container("nexus", "workspace", "ws-1") == WS
+
+    with as_service_account("api"):
+        assert h.iam.delete_container("nexus", "workspace", "ws-1") is True
+        assert h.iam.delete_container("nexus", "workspace", "ws-1") is False
+    assert h.iam.container("nexus", "workspace", "ws-1") is None
+    assert h.iam.container("nexus", "workspace", "ws-2") == WS_2
+    with pytest.raises(IAMNotFoundError):
+        h.iam.store.get_policy(ws_policy.id)
+    assert h.iam.store.get_principal(ws_group.id).status == "deleted"
+    # Its attachments go, the companions the roles brought with them, and a
+    # user left with nothing within the organisation leaves its groups.
+    assert h.iam.store.list_attachments(principal_id=bob.id) == []
+    assert not h.allowed(QUERY, graph("g"), bob)
+    assert h.iam.store.list_group_members(org_group.id) == []
+    assert {a.scope for a in h.iam.store.list_attachments(principal_id=alice.id)} == {
+        below("org-1"),
+        None,
+    }
+    assert h.iam.store.get_pending_grant(invited.id) is None
+    assert h.iam.resolve_placement("document", "nexus-ws-1") == PLATFORM
+    assert h.iam.resolve_placement("document", "nexus-ws-2") == WS_2
+
+    # The organisation goes with every container below it.
+    with as_service_account("api"):
+        assert h.iam.delete_container("nexus", "organization", "org-1") is True
+    assert h.iam.container("nexus", "workspace", "ws-2") is None
+    with pytest.raises(IAMNotFoundError):
+        h.iam.store.get_policy(org_policy.id)
+    assert h.iam.store.get_principal(org_group.id).status == "deleted"
+    assert h.iam.store.list_attachments(principal_id=alice.id) == []
+    assert h.iam.resolve_placement("document", "nexus-ws-2") == PLATFORM
+    # Another organisation keeps what it has.
+    assert h.iam.store.get_policy(other_policy.id).owner_scope == other
+    assert h.iam.resolve_placement("document", "nexus-ws-9") == other
+    assert {a.scope for a in h.iam.store.list_attachments(principal_id=carol.id)} == {
+        other,
+        None,
+    }
+
+
+def test_the_container_of_a_call_is_checked_against_its_path(h):
+    from naas_abi_core.engine.call_context import inside
+
+    h.register("ws-1")
+    with inside(None):
+        assert h.iam.call_container() is None
+    with inside(PLATFORM):
+        assert h.iam.call_container() is None
+    with inside(WS):
+        assert h.iam.call_container() == WS
+    with inside(org("org-1")):
+        assert h.iam.call_container() == org("org-1")
+    # Named under another path, unknown, or no container's name: nothing.
+    for claimed in (workspace("ws-1", "org-2"), workspace("ws-9"), "abi:org-1:ws-1"):
+        with inside(claimed):
+            assert h.iam.call_container() == UNRESOLVED
+
+
+# -- caching --------------------------------------------------------------------------------------
+
+
+def test_changes_through_the_service_apply_at_the_next_check(h):
+    bob = h.user()
+    assert not h.allowed(QUERY, graph("a"), bob)  # cached: no access
+    policy = h.grant(bob.id, statement("Allow", [QUERY], ["*"]))
+    assert h.allowed(QUERY, graph("a"), bob)
+    h.admin("detach_policy", policy.id, bob.id)
+    assert not h.allowed(QUERY, graph("a"), bob)
+
+
+def test_cached_state_expires(h):
+    store = h.iam.store
+    service = IAMService(store, cache_ttl_seconds=0.05)
+    from naas_abi_core.services.iam.tests.iam_harness import IAMHarness
+
+    other = IAMHarness(service)
+    bob = h.user()
+    assert not other.allowed(QUERY, graph("a"), bob)
+    # Another process writes the shared store: this one never hears of it.
+    h.grant(bob.id, statement("Allow", [QUERY], ["*"]))
+    assert not other.allowed(QUERY, graph("a"), bob)
+    time.sleep(0.1)
+    assert other.allowed(QUERY, graph("a"), bob)
+
+
+def test_listeners_hear_every_change(h):
+    heard: list[int] = []
+    h.iam.add_change_listener(heard.append)
+    h.iam.add_change_listener(lambda _revision: 1 / 0)  # never fails a write
+    h.user("new")
+    assert heard and heard[-1] == h.iam.store.revision()
+
+
+# -- review round 1 --------------------------------------------------------------------
+
+
+def test_a_clear_during_a_lookup_keeps_its_stale_value_out_of_the_cache():
+    from naas_abi_core.services.iam.IAMService import _TTLCache
+
+    cache = _TTLCache(60, 10)
+    calls: list[str] = []
+
+    def stale():
+        calls.append("stale")
+        cache.clear()  # a change lands while the old state is being read
+        return "stale"
+
+    assert cache.get("k", stale) == "stale"
+    assert cache.get("k", lambda: "fresh") == "fresh"
+    assert cache.get("k", lambda: "never") == "fresh"
+
+
+def test_a_suspension_during_a_check_applies_to_the_next_one(h):
+    bob = h.user()
+    h.attach(roles.PLATFORM_ADMIN, bob.id)
+    store = h.iam.store
+    original = store.attachments_for
+    suspended = False
+
+    def racing(principal_ids):
+        nonlocal suspended
+        found = original(principal_ids)
+        if not suspended:
+            suspended = True
+            h.admin("suspend_principal", bob.id)
+        return found
+
+    store.attachments_for = racing  # type: ignore[method-assign]
+    try:
+        h.allowed(QUERY, graph("a"), bob)  # reads the pre-suspension state
+    finally:
+        store.attachments_for = original  # type: ignore[method-assign]
+    assert not h.allowed(QUERY, graph("a"), bob)
+
+
+def test_ensure_user_survives_a_concurrent_first_sighting(h):
+    store = h.iam.store
+    first = h.user("bob")
+    original = store.find_user
+    misses = iter([None])
+
+    def late_find(issuer, subject):
+        # The first lookup misses: another request is creating the same user.
+        return next(misses, None) or original(issuer, subject)
+
+    store.find_user = late_find  # type: ignore[method-assign]
+    try:
+        again = h.user("bob")
+    finally:
+        store.find_user = original  # type: ignore[method-assign]
+    assert again.id == first.id
+
+
+def test_explain_reveals_nothing_without_iam_explain(h):
+    carol = h.user("carol")
+    group = h.group("secret-team")
+    errors = []
+    for principal_id in (group.id, "usr_" + "0" * 26, h.user("bob").id):
+        with h.as_(carol), pytest.raises(IAMNotFoundError) as refused:
+            h.iam.explain(QUERY, graph("a"), principal_id=principal_id)
+        errors.append(type(refused.value))
+    assert len(set(errors)) == 1
+
+
+def test_a_caller_who_may_list_nothing_never_scans_the_store(h):
+    for i in range(5):
+        h.user(f"u{i}")
+    store = h.iam.store
+    original = store.list_principals
+    calls = []
+
+    def counting(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    store.list_principals = counting  # type: ignore[method-assign]
+    try:
+        with h.as_(actor="some-module"):
+            assert h.iam.list_principals(limit=10).items == []
+    finally:
+        store.list_principals = original  # type: ignore[method-assign]
+    assert calls == []
+
+
+def test_an_attachment_below_a_container_is_named_in_that_container():
+    """The name no longer tells an attachment below a container from one at it:
+    "Grant only what you hold" checks what one below grants at every container
+    under it, so an admin of the container's own level attaches nothing below."""
+    acme = org("acme")
+    assert attachment_resource("p", "u", acme + "/*") == acme + "/iam:attachment/p/u"
+    assert attachment_resource("p", "u", acme) == acme + "/iam:attachment/p/u"
+
+
+# -- review round 2 --------------------------------------------------------------------
+
+
+def test_a_policy_attached_at_a_scope_cannot_be_updated_out_of_it(h):
+    bob = h.user()
+    policy = h.admin(
+        "create_policy",
+        "read here",
+        document(statement("Allow", [QUERY], ["${scope}/triple_store:graph/*"])),
+    )
+    h.attach(policy.id, bob.id, workspace("ws1", "acme"))
+    with pytest.raises(ValueError, match=r"\$\{scope\}"):
+        h.admin(
+            "update_policy",
+            policy.id,
+            expected_revision=1,
+            document=document(statement("Allow", ["*"], ["*"])),
+        )
+    narrowed = h.admin(
+        "update_policy",
+        policy.id,
+        expected_revision=1,
+        document=document(
+            statement("Allow", [QUERY], ["${scope}/triple_store:graph/a"])
+        ),
+    )
+    assert narrowed.revision == 2
+    # Unattached at any scope, a policy may name anything.
+    free = h.admin(
+        "create_policy", "free", document(statement("Allow", [QUERY], ["*"]))
+    )
+    h.admin(
+        "update_policy",
+        free.id,
+        expected_revision=1,
+        document=document(statement("Allow", ["*"], ["*"])),
+    )
+
+
+def test_below_a_container_is_a_scope_for_attachments_only(h):
+    """``<container>/*`` is a scope: no container is registered, placed or owns
+    anything under that name."""
+    h.register("-", "acme")
+    acme_below = below("acme")
+    with pytest.raises(ValueError):
+        h.admin("put_placement", "document", "nexus-ws-1/*", acme_below)
+    with pytest.raises(ValueError):
+        h.admin(
+            "create_policy",
+            "p",
+            document(statement("Allow", [QUERY], ["${scope}/triple_store:graph/*"])),
+            scope=acme_below,
+        )
+    with pytest.raises(ValueError):
+        h.admin("register_container", "nexus", "workspace", "w", parent=acme_below)
+    assert h.iam.container("nexus", "workspace", "%2A") is None
+
+
+def test_the_ensure_user_race_authorizes_the_existing_principal(h):
+    bob = h.user("bob", email="bob@example.com")
+    clerk = h.service_account("ci/clerk")
+    h.grant(
+        clerk.id,
+        statement("Allow", ["iam:CreateUser"], ["abi:iam:principal/*"]),
+        statement("Deny", ["iam:CreateUser"], [f"abi:iam:principal/{bob.id}"]),
+    )
+    store = h.iam.store
+    original = store.find_user
+    misses = iter([None])
+
+    def late_find(issuer, subject):
+        return next(misses, None) or original(issuer, subject)
+
+    store.find_user = late_find  # type: ignore[method-assign]
+    try:
+        with h.as_(clerk), pytest.raises((IAMNotFoundError, PermissionDeniedError)):
+            h.iam.ensure_user("https://idp.example", "bob", email="mallory@example.com")
+    finally:
+        store.find_user = original  # type: ignore[method-assign]
+    assert store.get_principal(bob.id).email == "bob@example.com"
+
+
+def _api_for(user_id: str):
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        Principal,
+        use_call_context,
+    )
+
+    return use_call_context(
+        CallContext(
+            principal=Principal(id="api", kind="service_account", name="api"),
+            on_behalf_of=Principal(id=user_id, kind="user"),
+        )
+    )
+
+
+def test_api_never_reaches_what_it_does_not_name(h):
+    """api holds enumerated statements, not ``*``: whoever it acts for, it keeps
+    out of IAM's administration and of the seals."""
+    h.iam._register_catalog(
+        __import__(
+            "naas_abi_core.services.secret.iam_catalog", fromlist=["CATALOG"]
+        ).CATALOG
+    )
+    user = _member(h, "user-aaaaaaaaaaaa", "owner")
+    h.attach(roles.PLATFORM_ADMIN, user.id)
+    with _api_for("user-aaaaaaaaaaaa"):
+        assert h.iam.authorize(QUERY, graph("a")).allowed
+        assert not h.iam.authorize("iam:DeletePrincipal", "abi:iam:principal/x").allowed
+        assert not h.iam.authorize("secret:Get", "abi:secret:secret/idp%2Fk").allowed
+        assert not h.iam.authorize(
+            "dataset:QueryUnchecked", "abi:dataset:catalog/-"
+        ).allowed
+
+
+def test_allows_every_is_a_safe_shortcut(h):
+    bob = h.user("bob")
+    with h.as_(actor="engine"):
+        assert h.iam.allows_every(QUERY, "triple_store", "graph")
+    with h.as_(bob):
+        assert not h.iam.allows_every(QUERY, "triple_store", "graph")
+    # Every graph: at the platform and in any container (``names.anywhere``).
+    h.grant(
+        bob.id,
+        statement("Allow", ["triple_store:*"], anywhere("triple_store:graph/*")),
+    )
+    with h.as_(bob):
+        assert h.iam.allows_every(QUERY, "triple_store", "graph")
+        assert not h.iam.allows_every("document:Get", "document", "document")
+    # One Deny naming the action, on any graph, ends the shortcut.
+    h.grant(bob.id, statement("Deny", [QUERY], [graph("secret")]))
+    with h.as_(bob):
+        assert not h.iam.allows_every(QUERY, "triple_store", "graph")
+    # A workspace role is not "every graph".
+    alice = h.user("alice")
+    h.attach(roles.VIEWER, alice.id, WS)
+    with h.as_(alice):
+        assert not h.iam.allows_every(QUERY, "triple_store", "graph")
+    # Sealed types are never "every": the seal owner's own is checked.
+    with h.as_(actor="engine"):
+        assert not h.iam.allows_every("secret:Get", "secret", "secret")
+    # On behalf of a user, both must span the type.
+    with h.as_(actor="engine", on_behalf_of=bob):
+        assert not h.iam.allows_every("document:Get", "document", "document")
+
+
+# -- service accounts, keys and the exchange -------------------------
+
+
+def _module(h, name: str = "module/acme/people"):
+    return h.service_account(name)
+
+
+def test_a_key_is_shown_once_and_stored_hashed(h, iam):
+    account = _module(h)
+    created = h.admin("create_key", account.id, description="dev")
+    assert created.value.startswith(f"abi_sk_{created.record.key_id}_")
+    stored = iam.store.get_key(created.record.key_id)
+    assert created.value.split("_", 3)[3] not in repr(stored)
+    assert len(stored.secret_hash) == 64
+    assert h.admin("list_keys", account.id) == [stored]
+
+
+def test_exchange_gives_a_ten_minute_nats_token_for_the_account(h, iam):
+    account = _module(h)
+    value = h.admin("create_key", account.id).value
+    issued = iam.exchange_key(value)
+    claims = iam.verifier().verify(issued.token)
+    assert claims.subject == account.id
+    assert claims.name == "module/acme/people"
+    assert claims.kind == "service_account" and claims.audience == "abi:nats"
+    assert claims.lifetime == 600
+    assert iam.store.get_key(value.split("_")[2]).last_used_at is not None
+
+
+def test_a_key_buys_a_host_token_the_kernel_refuses(h, iam):
+    """A host reads its caller's token: what a caller sends to a host is
+    addressed to that host, and good at no kernel service."""
+    from naas_abi_core.engine.nats_auth import (
+        HOST_AUDIENCE_PREFIX,
+        InvalidServiceTokenError,
+        host_audience,
+    )
+
+    account = _module(h)
+    value = h.admin("create_key", account.id).value
+    mine = host_audience("HOSTA")
+    host = iam.exchange_key(value, mine)
+    with pytest.raises(InvalidServiceTokenError):
+        iam.verifier().verify(host.token)  # the kernel's verifier
+    anywhere = iam.verifier().for_audiences((), prefixes=(HOST_AUDIENCE_PREFIX,))
+    claims = anywhere.verify(host.token)
+    assert claims.subject == account.id and claims.audience == mine
+    # A token for one host names that host, and no other.
+    assert iam.exchange_key(value, host_audience("HOSTB")).token != host.token
+    assert anywhere.verify(
+        iam.exchange_key(value, host_audience("HOSTB")).token
+    ).audience == host_audience("HOSTB")
+    # And the kernel's token is no host token.
+    own = iam.exchange_key(value)
+    with pytest.raises(InvalidServiceTokenError):
+        anywhere.verify(own.token)
+    for audience in ("abi:anything", "abi:host", "abi:host:", "abi:host:a b"):
+        with pytest.raises(ValueError):
+            iam.exchange_key(value, audience)
+
+
+def test_a_storm_of_exchanges_writes_the_last_use_once(h, iam, monkeypatch):
+    value = h.admin("create_key", _module(h).id).value
+    touched: list[str] = []
+    real = iam.store.touch_key
+    monkeypatch.setattr(
+        iam.store,
+        "touch_key",
+        lambda key_id, now: (touched.append(key_id), real(key_id, now)),
+    )
+    for _ in range(20):
+        iam.exchange_key(value)
+        iam.authenticate_key(value)
+    assert touched == [value.split("_")[2]]
+
+
+@pytest.mark.parametrize(
+    "mangle",
+    [
+        lambda v: v[:-1] + ("A" if v[-1] != "A" else "B"),  # wrong secret
+        lambda v: "abi_sk_aaaaaaaaaaaaaaaa_" + v.split("_", 3)[3],  # unknown id
+        lambda v: v.replace("abi_sk_", "abi_pk_"),  # another kind
+        lambda v: "not-a-key",
+    ],
+)
+def test_exchange_refuses_a_bad_key_with_one_message(h, iam, mangle):
+    value = h.admin("create_key", _module(h).id).value
+    with pytest.raises(KeyRefusedError, match="^invalid key$"):
+        iam.exchange_key(mangle(value))
+
+
+def test_revoked_expired_or_suspended_keys_stop_at_the_next_exchange(h, iam):
+    account = _module(h)
+    revoked = h.admin("create_key", account.id)
+    iam.exchange_key(revoked.value)
+    h.admin("revoke_key", account.id, revoked.record.key_id)
+    with pytest.raises(KeyRefusedError):
+        iam.exchange_key(revoked.value)
+
+    expiring = h.admin(
+        "create_key", account.id, expires_at=datetime.now(UTC) + timedelta(seconds=1)
+    )
+    time.sleep(1.1)
+    with pytest.raises(KeyRefusedError):
+        iam.exchange_key(expiring.value)
+
+    live = h.admin("create_key", account.id)
+    h.admin("suspend_principal", account.id)
+    with pytest.raises(KeyRefusedError):
+        iam.exchange_key(live.value)
+    h.admin("resume_principal", account.id)
+    assert iam.exchange_key(live.value).token
+
+
+def test_rotation_issues_a_new_key_and_revokes_the_old(h, iam):
+    account = _module(h)
+    old = h.admin("create_key", account.id, description="prod")
+    new = h.admin("rotate_key", account.id, old.record.key_id)
+    assert new.record.description == "prod"
+    assert iam.exchange_key(new.value)
+    with pytest.raises(KeyRefusedError):
+        iam.exchange_key(old.value)
+
+
+def test_an_account_at_its_key_limit_can_still_rotate(h, iam):
+    account = _module(h)
+    created = [h.admin("create_key", account.id) for _ in range(5)]
+    new = h.admin("rotate_key", account.id, created[0].record.key_id)
+    assert iam.exchange_key(new.value)
+    with pytest.raises(KeyRefusedError):
+        iam.exchange_key(created[0].value)
+    assert (
+        len(
+            [k for k in h.admin("list_keys", account.id) if k.usable(datetime.now(UTC))]
+        )
+        == 5
+    )
+
+
+def test_a_rotated_key_gets_a_fresh_life_and_an_expired_one_rotates(h, iam):
+    account = h.service_account("ci/nightly")
+    short = h.admin(
+        "create_key",
+        account.id,
+        expires_at=datetime.now(UTC) + timedelta(seconds=1),
+    )
+    time.sleep(1.1)
+    with pytest.raises(KeyRefusedError):
+        iam.exchange_key(short.value)
+    new = h.admin("rotate_key", account.id, short.record.key_id)
+    # Not what was left of the old key's life: a ci key's full 90 days.
+    assert new.record.expires_at - datetime.now(UTC) > timedelta(days=89)
+    assert iam.exchange_key(new.value)
+
+
+def test_at_most_five_active_keys(h):
+    account = _module(h)
+    created = [h.admin("create_key", account.id) for _ in range(5)]
+    with pytest.raises(IAMConflictError, match="5 active keys"):
+        h.admin("create_key", account.id)
+    h.admin("revoke_key", account.id, created[0].record.key_id)
+    assert h.admin("create_key", account.id)
+
+
+def test_ci_keys_expire_in_90_days_module_keys_never(h):
+    ci = h.admin("create_key", h.service_account("ci/nightly").id).record
+    assert ci.expires_at is not None
+    assert ci.expires_at - datetime.now(UTC) > timedelta(days=89)
+    assert h.admin("create_key", _module(h).id).record.expires_at is None
+
+
+def test_keys_need_iam_actions_and_belong_to_their_account(h):
+    account = _module(h)
+    other = _module(h, "module/acme/other")
+    key = h.admin("create_key", account.id)
+    with h.as_(other):
+        with pytest.raises(IAMNotFoundError):
+            h.iam.create_key(account.id)
+        with pytest.raises(IAMNotFoundError):
+            h.iam.revoke_key(account.id, key.record.key_id)
+        assert h.iam.list_keys(account.id) == []
+    with pytest.raises(IAMNotFoundError):
+        h.admin("revoke_key", other.id, key.record.key_id)
+
+
+def test_a_module_account_starts_with_its_bootstrap_only(h, iam):
+    account = _module(h)
+    attached = iam.store.list_attachments(principal_id=account.id)
+    assert [a.policy_id for a in attached] == [roles.MODULE_BOOTSTRAP]
+    assert iam.store.list_attachments(principal_id=h.service_account("ci/x").id) == []
+
+
+def test_the_engine_key_is_created_once_and_kept_in_the_secrets(iam):
+    value = iam.engine_service_key()
+    assert iam.secrets.get("iam/service-keys/engine") == value
+    assert iam.engine_service_key() == value
+    assert iam.verifier().verify(iam.exchange_key(value).token).name == "engine"
+
+
+def test_a_lost_engine_key_is_replaced_not_accumulated(iam):
+    first = iam.engine_service_key()
+    for _ in range(6):  # each boot of a process that never saw the stored key
+        iam.secrets.delete("iam/service-keys/engine")
+        latest = iam.engine_service_key()
+    engine = iam.store.find_service_account("engine")
+    now = datetime.now(UTC)
+    active = [k.key_id for k in iam.store.list_keys(engine.id) if k.usable(now)]
+    assert active == [latest.split("_")[2]]
+    with pytest.raises(KeyRefusedError):
+        iam.exchange_key(first)
+
+
+def test_in_process_tokens_for_the_engine_and_api(iam):
+    for name in ("engine", "api"):
+        claims = iam.verifier().verify(iam.issue_service_token(name).token)
+        assert claims.name == name and claims.subject.startswith("sa_")
+
+
+# -- manifests ---------------------------------------------------------------
+
+MANIFEST = document(
+    statement(
+        "Allow",
+        ["triple_store:Query"],
+        ["abi:triple_store:graph/${module.id}-*"],
+        sid="OwnGraphs",
+    )
+)
+
+
+def _submit(h, account, manifest=MANIFEST, module_id="people", project="acme"):
+    with h.as_(account):
+        return h.iam.submit_manifest(module_id, project, manifest)
+
+
+def test_a_manifest_is_pending_until_approved(h, iam):
+    account = _module(h)
+    own = "abi:triple_store:graph/people-contacts"
+    submitted = _submit(h, account)
+    assert submitted.manifest.status == "pending" and not submitted.approved_now
+    assert not h.allowed(QUERY, own, account)
+    approved = h.admin("approve_manifest", account.id)
+    assert approved.status == "approved" and approved.decided_by
+    assert h.allowed(QUERY, own, account)
+    assert not h.allowed(QUERY, "abi:triple_store:graph/other-x", account)
+    policy = iam.store.get_policy("module.acme.people")
+    assert policy.managed
+    assert policy.document.statements[0].resources == (
+        "abi:triple_store:graph/people-*",
+    )
+    # Submitting the approved version again changes nothing.
+    again = _submit(h, account)
+    assert again.manifest.status == "approved" and not again.approved_now
+
+
+def test_approval_places_the_module_namespaces_on_the_platform(h, iam):
+    account = _module(h)
+    _submit(h, account)
+    h.admin("approve_manifest", account.id)
+    keys = {(p.service, p.id_key) for p in iam.store.list_placements()}
+    assert {
+        ("document", "people"),
+        ("document", "people/*"),
+        ("dataset", "people"),
+        ("dataset", "people/*"),
+    } <= keys
+
+
+def test_a_new_version_waits_while_the_approved_one_holds(h):
+    account = _module(h)
+    _submit(h, account)
+    h.admin("approve_manifest", account.id)
+    wider = document(statement("Allow", ["triple_store:*"], ["*"]))
+    pending = _submit(h, account, wider)
+    assert pending.manifest.status == "pending"
+    assert h.allowed(QUERY, "abi:triple_store:graph/people-a", account)
+    assert not h.allowed("triple_store:Insert", "abi:triple_store:graph/x", account)
+
+
+def test_an_admin_can_narrow_or_reject(h):
+    account = _module(h)
+    _submit(h, account, document(statement("Allow", ["triple_store:*"], ["*"])))
+    narrowed = document(
+        statement("Allow", ["triple_store:Query"], ["abi:triple_store:graph/a"])
+    )
+    h.admin("approve_manifest", account.id, document=narrowed)
+    assert h.allowed(QUERY, "abi:triple_store:graph/a", account)
+    assert not h.allowed("triple_store:Insert", "abi:triple_store:graph/a", account)
+
+    other = _module(h, "module/acme/other")
+    _submit(h, other, module_id="other")
+    rejected = h.admin("reject_manifest", other.id, reason="too wide")
+    assert rejected.status == "rejected" and rejected.reason == "too wide"
+    assert _submit(h, other, module_id="other").manifest.status == "rejected"
+    with pytest.raises(IAMConflictError):
+        h.admin(
+            "reject_manifest", account.id, h.admin("get_manifest", account.id).sha256
+        )
+
+
+def test_auto_approve_approves_at_submission(h, iam):
+    iam.auto_approve = True
+    account = _module(h)
+    submitted = _submit(h, account)
+    assert submitted.manifest.status == "approved" and submitted.approved_now
+    assert h.allowed(QUERY, "abi:triple_store:graph/people-a", account)
+    assert not _submit(h, account).approved_now
+
+
+def test_a_module_submits_only_as_its_own_account(h):
+    account = _module(h)
+    with pytest.raises(PermissionDeniedError, match="runs as the service account"):
+        _submit(h, account, module_id="other")
+    with pytest.raises(PermissionDeniedError):
+        _submit(h, account, project="beta")
+    with pytest.raises(PermissionDeniedError):
+        _submit(h, h.service_account("ci/nightly"))
+
+
+def test_without_a_version_only_a_pending_manifest_is_decided(h):
+    account = _module(h)
+    _submit(h, account)
+    rejected = h.admin("reject_manifest", account.id, reason="no")
+    # Nothing waits: a rejected version is decided on only by naming it.
+    with pytest.raises(IAMNotFoundError, match="waits for a decision"):
+        h.admin("approve_manifest", account.id)
+    with pytest.raises(IAMNotFoundError, match="waits for a decision"):
+        h.admin("reject_manifest", account.id)
+    approved = h.admin("approve_manifest", account.id, rejected.sha256)
+    assert approved.status == "approved"
+
+
+def test_a_superseded_version_submitted_again_waits_for_approval(h):
+    account = _module(h)
+    first = _submit(h, account).manifest
+    h.admin("approve_manifest", account.id)
+    wider = document(statement("Allow", ["triple_store:*"], ["*"]))
+    _submit(h, account, wider)
+    h.admin("approve_manifest", account.id)
+    assert h.admin("get_manifest", account.id, first.sha256).status == "superseded"
+    # Rolling back to the first version: pending again, the wider one in force.
+    again = _submit(h, account)
+    assert again.manifest.status == "pending" and again.in_force
+    assert [m.sha256 for m in h.admin("list_manifests", status="pending")] == [
+        first.sha256
+    ]
+    assert h.allowed("triple_store:Insert", "abi:triple_store:graph/x", account)
+    assert h.admin("approve_manifest", account.id).sha256 == first.sha256
+    assert not h.allowed("triple_store:Insert", "abi:triple_store:graph/x", account)
+
+
+def test_approving_needs_the_admin_action(h):
+    account = _module(h)
+    _submit(h, account)
+    with h.as_(account), pytest.raises(PermissionDeniedError):
+        h.iam.approve_manifest(account.id)
+    assert h.admin("list_manifests", status="pending")[0].principal_id == account.id
+
+
+def test_unapproved_modules_reach_nothing_but_their_bootstrap(h):
+    account = _module(h)
+    _submit(h, account)
+    assert not h.allowed("document:Find", "abi:document:collection/people/c", account)
+    assert not h.allowed(QUERY, "abi:triple_store:graph/people-a", account)
+
+
+# -- broker permissions -------------------------------------------------------
+
+
+def test_broker_permissions_follow_the_approved_policy(h, iam):
+    account = _module(h)
+    key = h.admin("create_key", account.id).record
+    sa = account.id.removeprefix("sa_")
+    before = iam.broker_permissions(account, key)
+    assert before.inbox_prefix == f"_INBOX.{key.key_id}"
+    assert f"_INBOX.{key.key_id}.>" in before.subscribe
+    assert "_INBOX.>" not in before.subscribe
+    assert f"abi.agent.acme.{sa}.>" in before.subscribe
+    assert f"abi.mod.acme.{sa}.>" in before.subscribe
+    assert "abi.iam.v1.token" in before.publish
+    assert "abi.iam.v1.changed" not in before.publish
+    assert "abi.discovery.acme.v1.>" in before.publish
+    assert not any(s.startswith("abi.svc.") for s in before.publish)
+    assert ">" not in before.publish and ">" not in before.subscribe
+
+    _submit(h, account, document(statement("Allow", ["document:*"], ["*"])))
+    h.admin("approve_manifest", account.id)
+    after = iam.broker_permissions(account, key)
+    assert "abi.svc.document.v1.>" in after.publish
+    assert "abi.svc.triple_store.v1.>" not in after.publish
+
+
+def test_broker_permissions_never_read_a_cached_policy(h, iam):
+    account = _module(h)
+    key = h.admin("create_key", account.id).record
+    _submit(h, account, document(statement("Allow", ["document:*"], ["*"])))
+    h.admin("approve_manifest", account.id)
+    assert h.allowed("document:Get", "abi:document:document/x/y", account)
+    # Narrowed in the store by another process (abi iam), this one not told.
+    policy = iam.store.get_policy("module.acme.people")
+    iam.store.put_managed_policy(
+        replace(
+            policy,
+            document=parse_policy_document(
+                document(statement("Allow", ["keyvalue:*"], anywhere("keyvalue:*")))
+            ),
+        )
+    )
+    after = iam.broker_permissions(account, key)
+    assert "abi.svc.document.v1.>" not in after.publish
+    assert "abi.svc.keyvalue.v1.>" in after.publish
+
+
+def test_a_manifest_naming_a_platform_topic_is_refused(h):
+    account = _module(h)
+    wide = document(statement("Allow", ["bus:*"], ["abi:bus:topic/abi.iam.v1"]))
+    with pytest.raises(PolicyValidationError, match="reserved for the platform"):
+        _submit(h, account, wide)
+    _submit(h, account)
+    with pytest.raises(PolicyValidationError, match="reserved for the platform"):
+        h.admin("approve_manifest", account.id, document=wide)
+
+
+def _topic(topic: str):
+    return document(statement("Allow", ["bus:*"], [f"abi:bus:topic/{topic}"]))
+
+
+def test_a_topic_nested_in_another_modules_approved_topic_is_refused(h):
+    orders = _module(h)
+    _submit(h, orders, _topic("orders"))
+    h.admin("approve_manifest", orders.id)
+    eu = _module(h, "module/acme/eu")
+    _submit(h, eu, _topic("orders.eu"), module_id="eu")
+    with pytest.raises(PolicyValidationError, match="inside approved topic"):
+        h.admin("approve_manifest", eu.id)
+    # The same topic is shared, fine.
+    shared = _module(h, "module/acme/shared")
+    _submit(h, shared, _topic("orders"), module_id="shared")
+    assert h.admin("approve_manifest", shared.id).status == "approved"
+
+
+def test_a_forged_change_notice_never_stops_refreshes(iam):
+    import asyncio
+    from types import SimpleNamespace
+
+    from naas_abi_proto.iam.v1 import iam_pb2 as pb
+
+    from naas_abi_core.services.iam.adapters.primary.iam__primary_adapter__NATS import (
+        IAMPrimaryAdapterNATS,
+    )
+
+    other = IAMService(iam.store)  # another process writing the same store
+    primary = IAMPrimaryAdapterNATS(iam, iam.verifier())
+    calls = []
+    iam.invalidate = lambda: calls.append(iam.store.revision())  # type: ignore[method-assign]
+
+    def heard(revision: int) -> None:
+        msg = SimpleNamespace(
+            data=pb.ChangeEvent(revision=revision).SerializeToString()
+        )
+        asyncio.run(primary._heard_change(msg))
+
+    heard(2**62)  # forged: the store's revision is what counts
+    seen = len(calls)
+    heard(2**62)
+    assert len(calls) == seen  # nothing changed in the store
+    with as_service_account("engine"):
+        other.create_service_account("ci/after-the-forgery")
+    heard(1)  # a real change, whatever the notice says
+    assert len(calls) == seen + 1
+
+
+def test_a_topic_nested_in_a_policy_attached_directly_is_refused_too(h, iam):
+    from naas_abi_core.services.iam.IAMPorts import Attachment, Policy, new_id
+
+    ci = h.service_account("ci/feeder")
+    iam.store.put_managed_policy(
+        Policy(
+            id="custom.feeder",
+            name="feeder",
+            document=parse_policy_document(_topic("orders")),
+            managed=True,
+        )
+    )
+    iam.store.attach(Attachment(new_id("att"), "custom.feeder", ci.id))
+    eu = _module(h, "module/acme/eu")
+    _submit(h, eu, _topic("orders.eu"), module_id="eu")
+    with pytest.raises(PolicyValidationError, match="inside approved topic"):
+        h.admin("approve_manifest", eu.id)
+
+
+def test_a_denied_topic_is_no_topic_another_one_nests_in(h):
+    orders = _module(h)
+    _submit(h, orders, _topic("orders"))
+    h.admin("approve_manifest", orders.id)
+    denier = _module(h, "module/acme/denier")
+    only_deny = document(statement("Deny", ["bus:*"], ["abi:bus:topic/orders.eu"]))
+    _submit(h, denier, only_deny, module_id="denier")
+    assert h.admin("approve_manifest", denier.id).status == "approved"
+
+
+def test_a_trigger_seal_is_the_engines_over_exactly_its_fields(iam):
+    fields = ["abi.jobs.p.trigger.a.b", "manual", "0" * 64, []]
+    seal = iam.seal_trigger(fields)
+    assert iam.trigger_sealed(fields, seal)
+    assert not iam.trigger_sealed([*fields[:1], "event", *fields[2:]], seal)
+    assert not iam.trigger_sealed(["abi.jobs.p.trigger.a.c", *fields[1:]], seal)
+    assert not iam.trigger_sealed(fields, "v1.forged")
+    # The key is kept: another engine on the same secrets seals the same.
+    other = IAMService(iam.store, secrets=iam.secrets)
+    assert other.trigger_sealed(fields, seal)
+
+
+def test_a_retired_managed_policy_and_its_attachments_go_at_boot(h):
+    from naas_abi_core.services.iam.IAMPorts import Policy
+    from naas_abi_core.services.iam.policy import PolicyDocument, Statement
+
+    old = Policy(
+        id="builtin.transitional.nexus_user",
+        name="old",
+        document=PolicyDocument(
+            statements=(Statement("Allow", ("triple_store:*",), ("*",), "Old"),)
+        ),
+        managed=True,
+    )
+    h.iam.store.put_managed_policy(old)
+    record = h.admin("ensure_user", LEGACY_NEXUS_ISSUER, "user-0123456789ab")
+    h.iam.store.attach(
+        __import__(
+            "naas_abi_core.services.iam.IAMPorts", fromlist=["Attachment"]
+        ).Attachment("att_x", old.id, record.id)
+    )
+    with _nexus_call("user-0123456789ab"):
+        assert h.iam.authorize(QUERY, graph("a")).allowed
+    h.iam.bootstrap()
+    with _nexus_call("user-0123456789ab"):
+        assert not h.iam.authorize(QUERY, graph("a")).allowed
+    with pytest.raises(IAMNotFoundError):
+        h.iam.store.get_policy(old.id)
+
+
+def _old_feature_policy(policy_id="builtin.features.org-1.member"):
+    from naas_abi_core.services.iam.IAMPorts import Policy
+    from naas_abi_core.services.iam.policy import PolicyDocument, Statement
+
+    return Policy(
+        id=policy_id,
+        name="Features of org-1.member",
+        document=PolicyDocument(
+            statements=(
+                # As the rewrite of the names left it (``${scope}:*`` before).
+                Statement("Allow", ("triple_store:Query",), ("${scope}/*",), "Old"),
+            )
+        ),
+        managed=True,
+    )
+
+
+def test_the_feature_policies_an_older_version_made_stay_until_moved(h):
+    """An older version generated ``builtin.features.*`` and attached them beside
+    each role: they stay in force at boot (nothing is lost before the module that
+    made them moved them), and ``retire_policies`` drops them with what is
+    attached once it has."""
+    from naas_abi_core.services.iam.IAMPorts import Attachment
+
+    old = _old_feature_policy()
+    h.iam.store.put_managed_policy(old)
+    bob = h.user("bob")
+    h.iam.store.attach(Attachment("att_old", old.id, bob.id, WS))
+    h.iam.bootstrap()
+    h.iam.invalidate()
+    assert h.allowed(QUERY, graph("a", "org-1", "ws-1"), bob)
+    with as_service_account("engine"):
+        assert [p.id for p in h.iam.retired_policies()] == [old.id]
+        with pytest.raises(ValueError):
+            h.iam.retire_policies([roles.MEMBER])
+        assert h.iam.retire_policies([old.id]) == [old.id]
+        assert h.iam.retire_policies([old.id]) == []
+    assert not h.allowed(QUERY, graph("a", "org-1", "ws-1"), bob)
+    with pytest.raises(IAMNotFoundError):
+        h.iam.store.get_policy(old.id)
+    assert h.iam.store.list_attachments(policy_id=old.id) == []
+
+
+def test_retiring_needs_the_right_to_delete(h):
+    h.iam.store.put_managed_policy(_old_feature_policy())
+    bob = h.user("bob")
+    with h.as_(bob), pytest.raises((PermissionDeniedError, ResourceNotFoundError)):
+        h.iam.retire_policies(["builtin.features.org-1.member"])
+    assert h.iam.store.get_policy("builtin.features.org-1.member")
+
+
+def test_an_old_companion_follows_its_role_out(h):
+    """Until it is moved, a retired policy attached beside a role leaves with
+    the role, as the older version's sync detached it."""
+    from naas_abi_core.services.iam.IAMPorts import Attachment
+
+    old = _old_feature_policy()
+    h.iam.store.put_managed_policy(old)
+    bob = h.user("bob")
+    h.attach(roles.MEMBER, bob.id, WS)
+    h.iam.store.attach(Attachment("att_old", old.id, bob.id, WS))
+    with as_service_account("engine"):
+        h.iam.detach_policy(roles.MEMBER, bob.id, WS)
+    assert h.iam.store.list_attachments(policy_id=old.id) == []
+
+
+def _legacy_nexus_catalog() -> ActionCatalog:
+    """The ``nexus`` catalog as an older version stored it: no flags, no format."""
+    found = ActionCatalog(
+        service="nexus",
+        version=6,
+        resource_types=(
+            ResourceType("workspace", id="singleton"),
+            ResourceType("feature"),
+        ),
+        actions=(
+            ActionSpec("GetWorkspace", "read", ("workspace",)),
+            ActionSpec("DeleteWorkspace", "admin", ("workspace",)),
+            ActionSpec("UseFeature", "read", ("feature",)),
+        ),
+    )
+    return ActionCatalog.from_dict(found.to_dict(), stored=True)
+
+
+def _role_actions(iam, role):
+    return {a for s in iam.get_policy(role).document.statements for a in s.actions}
+
+
+def test_a_catalog_stored_before_the_flags_widens_no_role(h):
+    """IAM loads the stored catalogs at boot. One stored before the flags says
+    nothing of policy-only types or owner-only actions: until it is registered
+    again its service holds nothing for the roles, so no role reaches a feature
+    nor an admin the owners' delete, before the registration or after one that
+    fails."""
+    store = IAMStoreMemory()
+    legacy = _legacy_nexus_catalog()
+    assert legacy.format == 1 and not legacy.flags_known
+    store.put_catalog(legacy)
+    iam = IAMService(store)
+    iam.bootstrap()
+
+    def nexus_of(role):
+        with as_service_account("engine"):
+            return {a for a in _role_actions(iam, role) if a.startswith("nexus:")}
+
+    for role in roles.ROLES:
+        assert nexus_of(role) == set(), role
+    newer = ActionCatalog(
+        service="nexus",
+        version=7,
+        resource_types=(ResourceType("workspace", id="singleton"),),
+        actions=(ActionSpec("GetWorkspace", "read", ("workspace",)),),
+    )
+    with as_service_account("engine"):
+        policy = iam.create_policy(
+            "names an action v7 drops",
+            {
+                "version": "2026-10-13",
+                "statements": [
+                    {
+                        "effect": "Allow",
+                        "actions": ["nexus:UseFeature"],
+                        "resources": ["*"],
+                    }
+                ],
+            },
+        )
+        assert policy.id
+        with pytest.raises(IAMConflictError):
+            iam.register_catalog(newer)
+    for role in roles.ROLES:
+        assert nexus_of(role) == set(), role
+    flagged = ActionCatalog(
+        service="nexus",
+        version=7,
+        resource_types=(
+            ResourceType("workspace", id="singleton"),
+            ResourceType("feature", policy_only=True),
+        ),
+        actions=(
+            ActionSpec("GetWorkspace", "read", ("workspace",)),
+            ActionSpec("DeleteWorkspace", "admin", ("workspace",), owner_only=True),
+            ActionSpec("UseFeature", "read", ("feature",)),
+        ),
+    )
+    with as_service_account("engine"):
+        iam.register_catalog(flagged)
+    assert "nexus:GetWorkspace" in nexus_of(roles.VIEWER)
+    assert "nexus:UseFeature" not in nexus_of(roles.OWNER)
+    assert "nexus:DeleteWorkspace" not in nexus_of(roles.ADMIN)
+    assert "nexus:DeleteWorkspace" in nexus_of(roles.OWNER)
+
+
+def test_a_demoted_role_takes_its_old_features_with_it(h):
+    """Nexus changes a role by attaching the new one, then detaching the old:
+    the older version's companion of the old role goes with it, even though a
+    role is still held there."""
+    from naas_abi_core.services.iam.IAMPorts import Attachment
+
+    ws = WS
+    admins = _old_feature_policy("builtin.features.org-1.admin")
+    h.iam.store.put_managed_policy(admins)
+    bob = h.user("bob")
+    h.attach(roles.ADMIN, bob.id, ws)
+    h.iam.store.attach(Attachment("att_old", admins.id, bob.id, ws))
+    with as_service_account("engine"):
+        h.iam.attach_policy(roles.VIEWER, bob.id, ws)
+        assert h.iam.store.list_attachments(policy_id=admins.id)  # admin still held
+        h.iam.detach_policy(roles.ADMIN, bob.id, ws)
+    assert h.iam.store.list_attachments(policy_id=admins.id) == []
+    assert roles.retired_role(admins.id) == roles.ADMIN
+    assert roles.retired_role("builtin.features.member") == roles.MEMBER
+    assert roles.retired_role("pol_x") is None
+
+
+def test_retiring_checks_every_id_before_dropping_any(h):
+    h.iam.store.put_managed_policy(_old_feature_policy())
+    with as_service_account("engine"), pytest.raises(ValueError):
+        h.iam.retire_policies(["builtin.features.org-1.member", roles.MEMBER])
+    assert h.iam.store.get_policy("builtin.features.org-1.member")
+
+
+def test_the_same_version_without_a_format_never_replaces_one_with(h):
+    """An older writer re-registering the same version (no format: flags
+    unknown) leaves the catalog whose flags are read in place."""
+    flagged = ActionCatalog(
+        service="acme",
+        version=3,
+        resource_types=(ResourceType("thing", policy_only=True),),
+        actions=(ActionSpec("UseThing", "read", ("thing",)),),
+    )
+    with as_service_account("engine"):
+        assert h.iam.register_catalog(flagged)
+        older = ActionCatalog.from_dict(
+            {
+                **flagged.to_dict(),
+                "resource_types": [
+                    {"name": "thing", "id": "opaque", "placement": "placed"}
+                ],
+            },
+            stored=True,
+        )
+        assert older.format == 1
+        assert h.iam.register_catalog(older) is False
+    assert (
+        h.iam.list_catalogs()
+        and next(c for c in h.iam.list_catalogs() if c.service == "acme")
+        .resource_types[0]
+        .policy_only
+    )
+
+
+def test_a_retired_policy_that_is_a_parent_is_detached_but_kept(h):
+    """Sub-policies stay bounded by their parent: a retired policy someone
+    derived from is detached (it grants nothing any more) but stays until its
+    sub-policies get another parent."""
+    from naas_abi_core.services.iam.IAMPorts import Attachment
+
+    old = _old_feature_policy()
+    h.iam.store.put_managed_policy(old)
+    bob = h.user("bob")
+    h.iam.store.attach(Attachment("att_old", old.id, bob.id, WS))
+    with as_service_account("engine"):
+        child = h.iam.create_policy(
+            "narrower",
+            document(statement("Allow", [QUERY], ["${scope}/triple_store:graph/a"])),
+            parent=old.id,
+        )
+        assert h.iam.retire_policies([old.id]) == []
+    assert h.iam.store.get_policy(old.id)
+    assert h.iam.store.list_attachments(policy_id=old.id) == []
+    assert child.id
+
+
+def test_placements_and_containers_are_read_from_the_store_once(h):
+    """The placements, their index and the containers are cached side by side:
+    resolving names and checking the container of a call read the store once."""
+    h.register("ws-1", "org-1")
+    h.admin("put_placement", "triple_store", "g", WS)
+    reads = {"placements": 0, "containers": 0}
+    store = h.iam.store
+    list_placements, list_containers = store.list_placements, store.list_containers
+
+    def counted_placements(*args, **kwargs):
+        reads["placements"] += 1
+        return list_placements(*args, **kwargs)
+
+    def counted_containers(*args, **kwargs):
+        reads["containers"] += 1
+        return list_containers(*args, **kwargs)
+
+    store.list_placements = counted_placements  # type: ignore[method-assign]
+    store.list_containers = counted_containers  # type: ignore[method-assign]
+    for _ in range(3):
+        assert h.iam.container("nexus", "workspace", "ws-1") == WS
+        assert h.iam.resolve_placement("triple_store", "g") == WS
+        assert h.iam.placement_of("triple_store", "other") is None
+    assert reads == {"placements": 1, "containers": 1}

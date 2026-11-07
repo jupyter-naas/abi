@@ -12,7 +12,7 @@ import shutil
 import socket
 import subprocess
 import time
-from collections.abc import Generator, Iterator, Mapping
+from collections.abc import Generator, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -57,13 +57,11 @@ def native_nats_server(
     *,
     max_payload: int | None = None,
     jetstream: bool = False,
-    users: Mapping[str, str] | None = None,
+    config: str = "",
 ) -> Iterator[str]:
     """Run ``nats-server`` on a free local port; yield its URL.
 
-    ``users`` (passwords of ``abi`` and ``module``) makes it log every client in,
-    as deployed brokers do: ``abi`` with every right, ``module`` within
-    ``nats_permissions.MODULE_PERMISSIONS``. Add the login with :func:`login`."""
+    ``config``: more nats.conf (an ``authorization`` block, say)."""
     binary = nats_server_binary()
     if binary is None:
         raise RuntimeError("nats-server is not installed")
@@ -71,15 +69,11 @@ def native_nats_server(
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
     command = [binary, "-a", "127.0.0.1", "-p", str(port)]
-    if max_payload is not None or users is not None:
-        from naas_abi_core.engine.nats_permissions import authorization_config
-
-        config = workdir / "nats.conf"
-        config.write_text(
-            (f"max_payload: {max_payload}\n" if max_payload is not None else "")
-            + (authorization_config(users) if users is not None else "")
-        )
-        command += ["-c", str(config)]
+    if max_payload is not None or config:
+        path = workdir / "nats.conf"
+        limit = f"max_payload: {max_payload}\n" if max_payload is not None else ""
+        path.write_text(limit + config)
+        command += ["-c", str(path)]
     if jetstream:
         command += ["-js", "-sd", str(workdir / "jetstream")]
     with (workdir / "nats.log").open("w") as log:
@@ -100,8 +94,3 @@ def native_nats_server(
     finally:
         process.terminate()
         process.wait(timeout=5)
-
-
-def login(url: str, user: str, password: str) -> str:
-    """``url`` (``nats://host:port``) logged in as ``user``."""
-    return url.replace("nats://", f"nats://{user}:{password}@", 1)

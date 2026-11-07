@@ -16,7 +16,7 @@ git clone https://github.com/jravenel/nexus.git && cd nexus
 make install && make db-up && make db-migrate && make up
 ```
 
-→ **http://localhost:3000/auth/login** · `admin@example.com`, password from `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD` in `.env`
+→ **http://localhost:3000/auth/login** · `admin@example.com`, then the 6-digit code the identity provider emails (no password; in `abi dev`, `abi dev code` prints it)
 
 ## Features
 

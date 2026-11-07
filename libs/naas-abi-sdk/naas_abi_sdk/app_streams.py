@@ -23,7 +23,7 @@ from nats.errors import NoRespondersError
 from nats.errors import TimeoutError as NATSTimeoutError
 
 from naas_abi_sdk.broker_flush import flush_to_broker
-from naas_abi_sdk.messages import reply
+from naas_abi_sdk.messages import reply, reply_allowed
 from naas_abi_sdk.transport import RPCError
 
 logger = logging.getLogger(__name__)
@@ -185,10 +185,14 @@ class BodySource:
         try:
             pull = pb.BodyPull.FromString(msg.data)
         except Exception:  # noqa: BLE001 - a malformed pull gets an error
-            return await self._answer(msg, _error("INVALID_ARGUMENT", "Bad pull"))
-        if pull.cancel:
-            self.gone.set()
+            pull = None
+        if pull is not None and pull.cancel:
+            self.gone.set()  # needs no answer
             return None
+        if not reply_allowed(msg.reply):
+            return None  # answered on an inbox only: the reply subject is the puller's
+        if pull is None:
+            return await self._answer(msg, _error("INVALID_ARGUMENT", "Bad pull"))
         if self._serving is not None and not self._serving.done():
             # A reader sends its next pull once answered: another one now is
             # out of turn, and is not queued (no backlog of waiting pulls).

@@ -19,17 +19,14 @@ PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     ("GET", "/health"): "liveness probe",
     ("GET", "/api/tenant"): "branding for the login page",
     ("GET", "/api/organizations/slug/{slug}/branding"): "org login page branding",
-    ("GET", "/api/auth/config"): "tells the login page which methods exist",
-    ("POST", "/api/auth/register"): "sign-up (off unless auth_signup_enabled)",
-    ("POST", "/api/auth/login"): "sign-in",
-    ("POST", "/api/auth/token"): "OAuth2 password sign-in",
-    ("POST", "/api/auth/refresh"): "exchanges a refresh token",
-    ("POST", "/api/auth/forgot-password"): "password reset request",
-    ("POST", "/api/auth/reset-password"): "password reset with a token",
-    ("POST", "/api/auth/magic-link/request"): "sign-in code request",
-    ("POST", "/api/auth/magic-link/verify"): "sign-in with a link token",
-    ("POST", "/api/auth/otp/verify"): "sign-in with a code",
+    ("POST", "/api/iam/token"): "OAuth2 token endpoint: a personal API key is the credential",
     ("GET", "/api/auth/avatar/{filename}"): "avatar images used in <img> tags",
+    ("GET", "/api/auth/oidc/providers"): "the identity providers a login page offers",
+    ("POST", "/api/auth/oidc/route"): "which identity provider an email signs in with",
+    ("GET", "/api/auth/oidc/login"): "starts a sign-in at an identity provider",
+    ("GET", "/api/auth/oidc/callback"): "the identity provider's redirect back",
+    ("GET", "/api/auth/oidc/session"): "the session cookie's user, checked by the route",
+    ("POST", "/api/auth/oidc/logout"): "ends the session cookie's session, CSRF-checked",
     ("GET", "/api/auth/avatar/user/{user_id}"): "account pictures (personal drive) in <img> tags",
     ("GET", "/api/auth/avatar/user/{user_id}/org"): "organization member pictures (personal drive)",
     ("GET", "/api/auth/avatar/user/{user_id}/org/{org_id}"): "per-org member pictures",
@@ -47,7 +44,28 @@ PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     },
     ("GET", "/app-remote/{grant}/{module_id}/{app}"): "capability URL (signed remote app grant)",
     ("HEAD", "/app-remote/{grant}/{module_id}/{app}"): "capability URL (signed remote app grant)",
+    **{
+        (method, path): (
+            "capability URL (signed app-html access token, checked by its middleware); "
+            "every method: the user's request is redirected to a grant link, an ABI_API_KEY "
+            "caller's is answered directly"
+        )
+        for method in ("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+        for path in (
+            "/app-html/remote/{module_id}/{app}/{path:path}",
+            "/app-html/remote/{module_id}/{app}",
+        )
+    },
+    ("GET", "/app-html/{path:path}"): (
+        "capability URL (signed app-html access token, checked by its middleware)"
+    ),
     ("GET", "/provider-logos/{provider_id}"): "static provider logos",
+    **{
+        (method, "/idp/{path:path}"): (
+            "the built-in identity provider's pages and endpoints (a login has no user yet)"
+        )
+        for method in ("GET", "POST")
+    },
 }
 
 SUPERADMIN_ONLY = {
@@ -83,18 +101,11 @@ def _auth_guards() -> set:
     from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
         get_current_user_released,
         get_current_user_required,
-        require_superadmin_or_api_key,
     )
     from naas_abi_core.apps.api.abi_api_key_auth import require_abi_api_token
 
-    # get_current_user_released checks the same token on its own session;
-    # require_superadmin_or_api_key accepts a super admin's session or the API key.
-    return {
-        get_current_user_required,
-        get_current_user_released,
-        require_abi_api_token,
-        require_superadmin_or_api_key,
-    }
+    # get_current_user_released checks the same token on its own session.
+    return {get_current_user_required, get_current_user_released, require_abi_api_token}
 
 
 def test_every_route_requires_a_signed_in_caller_unless_listed(routes) -> None:
@@ -130,9 +141,9 @@ def test_sysadmin_routes_are_superadmin_only(routes) -> None:
         assert require_superadmin in routes[key], key
 
 
-def test_workflow_routes_are_superadmin_or_api_key_only(routes) -> None:
+def test_workflow_routes_are_superadmin_only(routes) -> None:
     from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
-        require_superadmin_or_api_key,
+        require_superadmin,
     )
 
     workflows = [key for key in routes if key[1].startswith("/api/workflows")]
@@ -143,7 +154,7 @@ def test_workflow_routes_are_superadmin_or_api_key_only(routes) -> None:
         ("POST", "/api/workflows/{module_id}/{name}/runs"),
     ]
     for key in workflows:
-        assert require_superadmin_or_api_key in routes[key], key
+        assert require_superadmin in routes[key], key
 
 
 def test_the_trace_viewer_is_mounted_under_sysadmin(routes) -> None:

@@ -12,9 +12,10 @@ from naas_abi_core.engine.engine_loaders.EngineJobLoader import (
     EngineJobLoader,
     as_async_handler,
 )
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.module.jobs import JobDescriptor, JobsMixin, job
 
-SECRET = "engine-job-loader-test-secret-32-bytes"
+SECRET = TEST_TOKENS.verifier
 
 
 class _Jobs(JobsMixin):
@@ -50,7 +51,6 @@ class _Host:
 
 def _config(**jobs):
     return NATSConfiguration(
-        jwt_secret=SECRET,
         discovery=DiscoveryConfiguration(project="zen"),
         jobs=NATSJobsConfiguration(**jobs),
     )
@@ -63,6 +63,7 @@ def _loader(config, hosts):
 
     return EngineJobLoader(
         config,
+        credentials=TEST_TOKENS.source("engine"),
         documents_factory=lambda transport, module_id: f"docs:{module_id}",
         host_factory=host_factory,
     )
@@ -107,6 +108,37 @@ def test_sync_handlers_run_in_their_own_interruptible_thread():
     assert worker == "abi-job-compact:1" != loop_thread
 
 
+@pytest.mark.parametrize("synchronous", [True, False])
+def test_engine_jobs_run_as_the_engine_for_nobody(synchronous):
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        current_call_context,
+        service_account,
+        use_call_context,
+        user,
+    )
+    from naas_abi_core.engine.engine_loaders.EngineJobLoader import as_engine
+    from naas_abi_core.module.jobs import JobContext
+
+    def sync_job(ctx):
+        return current_call_context()
+
+    async def async_job(ctx):
+        return current_call_context()
+
+    handler = as_engine(as_async_handler(sync_job if synchronous else async_job))
+
+    async def run():
+        ctx = JobContext("report:1", "report", 1, {"kind": "manual"}, {})
+        return await handler(ctx)
+
+    leaked = CallContext(principal=service_account("api"), on_behalf_of=user("u"))
+    with use_call_context(leaked):
+        seen = asyncio.run(run())
+    assert seen.principal == service_account("engine")
+    assert seen.user is None
+
+
 def test_async_handlers_are_used_as_is():
     async def handler(ctx):
         return None
@@ -141,7 +173,7 @@ def test_disabled_or_non_nats_engines_host_nothing():
 
 def test_project_defaults_without_discovery():
     hosts: list[_Host] = []
-    loader = _loader(NATSConfiguration(jwt_secret=SECRET), hosts)
+    loader = _loader(NATSConfiguration(), hosts)
 
     loader.start({"acme.jobs": _Jobs()}, document_available=True)
     loader.stop()
@@ -189,6 +221,7 @@ def test_a_module_triggers_its_own_jobs_while_its_host_runs():
     hosts: list = []
     loader = EngineJobLoader(
         _config(),
+        credentials=TEST_TOKENS.source("engine"),
         documents_factory=lambda transport, module_id: None,
         host_factory=lambda *a, **k: (
             hosts.append(_TriggeringHost(*a, **k)) or hosts[-1]
@@ -247,6 +280,43 @@ def test_retention_defaults_keep_a_week_and_skipped_runs_an_hour():
     assert retention.skipped_max_age.total_seconds() == 3600
 
 
+def test_a_modules_jobs_run_as_their_own_account_not_the_engine() -> None:
+    from naas_abi_core.engine.call_context import current_call_context
+    from naas_abi_core.engine.engine_loaders.EngineJobLoader import (
+        as_async_handler,
+        as_engine,
+        job_identity,
+    )
+    from naas_abi_core.services.iam import roles
+    from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import (
+        IAMStoreMemory,
+    )
+    from naas_abi_core.services.iam.IAMService import IAMService
+
+    iam = IAMService(IAMStoreMemory())
+    iam.bootstrap()
+    identity = job_identity(iam, "acme.jobs")
+    assert identity == "job/acme.jobs"
+    assert job_identity(iam, "acme.jobs") == identity  # idempotent
+    account = iam.store.find_service_account(identity)
+    assert account is not None
+    assert [
+        a.policy_id for a in iam.store.list_attachments(principal_id=account.id)
+    ] == [roles.JOB]
+    # No IAM of this engine's own: the engine itself.
+    assert job_identity(None, "acme.jobs") == "engine"
+
+    seen: list[str] = []
+
+    async def job(ctx):
+        seen.append(current_call_context().principal.name)
+
+    import asyncio
+
+    asyncio.run(as_engine(as_async_handler(job), identity)(None))
+    assert seen == ["job/acme.jobs"]
+
+
 def test_hosts_read_the_runs_of_other_modules_through_the_engines_documents():
     hosts: list[_Host] = []
     loader = _loader(_config(), hosts)
@@ -282,8 +352,9 @@ def test_a_sync_workflow_is_hosted_with_a_flow_context_that_blocks_on_the_host_l
         loader.stop()
 
     assert descriptor.kind == "workflow"
-    assert isinstance(handler, SyncJobRunner)
-    assert handler.context_factory is SyncFlowContext
+    runner = handler.__wrapped__  # as_engine: it runs as the module's job account
+    assert isinstance(runner, SyncJobRunner)
+    assert runner.context_factory is SyncFlowContext
 
 
 def test_a_declared_workflow_without_a_handler_fails_the_load():
@@ -322,6 +393,18 @@ def test_workflows_need_nats_mode():
         _loader(None, []).workflow("acme.remote", "report")
 
 
+def _bare_engine(Engine, nats):
+    """An engine with only what its job loader reads: the NATS block, its own
+    credentials, and no IAM of its own."""
+    e = Engine.__new__(Engine)
+    e._Engine__configuration = SimpleNamespace(nats=nats)  # type: ignore[attr-defined]
+    e._Engine__services = SimpleNamespace(iam_available=lambda: False)  # type: ignore[attr-defined]
+    e._Engine__credentials = TEST_TOKENS.source("engine")  # type: ignore[attr-defined]
+    e._Engine__job_loader = None  # type: ignore[attr-defined]
+    e._Engine__job_loader_lock = threading.Lock()  # type: ignore[attr-defined]
+    return e
+
+
 def test_engines_hand_out_workflows_and_modules_ask_for_declared_dependencies():
     from naas_abi_core.engine.Engine import Engine
     from naas_abi_core.engine.EngineProxy import EngineProxy
@@ -329,11 +412,7 @@ def test_engines_hand_out_workflows_and_modules_ask_for_declared_dependencies():
     from naas_abi_core.module.Module import ModuleDependencies
 
     def engine(nats):
-        e = Engine.__new__(Engine)
-        e._Engine__configuration = SimpleNamespace(nats=nats)  # type: ignore[attr-defined]
-        e._Engine__job_loader = None  # type: ignore[attr-defined]
-        e._Engine__job_loader_lock = threading.Lock()  # type: ignore[attr-defined]
-        return e
+        return _bare_engine(Engine, nats)
 
     nats = engine(_config())
     try:
@@ -363,10 +442,7 @@ def test_engines_hand_out_workflows_and_modules_ask_for_declared_dependencies():
 def test_an_engine_makes_its_loader_on_the_first_workflow_call():
     from naas_abi_core.engine.Engine import Engine
 
-    e = Engine.__new__(Engine)
-    e._Engine__configuration = SimpleNamespace(nats=_config())  # type: ignore[attr-defined]
-    e._Engine__job_loader = None  # type: ignore[attr-defined]
-    e._Engine__job_loader_lock = threading.Lock()  # type: ignore[attr-defined]
+    e = _bare_engine(Engine, _config())
     try:
         e.workflow("acme.remote", "report")
         made = e._Engine__job_loader  # type: ignore[attr-defined]
@@ -378,10 +454,7 @@ def test_an_engine_makes_its_loader_on_the_first_workflow_call():
 def test_threads_asking_at_once_share_one_loader_one_loop_and_one_connection():
     from naas_abi_core.engine.Engine import Engine
 
-    e = Engine.__new__(Engine)
-    e._Engine__configuration = SimpleNamespace(nats=_config())  # type: ignore[attr-defined]
-    e._Engine__job_loader = None  # type: ignore[attr-defined]
-    e._Engine__job_loader_lock = threading.Lock()  # type: ignore[attr-defined]
+    e = _bare_engine(Engine, _config())
     start, proxies = threading.Barrier(8), []
 
     def ask(i):

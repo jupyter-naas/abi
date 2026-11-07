@@ -59,7 +59,7 @@ class SentEmailSummary:
 
     message_id: str
     sent_at: str  # ISO 8601
-    size: int  # bytes of the RFC 5322 message
+    size: int  # size of the message in bytes (RFC 5322 format)
     subject: str
     to: str
     sender: str

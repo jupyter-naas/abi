@@ -2,6 +2,7 @@ import type { MapsPinMarker } from './leaflet-map';
 import { resolveMapsPinImageUrl } from './maps-pin-image-url';
 import { featureToPinPartial, isMapsFeatureCollection } from './maps-pin-geojson';
 import type { MapsFeedMeta } from './maps-view';
+import { authCredentials } from '@/stores/auth';
 
 export type { MapsFeedMeta, MapsFeedView } from './maps-view';
 export { formatMapsFeedAge, withMapsView } from './maps-view';
@@ -149,7 +150,8 @@ export async function fetchMapsFeedPins(
   headers?: HeadersInit,
   cache: RequestCache = 'no-store',
 ): Promise<MapsFeedResult> {
-  const res = await fetch(url, { signal, headers, cache });
+  // A cookie session's cookie must go with the request.
+  const res = await fetch(url, { signal, headers, credentials: authCredentials(), cache });
   const data = (await res.json()) as MapsFeedPayload & {type?: string; features?: unknown[]};
   const hasLocations =
     (Array.isArray(data.pins) && data.pins.length > 0)

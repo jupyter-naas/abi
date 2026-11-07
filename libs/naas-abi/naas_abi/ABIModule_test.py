@@ -238,3 +238,24 @@ def test_rate_limiting_stays_on_in_local_development() -> None:
     settings = Settings(environment="development", nexus_env="local")
 
     assert settings.rate_limit_enabled is True
+
+
+def test_nexus_urls_follow_the_environment_unless_yaml_sets_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`abi dev up` binds each worktree's own ports and says so through
+    API_URL / FRONTEND_URL; the sign-in redirect URI is built from api_url."""
+    from naas_abi import nexus_settings_kwargs
+    from naas_abi.apps.nexus.apps.api.app.core.config import Settings
+
+    monkeypatch.setenv("API_URL", "http://localhost:10088")
+    monkeypatch.setenv("FRONTEND_URL", "http://localhost:12209")
+
+    settings = Settings(**nexus_settings_kwargs(NexusConfig()))
+    assert settings.api_url == "http://localhost:10088"
+    assert settings.frontend_url == "http://localhost:12209"
+
+    configured = Settings(
+        **nexus_settings_kwargs(NexusConfig(api_url="https://abi.example"))
+    )
+    assert configured.api_url == "https://abi.example"

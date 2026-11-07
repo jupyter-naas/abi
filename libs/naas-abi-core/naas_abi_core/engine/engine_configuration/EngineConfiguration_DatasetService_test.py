@@ -5,6 +5,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_DatasetServic
     DatasetAdapterNATSConfiguration,
     DatasetServiceConfiguration,
 )
+from naas_abi_core.engine.nats_test_tokens import TEST_SERVICE_KEY
 from naas_abi_core.services.dataset.adapters.secondary.DatasetSecondaryAdapterDuckLake import (
     DatasetSecondaryAdapterDuckLake,
 )
@@ -43,8 +44,7 @@ def test_dataset_service_configuration_nats_rpc_is_lazy():
             adapter="nats_rpc",
             config=DatasetAdapterNATSConfiguration(
                 nats_url="nats://127.0.0.1:4222",
-                jwt_secret="test-shared-secret",
-                service_identity="api",
+                service_key=TEST_SERVICE_KEY,
             ).model_dump(),
         )
     )

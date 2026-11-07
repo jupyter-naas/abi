@@ -1,8 +1,8 @@
 // NATS-RPC contract for the activity_log kernel domain.
 // Mirrors naas_abi_core/services/activity_log/ActivityLogPort.py::IActivityLogAdapter
-// 1:1. See docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md.
+// 1:1.
 //
-// Subjects (see "Protobuf contract shapes" in the RFC):
+// Subjects:
 //   abi.svc.activity_log.v1.record
 //   abi.svc.activity_log.v1.query
 //   abi.svc.activity_log.v1.list_actors
@@ -25,9 +25,8 @@ message ActivityEvent {
   google.protobuf.Timestamp timestamp = 3;
   optional string correlation_id = 4;
   // dict[str, Any] on the port -- arbitrary caller-supplied JSON-shaped
-  // data, never enumerated by the domain. See the RFC's "Protobuf contract
-  // shapes" for why Struct is the right fit for this one field rather than
-  // a typed message, while the rest of the contract stays fully typed.
+  // data, never enumerated by the domain. Struct fits this one field better
+  // than a typed message, while the rest of the contract stays fully typed.
   google.protobuf.Struct attributes = 5;
   // Store-assigned, increasing per actor; unset on events being recorded.
   optional int64 seq = 6;

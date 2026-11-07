@@ -12,7 +12,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { useAuthStore } from '@/stores/auth';
+import { selectSession, useAuthStore } from '@/stores/auth';
 import { getApiUrl, getWebsocketPath } from '@/lib/config';
 
 interface PresenceUser {
@@ -36,7 +36,9 @@ const WebSocketContext = createContext<WebSocketContextType | null>(null);
 
 export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((state) => state.user);
-  const token = useAuthStore((state) => state.token);
+  const token = useAuthStore(selectSession);
+  // The server refuses the handshake of a view: no presence, no room, so none is tried.
+  const viewing = useAuthStore((state) => state.view !== null);
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [presenceUsers, setPresenceUsers] = useState<string[]>([]);
@@ -44,7 +46,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
 
   // Initialize socket connection
   useEffect(() => {
-    if (!user || !token) {
+    if (!user || !token || viewing) {
       setSocket(null);
       setIsConnected(false);
       return;
@@ -55,7 +57,8 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
 
     const socketInstance = io(apiUrl, {
       path: websocketPath,
-      auth: { authorization: `Bearer ${token}` },
+      // The session's cookie travels with the handshake.
+      withCredentials: true,
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionDelay: 1000,
@@ -140,7 +143,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     return () => {
       socketInstance.disconnect();
     };
-  }, [user, token]);
+  }, [user, token, viewing]);
 
   const joinWorkspace = useCallback((workspaceId: string) => {
     if (!socket) return;

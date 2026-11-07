@@ -27,8 +27,9 @@ stack = importlib.import_module("naas_abi_cli.cli.stack")
 REPO_ROOT = Path(__file__).resolve().parents[4]
 LEGACY_SERVICES = {"dagster", "rabbitmq"}
 NATS_SECRETS = {
-    "NATS_ABI_PASSWORD": "nats-abi-password-for-the-test",
-    "NATS_JWT_SECRET": "j" * 48,
+    "NATS_ENGINE_PASSWORD": "nats-engine-password-for-the-test",
+    "NATS_AUTH_PASSWORD": "nats-auth-password-for-the-test",
+    "NATS_AUTH_CALLOUT_SEED": "SAAFAKESEEDFORTHETEST",
 }
 
 
@@ -54,9 +55,13 @@ def test_the_repository_config_runs_on_nats(
 
     assert config.nats is not None
     assert config.nats.nats_url == (
-        f"nats://abi:{NATS_SECRETS['NATS_ABI_PASSWORD']}@{host}:4222"
+        f"nats://engine:{NATS_SECRETS['NATS_ENGINE_PASSWORD']}@{host}:4222"
     )
-    assert config.nats.jwt_secret == NATS_SECRETS["NATS_JWT_SECRET"]
+    # The engine answers the broker's auth callout; no shared signing secret.
+    assert config.nats.auth_callout is not None
+    assert config.nats.auth_callout.nats_url == (
+        f"nats://auth:{NATS_SECRETS['NATS_AUTH_PASSWORD']}@{host}:4222"
+    )
     assert config.nats.discovery is not None
     assert config.nats.discovery.project == "abi"
     # The bus is JetStream: an explicit bus block would have to name it.
@@ -66,7 +71,11 @@ def test_the_repository_config_runs_on_nats(
 def test_the_repository_names_its_nats_secrets_in_env_example() -> None:
     example = (REPO_ROOT / ".env.example").read_text(encoding="utf-8")
 
-    for key in ("NATS_ABI_PASSWORD", "NATS_MODULE_PASSWORD", "NATS_JWT_SECRET"):
+    for key in (
+        "NATS_ENGINE_PASSWORD",
+        "NATS_AUTH_PASSWORD",
+        "NATS_AUTH_CALLOUT_SEED",
+    ):
         assert re.search(rf"^#? ?{key}=", example, re.MULTILINE), key
 
 

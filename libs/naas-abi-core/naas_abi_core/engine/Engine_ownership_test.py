@@ -20,7 +20,7 @@ CONFIG = (
     "global_config: {ai_mode: cloud, skip_ontology_loading: true}\n"
     "modules: []\n"
     "services: {secret: {secret_adapters: []}}\n"
-    "nats: {jwt_secret: test-secret}\n"
+    "nats: {service_key: abi_sk_aaaaaaaaaaaaaaaa_dGVzdC1vbmx5LXNlcnZpY2Uta2V5}\n"
 )
 
 
@@ -103,8 +103,8 @@ def new_engine(**engine):
     settings = ", ".join(f"{key}: {value}" for key, value in engine.items())
     return Engine(
         CONFIG.replace(
-            "{jwt_secret: test-secret}",
-            f"{{jwt_secret: test-secret, engine: {{{settings}}}}}",
+            "nats: {service_key: ",
+            f"nats: {{engine: {{{settings}}}, service_key: ",
         )
     )
 
@@ -183,6 +183,27 @@ def test_a_client_engine_reaches_every_service_through_nats_and_loads_none(
     assert isinstance(memory.documents.adapter, NatsRPCClient)
     parts.expose.assert_not_called()
     engine.shutdown()
+
+
+def test_a_client_engine_carries_users_with_an_iam_that_calls_by_its_key_alone(
+    parts,
+):
+    """The engine's tokens carry the users it serves through the serving
+    engine's IAM, and that IAM is called with the engine's own key: asked
+    through the delegating source, a delegation would wait on itself."""
+    parts.claim.return_value = None
+    engine = new_engine()
+
+    engine.load()
+
+    credentials = engine._Engine__credentials
+    iam = engine._Engine__client_iam
+    assert credentials._delegate is not None
+    assert iam._credentials is not credentials
+    assert iam._credentials._delegate is None
+    assert iam._credentials.identity == credentials.identity == "engine"
+    engine.shutdown()
+    assert engine._Engine__client_iam is None
 
 
 def test_a_client_engine_leaves_the_ontologies_to_the_serving_engine(

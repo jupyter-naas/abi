@@ -3,8 +3,10 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from naas_abi.apps.nexus.apps.api.app.services.graph.testing import acting_as_header
+from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 from naas_abi.apps.nexus.apps.api.app.services.maps.basemaps.adapters.secondary.memory import (
     InMemoryMapsBasemapStore,
 )
@@ -34,7 +36,21 @@ WORKSPACES = {"ws-fm": "Forvis Mazars", "ws-fr": "Forvis Mazars en France", "ws-
 
 
 @pytest.fixture
-def setup(monkeypatch):
+def setup():
+    """Who is what is IAM's: ``root`` administers the platform, ``fr-admin`` is an admin
+    of ``ws-fr`` and ``ws-valeo``, ``member`` a member of ``ws-fr``."""
+    nexus = NexusIam()
+    nexus.org("org-1")
+    containers = {workspace: nexus.workspace("org-1", workspace) for workspace in WORKSPACES}
+    for workspace in ("ws-fr", "ws-valeo"):
+        nexus.grant("fr-admin", "admin", containers[workspace])
+    nexus.grant("member", "member", containers["ws-fr"])
+    nexus.platform_admin("root")
+    with nexus.installed():
+        yield from _setup()
+
+
+def _setup():
     access = MapsAccess(InMemoryMapsGrantStore())
     settings = InMemoryMapsSettingsStore()
     layouts = MapsLayoutService(InMemoryMapsLayoutStore(), settings, access)
@@ -59,19 +75,12 @@ def setup(monkeypatch):
     app.dependency_overrides[api.get_maps_basemap_service] = lambda: basemaps
     app.dependency_overrides[api.get_workspace_directory] = lambda: directory
 
-    async def admin(user_id, workspace_id):
-        if user_id == "member":
-            raise HTTPException(status_code=403, detail="admins only")
+    acting_as_header(app)
 
-    monkeypatch.setattr(api, "require_workspace_admin", admin)
+    def client(user_id: str) -> TestClient:
+        return TestClient(app, headers={"x-user": user_id})
 
-    def client(user_id: str, superadmin: bool = False) -> TestClient:
-        app.dependency_overrides[api.get_current_user_required] = lambda: SimpleNamespace(
-            id=user_id, is_superadmin=superadmin
-        )
-        return TestClient(app)
-
-    return SimpleNamespace(client=client, layouts=layouts)
+    yield SimpleNamespace(client=client, layouts=layouts)
 
 
 def _item(body, item_id):
@@ -79,7 +88,7 @@ def _item(body, item_id):
 
 
 def test_superadmin_restricts_valeo_to_two_workspaces(setup) -> None:
-    root = setup.client("root", superadmin=True)
+    root = setup.client("root")
     listed = root.get("/api/maps/permissions?workspace_id=ws-fm").json()
     assert [w["id"] for w in listed["workspaces"]] == ["ws-fm", "ws-fr", "ws-valeo"]
     valeo = _item(listed, "valeo-facilities")

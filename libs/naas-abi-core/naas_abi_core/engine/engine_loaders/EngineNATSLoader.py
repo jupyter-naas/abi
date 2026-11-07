@@ -1,7 +1,6 @@
 """Expose already-loaded engine services over NATS, if configured to.
 
-See docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md and
-``EngineConfiguration.NATSConfiguration``'s docstring for the design this
+See ``EngineConfiguration.NATSConfiguration``'s docstring for the design this
 implements: ``config.yaml``'s top-level ``nats:`` block is what turns this
 on at all -- no per-service opt-in flag. When present, every loaded service
 that has a NATS primary adapter available gets one started automatically,
@@ -14,12 +13,11 @@ Extending to another service means adding one more branch to
 metaprogrammed dispatch, matching how ``EngineServiceLoader.load_services``
 itself lists every service explicitly rather than looping over a registry.
 
-``secret`` is exposed too, at Max's explicit direction, despite Stage 1's
-shared-JWT auth having no per-caller ARN/IAM authorization yet -- anyone
-holding a valid service token can read every secret this process's
-``Secret`` service is configured with. Accepted as a known, temporary gap
-("if it's adding security problems we will have to fix that anyway"), not
-an oversight -- revisit once Stage 2 per-caller authorization exists. It
+Every primary verifies its callers' engine tokens against IAM's JWKS: in
+this process when it holds IAM (the serving engine), else over NATS.
+
+``secret`` is exposed too; the ``Secret`` domain service it wraps checks each
+caller per key against IAM, as every exposed domain service does. It
 also has its own re-exposure guard shape (see ``expose_services`` below):
 ``Secret`` fans out over a *list* of adapters, not one, so only its local
 adapters are served: a NATS client in the fanout is left out, preventing
@@ -38,6 +36,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     EngineConfiguration,
 )
 from naas_abi_core.engine.IEngine import IEngine
+from naas_abi_core.engine.nats_auth import TokenVerifier
 from naas_abi_core.services.activity_log.adapters.primary.activity_log__primary_adapter__NATS import (
     ActivityLogPrimaryAdapterNATS,
 )
@@ -80,6 +79,14 @@ from naas_abi_core.services.event.adapters.primary.event__primary_adapter__NATS 
 from naas_abi_core.services.event.adapters.secondary.EventSecondaryAdapterNATSClient import (
     EventSecondaryAdapterNATSClient,
 )
+from naas_abi_core.services.iam.adapters.primary.iam__primary_adapter__NATS import (
+    IAMPrimaryAdapterNATS,
+)
+from naas_abi_core.services.iam.IAMService import IAMService
+from naas_abi_core.services.identity.adapters.primary.identity__primary_adapter__NATS import (
+    IdentityPrimaryAdapterNATS,
+)
+from naas_abi_core.services.identity.IdentityService import IdentityService
 from naas_abi_core.services.keyvalue.adapters.primary.keyvalue__primary_adapter__NATS import (
     KeyValuePrimaryAdapterNATS,
 )
@@ -99,7 +106,6 @@ from naas_abi_core.services.secret.adaptors.secondary.SecretSecondaryAdapterNATS
     SecretSecondaryAdapterNATSClient,
 )
 from naas_abi_core.services.secret.Secret import Secret
-from naas_abi_core.services.ServiceBase import ServiceBase
 from naas_abi_core.services.source_control.adapters.primary.source_control__primary_adapter__NATS import (
     SourceControlPrimaryAdapterNATS,
 )
@@ -120,22 +126,35 @@ from naas_abi_core.services.vector_store.adapters.secondary.VectorStoreSecondary
 )
 
 
-def _publish_owner_event(service: ServiceBase, event: object) -> None:
-    if service.services_wired and service.services.events_available():
-        service.services.events.publish(event)
-
-
 class EngineNATSLoader:
     __configuration: EngineConfiguration
 
     def __init__(self, configuration: EngineConfiguration):
         self.__configuration = configuration
+        self._verifier: TokenVerifier | None = None
+
+    def verifier(self, services: IEngine.Services | None = None) -> TokenVerifier:
+        """What every primary verifies tokens with: IAM's own JWKS when this
+        process holds IAM, else the JWKS over NATS."""
+        if self._verifier is None:
+            if (
+                services is not None
+                and services.iam_available()
+                and isinstance(services.iam, IAMService)
+            ):
+                self._verifier = services.iam.verifier()
+            else:
+                from naas_abi_core.engine.nats_credentials import nats_verifier
+
+                assert self.__configuration.nats is not None
+                self._verifier = nats_verifier(self.__configuration.nats.nats_url)
+        return self._verifier
 
     def expose_overflow(self, primaries: list[object]) -> list[object]:
         """Start this process's RPC overflow host when it exposes primaries.
 
         Replies above the broker limit are parked there and uploaded requests
-        read from there (docs/adr/20261003_nats-rpc-overflow.md). Returns the
+        read from there. Returns the
         started host, stopped at shutdown with the primaries.
         """
         nats_config = self.__configuration.nats
@@ -144,7 +163,7 @@ class EngineNATSLoader:
         from naas_abi_core.engine import nats_overflow
 
         options = nats_config.rpc_overflow.model_dump(exclude={"enabled"})
-        host = nats_overflow.OverflowHost(nats_config.jwt_secret, **options)
+        host = nats_overflow.OverflowHost(self.verifier(), **options)
         nc = nats_runtime.get_connection(nats_config.nats_url)
         try:
             nats_runtime.run_coro(host.start(nc))
@@ -155,11 +174,39 @@ class EngineNATSLoader:
         logger.debug("EngineNATSLoader: RPC overflow host started")
         return [host]
 
+    def expose_auth_callout(self, services: IEngine.Services) -> list[object]:
+        """Answer the broker's auth callout, when configured and this engine
+        holds IAM: module connections get the subjects their policy allows."""
+        nats_config = self.__configuration.nats
+        if (
+            nats_config is None
+            or nats_config.auth_callout is None
+            or not isinstance(services.iam, IAMService)
+        ):
+            return []
+        from naas_abi_core.engine.nats_auth_callout import AuthCallout
+        from naas_abi_core.engine.nats_broker_control import BrokerControl
+
+        settings = nats_config.auth_callout
+        callout = AuthCallout(
+            services.iam,
+            settings.issuer_seed,
+            settings.nats_url,
+            user_ttl_seconds=settings.user_ttl_seconds,
+        )
+        # The engine's own login creates the streams and consumers modules use.
+        control = BrokerControl(
+            services.iam, services.iam.verifier(), nats_config.nats_url
+        )
+        nats_runtime.run_coro(callout.start())
+        nats_runtime.run_coro(control.start())
+        return [callout, control]
+
     def expose_services(self, services: IEngine.Services) -> list[object]:
         """Start a NATS primary adapter for every loaded service that has one.
 
         Returns the started primary-adapter instances -- there's no shutdown
-        hook yet to hand them to (see the RFC's open questions), but a
+        hook yet to hand them to, but a
         caller that wants to keep a reference for later can.
         """
         nats_config = self.__configuration.nats
@@ -169,37 +216,42 @@ class EngineNATSLoader:
 
         # Before the primaries below build their dispatchers and services.
         nats_dispatch.configure(nats_config.max_concurrent_requests)
+        verifier = self.verifier(services)
         nc = nats_runtime.get_connection(nats_config.nats_url)
         started: list[object] = []
         if nats_config.discovery is not None:
-            from naas_abi_core.engine.nats_permissions import prepare_module_streams
             from naas_abi_core.services.discovery.discovery_factory import (
                 start_discovery,
             )
-
-            # Before discovery serves: a module that registers at once and
-            # starts its job host must find the streams it may not create
-            # (MODULE_PERMISSIONS).
-            try:
-                nats_runtime.run_coro(
-                    prepare_module_streams(nc, nats_config.discovery.project)
-                )
-            except Exception:  # noqa: BLE001 - modules report it; the engine serves on
-                logger.exception(
-                    "EngineNATSLoader: could not create the jobs stream and the "
-                    "claim-check store modules use"
-                )
 
             started.append(
                 nats_runtime.run_coro(
                     start_discovery(
                         nc,
-                        nats_config.jwt_secret,
+                        verifier,
                         nats_config.discovery.project,
                         nats_config.discovery.lease_seconds,
+                        # Every registration and use is authorized in process.
+                        iam=services.iam if services.iam_available() else None,
                     )
                 )
             )
+
+        if services.iam_available() and isinstance(services.iam, IAMService):
+            # First: the others ask it. A client engine's IAM is the serving
+            # engine's, over NATS, and is never re-exposed.
+            primary_iam = IAMPrimaryAdapterNATS(services.iam, verifier)
+            nats_runtime.run_coro(primary_iam.start(nc))
+            started.append(primary_iam)
+            logger.debug("EngineNATSLoader: exposed iam over NATS")
+
+        if services.identity_available() and isinstance(
+            services.identity, IdentityService
+        ):
+            primary_identity = IdentityPrimaryAdapterNATS(services.identity, verifier)
+            nats_runtime.run_coro(primary_identity.start(nc))
+            started.append(primary_identity)
+            logger.debug("EngineNATSLoader: exposed identity over NATS")
 
         if services.object_storage_available() and not isinstance(
             services.object_storage.adapter, ObjectStorageSecondaryAdapterNATSClient
@@ -209,7 +261,7 @@ class EngineNATSLoader:
             # distinction matters (event publishing, prefix normalization).
             primary = ObjectStoragePrimaryAdapterNATS(
                 services.object_storage,
-                nats_config.jwt_secret,
+                verifier,
                 transfer_options=nats_config.object_storage_streaming.model_dump(),
             )
             nats_runtime.run_coro(primary.start(nc))
@@ -239,9 +291,7 @@ class EngineNATSLoader:
                 exposed_secret = Secret(local_secrets)
                 if services.secret.services_wired:
                     exposed_secret.set_services(services.secret.services)
-            primary_secret = SecretPrimaryAdapterNATS(
-                exposed_secret, nats_config.jwt_secret
-            )
+            primary_secret = SecretPrimaryAdapterNATS(exposed_secret, verifier)
             nats_runtime.run_coro(primary_secret.start(nc))
             started.append(primary_secret)
             logger.debug("EngineNATSLoader: exposed secret over NATS")
@@ -254,9 +304,7 @@ class EngineNATSLoader:
         if services.dataset_available() and not isinstance(
             services.dataset.adapter, DatasetSecondaryAdapterNATSClient
         ):
-            primary_dataset = DatasetPrimaryAdapterNATS(
-                services.dataset, nats_config.jwt_secret
-            )
+            primary_dataset = DatasetPrimaryAdapterNATS(services.dataset, verifier)
             nats_runtime.run_coro(primary_dataset.start(nc))
             started.append(primary_dataset)
             logger.debug("EngineNATSLoader: exposed dataset over NATS")
@@ -269,7 +317,7 @@ class EngineNATSLoader:
         if services.kv_available() and not isinstance(
             services.kv.adapter, KeyValueSecondaryAdapterNATSClient
         ):
-            primary_kv = KeyValuePrimaryAdapterNATS(services.kv, nats_config.jwt_secret)
+            primary_kv = KeyValuePrimaryAdapterNATS(services.kv, verifier)
             nats_runtime.run_coro(primary_kv.start(nc))
             started.append(primary_kv)
             logger.debug("EngineNATSLoader: exposed kv over NATS")
@@ -282,9 +330,7 @@ class EngineNATSLoader:
         if services.email_available() and not isinstance(
             services.email.adapter, EmailSecondaryAdapterNATSClient
         ):
-            primary_email = EmailPrimaryAdapterNATS(
-                services.email, nats_config.jwt_secret
-            )
+            primary_email = EmailPrimaryAdapterNATS(services.email, verifier)
             nats_runtime.run_coro(primary_email.start(nc))
             started.append(primary_email)
             logger.debug("EngineNATSLoader: exposed email over NATS")
@@ -298,7 +344,7 @@ class EngineNATSLoader:
             services.activity_log.adapter, ActivityLogSecondaryAdapterNATSClient
         ):
             primary_activity_log = ActivityLogPrimaryAdapterNATS(
-                services.activity_log, nats_config.jwt_secret
+                services.activity_log, verifier
             )
             nats_runtime.run_coro(primary_activity_log.start(nc))
             started.append(primary_activity_log)
@@ -314,7 +360,7 @@ class EngineNATSLoader:
             CodingEnvironmentSecondaryAdapterNATSClient,
         ):
             primary_coding_environment = CodingEnvironmentPrimaryAdapterNATS(
-                services.coding_environment, nats_config.jwt_secret
+                services.coding_environment, verifier
             )
             nats_runtime.run_coro(primary_coding_environment.start(nc))
             started.append(primary_coding_environment)
@@ -328,13 +374,10 @@ class EngineNATSLoader:
         if services.events_available() and not isinstance(
             services.events.adapter, EventSecondaryAdapterNATSClient
         ):
-            # Wraps the raw IEventAdapter, not the EventService domain object
-            # -- EventService's extra behaviour (bus broadcasting) lives
-            # above this port entirely, so there's no richer object to
-            # prefer here the way object_storage prefers its domain service.
-            primary_events = EventPrimaryAdapterNATS(
-                services.events.adapter, nats_config.jwt_secret
-            )
+            # Wraps the domain SERVICE: every call reaches EventService (and
+            # whatever it checks), through its stored-level operations, which
+            # never broadcast -- the remote publisher already did.
+            primary_events = EventPrimaryAdapterNATS(services.events, verifier)
             nats_runtime.run_coro(primary_events.start(nc))
             started.append(primary_events)
             logger.debug("EngineNATSLoader: exposed event over NATS")
@@ -348,7 +391,7 @@ class EngineNATSLoader:
             services.source_control.adapter, SourceControlSecondaryAdapterNATSClient
         ):
             primary_source_control = SourceControlPrimaryAdapterNATS(
-                services.source_control, nats_config.jwt_secret
+                services.source_control, verifier
             )
             nats_runtime.run_coro(primary_source_control.start(nc))
             started.append(primary_source_control)
@@ -362,15 +405,10 @@ class EngineNATSLoader:
         if services.vector_store_available() and not isinstance(
             services.vector_store.adapter, VectorStoreSecondaryAdapterNATSClient
         ):
-            # The port owns persistence; the primary records mutation audit events
-            # through the owner's injected event service for every caller.
+            # Wraps the domain SERVICE: it initializes its adapter and emits
+            # the mutation audit events, once, for every caller.
             primary_vector_store = VectorStorePrimaryAdapterNATS(
-                services.vector_store.adapter,
-                nats_config.jwt_secret,
-                event_publisher=lambda event: _publish_owner_event(
-                    services.vector_store, event
-                ),
-                prepare=services.vector_store.initialize,
+                services.vector_store, verifier
             )
             nats_runtime.run_coro(primary_vector_store.start(nc))
             started.append(primary_vector_store)
@@ -390,7 +428,7 @@ class EngineNATSLoader:
             # bus notification on insert/remove, same rationale as
             # object_storage's primary adapter.
             primary_triple_store = TripleStorePrimaryAdapterNATS(
-                services.triple_store, nats_config.jwt_secret
+                services.triple_store, verifier
             )
             nats_runtime.run_coro(primary_triple_store.start(nc))
             started.append(primary_triple_store)
@@ -404,38 +442,26 @@ class EngineNATSLoader:
         if services.cache_available() and not isinstance(
             services.cache.cold.adapter, CacheSecondaryAdapterNATSClient
         ):
-            # v1 exposes one adapter. Use the canonical cold tier for remote callers.
+            # v1 exposes one tier: the canonical cold one. Each endpoint goes
+            # through the CacheService's view of its tier, which emits the
+            # mutation audit events, once, for every caller.
             primary_cache = CachePrimaryAdapterNATS(
-                services.cache.cold.adapter,
-                nats_config.jwt_secret,
-                tiers=tuple(tier for tier, _ in services.cache.adapters),
-                event_publisher=lambda event: _publish_owner_event(
-                    services.cache, event
-                ),
-                tier_name=next(
-                    (
-                        tier
-                        for tier, adapter in services.cache.adapters
-                        if adapter is services.cache.cold.adapter
-                    ),
-                    "cold",
-                ),
+                services.cache.cold,
+                verifier,
+                tiers=services.cache.tier_names,
             )
             nats_runtime.run_coro(primary_cache.start(nc))
             started.append(primary_cache)
 
         if services.cache_available():
-            for index, (tier, adapter) in enumerate(services.cache.adapters):
+            for index, (_, adapter) in enumerate(services.cache.adapters):
                 if isinstance(adapter, CacheSecondaryAdapterNATSClient):
                     continue
                 primary_tier = CachePrimaryAdapterNATS(
-                    adapter,
-                    nats_config.jwt_secret,
+                    # By position: two tiers may share a name.
+                    services.cache.tier_at(index),
+                    verifier,
                     subject_prefix=f"abi.svc.cache.v1.tier.{index}",
-                    event_publisher=lambda event: _publish_owner_event(
-                        services.cache, event
-                    ),
-                    tier_name=tier,
                 )
                 nats_runtime.run_coro(primary_tier.start(nc))
                 started.append(primary_tier)
@@ -443,9 +469,7 @@ class EngineNATSLoader:
         if services.document_available() and not isinstance(
             services.document.adapter, DocumentSecondaryAdapterNATSClient
         ):
-            primary_document = DocumentPrimaryAdapterNATS(
-                services.document, nats_config.jwt_secret
-            )
+            primary_document = DocumentPrimaryAdapterNATS(services.document, verifier)
             nats_runtime.run_coro(primary_document.start(nc))
             started.append(primary_document)
 
@@ -456,7 +480,7 @@ class EngineNATSLoader:
 
             primary_models = ModelRegistryNATS(
                 services.model_registry,
-                nats_config.jwt_secret,
+                verifier,
                 deadline=nats_config.models.generation_timeout_seconds,
                 transfer_options=nats_config.models.streaming.model_dump(),
             )

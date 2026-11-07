@@ -9,13 +9,12 @@ from fastapi.responses import StreamingResponse
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
-    require_workspace_access,
-    require_workspace_platform_drive,
-    require_workspace_system_drive,
 )
 from naas_abi.apps.nexus.apps.api.app.core.content_disposition import content_disposition
+from naas_abi.apps.nexus.apps.api.app.core.user_content import user_content_headers
 from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__primary_adapter__dependencies import (  # noqa: E501
     get_files_service,
+    workspace_setting,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__primary_adapter__schemas import (  # noqa: E501
     CreateFileRequest,
@@ -44,7 +43,14 @@ from naas_abi.apps.nexus.apps.api.app.services.files.files__schema import (
     FileInfoData,
     FileListResponseData,
 )
+from naas_abi.apps.nexus.apps.api.app.services.files.placement import (
+    ensure_workspace_drive_placed,
+)
 from naas_abi.apps.nexus.apps.api.app.services.files.service import FilesService
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares
+from naas_abi.apps.nexus.apps.api.app.services.view_as.active import viewing
+from naas_abi_core.engine.call_context import as_service_account
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
@@ -52,6 +58,27 @@ router = APIRouter(dependencies=[Depends(get_current_user_required)])
 class FilesFastAPIPrimaryAdapter:
     def __init__(self) -> None:
         self.router = router
+
+
+# What a request does to a file, and the IAM action it needs on each kind of drive:
+# the workspace and platform drives, the system drive (admins), My drive.
+_ACTIONS: dict[str, tuple[str, str, str]] = {
+    "list": ("ListFiles", "ListSystemFiles", "ListMyFiles"),
+    "read": ("GetFile", "GetSystemFile", "GetMyFile"),
+    "write": ("PutFile", "PutSystemFile", "PutMyFile"),
+    "delete": ("DeleteFile", "DeleteSystemFile", "DeleteMyFile"),
+}
+
+
+def _declares(op: str) -> list:
+    """The route authorizes inline, once the drive and the path are resolved."""
+    return [declares(name) for name in _ACTIONS[op]]
+
+
+def _below(storage_path: str, root: str) -> list[str]:
+    """The segments of ``storage_path`` under ``root`` (all of them for no root)."""
+    rest = storage_path[len(root) :] if root else storage_path
+    return [segment for segment in rest.split("/") if segment]
 
 
 def _reject_system_path(*paths: str) -> None:
@@ -201,29 +228,59 @@ def _resolve_system_drive_scoped_path(path: str) -> str:
     return _scope_to_path(SYSTEM_DRIVE_ROOT, path)
 
 
+def _migrate_legacy_layout(
+    files_service: FilesService, *, workspace_id: str | None = None, user_id: str | None = None
+) -> None:
+    """Move a drive of the old layout, once. The legacy roots belong to nobody
+    IAM knows, so the move is Nexus's own, after the caller was authorized."""
+    if viewing():
+        return  # a page load never moves anything in a view
+    migrator = LegacyStorageMigrator(files_service)
+    with as_service_account("api"):
+        if workspace_id is not None:
+            migrator.ensure_workspace_drive_migrated(workspace_id)
+        if user_id is not None:
+            migrator.ensure_my_drive_migrated(user_id)
+
+
 async def _authorize_workspace_path(
     current_user: User,
     path: str,
     workspace_id: str | None,
+    op: str,
     files_service: FilesService | None = None,
 ) -> str:
     resolved_workspace_id, resolved_path = _resolve_workspace_scoped_path(path, workspace_id)
-    await require_workspace_access(current_user.id, resolved_workspace_id)
+    await authz.require(
+        _ACTIONS[op][0],
+        user=current_user,
+        workspace=resolved_workspace_id,
+        id=("workspace", *_below(resolved_path, workspace_drive_root(resolved_workspace_id))),
+    )
+    if not viewing():  # placing a drive is a write
+        await ensure_workspace_drive_placed(resolved_workspace_id)
     if files_service is not None:
-        LegacyStorageMigrator(files_service).ensure_workspace_drive_migrated(
-            resolved_workspace_id
-        )
+        _migrate_legacy_layout(files_service, workspace_id=resolved_workspace_id)
     return resolved_path
 
 
-def _authorize_my_drive_path(
+async def _authorize_my_drive_path(
     current_user: User,
     path: str,
+    op: str,
     files_service: FilesService | None = None,
 ) -> str:
+    if viewing():
+        # My Drive is the person's alone: it is not shown, and nothing in it is found.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     resolved = _resolve_my_drive_scoped_path(path=path, user_id=current_user.id)
+    await authz.require(
+        _ACTIONS[op][2],
+        user=current_user,
+        id=(current_user.id, *_below(resolved, my_drive_root(current_user.id))),
+    )
     if files_service is not None:
-        LegacyStorageMigrator(files_service).ensure_my_drive_migrated(current_user.id)
+        _migrate_legacy_layout(files_service, user_id=current_user.id)
     return resolved
 
 
@@ -231,6 +288,7 @@ async def _authorize_platform_drive_path(
     current_user: User,
     path: str,
     workspace_id: str | None,
+    op: str,
 ) -> str:
     if not workspace_id:
         raise HTTPException(
@@ -238,23 +296,55 @@ async def _authorize_platform_drive_path(
             detail="workspace_id is required for platform drive access",
         )
     normalized_workspace = _normalize_workspace_id(workspace_id)
-    await require_workspace_platform_drive(current_user.id, normalized_workspace)
-    return _resolve_platform_drive_scoped_path(path)
+    scoped = _resolve_platform_drive_scoped_path(path)
+    await authz.require(
+        _ACTIONS[op][0],
+        user=current_user,
+        workspace=normalized_workspace,
+        id=("platform", *_below(scoped, PLATFORM_DRIVE_ROOT)),
+    )
+    # A workspace uses the shared drive only when it switched it on.
+    if not await workspace_setting(normalized_workspace, "platform_drive_enabled"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Platform drive is not enabled for this workspace",
+        )
+    return scoped
 
 
 async def _authorize_system_drive_path(
     current_user: User,
     path: str,
     workspace_id: str | None,
+    op: str,
 ) -> str:
+    if viewing():
+        # The system drive is the whole storage tree: it holds the person's My Drive
+        # (``naas_abi/my-drive/<id>``), their ``users/<id>`` data and other workspaces' drives,
+        # all of which the person's own rights reach. None of it is shown in a view.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     if not workspace_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="workspace_id is required for system drive access",
         )
     normalized_workspace = _normalize_workspace_id(workspace_id)
-    await require_workspace_system_drive(current_user.id, normalized_workspace)
-    return _resolve_system_drive_scoped_path(path)
+    scoped = _resolve_system_drive_scoped_path(path)
+    await authz.require(
+        _ACTIONS[op][1],
+        user=current_user,
+        workspace=normalized_workspace,
+        id=("system", *_below(scoped, SYSTEM_DRIVE_ROOT)),
+        denied="Workspace admin role required",
+    )
+    # The whole tree the workspace holds, only when it switched the drive on.
+    if not await workspace_setting(normalized_workspace, "system_drive_enabled"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="System drive is not enabled for this workspace",
+        )
+    await ensure_workspace_drive_placed(normalized_workspace)
+    return scoped
 
 
 async def _authorize_path(
@@ -262,12 +352,14 @@ async def _authorize_path(
     path: str,
     workspace_id: str | None,
     scope: str,
+    op: str,
     files_service: FilesService | None = None,
 ) -> str:
     if scope == SCOPE_MY_DRIVE:
-        return _authorize_my_drive_path(
+        return await _authorize_my_drive_path(
             current_user=current_user,
             path=path,
+            op=op,
             files_service=files_service,
         )
     if scope == SCOPE_PLATFORM_DRIVE:
@@ -275,22 +367,25 @@ async def _authorize_path(
             current_user=current_user,
             path=path,
             workspace_id=workspace_id,
+            op=op,
         )
     if scope == SCOPE_SYSTEM_DRIVE:
         return await _authorize_system_drive_path(
             current_user=current_user,
             path=path,
             workspace_id=workspace_id,
+            op=op,
         )
     return await _authorize_workspace_path(
         current_user=current_user,
         path=path,
         workspace_id=workspace_id,
+        op=op,
         files_service=files_service,
     )
 
 
-@router.get("/", response_model=FileListResponse)
+@router.get("/", response_model=FileListResponse, dependencies=_declares("list"))
 async def list_files(
     path: str = Query("", description="Directory path to list"),
     workspace_id: str | None = Query(default=None, max_length=100),
@@ -324,7 +419,13 @@ async def list_files(
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
-    scoped_path = await _authorize_path(current_user, path, workspace_id, scope, files_service=files_service)
+    if viewing() and scope in (SCOPE_MY_DRIVE, SCOPE_SYSTEM_DRIVE):
+        # The person's My Drive is private to them, and the system drive holds it: an empty
+        # listing, the page still opens.
+        return FileListResponse(files=[], path=path, total=0)
+    scoped_path = await _authorize_path(
+        current_user, path, workspace_id, scope, "list", files_service=files_service
+    )
     return _to_file_list_response_schema(
         files_service.list_files(
             path=scoped_path,
@@ -338,7 +439,7 @@ async def list_files(
     )
 
 
-@router.post("/", response_model=FileInfo)
+@router.post("/", response_model=FileInfo, dependencies=_declares("write"))
 async def create_file(
     payload: CreateFileRequest,
     current_user: User = Depends(get_current_user_required),
@@ -346,7 +447,12 @@ async def create_file(
 ):
     _reject_system_path(payload.path)
     scoped_path = await _authorize_path(
-        current_user, payload.path, payload.workspace_id, payload.scope, files_service=files_service
+        current_user,
+        payload.path,
+        payload.workspace_id,
+        payload.scope,
+        "write",
+        files_service=files_service,
     )
     return _to_file_info_schema(
         files_service.create_file(
@@ -357,7 +463,7 @@ async def create_file(
     )
 
 
-@router.post("/folder", response_model=FileInfo)
+@router.post("/folder", response_model=FileInfo, dependencies=_declares("write"))
 async def create_folder(
     payload: CreateFolderRequest,
     current_user: User = Depends(get_current_user_required),
@@ -365,12 +471,17 @@ async def create_folder(
 ):
     _reject_system_path(payload.path)
     scoped_path = await _authorize_path(
-        current_user, payload.path, payload.workspace_id, payload.scope, files_service=files_service
+        current_user,
+        payload.path,
+        payload.workspace_id,
+        payload.scope,
+        "write",
+        files_service=files_service,
     )
     return _to_file_info_schema(files_service.create_folder(path=scoped_path))
 
 
-@router.post("/rename", response_model=FileInfo)
+@router.post("/rename", response_model=FileInfo, dependencies=_declares("write"))
 async def rename_file(
     payload: RenameRequest,
     current_user: User = Depends(get_current_user_required),
@@ -382,6 +493,7 @@ async def rename_file(
         payload.old_path,
         payload.workspace_id,
         payload.scope,
+        "delete",
         files_service=files_service,
     )
     scoped_new_path = await _authorize_path(
@@ -389,6 +501,7 @@ async def rename_file(
         payload.new_path,
         payload.workspace_id,
         payload.scope,
+        "write",
         files_service=files_service,
     )
 
@@ -413,7 +526,7 @@ async def rename_file(
     )
 
 
-@router.post("/upload", response_model=FileInfo)
+@router.post("/upload", response_model=FileInfo, dependencies=_declares("write"))
 async def upload_file(
     file: FastAPIUploadFile = FastAPIFile(...),
     path: str = Form("", max_length=500),
@@ -423,7 +536,9 @@ async def upload_file(
     files_service: FilesService = Depends(get_files_service),
 ):
     _reject_system_path(path, file.filename or "")
-    scoped_path = await _authorize_path(current_user, path, workspace_id, scope, files_service=files_service)
+    scoped_path = await _authorize_path(
+        current_user, path, workspace_id, scope, "write", files_service=files_service
+    )
     content = await file.read()
     return _to_file_info_schema(
         files_service.upload_file(
@@ -435,7 +550,7 @@ async def upload_file(
     )
 
 
-@router.get("/preview/pdf/{path:path}")
+@router.get("/preview/pdf/{path:path}", dependencies=_declares("read"))
 async def preview_file_as_pdf(
     path: str,
     workspace_id: str | None = Query(default=None, max_length=100),
@@ -443,17 +558,19 @@ async def preview_file_as_pdf(
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
-    scoped_path = await _authorize_path(current_user, path, workspace_id, scope, files_service=files_service)
+    scoped_path = await _authorize_path(
+        current_user, path, workspace_id, scope, "read", files_service=files_service
+    )
     preview = files_service.preview_file_as_pdf(path=scoped_path)
 
     return Response(
         content=preview.content,
         media_type="application/pdf",
-        headers={"Content-Disposition": content_disposition("inline", preview.filename)},
+        headers=user_content_headers(preview.filename, "application/pdf"),
     )
 
 
-@router.get("/archive/{path:path}")
+@router.get("/archive/{path:path}", dependencies=_declares("read"))
 async def download_folder_archive(
     path: str,
     workspace_id: str | None = Query(default=None, max_length=100),
@@ -461,7 +578,9 @@ async def download_folder_archive(
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
-    scoped_path = await _authorize_path(current_user, path, workspace_id, scope, files_service=files_service)
+    scoped_path = await _authorize_path(
+        current_user, path, workspace_id, scope, "read", files_service=files_service
+    )
     filename, archive_iterator = files_service.stream_folder_archive(path=scoped_path)
     return StreamingResponse(
         archive_iterator,
@@ -470,7 +589,7 @@ async def download_folder_archive(
     )
 
 
-@router.post("/extract/{path:path}", response_model=FileInfo)
+@router.post("/extract/{path:path}", response_model=FileInfo, dependencies=_declares("write"))
 async def extract_archive(
     path: str,
     workspace_id: str | None = Query(default=None, max_length=100),
@@ -480,12 +599,12 @@ async def extract_archive(
 ):
     _reject_system_path(path)
     scoped_path = await _authorize_path(
-        current_user, path, workspace_id, scope, files_service=files_service
+        current_user, path, workspace_id, scope, "write", files_service=files_service
     )
     return _to_file_info_schema(files_service.extract_archive(path=scoped_path))
 
 
-@router.get("/raw/{path:path}")
+@router.get("/raw/{path:path}", dependencies=_declares("read"))
 async def read_file_raw(
     path: str,
     workspace_id: str | None = Query(default=None, max_length=100),
@@ -493,17 +612,19 @@ async def read_file_raw(
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
-    scoped_path = await _authorize_path(current_user, path, workspace_id, scope, files_service=files_service)
+    scoped_path = await _authorize_path(
+        current_user, path, workspace_id, scope, "read", files_service=files_service
+    )
     raw_file = files_service.read_file_raw(path=scoped_path)
 
     return Response(
         content=raw_file.content,
         media_type=raw_file.media_type,
-        headers={"Content-Disposition": content_disposition("inline", raw_file.filename)},
+        headers=user_content_headers(raw_file.filename, raw_file.media_type),
     )
 
 
-@router.get("/{path:path}", response_model=FileContent)
+@router.get("/{path:path}", response_model=FileContent, dependencies=_declares("read"))
 async def read_file(
     path: str,
     workspace_id: str | None = Query(default=None, max_length=100),
@@ -511,11 +632,13 @@ async def read_file(
     current_user: User = Depends(get_current_user_required),
     files_service: FilesService = Depends(get_files_service),
 ):
-    scoped_path = await _authorize_path(current_user, path, workspace_id, scope, files_service=files_service)
+    scoped_path = await _authorize_path(
+        current_user, path, workspace_id, scope, "read", files_service=files_service
+    )
     return _to_file_content_schema(files_service.read_file(path=scoped_path))
 
 
-@router.put("/{path:path}", response_model=FileInfo)
+@router.put("/{path:path}", response_model=FileInfo, dependencies=_declares("write"))
 async def update_file(
     path: str,
     payload: CreateFileRequest,
@@ -526,7 +649,9 @@ async def update_file(
 ):
     _reject_system_path(path)
     effective_workspace_id = workspace_id or payload.workspace_id
-    scoped_path = await _authorize_path(current_user, path, effective_workspace_id, scope, files_service=files_service)
+    scoped_path = await _authorize_path(
+        current_user, path, effective_workspace_id, scope, "write", files_service=files_service
+    )
     return _to_file_info_schema(
         files_service.update_file(
             path=scoped_path,
@@ -536,7 +661,7 @@ async def update_file(
     )
 
 
-@router.delete("/{path:path}")
+@router.delete("/{path:path}", dependencies=_declares("delete"))
 async def delete_file(
     path: str,
     workspace_id: str | None = Query(default=None, max_length=100),
@@ -545,5 +670,7 @@ async def delete_file(
     files_service: FilesService = Depends(get_files_service),
 ):
     _reject_system_path(path)
-    scoped_path = await _authorize_path(current_user, path, workspace_id, scope, files_service=files_service)
+    scoped_path = await _authorize_path(
+        current_user, path, workspace_id, scope, "delete", files_service=files_service
+    )
     return files_service.delete_path(path=scoped_path)

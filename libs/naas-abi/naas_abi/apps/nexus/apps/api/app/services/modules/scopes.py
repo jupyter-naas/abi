@@ -1,0 +1,396 @@
+"""Every module with what it exposes, as module scopes: for the policy builder
+and the module × workspace page.
+
+Each module (an engine module by its configured path, a remote one by its id)
+lists its agents, apps, workflows and pipelines (core ``module_scopes``: the
+``module`` catalog, ``<container>/module:<type>/<module>/<name>``) with
+their display name, description and icon, and the catalog it declares (its
+own service, resource types and actions). ``resource`` is the pattern a policy
+names, written for the container it is attached at (``${scope}/...``).
+
+``build`` is the pure part; ``gather`` reads the engine, discovery, the jobs
+and IAM, each source on its own: one that fails leaves its part out.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from collections.abc import Collection, Iterable, Mapping
+from contextvars import ContextVar
+from dataclasses import dataclass, field
+from typing import Any
+
+from naas_abi_core.engine.call_context import as_service_account
+from naas_abi_core.services.iam import module_scopes
+from naas_abi_core.services.iam.catalog import ActionCatalog
+from naas_abi_core.services.iam.names import PLATFORM, matches
+
+_log = logging.getLogger(__name__)
+
+# The kinds (``PLURAL`` values) a ``gather`` could not read in full: what it lists
+# of them may be short. A source that answers in part says so here.
+_unavailable: ContextVar[set[str] | None] = ContextVar("module_scopes_unavailable", default=None)
+
+
+def _missing(*kinds: str) -> None:
+    found = _unavailable.get()
+    if found is not None:
+        found.update(kinds)
+
+
+PLURAL = {
+    module_scopes.AGENT: "agents",
+    module_scopes.APP: "apps",
+    module_scopes.WORKFLOW: "workflows",
+    module_scopes.PIPELINE: "pipelines",
+}
+
+
+@dataclass(frozen=True)
+class Exposed:
+    """One agent, app, workflow or pipeline of a module."""
+
+    type: str
+    module: str
+    name: str
+    display_name: str = ""
+    description: str = ""
+    icon: str | None = None
+
+
+@dataclass
+class ModuleScopes:
+    module: str
+    items: dict[str, list[Exposed]] = field(default_factory=dict)
+    catalog: ActionCatalog | None = None
+
+
+def _actions(type_name: str) -> list[str]:
+    actions = [module_scopes.USE_ACTION[type_name]]
+    if type_name in module_scopes.RUNS_ACTION:
+        actions.append(module_scopes.RUNS_ACTION[type_name])
+    return [f"{module_scopes.SERVICE}:{a}" for a in actions]
+
+
+def _item_view(item: Exposed) -> dict[str, Any]:
+    # Named at the platform, then written for the container the policy is attached at.
+    resource = module_scopes.scope_resource(item.type, item.module, item.name)
+    return {
+        "name": item.name,
+        "display_name": item.display_name or item.name,
+        "description": item.description,
+        "icon": item.icon,
+        "resource": "${scope}/" + resource.removeprefix(PLATFORM),
+        "actions": _actions(item.type),
+    }
+
+
+def _catalog_view(catalog: ActionCatalog) -> dict[str, Any]:
+    return {
+        "service": catalog.service,
+        "version": catalog.version,
+        "resource_types": [
+            {
+                "name": t.name,
+                "description": t.description,
+                "resource": f"${{scope}}/{catalog.service}:{t.name}/*",
+            }
+            for t in catalog.resource_types
+        ],
+        "actions": [
+            {
+                "action": catalog.qualified(a.name),
+                "level": a.level,
+                "resource_types": list(a.resource_types),
+                "description": a.description,
+            }
+            for a in catalog.actions
+        ],
+    }
+
+
+def build(
+    exposed: Iterable[Exposed],
+    catalogs: Iterable[ActionCatalog] = (),
+    modules: Iterable[str] = (),
+) -> list[dict[str, Any]]:
+    """The modules, sorted, each with its items by type (sorted, one entry per
+    name) and its declared catalog. ``modules`` are listed even with nothing."""
+    found: dict[str, ModuleScopes] = {m: ModuleScopes(m) for m in modules}
+    for item in exposed:
+        entry = found.setdefault(item.module, ModuleScopes(item.module))
+        same = entry.items.setdefault(item.type, [])
+        if all(other.name != item.name for other in same):
+            same.append(item)
+    for catalog in catalogs:
+        if catalog.module:
+            found.setdefault(catalog.module, ModuleScopes(catalog.module)).catalog = catalog
+    return [
+        {
+            "module": entry.module,
+            **{
+                PLURAL[t]: [
+                    _item_view(i)
+                    for i in sorted(entry.items.get(t, []), key=lambda i: i.name.lower())
+                ]
+                for t in module_scopes.TYPES
+            },
+            "declared": _catalog_view(entry.catalog) if entry.catalog else None,
+        }
+        for entry in sorted(found.values(), key=lambda e: e.module)
+    ]
+
+
+# -- sources ---------------------------------------------------------------------------
+
+
+def _text(value: Any) -> str:
+    return value if isinstance(value, str) else ""
+
+
+def engine_modules() -> list[str]:
+    try:
+        from naas_abi import ABIModule
+
+        return list(ABIModule.get_instance().engine.modules)
+    except Exception:  # noqa: BLE001 - no engine loaded
+        _log.debug("No engine modules", exc_info=True)
+        return []
+
+
+def engine_agents() -> list[Exposed]:
+    from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary import (
+        agents__primary_adapter__FastAPI as agents_api,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.agents.scopes import class_scope
+
+    classes = agents_api._get_agent_class_registry()
+    module_of = agents_api.agent_class_modules()
+    found: list[Exposed] = []
+    for key, cls in classes.items():
+        scope = class_scope(key, cls, module_of)
+        if scope is None:
+            continue
+        found.append(
+            Exposed(
+                scope.type,
+                scope.module,
+                scope.name,
+                display_name=scope.name,
+                description=_text(getattr(cls, "description", None))
+                or _text(getattr(cls, "DESCRIPTION", None)),
+                icon=_text(getattr(cls, "logo_url", None))
+                or _text(getattr(cls, "AVATAR_URL", None))
+                or None,
+            )
+        )
+    return found
+
+
+async def remote_agents() -> list[Exposed]:
+    from naas_abi.apps.nexus.apps.api.app.services.agents.remote.factory import (
+        get_remote_agent_directory,
+    )
+
+    return [
+        Exposed(module_scopes.AGENT, a.module_id, a.name, a.name, a.description)
+        for a in await get_remote_agent_directory().list_agents()
+    ]
+
+
+async def apps() -> list[Exposed]:
+    from naas_abi.apps.nexus.apps.api.app.services.apps.adapters.primary import (
+        apps__primary_adapter__FastAPI as apps_api,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.apps.scopes import app_scope
+
+    found: list[Exposed] = []
+    try:
+        remote = await apps_api._remote_apps_catalog(strict=True)
+    except Exception:  # noqa: BLE001 - discovery down: the loaded modules' apps
+        _log.warning("Module scopes: remote apps unavailable", exc_info=True)
+        _missing("apps")
+        remote = ()
+    for app in (*apps_api._scan_apps_catalog(), *remote):
+        scope = app_scope(app.app_id)
+        if scope is not None:
+            found.append(
+                Exposed(
+                    scope.type,
+                    scope.module,
+                    scope.name,
+                    app.name,
+                    app.description,
+                    app.avatar_url or app.icon_emoji,
+                )
+            )
+    return found
+
+
+async def workflows(service: Any = None) -> list[Exposed]:
+    """The workflows and pipelines the jobs catalogs list (``service``, the
+    workflows service, the API's by default), then the engine's own (when the
+    jobs are not reachable, or not hosted here)."""
+    from naas_abi.apps.nexus.apps.api.app.services.agents.scopes import engine_process_scopes
+    from naas_abi.apps.nexus.apps.api.app.services.workflows.factory import (
+        get_workflows_service,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.workflows.scopes import workflow_scope
+
+    found: list[Exposed] = []
+    try:
+        listed = await (service or get_workflows_service()).list()
+    except Exception:  # noqa: BLE001 - no broker, no jobs: the engine's own below
+        _log.debug("Jobs catalogs unavailable for module scopes", exc_info=True)
+        _missing("workflows", "pipelines")
+    else:
+        for d in listed.workflows:
+            scope = workflow_scope(d.module_id, d.name)
+            found.append(Exposed(scope.type, scope.module, scope.name, d.name, d.description))
+    for scope in engine_process_scopes():
+        found.append(Exposed(scope.type, scope.module, scope.name, scope.name))
+    return found
+
+
+def declared_catalogs() -> list[ActionCatalog]:
+    from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
+
+    registry = getattr(runtime.iam(), "catalogs", None)
+    return [c for c in registry.all() if c.module] if registry is not None else []
+
+
+async def gather(unavailable: set[str] | None = None) -> list[dict[str, Any]]:
+    """Every module with its scopes, from every source that answers. The kinds a
+    source could not read in full are added to ``unavailable`` (``agents``,
+    ``apps``, ``workflows``, ``pipelines``): what is listed of them may be short.
+
+    What exists is read as Nexus's own account (``api``), whoever asks: someone
+    who holds policies but no role (no discovery listing) still sees what they
+    may grant, and a cache of it (``iam/listers.ModuleItems``) is everyone's.
+    Each caller's view is narrowed afterwards (``granted``,
+    ``authz.filter_scopes``)."""
+    exposed: list[Exposed] = []
+    token = _unavailable.set(unavailable if unavailable is not None else set())
+    kinds_of = {
+        "engine agents": ("agents",),
+        "remote agents": ("agents",),
+        "apps": ("apps",),
+        "workflows": ("workflows", "pipelines"),
+    }
+
+    async def collect(name: str, source: Any) -> Any:
+        try:
+            result = source()
+            return await result if hasattr(result, "__await__") else result
+        except Exception:  # noqa: BLE001 - one source down leaves its part out
+            _log.warning("Module scopes: %s unavailable", name, exc_info=True)
+            _missing(*kinds_of.get(name, ()))
+            return []
+
+    # The engine's sources read in process; discovery and the jobs are NATS calls,
+    # which run at once.
+    try:
+        with as_service_account("api"):
+            *parts, catalogs = await asyncio.gather(
+                collect("engine agents", engine_agents),
+                collect("remote agents", remote_agents),
+                collect("apps", apps),
+                collect("workflows", workflows),
+                collect("declared catalogs", declared_catalogs),
+            )
+    finally:
+        _unavailable.reset(token)
+    for part in parts:
+        exposed.extend(part)
+    return build(exposed, catalogs, engine_modules())
+
+
+def exposed_types(modules: Iterable[dict[str, Any]]) -> dict[str, list[str]]:
+    """Each module ``gather`` lists and the ``module`` catalog types it has items
+    of (its agents, apps, workflows, pipelines), for the publishers' view."""
+    return {
+        entry["module"]: [t for t, plural in PLURAL.items() if entry.get(plural)]
+        for entry in modules
+    }
+
+
+def granted(
+    modules: Iterable[dict[str, Any]], grantable: Iterable[Mapping[str, Any]]
+) -> list[dict[str, Any]]:
+    """What ``gather`` lists, narrowed to what the caller may grant at a scope
+    (``grantable``: IAM's, as ``iam_admin`` shows it, patterns written at
+    ``${scope}``): an item one of whose actions the caller may grant on it, a
+    declared catalog's actions they may grant and the types those name. A module
+    left with nothing is left out: nothing lists more to someone who may grant
+    less."""
+    held = {a["action"]: a for c in grantable for a in c.get("actions") or ()}
+
+    def may(action: str, resource: str) -> bool:
+        found = held.get(action)
+        return (
+            found is not None
+            and any(matches(p, resource) for p in found.get("resources") or ())
+            and not any(matches(p, resource) for p in found.get("excluded") or ())
+        )
+
+    narrowed: list[dict[str, Any]] = []
+    for entry in modules:
+        kept: dict[str, Any] = {"module": entry["module"]}
+        for plural in PLURAL.values():
+            kept[plural] = [
+                item
+                for item in entry.get(plural) or ()
+                if any(may(action, item["resource"]) for action in item["actions"])
+            ]
+        declared = entry.get("declared")
+        if declared:
+            actions = [a for a in declared["actions"] if a["action"] in held]
+            named = {t for a in actions for t in a["resource_types"]}
+            declared = (
+                {
+                    **declared,
+                    "actions": actions,
+                    "resource_types": [t for t in declared["resource_types"] if t["name"] in named],
+                }
+                if actions
+                else None
+            )
+        kept["declared"] = declared
+        if declared or any(kept[plural] for plural in PLURAL.values()):
+            narrowed.append(kept)
+    return narrowed
+
+
+def item_scopes(modules: Iterable[dict[str, Any]]) -> list[Any]:
+    """The module scope of every agent, app, workflow and pipeline ``gather``
+    lists, to ask IAM which of them a caller may use."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
+
+    return [
+        ModuleScope(type_name, entry["module"], item["name"])
+        for entry in modules
+        for type_name, plural in PLURAL.items()
+        for item in entry.get(plural) or ()
+    ]
+
+
+def counted(modules: Iterable[dict[str, Any]], usable: Collection[Any]) -> list[dict[str, Any]]:
+    """What ``gather`` lists, counted within ``usable`` (module scopes): each
+    module with something in it and how many agents, apps, workflows and
+    pipelines, for a workspace's settings (what the caller may use there)."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
+
+    found: list[dict[str, Any]] = []
+    for entry in modules:
+        counts = {
+            plural: sum(
+                1
+                for item in entry.get(plural) or ()
+                if ModuleScope(type_name, entry["module"], item["name"]) in usable
+            )
+            for type_name, plural in PLURAL.items()
+        }
+        if any(counts.values()):
+            found.append({"module": entry["module"], **counts})
+    return found

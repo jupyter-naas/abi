@@ -9,8 +9,6 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
-from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user_required
 from naas_abi.apps.nexus.apps.api.app.services.ontology.adapters.primary import (
     ontology__primary_adapter__FastAPI as http,
 )
@@ -363,33 +361,38 @@ class ReaderCacheTests(unittest.TestCase):
 
 class HttpTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
+        from naas_abi.apps.nexus.apps.api.app.services.graph.testing import (
+            acting_as_header,
+            client,
+            knowledge_team,
+        )
+
         clear_catalog_import_caches()
         self.addCleanup(clear_catalog_import_caches)
         self.addCleanup(install_reader, None)
+        # The routes decide with a real IAM: a viewer of ws-1 reads its catalog.
+        self.nexus = knowledge_team()
+        self.nexus.__enter__()
+        self.addCleanup(self.nexus.__exit__, None, None, None)
         self.service = service_with(FakeTripleStore(REMOTE_FILES))
         self.app = FastAPI()
         self.app.include_router(http.router, prefix="/api/ontology")
-        self.app.dependency_overrides[get_current_user_required] = lambda: SimpleNamespace(
-            id="viewer"
-        )
         self.app.dependency_overrides[get_ontology_service] = lambda: self.service
-        self.client = AsyncClient(transport=ASGITransport(self.app), base_url="http://test")
-        for patcher in (
-            patch.object(http, "require_workspace_access", new=AsyncMock()),
-            patch.object(
-                http,
-                "_catalog_refs_for_workspace",
-                new=AsyncMock(return_value=["acme.reports:ReportsOntology.ttl"]),
-            ),
-        ):
-            patcher.start()
-            self.addCleanup(patcher.stop)
+        acting_as_header(self.app)
+        self.client = client(self.app, "viewer")
+        patcher = patch.object(
+            http,
+            "_catalog_refs_for_workspace",
+            new=AsyncMock(return_value=["acme.reports:ReportsOntology.ttl"]),
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     async def asyncTearDown(self) -> None:
         await self.client.aclose()
 
     async def test_listing_shows_the_remote_ontology(self) -> None:
-        response = await self.client.get("/api/ontology/ontologies?workspace_id=w")
+        response = await self.client.get("/api/ontology/ontologies?workspace_id=ws-1")
         self.assertEqual(response.status_code, 200, response.text)
         items = response.json()["items"]
         self.assertEqual(len(items), 1)
@@ -401,12 +404,12 @@ class HttpTests(unittest.IsolatedAsyncioTestCase):
     async def test_stats_and_export_work_for_the_remote_ontology(self) -> None:
         response = await self.client.get(
             "/api/ontology/overview/stats",
-            params={"workspace_id": "w", "ontology_path": REPORTS_ID},
+            params={"workspace_id": "ws-1", "ontology_path": REPORTS_ID},
         )
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()["classes"], 2)
         response = await self.client.get(
-            "/api/ontology/export", params={"workspace_id": "w", "ontology_path": REPORTS_ID}
+            "/api/ontology/export", params={"workspace_id": "ws-1", "ontology_path": REPORTS_ID}
         )
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.content, REPORTS.encode())
@@ -423,7 +426,7 @@ class HttpTests(unittest.IsolatedAsyncioTestCase):
         ):
             with self.subTest(path=path):
                 response = await self.client.get(
-                    "/api/ontology/export", params={"workspace_id": "w", "ontology_path": path}
+                    "/api/ontology/export", params={"workspace_id": "ws-1", "ontology_path": path}
                 )
                 self.assertEqual(response.status_code, 404, response.text)
 

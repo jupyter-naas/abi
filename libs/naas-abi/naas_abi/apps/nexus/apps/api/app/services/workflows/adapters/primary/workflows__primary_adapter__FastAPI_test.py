@@ -1,5 +1,6 @@
 from dataclasses import replace
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
@@ -33,9 +34,7 @@ from naas_abi.apps.nexus.apps.api.app.services.workflows.factory import get_work
 from naas_abi.apps.nexus.apps.api.app.services.workflows.service import WorkflowsService
 
 BASE = "/api/workflows"
-API_KEY = "abi-key-for-tests"
 NOW = datetime(2026, 10, 2, 13, 0, 0, tzinfo=UTC)
-KEY_HEADERS = {"Authorization": f"Bearer {API_KEY}"}
 
 RUN_KEYS = {
     "key",
@@ -55,11 +54,6 @@ RUN_KEYS = {
     "steps",
     "steps_truncated",
 }
-
-
-@pytest.fixture(autouse=True)
-def api_key(monkeypatch):
-    monkeypatch.setenv("ABI_API_KEY", API_KEY)
 
 
 @pytest.fixture
@@ -108,15 +102,24 @@ def _service(control, audit, **overrides):
     )
 
 
-def _client(service, user="admin"):
-    """``user``: ``"admin"`` (a super admin), ``"member"`` (not) or None (no session)."""
+def _client(service, user="admin", *, credential="session"):
+    """``user``: ``"admin"`` (``root``, a platform admin), ``"member"`` (``u1``,
+    who holds nothing) or None (no credential). ``credential``: how they signed
+    in, a ``session`` or their personal API key (``api-key``)."""
     app = FastAPI()
     app.include_router(router, prefix=BASE)
     app.dependency_overrides[get_workflows_service] = lambda: service
     if user:
+        uid = "root" if user == "admin" else "u1"
         app.dependency_overrides[get_current_user] = lambda: User.model_construct(
-            id="u1", email="u1@example.com", name="U1", is_superadmin=user == "admin"
+            id=uid, email=f"{uid}@example.com", name=uid
         )
+
+        @app.middleware("http")
+        async def signed_in(request, call_next):
+            request.state.nexus_credential = SimpleNamespace(kind=credential, user_id=uid)
+            return await call_next(request)
+
     else:
         app.dependency_overrides[get_current_user] = lambda: None
     return TestClient(app)
@@ -136,7 +139,9 @@ ROUTES = [
 
 
 @pytest.mark.parametrize("method,path", ROUTES)
-def test_a_user_who_is_not_a_super_admin_gets_403_and_nothing_happens(control, audit, method, path):
+def test_a_user_who_is_not_a_platform_admin_gets_403_and_nothing_happens(
+    control, audit, method, path
+):
     client = _client(_service(control, audit), user="member")
 
     response = client.request(
@@ -157,26 +162,20 @@ def test_no_credentials_get_401_and_a_wrong_key_too(control, audit, method, path
     assert control.triggered == [] and control.cancelled == [] and audit.records == []
 
 
-def test_the_api_key_reaches_every_route(control, audit):
-    client = _client(_service(control, audit), user=None)
-    h = KEY_HEADERS
+def test_a_platform_admins_personal_key_reaches_every_route(control, audit):
+    client = _client(_service(control, audit), credential="api-key")
 
-    assert client.get(BASE, headers=h).status_code == 200
-    assert (
-        client.post(
-            f"{BASE}/acme.flows/ingest/runs", json={"filter": "news"}, headers=h
-        ).status_code
-        == 202
-    )
-    assert client.get(f"{BASE}/acme.flows/runs/ingest:5", headers=h).status_code == 200
-    assert client.post(f"{BASE}/acme.flows/runs/ingest:6/cancel", headers=h).status_code == 202
+    assert client.get(BASE).status_code == 200
+    assert client.post(f"{BASE}/acme.flows/ingest/runs", json={"filter": "news"}).status_code == 202
+    assert client.get(f"{BASE}/acme.flows/runs/ingest:5").status_code == 200
+    assert client.post(f"{BASE}/acme.flows/runs/ingest:6/cancel").status_code == 202
 
 
-def test_every_start_and_cancel_by_the_api_key_is_audited_without_a_user(control, audit):
-    client = _client(_service(control, audit), user=None)
+def test_a_start_and_a_cancel_with_a_personal_key_are_audited_for_its_user(control, audit):
+    client = _client(_service(control, audit), credential="api-key")
 
-    client.post(f"{BASE}/acme.flows/ingest/runs", json={"filter": "news"}, headers=KEY_HEADERS)
-    client.post(f"{BASE}/acme.flows/runs/ingest:6/cancel", headers=KEY_HEADERS)
+    client.post(f"{BASE}/acme.flows/ingest/runs", json={"filter": "news"})
+    client.post(f"{BASE}/acme.flows/runs/ingest:6/cancel")
 
     assert [
         (
@@ -189,10 +188,10 @@ def test_every_start_and_cancel_by_the_api_key_is_audited_without_a_user(control
         )
         for r in audit.records
     ] == [
-        ("", "api_key", "jobs", "trigger", "acme.flows/ingest", "requested"),
-        ("", "api_key", "jobs", "trigger", "acme.flows/ingest", "succeeded"),
-        ("", "api_key", "jobs", "cancel", "acme.flows/ingest:6", "requested"),
-        ("", "api_key", "jobs", "cancel", "acme.flows/ingest:6", "succeeded"),
+        ("root", "api_key", "jobs", "trigger", "acme.flows/ingest", "requested"),
+        ("root", "api_key", "jobs", "trigger", "acme.flows/ingest", "succeeded"),
+        ("root", "api_key", "jobs", "cancel", "acme.flows/ingest:6", "requested"),
+        ("root", "api_key", "jobs", "cancel", "acme.flows/ingest:6", "succeeded"),
     ]
 
 
@@ -226,8 +225,8 @@ def test_a_start_is_accepted_with_its_run_id_and_audited_for_the_user(client, co
     )
     assert control.triggered == [("acme.flows", "ingest", {"filter": "news", "limit": 5})]
     assert [(r.action.actor_id, r.action.via, r.phase) for r in audit.records] == [
-        ("u1", "user", "requested"),
-        ("u1", "user", "succeeded"),
+        ("root", "user", "requested"),
+        ("root", "user", "succeeded"),
     ]
 
 

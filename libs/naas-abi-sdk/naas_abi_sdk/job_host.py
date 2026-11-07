@@ -22,14 +22,20 @@ import contextlib
 import hashlib
 import json
 import logging
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from naas_abi_sdk.call_context import current_call_context, use_call_context
 from naas_abi_sdk.jobs import (
     INPUT_HASH_HEADER,
+    MAX_TRIGGER_INPUT_BYTES,
     MAX_TRIGGERS,
+    SEAL_HEADER,
     TERMINAL_STATUSES,
     TRIGGER_HEADER,
+    TRIGGER_SENDER_HEADERS,
+    TRIGGER_TTLS,
     Cron,
     Every,
     JobContext,
@@ -43,7 +49,9 @@ from naas_abi_sdk.jobs import (
     job_subjects,
     run_key,
     runs_collection,
+    seal_fields,
     stream_name,
+    trigger_reserve,
 )
 from naas_abi_sdk.services.errors import DocumentNotFound, VersionConflict
 from naas_abi_sdk.services.models import CollectionSpec, FieldSpec
@@ -61,8 +69,7 @@ from naas_abi_sdk.workflows import (
 logger = logging.getLogger(__name__)
 
 MAX_RESULT_BYTES = 64 * 1024
-MANUAL_TRIGGER_TTL = "168h"
-EVENT_TRIGGER_TTL = "24h"
+
 MAX_SCHEDULED_TICK_TTL_SECONDS = 3600
 DEFAULT_RETENTION = JobRetention()
 # What makes two schedule messages the same schedule (anything else is NATS's own).
@@ -72,6 +79,7 @@ SCHEDULE_HEADERS = (
     "Nats-Schedule-Target",
     "Nats-Schedule-TTL",
     TRIGGER_HEADER,
+    SEAL_HEADER,
     # Present only on a schedule with an input (a changed input changes the schedule).
     INPUT_HASH_HEADER,
 )
@@ -120,6 +128,28 @@ def _expires_within(msg: Any, seconds: float) -> bool:
     return stored + timedelta(seconds=lifetime) <= deadline
 
 
+# How long a trigger of each kind stays in the stream when its record does not
+# say (records written before ``trigger_expires_at``).
+_KIND_TTL_SECONDS = {
+    "manual": go_duration_seconds(TRIGGER_TTLS["manual"]),
+    "event": go_duration_seconds(TRIGGER_TTLS["event"]),
+    "schedule": MAX_SCHEDULED_TICK_TTL_SECONDS,
+}
+
+
+def _trigger_expires_at(msg: Any) -> str | None:
+    """When the trigger leaves the stream (stored time + ``Nats-TTL``), if known."""
+    stored = _stored_at(msg)
+    ttl = str((msg.headers or {}).get("Nats-TTL", ""))
+    if stored is None or not ttl:
+        return None
+    try:
+        lifetime = float(ttl) if ttl.isdigit() else go_duration_seconds(ttl)
+    except ValueError:  # "never"
+        return None
+    return (stored + timedelta(seconds=lifetime)).isoformat()
+
+
 def scheduled_tick_ttl(trigger: Cron | Every) -> str:
     """Unprocessed ticks expire: a module back after days runs once, not per missed tick."""
     if isinstance(trigger, Every):
@@ -132,38 +162,232 @@ def scheduled_tick_ttl(trigger: Cron | Every) -> str:
     return f"{int(ttl)}s"
 
 
-async def ensure_stream(js: Any, project: str) -> None:
-    """Create the project's jobs stream (schedules + TTL) or enable the flags on it."""
+def stream_config(project: str) -> Any:
+    """The project's jobs stream: schedules, per-message TTL and direct gets
+    (schedules are reconciled by subject). The server allows rollups wherever
+    schedules are (whatever ``allow_rollup_hdrs`` says), so one
+    ``Nats-Rollup: all`` would purge every module's triggers and schedules:
+    behind the broker's auth callout only the engine writes here."""
     from nats.js.api import StreamConfig
-    from nats.js.errors import BadRequestError, NotFoundError
 
-    name = stream_name(project)
-    config = StreamConfig(
-        name=name,
+    return StreamConfig(
+        name=stream_name(project),
         subjects=[f"abi.jobs.{project}.>"],
         allow_msg_schedules=True,
         allow_msg_ttl=True,
+        allow_direct=True,
     )
-    from naas_abi_sdk.streams import REFUSED, not_created
 
+
+# Flags the stream must have on. Not allow_rollup_hdrs: the server sets it
+# with schedules, and asking otherwise would rewrite the stream at every start.
+STREAM_FLAGS = {
+    "allow_msg_schedules": True,
+    "allow_msg_ttl": True,
+    "allow_direct": True,
+}
+
+
+async def ensure_stream(js: Any, project: str) -> None:
+    """Create the project's jobs stream or set its flags (``stream_config``)."""
+    from nats.js.errors import BadRequestError, NotFoundError
+
+    name = stream_name(project)
     try:
         info = await js.stream_info(name)
     except NotFoundError:
         try:
-            await js.add_stream(config)
+            await js.add_stream(stream_config(project))
             return
         except BadRequestError:
             info = await js.stream_info(name)
-        except REFUSED as exc:
-            raise not_created("The jobs stream", name, exc) from exc
     current = info.config
-    if not (current.allow_msg_schedules and current.allow_msg_ttl):
-        current.allow_msg_schedules = True
-        current.allow_msg_ttl = True
+    if any(bool(getattr(current, f, False)) != on for f, on in STREAM_FLAGS.items()):
+        for flag, on in STREAM_FLAGS.items():
+            setattr(current, flag, on)
+        await js.update_stream(current)
+
+
+# (operation "trigger" | "cancel", job, run id, headers, stored at or None):
+# raises RPCError when the caller may not. For an allowed trigger it returns the
+# CallContext the run executes in (the module acting for the user the trigger was
+# stored for), or None: the run is the module's own. Scheduled ("cron", "every")
+# and "event" triggers are the host's own and are not asked about: the host drops
+# any trigger the engine did not seal.
+JobAuthorizer = Callable[
+    [str, str, str, Mapping[str, str], "datetime | None"], Awaitable[Any]
+]
+# Codes that refuse a trigger for good; anything else is retried later.
+REFUSALS = frozenset(
+    {
+        "PERMISSION_DENIED",
+        "UNAUTHENTICATED",
+        "NOT_FOUND",
+        "JOB_NOT_FOUND",
+        "RUN_NOT_FOUND",
+        "INVALID_ARGUMENT",
+    }
+)
+
+
+def consumer_config(
+    project: str,
+    module_id: str,
+    job: str,
+    *,
+    max_concurrency: int,
+    ack_wait_seconds: float,
+) -> Any:
+    """The durable pull consumer of a module's job (shared by its replicas)."""
+    from nats.js.api import AckPolicy, ConsumerConfig, DeliverPolicy
+
+    subjects = job_subjects(project, module_id, job)
+    return ConsumerConfig(
+        # A name sends the filter in the API subject
+        # ($JS.API.CONSUMER.CREATE.<stream>.<name>.<filter>).
+        name=subjects.consumer,
+        durable_name=subjects.consumer,
+        filter_subject=subjects.trigger,
+        ack_policy=AckPolicy.EXPLICIT,
+        deliver_policy=DeliverPolicy.NEW,
+        ack_wait=ack_wait_seconds,
+        # Unlimited: the host counts attempts on the run, so deliveries
+        # deferred while the store is down use none. Triggers expire.
+        max_deliver=-1,
+        max_ack_pending=max_concurrency,
+    )
+
+
+async def ensure_consumer(js: Any, config: Any, project: str, *, update: bool) -> None:
+    """Create a job consumer if it is missing, or (``update``) update it."""
+    from nats.js.errors import NotFoundError
+
+    stream = stream_name(project)
+    if not update:
         try:
-            await js.update_stream(current)
-        except REFUSED as exc:
-            raise not_created("The jobs stream", name, exc) from exc
+            await js.consumer_info(stream, config.durable_name)
+            return
+        except NotFoundError:
+            pass
+    await js.add_consumer(stream, config)
+
+
+# What a host says about each schedule; the target and the kind are the store's.
+SCHEDULE_FIELDS = ("Nats-Schedule", "Nats-Schedule-Time-Zone", "Nats-Schedule-TTL")
+# Besides those: the trigger's input, the canonical JSON of an object (the body).
+SCHEDULE_INPUT = "input"
+
+
+def schedule_input(value: Any) -> str:
+    """A schedule's ``input`` as its canonical JSON (empty: none), or ValueError:
+    a JSON object of at most ``MAX_TRIGGER_INPUT_BYTES``."""
+    if value in (None, ""):
+        return ""
+    if not isinstance(value, str) or len(value.encode()) > MAX_TRIGGER_INPUT_BYTES:
+        raise ValueError(
+            f"an input is the JSON text of an object of {MAX_TRIGGER_INPUT_BYTES} "
+            "bytes at most"
+        )
+    try:
+        parsed = json.loads(value)
+    except ValueError:
+        raise ValueError("an input is JSON") from None
+    if not isinstance(parsed, dict):
+        raise ValueError("an input is a JSON object")  # noqa: TRY004 - payload validation
+    # As ``Cron.input_json`` writes it: the same input is the same bytes.
+    return (
+        json.dumps(parsed, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+        if parsed
+        else ""
+    )
+
+
+async def set_schedules(
+    js: Any,
+    project: str,
+    module_id: str,
+    job: str,
+    schedules: list[dict[str, str]],
+    *,
+    seal: Callable[[bytes], str] | None = None,
+) -> None:
+    """A job's schedules, one message each, aimed at its own trigger; the
+    indexes beyond them purged. A schedule's ``input`` is its body, each fired
+    trigger's payload (``{}`` without one). ``seal``: the engine's, over that
+    body, copied by the server onto every trigger a schedule fires."""
+    subjects = job_subjects(project, module_id, job)
+    for index, fields in enumerate(schedules):
+        headers = {k: v for k, v in fields.items() if k in SCHEDULE_FIELDS}
+        given = schedule_input(fields.get(SCHEDULE_INPUT))
+        body = given.encode() if given else b"{}"
+        if given:
+            # A changed input is a changed schedule (published again).
+            headers[INPUT_HASH_HEADER] = hashlib.sha256(given.encode()).hexdigest()[:32]
+        if seal is not None:
+            headers[SEAL_HEADER] = seal(body)
+        headers["Nats-Schedule-Target"] = subjects.trigger
+        headers[TRIGGER_HEADER] = "schedule"
+        await ensure_schedule(js, project, subjects.schedule(index), headers, body)
+    await remove_schedules(js, subjects, len(schedules))
+
+
+async def ensure_schedule(
+    js: Any, project: str, subject: str, headers: dict[str, str], body: bytes = b"{}"
+) -> None:
+    """Publish a schedule only when it is missing or changed.
+
+    Replacing a schedule message restarts an ``@every`` interval: hosts that
+    restart more often than the interval would keep it from ever firing. The
+    publish expects the sequence just read, so hosts starting together write
+    it once; the loser reads it again. ``body`` is the trigger's input
+    (``b"{}"`` without one), delivered as each run's payload; the input's hash
+    is in the headers, so a changed input publishes the schedule again.
+    """
+    from nats.js.errors import BadRequestError, NotFoundError
+
+    stream = stream_name(project)
+    wanted = {name: headers.get(name) for name in SCHEDULE_HEADERS}
+    for _ in range(3):
+        try:
+            current = await js.get_last_msg(stream, subject, direct=True)
+        except NotFoundError:
+            sequence = 0
+        else:
+            found = current.headers or {}
+            if {name: found.get(name) for name in SCHEDULE_HEADERS} == wanted:
+                return
+            sequence = current.seq
+        try:
+            await js.publish(
+                subject,
+                body,
+                headers={
+                    **headers,
+                    "Nats-Expected-Last-Subject-Sequence": str(sequence),
+                },
+                stream=stream,
+            )
+            return
+        except BadRequestError as error:
+            if error.err_code != WRONG_LAST_SEQUENCE:
+                raise
+    logger.warning(
+        "Schedule %s kept changing while it was reconciled; "
+        "keeping the one another host wrote",
+        subject,
+    )
+
+
+async def remove_schedules(js: Any, subjects: Any, keep: int) -> None:
+    """Purge a job's schedules from index ``keep`` on."""
+    for index in range(keep, MAX_TRIGGERS):
+        await js.purge_stream(
+            stream_name(subjects.project), subject=subjects.schedule(index)
+        )
+
+
+class EngineUnavailable(RuntimeError):
+    """The engine that seals triggers did not answer: try again later."""
 
 
 class JobHost:
@@ -186,9 +410,21 @@ class JobHost:
         retention: JobRetention | None = DEFAULT_RETENTION,
         lost_after_seconds: float = 300.0,
         completion_error_after_seconds: float = 60.0,
+        authorize: JobAuthorizer | None = None,
+        control: Any = None,
         module_documents: Any = None,
         workflow_poll_seconds: float = NOTICE_FALLBACK_POLL_SECONDS,
     ):
+        """``authorize``: asks whether the caller named by a manual trigger or a
+        cancel may trigger the job or cancel the run (discovery:TriggerJob,
+        CancelJobRun). Every host the SDK and the engine start has one; without
+        it (tests of the host alone) nothing is authorized.
+
+        ``control``: a ``BrokerControl`` creating the jobs stream and the
+        consumers, writing the schedules and checking seals (a module behind the
+        broker's auth callout may do none of it); None does it over
+        ``transport``."""
+        self.authorize = authorize
         self.transport, self.documents = transport, documents
         self.module_id, self.project = module_id, project
         self.handlers, self.instance_id = handlers, instance_id
@@ -207,6 +443,7 @@ class JobHost:
         self.lost_after_seconds = lost_after_seconds
         # A completion still unsaved after this long is logged as an error.
         self.completion_error_after_seconds = completion_error_after_seconds
+        self.control = control
         self.collection = runs_collection(project)
         # What workflow runs need: their journal's store, and how to read the runs
         # of other modules (``module_documents(module_id)``; None: over the transport).
@@ -234,19 +471,38 @@ class JobHost:
         return job_subjects(self.project, self.module_id, descriptor.name)
 
     def _consumer_config(self, descriptor: JobDescriptor) -> Any:
-        from nats.js.api import AckPolicy, ConsumerConfig, DeliverPolicy
+        return consumer_config(
+            self.project,
+            self.module_id,
+            descriptor.name,
+            max_concurrency=descriptor.max_concurrency,
+            ack_wait_seconds=self.ack_wait_seconds,
+        )
 
-        subjects = self._subjects(descriptor)
-        return ConsumerConfig(
-            durable_name=subjects.consumer,
-            filter_subject=subjects.trigger,
-            ack_policy=AckPolicy.EXPLICIT,
-            deliver_policy=DeliverPolicy.NEW,
-            ack_wait=self.ack_wait_seconds,
-            # Unlimited: the host counts attempts on the run, so deliveries
-            # deferred while the store is down use none. Triggers expire.
-            max_deliver=-1,
-            max_ack_pending=descriptor.max_concurrency,
+    @property
+    def _claims(self) -> Any:
+        """Claim checks through the engine, when this host has broker control."""
+        from naas_abi_sdk import claim_check
+
+        return None if self.control is None else claim_check.ThroughEngine(self.control)
+
+    async def _ensure_consumer(
+        self, js: Any, descriptor: JobDescriptor, *, update: bool
+    ) -> None:
+        """The jobs stream and this job's consumer: through the engine when
+        it answers, else over this host's own connection."""
+        if self.control is not None and await self.control.request(
+            "ensure_job",
+            project=self.project,
+            job=descriptor.name,
+            max_concurrency=descriptor.max_concurrency,
+            ack_wait_seconds=self.ack_wait_seconds,
+            update=update,
+        ):
+            return
+        await ensure_stream(js, self.project)
+        await ensure_consumer(
+            js, self._consumer_config(descriptor), self.project, update=update
         )
 
     # --- lifecycle -----------------------------------------------------------------------
@@ -262,16 +518,10 @@ class JobHost:
         events or fetches: those stay with the serving generation until
         ``start``.
         """
-        from nats.js.errors import NotFoundError
 
         js = (await self.transport.connect()).jetstream()
-        await ensure_stream(js, self.project)
-        stream = stream_name(self.project)
         for descriptor, _ in self.handlers.values():
-            try:
-                await js.consumer_info(stream, self._subjects(descriptor).consumer)
-            except NotFoundError:
-                await js.add_consumer(stream, self._consumer_config(descriptor))
+            await self._ensure_consumer(js, descriptor, update=False)
 
     async def start(self) -> None:
         await self.documents.ensure_collection(
@@ -288,15 +538,12 @@ class JobHost:
             await StepJournal(self.documents, self.project, "").ensure()
         nc = await self.transport.connect()
         js = nc.jetstream()
-        await ensure_stream(js, self.project)
         cancel_subject = None
         for descriptor, handler in self.handlers.values():
             subjects = self._subjects(descriptor)
             cancel_subject = subjects.cancel
             # Created, or updated in place to this code's limits.
-            await js.add_consumer(
-                stream_name(self.project), self._consumer_config(descriptor)
-            )
+            await self._ensure_consumer(js, descriptor, update=True)
             await self.reconcile_schedules(js, descriptor)
             for event in descriptor.events:
                 self._subscriptions.append(
@@ -416,68 +663,29 @@ class JobHost:
     # --- schedules and events --------------------------------------------------------------
 
     async def reconcile_schedules(self, js: Any, descriptor: JobDescriptor) -> None:
-        """One schedule message per Cron/Every trigger; stale indexes are purged."""
-        subjects = self._subjects(descriptor)
-        schedules = descriptor.schedules
-        for index, trigger in enumerate(schedules):
-            headers = {
-                **trigger.headers(),
-                "Nats-Schedule-Target": subjects.trigger,
+        """One schedule message per Cron/Every trigger; stale indexes are purged.
+        Through the engine when it answers: a module behind the broker's auth
+        callout writes nothing into the jobs stream. A trigger's input travels
+        as ``input`` (its canonical JSON), the schedule's body."""
+        schedules = [
+            {
+                **{
+                    k: v for k, v in trigger.headers().items() if k != INPUT_HASH_HEADER
+                },
                 "Nats-Schedule-TTL": scheduled_tick_ttl(trigger),
-                TRIGGER_HEADER: "schedule",
+                **({"input": trigger.input_json} if trigger.input else {}),
             }
-            await self._ensure_schedule(
-                js, subjects.schedule(index), headers, trigger.body
-            )
-        for index in range(len(schedules), MAX_TRIGGERS):
-            await js.purge_stream(
-                stream_name(self.project), subject=subjects.schedule(index)
-            )
-
-    async def _ensure_schedule(
-        self, js: Any, subject: str, headers: dict[str, str], body: bytes = b"{}"
-    ) -> None:
-        """Publish a schedule only when it is missing or changed.
-
-        Replacing a schedule message restarts an ``@every`` interval: hosts that
-        restart more often than the interval would keep it from ever firing. The
-        publish expects the sequence just read, so hosts starting together write
-        it once; the loser reads it again. ``body`` is the trigger's input
-        (``b"{}"`` without one), delivered as each run's payload; the input's hash
-        is in the headers, so a changed input publishes the schedule again.
-        """
-        from nats.js.errors import BadRequestError, NotFoundError
-
-        stream = stream_name(self.project)
-        wanted = {name: headers.get(name) for name in SCHEDULE_HEADERS}
-        for _ in range(3):
-            try:
-                current = await js.get_last_msg(stream, subject)
-            except NotFoundError:
-                sequence = 0
-            else:
-                found = current.headers or {}
-                if {name: found.get(name) for name in SCHEDULE_HEADERS} == wanted:
-                    return
-                sequence = current.seq
-            try:
-                await js.publish(
-                    subject,
-                    body,
-                    headers={
-                        **headers,
-                        "Nats-Expected-Last-Subject-Sequence": str(sequence),
-                    },
-                    stream=stream,
-                )
-                return
-            except BadRequestError as error:
-                if error.err_code != WRONG_LAST_SEQUENCE:
-                    raise
-        logger.warning(
-            "Schedule %s kept changing while it was reconciled; "
-            "keeping the one another host wrote",
-            subject,
+            for trigger in descriptor.schedules
+        ]
+        if self.control is not None and await self.control.request(
+            "set_schedules",
+            project=self.project,
+            job=descriptor.name,
+            schedules=schedules,
+        ):
+            return
+        await set_schedules(
+            js, self.project, self.module_id, descriptor.name, schedules
         )
 
     async def bridge_event(
@@ -496,7 +704,7 @@ class JobHost:
         from naas_abi_sdk import claim_check
 
         nc = await self.transport.connect()
-        raw = await claim_check.resolve(nc, msg)
+        raw = await claim_check.resolve(nc, msg, store=self._claims)
         try:
             data: Any = json.loads(raw) if raw else None
         except (ValueError, UnicodeDecodeError):
@@ -504,22 +712,42 @@ class JobHost:
         if trigger is not None and not trigger.matches(data):
             return
         stream = stream_name(self.project)
-        headers = {TRIGGER_HEADER: "event", "Nats-TTL": EVENT_TRIGGER_TTL}
+        headers = {TRIGGER_HEADER: "event", "Nats-TTL": TRIGGER_TTLS["event"]}
         event_id = (getattr(msg, "headers", None) or {}).get("Nats-Msg-Id")
         if event_id:
             identity = json.dumps(
                 [self._subjects(descriptor).trigger, msg.subject, event_id]
             )
             headers["Nats-Msg-Id"] = hashlib.sha256(identity.encode()).hexdigest()
-        body, headers = await claim_check.prepare(
+        subjects = self._subjects(descriptor)
+        payload = json.dumps({"subject": msg.subject, "data": data}).encode()
+        body, sent = await claim_check.prepare(
             nc,
-            json.dumps({"subject": msg.subject, "data": data}).encode(),
+            payload,
             headers,
-            reserve=claim_check.stream_header_reserve(stream),
+            scope=claim_check.job_scope(self.project, subjects.module_hash),
+            reserve=trigger_reserve(len(payload)),
+            store=self._claims,
         )
-        await js.publish(
-            self._subjects(descriptor).trigger, body, headers=headers, stream=stream
-        )
+        if self.control is not None:
+            # Through the engine (a module writes nothing into the jobs stream);
+            # it stores an event trigger for the job's own module only.
+            import base64
+
+            answer = await self.control.request(
+                "trigger",
+                project=self.project,
+                module_id=self.module_id,
+                job=descriptor.name,
+                body=base64.b64encode(body).decode(),
+                headers={
+                    k: v for k, v in (sent or {}).items() if k in TRIGGER_SENDER_HEADERS
+                },
+                kind="event",
+            )
+            if answer is not None:
+                return
+        await js.publish(subjects.trigger, body, headers=sent, stream=stream)
 
     # --- cancellation ------------------------------------------------------------------------
 
@@ -553,9 +781,10 @@ class JobHost:
         if name not in self.handlers:
             raise ValueError(f"Module {self.module_id} has no job named {name!r}")
         descriptor = self.handlers[name][0]
+        # The module's own trigger: as the module (or the engine), for no user.
         return await JobProxy(
             self.transport, self.project, self.module_id, descriptor, self.documents
-        ).trigger(payload, idempotency_key=idempotency_key)
+        ).trigger(payload, idempotency_key=idempotency_key, on_behalf_of=False)
 
     # --- upkeep: lost runs and retention ---------------------------------------------------
 
@@ -636,24 +865,36 @@ class JobHost:
             if run.get("attempt", 1) >= run.get("max_attempts", 1):
                 return f"{lost} (its host stopped before the run finished)"
             error = f"{lost}, and its trigger expired before it could be retried"
-        return error if await self._trigger_gone(descriptor, run_id, run) else None
+        return error if await self._trigger_gone(descriptor, run_id, run, now) else None
 
     async def _trigger_gone(
-        self, descriptor: JobDescriptor, run_id: str, run: dict[str, Any]
+        self,
+        descriptor: JobDescriptor,
+        run_id: str,
+        run: dict[str, Any],
+        now: datetime | None = None,
     ) -> bool:
-        """Whether the run's trigger message left the jobs stream."""
-        from nats.js.errors import NotFoundError
-
-        sequence = str(run.get("sequence") or run_id.rpartition(":")[2])
-        if not sequence.isdigit():
-            return False
-        js = (await self.transport.connect()).jetstream()
+        """Whether the run's trigger message left the jobs stream: its
+        ``Nats-TTL`` passed. Read from the run, never from the stream (a host
+        may not read other modules' triggers there): ``trigger_expires_at``,
+        else ``fired_at`` plus the longest TTL of the trigger's kind."""
+        now = now or datetime.now(timezone.utc)
         try:
-            stored = await js.get_msg(stream_name(self.project), int(sequence))
-        except NotFoundError:
-            return True
-        # A recreated stream reuses sequences: another job's message is not its trigger.
-        return stored.subject != self._subjects(descriptor).trigger
+            if run.get("trigger_expires_at"):
+                expires = datetime.fromisoformat(run["trigger_expires_at"])
+            elif run.get("fired_at"):
+                kind = (run.get("trigger") or {}).get("kind", "manual")
+                lifetime = _KIND_TTL_SECONDS.get(kind, _KIND_TTL_SECONDS["manual"])
+                expires = datetime.fromisoformat(run["fired_at"]) + timedelta(
+                    seconds=lifetime
+                )
+            else:
+                return False
+        except (TypeError, ValueError):
+            return False
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        return now >= expires
 
     async def prune(self, now: datetime | None = None) -> int:
         """One retention pass over this host's jobs; returns the runs deleted.
@@ -745,7 +986,60 @@ class JobHost:
             )
 
     async def _on_cancel(self, msg: Any) -> None:
-        self.cancel(msg.data.decode(errors="replace"))
+        run_id = msg.data.decode(errors="replace")
+        job = run_id.rpartition(":")[0]
+        if run_id not in self._running or job not in self.handlers:
+            return
+        try:
+            sealed = await self._sealed(
+                getattr(msg, "subject", ""), "cancel", msg.data, msg.headers
+            )
+        except Exception:  # noqa: BLE001 - a cancel is best effort
+            logger.warning("Could not check a cancel's seal; ignored", exc_info=True)
+            return
+        if not sealed:
+            logger.warning(
+                "Dropped a cancel on %s the engine did not seal", msg.subject
+            )
+            return
+        if self.authorize is not None:
+            try:
+                await self.authorize("cancel", job, run_id, msg.headers or {}, None)
+            except Exception as exc:  # noqa: BLE001 - a refused cancel changes nothing
+                logger.warning("Job cancel of %s refused: %s", run_id, exc)
+                return
+        self.cancel(run_id)
+
+    async def _sealed(
+        self, subject: str, kind: str, body: bytes, headers: dict[str, str] | None
+    ) -> bool:
+        """Whether the engine wrote this trigger or cancel (its seal).
+
+        Behind the broker's auth callout (a transport logged in with a service
+        key) nothing is taken on faith: with no engine answering, this raises
+        and the message is redelivered, so an engine restart never lets a
+        forged or unsealed message run. Only a host without a callout (no
+        broker control, or a broker where nothing is sealed) takes a message as
+        it is."""
+        if self.control is None:
+            return True
+        confined = getattr(self.transport, "credentials", None) is not None
+        seal = (headers or {}).get(SEAL_HEADER, "")
+        if not seal:
+            # Nothing unsealed is written behind the callout: unless no engine
+            # answers at all, this one was forged.
+            answer = await self.control.request("verify_trigger", fields=[], seal="-")
+            if answer is None and confined:
+                raise EngineUnavailable("no engine answered to check a seal")
+            return answer is None
+        answer = await self.control.request(
+            "verify_trigger",
+            fields=seal_fields(subject, kind, body, headers),
+            seal=seal,
+        )
+        if answer is None and confined:
+            raise EngineUnavailable("no engine answered to check a seal")
+        return answer is None or bool(answer.get("valid"))
 
     # --- running one trigger ---------------------------------------------------------------
 
@@ -891,7 +1185,9 @@ class JobHost:
 
         data = msg.data
         if claim_check.carries_reference(msg):
-            data = await claim_check.resolve(await self.transport.connect(), msg)
+            data = await claim_check.resolve(
+                await self.transport.connect(), msg, store=self._claims
+            )
         try:
             payload = json.loads(data) if data else {}
         except (ValueError, UnicodeDecodeError):
@@ -914,11 +1210,88 @@ class JobHost:
         await msg.nak(delay=delay)
         return "DEFERRED"
 
+    async def _refuse(
+        self,
+        msg: Any,
+        run_id: str,
+        descriptor: JobDescriptor,
+        trigger: dict[str, str],
+        error: Exception,
+        *,
+        retried: bool = False,
+    ) -> str:
+        """A trigger whose caller may not trigger the job: recorded as failed,
+        never run, never redelivered, and waiters told. Refused on a retry (a
+        right revoked since the first attempt), the run keeps what its earlier
+        attempts recorded: it only ends FAILED."""
+        logger.warning("Job trigger %s refused: %s", run_id, error)
+        refused = f"Trigger refused: {getattr(error, 'code', '') or error}"
+        try:
+            if retried:
+                await self._save(
+                    run_id,
+                    {"status": "FAILED", "finished_at": _now(), "error": refused},
+                )
+            else:
+                await self._save(
+                    run_id,
+                    {
+                        "job": descriptor.name,
+                        "run_id": run_id,
+                        "module_id": self.module_id,
+                        "status": "FAILED",
+                        "attempt": 0,
+                        "max_attempts": descriptor.max_attempts,
+                        "trigger": trigger,
+                        "instance": self.instance_id,
+                        "sequence": msg.metadata.sequence.stream,
+                        "fired_at": _fired_at(msg),
+                        "finished_at": _now(),
+                        "error": refused,
+                    },
+                    replace=True,
+                )
+        except Exception as exc:  # noqa: BLE001 - logged and redelivered by _defer
+            return await self._defer(msg, run_id, msg.metadata.num_delivered, exc)
+        await msg.term()
+        await self._notify(descriptor, run_id, "FAILED")
+        return "FAILED"
+
     async def _handle_delivery(
         self, descriptor: JobDescriptor, handler: Any, msg: Any
     ) -> str:
         sequence, delivery = msg.metadata.sequence.stream, msg.metadata.num_delivered
         run_id = run_key(descriptor.name, sequence)
+        scheduler = (msg.headers or {}).get("Nats-Scheduler")
+        own = self._subjects(descriptor).schedule(0).rpartition(".")[0] + "."
+        if scheduler and not scheduler.startswith(own):
+            # The server names the schedule that fired (a client cannot set
+            # it), and any module may target its own schedules at this subject.
+            logger.warning(
+                "Job %s: dropped a trigger fired by another module's schedule %s",
+                descriptor.name,
+                scheduler,
+            )
+            await msg.term()
+            return "REFUSED"
+        headers = msg.headers or {}
+        try:
+            sealed = await self._sealed(
+                getattr(msg, "subject", ""),
+                headers.get(TRIGGER_HEADER, "manual"),
+                msg.data,
+                headers,
+            )
+        except Exception as exc:  # noqa: BLE001 - the engine is away: later
+            return await self._defer(msg, run_id, delivery, exc)
+        if not sealed:
+            # Behind the broker's auth callout only the engine writes triggers;
+            # anything else landed here by a JetStream answer a module aimed.
+            logger.warning(
+                "Job %s: dropped a trigger the engine did not seal", descriptor.name
+            )
+            await msg.term()
+            return "REFUSED"
         try:
             existing = await self.documents.get(self.collection, run_id)
         except DocumentNotFound:
@@ -951,6 +1324,22 @@ class JobHost:
         trigger = {"kind": headers.get(TRIGGER_HEADER, "manual")}
         if headers.get("Nats-Scheduler"):
             trigger["scheduler"] = headers["Nats-Scheduler"]
+        elif trigger["kind"] == "schedule":
+            trigger["kind"] = "manual"  # only the server fires a schedule
+        # Every attempt of a manual trigger is asked about: a retry runs for the
+        # same user, and a right revoked since stops it.
+        run_as = None
+        if trigger["kind"] == "manual" and self.authorize is not None:
+            try:
+                run_as = await self.authorize(
+                    "trigger", descriptor.name, run_id, headers, _stored_at(msg)
+                )
+            except Exception as exc:  # noqa: BLE001 - refused, or retried below
+                if getattr(exc, "code", "") not in REFUSALS:
+                    return await self._defer(msg, run_id, delivery, exc)
+                return await self._refuse(
+                    msg, run_id, descriptor, trigger, exc, retried=attempt > 1
+                )
         fired_at = _fired_at(msg)
         try:
             payload = await self._payload(msg)
@@ -968,6 +1357,7 @@ class JobHost:
                     "instance": self.instance_id,
                     "sequence": sequence,
                     "fired_at": fired_at,
+                    "trigger_expires_at": _trigger_expires_at(msg),
                     "started_at": _now(),
                     "heartbeat_at": _now(),
                     "trace_id": current_trace_id(),
@@ -987,13 +1377,21 @@ class JobHost:
                 payload,
                 runtime=self._flow_runtime,
                 fired_at=fired_at,
+                # Its journal, children and notices stay the module's own.
+                host_context=current_call_context(),
             )
         else:
             context = JobContext(run_id, descriptor.name, attempt, trigger, payload)
         self._running[run_id] = context
         heartbeat = asyncio.create_task(self._heartbeat(msg))
         progress = asyncio.create_task(self._persist_progress(context))
-        work = asyncio.create_task(handler(context))
+        if run_as is None:
+            work = asyncio.create_task(handler(context))
+        else:
+            # The run's calls are the module's, for the user: the task copies
+            # this context, and the transport sends the delegation it holds.
+            with use_call_context(run_as):
+                work = asyncio.create_task(handler(context))
         self._work[run_id] = work
         timeout = descriptor.timeout.total_seconds() if descriptor.timeout else None
         result: Any = None

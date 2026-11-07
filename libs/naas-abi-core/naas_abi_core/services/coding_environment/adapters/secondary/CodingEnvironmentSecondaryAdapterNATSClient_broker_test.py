@@ -7,6 +7,7 @@ import subprocess
 import time
 
 import pytest
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.coding_environment.adapters.secondary.CodingEnvironmentSecondaryAdapterNATSClient import (
     CodingEnvironmentSecondaryAdapterNATSClient,
 )
@@ -59,8 +60,7 @@ def test_list_all_environments_round_trip(nats_url):
     server.start()
     client = CodingEnvironmentSecondaryAdapterNATSClient(
         nats_url=nats_url,
-        jwt_secret=JWT_SECRET,
-        service_identity="api",
+        credentials=TEST_TOKENS.source("api"),
         timeout_seconds=10.0,
     )
     try:

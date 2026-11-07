@@ -12,6 +12,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     FileWrite,
     MergeBlockedError,
     ProposalNotFoundError,
+    RepoExistsError,
     RepoNotFoundError,
 )
 from naas_abi_core.services.source_control.tests.source_control__secondary_adapter__generic_test import (
@@ -35,6 +36,15 @@ def test_ensure_user_is_idempotent() -> None:
     a = adapter.ensure_user(external_id="x", email="a@b.c", username="alice")
     b = adapter.ensure_user(external_id="x", email="a@b.c", username="alice")
     assert a == b
+
+
+@pytest.mark.parametrize("name", ["proj", "PROJ", "Proj"])
+def test_create_repo_never_returns_an_existing_repository(name) -> None:
+    adapter = InMemoryAdapter()
+    created = adapter.create_repo(owner="alice", name="proj")
+    assert (created.owner, created.name) == ("alice", "proj")
+    with pytest.raises(RepoExistsError):
+        adapter.create_repo(owner="alice", name=name)
 
 
 def test_ensure_repo_is_idempotent() -> None:

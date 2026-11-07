@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import NoReturn
 
 from naas_abi_core.services.source_control.SourceControlPorts import (
+    AccessDeniedError,
     Branch,
     BranchNameConflictError,
     BranchNotFoundError,
@@ -22,6 +23,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     MergeResult,
     Proposal,
     Repo,
+    RepoExistsError,
     RepoNotFoundError,
     Review,
     SourceControlError,
@@ -113,11 +115,27 @@ class LocalGitAdapter(ISourceControlAdapter):
     def _unsupported(self, feature: str) -> NoReturn:
         raise NotImplementedError(f"{feature} is not supported by the local_git adapter")
 
-    def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
-        del email
-        if username not in self._users:
+    def ensure_user(
+        self,
+        *,
+        external_id: str,
+        email: str,
+        username: str,
+        vouched_email: bool = False,
+    ) -> str:
+        del email, vouched_email
+        bound = self._users.get(username)
+        if bound is not None and external_id and bound != external_id:
+            raise AccessDeniedError(
+                f"Forge user {username} belongs to another principal"
+            )
+        if bound is None or external_id:
             self._users[username] = external_id or username
         return self._users[username]
+
+    def find_user(self, *, external_id: str) -> str | None:
+        found = [name for name, owner in self._users.items() if owner == external_id]
+        return found[-1] if found else None
 
     def ensure_repo(
         self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
@@ -135,6 +153,19 @@ class LocalGitAdapter(ISourceControlAdapter):
                 self._run("add", "README.md", cwd=path, env=env)
                 self._run("commit", "-m", "Initial commit", cwd=path, env=env)
         return self._to_repo(repo_id)
+
+    def create_repo(
+        self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
+    ) -> Repo:
+        repo_id = f"{owner}/{name}"
+        if self._repo_exists(repo_id) or any(
+            f"{repo.owner}/{repo.name}".lower() == repo_id.lower()
+            for repo in self.list_repos()
+        ):
+            raise RepoExistsError(f"Repository {repo_id} exists")
+        return self.ensure_repo(
+            owner=owner, name=name, private=private, auto_init=auto_init
+        )
 
     def list_repos(self) -> list[Repo]:
         repos: list[Repo] = []
@@ -446,6 +477,6 @@ class LocalGitAdapter(ISourceControlAdapter):
         del repo_id, limit
         self._unsupported("list_workflow_runs")
 
-    def mint_git_token(self, *, user_id: str) -> str:
-        del user_id
+    def mint_git_token(self, *, user_id: str, external_id: str | None = None) -> str:
+        del user_id, external_id
         return "local"

@@ -4,7 +4,7 @@
 // primitives (coding environment + agents + source control) targeting one abi
 // module's surface, so less-technical users can leverage them for a specific
 // use case. New verticals are added here (config) + a view that composes the
-// shared primitives — no backend changes (RFC §7.4).
+// shared primitives — no backend changes.
 
 export interface VerticalDef {
   id: string;

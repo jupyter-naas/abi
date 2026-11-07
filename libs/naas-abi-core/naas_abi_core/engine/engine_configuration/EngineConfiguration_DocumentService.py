@@ -35,8 +35,8 @@ class DocumentAdapterPostgreSQLConfiguration(BaseModel):
 class DocumentAdapterNATSConfiguration(BaseModel):
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
     nats_url: str = "nats://127.0.0.1:4222"
-    jwt_secret: str = Field(min_length=32, repr=False)
-    service_identity: str = "engine"
+    # A key of the upstream engine (abi_sk_...), exchanged for its tokens.
+    service_key: str = Field(min_length=1, repr=False)
     timeout_seconds: float = Field(default=10.0, gt=0, allow_inf_nan=False)
 
 
@@ -93,14 +93,16 @@ class DocumentAdapterConfiguration(GenericLoader):
                 ).model_dump(by_alias=True)
             )
         if self.adapter == "nats_rpc":
+            from naas_abi_core.engine.nats_credentials import rpc_client
             from naas_abi_core.services.document.adapters.secondary.DocumentSecondaryAdapterNATSClient import (
                 DocumentSecondaryAdapterNATSClient,
             )
 
-            return DocumentSecondaryAdapterNATSClient(
+            return rpc_client(
+                DocumentSecondaryAdapterNATSClient,
                 **DocumentAdapterNATSConfiguration.model_validate(
                     self.config
-                ).model_dump()
+                ).model_dump(),
             )
         adapter = super().load()
         if not isinstance(adapter, IDocumentAdapter):

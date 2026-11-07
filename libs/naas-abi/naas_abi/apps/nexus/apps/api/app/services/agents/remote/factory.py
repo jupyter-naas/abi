@@ -12,9 +12,12 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.remote.adapters.in_memory 
 )
 from naas_abi.apps.nexus.apps.api.app.services.agents.remote.port import RemoteAgentDirectory
 
-# Discovery binds invocation status/events/cancel to the caller identity; every
-# API worker shares this one so any worker can follow a run another started.
-CALLER_IDENTITY = "api"
+# Nexus calls remote agents and apps for the signed-in user with a delegation
+# that names the module behind the host as the actor and the user:
+# discovery checks the user's policy and the module's (discovery:InvokeAgent,
+# OpenApp) and makes the user the owner of the runs it starts, so any API worker
+# can follow them. The host holds a token that is good for that module acting
+# for that user, ten minutes, and nowhere else; never ``api``'s own.
 
 _directory: RemoteAgentDirectory | None = None
 
@@ -25,15 +28,23 @@ def build_remote_agent_directory(nats: Any | None) -> RemoteAgentDirectory:
         return InMemoryRemoteAgentDirectory()
 
     def discovery_client() -> Any:
-        from naas_abi_core.engine.nats_auth import ServiceTokenSource
+        from naas_abi.apps.nexus.apps.api.app.services.engine_credentials import (
+            api_delegate,
+            api_host_token,
+            api_token,
+        )
         from naas_abi_sdk.discovery import DiscoveryClient
         from naas_abi_sdk.transport import Transport
 
-        # Calls to a module's agents carry a token bound to its instance.
+        # api's own tokens (engine_credentials) for what Nexus asks for itself
+        # (listing agents); for a call made for the signed-in user, a delegation:
+        # to discovery with api as the actor, to a host with its module.
         transport = Transport(
             nats.nats_url,
-            ServiceTokenSource(CALLER_IDENTITY, nats.jwt_secret),
+            api_token(),
             timeout=30,
+            delegate=api_delegate(),
+            host_token=api_host_token(),
         )
         return DiscoveryClient(transport, nats.discovery.project)
 

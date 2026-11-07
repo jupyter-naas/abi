@@ -34,8 +34,10 @@ MAX_SOURCE_LENGTH = 512
 SOURCE_PREFIX = "module"
 _MODULE_ID = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.:-]{0,255}")
 _SEGMENT = re.compile(r"[A-Za-z0-9_.-]+")
-# What the engine answers to a file that no retry makes acceptable.
-TERMINAL_CODES = frozenset({"INVALID_ARGUMENT", "PERMISSION_DENIED"})
+# What the engine answers to a file that no retry makes acceptable. NOT_FOUND:
+# the module may load no schema at all (triple_store:LoadSchema), so it cannot
+# even see the source; like a refusal, only an approved manifest changes it.
+TERMINAL_CODES = frozenset({"INVALID_ARGUMENT", "PERMISSION_DENIED", "NOT_FOUND"})
 # Seconds between attempts at a failed load: doubled each time, up to the cap.
 RETRY_FIRST_SECONDS = 1.0
 RETRY_MAX_SECONDS = 60.0

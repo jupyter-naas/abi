@@ -54,7 +54,53 @@ def test_a_generated_stack_runs_on_nats_by_default(tmp_path: Path) -> None:
     for name, service in services.items():
         if name != "nats" and not service.get("profiles"):
             assert service.get("image") or service.get("build"), name
-    assert len(_env_values(tmp_path / ".env")["NATS_JWT_SECRET"]) >= 32
+    env = _env_values(tmp_path / ".env")
+    assert env["NATS_AUTH_CALLOUT_SEED"].startswith("SA")
+    assert "NATS_JWT_SECRET" not in env
+
+
+def test_a_generated_nats_stack_runs_the_idp_in_its_own_container(
+    tmp_path: Path,
+) -> None:
+    setup_local_deploy(str(tmp_path), base_domain="localhost", nats=True)
+    compose = (tmp_path / "docker-compose.yml").read_text()
+    idp = _services(tmp_path / "docker-compose.yml")["idp"]
+
+    # SDK-only: built from the provider's folder with the proto and SDK contexts.
+    assert idp["build"] == {
+        "context": "./.abi/libs/naas-abi-idp",
+        "additional_contexts": {
+            "abi_proto": "./.abi/libs/naas-abi-proto",
+            "abi_sdk": "./.abi/libs/naas-abi-sdk",
+        },
+    }
+    # Nothing of the engine's is mounted: not the project, not .env, not storage.
+    assert "volumes" not in idp and "env_file" not in idp
+    assert idp["networks"] == ["abi-network"] and idp["restart"] == "unless-stopped"
+    environment = dict(e.split("=", 1) for e in idp["environment"])
+    assert environment["ABI_NATS_URL"] == "nats://nats:4222"  # no login in the URL
+    assert environment["ABI_SERVICE_KEY"] == "${IDP_SERVICE_KEY:-}"
+    assert re.fullmatch(r"[A-Za-z0-9_-]{1,64}", environment["ABI_DISCOVERY_PROJECT"])
+    assert environment["ABI_IDP_ISSUER"] == "${NEXUS_API_URL}/idp"
+    assert (
+        environment["ABI_IDP_REDIRECT_URIS"]
+        == "${NEXUS_API_URL}/api/auth/oidc/callback"
+    )
+    assert environment["ABI_IDP_CLIENT_SECRET"].startswith("${ABI_IDP_CLIENT_SECRET")
+    # No broker password or signing secret is handed to it.
+    assert not any(
+        "NATS_ENGINE_PASSWORD" in e or "NATS_AUTH" in e for e in idp["environment"]
+    )
+    assert idp["depends_on"] == {"abi": {"condition": "service_healthy"}}
+    assert "module/" in compose  # the comment says which account to create
+    env = _env_values(tmp_path / ".env")
+    assert len(env["ABI_IDP_CLIENT_SECRET"]) >= 24
+    assert "IDP_SERVICE_KEY" not in env  # an operator creates it (a module's key)
+
+
+def test_a_classic_stack_has_no_idp(tmp_path: Path) -> None:
+    setup_local_deploy(str(tmp_path), base_domain="localhost", nats=False)
+    assert "idp" not in _services(tmp_path / "docker-compose.yml")
 
 
 def _seconds(duration: str) -> int:
@@ -87,6 +133,8 @@ def test_a_classic_stack_keeps_nats_opt_in(tmp_path: Path) -> None:
     assert "profiles" not in services["rabbitmq"]
     assert services["abi"]["depends_on"]["rabbitmq"] == {"condition": "service_healthy"}
     assert "NATS_JWT_SECRET" not in _env_values(tmp_path / ".env")
+    # The broker's users exist even with the nats profile off.
+    assert _env_values(tmp_path / ".env")["NATS_ENGINE_PASSWORD"]
 
 
 def _write_config(project: Path, *, nats: bool) -> None:
@@ -187,12 +235,14 @@ def test_ensure_legacy_extras_without_uv_prints_the_command(
 
     ensure_legacy_extras(str(tmp_path))
 
-    assert "run `uv add 'naas-abi-core[all,dagster,rabbitmq]'`" in capsys.readouterr().out
+    assert (
+        "run `uv add 'naas-abi-core[all,dagster,rabbitmq]'`" in capsys.readouterr().out
+    )
 
 
 def test_project_mode_is_read_from_the_compose_config_first(tmp_path: Path) -> None:
     assert project_uses_nats(str(tmp_path)) is None
-    (tmp_path / "config.yaml").write_text("nats:\n  jwt_secret: x\n")
+    (tmp_path / "config.yaml").write_text("nats:\n  nats_url: x\n")
     assert project_uses_nats(str(tmp_path)) is True
     # docker-compose runs config.local.yaml, so it decides.
     _write_config(tmp_path, nats=False)
@@ -493,30 +543,24 @@ def _env_values(path: Path) -> dict[str, str]:
     return values
 
 
-def test_setup_local_deploy_generates_a_per_project_admin_password(
-    tmp_path: Path,
-) -> None:
-    first, second = tmp_path / "a", tmp_path / "b"
-    setup_local_deploy(str(first), base_domain="localhost")
-    setup_local_deploy(str(second), base_domain="localhost")
+def test_setup_local_deploy_makes_no_admin_password(tmp_path: Path) -> None:
+    setup_local_deploy(str(tmp_path), base_domain="localhost")
 
-    a = _env_values(first / ".env")["NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD"]
-    b = _env_values(second / ".env")["NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD"]
-
-    assert a != b
-    assert len(a) >= 24
+    values = _env_values(tmp_path / ".env")
+    assert values["NEXUS_USER_ADMIN_EMAIL"] == "admin@example.com"
+    # The admin signs in at the identity provider with a mailed code.
+    assert not [
+        key for key in values if key.startswith("NEXUS_USER_") and "PASSWORD" in key
+    ]
     for content in (
-        (first / ".env").read_text(),
-        (first / "docker-compose.yml").read_text(),
+        (tmp_path / ".env").read_text(),
+        (tmp_path / "docker-compose.yml").read_text(),
     ):
         assert "Admin1234!" not in content
         assert "ABI_API_KEY=abi\n" not in content
-    assert "NEXUS_USER_ADMIN_PASSWORD" not in _env_values(first / ".env")
 
 
-def test_setup_local_deploy_replaces_a_shipped_default_admin_password(
-    tmp_path: Path,
-) -> None:
+def test_regenerating_does_not_bring_a_password_back(tmp_path: Path) -> None:
     (tmp_path / ".env").write_text(
         "NEXUS_USER_ADMIN_PASSWORD=Admin1234!\n"
         "NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD=Admin1234!\n",
@@ -527,15 +571,16 @@ def test_setup_local_deploy_replaces_a_shipped_default_admin_password(
         str(tmp_path), base_domain="localhost", regenerate=True, backup=False
     )
 
-    content = (tmp_path / ".env").read_text(encoding="utf-8")
-    assert "Admin1234!" not in content
-    assert (
-        len(_env_values(tmp_path / ".env")["NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD"])
-        >= 24
-    )
+    values = _env_values(tmp_path / ".env")
+    assert values["NEXUS_USER_ADMIN_EMAIL"] == "admin@example.com"
+    assert "NEXUS_USER_ADMIN_PASSWORD" not in values
+    assert "NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD" not in values
 
 
-NATS_USERS = {"abi": "NATS_ABI_PASSWORD", "module": "NATS_MODULE_PASSWORD"}
+NATS_USERS = {"engine": "NATS_ENGINE_PASSWORD", "auth": "NATS_AUTH_PASSWORD"}
+# What the broker container needs from .env: both passwords and the callout's
+# trusted key.
+BROKER_ENV = (*NATS_USERS.values(), "NATS_AUTH_CALLOUT_ISSUER")
 
 
 def _nats_service(compose: Path) -> dict:
@@ -556,6 +601,7 @@ def test_setup_local_deploy_generates_the_broker_passwords(tmp_path: Path) -> No
 
     for key in NATS_USERS.values():
         assert len(env[key]) >= 32
+    assert env["NATS_AUTH_CALLOUT_ISSUER"].startswith("A")
 
 
 def test_the_broker_requires_a_password_and_listens_on_localhost(
@@ -567,12 +613,11 @@ def test_the_broker_requires_a_password_and_listens_on_localhost(
     for root in (repo_root, tmp_path):
         service = _nats_service(root / "docker-compose.yml")
         conf = (root / ".deploy/docker/nats/nats.conf").read_text(encoding="utf-8")
-        assert "{ user: abi, password: $NATS_ABI_PASSWORD }" in conf
-        assert (
-            "{ user: module, password: $NATS_MODULE_PASSWORD, "
-            "permissions: $MODULE_PERMISSIONS }" in conf
-        )
-        for key in NATS_USERS.values():
+        for user, key in NATS_USERS.items():
+            assert f"{{ user: {user}, password: ${key}," in conf
+        assert "issuer: $NATS_AUTH_CALLOUT_ISSUER" in conf
+        assert "auth_users: [ engine, auth ]" in conf
+        for key in BROKER_ENV:
             assert f"{key}=${{{key}:-}}" in service["environment"]
         assert all(port.startswith("127.0.0.1:") for port in service["ports"])
         assert (
@@ -582,31 +627,11 @@ def test_the_broker_requires_a_password_and_listens_on_localhost(
         )
 
 
-def test_the_docker_broker_gives_modules_the_engines_module_permissions(
-    tmp_path: Path,
-) -> None:
-    """The nats.conf lists are the ones nats_permissions defines (and abi dev uses)."""
-    from naas_abi_core.engine.nats_permissions import MODULE_PERMISSIONS
-
-    setup_local_deploy(str(tmp_path), base_domain="localhost")
-    repo_root = Path(__file__).resolve().parents[5]
-
-    for root in (repo_root, tmp_path):
-        conf = (root / ".deploy/docker/nats/nats.conf").read_text(encoding="utf-8")
-        block = conf[conf.index("MODULE_PERMISSIONS = {") : conf.index("authorization {")]
-        publish = block[block.index("publish:") : block.index("subscribe:")]
-        subscribe = block[block.index("subscribe:") :]
-        assert re.findall(r'"([^"]+)"', publish) == MODULE_PERMISSIONS["publish"]["deny"]
-        assert (
-            re.findall(r'"([^"]+)"', subscribe) == MODULE_PERMISSIONS["subscribe"]["deny"]
-        )
-
-
-@pytest.mark.parametrize("missing", list(NATS_USERS.values()))
+@pytest.mark.parametrize("missing", BROKER_ENV)
 def test_the_broker_does_not_start_without_a_password(tmp_path: Path, missing) -> None:
     """nats-server takes an empty $VAR as an empty password: anyone could log in."""
     setup_local_deploy(str(tmp_path), base_domain="localhost")
-    env = {key: "p" * 32 for key in NATS_USERS.values()} | {missing: ""}
+    env = {key: "p" * 32 for key in BROKER_ENV} | {missing: ""}
 
     result = subprocess.run(
         ["sh", "-c", _nats_guard(_nats_service(tmp_path / "docker-compose.yml"))],
@@ -646,7 +671,7 @@ def test_the_generated_broker_admits_only_its_users(tmp_path: Path) -> None:
             "-sd",
             str(tmp_path / "jetstream"),
         ],
-        env={**os.environ, **{key: env[key] for key in NATS_USERS.values()}},
+        env={**os.environ, **{key: env[key] for key in BROKER_ENV}},
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -659,20 +684,20 @@ def test_the_generated_broker_admits_only_its_users(tmp_path: Path) -> None:
         )
 
     async def scenario() -> None:
-        for credentials in ("", "abi:wrong@", f"intruder:{env['NATS_ABI_PASSWORD']}@"):
-            with pytest.raises(NATSError, match="Authorization Violation"):
+        # Nobody answers the callout here: only the static users get in.
+        for credentials in (
+            "",
+            "engine:wrong@",
+            f"intruder:{env['NATS_ENGINE_PASSWORD']}@",
+        ):
+            with pytest.raises((NATSError, TimeoutError)):
                 await connect(credentials)
         for user, key in NATS_USERS.items():
-            # Modules read replies on their own inbox prefix (_INBOX.> is the engine's).
-            options = {"inbox_prefix": "_INBOX_MODULES"} if user == "module" else {}
-            nc = await nats.connect(
-                f"nats://{user}:{env[key]}@127.0.0.1:{port}",
-                allow_reconnect=False,
-                connect_timeout=2,
-                **options,
-            )
-            # Both users share the default account, so its JetStream too.
-            await nc.jetstream().account_info()
+            nc = await connect(f"{user}:{env[key]}@")
+            if (
+                user == "engine"
+            ):  # the engine reaches JetStream; auth answers callouts only
+                await nc.jetstream().account_info()
             await nc.close()
 
     try:

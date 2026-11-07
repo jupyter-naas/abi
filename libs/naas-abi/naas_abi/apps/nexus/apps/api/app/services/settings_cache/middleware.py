@@ -3,9 +3,14 @@
 Opt-in: only GET requests carrying ``X-Nexus-Cache: 1`` are cached. The web app sends
 that header from settings pages only, so the rest of the app always reads live data.
 
-Keys are per user (the bearer token's ``sub``, not the token itself, which rotates)
-and include the full path and query string, so role-dependent answers never leak
-between users.
+Keys are per user (the user ``RequestIdentityMiddleware`` verified, which wraps this
+one; a request with none is never cached), per set of IdP groups, and include the full
+path and query string, so role-dependent answers never leak between users. Only a plain
+session is cached: an API key, a coding key or any credential with a ``scope`` (it narrows
+what the user sees) is answered live and never reads or fills a session's entries;
+every credential can still reload and invalidate its user's entries.
+A request in a view (``services/view_as``, ``nexus_view`` on the scope's state) neither reads nor fills
+the cache: its user is the person's, whose entries are theirs.
 
 Invalidation uses two generation counters stored in the cache itself:
 
@@ -53,6 +58,9 @@ SETTINGS_PATH_PREFIXES: tuple[str, ...] = (
     "/api/apps",
     "/api/search/topics",
     "/api/graph/list",
+    # Policies, attachments and groups: what the settings pages list is what
+    # the caller may use, so a change there is read again.
+    "/api/iam/admin",
 )
 
 _WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
@@ -117,12 +125,37 @@ def invalidate_on_startup(cache_resolver: Callable[[], Any] = default_cache_reso
         logger.warning("Settings cache: startup invalidation failed: %s", exc)
 
 
-def default_user_resolver(headers: Headers) -> str | None:
-    from naas_abi.apps.nexus.apps.api.app.services.identity_events.middleware import (
-        user_id_from_headers,
-    )
+def default_user_resolver(scope: Scope) -> str | None:
+    """The user the request's credential proved (``RequestIdentityMiddleware``)."""
+    state = scope.get("state") or {}
+    if state.get("nexus_view") is not None:
+        return None  # a view (services/view_as) neither reads nor fills the cache
+    credential = state.get("nexus_credential")
+    user_id = getattr(credential, "user_id", None)
+    return str(user_id) if user_id else None
 
-    return user_id_from_headers(headers)
+
+def default_entry_variant(scope: Scope) -> str | None:
+    """What an entry depends on besides the user, or None: do not cache.
+
+    An answer is cached only for a plain session (the reach of the user), and
+    apart per set of IdP groups. A key or token with a ``scope`` narrows what the
+    user may see, and a coding or API-key credential reaches fewer routes: their
+    requests never read or fill the session's entries.
+    """
+    state = scope.get("state") or {}
+    if state.get("nexus_view") is not None:
+        return None  # a view never reads or fills the cache: the person's entries are theirs
+    credential = state.get("nexus_credential")
+    if credential is None:
+        return ""  # no credential in the scope: the resolver of the user speaks alone
+    if (
+        getattr(credential, "kind", None) != "session"
+        or getattr(credential, "scope", None) is not None
+    ):
+        return None
+    groups = "\n".join(sorted(str(g) for g in getattr(credential, "groups", ()) or ()))
+    return hashlib.sha256(groups.encode()).hexdigest()[:16]
 
 
 def is_settings_path(path: str) -> bool:
@@ -137,12 +170,14 @@ class SettingsCacheMiddleware:
         self,
         app: ASGIApp,
         cache_resolver: Callable[[], Any] = default_cache_resolver,
-        user_resolver: Callable[[Headers], str | None] = default_user_resolver,
+        user_resolver: Callable[[Scope], str | None] = default_user_resolver,
+        entry_variant: Callable[[Scope], str | None] = default_entry_variant,
         ttl: datetime.timedelta = DEFAULT_TTL,
     ) -> None:
         self.app = app
         self.cache_resolver = cache_resolver
         self.user_resolver = user_resolver
+        self.entry_variant = entry_variant
         self.ttl = ttl
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
@@ -167,12 +202,13 @@ class SettingsCacheMiddleware:
         if method != "GET" or headers.get(CACHE_HEADER) != "1":
             await self.app(scope, receive, send)
             return
-        user_id = self.user_resolver(headers)
-        if not user_id:
+        user_id = self.user_resolver(scope)
+        variant = self.entry_variant(scope)
+        if not user_id or variant is None:
             await self.app(scope, receive, send)
             return
 
-        key = await self._entry_key(user_id, path, scope.get("query_string", b""))
+        key = await self._entry_key(user_id, variant, path, scope.get("query_string", b""))
         if key is None:
             await self.app(scope, receive, send)
             return
@@ -196,7 +232,7 @@ class SettingsCacheMiddleware:
         if method != "POST":
             await _send_plain(send, 405)
             return
-        user_id = self.user_resolver(Headers(scope=scope))
+        user_id = self.user_resolver(scope)
         if not user_id:
             await _send_plain(send, 401)
             return
@@ -251,7 +287,9 @@ class SettingsCacheMiddleware:
     # Cache access (blocking cache I/O runs in the threadpool)
     # ------------------------------------------------------------------
 
-    async def _entry_key(self, user_id: str, path: str, query_string: bytes) -> str | None:
+    async def _entry_key(
+        self, user_id: str, variant: str, path: str, query_string: bytes
+    ) -> str | None:
         try:
             global_gen = await self._generation(_GLOBAL_GENERATION_KEY)
             user_gen = await self._generation(_user_generation_key(user_id))
@@ -259,7 +297,7 @@ class SettingsCacheMiddleware:
             logger.warning("Settings cache unavailable, serving live: %s", exc)
             return None
         query = "&".join(sorted(query_string.decode("latin-1").split("&"))) if query_string else ""
-        digest = hashlib.sha256(f"{user_id}|{path}?{query}".encode()).hexdigest()
+        digest = hashlib.sha256(f"{user_id}|{variant}|{path}?{query}".encode()).hexdigest()
         return f"{_KEY_PREFIX}:entry:{global_gen}:{user_gen}:{digest}"
 
     async def _generation(self, key: str) -> int:

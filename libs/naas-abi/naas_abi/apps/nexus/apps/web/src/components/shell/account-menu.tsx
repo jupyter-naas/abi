@@ -5,7 +5,9 @@ import { Building2, HelpCircle, LogOut, ShieldCheck, User } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
-import { useFeature } from '@/hooks/use-feature';
+import { useOrganizationSettingsAccess } from '@/hooks/use-organization-settings-access';
+import { usePlatformSettingsAccess } from '@/hooks/use-platform-settings-access';
+import { visiblePlatformSettingsGroups } from '@/app/settings/lib/nav';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { getWorkspacePath } from './sidebar/utils';
 
@@ -56,8 +58,13 @@ export function AccountMenuPanel({
 }) {
   const router = useRouter();
   const logout = useAuthStore((s) => s.logout);
-  const canOrganizationSettings = useFeature('settings.organization');
-  const isSuperadmin = useAuthStore((s) => !!s.user?.is_superadmin);
+  // IAM decides, as Organization settings does for its own sections: never a workspace role.
+  const canOrganizationSettings = useOrganizationSettingsAccess();
+  // Whenever any of its pages is open to the user: IAM decides, not a role name.
+  const platformSettings = usePlatformSettingsAccess();
+  const canPlatformSettings =
+    platformSettings.status === 'ready' &&
+    visiblePlatformSettingsGroups(platformSettings.actions).length > 0;
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const helpHref = getWorkspacePath(currentWorkspaceId, '/help');
 
@@ -98,7 +105,7 @@ export function AccountMenuPanel({
             Organization Settings
           </Link>
         )}
-        {isSuperadmin && (
+        {canPlatformSettings && (
           <Link
             href="/settings"
             role="menuitem"

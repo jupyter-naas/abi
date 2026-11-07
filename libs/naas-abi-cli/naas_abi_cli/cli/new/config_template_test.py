@@ -61,23 +61,19 @@ def _enabled_modules(doc: dict) -> set[str]:
     return {m["module"] for m in doc["modules"] if m.get("enabled")}
 
 
-def test_code_enabled_for_admins_when_coding_included() -> None:
+def test_code_enabled_when_coding_included() -> None:
     ff = _render_feature_flags(include_coding=True)
 
     assert "code" in ff["enabled_features"]
-    assert "code" in ff["role_baseline"]["owner"]
-    assert "code" in ff["role_baseline"]["admin"]
-    # Members and viewers never get the coding section by default.
-    assert "code" not in ff["role_baseline"]["member"]
-    assert "code" not in ff["role_baseline"]["viewer"]
+    # No role brings a feature: a policy does.
+    assert set(ff) == {"enabled_features"}
 
 
 def test_code_absent_when_coding_not_included() -> None:
     ff = _render_feature_flags(include_coding=False)
 
     assert "code" not in ff["enabled_features"]
-    for role in ("owner", "admin", "member", "viewer"):
-        assert "code" not in ff["role_baseline"][role]
+    assert set(ff) == {"enabled_features"}
 
 
 @pytest.mark.parametrize("filename", _ALL_CONFIGS)
@@ -191,21 +187,28 @@ def test_nats_configs_pass_the_engine_validation(filename: str) -> None:
     assert nats.discovery.project == "demo"
     # Outlives an engine restart, so remote modules renew instead of dropping out.
     assert nats.discovery.lease_seconds == 180
-    assert nats.jwt_secret == "{{ secret.NATS_JWT_SECRET }}"
+    # No signing secret: the engine answers the broker's auth callout.
+    assert nats.auth_callout is not None
+    assert nats.auth_callout.issuer_seed == "{{ secret.NATS_AUTH_CALLOUT_SEED }}"
 
 
 @pytest.mark.parametrize("filename", sorted(_NATS_HOSTS))
-def test_nats_engines_log_in_as_the_abi_user(filename: str) -> None:
+def test_nats_engines_log_in_as_the_engine_and_auth_users(filename: str) -> None:
     nats = _render(filename)["nats"]
 
     assert nats["nats_url"] == (
-        "nats://abi:{{ secret.NATS_ABI_PASSWORD }}" + _NATS_HOSTS[filename]
+        "nats://engine:{{ secret.NATS_ENGINE_PASSWORD }}" + _NATS_HOSTS[filename]
+    )
+    assert nats["auth_callout"]["nats_url"] == (
+        "nats://auth:{{ secret.NATS_AUTH_PASSWORD }}" + _NATS_HOSTS[filename]
     )
     assert nats["monitoring_url"].endswith(":8222")
 
 
 def test_the_remote_config_reads_the_broker_url_from_a_secret() -> None:
-    assert _render("config.remote.yaml")["nats"]["nats_url"] == "{{ secret.NATS_URL }}"
+    nats = _render("config.remote.yaml")["nats"]
+    assert nats["nats_url"] == "{{ secret.NATS_URL }}"
+    assert nats["auth_callout"]["nats_url"] == "{{ secret.NATS_AUTH_URL }}"
 
 
 @pytest.mark.parametrize("filename", _ALL_CONFIGS)
@@ -227,3 +230,33 @@ def test_classic_configs_keep_their_bus_and_no_nats(filename: str) -> None:
         "python_queue",
         "rabbitmq",
     }
+
+
+def test_docker_configs_make_the_builtin_idp_the_default_provider() -> None:
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration_Identity import (
+        IdentityConfiguration,
+    )
+
+    for filename in ("config.local.yaml", "config.remote.yaml"):
+        block = _render(filename)["identity"]
+        # The two secrets the config names are in .env (the deploy generates them).
+        block["providers"][0]["issuer"] = block["providers"][0]["issuer"].replace(
+            "{{ secret.NEXUS_API_URL }}", "https://api.localhost"
+        )
+        block["providers"][0]["client_secret"] = "s" * 32
+        config = IdentityConfiguration.model_validate(block)
+        provider = config.providers[0]
+        assert config.default_provider == provider.name == "builtin", filename
+        assert provider.provisioning == "builtin" and provider.issuer.endswith("/idp")
+        assert "groups" in provider.scopes and "offline_access" in provider.scopes
+        assert "identity" not in _render(filename, nats=False), filename
+
+
+def test_the_dev_config_names_no_provider_so_abi_dev_up_adds_the_builtin_one() -> None:
+    # Active YAML would need ABI_IDP_ISSUER, which only `abi dev up` sets; the
+    # block is a comment, and the dev overlay supplies it.
+    assert "identity" not in _render("config.yaml")
+    assert (
+        "identity:"
+        in open(os.path.join(_TEMPLATES_DIR, "config.yaml"), encoding="utf-8").read()
+    )

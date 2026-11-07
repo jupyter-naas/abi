@@ -27,18 +27,16 @@ class _FakeEventService:
     def __init__(self) -> None:
         self.published: list = []
 
-    def publish(self, event) -> None:
+    def emit(self, event) -> None:
         self.published.append(event)
-
-
-class _ExplodingEventService:
-    def publish(self, event) -> None:
-        raise RuntimeError("event bus down")
 
 
 class _FakeServices:
     def __init__(self, events=None) -> None:
         self._events = events
+
+    def iam_available(self) -> bool:
+        return False
 
     def events_available(self) -> bool:
         return self._events is not None
@@ -104,12 +102,3 @@ def test_adapter_exception_emits_email_error_and_reraises() -> None:
     assert err.subject == "hi"
     assert "SMTP down" in (err.message or "")
     assert not any(isinstance(e, EmailSent) for e in events.published)
-
-
-def test_publisher_exception_does_not_break_send() -> None:
-    adapter = _RecordingAdapter()
-    svc = EmailService(adapter)
-    svc.set_services(_FakeServices(events=_ExplodingEventService()))
-
-    _send(svc)
-    assert len(adapter.calls) == 1

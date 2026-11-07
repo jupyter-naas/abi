@@ -1,4 +1,9 @@
-"""Run a package exporting ABIModule in an independent SDK-only process."""
+"""Run a package exporting ABIModule in an independent SDK-only process.
+
+``ABI_SERVICE_KEY`` is the module's service key (``abi_sk_...``): it logs in
+to the broker and is exchanged for the engine's tokens. ``ABI_NATS_URL`` is
+the broker.
+"""
 
 import argparse
 import asyncio
@@ -9,7 +14,6 @@ from pathlib import Path
 
 from naas_abi_sdk.discovery import DiscoveryConfiguration
 from naas_abi_sdk.module import BaseModule, run_module
-from naas_abi_sdk.service_token import token_from_env
 
 
 def main() -> None:
@@ -26,22 +30,21 @@ def main() -> None:
         "--discovery-project", help="Enable module discovery in this project"
     )
     args = parser.parse_args()
+    key = os.environ.get("ABI_SERVICE_KEY", "")
+    if not key.startswith("abi_sk_"):
+        parser.error(
+            "ABI_SERVICE_KEY must contain the module's service key (abi_sk_...)"
+        )
     module_type = importlib.import_module(args.module).ABIModule
     if not issubclass(module_type, BaseModule):
         parser.error("ABIModule must extend naas_abi_sdk.BaseModule")
-    # The module registers as itself: its token asserts its module id.
-    identity = module_type.module_id or module_type.__module__
-    try:
-        token = token_from_env(os.environ, identity)
-    except RuntimeError as exc:
-        parser.error(str(exc))
     data = json.loads(args.config.read_text()) if args.config else {}
     configuration = module_type.Configuration(**data)
     asyncio.run(
         run_module(
             module_type,
             url=args.url,
-            token=token,
+            token=key,
             configuration=configuration,
             timeout=args.timeout,
             discovery=DiscoveryConfiguration(project=args.discovery_project)

@@ -1,4 +1,5 @@
 """Exercise discovery before dictionary projection: ontologies are listed, process slices are not."""
+
 import json
 import unittest
 from pathlib import Path
@@ -46,31 +47,44 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
         with TemporaryDirectory() as directory:
             root = Path(directory) / "example" / "ontologies"
             paths = []
-            for folder, name in (("modules", "Reference"), ("processes", "Ledger"),
-                                 ("sandbox", "Draft"), ("imports", "Dependency"),
-                                 ("queries", "Queries")):
+            for folder, name in (
+                ("modules", "Reference"),
+                ("processes", "Ledger"),
+                ("sandbox", "Draft"),
+                ("imports", "Dependency"),
+                ("queries", "Queries"),
+            ):
                 path = root / folder / (name + ".ttl")
                 path.parent.mkdir(parents=True, exist_ok=True)
-                header = "" if name == "Queries" else '<urn:ontology> a owl:Ontology; rdfs:label "Test ontology" .'
-                path.write_text(f'''@prefix owl: <http://www.w3.org/2002/07/owl#> .
+                header = (
+                    ""
+                    if name == "Queries"
+                    else '<urn:ontology> a owl:Ontology; rdfs:label "Test ontology" .'
+                )
+                path.write_text(f"""@prefix owl: <http://www.w3.org/2002/07/owl#> .
                     @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
                     @prefix abi: <http://ontology.naas.ai/abi/> .
                     {header}
                     <urn:system> a owl:Class; abi:systemViewKind "system" .
-                ''')
+                """)
                 paths.append(path)
             service = service_for(paths)
             files = await service.list_ontology_files()
             # Any ontologies/**/*.ttl declaring owl:Ontology, except process
             # slices (consolidated into modules/) and sandbox drafts.
-            self.assertEqual({Path(item.path).name for item in files}, {"Reference.ttl", "Dependency.ttl"})
+            self.assertEqual(
+                {Path(item.path).name for item in files}, {"Reference.ttl", "Dependency.ttl"}
+            )
             self.assertEqual(len(files), 2)  # registered more than once above
             data = await service.workspace_dictionary(["example:Reference.ttl"])
             self.assertEqual(data["file_count"], 1)
             self.assertEqual(data["loaded_file_count"], 1)
             self.assertEqual(data["items"][0]["systemViewKind"], "system")
             self.assertEqual([item["id"] for item in data["ontologies"]], ["urn:ontology"])
-            self.assertEqual(data["ontologies"][0]["metadata"]["label"], [str(root / "modules" / "Reference.ttl")])
+            self.assertEqual(
+                data["ontologies"][0]["metadata"]["label"],
+                [str(root / "modules" / "Reference.ttl")],
+            )
             self.assertEqual((await service.workspace_dictionary([]))["ontologies"], [])
             self.assertEqual(await service.list_ontology_files(catalog_refs=[]), [])
 
@@ -81,7 +95,9 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
             root = Path(directory) / "example" / "ontologies" / "modules"
             root.mkdir(parents=True)
             good = root / "Good.ttl"
-            good.write_text('@prefix owl: <http://www.w3.org/2002/07/owl#> .\n<urn:good> a owl:Ontology .\n')
+            good.write_text(
+                "@prefix owl: <http://www.w3.org/2002/07/owl#> .\n<urn:good> a owl:Ontology .\n"
+            )
             broken = root / "Broken.ttl"
             broken.write_text("this is not turtle")
             files = await service_for([root / "Moved.ttl", broken, good]).list_ontology_files()
@@ -94,7 +110,7 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
         with TemporaryDirectory() as directory:
             path = Path(directory) / "example" / "ontologies" / "modules" / "Work.ttl"
             path.parent.mkdir(parents=True)
-            path.write_text('''@prefix owl: <http://www.w3.org/2002/07/owl#> .
+            path.write_text("""@prefix owl: <http://www.w3.org/2002/07/owl#> .
                 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
                 @prefix cco: <https://www.commoncoreontologies.org/> .
                 <urn:work> a owl:Ontology ;
@@ -103,18 +119,34 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
                 <urn:ActOfWorking> a owl:Class ; rdfs:subClassOf cco:ont00000228 .
                 <urn:Human> a owl:Class ; owl:equivalentClass cco:ont00001262 .
                 <urn:Orphan> a owl:Class ; rdfs:subClassOf <urn:Nowhere> .
-            ''')
+            """)
             data = await service_for([path]).workspace_dictionary(["example:Work.ttl"])
-            buckets = {item["id"]: item.get("bfoBucket") for item in data["items"] if item["type"] == "entity"}
-            self.assertEqual(buckets["urn:ActOfWorking"], "http://purl.obolibrary.org/obo/BFO_0000015")
+            buckets = {
+                item["id"]: item.get("bfoBucket")
+                for item in data["items"]
+                if item["type"] == "entity"
+            }
+            self.assertEqual(
+                buckets["urn:ActOfWorking"], "http://purl.obolibrary.org/obo/BFO_0000015"
+            )
             self.assertEqual(buckets["urn:Human"], "http://purl.obolibrary.org/obo/BFO_0000040")
             self.assertIsNone(buckets["urn:Orphan"])
             # Ancestors run through the same imports, nearest first: the
             # bucket view nests classes under them.
-            ancestors = {item["id"]: item["bfoAncestors"] for item in data["items"] if item["type"] == "entity"}
-            self.assertEqual(ancestors["urn:ActOfWorking"][0], "https://www.commoncoreontologies.org/ont00000228")
-            self.assertIn("http://purl.obolibrary.org/obo/BFO_0000015", ancestors["urn:ActOfWorking"])
-            self.assertEqual(ancestors["urn:Human"][0], "https://www.commoncoreontologies.org/ont00001262")
+            ancestors = {
+                item["id"]: item["bfoAncestors"]
+                for item in data["items"]
+                if item["type"] == "entity"
+            }
+            self.assertEqual(
+                ancestors["urn:ActOfWorking"][0], "https://www.commoncoreontologies.org/ont00000228"
+            )
+            self.assertIn(
+                "http://purl.obolibrary.org/obo/BFO_0000015", ancestors["urn:ActOfWorking"]
+            )
+            self.assertEqual(
+                ancestors["urn:Human"][0], "https://www.commoncoreontologies.org/ont00001262"
+            )
             self.assertIn("http://purl.obolibrary.org/obo/BFO_0000040", ancestors["urn:Human"])
             self.assertEqual(ancestors["urn:Orphan"], [])  # unresolved: direct parents only
 
@@ -124,13 +156,13 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
         with TemporaryDirectory() as directory:
             path = Path(directory) / "example" / "ontologies" / "modules" / "Work.ttl"
             path.parent.mkdir(parents=True)
-            path.write_text('''@prefix owl: <http://www.w3.org/2002/07/owl#> .
+            path.write_text("""@prefix owl: <http://www.w3.org/2002/07/owl#> .
                 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
                 @prefix cco: <https://www.commoncoreontologies.org/> .
                 <urn:work> a owl:Ontology ;
                     owl:imports <https://www.commoncoreontologies.org/FacilityOntology> .
                 <urn:Desk> a owl:Class ; rdfs:label "Desk" ; rdfs:subClassOf cco:ont00000468 .
-            ''')
+            """)
             service = service_for([path])
             data = await service.workspace_dictionary(["example:Work.ttl"])
             desk = next(item for item in data["items"] if item["id"] == "urn:Desk")
@@ -142,7 +174,9 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(desk["bfoBucket"], "http://purl.obolibrary.org/obo/BFO_0000040")
 
             # Known buckets are served from the cache, without walking the graph again.
-            with patch.object(ontology_service_module, "_bfo_bucket", side_effect=AssertionError("walked")):
+            with patch.object(
+                ontology_service_module, "_bfo_bucket", side_effect=AssertionError("walked")
+            ):
                 cached = await service.workspace_dictionary(["example:Work.ttl"])
             self.assertEqual(
                 next(item for item in cached["items"] if item["id"] == "urn:Desk")["bfoBucket"],
@@ -160,14 +194,16 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
         with TemporaryDirectory() as directory:
             path = Path(directory) / "example" / "ontologies" / "modules" / "Loose.ttl"
             path.parent.mkdir(parents=True)
-            path.write_text('''@prefix owl: <http://www.w3.org/2002/07/owl#> .
+            path.write_text("""@prefix owl: <http://www.w3.org/2002/07/owl#> .
                 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
                 <urn:loose> a owl:Ontology .
                 <urn:Orphan> a owl:Class ; rdfs:subClassOf <urn:Nowhere> .
                 <urn:Vague> a owl:Class ; rdfs:subClassOf <http://purl.obolibrary.org/obo/BFO_0000001> .
-            ''')
+            """)
             data = await service_for([path]).workspace_dictionary(["example:Loose.ttl"])
-            buckets = {item["id"]: item["bfoBucket"] for item in data["items"] if item["type"] == "entity"}
+            buckets = {
+                item["id"]: item["bfoBucket"] for item in data["items"] if item["type"] == "entity"
+            }
             self.assertIsNone(buckets["urn:Orphan"])
             self.assertEqual(buckets["urn:Vague"], "http://purl.obolibrary.org/obo/BFO_0000001")
             self.assertEqual(self.cache.data, {})
@@ -182,24 +218,30 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
                 @prefix dc: <http://purl.org/dc/terms/> .
                 @prefix ex: <urn:ex:> .
             """
-            (slices / "WorkProcess.ttl").write_text(prefixes + """
+            (slices / "WorkProcess.ttl").write_text(
+                prefixes
+                + """
                 ex:WorkProcess a owl:Ontology ; dc:title "Work Process Ontology"@en .
                 ex:Work a owl:Class ; rdfs:subClassOf
                     [ a owl:Restriction ; owl:onProperty ex:occursIn ; owl:someValuesFrom ex:Site ] .
                 ex:Person rdfs:subClassOf
                     [ a owl:Restriction ; owl:onProperty ex:hasDesk ; owl:someValuesFrom ex:Desk ] .
-            """)
+            """
+            )
             # Present on disk but not consolidated: never reported.
             (slices / "Draft.ttl").write_text(prefixes + "ex:Draft a owl:Ontology .")
             path = module / "ontologies" / "modules" / "Example.ttl"
             path.parent.mkdir(parents=True)
-            path.write_text(prefixes + """
+            path.write_text(
+                prefixes
+                + """
                 ex:Example a owl:Ontology .
                 # >>> onto2py:consolidated-processes >>>
                 #    Process slice: urn:ex:WorkProcess
                 #    Source: ontologies/processes/WorkProcess.ttl
                 # <<< onto2py:consolidated-processes <<<
-            """)
+            """
+            )
             plain = module / "ontologies" / "modules" / "Plain.ttl"
             plain.write_text(prefixes + "ex:Plain a owl:Ontology .")
             service = service_for([path, plain])
@@ -207,10 +249,13 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(work["id"], "urn:ex:WorkProcess")
             self.assertEqual(work["name"], "Work Process Ontology")
             self.assertEqual(work["classes"], ["urn:ex:Person", "urn:ex:Work"])
-            self.assertEqual(sorted(map(tuple, (r.values() for r in work["restrictions"]))), [
-                ("urn:ex:Person", "urn:ex:hasDesk", "urn:ex:Desk"),
-                ("urn:ex:Work", "urn:ex:occursIn", "urn:ex:Site"),
-            ])
+            self.assertEqual(
+                sorted(map(tuple, (r.values() for r in work["restrictions"]))),
+                [
+                    ("urn:ex:Person", "urn:ex:hasDesk", "urn:ex:Desk"),
+                    ("urn:ex:Work", "urn:ex:occursIn", "urn:ex:Site"),
+                ],
+            )
             self.assertEqual(await service.process_slices(str(plain), None), [])
             # Only files the workspace catalog admits.
             self.assertEqual(await service.process_slices(str(path), []), [])
@@ -219,7 +264,9 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
         import naas_abi
 
         ontologies = Path(naas_abi.__file__).parent / "ontologies"
-        manifest = json.loads((ontologies / "processes" / "process_ledger_manifest.json").read_text())
+        manifest = json.loads(
+            (ontologies / "processes" / "process_ledger_manifest.json").read_text()
+        )
         slices = [ontologies / "processes" / name for name in manifest["files"]]
         consolidated = ontologies / "modules" / "NaasAbiOntology.ttl"
         service = service_for([*slices, consolidated])
@@ -231,7 +278,9 @@ class CatalogTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(data["file_count"], 1)
         self.assertEqual(data["loaded_file_count"], 1)
         systems = [term for term in data["items"] if term["systemViewKind"] == "system"]
-        self.assertEqual([term["id"] for term in systems], ["http://ontology.naas.ai/abi/LedgerProcess"])
+        self.assertEqual(
+            [term["id"] for term in systems], ["http://ontology.naas.ai/abi/LedgerProcess"]
+        )
         self.assertEqual(sum(term["systemViewKind"] == "subsystem" for term in data["items"]), 9)
         self.assertEqual(sum(bool(term["processLedger"]) for term in data["items"]), 37)
 

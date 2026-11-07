@@ -12,6 +12,8 @@ from naas_abi_core.services.dataset.DatasetService import DatasetService
 from naas_abi_core.services.document.DocumentService import DocumentService
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.event.EventService import EventService
+from naas_abi_core.services.iam.IAMPorts import IIAMService
+from naas_abi_core.services.identity.IdentityPorts import IIdentityService
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.model_registry.ModelRegistryService import (
     ModelRegistryService,
@@ -52,6 +54,8 @@ class IEngine:
         __model_registry: ModelRegistryService | None
         __coding_environment: CodingEnvironmentService | None
         __source_control: SourceControlService | None
+        __iam: IIAMService | None
+        __identity: IIdentityService | None
 
         def __init__(
             self,
@@ -70,6 +74,8 @@ class IEngine:
             coding_environment: CodingEnvironmentService | None = None,
             source_control: SourceControlService | None = None,
             document: DocumentService | None = None,
+            iam: IIAMService | None = None,
+            identity: IIdentityService | None = None,
         ):
             self.__object_storage = object_storage
             self.__dataset = dataset
@@ -86,6 +92,8 @@ class IEngine:
             self.__model_registry = model_registry
             self.__coding_environment = coding_environment
             self.__source_control = source_control
+            self.__iam = iam
+            self.__identity = identity
 
         @property
         def kv(self) -> KeyValueService:
@@ -222,12 +230,50 @@ class IEngine:
             return self.__source_control is not None
 
         @property
+        def iam(self) -> IIAMService:
+            """IAM: in process on the serving engine, over NATS on a client engine."""
+            assert self.__iam is not None, "IAM service is not initialized"
+            return self.__iam
+
+        def iam_available(self) -> bool:
+            return self.__iam is not None
+
+        @property
+        def identity(self) -> IIdentityService:
+            """The OIDC providers the engine trusts: in process on the serving
+            engine, over NATS on a client engine."""
+            assert self.__identity is not None, "Identity service is not initialized"
+            return self.__identity
+
+        def identity_available(self) -> bool:
+            return self.__identity is not None
+
+        @property
         def all(
             self,
         ) -> list[
-            ObjectStorageService | None | DatasetService | DocumentService | TripleStoreService | VectorStoreService | Secret | BusService | KeyValueService | EmailService | CacheService | EventService | ActivityLogService | ModelRegistryService | CodingEnvironmentService | SourceControlService
+            ObjectStorageService
+            | None
+            | DatasetService
+            | DocumentService
+            | TripleStoreService
+            | VectorStoreService
+            | Secret
+            | BusService
+            | KeyValueService
+            | EmailService
+            | CacheService
+            | EventService
+            | ActivityLogService
+            | ModelRegistryService
+            | CodingEnvironmentService
+            | SourceControlService
+            | IIAMService
+            | IIdentityService
         ]:
             return [
+                self.__iam,
+                self.__identity,
                 self.__object_storage,
                 self.__dataset,
                 self.__document,
@@ -258,7 +304,9 @@ class IEngine:
                 if service is None:
                     continue
                 if isinstance(service, ServicesAware):
-                    service.set_services(dependencies if dependencies is not None else self)
+                    service.set_services(
+                        dependencies if dependencies is not None else self
+                    )
 
     __services: Services
     __modules: dict[str, BaseModule]

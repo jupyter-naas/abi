@@ -16,6 +16,7 @@ from pathlib import Path
 from naas_abi_proto.dataset.rows import decode_row, encode_row
 from naas_abi_proto.vector_store.values import decode_object, encode_object
 from naas_abi_sdk import RPCError
+from naas_abi_sdk.call_context import inside
 from naas_abi_sdk.catalog import OPERATIONS
 from naas_abi_sdk.module import (
     BaseModule,
@@ -23,17 +24,71 @@ from naas_abi_sdk.module import (
     ModuleDependencies,
     run_module,
 )
+from naas_abi_sdk.permissions import default_manifest
+
+DEPENDENCIES = ModuleDependencies(services=(*OPERATIONS, "bus"))
+# Bus topics have no default: the manifest names the ones this module uses.
+BUS_TOPICS = ("demo.inbox", "demo.reply", "demo.jobs", "demo.outbox")
 
 # The identity the demo engine issues the worker's token for (engine_host): a module
 # loads schemas only under module/<its own identity>/.
 TOKEN_IDENTITY = "standalone-demo"
+# A Nexus workspace's container: invitations and bindings name one.
+DEMO_WORKSPACE = "abi:nexus:organization/org-demo/nexus:workspace/ws-demo"
 
 
 class ABIModule(BaseModule):
+    module_id = "standalone-demo"
+
     class Configuration(ModuleConfiguration):
         pass
 
-    dependencies = ModuleDependencies(services=(*OPERATIONS, "bus"))
+    dependencies = DEPENDENCIES
+    permissions = {
+        **default_manifest(DEPENDENCIES),
+        "statements": [
+            *default_manifest(DEPENDENCIES)["statements"],
+            {
+                # The default grants sending only: the platform keeps a copy of
+                # the mail it sends (sign-in codes included), so reading it back
+                # is asked for by name.
+                "sid": "DemoKeptMail",
+                "effect": "Allow",
+                "actions": ["email:ListSent", "email:GetSent", "email:DeleteSent"],
+                # The platform's and those kept in any container.
+                "resources": ["abi:email:message/*", "abi:*/email:message/*"],
+            },
+            {
+                "sid": "DemoBus",
+                "effect": "Allow",
+                "actions": ["bus:*"],
+                "resources": [f"abi:bus:topic/{topic}" for topic in BUS_TOPICS],
+            },
+        ],
+    }
+    # Actions of its own (service standalone_demo), with a container type: the
+    # module registers a project, makes calls inside it and deletes it.
+    iam_catalog = {
+        "resource_types": [
+            {"name": "project", "container": True},
+            {"name": "note"},
+        ],
+        "actions": [
+            {
+                "name": "CreateProject",
+                "level": "write",
+                "resource_types": ["project"],
+                "creates": True,
+            },
+            {
+                "name": "DeleteProject",
+                "level": "admin",
+                "resource_types": ["project"],
+                "deletes": True,
+            },
+            {"name": "ReadNote", "level": "read", "resource_types": ["note"]},
+        ],
+    }
 
     @property
     def client(self):
@@ -94,6 +149,11 @@ class ABIModule(BaseModule):
         await call("set", value=b"updated", ttl=60)
         assert (await call("get")).value == b"updated"
         assert (await call("exists")).ok_value
+        assert 0 < (await call("get_ttl")).seconds <= 60
+        assert (
+            "demo"
+            in (await self.call("keyvalue", "list_keys", prefix="de", limit=10)).keys
+        )
         assert not (await call("delete_if_value_matches", value=b"wrong")).ok_value
         assert (await call("delete_if_value_matches", value=b"updated")).ok_value
         await call("set", value=b"delete-me")
@@ -119,6 +179,10 @@ class ABIModule(BaseModule):
         await call("set", value=value)
         assert (await call("get")).value.data == "updated"
         assert (await call("exists")).value
+        assert (
+            "demo"
+            in (await self.call("cache", "list_keys", prefix="de", limit=10)).keys
+        )
         await call("delete")
         assert not (await call("exists")).value
         from naas_abi_proto.cache.v1 import cache_pb2
@@ -131,17 +195,18 @@ class ABIModule(BaseModule):
         await hot.delete(cache_pb2.DeleteRequest(key="tier-demo"))
 
     async def secret(self):
-        await self.call("secret", "set", key="DEMO_VALUE", value="fixture-value")
+        # A module's secrets are named after it: that is all its manifest
+        # grants by default.
+        key = f"{self.module_id}/DEMO_VALUE"
+        await self.call("secret", "set", key=key, value="fixture-value")
         assert (
-            await self.call("secret", "get", key="DEMO_VALUE")
+            await self.call("secret", "get", key=key)
         ).found.value == "fixture-value"
-        await self.call("secret", "set", key="DEMO_VALUE", value="updated")
+        await self.call("secret", "set", key=key, value="updated")
         entries = (await self.call("secret", "list")).found.entries
-        assert any(e.key == "DEMO_VALUE" and e.value == "updated" for e in entries)
-        await self.call("secret", "remove", key="DEMO_VALUE")
-        assert not (await self.call("secret", "get", key="DEMO_VALUE")).found.HasField(
-            "value"
-        )
+        assert any(e.key == key and e.value == "updated" for e in entries)
+        await self.call("secret", "remove", key=key)
+        assert not (await self.call("secret", "get", key=key)).found.HasField("value")
 
     async def email(self):
         await self.call(
@@ -160,6 +225,25 @@ class ABIModule(BaseModule):
             ],
         )
         # The parent verifies the persisted message without giving this worker filesystem access to it.
+        await self.call(
+            "email",
+            "send",
+            to_email="recipient@example.invalid",
+            from_email="demo@example.invalid",
+            subject="Delete me",
+            text_body="Read back, then deleted.",
+        )
+        sent = (await self.call("email", "list_sent", limit=10)).messages.messages
+        assert {m.subject for m in sent} >= {"Standalone module", "Delete me"}
+        doomed = next(m.message_id for m in sent if m.subject == "Delete me")
+        message = (await self.call("email", "get_sent", message_id=doomed)).message
+        assert message.summary.subject == "Delete me"
+        assert b"Read back, then deleted." in message.raw
+        await self.call("email", "delete_sent", message_id=doomed)
+        assert doomed not in {
+            m.message_id
+            for m in (await self.call("email", "list_sent", limit=10)).messages.messages
+        }
 
     async def activity_log(self):
         await self.call(
@@ -172,11 +256,12 @@ class ABIModule(BaseModule):
                 "attributes": {"source": "worker"},
             },
         )
-        events = (
-            await self.call("activity_log", "query", actor_id="demo")
-        ).events.events
+        # Recorded under the caller's identity (its service account), not "demo".
+        me = self.engine.principal_id
+        events = (await self.call("activity_log", "query", actor_id=me)).events.events
         assert any(e.event_type == "exercise" for e in events)
-        assert "demo" in (await self.call("activity_log", "list_actors")).actors.actors
+        actors = (await self.call("activity_log", "list_actors")).actors.actors
+        assert me in actors
         await self.call("activity_log", "shutdown")
 
     async def event(self):
@@ -192,6 +277,10 @@ class ABIModule(BaseModule):
         ).event
         assert event.payload == b'{"value":1}'
         assert (await self.call("event", "max_seq", event_type="demo")).seq == event.seq
+        assert any(
+            t.event_type == "demo" and t.last_seq == event.seq
+            for t in (await self.call("event", "list_event_types")).types.types
+        )
         assert any(
             e.id == event.id
             for e in (
@@ -250,6 +339,10 @@ class ABIModule(BaseModule):
         await call("flush")
         await call("compact")
         assert (await self.call("dataset", "list_snapshots")).snapshots.items
+        version = await self.call("dataset", "namespace_version", namespace="default")
+        assert version.HasField("version") and version.version > 0
+        unused = await self.call("dataset", "namespace_version", namespace="unused")
+        assert not unused.HasField("version")
         await call("drop")
         assert not any(
             i.name == "demo"
@@ -278,6 +371,10 @@ class ABIModule(BaseModule):
             ],
         )
         assert (await call("count_vectors")).count == 1
+        info = (await call("get_collection_info")).info
+        assert (info.name, info.dimension, info.size) == ("demo", 3, 1)
+        page = (await call("list_vectors", limit=10)).page
+        assert [d.id for d in page.documents] == [vid]
         assert (
             await call("get_vector", vector_id=vid, include_vector=True)
         ).found.document.id == vid
@@ -335,6 +432,12 @@ class ABIModule(BaseModule):
             await self.call(domain, "get_status", workspace_id=wid)
         ).status.id == wid
         await self.call(domain, "get_logs", workspace_id=wid)
+        assert any(
+            e.id == wid
+            for e in (
+                await self.call(domain, "list_all_environments")
+            ).environments.environments
+        )
         assert (
             await self.call(
                 domain, "get_access", workspace_id=wid, user_id=user, app_slug="code"
@@ -371,11 +474,30 @@ class ABIModule(BaseModule):
             r.name == repo.name
             for r in (await self.call(domain, "list_repos")).repos.repos
         )
+        # create_repo only creates: a name that exists, in any case, is refused.
+        created = await self.call(
+            domain, "create_repo", owner="demo", name="fresh", auto_init=True
+        )
+        assert not created.HasField("error") and created.repo.name == "fresh"
+        try:
+            await self.call(domain, "create_repo", owner="demo", name="FRESH")
+        except RPCError as exc:
+            assert exc.code == "REPO_EXISTS", exc
+        else:
+            raise AssertionError("create_repo returned a repository that exists")
 
         async def call(op, **fields):
             return await self.call(domain, op, repo_id="demo/repo", **fields)
 
-        await call("add_collaborator", username="demo", permission="write")
+        # Granting access to a repository is an admin action: the default
+        # manifest denies it, so a module cannot make anyone a collaborator.
+        try:
+            await call("add_collaborator", username="demo", permission="write")
+        except RPCError as exc:
+            assert exc.code == "PERMISSION_DENIED", exc
+            self.seen.add((domain, "add_collaborator"))
+        else:
+            raise AssertionError("a module's default manifest granted add_collaborator")
         await call(
             "upsert_file",
             path="hello.txt",
@@ -435,6 +557,11 @@ class ABIModule(BaseModule):
         )
         await call("list_workflow_runs", limit=10)
         assert (await self.call(domain, "mint_git_token", user_id=user)).token
+        await self.call(domain, "delete_repo", repo_id="demo/repo")
+        assert not any(
+            r.name == repo.name
+            for r in (await self.call(domain, "list_repos")).repos.repos
+        )
 
     async def triple_store(self):
         domain = "triple_store"
@@ -509,14 +636,15 @@ class ABIModule(BaseModule):
             not in (await self.call(domain, "list_graphs")).graph_names.graph_names
         )
         # A module's ontology: stored once, nothing written for the same content, and
-        # refused under another module's id or when it is not Turtle.
+        # refused under another module's id (its manifest asks LoadSchema on its own
+        # sources only, so another's does not exist for it) or when it is not Turtle.
         source = f"module/{TOKEN_IDENTITY}/demo.ttl"
         ontology = b"<urn:demo:Thing> a <http://www.w3.org/2002/07/owl#Class> .\n"
         load = {"source": source, "content_ttl": ontology}
         assert (await self.call(domain, "load_schema", **load)).changed
         assert not (await self.call(domain, "load_schema", **load)).changed
         for refused, code, content in (
-            ("module/another-module/demo.ttl", "PERMISSION_DENIED", ontology),
+            ("module/another-module/demo.ttl", "NOT_FOUND", ontology),
             (source, "INVALID_ARGUMENT", b"this is not turtle"),
         ):
             try:
@@ -614,6 +742,364 @@ class ABIModule(BaseModule):
         )
         assert (await self.call("document", "count", collection="exercise")).count == 0
         await self.call("document", "drop_collection", collection="exercise")
+        # Listing namespaces is reserved to the platform identities: a module is
+        # refused, by its namespace-bound SDK client or else by the engine.
+        try:
+            await self.call("document", "namespaces")
+        except PermissionError:
+            self.seen.add(("document", "namespaces"))
+        except RPCError as exc:
+            assert exc.code == "PERMISSION_DENIED", exc.code
+            self.seen.add(("document", "namespaces"))
+        else:
+            raise AssertionError("document.namespaces answered a module identity")
+
+    async def _broker_refuses(self, subject: str) -> bool:
+        """Whether the broker refuses this module's request on ``subject``: a
+        publish it may not make is a permissions violation on its connection."""
+        nc = await self.engine._client._transport.connect()
+        errors: list[str] = []
+
+        async def on_error(error):
+            errors.append(str(error))
+
+        previous, nc._error_cb = nc._error_cb, on_error
+        try:
+            try:
+                await nc.request(subject, b"", timeout=1)
+            except Exception:  # noqa: BLE001 - refused publishes get no reply
+                pass
+            await asyncio.sleep(0.1)
+        finally:
+            nc._error_cb = previous
+        return any("ermissions violation" in e for e in errors)
+
+    async def containers(self):
+        """The module registers a container of its own type, finds it, makes a
+        call inside it, and deletes it. A Nexus workspace is not its to make."""
+        project = await self.call(
+            "iam",
+            "register_container",
+            service="standalone_demo",
+            type="project",
+            id="p-1",
+        )
+        name = project.container.name
+        assert name == "abi:standalone_demo:project/p-1", name
+        assert project.container.parent == "abi:"
+        found = await self.call(
+            "iam", "get_container", service="standalone_demo", type="project", id="p-1"
+        )
+        assert found.name == name
+        # Inside it, IAM names what the module declares in the project.
+        with inside(name):
+            note = await self.call(
+                "iam",
+                "authorize_declared",
+                action="standalone_demo:ReadNote",
+                resource_type="note",
+                parts=["n-1"],
+            )
+        assert note.resource == f"{name}/standalone_demo:note/n-1", note.resource
+        assert note.decision.allowed
+        # IAM lists a container type from its registry, as the caller: the
+        # project it holds; a type with no lister is offered as wildcards.
+        projects = await self.call(
+            "iam", "list_resources", service="standalone_demo", type="project"
+        )
+        assert projects.listed and [i.name for i in projects.items] == [name], projects
+        notes = await self.call(
+            "iam", "list_resources", service="standalone_demo", type="note", scope=name
+        )
+        assert not notes.listed and not notes.items, notes
+        try:
+            await self.call(
+                "iam",
+                "register_container",
+                service="nexus",
+                type="workspace",
+                id="ws-demo",
+                parent="abi:nexus:organization/org-demo",
+            )
+        except RPCError as exc:
+            assert exc.code in ("NOT_FOUND", "PERMISSION_DENIED", "INVALID_ARGUMENT"), (
+                exc
+            )
+        else:
+            raise AssertionError("a module registered a Nexus workspace")
+        deleted = await self.call(
+            "iam",
+            "delete_container",
+            service="standalone_demo",
+            type="project",
+            id="p-1",
+        )
+        assert deleted.deleted
+        gone = await self.call(
+            "iam", "get_container", service="standalone_demo", type="project", id="p-1"
+        )
+        assert gone.name == ""
+
+    async def iam(self):
+        """A module asks IAM about itself; administering IAM is refused to it,
+        by the broker for most operations and by IAM for the rest."""
+        from naas_abi_proto.iam.v1 import iam_pb2 as pb
+
+        own = "abi:document:collection/standalone-demo/runs"
+        other = "abi:document:collection/someone-else/runs"
+        assert (
+            await self.call("iam", "authorize", action="document:Find", resource=own)
+        ).decision.allowed
+        assert not (
+            await self.call("iam", "authorize", action="document:Find", resource=other)
+        ).decision.allowed
+        filtered = await self.call(
+            "iam", "filter", action="document:Find", resources=[other, own]
+        )
+        assert list(filtered.allowed) == [own]
+        # An action another module declares (discovery_demo's provider, approved
+        # before this worker runs): IAM names the brief and refuses it to a
+        # module its manifest does not grant.
+        declared = await self.call(
+            "iam",
+            "authorize_declared",
+            action="demo_research:ExportBrief",
+            resource_type="brief",
+            parts=["q3"],
+        )
+        assert not declared.decision.allowed
+        assert declared.resource == "abi:demo_research:brief/q3"
+        await self.containers()
+        # What it may grant at the platform: what it holds, its own collections
+        # among it.
+        grantable = await self.call("iam", "grantable", scope="abi:")
+        held = {
+            r
+            for c in grantable.catalogs
+            if c.service == "document"
+            for a in c.actions
+            if a.action == "document:Find"
+            for r in a.resources
+        }
+        assert any(r.startswith("${scope}/document:collection/") for r in held), held
+        # The broker offers a module IAM's self-service and read-only questions
+        # (token, jwks, manifest, authorize, filter, grantable) and no more: the lists and
+        # every change are refused before they reach IAM, whoever's token the
+        # module holds (an agent host reads its caller's).
+        at_broker = [
+            "list_principals",
+            "list_groups",
+            "list_policies",
+            "attachable_policies",
+            "list_attachments",
+            "list_placements",
+            "list_keys",
+            "list_manifests",
+        ]
+
+        user, group = "usr_" + "0" * 26, "grp_" + "0" * 26
+        document_json = json.dumps(
+            {
+                "version": "2026-10-13",
+                "statements": [
+                    {"effect": "Allow", "actions": ["*"], "resources": ["*"]}
+                ],
+            }
+        )
+        refused = {
+            "explain": {"action": "document:Find", "resource": own},
+            "ensure_user": {"issuer": "https://idp.example", "subject": "demo"},
+            "create_service_account": {"name": "ci/demo"},
+            "get_principal": {"principal_id": user},
+            "suspend_principal": {"principal_id": user},
+            "resume_principal": {"principal_id": user},
+            "delete_principal": {"principal_id": user},
+            "create_group": {"name": "demo"},
+            "get_group": {"group_id": group},
+            "delete_group": {"group_id": group},
+            "add_group_member": {"group_id": group, "member_id": user},
+            "remove_group_member": {"group_id": group, "member_id": user},
+            "list_group_members": {"group_id": group},
+            "list_principal_groups": {"principal_id": user},
+            "map_idp_group": {
+                "provider": "acme",
+                "claim_value": "Sales",
+                "group_id": group,
+            },
+            "unmap_idp_group": {
+                "provider": "acme",
+                "claim_value": "Sales",
+                "group_id": group,
+            },
+            "list_idp_group_mappings": {"group_id": group},
+            "create_policy": {"name": "everything", "document_json": document_json},
+            "get_policy": {"policy_id": "builtin.platform_admin"},
+            "update_policy": {"policy_id": "builtin.viewer", "expected_revision": 1},
+            "delete_policy": {"policy_id": "builtin.viewer"},
+            # Sub-policies: deriving one from a built-in policy, moving one
+            # under another, and listing those below a policy are an
+            # administrator's; the broker refuses each to a module.
+            "list_sub_policies": {"policy_id": "builtin.viewer"},
+            "attach_policy": {
+                "policy_id": "builtin.platform_admin",
+                "principal_id": user,
+            },
+            "detach_policy": {
+                "policy_id": "builtin.platform_admin",
+                "principal_id": user,
+            },
+            "put_placement": {
+                "placement": pb.Placement(
+                    service="document", id_key="standalone-demo", container="abi:"
+                )
+            },
+            "delete_placement": {"service": "document", "id_key": "standalone-demo"},
+            "register_catalog": {
+                "catalog": pb.ActionCatalog(
+                    service="standalone_demo",
+                    version=1,
+                    resource_types=[pb.ResourceType(name="item", id="opaque")],
+                    actions=[
+                        pb.ActionSpec(
+                            name="GetItem", level="read", resource_types=["item"]
+                        )
+                    ],
+                )
+            },
+        }
+        refused.update(
+            {
+                "find_service_account": {"name": "engine"},
+                "create_key": {"principal_id": user},
+                "revoke_key": {"principal_id": user, "key_id": "a" * 16},
+                "revoke_tokens": {"principal_id": user},
+                # A token exchange is offered to every module (it renews the
+                # delegation it holds), and refused to one that holds no
+                # iam:ExchangeToken for the audience.
+                "exchange_token": {
+                    "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
+                    "subject_token": user,
+                    "subject_token_type": "urn:abi:params:oauth:token-type:session",
+                    "audience": "abi:delegated:agent",
+                },
+                # Invitations: pending grants and IdP group bindings are an
+                # administrator's, never a module's.
+                "create_pending_grant": {
+                    "provider": "acme",
+                    "email": "bob@example.com",
+                    "policy_id": "builtin.member",
+                    "scope": DEMO_WORKSPACE,
+                },
+                "list_pending_grants": {"provider": "acme"},
+                "revoke_pending_grant": {"grant_id": "pgr_" + "0" * 26},
+                "claim_pending_grants": {"principal_id": user},
+                "bind_idp_group": {
+                    "provider": "acme",
+                    "claim_value": "Sales",
+                    "policy_id": "builtin.member",
+                    "scope": DEMO_WORKSPACE,
+                },
+                "unbind_idp_group": {
+                    "provider": "acme",
+                    "claim_value": "Sales",
+                    "policy_id": "builtin.member",
+                    "scope": DEMO_WORKSPACE,
+                },
+                "list_idp_bindings": {"provider": "acme"},
+                "get_manifest": {"principal_id": user},
+                "approve_manifest": {"principal_id": user},
+                "reject_manifest": {"principal_id": user},
+                # A module submits its own manifest, never another module's.
+                "submit_manifest": {
+                    "module_id": "someone-else",
+                    "project": "default",
+                    "document_json": document_json,
+                },
+            }
+        )
+        offered = (
+            "find_service_account",
+            "get_manifest",
+            "submit_manifest",
+            "exchange_token",
+        )
+        at_broker += [operation for operation in refused if operation not in offered]
+        for operation in at_broker:
+            assert await self._broker_refuses(f"abi.iam.v1.{operation}"), operation
+            self.seen.add(("iam", operation))
+        for operation, fields in refused.items():
+            if operation not in offered:
+                continue
+            try:
+                await self.call("iam", operation, **fields)
+            except RPCError as exc:
+                assert exc.code in ("NOT_FOUND", "PERMISSION_DENIED"), (operation, exc)
+                self.seen.add(("iam", operation))
+            else:
+                raise AssertionError(f"iam.{operation} answered a module identity")
+        # The JWKS is public; a key that is not one is refused.
+        jwks = json.loads((await self.call("iam", "jwks")).jwks_json)
+        assert jwks["issuer"].startswith("urn:abi:engine:") and jwks["keys"]
+        try:
+            await self.call("iam", "token", key="abi_sk_aaaaaaaaaaaaaaaa_not-a-key")
+        except RPCError as exc:
+            assert exc.code == "UNAUTHENTICATED", exc
+            self.seen.add(("iam", "token"))
+        else:
+            raise AssertionError("iam.token exchanged an unknown key")
+
+    async def identity(self):
+        """The module declares identity, so its approved manifest reaches it,
+        but the demo engine has no provider: it lists none, and every sign-in
+        operation is refused, for an unknown provider or a token no provider
+        issued."""
+        assert not (await self.call("identity", "list_providers")).providers
+        challenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+        refused = {
+            "get_provider": {"name": "acme"},
+            "verify_token": {"token": "not.a.token"},
+            "authenticate": {"token": "not.a.token"},
+            "authorization_url": {
+                "provider": "acme",
+                "redirect_uri": "https://abi.example/callback",
+                "state": "state",
+                "nonce": "nonce",
+                "code_challenge": challenge,
+            },
+            "exchange_code": {
+                "provider": "acme",
+                "code": "code",
+                "code_verifier": "v" * 43,
+                "redirect_uri": "https://abi.example/callback",
+                "nonce": "nonce",
+            },
+            "refresh": {
+                "provider": "acme",
+                "refresh_token": "r",
+                "principal_id": "usr_x",
+            },
+            "revoke": {"provider": "acme", "refresh_token": "r"},
+            "end_session_url": {"provider": "acme"},
+            "provision_user": {"provider": "acme", "email": "bob@example.com"},
+            "find_provisioned_user": {"provider": "acme", "email": "bob@example.com"},
+            "update_provisioned_user": {
+                "provider": "acme",
+                "subject": "sub-1",
+                "disabled": True,
+            },
+            "delete_provisioned_user": {"provider": "acme", "subject": "sub-1"},
+        }
+        for operation, fields in refused.items():
+            try:
+                await self.call("identity", operation, **fields)
+            except RPCError as exc:
+                assert exc.code in (
+                    "NOT_FOUND",
+                    "PERMISSION_DENIED",
+                ) or exc.code.startswith("TOKEN_"), (operation, exc)
+                self.seen.add(("identity", operation))
+            else:
+                raise AssertionError(f"identity.{operation} answered a module identity")
 
     async def model_registry(self):
         from naas_abi_proto.model_registry.v1 import model_registry_pb2 as pb
@@ -708,7 +1194,7 @@ async def main():
     assert importlib.util.find_spec("naas_abi_core") is None, (
         "Worker must not have core installed"
     )
-    token = os.environ["ABI_SERVICE_TOKEN"]
+    token = os.environ["ABI_SERVICE_KEY"]
     report = await run_module(
         ABIModule, url=os.environ["ABI_NATS_URL"], token=token, timeout=30
     )

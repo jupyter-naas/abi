@@ -48,12 +48,13 @@ local connection. Explicit `vector_store.close(request)` and
 `activity_log.shutdown(request)` are remote administrative operations; do not
 call them to dispose of your client on a shared engine.
 
-The token is an issued service JWT, or a synchronous `Callable[[], str]` that
-supplies a refreshed token per request. The SDK never needs the engine's signing
-key and does not depend on a JWT library. Broker credentials/TLS options can be
-passed as nats-py connection keyword arguments. Service JWTs authenticate RPC
-headers; they do not authenticate a connection to the broker or authorize native
-bus subjects. Configure broker credentials and subject ACLs separately.
+The token is a service key (`abi_sk_...`): the connection logs in to the broker
+with it and each call carries the token it is exchanged for (see
+[Service key and permissions](#service-key-and-permissions)). A process of the
+engine passes its own token instead, or a synchronous `Callable[[], str]` that
+supplies a refreshed one per request. The SDK never holds a signing key and does
+not depend on a JWT library. TLS options can be passed as nats-py connection
+keyword arguments.
 
 Default deadline: 10 seconds, covering connect and request. Each RPC is attempted
 once. A timeout or lost connection may hide a completed write: reconcile before
@@ -121,40 +122,63 @@ async def save_report(content: bytes):
     )
 ```
 
-Install your module package alongside the SDK, supply `ABI_MODULE_KEY` (or an
-issued `ABI_SERVICE_TOKEN`) and `ABI_NATS_URL`, then run
-`naas-abi-module my_module --config module.json`. Alternatively call
-`await run_module(ABIModule, url=..., token=ModuleToken(module_id, key), configuration=...)`
-(`naas_abi_sdk.service_token`). The configuration file contains fields for your
-dataclass, not engine configuration or signing credentials. `global_config` is a
-plain mapping.
+Install your module package alongside the SDK, supply `ABI_SERVICE_KEY` and
+`ABI_NATS_URL`, then run `naas-abi-module my_module --config module.json`.
+Alternatively call `await run_module(ABIModule, url=..., token=service_key, configuration=...)`.
+The configuration file contains fields for your dataclass, not engine configuration
+or credentials. `global_config` is a plain mapping.
 
-### Identity
+### Service key and permissions
 
-A module calls the engine as itself: its token asserts its module id, signed
-with its **module key**. The project derives that key from its secret for one
-module id (`abi module key <module_id>` prints it); a module never receives the
-secret. The engine accepts the token for that module id only, never for one of
-its own identities (`api`, `engine`, `dagster`), and discovery registers a
-module only under a token for its own module id. `ModuleToken(module_id, key)`
-signs and refreshes the token; `token_from_env(os.environ, module_id)` reads
-`ABI_MODULE_KEY`, else `ABI_SERVICE_TOKEN`.
+A module runs as its own service account, `module/<project>/<module_id>`, and
+holds a service key (`abi_sk_...`), never a signing secret. An admin creates both:
 
-A call to another module (its agents, models, apps, workflows, pipelines) carries a token bound to the
-instance called, for five minutes and sent with at least 4.5 of them left:
-`Transport` asks the token source for it (`ModuleToken.for_audience`), bound to
-the instance id the caller passes (`call(..., instance_id=...)`), so that module
-cannot replay it elsewhere. A static token cannot call a module. An instance id
-is one subject token: letters, digits, `_` and `-`.
+```bash
+abi iam service-account create module/default/acme.research --key
+```
 
-Logged in as the broker user `module`, a module may not subscribe to the
-engine's service, discovery, RPC overflow, reply (`_INBOX.>`) or JetStream
-(`$JS.>`) subjects, nor create streams (docs/adr/20261014_module-identities.md). `run_module` connects
-with the inbox prefix `_INBOX_MODULES`, and so does `Transport` for a URL logged
-in as `module`; pass `inbox_prefix="_INBOX_MODULES"` to any other connection a
-module opens. The engine creates the jobs stream and the claim-check store;
-`BusClient.enqueue` and `dequeue` need a topic whose stream exists, and raise
-`naas_abi_sdk.streams.StreamNotCreated` when it does not.
+The SDK logs in to the broker with the key (user `sa`, the key as password) and
+exchanges it at `abi.iam.v1.token` for an engine-signed token of at most ten
+minutes, renewed at half its life. The broker gives the connection only the
+subjects its approved policy allows, for a few minutes: the transport reconnects
+itself every two minutes, so a revoked key or a narrowed manifest reaches the
+broker within minutes. A call to another module's agent, model or app carries a
+token addressed to that host (`abi:host:<sa>`, from its subject), exchanged
+with the same key: the host reads it, no kernel service accepts it, and
+discovery accepts it from that host only.
+
+At start the module submits its permission manifest, a policy document, and
+waits until an admin approves it (`abi iam module approve
+module/default/acme.research`, optionally `--document narrowed.yaml`). Until then
+it can call nothing but IAM. The manifest is `BaseModule.permissions`, else
+`permissions.yaml` beside the module's code, else derived from `dependencies`:
+its own `document`/`dataset` namespace, the secrets named `<module id>/...`,
+every action of the other services it declares (sending only for `email`, and no
+`source_control:AddCollaborator`), the agents, models and apps of
+the modules it depends on, and its own jobs. Bus topics are never derived:
+declare `bus:Publish` and `bus:Consume` on `abi:bus:topic/<topic>` yourself.
+
+```python
+class Research(BaseModule):
+    module_id = "acme.research"
+    dependencies = ModuleDependencies(services=("document",))
+    permissions = {
+        "version": "2026-10-13",
+        "statements": [
+            {
+                "effect": "Allow",
+                "actions": ["document:Get", "document:Put"],
+                "resources": ["abi:document:document/${module.id}/*"],
+            }
+        ],
+    }
+```
+
+A changed manifest waits for approval again while the module keeps running on
+the approved one. Revoke a key with `abi iam key revoke`: the next exchange and
+the next broker connection fail, and tokens already issued expire within ten
+minutes. `abi dev up` creates the account and a fresh key for each dev module
+and approves its manifest.
 
 Migration preserves module structure/lifecycle; it is not binary compatibility
 with arbitrary engine modules. Change the base imports, declare service names
@@ -171,7 +195,7 @@ v1 cold endpoint. Tier contracts use the same protobuf messages, with subjects
 ## Jobs
 
 A module declares jobs and runs them in its own process; JetStream schedules
-and delivers the triggers (docs/adr/20261001_nats-jobs.md). One replica takes
+and delivers the triggers. One replica takes
 each trigger, and delivery is at least once.
 
 ```python
@@ -240,8 +264,9 @@ class ABIModule(BaseModule):
 Modules can declare `"document"`. `self.engine.services.document` binds requests
 to the module's Python module name; it rejects rebinding and conflicting request
 namespaces. Direct ABIClient users explicitly call
-`client.document.for_namespace("my_package.agents")`. This is API scoping under
-Stage 1 shared trust, not server-enforced per-module authorization.
+`client.document.for_namespace("my_package.agents")`. The document service asks
+IAM on every call: a module reaches the namespaces its approved policy names (its
+own, `${module.id}`, by default).
 
 Document RPCs cover collection declarations/list/drop, put/get/delete,
 find/pagination, and count. `if_version=0` is create-only, positive versions are
@@ -276,7 +301,7 @@ paging history; full snapshots remain subject to RPC payload limits.
 
 Existing core agents keep their current PostgreSQL/memory selection. This optional
 saver does not migrate old checkpoints, launch remote agents, or provide discovery.
-See the document-checkpoint ADR and remote-agent invocation RFC for those boundaries.
+Those are outside the saver's scope.
 
 ## Facade compatibility boundaries
 
@@ -308,7 +333,6 @@ Configure exactly one engine to host the registry for a project:
 ```yaml
 nats:
   nats_url: nats://127.0.0.1:4222
-  jwt_secret: "{{ secret.NATS_JWT_SECRET }}"
   discovery:
     project: default
     lease_seconds: 20
@@ -351,9 +375,9 @@ class Consumer(BaseModule):
         return self.agents
 
 
-# In separate processes, using issued tokens:
-# await run_module(Provider, url=url, token=token, discovery=DiscoveryConfiguration())
-# await run_module(Consumer, url=url, token=token, discovery=DiscoveryConfiguration())
+# In separate processes, each with its own service key:
+# await run_module(Provider, url=url, token=provider_key, discovery=DiscoveryConfiguration())
+# await run_module(Consumer, url=url, token=consumer_key, discovery=DiscoveryConfiguration())
 ```
 
 For package entrypoints the CLI accepts `--discovery-project default`. Registration
@@ -382,8 +406,10 @@ when discovery reports `READY` (or discovery is off). Other statuses return 503.
 
 `list_agents()` returns descriptors; `get_agent(name)` returns an invocable
 proxy when its capability is registered. Legacy engine modules are not automatically
-published. The Stage 1 trust model still allows trusted service identities
-to register logical module names; declaration checks are not authorization.
+published. A module registers under its own name only: discovery binds a
+module id to the service account `module/<project>/<module_id>`, and the
+module's hosting subjects carry that account's token. Declaration checks are not
+authorization.
 
 Run the standalone demo to see a consumer wait, discover a provider's agent,
 observe provider death, and recover after a replacement process registers.
@@ -525,8 +551,8 @@ one second; routing failures invalidate the caller cache without replaying calls
 Providers authenticate incoming issued tokens through discovery's authorize_agent
 RPC using their own issued token and lease. Signing keys stay in the engine.
 This forwards the caller's bearer token to the trusted provider for verification;
-use broker TLS/ACLs. Stage 1 still lacks per-end-user/module grants, and document
-namespaces are not security boundaries. Caller identity guards invocation status
+use broker TLS. Each module's approved policy decides which agents it may
+invoke, and the broker refuses the rest. Caller identity guards invocation status
 and cancellation; declaration checks alone are not authorization.
 
 ## Remote models
@@ -739,7 +765,7 @@ class IngestPipeline(Pipeline[IngestParameters]):
 ## Apps
 
 A module serves web apps through Nexus without a port, hostname or route of its
-own (docs/adr/20261012_remote-module-apps.md). Each `apps/<name>/manifest.json`
+own. Each `apps/<name>/manifest.json`
 next to the module's package is an app: discovery announces it, Nexus lists it
 and forwards its requests under `/app-remote/<grant>/<module_id>/<name>/` over
 NATS, and the module answers. Files of the folder (HTML, scripts, styles,
@@ -754,7 +780,7 @@ api = FastAPI()
 
 @api.get("/api/report")
 async def report(request: Request):
-    user = request.scope["abi"]["user_id"]  # the signed-in Nexus user, as Nexus vouches
+    user = request.scope["abi"]["user_id"]  # the user the caller's credential acts for
     return {"user": user}
 
 class ABIModule(BaseModule):
@@ -770,13 +796,15 @@ app runs in the module's process with `root_path` set to the Nexus path, and its
 lifespan (startup and shutdown) runs with the module. Nexus checks the user's
 access, then forwards the request without the user's credential.
 
-`request.scope["abi"]` holds `user_id`, `workspace_id` (the Nexus workspace
-the user opened the app from, one where it is enabled) and `caller`, the
-service identity that sent the request. Only Nexus (`api`) may send a
-`user_id` or a `workspace_id`: a request from any other caller that names one
-is refused (`PERMISSION_DENIED`) before the app sees it, so another module can
-call an app, but never on behalf of a user. Keep each workspace's data apart
-with `workspace_id`. A lifespan's state (`yield {...}`) reaches each request
+`request.scope["abi"]` holds `user_id` (the user the caller's verified credential
+acts for, empty for a caller acting for nobody), `principal` (`id`, `kind`, `name`:
+whoever holds the credential, which may act for that user), `container` (the name
+of the container the user opened the app from, `abi:...`, the one its calls for the
+user are made in; empty without a `user_id`) and `workspace_id` (the Nexus workspace
+id of that container, kept for the apps that read it; empty without a `user_id`). The app host takes the user and the principal from
+discovery's verification of the caller's token, never from the request, so
+another module can call an app, but never on behalf of a user it does not act
+for. Keep each container's data apart with `container`. A lifespan's state (`yield {...}`) reaches each request
 (`request.state`).
 
 The page runs sandboxed, in an opaque origin, apart from the Nexus session. The
@@ -875,7 +903,6 @@ Optional engine settings (shown with defaults):
 ```yaml
 nats:
   nats_url: "nats://127.0.0.1:4222"
-  jwt_secret: "{{ secret.NATS_JWT_SECRET }}"
   object_storage_streaming:
     chunk_bytes: 65536
     idle_seconds: 60

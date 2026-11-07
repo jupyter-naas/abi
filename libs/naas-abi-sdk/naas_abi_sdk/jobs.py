@@ -21,8 +21,7 @@ its descriptor has ``kind="workflow"`` and JSON Schemas. ``Cron``/``Every`` can 
 an ``input``, the schedule message body, delivered as the run's payload.
 
 JetStream message schedules (NATS >= 2.12, time zones >= 2.14) produce the
-triggers; one durable consumer per job hands each trigger to one replica. See
-docs/adr/20261001_nats-jobs.md.
+triggers; one durable consumer per job hands each trigger to one replica.
 """
 
 from __future__ import annotations
@@ -40,6 +39,7 @@ from typing import Any, ClassVar
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 
 from naas_abi_sdk import event_filter
+from naas_abi_sdk.broker_control import BrokerControlError
 from naas_abi_sdk.telemetry import client_span
 
 JOB_CONTRACT_MAJOR = 1
@@ -740,6 +740,167 @@ class JobsMixin:
 # --- subjects and storage -------------------------------------------------------------
 
 
+# How long an unprocessed trigger of each kind stays in the jobs stream.
+TRIGGER_TTLS = {"manual": "168h", "event": "24h"}
+# Headers a trigger's sender may set; the rest (kind, TTL) is the store's.
+TRIGGER_SENDER_HEADERS = (
+    "Nats-Msg-Id",
+    "traceparent",
+    "tracestate",
+    "Abi-Claim-Check",
+    "Abi-Claim-Check-Size",
+    "Abi-Claim-Check-Chunks",
+    "Abi-Claim-Check-Sha256",
+)
+
+
+# A trigger, schedule or cancel the engine stored carries its seal: an HMAC
+# with a key only the engine holds, over ``seal_fields``. A job host takes no
+# other (``verify_trigger``): the server answers JetStream requests on the reply
+# subject the requester chose, and the jobs stream would store a forged one.
+SEAL_HEADER = "Abi-Job-Seal"
+# A manual trigger a first-party service (Nexus, the engine) stored for a user:
+# the delegation the run executes with (``abi:delegated:agent``, ``act`` the
+# job's module, ``sub`` the user). The engine writes it, never a sender.
+DELEGATION_HEADER = "Abi-Job-Delegation"
+SEALED_HEADERS = (
+    "Abi-Claim-Check",
+    "Abi-Claim-Check-Size",
+    "Abi-Claim-Check-Chunks",
+    "Abi-Claim-Check-Sha256",
+    DELEGATION_HEADER,
+)
+
+
+def seal_fields(
+    subject: str, kind: str, body: bytes, headers: dict[str, str] | None
+) -> list[Any]:
+    """What a seal covers: where the message is delivered, its kind (a
+    trigger's ``Abi-Job-Trigger``, or ``cancel``), its body, its claim check."""
+    found = headers or {}
+    return [
+        subject,
+        kind,
+        hashlib.sha256(body or b"").hexdigest(),
+        [[name, str(found[name])] for name in SEALED_HEADERS if name in found],
+    ]
+
+
+def trigger_reserve(body_size: int) -> int:
+    """Bytes a trigger's way through the engine adds to its body: base64 in a
+    JSON request, and the headers the engine stores with it."""
+    return body_size // 3 + 4096
+
+
+async def store_trigger(
+    transport: Any,
+    project: str,
+    module_id: str,
+    job: str,
+    body: bytes,
+    headers: dict[str, str],
+    *,
+    kind: str = "manual",
+    on_behalf_of: bool = True,
+) -> int:
+    """Store a trigger for a job; its stream sequence (``store_trigger_ack``)."""
+    sequence, _ = await store_trigger_ack(
+        transport,
+        project,
+        module_id,
+        job,
+        body,
+        headers,
+        kind=kind,
+        on_behalf_of=on_behalf_of,
+    )
+    return sequence
+
+
+async def store_trigger_ack(
+    transport: Any,
+    project: str,
+    module_id: str,
+    job: str,
+    body: bytes,
+    headers: dict[str, str],
+    *,
+    kind: str = "manual",
+    on_behalf_of: bool = True,
+) -> tuple[int, bool]:
+    """Store a trigger for a job: its stream sequence, and whether it repeated a
+    message id within the stream's duplicate window (nothing was stored, and the
+    sequence is the first trigger's). Through the engine when
+    it answers (a module behind the broker's auth callout writes nothing into
+    the jobs stream), else published here. ``kind`` is ``manual`` or
+    ``event`` (the engine grants ``event`` to the job's own module only).
+
+    The caller's credentials (``_credentials``) go with it: the job's host
+    authorizes the trigger with them. Through the engine they are the
+    request's own, verified, and the engine stores them with the trigger."""
+    import base64
+
+    from naas_abi_sdk.broker_control import for_transport
+
+    sent = {k: v for k, v in headers.items() if k in TRIGGER_SENDER_HEADERS}
+    credentials = await _credentials(transport, on_behalf_of=on_behalf_of)
+    answer = await for_transport(transport).request(
+        "trigger",
+        credentials=credentials,
+        project=project,
+        module_id=module_id,
+        job=job,
+        body=base64.b64encode(body).decode(),
+        headers=sent,
+        kind=kind,
+    )
+    if answer is not None:
+        return int(answer["seq"]), bool(answer.get("duplicate"))
+    # No engine answered. Behind the broker's auth callout nothing is stored
+    # here (a module may not write the jobs stream, and its token must never
+    # reach the job's host): the engine is away, so try again.
+    credentials = await _unconfined_credentials(transport, on_behalf_of=on_behalf_of)
+    nc = await transport.connect()
+    ack = await nc.jetstream().publish(
+        job_subjects(project, module_id, job).trigger,
+        body,
+        headers={
+            **sent,
+            **credentials,
+            TRIGGER_HEADER: kind,
+            "Nats-TTL": TRIGGER_TTLS[kind],
+        },
+        stream=stream_name(project),
+    )
+    return ack.seq, bool(ack.duplicate)
+
+
+async def store_cancel(
+    transport: Any, project: str, module_id: str, job: str, run_id: str
+) -> None:
+    """Ask the host of a job to cancel ``run_id``: through the engine when it
+    answers (the cancel subject is in the jobs stream)."""
+    from naas_abi_sdk.broker_control import for_transport
+
+    credentials = await _credentials(transport)
+    if await for_transport(transport).request(
+        "cancel",
+        credentials=credentials,
+        project=project,
+        module_id=module_id,
+        job=job,
+        run_id=run_id,
+    ):
+        return
+    credentials = await _unconfined_credentials(transport)
+    nc = await transport.connect()
+    await nc.publish(
+        job_subjects(project, module_id, job).cancel,
+        run_id.encode(),
+        headers=credentials,
+    )
+
+
 def stream_name(project: str) -> str:
     return f"ABI_JOBS_{project}"
 
@@ -816,6 +977,32 @@ class JobContext:
 # --- caller side ----------------------------------------------------------------------
 
 
+async def _credentials(transport: Any, *, on_behalf_of: bool = True) -> dict[str, str]:
+    """The caller's token sent to the engine, which verifies it and stores a
+    token for the job's host in its place (the host reads what is stored, so it
+    never holds the caller's own). With ``on_behalf_of`` the token carries the
+    current call's user, when the transport has one to carry; without, it is the
+    transport's own."""
+    auth_headers = getattr(transport, "auth_headers", None)
+    if auth_headers is None:
+        return {}
+    return dict(await auth_headers(user=on_behalf_of))
+
+
+async def _unconfined_credentials(
+    transport: Any, *, on_behalf_of: bool = True
+) -> dict[str, str]:
+    """What is stored with a trigger or cancel written without an engine: on a
+    broker with no auth callout, where nothing confines a host, the transport's
+    own. A transport logged in with a service key is behind the callout, and
+    the engine is the only one that may write: it raises."""
+    if getattr(transport, "credentials", None) is not None:
+        raise BrokerControlError(
+            "UNAVAILABLE", "no engine answered: a trigger is stored by the engine"
+        )
+    return await _credentials(transport, on_behalf_of=on_behalf_of)
+
+
 class JobRun:
     """A triggered run: read its record, wait for it, or ask its host to cancel it.
 
@@ -875,11 +1062,10 @@ class JobRun:
         return await asyncio.wait_for(poll(), timeout)
 
     async def cancel(self) -> None:
-        """Cooperative: the host running it sets ``ctx.cancelled``."""
-        nc = await self.transport.connect()
-        await nc.publish(
-            job_subjects(self.project, self.module_id, self.job).cancel,
-            self.run_id.encode(),
+        """Cooperative: the host running it sets ``ctx.cancelled``, once the
+        caller this transport names may cancel it (discovery:CancelJobRun)."""
+        await store_cancel(
+            self.transport, self.project, self.module_id, self.job, self.run_id
         )
 
 
@@ -906,37 +1092,52 @@ class JobProxy:
         payload: dict[str, Any] | None = None,
         *,
         idempotency_key: str | None = None,
+        on_behalf_of: bool = True,
     ) -> JobRun:
-        """Store a trigger; the run starts when a host takes it. A repeated
-        ``idempotency_key`` within the stream's duplicate window (2 minutes) is
-        the same run (JetStream message-id dedup), returned with ``duplicate``
-        set."""
+        """Store a trigger; the run starts when a host takes it, once the caller
+        this transport names may trigger the job (discovery:TriggerJob). A
+        repeated ``idempotency_key`` within the stream's duplicate window
+        (2 minutes) is the same run (JetStream message-id dedup), returned with
+        ``duplicate`` set.
+
+        ``on_behalf_of``: also name the current call's user, when the transport
+        forwards users. A module triggering its own job does so as itself."""
         from naas_abi_sdk import claim_check  # needs nats; keep jobs.py nats-free
+        from naas_abi_sdk.broker_control import for_transport
 
         nc = await self.transport.connect()
-        subject = job_subjects(self.project, self.module_id, self.name).trigger
-        stream = stream_name(self.project)
-        headers = {TRIGGER_HEADER: "manual", "Nats-TTL": "168h"}
+        subjects = job_subjects(self.project, self.module_id, self.name)
+        subject = subjects.trigger
+        headers: dict[str, str] = {}
         if idempotency_key:
             headers["Nats-Msg-Id"] = _hash(subject, idempotency_key)
         # The run continues this trace (the host reads traceparent off the message).
         with client_span(subject, headers):
+            body = json.dumps(payload or {}).encode()
             # A payload above the broker limit travels as a claim check.
             body, sent_headers = await claim_check.prepare(
                 nc,
-                json.dumps(payload or {}).encode(),
+                body,
                 headers,
-                reserve=claim_check.stream_header_reserve(stream),
+                scope=claim_check.job_scope(self.project, subjects.module_hash),
+                reserve=trigger_reserve(len(body)),
+                store=claim_check.ThroughEngine(for_transport(self.transport)),
             )
-            ack = await nc.jetstream().publish(
-                subject, body, headers=sent_headers, stream=stream
+            sequence, duplicate = await store_trigger_ack(
+                self.transport,
+                self.project,
+                self.module_id,
+                self.name,
+                body,
+                sent_headers or {},
+                on_behalf_of=on_behalf_of,
             )
         return JobRun(
             self.transport,
             self.project,
             self.module_id,
             self.name,
-            run_key(self.name, ack.seq),
+            run_key(self.name, sequence),
             self._documents,
-            duplicate=bool(ack.duplicate),
+            duplicate=duplicate,
         )

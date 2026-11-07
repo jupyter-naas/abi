@@ -74,7 +74,7 @@ def _show_rerun_info(
     project_root: Path, system_version: str, project_version: str
 ) -> None:
     # On stderr: stdout is the command's own output, which scripts capture
-    # (`key=$(abi module key ...)`).
+    # (`key=$(abi iam key create ...)`).
     click.secho(
         "[abi] ABI project detected. Re-running in local project environment.",
         fg="yellow",

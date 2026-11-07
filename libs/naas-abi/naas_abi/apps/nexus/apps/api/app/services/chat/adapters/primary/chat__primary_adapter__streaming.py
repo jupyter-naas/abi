@@ -16,7 +16,6 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__prima
     mark_message_superseded,
     persist_stream_content,
     persist_stream_metadata,
-    request_context,
     resolve_provider,
     # run_search_if_needed,
 )
@@ -116,11 +115,7 @@ def _ingest_stream_event_into_steps(
         input_str = str(input_val) if input_val else None
         prefix, name = _label_tool(raw_tool)
         last = steps[-1] if steps else None
-        if (
-            last
-            and last.get("status") == "running"
-            and last.get("_raw_name") == raw_tool
-        ):
+        if last and last.get("status") == "running" and last.get("_raw_name") == raw_tool:
             if input_str and not last.get("input"):
                 last["input"] = input_str
             return
@@ -223,6 +218,18 @@ def _merge_source_urls(*groups: list[str]) -> list[str]:
     return merged
 
 
+async def turn_container(workspace_id: str) -> str | None:
+    """The container of a turn's workspace; None when IAM cannot say (it is not
+    there): the turn then fails closed in IAM, never mid-stream here."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+    from naas_abi.apps.nexus.apps.api.app.services.iam.runtime import IAMUnavailableError
+
+    try:
+        return await AUTHZ.container_of(workspace_id)
+    except IAMUnavailableError:
+        return None
+
+
 async def stream_chat_response(
     request: ChatRequest,
     current_user: User,
@@ -234,35 +241,32 @@ async def stream_chat_response(
     )
 
     if request.workspace_id:
-        from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_workspace_role
         from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
-            caller_enabled_class_names,
-            caller_feature_flags,
-            filter_feature_agents,
+            bind_usable_processes,
+            caller_usable_class_names,
         )
         from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary.agents__primary_adapter__FastAPI import (
             pick_workspace_chat_agent_id,
             pick_workspace_documents_agent_id,
             pick_workspace_sheets_agent_id,
             pick_workspace_slides_agent_id,
+            usable_roster,
         )
         from naas_abi_core.services.agent.context import agent_workspace_enabled_class_names
 
         async with AsyncSessionLocal() as db:
             with bind_registry(db) as registry:
-                workspace_agents = await registry.agents.list_workspace_agents(
-                    context=request_context(current_user),
-                    workspace_id=request.workspace_id,
+                # The turn was authorized (SendMessage) in this workspace; the roster
+                # only picks which of its agents answers, among those the listing
+                # shows the caller: a fallback never runs one it hides.
+                workspace_agents, flags = await usable_roster(
+                    registry.agents, current_user, request.workspace_id
                 )
-                role = await get_workspace_role(current_user.id, request.workspace_id)
-                flags = await caller_feature_flags(db, request.workspace_id, role)
-                workspace_agents = filter_feature_agents(workspace_agents, flags)
                 agent_workspace_enabled_class_names.set(
-                    caller_enabled_class_names(workspace_agents, flags)
+                    caller_usable_class_names(workspace_agents, flags)
                 )
-        resolved_agent = pick_workspace_chat_agent_id(
-            workspace_agents, request.agent
-        )
+                await bind_usable_processes(current_user, request.workspace_id)
+        resolved_agent = pick_workspace_chat_agent_id(workspace_agents, request.agent)
         from naas_abi.agents.documents.policy import open_documents_slug
         from naas_abi.agents.sheets.policy import open_sheets_slug
         from naas_abi.agents.slides.policy import open_slides_slug
@@ -294,7 +298,6 @@ async def stream_chat_response(
 
     has_images = bool(request.images) or any(m.images for m in request.messages if m.images)
     provider = await resolve_provider(
-        request_context(current_user),
         request.provider,
         has_images,
         request.agent,
@@ -345,11 +348,11 @@ async def stream_chat_response(
                 # (which uses copy_context) inherit them.
                 from naas_abi_core.services.agent.context import (
                     agent_chat_id,
+                    agent_container,
                     agent_user_email,
                     agent_user_id,
                     agent_user_name,
                     agent_workspace_enabled_class_names,
-                    agent_workspace_id,
                     coder_workspace_base,
                     coder_workspace_secret,
                     documents_active_mode,
@@ -362,6 +365,7 @@ async def stream_chat_response(
                     slides_active_slug,
                     slides_active_title,
                 )
+
                 agent_user_id.set(str(current_user.id))
                 name = getattr(current_user, "name", None)
                 email = getattr(current_user, "email", None)
@@ -370,30 +374,34 @@ async def stream_chat_response(
                 if email:
                     agent_user_email.set(str(email))
                 agent_chat_id.set(str(conversation_id))
-                if request.workspace_id is not None:
-                    agent_workspace_id.set(str(request.workspace_id))
+                # The agents this turn may run and reach as sub-agents: those
+                # the caller may use where the turn is stored, whatever the
+                # request names (the in-process runtime refuses any other).
+                turn_workspace = request.workspace_id
+                if turn_workspace is None:
+                    stored = await registry.chat.get_conversation_for_user(
+                        user_id=current_user.id, conversation_id=conversation_id
+                    )
+                    turn_workspace = stored.workspace_id if stored is not None else None
+                if turn_workspace is not None:
+                    # The turn's workspace, as its container (``CallContext.container``):
+                    # what the feature tools read, and where IAM places what the turn
+                    # creates. A workspace IAM does not know names none; without IAM
+                    # the turn goes on in no container and IAM refuses what it asks.
+                    agent_container.set(await turn_container(str(turn_workspace)))
                     if agent_workspace_enabled_class_names.get() is None:
-                        from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
-                            get_workspace_role,
-                        )
                         from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
-                            caller_enabled_class_names,
-                            caller_feature_flags,
-                            filter_feature_agents,
+                            bind_usable_agents,
                         )
 
-                        role = await get_workspace_role(
-                            current_user.id, request.workspace_id
-                        )
-                        flags = await caller_feature_flags(db, request.workspace_id, role)
-                        roster = await registry.agents.list_workspace_agents(
-                            context=request_context(current_user),
-                            workspace_id=request.workspace_id,
-                        )
-                        visible = filter_feature_agents(roster, flags)
-                        agent_workspace_enabled_class_names.set(
-                            caller_enabled_class_names(visible, flags)
-                        )
+                        await bind_usable_agents(registry.agents, current_user, turn_workspace)
+                else:
+                    from naas_abi.apps.nexus.apps.api.app.core.agent_feature_access import (
+                        bind_usable_processes,
+                    )
+
+                    agent_workspace_enabled_class_names.set(frozenset())
+                    await bind_usable_processes(current_user, None)
 
                 # Bind open Slides deck or Documents file + Coder sidecar.
                 client_ctx = request.context if isinstance(request.context, dict) else {}
@@ -451,8 +459,7 @@ async def stream_chat_response(
                 from naas_abi.agents.slides import bind_slides_research_policy
 
                 has_prior_assistant = any(
-                    getattr(m, "role", None) == "assistant"
-                    for m in (request.messages or [])
+                    getattr(m, "role", None) == "assistant" for m in (request.messages or [])
                 )
                 bind_slides_research_policy(
                     request.message,
@@ -530,9 +537,7 @@ async def stream_chat_response(
                 except Exception:
                     logger.warning("Failed to auto-title office project", exc_info=True)
 
-                coding_ctx = (
-                    client_ctx.get("coding") if isinstance(client_ctx, dict) else None
-                )
+                coding_ctx = client_ctx.get("coding") if isinstance(client_ctx, dict) else None
                 if isinstance(coding_ctx, dict):
                     repo_id = str(coding_ctx.get("repo_id") or "").strip()
                     branch = str(coding_ctx.get("branch") or "").strip()
@@ -558,15 +563,18 @@ async def stream_chat_response(
                                 coding_service = (
                                     ABIModule.get_instance().engine.services.coding_environment
                                 )
-                                ws_base, ws_secret, harness_base, _env_id = (
-                                    await lookup_code_bindings(
-                                        db,
-                                        workspace_id=str(request.workspace_id),
-                                        user_id=str(current_user.id),
-                                        repo_id=repo_id,
-                                        branch=branch or "main",
-                                        service=coding_service,
-                                    )
+                                (
+                                    ws_base,
+                                    ws_secret,
+                                    harness_base,
+                                    _env_id,
+                                ) = await lookup_code_bindings(
+                                    db,
+                                    workspace_id=str(request.workspace_id),
+                                    user_id=str(current_user.id),
+                                    repo_id=repo_id,
+                                    branch=branch or "main",
+                                    service=coding_service,
                                 )
                                 if ws_base and ws_secret:
                                     coder_workspace_base.set(ws_base)
@@ -582,7 +590,7 @@ async def stream_chat_response(
 
                 provider_messages = await build_provider_messages_with_agents(
                     request=request,
-                    context=request_context(current_user),
+                    user_id=current_user.id,
                     current_agent_id=request.agent,
                     db=db,
                     conversation_id=conversation_id,
@@ -600,7 +608,6 @@ async def stream_chat_response(
                     user_id=current_user.id,
                     workspace_id=request.workspace_id,
                     conversation_id=conversation_id,
-                    context=request_context(current_user),
                     client_context=client_ctx or None,
                 )
                 if provider.type == "remote":
@@ -616,7 +623,6 @@ async def stream_chat_response(
                         user_id=current_user.id,
                         workspace_id=request.workspace_id,
                         conversation_id=conversation_id,
-                        context=request_context(current_user),
                         client_context=client_ctx or None,
                     )
             await db.commit()
@@ -645,20 +651,12 @@ async def stream_chat_response(
     # Documents does not steal an existing slides turn. Documents claims an
     # open file, or a main-chat report/document brief slides did not take.
     if open_documents_slug(client_ctx) and not open_slides_slug(client_ctx):
-        routed_llm = apply_documents_model_override(
-            incoming_llm, client_ctx, request.message
-        )
+        routed_llm = apply_documents_model_override(incoming_llm, client_ctx, request.message)
     else:
-        routed_llm = apply_slides_model_override(
-            incoming_llm, client_ctx, request.message
-        )
+        routed_llm = apply_slides_model_override(incoming_llm, client_ctx, request.message)
         if routed_llm == incoming_llm:
-            routed_llm = apply_documents_model_override(
-                incoming_llm, client_ctx, request.message
-            )
-    if provider.type == "abi" and (provider.endpoint or "").startswith(
-        "inprocess://"
-    ):
+            routed_llm = apply_documents_model_override(incoming_llm, client_ctx, request.message)
+    if provider.type == "abi" and (provider.endpoint or "").startswith("inprocess://"):
         from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
             resolve_inprocess_llm_model_for_turn,
         )
@@ -685,7 +683,7 @@ async def stream_chat_response(
         async with AsyncSessionLocal() as pre_db:
             with bind_registry(pre_db) as registry:
                 _, assistant_msg_id = await registry.chat.create_streaming_message_pair(
-                    context=request_context(current_user),
+                    user_id=current_user.id,
                     conversation_id=conversation_id,
                     user_content=request.message,
                     assistant_agent=request.agent,
@@ -852,6 +850,7 @@ async def stream_chat_response(
                         thread_id=conversation_id,
                         user_context_preamble=user_context_preamble,
                         invocation_id=assistant_msg_id,
+                        workspace_id=provider.run_workspace_id,
                     )
                 ):
                     yield output

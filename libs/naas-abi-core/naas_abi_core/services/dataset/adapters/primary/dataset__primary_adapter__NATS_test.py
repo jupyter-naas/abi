@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
-from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_test_tokens import OTHER_TOKENS, TEST_TOKENS
 from naas_abi_core.proto.dataset.v1 import dataset_pb2
 from naas_abi_core.services.dataset.adapters.primary.dataset__primary_adapter__NATS import (
     AUTH_HEADER,
@@ -37,7 +37,7 @@ from naas_abi_core.services.dataset.DatasetPort import (
     WriteMode,
 )
 
-SECRET = "test-shared-secret"
+SECRET = TEST_TOKENS.verifier
 
 
 class _FakeRequest:
@@ -173,7 +173,7 @@ class _StubAdapter(IDatasetPort):
 
 
 def _valid_token() -> str:
-    return issue_service_token("api", SECRET)
+    return TEST_TOKENS.token("api")
 
 
 def _describe_request(name: str = "n", namespace: str = "default") -> bytes:
@@ -224,7 +224,7 @@ def test_malformed_token_returns_unauthenticated():
 
 def test_token_signed_with_wrong_secret_returns_unauthenticated():
     adapter = DatasetPrimaryAdapterNATS(_StubAdapter(), SECRET)
-    wrong_secret_token = issue_service_token("api", "a-different-secret")
+    wrong_secret_token = OTHER_TOKENS.token("api")
     request = _FakeRequest(
         data=_describe_request(), headers={AUTH_HEADER: wrong_secret_token}
     )
@@ -467,3 +467,31 @@ def test_query_answers_json_rows_with_exact_integers():
 def test_stop_without_start_is_a_noop():
     adapter = DatasetPrimaryAdapterNATS(_StubAdapter(), SECRET)
     asyncio.run(adapter.stop())  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# What a caller is told about a ValueError.
+# ---------------------------------------------------------------------------
+
+
+def test_only_the_services_own_refusals_cross_as_invalid_argument():
+    from naas_abi_core.services.dataset.adapters.primary.dataset__primary_adapter__NATS import (
+        DOMAIN_ERRORS,
+    )
+    from naas_abi_core.services.dataset.DatasetPort import DatasetRequestRefused
+
+    refused = DatasetRequestRefused("Exactly one SELECT statement is allowed")
+    assert isinstance(refused, DOMAIN_ERRORS)
+    assert (
+        DatasetPrimaryAdapterNATS._domain_error(refused).error.code
+        == "INVALID_ARGUMENT"
+    )
+    assert DatasetPrimaryAdapterNATS._transfer_error(refused) == (
+        "INVALID_ARGUMENT",
+        str(refused),
+    )
+    # A backend's ValueError (DuckDB, pyarrow) can name paths and connections:
+    # it is an internal error, which is logged and never sent.
+    backend = ValueError("could not open /srv/lake/metadata.ducklake")
+    assert not isinstance(backend, DOMAIN_ERRORS)
+    assert DatasetPrimaryAdapterNATS._transfer_error(backend) is None

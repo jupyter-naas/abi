@@ -53,6 +53,145 @@
   box-shadow: var(--shadow-focus);
 }
 
+.account-api-keys-create-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.account-api-keys-create-form-select {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--input-bg-hex);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--foreground-hex);
+}
+
+.account-api-keys-create-form-scope {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.account-api-keys-create-form-hint {
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--muted-foreground-hex);
+}
+
+.account-api-keys-create-form-textarea {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--input-bg-hex);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-xs);
+  color: var(--foreground-hex);
+  outline: none;
+}
+
+.account-api-keys-create-form-submit:disabled,
+.account-api-keys-create-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.account-api-keys-error {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--destructive-hex);
+}
+
+/* One-time secret */
+.account-api-keys-secret {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--surface-subtle-hex);
+}
+
+.account-api-keys-secret-title {
+  margin: 0;
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground-hex);
+}
+
+.account-api-keys-secret-warning {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--destructive-hex);
+}
+
+.account-api-keys-secret-code {
+  flex: 1;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--muted-bg-hex);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-xs);
+  color: var(--foreground-hex);
+  word-break: break-all;
+}
+
+/* Status and revoke confirmation */
+.account-api-keys-status {
+  margin-left: var(--space-2);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--muted-foreground-hex);
+}
+
+.account-api-keys-status-active {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.account-api-keys-status-revoked {
+  color: var(--destructive-hex);
+  border-color: var(--destructive-hex);
+}
+
+.account-api-keys-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--foreground-hex);
+}
+
+.account-api-keys-confirm-yes {
+  padding: var(--space-1) var(--space-3);
+  border: none;
+  border-radius: var(--org-border-radius, 0px);
+  background-color: var(--destructive-hex);
+  font-size: var(--font-size-sm);
+  color: var(--color-primary-foreground);
+  cursor: pointer;
+}
+
+.account-api-keys-confirm-yes:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+pre.account-api-keys-usage-code {
+  margin: 0;
+  overflow-x: auto;
+  white-space: pre;
+}
+
 .account-api-keys-create-form-submit {
   padding: var(--space-2) var(--space-4);
   border: none;

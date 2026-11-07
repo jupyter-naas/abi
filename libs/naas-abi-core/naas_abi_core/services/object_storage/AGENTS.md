@@ -14,6 +14,8 @@ object_storage/
 ├── ObjectStorageService.py         # public service + event publishing
 ├── ObjectStorageFactory.py
 ├── ObjectStorageService_test.py
+├── iam_catalog.py                  # IAM action catalog; object_parts builds names
+├── ObjectStorageService_authorization_test.py  # authorization contract
 ├── adapters/secondary/
 │   ├── ObjectStorageSecondaryAdapterFS.py
 │   ├── ObjectStorageSecondaryAdapterS3.py
@@ -82,6 +84,55 @@ ObjectStorageFactory.ObjectStorageServiceR2(
 )
 ```
 
+## Authorization
+
+Every operation is checked in the domain service against IAM
+(`ResourceGuard`, see "Enforcing in a data service" in
+[`../iam/AGENTS.md`](../iam/AGENTS.md)),
+for the caller of the current `CallContext`, so in process and over NATS answer
+the same. The catalog is `iam_catalog.py`, registered by the serving engine at
+boot. A caller who cannot see a resource gets `Exceptions.ObjectNotFound` (`OBJECT_NOT_FOUND`); one who can see it but not
+act gets `PermissionDeniedError` (`PERMISSION_DENIED`). A service not wired into
+an engine with IAM (a library use, a NATS facade whose server checks) does not
+check. The contract test is `ObjectStorageService_authorization_test.py`: no policy, granted and denied
+principals, in process and over NATS.
+
+Resource type: `object/<path>` (`path`, placed): the prefix, stripped of its
+leading and trailing `/`, joined to the key with one `/`. Nexus places its
+`workspaces/<ws>/*` and `users/<user>/*` prefixes.
+
+| Action | Level | Resource | Subject (`abi.svc.object_storage.v1.`) |
+|---|---|---|---|
+| `ListObjects` | list | each listed `object/<prefix>/<key>` | `list_objects` |
+| `ListObjectsRecursive` | list | each listed object | `list_objects_recursive` |
+| `GetObject` | read | `object/<prefix>/<key>` | `get_object` |
+| `GetObjectMetadata` | read | `object/<prefix>/<key>` | `get_object_metadata` |
+| `GetObjectStream` | read | `object/<prefix>/<key>` | transfer subjects, operation `get` |
+| `PutObject` | write | `object/<prefix>/<key>` | `put_object` |
+| `PutObjectStream` | write | `object/<prefix>/<key>` | transfer subjects, operation `put` |
+| `DeleteObject` | write | `object/<prefix>/<key>` | `delete_object` |
+
+* **Names are plain paths.** IAM checks `prefix/key` as written and a backend
+  opens what the path resolves to, so `ws1/../ws2/x` would match `ws1/*` and
+  open `ws2/x`, and a key of `/etc/passwd` would replace the filesystem
+  adapter's base path. `ObjectStorageService` therefore refuses, before any
+  check and for every caller, a prefix or key with a `.` or `..` segment or an
+  empty segment (one trailing `/` on a prefix aside), and a leading `/`:
+  `Exceptions.InvalidObjectPath`, `INVALID_ARGUMENT` over NATS. It strips only a
+  leading `storage/` from a prefix, before the check in every operation
+  (metadata included): the name IAM checks is the path the adapter opens.
+* `list_objects` and `list_objects_recursive` keep the objects the caller may
+  list; the caller's `queue` is filled after filtering. `list_objects` also
+  shows a folder holding something the caller may list (one `filter` over
+  `<folder>/_` names), and hides an entry a Deny names or a folder whose
+  contents a Deny or a suspension hides (`<folder>/*`). Which entries are
+  folders is the adapter's `folders(entries)`: by default those ending in `/`
+  (S3); the filesystem adapter checks for directories. A caller with no Allow
+  for the list action, or a suspended one, gets `ObjectNotFound`, as for a
+  missing prefix.
+* Streams (`get_object_stream`, `put_object_stream`) have their own actions
+  (`GetObjectStream`, `PutObjectStream`).
+
 ## Tests
 
 ```bash
@@ -103,11 +154,22 @@ uv run pytest libs/naas-abi-core/naas_abi_core/services/object_storage/adapters/
 protobuf endpoints. `adapters/secondary/ObjectStorageSecondaryAdapterNATSClient.py` implements the outbound
 port. Wire contracts live under `naas_abi_core/proto/object_storage/v1/`.
 
+Every primary runs its domain call as the verified caller: it authenticates the
+request with `nats_rpc.authenticate_request` (built on `engine/nats_identity.py`,
+it answers a refusal itself) and hands that `CallContext`
+(`engine/call_context.py`) to its dispatcher. The actor is the
+token's identity; the user it acts for is named by the token itself: a
+delegated token (`abi:delegated:agent`, `act` the acting service, `sub` the user)
+made by IAM's token exchange, never a header (the old `Abi-On-Behalf-Of` header is
+refused); trace and container come from the request's `context`. Never read identity from request fields
+(`principal_id` and `tenant_id` are reserved). Clients of `api` and `engine` send a
+delegation for the current call's user, and the call's trace and container. The domain service authorizes the call on that context (see "Authorization").
+
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception
 mapping in the adapter. Primaries use `respond_protobuf` for bounded replies.
 Requests and replies above the broker limit (8 MiB, or lower) overflow as
-transfer frames up to 256 MiB (docs/adr/20261003_nats-rpc-overflow.md); above
+transfer frames up to 256 MiB (`naas_abi_core/engine/nats_rpc.py`); above
 that, at the overflow host's capacity, or with an older peer, the call fails
 with non-retryable `PAYLOAD_TOO_LARGE`. Micro-service error headers raise
 instead of becoming an empty success. Overflowed values are held whole in
@@ -125,5 +187,5 @@ reads the backend streaming port in bounded chunks; PUT stages chunks on tempora
 disk and calls the streaming port only after an explicit start. The old unary
 endpoints remain compatible and bounded. Transfer sessions are authenticated,
 caller-bound, sequence-checked and never replayed. Configure capacities through
-`nats.object_storage_streaming`; see the chunked-transfers ADR and standalone
+`nats.object_storage_streaming`; see the standalone
 `transfer_integration_test.py` for native-broker coverage.

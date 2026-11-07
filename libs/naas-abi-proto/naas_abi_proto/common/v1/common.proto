@@ -1,6 +1,4 @@
 // Shared envelope types for NATS-RPC-exposed kernel domain services.
-// See docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
-// ("Protobuf contract shapes", "Decisions locked in").
 //
 // Every kernel-domain RPC (object_storage, and whatever follows it) embeds a
 // CallContext in its request and reports errors via CallError, so callers
@@ -10,21 +8,28 @@ syntax = "proto3";
 
 package abi.common.v1;
 
-// Carried on every kernel-domain RPC call.
+// Carried on every kernel-domain RPC call. Request data, never identity.
 //
-// principal_id/workspace_id/tenant_id are carried starting now, in Stage 1,
-// even though nothing enforces them yet — see the RFC's "Decisions locked
-// in": this is a wire-format decision that's expensive to retrofit later,
-// cheap to add now while the envelope is being designed. Real per-user
-// authorization is deliberately Stage 2 work, checked in the domain via a
-// shared context variable, never in the primary adapter — don't add
-// enforcement logic here.
+// Who calls is not read from here: a server takes the caller from the
+// verified Nats-Auth-Token header (an abi:delegated:agent token names the user
+// the caller acts for), into the engine's CallContext variable
+// (naas_abi_core.engine.call_context, naas_abi_sdk.call_context). Anything in a
+// request body is the caller's own claim, so it is untrusted.
 message CallContext {
   string trace_id = 1;
   int32 timeout_ms = 2;
-  string principal_id = 3;  // end-user identity — carried, not yet enforced
+  // Reserved and deprecated: servers ignore it, clients leave it empty.
+  string principal_id = 3;
+  // Before container paths (SDK 0.2): the target workspace of a create. An
+  // engine of today refuses a call that sets it (INVALID_ARGUMENT): set
+  // container instead.
   string workspace_id = 4;
+  // Reserved and deprecated: servers ignore it, clients leave it empty.
   string tenant_id = 5;
+  // The container the call is made in (a container's name, abi:...): where what
+  // it creates is placed and its module scopes are named. An input, checked by
+  // IAM against its registry.
+  string container = 6;
 }
 
 // A structured, machine-readable error for a failed RPC call.

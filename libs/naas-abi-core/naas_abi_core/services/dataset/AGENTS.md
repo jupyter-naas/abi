@@ -16,6 +16,9 @@ dataset/
 ├── DatasetValues.py               # the values a row holds, for every adapter
 ├── DatasetService.py              # public service
 ├── DatasetFactory.py
+├── iam_catalog.py                 # IAM action catalog
+├── sql_references.py              # the datasets a SQL query reads
+├── DatasetService_authorization_test.py  # authorization contract
 ├── DatasetService_test.py
 ├── adapters/secondary/
 │   ├── DatasetSecondaryAdapterDuckLake.py
@@ -224,6 +227,79 @@ Every connection attaches with `AUTOMATIC_MIGRATION`, so the adapter initializes
 - `commit_retries` (DuckLake's `ducklake_max_retry_count`, 10 by default) lets a commit that raced a commit to another table go through without replaying its transaction; with 0, any commit in the catalog during a long write failed it.
 - Moving from a SQLite catalog to PostgreSQL is a metadata migration. A DSN change alone loses snapshot history and any inlined rows.
 
+## Authorization
+
+Every operation is checked in the domain service against IAM, for the caller of
+the current `CallContext`, so in process and over NATS answer
+the same. The catalog is `iam_catalog.py`, registered by the serving engine at
+boot. A caller who cannot see a resource gets `DatasetNotFoundError` (`DATASET_NOT_FOUND`; `namespace_version` returns None); one who can see it but not
+act gets `PermissionDeniedError` (`PERMISSION_DENIED`). A service not wired into
+an engine with IAM (a library use, a NATS facade whose server checks) does not
+check. The contract test is `DatasetService_authorization_test.py`: no policy, granted and denied
+principals, in process and over NATS.
+
+The cross-cutting pattern (`ResourceGuard`, errors, the create rule) is in
+[services/iam/AGENTS.md](../iam/AGENTS.md), "Enforcing in a data service". The
+engine-hosted facades reach datasets over NATS through an adapter that is itself
+a client of this checked service, so the check lives in the domain service, not
+in the adapter.
+
+| Action | Level | Resource | Subject (under `abi.svc.dataset.v1.`) |
+|---|---|---|---|
+| `List` | list | each `dataset/<ns>/<name>` | `list` |
+| `ListSnapshots` | list | `catalog/-` | `list_snapshots` |
+| `Describe` | read | `dataset/<ns>/<name>` | `describe` |
+| `NamespaceVersion` | read | `namespace/<ns>` | `namespace_version` |
+| `Query` | read | every `dataset/<ns>/<name>` the SQL references | `query` |
+| `QueryStream` | read | as `Query` | transfer, operation `query` |
+| `QueryUnchecked` | admin | `catalog/-` | `query`, transfer |
+| `Create` | write | `dataset/<ns>/<name>` (creates) | `create` |
+| `Write` | write | `dataset/<ns>/<name>` | `write` |
+| `WriteStream` | write | `dataset/<ns>/<name>` | transfer, operation `write` |
+| `InlinedRowCount`, `Flush`, `Compact`, `Drop` | admin | `dataset/<ns>/<name>` | the same-named subject |
+
+* `namespace/<ns>` is a placed container holding `dataset/<ns>/<name>`;
+  `catalog/-` is the platform's snapshots (`list_snapshots` is empty without
+  `ListSnapshots`).
+* `create` is a create (§4.4): the first dataset of a new namespace places the
+  namespace in the container of the call, or on the platform.
+* `query` and `query_stream` need `Query` on every dataset the SQL reads
+  (`sql_references.py`, DuckDB's parser), through joins, subqueries and CTEs;
+  unqualified names are in the query's namespace. A CTE hides a dataset only in
+  its own query and the queries nested in it (a recursive CTE's anchor does not
+  see it), and may have any name. Every other name must be a dataset of the
+  catalog, looked up by itself and matched without case as DuckDB resolves it:
+  anything else (a DuckDB view such as `duckdb_tables`) is
+  `DatasetNotFoundError`. Other statements, file-reading table functions, names
+  that are not dataset identifiers (`IDENTIFIER_PATTERN`; `FROM '/path/x.csv'`
+  scans the file), `SHOW`, system schemas and three-part names are refused with
+  `DatasetRequestRefused` (a `ValueError`, `INVALID_ARGUMENT`), for every caller: one allowed every
+  dataset skips only the per-dataset checks, as a file read reads no dataset.
+* `QueryUnchecked` (admin, on `catalog/-`) skips the SQL check, for SQL the
+  check cannot vouch for: catalog maintenance (`DESCRIBE`, `ALTER`,
+  `CALL ducklake_*`, `duckdb_tables()`) and, with it, DuckDB's file-reading
+  functions on the engine host. The engine holds it through its grant;
+  `builtin.api` denies it, so neither a Nexus user (through `api`) nor a remote
+  module (the default manifest carries the same Deny) reads files on the engine
+  host. A policy allowing `dataset:*` on `*` allows reading those files: only
+  platform-level grants should say so.
+* A module that owns tables in the catalog (the X module's) runs its own
+  maintenance through `catalog_maintenance(dataset)` (`CatalogMaintenance.py`,
+  typed to a dataset): each call on the dataset it wraps runs as the engine, and
+  nothing around it does. Wrap the dataset once and call it only with the
+  module's own fixed statements: code that passes a caller's SQL to the wrapped
+  dataset hands that caller the engine's access. Trust assumption: `internal_call`
+  (clears the user's bounds, scope and audience; the principal becomes `engine`)
+  and `own_storage` are core's; nothing outside `naas_abi_core` imports them, and
+  `services/iam/enforcement_boundary_test.py` checks it.
+* A remote module's account reaches the shared `default` namespace and the
+  catalog's snapshots through its approved manifest, never unchecked SQL.
+* Over NATS, only the service's own refusals (`DatasetRequestRefused`) and a
+  spec's validation errors map to `INVALID_ARGUMENT`. Any other `ValueError`
+  comes from a backend (DuckDB, pyarrow), may name paths or connection strings,
+  and is an internal error: logged, never sent.
+* `list` keeps the datasets the caller may list.
+
 ## Tests
 
 ```bash
@@ -233,7 +309,7 @@ uv run pytest naas_abi_core/services/dataset naas_abi_core/engine/engine_configu
 ## Streamed queries
 
 `query_stream` yields a `RowStream` (`columns`, lazy `rows`) read once inside
-the `with` (docs/adr/20261003_nats-streamed-results.md). The port's default
+the `with`. The port's default
 reads `query`; DuckLake spools the result first (below); over NATS the
 primary hosts `transfer/v1` sessions on `abi.svc.dataset.v1.transfer`
 (operation `query`, frames in
@@ -281,6 +357,18 @@ is read discards the upload before anything is written. The SDK facade's
 protobuf endpoints. `adapters/secondary/DatasetSecondaryAdapterNATSClient.py` implements the outbound
 port. Wire contracts live under `naas_abi_core/proto/dataset/v1/`.
 
+Every primary runs its domain call as the verified caller: it authenticates the
+request with `nats_rpc.authenticate_request` (built on `engine/nats_identity.py`,
+it answers a refusal itself) and hands that `CallContext`
+(`engine/call_context.py`) to its dispatcher. The actor is the
+token's identity; the user it acts for is named by the token itself: a
+delegated token (`abi:delegated:agent`, `act` the acting service, `sub` the user)
+made by IAM's token exchange, never a header (the old `Abi-On-Behalf-Of` header is
+refused); trace and container come from the request's `context`. Never read identity from request fields
+(`principal_id` and `tenant_id` are reserved). Clients of `api` and `engine` send a
+delegation for the current call's user, and the call's trace and container; the domain service authorizes on that
+context (Authorization above).
+
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception
 mapping in the adapter. `query`, `flush` and `compact` pass a caller's
@@ -288,7 +376,7 @@ mapping in the adapter. `query`, `flush` and `compact` pass a caller's
 use the client's `timeout_seconds` (`nats.client_timeout_seconds` for the
 engine's facades). Primaries use `respond_protobuf` for bounded replies.
 Requests and replies above the broker limit (8 MiB, or lower) overflow as
-transfer frames up to 256 MiB (docs/adr/20261003_nats-rpc-overflow.md); above
+transfer frames up to 256 MiB; above
 that, at the overflow host's capacity, or with an older peer, the call fails
 with non-retryable `PAYLOAD_TOO_LARGE`. Micro-service error headers raise
 instead of becoming an empty success. Overflowed values are held whole in

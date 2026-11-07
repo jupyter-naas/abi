@@ -1,23 +1,22 @@
-"""Authenticated document RPCs; namespace scoping follows Stage 1 shared trust.
+"""Authenticated document RPCs, authorized by the document service.
 
-Every authenticated caller passes its namespace explicitly. Listing namespaces
-is platform administration: only ``admin_identities`` (the API and the engine
-by default) may call it; anyone else gets PERMISSION_DENIED.
+Every caller passes the namespace it addresses, and the domain service checks
+the verified caller on it like on any other name: a module's own
+namespace is what its policy names. Listing namespaces is ``Namespaces`` on
+each one, so a caller sees only the namespaces its policies cover; no identity
+is an administrator by name.
 """
 
-from collections.abc import Iterable
 from functools import partial
 
 import nats.micro
 from google.protobuf.message import DecodeError
 from naas_abi_core import logger
-from naas_abi_core.engine.nats_auth import (
-    InvalidServiceTokenError,
-    verify_service_token,
-)
+from naas_abi_core.engine.nats_auth import TokenVerifier
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import (
     RequestPayloadError,
+    authenticate_request,
     broker_limit,
     request_payload,
     respond_protobuf,
@@ -33,6 +32,7 @@ from naas_abi_core.services.document.adapters.document_nats_codec import (
     encode_spec,
 )
 from naas_abi_core.services.document.DocumentService import DocumentService
+from naas_abi_core.services.iam.enforcement import authorization_error_code
 from naas_abi_proto.common.v1 import common_pb2
 from naas_abi_proto.document.v1 import document_pb2 as pb
 from naas_abi_proto.document.values import decode_data
@@ -55,22 +55,12 @@ SUBJECT_PREFIX = "abi.svc.document.v1"
 # broker limit, so its reply fits without RPC overflow: protobuf can run a few
 # times larger than JSON for many small values.
 PAGE_SHARE = 4
-# Operations across namespaces, and the service identities allowed to call them.
-ADMIN_OPERATIONS = frozenset({"namespaces"})
-ADMIN_IDENTITIES = frozenset({"api", "engine"})
 
 
 class DocumentPrimaryAdapterNATS(ServicePrimary):
-    def __init__(
-        self,
-        service: DocumentService,
-        jwt_secret: str,
-        *,
-        admin_identities: Iterable[str] = ADMIN_IDENTITIES,
-    ) -> None:
+    def __init__(self, service: DocumentService, verifier: TokenVerifier) -> None:
         self._adapter = service
-        self._jwt_secret = jwt_secret
-        self._admin_identities = frozenset(admin_identities)
+        self._verifier = verifier
         self._dispatch = DomainRPCDispatcher("document")
         self._service: Service | TracedService | None = None
 
@@ -96,33 +86,8 @@ class DocumentPrimaryAdapterNATS(ServicePrimary):
 
     async def _handle(self, request, *, operation: str) -> None:
         response_type = getattr(pb, OPERATIONS[operation] + "Response")
-        try:
-            identity = verify_service_token(
-                (request.headers or {}).get("Nats-Auth-Token", ""), self._jwt_secret
-            )
-        except InvalidServiceTokenError:
-            await respond_protobuf(
-                request,
-                response_type(
-                    error=common_pb2.CallError(
-                        code="UNAUTHENTICATED", message="missing or invalid auth token"
-                    )
-                ),
-                response_type,
-            )
-            return
-        if operation in ADMIN_OPERATIONS and identity not in self._admin_identities:
-            await respond_protobuf(
-                request,
-                response_type(
-                    error=common_pb2.CallError(
-                        code="PERMISSION_DENIED",
-                        message=f"{operation} needs a platform service identity",
-                        retryable=False,
-                    )
-                ),
-                response_type,
-            )
+        caller = await authenticate_request(request, self._verifier, response_type)
+        if caller is None:
             return
         try:
             parsed = getattr(pb, OPERATIONS[operation] + "Request").FromString(
@@ -132,7 +97,7 @@ class DocumentPrimaryAdapterNATS(ServicePrimary):
             if operation == "find":
                 limit = broker_limit(request)
                 call = partial(call, page_bytes=limit // PAGE_SHARE if limit else None)
-            result = await self._dispatch.call(call, parsed)
+            result = await self._dispatch.call(call, parsed, caller)
         except Exception as exc:  # noqa: BLE001 - translate failures at the RPC boundary
             code = next(
                 (code for code, cls in ERRORS.items() if isinstance(exc, cls)),
@@ -142,6 +107,9 @@ class DocumentPrimaryAdapterNATS(ServicePrimary):
                 code = "INVALID_ARGUMENT"
             if isinstance(exc, RequestPayloadError):
                 code = exc.code
+            authorization = authorization_error_code(exc)
+            if authorization is not None:
+                code = authorization
             # Backend details may contain connection credentials or document contents.
             if code in ("INTERNAL", "STORAGE_ERROR", "ADAPTER_ERROR"):
                 logger.warning(
@@ -150,7 +118,7 @@ class DocumentPrimaryAdapterNATS(ServicePrimary):
             result = response_type(
                 error=common_pb2.CallError(
                     code=code,
-                    message=str(exc) if code == "INVALID_ARGUMENT" else code,
+                    message=str(exc) if code in _DETAILED else code,
                     retryable=False,
                 )
             )
@@ -213,6 +181,10 @@ class DocumentPrimaryAdapterNATS(ServicePrimary):
                 count=service.count(request.collection, decode_where(request.where))
             )
         return response()
+
+
+# Codes whose message is safe to return: it names only what the caller sent.
+_DETAILED = frozenset({"INVALID_ARGUMENT", "PERMISSION_DENIED", "NOT_FOUND"})
 
 
 def _smallest(*budgets: int | None) -> int | None:

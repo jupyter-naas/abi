@@ -8,13 +8,14 @@ the agent's notification methods when publishing to the EventService.
 
 ``chat_id`` defaults to ``AgentSharedState.thread_id`` when unset, so the
 generic ``Agent.as_api`` endpoints already produce chat-tagged events without
-any extra wiring. ``user_id`` and ``workspace_id`` are auth-specific and must
-be populated by the integrator. Example::
+any extra wiring. ``user_id`` and ``container`` (the name of the container the
+call is made in, ``CallContext.container``) are auth-specific and must be
+populated by the integrator. Example::
 
     @router.middleware("http")
     async def attach_identity(request, call_next):
         agent_user_id.set(request.state.user.id)
-        agent_workspace_id.set(request.state.workspace.id)
+        agent_container.set(request.state.workspace.container)
         return await call_next(request)
 
 Propagating across raw thread spawns requires ``contextvars.copy_context()``;
@@ -24,16 +25,18 @@ handles the thread copy.
 
 from __future__ import annotations
 
+import weakref
 from contextvars import ContextVar
 
 from naas_abi_core.services.event.context import (
+    CallContextField,
+    event_actor_container,
     event_actor_user_id,
-    event_actor_workspace_id,
 )
 
-# Same ContextVars as the event service's: identity set for an agent run is
-# stamped on every event published during it (EventService.publish).
-agent_user_id: ContextVar[str | None] = event_actor_user_id
+# The event service's views of the CallContext: identity set for an agent run
+# is stamped on every event published during it (EventService.publish).
+agent_user_id: CallContextField = event_actor_user_id
 # Display identity for the acting user, alongside agent_user_id. Populated at
 # the same request boundary so tools that commit on the user's behalf (e.g.
 # Slides' upsert_file/upsert_files) can attribute the commit's git author to
@@ -42,20 +45,85 @@ agent_user_id: ContextVar[str | None] = event_actor_user_id
 agent_user_name: ContextVar[str | None] = ContextVar("agent_user_name", default=None)
 agent_user_email: ContextVar[str | None] = ContextVar("agent_user_email", default=None)
 agent_chat_id: ContextVar[str | None] = ContextVar("agent_chat_id", default=None)
-agent_workspace_id: ContextVar[str | None] = event_actor_workspace_id
+# The container the turn is made in (its name, ``CallContext.container``).
+agent_container: CallContextField = event_actor_container
 # Enabled agent registry keys (``module/Class``) for the current chat turn after
 # workspace roster and per-caller feature gating. Abi uses this to attach only
 # the office sub-agents the user may reach.
 agent_workspace_enabled_class_names: ContextVar[frozenset[str] | None] = ContextVar(
     "agent_workspace_enabled_class_names", default=None
 )
+# The module scopes (``(type, module, name)``, IAM ``module_scopes``) of the
+# workflows and pipelines the caller may run where the turn runs. An agent's tool
+# that one of them exposes answers a refusal for any other (``tool_scope_refused``).
+# None: the turn is not bound (a caller outside Nexus's routes).
+agent_usable_module_scopes: ContextVar[frozenset[tuple[str, str, str]] | None] = (
+    ContextVar("agent_usable_module_scopes", default=None)
+)
+# A tool's metadata key naming the object that exposed it (``Expose.as_tools``):
+# a string, so tracing serializes it; ``exposer`` finds the object.
+EXPOSED_BY = "abi_exposed_by"
+_exposers: weakref.WeakValueDictionary[str, object] = weakref.WeakValueDictionary()
+# The module scope of each module's workflow and pipeline classes, ``(type, module,
+# name)``: an instance an agent builds itself is bounded like the module's own.
+_scopes_by_class: dict[type, tuple[str, str, str]] = {}
+
+
+def register_process_scope(cls: type, scope: tuple[str, str, str]) -> bool:
+    """Record ``cls``'s module scope; False (kept as it was) when another module
+    already declared the class under another scope."""
+    known = _scopes_by_class.setdefault(cls, scope)
+    return known == scope
+
+
+def process_scopes() -> list[tuple[str, str, str]]:
+    """Every registered workflow and pipeline scope."""
+    return sorted(set(_scopes_by_class.values()))
+
+
+def process_scope_of(owner: object) -> tuple[str, str, str] | None:
+    """The module scope of a workflow or pipeline instance: its class's, or the
+    nearest registered base class's (a subclass of a module's workflow)."""
+    for cls in type(owner).__mro__:
+        scope = _scopes_by_class.get(cls)
+        if scope is not None:
+            return scope
+    return None
+
+
+def remember_exposer(owner: object) -> str | None:
+    """The key a tool of ``owner`` carries in its metadata; None for an object
+    that cannot be referenced weakly."""
+    key = f"{type(owner).__qualname__}:{id(owner)}"
+    try:
+        _exposers[key] = owner
+    except TypeError:
+        return None
+    return key
+
+
+def tool_scope_refused(tool: object) -> tuple[str, str, str] | None:
+    """The module scope of a workflow or pipeline ``tool`` exposes, when the turn
+    is bound and the caller may not run it there; else None."""
+    usable = agent_usable_module_scopes.get()
+    if usable is None:
+        return None
+    metadata = getattr(tool, "metadata", None) or {}
+    key = metadata.get(EXPOSED_BY)
+    owner = _exposers.get(key) if isinstance(key, str) else None
+    scope = process_scope_of(owner) if owner is not None else None
+    if scope is None or scope in usable:
+        return None
+    return scope
+
 
 # Coding-workspace bridge: base URL + bearer secret of the exec sidecar running
 # inside the caller's Coder coding workspace. Set at the request boundary (the
 # OpenAI shim, from the per-workspace token claims) and read by the workspace
 # filesystem/terminal tools so a server-side agent acts on the right user's
-# workspace. NOTE: distinct from ``agent_workspace_id`` (the Nexus tenant
-# workspace) — this targets the Coder container ``coder-<user>-<ws>``.
+# workspace. NOTE: distinct from ``agent_container`` (the container of the
+# call, e.g. a Nexus workspace) — this targets the Coder container
+# ``coder-<user>-<ws>``.
 coder_workspace_base: ContextVar[str | None] = ContextVar(
     "coder_workspace_base", default=None
 )
@@ -187,9 +255,7 @@ def documents_step_limit_message() -> str:
     queries = documents_research_queries.get() or []
     finished: list[str] = []
     if queries:
-        finished.append(
-            f"{len(queries)} web search{'es' if len(queries) != 1 else ''}"
-        )
+        finished.append(f"{len(queries)} web search{'es' if len(queries) != 1 else ''}")
     if writes:
         finished.append("wrote " + ", ".join(writes))
     done = (
@@ -281,9 +347,7 @@ def slides_step_limit_message() -> str:
     queries = slides_research_queries.get() or []
     finished: list[str] = []
     if queries:
-        finished.append(
-            f"{len(queries)} web search{'es' if len(queries) != 1 else ''}"
-        )
+        finished.append(f"{len(queries)} web search{'es' if len(queries) != 1 else ''}")
     if writes:
         finished.append("wrote " + ", ".join(writes))
     done = (

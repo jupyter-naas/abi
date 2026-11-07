@@ -1,71 +1,34 @@
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from datetime import datetime
 from uuid import uuid4
 
-from naas_abi.apps.nexus.apps.api.app.core.feature_flags import parse_feature_overrides
+from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.models import (
     OrganizationDomainModel,
     OrganizationMemberModel,
     OrganizationModel,
-    OrganizationRoleFeaturesModel,
     UserModel,
-    WorkspaceMemberModel,
     WorkspaceModel,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import SqlDefaultsStore
 from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
     OrganizationCreateInput,
     OrganizationDomainCreateInput,
     OrganizationDomainRecord,
     OrganizationMemberAccountRecord,
-    OrganizationMemberDetailsRecord,
     OrganizationMemberProfileRecord,
-    OrganizationMemberRecord,
     OrganizationPermissionPort,
     OrganizationRecord,
-    OrganizationRoleFeaturesRecord,
     OrganizationUpdateInput,
-    OrganizationWorkspaceMembershipRecord,
     OrganizationWorkspaceRecord,
-    UserOrganizationMembershipRecord,
     UserRecord,
 )
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 AsyncSessionGetter = Callable[[], AsyncSession | None]
-
-
-def _org_or_account(org_value: str | None, account_value: str | None) -> str | None:
-    """The org profile wins when set (even to ""); otherwise show the account value."""
-    return org_value if org_value is not None else account_value
-
-
-def _member_record(
-    member: OrganizationMemberModel, user: UserModel | None
-) -> OrganizationMemberRecord:
-    return OrganizationMemberRecord(
-        id=member.id,
-        organization_id=member.organization_id,
-        user_id=member.user_id,
-        role=member.role,
-        email=user.email if user else None,
-        # The full name is always the account's (users.name), in every organization.
-        name=user.name if user else member.name,
-        created_at=member.created_at,
-        bio=_org_or_account(member.bio, user.bio if user else None),
-        # Set by org admins only, never taken from the account. It is the account
-        # that falls back to these (picture, organization, job title), not the
-        # other way around (see auth: account fallbacks).
-        avatar=member.avatar,
-        organization=member.organization_name,
-        job_title=member.job_title,
-        service_line=member.service_line,
-        country=member.country,
-        interest=member.interest,
-    )
 
 
 class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
@@ -84,23 +47,23 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             raise RuntimeError("No database session bound in ServiceRegistry context")
         return db
 
-    async def get_organization_role(self, user_id: str, org_id: str) -> str | None:
-        member_result = await self.db.execute(
-            select(OrganizationMemberModel.role)
-            .where(OrganizationMemberModel.organization_id == org_id)
-            .where(OrganizationMemberModel.user_id == user_id)
-        )
-        member_role = member_result.scalar_one_or_none()
-        if member_role is not None:
-            return member_role
+    def container_defaults(self) -> SqlDefaultsStore:
+        """Where the access policy and default groups of what this adapter creates
+        are recorded: this adapter's session, so in the same transaction."""
+        return SqlDefaultsStore(self.db)
 
-        owner_result = await self.db.execute(
-            select(OrganizationModel.owner_id).where(OrganizationModel.id == org_id)
-        )
-        owner_id = owner_result.scalar_one_or_none()
-        if owner_id == user_id:
-            return "owner"
-        return None
+    async def list_all_organizations(self) -> list[OrganizationRecord]:
+        result = await self.db.execute(select(OrganizationModel).order_by(OrganizationModel.name))
+        return [self._to_organization_record(row) for row in result.scalars().all()]
+
+    async def get_users_by_ids(self, user_ids: list[str]) -> dict[str, UserRecord]:
+        if not user_ids:
+            return {}
+        result = await self.db.execute(select(UserModel).where(UserModel.id.in_(user_ids)))
+        return {
+            user.id: UserRecord(id=user.id, email=user.email, name=user.name, bio=user.bio)
+            for user in result.scalars().all()
+        }
 
     @staticmethod
     def _to_organization_record(row: OrganizationModel) -> OrganizationRecord:
@@ -133,22 +96,6 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             created_at=row.created_at,
             updated_at=row.updated_at,
         )
-
-    async def list_organizations_for_user(self, user_id: str) -> list[OrganizationRecord]:
-        result = await self.db.execute(
-            select(OrganizationModel)
-            .outerjoin(
-                OrganizationMemberModel,
-                OrganizationModel.id == OrganizationMemberModel.organization_id,
-            )
-            .where(
-                (OrganizationModel.owner_id == user_id)
-                | (OrganizationMemberModel.user_id == user_id)
-            )
-            .distinct()
-            .order_by(OrganizationModel.name)
-        )
-        return [self._to_organization_record(row) for row in result.scalars().all()]
 
     async def get_organization_by_id(self, org_id: str) -> OrganizationRecord | None:
         result = await self.db.execute(
@@ -232,21 +179,6 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
         await self.db.flush()
         return self._to_organization_record(row)
 
-    async def list_workspaces_for_org_and_user(
-        self, org_id: str, user_id: str
-    ) -> list[OrganizationWorkspaceRecord]:
-        result = await self.db.execute(
-            select(WorkspaceModel)
-            .outerjoin(WorkspaceMemberModel, WorkspaceModel.id == WorkspaceMemberModel.workspace_id)
-            .where(
-                (WorkspaceModel.organization_id == org_id)
-                & ((WorkspaceModel.owner_id == user_id) | (WorkspaceMemberModel.user_id == user_id))
-            )
-            .distinct()
-            .order_by(WorkspaceModel.name)
-        )
-        return [self._to_workspace_record(row) for row in result.scalars().all()]
-
     async def list_workspaces_for_org(self, org_id: str) -> list[OrganizationWorkspaceRecord]:
         result = await self.db.execute(
             select(WorkspaceModel)
@@ -254,27 +186,6 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             .order_by(WorkspaceModel.name)
         )
         return [self._to_workspace_record(row) for row in result.scalars().all()]
-
-    async def list_workspace_memberships_for_org(
-        self, org_id: str
-    ) -> list[OrganizationWorkspaceMembershipRecord]:
-        result = await self.db.execute(
-            select(
-                WorkspaceMemberModel.user_id,
-                WorkspaceMemberModel.workspace_id,
-                WorkspaceMemberModel.role,
-            )
-            .join(WorkspaceModel, WorkspaceModel.id == WorkspaceMemberModel.workspace_id)
-            .where(WorkspaceModel.organization_id == org_id)
-        )
-        return [
-            OrganizationWorkspaceMembershipRecord(
-                user_id=user_id,
-                workspace_id=workspace_id,
-                role=role,
-            )
-            for user_id, workspace_id, role in result.all()
-        ]
 
     def _to_workspace_record(self, row: WorkspaceModel) -> OrganizationWorkspaceRecord:
         return OrganizationWorkspaceRecord(
@@ -288,45 +199,7 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             logo_url=row.logo_url,
             logo_emoji=row.logo_emoji,
             workspace_group=row.workspace_group,
-            feature_overrides=parse_feature_overrides(getattr(row, "feature_overrides", None)),
         )
-
-    async def list_organization_members(self, org_id: str) -> list[OrganizationMemberRecord]:
-        result = await self.db.execute(
-            select(OrganizationMemberModel, UserModel)
-            .join(UserModel, OrganizationMemberModel.user_id == UserModel.id)
-            .where(OrganizationMemberModel.organization_id == org_id)
-            .order_by(OrganizationMemberModel.created_at)
-        )
-        return [_member_record(member, user) for member, user in result.all()]
-
-    async def list_all_organization_memberships(self) -> list[UserOrganizationMembershipRecord]:
-        rows = await self.db.execute(
-            select(
-                OrganizationMemberModel.user_id,
-                OrganizationModel.id,
-                OrganizationModel.name,
-                OrganizationMemberModel.role,
-            ).join(
-                OrganizationModel, OrganizationModel.id == OrganizationMemberModel.organization_id
-            )
-        )
-        memberships = {
-            (user_id, org_id): UserOrganizationMembershipRecord(
-                user_id=user_id, organization_id=org_id, organization_name=name, role=role
-            )
-            for user_id, org_id, name, role in rows.all()
-        }
-        # organizations.owner_id is an owner even without a membership row.
-        owners = await self.db.execute(
-            select(OrganizationModel.owner_id, OrganizationModel.id, OrganizationModel.name)
-        )
-        for owner_id, org_id, name in owners.all():
-            if owner_id:
-                memberships[(owner_id, org_id)] = UserOrganizationMembershipRecord(
-                    user_id=owner_id, organization_id=org_id, organization_name=name, role="owner"
-                )
-        return sorted(memberships.values(), key=lambda m: (m.user_id, m.organization_name))
 
     async def get_user_by_email(self, email: str) -> UserRecord | None:
         normalized = email.lower().strip()
@@ -334,65 +207,40 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
         user = result.scalar_one_or_none()
         if user is None:
             return None
-        return UserRecord(id=user.id, email=user.email, name=user.name)
+        return UserRecord(id=user.id, email=user.email, name=user.name, bio=user.bio)
 
-    async def is_organization_member(self, org_id: str, user_id: str) -> bool:
-        result = await self.db.execute(
-            select(OrganizationMemberModel.id)
-            .where(OrganizationMemberModel.organization_id == org_id)
-            .where(OrganizationMemberModel.user_id == user_id)
-        )
-        return result.scalar_one_or_none() is not None
-
-    async def add_organization_member(
-        self, org_id: str, user_id: str, role: str, created_at: datetime
-    ) -> OrganizationMemberRecord:
-        row = OrganizationMemberModel(
-            id=str(uuid4()),
-            organization_id=org_id,
+    async def get_member_account(self, user_id: str) -> OrganizationMemberAccountRecord | None:
+        user = (
+            await self.db.execute(select(UserModel).where(UserModel.id == user_id))
+        ).scalar_one_or_none()
+        if user is None:
+            return None
+        return OrganizationMemberAccountRecord(
             user_id=user_id,
-            role=role,
-            created_at=created_at,
+            email=user.email,
+            name=user.name,
+            avatar=user.avatar,
+            organization=user.organization,
+            job_title=user.job_title,
+            bio=user.bio,
+            created_at=user.created_at,
+            updated_at=user.updated_at,
         )
-        self.db.add(row)
-        await self.db.flush()
-        user_result = await self.db.execute(select(UserModel).where(UserModel.id == user_id))
-        user = user_result.scalar_one_or_none()
-        return _member_record(row, user)
 
-    async def get_organization_member(
-        self, org_id: str, user_id: str
-    ) -> OrganizationMemberRecord | None:
-        result = await self.db.execute(
-            select(OrganizationMemberModel).where(
-                (OrganizationMemberModel.organization_id == org_id)
-                & (OrganizationMemberModel.user_id == user_id)
-            )
+    @staticmethod
+    def _to_profile(row: OrganizationMemberModel) -> OrganizationMemberProfileRecord:
+        return OrganizationMemberProfileRecord(
+            name=row.name,
+            avatar=row.avatar,
+            organization=row.organization_name,
+            job_title=row.job_title,
+            bio=row.bio,
+            service_line=row.service_line,
+            country=row.country,
+            interest=row.interest,
         )
-        row = result.scalar_one_or_none()
-        if row is None:
-            return None
-        user_result = await self.db.execute(select(UserModel).where(UserModel.id == user_id))
-        user = user_result.scalar_one_or_none()
-        return _member_record(row, user)
 
-    async def update_organization_member_role(
-        self, org_id: str, user_id: str, role: str
-    ) -> OrganizationMemberRecord | None:
-        result = await self.db.execute(
-            select(OrganizationMemberModel).where(
-                (OrganizationMemberModel.organization_id == org_id)
-                & (OrganizationMemberModel.user_id == user_id)
-            )
-        )
-        row = result.scalar_one_or_none()
-        if row is None:
-            return None
-        row.role = role
-        await self.db.flush()
-        return await self.get_organization_member(org_id=org_id, user_id=user_id)
-
-    async def _find_member_row(self, org_id: str, user_id: str) -> OrganizationMemberModel | None:
+    async def _find_profile_row(self, org_id: str, user_id: str) -> OrganizationMemberModel | None:
         result = await self.db.execute(
             select(OrganizationMemberModel).where(
                 (OrganizationMemberModel.organization_id == org_id)
@@ -401,39 +249,34 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
         )
         return result.scalar_one_or_none()
 
-    async def get_organization_member_details(
-        self, org_id: str, user_id: str
-    ) -> OrganizationMemberDetailsRecord | None:
-        row = await self._find_member_row(org_id, user_id)
+    async def _profile_row(self, org_id: str, user_id: str) -> OrganizationMemberModel:
+        """The row a member's profile is kept in, made on the first edit. Who holds
+        which role is IAM's: ``role`` here is only the column's placeholder."""
+        row = await self._find_profile_row(org_id, user_id)
         if row is None:
-            return None
-        user = (
-            await self.db.execute(select(UserModel).where(UserModel.id == user_id))
-        ).scalar_one_or_none()
-        return OrganizationMemberDetailsRecord(
-            member=_member_record(row, user),
-            account=OrganizationMemberAccountRecord(
+            row = OrganizationMemberModel(
+                id=str(uuid4()),
+                organization_id=org_id,
                 user_id=user_id,
-                email=user.email if user else None,
-                name=user.name if user else None,
-                avatar=user.avatar if user else None,
-                organization=user.organization if user else None,
-                job_title=user.job_title if user else None,
-                bio=user.bio if user else None,
-                created_at=user.created_at if user else None,
-                updated_at=user.updated_at if user else None,
-            ),
-            organization_profile=OrganizationMemberProfileRecord(
-                name=row.name,
-                avatar=row.avatar,
-                organization=row.organization_name,
-                job_title=row.job_title,
-                bio=row.bio,
-                service_line=row.service_line,
-                country=row.country,
-                interest=row.interest,
-            ),
+                role="member",
+                created_at=datetime.now(UTC).replace(tzinfo=None),
+            )
+            self.db.add(row)
+        return row
+
+    async def get_organization_member_profile(
+        self, org_id: str, user_id: str
+    ) -> OrganizationMemberProfileRecord | None:
+        row = await self._find_profile_row(org_id, user_id)
+        return self._to_profile(row) if row is not None else None
+
+    async def list_organization_member_profiles(
+        self, org_id: str
+    ) -> dict[str, OrganizationMemberProfileRecord]:
+        result = await self.db.execute(
+            select(OrganizationMemberModel).where(OrganizationMemberModel.organization_id == org_id)
         )
+        return {row.user_id: self._to_profile(row) for row in result.scalars().all()}
 
     async def update_organization_member_profile(
         self,
@@ -447,10 +290,8 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
         service_line: str | None = None,
         country: str | None = None,
         interest: str | None = None,
-    ) -> OrganizationMemberRecord | None:
-        row = await self._find_member_row(org_id, user_id)
-        if row is None:
-            return None
+    ) -> OrganizationMemberProfileRecord:
+        row = await self._profile_row(org_id, user_id)
         for field, value in (
             ("name", name),
             ("organization_name", organization),
@@ -463,32 +304,16 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             if value is not None:
                 setattr(row, field, value)
         await self.db.flush()
-        return await self.get_organization_member(org_id=org_id, user_id=user_id)
+        return self._to_profile(row)
 
     async def set_organization_member_avatar(
         self, org_id: str, user_id: str, avatar: str | None
     ) -> str | None:
-        row = await self._find_member_row(org_id, user_id)
-        if row is None:
-            return None
+        row = await self._profile_row(org_id, user_id)
         previous = row.avatar
         row.avatar = avatar
         await self.db.flush()
         return previous
-
-    async def delete_organization_member(self, org_id: str, user_id: str) -> bool:
-        result = await self.db.execute(
-            select(OrganizationMemberModel).where(
-                (OrganizationMemberModel.organization_id == org_id)
-                & (OrganizationMemberModel.user_id == user_id)
-            )
-        )
-        row = result.scalar_one_or_none()
-        if row is None:
-            return False
-        await self.db.delete(row)
-        await self.db.flush()
-        return True
 
     async def list_organization_domains(self, org_id: str) -> list[OrganizationDomainRecord]:
         result = await self.db.execute(
@@ -536,6 +361,7 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             verification_token=row.verification_token,
             created_at=row.created_at,
             verified_at=row.verified_at,
+            provider=row.provider,
         )
 
     async def get_organization_domain(
@@ -558,6 +384,7 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             verification_token=row.verification_token,
             created_at=row.created_at,
             verified_at=row.verified_at,
+            provider=row.provider,
         )
 
     async def verify_organization_domain(
@@ -584,7 +411,64 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             verification_token=row.verification_token,
             created_at=row.created_at,
             verified_at=row.verified_at,
+            provider=row.provider,
         )
+
+    async def set_organization_domain_provider(
+        self, org_id: str, domain_id: str, provider: str | None
+    ) -> OrganizationDomainRecord | None:
+        result = await self.db.execute(
+            select(OrganizationDomainModel).where(
+                (OrganizationDomainModel.id == domain_id)
+                & (OrganizationDomainModel.organization_id == org_id)
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            return None
+        row.provider = provider
+        await self.db.flush()
+        return OrganizationDomainRecord(
+            id=row.id,
+            organization_id=row.organization_id,
+            domain=row.domain,
+            is_verified=row.is_verified,
+            verification_token=row.verification_token,
+            created_at=row.created_at,
+            verified_at=row.verified_at,
+            provider=row.provider,
+        )
+
+    async def lock_organization(self, org_id: str) -> bool:
+        # PostgreSQL: FOR UPDATE conflicts with the FOR KEY SHARE a workspace
+        # insert's foreign key check takes, so the insert waits for this
+        # transaction, then fails its key once the organization is gone (a plain
+        # UPDATE takes FOR NO KEY UPDATE, which does not stop it).
+        found = (
+            await self.db.execute(
+                select(OrganizationModel.id).where(OrganizationModel.id == org_id).with_for_update()
+            )
+        ).first()
+        if found is None:
+            return False
+        # SQLite has no row locks (FOR UPDATE is not emitted): a write takes the
+        # database for this transaction, so another writer waits for it.
+        await self.db.execute(
+            update(OrganizationModel)
+            .where(OrganizationModel.id == org_id)
+            .values(updated_at=OrganizationModel.updated_at)
+        )
+        return True
+
+    async def delete_organization(self, org_id: str) -> bool:
+        row = (
+            await self.db.execute(select(OrganizationModel).where(OrganizationModel.id == org_id))
+        ).scalar_one_or_none()
+        if row is None:
+            return False
+        await self.db.delete(row)
+        await self.db.flush()
+        return True
 
     async def delete_organization_domain(self, org_id: str, domain_id: str) -> bool:
         result = await self.db.execute(
@@ -599,76 +483,3 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
         await self.db.delete(row)
         await self.db.flush()
         return True
-
-    @staticmethod
-    def _decode_role_baseline(raw: str) -> dict[str, list[str]]:
-        try:
-            parsed = json.loads(raw)
-        except json.JSONDecodeError:
-            return {}
-        if not isinstance(parsed, dict):
-            return {}
-        decoded: dict[str, list[str]] = {}
-        for role, features in parsed.items():
-            if not isinstance(role, str) or not isinstance(features, list):
-                continue
-            decoded[role] = [str(feature) for feature in features]
-        return decoded
-
-    def _to_role_features_record(
-        self, row: OrganizationRoleFeaturesModel
-    ) -> OrganizationRoleFeaturesRecord:
-        return OrganizationRoleFeaturesRecord(
-            organization_id=row.organization_id,
-            role_baseline=self._decode_role_baseline(row.role_baseline),
-            updated_by=row.updated_by,
-            created_at=row.created_at,
-            updated_at=row.updated_at,
-        )
-
-    async def get_organization_role_features(
-        self, org_id: str
-    ) -> OrganizationRoleFeaturesRecord | None:
-        result = await self.db.execute(
-            select(OrganizationRoleFeaturesModel).where(
-                OrganizationRoleFeaturesModel.organization_id == org_id
-            )
-        )
-        row = result.scalar_one_or_none()
-        if row is None:
-            return None
-        return self._to_role_features_record(row)
-
-    async def upsert_organization_role_features(
-        self,
-        org_id: str,
-        role_baseline: dict[str, list[str]],
-        updated_by: str | None,
-        now: datetime,
-    ) -> OrganizationRoleFeaturesRecord:
-        payload = json.dumps(
-            {role: list(features) for role, features in role_baseline.items()},
-            separators=(",", ":"),
-            sort_keys=True,
-        )
-        result = await self.db.execute(
-            select(OrganizationRoleFeaturesModel).where(
-                OrganizationRoleFeaturesModel.organization_id == org_id
-            )
-        )
-        row = result.scalar_one_or_none()
-        if row is None:
-            row = OrganizationRoleFeaturesModel(
-                organization_id=org_id,
-                role_baseline=payload,
-                updated_by=updated_by,
-                created_at=now,
-                updated_at=now,
-            )
-            self.db.add(row)
-        else:
-            row.role_baseline = payload
-            row.updated_by = updated_by
-            row.updated_at = now
-        await self.db.flush()
-        return self._to_role_features_record(row)

@@ -19,8 +19,8 @@ from naas_abi_core.engine.context import _event_service_override
 from naas_abi_core.services.agent.Agent import Agent
 from naas_abi_core.services.agent.context import (
     agent_chat_id,
+    agent_container,
     agent_user_id,
-    agent_workspace_id,
 )
 from naas_abi_core.services.agent.ontologies.modules.AgentEventOntology import (
     AgentAIMessageEmitted,
@@ -31,6 +31,9 @@ from naas_abi_core.services.agent.ontologies.modules.AgentEventOntology import (
     AgentToolResponded,
     AgentUserMessageReceived,
 )
+
+# The container a turn is made in, as IAM names it.
+WS = "abi:nexus:organization/org-1/nexus:workspace/ws-9"
 
 # ---------------------------------------------------------------------------
 # Test doubles
@@ -169,7 +172,7 @@ def test_chat_id_falls_back_to_thread_id_when_contextvar_unset() -> None:
         assert isinstance(evt, AgentModelCalled)
         assert evt.chat_id == "thread-42"
         assert evt.user_id is None
-        assert evt.workspace_id is None
+        assert evt.container is None and evt.workspace_id is None
     finally:
         _event_service_override.reset(token)
 
@@ -180,16 +183,18 @@ def test_identity_contextvars_are_stamped_on_events() -> None:
         _with_event_service(events),
         agent_user_id.set("alice"),
         agent_chat_id.set("chat-7"),
-        agent_workspace_id.set("ws-9"),
+        agent_container.set(WS),
     ]
     try:
         _StubAgent()._notify_call_model("tester")
         evt = events.published[0]
         assert evt.user_id == "alice"
         assert evt.chat_id == "chat-7"
-        assert evt.workspace_id == "ws-9"
+        assert evt.container == WS
+        # Recorded before container paths only.
+        assert evt.workspace_id is None
     finally:
-        agent_workspace_id.reset(tokens[3])
+        agent_container.reset(tokens[3])
         agent_chat_id.reset(tokens[2])
         agent_user_id.reset(tokens[1])
         _event_service_override.reset(tokens[0])
@@ -199,6 +204,7 @@ def test_contextvars_propagate_across_threads_with_copy_context() -> None:
     events = _FakeEventService()
     tokens = [_with_event_service(events), agent_user_id.set("bob")]
     try:
+
         def worker():
             _StubAgent()._notify_call_model("tester")
 
@@ -236,6 +242,7 @@ def test_notify_tool_usage_emits_one_event_per_tool_call() -> None:
         assert {e.tool_call_id for e in tool_events} == {"call-1", "call-2"}
         # tool_args is JSON-encoded so it round-trips through the SQLite log
         import json
+
         args_by_tool = {e.tool_name: json.loads(e.tool_args) for e in tool_events}
         assert args_by_tool == {"search": {"q": "hello"}, "fetch": {"url": "https://x"}}
     finally:
@@ -294,7 +301,7 @@ def test_user_message_event_class_constructs_with_content() -> None:
         content_length=len("hi there"),
         user_id="u",
         chat_id="c",
-        workspace_id="w",
+        container=WS,
     )
     assert evt.content == "hi there"
     assert evt.content_length == 8
@@ -307,9 +314,14 @@ def test_agent_invocation_completed_event_class_constructs() -> None:
         content_length=42,
         user_id="u",
         chat_id="c",
-        workspace_id="w",
+        container=WS,
     )
     assert evt.content_length == 42
+    # An event recorded before container paths, with a workspace id, still reads.
+    assert (
+        AgentInvocationCompleted(agent_name="tester", workspace_id="w").workspace_id
+        == "w"
+    )
 
 
 def test_every_tool_response_in_a_turn_is_notified() -> None:
@@ -320,8 +332,12 @@ def test_every_tool_response_in_a_turn_is_notified() -> None:
     only reloads on ``tool_response``, so a deck written by the second tool of
     a turn never refreshed.
     """
-    first = ToolMessage(content="{}", name="list_slides_sections", tool_call_id="call-1")
-    second = ToolMessage(content="{}", name="replace_in_slides_deck", tool_call_id="call-2")
+    first = ToolMessage(
+        content="{}", name="list_slides_sections", tool_call_id="call-1"
+    )
+    second = ToolMessage(
+        content="{}", name="replace_in_slides_deck", tool_call_id="call-2"
+    )
     assert first.id is None and second.id is None
 
     notified: dict[Any, bool] = {}

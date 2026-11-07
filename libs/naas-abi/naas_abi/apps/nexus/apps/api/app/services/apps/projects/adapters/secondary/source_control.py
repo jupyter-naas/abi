@@ -2,8 +2,11 @@
 
 Branch ``apps/<workspace>/<slug>``; the app's files under
 ``apps/<workspace>/<slug>/``; project settings in
-``apps/<workspace>/<slug>.project.json``. Nexus writes with its service
-token; users get no repo-wide write grant (Slides model).
+``apps/<workspace>/<slug>.project.json``. The repository is the deployment's
+shared one, which belongs to the platform: no workspace role reaches it, and
+users get no repo-wide write grant (Slides model). Nexus works in it as
+itself (``api``), after its routes authorized the user for the project
+(``GetAppProject``, ``UpdateAppProject``...).
 """
 
 from __future__ import annotations
@@ -21,6 +24,7 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.projects.port import (
     AppProjectRepositoryPort,
     workspace_segment,
 )
+from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.source_control.SourceControlPorts import (
     BranchNameConflictError,
     FileWrite,
@@ -32,9 +36,27 @@ from naas_abi_core.services.source_control.SourceControlService import (
 )
 
 
+class _AsNexus:
+    """The source control service, called as ``api`` for no user."""
+
+    def __init__(self, source_control: SourceControlService) -> None:
+        self._source_control = source_control
+
+    def __getattr__(self, name: str) -> Any:
+        target = getattr(self._source_control, name)
+        if not callable(target):
+            return target
+
+        def call(*args: Any, **kwargs: Any) -> Any:
+            with as_service_account("api"):
+                return target(*args, **kwargs)
+
+        return call
+
+
 class AppProjectRepositoryGit(AppProjectRepositoryPort):
     def __init__(self, source_control: SourceControlService, repo_id: str) -> None:
-        self.sc = source_control
+        self.sc = _AsNexus(source_control)
         self.repo_id = repo_id
 
     def list_projects(self, workspace_id: str) -> list[tuple[str, str]]:

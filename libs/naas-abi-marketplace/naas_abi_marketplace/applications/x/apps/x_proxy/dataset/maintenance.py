@@ -21,6 +21,7 @@ from datetime import timedelta
 from typing import Any
 
 from naas_abi_core import logger
+from naas_abi_core.services.dataset.CatalogMaintenance import catalog_maintenance
 from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.store import (
     TABLE_PRIMARY_KEYS,
     X_DATASET_NAMESPACE,
@@ -95,8 +96,29 @@ def compact_x_datasets(
     snapshot_retention: timedelta = DEFAULT_SNAPSHOT_RETENTION,
     delete_threshold: float = DEFAULT_DELETE_THRESHOLD,
 ) -> dict[str, Any]:
-    """Compact the X tables and expire old snapshots; returns what it did."""
+    """Compact the X tables and expire old snapshots; returns what it did.
+
+    Each dataset call runs as the engine: ``CALL ducklake_*`` is SQL only the
+    engine may run (``QueryUnchecked``), and the tables are the module's own
+    storage.
+    """
+    return _compact_x_datasets(
+        dataset,
+        tables=tables,
+        snapshot_retention=snapshot_retention,
+        delete_threshold=delete_threshold,
+    )
+
+
+def _compact_x_datasets(
+    dataset,
+    *,
+    tables: tuple[str, ...],
+    snapshot_retention: timedelta,
+    delete_threshold: float,
+) -> dict[str, Any]:
     ensure_x_datasets(dataset)
+    dataset = catalog_maintenance(dataset)
     report: dict[str, Any] = {"files": {}}
     for table in tables:
         _compact_table(dataset, table, report, delete_threshold=delete_threshold)

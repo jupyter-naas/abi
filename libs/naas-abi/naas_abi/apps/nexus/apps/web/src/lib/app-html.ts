@@ -31,21 +31,6 @@ function toAppHtmlPath(url: string): string | null {
 }
 
 /**
- * Path lock for scoped ``app-html`` JWTs, e.g. ``/app-html/report/counter_uas/``.
- */
-export function appHtmlPathPrefix(url: string): string | null {
-  const path = toAppHtmlPath(url);
-  if (!path) return null;
-  const pathname = path.split('?')[0].split('#')[0];
-  const parts = pathname.split('/').filter(Boolean);
-  // app-html / <module> / <app> / …
-  if (parts.length < 3 || parts[0] !== 'app-html') {
-    return '/app-html/';
-  }
-  return `/${parts[0]}/${parts[1]}/${parts[2]}/`;
-}
-
-/**
  * A remote module's app (``/app-html/remote/<module>/<app>/<rest>``). It never
  * loads from this origin: the page asks the API for a grant
  * (POST /apps/remote-grant) and frames ``<apiBase>/app-remote/<grant>/…``,

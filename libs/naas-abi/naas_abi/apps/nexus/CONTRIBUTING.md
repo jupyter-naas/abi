@@ -50,7 +50,7 @@ make up
 
 Visit http://localhost:3000 and login with:
 - Email: `admin@example.com`
-- Password: the value of `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD` in `.env` (generated; there is no default)
+- Code: the 6-digit sign-in code the identity provider emails to that address (there is no password; in `abi dev`, `abi dev code` prints it)
 
 ## Development Setup
 

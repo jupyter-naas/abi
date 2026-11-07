@@ -59,7 +59,7 @@ import { SuggestionsBlock } from './suggestions-block';
 import { slidesEmptyStateCopy } from './slides-empty-state';
 import { templateDisplayName } from '@/lib/slides-templates';
 import { dispatchCodeFileUpdated, useCodeStore } from '@/stores/code';
-import { useAuthStore, authFetch } from '@/stores/auth';
+import { useAuthStore, authFetch, authCredentials, getAuthHeader } from '@/stores/auth';
 import { useWebSocket } from '@/contexts/websocket-context';
 import { useTenant } from '@/contexts/tenant-context';
 import { ChatAgentSelector } from '@/app/workspace/[workspaceId]/chat/components/chat-agent-selector';
@@ -67,7 +67,7 @@ import '@/app/workspace/[workspaceId]/chat/components/chat-agent-selector.css';
 import { TypingIndicator } from '@/components/typing-indicator';
 import { PdfViewer } from '@/components/files/pdf-viewer';
 
-import { humanizeChatProviderError } from '@/lib/chat-provider-error';
+import { chatFailureText, chatResponseError, humanizeChatProviderError } from '@/lib/chat-provider-error';
 import {
   buildContextUsage,
   parseStreamTokenUsage,
@@ -813,8 +813,8 @@ export function ChatInterface({
     if (useWorkspaceStore.getState().agentExplicitlySelected) return;
     const agents = useAgentsStore.getState().agents;
     const defaultAgent =
-      agents.find((a) => a.isDefault && a.enabled) ??
-      agents.find((a) => a.enabled);
+      agents.find((a) => a.isDefault) ??
+      agents[0];
     if (defaultAgent) setSelectedAgent(defaultAgent.id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialConversationId, isPane]);
@@ -954,7 +954,7 @@ export function ChatInterface({
     if (!isPane) return;
     const surface = officeSurfaceFromPath(pathname);
     if (!surface.onDocuments && !surface.onSlides && !surface.onSheets) return;
-    const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
+    const agents = useAgentsStore.getState().agents;
     const picked = pickPaneOfficeAgent(agents, surface);
     if (picked && useWorkspaceStore.getState().paneAgent !== picked.id) {
       useWorkspaceStore.getState().setPaneAgent(picked.id);
@@ -1257,7 +1257,6 @@ export function ChatInterface({
     jobId: string,
     filename: string,
     conversationId: string,
-    token: string | null,
   ): Promise<void> => {
     const abortController = new AbortController();
     ingestionAbortRefs.current.set(jobId, abortController);
@@ -1282,7 +1281,7 @@ export function ChatInterface({
           statusResponse = await fetch(
             `${getApiBase()}/api/chat/ingestion-jobs/${jobId}`,
             {
-              headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+              credentials: authCredentials(),
               signal: abortController.signal,
             },
           );
@@ -1342,7 +1341,6 @@ export function ChatInterface({
       conversationId = createSurfaceConversation();
     }
 
-    const token = useAuthStore.getState().token;
     const formData = new FormData();
     formData.append('file', file);
     if (currentWorkspaceId) formData.append('workspace_id', currentWorkspaceId);
@@ -1351,7 +1349,8 @@ export function ChatInterface({
       `${getApiBase()}/api/chat/conversations/${conversationId}/files/upload`,
       {
         method: 'POST',
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        headers: { ...getAuthHeader('POST') },
+        credentials: authCredentials(),
         body: formData,
       },
     );
@@ -1381,17 +1380,16 @@ export function ChatInterface({
       return next;
     });
 
-    await pollIngestionJob(result.job_id, file.name, conversationId, token);
+    await pollIngestionJob(result.job_id, file.name, conversationId);
     setPendingFileAttachments((prev) => [...prev, file.name]);
   };
 
   const fetchMyDriveFiles = async (path = '') => {
     setMyDriveLoading(true);
-    const token = useAuthStore.getState().token;
     try {
       const params = new URLSearchParams({ scope: 'my_drive', path });
       const res = await fetch(`${getApiBase()}/api/files/?${params}`, {
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        credentials: authCredentials(),
       });
       if (!res.ok) return;
       const data = await res.json();
@@ -1414,15 +1412,15 @@ export function ChatInterface({
     }
     setShowMyDrivePicker(false);
 
-    const token = useAuthStore.getState().token;
     const res = await fetch(
       `${getApiBase()}/api/chat/conversations/${conversationId}/files/ingest`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...getAuthHeader('POST'),
         },
+        credentials: authCredentials(),
         body: JSON.stringify({ source_path: sourcePath, workspace_id: currentWorkspaceId }),
       },
     );
@@ -1452,7 +1450,7 @@ export function ChatInterface({
       return next;
     });
 
-    await pollIngestionJob(result.job_id, filename, conversationId, token);
+    await pollIngestionJob(result.job_id, filename, conversationId);
     setPendingFileAttachments((prev) => [...prev, filename]);
   };
 
@@ -1846,7 +1844,7 @@ export function ChatInterface({
     // a real agent id. Route wins over a leftover Documents/Slides bind from
     // the other office surface.
     if (!effectiveAgent) {
-      const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
+      const agents = useAgentsStore.getState().agents;
       const resolved =
         officeSurface.onSlides || officeSurface.onDocuments || officeSurface.onSheets
           ? (pickPaneOfficeAgent(agents, officeSurface) ?? pickWorkspaceDefaultAgent(agents))
@@ -1866,7 +1864,7 @@ export function ChatInterface({
         }
       }
     } else if (officeSurface.onSheets) {
-      const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
+      const agents = useAgentsStore.getState().agents;
       const sheets = pickSheetsOfficeAgent(agents);
       if (sheets) {
         effectiveAgent = sheets.id;
@@ -1875,7 +1873,7 @@ export function ChatInterface({
         }
       }
     } else if (officeSurface.onSlides) {
-      const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
+      const agents = useAgentsStore.getState().agents;
       const slides = pickSlidesOfficeAgent(agents);
       if (slides) {
         effectiveAgent = slides.id;
@@ -1884,7 +1882,7 @@ export function ChatInterface({
         }
       }
     } else if (officeSurface.onDocuments) {
-      const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
+      const agents = useAgentsStore.getState().agents;
       const documents = pickDocumentsOfficeAgent(agents);
       if (documents) {
         effectiveAgent = documents.id;
@@ -2048,7 +2046,6 @@ export function ChatInterface({
     try {
       // Get provider for current agent
       const provider = getProviderForAgent(effectiveAgent);
-      const token = useAuthStore.getState().token;
       const workspaceId = useWorkspaceStore.getState().currentWorkspaceId;
 
       const agentDataForModel = getAgent(effectiveAgent);
@@ -2451,8 +2448,9 @@ export function ChatInterface({
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            ...getAuthHeader('POST'),
           },
+          credentials: authCredentials(),
           signal: controller.signal,
           body: JSON.stringify({
             conversation_id: conversationId,
@@ -2472,14 +2470,14 @@ export function ChatInterface({
         });
 
         if (!response.ok) {
-          // Auto-logout on 401 (invalid/expired token)
+          // Auto-logout on 401 (the session ended)
           if (response.status === 401) {
-            console.warn('Auth token expired, logging out...');
+            console.warn('Session ended, logging out...');
             useAuthStore.getState().logout();
             window.location.href = '/auth/login';
             return;
           }
-          throw new Error(`API error: ${response.status}`);
+          throw await chatResponseError(response);
         }
 
         const reader = response.body?.getReader();
@@ -2699,8 +2697,9 @@ export function ChatInterface({
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            ...getAuthHeader('POST'),
           },
+          credentials: authCredentials(),
           body: JSON.stringify({
             conversation_id: conversationId,
             workspace_id: workspaceId,
@@ -2717,7 +2716,7 @@ export function ChatInterface({
         });
 
         if (!response.ok) {
-          throw new Error(`API error: ${response.status}`);
+          throw await chatResponseError(response);
         }
 
         const data = await response.json();
@@ -2815,11 +2814,11 @@ export function ChatInterface({
         (error as { name?: string } | null)?.name === 'AbortError' || stopRequestedRef.current;
       if (conversationId && !wasAborted) {
           if (isStreaming) {
-            updateLastMessage(conversationId, `❌ Error: ${errorMessage}\n\nPlease try again or check your provider settings.`);
+            updateLastMessage(conversationId, chatFailureText(errorMessage));
           } else {
             addMessage(conversationId, {
               role: 'assistant',
-              content: `❌ Error: ${errorMessage}\n\nPlease try again or check your provider settings.`,
+              content: chatFailureText(errorMessage),
               agent: effectiveAgent,
             });
           }

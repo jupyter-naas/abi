@@ -21,6 +21,7 @@ _FRAMEWORK_PACKAGES = {
     "naas-abi-cli",
     "naas-abi-proto",
     "naas-abi-sdk",
+    "naas-abi-idp",
 }
 
 
@@ -150,6 +151,7 @@ def test_the_submodule_comes_from_github_by_default(tmp_path, monkeypatch) -> No
 # (submodule clone, `uv add`, `abi config validate`) stubbed out.
 # =============================================================================
 
+
 def _run_new_project(tmp_path, monkeypatch, *extra_args, submodule_ok: bool):
     import tomllib
 
@@ -169,8 +171,14 @@ def _run_new_project(tmp_path, monkeypatch, *extra_args, submodule_ok: bool):
 
     result = CliRunner().invoke(
         project.new_project,
-        ["demo", str(tmp_path), "--domain", "localhost",
-         "--without-local-deploy", *extra_args],
+        [
+            "demo",
+            str(tmp_path),
+            "--domain",
+            "localhost",
+            "--without-local-deploy",
+            *extra_args,
+        ],
     )
     assert result.exit_code == 0, result.output
 
@@ -199,8 +207,14 @@ def _invoke_new_project(tmp_path, monkeypatch, *extra_args, commands=None):
 
     return CliRunner().invoke(
         project.new_project,
-        ["demo", str(tmp_path), "--domain", "localhost", "--without-local-deploy",
-         *extra_args],
+        [
+            "demo",
+            str(tmp_path),
+            "--domain",
+            "localhost",
+            "--without-local-deploy",
+            *extra_args,
+        ],
     )
 
 
@@ -249,6 +263,7 @@ def test_new_project_without_the_submodule_flag_uses_pypi(
 # where the caller stands.
 # =============================================================================
 
+
 def test_next_steps_report_the_project_path_and_how_to_start(
     tmp_path, monkeypatch
 ) -> None:
@@ -288,21 +303,16 @@ def test_cd_target_is_quoted_when_the_path_has_spaces(tmp_path, monkeypatch) -> 
     assert project._cd_argument(str(tmp_path / "my demo")) == "'my demo'"
 
 
-
-def test_new_project_generates_the_admin_password_in_env(tmp_path, monkeypatch) -> None:
+def test_new_project_makes_no_admin_password(tmp_path, monkeypatch) -> None:
     result = _invoke_new_project(tmp_path, monkeypatch)
     assert result.exit_code == 0, result.output
 
     env = (tmp_path / "demo" / ".env").read_text(encoding="utf-8")
-    password = next(
-        line.split("=", 1)[1]
-        for line in env.splitlines()
-        if line.startswith("NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD=")
-    )
-    assert len(password) >= 24
-    assert password not in ("admin", "Admin1234!")
+    assert "NEXUS_USER_" not in env
+    # The admin signs in at the identity provider, with a code mailed to it.
     assert "admin@example.com" in result.output
-    assert "NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD" in result.output
+    assert "abi dev code" in result.output
+    assert "password" not in result.output.lower()
 
 
 def test_new_project_keeps_secrets_out_of_git_and_out_of_the_image(
@@ -327,9 +337,12 @@ def test_new_project_keeps_secrets_out_of_git_and_out_of_the_image(
 # NATS is the default; --without-nats keeps the classic in-process project.
 # =============================================================================
 
+
 def _env(tmp_path) -> dict[str, str]:
     lines = (tmp_path / "demo" / ".env").read_text(encoding="utf-8").splitlines()
-    return dict(line.split("=", 1) for line in lines if "=" in line and not line.startswith("#"))
+    return dict(
+        line.split("=", 1) for line in lines if "=" in line and not line.startswith("#")
+    )
 
 
 def _config(tmp_path, name: str = "config.yaml") -> str:
@@ -348,9 +361,20 @@ def test_new_project_runs_on_nats_by_default(tmp_path, monkeypatch) -> None:
     for name in ("config.yaml", "config.local.yaml", "config.remote.yaml"):
         assert "\nnats:\n" in _config(tmp_path, name), name
     env = _env(tmp_path)
-    assert len(env["NATS_JWT_SECRET"]) >= 32
-    assert env["NATS_ABI_PASSWORD"] and env["NATS_MODULE_PASSWORD"]
+    assert "NATS_JWT_SECRET" not in env
+    assert env["NATS_ENGINE_PASSWORD"] and env["NATS_AUTH_PASSWORD"]
+    assert env["NATS_AUTH_CALLOUT_SEED"].startswith("SA")
     assert "naas-abi-sdk[agent]" in _uv_add(commands)
+    # The built-in identity provider `abi dev up` runs, and its client's secret.
+    assert "naas-abi-idp" in _uv_add(commands)
+    assert len(env["ABI_IDP_CLIENT_SECRET"]) >= 24
+    # The IdP mails its sign-in code: with no mail server in dev it is a file.
+    import yaml
+
+    email = yaml.safe_load(_config(tmp_path).replace("{% raw %}", ""))["services"][
+        "email"
+    ]
+    assert email["email_adapter"]["adapter"] == "filesystem"
     # No legacy extras: Dagster and RabbitMQ are not installed.
     assert "naas-abi-core[all]" in _uv_add(commands)
     assert "nats-server" in result.output
@@ -372,8 +396,10 @@ def test_new_project_without_nats_is_the_classic_project(tmp_path, monkeypatch) 
     for name in ("config.yaml", "config.local.yaml", "config.remote.yaml"):
         assert "\nnats:" not in _config(tmp_path, name), name
     assert 'adapter: "python_queue"' in _config(tmp_path)
-    assert "NATS_JWT_SECRET" not in _env(tmp_path)
+    assert "NATS_AUTH_CALLOUT_SEED" not in _env(tmp_path)
+    assert "ABI_IDP_CLIENT_SECRET" not in _env(tmp_path)
     assert not any("naas-abi-sdk" in arg for arg in _uv_add(commands))
+    assert not any("naas-abi-idp" in arg for arg in _uv_add(commands))
     assert "nats-server" not in result.output
     # The legacy extras its Dagster and RabbitMQ setup runs on.
     assert "naas-abi-core[all,dagster,rabbitmq]" in _uv_add(commands)

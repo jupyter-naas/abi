@@ -1,6 +1,6 @@
 """
-Rate Limiting Middleware
-Protects auth endpoints from brute force attacks.
+Rate limiting: the token exchange, and the invitation routes (per inviting user and
+per address), against abuse.
 """
 
 from datetime import datetime, timedelta
@@ -69,7 +69,7 @@ async def check_rate_limit(identifier: str, endpoint: str, limit: int | None = N
     use ``ensure_under_limit`` then ``record_attempt`` on failure.
     """
     await ensure_under_limit(
-        identifier, endpoint, settings.rate_limit_login_attempts if limit is None else limit
+        identifier, endpoint, settings.rate_limit_attempts if limit is None else limit
     )
     await record_attempt(identifier, endpoint)
 
@@ -84,6 +84,7 @@ async def cleanup_old_rate_limit_events() -> None:
             text("DELETE FROM rate_limit_events WHERE created_at < :cutoff"),
             {"cutoff": cutoff},
         )
+
 
 def get_rate_limit_identifier(request: Request, user_id: str | None = None) -> str:
     """Get the identifier for rate limiting (user_id if authenticated, otherwise IP)."""

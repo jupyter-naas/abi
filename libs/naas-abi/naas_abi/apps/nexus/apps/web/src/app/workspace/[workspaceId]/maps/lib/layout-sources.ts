@@ -1,5 +1,5 @@
 import { getApiUrl } from '@/lib/config';
-import { useAuthStore } from '@/stores/auth';
+import { getAuthHeader, hasSession } from '@/stores/auth';
 import { fetchFeed as aisPins } from '../components/maps-ais';
 import { fetchPins as conflictPins } from '../components/maps-conflict';
 import { fetchPins as earthquakePins } from '../components/maps-earthquakes';
@@ -48,9 +48,8 @@ const BUILTIN_FETCHERS: Record<string, Fetcher> = {
 };
 
 function authHeader(): HeadersInit {
-  const token = useAuthStore.getState().token;
-  if (!token) throw new Error('Not authenticated');
-  return { Authorization: `Bearer ${token}` };
+  if (!hasSession()) throw new Error('Not authenticated');
+  return getAuthHeader();
 }
 
 export function layoutPinSource(

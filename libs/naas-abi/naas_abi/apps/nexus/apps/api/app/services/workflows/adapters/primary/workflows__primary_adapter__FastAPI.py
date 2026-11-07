@@ -1,4 +1,5 @@
-"""Workflows over HTTP: /api/workflows. Super admins, or scripts with ``ABI_API_KEY``.
+"""Workflows over HTTP: /api/workflows. Platform admins, signed in or with their
+personal API key (``abi_pk_``).
 
 - ``GET ""``: the workflows with their input and output schemas and triggers.
 - ``POST /{module_id}/{name}/runs``: the body is the input, checked against the
@@ -8,8 +9,15 @@
 - ``GET /{module_id}/runs/{run_id}``: status, result, error and steps.
 - ``POST /{module_id}/runs/{run_id}/cancel``: cooperative; cancels its children too.
 
-Every start and cancel is audited before it happens, with how the caller
-authenticated; if the audit record cannot be written nothing is started.
+Every start and cancel is audited before it happens, with the user and how they
+signed in; if the audit record cannot be written nothing is started.
+
+``workspace_router`` (/api/workspaces/{workspace_id}/workflows) is the same for
+any user of the workspace, by module scope (``scopes.py``): the workflows and
+pipelines they may start there (IAM alone decides: no set, no on/off switch), a
+start, and the runs they started there. Its ``/settings`` are the workspace
+settings page: the workflows and pipelines the caller may run there, those an
+engine module's agents run as tools included.
 """
 
 from __future__ import annotations
@@ -17,11 +25,18 @@ from __future__ import annotations
 from collections.abc import Awaitable
 from typing import Any, TypeVar
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Response
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, Response
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
-    PlatformCaller,
-    require_superadmin_or_api_key,
+    get_current_user_required,
+    require_superadmin,
 )
+from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__schemas import (
+    User,
+)
+from naas_abi.apps.nexus.apps.api.app.services.auth.credentials import API_KEY
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.adapters.primary.sysadmin__primary_adapter__jobs import (
     definition_view,
     invalid_input,
@@ -36,7 +51,13 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.jobs import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.port import SourceUnavailable
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import AuditUnavailable
+from naas_abi.apps.nexus.apps.api.app.services.view_as.active import viewing
 from naas_abi.apps.nexus.apps.api.app.services.workflows.factory import get_workflows_service
+from naas_abi.apps.nexus.apps.api.app.services.workflows.port import RunOwner
+from naas_abi.apps.nexus.apps.api.app.services.workflows.scopes import (
+    runs_action,
+    workflow_scope,
+)
 from naas_abi.apps.nexus.apps.api.app.services.workflows.service import WorkflowsService
 from naas_abi.apps.nexus.apps.api.app.services.workflows.workflows import (
     MAX_WAIT_SECONDS,
@@ -47,7 +68,7 @@ from naas_abi.apps.nexus.apps.api.app.services.workflows.workflows import (
 
 T = TypeVar("T")
 
-router = APIRouter(dependencies=[Depends(require_superadmin_or_api_key)])
+router = APIRouter(dependencies=[Depends(require_superadmin)])
 
 
 def _error(status: int, source: str, reason: str) -> HTTPException:
@@ -71,8 +92,10 @@ async def _call(call: Awaitable[T]) -> T:
         raise _error(503, exc.source, exc.reason) from exc
 
 
-def _caller(platform: PlatformCaller) -> Caller:
-    return Caller(platform.via, platform.user_id)
+def _caller(request: Request, user: User) -> Caller:
+    credential = getattr(request.state, "nexus_credential", None)
+    via = "api_key" if getattr(credential, "kind", None) == API_KEY else "user"
+    return Caller(via, user.id)
 
 
 # What a client reads of the run record (an allow-list: a field added to the Jobs tab's
@@ -134,6 +157,7 @@ def _spec(trigger: Any) -> dict[str, Any]:
 async def start_run(
     module_id: str,
     name: str,
+    request: Request,
     response: Response,
     body: dict[str, Any] = Body(default_factory=dict),
     wait: float | None = Query(
@@ -143,12 +167,17 @@ async def start_run(
         description="Seconds to wait for the result; 200 with it if the run ends in time, else 202",
     ),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
-    caller: PlatformCaller = Depends(require_superadmin_or_api_key),
+    user: User = Depends(require_superadmin),
     service: WorkflowsService = Depends(get_workflows_service),
 ) -> Any:
     started = await _call(
         service.start(
-            _caller(caller), module_id, name, body, wait=wait, idempotency_key=idempotency_key
+            _caller(request, user),
+            module_id,
+            name,
+            body,
+            wait=wait,
+            idempotency_key=idempotency_key,
         )
     )
     response.status_code = 200 if started.view.finished else 202
@@ -168,8 +197,185 @@ async def get_run(
 async def cancel_run(
     module_id: str,
     run_id: str,
-    caller: PlatformCaller = Depends(require_superadmin_or_api_key),
+    request: Request,
+    user: User = Depends(require_superadmin),
     service: WorkflowsService = Depends(get_workflows_service),
 ) -> Any:
-    await _call(service.cancel(_caller(caller), module_id, run_id))
+    await _call(service.cancel(_caller(request, user), module_id, run_id))
     return {"ok": True}
+
+
+# -- in a workspace, by module scope --------------------------------------------------
+
+workspace_router = APIRouter(
+    dependencies=[Depends(get_current_user_required), guard("GetWorkspace")]
+)
+
+
+@workspace_router.get(
+    "", dependencies=[declares("module:RunWorkflow"), declares("module:RunPipeline")]
+)
+async def list_workspace_workflows(
+    workspace_id: str,
+    user: User = Depends(get_current_user_required),
+    service: WorkflowsService = Depends(get_workflows_service),
+) -> Any:
+    """The workflows and pipelines the caller may start there: IAM's decision
+    (``module:RunWorkflow`` / ``RunPipeline``) alone."""
+    found = await _call(service.list())
+    usable = await authz.filter_scopes(
+        found.workflows,
+        user=user,
+        workspace=workspace_id,
+        scope_of=lambda d: workflow_scope(d.module_id, d.name),
+    )
+    return {
+        "workflows": [
+            {
+                **definition_view(d),
+                "type": workflow_scope(d.module_id, d.name).type,
+                "triggers": [_spec(t) for t in d.triggers],
+            }
+            for d in usable
+        ],
+        "sources": {
+            name: {"available": s.available, "reason": s.reason}
+            for name, s in found.sources.items()
+        },
+    }
+
+
+@workspace_router.get("/settings", dependencies=[guard("ListWorkflowSettings", literal="-")])
+async def list_workflow_settings(
+    workspace_id: str,
+    user: User = Depends(get_current_user_required),
+    service: WorkflowsService = Depends(get_workflows_service),
+) -> Any:
+    """The workflows and pipelines the caller may run in the workspace (the jobs
+    catalogs', and those an engine module's agents run as tools), as Workspace
+    settings › Workflows lists them. IAM alone decides, as everywhere: there is
+    no on/off switch."""
+    from naas_abi.apps.nexus.apps.api.app.services.modules.scopes import (
+        workflows as module_workflows,
+    )
+
+    listed = await authz.filter_scopes(
+        await module_workflows(service),
+        user=user,
+        workspace=workspace_id,
+        scope_of=_scope,
+    )
+    return {
+        "workflows": [
+            {
+                "type": i.type,
+                "module_id": i.module,
+                "name": i.name,
+                "display_name": i.display_name or i.name,
+                "description": i.description,
+            }
+            for i in sorted(listed, key=lambda i: (i.module, i.type, i.name.lower()))
+        ]
+    }
+
+
+def _scope(item: Any) -> ModuleScope:
+    return ModuleScope(item.type, item.module, item.name)
+
+
+@workspace_router.post(
+    "/{module_id}/{name}/runs",
+    dependencies=[declares("module:RunWorkflow"), declares("module:RunPipeline")],
+)
+async def start_workspace_run(
+    workspace_id: str,
+    module_id: str,
+    name: str,
+    request: Request,
+    response: Response,
+    body: dict[str, Any] = Body(default_factory=dict),
+    wait: float | None = Query(None, ge=0, le=MAX_WAIT_SECONDS),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    user: User = Depends(get_current_user_required),
+    service: WorkflowsService = Depends(get_workflows_service),
+) -> Any:
+    """Start a run in the workspace, for the caller (``module:RunWorkflow`` or
+    ``RunPipeline`` there). The run is the caller's: they read it here."""
+    await authz.require_scope(workflow_scope(module_id, name), user=user, workspace=workspace_id)
+    started = await _call(
+        service.start_in(
+            _caller(request, user),
+            workspace_id,
+            module_id,
+            name,
+            body,
+            wait=wait,
+            idempotency_key=idempotency_key,
+        )
+    )
+    response.status_code = 200 if started.view.finished else 202
+    return run_view(started.view)
+
+
+def _own_run_view(owner: RunOwner) -> dict[str, Any]:
+    return {
+        "module_id": owner.module_id,
+        "workflow": owner.workflow,
+        "type": workflow_scope(owner.module_id, owner.workflow).type,
+        "run_id": owner.run_id,
+        "started_at": owner.started_at.isoformat(),
+    }
+
+
+@workspace_router.get(
+    "/runs",
+    dependencies=[declares("module:ReadWorkflowRuns"), declares("module:ReadPipelineRuns")],
+)
+async def list_own_runs(
+    workspace_id: str,
+    user: User = Depends(get_current_user_required),
+    service: WorkflowsService = Depends(get_workflows_service),
+) -> Any:
+    """The runs the caller started in the workspace, of the workflows and
+    pipelines whose runs they may still read there. In a view: none, the person's runs are
+    private to them."""
+    if viewing():
+        return {"runs": []}
+    # Workflows' runs and pipelines' runs are read with different actions.
+    by_action: dict[str, list[RunOwner]] = {}
+    for owner in await _call(service.own_runs(user.id, workspace_id)):
+        by_action.setdefault(
+            runs_action(workflow_scope(owner.module_id, owner.workflow)), []
+        ).append(owner)
+    readable: list[RunOwner] = []
+    for action, owners in by_action.items():
+        readable += await authz.filter_scopes(
+            owners,
+            user=user,
+            workspace=workspace_id,
+            scope_of=lambda o: workflow_scope(o.module_id, o.workflow),
+            action=action,
+        )
+    readable.sort(key=lambda o: o.started_at, reverse=True)
+    return {"runs": [_own_run_view(o) for o in readable]}
+
+
+@workspace_router.get(
+    "/{module_id}/runs/{run_id}",
+    dependencies=[declares("module:ReadWorkflowRuns"), declares("module:ReadPipelineRuns")],
+)
+async def get_own_run(
+    workspace_id: str,
+    module_id: str,
+    run_id: str,
+    user: User = Depends(get_current_user_required),
+    service: WorkflowsService = Depends(get_workflows_service),
+) -> Any:
+    """A run the caller started in the workspace: status, result, error, steps. In a view it is
+    the person's, and private to them: never found."""
+    if viewing():
+        raise _error(404, "workflows", "run not found")
+    owner, view = await _call(service.own_run(user.id, workspace_id, module_id, run_id))
+    scope = workflow_scope(owner.module_id, owner.workflow)
+    await authz.require_scope(scope, user=user, workspace=workspace_id, action=runs_action(scope))
+    return run_view(view)

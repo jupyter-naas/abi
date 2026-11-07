@@ -1,8 +1,9 @@
 """Platform admin endpoints.
 
 Surfaces capabilities scoped to platform superadmins (users with the
-``is_superadmin`` flag), independent of workspace membership. The flag is
-managed with ``PATCH /api/admin/users/{id}``; config ``users:`` only bootstraps operators.
+``is_superadmin`` flag), independent of workspace membership. The accounts
+(``/api/admin/users``: the directory, invitations, superadmin, deactivation,
+deletion) are ``services/accounts``; config ``users:`` only bootstraps operators.
 """
 
 from __future__ import annotations
@@ -11,7 +12,6 @@ import asyncio
 import json
 import logging
 import os
-from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
 
@@ -26,26 +26,13 @@ from naas_abi.apps.nexus.apps.api.app.core.platform_tables import (
     read_platform_table_schema,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
-    get_auth_service,
     get_current_user_required,
     require_superadmin,
+    with_platform_role,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__schemas import (
     User,
 )
-from naas_abi.apps.nexus.apps.api.app.services.auth.port import AuthUserRecord
-from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
-    AuthService,
-    SuperadminChangeError,
-    UserNotFoundError,
-)
-from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
-    OrganizationSecondaryAdapterPostgres,
-)
-from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
-    UserOrganizationMembershipRecord,
-)
-from naas_abi.apps.nexus.apps.api.app.services.organizations.service import OrganizationService
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -87,7 +74,7 @@ async def admin_me(
     """Lightweight check the frontend can call to decide whether to show
     platform-admin surfaces (event stream, etc.). Does not 403 — returns
     a boolean so non-admin clients can simply hide the UI."""
-    return AdminMeResponse(is_superadmin=bool(current_user.is_superadmin))
+    return AdminMeResponse(is_superadmin=(await with_platform_role(current_user)).is_superadmin)
 
 
 class ConfiguredService(BaseModel):
@@ -110,100 +97,10 @@ async def admin_services(_: User = Depends(require_superadmin)) -> list[Configur
     return [ConfiguredService(**service) for service in configured_services(services)]
 
 
-class AdminUserOrganization(BaseModel):
-    id: str
-    name: str
-    role: str
-
-
-class AdminUser(BaseModel):
-    id: str
-    email: str
-    name: str
-    avatar: str | None = None
-    is_superadmin: bool
-    created_at: datetime
-    organizations: list[AdminUserOrganization] = Field(default_factory=list)
-
-
-class AdminUserUpdate(BaseModel):
-    is_superadmin: bool
-
-
-_SUPERADMIN_CHANGE_DETAIL = {
-    "cannot_demote_self": "You cannot remove your own superadmin access",
-    "last_superadmin": "The platform needs at least one superadmin",
-}
-
-
-def get_organization_service(db: AsyncSession = Depends(get_db)) -> OrganizationService:
-    return OrganizationService(adapter=OrganizationSecondaryAdapterPostgres(db=db))
-
-
-def _admin_user(
-    record: AuthUserRecord, memberships: list[UserOrganizationMembershipRecord] | None = None
-) -> AdminUser:
-    return AdminUser(
-        id=record.id,
-        email=record.email,
-        name=record.name,
-        avatar=record.avatar,
-        is_superadmin=record.is_superadmin,
-        created_at=record.created_at,
-        organizations=[
-            AdminUserOrganization(id=m.organization_id, name=m.organization_name, role=m.role)
-            for m in memberships or []
-        ],
-    )
-
-
-async def _memberships_by_user(
-    organization_service: OrganizationService,
-) -> dict[str, list[UserOrganizationMembershipRecord]]:
-    by_user: dict[str, list[UserOrganizationMembershipRecord]] = {}
-    for membership in await organization_service.list_all_memberships():
-        by_user.setdefault(membership.user_id, []).append(membership)
-    return by_user
-
-
-@router.get("/users", response_model=list[AdminUser])
-async def admin_list_users(
-    _: User = Depends(require_superadmin),
-    auth_service: AuthService = Depends(get_auth_service),
-    organization_service: OrganizationService = Depends(get_organization_service),
-) -> list[AdminUser]:
-    """Every platform account with its organizations."""
-    by_user = await _memberships_by_user(organization_service)
-    return [
-        _admin_user(record, by_user.get(record.id)) for record in await auth_service.list_users()
-    ]
-
-
-@router.patch("/users/{user_id}", response_model=AdminUser)
-async def admin_update_user(
-    user_id: str,
-    body: AdminUserUpdate,
-    current_user: User = Depends(require_superadmin),
-    auth_service: AuthService = Depends(get_auth_service),
-    organization_service: OrganizationService = Depends(get_organization_service),
-) -> AdminUser:
-    """Promote or demote a platform superadmin."""
-    try:
-        record = await auth_service.set_superadmin(
-            actor_id=current_user.id, user_id=user_id, is_superadmin=body.is_superadmin
-        )
-    except UserNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="User not found") from exc
-    except SuperadminChangeError as exc:
-        raise HTTPException(
-            status_code=400, detail=_SUPERADMIN_CHANGE_DETAIL.get(exc.reason, exc.reason)
-        ) from exc
-    by_user = await _memberships_by_user(organization_service)
-    return _admin_user(record, by_user.get(record.id))
-
-
 class AdminTableSummary(BaseModel):
     name: str
+    label: str
+    section: str
     description: str
     rows: int | None = None
     columns: int | None = None
@@ -227,6 +124,7 @@ class AdminTableSchema(BaseModel):
 
 class AdminTable(BaseModel):
     name: str
+    label: str
     description: str
     columns: list[str]
     rows: list[dict[str, Any]]
@@ -237,6 +135,7 @@ class AdminTable(BaseModel):
 
 class AdminTableRow(BaseModel):
     name: str
+    label: str
     description: str
     id: str
     primary_key: list[str]
@@ -249,7 +148,8 @@ async def admin_list_tables(
     _: User = Depends(require_superadmin),
     db: AsyncSession = Depends(get_db),
 ) -> list[AdminTableSummary]:
-    """People & access tables for the Platform Settings dashboard, with row and column counts."""
+    """Every registered table, in section order, with its label, section, row and column
+    counts: the Nexus tables page and the export read this list, never a copy of it."""
     return [AdminTableSummary(**s.__dict__) for s in await list_platform_tables(db)]
 
 
@@ -294,7 +194,7 @@ async def admin_read_table(
     _: User = Depends(require_superadmin),
     db: AsyncSession = Depends(get_db),
 ) -> AdminTable:
-    """Every column and row of one people & access table (secrets masked)."""
+    """Every column and row of one registered table (secrets masked)."""
     try:
         table = await read_platform_table(db, name)
     except UnknownPlatformTableError as exc:

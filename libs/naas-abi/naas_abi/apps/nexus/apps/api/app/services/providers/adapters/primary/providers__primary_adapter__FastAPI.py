@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user_required
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import guard
 from naas_abi.apps.nexus.apps.api.app.services.providers.adapters.primary.providers__primary_adapter__schemas import (  # noqa: E501
     Model,
     ModelUpdate,
@@ -16,6 +17,7 @@ from naas_abi.apps.nexus.apps.api.app.services.providers.adapters.secondary.prov
 from naas_abi.apps.nexus.apps.api.app.services.providers.service import ProviderService
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# The catalog is the platform's, not a workspace's: no ``workspace_id`` here.
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
 
@@ -24,7 +26,10 @@ def get_provider_service(db: AsyncSession = Depends(get_db)) -> ProviderService:
     return ProviderService(store=ModelCatalogSecondaryAdapterPostgres(db))
 
 
-@router.get("/available")
+@router.get(
+    "/available",
+    dependencies=[guard("ListProviderModels", workspace=None, literal="-")],
+)
 async def list_available_providers(
     service: ProviderService = Depends(get_provider_service),
 ) -> list[Provider]:
@@ -32,7 +37,10 @@ async def list_available_providers(
     return [to_provider_schema(provider) for provider in providers]
 
 
-@router.get("/models")
+@router.get(
+    "/models",
+    dependencies=[guard("ListProviderModels", workspace=None, literal="-")],
+)
 async def list_models(
     service: ProviderService = Depends(get_provider_service),
 ) -> list[Model]:
@@ -40,7 +48,10 @@ async def list_models(
     return [to_model_schema(model) for model in models]
 
 
-@router.get("/models/{model_id:path}")
+@router.get(
+    "/models/{model_id:path}",
+    dependencies=[guard("GetProviderModel", workspace=None, id="model_id")],
+)
 async def get_model(
     model_id: str,
     service: ProviderService = Depends(get_provider_service),
@@ -51,7 +62,10 @@ async def get_model(
     return to_model_schema(model)
 
 
-@router.patch("/models/{model_id:path}")
+@router.patch(
+    "/models/{model_id:path}",
+    dependencies=[guard("UpdateProviderModel", workspace=None, id="model_id")],
+)
 async def update_model(
     model_id: str,
     body: ModelUpdate,

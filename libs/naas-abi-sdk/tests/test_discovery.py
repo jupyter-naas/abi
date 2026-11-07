@@ -290,3 +290,47 @@ def test_rollout_is_registered_and_draining_wakes_the_runner():
 def test_rollout_configuration_rejects_a_cohort_without_an_id():
     with pytest.raises(ValueError, match="rollout id"):
         DiscoveryConfiguration(rollout_modules=("a",))
+
+
+def test_a_job_trigger_runs_with_the_delegation_stored_for_its_user():
+    import base64
+    import json
+    import time
+    from types import SimpleNamespace
+
+    from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
+
+    from naas_abi_sdk.call_context import user
+    from naas_abi_sdk.discovery import discovery_job_authorizer
+    from naas_abi_sdk.jobs import DELEGATION_HEADER
+
+    own = "01J8Z3K5M7N9P2Q4R6S8T0V2WX"
+
+    def token(sub="bob", act=f"sa_{own}"):
+        claims = {"sub": sub, "aud": "abi:delegated:agent", "exp": time.time() + 600}
+        claims["act"] = {"sub": act}
+        body = base64.urlsafe_b64encode(json.dumps(claims).encode()).rstrip(b"=")
+        return f"header.{body.decode()}.signature"
+
+    class Client:
+        async def _call(self, operation, request, response):
+            assert operation == "authorize_job"
+            return pb.AuthorizeJobResponse(caller_identity="bob")
+
+    session = SimpleNamespace(
+        client=Client(), instance_id="i", lease_token="t", service_account=own
+    )
+    authorize = discovery_job_authorizer(session)
+
+    def run_as(operation="trigger", **headers):
+        return asyncio.run(authorize(operation, "ingest", "ingest:7", headers, None))
+
+    stored = token()
+    context = run_as(**{DELEGATION_HEADER: stored})
+    assert context.principal.id == f"sa_{own}" and context.user == user("bob")
+    assert context.delegated_token == stored
+    # Not for the user discovery names, not for this module, or none: as itself.
+    assert run_as(**{DELEGATION_HEADER: token(sub="eve")}) is None
+    assert run_as(**{DELEGATION_HEADER: token(act="sa_other")}) is None
+    assert run_as() is None
+    assert run_as("cancel", **{DELEGATION_HEADER: token()}) is None

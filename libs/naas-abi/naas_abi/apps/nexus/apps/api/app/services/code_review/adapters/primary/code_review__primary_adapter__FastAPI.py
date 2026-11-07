@@ -5,8 +5,11 @@ branch, propose, review (inline comments + approvals), see checks, and merge —
 all inside Nexus, never leaving for GitHub/GitLab (the Foundry model).
 
 `repo_id` is the ``"owner/name"`` string and is passed as a query/body field
-(not a path segment) because it contains a slash. Every operation requires
-membership of the given Nexus ``workspace_id`` via ``require_workspace_access``.
+(not a path segment) because it contains a slash. Every route is behind the
+``code`` feature (``ReadCode`` to read, ``WriteCode`` to change anything) and
+the repository must belong to the request's workspace (a repository id from a
+request is never trusted on its own): the kernel then decides on the repository
+with the user's role, once it is placed in that workspace.
 The core service is synchronous, so calls run in a threadpool.
 """
 
@@ -17,8 +20,15 @@ from fastapi.concurrency import run_in_threadpool
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
-    require_workspace_access,
 )
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment.adapters.primary.coding_environment__primary_adapter__guard import (  # noqa: E501
+    KernelRoute,
+    authorize_repo,
+    get_iam,
+)
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
+from naas_abi_core.services.iam.IAMPorts import IIAMService
 from naas_abi_core.services.source_control.SourceControlPorts import (
     AccessDeniedError,
     Branch,
@@ -44,7 +54,7 @@ from naas_abi_core.services.source_control.SourceControlService import (
 )
 from pydantic import BaseModel, Field
 
-router = APIRouter(dependencies=[Depends(get_current_user_required)])
+router = APIRouter(dependencies=[Depends(get_current_user_required)], route_class=KernelRoute)
 
 
 _HTTP_STATUS_BY_ERROR: dict[type[SourceControlError], int] = {
@@ -167,42 +177,37 @@ class MergeOut(BaseModel):
     message: str | None = None
 
 
-class CreateBranchBody(BaseModel):
+class _RepoBody(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     repo_id: str = Field(..., min_length=1, max_length=200)
+
+
+class CreateBranchBody(_RepoBody):
     name: str = Field(..., min_length=1, max_length=200)
     from_ref: str = Field(..., min_length=1, max_length=200)
 
 
-class CreateProposalBody(BaseModel):
-    workspace_id: str = Field(..., min_length=1, max_length=100)
-    repo_id: str = Field(..., min_length=1, max_length=200)
+class CreateProposalBody(_RepoBody):
     title: str = Field(..., min_length=1, max_length=400)
     body: str = Field(default="", max_length=50_000)
     source_branch: str = Field(..., min_length=1, max_length=200)
     target_branch: str = Field(..., min_length=1, max_length=200)
 
 
-class AddCommentBody(BaseModel):
-    workspace_id: str = Field(..., min_length=1, max_length=100)
-    repo_id: str = Field(..., min_length=1, max_length=200)
+class AddCommentBody(_RepoBody):
     number: int
     body: str = Field(..., min_length=1, max_length=50_000)
     path: str | None = None
     line: int | None = None
 
 
-class SubmitReviewBody(BaseModel):
-    workspace_id: str = Field(..., min_length=1, max_length=100)
-    repo_id: str = Field(..., min_length=1, max_length=200)
+class SubmitReviewBody(_RepoBody):
     number: int
     event: str = Field(..., min_length=1, max_length=40)
     body: str = Field(default="", max_length=50_000)
 
 
-class MergeBody(BaseModel):
-    workspace_id: str = Field(..., min_length=1, max_length=100)
-    repo_id: str = Field(..., min_length=1, max_length=200)
+class MergeBody(_RepoBody):
     number: int
     method: str = "merge"
 
@@ -265,9 +270,7 @@ def _to_review(review: Review) -> ReviewOut:
 
 
 def _to_commit(commit: Commit) -> CommitOut:
-    return CommitOut(
-        sha=commit.sha, message=commit.message, author=commit.author, date=commit.date
-    )
+    return CommitOut(sha=commit.sha, message=commit.message, author=commit.author, date=commit.date)
 
 
 def _to_check(check: Check) -> CheckOut:
@@ -296,14 +299,32 @@ def _to_merge(result: MergeResult) -> MergeOut:
     return MergeOut(merged=result.merged, sha=result.sha, message=result.message)
 
 
-@router.get("/branches")
+async def _own_repo(
+    workspace_id: str, repo_id: str, iam: IIAMService | None = Depends(get_iam)
+) -> None:
+    """The workspace of the request owns ``repo_id`` (a repository id from a
+    request is never trusted on its own)."""
+    await authorize_repo(iam, repo_id, workspace_id, write=False)
+
+
+async def _write_repo(user: User, body: _RepoBody, iam: IIAMService | None) -> None:
+    """The body's workspace lets the user write code, and owns the repository."""
+    await authz.require("WriteCode", user=user, workspace=body.workspace_id)
+    await authorize_repo(iam, body.repo_id, body.workspace_id, write=False)
+
+
+@router.get(
+    "/branches",
+    dependencies=[
+        guard("ReadCode"),
+        declares("source_control:ListBranches"),
+        Depends(_own_repo),
+    ],
+)
 async def list_branches(
-    workspace_id: str,
     repo_id: str,
-    current_user: User = Depends(get_current_user_required),
     service: SourceControlService = Depends(_get_source_control_service),
 ) -> list[BranchOut]:
-    await require_workspace_access(current_user.id, workspace_id)
     try:
         branches = await run_in_threadpool(service.list_branches, repo_id=repo_id)
     except SourceControlError as exc:
@@ -311,13 +332,17 @@ async def list_branches(
     return [_to_branch(b) for b in branches]
 
 
-@router.post("/branches")
+@router.post(
+    "/branches",
+    dependencies=[declares("WriteCode"), declares("source_control:CreateBranch")],
+)
 async def create_branch(
     body: CreateBranchBody,
     current_user: User = Depends(get_current_user_required),
     service: SourceControlService = Depends(_get_source_control_service),
+    iam: IIAMService | None = Depends(get_iam),
 ) -> BranchOut:
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await _write_repo(current_user, body, iam)
     try:
         branch = await run_in_threadpool(
             service.create_branch, repo_id=body.repo_id, name=body.name, from_ref=body.from_ref
@@ -327,31 +352,37 @@ async def create_branch(
     return _to_branch(branch)
 
 
-@router.get("/proposals")
+@router.get(
+    "/proposals",
+    dependencies=[
+        guard("ReadCode"),
+        declares("source_control:ListProposals"),
+        Depends(_own_repo),
+    ],
+)
 async def list_proposals(
-    workspace_id: str,
     repo_id: str,
     state: str = "open",
-    current_user: User = Depends(get_current_user_required),
     service: SourceControlService = Depends(_get_source_control_service),
 ) -> list[ProposalOut]:
-    await require_workspace_access(current_user.id, workspace_id)
     try:
-        proposals = await run_in_threadpool(
-            service.list_proposals, repo_id=repo_id, state=state
-        )
+        proposals = await run_in_threadpool(service.list_proposals, repo_id=repo_id, state=state)
     except SourceControlError as exc:
         raise _http_error(exc) from exc
     return [_to_proposal(p) for p in proposals]
 
 
-@router.post("/proposals")
+@router.post(
+    "/proposals",
+    dependencies=[declares("WriteCode"), declares("source_control:CreateProposal")],
+)
 async def create_proposal(
     body: CreateProposalBody,
     current_user: User = Depends(get_current_user_required),
     service: SourceControlService = Depends(_get_source_control_service),
+    iam: IIAMService | None = Depends(get_iam),
 ) -> ProposalOut:
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await _write_repo(current_user, body, iam)
     try:
         proposal = await run_in_threadpool(
             service.create_proposal,
@@ -366,51 +397,59 @@ async def create_proposal(
     return _to_proposal(proposal)
 
 
-@router.get("/proposal")
+@router.get(
+    "/proposal",
+    dependencies=[
+        guard("ReadCode"),
+        declares("source_control:GetProposal"),
+        Depends(_own_repo),
+    ],
+)
 async def get_proposal(
-    workspace_id: str,
     repo_id: str,
     number: int,
-    current_user: User = Depends(get_current_user_required),
     service: SourceControlService = Depends(_get_source_control_service),
 ) -> ProposalOut:
-    await require_workspace_access(current_user.id, workspace_id)
     try:
-        proposal = await run_in_threadpool(
-            service.get_proposal, repo_id=repo_id, number=number
-        )
+        proposal = await run_in_threadpool(service.get_proposal, repo_id=repo_id, number=number)
     except SourceControlError as exc:
         raise _http_error(exc) from exc
     return _to_proposal(proposal)
 
 
-@router.get("/proposal/diff")
+@router.get(
+    "/proposal/diff",
+    dependencies=[
+        guard("ReadCode"),
+        declares("source_control:GetProposalDiff"),
+        Depends(_own_repo),
+    ],
+)
 async def get_proposal_diff(
-    workspace_id: str,
     repo_id: str,
     number: int,
-    current_user: User = Depends(get_current_user_required),
     service: SourceControlService = Depends(_get_source_control_service),
 ) -> DiffOut:
-    await require_workspace_access(current_user.id, workspace_id)
     try:
-        diff = await run_in_threadpool(
-            service.get_proposal_diff, repo_id=repo_id, number=number
-        )
+        diff = await run_in_threadpool(service.get_proposal_diff, repo_id=repo_id, number=number)
     except SourceControlError as exc:
         raise _http_error(exc) from exc
     return _to_diff(diff)
 
 
-@router.get("/proposal/commits")
+@router.get(
+    "/proposal/commits",
+    dependencies=[
+        guard("ReadCode"),
+        declares("source_control:ListProposalCommits"),
+        Depends(_own_repo),
+    ],
+)
 async def list_proposal_commits(
-    workspace_id: str,
     repo_id: str,
     number: int,
-    current_user: User = Depends(get_current_user_required),
     service: SourceControlService = Depends(_get_source_control_service),
 ) -> list[CommitOut]:
-    await require_workspace_access(current_user.id, workspace_id)
     try:
         commits = await run_in_threadpool(
             service.list_proposal_commits, repo_id=repo_id, number=number
@@ -420,31 +459,37 @@ async def list_proposal_commits(
     return [_to_commit(c) for c in commits]
 
 
-@router.get("/proposal/comments")
+@router.get(
+    "/proposal/comments",
+    dependencies=[
+        guard("ReadCode"),
+        declares("source_control:ListComments"),
+        Depends(_own_repo),
+    ],
+)
 async def list_comments(
-    workspace_id: str,
     repo_id: str,
     number: int,
-    current_user: User = Depends(get_current_user_required),
     service: SourceControlService = Depends(_get_source_control_service),
 ) -> list[CommentOut]:
-    await require_workspace_access(current_user.id, workspace_id)
     try:
-        comments = await run_in_threadpool(
-            service.list_comments, repo_id=repo_id, number=number
-        )
+        comments = await run_in_threadpool(service.list_comments, repo_id=repo_id, number=number)
     except SourceControlError as exc:
         raise _http_error(exc) from exc
     return [_to_comment(c) for c in comments]
 
 
-@router.post("/proposal/comments")
+@router.post(
+    "/proposal/comments",
+    dependencies=[declares("WriteCode"), declares("source_control:AddComment")],
+)
 async def add_comment(
     body: AddCommentBody,
     current_user: User = Depends(get_current_user_required),
     service: SourceControlService = Depends(_get_source_control_service),
+    iam: IIAMService | None = Depends(get_iam),
 ) -> CommentOut:
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await _write_repo(current_user, body, iam)
     try:
         comment = await run_in_threadpool(
             service.add_comment,
@@ -459,31 +504,37 @@ async def add_comment(
     return _to_comment(comment)
 
 
-@router.get("/proposal/reviews")
+@router.get(
+    "/proposal/reviews",
+    dependencies=[
+        guard("ReadCode"),
+        declares("source_control:ListReviews"),
+        Depends(_own_repo),
+    ],
+)
 async def list_reviews(
-    workspace_id: str,
     repo_id: str,
     number: int,
-    current_user: User = Depends(get_current_user_required),
     service: SourceControlService = Depends(_get_source_control_service),
 ) -> list[ReviewOut]:
-    await require_workspace_access(current_user.id, workspace_id)
     try:
-        reviews = await run_in_threadpool(
-            service.list_reviews, repo_id=repo_id, number=number
-        )
+        reviews = await run_in_threadpool(service.list_reviews, repo_id=repo_id, number=number)
     except SourceControlError as exc:
         raise _http_error(exc) from exc
     return [_to_review(r) for r in reviews]
 
 
-@router.post("/proposal/review")
+@router.post(
+    "/proposal/review",
+    dependencies=[declares("WriteCode"), declares("source_control:SubmitReview")],
+)
 async def submit_review(
     body: SubmitReviewBody,
     current_user: User = Depends(get_current_user_required),
     service: SourceControlService = Depends(_get_source_control_service),
+    iam: IIAMService | None = Depends(get_iam),
 ) -> ReviewOut:
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await _write_repo(current_user, body, iam)
     try:
         review = await run_in_threadpool(
             service.submit_review,
@@ -497,31 +548,37 @@ async def submit_review(
     return _to_review(review)
 
 
-@router.get("/proposal/checks")
+@router.get(
+    "/proposal/checks",
+    dependencies=[
+        guard("ReadCode"),
+        declares("source_control:ListChecks"),
+        Depends(_own_repo),
+    ],
+)
 async def list_checks(
-    workspace_id: str,
     repo_id: str,
     number: int,
-    current_user: User = Depends(get_current_user_required),
     service: SourceControlService = Depends(_get_source_control_service),
 ) -> list[CheckOut]:
-    await require_workspace_access(current_user.id, workspace_id)
     try:
-        checks = await run_in_threadpool(
-            service.list_checks, repo_id=repo_id, number=number
-        )
+        checks = await run_in_threadpool(service.list_checks, repo_id=repo_id, number=number)
     except SourceControlError as exc:
         raise _http_error(exc) from exc
     return [_to_check(c) for c in checks]
 
 
-@router.post("/proposal/merge")
+@router.post(
+    "/proposal/merge",
+    dependencies=[declares("WriteCode"), declares("source_control:Merge")],
+)
 async def merge_proposal(
     body: MergeBody,
     current_user: User = Depends(get_current_user_required),
     service: SourceControlService = Depends(_get_source_control_service),
+    iam: IIAMService | None = Depends(get_iam),
 ) -> MergeOut:
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await _write_repo(current_user, body, iam)
     try:
         result = await run_in_threadpool(
             service.merge, repo_id=body.repo_id, number=body.number, method=body.method
@@ -531,19 +588,21 @@ async def merge_proposal(
     return _to_merge(result)
 
 
-@router.get("/actions/runs")
+@router.get(
+    "/actions/runs",
+    dependencies=[
+        guard("ReadCode"),
+        declares("source_control:ListWorkflowRuns"),
+        Depends(_own_repo),
+    ],
+)
 async def list_workflow_runs(
-    workspace_id: str,
     repo_id: str,
     limit: int = 30,
-    current_user: User = Depends(get_current_user_required),
     service: SourceControlService = Depends(_get_source_control_service),
 ) -> list[WorkflowRunOut]:
-    await require_workspace_access(current_user.id, workspace_id)
     try:
-        runs = await run_in_threadpool(
-            service.list_workflow_runs, repo_id=repo_id, limit=limit
-        )
+        runs = await run_in_threadpool(service.list_workflow_runs, repo_id=repo_id, limit=limit)
     except SourceControlError as exc:
         raise _http_error(exc) from exc
     return [_to_workflow_run(r) for r in runs]

@@ -178,15 +178,16 @@ class MapsBasemapService:
         seeds: Sequence[SeedLike] = (),
         revisions: Mapping[str, int] | None = None,
         enabled_custom: frozenset[str] | None = None,
+        seed: bool = True,
     ) -> MapsBasemapList:
         """The workspace's basemaps; ``enabled_custom`` is the config's custom list
-        (``None``: decide nothing)."""
+        (``None``: decide nothing). ``seed=False`` writes neither: the list is what is stored."""
         policy = await self._access.policy(KIND_BASEMAP)
         allowed = [(b, p) for b, p in seeds if policy.allows(b.id, DEPLOYMENT, workspace_id)]
-        if allowed:
+        if allowed and seed:
             await self.ensure_seeded(workspace_id, allowed, revisions)
         basemaps = sorted(await self._visible(workspace_id, policy), key=_order_key)
-        if enabled_custom is not None:
+        if enabled_custom is not None and seed:
             await self.ensure_initial_basemaps(
                 workspace_id, [basemap.id for basemap in basemaps], enabled_custom
             )

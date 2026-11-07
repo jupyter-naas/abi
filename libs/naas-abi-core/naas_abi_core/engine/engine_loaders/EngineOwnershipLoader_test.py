@@ -28,7 +28,6 @@ from naas_abi_sdk import lifeline
 
 def nats_config(**engine) -> NATSConfiguration:
     return NATSConfiguration(
-        jwt_secret="test-only",
         engine=NATSEngineConfiguration(**{"lease_seconds": 1, **engine}),
     )
 

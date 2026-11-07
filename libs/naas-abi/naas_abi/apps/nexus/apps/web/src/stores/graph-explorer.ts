@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { useEffect } from 'react';
-import { authFetch, useAuthStore } from './auth';
+import { authFetch, hasSession, useAuthStore } from './auth';
 import { getApiUrl } from '@/lib/config';
 import { readGraph } from '@/hooks/use-graph-request';
 import { pendingPollDelay, type ExplorerCatalog, type ExplorerGraph } from '@/lib/graph-explorer';
@@ -169,7 +169,7 @@ export const useWorkspaceGraphListStore = create<ListState>((set, get) => ({
 }));
 
 useAuthStore.subscribe((state, previous) => {
-  if (state.user?.id !== previous.user?.id || Boolean(state.token) !== Boolean(previous.token)) {
+  if (state.user?.id !== previous.user?.id || hasSession(state) !== hasSession(previous)) {
     invalidateGraphExplorer();
     listPending?.abort();
     useWorkspaceGraphListStore.setState({
