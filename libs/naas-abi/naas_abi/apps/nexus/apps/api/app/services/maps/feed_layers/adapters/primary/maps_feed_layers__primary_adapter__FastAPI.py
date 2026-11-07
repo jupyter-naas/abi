@@ -1,8 +1,9 @@
 """HTTP routes for map layers (views on feeds), mounted under ``/api/maps/feed-layers``.
 
-Reading needs workspace access; creating, editing and deleting needs a
-workspace owner or admin. Hiding uses ``/api/maps/layouts/{id}/visibility``
-(one hidden set for every layer id).
+Reading is for everybody who sees the workspace's maps; creating, editing and
+deleting is for its admins (the IAM actions of the ``feed_layer`` type say so).
+Hiding uses ``/api/maps/layouts/{id}/visibility`` (one hidden set for every
+layer id).
 """
 
 from __future__ import annotations
@@ -16,9 +17,9 @@ from fastapi.responses import JSONResponse
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user_required
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
     get_current_user_released,
-    require_workspace_access,
-    require_workspace_admin,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi.apps.nexus.apps.api.app.services.maps.adapters.primary.objects import (
     get_maps_cache,
     get_maps_objects,
@@ -49,14 +50,15 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.objects import (
     layer_features,
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.seeds import maps_seed_registry
+from naas_abi.apps.nexus.apps.api.app.services.view_as.active import viewing
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 router = APIRouter()
 
-# Hot path (/data): a map opening fires many requests at once. Membership and
-# what a layer resolves to are kept in the engine cache (MapsCache) briefly;
-# layer writes here drop the layer's entry.
+# Hot path (/data): a map opening fires many requests at once. What a layer
+# resolves to is kept in the engine cache (MapsCache) briefly (who may read it is
+# IAM's, decided at every request); layer writes here drop the layer's entry.
 SOURCE_TTL = timedelta(seconds=30)
 
 
@@ -99,7 +101,7 @@ def _http_error(exc: Exception) -> HTTPException:
     return HTTPException(status_code=500, detail=f"Layer operation failed: {exc}")
 
 
-@router.get("")
+@router.get("", dependencies=[guard("ListFeedLayers", literal="-")])
 async def list_feed_layers(
     request: Request,
     response: Response,
@@ -107,17 +109,17 @@ async def list_feed_layers(
     current_user=Depends(get_current_user_required),
     service: MapsFeedLayerService = Depends(get_maps_feed_layer_service),
 ) -> dict[str, Any]:
-    await require_workspace_access(current_user.id, workspace_id)
     response.headers["Cache-Control"] = "no-store"
     layers = await service.list(
         workspace_id,
         seeds=feed_layer_seeds(request),
         revisions=feed_layer_seed_revisions(request),
+        seed=not viewing(),  # a page load writes nothing in a view
     )
     return {"layers": [layer.to_dict() for layer in layers]}
 
 
-@router.get("/{layer_id}/data")
+@router.get("/{layer_id}/data", dependencies=[declares("GetFeedLayer")])
 async def feed_layer_data(
     layer_id: str,
     request: Request,
@@ -137,14 +139,10 @@ async def feed_layer_data(
     anyway): the object is then sent as stored, without parsing it.
     Private data: revalidated on every load (``ETag``), never stored by caches.
     """
-    await cache.member(
-        current_user.id,
-        workspace_id,
-        lambda: require_workspace_access(current_user.id, workspace_id),
-    )
+    await authz.require("GetFeedLayer", user=current_user, workspace=workspace_id, id=layer_id)
 
     async def resolve() -> dict[str, Any]:
-        layer, feed = await service.data_source(workspace_id, layer_id)
+        layer, feed = await service.data_source(workspace_id, layer_id, seed=not viewing())
         return {"layer": layer.to_dict(), "feed": feed.to_dict()}
 
     try:
@@ -177,7 +175,7 @@ async def feed_layer_data(
     )
 
 
-@router.get("/{layer_id}")
+@router.get("/{layer_id}", dependencies=[guard("GetFeedLayer", id="layer_id")])
 async def get_feed_layer(
     layer_id: str,
     response: Response,
@@ -185,15 +183,14 @@ async def get_feed_layer(
     current_user=Depends(get_current_user_required),
     service: MapsFeedLayerService = Depends(get_maps_feed_layer_service),
 ) -> dict[str, Any]:
-    await require_workspace_access(current_user.id, workspace_id)
     response.headers["Cache-Control"] = "no-store"
     try:
-        return (await service.get(workspace_id, layer_id)).to_dict()
+        return (await service.get(workspace_id, layer_id, seed=not viewing())).to_dict()
     except Exception as exc:
         raise _http_error(exc) from exc
 
 
-@router.put("/{layer_id}")
+@router.put("/{layer_id}", dependencies=[guard("UpdateFeedLayer", id="layer_id")])
 async def save_feed_layer(
     layer_id: str,
     body: FeedLayerIn,
@@ -203,7 +200,6 @@ async def save_feed_layer(
     service: MapsFeedLayerService = Depends(get_maps_feed_layer_service),
     cache: MapsCache = Depends(get_maps_cache),
 ) -> dict[str, Any]:
-    await require_workspace_admin(current_user.id, workspace_id)
     cache.delete(_source_key(workspace_id, layer_id))
     layer = MapsFeedLayer(
         id=layer_id,
@@ -224,7 +220,7 @@ async def save_feed_layer(
     return saved.to_dict()
 
 
-@router.delete("/{layer_id}")
+@router.delete("/{layer_id}", dependencies=[guard("DeleteFeedLayer", id="layer_id")])
 async def delete_feed_layer(
     layer_id: str,
     workspace_id: str = Query(..., min_length=1),
@@ -232,7 +228,6 @@ async def delete_feed_layer(
     service: MapsFeedLayerService = Depends(get_maps_feed_layer_service),
     cache: MapsCache = Depends(get_maps_cache),
 ) -> dict[str, str]:
-    await require_workspace_admin(current_user.id, workspace_id)
     cache.delete(_source_key(workspace_id, layer_id))
     try:
         await service.delete(workspace_id, layer_id)

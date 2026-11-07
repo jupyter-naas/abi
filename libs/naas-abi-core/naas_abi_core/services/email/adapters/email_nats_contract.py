@@ -19,7 +19,7 @@ SERVICE_NAME = "email"
 SERVICE_VERSION = "1.0.0"
 SUBJECT_PREFIX = "abi.svc.email.v1"
 
-# Header carrying the Stage 1 service JWT (see naas_abi_core.engine.nats_auth).
+# Header carrying the caller's engine token (see naas_abi_core.engine.nats_auth).
 # The client attaches the token under this exact header name -- both sides
 # of this contract must agree on it.
 AUTH_HEADER = "Nats-Auth-Token"

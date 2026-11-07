@@ -10,7 +10,7 @@ import {
   AppWindow, ExternalLink, RefreshCw, AlertTriangle, Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { appIframeSandbox, isBundledAppHtmlUrl, remoteAppGrantUrl, remoteAppParts, resolveAppEmbedUrl, resolveAppExternalUrl, appHtmlPathPrefix, pagesSsoAudience, withAppHtmlAccessToken, withPagesSsoToken, withRemoteAppWorkspace, remoteGrantRenewDelayMs } from '@/lib/app-html';
+import { appIframeSandbox, isBundledAppHtmlUrl, remoteAppGrantUrl, remoteAppParts, resolveAppEmbedUrl, resolveAppExternalUrl, pagesSsoAudience, withAppHtmlAccessToken, withPagesSsoToken, withRemoteAppWorkspace, remoteGrantRenewDelayMs } from '@/lib/app-html';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import { useTenant } from '@/contexts/tenant-context';
@@ -88,7 +88,7 @@ function EmbedView({
           const res = await authFetch('/api/apps/sso-token', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ audience }),
+            body: JSON.stringify({ workspace_id: workspaceId, audience }),
           });
           if (!res.ok) {
             if (!cancelled) setEmbedUrl(baseEmbedUrl);
@@ -149,15 +149,16 @@ function EmbedView({
       };
     }
 
-    const prefix = appHtmlPathPrefix(url);
     (async () => {
       try {
         const res = await authFetch('/api/apps/access-token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            workspace_id: workspaceId,
             expires_minutes: 60,
-            path_prefix: prefix,
+            // The API locks the link to the app's own folder.
+            app_id: record.id,
           }),
         });
         if (!res.ok) {
@@ -181,7 +182,7 @@ function EmbedView({
     return () => {
       cancelled = true;
     };
-  }, [url, baseEmbedUrl, reloadKey, workspaceId]);
+  }, [url, baseEmbedUrl, reloadKey, workspaceId, record.id]);
 
   const handleLoad = useCallback(() => {
     // Same-origin bundled apps are proxied via /app-html/ — never flag them blocked.
@@ -538,7 +539,7 @@ export default function AppsPage() {
       .then((r) => (r.ok ? r.json() : Promise.reject(r.statusText)))
       .then((data: AppsResponse) => {
         setApps(
-          data.apps.filter((a) => a.installed && a.url && a.enabled).map(toRecord),
+          data.apps.filter((a) => a.installed && a.url).map(toRecord),
         );
       })
       .catch((e) => setError(String(e)))

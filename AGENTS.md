@@ -6,6 +6,7 @@ Guidance for coding agents in `/Users/XXXX/abi`.
 
 - Python monorepo managed with `uv`.
 - Main packages: `libs/naas-abi-core`, `libs/naas-abi`, `libs/naas-abi-cli`, `libs/naas-abi-marketplace`.
+- Core-free packages (SDK modules over NATS, never importing `naas_abi_core`): `libs/naas-abi-sdk`, `libs/naas-abi-proto`, and `libs/naas-abi-idp`, the built-in OIDC identity provider ([AGENTS.md](libs/naas-abi-idp/AGENTS.md)).
 - Root project links local packages via editable `tool.uv.sources` in `pyproject.toml`.
 - Python target is `>=3.10,<4`.
 - Frontend: Next.js app at `libs/naas-abi/naas_abi/apps/nexus/apps/web` (requires `pnpm`).
@@ -31,9 +32,12 @@ Core services live under `libs/naas-abi-core/naas_abi_core/services/`. Each has 
 | `agent` | LLM ↔ tools/sub-agents orchestration, memory, SSE streaming | [services/agent/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/agent/AGENTS.md) |
 | `bus` | Pub/sub + durable work-queue message broker | [services/bus/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/bus/AGENTS.md) |
 | `cache` | Multi-tier (hot/cold) cache with decorator API | [services/cache/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/cache/AGENTS.md) |
+| `discovery` | Module registry over NATS: leases, readiness, and the caller checks for remote agents, models, apps and jobs | [services/discovery/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/discovery/AGENTS.md) |
 | `document` | Portable mutable documents, scoped to modules (SQLite / PostgreSQL) | [services/document/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/document/AGENTS.md) |
 | `email` | Transactional email sending (SMTP / SES / FS) | [services/email/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/email/AGENTS.md) |
 | `event` | Durable typed event log + live pub/sub | [services/event/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/event/AGENTS.md) |
+| `iam` | Principals, AWS-style policies, roles and the deny-by-default authorizer every service asks (SQLite / PostgreSQL) | [services/iam/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/iam/AGENTS.md) |
+| `identity` | The OIDC providers the engine trusts: ID tokens verified against each issuer's discovery and JWKS, `(issuer, sub)` resolved to IAM users, the provider side of a relying party's PKCE sign-in | [services/identity/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/identity/AGENTS.md) |
 | `keyvalue` | Bytes-in/out KV store with TTL + atomic CAS/CAD | [services/keyvalue/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/keyvalue/AGENTS.md) |
 | `model_registry` | Canonical-ID catalog of chat/embedding models | [services/model_registry/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/model_registry/AGENTS.md) |
 | `object_storage` | S3-style blob storage (FS / S3 / Naas) | [services/object_storage/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/object_storage/AGENTS.md) |
@@ -43,6 +47,10 @@ Core services live under `libs/naas-abi-core/naas_abi_core/services/`. Each has 
 | `vector_store` | Vector DB facade (Qdrant / SQLite-vec) | [services/vector_store/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/vector_store/AGENTS.md) |
 
 Every service AGENTS.md follows the same structure: **Purpose → Files → Port → Service API → Adapters → Factory → Tests → Adding a new adapter** — so once you've read one, you know how to navigate them all.
+
+## Built-in identity provider
+
+`libs/naas-abi-idp` is an SDK module, not a core service: the default OIDC provider of `abi dev up` and small installs (email-code sign-in, authorization code + PKCE, refresh tokens, JWKS, client credentials, an admin app for provisioning). It runs as `module/<project>/idp`, its data and keys are sealed to that account, Nexus serves it at `/idp` and the engine reads it over NATS. It is how everyone signs in to Nexus: Nexus has no login of its own ([libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/oidc/AGENTS.md](libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/oidc/AGENTS.md): sign-in, sessions, credentials), and accounts of the old login are linked at their first sign-in (`abi user migrate`, `iam.link_user`). The IAM admin pages (policies, attachments, groups, service accounts and keys, module approvals, simulator, audit) are Nexus `services/iam_admin`: [libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/iam_admin/AGENTS.md](libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/iam_admin/AGENTS.md). Invitations (`services/identity` provisioning port, IAM pending grants, Nexus `services/invites`) create people there: see [libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/invites/AGENTS.md](libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/invites/AGENTS.md). Read [libs/naas-abi-idp/AGENTS.md](libs/naas-abi-idp/AGENTS.md) before touching it, [libs/naas-abi-core/naas_abi_core/services/identity/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/identity/AGENTS.md) for the engine's side and for plugging in another provider.
 
 ## Marketplace Map
 
@@ -232,23 +240,16 @@ def unsupported_method(self, arg: str) -> None:
 
 After `abi stack start`, the web UI is at `http://localhost:3042`.
 
-There is no default password. The only seeded account is `admin@example.com`; its password is generated per project and stored in `.env` as `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`:
+Nexus has no login of its own and no password: people sign in at an identity provider (`identity.providers`; the built-in one, `libs/naas-abi-idp`, is the default of `abi dev up`, `abi deploy local` and `abi new project`). The only seeded account is `admin@example.com` (`users:` in the configuration): the API makes it exist at the built-in provider when it starts, and its first sign-in links it to the account, which keeps the roles configured there. Enter the address on the login page; the provider emails a 6-digit code. In `abi dev` the mail is a file in `storage/email`, and the code is one command away:
 
 ```bash
-grep NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD .env
+abi dev code            # the newest sign-in code mailed to admin@example.com
+abi dev code --email bob@example.com
 ```
 
-Password login is enabled via `auth_password_enabled: true` in `config.local.yaml`. Set it to `false` to switch back to magic link.
+Self-registration is off in Nexus (there is no signup route): add people by invitation (`abi user invite`, the Nexus invite UI) or through `users:` in the configuration. Whether the provider lets anyone register is the provider's setting (`ABI_IDP_SIGNUP`; `abi dev up` turns it on). Scripts use a personal API key (`abi_pk_`, made in Nexus under Account, API keys): `NEXUS_ACCESS_TOKEN=abi_pk_... abi workspace list`.
 
-Self-registration is off (`auth_signup_enabled: false`): add people by invitation or through `users:` in the config. Sign-in endpoints are rate limited in every environment (5 failures per account and 20 attempts per IP per 5 minutes); `rate_limit_enabled: false` turns this off for local debugging.
-
-**How the password is set:** `abi new project`, `abi dev up` and `abi deploy local` generate it into `.env`. On first boot the seeder creates the account with that value; if the key is missing it generates one and writes it back. Published defaults (`admin`, `Admin1234!`) are never accepted: login refuses them, and on boot the seeder replaces them with a generated password written to `.env`.
-
-If you see "Incorrect email or password", read the current value from `.env` (it may have just been rotated), or wipe and reseed when there is no data to keep:
-```bash
-docker volume rm abi_postgres_data
-abi stack start
-```
+An older project upgrades with `abi user migrate` (dry run), then `abi user migrate --apply`: each account of the old password / magic-link login is made at the built-in provider with the same email; the person's first sign-in with the mailed code links it and keeps roles, groups and data. The API logs a reminder at start while accounts are not linked. `secret_key` no longer signs or encrypts anything: workspace secrets use `secrets_encryption_key` (generated as `NEXUS_SECRETS_KEY`; the API re-encrypts what is still under the old key at start).
 
 ### Deploying with Dokploy
 
@@ -260,8 +261,9 @@ The repo runs on NATS by default, like a project from `abi new project`: its
 `config.yaml` (`abi dev up`) and `config.local.yaml` (`abi stack start`) have a
 `nats:` block. Kernel services, the bus (JetStream), module jobs and remote
 module discovery go through the broker. The broker's passwords
-(`NATS_ABI_PASSWORD`, `NATS_MODULE_PASSWORD`) and `NATS_JWT_SECRET` are generated
-into `.env` on first run (see `.env.example`).
+(`NATS_ENGINE_PASSWORD`, `NATS_AUTH_PASSWORD`) and the seed of its auth callout
+(`NATS_AUTH_CALLOUT_SEED`) are generated into `.env` on first run (see
+`.env.example`); modules log in with their own service key, not a shared password.
 
 Dagster and the RabbitMQ bus are legacy, to be removed in the next major. In
 `docker-compose.yml` they sit behind the `legacy` profile, and nothing in the
@@ -450,9 +452,9 @@ Run all four services with `uv run abi dev up -d`, then `abi dev status` / `abi 
 
 Non-obvious gotchas discovered during setup:
 
-- **`.env` is required and gitignored.** It is auto-created on first `abi dev up`, seeding the admin login, `ABI_API_KEY` and the NATS secrets (`NATS_ABI_PASSWORD`, `NATS_MODULE_PASSWORD`, `NATS_JWT_SECRET`). The engine renders `config.yaml` through Jinja and **hard-fails non-interactively (no TTY) on missing `{{ secret.X }}` in active (non-comment) YAML**. Full-line YAML comments are left unrendered, so commented-out modules can keep example `{{ secret.X }}` placeholders. Deploy placeholders are in `.env.example` (`NAAS_API_KEY`, `ABI_API_KEY`, `NEXUS_API_URL`): copy those if missing. The root config also names `OPENAI_API_KEY`, `OPENROUTER_API_KEY` and `GITHUB_ACCESS_TOKEN` in active YAML, so set them (a placeholder lets the API boot) through environment secrets or `.env`.
+- **`.env` is required and gitignored.** It is auto-created on first `abi dev up`, seeding `ABI_API_KEY`, the broker's secrets (`NATS_ENGINE_PASSWORD`, `NATS_AUTH_PASSWORD`, `NATS_AUTH_CALLOUT_SEED`) and the identity provider's client secret (there is no admin password). The engine renders `config.yaml` through Jinja and **hard-fails non-interactively (no TTY) on missing `{{ secret.X }}` in active (non-comment) YAML**. Full-line YAML comments are left unrendered, so commented-out modules can keep example `{{ secret.X }}` placeholders. Deploy placeholders are in `.env.example` (`NAAS_API_KEY`, `ABI_API_KEY`, `NEXUS_API_URL`): copy those if missing. The root config also names `OPENAI_API_KEY`, `OPENROUTER_API_KEY` and `GITHUB_ACCESS_TOKEN` in active YAML, so set them (a placeholder lets the API boot) through environment secrets or `.env`.
 - **NATS ports are offset too.** `abi dev up` starts its own `nats-server` on an offset client port and hands the api its URL through `.abi/dev/dev.overlay.yaml`; the `127.0.0.1:4222` in `config.yaml` is the Docker stack's broker. `abi dev ports` lists the live ones; the broker's monitoring endpoint is the client port + 1000 (`/healthz`, `/connz`).
 - **For capable cloud models:** set `global_config.ai_mode: "cloud"`, uncomment a cloud provider module in `config.yaml`, replace `SECRET_REF` with a real Jinja secret, and add its key via environment secrets or `.env`.
 - **First API boot is slow (~2-3 min):** the worker loads every module/ontology and runs Nexus SQLite migrations before serving. Watch `abi dev logs api`; it is ready when `/docs` returns 200 (`GET http://localhost:<api-port>/docs`).
 - **Ports are offset per worktree** (see `abi dev ports`), so they are not the config defaults. `abi dev` injects `OXIGRAPH_URL` into each service; the `config.yaml` default `:7878` is not the live port. To run a test that builds its own engine against the live triple store, pass `OXIGRAPH_URL=http://127.0.0.1:<oxigraph-port>`.
-- **Login:** `admin@example.com` with the password generated into `.env` as `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD` (printed by `abi dev up`). There is no default password. Web UI is the `nexus-web` port.
+- **Login:** `admin@example.com` at the built-in identity provider, with the code it emails: `uv run abi dev code` prints the newest one (dev mail is a file in `storage/email`). There is no password. Web UI is the `nexus-web` port.

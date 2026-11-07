@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import TYPE_CHECKING
@@ -10,7 +11,37 @@ if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
 
 
+def _tagged(as_tools):
+    """``as_tools`` whose tools name the object that exposed them, so an agent
+    finds a module workflow's scope from its tool (``agent.context``)."""
+
+    @functools.wraps(as_tools)
+    def wrapper(self, *args, **kwargs):
+        from naas_abi_core.services.agent.context import EXPOSED_BY, remember_exposer
+
+        tools = as_tools(self, *args, **kwargs)
+        key = remember_exposer(self)
+        for tool in tools or () if key else ():
+            try:
+                tool.metadata = {
+                    **(getattr(tool, "metadata", None) or {}),
+                    EXPOSED_BY: key,
+                }
+            except (AttributeError, TypeError, ValueError):
+                pass  # a tool that takes no metadata stays unbound
+        return tools
+
+    wrapper.__abi_tagged__ = True  # type: ignore[attr-defined]
+    return wrapper
+
+
 class Expose(ABC):
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        own = cls.__dict__.get("as_tools")
+        if callable(own) and not getattr(own, "__abi_tagged__", False):
+            cls.as_tools = _tagged(own)  # type: ignore[method-assign]
+
     @abstractmethod
     def as_tools(self) -> list[BaseTool]:
         """Returns a list of Tools that can be used by an Agent.

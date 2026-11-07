@@ -2,6 +2,7 @@
 
 import dagster as dg
 
+from naas_abi_core.orchestrations.DagsterOrchestration import as_engine
 from naas_abi_core.services.dataset.DatasetService import DatasetService
 
 
@@ -13,6 +14,7 @@ from naas_abi_core.services.dataset.DatasetService import DatasetService
         "inline_warning_threshold": dg.Field(int, default_value=100_000),
     },
 )
+@as_engine
 def compact_datasets(context: dg.OpExecutionContext) -> None:
     service: DatasetService = context.resources.dataset_compaction_service
     namespace = context.op_config["namespace"]
@@ -49,6 +51,7 @@ def dataset_compaction_job() -> None:
     required_resource_keys={"dataset_compaction_service"},
     config_schema={"inline_warning_threshold": dg.Field(int, default_value=100_000)},
 )
+@as_engine
 def check_dataset_catalogs(context: dg.OpExecutionContext) -> None:
     service: DatasetService = context.resources.dataset_compaction_service
     for dataset in service.list():

@@ -97,7 +97,7 @@ def test_explicit_nats_config_still_exposes_services(monkeypatch):
         "global_config: {ai_mode: cloud, skip_ontology_loading: true}\n"
         "modules: []\n"
         "services: {secret: {secret_adapters: []}}\n"
-        "nats: {jwt_secret: test-secret}\n"
+        "nats: {}\n"
     )
     engine.shutdown()
     close.assert_not_called()

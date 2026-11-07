@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
 
 import pytest
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
@@ -11,20 +10,17 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
 
 
 @pytest.mark.asyncio
-async def test_get_workspace_role_delegates_to_adapter() -> None:
-    adapter = SimpleNamespace(get_workspace_role=AsyncMock(return_value="member"))
-    service = WorkspaceService(adapter=adapter)
+async def test_the_role_is_the_one_iam_holds(team) -> None:
+    service = WorkspaceService(adapter=SimpleNamespace())
 
-    role = await service.get_workspace_role(user_id="user-1", workspace_id="ws-1")
-
-    assert role == "member"
-    adapter.get_workspace_role.assert_awaited_once_with(user_id="user-1", workspace_id="ws-1")
+    assert await service.get_workspace_role(user_id="member", workspace_id="ws-1") == "member"
+    assert await service.get_workspace_role(user_id="stranger", workspace_id="ws-1") is None
+    assert await service.get_workspace_role(user_id="member", workspace_id="ws-unknown") is None
 
 
 @pytest.mark.asyncio
-async def test_require_workspace_access_raises_when_missing_role() -> None:
-    adapter = SimpleNamespace(get_workspace_role=AsyncMock(return_value=None))
-    service = WorkspaceService(adapter=adapter)
+async def test_require_workspace_access_raises_when_missing_role(team) -> None:
+    service = WorkspaceService(adapter=SimpleNamespace())
 
     with pytest.raises(WorkspacePermissionError):
-        await service.require_workspace_access(user_id="user-1", workspace_id="ws-1")
+        await service.require_workspace_access(user_id="stranger", workspace_id="ws-1")

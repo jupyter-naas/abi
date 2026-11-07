@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Plus, Shield, User, Crown, Trash2, AlertCircle } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Plus, Shield, User, Crown, Trash2, AlertCircle, Mail } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
@@ -9,6 +9,19 @@ import { useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { useConfirm } from '@/components/ui/dialogs';
 import { Input, Select } from '@/components/ui/input';
+import { IdpGroupBindings } from '@/components/invitations/idp-group-bindings';
+import { PendingInvitations } from '@/components/invitations/pending-invitations';
+import { InvitePolicyPicker } from '@/components/invitations/invite-policy-picker';
+import { useInviteProviders } from '@/components/invitations/use-invite-providers';
+import { workspaceAccessScope } from '@/components/access/access-scope';
+import { workspaceOrganization } from '@/components/shell/settings-nav';
+import {
+  classifyInviteAnswer,
+  inviteSuccessMessage,
+  providerHint,
+  workspaceInviteBody,
+} from '@/lib/invitations';
+import { ROLE_LABELS, assignableRoles, changeMemberRole, roleChangeable } from '@/components/access/roles/role-change';
 import {
   SettingsEmpty,
   SettingsLoading,
@@ -63,13 +76,24 @@ export default function MembersPage() {
   const [loading, setLoading] = useState(true);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'admin' | 'member' | 'viewer'>('member');
+  // Policies attached at this workspace with the role (features come from policies).
+  const [invitePolicyIds, setInvitePolicyIds] = useState<string[]>([]);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState('');
+  const [inviteNotice, setInviteNotice] = useState('');
+  const [invitationsKey, setInvitationsKey] = useState(0);
+  const providers = useInviteProviders(showInvite);
   const [actionError, setActionError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const { confirm: confirmRemove, dialog: confirmDialog } = useConfirm();
+
+  const organizationId = workspaceOrganization(workspace);
+  const inviteScope = useMemo(
+    () => (workspace?.id ? workspaceAccessScope(organizationId, workspace.id).value : null),
+    [organizationId, workspace?.id]
+  );
 
   const membershipRole =
     workspace?.currentUserRole ||
@@ -129,7 +153,14 @@ export default function MembersPage() {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole }),
+          body: JSON.stringify(
+            workspaceInviteBody({
+              email: inviteEmail.trim(),
+              role: inviteRole,
+              provider: providers.providerToSend(),
+              policyIds: invitePolicyIds,
+            })
+          ),
         }
       );
 
@@ -137,9 +168,15 @@ export default function MembersPage() {
         throw new Error(await readApiError(response, 'Failed to send invite'));
       }
 
+      // Someone with no account yet is invited, not added: they show in the
+      // pending invitations until they sign in.
+      const answer = classifyInviteAnswer(await response.json().catch(() => null));
+      setInviteNotice(answer.kind === 'invited' ? inviteSuccessMessage(answer) : '');
+      setInvitationsKey((key) => key + 1);
       await refreshMembers();
       setInviteEmail('');
       setInviteRole('member');
+      setInvitePolicyIds([]);
       setShowInvite(false);
     } catch (error: unknown) {
       console.error('Failed to invite member:', error);
@@ -174,6 +211,7 @@ export default function MembersPage() {
     }
   };
 
+  // The same role change as Roles & permissions › People & roles: the membership route, IAM decides.
   const handleChangeRole = async (
     userId: string,
     newRole: 'admin' | 'member' | 'viewer'
@@ -181,18 +219,7 @@ export default function MembersPage() {
     if (!canManage) return;
     setActionError('');
     try {
-      const { authFetch } = await import('@/stores/auth');
-      const response = await authFetch(
-        `/api/workspaces/${workspaceId}/members/${userId}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ role: newRole }),
-        }
-      );
-      if (!response.ok) {
-        throw new Error(await readApiError(response, 'Failed to change role'));
-      }
+      await changeMemberRole({ level: 'workspace', workspaceId }, userId, newRole);
 
       setMembers(
         members.map((m) =>
@@ -224,6 +251,7 @@ export default function MembersPage() {
           <Button
             onClick={() => {
               setInviteError('');
+              setInviteNotice('');
               setShowInvite(true);
             }}
             disabled={!canManage}
@@ -241,14 +269,28 @@ export default function MembersPage() {
         </SettingsNotice>
       )}
 
+      {inviteNotice && (
+        <SettingsNotice tone="info" icon={<Mail size={14} />}>
+          {inviteNotice}
+        </SettingsNotice>
+      )}
+
       {showInvite && canManage && (
         <SettingsSection
           title="Invite New Member"
           description={
-            <>
-              Creates the account if needed and emails a sign-in code. Same API as{' '}
-              <code>abi workspace members add</code> / <code>POST /api/workspaces/{'{id}'}/members/invite</code>.
-            </>
+            providers.known.enabled ? (
+              <>
+                The person is created at the identity provider if needed, and their role applies
+                when they first sign in with this email. Same API as{' '}
+                <code>abi workspace members add</code> / <code>POST /api/workspaces/{'{id}'}/members/invite</code>.
+              </>
+            ) : (
+              <>
+                Creates the account if needed and emails a sign-in code. Same API as{' '}
+                <code>abi workspace members add</code> / <code>POST /api/workspaces/{'{id}'}/members/invite</code>.
+              </>
+            )
           }
         >
           {inviteError && (
@@ -265,6 +307,20 @@ export default function MembersPage() {
               placeholder="email@example.com"
               className="flex-1"
             />
+            {providers.choosable && (
+              <Select
+                value={providers.picked ?? ''}
+                onChange={(e) => providers.setPicked(e.target.value)}
+                className="sm:w-48"
+                aria-label="Identity provider"
+              >
+                {providers.known.providers.map((p) => (
+                  <option key={p.name} value={p.name}>
+                    {p.display_name}
+                  </option>
+                ))}
+              </Select>
+            )}
             <Select
               value={inviteRole}
               onChange={(e) => setInviteRole(e.target.value as typeof inviteRole)}
@@ -282,11 +338,22 @@ export default function MembersPage() {
               onClick={() => {
                 setShowInvite(false);
                 setInviteError('');
+                setInvitePolicyIds([]);
               }}
             >
               Cancel
             </Button>
           </div>
+          {providers.known.enabled && providerHint(providers.chosen) && (
+            <p className="mt-3 text-xs text-muted-foreground">{providerHint(providers.chosen)}</p>
+          )}
+          <InvitePolicyPicker
+            className="mt-4 max-w-xl"
+            scope={showInvite ? inviteScope : null}
+            value={invitePolicyIds}
+            onChange={setInvitePolicyIds}
+            disabled={inviteLoading}
+          />
         </SettingsSection>
       )}
 
@@ -340,7 +407,8 @@ export default function MembersPage() {
                 const initial = (member.name || member.email || '?').charAt(0).toUpperCase();
                 const inherited = member.source === 'organization';
                 const roleLocked =
-                  inherited || member.role === 'owner' || member.user_id === authUser?.id || !canManage;
+                  !canManage ||
+                  !roleChangeable({ role: member.role, inherited, userId: member.user_id, selfId: authUser?.id });
                 return (
                   <tr key={member.id} className={settingsTable.row}>
                     <td className={settingsTable.td}>
@@ -378,9 +446,11 @@ export default function MembersPage() {
                           }
                           className="h-8 w-32"
                         >
-                          <option value="member">Member</option>
-                          <option value="viewer">Viewer</option>
-                          <option value="admin">Admin</option>
+                          {assignableRoles('workspace').map((r) => (
+                            <option key={r} value={r}>
+                              {ROLE_LABELS[r]}
+                            </option>
+                          ))}
                         </Select>
                       )}
                     </td>
@@ -408,6 +478,15 @@ export default function MembersPage() {
         </div>
       )}
 
+      <PendingInvitations
+        scope="workspaces"
+        id={workspaceId}
+        canManage={canManage}
+        refreshKey={invitationsKey}
+      />
+
+      <IdpGroupBindings scope="workspaces" id={workspaceId} canManage={canManage} />
+
       <SettingsSection title="Role Permissions">
         <div className="grid gap-3 sm:grid-cols-3">
           <div>
@@ -426,7 +505,8 @@ export default function MembersPage() {
         <p className="mt-3 text-xs text-muted-foreground">
           Organization owners and admins have owner or admin access to every workspace of the
           organization without being invited here. People invited here are also added to the
-          organization as members.
+          organization as members. Features (chat, files, graph, …) come from policies granting
+          them, not from the role: pick them when inviting, or attach them in Roles &amp; permissions.
         </p>
       </SettingsSection>
       {confirmDialog}

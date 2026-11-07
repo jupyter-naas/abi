@@ -81,6 +81,34 @@ Covers registration, provider pinning, fallback, off-catalog routing, defaults, 
 - **Off-catalog** model (provider knows how to build it on demand): call `register_chat_provider(provider, factory)` (or `register_embedding_provider`). The factory receives the canonical/model ID string and returns the live instance.
 - Always call `validate_defaults()` at startup if you set defaults via `InMemory(default_chat_model=..., default_embedding_model=...)`.
 
+## Authorization (`iam_catalog.py`)
+
+Wired with IAM (the engine's owner always is; the NATS client never is), every
+operation is checked in the domain service, on `model/<canonical id>`
+(opaque id, platform-level). An invisible model is `ModelNotFoundError`
+(`MODEL_NOT_FOUND`). The guard is described in
+[`services/iam/AGENTS.md`](../iam/AGENTS.md) ("Enforcing in a domain service").
+Levels: `ListModels` list; `Resolve`, `Chat`, `ChatStream`, `Embed` read. Subjects
+are the operations under `abi.svc.model_registry.v1.` (`list_models`, `resolve`,
+`chat`, `embed`; `ChatStream` is one action for `stream_open`, `<owner>.stream_next`
+and `<owner>.stream_close`; a large call also uses the `transfer.*` subjects).
+
+- `get`, `get_chat_model`, `get_embedding_model` (and the defaults): `Resolve`.
+- `list_models`, `list_canonical_ids`, `list_registered_models`: filtered by
+  `ListModels`.
+- Every invocation of a chat model the registry hands out needs `Chat`, in the
+  context of the call that invokes it: a LangChain callback attached once per
+  model (`_ChatGate`). Agents built once, at boot, as the engine are still
+  checked for each user that chats.
+- The NATS endpoint resolves a reference with `resolve_ref(..., action=)`, which
+  checks only that operation's action (`Resolve`, `Chat`, `ChatStream`, `Embed`)
+  and returns the run configuration marking the invocation as authorized, so
+  the callback does not ask for `Chat` again. Remote callers never pass run
+  configuration, so they cannot set that mark.
+- In process, an embedding model is used directly once resolved: its use is
+  checked as `Resolve`; `Embed` is checked over NATS.
+- Registering models is boot work and is not checked.
+
 ## Remote registry and inference
 
 `adapters/primary/model_registry_nats.py` wraps the owning IModelRegistry and
@@ -89,6 +117,8 @@ implements registry lookup over NATS, restores core model wrappers, and forwards
 only bootstrap registration/validation to its local owner. `list_registered_models`
 returns `(canonical_id, model)` entries for complete catalog publication.
 EngineNATSLoader exposes the primary; EngineNATSDependencies injects the client.
+The primary runs each call, and each stream, under the caller's `CallContext`
+(`engine/nats_identity.py`, `engine/call_context.py`).
 Never expose that client as a primary or route registration through inference RPCs.
 Each provider call runs in a `model <operation> <canonical id>` span (identity,
 input counts and reported token usage only: never messages, texts or options).
@@ -97,9 +127,7 @@ Contracts: `naas-abi-proto/naas_abi_proto/model_registry/v1/model_registry.proto
 SDK optional model codec/proxies stay core-free; core's NATS extra installs them.
 Tests: `uv run pytest examples/standalone_module/model_integration_test.py -q`
 from repository root, with native `nats-server`. Run `make demo-sdk` for the
-separate-process, wheel-installed model example. Defaults and limitations are
-in `docs/adr/20260924_remote-model-registry.md`.
+separate-process, wheel-installed model example.
 
 Independent requests use a queue group; stream/transfer IDs encode an owner.
-Never randomly distribute reads of an existing stream across replicas. See
-`20260924_nats-review-reliability.md` for routing and output persistence decisions.
+Never randomly distribute reads of an existing stream across replicas.

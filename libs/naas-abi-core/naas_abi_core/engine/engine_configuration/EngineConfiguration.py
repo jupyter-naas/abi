@@ -53,6 +53,12 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_EventService 
     EventAdapterSqliteConfiguration,
     EventServiceConfiguration,
 )
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_IAMService import (
+    IAMServiceConfiguration,
+)
+from naas_abi_core.engine.engine_configuration.EngineConfiguration_Identity import (
+    IdentityConfiguration,
+)
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_KeyValueService import (
     KeyValueAdapterConfiguration,
     KeyValueAdapterPythonConfiguration,
@@ -92,6 +98,8 @@ from rich.prompt import Prompt
 
 
 class ServicesConfiguration(BaseModel):
+    # Always loaded, first: every other service asks it.
+    iam: IAMServiceConfiguration = Field(default_factory=IAMServiceConfiguration)
     document: DocumentServiceConfiguration = Field(
         default_factory=DocumentServiceConfiguration
     )
@@ -223,7 +231,7 @@ class ServicesConfiguration(BaseModel):
         """For each owned service whose data stays on this host, where it is.
 
         A deploy that hands over without downtime needs every service the engine
-        owns on a shared backend (docs/adr/20261006_single-serving-engine.md).
+        owns on a shared backend.
         ``owned`` names services as in this configuration (``document``, ``kv``,
         ...). The bus is never listed: in NATS mode it is the broker's JetStream.
         """
@@ -235,6 +243,8 @@ class ServicesConfiguration(BaseModel):
         return found
 
     def _local_storage(self, name: str) -> str | None:
+        if name == "iam":
+            return self.iam.local_storage()
         if name == "secret":
             reasons = [a.local_storage() for a in self.secret.secret_adapters]
             return "; ".join(r for r in reasons if r) or None
@@ -311,7 +321,7 @@ class NATSModelConfiguration(BaseModel):
 
 class NATSRPCOverflowConfiguration(BaseModel):
     """RPC payloads above the broker limit travel as transfer frames instead of
-    failing with PAYLOAD_TOO_LARGE (docs/adr/20261003_nats-rpc-overflow.md).
+    failing with PAYLOAD_TOO_LARGE.
 
     ``enabled: false`` keeps PAYLOAD_TOO_LARGE for every call over the limit.
     Budgets are per process: parked replies are held in memory, uploaded
@@ -394,7 +404,7 @@ class NATSWorkflowsConfiguration(BaseModel):
 
 
 class NATSEngineConfiguration(BaseModel):
-    """Which engine serves the kernel services (docs/adr/20261006_single-serving-engine.md).
+    """Which engine serves the kernel services.
 
     One engine per NATS account serves them, holding a lease it renews every
     quarter of ``lease_seconds``. Another serving engine fails to start, unless
@@ -450,6 +460,24 @@ class NATSEngineConfiguration(BaseModel):
         )
 
 
+class NATSAuthCalloutConfiguration(BaseModel):
+    """The broker's auth callout, answered by the serving engine.
+
+    ``nats.conf`` declares ``auth_callout { issuer: <account public key>,
+    auth_users: [engine, auth] }``; the responder logs in as ``auth``
+    (``nats_url``) and signs each connection's user JWT with the account seed
+    whose public key is that issuer. Users it issues expire within
+    ``user_ttl_seconds`` (five minutes by default, ten at most: an access token's
+    life): a reconnect recomputes them, and modules reconnect every two minutes.
+    """
+
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+
+    nats_url: str
+    issuer_seed: str = Field(min_length=1, repr=False)
+    user_ttl_seconds: int = Field(default=300, ge=240, le=600)
+
+
 class NATSConfiguration(BaseModel):
     """Cross-cutting NATS exposure config -- not a domain service, so it lives
     at the top level next to ``api``/``deploy``/``global_config``, not nested
@@ -471,17 +499,28 @@ class NATSConfiguration(BaseModel):
     that can take longer (dataset ``compact``, ``flush``, ``query``) accept a
     deadline per call.
 
-    See docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
-    ("Decisions locked in" -- Stage 1's JWT is deliberately minimal).
+    Every call carries an ES256 token the engine signs (IAM's token issuer,
+    ``services/iam/AGENTS.md``, "Tokens"): there is no shared signing secret. The serving engine signs its own; a client-role
+    engine exchanges the engine's service key: ``service_key``, else the one
+    the serving engine keeps in the secret service.
+
+    With ``auth_callout``, the serving engine answers the broker's auth
+    callout: every module connection logs in with its service key and gets
+    the subjects its approved policy allows.
 
     nats:
-      nats_url: "nats://127.0.0.1:4222"
-      jwt_secret: "{{ secret.NATS_JWT_SECRET }}"
+      nats_url: "nats://engine:{{ secret.NATS_ENGINE_PASSWORD }}@127.0.0.1:4222"
+      auth_callout:
+        nats_url: "nats://auth:{{ secret.NATS_AUTH_PASSWORD }}@127.0.0.1:4222"
+        issuer_seed: "{{ secret.NATS_AUTH_CALLOUT_SEED }}"
       client_timeout_seconds: 10
     """
 
     nats_url: str = "nats://127.0.0.1:4222"
-    jwt_secret: str
+    # A client-role engine's key (abi_sk_...) for the engine's tokens. Unset:
+    # the one the serving engine keeps in the secret service.
+    service_key: str | None = Field(default=None, repr=False)
+    auth_callout: NATSAuthCalloutConfiguration | None = None
     # How long an engine's facades wait for a reply (calls without their own deadline).
     client_timeout_seconds: float = Field(default=10.0, gt=0, allow_inf_nan=False)
     # Calls each kernel service of this engine handles at once, on as many worker
@@ -503,6 +542,16 @@ class NATSConfiguration(BaseModel):
     # The broker's HTTP monitoring endpoint (``nats-server -m 8222``), read by the
     # Nexus SysAdmin app (/varz, /connz, /jsz). It has no auth: keep it private.
     monitoring_url: str | None = Field(default=None, pattern=r"^https?://")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _retired_secret(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "jwt_secret" in data:
+            raise ValueError(
+                "nats.jwt_secret is retired: the engine signs its tokens with ES256 "
+                "keys IAM holds, and modules hold service keys. Remove it."
+            )
+        return data
 
 
 class OpencodeProviderConfiguration(BaseModel):
@@ -658,6 +707,9 @@ class EngineConfiguration(BaseModel):
     global_config: GlobalConfig
 
     nats: NATSConfiguration | None = None
+    # The OIDC identity providers the engine trusts:
+    # engine-wide, never per organization.
+    identity: IdentityConfiguration = Field(default_factory=IdentityConfiguration)
     telemetry: TelemetryConfiguration = Field(default_factory=TelemetryConfiguration)
 
     modules: list[ModuleConfig]

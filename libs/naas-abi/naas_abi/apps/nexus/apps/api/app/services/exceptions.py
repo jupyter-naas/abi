@@ -4,15 +4,7 @@ from collections.abc import Callable
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from naas_abi.apps.nexus.apps.api.app.services.auth.service import (
-    CurrentPasswordInvalidError,
-    EmailAlreadyRegisteredError,
-    EmailAlreadyTakenError,
-    ExpiredResetTokenError,
-    InvalidCredentialsError,
-    InvalidResetTokenError,
-    UserNotFoundError,
-)
+from naas_abi.apps.nexus.apps.api.app.services.auth.service import UserNotFoundError
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat__schema import (
     ChatForbidden,
     ChatNotFound,
@@ -38,7 +30,6 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphProtectedError,
     GraphServiceUnavailableError,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam.service import IAMPermissionError
 from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology__schema import (
     OntologyFileNotFoundError,
     OntologyParseError,
@@ -60,6 +51,8 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
     WorkspacePermissionError,
     WorkspaceSlugAlreadyExistsError,
 )
+from naas_abi_core.services.iam.IAMPorts import GrantNotHeldError, IAMNotFoundError
+from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError as IAMDeniedError
 
 DetailResolver = Callable[[Exception], str]
 
@@ -102,16 +95,17 @@ EXCEPTION_TO_HTTP: dict[type[Exception], tuple[int, DetailResolver]] = {
     OntologyServiceUnavailableError: (500, _default_detail),
     OntologyParseError: (500, lambda _: "Failed to parse ontology file"),
     OntologyFileNotFoundError: (404, lambda _: "Ontology file does not exist"),
-    IAMPermissionError: (403, _default_detail),
+    # Grant only what you hold: the refusal names what the caller does not hold.
+    GrantNotHeldError: (403, _default_detail),
+    # The engine's IAM said no to what a request asked of it (a key's own limit
+    # included): a refusal of the caller, not a failure of the server.
+    IAMDeniedError: (403, lambda _exc: "This credential is not allowed to do that"),
+    # What IAM does not show the caller (a policy they may not see or attach,
+    # an invitation carrying it): as if it did not exist.
+    IAMNotFoundError: (404, _default_detail),
     SecretAlreadyExistsError: (400, lambda _exc: "Secret with this key already exists"),
     SecretNotFoundError: (404, lambda _exc: "Secret not found"),
-    EmailAlreadyRegisteredError: (400, lambda _exc: "Email already registered"),
-    EmailAlreadyTakenError: (400, lambda _exc: "Email already taken"),
     UserNotFoundError: (404, lambda _exc: "User not found"),
-    InvalidCredentialsError: (401, lambda _exc: "Invalid email or password"),
-    CurrentPasswordInvalidError: (401, lambda _exc: "Current password is incorrect"),
-    InvalidResetTokenError: (400, lambda _exc: "Invalid or expired reset token"),
-    ExpiredResetTokenError: (400, lambda _exc: "Reset token has expired"),
 }
 
 

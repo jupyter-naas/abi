@@ -90,6 +90,9 @@ def _install_fakes(monkeypatch: pytest.MonkeyPatch, capture: _Capture) -> None:
         async def build_abi_injection_preamble(self, **_kwargs) -> None:
             return None
 
+        async def get_conversation_for_user(self, **_kwargs):
+            return None
+
         async def create_streaming_message_pair(self, **_kwargs):
             return None, "assistant-msg-1"
 
@@ -120,7 +123,6 @@ def _install_fakes(monkeypatch: pytest.MonkeyPatch, capture: _Capture) -> None:
     monkeypatch.setattr(
         streaming, "build_provider_messages_with_agents", fake_build_provider_messages
     )
-    monkeypatch.setattr(streaming, "request_context", lambda user: SimpleNamespace(user=user))
     monkeypatch.setattr(streaming, "persist_stream_content", fake_persist_stream_content)
     monkeypatch.setattr(streaming, "persist_stream_metadata", fake_persist_stream_metadata)
     monkeypatch.setattr(streaming, "stream_with_abi_inprocess", fake_stream_with_abi_inprocess)

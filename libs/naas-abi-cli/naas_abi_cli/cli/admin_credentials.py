@@ -1,35 +1,42 @@
 """Per-project credentials written to a project's ``.env``.
 
-ABI ships no default passwords or API keys. The seeded admin account and the
-local API key are generated once per project and stored in ``.env``; a value
-that is one of the defaults older versions wrote is replaced in place.
+ABI ships no default passwords or API keys. The local API key, the secret of the
+client Nexus signs in to the built-in identity provider with, and the broker's
+passwords are generated once per project and stored in ``.env``; a value that is
+one of the defaults older versions wrote is replaced in place.
+
+The seeded admin has no password: Nexus has no login of its own, and the admin
+signs in at the built-in identity provider with the code it mails to
+``ADMIN_EMAIL``.
 """
 
 from __future__ import annotations
 
-import re
 import secrets
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
+# The account the project templates seed (``users:`` of the Nexus configuration).
 ADMIN_EMAIL = "admin@example.com"
-_ADMIN_PREFIX = re.sub(r"[^A-Z0-9]", "_", ADMIN_EMAIL.upper())
-# The keys the Nexus user seeder reads (``NEXUS_USER_<EMAIL_PREFIX>_*``).
-ADMIN_EMAIL_KEY = f"NEXUS_USER_{_ADMIN_PREFIX}_EMAIL"
-ADMIN_PASSWORD_KEY = f"NEXUS_USER_{_ADMIN_PREFIX}_PASSWORD"
-# Written by older `abi deploy local` templates; nothing reads it any more.
-_LEGACY_ADMIN_PASSWORD_KEY = "NEXUS_USER_ADMIN_PASSWORD"
 API_KEY = "ABI_API_KEY"
-NATS_SECRET = "NATS_JWT_SECRET"
-# The broker's users and the .env keys of their passwords: the engine's process
-# (abi), and the SDK modules joining it (module). Docker reads them in
-# .deploy/docker/nats/nats.conf, `abi dev` writes them into its own nats.conf.
-NATS_USERS = {"abi": "NATS_ABI_PASSWORD", "module": "NATS_MODULE_PASSWORD"}
+# The secret of the client ABI (Nexus, as a relying party) signs in to the
+# built-in IdP with: read by the engine (identity.providers) and by the IdP
+# module, which hashes it. Generated once per project.
+IDP_CLIENT_SECRET = "ABI_IDP_CLIENT_SECRET"
+# The broker's static users and the .env keys of their passwords: the engine's
+# processes (engine), and the engine's auth callout responder (auth). Every
+# other connection (modules, scripts) logs in with a service key and is
+# admitted by the callout. Docker reads them in .deploy/docker/nats/nats.conf,
+# `abi dev` writes them into its own nats.conf.
+NATS_USERS = {"engine": "NATS_ENGINE_PASSWORD", "auth": "NATS_AUTH_PASSWORD"}
 NATS_PASSWORDS = tuple(NATS_USERS.values())
+# The seed of the account key the callout signs admitted users with, and its
+# public half, which nats.conf names (auth_callout.issuer, $NATS_AUTH_CALLOUT_ISSUER).
+NATS_CALLOUT_SEED = "NATS_AUTH_CALLOUT_SEED"
+NATS_CALLOUT_ISSUER = "NATS_AUTH_CALLOUT_ISSUER"
 _MIN_NATS_PASSWORD = 16
 
-# Values older CLI versions wrote. Mirrors the Nexus auth list in
-# naas_abi/apps/nexus/apps/api/app/services/auth/default_passwords.py.
+# Values older CLI versions wrote as the API key.
 _SHIPPED_DEFAULTS = frozenset(
     v.casefold() for v in ("Admin1234!", "admin", "admin1234", "admin1234!", "abi")
 )
@@ -39,12 +46,10 @@ def _is_shipped_default(value: str | None) -> bool:
     return (value or "").strip().casefold() in _SHIPPED_DEFAULTS
 
 
-def generate_admin_password() -> str:
-    return secrets.token_urlsafe(24)
-
-
 def _read(env_path: Path) -> list[str]:
-    return env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
+    return (
+        env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
+    )
 
 
 def _value(lines: list[str], key: str) -> str | None:
@@ -74,31 +79,6 @@ def _write(env_path: Path, lines: list[str]) -> None:
     env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def ensure_admin_credentials(env_path: Path) -> tuple[str, str]:
-    """Return ``(email, password)`` for the seeded admin, generating what is missing."""
-    lines = _read(env_path)
-    original = list(lines)
-
-    email = _value(lines, ADMIN_EMAIL_KEY) or ADMIN_EMAIL
-    lines = _set(lines, ADMIN_EMAIL_KEY, email)
-
-    password = _value(lines, ADMIN_PASSWORD_KEY)
-    if not password or _is_shipped_default(password):
-        password = generate_admin_password()
-        lines = _set(lines, ADMIN_PASSWORD_KEY, password)
-
-    if _is_shipped_default(_value(lines, _LEGACY_ADMIN_PASSWORD_KEY)):
-        lines = [
-            line
-            for line in lines
-            if not line.strip().startswith(f"{_LEGACY_ADMIN_PASSWORD_KEY}=")
-        ]
-
-    if lines != original:
-        _write(env_path, lines)
-    return email, password
-
-
 def ensure_api_key(env_path: Path) -> str:
     """Return ``ABI_API_KEY`` from ``.env``, generating it when missing or a default."""
     lines = _read(env_path)
@@ -110,52 +90,44 @@ def ensure_api_key(env_path: Path) -> str:
     return key
 
 
-def ensure_nats_secret(env_path: Path) -> str:
-    """Return ``NATS_JWT_SECRET`` from ``.env``, generating it when missing or short.
-
-    Signs the service tokens of the dev engine and of any module joining its NATS.
-    """
+def ensure_idp_client_secret(env_path: Path) -> str:
+    """Return ``ABI_IDP_CLIENT_SECRET`` from ``.env``, generating it when missing."""
     lines = _read(env_path)
-    secret = _value(lines, NATS_SECRET)
-    if secret and len(secret) >= 32:
+    secret = _value(lines, IDP_CLIENT_SECRET)
+    if secret and len(secret) >= 24:
         return secret
-    secret = secrets.token_urlsafe(48)
-    _write(env_path, _set(lines, NATS_SECRET, secret))
+    secret = secrets.token_urlsafe(32)
+    _write(env_path, _set(lines, IDP_CLIENT_SECRET, secret))
     return secret
 
 
-def module_key_variable(name: str) -> str:
-    """The ``.env`` key holding a module's key for Compose (``ABI_MODULE_KEY_<NAME>``)."""
-    return "ABI_MODULE_KEY_" + re.sub(r"[^A-Z0-9]", "_", name.upper())
-
-
-class MissingNatsSecret(ValueError):
-    """``.env`` has no ``NATS_JWT_SECRET`` to derive a module key from."""
-
-
-def ensure_module_key(env_path: Path, name: str, module_id: str) -> tuple[str, bool]:
-    """Write the module key of ``module_id`` to ``.env`` under
-    ``module_key_variable(name)``; return it, and whether it replaced a different
-    one (a key derived from an older secret).
-
-    The key is derived from the ``NATS_JWT_SECRET`` already in ``.env``, the one
-    the engine signs with: a module signs its tokens with it, for its module id
-    only, and never gets the secret itself
-    (docs/adr/20261014_module-identities.md). Without one, MissingNatsSecret:
-    a secret made up here would not be the engine's.
-    """
-    from naas_abi_core.engine.nats_auth import module_key
+def ensure_nats_callout_seed(env_path: Path) -> str:
+    """Return ``NATS_AUTH_CALLOUT_SEED`` from ``.env``, generating it when missing
+    or not an account seed. Its public key is ``nats_callout_issuer(seed)``."""
+    from naas_abi_core.engine.nats_nkeys import PREFIX_ACCOUNT, KeyPair, NKeyError
 
     lines = _read(env_path)
-    secret = _value(lines, NATS_SECRET)
-    if not secret:
-        raise MissingNatsSecret(f"{env_path} has no {NATS_SECRET}")
-    key = module_key(secret, module_id)
-    variable = module_key_variable(name)
-    previous = _value(lines, variable)
-    if previous != key:
-        _write(env_path, _set(lines, variable, key))
-    return key, bool(previous) and previous != key
+    original = list(lines)
+    seed = _value(lines, NATS_CALLOUT_SEED) or ""
+    try:
+        pair = KeyPair.from_seed(seed)
+        if pair.prefix != PREFIX_ACCOUNT:
+            raise NKeyError("not an account seed")
+    except NKeyError:
+        pair = KeyPair.create(PREFIX_ACCOUNT)
+        lines = _set(lines, NATS_CALLOUT_SEED, pair.seed)
+    if _value(lines, NATS_CALLOUT_ISSUER) != pair.public_key:
+        lines = _set(lines, NATS_CALLOUT_ISSUER, pair.public_key)
+    if lines != original:
+        _write(env_path, lines)
+    return pair.seed
+
+
+def nats_callout_issuer(seed: str) -> str:
+    """The account public key nats.conf trusts as the callout's issuer."""
+    from naas_abi_core.engine.nats_nkeys import KeyPair
+
+    return KeyPair.from_seed(seed).public_key
 
 
 def generate_nats_password() -> str:

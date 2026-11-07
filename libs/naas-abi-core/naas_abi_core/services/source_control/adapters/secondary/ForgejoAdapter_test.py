@@ -15,6 +15,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     MergeBlockedError,
     MergeConflictError,
     ProposalNotFoundError,
+    RepoExistsError,
     RepoNotFoundError,
 )
 from naas_abi_core.services.source_control.tests.source_control__secondary_adapter__generic_test import (
@@ -94,7 +95,12 @@ def test_list_contents_sorts_dirs_first() -> None:
                 FakeResponse(
                     200,
                     [
-                        {"name": "README.md", "path": "README.md", "type": "file", "size": 10},
+                        {
+                            "name": "README.md",
+                            "path": "README.md",
+                            "type": "file",
+                            "size": 10,
+                        },
                         {"name": "src", "path": "src", "type": "dir", "size": 0},
                     ],
                 ),
@@ -102,7 +108,10 @@ def test_list_contents_sorts_dirs_first() -> None:
         ]
     )
     entries = _adapter(session).list_contents(repo_id="abi/monorepo", ref="main")
-    assert [(e.name, e.type) for e in entries] == [("src", "dir"), ("README.md", "file")]
+    assert [(e.name, e.type) for e in entries] == [
+        ("src", "dir"),
+        ("README.md", "file"),
+    ]
 
 
 def test_get_file_decodes_base64() -> None:
@@ -116,8 +125,13 @@ def test_get_file_decodes_base64() -> None:
                 "/repos/abi/monorepo/contents/README.md",
                 FakeResponse(
                     200,
-                    {"name": "README.md", "path": "README.md", "size": 8,
-                     "encoding": "base64", "content": encoded},
+                    {
+                        "name": "README.md",
+                        "path": "README.md",
+                        "size": 8,
+                        "encoding": "base64",
+                        "content": encoded,
+                    },
                 ),
             )
         ]
@@ -188,7 +202,13 @@ def test_mint_git_token_resets_password_then_basic_auths() -> None:
 
 def test_request_uses_token_auth_and_api_v1_base() -> None:
     session = FakeSession(
-        [("GET", "/api/v1/repos/alice/proj", FakeResponse(200, {"id": 1, "name": "proj"}))]
+        [
+            (
+                "GET",
+                "/api/v1/repos/alice/proj",
+                FakeResponse(200, {"id": 1, "name": "proj"}),
+            )
+        ]
     )
     adapter = _adapter(session)
     adapter.ensure_repo(owner="alice", name="proj")
@@ -199,9 +219,25 @@ def test_request_uses_token_auth_and_api_v1_base() -> None:
     assert call["headers"]["Authorization"] == "token admin-token"
 
 
+_NO_BINDING = ("GET", "/admin/users?", FakeResponse(200, []))
+
+
+def _legacy_alice(**fields) -> FakeResponse:
+    """A forge user created before principals were bound (login_name = login)."""
+    user = {
+        "id": 7,
+        "login": "alice",
+        "login_name": "alice",
+        "email": "alice@example.com",
+        "is_admin": False,
+    }
+    return FakeResponse(200, {**user, **fields})
+
+
 def test_ensure_user_creates_when_missing() -> None:
     session = FakeSession(
         [
+            _NO_BINDING,
             ("GET", "/users/alice", FakeResponse(404, {"message": "nf"}, "nf")),
             ("POST", "/admin/users", FakeResponse(201, {"id": 42})),
         ]
@@ -217,6 +253,182 @@ def test_ensure_user_creates_when_missing() -> None:
     assert call is not None
     assert call["json"]["email"] == "alice@example.com"
     assert call["json"]["username"] == "alice"
+    assert call["json"]["login_name"] == "ext"
+
+
+def test_ensure_user_keeps_a_forge_user_bound_to_its_principal() -> None:
+    session = FakeSession([("GET", "/users/alice", _legacy_alice(login_name="usr-a"))])
+    assert (
+        _adapter(session).ensure_user(
+            external_id="usr-a", email="alice@example.com", username="alice"
+        )
+        == "7"
+    )
+    assert session.find("PATCH", "/admin/users/alice") is None
+
+
+def test_a_pre_binding_account_goes_to_the_vouched_owner_of_its_email() -> None:
+    session = FakeSession(
+        [
+            _NO_BINDING,
+            ("GET", "/users/alice", _legacy_alice()),
+            ("PATCH", "/admin/users/alice", FakeResponse(200, {})),
+        ]
+    )
+    assert (
+        _adapter(session).ensure_user(
+            external_id="usr-a",
+            email="Alice@Example.com",
+            username="alice",
+            vouched_email=True,
+        )
+        == "7"
+    )
+    patch = session.find("PATCH", "/admin/users/alice")
+    assert patch is not None
+    assert patch["json"]["login_name"] == "usr-a"
+
+
+@pytest.mark.parametrize(
+    "fields, email, vouched",
+    [
+        ({}, "alice@example.com", False),  # nobody vouches for the email
+        ({}, "mallory@example.com", True),  # someone else's account
+        ({"login_name": ""}, "mallory@example.com", True),
+        ({"login_name": "usr-b"}, "alice@example.com", True),  # bound elsewhere
+        ({"is_admin": True}, "alice@example.com", True),  # the forge admin
+    ],
+)
+def test_an_existing_account_is_never_handed_to_whoever_asks_first(
+    fields, email, vouched
+) -> None:
+    """Regression: a display name chosen to match someone else's forge
+    username (or the admin's) must not hand that account over."""
+    session = FakeSession(
+        [
+            _NO_BINDING,
+            ("GET", "/users/alice", _legacy_alice(**fields)),
+            ("PATCH", "/admin/users/alice", FakeResponse(200, {})),
+        ]
+    )
+    with pytest.raises(AccessDeniedError):
+        _adapter(session).ensure_user(
+            external_id="usr-m",
+            email=email,
+            username="alice",
+            vouched_email=vouched,
+        )
+    assert session.find("PATCH", "/admin/users/alice") is None
+
+
+def test_a_principal_that_already_has_an_account_cannot_claim_another() -> None:
+    session = FakeSession(
+        [
+            (
+                "GET",
+                "/admin/users?",
+                FakeResponse(200, [{"id": 3, "login": "al", "login_name": "usr-a"}]),
+            ),
+            ("GET", "/users/alice", _legacy_alice()),
+        ]
+    )
+    with pytest.raises(AccessDeniedError):
+        _adapter(session).ensure_user(
+            external_id="usr-a",
+            email="alice@example.com",
+            username="alice",
+            vouched_email=True,
+        )
+
+
+def test_a_new_username_renames_the_principals_account() -> None:
+    session = FakeSession(
+        [
+            (
+                "GET",
+                "/admin/users?",
+                FakeResponse(200, [{"id": 3, "login": "al", "login_name": "usr-a"}]),
+            ),
+            ("POST", "/admin/users/al/rename", FakeResponse(204, {})),
+            ("GET", "/users/alice", FakeResponse(404, {"message": "nf"}, "nf")),
+        ]
+    )
+
+    # Once renamed, the account answers under its new username.
+    def renamed_after_post(method, url, headers=None, json=None, timeout=None):
+        if (
+            method == "GET"
+            and "/users/alice" in url
+            and session.find("POST", "/rename")
+        ):
+            session.calls.append({"method": method, "url": url, "json": json})
+            return _legacy_alice(id=3, login_name="usr-a")
+        return FakeSession.request(session, method, url, headers, json, timeout)
+
+    session.request = renamed_after_post  # type: ignore[method-assign]
+    assert (
+        _adapter(session).ensure_user(
+            external_id="usr-a", email="alice@example.com", username="alice"
+        )
+        == "3"
+    )
+    rename = session.find("POST", "/admin/users/al/rename")
+    assert rename is not None and rename["json"] == {"new_username": "alice"}
+    assert session.find("POST", "/admin/users?") is None  # no second account
+
+
+def test_create_repo_maps_an_existing_name_to_repo_exists() -> None:
+    session = FakeSession(
+        [
+            (
+                "POST",
+                "/admin/users/platform/repos",
+                FakeResponse(409, {"message": "exists"}, "repository already exists"),
+            )
+        ]
+    )
+    with pytest.raises(RepoExistsError):
+        _adapter(session).create_repo(owner="platform", name="secret")
+    assert session.find("GET", "/repos/platform/secret") is None  # never looked up
+
+
+def test_list_repos_reads_every_page() -> None:
+    pages = {
+        1: [{"name": f"r{i}", "owner": {"login": "o"}} for i in range(50)],
+        2: [{"name": "last", "owner": {"login": "o"}}],
+    }
+
+    class Paged(FakeSession):
+        def request(self, method, url, headers=None, json=None, timeout=None):
+            self.calls.append({"method": method, "url": url, "json": json})
+            page = int(url.rsplit("page=", 1)[1])
+            return FakeResponse(200, {"data": pages.get(page, [])})
+
+    names = [r.name for r in _adapter(Paged([])).list_repos()]
+    assert len(names) == 51 and names[-1] == "last"
+
+
+def test_find_user_reads_the_newest_binding_back() -> None:
+    session = FakeSession(
+        [
+            (
+                "GET",
+                "/admin/users",
+                FakeResponse(
+                    200,
+                    [
+                        {"id": 4, "login": "old", "login_name": "usr-a"},
+                        {"id": 9, "login": "alice", "login_name": "usr-a"},
+                        {"id": 11, "login": "other", "login_name": "usr-b"},
+                    ],
+                ),
+            )
+        ]
+    )
+    assert _adapter(session).find_user(external_id="usr-a") == "alice"
+    call = session.find("GET", "/admin/users")
+    assert call is not None
+    assert "login_name=usr-a" in call["url"]
 
 
 def test_create_proposal_posts_head_and_base() -> None:
@@ -252,7 +464,9 @@ def test_submit_review_maps_event_and_state() -> None:
             (
                 "POST",
                 "/repos/alice/proj/pulls/7/reviews",
-                FakeResponse(200, {"id": 5, "state": "APPROVED", "user": {"login": "bob"}}),
+                FakeResponse(
+                    200, {"id": 5, "state": "APPROVED", "user": {"login": "bob"}}
+                ),
             )
         ]
     )

@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from naas_abi.apps.nexus.apps.api.app.services.graph.testing import acting_as_header, knowledge_team
 from naas_abi.apps.nexus.apps.api.app.services.maps.basemaps.adapters.primary import (
     maps_basemaps__primary_adapter__FastAPI as api,
 )
@@ -51,21 +50,14 @@ def client_for(monkeypatch):
     app.dependency_overrides[api.get_maps_basemap_service] = lambda: service
     app.dependency_overrides[api.maps_workspace_defaults] = WorkspaceMapsDefaults
 
+    acting_as_header(app)
+
     def make(role: str) -> TestClient:
-        async def access(user_id, workspace_id):
-            return role
+        """A client acting as the workspace's user of that role (``ws-1``)."""
+        return TestClient(app, headers={"x-user": role})
 
-        async def admin(user_id, workspace_id):
-            if role not in ("owner", "admin"):
-                raise HTTPException(status_code=403, detail="admins only")
-
-        monkeypatch.setattr(api, "require_workspace_access", access)
-        monkeypatch.setattr(api, "get_workspace_role", access)
-        monkeypatch.setattr(api, "require_workspace_admin", admin)
-        app.dependency_overrides[api.get_current_user_required] = lambda: SimpleNamespace(id="u-1")
-        return TestClient(app)
-
-    return make
+    with knowledge_team():
+        yield make
 
 
 def test_member_lists_core_and_deployment_seeds_with_previews(client_for) -> None:

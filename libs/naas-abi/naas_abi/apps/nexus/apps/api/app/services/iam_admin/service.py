@@ -1,0 +1,1033 @@
+"""The IAM admin pages' use cases.
+
+Every call is IAM's, made as the signed-in user: the user's own policies decide
+what each page may read and change, and Nexus adds no role check of its own. What
+this service adds is
+
+* **audit**: every change writes a ``requested`` record first, and nothing changes
+  if it cannot be written (``run_audited``, the System app's fail-closed log);
+  ``succeeded`` or ``failed`` follows. Records name the actor, the operation and
+  the resource, never a key's value or a policy's text;
+* **narrowing**: a module's manifest is approved as submitted or narrowed, never
+  widened (``narrowing.py``);
+* **names**: ids in lists come with the name of the policy or principal, read by
+  the engine for ids the caller already holds;
+* **what the caller may do**, so pages show only what will answer.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Awaitable, Callable, Collection, Mapping
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
+from typing import Any, TypeVar
+
+from naas_abi.apps.nexus.apps.api.app.services.iam_admin import views
+from naas_abi.apps.nexus.apps.api.app.services.iam_admin.narrowing import (
+    is_unchanged,
+    narrowing_errors,
+)
+from naas_abi.apps.nexus.apps.api.app.services.iam_admin.port import (
+    IamGateway,
+)
+from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources import (
+    AdminAction,
+    AdminAuditLog,
+)
+from naas_abi.apps.nexus.apps.api.app.services.sysadmin.resources_service import run_audited
+from naas_abi_core.engine.call_context import current_call_context
+from naas_abi_core.services.iam import roles
+from naas_abi_core.services.iam.IAMPorts import (
+    IAMConflictError,
+    IAMNotFoundError,
+    IIAMService,
+    PermissionDeniedError,
+    Policy,
+    PrincipalKind,
+)
+from naas_abi_core.services.iam.IAMService import (
+    attachment_resource,
+    group_resource,
+    key_resource,
+    manifest_resource,
+    policy_resource,
+)
+from naas_abi_core.services.iam.listing import MAX_TEXT
+from naas_abi_core.services.iam.modules import split_manifest
+from naas_abi_core.services.iam.names import (
+    PLATFORM,
+    container_of_scope,
+    parse_resource_name,
+    resource_name,
+    split_action,
+    validate_owner_scope,
+    validate_scope,
+)
+from naas_abi_core.services.iam.policy import (
+    PolicyDocument,
+    PolicyValidationError,
+    check_owned_document,
+    parse_policy_document,
+)
+from naas_abi_core.services.iam.publishers import by_publisher
+from starlette.concurrency import run_in_threadpool
+
+T = TypeVar("T")
+
+SERVICE = "iam"
+AUDIT_LIMIT = 500
+# The pages of ``attachable``: policies are listed in chunks, and few installs have more.
+MAX_ATTACHABLE_SCAN = 2000
+# How long a service-account key lives unless told: IAM's own default applies when None.
+MAX_KEY_DAYS = 365
+
+# What each action decides on, for ``access``: the type of its resource.
+_WILDCARD_TYPE = {
+    "iam:ListPolicies": "policy",
+    "iam:CreatePolicy": "policy",
+    "iam:UpdatePolicy": "policy",
+    "iam:DeletePolicy": "policy",
+    "iam:ListGroups": "group",
+    "iam:CreateGroup": "group",
+    "iam:DeleteGroup": "group",
+    "iam:AddGroupMember": "group",
+    "iam:RemoveGroupMember": "group",
+    "iam:MapIdpGroup": "group",
+    "iam:UnmapIdpGroup": "group",
+    "iam:ListPrincipals": "principal",
+    "iam:CreateServiceAccount": "principal",
+    "iam:DeletePrincipal": "principal",
+    "iam:SuspendPrincipal": "principal",
+    "iam:ResumePrincipal": "principal",
+    "iam:Explain": "principal",
+    "iam:ListManifests": "manifest",
+    "iam:ApproveManifest": "manifest",
+    "iam:RejectManifest": "manifest",
+}
+_ATTACHMENT_ACTIONS = ("iam:ListAttachments", "iam:AttachPolicy", "iam:DetachPolicy")
+_KEY_ACTIONS = ("iam:ListKeys", "iam:CreateKey", "iam:RevokeKey")
+# Administered at platform level only: service accounts and their keys, module approvals,
+# the simulator and IdP mappings. ``access`` at a scope answers them False, as it does
+# ``nexus:ReadSystem`` (the audit), so an org's or a workspace's page never offers them.
+_PLATFORM_ONLY = frozenset(
+    {
+        *(action for action, kind in _WILDCARD_TYPE.items() if kind in ("principal", "manifest")),
+        "iam:MapIdpGroup",
+        "iam:UnmapIdpGroup",
+        *_KEY_ACTIONS,
+    }
+)
+ACCESS_ACTIONS: tuple[str, ...] = (*_WILDCARD_TYPE, *_ATTACHMENT_ACTIONS, *_KEY_ACTIONS)
+# The platform's accounts (Platform Settings > Users): answered at the platform only.
+ACCOUNT_ACTIONS: tuple[str, ...] = (
+    "nexus:ListUsers",
+    "nexus:InviteUser",
+    "nexus:UpdateUser",
+    "nexus:SuspendUser",
+    "nexus:ResumeUser",
+    "nexus:DeleteUser",
+)
+
+# Each module's key and the ``module`` catalog types it exposes (its agents, apps,
+# workflows, pipelines), for ``publishers``.
+ModuleTypes = Callable[[], Awaitable[Mapping[str, Collection[str]]]]
+
+
+async def _module_types() -> Mapping[str, Collection[str]]:
+    """What every module exposes, from Nexus's module listing (``modules/scopes.py``),
+    read through the listers' cache (``listers.MODULE_ITEMS``): not once per request."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.listers import MODULE_ITEMS
+    from naas_abi.apps.nexus.apps.api.app.services.modules import scopes
+
+    return scopes.exposed_types(await MODULE_ITEMS.modules())
+
+
+class IamAdminService:
+    def __init__(
+        self,
+        gateway: IamGateway,
+        audit: AdminAuditLog,
+        *,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        modules: ModuleTypes = _module_types,
+    ) -> None:
+        self._gateway = gateway
+        self._audit = audit
+        self._clock = clock
+        self._modules = modules
+
+    # -- plumbing ---------------------------------------------------------------------
+
+    def _session(self, user: Any) -> IIAMService:
+        return self._gateway.bind(user)
+
+    async def _read(self, user: Any, call: Callable[[IIAMService], T]) -> T:
+        session = self._session(user)
+        return await run_in_threadpool(call, session)
+
+    async def _change(
+        self,
+        user: Any,
+        operation: str,
+        resource_id: str,
+        call: Callable[[IIAMService], T],
+        *,
+        detail: str = "",
+    ) -> T:
+        """A change IAM decides, audited first: no record, no change."""
+        session = self._session(user)
+        action = AdminAction(_actor_id(user), SERVICE, operation, resource_id, detail)
+        return await run_audited(self._audit, action, lambda: run_in_threadpool(call, session))
+
+    @staticmethod
+    def _wildcard(kind: str, owner: str = PLATFORM) -> str:
+        """Any resource of ``kind``: policies and groups as named at ``owner``."""
+        if kind == "policy":
+            return policy_resource("*", owner)
+        if kind == "group":
+            return group_resource("*", owner)
+        return resource_name("iam", kind, "*")
+
+    @staticmethod
+    def _listing(session: IIAMService, action: str, resource: str) -> Callable[[list[Any]], None]:
+        """A page that comes back empty because the caller may list nothing is a
+        refusal, not an empty page: ``check(items)`` raises for it."""
+
+        def check(items: list[Any]) -> None:
+            if not items and not session.authorize(action, resource).allowed:
+                raise PermissionDeniedError(action, resource)
+
+        return check
+
+    # -- what the caller may do -------------------------------------------------------
+
+    async def access(self, user: Any, scope: str | None = None) -> dict[str, Any]:
+        """Which actions the caller may perform: on the platform, or (the attachment
+        actions, and the policies and groups of that level) at ``scope``. Decided by
+        IAM, as for any call; ``nexus:ReadSystem`` for the audit. What is administered at
+        platform level only is False at a scope."""
+        if scope is not None:
+            validate_scope(scope)
+        owner = _owner_of(scope)
+
+        def decide(session: IIAMService) -> dict[str, bool]:
+            # At a scope, what only the platform administers is not asked: it is False there.
+            result: dict[str, bool] = (
+                dict.fromkeys(_PLATFORM_ONLY, False) if scope is not None else {}
+            )
+            for action, kind in _WILDCARD_TYPE.items():
+                if action not in result:
+                    result[action] = session.authorize(action, self._wildcard(kind, owner)).allowed
+            for action in _ATTACHMENT_ACTIONS:
+                # Any policy, or at least one of the roles an admin grants below owner.
+                result[action] = any(
+                    session.authorize(action, attachment_resource(policy, "*", scope)).allowed
+                    for policy in ("*", *roles.ROLES)
+                )
+            for action in _KEY_ACTIONS:
+                if action not in result:
+                    result[action] = session.authorize(action, key_resource("*", "*")).allowed
+            return result
+
+        actions, reads_system, accounts = await asyncio.gather(
+            self._read(user, decide),
+            self._reads_system(user) if scope is None else _false(),
+            self._account_actions(user) if scope is None else _none_of(ACCOUNT_ACTIONS),
+        )
+        actions["nexus:ReadSystem"] = reads_system
+        actions.update(accounts)
+        return {"actions": actions}
+
+    async def grantable(
+        self, user: Any, scope: str, parent: str | None = None, *, derive: bool = False
+    ) -> dict[str, Any]:
+        """What the caller may grant at ``scope``, for the policy builder: per catalog
+        (a kernel service or a module), its publisher, the actions they hold there,
+        the types each acts on and the resource patterns (``${scope}/...``) they
+        hold them on, minus their Denies. IAM's ``grantable``, about the caller
+        only, like ``access``: IAM validates the scope. ``publishers`` groups the
+        same by publisher and type. With ``parent``, what a sub-policy of it may
+        grant there: within its chain (IAM refuses a parent the caller may not
+        derive from or read)."""
+        found = await self._read(
+            user, lambda session: session.grantable(scope, parent=parent, derive=derive)
+        )
+        registry = self._gateway.catalogs()
+        return {
+            "scope": scope,
+            "catalogs": [views.grantable_view(c, registry.get(c.service)) for c in found],
+        }
+
+    async def writes_policies(self, user: Any, scope: str) -> bool:
+        """Whether the caller may create or update policies at ``scope``'s level:
+        who builds a policy there sees what they may grant there."""
+        owner = _owner_of(scope)
+
+        def decide(session: IIAMService) -> bool:
+            return any(
+                session.authorize(action, self._wildcard("policy", owner)).allowed
+                for action in ("iam:CreatePolicy", "iam:UpdatePolicy")
+            )
+
+        try:
+            return await self._read(user, decide)
+        except PermissionDeniedError:
+            return False
+
+    async def publishers(
+        self, user: Any, scope: str, parent: str | None = None, *, derive: bool = False
+    ) -> dict[str, Any]:
+        """Each publisher (the engine, naas_abi, then the modules), its resource
+        types, their actions and what the caller may grant of each at ``scope``,
+        and whether a type's resources are listed (``GET /resources``). Only what
+        the caller may grant: a type, or a publisher, with nothing of it is left
+        out. About the caller, like ``grantable``, and within ``parent`` as it is.
+        IAM answers first: the modules are read only for a caller it answers."""
+        grantable = await self._read(
+            user, lambda session: session.grantable(scope, parent=parent, derive=derive)
+        )
+        modules = await self._modules()
+
+        def read() -> dict[str, Any]:
+            found = by_publisher(
+                self._gateway.catalogs().all(),
+                grantable,
+                modules=modules,
+                listable=self._gateway.listable,
+                scope=scope,
+            )
+            return {"scope": scope, "publishers": [views.publisher_view(p) for p in found]}
+
+        return await run_in_threadpool(read)
+
+    async def resources(
+        self,
+        user: Any,
+        scope: str,
+        service: str,
+        type_name: str,
+        *,
+        text: str = "",
+        cursor: str | None = None,
+        module: str = "",
+        limit: int | None = None,
+    ) -> dict[str, Any]:
+        """The existing resources of ``service:type_name`` in ``scope`` that the
+        caller may list (IAM's ``list_resources``, as the caller): a stranger gets
+        an empty page. ``listed`` False: offered as wildcards only."""
+        if len(text) > MAX_TEXT:
+            raise ValueError(f"A search text is at most {MAX_TEXT} characters")
+        page = await self._read(
+            user,
+            lambda session: session.list_resources(
+                service,
+                type_name,
+                scope=scope,
+                text=text,
+                cursor=cursor,
+                limit=limit,
+                module=module,
+            ),
+        )
+        return {
+            "scope": scope,
+            "service": service,
+            "type": type_name,
+            **views.resource_page_view(page),
+        }
+
+    async def _reads_system(self, user: Any) -> bool:
+        from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+
+        return await AUTHZ.allowed("ReadSystem", user=user)
+
+    async def _account_actions(self, user: Any) -> dict[str, bool]:
+        """Platform Settings > Users (``services/accounts``): each ``nexus`` action on
+        the platform's accounts, as its routes ask it (``abi:nexus:user/-``)."""
+        from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+
+        held = await asyncio.gather(
+            *(AUTHZ.allowed(a.removeprefix("nexus:"), user=user, id="-") for a in ACCOUNT_ACTIONS)
+        )
+        return dict(zip(ACCOUNT_ACTIONS, held, strict=True))
+
+    # -- catalogs and validation ------------------------------------------------------
+
+    async def catalogs(
+        self,
+        user: Any,
+        scope: str | None = None,
+        parent: str | None = None,
+        *,
+        derive: bool = False,
+    ) -> dict[str, Any]:
+        """The action catalogs a policy names, for the editor's autocomplete:
+        only the actions the caller may grant at ``scope`` (the platform by
+        default), within ``parent`` for a sub-policy of it, and the types they
+        name. For whoever may write policies or read them (at ``scope``'s level)."""
+        owner = _owner_of(scope)
+
+        def read(session: IIAMService) -> dict[str, Any]:
+            self._require_any(
+                session,
+                ("iam:ListPolicies", "iam:CreatePolicy", "iam:UpdatePolicy"),
+                self._wildcard("policy", owner),
+            )
+            # Only what the caller may grant there: nothing lists more to
+            # someone who may grant less.
+            return views.catalogs_view(
+                self._gateway.catalogs().all(),
+                granted=session.grantable(owner, parent=parent, derive=derive),
+            )
+
+        return await self._read(user, read)
+
+    @staticmethod
+    def _require_any(session: IIAMService, actions: tuple[str, ...], resource: str) -> None:
+        if not any(session.authorize(a, resource).allowed for a in actions):
+            raise PermissionDeniedError(actions[0], resource)
+
+    async def validate_policy(
+        self, user: Any, source: Mapping[str, Any], scope: str | None = None
+    ) -> dict[str, Any]:
+        """What IAM says of a document (its object or its YAML/JSON text), saving
+        nothing; at an org or a workspace, as a policy that level owns
+        (``check_owned_document``), so what passes here ``create_policy`` takes."""
+        owner = _owner_of(scope)
+
+        def check(session: IIAMService) -> dict[str, Any]:
+            self._require_any(
+                session,
+                ("iam:CreatePolicy", "iam:UpdatePolicy"),
+                self._wildcard("policy", owner),
+            )
+            try:
+                document = self._parse(source)
+                check_owned_document(document, owner)
+            except PolicyValidationError as exc:
+                return {"valid": False, "errors": list(exc.errors), "document": None}
+            except ValueError as exc:
+                return {"valid": False, "errors": [str(exc)], "document": None}
+            return {"valid": True, "errors": [], "document": document.to_dict()}
+
+        return await self._read(user, check)
+
+    def _parse(self, source: Mapping[str, Any]) -> PolicyDocument:
+        raw = source.get("document") if source.get("document") is not None else source.get("text")
+        if raw is None:
+            raise ValueError("Give the policy as a document or as text")
+        return parse_policy_document(raw, self._gateway.catalogs())
+
+    # -- policies ---------------------------------------------------------------------
+
+    async def list_policies(
+        self, user: Any, after: str | None = None, scope: str | None = None
+    ) -> dict[str, Any]:
+        """The policies the caller may list; with ``scope``, that level's own and
+        those above it the caller may attach there (IAM's ``list_policies``). A
+        scope below a container (``<container>/*``) lists that container's."""
+        owner = validate_owner_scope(_owner_of(scope)) if scope is not None else None
+
+        def read(session: IIAMService) -> dict[str, Any]:
+            page = session.list_policies(after=after, scope=owner)
+            self._listing(session, "iam:ListPolicies", self._wildcard("policy", _owner_of(owner)))(
+                page.items
+            )
+            return {
+                "items": [views.policy_view(p) for p in page.items],
+                "next_after": page.next_after,
+            }
+
+        return await self._read(user, read)
+
+    async def get_policy(self, user: Any, policy_id: str) -> dict[str, Any]:
+        """A policy, with its parent (named for whoever sees its id) and the
+        sub-policies below it the caller may list."""
+
+        def read(session: IIAMService) -> dict[str, Any]:
+            policy = session.get_policy(policy_id)
+            parent = self._gateway.policy(policy.parent_id) if policy.parent_id else None
+            return {
+                **views.policy_view(policy),
+                "parent": views.policy_ref(policy.parent_id, parent),
+                "sub_policies": [
+                    views.policy_ref(p.id, p) for p in session.list_sub_policies(policy_id)
+                ],
+            }
+
+        return await self._read(user, read)
+
+    async def create_policy(
+        self,
+        user: Any,
+        name: str,
+        source: Mapping[str, Any],
+        description: str = "",
+        scope: str | None = None,
+        parent: str | None = None,
+    ) -> dict[str, Any]:
+        """A policy owned by ``scope`` (the platform when None), a sub-policy of
+        ``parent`` when given: IAM refuses a parent the caller does not hold."""
+
+        def create(session: IIAMService) -> dict[str, Any]:
+            document = self._parse(source)
+            return views.policy_view(
+                session.create_policy(
+                    name, document, description=description, scope=scope, parent=parent
+                )
+            )
+
+        detail = f"{name}, {scope or PLATFORM}"
+        if parent:
+            detail += f", sub-policy of {parent}"
+        return await self._change(user, "create_policy", name, create, detail=detail)
+
+    async def update_policy(
+        self,
+        user: Any,
+        policy_id: str,
+        *,
+        expected_revision: int,
+        source: Mapping[str, Any] | None,
+        name: str | None,
+        description: str | None,
+        parent: str | None = None,
+    ) -> dict[str, Any]:
+        """``parent``: None keeps it, ``""`` removes it, an id sets it."""
+
+        def update(session: IIAMService) -> dict[str, Any]:
+            document = self._parse(source) if source else None
+            return views.policy_view(
+                session.update_policy(
+                    policy_id,
+                    expected_revision=expected_revision,
+                    document=document,
+                    name=name,
+                    description=description,
+                    parent=parent,
+                )
+            )
+
+        detail = f"revision {expected_revision}"
+        if parent is not None:
+            detail += f", parent {parent}" if parent else ", no parent"
+        return await self._change(user, "update_policy", policy_id, update, detail=detail)
+
+    async def delete_policy(self, user: Any, policy_id: str) -> None:
+        await self._change(user, "delete_policy", policy_id, lambda s: s.delete_policy(policy_id))
+
+    # -- attachments ------------------------------------------------------------------
+
+    async def list_attachments(
+        self,
+        user: Any,
+        *,
+        principal_id: str | None = None,
+        policy_id: str | None = None,
+        scope: str | None = None,
+    ) -> dict[str, Any]:
+        if scope is not None:
+            validate_scope(scope)
+
+        # One principal's or one policy's attachments across levels: IAM keeps each one the
+        # caller may list, so an empty answer says only that there is none to show them. A
+        # level's list, or every attachment, stays refused to whoever may list none there.
+        across_levels = scope is None and (principal_id is not None or policy_id is not None)
+
+        def read(session: IIAMService) -> dict[str, Any]:
+            found = session.list_attachments(principal_id=principal_id, policy_id=policy_id)
+            if scope is not None:
+                found = [a for a in found if a.scope == scope]
+            if not across_levels:
+                self._listing(session, "iam:ListAttachments", attachment_resource("*", "*", scope))(
+                    found
+                )
+            policies: dict[str, Policy | None] = {}
+            principals: dict[str, Any] = {}
+            items = []
+            for attachment in found:
+                if attachment.policy_id not in policies:
+                    policies[attachment.policy_id] = self._gateway.policy(attachment.policy_id)
+                if attachment.principal_id not in principals:
+                    principals[attachment.principal_id] = self._gateway.principal(
+                        attachment.principal_id
+                    )
+                policy = policies[attachment.policy_id]
+                items.append(
+                    views.attachment_view(
+                        attachment,
+                        policy.name if policy else None,
+                        principals[attachment.principal_id],
+                        policy.owner_scope if policy else None,
+                    )
+                )
+            return {"items": items}
+
+        return await self._read(user, read)
+
+    async def attachable(
+        self, user: Any, scope: str | None, principal_id: str | None = None
+    ) -> dict[str, Any]:
+        """The policies the caller may attach at ``scope`` (to ``principal_id`` when
+        given), as IAM decides them (``attachable_policies``): written for the scope,
+        the caller's own right to attach, a Deny beyond ``${scope}`` only for whoever
+        may attach it unscoped, ``${scope}`` never unscoped, and another container's
+        policy only where the caller may know of it. At most ``MAX_ATTACHABLE_SCAN``."""
+        if scope is not None:
+            validate_scope(scope)
+
+        def read(session: IIAMService) -> dict[str, Any]:
+            found: list[Policy] = []
+            after: str | None = None
+            while len(found) < MAX_ATTACHABLE_SCAN:
+                page = session.attachable_policies(
+                    scope, principal_id=principal_id, limit=1000, after=after
+                )
+                found.extend(page.items)
+                if page.next_after is None:
+                    break
+                after = page.next_after
+            return {
+                "items": [
+                    {
+                        "id": p.id,
+                        "name": p.name,
+                        "description": p.description,
+                        "managed": p.managed,
+                        "owner_scope": p.owner_scope,
+                    }
+                    for p in found[:MAX_ATTACHABLE_SCAN]
+                ]
+            }
+
+        return await self._read(user, read)
+
+    async def attach(
+        self, user: Any, policy_id: str, principal_id: str, scope: str | None
+    ) -> dict[str, Any]:
+        if scope is not None:
+            validate_scope(scope)
+
+        def attach(session: IIAMService) -> dict[str, Any]:
+            attachment = session.attach_policy(policy_id, principal_id, scope)
+            policy = self._gateway.policy(policy_id)
+            return views.attachment_view(
+                attachment,
+                policy.name if policy else None,
+                self._gateway.principal(principal_id),
+                policy.owner_scope if policy else None,
+            )
+
+        return await self._change(
+            user,
+            "attach_policy",
+            f"{policy_id}/{principal_id}",
+            attach,
+            detail=f"scope {scope or 'platform'}",
+        )
+
+    async def detach(self, user: Any, policy_id: str, principal_id: str, scope: str | None) -> None:
+        if scope is not None:
+            validate_scope(scope)
+
+        def detach(session: IIAMService) -> None:
+            if not session.detach_policy(policy_id, principal_id, scope):
+                raise IAMNotFoundError("That policy is not attached there")
+
+        await self._change(
+            user,
+            "detach_policy",
+            f"{policy_id}/{principal_id}",
+            detach,
+            detail=f"scope {scope or 'platform'}",
+        )
+
+    # -- principals -------------------------------------------------------------------
+
+    async def list_principals(
+        self,
+        user: Any,
+        kind: PrincipalKind | None = None,
+        after: str | None = None,
+        text: str | None = None,
+    ) -> dict[str, Any]:
+        """The principals the caller may list; with ``text``, IAM's search (id, name,
+        email or display name): how Platform settings finds a person."""
+
+        def read(session: IIAMService) -> dict[str, Any]:
+            page = session.list_principals(kind, after=after, text=text or None)
+            self._listing(session, "iam:ListPrincipals", self._wildcard("principal"))(page.items)
+            return {
+                "items": [views.principal_view(p) for p in page.items if p.status != "deleted"],
+                "next_after": page.next_after,
+            }
+
+        return await self._read(user, read)
+
+    async def principal_groups(self, user: Any, principal_id: str) -> dict[str, Any]:
+        """The groups ``principal_id`` belongs to that the caller may read, at every
+        level (IAM's ``list_principal_groups``): empty, not refused, for a principal
+        the caller sees nothing of, since the answer says no more than that."""
+        return await self._read(
+            user,
+            lambda s: {
+                "items": [views.principal_view(g) for g in s.list_principal_groups(principal_id)]
+            },
+        )
+
+    async def get_principal(self, user: Any, principal_id: str) -> dict[str, Any]:
+        return await self._read(user, lambda s: views.principal_view(s.get_principal(principal_id)))
+
+    async def suspend(self, user: Any, principal_id: str) -> dict[str, Any]:
+        return await self._change(
+            user,
+            "suspend_principal",
+            principal_id,
+            lambda s: views.principal_view(s.suspend_principal(principal_id)),
+        )
+
+    async def resume(self, user: Any, principal_id: str) -> dict[str, Any]:
+        return await self._change(
+            user,
+            "resume_principal",
+            principal_id,
+            lambda s: views.principal_view(s.resume_principal(principal_id)),
+        )
+
+    # -- groups -----------------------------------------------------------------------
+
+    async def list_groups(self, user: Any, scope: str | None = None) -> dict[str, Any]:
+        """The groups the caller may list; with ``scope``, that level's own (and,
+        at a workspace, its org's the caller attaches to there). A scope below a
+        container lists that container's."""
+        owner = validate_owner_scope(_owner_of(scope)) if scope is not None else None
+
+        def read(session: IIAMService) -> dict[str, Any]:
+            page = session.list_groups(scope=owner)
+            self._listing(session, "iam:ListGroups", self._wildcard("group", _owner_of(owner)))(
+                page.items
+            )
+            return {"items": [views.principal_view(g) for g in page.items if g.status != "deleted"]}
+
+        return await self._read(user, read)
+
+    def _group_view(self, session: IIAMService, group_id: str) -> dict[str, Any]:
+        group = session.get_group(group_id)
+        members = []
+        for member_id in session.list_group_members(group_id):
+            record = self._gateway.principal(member_id)
+            if record is not None:
+                members.append(views.principal_view(record))
+        mappings = [
+            {"provider": m.provider, "claim_value": m.claim_value}
+            for m in session.list_idp_group_mappings(group_id)
+        ]
+        return {**views.principal_view(group), "members": members, "idp_mappings": mappings}
+
+    async def get_group(self, user: Any, group_id: str) -> dict[str, Any]:
+        return await self._read(user, lambda s: self._group_view(s, group_id))
+
+    async def create_group(self, user: Any, name: str, scope: str | None = None) -> dict[str, Any]:
+        """A group owned by ``scope`` (a container's name; the platform without one)."""
+        owner = scope
+        return await self._change(
+            user,
+            "create_group",
+            name,
+            lambda s: views.principal_view(s.create_group(name, scope=owner)),
+            detail=owner or "platform group",
+        )
+
+    async def delete_group(self, user: Any, group_id: str) -> None:
+        await self._change(user, "delete_group", group_id, lambda s: s.delete_group(group_id))
+
+    async def add_member(self, user: Any, group_id: str, member_id: str) -> dict[str, Any]:
+        def add(session: IIAMService) -> dict[str, Any]:
+            session.add_group_member(group_id, member_id)
+            return self._group_view(session, group_id)
+
+        return await self._change(user, "add_group_member", f"{group_id}/{member_id}", add)
+
+    async def remove_member(self, user: Any, group_id: str, member_id: str) -> dict[str, Any]:
+        def remove(session: IIAMService) -> dict[str, Any]:
+            if not session.remove_group_member(group_id, member_id):
+                raise IAMNotFoundError("That principal is not a member")
+            return self._group_view(session, group_id)
+
+        return await self._change(user, "remove_group_member", f"{group_id}/{member_id}", remove)
+
+    async def map_idp_group(
+        self, user: Any, group_id: str, provider: str, claim_value: str
+    ) -> dict[str, Any]:
+        def map_(session: IIAMService) -> dict[str, Any]:
+            session.map_idp_group(provider, claim_value, group_id)
+            return self._group_view(session, group_id)
+
+        return await self._change(
+            user, "map_idp_group", group_id, map_, detail=f"{provider}: {claim_value}"
+        )
+
+    async def unmap_idp_group(
+        self, user: Any, group_id: str, provider: str, claim_value: str
+    ) -> dict[str, Any]:
+        def unmap(session: IIAMService) -> dict[str, Any]:
+            if not session.unmap_idp_group(provider, claim_value, group_id):
+                raise IAMNotFoundError("That IdP group is not mapped to this group")
+            return self._group_view(session, group_id)
+
+        return await self._change(
+            user, "unmap_idp_group", group_id, unmap, detail=f"{provider}: {claim_value}"
+        )
+
+    # -- service accounts and keys ----------------------------------------------------
+
+    async def list_service_accounts(self, user: Any) -> dict[str, Any]:
+        def read(session: IIAMService) -> dict[str, Any]:
+            page = session.list_principals("service_account", limit=500)
+            self._listing(session, "iam:ListPrincipals", self._wildcard("principal"))(page.items)
+            builtin = frozenset(roles.SERVICE_ACCOUNTS)
+            now = self._clock()
+            items = []
+            for record in page.items:
+                if record.status == "deleted":
+                    continue
+                try:
+                    keys = session.list_keys(record.id)
+                except (PermissionDeniedError, IAMNotFoundError):
+                    keys = []
+                items.append(
+                    {
+                        **views.principal_view(record),
+                        "account_kind": views.account_kind(record, builtin),
+                        "active_keys": sum(1 for k in keys if k.usable(now)),
+                    }
+                )
+            return {"items": items}
+
+        return await self._read(user, read)
+
+    async def create_service_account(self, user: Any, name: str) -> dict[str, Any]:
+        def create(session: IIAMService) -> dict[str, Any]:
+            record = session.create_service_account(name)
+            return {
+                **views.principal_view(record),
+                "account_kind": views.account_kind(record, frozenset(roles.SERVICE_ACCOUNTS)),
+                "active_keys": 0,
+            }
+
+        return await self._change(user, "create_service_account", name, create)
+
+    async def delete_service_account(self, user: Any, account_id: str) -> None:
+        def delete(session: IIAMService) -> None:
+            record = session.get_principal(account_id)
+            if record.kind != "service_account":
+                raise IAMNotFoundError(f"Service account {account_id} not found")
+            if views.account_kind(record, frozenset(roles.SERVICE_ACCOUNTS)) == "builtin":
+                raise IAMConflictError("The engine's own service accounts cannot be deleted")
+            session.delete_principal(account_id)
+
+        await self._change(user, "delete_principal", account_id, delete)
+
+    async def list_keys(self, user: Any, account_id: str) -> dict[str, Any]:
+        def read(session: IIAMService) -> dict[str, Any]:
+            session.require(
+                "iam:ListKeys",
+                key_resource(account_id, "*"),
+                not_found=lambda: IAMNotFoundError(f"Service account {account_id} not found"),
+            )
+            return {"items": [views.key_view(k) for k in session.list_keys(account_id)]}
+
+        return await self._read(user, read)
+
+    async def create_key(
+        self, user: Any, account_id: str, description: str, expires_in_days: int | None
+    ) -> dict[str, Any]:
+        if expires_in_days is not None and not 1 <= expires_in_days <= MAX_KEY_DAYS:
+            raise ValueError(f"A key lasts 1 to {MAX_KEY_DAYS} days")
+        expires = (
+            self._clock() + timedelta(days=expires_in_days) if expires_in_days is not None else None
+        )
+
+        def create(session: IIAMService) -> dict[str, Any]:
+            return views.created_key(
+                session.create_key(account_id, description=description, expires_at=expires)
+            )
+
+        return await self._change(
+            user, "create_key", account_id, create, detail=description or "no description"
+        )
+
+    async def revoke_key(self, user: Any, account_id: str, key_id: str) -> dict[str, Any]:
+        return await self._change(
+            user,
+            "revoke_key",
+            f"{account_id}/{key_id}",
+            lambda s: views.key_view(s.revoke_key(account_id, key_id)),
+        )
+
+    async def rotate_key(self, user: Any, account_id: str, key_id: str) -> dict[str, Any]:
+        return await self._change(
+            user,
+            "rotate_key",
+            f"{account_id}/{key_id}",
+            lambda s: views.created_key(s.rotate_key(account_id, key_id)),
+        )
+
+    # -- module permission approvals --------------------------------------------------
+
+    def _account_name(self, principal_id: str) -> str | None:
+        record = self._gateway.principal(principal_id)
+        return record.name if record else None
+
+    async def list_manifests(self, user: Any, status: str | None) -> dict[str, Any]:
+        def read(session: IIAMService) -> dict[str, Any]:
+            found = session.list_manifests(status=status)  # type: ignore[arg-type]
+            self._listing(session, "iam:ListManifests", manifest_resource("*"))(found)
+            return {
+                "items": [views.manifest_view(m, self._account_name(m.principal_id)) for m in found]
+            }
+
+        return await self._read(user, read)
+
+    async def approve_manifest(
+        self,
+        user: Any,
+        principal_id: str,
+        sha256: str,
+        document: Mapping[str, Any] | None,
+    ) -> dict[str, Any]:
+        def approve(session: IIAMService) -> dict[str, Any]:
+            narrowed = None
+            if document is not None:
+                # The policy is what an admin narrows; the catalog the module
+                # declares is approved as submitted (``views.manifest_view``).
+                submitted_policy, catalog = split_manifest(
+                    session.get_manifest(principal_id, sha256).document
+                )
+                candidate_policy, echoed = split_manifest(document)
+                if echoed is not None and dict(echoed) != dict(catalog or {}):
+                    raise PolicyValidationError(
+                        ["catalog: a module's declared catalog is approved as submitted"]
+                    )
+                submitted = parse_policy_document(submitted_policy)
+                candidate = parse_policy_document(candidate_policy)
+                problems = narrowing_errors(submitted, candidate)
+                if problems:
+                    raise PolicyValidationError(problems)
+                if not is_unchanged(submitted, candidate):
+                    narrowed = candidate
+            approved = session.approve_manifest(principal_id, sha256, document=narrowed)
+            return views.manifest_view(approved, self._account_name(principal_id))
+
+        return await self._change(
+            user,
+            "approve_manifest",
+            f"{principal_id}/{sha256}",
+            approve,
+            detail="narrowed" if document is not None else "as submitted",
+        )
+
+    async def reject_manifest(
+        self, user: Any, principal_id: str, sha256: str, reason: str
+    ) -> dict[str, Any]:
+        return await self._change(
+            user,
+            "reject_manifest",
+            f"{principal_id}/{sha256}",
+            lambda s: views.manifest_view(
+                s.reject_manifest(principal_id, sha256, reason=reason),
+                self._account_name(principal_id),
+            ),
+            detail=reason[:200],
+        )
+
+    # -- the simulator ----------------------------------------------------------------
+
+    async def simulate(
+        self, user: Any, principal_id: str, action: str, resource: str
+    ) -> dict[str, Any]:
+        """Whether ``principal_id`` may perform ``action`` on ``resource``, and which
+        statement decides: IAM's ``explain``, which needs ``iam:Explain`` on the principal."""
+
+        # A malformed action or resource is a bad request, not a denial.
+        split_action(action)
+        parse_resource_name(resource)
+
+        def explain(session: IIAMService) -> dict[str, Any]:
+            explanation = session.explain(action, resource, principal_id=principal_id)
+            principal = self._gateway.principal(principal_id)
+            if principal is None:
+                raise IAMNotFoundError(f"Principal {principal_id} not found")
+            policy = None
+            if explanation.statement is not None and explanation.statement.policy_id:
+                try:
+                    policy = session.get_policy(explanation.statement.policy_id)
+                except (PermissionDeniedError, IAMNotFoundError):
+                    policy = self._gateway.policy(explanation.statement.policy_id)
+                    if policy is not None:
+                        # The caller may not read the policy: name it, show no text.
+                        policy = replace(policy, document=PolicyDocument(statements=()))
+            return views.simulation_view(explanation, principal, policy)
+
+        return await self._read(user, explain)
+
+    # -- audit ------------------------------------------------------------------------
+
+    async def history(
+        self,
+        *,
+        operation: str | None = None,
+        resource_id: str | None = None,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        """Every change made through these pages, newest first (requested, then
+        succeeded or failed)."""
+        entries = await self._audit.history(
+            service=SERVICE, resource_id=resource_id, limit=min(max(limit, 1), AUDIT_LIMIT)
+        )
+        return {
+            "items": [
+                {
+                    "at": e.at,
+                    "actor_id": e.actor_id,
+                    "actor": e.actor,
+                    "operation": e.operation,
+                    "resource_id": e.resource_id,
+                    "detail": e.detail,
+                    "phase": e.phase,
+                    "error": e.error,
+                }
+                for e in entries
+                if operation is None or e.operation == operation
+            ]
+        }
+
+
+def _owner_of(scope: str | None) -> str:
+    """The level whose policies and groups a scope's page shows: the scope's
+    container (a scope below a container, ``<container>/*``, shows that
+    container's), or the platform."""
+    if scope is None:
+        return PLATFORM
+    return container_of_scope(scope)
+
+
+async def _false() -> bool:
+    return False
+
+
+async def _none_of(actions: tuple[str, ...]) -> dict[str, bool]:
+    return dict.fromkeys(actions, False)
+
+
+def _actor_id(user: Any) -> str:
+    """Whose change it is: the user's id, else the call's own user."""
+    found = user if isinstance(user, str) else getattr(user, "id", None)
+    if found:
+        return str(found)
+    named = current_call_context().user
+    return named.id if named is not None else "unknown"
+
+
+__all__ = ["ACCESS_ACTIONS", "IamAdminService"]

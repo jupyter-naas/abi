@@ -29,7 +29,12 @@ _CAMEL_BOUNDARY = re.compile(r"([a-z0-9])([A-Z])")
 
 
 def process_route_slug(instance: Any) -> str:
-    name = instance.__class__.__name__
+    return process_class_slug(instance.__class__)
+
+
+def process_class_slug(cls: type) -> str:
+    """``process_route_slug`` of an instance of ``cls``."""
+    name = cls.__name__
     stepped = _CAMEL_ACRONYM.sub(r"\1_\2", name)
     stepped = _CAMEL_BOUNDARY.sub(r"\1_\2", stepped)
     return stepped.replace(" ", "_").replace("-", "_").lower()

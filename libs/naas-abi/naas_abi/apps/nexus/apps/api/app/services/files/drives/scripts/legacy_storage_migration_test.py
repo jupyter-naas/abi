@@ -51,23 +51,18 @@ def test_workspace_legacy_files_are_moved_under_naas_abi(tmp_path) -> None:
     LegacyStorageMigrator(files_service).ensure_workspace_drive_migrated("ws-1")
 
     assert (
-        files_service.read_file(path="naas_abi/workspace-drive/ws-1/docs/spec.md").content
-        == "spec"
+        files_service.read_file(path="naas_abi/workspace-drive/ws-1/docs/spec.md").content == "spec"
     )
     assert not files_service._file_exists("ws-1/docs/spec.md")
 
 
 def test_migration_is_idempotent(tmp_path) -> None:
     files_service = _make_files_service(tmp_path)
-    files_service.create_file(
-        path="my-drive/user-1/a.txt", content="a", content_type="text/plain"
-    )
+    files_service.create_file(path="my-drive/user-1/a.txt", content="a", content_type="text/plain")
     migrator = LegacyStorageMigrator(files_service)
     migrator.ensure_my_drive_migrated("user-1")
     # Re-adding a legacy file after the marker is written must not trigger a second move
-    files_service.create_file(
-        path="my-drive/user-1/b.txt", content="b", content_type="text/plain"
-    )
+    files_service.create_file(path="my-drive/user-1/b.txt", content="b", content_type="text/plain")
     migrator.ensure_my_drive_migrated("user-1")
 
     assert files_service._file_exists("my-drive/user-1/b.txt")

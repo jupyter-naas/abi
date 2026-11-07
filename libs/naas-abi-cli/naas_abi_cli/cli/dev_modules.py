@@ -5,17 +5,16 @@ Each runs as `python -m <module> <args>` under `dev_supervisor`, which restarts
 it when it exits on its own. Its environment carries the dev broker from the
 overlay `abi dev up` generates:
 
-- ``ABI_NATS_URL``, logged in as the broker user ``module``, and
-  ``ABI_DISCOVERY_PROJECT``;
-- ``ABI_MODULE_KEY``, the module key of its module id (its ``identity``, else
-  the ``module_id`` of the ``ABIModule`` its package exports), and
-  ``ABI_SERVICE_TOKEN``, a token signed with it, for modules that read only
-  that. Never the project secret: a module can sign for its own id only, and
-  discovery registers it only under that id;
+- ``ABI_NATS_URL``, the broker with no login: the module brings its key;
+- ``ABI_SERVICE_KEY``, a fresh key of its service account
+  (``module/<project>/<module_id>``), as ``python -m naas_abi_sdk.module_runner``
+  expects, and ``ABI_DISCOVERY_PROJECT``;
 - ``OTEL_EXPORTER_OTLP_ENDPOINT`` with ``--with-tracing``;
 - the project's ``src/`` first on ``PYTHONPATH``.
 
-The module's own ``env`` comes last; its values may name the above as ``${VAR}``.
+No signing secret, broker password or other key reaches it: the CLI's own
+``NATS_*`` variables and ``iam/`` secrets are left out. The module's own
+``env`` comes last; its values may name the above as ``${VAR}``.
 """
 
 from __future__ import annotations
@@ -23,22 +22,27 @@ from __future__ import annotations
 import json
 import os
 import string
-import subprocess
 import sys
 from collections.abc import Mapping
-from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
-
-from naas_abi_cli.cli.admin_credentials import nats_login
+from urllib.parse import urlsplit, urlunsplit
 
 if TYPE_CHECKING:
     from naas_abi_core.engine.engine_configuration.EngineConfiguration_Dev import (
         DevModuleConfiguration,
     )
 
-# A dev process's token. Modules sign fresh ones with their ABI_MODULE_KEY.
-SERVICE_TOKEN_TTL = timedelta(days=7)
+# Never passed on to a module: broker logins, the callout seed, IAM's secrets.
+_WITHHELD_PREFIXES = ("NATS_", "iam/", "ABI_SERVICE_KEY")
+
+# The built-in identity provider (libs/naas-abi-idp), the default provider of
+# `abi dev up`. It runs as the module account module/<project>/idp.
+IDP_MODULE = "naas_abi_idp"
+IDP_NAME = "idp"
+IDP_CLIENT_ID = "abi"
+IDP_ISSUER_ENV = "ABI_IDP_ISSUER"
+IDP_PROVIDER = "builtin"
 
 
 def load_dev_modules() -> dict[str, DevModuleConfiguration]:
@@ -81,6 +85,93 @@ def configured_discovery_project(config_file: str | Path) -> str | None:
     return project if isinstance(project, str) and project else None
 
 
+def configured_identity(config_file: str | Path) -> dict | None:
+    """The top-level ``identity:`` block of a project config, rendered without
+    secrets and not validated; None when the config has none."""
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
+        EngineConfiguration,
+    )
+
+    path = Path(config_file)
+    data = EngineConfiguration.render_without_secrets(
+        path.read_text(encoding="utf-8"), base_dir=str(path.resolve().parent)
+    )
+    identity = data.get("identity") if isinstance(data, dict) else None
+    return identity if isinstance(identity, dict) else None
+
+
+def has_identity_providers(identity: dict | None) -> bool:
+    return bool((identity or {}).get("providers"))
+
+
+def wants_builtin_idp(identity: dict | None) -> bool:
+    """Whether ``abi dev up`` runs the built-in IdP: the project names it
+    (``provisioning: builtin``), or names no provider at all, in which case the
+    dev overlay configures it. A project with providers of its own gets none."""
+    providers = (identity or {}).get("providers") or []
+    if not providers:
+        return True
+    return any(
+        isinstance(p, dict) and p.get("provisioning") == "builtin" for p in providers
+    )
+
+
+def is_builtin_idp(module: DevModuleConfiguration) -> bool:
+    return module.module == IDP_MODULE
+
+
+def implicit_idp_module() -> DevModuleConfiguration:
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration_Dev import (
+        DevModuleConfiguration,
+    )
+
+    return DevModuleConfiguration(name=IDP_NAME, module=IDP_MODULE, module_id=IDP_NAME)
+
+
+def with_builtin_idp(
+    modules: dict[str, DevModuleConfiguration], identity: dict | None
+) -> dict[str, DevModuleConfiguration]:
+    """``modules``, plus the built-in IdP when ``abi dev up`` should run it and
+    the project does not declare it as a dev module itself."""
+    if not wants_builtin_idp(identity) or any(
+        is_builtin_idp(m) for m in modules.values()
+    ):
+        return modules
+    return {**modules, IDP_NAME: implicit_idp_module()}
+
+
+def builtin_identity(issuer: str, client_secret: str) -> dict:
+    """The ``identity`` block the dev overlay adds when the project has none."""
+    return {
+        "default_provider": IDP_PROVIDER,
+        "providers": [
+            {
+                "name": IDP_PROVIDER,
+                "display_name": "Email code",
+                "issuer": issuer,
+                "client_id": IDP_CLIENT_ID,
+                "client_secret": client_secret,
+                "groups_claim": "groups",
+                "scopes": ["openid", "email", "profile", "groups", "offline_access"],
+                "provisioning": "builtin",
+            }
+        ],
+    }
+
+
+def idp_environment(api_origin: str, client_secret: str) -> dict[str, str]:
+    """What the built-in IdP module is told: where it is served, the client ABI
+    signs in as, and (dev only, the mail goes to a local file) that an address
+    may register itself. ``api_origin``: where the browser reaches the API."""
+    return {
+        IDP_ISSUER_ENV: f"{api_origin}/idp",
+        "ABI_IDP_CLIENT_ID": IDP_CLIENT_ID,
+        "ABI_IDP_CLIENT_SECRET": client_secret,
+        "ABI_IDP_REDIRECT_URIS": f"{api_origin}/api/auth/oidc/callback",
+        "ABI_IDP_SIGNUP": "1",
+    }
+
+
 def read_overlay(path: Path) -> dict:
     """The generated dev overlay: JSON after a comment line."""
     body = "\n".join(
@@ -89,57 +180,10 @@ def read_overlay(path: Path) -> dict:
     return json.loads(body)
 
 
-# Prints the module id of the ABIModule a package exports, as naas-abi-module
-# reads it (module_id, else the class's module), or nothing without one.
-_MODULE_ID = (
-    "import importlib, sys\n"
-    "t = getattr(importlib.import_module(sys.argv[1]), 'ABIModule', None)\n"
-    "print((getattr(t, 'module_id', None) or t.__module__) if t is not None else '')\n"
-)
-
-
-def module_identity(
-    module: DevModuleConfiguration, project_root: Path, base: Mapping[str, str]
-) -> str:
-    """The module id ``module`` registers as: its ``identity``, else read from the
-    ``ABIModule`` its package exports (in a subprocess: the CLI never imports the
-    project's code). Raises ValueError when neither tells it."""
-    if module.identity:
-        return module.identity
-    env = dict(base)
-    src = project_root / "src"
-    if src.is_dir():
-        env["PYTHONPATH"] = os.pathsep.join(
-            [str(src), *filter(None, [base.get("PYTHONPATH", "")])]
-        )
-    hint = f"add `identity: <module_id>` to the dev.modules entry {module.name!r}"
-    try:
-        result = subprocess.run(
-            [sys.executable, "-c", _MODULE_ID, module.module],
-            cwd=project_root,
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=120,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        raise ValueError(
-            f"dev module {module.name!r}: could not read its module id ({exc}); {hint}"
-        ) from exc
-    if result.returncode != 0:
-        error = (result.stderr.strip().splitlines() or ["no output"])[-1]
-        raise ValueError(
-            f"dev module {module.name!r}: importing {module.module} to read its module "
-            f"id failed: {error}; fix the import, or {hint}"
-        )
-    lines = result.stdout.strip().splitlines()
-    if not lines or not lines[-1].strip():
-        raise ValueError(
-            f"dev module {module.name!r}: {module.module} exports no ABIModule to read "
-            f"its module id from; {hint}"
-        )
-    return lines[-1].strip()
+def without_login(url: str) -> str:
+    """``url`` with its ``user:password@`` removed."""
+    parts = urlsplit(url)
+    return urlunsplit(parts._replace(netloc=parts.netloc.rpartition("@")[2]))
 
 
 def module_environment(
@@ -148,21 +192,19 @@ def module_environment(
     project_root: Path,
     base: Mapping[str, str],
     *,
-    nats_password: str,
+    service_key: str,
 ) -> dict[str, str]:
-    """``nats_password``: the broker user ``module``'s (NATS_MODULE_PASSWORD)."""
-    from naas_abi_core.engine.nats_auth import issue_module_token, module_key
-
+    """``service_key``: the module's own (``abi dev up`` creates it)."""
     nats = overlay["nats"]
-    identity = module_identity(module, project_root, base)
-    key = module_key(nats["jwt_secret"], identity)
-    env = dict(base)
-    env.pop("NATS_JWT_SECRET", None)  # the engine's, never a module's
+    env = {
+        key: value
+        for key, value in base.items()
+        if not key.startswith(_WITHHELD_PREFIXES)
+    }
     env.update(
-        ABI_NATS_URL=nats_login(nats["nats_url"], "module", nats_password),
+        ABI_NATS_URL=without_login(nats["nats_url"]),
+        ABI_SERVICE_KEY=service_key,
         ABI_DISCOVERY_PROJECT=nats["discovery"]["project"],
-        ABI_MODULE_KEY=key,
-        ABI_SERVICE_TOKEN=issue_module_token(identity, key, ttl=SERVICE_TOKEN_TTL),
     )
     src = project_root / "src"
     if src.is_dir():

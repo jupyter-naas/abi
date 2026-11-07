@@ -111,14 +111,6 @@ function pathWithoutQuery(pathname: string): string {
   return pathname.split(/[?#]/)[0];
 }
 
-/** Superadmin Events page: left column shows an events feed, not Chat. */
-export function isWorkspaceAdminEventsPath(pathname: string | null | undefined): boolean {
-  const parts = pathWithoutQuery(pathname || '').split('/').filter(Boolean);
-  const workspaceIndex = parts.indexOf('workspace');
-  if (workspaceIndex < 0) return false;
-  return parts[workspaceIndex + 2] === 'admin' && parts[workspaceIndex + 3] === 'events';
-}
-
 export function getFeatureForWorkspacePath(pathname: string): FeatureKey | null {
   const parts = pathWithoutQuery(pathname).split('/').filter(Boolean);
   const workspaceIndex = parts.indexOf('workspace');
@@ -204,12 +196,33 @@ export function pathNeedsGraphExport(pathname: string | null | undefined): boole
   return getFeatureForWorkspacePath(pathname || '') === 'graph';
 }
 
+/**
+ * The feature a route needs to be opened: its section's, except the Apps page.
+ * Opening an app is that app's module scope, which the API checks (the page lists
+ * only the apps the caller may open); the "apps" feature is the app projects
+ * (`/apps/p/<slug>`) and the settings. The workspace's settings are the settings layout's
+ * to open (`useWorkspaceSettingsAccess`: the role there, else a Roles & permissions section
+ * IAM shows), so a member an admin gave an `iam:` right opens Roles & permissions without the
+ * settings feature, and a member with neither is told so on every settings page.
+ */
+export function getGatingFeatureForWorkspacePath(pathname: string): FeatureKey | null {
+  const feature = getFeatureForWorkspacePath(pathname);
+  const parts = pathWithoutQuery(pathname).split('/').filter(Boolean);
+  const workspaceIndex = parts.indexOf('workspace');
+  if (feature === 'settings.workspace') {
+    // The settings layout decides, with the role and IAM (`useWorkspaceSettingsAccess`).
+    return null;
+  }
+  if (feature !== 'apps') return feature;
+  return parts[workspaceIndex + 3] === 'p' ? 'apps' : null;
+}
+
 export function isWorkspacePathAllowed(params: {
   pathname: string;
   role?: string;
   workspaceFlags?: WorkspaceFeatureFlags;
 }): boolean {
-  const feature = getFeatureForWorkspacePath(params.pathname);
+  const feature = getGatingFeatureForWorkspacePath(params.pathname);
   if (!feature) {
     return true;
   }
@@ -257,7 +270,7 @@ export function getWorkspaceSwitchPath(params: {
   role?: string;
   workspaceFlags?: WorkspaceFeatureFlags;
 }): string {
-  const feature = getFeatureForWorkspacePath(params.pathname);
+  const feature = getGatingFeatureForWorkspacePath(params.pathname);
   if (feature) {
     if (
       isFeatureEnabled({

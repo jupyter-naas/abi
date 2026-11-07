@@ -59,10 +59,10 @@ export function AgentSelector({ compact = false }: { compact?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const selectedAgent = useWorkspaceStore((s) => s.selectedAgent);
   const setSelectedAgent = useWorkspaceStore((s) => s.setSelectedAgent);
-  const { defaultAgents, customAgents, filteredAgents, enabledAgents } = useAgentList(searchQuery);
+  const { defaultAgents, customAgents, filteredAgents, usableAgents } = useAgentList(searchQuery);
 
-  const defaultAgent = pickWorkspaceDefaultAgent(enabledAgents);
-  const selected = enabledAgents.find((a) => a.id === selectedAgent) || defaultAgent;
+  const defaultAgent = pickWorkspaceDefaultAgent(usableAgents);
+  const selected = usableAgents.find((a) => a.id === selectedAgent) || defaultAgent;
 
   useEffect(() => {
     setMounted(true);

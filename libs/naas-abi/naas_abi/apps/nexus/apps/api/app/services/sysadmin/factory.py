@@ -48,8 +48,6 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.service import SysAdminS
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.traces import TraceStore
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.traffic import TrafficHub
 
-# Same service identity as the API's other NATS calls (remote agents).
-CALLER_IDENTITY = "api"
 CONNECTION_NAME = "nexus-api-sysadmin"
 TAP_CONNECTION_NAME = "nexus-api-traffic-tap"
 DATA_CONNECTION_NAME = "nexus-api-sysadmin-data"
@@ -94,16 +92,22 @@ class _UnavailableTap:
         return None
 
 
-def _transport(nats: Any, name: str) -> Any:
-    from naas_abi_core.engine.nats_auth import ServiceTokenSource
+def _transport(nats: Any, name: str, *, delegate_user: bool = False) -> Any:
+    from naas_abi.apps.nexus.apps.api.app.services.engine_credentials import (
+        api_delegate,
+        api_host_token,
+        api_token,
+    )
     from naas_abi_sdk.transport import Transport
 
     return Transport(
         nats.nats_url,
-        ServiceTokenSource(CALLER_IDENTITY, nats.jwt_secret),
+        api_token(),
+        host_token=api_host_token(),
         timeout=10,
         name=name,
         connect_timeout=2,
+        delegate=api_delegate() if delegate_user else None,
     )
 
 
@@ -391,7 +395,10 @@ def build_jobs_admin(engine: Any, audit_engine: Callable[[], Any]) -> Any:
         control: Any = SourceUnavailable("jobs", off)
         queue: Any = SourceUnavailable("queue", off)
     else:
-        transports = _PerLoop(lambda: _transport(nats, JOBS_CONNECTION_NAME))
+        # For the signed-in admin: a manual trigger or cancel carries a delegation
+        # that names the user, whose policy the job's host checks
+        # (discovery:TriggerJob).
+        transports = _PerLoop(lambda: _transport(nats, JOBS_CONNECTION_NAME, delegate_user=True))
 
         async def connect() -> Any:
             return await transports.get().connect()

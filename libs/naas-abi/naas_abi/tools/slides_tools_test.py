@@ -8,8 +8,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from naas_abi_core.services.agent.context import (
+    agent_container,
     agent_user_id,
-    agent_workspace_id,
     slides_active_slug,
     slides_active_title,
     slides_brief,
@@ -24,6 +24,7 @@ from naas_abi_core.services.source_control.SourceControlService import (
     SourceControlService,
 )
 
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from naas_abi.tools.slides_tools import (
     _DATA_URL_RE,
     _READ_SECTION_BUDGET,
@@ -756,12 +757,8 @@ def test_apply_replacements_real_template_cover_title():
 
 def _bind_in_memory_git(monkeypatch):
     sc = SourceControlService(InMemoryAdapter())
-    monkeypatch.setattr(
-        "naas_abi.tools.slides_tools._get_source_control", lambda: sc
-    )
-    monkeypatch.setattr(
-        "naas_abi.tools.slides_tools._repo_id", lambda: "abi/monorepo"
-    )
+    monkeypatch.setattr("naas_abi.tools.slides_tools._get_source_control", lambda: sc)
+    monkeypatch.setattr("naas_abi.tools.slides_tools._repo_id", lambda: "abi/monorepo")
     return sc
 
 
@@ -785,7 +782,7 @@ def _seed_in_memory_deck(sc, html: str, *, slug: str = "untitled-local"):
 def _slides_context(*, workspace: str = "ws-test", slug: str = "untitled-local"):
     _forget_active_slugs()
     tokens = [
-        agent_workspace_id.set(workspace),
+        agent_container.set(workspace_container(None, workspace)),
         slides_active_slug.set(slug),
         agent_user_id.set("user-1"),
         slides_research_required.set(False),
@@ -795,7 +792,7 @@ def _slides_context(*, workspace: str = "ws-test", slug: str = "untitled-local")
 
 
 def _reset_tokens(tokens) -> None:
-    agent_workspace_id.reset(tokens[0])
+    agent_container.reset(tokens[0])
     slides_active_slug.reset(tokens[1])
     agent_user_id.reset(tokens[2])
     slides_research_required.reset(tokens[3])
@@ -949,9 +946,7 @@ def test_missing_repo_error_is_wipe_message(monkeypatch):
         "naas_abi.tools.slides_tools._get_source_control",
         lambda: _MissingRepo(),
     )
-    monkeypatch.setattr(
-        "naas_abi.tools.slides_tools._repo_id", lambda: "abi/monorepo"
-    )
+    monkeypatch.setattr("naas_abi.tools.slides_tools._repo_id", lambda: "abi/monorepo")
     tokens = _slides_context()
     try:
         result = _persist_deck(
@@ -969,7 +964,7 @@ def _main_chat_context(*, workspace: str = "ws-test"):
     """Main chat surface: authenticated, but no deck open."""
     _forget_active_slugs()
     return [
-        agent_workspace_id.set(workspace),
+        agent_container.set(workspace_container(None, workspace)),
         slides_active_slug.set(None),
         agent_user_id.set("user-1"),
         slides_research_required.set(False),

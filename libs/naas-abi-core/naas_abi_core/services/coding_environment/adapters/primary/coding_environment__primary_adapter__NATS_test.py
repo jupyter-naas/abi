@@ -10,7 +10,7 @@ against a minimal fake ``Request`` that records whatever gets passed to
 import asyncio
 
 import pytest
-from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_test_tokens import OTHER_TOKENS, TEST_TOKENS
 from naas_abi_core.proto.coding_environment.v1 import coding_environment_pb2
 from naas_abi_core.services.coding_environment.adapters.primary.coding_environment__primary_adapter__NATS import (
     AUTH_HEADER,
@@ -33,7 +33,7 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
     WorkspaceTemplate,
 )
 
-SECRET = "test-shared-secret"
+SECRET = TEST_TOKENS.verifier
 
 
 class _FakeRequest:
@@ -73,9 +73,19 @@ class _StubAdapter(ICodingEnvironmentAdapter):
         self.logs: dict[str, list[str]] = {}
         self.last_params: dict[str, str] | None | object = "unset"
 
-    def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
+    def ensure_user(
+        self,
+        *,
+        external_id: str,
+        email: str,
+        username: str,
+        vouched_email: bool = False,
+    ) -> str:
         if self.next_error is not None:
             raise self.next_error
+        return f"user-{external_id}"
+
+    def find_user(self, *, external_id: str) -> str | None:
         return f"user-{external_id}"
 
     def list_templates(self) -> list[WorkspaceTemplate]:
@@ -155,7 +165,7 @@ class _StubAdapter(ICodingEnvironmentAdapter):
 
 
 def _valid_token() -> str:
-    return issue_service_token("api", SECRET)
+    return TEST_TOKENS.token("api")
 
 
 def _ensure_user_request(
@@ -210,7 +220,7 @@ def test_malformed_token_returns_unauthenticated():
 
 def test_token_signed_with_wrong_secret_returns_unauthenticated():
     adapter = CodingEnvironmentPrimaryAdapterNATS(_StubAdapter(), SECRET)
-    wrong_secret_token = issue_service_token("api", "a-different-secret")
+    wrong_secret_token = OTHER_TOKENS.token("api")
     request = _FakeRequest(
         data=_ensure_user_request(), headers={AUTH_HEADER: wrong_secret_token}
     )

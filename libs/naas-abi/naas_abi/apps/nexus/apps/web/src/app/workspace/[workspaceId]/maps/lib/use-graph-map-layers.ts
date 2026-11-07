@@ -1,7 +1,7 @@
 "use client";
 import {useEffect, useState} from 'react';
 import {getApiUrl} from '@/lib/config';
-import {useAuthStore} from '@/stores/auth';
+import { authCredentials, getAuthHeader, selectSession, useAuthStore } from '@/stores/auth';
 import {useWorkspaceStore} from '@/stores/workspace';
 import {MAPS_DATASETS, type MapsDataset} from './datasets';
 
@@ -10,7 +10,7 @@ export interface GraphMapDataset extends MapsDataset { graphUri: string; runtime
 type GraphLayersState = {layers: GraphMapDataset[]; loading: boolean; error: string | null};
 
 /**
- * One request per workspace (and token) for every component that lists the
+ * One request per workspace (and session) for every component that lists the
  * layers, kept a minute: graph layers only change when a module registers one.
  * Failures are not kept.
  */
@@ -21,7 +21,7 @@ function loadGraphLayers(workspaceId: string, token: string): Promise<GraphMapDa
   const key = `${workspaceId}\n${token}`;
   const cached = loads.get(key);
   if (cached && Date.now() - cached.at < TTL_MS) return cached.promise;
-  const promise = fetch(`${getApiUrl()}/api/maps/layers?workspace_id=${encodeURIComponent(workspaceId)}`, {headers: {Authorization: `Bearer ${token}`}, cache: 'no-store'})
+  const promise = fetch(`${getApiUrl()}/api/maps/layers?workspace_id=${encodeURIComponent(workspaceId)}`, {headers: getAuthHeader(), credentials: authCredentials(), cache: 'no-store'})
     .then(async res => {
       if (res.status === 404) return {layers: []};
       if (!res.ok) throw new Error('Unable to load graph map layers');
@@ -39,7 +39,7 @@ function loadGraphLayers(workspaceId: string, token: string): Promise<GraphMapDa
 
 export function useGraphMapLayers(): GraphLayersState {
   const workspaceId = useWorkspaceStore(s => s.currentWorkspaceId);
-  const token = useAuthStore(s => s.token);
+  const token = useAuthStore(selectSession);
   const [state, setState] = useState<GraphLayersState & {workspaceId: string | null; token: string | null}>({workspaceId: null, token: null, layers: [], loading: true, error: null});
   useEffect(() => {
     let cancelled = false;

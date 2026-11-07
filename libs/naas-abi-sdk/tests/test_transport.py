@@ -11,11 +11,20 @@ from naas_abi_proto.transfer.v1 import transfer_pb2 as pb
 from nats.errors import NoRespondersError
 from overflow_fakes import OWNER, FakeHost
 
+from naas_abi_sdk.call_context import (
+    CallContext,
+    service_account,
+    use_call_context,
+    user,
+)
 from naas_abi_sdk.transport import RPCError, Transport
 
+WS_1 = "abi:nexus:organization/o-1/nexus:workspace/ws-1"
+WS_2 = "abi:nexus:organization/o-1/nexus:workspace/ws-2"
 
-def transport(reply=b"", headers=None):
-    rpc = Transport("nats://unused", "issued-token", timeout=0.02)
+
+def transport(reply=b"", headers=None, **options):
+    rpc = Transport("nats://unused", "issued-token", timeout=0.02, **options)
     nc = SimpleNamespace(
         max_payload=8 * 1024 * 1024,
         request=AsyncMock(return_value=SimpleNamespace(data=reply, headers=headers)),
@@ -36,6 +45,202 @@ def test_roundtrip_preserves_bytes_and_does_not_mutate_request():
         "Nats-Auth-Token": "issued-token",
         "Abi-Overflow": "1",  # can read a reply above the broker limit
     }
+
+
+def test_the_current_calls_trace_and_container_travel_with_the_call():
+    rpc, nc = transport(kv.GetResponse().SerializeToString())
+    caller = CallContext(
+        principal=service_account("api"),
+        on_behalf_of=user("usr-ada"),
+        container=WS_1,
+        trace_id="trace-1",
+    )
+    with use_call_context(caller):
+        asyncio.run(
+            rpc.call("abi.svc.keyvalue.v1.get", kv.GetRequest(), kv.GetResponse)
+        )
+    sent = kv.GetRequest.FromString(nc.request.call_args.args[1])
+    assert (sent.context.trace_id, sent.context.container) == ("trace-1", WS_1)
+    # Never the field of SDK 0.2, which an engine refuses.
+    assert not sent.context.workspace_id
+    # Identity travels only in headers, never in the request body.
+    assert not sent.context.principal_id and not sent.context.tenant_id
+
+
+def test_a_delegating_transport_sends_the_token_that_carries_the_user():
+    seen = []
+
+    def delegate(who, recipient, scope=None):
+        seen.append((who.id, recipient))
+        return f"delegation-for-{who.id}"
+
+    rpc, nc = transport(kv.GetResponse().SerializeToString(), delegate=delegate)
+    caller = CallContext(principal=service_account("api"), on_behalf_of=user("usr-ada"))
+    with use_call_context(caller):
+        asyncio.run(
+            rpc.call("abi.svc.keyvalue.v1.get", kv.GetRequest(), kv.GetResponse)
+        )
+    headers = nc.request.call_args.kwargs["headers"]
+    assert headers["Nats-Auth-Token"] == "delegation-for-usr-ada"
+    assert "Abi-On-Behalf-Of" not in headers
+    assert seen == [("usr-ada", None)]
+
+
+def test_a_delegate_may_be_asynchronous_and_names_the_host_it_calls():
+    seen = []
+
+    async def delegate(who, recipient, scope=None):
+        seen.append(recipient)
+        return "delegation-for-a-host"
+
+    rpc, nc = transport(kv.GetResponse().SerializeToString(), delegate=delegate)
+    caller = CallContext(principal=service_account("api"), on_behalf_of=user("usr-ada"))
+    with use_call_context(caller):
+        asyncio.run(
+            rpc.call(
+                "abi.agent.default.HOSTULID.i1.summarize.submit",
+                kv.GetRequest(),
+                kv.GetResponse,
+            )
+        )
+    assert seen == ["HOSTULID"]
+    assert nc.request.call_args.kwargs["headers"]["Nats-Auth-Token"] == (
+        "delegation-for-a-host"
+    )
+
+
+def test_without_a_user_the_transport_calls_as_itself():
+    rpc, nc = transport(
+        kv.GetResponse().SerializeToString(),
+        delegate=lambda who, recipient, scope: pytest.fail("no user to carry"),
+    )
+    with use_call_context(CallContext(principal=service_account("engine"))):
+        asyncio.run(
+            rpc.call("abi.svc.keyvalue.v1.get", kv.GetRequest(), kv.GetResponse)
+        )
+    assert nc.request.call_args.kwargs["headers"]["Nats-Auth-Token"] == "issued-token"
+
+
+def test_a_delegation_that_fails_fails_the_call_instead_of_dropping_the_user():
+    def refuse(who, recipient, scope=None):
+        raise PermissionError("user suspended")
+
+    rpc, nc = transport(kv.GetResponse().SerializeToString(), delegate=refuse)
+    caller = CallContext(principal=service_account("api"), on_behalf_of=user("usr-ada"))
+    with use_call_context(caller), pytest.raises(PermissionError):
+        asyncio.run(
+            rpc.call("abi.svc.keyvalue.v1.get", kv.GetRequest(), kv.GetResponse)
+        )
+    nc.request.assert_not_called()
+
+
+def test_a_transport_without_a_delegate_calls_as_itself_for_any_user():
+    """A module's transport calls as the module: it is not allowed to carry a user."""
+    rpc, nc = transport(kv.GetResponse().SerializeToString())
+    caller = CallContext(principal=service_account("api"), on_behalf_of=user("u"))
+    with use_call_context(caller):
+        asyncio.run(
+            rpc.call("abi.svc.keyvalue.v1.get", kv.GetRequest(), kv.GetResponse)
+        )
+    headers = nc.request.call_args.kwargs["headers"]
+    assert headers["Nats-Auth-Token"] == "issued-token"
+    assert "Abi-On-Behalf-Of" not in headers
+
+
+def _jwt(exp, **claims):
+    import base64
+    import json
+
+    body = base64.urlsafe_b64encode(json.dumps({"exp": exp, **claims}).encode())
+    return f"h.{body.decode().rstrip('=')}.s"
+
+
+def test_a_run_makes_its_kernel_calls_with_the_delegation_it_was_handed():
+    import time
+
+    token = _jwt(time.time() + 600)
+    rpc, nc = transport(kv.GetResponse().SerializeToString())
+    context = CallContext(
+        principal=service_account("module/acme/people"),
+        on_behalf_of=user("usr-ada"),
+        delegated_token=token,
+    )
+    with use_call_context(context):
+        asyncio.run(
+            rpc.call("abi.svc.keyvalue.v1.get", kv.GetRequest(), kv.GetResponse)
+        )
+    assert nc.request.call_args.kwargs["headers"]["Nats-Auth-Token"] == token
+
+
+def test_a_run_never_hands_its_delegation_to_another_module_host():
+    import time
+
+    rpc, nc = transport(kv.GetResponse().SerializeToString())
+    context = CallContext(
+        principal=service_account("module/acme/people"),
+        on_behalf_of=user("usr-ada"),
+        delegated_token=_jwt(time.time() + 600),
+    )
+    with use_call_context(context):
+        rpc.host_token = lambda recipient: f"host-token-{recipient}"
+        asyncio.run(
+            rpc.call(
+                "abi.agent.default.OTHERHOST.i1.x.submit",
+                kv.GetRequest(),
+                kv.GetResponse,
+            )
+        )
+    # The host gets this module's own token for it, not the user's delegation.
+    assert nc.request.call_args.kwargs["headers"]["Nats-Auth-Token"] == (
+        "host-token-OTHERHOST"
+    )
+
+
+def test_a_delegation_about_to_expire_is_renewed_through_the_service_key():
+    import time
+
+    old = _jwt(time.time() + 10)
+    fresh = _jwt(time.time() + 600)
+    rpc, nc = transport(kv.GetResponse().SerializeToString())
+    renewed = []
+
+    class Credentials:
+        async def renew_delegation(self, transport, token):
+            renewed.append(token)
+            return fresh
+
+        async def access_token(self, transport, audience="abi:nats"):
+            return "issued-token"
+
+    rpc.credentials = Credentials()
+    context = CallContext(
+        principal=service_account("module/acme/people"),
+        on_behalf_of=user("usr-ada"),
+        delegated_token=old,
+    )
+
+    async def twice():
+        for _ in range(2):
+            await rpc.call("abi.svc.keyvalue.v1.get", kv.GetRequest(), kv.GetResponse)
+
+    with use_call_context(context):
+        asyncio.run(twice())
+    assert renewed == [old]  # once, then remembered
+    assert nc.request.call_args.kwargs["headers"]["Nats-Auth-Token"] == fresh
+
+
+def test_a_request_keeps_its_own_trace_and_container():
+    rpc, nc = transport(kv.GetResponse().SerializeToString())
+    request = kv.GetRequest(
+        context=common_pb2.CallContext(trace_id="mine", container=WS_2)
+    )
+    with use_call_context(
+        CallContext(principal=service_account("api"), container=WS_1)
+    ):
+        asyncio.run(rpc.call("abi.svc.keyvalue.v1.get", request, kv.GetResponse))
+    sent = kv.GetRequest.FromString(nc.request.call_args.args[1])
+    assert (sent.context.trace_id, sent.context.container) == ("mine", WS_2)
+    assert "Abi-On-Behalf-Of" not in nc.request.call_args.kwargs["headers"]
 
 
 @pytest.mark.parametrize("error", [TimeoutError(), ConnectionError("lost")])
@@ -127,7 +332,7 @@ def test_closed_client_cannot_reconnect():
     asyncio.run(close())
 
 
-# --- overflow: payloads above the broker limit (docs/adr/20261003_nats-rpc-overflow.md)
+# --- overflow: payloads above the broker limit
 
 
 class OverflowBroker:
@@ -243,3 +448,66 @@ def test_the_brokers_limit_is_the_only_limit():
     )
     (subject, payload), _ = nc.request.call_args
     assert subject == "set" and len(payload) > 10 * 1024 * 1024
+
+
+def _sent_token(nc):
+    return nc.request.call_args.kwargs["headers"]["Nats-Auth-Token"]
+
+
+def test_a_call_to_a_host_carries_a_token_for_that_host_only():
+    """A host reads its caller's token: it is never the one the kernel accepts,
+    nor one made for another host."""
+    rpc, nc = transport(
+        kv.GetResponse().SerializeToString(),
+        host_token=lambda recipient: f"for-{recipient}",
+    )
+    for subject, recipient in (
+        ("abi.agent.default.SAONE.i.h.v1.submit", "SAONE"),
+        ("abi.mod.default.SATWO.i.model.m.chat", "SATWO"),
+    ):
+        asyncio.run(rpc.call(subject, kv.GetRequest(key="x"), kv.GetResponse))
+        assert _sent_token(nc) == f"for-{recipient}", subject
+    for subject in ("abi.svc.keyvalue.v1.get", "abi.discovery.default.v1.list_modules"):
+        asyncio.run(rpc.call(subject, kv.GetRequest(key="x"), kv.GetResponse))
+        assert _sent_token(nc) == "issued-token", subject
+
+
+def test_the_host_a_subject_addresses():
+    from naas_abi_sdk.transport import host_recipient
+
+    assert host_recipient("abi.agent.default.SA.inst.digest.v1.submit") == "SA"
+    assert host_recipient("abi.mod.default.SA.inst.app.x.http") == "SA"
+    assert host_recipient("abi.svc.keyvalue.v1.get") is None
+    assert host_recipient("abi.agent.default") is None
+
+
+def test_a_transport_without_a_host_token_makes_no_call_to_a_host():
+    from naas_abi_sdk.transport import NoHostTokenError
+
+    rpc, nc = transport(kv.GetResponse().SerializeToString())
+    with pytest.raises(NoHostTokenError):
+        asyncio.run(
+            rpc.call(
+                "abi.agent.default.sa.i.h.v1.submit", kv.GetRequest(), kv.GetResponse
+            )
+        )
+    nc.request.assert_not_called()
+
+
+def test_a_delegation_carries_the_scope_of_the_calls_credential():
+    seen = []
+
+    def delegate(who, recipient, scope=None):
+        seen.append(scope)
+        return "delegation"
+
+    rpc, _ = transport(kv.GetResponse().SerializeToString(), delegate=delegate)
+    scope = ({"effect": "Allow", "actions": ["keyvalue:Get"], "resources": ["*"]},)
+    caller = CallContext(
+        principal=service_account("api"), on_behalf_of=user("usr-ada"), scope=scope
+    )
+    with use_call_context(caller):
+        asyncio.run(
+            rpc.call("abi.svc.keyvalue.v1.get", kv.GetRequest(), kv.GetResponse)
+        )
+    assert seen == [scope]

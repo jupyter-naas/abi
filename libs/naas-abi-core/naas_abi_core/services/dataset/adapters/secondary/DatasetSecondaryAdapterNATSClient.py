@@ -9,10 +9,10 @@ Shared connection, token, timeout, and reply handling live in
 ``naas_abi_core.engine.nats_rpc.NatsRPCClient``. Calls are never replayed
 by the transport after failure; a timeout may hide a completed operation.
 
-Stage 1 auth model (see ``naas_abi_core.engine.nats_auth``): a JWT asserting
-``service_identity`` is issued once and attached on the ``Nats-Auth-Token``
-header of every request, reissued only when it is close to expiry rather
-than on every call. ``DatasetPrimaryAdapterNATS`` must read the token from
+Auth (see ``naas_abi_core.engine.nats_auth``): the client's credentials
+(the engine's own tokens, or a service key's) put an ES256 engine token on
+the ``Nats-Auth-Token`` header of every request, renewed at half its
+life. ``DatasetPrimaryAdapterNATS`` must read the token from
 that exact header -- both sides read ``AUTH_HEADER`` from
 ``dataset_nats_contract``, a neutral module neither adapter owns, so this
 file never has to import from the primary adapter's module (or vice versa)
@@ -33,6 +33,7 @@ from contextlib import contextmanager
 from datetime import UTC
 from typing import Any
 
+from naas_abi_core.engine.nats_auth import TokenSource
 from naas_abi_core.engine.nats_rpc import NatsRPCClient, NatsRPCError
 from naas_abi_core.proto.dataset.v1 import dataset_pb2
 from naas_abi_core.services.dataset.adapters.dataset_nats_contract import (
@@ -55,6 +56,7 @@ from naas_abi_core.services.dataset.DatasetPort import (
     DatasetAlreadyExistsError,
     DatasetInfo,
     DatasetNotFoundError,
+    DatasetRequestRefused,
     DatasetSchemaError,
     DatasetSnapshotConflictError,
     DatasetSnapshotInfo,
@@ -67,6 +69,7 @@ from naas_abi_core.services.dataset.DatasetPort import (
     RowStream,
     WriteMode,
 )
+from naas_abi_core.services.iam.enforcement import raise_authorization_error
 
 _COLUMN_TYPE_TO_PB: dict[ColumnType, dataset_pb2.ColumnType] = {
     "string": dataset_pb2.COLUMN_TYPE_STRING,
@@ -167,6 +170,9 @@ def _raise_for_error(error: dataset_pb2.DatasetError) -> None:
     code = error.error.code
     message = error.error.message
     detail_case = error.WhichOneof("detail")
+    raise_authorization_error(code, message)
+    if code == "INVALID_ARGUMENT":
+        raise DatasetRequestRefused(message)
     if code == "DATASET_NOT_FOUND" and detail_case == "not_found":
         raise DatasetNotFoundError(error.not_found.name, error.not_found.namespace)
     if code == "DATASET_ALREADY_EXISTS" and detail_case == "already_exists":
@@ -185,20 +191,25 @@ def _raise_for_error(error: dataset_pb2.DatasetError) -> None:
     raise RuntimeError(f"dataset NATS RPC failed ({code}): {message}")
 
 
+def _not_found(message: str) -> DatasetNotFoundError:
+    """The error a stream reports as ``Dataset <namespace>.<name> not found``."""
+    qualified = message.removeprefix("Dataset ").removesuffix(" not found")
+    namespace, _, name = qualified.partition(".")
+    return DatasetNotFoundError(name, namespace)
+
+
 class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
     """Calls a remote ``DatasetPrimaryAdapterNATS`` over NATS RPC."""
 
     def __init__(
         self,
         nats_url: str,
-        jwt_secret: str,
-        service_identity: str,
+        credentials: TokenSource,
         timeout_seconds: float = 10.0,
     ) -> None:
         super().__init__(
             nats_url,
-            jwt_secret,
-            service_identity,
+            credentials,
             timeout_seconds,
             auth_header=AUTH_HEADER,
         )
@@ -280,7 +291,7 @@ class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
         timeout_seconds: float | None = None,
     ) -> DatasetInfo:
         """Upload the rows as they are read, one JSON object per line, over a
-        transfer stream (docs/adr/20261003_nats-streamed-results.md); the
+        transfer stream; the
         engine commits them once. An error while reading ``rows`` discards the
         upload: nothing is written. ``timeout_seconds`` bounds the upload and
         the wait for the commit (``None``: no bound; each exchange of the
@@ -293,6 +304,9 @@ class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
             request.snapshot_id = snapshot_id
 
         def raise_error(error: Any) -> None:
+            raise_authorization_error(error.code, error.message)
+            if error.code == "DATASET_NOT_FOUND":
+                raise DatasetNotFoundError(name, namespace)
             raise NatsRPCError(error.code, error.message)
 
         with self._transfer_stream(
@@ -346,14 +360,19 @@ class DatasetSecondaryAdapterNATSClient(NatsRPCClient, IDatasetPort):
         namespace: str = "default",
         snapshot_id: int | None = None,
     ) -> Iterator[RowStream]:
-        """Rows fetched as the caller iterates, over a transfer stream
-        (docs/adr/20261003_nats-streamed-results.md); the unary ``query`` on an
-        engine without it. Leaving the block closes the session."""
+        """Rows fetched as the caller iterates, over a transfer stream; the
+        unary ``query`` on an engine without it. Leaving the block closes the
+        session."""
         request = dataset_pb2.QueryRequest(sql=sql, namespace=namespace)
         if snapshot_id is not None:
             request.snapshot_id = snapshot_id
 
         def raise_error(error: Any) -> None:
+            raise_authorization_error(error.code, error.message)
+            if error.code == "INVALID_ARGUMENT":
+                raise DatasetRequestRefused(error.message)
+            if error.code == "DATASET_NOT_FOUND":
+                raise _not_found(error.message)
             if error.code == "DATASET_SCHEMA_ERROR":
                 raise DatasetSchemaError(error.message)
             if error.code == "DATASET_SNAPSHOT_NOT_FOUND" and snapshot_id is not None:

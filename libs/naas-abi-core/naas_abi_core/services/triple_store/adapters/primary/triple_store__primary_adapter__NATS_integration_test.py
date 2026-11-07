@@ -1,9 +1,10 @@
 """A remote module's ontologies reach the engine's schema graph, over a real broker.
 
-An SDK module (``run_module``, logged in as the broker's ``module`` user, signing as its own
-module id) sends the ``.ttl`` files of its ``ontologies/`` folder once discovery reports it
-READY; the engine's triple store primary adapter stores them under
-``module/<module_id>/<path>``. Run with ``--import-mode=importlib``; needs ``nats-server``.
+An SDK module (``run_module``) sends the ``.ttl`` files of its ``ontologies/`` folder once
+discovery reports it READY; the engine's triple store primary adapter stores them under
+``module/<module_id>/<path>``. Who may load under a source is IAM's decision, proved in
+``TripleStoreService_authorization_test.py``; here the service is wired to no IAM. Run with
+``--import-mode=importlib``; needs ``nats-server``.
 """
 
 from __future__ import annotations
@@ -19,12 +20,11 @@ from typing import Any, cast
 import nats
 import pytest
 from naas_abi_core.engine import nats_overflow
-from naas_abi_core.engine.nats_auth import module_key
 from naas_abi_core.engine.nats_test_server import (
-    login,
     native_nats_server,
     nats_server_binary,
 )
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.discovery.discovery_factory import start_discovery
 from naas_abi_core.services.triple_store.adapters.primary.triple_store__primary_adapter__NATS import (
     TripleStorePrimaryAdapterNATS,
@@ -33,8 +33,7 @@ from naas_abi_core.services.triple_store.TripleStoreFactory import TripleStoreFa
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from rdflib import RDF, Graph, URIRef
 
-SECRET = "triple-store-schema-integration-secret-32"
-PASSWORDS = {"abi": "nats-abi-schema", "module": "nats-module-schema"}
+SECRET = TEST_TOKENS.verifier
 SCHEMA_GRAPH = URIRef("http://ontology.naas.ai/graph/schema")
 EX = "http://example.org/"
 pytestmark = [
@@ -155,21 +154,15 @@ def broker(request, tmp_path):
     with native_nats_server(
         tmp_path / "broker" if (tmp_path / "broker").mkdir() is None else tmp_path,
         jetstream=True,
-        users=PASSWORDS,
         max_payload=request.param,
     ) as url:
-        yield (
-            login(url, "abi", PASSWORDS["abi"]),
-            login(url, "module", PASSWORDS["module"]),
-            request.param,
-        )
+        yield url, url, request.param
 
 
 def test_a_remote_modules_ontologies_load_once_ready_and_follow_the_file(
     broker, tmp_path
 ):
     from naas_abi_sdk import DiscoveryConfiguration, run_module
-    from naas_abi_sdk.service_token import ModuleToken
 
     engine_url, module_url, max_payload = broker
     # Above the broker's limit when it is small: the file travels through RPC overflow.
@@ -199,7 +192,7 @@ def test_a_remote_modules_ontologies_load_once_ready_and_follow_the_file(
             run_module(
                 module_type,
                 url=module_url,
-                token=ModuleToken(mid, module_key(SECRET, mid)),
+                token=TEST_TOKENS.token(mid),
                 discovery=DiscoveryConfiguration(refresh_seconds=0.1),
             )
         )
@@ -248,11 +241,8 @@ def test_a_remote_modules_ontologies_load_once_ready_and_follow_the_file(
     asyncio.run(asyncio.wait_for(scenario(), 90))
 
 
-def test_a_module_cannot_load_under_another_modules_id_or_invalid_turtle(
-    broker, tmp_path
-):
+def test_a_module_cannot_load_a_malformed_source_or_invalid_turtle(broker, tmp_path):
     from naas_abi_sdk import DiscoveryConfiguration, run_module
-    from naas_abi_sdk.service_token import ModuleToken
     from naas_abi_sdk.services.errors import ServiceError
 
     engine_url, module_url, _ = broker
@@ -268,7 +258,6 @@ def test_a_module_cannot_load_under_another_modules_id_or_invalid_turtle(
             async def run(self):
                 store = self.engine.services.triple_store
                 for label, source, text in (
-                    ("other", "module/b/Stolen.ttl", _ttl("Stolen")),
                     ("invalid", "module/a/Broken.ttl", "this is not turtle"),
                     ("malformed", "module/a/../b/Stolen.ttl", _ttl("Stolen")),
                     ("internal", "module/a/Forged.ttl", _forged()),
@@ -291,11 +280,10 @@ def test_a_module_cannot_load_under_another_modules_id_or_invalid_turtle(
             await run_module(
                 A,
                 url=module_url,
-                token=ModuleToken("a", module_key(SECRET, "a")),
+                token=TEST_TOKENS.token("a"),
                 discovery=DiscoveryConfiguration(refresh_seconds=0.1),
             )
             assert outcomes == {
-                "other": "PERMISSION_DENIED",
                 "invalid": "INVALID_ARGUMENT",
                 "malformed": "INVALID_ARGUMENT",
                 "internal": "INVALID_ARGUMENT",

@@ -7,9 +7,8 @@ contract and ``naas_abi_core/proto/README.md`` for why it lives there). This
 is the server side; the matching client is
 ``SourceControlSecondaryAdapterNATSClient``.
 
-Stage 1 auth model (see ``naas_abi_core.engine.nats_auth``): one shared
-secret, one claim -- which known first-party process holds the token. Every
-incoming request must carry a valid token in the ``Nats-Auth-Token`` header
+Auth (see ``naas_abi_core.engine.nats_auth``): every incoming request
+must carry an engine token, verified against the JWKS, in the ``Nats-Auth-Token`` header
 (``AUTH_HEADER``, imported from ``source_control_nats_contract`` below --
 that's a neutral module neither adapter owns, so this file and the client's
 don't depend on each other; see that module's docstring for why).
@@ -28,13 +27,11 @@ import nats
 import nats.micro
 from google.protobuf.message import DecodeError, Message
 from naas_abi_core import logger
-from naas_abi_core.engine.nats_auth import (
-    InvalidServiceTokenError,
-    verify_service_token,
-)
+from naas_abi_core.engine.nats_auth import TokenVerifier
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import (
     RequestPayloadError,
+    authenticate_request,
     request_payload,
     respond_protobuf,
 )
@@ -42,6 +39,11 @@ from naas_abi_core.engine.nats_sessions import ServicePrimary
 from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.source_control.v1 import source_control_pb2
+from naas_abi_core.services.iam.guard import authorization_error_code
+from naas_abi_core.services.iam.IAMPorts import (
+    PermissionDeniedError,
+    ResourceNotFoundError,
+)
 from naas_abi_core.services.source_control.adapters.source_control_nats_contract import (
     AUTH_HEADER,
     SERVICE_NAME,
@@ -68,6 +70,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     Proposal,
     ProposalNotFoundError,
     Repo,
+    RepoExistsError,
     RepoNotFoundError,
     Review,
     ValidationError,
@@ -280,10 +283,10 @@ class SourceControlPrimaryAdapterNATS(ServicePrimary):
     def __init__(
         self,
         adapter: ISourceControlAdapter | SourceControlService,
-        jwt_secret: str,
+        verifier: TokenVerifier,
     ) -> None:
         self._adapter = adapter
-        self._jwt_secret = jwt_secret
+        self._verifier = verifier
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
         self._service: TracedService | None = None
 
@@ -312,6 +315,11 @@ class SourceControlPrimaryAdapterNATS(ServicePrimary):
             name="ensure_repo",
             subject=f"{SUBJECT_PREFIX}.ensure_repo",
             handler=self._handle_ensure_repo,
+        )
+        await service.add_endpoint(
+            name="create_repo",
+            subject=f"{SUBJECT_PREFIX}.create_repo",
+            handler=self._handle_create_repo,
         )
         await service.add_endpoint(
             name="list_repos",
@@ -466,14 +474,8 @@ class SourceControlPrimaryAdapterNATS(ServicePrimary):
         response_cls: Callable[..., _ResponseT],
         call: Callable[[_RequestT], _ResponseT],
     ) -> None:
-        if not self._is_authenticated(request):
-            await self._respond_error(
-                request,
-                response_cls,
-                "UNAUTHENTICATED",
-                "missing or invalid auth token",
-                retryable=False,
-            )
+        caller = await authenticate_request(request, self._verifier, response_cls)
+        if caller is None:
             return
 
         parsed_request = request_cls()
@@ -500,7 +502,26 @@ class SourceControlPrimaryAdapterNATS(ServicePrimary):
             # ONE connection (nats_runtime), so run the call on a worker thread:
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
-            response = await self._dispatch.call(call, parsed_request)
+            response = await self._dispatch.call(call, parsed_request, caller)
+        except (PermissionDeniedError, ResourceNotFoundError) as exc:
+            await self._respond_error(
+                request,
+                response_cls,
+                authorization_error_code(exc) or "PERMISSION_DENIED",
+                str(exc),
+                retryable=False,
+            )
+            return
+        except RepoExistsError as exc:
+            await self._respond_error(
+                request,
+                response_cls,
+                "REPO_EXISTS",
+                str(exc),
+                retryable=False,
+                status=exc.status,
+            )
+            return
         except RepoNotFoundError as exc:
             await self._respond_error(
                 request,
@@ -599,17 +620,6 @@ class SourceControlPrimaryAdapterNATS(ServicePrimary):
 
         await respond_protobuf(request, response, response_cls)
 
-    def _is_authenticated(self, request: Request) -> bool:
-        headers = request.headers or {}
-        token = headers.get(AUTH_HEADER)
-        if not token:
-            return False
-        try:
-            verify_service_token(token, self._jwt_secret)
-        except InvalidServiceTokenError:
-            return False
-        return True
-
     @staticmethod
     async def _respond_error(
         request: Request,
@@ -661,6 +671,22 @@ class SourceControlPrimaryAdapterNATS(ServicePrimary):
             owner=req.owner, name=req.name, private=req.private, auto_init=req.auto_init
         )
         return source_control_pb2.EnsureRepoResponse(repo=_repo_to_pb(repo))
+
+    async def _handle_create_repo(self, request: Request) -> None:
+        await self._handle(
+            request,
+            source_control_pb2.CreateRepoRequest,
+            source_control_pb2.CreateRepoResponse,
+            self._call_create_repo,
+        )
+
+    def _call_create_repo(
+        self, req: source_control_pb2.CreateRepoRequest
+    ) -> source_control_pb2.CreateRepoResponse:
+        repo = self._adapter.create_repo(
+            owner=req.owner, name=req.name, private=req.private, auto_init=req.auto_init
+        )
+        return source_control_pb2.CreateRepoResponse(repo=_repo_to_pb(repo))
 
     async def _handle_list_repos(self, request: Request) -> None:
         await self._handle(

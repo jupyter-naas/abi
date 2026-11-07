@@ -15,7 +15,6 @@ from click.testing import CliRunner
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_Dev import (
     load_dev_configuration,
 )
-from naas_abi_core.engine.nats_auth import module_key
 
 from naas_abi_cli.cli.new.agent import _new_agent
 from naas_abi_cli.cli.new.module import _new_module
@@ -36,8 +35,7 @@ api:
   title: "demo"
 
 nats:
-  nats_url: "nats://abi:{{ secret.NATS_ABI_PASSWORD }}@127.0.0.1:4222"
-  jwt_secret: "{{ secret.NATS_JWT_SECRET }}"
+  nats_url: "nats://engine:{{ secret.NATS_ENGINE_PASSWORD }}@127.0.0.1:4222"
   discovery:
     project: "acme"
 
@@ -173,6 +171,8 @@ def test_the_module_is_run_by_abi_dev_up_not_loaded_by_the_engine(
     assert [(m.name, m.module, m.args, m.identity) for m in dev.modules] == [
         ("research", "research", [], "demo.research")
     ]
+    # Its service account is module/<project>/<module_id>.
+    assert dev.modules[0].module_id == "demo.research"
     config = yaml.safe_load((root / "config.yaml").read_text())
     # It registers itself through discovery.
     assert [m["module"] for m in config["modules"]] == ["demo"]
@@ -180,7 +180,6 @@ def test_the_module_is_run_by_abi_dev_up_not_loaded_by_the_engine(
 
 def test_the_module_gets_a_compose_service_in_the_override(tmp_path: Path) -> None:
     root = _project(tmp_path)
-    (root / ".env").write_text(f"NATS_JWT_SECRET={'s' * 48}\n")
 
     _invoke(_new_module, root, "research")
 
@@ -192,24 +191,15 @@ def test_the_module_gets_a_compose_service_in_the_override(tmp_path: Path) -> No
         "abi_proto": "./.abi/libs/naas-abi-proto",
         "abi_sdk": "./.abi/libs/naas-abi-sdk",
     }
-    assert (
-        "ABI_NATS_URL=nats://module:${NATS_MODULE_PASSWORD}@nats:4222"
-        in service["environment"]
+    # No login and no signing secret: the module brings its own key.
+    assert "ABI_NATS_URL=nats://nats:4222" in service["environment"]
+    assert any(
+        entry.startswith("ABI_SERVICE_KEY=${RESEARCH_SERVICE_KEY:?")
+        for entry in service["environment"]
     )
+    assert not any("NATS_JWT_SECRET" in entry for entry in service["environment"])
     assert "ABI_DISCOVERY_PROJECT=acme" in service["environment"]
     assert service["depends_on"] == {"abi": {"condition": "service_healthy"}}
-    # It signs as its module id with its own key, never with the project secret.
-    assert not any("NATS_JWT_SECRET" in item for item in service["environment"])
-    assert (
-        "ABI_MODULE_KEY=${ABI_MODULE_KEY_RESEARCH:?ABI_MODULE_KEY_RESEARCH is not in "
-        ".env: abi module key demo.research}" in service["environment"]
-    )
-    env = dict(
-        line.split("=", 1) for line in (root / ".env").read_text().splitlines() if "=" in line
-    )
-    assert env["ABI_MODULE_KEY_RESEARCH"] == module_key(
-        env["NATS_JWT_SECRET"], "demo.research"
-    )
     # docker-compose.yml, which --regenerate rewrites, is left alone.
     assert (root / "docker-compose.yml").read_text() == "services: {}\n"
 
@@ -223,7 +213,6 @@ def test_the_compose_service_joins_the_discovery_project_of_the_docker_config(
     (root / "config.local.yaml").write_text(
         _NATS_CONFIG.replace('"acme"', '"acme_stack"'), encoding="utf-8"
     )
-    (root / ".env").write_text(f"NATS_JWT_SECRET={'s' * 48}\n")
 
     _invoke(_new_module, root, "research")
 
@@ -233,14 +222,19 @@ def test_the_compose_service_joins_the_discovery_project_of_the_docker_config(
     assert "ABI_DISCOVERY_PROJECT=acme_stack" in service["environment"]
 
 
-def test_without_the_engines_secret_no_key_is_made_up(tmp_path: Path) -> None:
+def test_no_key_is_made_up_and_the_next_steps_name_the_commands(
+    tmp_path: Path,
+) -> None:
     root = _project(tmp_path)
 
     result = _invoke(_new_module, root, "research")
 
     assert result.exit_code == 0, result.output
     assert not (root / ".env").exists()
-    assert "abi module key demo.research" in result.output
+    assert "abi iam service-account create module/acme/demo.research --key" in (
+        result.output
+    )
+    assert "abi iam module approve module/acme/demo.research" in result.output
 
 
 def test_a_second_module_joins_the_first(tmp_path: Path) -> None:
@@ -411,7 +405,10 @@ def test_standalone_pins_the_sdk_to_this_cli_release_by_default(
     assert result.exit_code == 0, result.output
     project = tomllib.loads((tmp_path / "research" / "pyproject.toml").read_text())
     for dependency in project["project"]["dependencies"]:
-        assert "@ git+https://github.com/jupyter-naas/abi.git@naas-abi-cli-v3.0.0#" in dependency
+        assert (
+            "@ git+https://github.com/jupyter-naas/abi.git@naas-abi-cli-v3.0.0#"
+            in dependency
+        )
         assert "@main" not in dependency
 
 
@@ -495,7 +492,9 @@ def test_new_app_in_a_nested_module_names_its_dotted_package(tmp_path: Path) -> 
 
     assert _invoke(_new_app, apps, "reports").exit_code == 0
 
-    assert "the core.research module" in (apps / "reports" / "manifest.json").read_text()
+    assert (
+        "the core.research module" in (apps / "reports" / "manifest.json").read_text()
+    )
     for written in (apps / "AGENTS.md", apps / "reports" / "README.md"):
         assert "  - module: core.research\n" in written.read_text()
 
@@ -939,7 +938,9 @@ def test_the_build_context_leaves_secrets_and_caches_out(
 ) -> None:
     """A31: env files, keys, bytecode and local state never reach the builder."""
     if standalone:
-        result = _invoke(_new_module, tmp_path, "research", "--standalone", "--abi-ref", "v9")
+        result = _invoke(
+            _new_module, tmp_path, "research", "--standalone", "--abi-ref", "v9"
+        )
         ignore = tmp_path / "research" / ".dockerignore"
     else:
         root = _project(tmp_path)
@@ -947,5 +948,13 @@ def test_the_build_context_leaves_secrets_and_caches_out(
         ignore = root / "src" / "research" / ".dockerignore"
     assert result.exit_code == 0, result.output
     patterns = set(ignore.read_text().splitlines())
-    for pattern in ("**/.env", "**/.env.*", "**/*.pem", "**/*.key", "**/*.py[cod]", ".venv", "storage/"):
+    for pattern in (
+        "**/.env",
+        "**/.env.*",
+        "**/*.pem",
+        "**/*.key",
+        "**/*.py[cod]",
+        ".venv",
+        "storage/",
+    ):
         assert pattern in patterns, pattern

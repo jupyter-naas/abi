@@ -72,7 +72,10 @@ def _client(admin, *, is_superadmin=True):
     app = FastAPI()
     app.include_router(router, prefix="/api/admin/system")
     app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
-        id="u1", email="u1@example.com", name="U1", is_superadmin=is_superadmin
+        id="root" if is_superadmin else "u1",
+        email="u1@example.com",
+        name="U1",
+        is_superadmin=is_superadmin,
     )
     app.dependency_overrides[get_agents_admin] = lambda: admin
     return TestClient(app)
@@ -135,7 +138,7 @@ def test_cancel_is_audited_and_refused_for_finished_runs(client, control, audit)
     assert client.post(f"{BASE}/runs/acme.agents/r4/cancel").status_code == 202
     assert control.cancelled == ["acme.agents/r4"]
     assert [r.phase for r in audit.records] == ["requested", "succeeded"]
-    assert audit.records[0].action.actor_id == "u1"
+    assert audit.records[0].action.actor_id == "root"
 
     refused = client.post(f"{BASE}/runs/acme.agents/r2/cancel")
     assert refused.status_code == 409

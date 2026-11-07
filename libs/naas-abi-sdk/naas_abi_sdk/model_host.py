@@ -31,20 +31,20 @@ MAX_TOOLS = 128
 MAX_REQUEST_BYTES = 512 * 1024
 
 
-def model_subject(project: str, instance_id: str, name: str) -> str:
-    return f"abi.mod.{project}.{instance_id}.model.{name}.chat"
+def model_subject(
+    project: str, service_account: str, instance_id: str, name: str
+) -> str:
+    return f"abi.mod.{project}.{service_account or '-'}.{instance_id}.model.{name}.chat"
 
 
 class ModuleModelClient:
     """Unary chat client for one model on one module instance."""
 
-    def __init__(self, transport: Any, subject: str, instance_id: str) -> None:
-        self._transport, self.subject, self.instance_id = transport, subject, instance_id
+    def __init__(self, transport: Any, subject: str) -> None:
+        self._transport, self.subject = transport, subject
 
     async def chat(self, request: pb.ChatRequest) -> pb.ChatResponse:
-        return await self._transport.call(
-            self.subject, request, pb.ChatResponse, instance_id=self.instance_id
-        )
+        return await self._transport.call(self.subject, request, pb.ChatResponse)
 
 
 class ModelHost:
@@ -69,10 +69,13 @@ class ModelHost:
                     await nc.subscribe(
                         model_subject(
                             self.session.client.project,
+                            self.session.service_account,
                             self.session.instance_id,
                             name,
                         ),
-                        cb=self.calls.callback(partial(self._handle, name)),
+                        cb=self.calls.callback(
+                            partial(self._handle, name), requests=True
+                        ),
                     )
                 )
             await flush_to_broker(nc)

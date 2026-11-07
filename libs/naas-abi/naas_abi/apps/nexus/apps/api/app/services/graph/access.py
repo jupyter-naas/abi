@@ -1,4 +1,13 @@
-"""Workspace graph authorization. No HTTP, database or engine dependencies."""
+"""A workspace's view of the knowledge graphs. No HTTP or database dependencies.
+
+Who may read or write a graph is the kernel's decision (IAM, by the workspace
+IAM placed the graph in and the statements that share it). What stays here is
+what the kernel cannot decide: which graphs *this workspace* offers its
+members. A user who belongs to several workspaces holds rights to all their
+graphs; each workspace's pages still list, query and cache only its own.
+``GraphAccessScope`` is that view, already narrowed to what the kernel lets the
+caller read (``readable``) and write (``writable``).
+"""
 
 from __future__ import annotations
 
@@ -14,13 +23,13 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphAccessError,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.sparql_safe import sparql_iri
-from naas_abi.apps.nexus.graph_policy_config import (
-    NEXUS_GRAPH,
-    SCHEMA_GRAPH,
-    WorkspaceGraphPolicyConfig,
+from naas_abi_core.services.iam.IAMPorts import (
+    PermissionDeniedError,
+    ResourceNotFoundError,
 )
+from naas_abi_core.services.triple_store.TripleStorePorts import Exceptions
 
-OWNER_PREDICATE = "http://ontology.naas.ai/nexus/graphWorkspaceId"
+UNAVAILABLE = "Graph is not available with the required workspace permissions"
 
 
 @dataclass(frozen=True)
@@ -28,29 +37,7 @@ class GraphAccessScope:
     workspace_id: str
     readable: frozenset[str]
     writable: frozenset[str]
-    allow_create: bool = False
-
-    @classmethod
-    def resolve(
-        cls,
-        workspace_id: str,
-        config: WorkspaceGraphPolicyConfig,
-        owned: set[str],
-        role: str,
-        *,
-        catalog: set[str] | None = None,
-    ) -> GraphAccessScope:
-        owned = owned if config.include_owned else set()
-        all_readable = (catalog or set()) if config.read_all else set()
-        readable = (all_readable | set(config.read) | set(config.write) | owned) - {NEXUS_GRAPH}
-        writer = role in {"owner", "admin", "member"}
-        writable = ((set(config.write) | owned) - {NEXUS_GRAPH, SCHEMA_GRAPH}) if writer else set()
-        return cls(
-            workspace_id,
-            frozenset(readable),
-            frozenset(writable),
-            config.allow_create and config.include_owned and writer,
-        )
+    can_create: bool = False
 
     @property
     def cache_key(self) -> str:
@@ -70,7 +57,7 @@ class GraphAccessScope:
             sparql_iri(graph)
         if set(graphs) - (self.writable if write else self.readable):
             # Do not confirm whether an inaccessible graph actually exists.
-            raise GraphAccessError("Graph is not available with the required workspace permissions")
+            raise GraphAccessError(UNAVAILABLE)
 
 
 P = ParamSpec("P")
@@ -82,7 +69,12 @@ def workspace_graph_operation(
     write: bool = False,
     create: bool = False,
 ) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, Awaitable[T]]]:
-    """Guard service entrypoints before queries, metadata access and cache reads."""
+    """Guard service entrypoints before queries, metadata access and cache reads.
+
+    The workspace's view is checked first; the kernel then decides every call
+    on its own. What it refuses (a graph the caller may not see, or may not
+    change) is a ``GraphAccessError`` here, as it is for the view.
+    """
 
     def decorate(method: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
         signature = inspect.signature(method)
@@ -101,7 +93,7 @@ def workspace_graph_operation(
                 elif value:
                     graphs.extend(value)
             scope.require(values["workspace_id"], graphs, write=write)
-            if create and not scope.allow_create:
+            if create and not scope.can_create:
                 raise GraphAccessError("Graph creation is not allowed in this workspace")
 
             # Legacy discovery queries interpolate IRIs. Validate every URI-bearing
@@ -122,7 +114,14 @@ def workspace_graph_operation(
 
             for name, value in values.items():
                 validate(name, value)
-            return await method(*args, **kwargs)
+            try:
+                return await method(*args, **kwargs)
+            except (
+                PermissionDeniedError,
+                ResourceNotFoundError,
+                Exceptions.GraphNotFoundError,
+            ) as exc:
+                raise GraphAccessError(UNAVAILABLE) from exc
 
         return guarded
 

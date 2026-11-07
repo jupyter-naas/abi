@@ -176,6 +176,9 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
         let files: FileInfo[];
         if (synced) {
           files = await listLocalSyncedFolders(synced, path);
+        } else if (source === 'my-drive' && useAuthStore.getState().view) {
+          // The person's own drive: private in a view, nothing is asked for.
+          files = [];
         } else {
           const query = explorerListQuery(path, source, currentWorkspaceId);
           const response = await authFetch(`${getApiUrl()}/api/files/?${query}`);

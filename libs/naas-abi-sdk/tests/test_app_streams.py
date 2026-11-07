@@ -33,14 +33,13 @@ from fastapi.responses import StreamingResponse
 MB = 1024 * 1024
 
 
-class NexusToken:
-    """Nexus's token source: a call to a module gets a token bound to its instance."""
-
-    def __call__(self) -> str:
-        return "nexus-token"
-
-    def for_audience(self, audience: str) -> str:
-        return f"nexus-token-for-{audience}"
+def _nexus(url, timeout=60):
+    return Transport(
+        url,
+        "nexus-token",
+        timeout=timeout,
+        host_token=lambda recipient: "nexus-host-token",
+    )
 
 
 def _start_broker(tmp_path, *config_lines):
@@ -188,6 +187,7 @@ async def _module(url, tmp_path, app, manifest=None, **kwargs):
     transport = Transport(url, "module-token")
     session = SimpleNamespace(
         instance_id="i-1",
+        service_account="sa1",
         lease_token="l" * 32,
         client=SimpleNamespace(
             transport=transport,
@@ -223,7 +223,12 @@ def test_a_large_upload_streams_through_the_app(broker, tmp_path):
     async def scenario():
         api, _ = _app()
         host = await _module(broker, tmp_path, api)
-        nexus = Transport(broker, NexusToken(), timeout=60)
+        nexus = Transport(
+            broker,
+            "nexus-token",
+            timeout=60,
+            host_token=lambda recipient: "nexus-host-token",
+        )
         try:
             payload = bytes(range(256)) * (20 * MB // 256)  # 20 MB
             source = BodySource(await nexus.connect())
@@ -255,6 +260,7 @@ def test_a_large_upload_streams_through_the_app(broker, tmp_path):
                     body_inbox=source.inbox,
                     max_body_bytes=100 * MB,
                 ),
+                service_account="sa1",
             )
             await producer
             await source.close()
@@ -275,7 +281,12 @@ def test_an_upload_above_its_limit_is_413(broker, tmp_path):
     async def scenario():
         api, _ = _app()
         host = await _module(broker, tmp_path, api)
-        nexus = Transport(broker, NexusToken(), timeout=60)
+        nexus = Transport(
+            broker,
+            "nexus-token",
+            timeout=60,
+            host_token=lambda recipient: "nexus-host-token",
+        )
         try:
             source = BodySource(await nexus.connect())
             await source.start()
@@ -297,6 +308,7 @@ def test_an_upload_above_its_limit_is_413(broker, tmp_path):
                     body_inbox=source.inbox,
                     max_body_bytes=MB,
                 ),
+                service_account="sa1",
             )
             producer.cancel()
             await asyncio.gather(producer, return_exceptions=True)
@@ -314,14 +326,25 @@ def test_a_large_download_and_a_large_file_stream_back(broker, tmp_path):
     async def scenario():
         api, _ = _app()
         host = await _module(broker, tmp_path, api)
-        nexus = Transport(broker, NexusToken(), timeout=60)
+        nexus = Transport(
+            broker,
+            "nexus-token",
+            timeout=60,
+            host_token=lambda recipient: "nexus-host-token",
+        )
         try:
             download = await call_app(
-                nexus, "acme", "i-1", _request("/api/download", query=f"size={5 * MB}")
+                nexus,
+                "acme",
+                "i-1",
+                _request("/api/download", query=f"size={5 * MB}"),
+                service_account="sa1",
             )
             assert download.status == 200 and download.body_follows
             assert await _body(nexus, download) == b"d" * (5 * MB)
-            static = await call_app(nexus, "acme", "i-1", _request("/big.js"))
+            static = await call_app(
+                nexus, "acme", "i-1", _request("/big.js"), service_account="sa1"
+            )
             assert static.body_follows
             assert await _body(nexus, static) == b"j" * (3 * MB + 17)
         finally:
@@ -336,9 +359,16 @@ def test_leaving_an_endless_stream_stops_the_app(broker, tmp_path):
     async def scenario():
         api, seen = _app()
         host = await _module(broker, tmp_path, api)
-        nexus = Transport(broker, NexusToken(), timeout=60)
+        nexus = Transport(
+            broker,
+            "nexus-token",
+            timeout=60,
+            host_token=lambda recipient: "nexus-host-token",
+        )
         try:
-            response = await call_app(nexus, "acme", "i-1", _request("/api/events"))
+            response = await call_app(
+                nexus, "acme", "i-1", _request("/api/events"), service_account="sa1"
+            )
             assert response.body_follows
             stream = pull_body(await nexus.connect(), response.body_inbox)
             assert await stream.__anext__() == b"data: 1\n\n"
@@ -361,9 +391,16 @@ def test_an_idle_app_is_504(broker, tmp_path):
     async def scenario():
         api, _ = _app()
         host = await _module(broker, tmp_path, api, idle_seconds=0.5)
-        nexus = Transport(broker, NexusToken(), timeout=60)
+        nexus = Transport(
+            broker,
+            "nexus-token",
+            timeout=60,
+            host_token=lambda recipient: "nexus-host-token",
+        )
         try:
-            response = await call_app(nexus, "acme", "i-1", _request("/api/stall"))
+            response = await call_app(
+                nexus, "acme", "i-1", _request("/api/stall"), service_account="sa1"
+            )
             assert response.status == 504
         finally:
             await host.close()
@@ -375,7 +412,12 @@ def test_an_idle_app_is_504(broker, tmp_path):
 
 def test_a_holder_that_stops_answering_fails_the_pull(broker):
     async def scenario():
-        nexus = Transport(broker, NexusToken(), timeout=60)
+        nexus = Transport(
+            broker,
+            "nexus-token",
+            timeout=60,
+            host_token=lambda recipient: "nexus-host-token",
+        )
         try:
             nc = await nexus.connect()
             inbox = nc.new_inbox()
@@ -424,6 +466,7 @@ async def _upload(nexus, size, *, max_body_bytes=0, gate=None):
                 body_inbox=source.inbox,
                 max_body_bytes=max_body_bytes,
             ),
+            service_account="sa1",
         )
     )
     return source, producer, call
@@ -436,10 +479,14 @@ def test_closing_ends_an_open_stream_with_an_error(broker, tmp_path):
     async def scenario():
         api, _ = _app()
         host = await _module(broker, tmp_path, api)
-        nexus = Transport(broker, NexusToken(), timeout=60)
+        nexus = _nexus(broker, 60)
         try:
-            events = await call_app(nexus, "acme", "i-1", _request("/api/events"))
-            quiet = await call_app(nexus, "acme", "i-1", _request("/api/quiet"))
+            events = await call_app(
+                nexus, "acme", "i-1", _request("/api/events"), service_account="sa1"
+            )
+            quiet = await call_app(
+                nexus, "acme", "i-1", _request("/api/quiet"), service_account="sa1"
+            )
             nc = await nexus.connect()
 
             async def read(response):
@@ -471,12 +518,20 @@ def test_draining_ends_event_streams_and_lets_a_download_finish(broker, tmp_path
     async def scenario():
         api, seen = _app()
         host = await _module(broker, tmp_path, api)
-        nexus = Transport(broker, NexusToken(), timeout=60)
+        nexus = _nexus(broker, 60)
         try:
-            events = await call_app(nexus, "acme", "i-1", _request("/api/events"))
-            quiet = await call_app(nexus, "acme", "i-1", _request("/api/quiet"))
+            events = await call_app(
+                nexus, "acme", "i-1", _request("/api/events"), service_account="sa1"
+            )
+            quiet = await call_app(
+                nexus, "acme", "i-1", _request("/api/quiet"), service_account="sa1"
+            )
             download = await call_app(
-                nexus, "acme", "i-1", _request("/api/download", query=f"size={8 * MB}")
+                nexus,
+                "acme",
+                "i-1",
+                _request("/api/download", query=f"size={8 * MB}"),
+                service_account="sa1",
             )
             nc = await nexus.connect()
 
@@ -529,9 +584,11 @@ def test_draining_lets_a_background_task_finish_after_its_stream(broker, tmp_pat
 
     async def scenario():
         host = await _module(broker, tmp_path, api)
-        nexus = Transport(broker, NexusToken(), timeout=60)
+        nexus = _nexus(broker, 60)
         try:
-            response = await call_app(nexus, "acme", "i-1", _request("/api/export"))
+            response = await call_app(
+                nexus, "acme", "i-1", _request("/api/export"), service_account="sa1"
+            )
             assert len(await _body(nexus, response)) == MB
             await asyncio.sleep(0.1)  # the body is over; the task runs
             await asyncio.wait_for(host.drain(30), 10)
@@ -550,9 +607,11 @@ def test_an_app_failing_mid_stream_is_an_error_to_the_reader(broker, tmp_path):
     async def scenario():
         api, _ = _app()
         host = await _module(broker, tmp_path, api)
-        nexus = Transport(broker, NexusToken(), timeout=60)
+        nexus = _nexus(broker, 60)
         try:
-            response = await call_app(nexus, "acme", "i-1", _request("/api/broken"))
+            response = await call_app(
+                nexus, "acme", "i-1", _request("/api/broken"), service_account="sa1"
+            )
             assert response.status == 200 and response.body_follows
             received = 0
             with pytest.raises(RPCError) as raised:
@@ -577,15 +636,23 @@ def test_a_body_too_large_for_one_message_streams(small_broker, tmp_path):
     async def scenario():
         api, _ = _app()
         host = await _module(small_broker, tmp_path, api)
-        nexus = Transport(small_broker, NexusToken(), timeout=10)
+        nexus = _nexus(small_broker, 10)
         try:
             whole = await call_app(
-                nexus, "acme", "i-1", _request("/api/whole", query="size=102400")
+                nexus,
+                "acme",
+                "i-1",
+                _request("/api/whole", query="size=102400"),
+                service_account="sa1",
             )
             assert whole.status == 200 and whole.body_follows
             assert await _body(nexus, whole) == b"w" * 102400
             small = await call_app(
-                nexus, "acme", "i-1", _request("/api/whole", query="size=1000")
+                nexus,
+                "acme",
+                "i-1",
+                _request("/api/whole", query="size=1000"),
+                service_account="sa1",
             )
             assert small.body == b"w" * 1000 and not small.body_follows
         finally:
@@ -603,14 +670,16 @@ def test_slow_uploads_hold_slots_of_their_own(broker, tmp_path):
     async def scenario():
         api, _ = _app()
         host = await _module(broker, tmp_path, api, max_concurrency=1, max_uploads=1)
-        nexus = Transport(broker, NexusToken(), timeout=60)
-        quick = Transport(broker, NexusToken(), timeout=2)
+        nexus = _nexus(broker, 60)
+        quick = _nexus(broker, 2)
         gate = asyncio.Event()
         try:
             source, producer, upload = await _upload(nexus, 2 * MB, gate=gate)
             await asyncio.sleep(0.5)  # the app reads it, slowly
             assert not upload.done()
-            ping = await call_app(quick, "acme", "i-1", _request("/api/ping"))
+            ping = await call_app(
+                quick, "acme", "i-1", _request("/api/ping"), service_account="sa1"
+            )
             assert (ping.status, json.loads(ping.body)) == (200, {"pong": True})
             other, other_producer, refused = await _upload(quick, 2 * MB)
             with pytest.raises(RPCError) as raised:
@@ -644,7 +713,7 @@ def test_the_apps_own_upload_limit_holds_whatever_the_request_says(broker, tmp_p
             api,
             manifest={"name": "Console", "max_upload_bytes": MB},
         )
-        nexus = Transport(broker, NexusToken(), timeout=60)
+        nexus = _nexus(broker, 60)
         try:
             source, producer, upload = await _upload(nexus, 2 * MB, max_body_bytes=0)
             response = await upload
@@ -670,7 +739,7 @@ def test_a_lost_last_reply_is_answered_again(broker, monkeypatch):
     monkeypatch.setattr(app_streams, "LINGER_SECONDS", 1.0)
 
     async def scenario():
-        nexus = Transport(broker, NexusToken(), timeout=60)
+        nexus = _nexus(broker, 60)
         try:
             nc = await nexus.connect()
             source = BodySource(nc)
@@ -709,9 +778,11 @@ def test_a_finished_stream_lingers_without_holding_a_slot(broker, tmp_path):
     async def scenario():
         api, _ = _app()
         host = await _module(broker, tmp_path, api)
-        nexus = Transport(broker, NexusToken(), timeout=60)
+        nexus = _nexus(broker, 60)
         try:
-            response = await call_app(nexus, "acme", "i-1", _request("/big.js"))
+            response = await call_app(
+                nexus, "acme", "i-1", _request("/big.js"), service_account="sa1"
+            )
             assert len(await _body(nexus, response)) == 3 * MB + 17
             for _ in range(20):
                 if not host._streams:
@@ -734,9 +805,11 @@ def test_leaving_an_idle_stream_stops_the_app_at_once(broker, tmp_path, monkeypa
     async def scenario():
         api, seen = _app()
         host = await _module(broker, tmp_path, api)
-        nexus = Transport(broker, NexusToken(), timeout=60)
+        nexus = _nexus(broker, 60)
         try:
-            response = await call_app(nexus, "acme", "i-1", _request("/api/quiet"))
+            response = await call_app(
+                nexus, "acme", "i-1", _request("/api/quiet"), service_account="sa1"
+            )
             stream = pull_body(await nexus.connect(), response.body_inbox)
             assert await stream.__anext__() == b"data: hello\n\n"
             waiting = asyncio.create_task(stream.__anext__())
@@ -766,9 +839,11 @@ def test_headers_count_toward_what_travels_inline(small_broker, tmp_path):
     async def scenario():
         api, _ = _app()
         host = await _module(small_broker, tmp_path, api)
-        nexus = Transport(small_broker, NexusToken(), timeout=10)
+        nexus = _nexus(small_broker, 10)
         try:
-            response = await call_app(nexus, "acme", "i-1", _request("/api/headers"))
+            response = await call_app(
+                nexus, "acme", "i-1", _request("/api/headers"), service_account="sa1"
+            )
             assert response.status == 200 and response.body_follows, response.error
             assert {h.name: h.value for h in response.headers}[
                 "x-padding"
@@ -788,7 +863,7 @@ def test_one_pull_waits_at_a_time(broker, monkeypatch):
     monkeypatch.setattr(app_streams, "KEEPALIVE_SECONDS", 1.0)
 
     async def scenario():
-        nexus = Transport(broker, NexusToken(), timeout=60)
+        nexus = _nexus(broker, 60)
         try:
             nc = await nexus.connect()
             source = BodySource(nc)
@@ -816,7 +891,7 @@ def test_an_abort_after_the_whole_body_keeps_its_end(broker):
     body: the reader gets the clean end, not an error."""
 
     async def scenario():
-        nexus = Transport(broker, NexusToken(), timeout=60)
+        nexus = _nexus(broker, 60)
         try:
             nc = await nexus.connect()
             source = BodySource(nc)

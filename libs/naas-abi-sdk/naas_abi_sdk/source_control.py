@@ -18,6 +18,11 @@ class SourceControlClient:
             "abi.svc.source_control.v1.ensure_repo", request, pb.EnsureRepoResponse
         )
 
+    async def create_repo(self, request: pb.CreateRepoRequest) -> pb.CreateRepoResponse:
+        return await self._transport.call(
+            "abi.svc.source_control.v1.create_repo", request, pb.CreateRepoResponse
+        )
+
     async def list_repos(self, request: pb.ListReposRequest) -> pb.ListReposResponse:
         return await self._transport.call(
             "abi.svc.source_control.v1.list_repos", request, pb.ListReposResponse

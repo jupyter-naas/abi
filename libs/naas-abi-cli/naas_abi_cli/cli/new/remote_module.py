@@ -19,11 +19,6 @@ import jinja2
 import yaml
 
 import naas_abi_cli
-from naas_abi_cli.cli.admin_credentials import (
-    MissingNatsSecret,
-    ensure_module_key,
-    module_key_variable,
-)
 from naas_abi_cli.cli.deploy.local import MIGRATE_TO_NATS_DOC
 from naas_abi_cli.cli.utils.Copier import Copier
 
@@ -298,8 +293,10 @@ def _with_dev_module(text: str, entry: str) -> str | None:
     return "".join(lines[:last] + [entry] + lines[last:])
 
 
-def add_dev_module(config: Path, name: str, module: str, identity: str = "") -> bool:
-    """Add ``name`` (``python -m module``, registering as ``identity``) to
+def add_dev_module(
+    config: Path, name: str, module: str, module_id: str | None = None
+) -> bool:
+    """Add ``name`` (``python -m module``, of id ``module_id``) to
     ``dev.modules`` in ``config``, keeping the file's comments and templating.
     False when it could not: the file is then left as it was."""
     from naas_abi_core.engine.engine_configuration.EngineConfiguration_Dev import (
@@ -313,8 +310,9 @@ def add_dev_module(config: Path, name: str, module: str, identity: str = "") -> 
     except _CONFIG_ERRORS:
         return False
     entry = f"    - name: {name}\n      module: {module}\n"
-    if identity:
-        entry += f"      identity: {identity}\n"
+    if module_id is not None:
+        # Its service account is module/<project>/<module_id>.
+        entry += f"      module_id: {module_id}\n"
     updated = _with_dev_module(original, entry)
     if updated is None:
         return False
@@ -328,13 +326,16 @@ def add_dev_module(config: Path, name: str, module: str, identity: str = "") -> 
     return added
 
 
+def service_key_variable(name: str) -> str:
+    """The .env variable holding the module's service key in Docker."""
+    return re.sub(r"[^A-Z0-9]", "_", name.upper()) + "_SERVICE_KEY"
+
+
 def compose_service(
-    project: Project, name: str, package: Path, discovery_project: str, module_id: str
+    project: Project, name: str, package: Path, discovery_project: str
 ) -> dict:
-    """The module's service: its SDK-only image, logged in to the stack's broker,
-    signing as ``module_id`` with its module key (from ``.env``)."""
+    """The module's service: its SDK-only image, logged in to the stack's broker."""
     context = "./" + package.relative_to(project.root).as_posix()
-    variable = module_key_variable(name)
     return {
         "build": {
             "context": context,
@@ -345,12 +346,9 @@ def compose_service(
         },
         "restart": "unless-stopped",
         "environment": [
-            "ABI_NATS_URL=nats://module:${NATS_MODULE_PASSWORD}@nats:4222",
-            # Its own key, never the project's NATS_JWT_SECRET.
-            (
-                f"ABI_MODULE_KEY=${{{variable}:?{variable} is not in .env: "
-                f"abi module key {module_id}}}"
-            ),
+            # No login in the URL: the module logs in with its own key.
+            "ABI_NATS_URL=nats://nats:4222",
+            f"ABI_SERVICE_KEY=${{{service_key_variable(name)}:?create it: abi iam service-account create <account> --key}}",
             f"ABI_DISCOVERY_PROJECT={discovery_project}",
             "LOG_LEVEL=${LOG_LEVEL:-INFO}",
         ],
@@ -431,31 +429,10 @@ def create_in_project(project: Project, module_name: str, package: Path) -> None
             f"- Could not edit dev.modules in {project.config.name}; add this "
             "for `abi dev up` to run it:\n\n"
             f"dev:\n  modules:\n    - name: {name}\n      module: {dotted}\n"
-            f"      identity: {module_id}\n"
+            f"      module_id: {module_id}\n"
         )
 
-    service = compose_service(project, name, package, discovery_project, module_id)
-    if project.nats():
-        # The service signs with its own key, kept in .env next to the secret.
-        variable = module_key_variable(name)
-        try:
-            _, replaced = ensure_module_key(project.root / ".env", name, module_id)
-        except MissingNatsSecret:
-            click.echo(
-                f"- No NATS_JWT_SECRET in .env to derive its key from. Once the "
-                f"project has its secret (`abi deploy local`), add it: "
-                f"echo {variable}=$(abi module key {module_id}) >> .env"
-            )
-        else:
-            click.echo(
-                f"- Its module key is in .env ({variable}): it signs its tokens as "
-                f"{module_id} only."
-            )
-            if replaced:
-                click.echo(
-                    f"  Warning: {variable} in .env was another key (an older "
-                    "NATS_JWT_SECRET?); replaced with the current secret's."
-                )
+    service = compose_service(project, name, package, discovery_project)
     if not project.nats():
         click.echo(
             "- This project's Docker config has no `nats:` block, so its Docker "
@@ -469,8 +446,13 @@ def create_in_project(project: Project, module_name: str, package: Path) -> None
             f"service for {COMPOSE_OVERRIDE}:\n\n" + compose_snippet(name, service)
         )
     elif add_compose_service(project, name, service):
+        account = f"module/{discovery_project}/{module_id}"
         click.echo(
-            f"- `abi start` runs it: added the '{name}' service to {COMPOSE_OVERRIDE}."
+            f"- `abi start` runs it: added the '{name}' service to {COMPOSE_OVERRIDE}. "
+            f"Give it its key first, as {service_key_variable(name)} in .env:\n"
+            f"    uv run abi iam service-account create {account} --key\n"
+            f"  and approve its manifest once it has submitted it:\n"
+            f"    uv run abi iam module approve {account}"
         )
     else:
         click.echo(f"- {COMPOSE_OVERRIDE} already has a '{name}' service; left as is.")
@@ -500,8 +482,8 @@ def create_standalone(module_name: str, repository: Path, abi_git_ref: str) -> N
     click.echo(f"  cd {repository}")
     click.echo("  git init && uv sync && uv run pytest")
     click.echo(
-        f"  ABI_NATS_URL=... ABI_MODULE_KEY=$(abi module key {snake}) "
-        f"ABI_DISCOVERY_PROJECT=... uv run python -m {snake}   # see README.md\n"
+        f"  ABI_NATS_URL=... ABI_SERVICE_KEY=abi_sk_... ABI_DISCOVERY_PROJECT=... "
+        f"uv run python -m {snake}   # see README.md\n"
     )
 
 

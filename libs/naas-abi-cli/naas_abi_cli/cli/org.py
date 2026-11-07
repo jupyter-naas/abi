@@ -25,15 +25,13 @@ def org() -> None:
 def org_list(
     api_url: str,
     token: str | None,
-    email: str | None,
-    password: str | None,
     dry_run: bool,
 ) -> None:
     """List organizations for the authenticated user."""
     if dry_run:
         print_json({"method": "GET", "path": "/api/organizations"})
         return
-    client = build_client(api_url=api_url, token=token, email=email, password=password)
+    client = build_client(api_url=api_url, token=token)
     try:
         rows = client.get("/api/organizations")
     except NexusApiError as exc:
@@ -53,8 +51,6 @@ def org_create(
     slug: str,
     api_url: str,
     token: str | None,
-    email: str | None,
-    password: str | None,
     dry_run: bool,
 ) -> None:
     """Create an organization (caller becomes owner)."""
@@ -62,7 +58,7 @@ def org_create(
     if dry_run:
         print_json({"method": "POST", "path": "/api/organizations", "body": body})
         return
-    client = build_client(api_url=api_url, token=token, email=email, password=password)
+    client = build_client(api_url=api_url, token=token)
     try:
         print_json(client.post("/api/organizations", body))
     except NexusApiError as exc:
@@ -76,8 +72,6 @@ def org_get(
     org_id: str,
     api_url: str,
     token: str | None,
-    email: str | None,
-    password: str | None,
     dry_run: bool,
 ) -> None:
     """Fetch an organization by id."""
@@ -85,7 +79,7 @@ def org_get(
     if dry_run:
         print_json({"method": "GET", "path": path})
         return
-    client = build_client(api_url=api_url, token=token, email=email, password=password)
+    client = build_client(api_url=api_url, token=token)
     try:
         print_json(client.get(path))
     except NexusApiError as exc:
@@ -104,8 +98,6 @@ def org_members_list(
     org_id: str,
     api_url: str,
     token: str | None,
-    email: str | None,
-    password: str | None,
     dry_run: bool,
 ) -> None:
     """List organization members."""
@@ -113,7 +105,7 @@ def org_members_list(
     if dry_run:
         print_json({"method": "GET", "path": path})
         return
-    client = build_client(api_url=api_url, token=token, email=email, password=password)
+    client = build_client(api_url=api_url, token=token)
     try:
         rows = client.get(path)
     except NexusApiError as exc:
@@ -151,8 +143,6 @@ def org_members_invite(
     role: str,
     api_url: str,
     token: str | None,
-    email: str | None,
-    password: str | None,
     dry_run: bool,
 ) -> None:
     """Invite a user into an organization (create-on-invite + sign-in email)."""
@@ -166,7 +156,7 @@ def org_members_invite(
     if dry_run:
         print_json({"method": "POST", "path": path, "body": body})
         return
-    client = build_client(api_url=api_url, token=token, email=email, password=password)
+    client = build_client(api_url=api_url, token=token)
     try:
         print_json(client.post(path, body))
     except NexusApiError as exc:
@@ -180,8 +170,6 @@ def org_workspaces(
     org_id: str,
     api_url: str,
     token: str | None,
-    email: str | None,
-    password: str | None,
     dry_run: bool,
 ) -> None:
     """List workspaces under an organization."""
@@ -189,7 +177,7 @@ def org_workspaces(
     if dry_run:
         print_json({"method": "GET", "path": path})
         return
-    client = build_client(api_url=api_url, token=token, email=email, password=password)
+    client = build_client(api_url=api_url, token=token)
     try:
         rows = client.get(path)
     except NexusApiError as exc:

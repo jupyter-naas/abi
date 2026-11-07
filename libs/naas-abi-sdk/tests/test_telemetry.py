@@ -29,7 +29,7 @@ def test_describe_subject_names_service_and_method():
         "discovery",
         "list_modules",
     )
-    assert telemetry.describe_subject("abi.agent.zen.i.h.v1.submit") == (
+    assert telemetry.describe_subject("abi.agent.zen.sa.i.h.v1.submit") == (
         "agent",
         "submit",
     )
@@ -92,7 +92,7 @@ def test_configure_from_env_only_with_an_endpoint(monkeypatch):
 
 def test_internal_spans_nest_under_the_current_one(spans):
     with (
-        telemetry.server_span("abi.agent.zen.i.h.v1.submit", {}),
+        telemetry.server_span("abi.agent.zen.sa.i.h.v1.submit", {}),
         telemetry.internal_span(
             "agent Researcher run", {"abi.agent.name": "Researcher"}
         ),

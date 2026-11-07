@@ -1,4 +1,4 @@
-import type { WorkbookSheet } from '@/app/organizations/[orgId]/settings/users/users-table-export';
+import type { WorkbookSheet } from '@/components/settings/users-table/users-table-export';
 import { cellText, type CellValue } from './table-cells';
 
 /** One table, as `GET /api/admin/tables/{name}` returns it. */

@@ -418,7 +418,7 @@ services:
       - DAGSTER_PG_DB=${POSTGRES_DB}
       - ABI_CONFIG_OVERLAY=${ABI_STACK_CONFIG_OVERLAY:-}
       # Next to an engine on NATS, a client of it: a second serving engine would
-      # fail on the ownership lease (docs/adr/20261006_single-serving-engine.md).
+      # fail on the ownership lease.
       # Without NATS (`--legacy`) the role is ignored.
       - ABI_ENGINE_ROLE=client
     command:
@@ -514,16 +514,18 @@ services:
     pull_policy: always
     restart: unless-stopped
     environment:
-      # The broker's users (nats.conf). `abi stack start` generates them in .env.
-      - NATS_ABI_PASSWORD=${NATS_ABI_PASSWORD:-}
-      - NATS_MODULE_PASSWORD=${NATS_MODULE_PASSWORD:-}
+      # The broker's static users and its auth callout's trusted key (nats.conf).
+      # `abi stack start` and `abi deploy local` generate them in .env.
+      - NATS_ENGINE_PASSWORD=${NATS_ENGINE_PASSWORD:-}
+      - NATS_AUTH_PASSWORD=${NATS_AUTH_PASSWORD:-}
+      - NATS_AUTH_CALLOUT_ISSUER=${NATS_AUTH_CALLOUT_ISSUER:-}
     # nats-server takes an empty password as is, which would let anyone log in
-    # as that user: refuse to start without both.
+    # as that user: refuse to start without all three.
     command:
       - sh
       - -c
       - |
-        for key in NATS_ABI_PASSWORD NATS_MODULE_PASSWORD; do
+        for key in NATS_ENGINE_PASSWORD NATS_AUTH_PASSWORD NATS_AUTH_CALLOUT_ISSUER; do
           [ -n "$$(printenv $$key)" ] || { echo "$$key is empty: run abi stack start" >&2; exit 1; }
         done
         exec nats-server -c /etc/nats/nats.conf -js -sd /data -m 8222

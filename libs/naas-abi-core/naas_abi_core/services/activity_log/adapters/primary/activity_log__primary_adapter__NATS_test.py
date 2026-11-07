@@ -9,7 +9,7 @@ out for this adapter.
 import asyncio
 from datetime import UTC, datetime
 
-from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_test_tokens import OTHER_TOKENS, TEST_TOKENS
 from naas_abi_core.proto.activity_log.v1 import activity_log_pb2
 from naas_abi_core.services.activity_log.ActivityLogPort import (
     ActivityEvent,
@@ -21,7 +21,7 @@ from naas_abi_core.services.activity_log.adapters.primary.activity_log__primary_
     ActivityLogPrimaryAdapterNATS,
 )
 
-SECRET = "test-shared-secret"
+SECRET = TEST_TOKENS.verifier
 
 
 class _FakeRequest:
@@ -74,10 +74,12 @@ class _StubAdapter(IActivityLogAdapter):
 
 
 def _valid_token() -> str:
-    return issue_service_token("api", SECRET)
+    return TEST_TOKENS.token("api")
 
 
-def _record_request(actor_id: str = "user:1", event_type: str = "http.request") -> bytes:
+def _record_request(
+    actor_id: str = "user:1", event_type: str = "http.request"
+) -> bytes:
     event = activity_log_pb2.ActivityEvent(actor_id=actor_id, event_type=event_type)
     event.timestamp.FromDatetime(datetime.now(UTC))
     return activity_log_pb2.RecordRequest(event=event).SerializeToString()
@@ -125,7 +127,7 @@ def test_malformed_token_returns_unauthenticated():
 
 def test_token_signed_with_wrong_secret_returns_unauthenticated():
     adapter = ActivityLogPrimaryAdapterNATS(_StubAdapter(), SECRET)
-    wrong_secret_token = issue_service_token("api", "a-different-secret")
+    wrong_secret_token = OTHER_TOKENS.token("api")
     request = _FakeRequest(
         data=_record_request(), headers={AUTH_HEADER: wrong_secret_token}
     )
@@ -335,5 +337,10 @@ def test_query_passes_paging_and_returns_seqs():
     response.ParseFromString(request.responses[0])
     (query,) = seen
     assert query is not None
-    assert (query.newest_first, query.before_seq, query.after_seq, query.limit) == (True, 9, 2, 5)
+    assert (query.newest_first, query.before_seq, query.after_seq, query.limit) == (
+        True,
+        9,
+        2,
+        5,
+    )
     assert response.events.events[0].seq == 7

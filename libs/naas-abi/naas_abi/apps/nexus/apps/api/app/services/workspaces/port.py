@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
+from uuid import uuid4
 
 
 @dataclass
@@ -23,7 +24,6 @@ class WorkspaceRecord:
     description: str | None = None
     workspace_group: str | None = None
     # Saved in Organization Settings > Workspaces; None = config overrides apply.
-    feature_overrides: dict[str, bool] | None = None
     catalog_seed: dict[str, object] | None = None
     platform_drive_enabled: bool = False
     system_drive_enabled: bool = False
@@ -50,6 +50,13 @@ class WorkspaceCreateInput:
     description: str | None = None
     workspace_group: str | None = None
     catalog_seed: dict[str, object] | None = None
+    # Decided before the row exists, so the create is checked on the new
+    # workspace's own name (``new_workspace_id``); made by the adapter when None.
+    id: str | None = None
+
+
+def new_workspace_id() -> str:
+    return f"ws-{uuid4().hex[:12]}"
 
 
 @dataclass
@@ -90,12 +97,16 @@ class WorkspaceMemberRecord:
     # "workspace": explicit membership row. "organization": no row, the role is
     # inherited from being an owner/admin of the workspace's organization.
     source: str = "workspace"
+    # Their IAM principal (``Member.principal_id``): an account linked from the old
+    # login has another id in IAM than in Nexus. What the access pages link to.
+    principal_id: str | None = None
 
 
 @dataclass
 class UserRecord:
     id: str
     email: str
+    name: str | None = None
 
 
 @dataclass
@@ -140,12 +151,15 @@ class InferenceServerUpdateInput:
 
 
 class WorkspacePermissionPort(ABC):
+    """The workspaces Nexus keeps. Who belongs to them and with which role is
+    IAM's (``services/iam/memberships``), not this port's."""
+
     @abstractmethod
-    async def get_workspace_role(self, user_id: str, workspace_id: str) -> str | None:
+    async def list_all_workspaces(self) -> list[WorkspaceRecord]:
         raise NotImplementedError
 
     @abstractmethod
-    async def list_workspaces_for_user(self, user_id: str) -> list[WorkspaceRecord]:
+    async def get_users_by_ids(self, user_ids: list[str]) -> dict[str, UserRecord]:
         raise NotImplementedError
 
     @abstractmethod
@@ -169,16 +183,14 @@ class WorkspacePermissionPort(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def update_workspace(
-        self, workspace_id: str, updates: WorkspaceUpdateInput
-    ) -> WorkspaceRecord | None:
+    async def rollback(self) -> None:
+        """Discard what this unit of work wrote and has not committed."""
         raise NotImplementedError
 
     @abstractmethod
-    async def set_workspace_feature_overrides(
-        self, workspace_id: str, overrides: dict[str, bool] | None
+    async def update_workspace(
+        self, workspace_id: str, updates: WorkspaceUpdateInput
     ) -> WorkspaceRecord | None:
-        """Save the workspace's feature overrides; ``None`` restores the config ones."""
         raise NotImplementedError
 
     @abstractmethod
@@ -186,31 +198,7 @@ class WorkspacePermissionPort(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def list_workspace_members(self, workspace_id: str) -> list[WorkspaceMemberRecord]:
-        raise NotImplementedError
-
-    @abstractmethod
     async def get_user_by_email(self, email: str) -> UserRecord | None:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def is_workspace_member(self, workspace_id: str, user_id: str) -> bool:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def add_workspace_member(
-        self, workspace_id: str, user_id: str, role: str
-    ) -> WorkspaceMemberRecord:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def remove_workspace_member(self, workspace_id: str, user_id: str) -> bool:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def update_workspace_member_role(
-        self, workspace_id: str, user_id: str, role: str
-    ) -> bool:
         raise NotImplementedError
 
     @abstractmethod

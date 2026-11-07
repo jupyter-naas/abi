@@ -48,12 +48,13 @@ from naas_abi.apps.nexus.apps.api.app.services.analytics.service import (
     AnalyticsService,
 )
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (
-    require_superadmin,
+    get_current_user_required,
 )
 from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__primary_adapter__export import (
     export_conversation_as_response,
 )
 from naas_abi.apps.nexus.apps.api.app.services.chat.service import ChatService
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import guard
 from naas_abi.apps.nexus.apps.api.app.services.registry import get_service_registry
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
@@ -61,7 +62,11 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
-router = APIRouter(dependencies=[Depends(require_superadmin)])
+router = APIRouter(dependencies=[Depends(get_current_user_required)])
+# Analytics belong to the platform, not to a workspace: ``workspace_id`` below is a
+# filter on the figures, never the workspace the caller acts in.
+_READ = [guard("ReadAnalytics", workspace=None)]
+_WRITE = [guard("WriteAnalytics", workspace=None)]
 
 
 def _parse_message_metadata(raw: str | None) -> dict | None:
@@ -128,7 +133,7 @@ def get_analytics_service(
 # ---------------------------------------------------------------------------
 
 
-@router.post("/events", response_model=IngestResponse)
+@router.post("/events", response_model=IngestResponse, dependencies=_WRITE)
 async def ingest_event(
     event: AnalyticsEvent,
     service: AnalyticsService = Depends(get_analytics_service),
@@ -137,7 +142,7 @@ async def ingest_event(
     return IngestResponse(stored_at=stored_at)
 
 
-@router.post("/rebuild", response_model=RebuildResponse)
+@router.post("/rebuild", response_model=RebuildResponse, dependencies=_WRITE)
 async def rebuild_now(
     service: AnalyticsService = Depends(get_analytics_service),
 ) -> RebuildResponse:
@@ -145,14 +150,14 @@ async def rebuild_now(
     return RebuildResponse(metadata=metadata)
 
 
-@router.get("/metadata", response_model=Metadata | None)
+@router.get("/metadata", response_model=Metadata | None, dependencies=_READ)
 async def get_metadata(
     service: AnalyticsService = Depends(get_analytics_service),
 ) -> Metadata | None:
     return service.get_metadata()
 
 
-@router.get("/scenarios", response_model=ScenariosResponse)
+@router.get("/scenarios", response_model=ScenariosResponse, dependencies=_READ)
 async def get_scenarios(
     service: AnalyticsService = Depends(get_analytics_service),
 ) -> ScenariosResponse:
@@ -164,7 +169,7 @@ async def get_scenarios(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/overview", response_model=OverviewResponse)
+@router.get("/overview", response_model=OverviewResponse, dependencies=_READ)
 async def get_overview(
     scenario_id: str = Query(DEFAULT_SCENARIO_ID),
     workspace_id: str | None = Query(None),
@@ -176,7 +181,7 @@ async def get_overview(
     )
 
 
-@router.get("/users", response_model=UsersResponse)
+@router.get("/users", response_model=UsersResponse, dependencies=_READ)
 async def get_users(
     scenario_id: str = Query(DEFAULT_SCENARIO_ID),
     workspace_id: str | None = Query(None),
@@ -185,7 +190,7 @@ async def get_users(
     return service.get_users(scenario_id=scenario_id, workspace_id=workspace_id)
 
 
-@router.get("/users/{email:path}", response_model=UserDetail)
+@router.get("/users/{email:path}", response_model=UserDetail, dependencies=_READ)
 async def get_user_detail(
     email: str,
     scenario_id: str = Query(DEFAULT_SCENARIO_ID),
@@ -198,7 +203,7 @@ async def get_user_detail(
         raise HTTPException(status_code=404, detail="No data for user in selected range") from exc
 
 
-@router.get("/sessions", response_model=SessionsResponse)
+@router.get("/sessions", response_model=SessionsResponse, dependencies=_READ)
 async def get_sessions(
     scenario_id: str = Query(DEFAULT_SCENARIO_ID),
     workspace_id: str | None = Query(None),
@@ -210,7 +215,7 @@ async def get_sessions(
     )
 
 
-@router.get("/pages", response_model=PagesResponse)
+@router.get("/pages", response_model=PagesResponse, dependencies=_READ)
 async def get_pages(
     scenario_id: str = Query(DEFAULT_SCENARIO_ID),
     workspace_id: str | None = Query(None),
@@ -222,7 +227,7 @@ async def get_pages(
     )
 
 
-@router.get("/workspaces", response_model=WorkspacesResponse)
+@router.get("/workspaces", response_model=WorkspacesResponse, dependencies=_READ)
 async def get_workspaces(
     scenario_id: str = Query(DEFAULT_SCENARIO_ID),
     workspace_id: str | None = Query(None),
@@ -234,7 +239,7 @@ async def get_workspaces(
     )
 
 
-@router.get("/events", response_model=EventsResponse)
+@router.get("/events", response_model=EventsResponse, dependencies=_READ)
 async def get_events(
     scenario_id: str = Query(DEFAULT_SCENARIO_ID),
     limit: int = Query(200, ge=1, le=1000),
@@ -250,7 +255,7 @@ async def get_events(
     )
 
 
-@router.get("/chats", response_model=ChatsResponse)
+@router.get("/chats", response_model=ChatsResponse, dependencies=_READ)
 async def get_chats(
     scenario_id: str = Query(DEFAULT_SCENARIO_ID),
     workspace_id: str | None = Query(None),
@@ -274,7 +279,7 @@ async def get_chats(
     return response
 
 
-@router.get("/chat-analytics", response_model=ChatAnalyticsResponse)
+@router.get("/chat-analytics", response_model=ChatAnalyticsResponse, dependencies=_READ)
 async def get_chat_analytics(
     scenario_id: str = Query(DEFAULT_SCENARIO_ID),
     workspace_id: str | None = Query(None),
@@ -520,7 +525,7 @@ async def get_chat_analytics(
     )
 
 
-@router.get("/chats/{conversation_id}", response_model=ChatDetail)
+@router.get("/chats/{conversation_id}", response_model=ChatDetail, dependencies=_READ)
 async def get_chat_detail(
     conversation_id: str,
     registry=Depends(get_service_registry),
@@ -573,7 +578,7 @@ class ChatFeedbackUpdate(BaseModel):
 _FEEDBACK_DETAIL_KEYS = ("feedback_type", "feedback_detail", "feedback_severity")
 
 
-@router.patch("/chats/{conversation_id}/messages/{message_id}/feedback")
+@router.patch("/chats/{conversation_id}/messages/{message_id}/feedback", dependencies=_WRITE)
 async def update_chat_message_feedback(
     conversation_id: str,
     message_id: str,
@@ -632,7 +637,7 @@ async def update_chat_message_feedback(
     }
 
 
-@router.get("/chats/{conversation_id}/export")
+@router.get("/chats/{conversation_id}/export", dependencies=_READ)
 async def export_chat(
     conversation_id: str,
     format: str = Query("txt", pattern="^(txt|json|md)$"),

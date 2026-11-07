@@ -6,6 +6,8 @@
  * or an in-memory fallback.
  */
 
+import { viewFlagActive } from './view-flag';
+
 export type SafeStorage = {
   getItem: (name: string) => string | null;
   setItem: (name: string, value: string) => void;
@@ -70,8 +72,13 @@ function createMemoryStorage(): SafeStorage {
 
 let cachedStorage: SafeStorage | null = null;
 
-/** Resolve the best available storage backend for this browser context. */
+/**
+ * Resolve the best available storage backend for this browser context. During a view
+ * ("View as") it is memory, whatever the browser allows: nothing is read from, or kept in, the
+ * browser, and a reload forgets it.
+ */
 export function getSafeStorage(): SafeStorage {
+  if (viewFlagActive()) return createMemoryStorage();
   if (cachedStorage) return cachedStorage;
 
   if (typeof window !== 'undefined') {

@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.11, <4"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'win32'",
@@ -2283,6 +2283,7 @@ dependencies = [
     { name = "duckdb" },
     { name = "fastapi" },
     { name = "fastmcp" },
+    { name = "httpx" },
     { name = "langchain-openai" },
     { name = "langgraph" },
     { name = "langgraph-checkpoint-postgres" },
@@ -2294,6 +2295,7 @@ dependencies = [
     { name = "psycopg", extra = ["binary", "pool"] },
     { name = "pydantic" },
     { name = "pydash" },
+    { name = "pyjwt", extra = ["crypto"] },
     { name = "pyoxigraph" },
     { name = "pytz" },
     { name = "pyyaml" },
@@ -2318,7 +2320,7 @@ all = [
     { name = "naas-abi-sdk", extra = ["models", "otel"] },
     { name = "nats-py" },
     { name = "paramiko" },
-    { name = "pyjwt" },
+    { name = "pyjwt", extra = ["crypto"] },
     { name = "qdrant-client" },
     { name = "redis" },
     { name = "sqlite-vec" },
@@ -2342,7 +2344,7 @@ nats = [
     { name = "naas-abi-proto" },
     { name = "naas-abi-sdk", extra = ["models"] },
     { name = "nats-py" },
-    { name = "pyjwt" },
+    { name = "pyjwt", extra = ["crypto"] },
 ]
 openrouter = [
     { name = "langchain-openai" },
@@ -2391,6 +2393,7 @@ requires-dist = [
     { name = "duckdb", specifier = ">=1.5.5" },
     { name = "fastapi", specifier = ">=0.115.5,<0.116" },
     { name = "fastmcp", specifier = ">=2.13.2" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "langchain-openai", specifier = ">=0.3.3,<0.4" },
     { name = "langchain-openai", marker = "extra == 'openrouter'", specifier = ">=0.3.35" },
     { name = "langgraph", specifier = ">=0.6.6" },
@@ -2419,7 +2422,8 @@ requires-dist = [
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.0.0" },
     { name = "pydantic", specifier = ">=2.11.5" },
     { name = "pydash", specifier = ">=8.0.5" },
-    { name = "pyjwt", marker = "extra == 'nats'", specifier = ">=2.11.0" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.11.0" },
+    { name = "pyjwt", extras = ["crypto"], marker = "extra == 'nats'", specifier = ">=2.11.0" },
     { name = "pyoxigraph", specifier = ">=0.5.5" },
     { name = "pytz", specifier = ">=2025.2" },
     { name = "pyyaml", specifier = ">=6.0.3" },

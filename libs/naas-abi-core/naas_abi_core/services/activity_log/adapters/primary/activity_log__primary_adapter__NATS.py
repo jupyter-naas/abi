@@ -6,9 +6,8 @@ contract and ``naas_abi_core/proto/README.md`` for why it lives there). This
 is the server side; the matching client is
 ``ActivityLogSecondaryAdapterNATSClient``.
 
-Stage 1 auth model (see ``naas_abi_core.engine.nats_auth``): one shared
-secret, one claim -- which known first-party process holds the token. Every
-incoming request must carry a valid token in the ``Nats-Auth-Token`` header
+Auth (see ``naas_abi_core.engine.nats_auth``): every incoming request
+must carry an engine token, verified against the JWKS, in the ``Nats-Auth-Token`` header
 (``AUTH_HEADER``, imported from ``activity_log_nats_contract`` below --
 that's a neutral module neither adapter owns, so this file and the client's
 don't depend on each other; see that module's docstring for why).
@@ -34,13 +33,11 @@ import nats
 import nats.micro
 from google.protobuf.message import DecodeError, Message
 from naas_abi_core import logger
-from naas_abi_core.engine.nats_auth import (
-    InvalidServiceTokenError,
-    verify_service_token,
-)
+from naas_abi_core.engine.nats_auth import TokenVerifier
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import (
     RequestPayloadError,
+    authenticate_request,
     request_payload,
     respond_protobuf,
 )
@@ -69,6 +66,11 @@ from naas_abi_core.services.activity_log.adapters.activity_log_stream_codec impo
     event_to_pb,
     pb_to_event,
 )
+from naas_abi_core.services.iam.guard import authorization_error_code
+from naas_abi_core.services.iam.IAMPorts import (
+    PermissionDeniedError,
+    ResourceNotFoundError,
+)
 from nats.micro.request import Request
 
 __all__ = [
@@ -93,6 +95,12 @@ def _pb_to_query(pb: activity_log_pb2.ActivityLogQueryFilter) -> ActivityLogQuer
         before_seq=pb.before_seq if pb.HasField("before_seq") else None,
         after_seq=pb.after_seq if pb.HasField("after_seq") else None,
     )
+
+
+def _transfer_error(exc: Exception) -> tuple[str, str] | None:
+    """A streamed query refused like the one-shot one."""
+    code = authorization_error_code(exc)
+    return (code, str(exc)) if code is not None else None
 
 
 class ActivityLogPrimaryAdapterNATS(ServiceWithTransfers):
@@ -122,19 +130,20 @@ class ActivityLogPrimaryAdapterNATS(ServiceWithTransfers):
     def __init__(
         self,
         adapter: IActivityLogAdapter | IActivityLogDomain,
-        jwt_secret: str,
+        verifier: TokenVerifier,
     ) -> None:
         self._adapter = adapter
-        self._jwt_secret = jwt_secret
+        self._verifier = verifier
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
         self._service: TracedService | None = None
-        # Streamed queries (docs/adr/20261003_nats-streamed-results.md).
+        # Streamed queries.
         self._transfer = TransferHost(
             TRANSFER_PREFIX,
-            jwt_secret,
+            verifier,
             self._transfer_frames,
             operations=("query",),
             chunk_bytes=1024 * 1024,
+            error_mapper=_transfer_error,
         )
 
     async def start(self, nc: nats.NATS) -> None:
@@ -187,14 +196,8 @@ class ActivityLogPrimaryAdapterNATS(ServiceWithTransfers):
         response_cls: Callable[..., _ResponseT],
         call: Callable[[_RequestT], _ResponseT],
     ) -> None:
-        if not self._is_authenticated(request):
-            await self._respond_error(
-                request,
-                response_cls,
-                "UNAUTHENTICATED",
-                "missing or invalid auth token",
-                retryable=False,
-            )
+        caller = await authenticate_request(request, self._verifier, response_cls)
+        if caller is None:
             return
 
         parsed_request = request_cls()
@@ -221,7 +224,16 @@ class ActivityLogPrimaryAdapterNATS(ServiceWithTransfers):
             # ONE connection (nats_runtime), so run the call on a worker thread:
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
-            response = await self._dispatch.call(call, parsed_request)
+            response = await self._dispatch.call(call, parsed_request, caller)
+        except (PermissionDeniedError, ResourceNotFoundError) as exc:
+            await self._respond_error(
+                request,
+                response_cls,
+                authorization_error_code(exc) or "PERMISSION_DENIED",
+                str(exc),
+                retryable=False,
+            )
+            return
         except Exception:  # noqa: BLE001 - a handler must never crash the service
             logger.opt(exception=True).error(
                 f"ActivityLogPrimaryAdapterNATS: unexpected error handling {request.subject!r}"
@@ -232,17 +244,6 @@ class ActivityLogPrimaryAdapterNATS(ServiceWithTransfers):
             return
 
         await respond_protobuf(request, response, response_cls)
-
-    def _is_authenticated(self, request: Request) -> bool:
-        headers = request.headers or {}
-        token = headers.get(AUTH_HEADER)
-        if not token:
-            return False
-        try:
-            verify_service_token(token, self._jwt_secret)
-        except InvalidServiceTokenError:
-            return False
-        return True
 
     @staticmethod
     async def _respond_error(

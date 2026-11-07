@@ -11,7 +11,10 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.chat_file_embeddings import 
 
 def test_collection_and_cache_key() -> None:
     assert build_chat_collection_name("conv-1") == "chat_conv-1"
-    assert build_embedding_cache_key("abc", "hash-v1", 256) == "embeddings:abc:hash-v1:256"
+    assert (
+        build_embedding_cache_key("ws-1", "abc", "hash-v1", 256)
+        == "embeddings:ws-1:abc:hash-v1:256"
+    )
 
 
 def test_chunk_markdown_basic() -> None:

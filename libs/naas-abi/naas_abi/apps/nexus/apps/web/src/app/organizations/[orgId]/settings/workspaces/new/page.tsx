@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Brush, Camera, Check, Palette, Save, SlidersHorizontal, Trash2, X } from 'lucide-react';
+import { Brush, Camera, Check, Palette, Save, Trash2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { SettingsField, SettingsNotice, SettingsSection } from '@/components/settings/settings-ui';
@@ -11,13 +11,6 @@ import { DEFAULT_THEME, PRESET_COLORS } from '@/stores/workspace';
 import { AccountPageHeader } from '@/app/account/components/account-page-header';
 import { AccountSectionCard } from '@/app/account/components/account-section-card';
 import { orgSettingsSectionPath } from '../../lib/nav';
-import {
-  configurableFeatures,
-  overridesFromChoices,
-  WorkspaceFeaturesTable,
-  type FeatureChoice,
-  type WorkspaceFeatureCatalog,
-} from '../workspace-features-table';
 import { WorkspaceGroupSelect } from '../workspace-group-select';
 import { WorkspaceOwnerSelect } from '../workspace-owner-select';
 import {
@@ -53,10 +46,8 @@ async function readApiError(response: Response, fallback: string): Promise<strin
  * organization's groups, or typed as a new one. The logo is uploaded right
  * after the workspace exists, into the workspace drive
  * (``.settings/logos/logo.<ext>``); the desk wallpaper is set in General
- * once the workspace exists. Features left on Default follow the role
- * defaults and the config; any On/Off choice is saved as the workspace
- * overrides, like the Features column of the workspaces list, and then
- * replaces the config overrides (``workspace_overrides``) for this slug.
+ * once the workspace exists. No feature is picked here: what people may use
+ * in it is what their policies grant (`nexus:UseFeature`), like agents.
  */
 export default function OrgCreateWorkspacePage() {
   const params = useParams();
@@ -75,9 +66,6 @@ export default function OrgCreateWorkspacePage() {
   const [accentColor, setAccentColor] = useState(DEFAULT_THEME.accentColor ?? '');
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState('');
-  const [featureCatalog, setFeatureCatalog] = useState<WorkspaceFeatureCatalog | null>(null);
-  const [featureChoices, setFeatureChoices] = useState<Record<string, FeatureChoice>>({});
-  const [featureCatalogFailed, setFeatureCatalogFailed] = useState(false);
   const [ownerId, setOwnerId] = useState('');
   const [catalogSeedDraft, setCatalogSeedDraft] = useState<CatalogSeedDraft>({});
   const [error, setError] = useState('');
@@ -138,29 +126,6 @@ export default function OrgCreateWorkspacePage() {
     if (currentUserId && !ownerId) setOwnerId(currentUserId);
   }, [currentUserId, ownerId]);
 
-  // Feature catalog and role defaults, for the Features section.
-  useEffect(() => {
-    if (!orgId) return;
-    let cancelled = false;
-    setFeatureCatalogFailed(false);
-    // No catalog: the workspace follows the role defaults.
-    void authFetch(`/api/organizations/${orgId}/workspace-features`)
-      .then(async (res) => {
-        if (cancelled) return;
-        if (!res.ok) {
-          setFeatureCatalogFailed(true);
-          return;
-        }
-        setFeatureCatalog(await res.json());
-      })
-      .catch(() => {
-        if (!cancelled) setFeatureCatalogFailed(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [orgId]);
-
   useEffect(() => {
     if (!logoFile) {
       setLogoPreview('');
@@ -196,10 +161,6 @@ export default function OrgCreateWorkspacePage() {
     if (!canCreate) return;
     setError('');
     setCreating(true);
-    const featureOverrides = overridesFromChoices(
-      featureChoices,
-      configurableFeatures(featureCatalog)
-    );
     const catalog_seed = catalogSeedPayload(catalogSeedDraft);
     try {
       const res = await authFetch('/api/workspaces', {
@@ -214,8 +175,6 @@ export default function OrgCreateWorkspacePage() {
           description: description.trim() || null,
           primary_color: primaryColor,
           accent_color: accentColor || null,
-          // Nothing changed: keep following the role defaults and the config.
-          feature_overrides: Object.keys(featureOverrides).length ? featureOverrides : null,
           catalog_seed,
         }),
       });
@@ -253,7 +212,7 @@ export default function OrgCreateWorkspacePage() {
     <div className="workspace-general org-create-workspace space-y-6">
       <AccountPageHeader
         title="Create workspace"
-        subtitle="Add a workspace to this organization. Pick an owner, features, and optional instances; org owners and admins reach every workspace."
+        subtitle="Add a workspace to this organization. Pick an owner and optional instances; org owners and admins reach every workspace."
         actions={
           <div className="org-create-workspace-actions">
             <button
@@ -422,38 +381,8 @@ export default function OrgCreateWorkspacePage() {
         </div>
       </AccountSectionCard>
 
-      <SettingsSection
-        title={
-          <span className="flex items-center gap-2">
-            <SlidersHorizontal size={16} className="text-muted-foreground" />
-            Features
-          </span>
-        }
-        description="Default follows the role defaults. On shows a feature to every role, Off hides it. Any On or Off replaces the config overrides for this workspace. Change them later from the Features column of the workspaces list."
-      >
-        {featureCatalogFailed ? (
-          <p className="text-sm text-muted-foreground">
-            Features could not be loaded. The workspace will follow the role defaults; change
-            them later from the Features column of the workspaces list.
-          </p>
-        ) : featureCatalog ? (
-          <WorkspaceFeaturesTable
-            catalog={featureCatalog}
-            choices={featureChoices}
-            disabled={creating}
-            onChange={(feature, choice) =>
-              setFeatureChoices((current) => ({ ...current, [feature]: choice }))
-            }
-          />
-        ) : (
-          <p className="text-sm text-muted-foreground">Loading features...</p>
-        )}
-      </SettingsSection>
-
       <WorkspaceInstancesSection
         orgId={orgId}
-        featureCatalog={featureCatalog}
-        featureChoices={featureChoices}
         draft={catalogSeedDraft}
         onDraftChange={setCatalogSeedDraft}
         disabled={creating}

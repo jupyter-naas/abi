@@ -51,8 +51,6 @@ def workspace_create(
     via: str,
     api_url: str,
     token: str | None,
-    email: str | None,
-    password: str | None,
     dry_run: bool,
 ) -> None:
     """Create a workspace under an organization (API caller becomes owner)."""
@@ -76,7 +74,7 @@ def workspace_create(
     if dry_run:
         print_json({"method": "POST", "path": "/api/workspaces", "body": body})
         return
-    client = build_client(api_url=api_url, token=token, email=email, password=password)
+    client = build_client(api_url=api_url, token=token)
     try:
         result = client.post("/api/workspaces", body)
     except NexusApiError as exc:
@@ -96,8 +94,6 @@ def workspace_list(
     organization_id: str | None,
     api_url: str,
     token: str | None,
-    email: str | None,
-    password: str | None,
     dry_run: bool,
 ) -> None:
     """List workspaces visible to the authenticated user (or under --org)."""
@@ -109,7 +105,7 @@ def workspace_list(
     if dry_run:
         print_json({"method": "GET", "path": path})
         return
-    client = build_client(api_url=api_url, token=token, email=email, password=password)
+    client = build_client(api_url=api_url, token=token)
     try:
         rows = client.get(path)
     except NexusApiError as exc:
@@ -133,8 +129,6 @@ def workspace_get(
     slug: str | None,
     api_url: str,
     token: str | None,
-    email: str | None,
-    password: str | None,
     dry_run: bool,
 ) -> None:
     """Fetch a workspace by id or slug."""
@@ -144,7 +138,7 @@ def workspace_get(
     if dry_run:
         print_json({"method": "GET", "path": path})
         return
-    client = build_client(api_url=api_url, token=token, email=email, password=password)
+    client = build_client(api_url=api_url, token=token)
     try:
         print_json(client.get(path))
     except NexusApiError as exc:
@@ -160,8 +154,6 @@ def workspace_delete(
     yes: bool,
     api_url: str,
     token: str | None,
-    email: str | None,
-    password: str | None,
     dry_run: bool,
 ) -> None:
     """Delete a workspace (owner only)."""
@@ -171,7 +163,7 @@ def workspace_delete(
         return
     if not yes and not click.confirm(f"Delete workspace {workspace_id}?"):
         raise click.Abort()
-    client = build_client(api_url=api_url, token=token, email=email, password=password)
+    client = build_client(api_url=api_url, token=token)
     try:
         print_json(client.delete(path))
     except NexusApiError as exc:
@@ -190,8 +182,6 @@ def workspace_members_list(
     workspace_id: str,
     api_url: str,
     token: str | None,
-    email: str | None,
-    password: str | None,
     dry_run: bool,
 ) -> None:
     """List members of a workspace."""
@@ -199,7 +189,7 @@ def workspace_members_list(
     if dry_run:
         print_json({"method": "GET", "path": path})
         return
-    client = build_client(api_url=api_url, token=token, email=email, password=password)
+    client = build_client(api_url=api_url, token=token)
     try:
         rows = client.get(path)
     except NexusApiError as exc:
@@ -232,8 +222,6 @@ def workspace_members_add(
     role: str,
     api_url: str,
     token: str | None,
-    email: str | None,
-    password: str | None,
     dry_run: bool,
 ) -> None:
     """Invite a user into a workspace (create-on-invite + sign-in email)."""
@@ -244,7 +232,7 @@ def workspace_members_add(
     if dry_run:
         print_json({"method": "POST", "path": path, "body": body})
         return
-    client = build_client(api_url=api_url, token=token, email=email, password=password)
+    client = build_client(api_url=api_url, token=token)
     try:
         print_json(client.post(path, body))
     except NexusApiError as exc:
@@ -262,8 +250,6 @@ def workspace_members_remove(
     yes: bool,
     api_url: str,
     token: str | None,
-    email: str | None,
-    password: str | None,
     dry_run: bool,
 ) -> None:
     """Remove a member from a workspace."""
@@ -273,7 +259,7 @@ def workspace_members_remove(
         return
     if not yes and not click.confirm(f"Remove {user_id} from {workspace_id}?"):
         raise click.Abort()
-    client = build_client(api_url=api_url, token=token, email=email, password=password)
+    client = build_client(api_url=api_url, token=token)
     try:
         print_json(client.delete(path))
     except NexusApiError as exc:

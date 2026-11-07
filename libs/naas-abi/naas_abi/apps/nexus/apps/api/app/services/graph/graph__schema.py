@@ -195,7 +195,9 @@ class DiscoveryRelationRowData:
     range_label: str
     range_class_uri: str
     range_class_label: str
-    role: str = "domain"  # "domain" = working instance is subject; "range" = working instance is object
+    role: str = (
+        "domain"  # "domain" = working instance is subject; "range" = working instance is object
+    )
 
 
 @dataclass(frozen=True)

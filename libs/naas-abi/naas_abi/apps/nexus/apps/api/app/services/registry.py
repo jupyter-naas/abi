@@ -13,10 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 if TYPE_CHECKING:
     from naas_abi.apps.nexus.apps.api.app.services.agents.service import AgentService
-    from naas_abi.apps.nexus.apps.api.app.services.apps.service import AppsService
     from naas_abi.apps.nexus.apps.api.app.services.chat.service import ChatService
     from naas_abi.apps.nexus.apps.api.app.services.graph.service import GraphService
-    from naas_abi.apps.nexus.apps.api.app.services.iam.service import IAMService
     from naas_abi.apps.nexus.apps.api.app.services.ontology.service import OntologyService
     from naas_abi.apps.nexus.apps.api.app.services.organizations.service import OrganizationService
     from naas_abi.apps.nexus.apps.api.app.services.search.service import SearchService
@@ -26,12 +24,10 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class RegistryServices:
-    iam: IAMService
     chat: ChatService
     search: SearchService
     agents: AgentService
     skills: SkillService
-    apps: AppsService
     workspaces: WorkspaceService
     organizations: OrganizationService
     graph: GraphService
@@ -56,10 +52,6 @@ class ServiceRegistry:
         return cls._instance
 
     @property
-    def iam(self) -> IAMService:
-        return self._services.iam
-
-    @property
     def chat(self) -> ChatService:
         return self._services.chat
 
@@ -70,10 +62,6 @@ class ServiceRegistry:
     @property
     def skills(self) -> SkillService:
         return self._services.skills
-
-    @property
-    def apps(self) -> AppsService:
-        return self._services.apps
 
     @property
     def search(self) -> SearchService:

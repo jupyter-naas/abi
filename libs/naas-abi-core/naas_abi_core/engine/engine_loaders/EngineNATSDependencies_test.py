@@ -8,10 +8,17 @@ from naas_abi_core.engine.engine_loaders.EngineNATSDependencies import (
 )
 from naas_abi_core.engine.IEngine import IEngine
 from naas_abi_core.engine.nats_rpc import NatsRPCClient
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.cache.adapters.secondary.CacheFSAdapter import (
     CacheFSAdapter,
 )
 from naas_abi_core.services.cache.CacheService import CacheService
+from naas_abi_core.services.iam.adapters.secondary.IAMSecondaryAdapterNATSClient import (
+    IAMSecondaryAdapterNATSClient,
+)
+from naas_abi_core.services.identity.adapters.secondary.IdentitySecondaryAdapterNATSClient import (
+    IdentitySecondaryAdapterNATSClient,
+)
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
@@ -37,7 +44,7 @@ def test_domains_receive_only_network_dependencies_and_no_local_model_objects(tm
         ),
         model_registry=MagicMock(),
     )
-    wiring = EngineNATSDependencies(NATSConfiguration(jwt_secret="x" * 32))
+    wiring = EngineNATSDependencies(NATSConfiguration(), TEST_TOKENS.source("engine"))
     dependencies = wiring.build(owners)
     try:
         owners.wire_services(dependencies)
@@ -78,7 +85,7 @@ def test_dependency_failure_has_no_local_fallback():
 
     local_backend = MagicMock()
     owner = ObjectStorageService(local_backend)
-    wiring = EngineNATSDependencies(NATSConfiguration(jwt_secret="x" * 32))
+    wiring = EngineNATSDependencies(NATSConfiguration(), TEST_TOKENS.source("engine"))
     dependencies = wiring.build(IEngine.Services(object_storage=owner))
     try:
         adapter = dependencies.object_storage.adapter
@@ -103,9 +110,9 @@ def test_existing_remote_route_is_retained():
     )
 
     remote = KeyValueSecondaryAdapterNATSClient(
-        "nats://upstream:4222", "x" * 32, "engine"
+        "nats://upstream:4222", TEST_TOKENS.source("engine")
     )
-    wiring = EngineNATSDependencies(NATSConfiguration(jwt_secret="x" * 32))
+    wiring = EngineNATSDependencies(NATSConfiguration(), TEST_TOKENS.source("engine"))
     try:
         dependencies = wiring.build(IEngine.Services(kv=KeyValueService(remote)))
         assert dependencies.kv.adapter is remote
@@ -120,7 +127,7 @@ def test_facades_wait_as_long_as_the_configuration_says(tmp_path):
     )
 
     upstream = KeyValueSecondaryAdapterNATSClient(
-        "nats://upstream:4222", "x" * 32, "engine", timeout_seconds=3.0
+        "nats://upstream:4222", TEST_TOKENS.source("engine"), timeout_seconds=3.0
     )
     owners = IEngine.Services(
         object_storage=ObjectStorageService(MagicMock()),
@@ -129,8 +136,8 @@ def test_facades_wait_as_long_as_the_configuration_says(tmp_path):
         secret=Secret([MagicMock(spec=ISecretAdapter)]),
         cache=CacheService([("hot", CacheFSAdapter(str(tmp_path / "hot")))]),
     )
-    config = NATSConfiguration(jwt_secret="x" * 32, client_timeout_seconds=120)
-    wiring = EngineNATSDependencies(config)
+    config = NATSConfiguration(client_timeout_seconds=120)
+    wiring = EngineNATSDependencies(config, TEST_TOKENS.source("engine"))
     try:
         dependencies = wiring.build(owners)
 
@@ -153,12 +160,14 @@ def test_facades_wait_as_long_as_the_configuration_says(tmp_path):
 
 
 def _upstream_secret() -> SecretSecondaryAdapterNATSClient:
-    return SecretSecondaryAdapterNATSClient("nats://upstream:4222", "x" * 32, "engine")
+    return SecretSecondaryAdapterNATSClient(
+        "nats://upstream:4222", TEST_TOKENS.source("engine")
+    )
 
 
 def _secret_view(*adapters) -> tuple[EngineNATSDependencies, list]:
     wiring = EngineNATSDependencies(
-        NATSConfiguration(nats_url="nats://engine:4222", jwt_secret="x" * 32)
+        NATSConfiguration(nats_url="nats://engine:4222"), TEST_TOKENS.source("engine")
     )
     dependencies = wiring.build(IEngine.Services(secret=Secret(list(adapters))))
     return wiring, dependencies.secret.adapters
@@ -219,7 +228,7 @@ def test_a_mixed_secret_fanout_keeps_the_upstream_position():
 
 def test_a_mixed_secret_fanout_falls_through_to_upstream(monkeypatch):
     upstream = _upstream_secret()
-    wiring = EngineNATSDependencies(NATSConfiguration(jwt_secret="x" * 32))
+    wiring = EngineNATSDependencies(NATSConfiguration(), TEST_TOKENS.source("engine"))
     try:
         dependencies = wiring.build(
             IEngine.Services(secret=Secret([MagicMock(spec=ISecretAdapter), upstream]))
@@ -238,8 +247,8 @@ def test_a_client_engine_gets_the_facades_a_serving_engine_gives_its_modules():
     owners.cache.adapters = [("hot", object()), ("cold", object())]
     # A local secret fanout: its modules read it through this engine's endpoint.
     owners.secret = Secret([MagicMock(spec=ISecretAdapter)])
-    serving = EngineNATSDependencies(NATSConfiguration(jwt_secret="x" * 32))
-    client = EngineNATSDependencies(NATSConfiguration(jwt_secret="x" * 32))
+    serving = EngineNATSDependencies(NATSConfiguration(), TEST_TOKENS.source("engine"))
+    client = EngineNATSDependencies(NATSConfiguration(), TEST_TOKENS.source("engine"))
 
     def shape(services: IEngine.Services) -> list:
         return [
@@ -253,13 +262,23 @@ def test_a_client_engine_gets_the_facades_a_serving_engine_gives_its_modules():
                 getattr(service, "services_wired", None),
             )
             for service in services.all
+            # compared below
+            if service is not services.iam and service is not services.identity
         ]
 
     try:
         facades = client.build_clients(
             MagicMock(), cache_tiers=["hot", "cold"], emit_message_events=True
         )
-        assert shape(facades) == shape(serving.build(owners))
+        built = serving.build(owners)
+        assert shape(facades) == shape(built)
+        # IAM is the owner itself on a serving engine (checks read the caller's
+        # context in process), the serving engine's over NATS on a client.
+        assert built.iam is owners.iam
+        assert isinstance(facades.iam, IAMSecondaryAdapterNATSClient)
+        # Identity too: it authorizes the caller of this process's context.
+        assert built.identity is owners.identity
+        assert isinstance(facades.identity, IdentitySecondaryAdapterNATSClient)
         assert client.module_services is facades
         assert [tier for tier, _ in facades.cache.adapters] == ["hot", "cold"]
         assert facades.bus.emit_message_events
@@ -272,7 +291,8 @@ def test_a_client_engine_gets_the_facades_a_serving_engine_gives_its_modules():
 def test_a_client_engine_keeps_the_upstream_routes_of_its_secret_fanout():
     def secret_routes(routes):
         client = EngineNATSDependencies(
-            NATSConfiguration(nats_url="nats://engine:4222", jwt_secret="x" * 32)
+            NATSConfiguration(nats_url="nats://engine:4222"),
+            TEST_TOKENS.source("engine"),
         )
         facades = client.build_clients(
             MagicMock(), cache_tiers=[], emit_message_events=False, secret_routes=routes

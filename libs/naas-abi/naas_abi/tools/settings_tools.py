@@ -17,7 +17,7 @@ from langchain_core.tools import BaseTool, tool
 from naas_abi.agents.feature.runtime import (
     guarded,
     jsonable,
-    request_context,
+    require_action,
     require_member,
     run_db,
     tool_context,
@@ -40,37 +40,32 @@ def settings_tools() -> list[BaseTool]:
         async def _run(db: Any) -> Any:
             from naas_abi.apps.nexus.apps.api.app.core.config import settings
             from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
-                build_feature_flags,
+                enabled_feature_catalog,
             )
-            from naas_abi.tools.nexus_admin_tools import (
-                _organization_service,
-                _workspace_service,
+            from naas_abi.apps.nexus.apps.api.app.services.iam.user_features import (
+                user_feature_flags,
             )
+            from naas_abi.tools.nexus_admin_tools import _workspace_service
 
             role = await require_member(db, user_id, workspace_id)
             if isinstance(role, dict):
                 return role
+            denied = await require_action(user_id, workspace_id, "GetWorkspace", id=())
+            if denied is not None:
+                return denied
             record = await _workspace_service(db).get_workspace(workspace_id)
             if record is None:
                 return {"error": "Workspace not found."}
-            override = None
-            if record.organization_id:
-                stored = await _organization_service(db).get_role_features(
-                    org_id=record.organization_id
-                )
-                override = stored.role_baseline if stored is not None else None
-            flags = build_feature_flags(
-                role=role,
-                feature_flags_config=settings.feature_flags,
-                workspace_slug=record.slug,
-                workspace_id=record.id,
-                organization_id=record.organization_id,
-                organization_override=override,
+            # What the user may use here: IAM's, from the policies granting
+            # features (no role brings one).
+            flags = await user_feature_flags(
+                user_id,
+                [(record.organization_id, record.id)],
+                enabled_feature_catalog(settings.feature_flags),
             )
             out = jsonable(record)
             out["your_role"] = role
-            out["feature_flags"] = flags
-            out["organization_role_override"] = override is not None
+            out["feature_flags"] = (flags or {}).get(record.id, {})
             return out
 
         return guarded(_FEATURE, lambda: run_db(_run))
@@ -95,11 +90,11 @@ def settings_tools() -> list[BaseTool]:
                 SecretsService,
             )
 
-            role = await require_member(db, user_id, workspace_id)
-            if isinstance(role, dict):
-                return role
+            denied = await require_action(user_id, workspace_id, "ListSecrets")
+            if denied is not None:
+                return denied
             service = SecretsService(adapter=SecretsSecondaryAdapterPostgres(db=db))
-            secrets = await service.list_secrets(request_context(user_id), workspace_id)
+            secrets = await service.list_secrets(workspace_id)
             return {
                 "total": len(secrets),
                 "secrets": [

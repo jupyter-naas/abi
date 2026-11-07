@@ -9,10 +9,10 @@ Shared connection, token, timeout, and reply handling live in
 ``naas_abi_core.engine.nats_rpc.NatsRPCClient``. Calls are never replayed
 by the transport after failure; a timeout may hide a completed operation.
 
-Stage 1 auth model (see ``naas_abi_core.engine.nats_auth``): a JWT asserting
-``service_identity`` is issued once and attached on the ``Nats-Auth-Token``
-header of every request, reissued only when it is close to expiry rather
-than on every call. ``SourceControlPrimaryAdapterNATS`` must read the token
+Auth (see ``naas_abi_core.engine.nats_auth``): the client's credentials
+(the engine's own tokens, or a service key's) put an ES256 engine token on
+the ``Nats-Auth-Token`` header of every request, renewed at half its
+life. ``SourceControlPrimaryAdapterNATS`` must read the token
 from that exact header -- both sides read ``AUTH_HEADER`` from
 ``source_control_nats_contract``, a neutral module neither adapter owns, so
 this file never has to import from the primary adapter's module (or vice
@@ -23,9 +23,11 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from naas_abi_core.engine.nats_auth import TokenSource
 from naas_abi_core.engine.nats_rpc import NatsRPCClient
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.source_control.v1 import source_control_pb2
+from naas_abi_core.services.iam.guard import raise_authorization_error
 from naas_abi_core.services.source_control.adapters.source_control_nats_contract import (
     AUTH_HEADER,
     SUBJECT_PREFIX,
@@ -50,6 +52,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     Proposal,
     ProposalNotFoundError,
     Repo,
+    RepoExistsError,
     RepoNotFoundError,
     Review,
     ValidationError,
@@ -211,6 +214,9 @@ def _raise_for_error(error: common_pb2.CallError) -> None:
     exception types, not on the wire code.
     """
     status = error.status if error.HasField("status") else None
+    raise_authorization_error(error.code, error.message)
+    if error.code == "REPO_EXISTS":
+        raise RepoExistsError(error.message, status=status)
     if error.code == "REPO_NOT_FOUND":
         raise RepoNotFoundError(error.message, status=status)
     if error.code == "BRANCH_NOT_FOUND":
@@ -240,14 +246,12 @@ class SourceControlSecondaryAdapterNATSClient(NatsRPCClient, ISourceControlAdapt
     def __init__(
         self,
         nats_url: str,
-        jwt_secret: str,
-        service_identity: str,
+        credentials: TokenSource,
         timeout_seconds: float = 10.0,
     ) -> None:
         super().__init__(
             nats_url,
-            jwt_secret,
-            service_identity,
+            credentials,
             timeout_seconds,
             auth_header=AUTH_HEADER,
         )
@@ -256,7 +260,16 @@ class SourceControlSecondaryAdapterNATSClient(NatsRPCClient, ISourceControlAdapt
     # ISourceControlAdapter.
     # ------------------------------------------------------------------
 
-    def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
+    def ensure_user(
+        self,
+        *,
+        external_id: str,
+        email: str,
+        username: str,
+        vouched_email: bool = False,
+    ) -> str:
+        # The owner decides what it vouches for, from its own verified caller.
+        del vouched_email
         request = source_control_pb2.EnsureUserRequest(
             context=self._context(),
             external_id=external_id,
@@ -272,6 +285,11 @@ class SourceControlSecondaryAdapterNATSClient(NatsRPCClient, ISourceControlAdapt
             _raise_for_error(response.error)
         return response.user_id
 
+    def find_user(self, *, external_id: str) -> str | None:
+        raise NotImplementedError(
+            "Forge users are resolved by the owning service, from the call's user"
+        )
+
     def ensure_repo(
         self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
     ) -> Repo:
@@ -286,6 +304,25 @@ class SourceControlSecondaryAdapterNATSClient(NatsRPCClient, ISourceControlAdapt
             f"{SUBJECT_PREFIX}.ensure_repo",
             request,
             source_control_pb2.EnsureRepoResponse,
+        )
+        if response.HasField("error"):
+            _raise_for_error(response.error)
+        return _pb_to_repo(response.repo)
+
+    def create_repo(
+        self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
+    ) -> Repo:
+        request = source_control_pb2.CreateRepoRequest(
+            context=self._context(),
+            owner=owner,
+            name=name,
+            private=private,
+            auto_init=auto_init,
+        )
+        response = self._call(
+            f"{SUBJECT_PREFIX}.create_repo",
+            request,
+            source_control_pb2.CreateRepoResponse,
         )
         if response.HasField("error"):
             _raise_for_error(response.error)
@@ -711,7 +748,11 @@ class SourceControlSecondaryAdapterNATSClient(NatsRPCClient, ISourceControlAdapt
             _raise_for_error(response.error)
         return [_pb_to_workflow_run(r) for r in response.workflow_runs.workflow_runs]
 
-    def mint_git_token(self, *, user_id: str) -> str:
+    def mint_git_token(
+        self, *, user_id: str = "", external_id: str | None = None
+    ) -> str:
+        # The owner mints for the call's user; ``user_id`` is ignored there.
+        del external_id
         request = source_control_pb2.MintGitTokenRequest(
             context=self._context(), user_id=user_id
         )

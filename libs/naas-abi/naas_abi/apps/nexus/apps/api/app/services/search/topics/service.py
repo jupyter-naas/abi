@@ -55,6 +55,8 @@ def count_query(results_sparql: str) -> str:
     prologue = "\n".join(lines[:split])
     body = "\n".join(lines[split:])
     return f"{prologue}\nSELECT (COUNT(DISTINCT ?uri) AS ?total)\nWHERE {{\n{{\n{body}\n}}\n}}"
+
+
 SECTION_LIMIT = 100
 PREVIEW_LIMIT = 20
 # A result row lists at most this many values ("A, B, C +2").

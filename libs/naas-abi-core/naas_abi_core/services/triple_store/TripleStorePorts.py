@@ -14,6 +14,11 @@ Triple = tuple[Node, Node, Node]
 
 
 class Exceptions:
+    class InvalidRequest(ValueError):
+        """A request refused for what it says (a SPARQL the authorization cannot
+        classify, a malformed IRI): its message is safe to show the caller. Any
+        other ``ValueError`` comes from a backend and is not."""
+
     class SubjectNotFoundError(Exception):
         pass
 
@@ -92,7 +97,7 @@ class OntologyEvent(Enum):
 
 @dataclass
 class QueryStream:
-    """A SPARQL result read incrementally (docs/adr/20261003_nats-streamed-results.md).
+    """A SPARQL result read incrementally.
 
     ``result_type`` is rdflib's: SELECT, ASK, CONSTRUCT or DESCRIBE. ``rows``
     (SELECT: variable name -> term, unbound variables absent) and ``triples``
@@ -131,14 +136,87 @@ class QueryStream:
 _IRI = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:[^\s<>\"{}|^`\\]*")
 
 
+# A graph no store holds: it names an empty default graph, or no named graph,
+# where a protocol has no other way to say "none".
+NO_GRAPH = URIRef("urn:abi:iam:no-graph")
+
+
+@dataclass(frozen=True)
+class QueryDataset:
+    """The RDF dataset a query may read, for a caller who may not read every
+    graph. It replaces the query's own dataset clauses.
+
+    * ``default_graph``: the store's own default graph is part of the query's
+      default graph;
+    * ``default_graphs``: named graphs merged into the query's default graph
+      (``FROM``, or the allowed graphs of a store whose default graph is the
+      union of its named graphs);
+    * ``named_graphs``: the only graphs ``GRAPH`` reaches.
+    """
+
+    default_graph: bool = False
+    default_graphs: tuple[URIRef, ...] = ()
+    named_graphs: tuple[URIRef, ...] = ()
+
+
+class DatasetRestrictionUnsupported(NotImplementedError):
+    """The store cannot confine a query to some of its graphs."""
+
+
+def dataset_parameters(
+    dataset: QueryDataset, *, default_graph_iri: str | None
+) -> list[tuple[str, str]]:
+    """SPARQL Protocol ``default-graph-uri`` / ``named-graph-uri`` parameters.
+
+    They take precedence over the query's own ``FROM`` and ``FROM NAMED``.
+    ``default_graph_iri`` names the store's own default graph where the store
+    has a name for it (Jena: ``urn:x-arq:DefaultGraph``); without one, the
+    store's default graph is kept by sending no ``default-graph-uri``.
+    """
+    parameters: list[tuple[str, str]] = []
+    defaults = [str(graph) for graph in dataset.default_graphs]
+    if dataset.default_graph:
+        if default_graph_iri is not None:
+            defaults.append(default_graph_iri)
+        elif defaults:
+            raise DatasetRestrictionUnsupported(
+                "This store cannot merge its default graph with named graphs"
+            )
+    if defaults or not dataset.default_graph:
+        parameters += [("default-graph-uri", g) for g in defaults or [str(NO_GRAPH)]]
+    named = [str(graph) for graph in dataset.named_graphs] or [str(NO_GRAPH)]
+    parameters += [("named-graph-uri", g) for g in named]
+    return parameters
+
+
+def checked_iri(value: object) -> str:
+    """``value`` as an absolute IRI, else ``Exceptions.InvalidRequest``.
+
+    What IAM checks and what a store runs must be the same string: a name with
+    a ``>``, ``{``, a space or a newline is no IRI, and interpolated into SPARQL
+    it would close the IRI and carry operations of its own.
+    """
+    text = str(value)
+    if not _IRI.fullmatch(text):
+        raise Exceptions.InvalidRequest(f"Not an absolute IRI: {text!r}")
+    return text
+
+
+def iri_n3(value: object) -> str:
+    """``<iri>`` for SPARQL, after ``checked_iri``: what an adapter that builds
+    SPARQL from a string interpolates."""
+    return f"<{checked_iri(value)}>"
+
+
 def graph_export_query(graph_name: URIRef) -> str:
     """The CONSTRUCT reading every triple of one named graph."""
-    if not _IRI.fullmatch(str(graph_name)):
-        raise ValueError(f"Not an absolute IRI: {str(graph_name)!r}")
-    return f"CONSTRUCT {{ ?s ?p ?o }} WHERE {{ GRAPH <{graph_name}> {{ ?s ?p ?o }} }}"
+    return f"CONSTRUCT {{ ?s ?p ?o }} WHERE {{ GRAPH {iri_n3(graph_name)} {{ ?s ?p ?o }} }}"
 
 
 class ITripleStorePort(ABC):
+    # Whether a query's default graph is the union of the named graphs.
+    union_default_graph: bool = False
+
     @abstractmethod
     def insert(self, triples: Graph, graph_name: URIRef):
         pass
@@ -200,7 +278,7 @@ class ITripleStorePort(ABC):
     def list_graphs(self) -> list[URIRef]:
         pass
 
-    # Streaming reads (docs/adr/20261003_nats-streamed-results.md). These
+    # Streaming reads. These
     # defaults read the materialized result; adapters that can stream from
     # their backend override them.
 
@@ -208,6 +286,23 @@ class ITripleStorePort(ABC):
     def query_stream(self, query: str) -> Iterator[QueryStream]:
         """Run a SPARQL query and read its result incrementally, inside the block."""
         yield QueryStream.from_result(self.query(query))
+
+    # Confined reads: a query over the graphs its caller may read.
+    # A store that cannot confine a query keeps these defaults, and such a
+    # caller's queries are refused.
+
+    def query_dataset(self, query: str, dataset: QueryDataset) -> Any:
+        """Run a SPARQL query over ``dataset`` instead of the whole store."""
+        raise DatasetRestrictionUnsupported(
+            f"{type(self).__name__} cannot confine a query to some graphs"
+        )
+
+    @contextmanager
+    def query_stream_dataset(
+        self, query: str, dataset: QueryDataset
+    ) -> Iterator[QueryStream]:
+        """``query_stream`` over ``dataset`` instead of the whole store."""
+        yield QueryStream.from_result(self.query_dataset(query, dataset))
 
     @contextmanager
     def export(self, graph_name: URIRef | None = None) -> Iterator[Iterator[Triple]]:
@@ -381,9 +476,7 @@ class ITripleStoreService(ABC):
         """
 
     @abstractmethod
-    def create_graph(
-        self, graph_name: URIRef, *, timeout_seconds: float | None = None
-    ):
+    def create_graph(self, graph_name: URIRef, *, timeout_seconds: float | None = None):
         """Create an empty named graph in the underlying store.
 
         Args:
@@ -398,9 +491,7 @@ class ITripleStoreService(ABC):
         """
 
     @abstractmethod
-    def clear_graph(
-        self, graph_name: URIRef, *, timeout_seconds: float | None = None
-    ):
+    def clear_graph(self, graph_name: URIRef, *, timeout_seconds: float | None = None):
         """Clear triples from a graph.
 
         Args:
@@ -415,9 +506,7 @@ class ITripleStoreService(ABC):
         """
 
     @abstractmethod
-    def drop_graph(
-        self, graph_name: URIRef, *, timeout_seconds: float | None = None
-    ):
+    def drop_graph(self, graph_name: URIRef, *, timeout_seconds: float | None = None):
         """Drop a named graph and all its triples.
 
         Args:
@@ -444,7 +533,7 @@ class ITripleStoreService(ABC):
         """Run a SPARQL query and read its result incrementally.
 
         Constant memory where the backend streams; read ``rows`` or ``triples``
-        inside the ``with`` block (docs/adr/20261003_nats-streamed-results.md).
+        inside the ``with`` block.
         """
 
     @abstractmethod

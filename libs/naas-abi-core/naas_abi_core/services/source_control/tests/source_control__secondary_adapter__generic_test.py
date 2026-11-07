@@ -5,6 +5,7 @@ import pytest
 REQUIRED_METHODS = (
     "ensure_user",
     "ensure_repo",
+    "create_repo",
     "list_repos",
     "delete_repo",
     "add_collaborator",

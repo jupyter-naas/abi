@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { Package, Search } from 'lucide-react';
 import { SettingsSection } from '@/components/settings/settings-ui';
 import { authFetch } from '@/stores/auth';
-import type { FeatureChoice, WorkspaceFeatureCatalog } from './workspace-features-table';
 
 export type CatalogOption = { id: string; label: string; kind: string };
 
@@ -23,18 +22,6 @@ export type CatalogSeedDraft = {
   ontologies?: string[];
   maps?: { feeds?: string[]; basemaps?: { custom?: string[] } };
 };
-
-function featureEnabled(
-  feature: string,
-  choices: Record<string, FeatureChoice>,
-  catalog: WorkspaceFeatureCatalog | null
-): boolean {
-  const choice = choices[feature] ?? 'default';
-  if (choice === 'off') return false;
-  if (choice === 'on') return true;
-  if (!catalog) return true;
-  return catalog.roles.some((role) => catalog.role_baseline[role]?.includes(feature));
-}
 
 function matchesInstanceQuery(option: CatalogOption, query: string): boolean {
   const q = query.trim().toLowerCase();
@@ -131,15 +118,11 @@ function InstanceChecklist({
 
 export function WorkspaceInstancesSection({
   orgId,
-  featureCatalog,
-  featureChoices,
   draft,
   onDraftChange,
   disabled,
 }: {
   orgId: string;
-  featureCatalog: WorkspaceFeatureCatalog | null;
-  featureChoices: Record<string, FeatureChoice>;
   draft: CatalogSeedDraft;
   onDraftChange: (draft: CatalogSeedDraft) => void;
   disabled?: boolean;
@@ -166,13 +149,6 @@ export function WorkspaceInstancesSection({
       cancelled = true;
     };
   }, [orgId]);
-
-  const showAgents =
-    featureEnabled('agents', featureChoices, featureCatalog) ||
-    featureEnabled('skills', featureChoices, featureCatalog);
-  const showApps = featureEnabled('apps', featureChoices, featureCatalog);
-  const showOntology = featureEnabled('ontology', featureChoices, featureCatalog);
-  const showMaps = featureEnabled('maps', featureChoices, featureCatalog);
 
   const agentSet = useMemo(() => new Set(draft.agents || []), [draft.agents]);
   const appSet = useMemo(() => new Set(draft.apps || []), [draft.apps]);
@@ -209,106 +185,89 @@ export function WorkspaceInstancesSection({
         <p className="text-sm text-muted-foreground">Loading instance catalog…</p>
       ) : (
         <div className="space-y-6">
-          {showAgents && (
-            <>
-              <InstanceChecklist
-                title="Agents"
-                options={catalog.agents}
-                selected={agentSet}
+          <InstanceChecklist
+            title="Agents"
+            options={catalog.agents}
+            selected={agentSet}
+            disabled={disabled}
+            onChange={(next) =>
+              onDraftChange({
+                ...draft,
+                agents: [...next],
+                default_agent:
+                  draft.default_agent && next.has(draft.default_agent)
+                    ? draft.default_agent
+                    : [...next][0],
+              })
+            }
+          />
+          {defaultAgentOptions.length > 0 && (
+            <div className="account-profile-field">
+              <label className="account-profile-field-label" htmlFor="default-agent">
+                Default chat agent
+              </label>
+              <select
+                id="default-agent"
+                className="account-profile-field-input"
                 disabled={disabled}
-                onChange={(next) =>
-                  onDraftChange({
-                    ...draft,
-                    agents: [...next],
-                    default_agent:
-                      draft.default_agent && next.has(draft.default_agent)
-                        ? draft.default_agent
-                        : [...next][0],
-                  })
+                value={draft.default_agent || defaultAgentOptions[0]}
+                onChange={(event) =>
+                  onDraftChange({ ...draft, default_agent: event.target.value })
                 }
-              />
-              {defaultAgentOptions.length > 0 && (
-                <div className="account-profile-field">
-                  <label className="account-profile-field-label" htmlFor="default-agent">
-                    Default chat agent
-                  </label>
-                  <select
-                    id="default-agent"
-                    className="account-profile-field-input"
-                    disabled={disabled}
-                    value={draft.default_agent || defaultAgentOptions[0]}
-                    onChange={(event) =>
-                      onDraftChange({ ...draft, default_agent: event.target.value })
-                    }
-                  >
-                    {defaultAgentOptions.map((ref) => (
-                      <option key={ref} value={ref}>
-                        {ref}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </>
+              >
+                {defaultAgentOptions.map((ref) => (
+                  <option key={ref} value={ref}>
+                    {ref}
+                  </option>
+                ))}
+              </select>
+            </div>
           )}
-          {showApps && (
-            <InstanceChecklist
-              title="Apps"
-              options={catalog.apps}
-              selected={appSet}
-              disabled={disabled}
-              onChange={(next) => onDraftChange({ ...draft, apps: [...next] })}
-            />
-          )}
-          {showOntology && (
-            <InstanceChecklist
-              title="Ontologies"
-              options={catalog.ontologies}
-              selected={ontologySet}
-              disabled={disabled}
-              onChange={(next) => onDraftChange({ ...draft, ontologies: [...next] })}
-            />
-          )}
-          {showMaps && (
-            <>
-              <InstanceChecklist
-                title="Map feeds"
-                options={catalog.map_feeds}
-                selected={mapFeedSet}
-                disabled={disabled}
-                onChange={(next) =>
-                  onDraftChange({
-                    ...draft,
-                    maps: {
-                      ...draft.maps,
-                      feeds: [...next],
-                      basemaps: draft.maps?.basemaps,
-                    },
-                  })
-                }
-              />
-              <InstanceChecklist
-                title="Basemaps"
-                options={catalog.basemaps}
-                selected={basemapSet}
-                disabled={disabled}
-                onChange={(next) =>
-                  onDraftChange({
-                    ...draft,
-                    maps: {
-                      feeds: draft.maps?.feeds,
-                      basemaps: { custom: [...next] },
-                    },
-                  })
-                }
-              />
-            </>
-          )}
-          {!showAgents && !showApps && !showOntology && !showMaps && featureCatalog && (
-            <p className="text-sm text-muted-foreground">
-              Turn on Apps, Agents, Ontology or Maps under Features to pick instances.
-            </p>
-          )}
+          <InstanceChecklist
+            title="Apps"
+            options={catalog.apps}
+            selected={appSet}
+            disabled={disabled}
+            onChange={(next) => onDraftChange({ ...draft, apps: [...next] })}
+          />
+          <InstanceChecklist
+            title="Ontologies"
+            options={catalog.ontologies}
+            selected={ontologySet}
+            disabled={disabled}
+            onChange={(next) => onDraftChange({ ...draft, ontologies: [...next] })}
+          />
+          <InstanceChecklist
+            title="Map feeds"
+            options={catalog.map_feeds}
+            selected={mapFeedSet}
+            disabled={disabled}
+            onChange={(next) =>
+              onDraftChange({
+                ...draft,
+                maps: {
+                  ...draft.maps,
+                  feeds: [...next],
+                  basemaps: draft.maps?.basemaps,
+                },
+              })
+            }
+          />
+          <InstanceChecklist
+            title="Basemaps"
+            options={catalog.basemaps}
+            selected={basemapSet}
+            disabled={disabled}
+            onChange={(next) =>
+              onDraftChange({
+                ...draft,
+                maps: {
+                  feeds: draft.maps?.feeds,
+                  basemaps: { custom: [...next] },
+                },
+              })
+            }
+          />
         </div>
       )}
     </SettingsSection>

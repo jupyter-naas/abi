@@ -3,10 +3,14 @@ from __future__ import annotations
 import json
 
 from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
-from naas_abi.apps.nexus.apps.api.app.core.workspace_access import accessible_workspace_ids
 from naas_abi.apps.nexus.apps.api.app.models import (
     MapsGrantModel,
     WorkspaceModel,
+)
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
+    nexus_resource,
+    workspace_container,
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.permissions.permissions__schema import (
     MapsGrant,
@@ -66,11 +70,24 @@ class PostgresMapsGrantStore(MapsGrantStorePort):
 
 class PostgresWorkspaceDirectory(WorkspaceDirectoryPort):
     async def administered(self, user_id: str, *, superadmin: bool) -> list[WorkspaceRef]:
-        query = select(WorkspaceModel.id, WorkspaceModel.name)
-        if not superadmin:
-            query = query.where(
-                WorkspaceModel.id.in_(accessible_workspace_ids(user_id, min_role="admin"))
-            )
+        """Every workspace for a platform administrator; else the ones IAM lets the
+        user administer (``nexus:UpdateWorkspace``: an admin's, an owner's, or an
+        org owner's or admin's through the organization-wide role)."""
         async with AsyncSessionLocal() as db:
-            rows = (await db.execute(query.order_by(WorkspaceModel.name))).all()
+            rows = (
+                await db.execute(
+                    select(
+                        WorkspaceModel.id, WorkspaceModel.name, WorkspaceModel.organization_id
+                    ).order_by(WorkspaceModel.name)
+                )
+            ).all()
+        if not superadmin:
+            rows = await authz.filter_allowed(
+                "UpdateWorkspace",
+                rows,
+                user=user_id,
+                resource_of=lambda row: nexus_resource(
+                    "workspace", container=workspace_container(row.organization_id, str(row.id))
+                ),
+            )
         return [WorkspaceRef(str(row.id), str(row.name)) for row in rows]

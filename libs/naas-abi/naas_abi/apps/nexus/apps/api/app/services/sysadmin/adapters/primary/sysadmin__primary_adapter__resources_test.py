@@ -57,7 +57,10 @@ def _client(admin, *, is_superadmin=True):
     app = FastAPI()
     app.include_router(router, prefix="/api/admin/system")
     app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
-        id="u1", email="u1@example.com", name="U1", is_superadmin=is_superadmin
+        id="root" if is_superadmin else "u1",
+        email="u1@example.com",
+        name="U1",
+        is_superadmin=is_superadmin,
     )
     app.dependency_overrides[get_resource_admin] = lambda: admin
     return TestClient(app)
@@ -129,8 +132,8 @@ def test_reads_mask_secrets_and_reveal_is_audited_and_not_cached(client, audit):
     assert revealed.json()["content"]["text"] == "sk-123"
     assert revealed.headers["cache-control"] == "no-store"
     assert [(r.action.actor_id, r.action.operation, r.phase) for r in audit.records] == [
-        ("u1", "reveal", "requested"),
-        ("u1", "reveal", "succeeded"),
+        ("root", "reveal", "requested"),
+        ("root", "reveal", "succeeded"),
     ]
 
 

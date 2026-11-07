@@ -211,9 +211,13 @@ class ExpiringResources(ServiceResources, Protocol):
 class AdminAction:
     actor_id: str
     service: str
-    operation: Literal["create", "replace", "delete", "reveal", "trigger", "cancel"]
+    # The System app's verbs (create, replace, delete, reveal, trigger, cancel) and
+    # the IAM admin's (``create_policy``, ``attach_policy``, ...).
+    operation: str
     resource_id: str
-    # How the actor authenticated: a Nexus user, or the ABI API key (no user id).
+    # What changed in words (a name, a scope), kept with the record. Never a secret.
+    detail: str = ""
+    # How the user signed in: a session, or their personal API key (``abi_pk_``).
     via: Literal["user", "api_key"] = "user"
 
 
@@ -239,6 +243,7 @@ class AuditEntry:
     resource_id: str
     phase: str
     error: str = ""
+    detail: str = ""
 
 
 class AdminAuditLog(Protocol):

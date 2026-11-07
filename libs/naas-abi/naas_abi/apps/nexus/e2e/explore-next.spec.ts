@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { WEB, signIn } from './sign-in'
 
 // Use system Chrome (Playwright's bundled chromium isn't downloaded in this environment).
 test.use({ channel: 'chrome' })
@@ -8,24 +9,12 @@ test.use({ channel: 'chrome' })
 test.describe.configure({ mode: 'serial' })
 test.setTimeout(120_000)
 
-const WEB = process.env.WEB_URL || 'http://localhost:3000'
-const ADMIN_EMAIL = process.env.NEXUS_ADMIN_EMAIL || 'admin@example.com'
-const ADMIN_PASSWORD = process.env.NEXUS_ADMIN_PASSWORD ?? ''
 const WORKSPACE = process.env.NEXUS_WORKSPACE || 'ws-3e360b19bb96'
 const GRAPH_LABEL = process.env.NEXUS_GRAPH_LABEL || 'Test Compiler'
 const CLASS_URI = process.env.NEXUS_CLASS_URI || 'http://ontology.naas.ai/documents#ExtractedItem'
 
-async function login(page: Page): Promise<void> {
-  page.setDefaultNavigationTimeout(90_000)
-  await page.goto(`${WEB}/auth/login`, { waitUntil: 'domcontentloaded', timeout: 90_000 })
-  await page.fill('input[type="email"]', ADMIN_EMAIL)
-  await page.fill('input[type="password"]', ADMIN_PASSWORD)
-  await page.click('button[type="submit"]')
-  await page.waitForURL((url) => !url.pathname.includes('/auth/login'), { timeout: 60_000 })
-}
-
 async function openExplore(page: Page): Promise<void> {
-  await login(page)
+  await signIn(page)
   await page.goto(`${WEB}/workspace/${WORKSPACE}/graph/explore-next`, {
     waitUntil: 'domcontentloaded',
     timeout: 90_000,

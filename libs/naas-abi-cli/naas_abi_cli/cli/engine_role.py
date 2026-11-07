@@ -2,7 +2,7 @@
 
 In NATS mode one engine serves the kernel services. A command like ``abi chat``
 serves them itself when no engine does, and is a client of the serving one
-otherwise (docs/adr/20261006_single-serving-engine.md).
+otherwise: a second serving engine would fail on the ownership lease.
 """
 
 import os

@@ -9,10 +9,10 @@ Shared connection, token, timeout, and reply handling live in
 ``naas_abi_core.engine.nats_rpc.NatsRPCClient``. Calls are never replayed
 by the transport after failure; a timeout may hide a completed operation.
 
-Stage 1 auth model (see ``naas_abi_core.engine.nats_auth``): a JWT asserting
-``service_identity`` is issued once and attached on the ``Nats-Auth-Token``
-header of every request, reissued only when it is close to expiry rather
-than on every call. ``ObjectStoragePrimaryAdapterNATS`` must read the token
+Auth (see ``naas_abi_core.engine.nats_auth``): the client's credentials
+(the engine's own tokens, or a service key's) put an ES256 engine token on
+the ``Nats-Auth-Token`` header of every request, renewed at half its
+life. ``ObjectStoragePrimaryAdapterNATS`` must read the token
 from that exact header -- both sides read ``AUTH_HEADER`` from
 ``object_storage_nats_contract``, a neutral module neither adapter owns, so
 this file never has to import from the primary adapter's module (or vice
@@ -33,9 +33,11 @@ from queue import Queue
 from typing import BinaryIO
 
 from naas_abi_core import logger
+from naas_abi_core.engine.nats_auth import TokenSource
 from naas_abi_core.engine.nats_rpc import NatsRPCClient
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.object_storage.v1 import object_storage_pb2
+from naas_abi_core.services.iam.enforcement import raise_authorization_error
 from naas_abi_core.services.object_storage.adapters.object_storage_nats_contract import (
     AUTH_HEADER,
     SUBJECT_PREFIX,
@@ -81,6 +83,9 @@ def _raise_for_error(error: common_pb2.CallError) -> None:
     encodes errors -- the generic adapter contract test asserts on the real
     exception types, not on the wire code.
     """
+    raise_authorization_error(error.code, error.message)
+    if error.code == "INVALID_ARGUMENT":
+        raise Exceptions.InvalidObjectPath(error.message)
     if error.code == "OBJECT_NOT_FOUND":
         raise Exceptions.ObjectNotFound(error.message)
     if error.code == "OBJECT_ALREADY_EXISTS":
@@ -98,14 +103,12 @@ class ObjectStorageSecondaryAdapterNATSClient(NatsRPCClient, IObjectStorageAdapt
     def __init__(
         self,
         nats_url: str,
-        jwt_secret: str,
-        service_identity: str,
+        credentials: TokenSource,
         timeout_seconds: float = 10.0,
     ) -> None:
         super().__init__(
             nats_url,
-            jwt_secret,
-            service_identity,
+            credentials,
             timeout_seconds,
             auth_header=AUTH_HEADER,
         )

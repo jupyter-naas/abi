@@ -12,6 +12,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     NATSConfiguration,
 )
 from naas_abi_core.engine.IEngine import IEngine
+from naas_abi_core.engine.nats_auth import TokenSource
 from naas_abi_core.services.activity_log.ActivityLogService import ActivityLogService
 from naas_abi_core.services.activity_log.adapters.secondary.ActivityLogSecondaryAdapterNATSClient import (
     ActivityLogSecondaryAdapterNATSClient,
@@ -46,6 +47,12 @@ from naas_abi_core.services.event.adapters.secondary.EventSecondaryAdapterNATSCl
     EventSecondaryAdapterNATSClient,
 )
 from naas_abi_core.services.event.EventService import EventService
+from naas_abi_core.services.iam.adapters.secondary.IAMSecondaryAdapterNATSClient import (
+    IAMSecondaryAdapterNATSClient,
+)
+from naas_abi_core.services.identity.adapters.secondary.IdentitySecondaryAdapterNATSClient import (
+    IdentitySecondaryAdapterNATSClient,
+)
 from naas_abi_core.services.keyvalue.adapters.secondary.KeyValueSecondaryAdapterNATSClient import (
     KeyValueSecondaryAdapterNATSClient,
 )
@@ -109,15 +116,19 @@ class RemoteTripleStoreService(TripleStoreService):
 
 
 class EngineNATSDependencies:
-    def __init__(self, config: NATSConfiguration):
+    """``credentials``: the engine's own tokens (``nats_credentials``): signed
+    in process by a serving engine, exchanged from the engine's key by a
+    client-role one."""
+
+    def __init__(self, config: NATSConfiguration, credentials: TokenSource):
         self.config = config
+        self.credentials = credentials
         self.clients: list[Any] = []
 
     def _client(self, cls, **kwargs):
         client = cls(
             self.config.nats_url,
-            self.config.jwt_secret,
-            "engine",
+            self.credentials,
             timeout_seconds=self.config.client_timeout_seconds,
             **kwargs,
         )
@@ -132,6 +143,13 @@ class EngineNATSDependencies:
 
     def build(self, owners: IEngine.Services) -> IEngine.Services:
         values: dict[str, Any] = {}
+        if owners.iam_available():
+            # The owner itself, never a NATS facade: a check reads the caller's
+            # CallContext in this process, which a hop would replace with "engine".
+            values["iam"] = owners.iam
+        if owners.identity_available():
+            # The owner too: it authorizes the caller of this process's context.
+            values["identity"] = owners.identity
         if owners.bus_available():
             if isinstance(owners.bus.adapter, NATSJetStreamAdapter):
                 self.clients.append(owners.bus.adapter)
@@ -238,7 +256,7 @@ class EngineNATSDependencies:
             )
 
             models = ModelRegistryNATSClient(
-                owners.model_registry, self.config.nats_url, self.config.jwt_secret
+                owners.model_registry, self.config.nats_url, self.credentials
             )
             self.clients.append(models)
             values["model_registry"] = models
@@ -297,10 +315,12 @@ class EngineNATSDependencies:
         self.clients.append(bus_adapter)
         bus = BusService(bus_adapter, emit_message_events=emit_message_events)
         models = ModelRegistryNATSClient(
-            model_registry, self.config.nats_url, self.config.jwt_secret
+            model_registry, self.config.nats_url, self.credentials
         )
         self.clients.append(models)
         values: dict[str, Any] = {
+            "iam": self._client(IAMSecondaryAdapterNATSClient),
+            "identity": self._client(IdentitySecondaryAdapterNATSClient),
             "bus": bus,
             "object_storage": ObjectStorageService(
                 self._client(ObjectStorageSecondaryAdapterNATSClient)

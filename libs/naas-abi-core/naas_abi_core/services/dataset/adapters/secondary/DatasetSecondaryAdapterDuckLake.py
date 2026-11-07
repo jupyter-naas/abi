@@ -652,8 +652,7 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         snapshot_id: int | None = None,
     ) -> Iterator[RowStream]:
         """Run the query, spool its rows to an anonymous temporary file, then
-        read them back as the caller iterates
-        (docs/adr/20261003_nats-streamed-results.md). Only the spool holds the
+        read them back as the caller iterates. Only the spool holds the
         cursor and, on a SQLite catalog, the shared lock, so a slow or
         abandoned reader never holds up writes, nor the reads queued behind
         them. Like ``query``, this never replays the SQL. The file goes when

@@ -31,7 +31,7 @@ def _env(project: Path) -> dict[str, str]:
 
 def _nats_project(project: Path) -> None:
     (project / "config.local.yaml").write_text(
-        'nats:\n  nats_url: "nats://abi:{{ secret.NATS_ABI_PASSWORD }}@nats:4222"\n'
+        'nats:\n  nats_url: "nats://engine:{{ secret.NATS_ENGINE_PASSWORD }}@nats:4222"\n'
     )
 
 
@@ -69,14 +69,16 @@ def test_start_seeds_the_nats_secrets_before_compose_reads_env(
     """The nats service refuses to start without its passwords, and the engine
     cannot render its `nats:` block without them."""
     _nats_project(project)
-    (project / ".env").write_text("NATS_ABI_PASSWORD=keep-this-password-please\n")
+    (project / ".env").write_text("NATS_ENGINE_PASSWORD=keep-this-password-please\n")
 
     stack_module._start_stack()
 
     env = _env(project)
-    assert env["NATS_ABI_PASSWORD"] == "keep-this-password-please"
-    assert len(env["NATS_MODULE_PASSWORD"]) >= 16
-    assert len(env["NATS_JWT_SECRET"]) >= 32
+    assert env["NATS_ENGINE_PASSWORD"] == "keep-this-password-please"
+    assert len(env["NATS_AUTH_PASSWORD"]) >= 16
+    assert env["NATS_AUTH_CALLOUT_SEED"].startswith("SA")
+    assert env["NATS_AUTH_CALLOUT_ISSUER"].startswith("A")
+    assert "NATS_JWT_SECRET" not in env
     assert [args for args, _ in compose.calls] == [["up", "-d"]]
     up = compose.env_of("up")
     assert up["COMPOSE_PROFILES"] == ""
@@ -118,7 +120,7 @@ def test_legacy_start_runs_the_legacy_profile_without_nats(
         },
     }
     # The nats service still runs in the default profile: its passwords too.
-    assert len(env["NATS_ABI_PASSWORD"]) >= 16
+    assert len(env["NATS_ENGINE_PASSWORD"]) >= 16
 
 
 def test_legacy_overlay_keeps_the_rabbitmq_credentials_of_env(

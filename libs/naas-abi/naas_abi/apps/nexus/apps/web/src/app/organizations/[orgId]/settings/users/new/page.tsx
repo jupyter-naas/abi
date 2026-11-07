@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { AlertCircle, ArrowLeft, Camera, UserPlus, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Camera, Mail, UserPlus, X } from 'lucide-react';
 import { authFetch } from '@/stores/auth';
 import { useOrganizationStore, type OrganizationMemberCreateProfile } from '@/stores/organization';
 import { Checkbox } from '@/components/ui/checkbox';
+import { useInviteProviders } from '@/components/invitations/use-invite-providers';
+import { inviteSuccessMessage, providerHint } from '@/lib/invitations';
 import { AccountPageHeader } from '@/app/account/components/account-page-header';
 import { AccountSectionCard } from '@/app/account/components/account-section-card';
 import { orgSettingsSectionPath } from '../../lib/nav';
@@ -55,20 +57,25 @@ function filledProfile(draft: Draft): OrganizationMemberCreateProfile {
 
 /**
  * Create user (Organization Settings > Users): a full page with the member's
- * organization profile. The account is created when no user has this email
- * yet, and the person gets a sign-in email either way.
+ * organization profile. The person is invited through an identity provider:
+ * the account is made there when it does not exist yet (the provider mails the
+ * sign-in code). Someone who has not signed in yet has no member row to fill:
+ * the invitation holds their roles, and the profile is set from their page
+ * once they are in.
  */
 export default function OrgCreateUserPage() {
   const params = useParams();
   const router = useRouter();
   const orgId = params.orgId as string;
-  const { inviteMember, uploadMemberAvatar } = useOrganizationStore();
+  const { inviteToOrganization, uploadMemberAvatar } = useOrganizationStore();
+  const providers = useInviteProviders(true);
 
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [role, setRole] = useState<'admin' | 'member'>('member');
   const [workspaces, setWorkspaces] = useState<OrgWorkspace[]>([]);
   const [workspaceIds, setWorkspaceIds] = useState<string[]>([]);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [creating, setCreating] = useState(false);
   // Picked now, uploaded right after the user exists (organization picture, avatar_org).
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -141,9 +148,37 @@ export default function OrgCreateUserPage() {
       return;
     }
     setError('');
+    setNotice('');
     setCreating(true);
     try {
-      const member = await inviteMember(orgId, email, role, filledProfile(draft));
+      const provider = providers.providerToSend();
+      const { member, answer } = await inviteToOrganization(orgId, {
+        email,
+        role,
+        provider,
+        profile: filledProfile(draft),
+        workspaceId: workspaceIds[0],
+        workspaceRole: workspaceIds[0] ? 'member' : undefined,
+      });
+      if (answer.kind === 'invited') {
+        // No account yet: the invitation holds the roles until they sign in,
+        // one invitation per workspace picked.
+        for (const workspaceId of workspaceIds.slice(1)) {
+          await inviteToOrganization(orgId, {
+            email,
+            role,
+            provider,
+            workspaceId,
+            workspaceRole: 'member',
+          });
+        }
+        setNotice(inviteSuccessMessage(answer));
+        setDraft(EMPTY);
+        setWorkspaceIds([]);
+        setAvatarFile(null);
+        setCreating(false);
+        return;
+      }
       if (!member) throw new Error('Failed to create the user');
       if (workspaceIds.length > 0) {
         const res = await authFetch(
@@ -186,7 +221,7 @@ export default function OrgCreateUserPage() {
 
       <AccountPageHeader
         title="Create user"
-        subtitle="Add someone to this organization. Their account is created if it does not exist yet, and they get a sign-in email."
+        subtitle="Add someone to this organization. Their account is created at the identity provider if it does not exist yet, and they sign in with the code it emails."
         actions={
           <div className="org-member-detail-actions">
             <button
@@ -214,6 +249,17 @@ export default function OrgCreateUserPage() {
           <AlertCircle size={16} />
           <span>{error}</span>
         </div>
+      )}
+
+      {notice && (
+        <div className="org-settings-users-alert" role="status">
+          <Mail size={16} />
+          <span>{notice}</span>
+        </div>
+      )}
+
+      {providerHint(providers.chosen) && (
+        <p className="org-settings-footnote">{providerHint(providers.chosen)}</p>
       )}
 
       <div className="account-profile-avatar-section">
@@ -306,6 +352,25 @@ export default function OrgCreateUserPage() {
               <option value="admin">Admin</option>
             </select>
           </div>
+          {providers.choosable && (
+            <div className="account-profile-field">
+              <label className="account-profile-field-label" htmlFor="create-user-provider">
+                Identity provider
+              </label>
+              <select
+                id="create-user-provider"
+                value={providers.picked ?? ''}
+                onChange={(event) => providers.setPicked(event.target.value)}
+                className="account-profile-field-input"
+              >
+                {providers.known.providers.map((provider) => (
+                  <option key={provider.name} value={provider.name}>
+                    {provider.display_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           {TEXT_FIELDS.map(({ field, label }) => (
             <div key={field} className="account-profile-field">
               <label className="account-profile-field-label" htmlFor={`create-user-${field}`}>

@@ -8,7 +8,12 @@ topic as defined (an edit is a new key), the request, and the workspace's cache
 generation. "Refresh" replaces the generation, which retires every entry of the
 workspace at once; the TTL reaps them.
 
-The cache is best-effort: a cache failure answers from the graphs, never an error.
+Every key of a workspace starts with ``workspace_prefix``, which IAM places in the
+workspace (``topics.placement``): the digest has a fixed length, so one
+workspace's prefix is never the start of another's.
+
+The cache is best-effort: a cache failure (a key the caller may not write
+included) answers from the graphs, never an error.
 """
 
 from __future__ import annotations
@@ -23,6 +28,11 @@ TTL = datetime.timedelta(days=1)
 _SEMVER = "v1"
 
 
+def workspace_prefix(workspace_id: str) -> str:
+    """The start of every cache key of ``workspace_id``."""
+    return f"search_topics_{hashlib.sha256(workspace_id.encode()).hexdigest()}_"
+
+
 class SearchCache:
     """``fetch``/``store`` JSON responses over a naas-abi-core CacheService."""
 
@@ -31,7 +41,7 @@ class SearchCache:
         self._ttl = ttl
 
     def _generation_key(self, workspace_id: str) -> str:
-        return f"search_topics_generation_{hashlib.sha256(workspace_id.encode()).hexdigest()}"
+        return f"{workspace_prefix(workspace_id)}generation"
 
     def generation(self, workspace_id: str) -> str:
         """The workspace's current generation, created on first use."""
@@ -63,7 +73,9 @@ class SearchCache:
             "request": request,
         }
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
-        return "search_topics_" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        return (
+            workspace_prefix(workspace_id) + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        )
 
     def fetch(self, key: str) -> dict | None:
         try:

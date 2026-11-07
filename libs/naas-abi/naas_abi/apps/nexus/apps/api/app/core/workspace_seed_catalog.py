@@ -83,6 +83,15 @@ def effective_seed_apps(slug: str | None, catalog_seed: dict[str, Any] | None) -
     return set()
 
 
+def workspace_seed_apps(workspace: Any) -> set[str]:
+    """The apps a workspace record's seed turns on (``effective_seed_apps``: its
+    stored ``catalog_seed`` first, then the config's), as the catalog and the
+    visibility read them."""
+    raw = getattr(workspace, "catalog_seed", None)
+    catalog_seed = raw if isinstance(raw, dict) or raw is None else parse_catalog_seed(raw)
+    return effective_seed_apps(getattr(workspace, "slug", None), catalog_seed)
+
+
 def _unique_sorted(values: Sequence[str]) -> list[str]:
     seen: set[str] = set()
     out: list[str] = []
@@ -124,9 +133,7 @@ def build_workspace_seed_catalog() -> dict[str, list[CatalogOption]]:
 
     collected = _collect_from_config(getattr(live_settings(), "organizations", None) or [])
     options: dict[str, list[CatalogOption]] = {
-        "agents": [
-            CatalogOption(id=ref, label=ref, kind="agent") for ref in collected["agents"]
-        ],
+        "agents": [CatalogOption(id=ref, label=ref, kind="agent") for ref in collected["agents"]],
         "apps": [CatalogOption(id=ref, label=ref, kind="app") for ref in collected["apps"]],
         "ontologies": [
             CatalogOption(id=ref, label=ref, kind="ontology") for ref in collected["ontologies"]

@@ -23,7 +23,7 @@ from naas_abi.agents.feature.runtime import (
     jsonable,
     matches,
     request_context,
-    require_member,
+    require_action,
     run_db,
     tool_context,
 )
@@ -43,9 +43,9 @@ def _registry() -> Any:
 
 
 async def _visible_skills(db: Any, user_id: str, workspace_id: str) -> Any:
-    role = await require_member(db, user_id, workspace_id)
-    if isinstance(role, dict):
-        return role
+    denied = await require_action(user_id, workspace_id, "ListSkills")
+    if denied is not None:
+        return denied
     with bound_session(db):
         return await _registry().skills.list_visible_skills(
             request_context(user_id), workspace_id
@@ -162,12 +162,11 @@ def skills_tools() -> list[BaseTool]:
                 normalize_slug,
             )
 
-            role = await require_member(db, user_id, workspace_id)
-            if isinstance(role, dict):
-                return role
+            denied = await require_action(user_id, workspace_id, "CreateSkill")
+            if denied is not None:
+                return denied
             with bound_session(db):
                 created = await _registry().skills.create_skill(
-                    request_context(user_id),
                     SkillCreateInput(
                         workspace_id=workspace_id,
                         user_id=user_id,
@@ -231,6 +230,9 @@ def skills_tools() -> list[BaseTool]:
                 return {
                     "error": f"No visible skill {wanted}. See list_workspace_skills."
                 }
+            denied = await require_action(user_id, workspace_id, "UpdateSkill", id=found.id)
+            if denied is not None:
+                return denied
             with bound_session(db):
                 updated = await _registry().skills.update_skill(
                     request_context(user_id),
@@ -269,6 +271,9 @@ def skills_tools() -> list[BaseTool]:
                 return {
                     "error": f"No visible skill {wanted}. See list_workspace_skills."
                 }
+            denied = await require_action(user_id, workspace_id, "DeleteSkill", id=found.id)
+            if denied is not None:
+                return denied
             with bound_session(db):
                 deleted = await _registry().skills.delete_skill(
                     request_context(user_id), found.id

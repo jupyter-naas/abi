@@ -22,7 +22,6 @@ export type HomeFileMenuRow =
 type DesktopApp = {
   app_id: string;
   name: string;
-  enabled?: boolean;
   installed?: boolean;
   url?: string | null;
 };
@@ -67,7 +66,7 @@ export function buildHomeFileMenuRows(params: {
     });
   }
 
-  const desktopApps = apps.filter((a) => a.enabled && a.installed && a.url);
+  const desktopApps = apps.filter((a) => a.installed && a.url);
   if (desktopApps.length > 0) pushSeparatorBefore(rows, 'sep-apps');
   for (const app of desktopApps) {
     rows.push({

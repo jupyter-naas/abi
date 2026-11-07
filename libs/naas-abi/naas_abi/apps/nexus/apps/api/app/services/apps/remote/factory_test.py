@@ -1,32 +1,49 @@
 from __future__ import annotations
 
-import jwt
-from naas_abi.apps.nexus.apps.api.app.services.agents.remote.factory import (
-    CALLER_IDENTITY,
+from types import SimpleNamespace
+
+from naas_abi.apps.nexus.apps.api.app.services.apps.remote.factory import (
+    build_remote_app_directory,
 )
-from naas_abi_core.engine.nats_auth import ServiceTokenSource
 
 
-def test_the_service_token_is_reused_until_close_to_expiry():
-    """The module caches authorizations by token: a new one per request misses.
+def test_the_directory_calls_modules_as_the_api_service_account_for_the_user(monkeypatch):
+    """No shared secret signs anything here: the transports take the ``api``
+    account's tokens from the engine, a delegation for the signed-in user, and a
+    token addressed to one host for what is sent to a module."""
+    from naas_abi.apps.nexus.apps.api.app.services import engine_credentials
 
-    ``build_remote_app_directory`` hands its transports a ``ServiceTokenSource``,
-    which reissues a token only once most of its life is gone.
-    """
-    now = [1_800_000_000.0]
-    token = ServiceTokenSource(CALLER_IDENTITY, "s" * 32, clock=lambda: now[0])
+    asked: list[tuple] = []
 
-    first = token()
-    now[0] += 30
-    assert token() == first
-    now[0] += 55 * 60  # most of the 1 h lifetime is gone
-    renewed = token()
+    class Credentials:
+        def token(self) -> str:
+            return "api-token"
 
-    assert renewed != first
-    claims = jwt.decode(
-        renewed,
-        "s" * 32,
-        algorithms=["HS256"],
-        options={"verify_exp": False, "verify_iat": False, "verify_nbf": False},
+        def token_for(self, user, recipient=None, scope=None) -> str:
+            asked.append(("delegation", user, recipient))
+            return "delegation"
+
+    class Engine:
+        def service_credentials(self, name, audience=None):
+            asked.append(("credentials", name, audience))
+            return Credentials()
+
+    monkeypatch.setattr(
+        "naas_abi.ABIModule.get_instance",
+        staticmethod(lambda: SimpleNamespace(engine=Engine())),
     )
-    assert claims["sub"] == "api"
+    nats = SimpleNamespace(
+        nats_url="nats://localhost:4222",
+        discovery=SimpleNamespace(project="demo"),
+    )
+
+    directory = build_remote_app_directory(nats)
+    _discovery, transport, uploads, project = directory._factory()  # type: ignore[attr-defined]
+
+    assert project == "demo"
+    for held in (transport, uploads):
+        assert callable(held.token) and held.token() == "api-token"
+        assert held.delegate is not None and held.host_token is not None
+    assert held.host_token("acme_research-1") == "api-token"
+    assert ("credentials", "api", "abi:host:acme_research-1") in asked
+    assert engine_credentials.CALLER_IDENTITY == "api"

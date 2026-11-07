@@ -5,6 +5,12 @@
   white-space: nowrap;
 }
 
+.org-workspaces-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 /* Create workspace: buttons, focus rings and pickers use org branding from SettingsLayoutRoot, not the workspace colour draft below. */
 .org-create-workspace.workspace-general .account-profile-field-input:focus,
 .org-create-workspace.workspace-general .account-profile-field-textarea:focus {
@@ -58,7 +64,7 @@
   background-color: var(--background, #fff);
 }
 
-/* Features cell: the enabled features as chips; click opens the overrides. */
+/* Features cell: the workspace's features as chips. */
 .org-workspaces-features {
   display: flex;
   flex-wrap: wrap;
@@ -66,14 +72,6 @@
   gap: 4px;
   max-width: 22rem;
   padding: 2px;
-  border: 1px solid transparent;
-  background: none;
-  text-align: left;
-  cursor: pointer;
-}
-
-.org-workspaces-features:hover {
-  border-color: var(--border-hex, var(--border));
 }
 
 .org-workspaces-feature {
@@ -83,16 +81,6 @@
   white-space: nowrap;
   color: var(--foreground-hex, inherit);
   background-color: color-mix(in srgb, currentColor 8%, transparent);
-}
-
-.org-workspaces-feature-source {
-  padding: 1px 6px;
-  font-size: 10px;
-  line-height: 16px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--color-primary, #22c55e);
-  border: 1px solid currentColor;
 }
 
 .org-workspaces-feature-more {

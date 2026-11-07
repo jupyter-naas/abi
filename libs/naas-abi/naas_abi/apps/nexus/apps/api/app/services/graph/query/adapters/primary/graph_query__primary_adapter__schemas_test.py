@@ -21,17 +21,41 @@ def test_request_parses_and_lowers_example_a_to_a_compilable_spec() -> None:
             "graph_uris": [G],
             "root": {"kind": "class", "class_uris": [DOC + "ExtractedItem"]},
             "columns": [
-                {"id": "text", "datatype": "string",
-                 "source": {"kind": "property", "predicate": DOC + "extracted_text"}},
-                {"id": "paperPath", "datatype": "string",
-                 "source": {"kind": "property", "predicate": DOC + "path",
-                            "path": [{"predicate": DOC + "extracted_from_chunk", "direction": "out"},
-                                     {"predicate": DOC + "chunk_of", "direction": "out"}]}},
+                {
+                    "id": "text",
+                    "datatype": "string",
+                    "source": {"kind": "property", "predicate": DOC + "extracted_text"},
+                },
+                {
+                    "id": "paperPath",
+                    "datatype": "string",
+                    "source": {
+                        "kind": "property",
+                        "predicate": DOC + "path",
+                        "path": [
+                            {"predicate": DOC + "extracted_from_chunk", "direction": "out"},
+                            {"predicate": DOC + "chunk_of", "direction": "out"},
+                        ],
+                    },
+                },
             ],
-            "filters": {"op": "and", "children": [
-                {"op": "cond", "target": {"kind": "column", "column_id": "text"}, "operator": "contains", "value": "solitude"},
-                {"op": "cond", "target": {"kind": "column", "column_id": "paperPath"}, "operator": "contains", "value": "pubmed"},
-            ]},
+            "filters": {
+                "op": "and",
+                "children": [
+                    {
+                        "op": "cond",
+                        "target": {"kind": "column", "column_id": "text"},
+                        "operator": "contains",
+                        "value": "solitude",
+                    },
+                    {
+                        "op": "cond",
+                        "target": {"kind": "column", "column_id": "paperPath"},
+                        "operator": "contains",
+                        "value": "pubmed",
+                    },
+                ],
+            },
         },
     }
     req = GraphQueryRequest.model_validate(payload)
@@ -53,10 +77,21 @@ def test_aggregate_request_lowers_with_measure_and_having() -> None:
             "mode": "aggregate",
             "graph_uris": [G],
             "fact": {"kind": "class", "class_uris": [DOC + "ExtractedItem"]},
-            "group_by": [{"id": "pipeline", "show_kind": "property", "show_predicate": DOC + "pipeline_name",
-                          "path": [{"predicate": DOC + "extracted_by", "direction": "out"}]}],
+            "group_by": [
+                {
+                    "id": "pipeline",
+                    "show_kind": "property",
+                    "show_predicate": DOC + "pipeline_name",
+                    "path": [{"predicate": DOC + "extracted_by", "direction": "out"}],
+                }
+            ],
             "measures": [{"id": "items", "fn": "count", "of_kind": "node"}],
-            "filters": {"op": "cond", "target": {"kind": "column", "column_id": "items"}, "operator": "gt", "value": 1},
+            "filters": {
+                "op": "cond",
+                "target": {"kind": "column", "column_id": "items"},
+                "operator": "gt",
+                "value": 1,
+            },
         },
     }
     spec = GraphQueryRequest.model_validate(payload).spec.to_domain()
@@ -70,10 +105,22 @@ def test_in_operator_value_list_becomes_tuple() -> None:
     payload = {
         "workspace_id": "ws1",
         "spec": {
-            "mode": "list", "graph_uris": [G],
+            "mode": "list",
+            "graph_uris": [G],
             "root": {"kind": "class", "class_uris": [DOC + "Extraction"]},
-            "columns": [{"id": "model", "datatype": "string", "source": {"kind": "property", "predicate": DOC + "model_name"}}],
-            "filters": {"op": "cond", "target": {"kind": "column", "column_id": "model"}, "operator": "in", "value": ["gpt-5-mini", "gpt-4o"]},
+            "columns": [
+                {
+                    "id": "model",
+                    "datatype": "string",
+                    "source": {"kind": "property", "predicate": DOC + "model_name"},
+                }
+            ],
+            "filters": {
+                "op": "cond",
+                "target": {"kind": "column", "column_id": "model"},
+                "operator": "in",
+                "value": ["gpt-5-mini", "gpt-4o"],
+            },
         },
     }
     spec = GraphQueryRequest.model_validate(payload).spec.to_domain()

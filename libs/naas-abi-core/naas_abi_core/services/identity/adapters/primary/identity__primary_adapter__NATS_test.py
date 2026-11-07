@@ -1,0 +1,287 @@
+"""Identity over a real broker: a client engine and an SDK module reach it."""
+
+from __future__ import annotations
+
+import asyncio
+from urllib.parse import parse_qs, urlsplit
+
+import pytest
+
+from naas_abi_core.engine.nats_rpc_integration_test import (  # noqa: F401 - pytest fixture
+    broker,
+)
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
+from naas_abi_core.services.identity.adapters.primary.identity__primary_adapter__NATS import (
+    IdentityPrimaryAdapterNATS,
+)
+from naas_abi_core.services.identity.adapters.secondary.IdentitySecondaryAdapterNATSClient import (
+    IdentitySecondaryAdapterNATSClient,
+)
+from naas_abi_core.services.identity.IdentityPorts import (
+    TokenRejectedError,
+    UnknownProviderError,
+)
+from naas_abi_core.services.identity.tests.fake_idp import FakeIdP
+from naas_abi_core.services.identity.tests.identity_contract import (
+    Pkce,
+    bootstrapped_iam,
+    identity_service,
+)
+
+pytestmark = pytest.mark.integration
+
+
+@pytest.mark.parametrize("broker", [1024 * 1024], indirect=True)
+def test_a_client_engine_signs_users_in_through_the_serving_engine(broker):  # noqa: F811
+    url, _ = broker
+    with FakeIdP() as idp:
+        iam = bootstrapped_iam()
+        service = identity_service(idp, iam)
+
+        async def scenario():
+            import nats
+
+            nc = await nats.connect(url)
+            primary = IdentityPrimaryAdapterNATS(service, TEST_TOKENS.verifier)
+            await primary.start(nc)
+            api = IdentitySecondaryAdapterNATSClient(url, TEST_TOKENS.source("api"))
+            module = IdentitySecondaryAdapterNATSClient(
+                url, TEST_TOKENS.source("people")
+            )
+            try:
+                providers = await asyncio.to_thread(api.list_providers)
+                assert [p.name for p in providers] == ["fake"]
+                assert "secret" not in repr(providers)
+
+                pkce = Pkce.new()
+                authorize = await asyncio.to_thread(
+                    lambda: api.authorization_url(
+                        "fake",
+                        redirect_uri=idp.redirect_uri,
+                        state=pkce.state,
+                        nonce=pkce.nonce,
+                        code_challenge=pkce.challenge,
+                    )
+                )
+                user = idp.create_user("alice@abi.test")
+                callback = await asyncio.to_thread(idp.sign_in, authorize, user)
+                code = parse_qs(urlsplit(callback).query)["code"][0]
+                signed_in = await asyncio.to_thread(
+                    lambda: api.exchange_code(
+                        "fake",
+                        code=code,
+                        code_verifier=pkce.verifier,
+                        redirect_uri=idp.redirect_uri,
+                        nonce=pkce.nonce,
+                    )
+                )
+                record = iam.store.find_user(idp.issuer, user.subject)
+                assert record is not None
+                assert signed_in.user.principal_id == record.id
+                assert signed_in.tokens.refresh_token
+
+                # A refused token keeps its reason across the wire.
+                other = idp.issue_id_token(user.subject, audience="someone-else")
+                with pytest.raises(TokenRejectedError) as refused:
+                    await asyncio.to_thread(api.verify_token, other)
+                assert refused.value.reason == "wrong_audience"
+
+                # A module with no identity grant sees no provider at all.
+                assert await asyncio.to_thread(module.list_providers) == []
+                with pytest.raises(UnknownProviderError):
+                    await asyncio.to_thread(
+                        module.authenticate, signed_in.tokens.id_token or ""
+                    )
+            finally:
+                api.close()
+                module.close()
+                await primary.stop()
+                await nc.close()
+
+        asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("broker", [1024 * 1024], indirect=True)
+def test_provisioning_reaches_the_serving_engine_and_its_refusals_come_back(
+    broker,  # noqa: F811
+):
+    from naas_abi_core.services.identity.adapters.secondary.OIDCHttpHttpx import (
+        OIDCHttpHttpx,
+    )
+    from naas_abi_core.services.identity.IdentityPorts import (
+        IdentityProvider,
+        ProvisionedUser,
+        ProvisioningPort,
+    )
+    from naas_abi_core.services.identity.IdentityService import IdentityService
+
+    url, _ = broker
+
+    class Directory(ProvisioningPort):
+        def __init__(self):
+            self.users: dict[str, ProvisionedUser] = {}
+
+        def ensure_user(self, email, *, name=None):
+            known = self.users.get(email)
+            if known is not None:
+                return known
+            user = ProvisionedUser("acme", email, f"sub-{len(self.users)}", name, True)
+            self.users[email] = ProvisionedUser(
+                "acme", email, user.subject, name, False
+            )
+            return user
+
+        def find_user(self, email):
+            return self.users.get(email)
+
+        def update_user(self, subject, *, name=None, disabled=None):
+            for email, known in self.users.items():
+                if known.subject == subject:
+                    self.users[email] = ProvisionedUser(
+                        "acme",
+                        email,
+                        subject,
+                        name or known.name,
+                        False,
+                        disabled=known.disabled if disabled is None else disabled,
+                    )
+                    return self.users[email]
+            return None
+
+        def delete_user(self, subject):
+            for email, known in list(self.users.items()):
+                if known.subject == subject:
+                    del self.users[email]
+                    return True
+            return False
+
+    iam = bootstrapped_iam()
+    service = IdentityService(
+        [
+            IdentityProvider("acme", "https://acme.example.com", "abi"),
+            IdentityProvider("okta", "https://okta.example.com", "abi"),
+        ],
+        iam,
+        OIDCHttpHttpx(),
+        provisioning={"acme": Directory()},
+    )
+
+    async def scenario():
+        import nats
+
+        nc = await nats.connect(url)
+        primary = IdentityPrimaryAdapterNATS(service, TEST_TOKENS.verifier)
+        await primary.start(nc)
+        api = IdentitySecondaryAdapterNATSClient(url, TEST_TOKENS.source("api"))
+        module = IdentitySecondaryAdapterNATSClient(url, TEST_TOKENS.source("people"))
+        try:
+            created = await asyncio.to_thread(
+                api.provision_user, "acme", "Bob@Example.com", name="Bob"
+            )
+            assert (created.email, created.subject, created.created) == (
+                "bob@example.com",
+                "sub-0",
+                True,
+            )
+            again = await asyncio.to_thread(
+                api.provision_user, "acme", "bob@example.com"
+            )
+            assert again.created is False and again.subject == "sub-0"
+            found = await asyncio.to_thread(
+                api.find_provisioned_user, "acme", "bob@example.com"
+            )
+            assert found is not None and found.name == "Bob"
+            assert (
+                await asyncio.to_thread(
+                    api.find_provisioned_user, "acme", "nobody@example.com"
+                )
+                is None
+            )
+            # Renamed, disabled (an explicit False travels too), then deleted.
+            off = await asyncio.to_thread(
+                api.update_provisioned_user,
+                "acme",
+                "sub-0",
+                name="Bob B",
+                disabled=True,
+            )
+            assert off is not None and (off.name, off.disabled) == ("Bob B", True)
+            on = await asyncio.to_thread(
+                api.update_provisioned_user, "acme", "sub-0", disabled=False
+            )
+            assert on is not None and (on.name, on.disabled) == ("Bob B", False)
+            assert (
+                await asyncio.to_thread(
+                    api.update_provisioned_user, "acme", "sub-9", disabled=True
+                )
+                is None
+            )
+            assert await asyncio.to_thread(api.delete_provisioned_user, "acme", "sub-0")
+            assert not await asyncio.to_thread(
+                api.delete_provisioned_user, "acme", "sub-0"
+            )
+            # A provider managed in the provider: not implemented, over the wire.
+            with pytest.raises(NotImplementedError):
+                await asyncio.to_thread(api.provision_user, "okta", "bob@example.com")
+            with pytest.raises(NotImplementedError):
+                await asyncio.to_thread(api.delete_provisioned_user, "okta", "sub-0")
+            with pytest.raises(ValueError):
+                await asyncio.to_thread(api.provision_user, "acme", "nope")
+            # A module with no identity grant cannot provision or even see it.
+            with pytest.raises(UnknownProviderError):
+                await asyncio.to_thread(
+                    module.provision_user, "acme", "eve@example.com"
+                )
+            with pytest.raises(UnknownProviderError):
+                await asyncio.to_thread(
+                    module.update_provisioned_user, "acme", "sub-0", disabled=True
+                )
+            with pytest.raises(UnknownProviderError):
+                await asyncio.to_thread(module.delete_provisioned_user, "acme", "sub-0")
+        finally:
+            api.close()
+            module.close()
+            await primary.stop()
+            await nc.close()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("broker", [1024 * 1024], indirect=True)
+def test_sdk_modules_reach_identity_over_nats(broker):  # noqa: F811
+    naas_abi_sdk = pytest.importorskip("naas_abi_sdk")
+    del naas_abi_sdk
+    from naas_abi_sdk.client import ABIClient
+    from naas_abi_sdk.module import ModuleDependencies, ServicesProxy
+    from naas_abi_sdk.services.errors import NotFound, TokenRejected
+
+    url, _ = broker
+    with FakeIdP() as idp:
+        iam = bootstrapped_iam()
+        service = identity_service(idp, iam)
+
+        async def scenario():
+            import nats
+
+            nc = await nats.connect(url)
+            primary = IdentityPrimaryAdapterNATS(service, TEST_TOKENS.verifier)
+            await primary.start(nc)
+            client = ABIClient(url, TEST_TOKENS.token("people"))
+            try:
+                identity = ServicesProxy(
+                    client, ModuleDependencies(services=("identity",)), "people"
+                ).identity
+                listed = await identity.list_providers()
+                assert listed["providers"] == []
+                token = idp.issue_id_token(idp.create_user("bob@abi.test").subject)
+                with pytest.raises(NotFound):
+                    await identity.authenticate(token)
+                expired = idp.issue_id_token("x", issued_at=0, lifetime=60)
+                with pytest.raises((NotFound, TokenRejected)):
+                    await identity.verify_token(expired)
+            finally:
+                await client.close()
+                await primary.stop()
+                await nc.close()
+
+        asyncio.run(scenario())

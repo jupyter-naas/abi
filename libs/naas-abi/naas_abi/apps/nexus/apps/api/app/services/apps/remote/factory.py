@@ -4,9 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from naas_abi.apps.nexus.apps.api.app.services.agents.remote.factory import (
-    CALLER_IDENTITY,
-)
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.adapters.discovery import (
     DiscoveryRemoteAppDirectory,
 )
@@ -30,15 +27,34 @@ def build_remote_app_directory(nats: Any | None) -> RemoteAppDirectory:
         return InMemoryRemoteAppDirectory()
 
     def clients() -> tuple[Any, Any, Any, str]:
-        from naas_abi_core.engine.nats_auth import ServiceTokenSource
+        from naas_abi.apps.nexus.apps.api.app.services.engine_credentials import (
+            api_delegate,
+            api_host_token,
+            api_token,
+        )
         from naas_abi_sdk.discovery import DiscoveryClient
         from naas_abi_sdk.transport import Transport
 
-        # Requests to a module's app carry a token bound to its instance; discovery
-        # reads are bounded by the directory (REFRESH_SECONDS), not the transport.
-        token = ServiceTokenSource(CALLER_IDENTITY, nats.jwt_secret)
-        transport = Transport(nats.nats_url, token, timeout=REQUEST_TIMEOUT_SECONDS)
-        uploads = Transport(nats.nats_url, token, timeout=UPLOAD_TIMEOUT_SECONDS)
+        token = api_token()
+        host_token = api_host_token()
+
+        # For the signed-in user: the request to the app host carries a delegation
+        # naming the app's module and the user, which the host forwards to
+        # discovery to learn who is calling (never from HttpRequest.user_id).
+        transport = Transport(
+            nats.nats_url,
+            token,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+            delegate=api_delegate(),
+            host_token=host_token,
+        )
+        uploads = Transport(
+            nats.nats_url,
+            token,
+            timeout=UPLOAD_TIMEOUT_SECONDS,
+            delegate=api_delegate(),
+            host_token=host_token,
+        )
         project = nats.discovery.project
         return DiscoveryClient(transport, project), transport, uploads, project
 

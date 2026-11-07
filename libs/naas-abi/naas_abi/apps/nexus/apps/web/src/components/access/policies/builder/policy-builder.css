@@ -1,0 +1,195 @@
+/* components/access/policies/builder — what the caller may grant, by publisher and type */
+
+.access-builder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.access-builder-group {
+  margin: 0;
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  border: 1px solid var(--border-hex);
+  border-radius: var(--org-border-radius, 0px);
+}
+
+.access-builder-legend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-1);
+  font-weight: var(--font-weight-medium);
+}
+
+.access-builder-section + .access-builder-section {
+  margin-top: var(--space-2);
+}
+
+.access-builder-heading {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--muted-foreground-hex);
+}
+
+.access-builder-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.access-builder-refused {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-xs);
+  color: #b91c1c;
+}
+
+.access-builder-item {
+  min-width: 0;
+}
+
+.access-builder-item .access-checkbox {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.access-builder-item .access-checkbox span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.access-builder-types {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.access-builder-type {
+  border-top: 1px solid var(--border-hex);
+  padding-top: var(--space-1);
+}
+
+.access-builder-type:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.access-builder-type-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-1) 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.access-builder-type-label {
+  font-weight: var(--font-weight-medium);
+}
+
+.access-builder-type-code {
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground-hex);
+}
+
+.access-builder-type-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-1) 0 var(--space-2) var(--space-4);
+}
+
+.access-builder-listing {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.access-builder-wildcard {
+  margin-top: var(--space-2);
+}
+
+.access-builder-wildcard-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.access-builder-wildcard-row .access-policy-input {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.access-builder-prefix {
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground-hex);
+}
+
+/* Patterns are read whole: one per line. */
+.access-builder-items-wide {
+  grid-template-columns: 1fr;
+}
+
+.access-builder-items-wide .access-checkbox span,
+.access-builder-items-wide .access-checkbox code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* A publisher's or a service group's header: opens and closes what it holds. */
+.access-builder-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.access-builder-search {
+  width: 100%;
+}
+
+.access-builder-service + .access-builder-service {
+  margin-top: var(--space-1);
+}
+
+.access-builder-service-header {
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  font-size: var(--font-size-sm);
+}
+
+.access-builder-service > .access-builder-types {
+  padding-left: var(--space-3);
+}
+
+/* A closed publisher or service group: the lists above set their own display. */
+.access-builder [hidden] {
+  display: none;
+}
+
+.access-builder-group[data-open='false'] {
+  padding-bottom: 0;
+}

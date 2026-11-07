@@ -7,9 +7,8 @@ contract and ``naas_abi_core/proto/README.md`` for why it lives there). This
 is the server side; the matching client is
 ``TripleStoreSecondaryAdapterNATSClient``.
 
-Stage 1 auth model (see ``naas_abi_core.engine.nats_auth``): one shared
-secret, one claim -- which known first-party process holds the token. Every
-incoming request must carry a valid token in the ``Nats-Auth-Token`` header
+Auth (see ``naas_abi_core.engine.nats_auth``): every incoming request
+must carry an engine token, verified against the JWKS, in the ``Nats-Auth-Token`` header
 (``AUTH_HEADER``, imported from ``triple_store_nats_contract`` below -- that's
 a neutral module neither adapter owns, so this file and the client's don't
 depend on each other; see that module's docstring for why).
@@ -48,14 +47,11 @@ import nats.micro
 import rdflib
 from google.protobuf.message import DecodeError, Message
 from naas_abi_core import logger
-from naas_abi_core.engine.nats_auth import (
-    FIRST_PARTY_IDENTITIES,
-    InvalidServiceTokenError,
-    verify_service_token,
-)
+from naas_abi_core.engine.nats_auth import TokenVerifier
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import (
     RequestPayloadError,
+    authenticate_request,
     request_payload,
     respond_protobuf,
 )
@@ -67,6 +63,11 @@ from naas_abi_core.engine.nats_transfer import (
 )
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.triple_store.v1 import triple_store_pb2
+from naas_abi_core.services.iam.enforcement import authorization_error_code
+from naas_abi_core.services.iam.IAMPorts import (
+    PermissionDeniedError,
+    ResourceNotFoundError,
+)
 from naas_abi_core.services.triple_store.adapters.triple_store_nats_contract import (
     AUTH_HEADER,
     SERVICE_NAME,
@@ -102,10 +103,6 @@ _ResponseT = TypeVar("_ResponseT", bound=Message)
 
 class _InvalidArgumentError(Exception):
     """A request that is well-formed protobuf but not an acceptable call."""
-
-
-class _PermissionDeniedError(Exception):
-    """The caller's identity may not do this."""
 
 
 # ``module/<module_id>/<relative path>.ttl``: the key a remote module's ontology is stored
@@ -255,16 +252,16 @@ class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
     def __init__(
         self,
         adapter: ITripleStorePort | ITripleStoreService,
-        jwt_secret: str,
+        verifier: TokenVerifier,
     ) -> None:
         self._adapter = adapter
-        self._jwt_secret = jwt_secret
+        self._verifier = verifier
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
         self._service: TracedService | None = None
-        # Streamed reads (docs/adr/20261003_nats-streamed-results.md).
+        # Streamed reads.
         self._transfer = TransferHost(
             TRANSFER_PREFIX,
-            jwt_secret,
+            verifier,
             self._transfer_frames,
             operations=("query", "export"),
             chunk_bytes=1024 * 1024,
@@ -394,6 +391,8 @@ class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
             return "REQUEST_ERROR", str(exc)
         if isinstance(exc, Exceptions.GraphNotFoundError):
             return "GRAPH_NOT_FOUND", str(exc)
+        if isinstance(exc, Exceptions.InvalidRequest):
+            return "INVALID_ARGUMENT", str(exc)
         return None
 
     # ------------------------------------------------------------------
@@ -406,18 +405,9 @@ class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
         request_cls: type[_RequestT],
         response_cls: Callable[..., _ResponseT],
         call: Callable[..., _ResponseT],
-        *,
-        with_identity: bool = False,
     ) -> None:
-        identity = self._caller_identity(request)
-        if identity is None:
-            await self._respond_error(
-                request,
-                response_cls,
-                "UNAUTHENTICATED",
-                "missing or invalid auth token",
-                retryable=False,
-            )
+        caller = await authenticate_request(request, self._verifier, response_cls)
+        if caller is None:
             return
 
         parsed_request = request_cls()
@@ -444,9 +434,17 @@ class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
             # ONE connection (nats_runtime), so run the call on a worker thread:
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
-            if with_identity:
-                call = partial(call, identity)
-            response = await self._dispatch.call(call, parsed_request)
+            response = await self._dispatch.call(call, parsed_request, caller)
+        except (PermissionDeniedError, ResourceNotFoundError) as exc:
+            # The caller's authorization outcome, decided by the domain.
+            await self._respond_error(
+                request,
+                response_cls,
+                authorization_error_code(exc) or "PERMISSION_DENIED",
+                str(exc),
+                retryable=False,
+            )
+            return
         except _InvalidArgumentError as exc:
             await self._respond_error(
                 request, response_cls, "INVALID_ARGUMENT", str(exc), retryable=False
@@ -455,11 +453,6 @@ class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
         except Exceptions.InvalidSchemaError as exc:
             await self._respond_error(
                 request, response_cls, "INVALID_ARGUMENT", str(exc), retryable=False
-            )
-            return
-        except _PermissionDeniedError as exc:
-            await self._respond_error(
-                request, response_cls, "PERMISSION_DENIED", str(exc), retryable=False
             )
             return
         except Exceptions.SubjectNotFoundError as exc:
@@ -493,6 +486,12 @@ class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
                 "GRAPH_ALREADY_EXISTS",
                 str(exc),
                 retryable=False,
+            )
+            return
+        except Exceptions.InvalidRequest as exc:
+            # A SPARQL request the authorization cannot classify.
+            await self._respond_error(
+                request, response_cls, "INVALID_ARGUMENT", str(exc), retryable=False
             )
             return
         except Exceptions.RequestError as exc:
@@ -532,17 +531,6 @@ class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
             return
 
         await respond_protobuf(request, response, response_cls)
-
-    def _caller_identity(self, request: Request) -> str | None:
-        """The verified identity of the caller, None without a valid token."""
-        headers = request.headers or {}
-        token = headers.get(AUTH_HEADER)
-        if not token:
-            return None
-        try:
-            return verify_service_token(token, self._jwt_secret)
-        except InvalidServiceTokenError:
-            return None
 
     @staticmethod
     async def _respond_error(
@@ -632,7 +620,7 @@ class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
             )
         event = _EVENT_FROM_PB.get(req.event)
         if event is None:
-            raise ValueError(f"Unknown OntologyEventType: {req.event!r}")
+            raise Exceptions.InvalidRequest(f"Unknown OntologyEventType: {req.event!r}")
         handler(
             view=_triple_pattern_from_pb(req.view),
             event=event,
@@ -750,26 +738,18 @@ class TripleStorePrimaryAdapterNATS(ServiceWithTransfers):
             triple_store_pb2.LoadSchemaRequest,
             triple_store_pb2.LoadSchemaResponse,
             self._call_load_schema,
-            with_identity=True,
         )
 
     def _call_load_schema(
-        self, identity: str, req: triple_store_pb2.LoadSchemaRequest
+        self, req: triple_store_pb2.LoadSchemaRequest
     ) -> triple_store_pb2.LoadSchemaResponse:
-        """Load a module's ontology into the schema graph (decision in ``triple_store/AGENTS.md``).
-
-        A module loads only under its own id; a first-party identity (api, engine,
-        dagster) may load under any. Nothing is written for a refused call.
-        """
+        """Load a module's ontology into the schema graph (decision in
+        ``triple_store/AGENTS.md``). The domain service authorizes the caller on
+        the source; nothing is written for a refused call."""
         try:
-            module_id, _ = parse_schema_source(req.source)
+            parse_schema_source(req.source)
         except ValueError as exc:
             raise _InvalidArgumentError(str(exc)) from exc
-        if identity != module_id and identity not in FIRST_PARTY_IDENTITIES:
-            raise _PermissionDeniedError(
-                f"Identity {identity!r} cannot load schemas of module {module_id!r}: "
-                "a module loads only under module/<its own id>/"
-            )
         load = getattr(self._adapter, "load_schema_content", None)
         if load is None:
             raise _OperationNotSupportedError(

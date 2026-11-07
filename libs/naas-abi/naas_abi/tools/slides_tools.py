@@ -39,7 +39,6 @@ from naas_abi_core.services.agent.context import (
     agent_user_email,
     agent_user_id,
     agent_user_name,
-    agent_workspace_id,
     coder_workspace_base,
     note_slides_write,
     slides_active_mode,
@@ -53,6 +52,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     SourceControlError,
 )
 
+from naas_abi.agents.feature.context import turn_workspace_id
 from naas_abi.agents.slides import (
     derive_deck_title,
     is_placeholder_deck_title,
@@ -844,9 +844,17 @@ def _ensure_coding_repo() -> str:
     owner, sep, name = repo_id.partition("/")
     if not sep or not owner or not name or "/" in name:
         return repo_id
+    from naas_abi_core.services.iam.IAMPorts import IAMError
+
+    from naas_abi.apps.nexus.apps.api.app.services.coding_environment.repo_access import (
+        ensure_shared_repo,
+    )
+
     try:
-        _get_source_control().ensure_repo(owner=owner, name=name)
-    except SourceControlError:
+        # The deployment's shared repository: a platform container, ensured
+        # whatever workspace the chat request names.
+        ensure_shared_repo(_get_source_control(), owner=owner, name=name)
+    except (SourceControlError, IAMError):
         pass
     return repo_id
 
@@ -1101,7 +1109,7 @@ def _seed_deck_with_title(html: str, title: str) -> str:
 
 
 def _workspace_id() -> str | None:
-    value = (agent_workspace_id.get() or "").strip()
+    value = turn_workspace_id()
     return value or None
 
 

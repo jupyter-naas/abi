@@ -1,6 +1,5 @@
 import asyncio
 import time
-from datetime import UTC, datetime, timedelta
 from threading import Event as ThreadingEvent
 from threading import Thread
 
@@ -9,7 +8,9 @@ import nats
 import pytest
 import rdflib
 from naas_abi_core import logger
+from naas_abi_core.engine.nats_auth import StaticTokenSource
 from naas_abi_core.engine.nats_rpc import NatsRPCError
+from naas_abi_core.engine.nats_test_tokens import OTHER_TOKENS, TEST_TOKENS
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.triple_store.v1 import triple_store_pb2
 from naas_abi_core.services.triple_store.adapters.primary.triple_store__primary_adapter__NATS import (
@@ -29,7 +30,7 @@ from naas_abi_core.services.triple_store.TripleStorePorts import (
 )
 from rdflib import Graph, URIRef
 
-JWT_SECRET = "test-shared-secret"
+JWT_SECRET = TEST_TOKENS.verifier
 
 
 # ---------------------------------------------------------------------------
@@ -42,13 +43,15 @@ def test_init_is_lazy(monkeypatch):
 
     connect = AsyncMock()
     monkeypatch.setattr(nats, "connect", connect)
-    TripleStoreSecondaryAdapterNATSClient("nats://127.0.0.1:4222", JWT_SECRET, "api")
+    TripleStoreSecondaryAdapterNATSClient(
+        "nats://127.0.0.1:4222", TEST_TOKENS.source("api")
+    )
     connect.assert_not_called()
 
 
 def test_close_without_connecting_is_a_noop():
     client = TripleStoreSecondaryAdapterNATSClient(
-        "nats://127.0.0.1:4222", JWT_SECRET, "api"
+        "nats://127.0.0.1:4222", TEST_TOKENS.source("api")
     )
     client.close()  # must not raise, must not connect
 
@@ -56,7 +59,7 @@ def test_close_without_connecting_is_a_noop():
 def test_context_manager_calls_close():
     closed = []
     client = TripleStoreSecondaryAdapterNATSClient(
-        "nats://127.0.0.1:4222", JWT_SECRET, "api"
+        "nats://127.0.0.1:4222", TEST_TOKENS.source("api")
     )
     client.close = lambda: closed.append(True)  # type: ignore[method-assign]
 
@@ -75,7 +78,7 @@ def test_context_manager_calls_close():
 )
 def test_writes_send_the_callers_deadline(operation, response):
     client = TripleStoreSecondaryAdapterNATSClient(
-        "nats://127.0.0.1:4222", JWT_SECRET, "api", timeout_seconds=10.0
+        "nats://127.0.0.1:4222", TEST_TOKENS.source("api"), timeout_seconds=10.0
     )
     sent = []
 
@@ -102,7 +105,7 @@ def test_writes_send_the_callers_deadline(operation, response):
 )
 def test_graph_writes_send_the_callers_deadline(operation, response):
     client = TripleStoreSecondaryAdapterNATSClient(
-        "nats://127.0.0.1:4222", JWT_SECRET, "api", timeout_seconds=10.0
+        "nats://127.0.0.1:4222", TEST_TOKENS.source("api"), timeout_seconds=10.0
     )
     sent = []
 
@@ -258,45 +261,6 @@ def test_pb_to_query_result_reconstructs_construct():
 # ---------------------------------------------------------------------------
 
 
-def test_token_is_issued_once_and_reused(monkeypatch):
-    calls: list[str] = []
-
-    def fake_issue(identity: str, secret: str) -> str:
-        calls.append(identity)
-        return f"token-{len(calls)}"
-
-    monkeypatch.setattr("naas_abi_core.engine.nats_rpc.issue_service_token", fake_issue)
-
-    client = TripleStoreSecondaryAdapterNATSClient(
-        "nats://127.0.0.1:4222", JWT_SECRET, "api"
-    )
-
-    assert client._current_token() == "token-1"
-    assert client._current_token() == "token-1"
-    assert calls == ["api"]
-
-
-def test_token_is_reissued_when_close_to_expiry(monkeypatch):
-    calls: list[str] = []
-
-    def fake_issue(identity: str, secret: str) -> str:
-        calls.append(identity)
-        return f"token-{len(calls)}"
-
-    monkeypatch.setattr("naas_abi_core.engine.nats_rpc.issue_service_token", fake_issue)
-
-    client = TripleStoreSecondaryAdapterNATSClient(
-        "nats://127.0.0.1:4222", JWT_SECRET, "api"
-    )
-    assert client._current_token() == "token-1"
-
-    # Simulate the token being almost expired.
-    client._token_expires_at = datetime.now(UTC) + timedelta(seconds=1)
-
-    assert client._current_token() == "token-2"
-    assert calls == ["api", "api"]
-
-
 # ---------------------------------------------------------------------------
 # Real round trip: a live NATS container, a real TripleStorePrimaryAdapterNATS
 # wrapping a minimal in-memory ITripleStorePort, and the client talking to it
@@ -386,9 +350,9 @@ class _PrimaryAdapterServer:
     own background loop, since nats-py has no synchronous API on either
     side."""
 
-    def __init__(self, nats_url: str, jwt_secret: str, wrapped_adapter) -> None:
+    def __init__(self, nats_url: str, verifier, wrapped_adapter) -> None:
         self._nats_url = nats_url
-        self._jwt_secret = jwt_secret
+        self._verifier = verifier
         self._wrapped_adapter = wrapped_adapter
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: Thread | None = None
@@ -425,7 +389,7 @@ class _PrimaryAdapterServer:
     async def _start_async(self) -> None:
         self._nc = await nats.connect(self._nats_url)
         self._primary = TripleStorePrimaryAdapterNATS(
-            self._wrapped_adapter, self._jwt_secret
+            self._wrapped_adapter, self._verifier
         )
         await self._primary.start(self._nc)
 
@@ -470,7 +434,9 @@ def nats_url(tmp_path_factory):
         # pattern in NATSJetStreamAdapter_test.py / ObjectStorageSecondaryAdapterNATSClient_test.py.
         from testcontainers.core.container import DockerContainer
 
-        with DockerContainer("nats:2.14.7-alpine").with_exposed_ports(4222) as container:
+        with DockerContainer("nats:2.14.7-alpine").with_exposed_ports(
+            4222
+        ) as container:
             host = container.get_container_host_ip()
             port = container.get_exposed_port(4222)
             url = f"nats://{host}:{port}"
@@ -511,8 +477,7 @@ class TestTripleStoreSecondaryAdapterNATSClient(GenericTripleStoreSecondaryAdapt
 
         client = TripleStoreSecondaryAdapterNATSClient(
             nats_url=nats_url,
-            jwt_secret=JWT_SECRET,
-            service_identity="api",
+            credentials=TEST_TOKENS.source("api"),
             timeout_seconds=10.0,
         )
         yield client
@@ -535,8 +500,7 @@ def test_wrong_secret_surfaces_as_runtime_error(nats_url):
     server.start()
     client = TripleStoreSecondaryAdapterNATSClient(
         nats_url=nats_url,
-        jwt_secret="a-completely-different-secret",
-        service_identity="api",
+        credentials=OTHER_TOKENS.source("api"),
         timeout_seconds=5.0,
     )
     try:
@@ -553,7 +517,7 @@ def test_handle_view_event_round_trips_over_the_wire(nats_url):
     server = _PrimaryAdapterServer(nats_url, JWT_SECRET, wrapped)
     server.start()
     client = TripleStoreSecondaryAdapterNATSClient(
-        nats_url=nats_url, jwt_secret=JWT_SECRET, service_identity="api"
+        nats_url=nats_url, credentials=TEST_TOKENS.source("api")
     )
     try:
         # No assertion beyond "does not raise": _InMemoryTripleStorePort's
@@ -568,7 +532,7 @@ def test_handle_view_event_round_trips_over_the_wire(nats_url):
         server.stop()
 
 
-# --- streamed reads over transfer frames (docs/adr/20261003_nats-streamed-results.md)
+# --- streamed reads over transfer frames
 
 
 class _StreamingPort(_InMemoryTripleStorePort):
@@ -626,7 +590,7 @@ def streaming_client(nats_url):
     server = _PrimaryAdapterServer(nats_url, JWT_SECRET, _StreamingPort())
     server.start()
     client = TripleStoreSecondaryAdapterNATSClient(
-        nats_url=nats_url, jwt_secret=JWT_SECRET, service_identity="api"
+        nats_url=nats_url, credentials=TEST_TOKENS.source("api")
     )
     yield client
     client.close()
@@ -677,7 +641,7 @@ def test_get_reads_the_store_over_the_export_stream(streaming_client):
 @pytest.mark.integration
 def test_streams_without_a_transfer_host_fail_clearly(nats_url):
     client = TripleStoreSecondaryAdapterNATSClient(
-        nats_url=nats_url, jwt_secret=JWT_SECRET, service_identity="api"
+        nats_url=nats_url, credentials=TEST_TOKENS.source("api")
     )
     try:
         with (
@@ -692,6 +656,13 @@ def test_streams_without_a_transfer_host_fail_clearly(nats_url):
             pass
     finally:
         client.close()
+
+
+def test_the_client_presents_its_credentials_token():
+    client = TripleStoreSecondaryAdapterNATSClient(
+        "nats://127.0.0.1:4222", StaticTokenSource("token-1", "api")
+    )
+    assert client._current_token() == "token-1"
 
 
 @pytest.mark.integration
@@ -709,14 +680,17 @@ def test_a_write_behind_a_long_one_waits_for_its_own_deadline(nats_url):
     server.start()
     client = TripleStoreSecondaryAdapterNATSClient(
         nats_url=nats_url,
-        jwt_secret=JWT_SECRET,
-        service_identity="engine",
+        credentials=TEST_TOKENS.source("engine"),
         timeout_seconds=0.3,
     )
     graph_name = URIRef("http://test.example.org/chat")
     triples = Graph()
     triples.add(
-        (URIRef("http://test.example.org/m"), URIRef("http://test.example.org/p"), URIRef("http://test.example.org/o"))
+        (
+            URIRef("http://test.example.org/m"),
+            URIRef("http://test.example.org/p"),
+            URIRef("http://test.example.org/o"),
+        )
     )
     try:
         client.list_graphs()  # warm the connection
@@ -755,13 +729,16 @@ def test_a_fuseki_update_without_an_answer_reaches_the_caller_as_a_request_error
     server.start()
     client = TripleStoreSecondaryAdapterNATSClient(
         nats_url=nats_url,
-        jwt_secret=JWT_SECRET,
-        service_identity="engine",
+        credentials=TEST_TOKENS.source("engine"),
         timeout_seconds=10.0,
     )
     triples = Graph()
     triples.add(
-        (URIRef("http://test.example.org/m"), URIRef("http://test.example.org/p"), URIRef("http://test.example.org/o"))
+        (
+            URIRef("http://test.example.org/m"),
+            URIRef("http://test.example.org/p"),
+            URIRef("http://test.example.org/o"),
+        )
     )
     try:
         with pytest.raises(Exceptions.RequestError) as exc_info:

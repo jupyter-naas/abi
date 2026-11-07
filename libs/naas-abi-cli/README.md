@@ -36,8 +36,11 @@ Creates a new ABI project with all necessary starter files and dependencies.
 
 **NATS by default.** The project runs the engine on NATS: every config has a
 `nats:` block with discovery on (project = the project name), the bus is
-JetStream, and `.env` holds `NATS_JWT_SECRET` and the broker passwords
-(`NATS_ABI_PASSWORD`, `NATS_MODULE_PASSWORD`). The Docker stack starts the
+JetStream, and `.env` holds the broker passwords of the engine and of its auth
+callout (`NATS_ENGINE_PASSWORD`, `NATS_AUTH_PASSWORD`) and the callout's signing
+seed (`NATS_AUTH_CALLOUT_SEED`, `NATS_AUTH_CALLOUT_ISSUER`). Modules log in with
+their own service keys, and the engine gives each connection the subjects its
+approved policy allows. The Docker stack starts the
 `nats` service, keeps RabbitMQ behind the `rabbitmq` profile and runs no
 Dagster: one engine hosts discovery, and module jobs replace Dagster's
 schedules. Check the broker with `curl -s localhost:8222/healthz` and
@@ -64,16 +67,18 @@ Creates a module. By default a **remote module**: a `naas-abi-sdk` package that
 runs in its own process, reaches the engine only through NATS, and never
 imports `naas_abi_core`. It has an agent (an SDK `IntentAgent` on the engine's
 default models, its memory in the Document Service), an hourly `@job`, a
-`python -m <name>` entrypoint with discovery and SIGTERM handling (it signs
-its tokens with its module key, `ABI_MODULE_KEY`), an app scaffold and offline
-tests.
+`python -m <name>` entrypoint with discovery and SIGTERM handling, an app
+scaffold and offline tests. It runs on a service key (`ABI_SERVICE_KEY`) and
+holds no signing secret.
 
 - **In a project** (a folder with `config.yaml` and `pyproject.toml`), it goes
   to `src/<name>/` with an SDK-only `Dockerfile`, gets a `dev.modules` entry in
   `config.yaml` (`abi dev up` runs it) and a service in
   `docker-compose.override.yml` (`abi start` runs it; `abi deploy local
-  --regenerate` never touches that file), with its module key in `.env`
-  (`ABI_MODULE_KEY_<NAME>`). It is not added to `modules:`: it
+  --regenerate` never touches that file). Its service key goes in `.env`
+  (`<NAME>_SERVICE_KEY`, from `abi iam service-account create ... --key`),
+  and its permission manifest waits for `abi iam module approve`. It is not
+  added to `modules:`: it
   registers itself through discovery, and Nexus lists its agent once the
   module logs `READY`.
 - **`--standalone`** (the default outside a project) creates a repository of
@@ -193,14 +198,6 @@ Lists all available modules and their enabled/disabled status.
 abi module list
 ```
 
-#### `abi module key <module_id>`
-Prints the module key of `<module_id>`, derived from the project's
-`NATS_JWT_SECRET` (`$NATS_JWT_SECRET`, else `./.env`). A remote module signs its
-tokens with it (`ABI_MODULE_KEY`), and the engine accepts them for that module
-id only, never for `api`, `engine` or `dagster`. Discovery registers a module
-only under a token for its own module id. Give a module its key, never the
-secret; a new secret means new keys.
-
 ### Local dev stack
 
 #### `abi dev up [--service <name>]... [-d] [--with-nats/--without-nats] [--with-tracing]`
@@ -213,13 +210,41 @@ dev:
   modules:
     - name: probe-researcher                # logs, pid, --service name
       module: operations.projects.nats_probe  # run as `python -m <module> <args>`
-      identity: operations.projects.nats_probe.researcher  # its module id (default: its ABIModule's)
+      module_id: acme.researcher            # its ABIModule.module_id (default: name)
       args: [researcher]
       env: {NATS_PROBE_DISCOVERY_PROJECT: "${ABI_DISCOVERY_PROJECT}"}
       restart: on-failure                   # or always, never
 ```
 
-Each module gets `ABI_NATS_URL`, `ABI_MODULE_KEY` (the key of its module id, which discovery registers it under: its `identity:`, else the `module_id` of the `ABIModule` its package exports; `abi dev up` refuses a module whose id it cannot tell), `ABI_SERVICE_TOKEN` signed with that key (for modules that read only that; the SDK prefers the key), `ABI_DISCOVERY_PROJECT`, `OTEL_EXPORTER_OTLP_ENDPOINT` with tracing, and the project's `src/` on `PYTHONPATH`; `env` values may name them as `${VAR}`. A module is addressed like a service: `abi dev up --service probe-researcher -d` (it joins the running NATS stack and starts no broker of its own), `abi dev logs probe-researcher -f`, `abi dev down --service probe-researcher`. `abi dev down` stops modules before the stack. The engine validates the block and otherwise ignores it.
+Each module runs as the service account `module/<project>/<module_id>` (`module_id` in the entry, else its `name`): `abi dev up` creates it, revokes the key the last run had, hands the module a fresh one and approves its permission manifest (`services.iam.modules.auto_approve` in the dev overlay). Each module gets `ABI_NATS_URL` (without broker login), `ABI_SERVICE_KEY`, `ABI_DISCOVERY_PROJECT`, `OTEL_EXPORTER_OTLP_ENDPOINT` with tracing, and the project's `src/` on `PYTHONPATH`; `env` values may name them as `${VAR}`. A module is addressed like a service: `abi dev up --service probe-researcher -d` (it joins the running NATS stack and starts no broker of its own), `abi dev logs probe-researcher -f`, `abi dev down --service probe-researcher`. `abi dev down` stops modules before the stack. The engine validates the block and otherwise ignores it.
+
+### Service accounts, keys and module permissions
+
+`abi iam` works on the project's IAM store (`services.iam.store`, sqlite or
+PostgreSQL) and tells a running engine to reload (`abi.iam.v1.changed`). A key
+is printed once, at creation; only its hash is stored.
+
+```bash
+abi iam service-account create ci/nightly --key   # the account and a first key
+abi iam service-account list
+abi iam service-account delete ci/nightly         # its keys stop working
+
+abi iam key create module/default/research --description prod
+abi iam key list module/default/research
+abi iam key rotate module/default/research <key id>   # a new key; the old one revoked
+abi iam key revoke module/default/research <key id>
+
+abi iam module list --status pending              # manifests waiting for approval
+abi iam module show module/default/research
+abi iam module approve module/default/research [--document narrowed.yaml]
+abi iam module reject module/default/research --reason "asks for every document"
+```
+
+An account holds at most five active keys; `ci/*` keys expire after 90 days. A
+revoked key fails its next exchange and its next broker connection; tokens
+already issued expire within ten minutes. A remote module in Docker reads its key
+from `<NAME>_SERVICE_KEY` in `.env` (`docker-compose.override.yml` refuses to
+start without it).
 
 ### Deployment
 
@@ -233,10 +258,11 @@ Writes the project's Docker Compose stack (`docker-compose.yml`, `.deploy/`).
   with a `nats` service behind the `nats` profile, and `uv add`s the
   `naas-abi-core[dagster,rabbitmq]` extras it needs (commit `pyproject.toml`
   and `uv.lock`).
-- It writes `.deploy/docker/nats/nats.conf` (the broker users `abi` and
-  `module`, and the module user's permissions) and generates
-  `NATS_ABI_PASSWORD` and `NATS_MODULE_PASSWORD` in `.env`. Regenerate after
-  each CLI upgrade.
+- It writes `.deploy/docker/nats/nats.conf` (the broker users `engine` and
+  `auth`, and the auth callout that admits every module with its approved
+  permissions) and generates `NATS_ENGINE_PASSWORD`, `NATS_AUTH_PASSWORD`,
+  `NATS_AUTH_CALLOUT_SEED` and `NATS_AUTH_CALLOUT_ISSUER` in `.env`. Regenerate
+  after each CLI upgrade.
 - It stops before writing anything when `.env` is not writable, and prints the
   `chown` to run.
 - `docker-compose.override.yml` (remote modules) is never rewritten.
@@ -379,9 +405,12 @@ rejects a partial one.
 
 ### Nexus admin (workspace / user / org)
 
-Authenticated admin surface against the Nexus HTTP API. Auth via
-`NEXUS_ACCESS_TOKEN`, or `NEXUS_EMAIL` + `NEXUS_PASSWORD`. Base URL:
-`NEXUS_API_URL` (default `http://localhost:9879`).
+Authenticated admin surface against the Nexus HTTP API. Nexus has no login of its
+own (people sign in at an identity provider), so a script authenticates with a
+personal API key (`abi_pk_...`, made in Nexus under Account, API keys), as
+`NEXUS_ACCESS_TOKEN` or `--token`. Base URL: `NEXUS_API_URL` (default
+`http://localhost:9879`). The `/api/auth/*` and `/api/iam/*` routes take a signed-in
+session only, never a key.
 
 ```bash
 abi workspace create --name "Research preview" --slug research-preview --org org-...
@@ -389,12 +418,12 @@ abi workspace list --org org-...
 abi workspace members list --workspace ws-...
 abi workspace members add --workspace ws-... --email someone@naas.ai --role member
 
-# Preferred when password signup is off: create-on-invite + OTP/magic-link email
+# Someone with no account is invited through the identity provider (it makes them
+# exist and mails the code at their first sign-in); an existing account is added directly.
 abi user invite --email someone@gmail.com --name "Someone" \
   --org org-... --workspace ws-... --role member --workspace-role member
 abi org members invite --org org-... --email someone@gmail.com --workspace ws-...
 
-abi user create --email someone@naas.ai --name "Someone"   # needs password auth enabled
 abi user list --org org-...   # or --workspace ws-...
 
 abi org list
@@ -403,20 +432,26 @@ abi org workspaces --org org-...
 ```
 
 All of these accept `--dry-run` (prints the intended API call) and
-`--api-url` / `--token` / `--auth-email` / `--auth-password`.
+`--api-url` / `--token`.
 
-Invite endpoints create the user when missing and email OTP / magic-link sign-in.
+**Moving an older project to the identity provider** (accounts of the removed
+password / magic-link login):
 
-**Credentials:** `abi user create` never prints the password by default. It
-writes `secrets/NEXUS_USER_<EMAIL>.env` (mode 600). Pass `--show-password` only
-when you intentionally need stdout.
+```bash
+abi user migrate            # dry run: who would be made at the built-in provider
+abi user migrate --apply    # make them exist there, with the same email
+```
 
-**Break-glass Postgres** (ops VM only, when invite email / browser auth is
-unavailable):
+Each person then signs in with the code the provider mails to their address; that
+first sign-in links the account, which keeps its roles, groups and data. Nobody is
+created twice, so it can be run again. `--database-url` names Nexus's database
+(default: `nexus_config.database_url` of the project). In `abi dev`, `abi dev code`
+prints the newest sign-in code (dev mail is a file in `storage/email`).
+
+**Break-glass Postgres** (ops VM only, when the API is unavailable):
 
 ```bash
 export NEXUS_POSTGRES_COMPOSE_DIR=/opt/abi
-abi user create --via postgres --email someone@naas.ai --name "Someone" --org org-...
 abi workspace create --via postgres --name "..." --slug ... --org org-... --owner-id user-...
 ```
 

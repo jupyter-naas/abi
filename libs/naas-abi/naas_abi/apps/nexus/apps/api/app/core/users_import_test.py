@@ -6,23 +6,25 @@ import pytest
 import pytest_asyncio
 from naas_abi.apps.nexus.apps.api.app.core.users_import import import_users, load_entries
 from naas_abi.apps.nexus.apps.api.app.models import (
-    OrganizationMemberModel,
     OrganizationModel,
     UserModel,
-    WorkspaceMemberModel,
     WorkspaceModel,
 )
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 NOW = datetime(2026, 1, 1)
-TABLES = (
-    UserModel,
-    OrganizationModel,
-    OrganizationMemberModel,
-    WorkspaceModel,
-    WorkspaceMemberModel,
-)
+TABLES = (UserModel, OrganizationModel, WorkspaceModel)
+
+
+@pytest.fixture(autouse=True)
+def iam(nexus_iam):
+    """Roles are IAM's: ``u-existing`` already holds ``member`` of ``org-1``, changed
+    after the snapshot was taken, and ``admin`` of nothing else."""
+    nexus_iam.org("org-1")
+    nexus_iam.workspace("org-1", "ws-1")
+    nexus_iam.grant("u-existing", "member", "abi:nexus:organization/org-1")
+    return nexus_iam
 
 
 @pytest_asyncio.fixture
@@ -37,7 +39,6 @@ async def db():
                 id="u-existing",
                 email="existing@example.com",
                 name="Renamed In UI",
-                hashed_password="x",
                 is_superadmin=False,
                 created_at=NOW,
                 updated_at=NOW,
@@ -62,16 +63,6 @@ async def db():
                 organization_id="org-1",
                 created_at=NOW,
                 updated_at=NOW,
-            )
-        )
-        # Role changed in the UI after the snapshot was taken.
-        session.add(
-            OrganizationMemberModel(
-                id="om-1",
-                organization_id="org-1",
-                user_id="u-existing",
-                role="member",
-                created_at=NOW,
             )
         )
         await session.commit()
@@ -100,7 +91,9 @@ ENTRIES = [
 
 
 @pytest.mark.asyncio
-async def test_import_creates_missing_rows_and_never_overwrites(db) -> None:
+async def test_import_creates_missing_accounts_and_roles_and_never_overwrites(db, iam) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+
     report = await import_users(db, ENTRIES)
     await db.commit()
 
@@ -115,16 +108,18 @@ async def test_import_creates_missing_rows_and_never_overwrites(db) -> None:
     ).scalar_one()
     assert new.name == "new"
 
-    org_roles = {
-        row.user_id: row.role
-        for row in (await db.execute(select(OrganizationMemberModel))).scalars()
-    }
-    assert org_roles == {"u-existing": "member", new.id: "member"}
-
-    ws_roles = {
-        row.user_id: row.role for row in (await db.execute(select(WorkspaceMemberModel))).scalars()
-    }
-    assert ws_roles == {"u-existing": "admin", new.id: "viewer"}
+    # Roles are IAM's. A role held stays (the snapshot says admin, it is member); a
+    # person who held none gets what the snapshot names.
+    assert await MEMBERSHIPS.role_at("u-existing", "abi:nexus:organization/org-1") == "member"
+    assert await MEMBERSHIPS.role_at(new.id, "abi:nexus:organization/org-1") == "member"
+    assert (
+        await MEMBERSHIPS.role_at("u-existing", "abi:nexus:organization/org-1/nexus:workspace/ws-1")
+        == "admin"
+    )
+    assert (
+        await MEMBERSHIPS.role_at(new.id, "abi:nexus:organization/org-1/nexus:workspace/ws-1")
+        == "viewer"
+    )
 
     assert report.users_created == 1
     assert report.organization_memberships_created == 1
@@ -141,6 +136,33 @@ async def test_import_is_idempotent(db) -> None:
     assert again.users_created == 0
     assert again.organization_memberships_created == 0
     assert again.workspace_memberships_created == 0
+
+
+@pytest.mark.asyncio
+async def test_a_dry_run_gives_no_role(db) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+
+    report = await import_users(db, ENTRIES, apply=False)
+    await db.rollback()
+
+    assert report.workspace_memberships_created == 2
+    assert (
+        await MEMBERSHIPS.role_at("u-existing", "abi:nexus:organization/org-1/nexus:workspace/ws-1")
+        is None
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_new_superadmin_is_a_platform_administrator_in_iam(db) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+
+    await import_users(db, [{"email": "root@example.com", "name": "Root", "is_superadmin": True}])
+    await db.commit()
+    root = (
+        await db.execute(select(UserModel).where(UserModel.email == "root@example.com"))
+    ).scalar_one()
+
+    assert await authz.allowed("ManageSystem", user=root.id)
 
 
 def test_load_entries_reads_the_snapshot_format(tmp_path) -> None:

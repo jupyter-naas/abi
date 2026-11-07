@@ -57,6 +57,11 @@ _ALTER_CONSTRAINT_RE = re.compile(
 )
 
 
+# ``ALTER TABLE t DROP COLUMN c``: neither SQLite nor older PostgreSQL drivers
+# phrase "already dropped" like "already exists", so a rerun is told apart here.
+_DROP_COLUMN_RE = re.compile(r"^\s*ALTER\s+TABLE\s+\S+\s+DROP\s+COLUMN\b", re.IGNORECASE)
+
+
 # `ALTER TABLE t RENAME COLUMN a TO b` has no IF EXISTS form. Migrations re-run
 # on every boot, so the runner skips a rename whose old column is gone and whose
 # new column exists (already applied).
@@ -119,6 +124,7 @@ def _adapt_statement_for_dialect(statement: str, dialect: str) -> list[str]:
         statements.append(f"{prefix} ADD COLUMN {tail.strip()}")
     return statements
 
+
 # Known tables for safe row count queries
 KNOWN_TABLES = frozenset(
     {
@@ -133,20 +139,14 @@ KNOWN_TABLES = frozenset(
         "ontologies",
         "graph_nodes",
         "graph_edges",
-        "api_keys",
         "provider_configs",
         "agent_configs",
         "app_configs",
         "secrets",
-        "refresh_tokens",
-        "revoked_tokens",
-        "magic_link_tokens",
         "audit_logs",
         "rate_limit_events",
-        "password_changes",
         "workspace_secrets",
         "model_catalog",
-        "organization_role_features",
     }
 )
 
@@ -255,9 +255,7 @@ async def init_db() -> None:
             stripped = line.strip()
             if stripped.lower().startswith("-- @dialect:"):
                 allowed_dialects = {
-                    d.strip().lower()
-                    for d in stripped.split(":", 1)[1].split(",")
-                    if d.strip()
+                    d.strip().lower() for d in stripped.split(":", 1)[1].split(",") if d.strip()
                 }
                 break
         if allowed_dialects is not None and current_dialect not in allowed_dialects:
@@ -316,6 +314,11 @@ async def init_db() -> None:
                         "already exists" in error_msg
                         or "duplicate" in error_msg
                         or "duplicate column" in error_msg
+                        # A column a migration drops, dropped by an earlier run.
+                        or (
+                            _DROP_COLUMN_RE.match(statement)
+                            and ("no such column" in error_msg or "does not exist" in error_msg)
+                        )
                     ):
                         skipped += 1
                     else:
@@ -341,10 +344,7 @@ async def table_exists(table_name: str) -> bool:
     async with async_engine.begin() as conn:
         if _is_sqlite:
             result = await conn.execute(
-                text(
-                    "SELECT 1 FROM sqlite_master "
-                    "WHERE type = 'table' AND name = :name"
-                ),
+                text("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = :name"),
                 {"name": table_name},
             )
             return result.scalar() is not None

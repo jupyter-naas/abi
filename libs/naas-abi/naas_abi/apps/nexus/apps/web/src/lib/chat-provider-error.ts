@@ -1,3 +1,5 @@
+import { announceViewRefusal, isViewRefusal, viewRefusalMessage } from './view-model';
+
 const RATE_LIMIT_RE = /error code:\s*429|rate[- ]limited|temporarily rate-limited/i;
 const CONTEXT_WINDOW_RE =
   /contextwindowexceeded|context window|maximum context length/i;
@@ -22,4 +24,25 @@ export function humanizeChatProviderError(content: string): string {
     return 'This model is rate limited. Pick another model in the agent menu and try again.';
   }
   return 'The model provider failed. Pick another model and try again.';
+}
+
+/**
+ * The failure of a chat request the server answered with an error: the message of the view's refusal
+ * ("Read-only: …", "Outside this view: …"), which the banner announces as it does for every other call
+ * (the chat sends with `fetch`, not `authFetch`), else the status.
+ */
+export async function chatResponseError(response: Response): Promise<Error> {
+  const refusal = await viewRefusalMessage(response);
+  if (refusal) {
+    announceViewRefusal(refusal);
+    return new Error(refusal);
+  }
+  return new Error(`API error: ${response.status}`);
+}
+
+/** What the bubble says when a request failed: a view's refusal as the server wrote it, any other failure with
+ *  the advice to try again. */
+export function chatFailureText(message: string): string {
+  if (isViewRefusal(message)) return `🔒 ${message}`;
+  return `❌ Error: ${message}\n\nPlease try again or check your provider settings.`;
 }

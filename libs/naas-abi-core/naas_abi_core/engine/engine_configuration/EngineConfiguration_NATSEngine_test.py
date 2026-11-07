@@ -6,11 +6,11 @@ from pydantic import ValidationError
 
 
 def engine(**block):
-    return NATSConfiguration(jwt_secret="test-only", engine=block).engine
+    return NATSConfiguration(engine=block).engine
 
 
 def test_an_engine_serves_by_default_with_a_twenty_second_lease():
-    settings = NATSConfiguration(jwt_secret="test-only").engine
+    settings = NATSConfiguration().engine
 
     assert settings.role == "serve"
     assert settings.rollout_id == ""
@@ -82,9 +82,9 @@ def test_auto_is_a_role_for_one_off_engines():
 
 
 def test_a_kernel_service_handles_64_calls_at_once_by_default():
-    assert NATSConfiguration(jwt_secret="test-only").max_concurrent_requests == 64
+    assert NATSConfiguration().max_concurrent_requests == 64
 
 
 def test_a_kernel_service_handles_at_least_one_call_at_once():
     with pytest.raises(ValidationError):
-        NATSConfiguration(jwt_secret="test-only", max_concurrent_requests=0)
+        NATSConfiguration(max_concurrent_requests=0)

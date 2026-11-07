@@ -165,3 +165,42 @@ def test_app_html_middleware_accepts_registered_jwt_validator(
         "query_string": b"",
     }
     assert is_app_html_request_authorized(Request(bad_scope)) is False
+
+
+def test_a_link_is_checked_once_per_request_and_off_the_event_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A validator asks IAM, synchronously: the middleware runs it in a thread
+    (not on the loop that serves everyone) and once, for the check and for the
+    cookie alike."""
+    import asyncio
+    import threading
+
+    monkeypatch.delenv("ABI_API_KEY", raising=False)
+    calls: list[tuple[str, bool]] = []
+
+    def _validator(token: str, request: Request) -> bool:
+        try:
+            asyncio.get_running_loop()
+            on_loop = True
+        except RuntimeError:
+            on_loop = False
+        calls.append((threading.current_thread().name, on_loop))
+        return token == "link-ok"
+
+    register_app_html_token_validator(_validator)
+    app = FastAPI()
+    app.add_middleware(AppHtmlAbiKeyMiddleware)
+
+    @app.get("/app-html/{path:path}")
+    def _html(path: str) -> dict[str, str]:
+        return {"path": path}
+
+    client = TestClient(app)
+    response = client.get("/app-html/axi/devops/host/?token=link-ok")
+    assert response.status_code == 200
+    assert "abi_app_html_token=link-ok" in response.headers["set-cookie"]
+    assert len(calls) == 1
+    assert calls[0][1] is False  # no running loop in the thread that validated
+    assert client.get("/app-html/axi/?token=nope").status_code == 401
+    assert len(calls) == 2

@@ -59,6 +59,17 @@ from naas_abi_core.services.source_control.SourceControlService import (
 )
 from pydantic import ValidationError
 
+pytestmark = pytest.mark.usefixtures("engine_iam")
+
+
+@pytest.fixture(autouse=True)
+def _workspaces(team):
+    """``user-1`` owns the workspaces these tests use; ``team`` holds the roles."""
+    for workspace in ("ws-1", "ws-test"):
+        scope = team.workspace("org-1", workspace)
+        team.grant("user-1", "owner", scope)
+    return team
+
 
 def test_slugify_and_paths() -> None:
     assert _slugify("Q3 Business Review!") == "q3-business-review"
@@ -210,9 +221,7 @@ def test_configured_sources_do_not_leak_into_each_other(tmp_path, monkeypatch) -
     assert caught.value.status_code == 404
 
 
-def test_picker_hides_configured_ids_and_flags_the_default(
-    tmp_path, monkeypatch
-) -> None:
+def test_picker_hides_configured_ids_and_flags_the_default(tmp_path, monkeypatch) -> None:
     """A deploy can retire ABI's seed from the menu without deleting it."""
     directory = _write_template_dir(tmp_path / "acme", "tenant-only-v1", "Tenant Only")
     _configure_sources(monkeypatch, ("acme", directory))
@@ -237,9 +246,7 @@ def test_picker_hides_configured_ids_and_flags_the_default(
     assert "Document Title" in documents_api._load_seed_html("abi/article-light-v1")
 
 
-def test_create_omitting_template_id_uses_the_configured_default(
-    tmp_path, monkeypatch
-) -> None:
+def test_create_omitting_template_id_uses_the_configured_default(tmp_path, monkeypatch) -> None:
     """A plain New Document click must not still seed ABI's own template."""
     directory = _write_template_dir(tmp_path / "acme", "tenant-only-v1", "Tenant Only")
     _configure_sources(monkeypatch, ("acme", directory))
@@ -309,9 +316,7 @@ def test_a_source_namespace_is_refused_at_config_time(namespace: str) -> None:
         DocumentsTemplateSourceConfig(namespace=namespace, path="seeds/templates")
 
 
-def test_a_missing_source_directory_does_not_hide_the_abi_seeds(
-    tmp_path, monkeypatch
-) -> None:
+def test_a_missing_source_directory_does_not_hide_the_abi_seeds(tmp_path, monkeypatch) -> None:
     """A stale path in config.yaml must degrade to ABI's seeds, not to nothing."""
     _configure_sources(monkeypatch, ("acme", tmp_path / "does-not-exist"))
 
@@ -330,9 +335,7 @@ def test_friendly_coding_detail_hides_raw_coder_json() -> None:
     assert _friendly_coding_detail(WorkspaceNameConflictError(raw)) == (
         "Reconnecting to existing runtime…"
     )
-    assert _friendly_coding_detail(Exception(raw)) == (
-        "Reconnecting to existing runtime…"
-    )
+    assert _friendly_coding_detail(Exception(raw)) == ("Reconnecting to existing runtime…")
 
 
 def test_friendly_git_detail_rewrites_raw_repo_id() -> None:
@@ -364,12 +367,14 @@ def test_ensure_coding_repo_seeds_empty_in_memory() -> None:
     assert [b.name for b in sc.list_branches(repo_id=repo_id)]
 
 
-def _sections_client(monkeypatch, source_control: SourceControlService) -> TestClient:
+def _sections_client(
+    monkeypatch, source_control: SourceControlService, user_id: str = "user-1"
+) -> TestClient:
     app = FastAPI()
     app.state.source_control = source_control
     app.include_router(documents_api.router, prefix="/documents")
     app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
-        id="user-1", email="admin@example.com", name="Test Admin"
+        id=user_id, email="admin@example.com", name="Test Admin"
     )
 
     async def _fake_db():
@@ -377,10 +382,6 @@ def _sections_client(monkeypatch, source_control: SourceControlService) -> TestC
 
     app.dependency_overrides[get_db] = _fake_db
 
-    async def _allow(user_id: str, workspace_id: str) -> str:
-        return "owner"
-
-    monkeypatch.setattr(documents_api, "require_workspace_access", _allow)
     monkeypatch.setattr(documents_api, "_get_coding_environment", lambda _request: None)
     return TestClient(app)
 
@@ -644,7 +645,10 @@ def test_sidecar_tool_helpers_require_binding() -> None:
     assert _sidecar_tool_call(None, "s", "read_file", {"path": "x"}) == {
         "error": "sidecar not bound"
     }
-    assert _read_document_via_sidecar(None, "s", document_path="documents/ws/demo/document.html") is None
+    assert (
+        _read_document_via_sidecar(None, "s", document_path="documents/ws/demo/document.html")
+        is None
+    )
     assert (
         _write_document_via_sidecar(
             None, "s", document_path="documents/ws/demo/document.html", html="<html></html>"
@@ -652,8 +656,7 @@ def test_sidecar_tool_helpers_require_binding() -> None:
         is False
     )
     assert (
-        _sidecar_tool_call("file:///tmp", "s", "read_file", {"path": "x"}).get("error")
-        or ""
+        _sidecar_tool_call("file:///tmp", "s", "read_file", {"path": "x"}).get("error") or ""
     ).startswith("invalid sidecar base url")
 
 
@@ -700,9 +703,7 @@ def test_clone_url_uses_the_local_checkout_when_git_is_on_disk() -> None:
     and the document view shows "Coder runtime unavailable".
     """
     sc = _FakeRepoSC("file:///tmp/git/abi/monorepo")
-    url = documents_api._git_clone_url(
-        sc, "abi/monorepo", username="git", token="local"
-    )
+    url = documents_api._git_clone_url(sc, "abi/monorepo", username="git", token="local")
     assert url == "file:///tmp/git/abi/monorepo"
     assert "forgejo" not in url
     # Three slashes and no fourth component: the username and token must not be
@@ -713,9 +714,7 @@ def test_clone_url_uses_the_local_checkout_when_git_is_on_disk() -> None:
 
 def test_clone_url_keeps_authenticated_http_for_a_real_forge() -> None:
     sc = _FakeRepoSC("http://forgejo:3000/abi/monorepo.git")
-    url = documents_api._git_clone_url(
-        sc, "abi/monorepo", username="git", token="tok en"
-    )
+    url = documents_api._git_clone_url(sc, "abi/monorepo", username="git", token="tok en")
     assert url.startswith("http://git:tok%20en@")
     assert url.endswith("/abi/monorepo.git")
 
@@ -725,9 +724,7 @@ def test_clone_url_falls_back_when_the_adapter_cannot_describe_the_repo() -> Non
         def ensure_repo(self, **_kwargs):
             raise RuntimeError("nope")
 
-    url = documents_api._git_clone_url(
-        _Broken(), "abi/monorepo", username="git", token="t"
-    )
+    url = documents_api._git_clone_url(_Broken(), "abi/monorepo", username="git", token="t")
     assert url.startswith("http://git:t@")
 
 
@@ -775,9 +772,7 @@ class _FakeLocalCoding:
 
         del user_id, template_id
         self.provisioned.append(dict(params or {}))
-        return WorkspaceStatus(
-            id="env-local-1", name=name, phase="running", agent_ready=True
-        )
+        return WorkspaceStatus(id="env-local-1", name=name, phase="running", agent_ready=True)
 
     def get_runtime_binding(self, *, workspace_id: str):
         del workspace_id
@@ -855,9 +850,7 @@ def test_runtime_reports_the_adapter_binding_for_lookup(monkeypatch) -> None:
         "/documents/projects",
         json={"workspace_id": "ws-test", "title": "Bound document", "slug": "bound-document"},
     )
-    client.post(
-        "/documents/projects/bound-document/runtime", params={"workspace_id": "ws-test"}
-    )
+    client.post("/documents/projects/bound-document/runtime", params={"workspace_id": "ws-test"})
     assert captured.get("base") == _LOCAL_SIDECAR_BASE, captured
     assert captured.get("secret") == _LOCAL_SIDECAR_SECRET, captured
 
@@ -938,18 +931,12 @@ def _sqlite_sections_client(monkeypatch, source_control, session):
 
     app.dependency_overrides[get_db] = _session
 
-    async def _allow(user_id: str, workspace_id: str) -> str:
-        return "owner"
-
-    monkeypatch.setattr(documents_api, "require_workspace_access", _allow)
     monkeypatch.setattr(documents_api, "_probe_sidecar", _only_the_local_sidecar_answers)
     monkeypatch.setattr(documents_api.time, "sleep", lambda *_: None)
     return TestClient(app)
 
 
-def test_runtime_rebinds_when_the_same_environment_is_adopted_twice(
-    monkeypatch, tmp_path
-) -> None:
+def test_runtime_rebinds_when_the_same_environment_is_adopted_twice(monkeypatch, tmp_path) -> None:
     """Re-provisioning the same environment id must update, not collide.
 
     The persist step only deleted the prior row ``if old.id != status.id``,
@@ -996,11 +983,7 @@ def test_runtime_rebinds_when_the_same_environment_is_adopted_twice(
 
         await anyio.to_thread.run_sync(_call)
 
-        rows = (
-            (await session.execute(select(CodingEnvironmentModel)))
-            .scalars()
-            .all()
-        )
+        rows = (await session.execute(select(CodingEnvironmentModel))).scalars().all()
         count = len(rows)
         base = rows[0].sidecar_base if rows else None
         secret = rows[0].sidecar_secret if rows else None
@@ -1039,9 +1022,7 @@ def _write_folder_template(directory: Path, stem: str, name: str) -> Path:
     return directory
 
 
-def test_create_and_apply_template_copies_catalog_assets(
-    tmp_path, monkeypatch
-) -> None:
+def test_create_and_apply_template_copies_catalog_assets(tmp_path, monkeypatch) -> None:
     source_dir = _write_folder_template(tmp_path / "office", "pixel-v1", "Pixel")
     _configure_sources(monkeypatch, ("office", source_dir))
 
@@ -1271,9 +1252,7 @@ def test_document_commands_pass_slot_and_fill_keys(monkeypatch) -> None:
                     ],
                     "tables_heading": "Ask",
                     "tables_intro": "Three rows only.",
-                    "tables": [
-                        {"heading": "Ask table", "headers": ["Item"], "rows": [["Owner"]]}
-                    ],
+                    "tables": [{"heading": "Ask table", "headers": ["Item"], "rows": [["Owner"]]}],
                 }
             ],
         },
@@ -1287,9 +1266,7 @@ def test_document_commands_pass_slot_and_fill_keys(monkeypatch) -> None:
         "/documents/projects/slot-document/commands",
         json={
             "workspace_id": "ws-test",
-            "requests": [
-                {"type": "update_paragraph_style", "slot": "intro", "style": "normal"}
-            ],
+            "requests": [{"type": "update_paragraph_style", "slot": "intro", "style": "normal"}],
         },
     )
     assert missed.status_code == 422, missed.text

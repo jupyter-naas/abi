@@ -203,6 +203,10 @@ class ProposalNotFoundError(SourceControlError):
     """The requested proposal (pull/merge request) does not exist."""
 
 
+class RepoExistsError(SourceControlError):
+    """A repository with that id exists already, in any letter case."""
+
+
 class BranchNameConflictError(SourceControlError):
     """A branch with that name already exists."""
 
@@ -230,8 +234,30 @@ class ISourceControlAdapter(ABC):
     """
 
     @abstractmethod
-    def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
-        """Idempotently ensure a forge user exists; return its id."""
+    def ensure_user(
+        self,
+        *,
+        external_id: str,
+        email: str,
+        username: str,
+        vouched_email: bool = False,
+    ) -> str:
+        """Idempotently ensure a forge user exists, bound to ``external_id`` (the
+        principal it belongs to); return its id.
+
+        A forge username belongs to one principal: an account bound to another
+        principal, or an administrator, is never handed over
+        (``AccessDeniedError``). A principal keeps one account: asked under a
+        new username, its account is renamed when the backend can. An account
+        bound to no principal (it predates the binding) is claimed only when
+        ``vouched_email`` (a first-party caller verified ``email``) and the
+        account's email is that one.
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def find_user(self, *, external_id: str) -> str | None:
+        """The forge username ``ensure_user`` bound to ``external_id``, or None."""
         raise NotImplementedError()
 
     @abstractmethod
@@ -242,6 +268,19 @@ class ISourceControlAdapter(ABC):
 
         ``auto_init=False`` creates a truly empty repo (no initial commit) so an
         existing local history can be pushed to it.
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def create_repo(
+        self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
+    ) -> Repo:
+        """Create a new repository; return it.
+
+        Never returns one that exists already: a repository with that id, in
+        any letter case (forges look names up case-insensitively), raises
+        ``RepoExistsError``. A caller that places or grants access to what it
+        created relies on that.
         """
         raise NotImplementedError()
 
@@ -433,6 +472,7 @@ class ISourceControlAdapter(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def mint_git_token(self, *, user_id: str) -> str:
-        """Mint a scoped git access token for ``user_id``."""
+    def mint_git_token(self, *, user_id: str, external_id: str | None = None) -> str:
+        """Mint a scoped git access token for the forge user ``user_id`` (a
+        username), bound to the principal ``external_id``."""
         raise NotImplementedError()

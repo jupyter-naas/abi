@@ -1,0 +1,233 @@
+"""Ports of Nexus's sign-in through the engine's identity providers."""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from datetime import datetime
+
+from naas_abi_core.services.identity.IdentityPorts import ProviderInfo, SignIn
+
+
+@dataclass(frozen=True)
+class LoginRequest:
+    """A sign-in in flight. ``state_hash`` and ``binding_hash`` are SHA-256 hex."""
+
+    state_hash: str
+    provider: str
+    nonce: str
+    code_verifier: str = field(repr=False)
+    binding_hash: str = field(repr=False)
+    next_path: str
+    expires_at: datetime
+
+
+@dataclass(frozen=True)
+class SessionRecord:
+    """A browser session. The provider's tokens are stored encrypted."""
+
+    id: str
+    user_id: str
+    principal_id: str
+    provider: str
+    group_ids: tuple[str, ...]
+    refresh_token_enc: str | None = field(repr=False)
+    id_token_enc: str | None = field(repr=False)
+    refresh_at: datetime
+    expires_at: datetime
+    last_seen_at: datetime | None = None
+    revoked_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class OidcUser:
+    id: str
+    email: str
+    name: str
+    principal_id: str | None
+    idp_issuer: str | None
+    idp_subject: str | None
+
+
+class UserConflictError(Exception):
+    """A user could not be created: its email or identity is already held by
+    another row, and the row of this principal does not exist."""
+
+
+class OidcSessionPersistencePort(ABC):
+    """Nexus's tables for sign-in: login requests, sessions and users."""
+
+    @abstractmethod
+    async def save_login_request(self, request: LoginRequest) -> None: ...
+
+    @abstractmethod
+    async def take_login_request(self, state_hash: str) -> LoginRequest | None:
+        """The request, deleted in the same step: a state is used once."""
+
+    @abstractmethod
+    async def purge_login_requests(self, now: datetime) -> None:
+        """Drop the expired ones."""
+
+    @abstractmethod
+    async def user_by_principal(self, principal_id: str) -> OidcUser | None: ...
+
+    @abstractmethod
+    async def email_taken(self, email: str, *, except_user_id: str | None = None) -> bool: ...
+
+    @abstractmethod
+    async def create_user(
+        self,
+        *,
+        user_id: str,
+        email: str,
+        name: str,
+        principal_id: str,
+        provider: str,
+        issuer: str,
+        subject: str,
+        now: datetime,
+    ) -> OidcUser:
+        """A user signed in through a provider: no password, no workspace.
+
+        When a concurrent sign-in of the same principal inserted the row first,
+        that row; ``UserConflictError`` when the email is held by another."""
+
+    @abstractmethod
+    async def update_user(
+        self, user_id: str, *, email: str | None, name: str | None, now: datetime
+    ) -> None:
+        """Refresh the profile a provider states; ``None`` keeps a field."""
+
+    @abstractmethod
+    async def legacy_user_by_email(self, email: str) -> OidcUser | None:
+        """The user of the old built-in login this address belongs to: a row no
+        identity provider signs in yet (no principal, no identity)."""
+
+    @abstractmethod
+    async def list_legacy_users(self) -> list[OidcUser]:
+        """Every user of the old built-in login no provider signs in yet, by email."""
+
+    @abstractmethod
+    async def link_user(
+        self,
+        user_id: str,
+        *,
+        principal_id: str,
+        provider: str,
+        issuer: str,
+        subject: str,
+        now: datetime,
+    ) -> OidcUser:
+        """Record the identity a legacy user signs in with, once: the row keeps
+        its id, email and data. When a concurrent sign-in linked it first, that
+        link if it is this one; ``UserConflictError`` if it is another."""
+
+    @abstractmethod
+    async def provider_for_domain(self, domain: str) -> str | None:
+        """The provider a verified organization domain routes to, if any."""
+
+    @abstractmethod
+    async def create_session(self, session: SessionRecord, *, user_agent: str | None) -> None: ...
+
+    @abstractmethod
+    async def get_session(self, session_id: str) -> SessionRecord | None:
+        """The session as stored now, never a copy an earlier read left behind."""
+
+    @abstractmethod
+    async def swap_refresh_at(
+        self, session_id: str, *, expected: datetime, value: datetime
+    ) -> bool:
+        """Set ``refresh_at`` to ``value`` when it is still ``expected`` and the
+        session is not revoked, atomically; whether this call did."""
+
+    @abstractmethod
+    async def update_session(
+        self,
+        session_id: str,
+        *,
+        group_ids: tuple[str, ...] | None = None,
+        refresh_token_enc: str | None = None,
+        id_token_enc: str | None = None,
+        refresh_at: datetime | None = None,
+        last_seen_at: datetime | None = None,
+    ) -> None: ...
+
+    @abstractmethod
+    async def revoke_session(self, session_id: str, now: datetime) -> None: ...
+
+    @abstractmethod
+    async def commit(self) -> None: ...
+
+
+class IdentityGateway(ABC):
+    """The engine's identity service, as Nexus (``api``) calls it."""
+
+    @abstractmethod
+    async def providers(self) -> tuple[list[ProviderInfo], str | None]:
+        """The configured providers and the default one."""
+
+    @abstractmethod
+    async def authorization_url(
+        self,
+        provider: str,
+        *,
+        redirect_uri: str,
+        state: str,
+        nonce: str,
+        code_challenge: str,
+        login_hint: str | None,
+    ) -> str: ...
+
+    @abstractmethod
+    async def exchange_code(
+        self,
+        provider: str,
+        *,
+        code: str,
+        code_verifier: str,
+        redirect_uri: str,
+        nonce: str,
+    ) -> SignIn: ...
+
+    @abstractmethod
+    async def refresh(self, provider: str, *, refresh_token: str, principal_id: str) -> SignIn: ...
+
+    @abstractmethod
+    async def revoke(self, provider: str, *, refresh_token: str) -> bool: ...
+
+    @abstractmethod
+    async def end_session_url(
+        self,
+        provider: str,
+        *,
+        id_token_hint: str | None,
+        post_logout_redirect_uri: str | None,
+    ) -> str | None: ...
+
+
+class UserSuspendedError(Exception):
+    """The IAM user of an account is suspended or deleted."""
+
+
+class PrincipalGateway(ABC):
+    """What Nexus asks IAM about the users it signs in."""
+
+    @abstractmethod
+    async def link(
+        self,
+        user_id: str,
+        *,
+        provider: str,
+        issuer: str,
+        subject: str,
+        email: str,
+        display_name: str | None,
+    ) -> str:
+        """Make the identity one more identity of the IAM user of the Nexus user
+        ``user_id`` (the user of the old built-in login: its roles, groups and
+        keys stay), and return that user's principal id. ``UserSuspendedError``
+        for a suspended one; ``UserConflictError`` when IAM refuses the link."""
+
+    @abstractmethod
+    async def is_active(self, principal_id: str) -> bool:
+        """Not suspended or deleted, checked on every request (cached briefly)."""

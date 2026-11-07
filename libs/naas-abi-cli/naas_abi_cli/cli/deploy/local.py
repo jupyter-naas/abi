@@ -16,10 +16,9 @@ from rich.prompt import Prompt
 import naas_abi_cli
 
 from ..admin_credentials import (
-    ensure_admin_credentials,
+    ensure_idp_client_secret,
+    ensure_nats_callout_seed,
     ensure_nats_passwords,
-    ensure_nats_secret,
-    generate_admin_password,
 )
 from ..private_dir import keep_out_of_git
 from ..utils.Copier import Copier
@@ -165,6 +164,24 @@ def _ensure_headscale_service(docker_compose_target_path: str) -> None:
 
     with open(docker_compose_target_path, "w", encoding="utf-8") as compose_file:
         compose_file.write(compose_with_service)
+
+
+def _discovery_project(project_path: str) -> str:
+    """The discovery project of the project's config (``nats.discovery.project``),
+    else its folder name as a subject-safe token."""
+    from naas_abi_cli.cli.dev_modules import configured_discovery_project
+
+    for name in ("config.local.yaml", "config.yaml"):
+        path = os.path.join(project_path, name)
+        if os.path.exists(path):
+            try:
+                configured = configured_discovery_project(path)
+            except Exception:  # noqa: BLE001 - a config the CLI cannot render here
+                configured = None
+            if configured:
+                return configured
+    folder = re.sub(r"[^A-Za-z0-9_-]+", "-", os.path.basename(project_path)).strip("-")
+    return (folder or "dev")[:64]
 
 
 def project_uses_nats(project_path: str) -> bool | None:
@@ -444,6 +461,14 @@ def _read_env_vars(env_path: str) -> dict[str, str]:
     return env_vars
 
 
+def _is_dead_admin_password(key: str) -> bool:
+    """The admin password an older CLI generated: nothing reads it any more
+    (Nexus has no login of its own), so it is not carried over."""
+    return key == "NEXUS_USER_ADMIN_PASSWORD" or (
+        key.startswith("NEXUS_USER_") and key.endswith("_PASSWORD")
+    )
+
+
 def _merge_local_env_template(
     source_env_path: str,
     destination_env_path: str,
@@ -474,7 +499,11 @@ def _merge_local_env_template(
 
         merged_lines.append(line)
 
-    additional_keys = [key for key in existing_env_vars if key not in template_keys]
+    additional_keys = [
+        key
+        for key in existing_env_vars
+        if key not in template_keys and not _is_dead_admin_password(key)
+    ]
     if additional_keys:
         if merged_lines and merged_lines[-1].strip() != "":
             merged_lines.append("")
@@ -597,13 +626,15 @@ def setup_local_deploy(
         "INCLUDE_HEADSCALE": include_headscale,
         "INCLUDE_CODING": include_coding,
         "NATS": nats,
+        # The discovery project the stack's modules register in (the built-in
+        # identity provider's service account is module/<project>/idp).
+        "DISCOVERY_PROJECT": _discovery_project(project_path),
         "CODING_WORKSPACE_DOCKER_NETWORK": coding_network,
         "POSTGRES_PASSWORD": str(uuid4()),
         "MINIO_ROOT_PASSWORD": str(uuid4()),
         "RABBITMQ_PASSWORD": str(uuid4()),
         "FUSEKI_ADMIN_PASSWORD": str(uuid4()),
         "ABI_API_KEY": str(uuid4()),
-        "NEXUS_USER_ADMIN_PASSWORD": generate_admin_password(),
     }
 
     existing_env_vars = _read_env_vars(local_env_target_path)
@@ -678,13 +709,13 @@ def setup_local_deploy(
     for key in RANDOM_ENV_KEYS:
         _ensure_env_var(local_env_target_path, key, str(uuid4()))
 
-    # Generated per project; a password an older CLI wrote is replaced.
-    ensure_admin_credentials(Path(local_env_target_path))
-    # The NATS broker's users (nats.conf), also when the nats profile is off.
+    # The NATS broker's users (nats.conf), also when the nats profile is off,
+    # and the account seed its auth callout signs admitted modules with.
     ensure_nats_passwords(Path(local_env_target_path))
-    if nats:
-        # Signs the service tokens of the engine and of the modules joining it.
-        ensure_nats_secret(Path(local_env_target_path))
+    ensure_nats_callout_seed(Path(local_env_target_path))
+    # The secret of the client ABI signs in to the built-in identity provider
+    # with: the engine's config and the `idp` service both read it from .env.
+    ensure_idp_client_secret(Path(local_env_target_path))
 
     persisted_public_api_host = (
         _get_env_var(local_env_target_path, "PUBLIC_API_HOST")

@@ -2,18 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
-from uuid import uuid4
 
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
-from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
-    dump_feature_overrides,
-    parse_feature_overrides,
-)
-from naas_abi.apps.nexus.apps.api.app.core.workspace_access import (
-    INHERITED_FROM_ORG,
-    accessible_workspace_ids,
-    resolve_workspace_role,
-)
 from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import (
     dump_catalog_seed,
     parse_catalog_seed,
@@ -24,25 +14,24 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     GraphEdgeModel,
     GraphNodeModel,
     InferenceServerModel,
-    OrganizationMemberModel,
     OrganizationModel,
     UserModel,
-    WorkspaceMemberModel,
     WorkspaceModel,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import SqlDefaultsStore
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
     InferenceServerCreateInput,
     InferenceServerRecord,
     InferenceServerUpdateInput,
     UserRecord,
     WorkspaceCreateInput,
-    WorkspaceMemberRecord,
     WorkspacePermissionPort,
     WorkspaceRecord,
     WorkspaceStatsRecord,
     WorkspaceUpdateInput,
+    new_workspace_id,
 )
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 AsyncSessionGetter = Callable[[], AsyncSession | None]
@@ -64,8 +53,24 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             raise RuntimeError("No database session bound in ServiceRegistry context")
         return db
 
-    async def get_workspace_role(self, user_id: str, workspace_id: str) -> str | None:
-        return await resolve_workspace_role(self.db, user_id, workspace_id)
+    def container_defaults(self) -> SqlDefaultsStore:
+        """Where the access policy and default groups of what this adapter creates
+        are recorded: this adapter's session, so in the same transaction."""
+        return SqlDefaultsStore(self.db)
+
+    async def list_all_workspaces(self) -> list[WorkspaceRecord]:
+        result = await self.db.execute(select(WorkspaceModel).order_by(WorkspaceModel.name))
+        rows = [self._to_workspace_record(row) for row in result.scalars().all()]
+        return await self._apply_org_logos(rows)
+
+    async def get_users_by_ids(self, user_ids: list[str]) -> dict[str, UserRecord]:
+        if not user_ids:
+            return {}
+        result = await self.db.execute(select(UserModel).where(UserModel.id.in_(user_ids)))
+        return {
+            user.id: UserRecord(id=user.id, email=user.email, name=user.name)
+            for user in result.scalars().all()
+        }
 
     @staticmethod
     def _to_workspace_record(model: WorkspaceModel) -> WorkspaceRecord:
@@ -85,7 +90,6 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             font_family=model.font_family,
             description=model.description,
             workspace_group=model.workspace_group,
-            feature_overrides=parse_feature_overrides(getattr(model, "feature_overrides", None)),
             catalog_seed=parse_catalog_seed(getattr(model, "catalog_seed", None)),
             platform_drive_enabled=bool(model.platform_drive_enabled),
             system_drive_enabled=bool(model.system_drive_enabled),
@@ -135,15 +139,6 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             hydrated.append(row)
         return hydrated
 
-    async def list_workspaces_for_user(self, user_id: str) -> list[WorkspaceRecord]:
-        result = await self.db.execute(
-            select(WorkspaceModel)
-            .where(WorkspaceModel.id.in_(accessible_workspace_ids(user_id)))
-            .order_by(WorkspaceModel.name)
-        )
-        rows = [self._to_workspace_record(row) for row in result.scalars().all()]
-        return await self._apply_org_logos(rows)
-
     async def get_workspace_by_id(self, workspace_id: str) -> WorkspaceRecord | None:
         result = await self.db.execute(
             select(WorkspaceModel).where(WorkspaceModel.id == workspace_id)
@@ -168,7 +163,7 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
 
     async def create_workspace(self, workspace: WorkspaceCreateInput) -> WorkspaceRecord:
         now = datetime.now(UTC).replace(tzinfo=None)
-        workspace_id = f"ws-{uuid4().hex[:12]}"
+        workspace_id = workspace.id or new_workspace_id()
         workspace_model = WorkspaceModel(
             id=workspace_id,
             name=workspace.name,
@@ -190,67 +185,11 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             updated_at=now,
         )
         self.db.add(workspace_model)
-        self.db.add(
-            WorkspaceMemberModel(
-                id=str(uuid4()),
-                workspace_id=workspace_id,
-                user_id=workspace.owner_id,
-                role="owner",
-                created_at=now,
-            )
-        )
         await self.db.flush()
         return self._to_workspace_record(workspace_model)
 
-    async def set_workspace_feature_overrides(
-        self, workspace_id: str, overrides: dict[str, bool] | None
-    ) -> WorkspaceRecord | None:
-        result = await self.db.execute(
-            select(WorkspaceModel).where(WorkspaceModel.id == workspace_id)
-        )
-        workspace = result.scalar_one_or_none()
-        if workspace is None:
-            return None
-        workspace.feature_overrides = dump_feature_overrides(overrides)
-        workspace.updated_at = datetime.now(UTC).replace(tzinfo=None)
-        await self.db.flush()
-        return self._to_workspace_record(workspace)
-
-    async def _transfer_workspace_owner(
-        self, workspace: WorkspaceModel, new_owner_id: str
-    ) -> None:
-        old_owner_id = workspace.owner_id
-        workspace.owner_id = new_owner_id
-        now = datetime.now(UTC).replace(tzinfo=None)
-        result = await self.db.execute(
-            select(WorkspaceMemberModel).where(
-                WorkspaceMemberModel.workspace_id == workspace.id,
-                WorkspaceMemberModel.user_id == new_owner_id,
-            )
-        )
-        new_row = result.scalar_one_or_none()
-        if new_row is None:
-            self.db.add(
-                WorkspaceMemberModel(
-                    id=str(uuid4()),
-                    workspace_id=workspace.id,
-                    user_id=new_owner_id,
-                    role="owner",
-                    created_at=now,
-                )
-            )
-        else:
-            new_row.role = "owner"
-        if old_owner_id and old_owner_id != new_owner_id:
-            old_result = await self.db.execute(
-                select(WorkspaceMemberModel).where(
-                    WorkspaceMemberModel.workspace_id == workspace.id,
-                    WorkspaceMemberModel.user_id == old_owner_id,
-                )
-            )
-            old_row = old_result.scalar_one_or_none()
-            if old_row is not None and old_row.role == "owner":
-                old_row.role = "admin"
+    async def rollback(self) -> None:
+        await self.db.rollback()
 
     async def delete_workspace(self, workspace_id: str) -> bool:
         result = await self.db.execute(
@@ -294,7 +233,8 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             # A blank group clears it (the workspace lists under "Others").
             workspace.workspace_group = updates.workspace_group.strip() or None
         if updates.owner_id is not None and updates.owner_id != workspace.owner_id:
-            await self._transfer_workspace_owner(workspace, updates.owner_id)
+            # The owner's role is IAM's: the service moves it (``update_workspace``).
+            workspace.owner_id = updates.owner_id
         workspace.updated_at = datetime.now(UTC).replace(tzinfo=None)
         await self.db.flush()
         return self._to_workspace_record(workspace)
@@ -342,83 +282,6 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             agents=int(agents),
         )
 
-    async def list_workspace_members(self, workspace_id: str) -> list[WorkspaceMemberRecord]:
-        query = text(
-            """
-            SELECT
-                wm.id, wm.workspace_id, wm.user_id, wm.role, wm.created_at,
-                u.email, u.name
-            FROM workspace_members wm
-            JOIN users u ON wm.user_id = u.id
-            WHERE wm.workspace_id = :workspace_id
-            ORDER BY wm.created_at
-            """
-        )
-        result = await self.db.execute(query, {"workspace_id": workspace_id})
-        members = [
-            WorkspaceMemberRecord(
-                id=row.id,
-                workspace_id=row.workspace_id,
-                user_id=row.user_id,
-                role=row.role,
-                email=row.email,
-                name=row.name,
-                created_at=row.created_at,
-            )
-            for row in result.fetchall()
-        ]
-        return members + await self._inherited_members(workspace_id, members)
-
-    async def _inherited_members(
-        self, workspace_id: str, explicit: list[WorkspaceMemberRecord]
-    ) -> list[WorkspaceMemberRecord]:
-        """Org owners/admins without a row, who reach the workspace through the org."""
-        org_id = (
-            await self.db.execute(
-                select(WorkspaceModel.organization_id).where(WorkspaceModel.id == workspace_id)
-            )
-        ).scalar_one_or_none()
-        if not org_id:
-            return []
-        org_roles: dict[str, str | None] = {}
-        rows = await self.db.execute(
-            select(OrganizationMemberModel.user_id, OrganizationMemberModel.role).where(
-                OrganizationMemberModel.organization_id == org_id
-            )
-        )
-        for user_id, role in rows.all():
-            org_roles[user_id] = role
-        owner_id = (
-            await self.db.execute(
-                select(OrganizationModel.owner_id).where(OrganizationModel.id == org_id)
-            )
-        ).scalar_one_or_none()
-        if owner_id:
-            org_roles[owner_id] = "owner"
-
-        explicit_ids = {member.user_id for member in explicit}
-        inherited = {
-            user_id: INHERITED_FROM_ORG[role]
-            for user_id, role in org_roles.items()
-            if role in INHERITED_FROM_ORG and user_id not in explicit_ids
-        }
-        if not inherited:
-            return []
-        users = await self.db.execute(select(UserModel).where(UserModel.id.in_(inherited)))
-        return [
-            WorkspaceMemberRecord(
-                id=f"org:{user.id}",
-                workspace_id=workspace_id,
-                user_id=user.id,
-                role=inherited[user.id],
-                email=user.email,
-                name=user.name,
-                created_at=None,
-                source="organization",
-            )
-            for user in sorted(users.scalars().all(), key=lambda u: u.email)
-        ]
-
     async def get_user_by_email(self, email: str) -> UserRecord | None:
         normalized = email.lower().strip()
         result = await self.db.execute(select(UserModel).where(UserModel.email == normalized))
@@ -426,64 +289,6 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
         if user is None:
             return None
         return UserRecord(id=user.id, email=user.email)
-
-    async def is_workspace_member(self, workspace_id: str, user_id: str) -> bool:
-        result = await self.db.execute(
-            select(WorkspaceMemberModel.id).where(
-                (WorkspaceMemberModel.workspace_id == workspace_id)
-                & (WorkspaceMemberModel.user_id == user_id)
-            )
-        )
-        return result.scalar_one_or_none() is not None
-
-    async def add_workspace_member(
-        self, workspace_id: str, user_id: str, role: str
-    ) -> WorkspaceMemberRecord:
-        member = WorkspaceMemberModel(
-            id=str(uuid4()),
-            workspace_id=workspace_id,
-            user_id=user_id,
-            role=role,
-        )
-        self.db.add(member)
-        await self.db.commit()
-        return WorkspaceMemberRecord(
-            id=member.id,
-            workspace_id=member.workspace_id,
-            user_id=member.user_id,
-            role=member.role,
-            created_at=member.created_at,
-        )
-
-    async def remove_workspace_member(self, workspace_id: str, user_id: str) -> bool:
-        result = await self.db.execute(
-            select(WorkspaceMemberModel).where(
-                (WorkspaceMemberModel.workspace_id == workspace_id)
-                & (WorkspaceMemberModel.user_id == user_id)
-            )
-        )
-        member = result.scalar_one_or_none()
-        if member is None:
-            return False
-        await self.db.delete(member)
-        await self.db.commit()
-        return True
-
-    async def update_workspace_member_role(
-        self, workspace_id: str, user_id: str, role: str
-    ) -> bool:
-        result = await self.db.execute(
-            select(WorkspaceMemberModel).where(
-                (WorkspaceMemberModel.workspace_id == workspace_id)
-                & (WorkspaceMemberModel.user_id == user_id)
-            )
-        )
-        member = result.scalar_one_or_none()
-        if member is None:
-            return False
-        member.role = role
-        await self.db.commit()
-        return True
 
     async def list_inference_servers(self, workspace_id: str) -> list[InferenceServerRecord]:
         result = await self.db.execute(

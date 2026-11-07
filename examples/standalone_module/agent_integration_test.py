@@ -9,11 +9,8 @@ from langchain_core.embeddings import DeterministicFakeEmbedding
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
-from naas_abi_core.engine.nats_auth import (
-    issue_service_token,
-    module_key,
-)
 from naas_abi_core.engine.nats_rpc_integration_test import SECRET, broker  # noqa: F401
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.agent.Agent import Agent
 from naas_abi_core.services.agent.IntentAgent import IntentAgent
 from naas_abi_core.services.agent.RemoteAgentAdapter import RemoteAgentAdapter
@@ -21,6 +18,7 @@ from naas_abi_core.services.discovery.discovery_factory import start_discovery
 from naas_abi_core.services.document.adapters.secondary.DocumentSecondaryAdapterNATSClient_test import (
     document_host,  # noqa: F401
 )
+from naas_abi_sdk.credentials import host_audience
 
 pytestmark = [
     pytest.mark.integration,
@@ -28,13 +26,11 @@ pytestmark = [
 ]
 
 
+def _host_token(name):
+    """What a module's call to another module's host carries: its token, addressed
+    to that host."""
+    return lambda recipient: TEST_TOKENS.token(name, audience=host_audience(recipient))
 
-def _module_token(module_id: str):
-    """A module registers with a token for its own module id, signed with its key;
-    its calls to other modules carry tokens bound to them."""
-    from naas_abi_sdk.service_token import ModuleToken
-
-    return ModuleToken(module_id, module_key(SECRET, module_id))
 
 def test_core_agents_and_async_parent_tool_over_network(document_host):  # noqa: F811
     from naas_abi_proto.agent.v1 import agent_pb2 as pb
@@ -52,6 +48,7 @@ def test_core_agents_and_async_parent_tool_over_network(document_host):  # noqa:
         nc = await nats.connect(document_host)
         registry = await start_discovery(nc, SECRET)
         stop = asyncio.Event()
+        token = TEST_TOKENS.token("agent-test")
 
         class Provider(BaseModule):
             module_id = "test.agents"
@@ -139,23 +136,23 @@ def test_core_agents_and_async_parent_tool_over_network(document_host):  # noqa:
                 assert (await builder.compile().ainvoke({"result": ""}))[
                     "result"
                 ] == "network answer"
-                # Host validates the incoming token through the engine, not just
-                # discovery lookup: a valid token not bound to it is refused.
+                # Host validates the incoming token through the engine, not just discovery lookup.
                 target = (await module.ready_instances())[0]
-
-                class Unbound:
-                    def __call__(self):
-                        return issue_service_token("test", SECRET)
-
-                    def for_audience(self, audience):
-                        return issue_service_token("test", SECRET)
-
-                bad = Transport(document_host, Unbound(), timeout=2)
+                bad = Transport(
+                    document_host,
+                    "invalid",
+                    timeout=2,
+                    host_token=lambda recipient: "invalid",
+                )
                 try:
                     with pytest.raises(RPCError, match="UNAUTHENTICATED"):
                         await bad.call(
                             agent_subject(
-                                "default", target.instance_id, "Simple", "submit"
+                                "default",
+                                target.service_account,
+                                target.instance_id,
+                                "Simple",
+                                "submit",
                             ),
                             pb.SubmitRequest(
                                 invocation_id="invalid",
@@ -165,7 +162,6 @@ def test_core_agents_and_async_parent_tool_over_network(document_host):  # noqa:
                                 deadline_seconds=5,
                             ),
                             pb.SubmitResponse,
-                            instance_id=target.instance_id,
                         )
                 finally:
                     await bad.close()
@@ -174,7 +170,8 @@ def test_core_agents_and_async_parent_tool_over_network(document_host):  # noqa:
             run_module(
                 Provider,
                 url=document_host,
-                token=_module_token(Provider.module_id),
+                token=token,
+                host_token=_host_token("agent-test"),
                 discovery=DiscoveryConfiguration(),
             )
         )
@@ -183,7 +180,8 @@ def test_core_agents_and_async_parent_tool_over_network(document_host):  # noqa:
                 run_module(
                     Consumer,
                     url=document_host,
-                    token=_module_token(Consumer.module_id),
+                    token=token,
+                    host_token=_host_token("agent-test"),
                     discovery=DiscoveryConfiguration(refresh_seconds=0.05),
                 ),
                 30,
@@ -252,6 +250,7 @@ def test_a_tool_that_opts_out_of_chat_sources_streams_over_the_network(document_
         nc = await nats.connect(document_host)
         registry = await start_discovery(nc, SECRET)
         stop = asyncio.Event()
+        token = TEST_TOKENS.token("agent-test")
 
         class Provider(BaseModule):
             module_id = "test.sources"
@@ -264,7 +263,11 @@ def test_a_tool_that_opts_out_of_chat_sources_streams_over_the_network(document_
                         AIMessage(
                             content="",
                             tool_calls=[
-                                {"name": "lookup", "args": {"term": "a"}, "id": f"a{n}"},
+                                {
+                                    "name": "lookup",
+                                    "args": {"term": "a"},
+                                    "id": f"a{n}",
+                                },
                                 {
                                     "name": "internal_lookup",
                                     "args": {"term": "b"},
@@ -313,7 +316,8 @@ def test_a_tool_that_opts_out_of_chat_sources_streams_over_the_network(document_
             run_module(
                 Provider,
                 url=document_host,
-                token=_module_token(Provider.module_id),
+                token=token,
+                host_token=_host_token("agent-test"),
                 discovery=DiscoveryConfiguration(),
             )
         )
@@ -322,7 +326,8 @@ def test_a_tool_that_opts_out_of_chat_sources_streams_over_the_network(document_
                 run_module(
                     Consumer,
                     url=document_host,
-                    token=_module_token(Consumer.module_id),
+                    token=token,
+                    host_token=_host_token("agent-test"),
                     discovery=DiscoveryConfiguration(refresh_seconds=0.05),
                 ),
                 40,
@@ -352,9 +357,8 @@ def test_a_run_stays_reachable_after_its_owner_loses_the_lease(document_host):  
         # A 2 s lease: the provider renews every half second.
         registry = await start_discovery(nc, SECRET, lease_seconds=2)
         stop = asyncio.Event()
-        admin_transport = Transport(
-            document_host, issue_service_token("api", SECRET), timeout=2
-        )
+        token = TEST_TOKENS.token("agent-test")
+        admin_transport = Transport(document_host, TEST_TOKENS.token("api"), timeout=2)
         admin = DiscoveryClient(admin_transport)
 
         class Provider(BaseModule):
@@ -425,7 +429,8 @@ def test_a_run_stays_reachable_after_its_owner_loses_the_lease(document_host):  
             run_module(
                 Provider,
                 url=document_host,
-                token=_module_token(Provider.module_id),
+                token=token,
+                host_token=_host_token("agent-test"),
                 discovery=DiscoveryConfiguration(),
             )
         )
@@ -434,7 +439,8 @@ def test_a_run_stays_reachable_after_its_owner_loses_the_lease(document_host):  
                 run_module(
                     Consumer,
                     url=document_host,
-                    token=_module_token(Consumer.module_id),
+                    token=token,
+                    host_token=_host_token("agent-test"),
                     discovery=DiscoveryConfiguration(refresh_seconds=0.05),
                 ),
                 30,

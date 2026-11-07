@@ -97,16 +97,20 @@ INSERT DATA {{
 
 def _update(sparql: str) -> None:
     resp = requests.post(
-        f"{_URL}/update", data=sparql.encode("utf-8"),
-        headers={"Content-Type": "application/sparql-update"}, timeout=15,
+        f"{_URL}/update",
+        data=sparql.encode("utf-8"),
+        headers={"Content-Type": "application/sparql-update"},
+        timeout=15,
     )
     resp.raise_for_status()
 
 
 def _select(sparql: str) -> list[dict]:
     resp = requests.post(
-        f"{_URL}/query", data={"query": sparql},
-        headers={"Accept": "application/sparql-results+json"}, timeout=15,
+        f"{_URL}/query",
+        data={"query": sparql},
+        headers={"Accept": "application/sparql-results+json"},
+        timeout=15,
     )
     resp.raise_for_status()
     return resp.json()["results"]["bindings"]
@@ -136,15 +140,22 @@ def test_example_a_runs_and_returns_correct_rows() -> None:
         columns=(
             Column("text", "string", PropertySource(DOC + "extracted_text")),
             Column(
-                "paperPath", "string",
-                PropertySource(DOC + "path", path=(Hop(DOC + "extracted_from_chunk", "out"), Hop(DOC + "chunk_of", "out"))),
+                "paperPath",
+                "string",
+                PropertySource(
+                    DOC + "path",
+                    path=(Hop(DOC + "extracted_from_chunk", "out"), Hop(DOC + "chunk_of", "out")),
+                ),
             ),
         ),
-        filters=FilterGroup("and", (
-            FilterCondition(FilterColumnTarget("text"), "contains", "solitude"),
-            FilterCondition(FilterColumnTarget("text"), "contains", "sport"),
-            FilterCondition(FilterColumnTarget("paperPath"), "contains", "pubmed"),
-        )),
+        filters=FilterGroup(
+            "and",
+            (
+                FilterCondition(FilterColumnTarget("text"), "contains", "solitude"),
+                FilterCondition(FilterColumnTarget("text"), "contains", "sport"),
+                FilterCondition(FilterColumnTarget("paperPath"), "contains", "pubmed"),
+            ),
+        ),
     )
     compiled = compile_list(spec, _ctx())
     rows = _select(compiled.sparql)
@@ -170,8 +181,12 @@ def test_cross_graph_traversal_resolves_via_from_union() -> None:
         columns=(
             Column("text", "string", PropertySource(DOC + "extracted_text")),
             Column(
-                "paperPath", "string",
-                PropertySource(DOC + "path", path=(Hop(DOC + "extracted_from_chunk", "out"), Hop(DOC + "chunk_of", "out"))),
+                "paperPath",
+                "string",
+                PropertySource(
+                    DOC + "path",
+                    path=(Hop(DOC + "extracted_from_chunk", "out"), Hop(DOC + "chunk_of", "out")),
+                ),
             ),
         ),
     )
@@ -185,7 +200,11 @@ def test_cross_graph_traversal_resolves_via_from_union() -> None:
 def test_example_c_negation_runs_with_vacuous_case() -> None:
     branch = PropertySource(
         DOC + "model_name",
-        path=(Hop(DOC + "has_chunks", "out"), Hop(DOC + "has_extracted_item", "out"), Hop(DOC + "extracted_by", "out")),
+        path=(
+            Hop(DOC + "has_chunks", "out"),
+            Hop(DOC + "has_extracted_item", "out"),
+            Hop(DOC + "extracted_by", "out"),
+        ),
     )
     spec = ListSpec(
         graph_uris=(TG,),
@@ -208,10 +227,19 @@ def test_example_1_multihop_measures_runs() -> None:
         root=ClassAnchor((DOC + "User",)),
         columns=(
             Column("name", "string", PropertySource(LBL)),
-            Column("chats", "number", AggregateSource("count", path=(Hop(DOC + "hasChat", "out"),), of_kind="node")),
             Column(
-                "messages", "number",
-                AggregateSource("count", path=(Hop(DOC + "hasChat", "out"), Hop(DOC + "hasMessage", "out")), of_kind="node"),
+                "chats",
+                "number",
+                AggregateSource("count", path=(Hop(DOC + "hasChat", "out"),), of_kind="node"),
+            ),
+            Column(
+                "messages",
+                "number",
+                AggregateSource(
+                    "count",
+                    path=(Hop(DOC + "hasChat", "out"), Hop(DOC + "hasMessage", "out")),
+                    of_kind="node",
+                ),
             ),
         ),
         filters=FilterCondition(FilterColumnTarget("messages"), "gt", 0),
@@ -221,7 +249,10 @@ def test_example_1_multihop_measures_runs() -> None:
     rows = _select(compiled.sparql)
     # u3 (Carol, 0 messages) is filtered out; u1 then u2 by messages desc.
     assert [r["root"]["value"] for r in rows] == [DOC + "u1", DOC + "u2"]
-    by_root = {r["root"]["value"]: (int(r["col_chats"]["value"]), int(r["col_messages"]["value"])) for r in rows}
+    by_root = {
+        r["root"]["value"]: (int(r["col_chats"]["value"]), int(r["col_messages"]["value"]))
+        for r in rows
+    }
     assert by_root[DOC + "u1"] == (2, 3)  # 2 chats, 3 messages
     assert by_root[DOC + "u2"] == (1, 1)
     total = int(_select(compiled.count_sparql)[0]["total"]["value"])
@@ -234,11 +265,17 @@ def test_example_b_pivot_runs() -> None:
         fact=ClassAnchor((DOC + "ExtractedItem",)),
         group_by=(
             Dimension(
-                "paper", "property",
+                "paper",
+                "property",
                 path=(Hop(DOC + "extracted_from_chunk", "out"), Hop(DOC + "chunk_of", "out")),
                 show_predicate=DOC + "path",
             ),
-            Dimension("pipeline", "property", path=(Hop(DOC + "extracted_by", "out"),), show_predicate=DOC + "pipeline_name"),
+            Dimension(
+                "pipeline",
+                "property",
+                path=(Hop(DOC + "extracted_by", "out"),),
+                show_predicate=DOC + "pipeline_name",
+            ),
         ),
         measures=(Measure("items", "count", of_kind="node"),),
         sort=(SortKey("paper", "asc"),),
@@ -250,9 +287,9 @@ def test_example_b_pivot_runs() -> None:
         for r in rows
     }
     assert tuples == {
-        ("/data/pubmed/PMC1.pdf", "causes", 1),   # item1
+        ("/data/pubmed/PMC1.pdf", "causes", 1),  # item1
         ("/data/pubmed/PMC1.pdf", "effects", 2),  # item2 + item4
-        ("/data/arxiv/2.pdf", "effects", 1),      # item3
+        ("/data/arxiv/2.pdf", "effects", 1),  # item3
     }
     # COUNT(*) over the group tuples = 3 distinct (paper, pipeline) pairs.
     total = int(_select(compiled.count_sparql)[0]["total"]["value"])
@@ -272,10 +309,14 @@ def test_keyset_pagination_walks_pages() -> None:
     assert [r["root"]["value"] for r in rows1] == [DOC + "u1", DOC + "u2"]  # Alice, Bob
     # Build the cursor from the last row and fetch the next page.
     last = rows1[-1]
-    p2 = compile_list(spec, ctx, Page(limit=2, after=(last["col_name"]["value"], last["root"]["value"])))
+    p2 = compile_list(
+        spec, ctx, Page(limit=2, after=(last["col_name"]["value"], last["root"]["value"]))
+    )
     rows2 = _select(p2.sparql)
     assert [r["root"]["value"] for r in rows2] == [DOC + "u3"]  # Carol
-    assert not ({r["root"]["value"] for r in rows1} & {r["root"]["value"] for r in rows2})  # no overlap
+    assert not (
+        {r["root"]["value"] for r in rows1} & {r["root"]["value"] for r in rows2}
+    )  # no overlap
 
 
 def test_collapse_count_runs() -> None:
@@ -284,7 +325,11 @@ def test_collapse_count_runs() -> None:
         root=ClassAnchor((DOC + "User",)),
         columns=(
             Column("name", "string", PropertySource(LBL)),
-            Column("chat_count", "number", NodeSource(path=(Hop(DOC + "hasChat", "out"),), show="uri", collapse="count")),
+            Column(
+                "chat_count",
+                "number",
+                NodeSource(path=(Hop(DOC + "hasChat", "out"),), show="uri", collapse="count"),
+            ),
         ),
     )
     rows = _select(compile_list(spec, CompileContext()).sparql)
@@ -296,13 +341,22 @@ def test_aggregate_having_filter_runs() -> None:
     spec = AggregateSpec(
         graph_uris=(TG,),
         fact=ClassAnchor((DOC + "ExtractedItem",)),
-        group_by=(Dimension("pipeline", "property", path=(Hop(DOC + "extracted_by", "out"),), show_predicate=DOC + "pipeline_name"),),
+        group_by=(
+            Dimension(
+                "pipeline",
+                "property",
+                path=(Hop(DOC + "extracted_by", "out"),),
+                show_predicate=DOC + "pipeline_name",
+            ),
+        ),
         measures=(Measure("items", "count", of_kind="node"),),
         filters=FilterCondition(FilterColumnTarget("items"), "gt", 1),
     )
     rows = _select(compile_query(spec, CompileContext()).sparql)
     # causes → 1 item (item1), effects → 3 (item2,3,4). HAVING items > 1 keeps only effects.
-    assert {(r["dim_pipeline"]["value"], int(r["m_items"]["value"])) for r in rows} == {("effects", 3)}
+    assert {(r["dim_pipeline"]["value"], int(r["m_items"]["value"])) for r in rows} == {
+        ("effects", 3)
+    }
 
 
 def test_graph_query_service_against_live_store() -> None:
@@ -316,7 +370,10 @@ def test_graph_query_service_against_live_store() -> None:
     triple_store = TripleStoreFactory.TripleStoreServiceOxigraph(oxigraph_url=_URL)
     store = GraphQueryTripleStoreAdapter(triple_store, fts_backend="none")
     service = GraphQueryService(
-        store, owned_graphs=lambda _ws: {TG}, system_graphs=set(), now=lambda: "2026-06-16T00:00:00+00:00"
+        store,
+        owned_graphs=lambda _ws: {TG},
+        system_graphs=set(),
+        now=lambda: "2026-06-16T00:00:00+00:00",
     )
 
     spec = ListSpec(
@@ -325,15 +382,22 @@ def test_graph_query_service_against_live_store() -> None:
         columns=(
             Column("text", "string", PropertySource(DOC + "extracted_text")),
             Column(
-                "paperPath", "string",
-                PropertySource(DOC + "path", path=(Hop(DOC + "extracted_from_chunk", "out"), Hop(DOC + "chunk_of", "out"))),
+                "paperPath",
+                "string",
+                PropertySource(
+                    DOC + "path",
+                    path=(Hop(DOC + "extracted_from_chunk", "out"), Hop(DOC + "chunk_of", "out")),
+                ),
             ),
         ),
-        filters=FilterGroup("and", (
-            FilterCondition(FilterColumnTarget("text"), "contains", "solitude"),
-            FilterCondition(FilterColumnTarget("text"), "contains", "sport"),
-            FilterCondition(FilterColumnTarget("paperPath"), "contains", "pubmed"),
-        )),
+        filters=FilterGroup(
+            "and",
+            (
+                FilterCondition(FilterColumnTarget("text"), "contains", "solitude"),
+                FilterCondition(FilterColumnTarget("text"), "contains", "sport"),
+                FilterCondition(FilterColumnTarget("paperPath"), "contains", "pubmed"),
+            ),
+        ),
     )
     result = asyncio.run(service.run_query(spec=spec, workspace_id="ws1", limit=10))
     assert result.mode == "list"
@@ -354,7 +418,9 @@ def test_graph_query_service_rejects_unowned_graph() -> None:
 
     triple_store = TripleStoreFactory.TripleStoreServiceOxigraph(oxigraph_url=_URL)
     store = GraphQueryTripleStoreAdapter(triple_store)
-    service = GraphQueryService(store, owned_graphs=lambda _ws: {"http://other/graph"}, system_graphs=set())
+    service = GraphQueryService(
+        store, owned_graphs=lambda _ws: {"http://other/graph"}, system_graphs=set()
+    )
     spec = ListSpec(
         graph_uris=(TG,),
         root=ClassAnchor((DOC + "ExtractedItem",)),
@@ -374,8 +440,13 @@ def test_column_discovery_against_live_store() -> None:
     )
     from naas_abi_core.services.triple_store.TripleStoreFactory import TripleStoreFactory
 
-    store = GraphQueryTripleStoreAdapter(TripleStoreFactory.TripleStoreServiceOxigraph(oxigraph_url=_URL))
-    cols = {c.id: c for c in discover_columns(store, graph_uris=[TG], class_uris=[DOC + "ExtractedItem"])}
+    store = GraphQueryTripleStoreAdapter(
+        TripleStoreFactory.TripleStoreServiceOxigraph(oxigraph_url=_URL)
+    )
+    cols = {
+        c.id: c
+        for c in discover_columns(store, graph_uris=[TG], class_uris=[DOC + "ExtractedItem"])
+    }
 
     assert cols["extracted_text"].kind == "property"
     assert cols["extracted_text"].datatype == "string"

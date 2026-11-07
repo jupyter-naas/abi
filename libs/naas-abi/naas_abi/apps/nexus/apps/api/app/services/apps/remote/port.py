@@ -1,6 +1,6 @@
 """Apps served by remote modules over NATS (abi.app.v1).
 
-docs/adr/20261012_remote-module-apps.md: Nexus lists them next to the apps of
+Nexus lists them next to the apps of
 loaded modules and forwards their requests under
 ``/app-html/remote/<module_id>/<app>/``. The module answers; Nexus is the only
 HTTP entry point.
@@ -20,6 +20,11 @@ INLINE_BYTES = 256 * 1024
 DEFAULT_MAX_UPLOAD_BYTES = 1024 * 1024 * 1024
 # Uploads streaming at once to one module, per API worker.
 MAX_UPLOADS_PER_MODULE = 16
+# Modules the platform runs for itself: their apps are not in the catalog and no
+# generic route opens them. The built-in identity provider is reached at /idp,
+# by the route that knows which service account it runs as
+# (services/idp), and its admin app by services only, over NATS.
+INTERNAL_MODULES = frozenset({"idp"})
 # Responses streaming at once from one module, per API worker (downloads,
 # server-sent events): one module's streams cannot take a worker for all.
 MAX_STREAMS_PER_MODULE = 256
@@ -83,6 +88,8 @@ class AppRequest:
     user_id: str = ""
     # The workspace the user opened the app from (its grant names it).
     workspace_id: str = ""
+    # The workspace's container name: the container the app's calls are made in.
+    container: str = ""
     # A large body, read as the module pulls it (after ``body``).
     body_stream: AsyncIterator[bytes] | None = None
     max_body_bytes: int = 0
@@ -105,8 +112,19 @@ class RemoteAppDirectory(Protocol):
         """Apps of READY module instances, one entry per module and app."""
         ...
 
-    async def forward(self, module_id: str, app: str, request: AppRequest) -> AppResponse:
-        """The module's answer; RemoteAppUnavailable when there is none."""
+    async def forward(
+        self,
+        module_id: str,
+        app: str,
+        request: AppRequest,
+        *,
+        service_account: str | None = None,
+    ) -> AppResponse:
+        """The module's answer; RemoteAppUnavailable when there is none.
+
+        ``service_account``: only the instance running as that account (its
+        subject token) answers. A module in ``INTERNAL_MODULES`` is forwarded
+        to only with one."""
         ...
 
     async def upload_limit(self, module_id: str, app: str) -> int:

@@ -9,13 +9,11 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
-from jose import jwt
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote import http_routes as http
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.adapters.in_memory import (
     InMemoryRemoteAppDirectory,
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import (
-    grant_key,
     mint_remote_app_grant,
     read_remote_app_grant,
     redact_grant_path,
@@ -27,57 +25,56 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import (
     RemoteApp,
     RemoteAppStreamFailed,
 )
+from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
 from naas_abi_core.apps.api.abi_api_key_auth import APP_HTML_TOKEN_COOKIE
+from naas_abi_core.engine.call_context import as_service_account
+from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import IAMStoreMemory
+from naas_abi_core.services.iam.IAMService import IAMService
 
 CONSOLE = RemoteApp("acme.research", "console")
-SECRET = "s3cret-for-tests"
+
+# The engine's IAM, where grants live: one for this module's tests.
+IAM = IAMService(IAMStoreMemory())
+IAM.bootstrap()
 
 
 @pytest.fixture(autouse=True)
-def secret(monkeypatch):
-    monkeypatch.setattr(http, "current_secret_key", lambda: SECRET)
-
-
-@pytest.fixture(autouse=True)
-def logged_out(monkeypatch) -> dict[str, datetime]:
-    """When each user last logged out (revocation.py reads it from the database)."""
-    from naas_abi.apps.nexus.apps.api.app.services import refresh_token
-
-    at: dict[str, datetime] = {}
-
-    async def grant_revoked(user_id: str, issued_at: datetime) -> bool:
-        return user_id in at and at[user_id] >= issued_at
-
-    async def is_access_token_revoked(jti: str) -> bool:
-        return jti in REVOKED_JTIS
-
-    monkeypatch.setattr(http.revocation, "grant_revoked", grant_revoked)
-    monkeypatch.setattr(refresh_token, "is_access_token_revoked", is_access_token_revoked)
-    REVOKED_JTIS.clear()
-    return at
-
-
-REVOKED_JTIS: set[str] = set()
+def engine_iam():
+    previous = credentials.configure_iam(lambda: IAM)
+    yield IAM
+    credentials.configure_iam(previous)
 
 
 @pytest.fixture(autouse=True)
 def workspaces(monkeypatch) -> list[tuple[str, str, str | None]]:
     """The workspace a grant names (access.py checks it in the database):
-    the one asked for, else "ws-first"; "ws-off" enables no app."""
+    the one asked for, else "ws-first"; in "ws-off" IAM lets the user open no app."""
     asked: list[tuple[str, str, str | None]] = []
 
     async def remote_app_workspace(user_id: str, app_id: str, workspace_id: str | None) -> str:
         asked.append((user_id, app_id, workspace_id))
         if workspace_id == "ws-off":
-            raise HTTPException(status_code=403, detail="This app is not enabled in this workspace")
+            raise HTTPException(status_code=403, detail="You may not use this app here")
         return workspace_id or "ws-first"
 
     monkeypatch.setattr(http.access, "remote_app_workspace", remote_app_workspace)
     return asked
 
 
-def _grant(module_id: str = "acme.research", app: str = "console", user_id: str = "u-42") -> str:
-    return mint_remote_app_grant(secret=SECRET, user_id=user_id, module_id=module_id, app=app)
+def _grant(
+    module_id: str = "acme.research",
+    app: str = "console",
+    user_id: str = "u-42",
+    workspace_id: str = "",
+) -> str:
+    # Also called while the module loads (parameters), before any fixture ran.
+    previous = credentials.configure_iam(lambda: IAM)
+    try:
+        return mint_remote_app_grant(
+            user_id=user_id, module_id=module_id, app=app, workspace_id=workspace_id
+        )
+    finally:
+        credentials.configure_iam(previous)
 
 
 GRANT = _grant()
@@ -164,10 +161,14 @@ def test_the_modules_own_policy_does_not_replace_the_sandbox(monkeypatch):
 
 
 def test_the_grant_opens_its_own_app_only(forwarded):
-    from naas_abi.apps.nexus.apps.api.app.services.auth import service as auth_service
+    from jose import jwt
 
     client = _client()
-    session, _ = auth_service.create_access_token({"sub": "u-42"})
+    session = jwt.encode(
+        {"sub": "u-42", "aud": "abi:session", "jti": "j"},
+        "the-key-nexus-used-to-sign-with",
+        algorithm="HS256",
+    )
 
     assert client.get("/app-remote/forged/acme.research/console/").status_code == 401
     assert client.get(f"/app-remote/{session}/acme.research/console/").status_code == 401
@@ -178,25 +179,35 @@ def test_the_grant_opens_its_own_app_only(forwarded):
 
 
 def test_a_grant_is_never_a_session_token(monkeypatch):
-    from naas_abi.apps.nexus.apps.api.app.services.auth import service as auth_service
+    import asyncio
 
-    monkeypatch.setattr(auth_service.settings, "secret_key", SECRET)
-    assert auth_service.decode_token(GRANT) is None
-    session, _ = auth_service.create_access_token(
-        {"sub": "u-42", "scope": "app-remote", "uid": "u-42", "mod": "acme.research", "app": "x"}
+    from jose import jwt
+
+    assert asyncio.run(credentials.bearer_credential(GRANT)) is None
+    old = jwt.encode(
+        {"sub": "u-42", "scope": "app-remote", "uid": "u-42", "mod": "acme.research", "app": "x"},
+        "the-key-nexus-used-to-sign-with",
+        algorithm="HS256",
     )
-    assert read_remote_app_grant(session, secret=SECRET) is None
+    assert read_remote_app_grant(old) is None
+    # Nor does it act as one at the API: its audience is its own.
+    assert credentials.accepted_kinds("/api/chat") == {"session", "api-key"}
 
 
 def _presenting(monkeypatch, user_id: str, minutes_left: float | None = 60) -> None:
     expires = None if minutes_left is None else datetime.now(UTC) + timedelta(minutes=minutes_left)
-    monkeypatch.setattr(http, "_presented_user", lambda request: (user_id, expires))
+
+    async def presented(request):
+        return user_id, expires
+
+    monkeypatch.setattr(http, "_presented_user", presented)
 
 
 def _grant_of(response) -> tuple[str, str, dict]:
     _, prefix, grant, rest = response.headers["location"].split("/", 3)
-    claims = jwt.get_unverified_claims(grant)
-    return prefix, rest, {"grant": grant, **claims}
+    key_id = grant.split("_")[2]
+    record = IAM.store.get_key(key_id)
+    return prefix, rest, {"grant": grant, "key": record, "exp": record.expires_at.timestamp()}
 
 
 def test_the_catalog_url_redirects_to_a_fresh_grant(monkeypatch, forwarded, workspaces):
@@ -209,12 +220,19 @@ def test_the_catalog_url_redirects_to_a_fresh_grant(monkeypatch, forwarded, work
     assert response.status_code == 307
     prefix, rest, claims = _grant_of(response)
     assert (prefix, rest) == ("app-remote", "acme.research/console/index.html?q=1")
-    granted = read_remote_app_grant(claims["grant"], secret=SECRET)
+    granted = read_remote_app_grant(claims["grant"])
     assert granted is not None
     assert (granted.user_id, granted.module_id, granted.app) == ("u-7", "acme.research", "console")
-    # A15: an old link names no workspace: the first of the user's that enables it.
+    # An old link names no workspace: the first of the user's that enables it.
     assert granted.workspace_id == "ws-first"
     assert workspaces == [("u-7", "remote/acme.research:console", None)]
+    # It opens this app and does nothing else at the kernel.
+    scope = granted.scope
+    assert scope is not None and scope[0]["actions"] == ["discovery:OpenApp"]
+    assert scope[0]["resources"] == ["abi:discovery:app/*/acme.research/console"]
+    # IAM keeps it hashed: eight hours at most.
+    assert claims["key"].kind == "grant" and claims["key"].audience == "abi:delegated:app"
+    assert claims["exp"] <= (datetime.now(UTC) + timedelta(hours=8)).timestamp() + 1
 
 
 def test_a_grant_never_outlives_the_credential_it_was_exchanged_for(monkeypatch, forwarded):
@@ -226,9 +244,62 @@ def test_a_grant_never_outlives_the_credential_it_was_exchanged_for(monkeypatch,
     assert claims["exp"] <= (datetime.now(UTC) + timedelta(minutes=1)).timestamp() + 1
 
 
+def test_a_revoked_grant_stops_at_the_next_request(forwarded):
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        service_account,
+        use_call_context,
+        user,
+    )
+
+    client = _client()
+    grant = _grant(user_id="u-revoked")
+    root = f"/app-remote/{grant}/acme.research/console"
+    assert client.get(f"{root}/").status_code == 200
+    with use_call_context(
+        CallContext(principal=service_account("api"), on_behalf_of=user("u-revoked"))
+    ):
+        IAM.revoke_key("u-revoked", grant.split("_")[2])
+    assert client.get(f"{root}/").status_code == 401
+
+
+def test_a_suspended_user_s_grant_stops_too(forwarded):
+    from naas_abi_core.engine.call_context import as_service_account
+
+    client = _client()
+    grant = _grant(user_id="u-suspended")
+    root = f"/app-remote/{grant}/acme.research/console"
+    assert client.get(f"{root}/").status_code == 200
+    with as_service_account("engine"):
+        record = IAM.resolve_user("u-suspended")
+        IAM.suspend_principal(record.id)
+    assert client.get(f"{root}/").status_code == 401
+
+
+def test_the_request_is_forwarded_for_the_grants_user_narrowed_to_opening_the_app(
+    monkeypatch,
+):
+    from naas_abi_core.engine.call_context import current_call_context
+
+    seen = []
+
+    async def answer(request: AppRequest) -> AppResponse:
+        seen.append(current_call_context())
+        return AppResponse(200, (), b"ok")
+
+    _directory(monkeypatch, answer)
+    assert _client().get(f"{ROOT}/").status_code == 200
+    [context] = seen
+    assert context.principal.id == "api"
+    assert context.on_behalf_of is not None and context.on_behalf_of.id == "u-42"
+    assert context.scope is not None
+    assert context.scope[0]["actions"] == ["discovery:OpenApp"]
+
+
 def test_an_api_key_caller_is_answered_without_a_grant(monkeypatch, forwarded):
     """A script with ABI_API_KEY has no user and no browser: no grant, the
     module answers it directly, with no user and no workspace, any method."""
+    monkeypatch.setattr(http, "is_abi_api_token_valid", lambda token: True)
     _presenting(monkeypatch, "", minutes_left=None)  # ABI_API_KEY
 
     client = _client()
@@ -247,21 +318,24 @@ def test_an_api_key_caller_is_answered_without_a_grant(monkeypatch, forwarded):
     assert request.root_path == "/app-html/remote/acme.research/console"
 
 
-def test_a_grant_is_minted_and_read_for_a_user_only():
+def test_a_grant_is_minted_and_read_for_a_user_and_an_app_only():
+    from naas_abi.apps.nexus.apps.api.app.services.apps import links
+    from naas_abi_core.engine.nats_auth import PREVIEW_AUDIENCE
+
     with pytest.raises(ValueError):
-        mint_remote_app_grant(secret=SECRET, user_id="", module_id="acme.research", app="console")
-    anonymous = jwt.encode(
-        {
-            "scope": "app-remote",
-            "uid": "",
-            "mod": "acme.research",
-            "app": "console",
-            "exp": datetime.now(UTC) + timedelta(minutes=5),
-        },
-        grant_key(SECRET),
-        algorithm="HS256",
+        mint_remote_app_grant(user_id="", module_id="acme.research", app="console")
+    with pytest.raises(ValueError):
+        mint_remote_app_grant(user_id="u-1", module_id="acme/research", app="console")
+    # A preview link, or a link bound to anything else, is no remote app grant.
+    preview, _ = links.mint_link(
+        user_id="u-1",
+        audience=PREVIEW_AUDIENCE,
+        resource=links.preview_resource("ws", "demo"),
+        minutes=5,
     )
-    assert read_remote_app_grant(anonymous, secret=SECRET) is None
+    assert read_remote_app_grant(preview) is None
+    assert read_remote_app_grant("abi_gk_aaaaaaaaaaaaaaaa_nope") is None
+    assert read_remote_app_grant("") is None
 
 
 @pytest.mark.parametrize(
@@ -553,20 +627,69 @@ def test_uploads_to_one_module_are_capped():
     assert uploads.active == {}
 
 
-def test_the_user_and_expiry_come_from_the_nexus_token(monkeypatch):
-    from naas_abi.apps.nexus.apps.api.app.services.auth import service
+def _known_user(subject: str = "ada") -> str:
+    with as_service_account("engine"):
+        return IAM.ensure_user("https://idp.example", subject).id
 
-    monkeypatch.setattr(
-        service,
-        "decode_token",
-        lambda token: {"sub": "u-7", "exp": 1_900_000_000} if token == "jwt" else None,
+
+def _engine_session(user_id: str) -> str:
+    from naas_abi.apps.nexus.apps.api.app.services.auth.testing import session_token
+
+    return session_token(credentials.IAM(), user_id)
+
+
+def test_the_user_and_expiry_come_from_the_engine_session_or_a_link(monkeypatch):
+    import asyncio
+
+    from naas_abi.apps.nexus.apps.api.app.services.apps.app_html_access import (
+        mint_app_html_access_token,
     )
+    from naas_abi_core.engine.call_context import as_service_account
+
+    iam = credentials.IAM()
+    with as_service_account("engine"):
+        ada = iam.ensure_user("https://idp.example", "ada")
     request = type("R", (), {})()
 
-    monkeypatch.setattr(http, "extract_abi_api_token", lambda r: "jwt")
-    assert http._presented_user(request) == ("u-7", datetime.fromtimestamp(1_900_000_000, UTC))
+    monkeypatch.setattr(http, "extract_abi_api_token", lambda r: _engine_session(ada.id))
+    user_id, expires = asyncio.run(http._presented_user(request))
+    assert user_id == ada.id and expires is not None
+    assert 0 < (expires - datetime.now(UTC)).total_seconds() <= 600  # ten minutes at most
     monkeypatch.setattr(http, "extract_abi_api_token", lambda r: "abi-api-key")
-    assert http._presented_user(request) == ("", None)
+    assert asyncio.run(http._presented_user(request)) == ("", None)
+    # A share link (an /app-html/ grant) names its user and ends when it does.
+    link, _ = mint_app_html_access_token(user_id="u-8", expires_minutes=30)
+    monkeypatch.setattr(http, "extract_abi_api_token", lambda r: link)
+    user_id, expires = asyncio.run(http._presented_user(request))
+    assert user_id == "u-8" and expires is not None
+    assert abs((expires - datetime.now(UTC)).total_seconds() - 1800) < 5
+    # A link of another kind is not one.
+    grant = _grant(user_id="u-8")
+    monkeypatch.setattr(http, "extract_abi_api_token", lambda r: grant)
+    assert asyncio.run(http._presented_user(request)) == ("", None)
+
+
+def test_a_session_its_user_revoked_names_no_user_to_open_an_app_for(monkeypatch):
+    import asyncio
+
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        as_service_account,
+        service_account,
+        use_call_context,
+        user,
+    )
+
+    iam = credentials.IAM()
+    with as_service_account("engine"):
+        ada = iam.ensure_user("https://idp.example", "ada")
+    token = _engine_session(ada.id)
+    request = type("R", (), {})()
+    monkeypatch.setattr(http, "extract_abi_api_token", lambda r: token)
+    assert asyncio.run(http._presented_user(request))[0] == ada.id
+    with use_call_context(CallContext(principal=service_account("api"), on_behalf_of=user(ada.id))):
+        iam.revoke_tokens(ada.id)
+    assert asyncio.run(http._presented_user(request)) == ("", None)
 
 
 # -- the grant is a credential: never in logs or traces ------------------------
@@ -632,31 +755,37 @@ def test_the_access_log_hides_the_app_html_token():
 # -- #48 review: grants end at logout, and name a workspace -----------------------
 
 
-def test_a_logout_ends_the_grants_issued_before_it(monkeypatch, forwarded, logged_out):
-    client = _client()
-    assert client.get(f"{ROOT}/").status_code == 200
+def test_a_logout_ends_the_users_grants_on_every_device(monkeypatch, forwarded):
+    from naas_abi.apps.nexus.apps.api.app.services.apps import links
 
-    logged_out["u-42"] = datetime.now(UTC)
+    # A user of their own: the revocation reaches every grant a user holds.
+    client = _client()
+    mine = f"/app-remote/{_grant(user_id='u-out')}/acme.research/console"
+    other = f"/app-remote/{_grant(user_id='u-out')}/acme.research/console"
+    assert client.get(f"{mine}/").status_code == 200
+
+    assert links.revoke_remote_app_links("u-out") == 2
 
     for response in (
-        client.get(f"{ROOT}/"),
-        client.post(f"{ROOT}/api/save", content=b"{}"),
-        client.get(ROOT, follow_redirects=False),
+        client.get(f"{mine}/"),
+        client.post(f"{mine}/api/save", content=b"{}"),
+        client.get(mine, follow_redirects=False),
+        client.get(f"{other}/"),
     ):
         assert response.status_code == 401
         assert response.headers["content-security-policy"] == http.SANDBOX
-    fresh = f"/app-remote/{_grant()}/acme.research/console"
+    fresh = f"/app-remote/{_grant(user_id='u-out')}/acme.research/console"
     assert client.get(f"{fresh}/").status_code == 200
+    # Another user's grants stay.
+    assert client.get(f"{ROOT}/").status_code == 200
+    assert (
+        client.get(f"/app-remote/{_grant(user_id='u-43')}/acme.research/console/").status_code
+        == 200
+    )
 
 
 def test_the_module_learns_the_workspace_of_the_grant(forwarded):
-    grant = mint_remote_app_grant(
-        secret=SECRET,
-        user_id="u-42",
-        module_id="acme.research",
-        app="console",
-        workspace_id="ws-9",
-    )
+    grant = _grant(workspace_id="ws-9")
 
     _client().get(f"/app-remote/{grant}/acme.research/console/")
 
@@ -672,7 +801,7 @@ def test_the_catalog_url_opens_the_workspace_it_names(monkeypatch, forwarded, wo
     )
 
     _, rest, claims = _grant_of(response)
-    assert claims["ws"] == "ws-2"
+    assert read_remote_app_grant(claims["grant"]).workspace_id == "ws-2"
     assert rest == "acme.research/console/?q=1"  # Nexus's parameter stays with Nexus
     refused = client.get(
         "/app-html/remote/acme.research/console/?workspace_id=ws-off", follow_redirects=False
@@ -691,25 +820,6 @@ def test_a_post_to_the_catalog_url_keeps_its_method(monkeypatch, forwarded):
 
     assert response.status_code == 307
     assert response.headers["location"].endswith("/acme.research/console/api/save")
-
-
-def test_a_grant_without_its_issue_time_is_refused(forwarded):
-    """Grants from before revocation existed cannot be checked: open the app again."""
-    old = jwt.encode(
-        {
-            "scope": "app-remote",
-            "uid": "u-42",
-            "mod": "acme.research",
-            "app": "console",
-            "exp": datetime.now(UTC) + timedelta(minutes=5),
-        },
-        grant_key(SECRET),
-        algorithm="HS256",
-    )
-
-    response = _client().get(f"/app-remote/{old}/acme.research/console/")
-
-    assert response.status_code == 401
 
 
 # -- #48 review: the response headers an app's API needs ---------------------------
@@ -965,32 +1075,36 @@ def test_a_stream_stops_when_the_browser_leaves_while_it_is_idle():
     asyncio.run(scenario())
 
 
-def test_a_logged_out_credential_mints_no_grant(monkeypatch, forwarded, logged_out):
-    """Review round 1: the cookie or token of a logged-out browser cannot open
-    the app again (its grant would postdate the logout)."""
-    from naas_abi.apps.nexus.apps.api.app.services.auth import service as auth_service
+def test_a_revoked_session_mints_no_grant(monkeypatch, forwarded):
+    """The token of a session the user's tokens were revoked for (a logout, here
+    or elsewhere) cannot open the app again."""
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        as_service_account,
+        service_account,
+        use_call_context,
+        user,
+    )
 
-    monkeypatch.setattr(auth_service.settings, "secret_key", SECRET)
-    token, jti = auth_service.create_access_token({"sub": "u-7"})
+    with as_service_account("engine"):
+        ada = IAM.ensure_user("https://idp.example", "ada")
+    token = _engine_session(ada.id)
     client = _client()
     url = "/app-html/remote/acme.research/console/"
 
     opened = client.get(url, headers={"Authorization": f"Bearer {token}"}, follow_redirects=False)
     assert opened.status_code == 307
 
-    logged_out["u-7"] = datetime.now(UTC)  # a logout, here or elsewhere
+    with use_call_context(CallContext(principal=service_account("api"), on_behalf_of=user(ada.id))):
+        IAM.revoke_tokens(ada.id)
     after = client.get(url, headers={"Authorization": f"Bearer {token}"}, follow_redirects=False)
-    assert after.status_code == 401
+    assert after.status_code == 403
     assert "location" not in after.headers
 
-    del logged_out["u-7"]
-    REVOKED_JTIS.add(jti)  # this very token was the one logged out
-    revoked = client.get(url, headers={"Authorization": f"Bearer {token}"}, follow_redirects=False)
-    assert revoked.status_code == 401
-
-    fresh, _ = auth_service.create_access_token({"sub": "u-7"})
-    again = client.get(url, headers={"Authorization": f"Bearer {fresh}"}, follow_redirects=False)
-    assert again.status_code == 307
+    fresh = client.get(
+        url, headers={"Authorization": f"Bearer {_engine_session(ada.id)}"}, follow_redirects=False
+    )
+    assert fresh.status_code == 307
 
 
 def test_a_browser_leaving_mid_stream_is_not_an_error():
@@ -1075,10 +1189,7 @@ def test_the_apps_own_token_stays_without_an_authorization_header(forwarded):
 
 
 def test_a_nexus_token_leaves_the_query_whatever_authenticated_the_request(monkeypatch, forwarded):
-    from naas_abi.apps.nexus.apps.api.app.services.auth import service as auth_service
-
-    monkeypatch.setattr(auth_service.settings, "secret_key", SECRET)
-    session, _ = auth_service.create_access_token({"sub": "u-42"})
+    session = _engine_session(_known_user())
 
     response = _client().get(
         f"{ROOT}/x?token={session}&q=1", headers={"Authorization": "Bearer other"}
@@ -1088,40 +1199,26 @@ def test_a_nexus_token_leaves_the_query_whatever_authenticated_the_request(monke
     assert forwarded[0].query == "q=1"
 
 
-def test_an_expired_or_old_key_nexus_token_still_leaves_the_query(monkeypatch, forwarded):
-    """A Nexus JWT is a credential whether or not it still opens Nexus: one
-    that expired, or was signed with a published default key Nexus rotated
-    away from, never reaches the module's code."""
-    from datetime import UTC, datetime, timedelta
+def test_an_expired_or_unlisted_nexus_credential_still_leaves_the_query(forwarded):
+    """A credential the engine issued is one whether or not it still opens
+    anything: a session token that expired, a key, a grant that ended never
+    reach the module's code."""
+    import jwt as pyjwt
+    from cryptography.hazmat.primitives.asymmetric import ec
 
-    from jose import jwt as jose_jwt
-    from naas_abi.apps.nexus.apps.api.app.services.auth import service as auth_service
+    expired = pyjwt.encode(
+        {"sub": "u-42", "aud": "abi:session", "exp": datetime.now(UTC) - timedelta(minutes=5)},
+        ec.generate_private_key(ec.SECP256R1()),
+        algorithm="ES256",
+    )
+    stale_grant = _grant(app="board", user_id="u-stale")
+    from naas_abi.apps.nexus.apps.api.app.services.apps import links
 
-    monkeypatch.setattr(auth_service.settings, "secret_key", SECRET)
-    expired, _ = auth_service.create_access_token(
-        {"sub": "u-42"}, expires_delta=timedelta(minutes=-5)
-    )
-    assert auth_service.decode_token(expired) is None  # it opens nothing now
-    old_key = jose_jwt.encode(
-        {"sub": "u-42", "exp": datetime.now(UTC) + timedelta(minutes=5)},
-        "change-me-in-production",
-        algorithm="HS256",
-    )
-
-    stale_grant = jose_jwt.encode(
-        {
-            "scope": "app-remote",
-            "uid": "u-42",
-            "mod": "acme.other",
-            "app": "board",
-            "exp": datetime.now(UTC) - timedelta(minutes=5),
-        },
-        grant_key(SECRET),
-        algorithm="HS256",
-    )
+    links.revoke_remote_app_links("u-stale")  # it opens nothing now
 
     response = _client().get(
-        f"{ROOT}/x?token={expired}&token={old_key}&token={stale_grant}&token=own&q=1"
+        f"{ROOT}/x?token={expired}&token=abi_pk_aaaaaaaaaaaaaaaa_x"
+        f"&token={stale_grant}&token=own&q=1"
     )
 
     assert response.status_code == 200
@@ -1140,3 +1237,103 @@ def test_the_apps_cookies_pass_as_sent(forwarded):
 
     assert response.status_code == 200
     assert dict(forwarded[0].headers)["cookie"] == 'theme="dark blue"; n=a%3Bb'
+
+
+# -- a link made in a view is read-only: the proxy forwards GET and HEAD only ------------------
+
+
+def _made_in_a_view(person: str = "Dave") -> str:
+    from naas_abi.apps.nexus.apps.api.app.services.view_as.port import LinkView
+
+    previous = credentials.configure_iam(lambda: IAM)
+    try:
+        return mint_remote_app_grant(
+            user_id="u-dave",
+            module_id="acme.research",
+            app="console",
+            view=LinkView(mark="abc123", person=person),
+        )
+    finally:
+        credentials.configure_iam(previous)
+
+
+def test_a_link_made_in_a_view_forwards_only_get_and_head(forwarded):
+    client = _client()
+    root = f"/app-remote/{_made_in_a_view()}/acme.research/console"
+
+    assert client.get(f"{root}/").status_code == 200
+    assert client.head(f"{root}/").status_code == 200
+    forwarded.clear()
+    for method in ("post", "put", "patch", "delete"):
+        refused = client.request(method.upper(), f"{root}/api/save", content=b"{}")
+        assert refused.status_code == 403, method
+        assert refused.json() == {"detail": "Read-only: you are viewing as Dave"}
+    assert forwarded == []  # no write ever reached the app
+
+
+def test_a_link_that_no_view_made_forwards_every_method(forwarded):
+    client = _client()
+
+    assert client.post(f"{ROOT}/api/save", content=b"{}").status_code == 200
+    assert read_remote_app_grant(GRANT).view is None
+
+
+def test_the_catalog_url_of_a_view_link_refuses_writes_and_hands_the_view_on(
+    monkeypatch, forwarded
+):
+    from naas_abi.apps.nexus.apps.api.app.services.view_as.port import LinkView
+
+    async def presented(request):
+        request.state.presented_view = LinkView(mark="abc123", person="Dave")
+        return "u-dave", datetime.now(UTC) + timedelta(minutes=5)
+
+    monkeypatch.setattr(http, "_presented_user", presented)
+    client = _client()
+
+    refused = client.post(
+        "/app-html/remote/acme.research/console/api/save", content=b"{}", follow_redirects=False
+    )
+    opened = client.get("/app-html/remote/acme.research/console/", follow_redirects=False)
+
+    assert refused.status_code == 403
+    assert refused.json() == {"detail": "Read-only: you are viewing as Dave"}
+    assert opened.status_code == 307
+    _, _, claims = _grant_of(opened)
+    granted = read_remote_app_grant(claims["grant"])
+    # The fresh grant is the view's too: it cannot be used to write.
+    assert granted is not None and granted.view == LinkView(mark="abc123", person="Dave")
+    assert client.post(f"{opened.headers['location']}api/save", content=b"{}").status_code == 403
+
+
+def test_a_presented_link_is_looked_up_once_and_its_view_is_read_from_it(monkeypatch, forwarded):
+    from naas_abi.apps.nexus.apps.api.app.services.apps import links
+    from naas_abi.apps.nexus.apps.api.app.services.view_as.port import LinkView
+    from naas_abi_core.engine.nats_auth import APP_AUDIENCE
+
+    grant, _ = links.mint_link(
+        user_id="u-dave",
+        audience=APP_AUDIENCE,
+        resource=links.APP_HTML_ROOT,
+        minutes=5,
+        view=LinkView(mark="abc123", person="Dave"),
+    )
+    lookups = []
+    original = links.aopen_link
+
+    async def counting(value, audience):
+        lookups.append(audience)
+        return await original(value, audience)
+
+    monkeypatch.setattr(links, "aopen_link", counting)
+    client = _client()
+
+    refused = client.post(
+        "/app-html/remote/acme.research/console/api/save",
+        content=b"{}",
+        headers={"Authorization": f"Bearer {grant}"},
+        follow_redirects=False,
+    )
+
+    assert refused.status_code == 403
+    assert refused.json() == {"detail": "Read-only: you are viewing as Dave"}
+    assert len(lookups) == 1  # one IAM round trip for the presented link
