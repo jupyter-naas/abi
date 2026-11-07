@@ -1,6 +1,6 @@
-from pathlib import Path
-
 import pytest
+from naas_abi.apps.nexus.apps.api.app.main import app
+from naas_abi.apps.nexus.apps.api.app.services.auth.avatar_store_test import MemoryStorage
 
 
 class TestWorkspaceMembers:
@@ -109,7 +109,12 @@ class TestWorkspaceInferenceServers:
 
 
 class TestWorkspaceLogoUpload:
-    async def test_upload_logo_updates_workspace(self, client, test_user, test_workspace):
+    async def test_upload_logo_updates_workspace(
+        self, client, test_user, test_workspace, monkeypatch
+    ):
+        # The logo is kept in the workspace drive (logo_store): an in-memory store
+        # stands in for the engine's object storage.
+        monkeypatch.setattr(app.state, "object_storage", MemoryStorage(), raising=False)
         upload_response = await client.post(
             f"/api/workspaces/{test_workspace['id']}/upload-logo",
             files={"file": ("logo.png", b"fake-image-content", "image/png")},
@@ -117,7 +122,7 @@ class TestWorkspaceLogoUpload:
         )
         assert upload_response.status_code == 200
         payload = upload_response.json()
-        assert payload["logo_url"].startswith("/uploads/logos/")
+        assert payload["logo_url"].startswith(f"/api/workspaces/{test_workspace['id']}/logo?v=")
         assert payload["filename"].endswith(".png")
 
         workspace_response = await client.get(
@@ -128,7 +133,9 @@ class TestWorkspaceLogoUpload:
         workspace_data = workspace_response.json()
         assert workspace_data["logo_url"] == payload["logo_url"]
 
-        Path("uploads/logos", payload["filename"]).unlink(missing_ok=True)
+        served = await client.get(f"/api/workspaces/{test_workspace['id']}/logo")
+        assert served.status_code == 200
+        assert served.content == b"fake-image-content"
 
 
 class TestWorkspaceFeatureFlags:
@@ -148,6 +155,7 @@ class TestWorkspaceFeatureFlags:
             "chat": True,
             "files": True,
             "agents": True,
+            "tasks": True,
             "skills": True,
             "apps": True,
             "marketplace": True,

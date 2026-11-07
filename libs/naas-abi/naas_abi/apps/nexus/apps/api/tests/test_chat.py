@@ -10,6 +10,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from tests.conftest import add_workspace_member
+
 
 class TestConversationCRUD:
     """Conversation create, read, delete."""
@@ -62,13 +64,9 @@ class TestConversationCRUD:
         )
         assert create_response.status_code == 200
 
-        # Give second_user workspace membership.
-        invite_response = await client.post(
-            f"/api/workspaces/{test_workspace['id']}/members/invite",
-            json={"email": second_user["email"], "role": "member"},
-            headers=test_user["headers"],
-        )
-        assert invite_response.status_code == 200
+        # Give second_user workspace membership (an invitation only creates an
+        # invitation: the role is held once it is accepted).
+        add_workspace_member(test_workspace["id"], second_user["id"], "member")
 
         # second_user should not see test_user conversations in list endpoint.
         response = await client.get(
@@ -132,12 +130,7 @@ class TestConversationCRUD:
         conv = conv_response.json()
 
         # Give second_user workspace membership. They still should not read test_user conversations.
-        invite_response = await client.post(
-            f"/api/workspaces/{test_workspace['id']}/members/invite",
-            json={"email": second_user["email"], "role": "member"},
-            headers=test_user["headers"],
-        )
-        assert invite_response.status_code == 200
+        add_workspace_member(test_workspace["id"], second_user["id"], "member")
 
         response = await client.get(
             f"/api/chat/conversations/{conv['id']}",

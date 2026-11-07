@@ -118,6 +118,12 @@ _ENTRIES: list[PlatformTableEntry] = [
             "The accounts an invitation created at a provider: only those are deactivated or "
             "deleted there with the person's Nexus account.",
         ),
+        (
+            "view_as_views",
+            "View as",
+            "Administrators seeing Nexus as another person in one workspace, read-only: one "
+            "row per browser session, with the person, the workspace and when the view ends.",
+        ),
     ),
     *_section(
         "Chat, agents & models",
