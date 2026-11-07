@@ -24,6 +24,598 @@
 
 <!-- version list -->
 
+## v3.7.0 (2026-11-07)
+
+### Bug Fixes
+
+- A host token names its host, and discovery accepts it from that host only
+  ([`f557785`](https://github.com/jupyter-naas/abi/commit/f557785bb242b714fe39d9d724de580aff23e34e))
+
+- A revoked user's cached delegation is made again; a key's binding is its own
+  ([`c9accbf`](https://github.com/jupyter-naas/abi/commit/c9accbf06b26067fe900957bae2245739a2bdeac))
+
+- Bound agent-built workflow tools by class; open apps of dotted module paths
+  ([`32a0cf2`](https://github.com/jupyter-naas/abi/commit/32a0cf2ac0dd37e61fc26e2866cc6dc7cd3ac16b))
+
+- Clients that carry users keep carrying them, tokens exchange only for who may, tests follow
+  ([`7f57cb0`](https://github.com/jupyter-naas/abi/commit/7f57cb0a0baad708febec4975cb750957f8317ec))
+
+- Creating a repository never hands over one that exists
+  ([`f4fdb93`](https://github.com/jupyter-naas/abi/commit/f4fdb93269d3137c4afc3eab84a8fbcf1595cef1))
+
+- Final review round 2
+  ([`0eb6cbc`](https://github.com/jupyter-naas/abi/commit/0eb6cbcda98886dc204581e4c91a779407c85f5f))
+
+- Hosts never hold a caller's token; the secret endpoint is an allowlist; no key in logs
+  ([`98cefb3`](https://github.com/jupyter-naas/abi/commit/98cefb3be5f00c9b85f90de18d211f0b535abe99))
+
+- Identity on the engine's tokens; Nexus follows service-account subjects
+  ([`6494051`](https://github.com/jupyter-naas/abi/commit/64940513972e08c7fdc2b4505435c6cf8f62563b))
+
+- Invitations review round 1: owner invites, shared grants, rollbacks, bindings and sign-in claim
+  ([`3f2116c`](https://github.com/jupyter-naas/abi/commit/3f2116ca915296bd8ab4b942b82fb069da66d2f4))
+
+- Nexus signs its own NATS calls and follows the dev ports; docs for the built-in IdP
+  ([`5a1b814`](https://github.com/jupyter-naas/abi/commit/5a1b81421d229ebb80e2043e8a3c38755583f872))
+
+- Review round 1 of delegated tokens and API keys
+  ([`8fa83a5`](https://github.com/jupyter-naas/abi/commit/8fa83a517556fd85a59ee074efb9a60fa6d5953f))
+
+- The engine's invocation routes take the deployment key only; keys with a limit mint nothing
+  ([`278038c`](https://github.com/jupyter-naas/abi/commit/278038c1e7278fc4deae560f079bb0046a2db57e))
+
+- The permission scenario end to end in abi dev up
+  ([`80146d4`](https://github.com/jupyter-naas/abi/commit/80146d44c8223ac98a9a1c84620276762eafd3ec))
+
+- Work that runs for no caller gets an identity of its own
+  ([`1f2c347`](https://github.com/jupyter-naas/abi/commit/1f2c3472c82f51ab743e8b8ac0333f7a4cb5a8cf))
+
+- **abi**: A turn's copy of Abi names only the sub-agents it keeps
+  ([`ecaea43`](https://github.com/jupyter-naas/abi/commit/ecaea439050282ac68b77cf6441bd158afe5fec1))
+
+- **agent**: A turn's copy of an agent leaves out the sub-agents its caller may not use
+  ([`3034534`](https://github.com/jupyter-naas/abi/commit/303453408fa15b4da7cf6deaea4842844c61279d))
+
+- **ci**: Restore workspace access deps and NATS model registry token source
+  ([`174e326`](https://github.com/jupyter-naas/abi/commit/174e3269012d3bd9b2e1e100af808a21e2bc0406))
+
+- **core**: Make check is green: identity_at on the IdentityIAM Protocol, mypy and test guards for
+  naas_abi_idp
+  ([`c815326`](https://github.com/jupyter-naas/abi/commit/c81532608c17b93d038d0b02b1297b4f45b80912))
+
+- **core**: No transitional grant reaches another principal's agent run
+  ([`608343a`](https://github.com/jupyter-naas/abi/commit/608343aabe175392bd12ef758bc5b2ce2832edfd))
+
+- **core**: Tighten who a call names as its user
+  ([`ac64582`](https://github.com/jupyter-naas/abi/commit/ac64582355b0d07d8edeef6c2786b9c080b81c58))
+
+- **deps**: Install naas-abi-proto and naas-abi-sdk wherever they are imported
+  ([`f7685c4`](https://github.com/jupyter-naas/abi/commit/f7685c44230cc7ec34bdbcdbdbb6374d91e4405f))
+
+- **discovery**: Let a rollout change jobs, agents and models
+  ([`fdc0f15`](https://github.com/jupyter-naas/abi/commit/fdc0f15eb8ecb6d249864140ca5f9d3a70564505))
+
+- **iam**: A platform Deny is attached at a scope by the platform admin only
+  ([`632fefd`](https://github.com/jupyter-naas/abi/commit/632fefd28a08f66e1a4618cbb92800346913036e))
+
+- **iam**: Bus wildcards and org workspace assignment are checked
+  ([`ea0d68f`](https://github.com/jupyter-naas/abi/commit/ea0d68f19e3c4834446fea65792e7649bb31d065))
+
+- **iam**: Final review round 1 fixes
+  ([`234fbf1`](https://github.com/jupyter-naas/abi/commit/234fbf17830d50011b4b4c8d18e91169a70b8b18))
+
+- **iam**: Grant only what you hold, review round 1
+  ([`77b7bfd`](https://github.com/jupyter-naas/abi/commit/77b7bfda89f2b80d09abe2ea28515864c7266b65))
+
+- **iam**: Members trigger a module's workflows at the broker, never its plain jobs
+  ([`db1f85d`](https://github.com/jupyter-naas/abi/commit/db1f85d83c960853bd3d24f400f639c8f11750b1))
+
+- **iam**: No role widens on a stale catalog; old feature policies stay until moved
+  ([`ebdefa5`](https://github.com/jupyter-naas/abi/commit/ebdefa5a1463d34d40e74a4d8a6425c31aa5be47))
+
+- **iam**: Owned groups and the schema 2 upgrade keep to their org
+  ([`e9073d8`](https://github.com/jupyter-naas/abi/commit/e9073d80fa304c67207e8613198c7a5885d1dcd0))
+
+- **iam**: Sets follow their org, seeds snapshot no module, migration may run again
+  ([`1961b90`](https://github.com/jupyter-naas/abi/commit/1961b901c412c4ca4fa8c4408f6abc3104cad9a7))
+
+- **iam, nexus**: A container lists another organisation's policies only where they are known
+  ([`fdd9fda`](https://github.com/jupyter-naas/abi/commit/fdd9fdaef68183ee027ef9a47678ea938c43c8d2))
+
+- **iam, nexus**: A module's pattern names no other module's items
+  ([`ef2f076`](https://github.com/jupyter-naas/abi/commit/ef2f0765cff7944e14f76ead21ee3f6fb6b39a38))
+
+- **iam, nexus**: An old companion follows its own role; manifests hash as before
+  ([`8c451fe`](https://github.com/jupyter-naas/abi/commit/8c451fe3983986fa0b575b36764033366cb223f0))
+
+- **iam, nexus**: Review round 1 of container paths
+  ([`c4a58a5`](https://github.com/jupyter-naas/abi/commit/c4a58a57698605659a157130b248804ca3d0f602))
+
+- **iam, nexus**: Review round 1 of the builder, IAM side
+  ([`b1c86ef`](https://github.com/jupyter-naas/abi/commit/b1c86eff29b97e6cc6fd245c3c931d32f2e10696))
+
+- **iam, nexus**: The attach list is IAM's, and whether a policy is known is one read
+  ([`951a92d`](https://github.com/jupyter-naas/abi/commit/951a92d770d217f682663461fb57f4814a7662ab))
+
+- **idp**: Review round 1: cookie clearing, credentials changes, shared client addresses, relying
+  parties of the route
+  ([`309dc8e`](https://github.com/jupyter-naas/abi/commit/309dc8eaa7e7eb18cd47164ae65b5bb493bf6084))
+
+- **nexus**: A chat turn picks only among the agents the listing shows
+  ([`56efbef`](https://github.com/jupyter-naas/abi/commit/56efbef000ba7141def5cf670f8eb5a318533183))
+
+- **nexus**: A closed builder group hides its types
+  ([`9cfbea3`](https://github.com/jupyter-naas/abi/commit/9cfbea3122651619455c3b646b4fea10ff733405))
+
+- **nexus**: A link to the API never acts as the signed-in user
+  ([`19706d7`](https://github.com/jupyter-naas/abi/commit/19706d70306f5c1046fcee7f672aef73a2470d1f))
+
+- **nexus**: A member's page opens on their IAM id, on upgraded installs too
+  ([`1dcbd77`](https://github.com/jupyter-naas/abi/commit/1dcbd77fe9229226fafe3b1e487e4c4e5120a715))
+
+- **nexus**: A policy owned at another level is edited at its owner, from any page
+  ([`ba274a0`](https://github.com/jupyter-naas/abi/commit/ba274a0368785af134401bbd1c8ef00cd77480b1))
+
+- **nexus**: A provider email the schemas cannot carry is not stored
+  ([`f2de30b`](https://github.com/jupyter-naas/abi/commit/f2de30b365733c4ed1e27aa66dc1bdf34c77480b))
+
+- **nexus**: A turn in a workspace with no roster yet seeds it before binding
+  ([`53a303b`](https://github.com/jupyter-naas/abi/commit/53a303b1e34146a401140ab5a7af6325ba4eabe3))
+
+- **nexus**: A view answers the workspace's Roles & permissions reads, by the scope they name, and a
+  group by id held to the viewed container
+  ([`1db9687`](https://github.com/jupyter-naas/abi/commit/1db9687cf1709960f5ad1db808c7840722cf702c))
+
+- **nexus**: A view does not serve the system drive, which holds the person's My Drive and users
+  data
+  ([`0e825dd`](https://github.com/jupyter-naas/abi/commit/0e825dd8cbe5f3b6b7178e96d5a8c21c566a5cc7))
+
+- **nexus**: A view judges blank workspace ids, lets Stop and sign-out through, and names the person
+  by principal id
+  ([`12f4477`](https://github.com/jupyter-naas/abi/commit/12f4477033f0866024f7859e2a3946b06be2ed60))
+
+- **nexus**: A view's resource policy is validated, a link made as the view ends is revoked, the
+  proxy looks a link up once, and a body read keeps the disconnect
+  ([`a72c431`](https://github.com/jupyter-naas/abi/commit/a72c43113c5eeb2c0543b4fbe6d8abd20a851da0))
+
+- **nexus**: A workspace's access is always under its organization's
+  ([`0fd947b`](https://github.com/jupyter-naas/abi/commit/0fd947bf6c560fc0997c4c6183789e129c71e2bf))
+
+- **nexus**: ABI changes at an identity provider only the accounts it made
+  ([`b73fe52`](https://github.com/jupyter-naas/abi/commit/b73fe5266c41cda9aa68027e06f7340694687135))
+
+- **nexus**: Access pages after review: member ids, empty lists, closing pages
+  ([`9e445b1`](https://github.com/jupyter-naas/abi/commit/9e445b1950fb791fcc42f83009acc55743284454))
+
+- **nexus**: Access pages decide roles per principal, and drop stale answers
+  ([`8bd18ca`](https://github.com/jupyter-naas/abi/commit/8bd18ca799669858579758d18f44c837315c6b62))
+
+- **nexus**: Access policies and groups are made once, after the moves, and leave nothing on a
+  failure
+  ([`44b24e0`](https://github.com/jupyter-naas/abi/commit/44b24e0f800bed1898c15c6c371a7e0ffaf4f24a))
+
+- **nexus**: An app link opens its own app's files, not a nested module's
+  ([`09779d1`](https://github.com/jupyter-naas/abi/commit/09779d176c4c739377e96039f3decc668283a607))
+
+- **nexus**: An invitation with no date shows none, not 1970
+  ([`93ba965`](https://github.com/jupyter-naas/abi/commit/93ba96581b958b33a5cad7a5296dddd34c77bdeb))
+
+- **nexus**: An organization never adopts another's access policy of the same name; its delete holds
+  the row FOR UPDATE
+  ([`a6196e3`](https://github.com/jupyter-naas/abi/commit/a6196e30c6f88c34f8344f3ec9b1affacc4ee2b4))
+
+- **nexus**: Deleting a workspace never reads abi_servers
+  ([`5dba14d`](https://github.com/jupyter-naas/abi/commit/5dba14d0ae94703aa1e8ee5441d5e90bd496ffcc))
+
+- **nexus**: Deleting a workspace no longer reads abi_servers, which no migration creates
+  ([`5467e2e`](https://github.com/jupyter-naas/abi/commit/5467e2eef599100c6932bd3ba7b6044c96f0bfb4))
+
+- **nexus**: List workflow_run_owners among Platform Settings' tables
+  ([`9e6bfca`](https://github.com/jupyter-naas/abi/commit/9e6bfca7f062bd38b1b525fb0c40ec19f3098499))
+
+- **nexus**: Move role features from what was in force, keep pending invitations
+  ([`44855c7`](https://github.com/jupyter-naas/abi/commit/44855c74ce5b54881bb60dc88559ac2363613b73))
+
+- **nexus**: Narrowing a manifest that declares a catalog
+  ([`154de08`](https://github.com/jupyter-naas/abi/commit/154de086696054682c8ff8e504a444270f5fdda9))
+
+- **nexus**: Nexus tables lists the tasks tables; no wording of the toggles left
+  ([`4f0bd07`](https://github.com/jupyter-naas/abi/commit/4f0bd077434c83b280a66033014d9caeb514274a))
+
+- **nexus**: Offer a sub-policy where IAM lets it be attached
+  ([`7bf3dcf`](https://github.com/jupyter-naas/abi/commit/7bf3dcf20720caadbdc72d4e72c4dcb4409e0da6))
+
+- **nexus**: Ontologies are assigned and read per ontology, as IAM decides
+  ([`79d12fd`](https://github.com/jupyter-naas/abi/commit/79d12fd497aa137130570c2fd6e3480e24c647ce))
+
+- **nexus**: Platform Settings review round 1
+  ([`d85c1a3`](https://github.com/jupyter-naas/abi/commit/d85c1a33ad4eab0fb1fe2ab0673198fb32337edf))
+
+- **nexus**: Prefetch a sidebar panel only for items that have one
+  ([`aa9dc1b`](https://github.com/jupyter-naas/abi/commit/aa9dc1bb25d87f82e50f777effa62286e62a9f0f))
+
+- **nexus**: Record the old policies retired only once none is left
+  ([`cd2e56c`](https://github.com/jupyter-naas/abi/commit/cd2e56c68cca051d053f265dfae57f6537f886b1))
+
+- **nexus**: Refresh a due session once, route only verified domains
+  ([`2fd6ebb`](https://github.com/jupyter-naas/abi/commit/2fd6ebb4652a6f244e90ebc80c519bdf3a7e617b))
+
+- **nexus**: Remote app grants stay narrow, short and out of the logs
+  ([`c6064b9`](https://github.com/jupyter-naas/abi/commit/c6064b9721489c157d8f122f6bf37a79f220aceb))
+
+- **nexus**: Remote module apps run sandboxed, under a grant
+  ([`2e773d6`](https://github.com/jupyter-naas/abi/commit/2e773d635ba9940604815a14c90812b7adfc16c8))
+
+- **nexus**: Review round 1 of the builder, web side
+  ([`c7b09d3`](https://github.com/jupyter-naas/abi/commit/c7b09d3434d3b27aa566917971495c35c3ba5aa4))
+
+- **nexus**: Scoped tokens no longer open the API or the WebSocket
+  ([`ce3d301`](https://github.com/jupyter-naas/abi/commit/ce3d301d967614ac7923873db007b3401909aea0))
+
+- **nexus**: Settings are decided on access read for the scope shown
+  ([`e4d89d9`](https://github.com/jupyter-naas/abi/commit/e4d89d9c53e5e96d65ea5afff831daaee9a2c304))
+
+- **nexus**: Shared repo seeding and activity actors follow IAM
+  ([`aac13c8`](https://github.com/jupyter-naas/abi/commit/aac13c81483f15e7017c66da86d1ef5825ea34cd))
+
+- **nexus**: The attach form chooses nothing, and offers no service account's policy to a person
+  ([`b32d600`](https://github.com/jupyter-naas/abi/commit/b32d6007391922667d4a45dc01b4e1607500bc5f))
+
+- **nexus**: The attach form offers no Self to a person or a group
+  ([`c64a6d2`](https://github.com/jupyter-naas/abi/commit/c64a6d2d7a35087fc323620d7d8f2933d75af8cf))
+
+- **nexus**: The builder lists only what may be granted of a type
+  ([`92ced27`](https://github.com/jupyter-naas/abi/commit/92ced27550ea7acf17c697389f9d805065d4d449))
+
+- **nexus**: The icon route reads only the ontologies the caller may get; listed once
+  ([`1b76dbf`](https://github.com/jupyter-naas/abi/commit/1b76dbf2924324e91b3b39dcbf29631e5abb7c5f))
+
+- **nexus**: The modules that exist are read as Nexus, whoever asks
+  ([`d10bf13`](https://github.com/jupyter-naas/abi/commit/d10bf13d146cc9c8c7186d84472169fcf6f939c5))
+
+- **nexus**: The move of the sets keeps every decision in the review's cases
+  ([`713f9ef`](https://github.com/jupyter-naas/abi/commit/713f9ef4787faab90d058e9503e7229ba5613c7a))
+
+- **nexus**: The policy builder's publishers read the modules once, after IAM
+  ([`b3fc1d6`](https://github.com/jupyter-naas/abi/commit/b3fc1d651bc5e363382e614a6093c32299d10073))
+
+- **nexus**: The settings cache holds the reach of a plain session only
+  ([`2211988`](https://github.com/jupyter-naas/abi/commit/22119889d285499ae543975ef51146a55424f732))
+
+- **nexus**: The sign-in cookies stay usable over plain http on this machine
+  ([`64c4d2f`](https://github.com/jupyter-naas/abi/commit/64c4d2f30f512f7e47c2b7b6637f558a562993f5))
+
+- **nexus**: The start-up moves run in one API process at a time
+  ([`f436eaf`](https://github.com/jupyter-naas/abi/commit/f436eaf056e23fc696f2611b8379b97716144d1d))
+
+- **nexus**: The Statements view suggests no wildcard a Deny takes part of back
+  ([`2bfacc7`](https://github.com/jupyter-naas/abi/commit/2bfacc71bc8edf67ac96b5cfec50a581dcc0086e))
+
+- **nexus**: The Statements view suggests no wildcard the caller may not grant
+  ([`bcde530`](https://github.com/jupyter-naas/abi/commit/bcde53027feed5452332e8ed7bc9bb3d29d5b139))
+
+- **nexus**: The users directory, after review
+  ([`9281451`](https://github.com/jupyter-naas/abi/commit/92814516ba7c5d9e56a69fddcac6617992df7ab0))
+
+- **nexus**: Visibility refuses use only; listings ask each resource; resources say what is unknown
+  ([`cbe50ab`](https://github.com/jupyter-naas/abi/commit/cbe50abf5972375f5d6dd748520fca391f51cd47))
+
+- **nexus**: Workspace and organization settings open only as IAM allows, by URL too
+  ([`19dba2b`](https://github.com/jupyter-naas/abi/commit/19dba2b5377121d11ee301293ce68d6e8e64a862))
+
+- **nexus web**: The account menu shows Organization Settings as IAM decides, not from a workspace
+  role
+  ([`36efc73`](https://github.com/jupyter-naas/abi/commit/36efc733a2cbd9156c13f334ddca6837bc80815d))
+
+- **nexus, examples**: The scenario's comparator reads exactly; gather resets its context
+  ([`6147529`](https://github.com/jupyter-naas/abi/commit/61475291f98fb77882d85a3551fcc60944185579))
+
+- **nexus,web**: A view answers the reads the shell and the workspace's pages make, or the web does
+  not ask them
+  ([`e7eb828`](https://github.com/jupyter-naas/abi/commit/e7eb828c1c671044d2b0821b48856a9dc3241f15))
+
+- **nexus-web**: A chat message a view refuses shows the server's message, in the bubble and in the
+  banner's notice
+  ([`7647d6e`](https://github.com/jupyter-naas/abi/commit/7647d6ed20bf06f5ee684b559f6f6c04fd3771d0))
+
+- **nexus-web**: A view lands on the workspace Home, a page, and not on the bare workspace address
+  (404)
+  ([`43235b9`](https://github.com/jupyter-naas/abi/commit/43235b9ad01ef773070e24c0b4b4df8e809b324d))
+
+- **nexus-web**: Roles & permissions fixes from the abi dev up run
+  ([`b208ab0`](https://github.com/jupyter-naas/abi/commit/b208ab09838c7cbeb782143c9b6a2f9e035ebf66))
+
+- **nexus-web**: Roles & permissions review round 1
+  ([`b96dee8`](https://github.com/jupyter-naas/abi/commit/b96dee825d1d961f4b97c3889cec1f0795ca9a90))
+
+- **nexus-web**: The Apps page is a surface again, open to all; policies read in the current
+  workspace
+  ([`5ed7619`](https://github.com/jupyter-naas/abi/commit/5ed7619fd80aabcf714e56785b84646ea5f5ae58))
+
+- **nexus-web**: The person's page and the policy views ask nothing above the viewed workspace, and
+  no View as button inside a view
+  ([`dcb7d8b`](https://github.com/jupyter-naas/abi/commit/dcb7d8bf9ef0d697d95ecffb6409e1d6e94f2d10))
+
+- **nexus-web**: The view's end reloads on the server's word, and the banner tests no longer depend
+  on test order
+  ([`00baaa2`](https://github.com/jupyter-naas/abi/commit/00baaa2cc544c9a8fac65017ffa7f80fb06f7d90))
+
+- **sdk**: Keep the instance id when a discovery lease is lost
+  ([`db98a9d`](https://github.com/jupyter-naas/abi/commit/db98a9dd7230a1cdac7c859cac206ce4c0e7bc13))
+
+### Chores
+
+- Leave the formatting of files this work touches as it was
+  ([`f9222f7`](https://github.com/jupyter-naas/abi/commit/f9222f71f465bae2767990c6670218147d7f9079))
+
+- **nexus**: Drop an unused import from the Nexus tables page
+  ([`10d1a21`](https://github.com/jupyter-naas/abi/commit/10d1a21290ef104f6fe15e99342544603fdd6814))
+
+### Code Style
+
+- Fix the 25 ruff findings that fail make check
+  ([`ba278ad`](https://github.com/jupyter-naas/abi/commit/ba278ad305e093301c4b24c857a1c3cecaa6ebc8))
+
+- Lint and format the review fixes
+  ([`3dc3a7d`](https://github.com/jupyter-naas/abi/commit/3dc3a7dee21caed844af164c4f185e2c1d651c7b))
+
+### Documentation
+
+- Module scopes, declared catalogs and the upgrade note
+  ([`d739301`](https://github.com/jupyter-naas/abi/commit/d73930148c9312a6624717408c80305fce3f0a20))
+
+- Nexus has no login of its own: ADR, RFC, AGENTS, guides and the e2e sign-in
+  ([`0799cd2`](https://github.com/jupyter-naas/abi/commit/0799cd21cf5d8d4a0b2aea37f42183a3031a62dc))
+
+- Plugging in Okta, Entra, Zitadel and Keycloak; identity in CI
+  ([`5c3b711`](https://github.com/jupyter-naas/abi/commit/5c3b711efbbd5f406c59f3b0f31e23a596295e05))
+
+- Provisioning, pending grants and IdP group bindings; 502 when a provider cannot make the person
+  ([`f59b482`](https://github.com/jupyter-naas/abi/commit/f59b482bce220000ca30e9eff3f4f67012d7d972))
+
+- Say what things are, not which task built them: stale task numbers and
+  ([`c815326`](https://github.com/jupyter-naas/abi/commit/c81532608c17b93d038d0b02b1297b4f45b80912))
+
+- **iam, nexus, examples**: Access policies and default groups, refusals outside the parent, the
+  #1413 journeys
+  ([`5a738e1`](https://github.com/jupyter-naas/abi/commit/5a738e1476e9e965d35dfa1d404827414230b268))
+
+- **iam, nexus, examples**: The specs say what the acceptance run changed
+  ([`d33aece`](https://github.com/jupyter-naas/abi/commit/d33aece73e08d004349bc4763198106f138d1379))
+
+- **nexus**: Platform settings sidebar names its Database group
+  ([`9d5e584`](https://github.com/jupyter-naas/abi/commit/9d5e5841d4b21bb1ccfe50edc51964e01883d16c))
+
+### Features
+
+- Discovery and the model registry check the caller's policy
+  ([`636b1ac`](https://github.com/jupyter-naas/abi/commit/636b1ac463cde0a23fa06c1a424d2426d91153f3))
+
+- Invite UI, pending invitations, IdP group bindings and abi iam invite
+  ([`031e619`](https://github.com/jupyter-naas/abi/commit/031e61946eec043434bea8d7bae03b20ec2203ad))
+
+- Platform tools act for the user who is chatting
+  ([`16d4000`](https://github.com/jupyter-naas/abi/commit/16d400049f597933717a085080050f2a685baa2f))
+
+- The built-in IdP is served at /idp and read over NATS
+  ([`f2f666a`](https://github.com/jupyter-naas/abi/commit/f2f666a6205c96f49b29af7fdb4384ab9fb4f793))
+
+- **activity_log**: Copy the per-actor SQLite logs into documents as a job
+  ([`1ac84c8`](https://github.com/jupyter-naas/abi/commit/1ac84c8cbc367d0e9ec813d5cbc3f97ccc08fcfa))
+
+- **agent**: Run the agent memory migration and pruning as engine jobs
+  ([`2eafaf5`](https://github.com/jupyter-naas/abi/commit/2eafaf5a55225cdf41d5a640de8c23550cddbabb))
+
+- **cli**: Abi user migrate moves the old logins to the built-in provider
+  ([`524a262`](https://github.com/jupyter-naas/abi/commit/524a26221db1d59f62adcf01a41dea3e3ee624de))
+
+- **core**: Engine tokens, service keys, module manifests and broker confinement
+  ([`5427041`](https://github.com/jupyter-naas/abi/commit/54270410aee2bcba731e258f8008492060e50140))
+
+- **core**: Event and activity_log authorize every operation
+  ([`cfe19d3`](https://github.com/jupyter-naas/abi/commit/cfe19d327e29e0126b848f9605e0b9346c470207))
+
+- **core**: Every kernel call carries a verified CallContext
+  ([`c58683b`](https://github.com/jupyter-naas/abi/commit/c58683bfb1e72d4f1c2f34709c33fb62432925ef))
+
+- **core**: IAM over NATS and the SDK, configured and loaded first
+  ([`bff3bf6`](https://github.com/jupyter-naas/abi/commit/bff3bf6c0dfc7458cdf6ee671d61f08c3b292a9e))
+
+- **core**: Identity service verifies OIDC providers' tokens
+  ([`a973f51`](https://github.com/jupyter-naas/abi/commit/a973f51f97a4657221c420963c175e177e3353af))
+
+- **core**: Source control and coding environments authorize; bug (b) fixed
+  ([`0c57b78`](https://github.com/jupyter-naas/abi/commit/0c57b786e7c8cc47467358a58e59fba5b88c0ccc))
+
+- **core**: The data services enforce IAM in their domain services
+  ([`1de96d7`](https://github.com/jupyter-naas/abi/commit/1de96d776ab46fa45b4cb10f4ddf1dd96d0806a8))
+
+- **core,sdk**: A delegated token carries the user; the on-behalf-of header is gone
+  ([`2826428`](https://github.com/jupyter-naas/abi/commit/282642841efbb4646e7815a45b7b3b462f64a073))
+
+- **iam**: A sub-policy naming what its parent allows nowhere is refused, not a silent no-op
+  ([`f1a0c53`](https://github.com/jupyter-naas/abi/commit/f1a0c5302b4cb4d0dc2b34bf08c268b7b4fef7d5))
+
+- **iam**: Grant only what you hold
+  ([`5f39192`](https://github.com/jupyter-naas/abi/commit/5f3919264b2788f2f91c04d3b57c01d9af50f060))
+
+- **iam**: Policies and groups owned by an organisation or a workspace
+  ([`c575aad`](https://github.com/jupyter-naas/abi/commit/c575aad2effaa1f31bebb55eafdf018558c23d4b))
+
+- **iam, nexus**: What a sub-policy of a parent may grant
+  ([`27e23ee`](https://github.com/jupyter-naas/abi/commit/27e23eecaf4a77302e4f5c4647bcf65f8a423905))
+
+- **iam, sdk, proto**: A principal's groups, and a search for principals
+  ([`5669096`](https://github.com/jupyter-naas/abi/commit/566909670c9fe3d4eca2ad94bfd636023f83eb50))
+
+- **iam-admin**: Access at a scope answers for that level; org role feature rights
+  ([`6fe8a17`](https://github.com/jupyter-naas/abi/commit/6fe8a178235edc57ae614d68a3a78638499f3272))
+
+- **nexus**: A module's app needs its module scope to be listed or opened
+  ([`b45bd62`](https://github.com/jupyter-naas/abi/commit/b45bd6225af3536cce049b30ac3bc76271f86e8e))
+
+- **nexus**: A real API keys page; the engine exchanges an IdP token for a session
+  ([`e6f7bce`](https://github.com/jupyter-naas/abi/commit/e6f7bce13cff55fcc623fa31c56f32aaa0db4f90))
+
+- **nexus**: A view keeps the person's content private, writes nothing, and opens their apps
+  read-only
+  ([`79183e2`](https://github.com/jupyter-naas/abi/commit/79183e280297c75ee104299de211ac346387b73d))
+
+- **nexus**: Attach a policy from a person's page; say what a companion comes with
+  ([`83ac4d3`](https://github.com/jupyter-naas/abi/commit/83ac4d3579d7369e9a87aa271aca74647f4524a7))
+
+- **nexus**: Each organization and workspace has its access policy and default groups; organizations
+  are deleted
+  ([`8c6c715`](https://github.com/jupyter-naas/abi/commit/8c6c71504c50fa5f51fd6f04d1700327083bfa05))
+
+- **nexus**: Every account of the platform, its invitation and lifecycle
+  ([`6052ff3`](https://github.com/jupyter-naas/abi/commit/6052ff3885a033bd67e321617214a86a4f8dc940))
+
+- **nexus**: Every authorization decision goes through IAM
+  ([`6eeb927`](https://github.com/jupyter-naas/abi/commit/6eeb9275d0748bf16f3837c081bfbc3ab5eb2804))
+
+- **nexus**: Features are granted by policies only
+  ([`5511ff6`](https://github.com/jupyter-naas/abi/commit/5511ff69a5a7c155e0933c2d0646ab212b4b3df0))
+
+- **nexus**: IAM admin UI: policies, attachments, groups, service accounts, approvals, simulator and
+  audit
+  ([`93d5e6d`](https://github.com/jupyter-naas/abi/commit/93d5e6d5e0d6e5f1aa3eab1c25b4fa8f642ef34c))
+
+- **nexus**: Invitations through the identity providers, IdP group bindings
+  ([`564683e`](https://github.com/jupyter-naas/abi/commit/564683e66c94e9ca8b74883f24f508cfd759cbbd))
+
+- **nexus**: List and serve the apps of remote modules
+  ([`c781461`](https://github.com/jupyter-naas/abi/commit/c7814613443767e5bfee96d31ccc88a891b2a679))
+
+- **nexus**: List every module's scopes, with display data, for the policy editor
+  ([`f81393d`](https://github.com/jupyter-naas/abi/commit/f81393d9500b58ded0c3c11a060530a307f965fc))
+
+- **nexus**: Module agents need their module scope in chat, /v1 and the roster
+  ([`f9772ed`](https://github.com/jupyter-naas/abi/commit/f9772ed82490f4825688aab30cf8e44505b0f742))
+
+- **nexus**: One place to see a person's, a group's and a policy's access
+  ([`553e627`](https://github.com/jupyter-naas/abi/commit/553e627402ce4cdf1cb6c6c53e30bf8b858512ac))
+
+- **nexus**: Organizations and workspaces are IAM containers
+  ([`c85872c`](https://github.com/jupyter-naas/abi/commit/c85872c258343455d5c62b932800556e64c424c8))
+
+- **nexus**: Platform Settings > Users
+  ([`a4464ba`](https://github.com/jupyter-naas/abi/commit/a4464bada338ba66b6c0cbef9fb320fb3854a38b))
+
+- **nexus**: Platform Settings gets Nexus tables, System and a sidebar by permission
+  ([`6dc5851`](https://github.com/jupyter-naas/abi/commit/6dc58512645d774888a27ef6b2fc3ba2505ee734))
+
+- **nexus**: Policies take a parent and show it
+  ([`163307c`](https://github.com/jupyter-naas/abi/commit/163307cce69a604f5bc9a8c2317faad7e542b57c))
+
+- **nexus**: Publishers, resource listing, and nothing lists more than the caller may grant
+  ([`71020a3`](https://github.com/jupyter-naas/abi/commit/71020a3422f86390ef6fc5528dcf3c2d31127f7e))
+
+- **nexus**: Remove the login: password, magic link, one-time code, reset, signup, refresh tokens
+  ([`cbf409f`](https://github.com/jupyter-naas/abi/commit/cbf409fce4cbe07ef1200fd18152a5d677829766))
+
+- **nexus**: Sets replace workspace feature overrides; sets API for the page
+  ([`a41512a`](https://github.com/jupyter-naas/abi/commit/a41512a447c27916e60b9538046e28c39b7e8a33))
+
+- **nexus**: Sign-in through the engine's identity providers
+  ([`93a1146`](https://github.com/jupyter-naas/abi/commit/93a11465fde6d25d2ab63ca31a4f49912d66a709))
+
+- **nexus**: Stream uploads to remote apps and their answers back
+  ([`b733b56`](https://github.com/jupyter-naas/abi/commit/b733b56a5a027115a1da1aaf17d9f3d3476be898))
+
+- **nexus**: The API takes sessions, keys and coding keys where each belongs; links are IAM grants
+  ([`0803aba`](https://github.com/jupyter-naas/abi/commit/0803aba2f1aadb283420940e32b692f1b6c15249))
+
+- **nexus**: The first sign-in through the built-in provider links an existing account
+  ([`d65e9c1`](https://github.com/jupyter-naas/abi/commit/d65e9c19c8f7ea18b2bf86e0dd8582aa662ea75b))
+
+- **nexus**: The policy builder by publisher, with sub-policies
+  ([`8d00071`](https://github.com/jupyter-naas/abi/commit/8d000715ef5749e702b327785f2d62f9c054ddf1))
+
+- **nexus**: The policy builder opens and closes by publisher, groups by service, searches
+  ([`35b14a0`](https://github.com/jupyter-naas/abi/commit/35b14a0c28c6af9428ffb555a75cbaf24a4c0a2d))
+
+- **nexus**: The session settings of provider sign-ins are module config
+  ([`0c09226`](https://github.com/jupyter-naas/abi/commit/0c09226ebe73f7b76dd43c74c133258f95ee5a98))
+
+- **nexus**: The sets and the workspace toggles become a tree of policies
+  ([`d25ac9c`](https://github.com/jupyter-naas/abi/commit/d25ac9c775775c773f840a9adfff6a4a6d526c32))
+
+- **nexus**: View as another person on the server, read-only and confined to one workspace
+  ([`bdb43ef`](https://github.com/jupyter-naas/abi/commit/bdb43efa7ce997cdd357ed617d107dea33c869cd))
+
+- **nexus**: Workflows and pipelines in a workspace, by module scope
+  ([`3c512b5`](https://github.com/jupyter-naas/abi/commit/3c512b54d7feb360543726fe42d2907752114042))
+
+- **nexus**: Workspaces list only their set; a resource turned off is refused
+  ([`0af66c4`](https://github.com/jupyter-naas/abi/commit/0af66c48707a6fd8cd2255228412404a1aa9354d))
+
+- **nexus web**: Platform Settings lists, creates, renames and deletes organizations
+  ([`7832c96`](https://github.com/jupyter-naas/abi/commit/7832c96c5cf6709bdd0b924f17b62a0d7229b3f1))
+
+- **nexus, web**: No on/off toggles and no Modules & features pages
+  ([`7873416`](https://github.com/jupyter-naas/abi/commit/7873416a05c2df582147756c4a28c3437dc7c045))
+
+- **nexus-web**: Modules x workspaces page in Platform and Organization settings
+  ([`4cd9585`](https://github.com/jupyter-naas/abi/commit/4cd958538b716b184d9448b464b959f177002144))
+
+- **nexus-web**: Nexus tables under a Database heading in Platform settings
+  ([`d21954c`](https://github.com/jupyter-naas/abi/commit/d21954c09a97d3273c58faa5ec0753c561df8f7d))
+
+- **nexus-web**: No role feature defaults; invitations carry policies
+  ([`842ad22`](https://github.com/jupyter-naas/abi/commit/842ad222391c2a1fc56be825e1503057e5906e01))
+
+- **nexus-web**: One Roles & permissions UI for the platform, organizations and workspaces
+  ([`bba93fa`](https://github.com/jupyter-naas/abi/commit/bba93fa67ff33789b83cdaf08f3d52597c7de23d))
+
+- **nexus-web**: Sign in through identity providers on a cookie session
+  ([`9c925c1`](https://github.com/jupyter-naas/abi/commit/9c925c10e25ffb38f8de3ad6114fba91d017dd07))
+
+- **nexus-web**: Sign-in is the identity provider's, nothing else
+  ([`f5580ff`](https://github.com/jupyter-naas/abi/commit/f5580ff5e8d4950cfa70678451d72e32b62524cf))
+
+- **nexus-web**: View as another person, with the picker, the banner and Stop
+  ([`6b8e909`](https://github.com/jupyter-naas/abi/commit/6b8e909143b9211877aedb7ddd58e887bb7a280e))
+
+- **nexus-web**: Workspace settings show only the workspace's set
+  ([`2016a6a`](https://github.com/jupyter-naas/abi/commit/2016a6afdca499bf553a9300a773308abf9b584b))
+
+- **sdk**: App bodies stream between Nexus and the module
+  ([`fadf80f`](https://github.com/jupyter-naas/abi/commit/fadf80fcfd8ef5ed0597fb7716d1dcb22f6cd662))
+
+- **web**: Policies and scopes in container paths
+  ([`f32fb6b`](https://github.com/jupyter-naas/abi/commit/f32fb6bebf30afe1d96bba537f497abb682aafa0))
+
+### Refactoring
+
+- Review minors for module scopes
+  ([`750e738`](https://github.com/jupyter-naas/abi/commit/750e7389e526924896500b673e1dbdead050381c))
+
+- **nexus**: Group a user's own runs by the action that reads them; type a test's tools
+  ([`18ac381`](https://github.com/jupyter-naas/abi/commit/18ac38120fd153fab4f1886c804dcf144f1a1ab2))
+
+### Testing
+
+- The SDK demo reaches identity; client engines get its NATS facade
+  ([`6719f48`](https://github.com/jupyter-naas/abi/commit/6719f4822d77543a35c4758e9852fc59466012fb))
+
+- **nexus**: Tell a platform admin apart with an action no Nexus user holds
+  ([`b207a58`](https://github.com/jupyter-naas/abi/commit/b207a58845dce8219472acd1223ba98ce8940957))
+
+- **nexus**: The API tests follow the permission system's names and memberships
+  ([`b01fd75`](https://github.com/jupyter-naas/abi/commit/b01fd75d2470c644018765dc79fd8ad59bd843e0))
+
+- **nexus**: The platform tables list the accounts ABI made at identity providers
+  ([`0411b18`](https://github.com/jupyter-naas/abi/commit/0411b186ce302ce989a14c822b7ee759ac93618d))
+
+- **nexus**: The upgrade of access policies and groups on the SQLite store, with containers made
+  after the sets' move
+  ([`2135322`](https://github.com/jupyter-naas/abi/commit/2135322a30fbbe5f07bc4a7c610be47ffda05053))
+
+- **nexus-web**: The login page keeps the built-in login beside a default provider
+  ([`9c3b0c4`](https://github.com/jupyter-naas/abi/commit/9c3b0c41bd3ea792795468cd15165237a2704e71))
+
+
 ## v3.6.3 (2026-11-04)
 
 ### Bug Fixes
