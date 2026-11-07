@@ -2,6 +2,133 @@
 
 <!-- version list -->
 
+## v3.3.0 (2026-11-07)
+
+### Bug Fixes
+
+- Hosts never hold a caller's token; the secret endpoint is an allowlist; no key in logs
+  ([`98cefb3`](https://github.com/jupyter-naas/abi/commit/98cefb3be5f00c9b85f90de18d211f0b535abe99))
+
+- Invitations review round 1: owner invites, shared grants, rollbacks, bindings and sign-in claim
+  ([`3f2116c`](https://github.com/jupyter-naas/abi/commit/3f2116ca915296bd8ab4b942b82fb069da66d2f4))
+
+- Nexus signs its own NATS calls and follows the dev ports; docs for the built-in IdP
+  ([`5a1b814`](https://github.com/jupyter-naas/abi/commit/5a1b81421d229ebb80e2043e8a3c38755583f872))
+
+- **cli**: A new project mails the sign-in code to a file in dev
+  ([`9f20844`](https://github.com/jupyter-naas/abi/commit/9f20844af54b3c8534e9b37011e51fc4588d2943))
+
+- **cli**: Abi dev up no longer hangs telling a broker nobody listens on
+  ([`9dd5663`](https://github.com/jupyter-naas/abi/commit/9dd56630de6fb982aa412538f80359d639499d9d))
+
+- **deps**: Install naas-abi-proto and naas-abi-sdk wherever they are imported
+  ([`f7685c4`](https://github.com/jupyter-naas/abi/commit/f7685c44230cc7ec34bdbcdbdbb6374d91e4405f))
+
+- **idp**: Review round 1: cookie clearing, credentials changes, shared client addresses, relying
+  parties of the route
+  ([`309dc8e`](https://github.com/jupyter-naas/abi/commit/309dc8eaa7e7eb18cd47164ae65b5bb493bf6084))
+
+- **nexus**: Remote module apps run sandboxed, under a grant
+  ([`2e773d6`](https://github.com/jupyter-naas/abi/commit/2e773d635ba9940604815a14c90812b7adfc16c8))
+
+### Chores
+
+- Make check-core pass after the main merge
+  ([`6ccdeb5`](https://github.com/jupyter-naas/abi/commit/6ccdeb51cc33e6a4ffd5995a1e9ef672c5e9e11e))
+
+- **config**: The project templates and root configs drop role_baseline
+  ([`3479ae5`](https://github.com/jupyter-naas/abi/commit/3479ae540d6fedecf6f57bb8d56247a716810da4))
+
+### Code Style
+
+- Fix the 25 ruff findings that fail make check
+  ([`ba278ad`](https://github.com/jupyter-naas/abi/commit/ba278ad305e093301c4b24c857a1c3cecaa6ebc8))
+
+### Documentation
+
+- NATS is the default for new projects and modules
+  ([`2b5a9f6`](https://github.com/jupyter-naas/abi/commit/2b5a9f6fe971d60fcd201b780d8405b96776fdb3))
+
+- Point workflow documentation at durable workflows and remote classes
+  ([`029846a`](https://github.com/jupyter-naas/abi/commit/029846a2c7340f39e561be0de8e40d8b386f0021))
+
+### Features
+
+- Discovery and the model registry check the caller's policy
+  ([`636b1ac`](https://github.com/jupyter-naas/abi/commit/636b1ac463cde0a23fa06c1a424d2426d91153f3))
+
+- Invite UI, pending invitations, IdP group bindings and abi iam invite
+  ([`031e619`](https://github.com/jupyter-naas/abi/commit/031e61946eec043434bea8d7bae03b20ec2203ad))
+
+- **agent**: Run the agent memory migration and pruning as engine jobs
+  ([`2eafaf5`](https://github.com/jupyter-naas/abi/commit/2eafaf5a55225cdf41d5a640de8c23550cddbabb))
+
+- **cli**: Abi dev up and the Docker templates run the built-in IdP
+  ([`e56eaa5`](https://github.com/jupyter-naas/abi/commit/e56eaa53be5ff9b27acd083dc5e85b948aab7ae0))
+
+- **cli**: Abi dev up runs the engine on NATS by default
+  ([`10e1b20`](https://github.com/jupyter-naas/abi/commit/10e1b20c0bfa8a2b61bc7e3af5c839062a45c6d2))
+
+- **cli**: Abi iam, keys for dev modules, brokers behind the auth callout
+  ([`db5e1bb`](https://github.com/jupyter-naas/abi/commit/db5e1bb733e315ea8e65d74ac11968537f8794d2))
+
+- **cli**: Abi new module creates a remote (SDK) module by default
+  ([`43d2cf3`](https://github.com/jupyter-naas/abi/commit/43d2cf361b31f38c37e83aecc5aa6863a120e7e3))
+
+- **cli**: Abi new project creates a NATS project by default
+  ([`1e31a80`](https://github.com/jupyter-naas/abi/commit/1e31a805fa436618fc8bd951a7a8589c95d32530))
+
+- **cli**: Abi user migrate moves the old logins to the built-in provider
+  ([`524a262`](https://github.com/jupyter-naas/abi/commit/524a26221db1d59f62adcf01a41dea3e3ee624de))
+
+- **cli**: No admin password: dev up, new project and deploy local seed the identity provider
+  ([`fa81963`](https://github.com/jupyter-naas/abi/commit/fa81963486d3f101a0241a6fdcedf1d0798c46ea))
+
+- **cli**: Remote module apps are served through Nexus
+  ([`e4b8c0d`](https://github.com/jupyter-naas/abi/commit/e4b8c0d18ca3858c936ddc964fb75602fd69a117))
+
+- **cli**: Remote modules log READY once discovery confirms them
+  ([`71a4786`](https://github.com/jupyter-naas/abi/commit/71a47869a1adbb608884a7a6c520ade5f9fb8d7c))
+
+- **core**: IAM over NATS and the SDK, configured and loaded first
+  ([`bff3bf6`](https://github.com/jupyter-naas/abi/commit/bff3bf6c0dfc7458cdf6ee671d61f08c3b292a9e))
+
+- **core**: Identity service verifies OIDC providers' tokens
+  ([`a973f51`](https://github.com/jupyter-naas/abi/commit/a973f51f97a4657221c420963c175e177e3353af))
+
+- **core**: The data services enforce IAM in their domain services
+  ([`1de96d7`](https://github.com/jupyter-naas/abi/commit/1de96d776ab46fa45b4cb10f4ddf1dd96d0806a8))
+
+- **core, sdk, cli**: The container of the call in every kernel service
+  ([`5f82765`](https://github.com/jupyter-naas/abi/commit/5f82765a103e9c08b1c01fa31d1b1445d28db369))
+
+- **engine**: One serving engine per NATS account, shared event and activity storage
+  ([`6416192`](https://github.com/jupyter-naas/abi/commit/6416192db46fdcf390928a8cbccb67562b134d5b))
+
+- **examples**: The permission scenario runs end to end, the upgrade included
+  ([`78e32f7`](https://github.com/jupyter-naas/abi/commit/78e32f7cdd61186a5de0cc91cddb56225c1f69cb))
+
+- **iam**: Grant only what you hold
+  ([`5f39192`](https://github.com/jupyter-naas/abi/commit/5f3919264b2788f2f91c04d3b57c01d9af50f060))
+
+- **iam**: Policies and groups owned by an organisation or a workspace
+  ([`c575aad`](https://github.com/jupyter-naas/abi/commit/c575aad2effaa1f31bebb55eafdf018558c23d4b))
+
+- **nats**: Abi dev's broker admits only clients with a password too
+  ([`ceec0f9`](https://github.com/jupyter-naas/abi/commit/ceec0f9333f38ecbe851aeeb7a6c6bad73b33b84))
+
+- **nats**: The broker admits only clients with a password
+  ([`8c808be`](https://github.com/jupyter-naas/abi/commit/8c808be0b301d5c951e986ccdfdbc176c47e7eb3))
+
+- **nexus**: Stream uploads to remote apps and their answers back
+  ([`b733b56`](https://github.com/jupyter-naas/abi/commit/b733b56a5a027115a1da1aaf17d9f3d3476be898))
+
+### Testing
+
+- **cli**: A project without NATS has no built-in identity provider
+  ([`22e18f9`](https://github.com/jupyter-naas/abi/commit/22e18f93e9af8e3608af8b33c00bf7402e1647cd))
+
+
 ## v3.2.0 (2026-10-26)
 
 
