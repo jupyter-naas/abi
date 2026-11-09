@@ -1,4 +1,4 @@
-import test from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { crossesBox, orthogonalRoute, parallelLanes, routeDistance, routeLabel, type Box, type Point } from './orthogonal-route';
 const box = (x: number, y: number): Box => ({ left: x - 60, right: x + 60, top: y - 25, bottom: y + 25 });

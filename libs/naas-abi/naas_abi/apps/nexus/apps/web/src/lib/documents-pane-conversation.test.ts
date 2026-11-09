@@ -57,11 +57,11 @@ describe('openDocumentBranch', () => {
 });
 
 describe('conversationMatchesDocumentSlug', () => {
-  it('matches a stamped sectionsSlug', () => {
-    expect(conversationMatchesDocumentSlug(conv({ id: 'c1', sectionsSlug: 'document-a' }), 'document-a')).toBe(
+  it('matches a stamped documentsSlug', () => {
+    expect(conversationMatchesDocumentSlug(conv({ id: 'c1', documentsSlug: 'document-a' }), 'document-a')).toBe(
       true,
     );
-    expect(conversationMatchesDocumentSlug(conv({ id: 'c1', sectionsSlug: 'document-a' }), 'document-b')).toBe(
+    expect(conversationMatchesDocumentSlug(conv({ id: 'c1', documentsSlug: 'document-a' }), 'document-b')).toBe(
       false,
     );
   });
@@ -105,7 +105,7 @@ describe('conversationMatchesDocumentSlug', () => {
 describe('findDocumentsPaneConversationId', () => {
   it('prefers the stored binding when that thread still exists', () => {
     const conversations = [
-      conv({ id: 'old', sectionsSlug: 'document-a', updatedAt: new Date('2026-02-01') }),
+      conv({ id: 'old', documentsSlug: 'document-a', updatedAt: new Date('2026-02-01') }),
       conv({ id: 'bound', title: 'Other', updatedAt: new Date('2026-01-01') }),
     ];
     expect(
@@ -120,8 +120,8 @@ describe('findDocumentsPaneConversationId', () => {
 
   it('ignores a stored id that is gone and falls back to the newest match', () => {
     const conversations = [
-      conv({ id: 'older', sectionsSlug: 'document-a', updatedAt: new Date('2026-01-01') }),
-      conv({ id: 'newer', sectionsSlug: 'document-a', updatedAt: new Date('2026-03-01') }),
+      conv({ id: 'older', documentsSlug: 'document-a', updatedAt: new Date('2026-01-01') }),
+      conv({ id: 'newer', documentsSlug: 'document-a', updatedAt: new Date('2026-03-01') }),
     ];
     expect(
       findDocumentsPaneConversationId({
@@ -139,8 +139,8 @@ describe('findDocumentsPaneConversationId', () => {
         workspaceId: 'ws-1',
         slug: 'document-b',
         conversations: [
-          conv({ id: 'a', sectionsSlug: 'document-a' }),
-          conv({ id: 'other-ws', workspaceId: 'ws-2', sectionsSlug: 'document-b' }),
+          conv({ id: 'a', documentsSlug: 'document-a' }),
+          conv({ id: 'other-ws', workspaceId: 'ws-2', documentsSlug: 'document-b' }),
         ],
       }),
     ).toBeNull();
