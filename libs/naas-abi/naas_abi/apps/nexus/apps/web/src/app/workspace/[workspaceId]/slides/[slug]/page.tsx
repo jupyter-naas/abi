@@ -351,7 +351,8 @@ export default function SlidesEditorPage() {
         }
         setLoading(false);
         setRefreshing(false);
-        clearOfficeCreate();
+        // A quiet refresh of the page File → New left must not end that create.
+        if (!quiet) clearOfficeCreate();
         if (ensureRuntime) {
           // Fire-and-forget: Preview already has Forgejo HTML. Coder ensure is
           // optional (deployed sidecar) and must not block or alarm locally.
@@ -370,7 +371,8 @@ export default function SlidesEditorPage() {
         }
       } catch (e) {
         if (gen !== loadGenRef.current) return;
-        clearOfficeCreate();
+        // A quiet refresh of the page File → New left must not end that create.
+        if (!quiet) clearOfficeCreate();
         const message = (e as Error).message;
         // Deck load Forgejo races are not a Coder outage; keep banners separate.
         setError(

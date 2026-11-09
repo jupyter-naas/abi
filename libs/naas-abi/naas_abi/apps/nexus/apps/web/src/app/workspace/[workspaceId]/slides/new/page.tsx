@@ -26,18 +26,26 @@ export default function NewSlidesProjectPage() {
     const templateId = officeCreateTemplateId(
       typeof window === 'undefined' ? null : new URLSearchParams(window.location.search),
     );
-    void import('@/lib/create-slides-project').then(({ slidesApiErrorMessage, startNewPresentation }) =>
-      startNewPresentation(
-        workspaceId,
-        (href) => {
-          setOfficeCreatePhase('opening');
-          router.replace(href);
-        },
-        templateId,
-      ).catch((e) => {
-        failOfficeCreate(slidesApiErrorMessage((e as Error).message, 'Could not create the deck.'));
-      }),
-    );
+    void (async () => {
+      const fallback = 'Could not create the deck.';
+      let errorMessage = (detail: unknown) => (detail ? String(detail) : fallback);
+      try {
+        // A failed chunk load (deploy, network) must surface too, not spin.
+        const lib = await import('@/lib/create-slides-project');
+        const { slidesApiErrorMessage, startNewPresentation } = lib;
+        errorMessage = (detail) => slidesApiErrorMessage(detail, fallback);
+        await startNewPresentation(
+          workspaceId,
+          (href) => {
+            setOfficeCreatePhase('opening');
+            router.replace(href);
+          },
+          templateId,
+        );
+      } catch (e) {
+        failOfficeCreate(errorMessage((e as Error).message));
+      }
+    })();
   }, [workspaceId, router]);
 
   return <OfficeCreateLoader kind="deck" phase={phase} error={error} />;

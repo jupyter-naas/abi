@@ -8,6 +8,7 @@ import {
   clearOfficeCreate,
   isOfficeCreateNewPath,
   isOfficeCreateProjectPath,
+  officeCreateDismissHref,
   officeCreateKindFromHref,
   pushOfficeCreate,
   useOfficeCreateStore,
@@ -116,6 +117,16 @@ describe('office create overlay hold', () => {
     expect(isOfficeCreateProjectPath('/workspace/ws-1/home')).toBe(false);
   });
 
+  it('dismisses a failed /new to its section index, elsewhere in place', () => {
+    expect(officeCreateDismissHref('/workspace/ws-1/slides/new')).toBe('/workspace/ws-1/slides');
+    expect(officeCreateDismissHref('/workspace/ws-1/documents/new/')).toBe(
+      '/workspace/ws-1/documents',
+    );
+    expect(officeCreateDismissHref('/workspace/ws-1/slides/untitled-1')).toBeNull();
+    expect(officeCreateDismissHref('/workspace/ws-1/documents')).toBeNull();
+    expect(officeCreateDismissHref(null)).toBeNull();
+  });
+
   it('keeps the overlay on the project route and clears after HTML loads', () => {
     const overlay = source('./office-create-overlay.tsx');
     expect(overlay).toContain('isOfficeCreateProjectPath(pathname)');
@@ -123,8 +134,14 @@ describe('office create overlay hold', () => {
     // A failed create is dismissable and released on navigation, never stuck.
     expect(overlay).toContain('useOfficeCreateErrorRelease(pathname, error)');
     expect(overlay).toContain('data-testid="office-create-dismiss"');
+    // On `/new` there is nothing under the overlay but a spinner: leave it.
+    expect(overlay).toContain('const index = officeCreateDismissHref(pathname)');
+    expect(overlay).toContain('router.replace(index)');
     const docPage = source('../../app/workspace/[workspaceId]/documents/[slug]/page.tsx');
     expect(docPage).toContain('clearOfficeCreate()');
+    // A quiet refresh of the page New was clicked on must not end that create.
+    expect(docPage.match(/if \(!quiet\) clearOfficeCreate\(\);/g)?.length).toBe(2);
+    expect(docPage).not.toMatch(/^\s*clearOfficeCreate\(\);/m);
     expect(docPage).toContain('void ensureDocumentsRuntime');
     expect(docPage).not.toContain('await ensureDocumentsRuntime');
   });
@@ -132,6 +149,8 @@ describe('office create overlay hold', () => {
   it('clears the Slides overlay after the deck HTML loads', () => {
     const slidesPage = source('../../app/workspace/[workspaceId]/slides/[slug]/page.tsx');
     expect(slidesPage).toContain('clearOfficeCreate()');
+    expect(slidesPage.match(/if \(!quiet\) clearOfficeCreate\(\);/g)?.length).toBe(2);
+    expect(slidesPage).not.toMatch(/^\s*clearOfficeCreate\(\);/m);
     expect(slidesPage).toContain('void ensureSlidesRuntime');
     expect(slidesPage).not.toContain('await ensureSlidesRuntime');
   });
@@ -169,6 +188,8 @@ describe('New document click paths', () => {
     expect(src).not.toMatch(/import\s*\{[^}]*startNewDocument/);
     expect(src).toContain("import('@/lib/create-documents-project')");
     expect(src).toContain('OfficeCreateLoader');
+    // The chunk import sits inside the try: a failed load reports, never spins.
+    expect(src).toMatch(/try \{[\s\S]*await import\('@\/lib\/create-documents-project'\)[\s\S]*\} catch \(e\) \{\s*failOfficeCreate\(/);
     expect(src).not.toContain('useSearchParams');
   });
 
@@ -177,6 +198,8 @@ describe('New document click paths', () => {
     expect(src).not.toMatch(/import\s*\{[^}]*startNewPresentation/);
     expect(src).toContain("import('@/lib/create-slides-project')");
     expect(src).toContain('OfficeCreateLoader');
+    // The chunk import sits inside the try: a failed load reports, never spins.
+    expect(src).toMatch(/try \{[\s\S]*await import\('@\/lib\/create-slides-project'\)[\s\S]*\} catch \(e\) \{\s*failOfficeCreate\(/);
     expect(src).not.toContain('useSearchParams');
   });
 

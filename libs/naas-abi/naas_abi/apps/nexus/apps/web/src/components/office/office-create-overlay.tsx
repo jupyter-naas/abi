@@ -8,6 +8,7 @@ import {
   clearOfficeCreate,
   isOfficeCreateNewPath,
   isOfficeCreateProjectPath,
+  officeCreateDismissHref,
   prefetchOfficeCreate,
   useOfficeCreateStore,
 } from './office-create-state';
@@ -65,6 +66,7 @@ function useOfficeCreateErrorRelease(pathname: string | null, error: string | nu
 /** Covers the open office surface the instant File → New sets the store flag. */
 export function OfficeCreateOverlay() {
   const pathname = usePathname();
+  const router = useRouter();
   const kind = useOfficeCreateStore((s) => s.kind);
   const phase = useOfficeCreateStore((s) => s.phase);
   const error = useOfficeCreateStore((s) => s.error);
@@ -86,7 +88,13 @@ export function OfficeCreateOverlay() {
             type="button"
             className="rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground hover:bg-accent"
             data-testid="office-create-dismiss"
-            onClick={() => clearOfficeCreate()}
+            onClick={() => {
+              // `/new` has nothing under the overlay but its own spinner: leave
+              // for the section index; the route change releases the error.
+              const index = officeCreateDismissHref(pathname);
+              if (index) router.replace(index);
+              else clearOfficeCreate();
+            }}
           >
             Dismiss
           </button>
