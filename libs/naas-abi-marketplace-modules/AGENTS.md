@@ -1,0 +1,155 @@
+# naas-abi-marketplace-modules — AGENTS.md
+
+Remote (SDK) versions of `naas_abi_marketplace.applications.*`. Tracking issue:
+jupyter-naas/abi#1423.
+
+## Rules
+
+- **SDK only.** Never import `naas_abi_core`, `naas_abi` or
+  `naas_abi_marketplace`. Each module's `tests/module_test.py` checks it in a
+  fresh interpreter, and the Dockerfile fails if one is installed.
+- One application = one subpackage `naas_abi_apps/<app>/` = one remote module =
+  one process (`python -m naas_abi_apps.<app>`). `naas_abi_apps` is a namespace
+  package: no `__init__.py` at its root.
+- `MODULE_ID = "applications.<app>"`. Never change it: discovery and agent
+  memory are keyed by it.
+- Shared code is in `naas_abi_apps/common/`: `runtime` (READY wait, signals,
+  configuration from the environment; `__main__.py` is three lines on top of
+  it), `agents` (`build_agent`, `read_secrets`, `tools_prompt`), `http`
+  (`HttpConfiguration`, `request`, `request_json` over httpx), `storage`
+  (`archive_json`), `graph` (core-free `ABIGraph`, `rows`, `sparql_string`),
+  `sparql_templates` (templatable SPARQL queries of `ontologies/*.ttl` as tools,
+  instead of core's `templatablesparqlquery`) and `testing` (fake engine
+  services, `FakeTripleStore` running real SPARQL, `no_core_import`).
+- In-engine tools that are lambdas with positional parameters become
+  `schema_tool(fn, Schema)` coroutines (arguments validated, defaults filled).
+- User input in SPARQL goes through `sparql_string`, never an f-string.
+- Configuration: a `ModuleConfiguration` dataclass of plain settings, set from
+  `<APP>_<FIELD>` variables. **Credentials are engine secrets**, read in
+  `on_initialized` with `await self.engine.services.secret.get(name)`; the
+  configuration holds the secret's *name* (`api_key_secret`).
+- Declare every engine service used in `ModuleDependencies(services=...)`.
+- Agents: `naas_abi_sdk.agents.Agent` / `IntentAgent`, models from
+  `model_registry`, memory from `document_memory(...)`, published in
+  `ABIModule.agents` and bound with `expose_agent` in `on_initialized`. Keep
+  the in-engine agent's name, prompt and tool names.
+- Integrations: `naas_abi_sdk.integration`, **async** (`httpx`), with an
+  optional `transport` for tests and an optional object `storage` for the
+  archived JSON the in-engine version wrote with `StorageUtils`. Tools use
+  `StructuredTool(coroutine=...)`.
+- Workflows / pipelines: `naas_abi_sdk.workflow` / `.pipeline` under
+  `workflows/` / `pipelines/`. Dagster orchestrations become `@job` /
+  `@workflow` methods. Ontologies are `.ttl` files under `ontologies/`.
+- Third-party dependencies go in the application's extra in `pyproject.toml`.
+- Blocking libraries (yfinance, ...) run in `asyncio.to_thread`, never on the
+  module's event loop.
+- A tool intent whose tool is absent (no credentials) is dropped. RAW intents
+  that say "I have no access to tools" are not ported when the agent has tools.
+- Tests are offline (`httpx.MockTransport`, fakes for engine services).
+
+## Port checklist (per application)
+
+1. `naas_abi_apps/<app>/`: `__init__.py` (`ABIModule`), `__main__.py`,
+   `agents/`, `integrations/`, `tests/module_test.py`, tests beside the code.
+2. Extra `<app>` in `pyproject.toml`; row in `README.md`.
+3. Remove the in-engine module, its extra, its `naas_abi` soft dependency and
+   its `make chat-*` target. An in-engine module that needs its raw client gets
+   its own copy (as `support` → GitHub, `people` → LinkedIn export below).
+
+## Decision (2026-11-05): cleanup, no compatibility window
+
+**Context.** Decision 6 of #1423: keep the ported in-engine modules
+(deprecated) for a release, or remove them.
+
+**Decision.** Removed with the ports, in the same PR: the in-engine versions of
+the 17 applications above and `applications.openrouter`, their extras, their
+`naas_abi` soft dependencies, their `make chat-*` targets and their generated
+reference docs. Kept in-engine: `git`, `bodo`, `naas` (its ontology YAML
+workflows and triggers; the agent is removed) and `x` (not ported yet).
+In-engine code that used a removed client got its own copy:
+- `support` owns `GitHubIntegration` and `GitHubGraphqlIntegration`
+  (`domains/operations/modules/support/integrations/`; `pynacl` in the
+  `domains-support` extra). It needs the raw REST and GraphQL calls (project
+  fields, iterations), which the remote module exposes only through its agent;
+- `people` owns the LinkedIn connections import (decision above);
+- `organizations` dropped its unused `applications.sec_gov` soft dependency;
+- `config.remote.yaml` loads `ai.openrouter` instead of `applications.openrouter`.
+
+**Consequences.** A project that loads a removed module in `modules:` fails at
+load: it removes the entry and runs the remote module (README), with the
+credentials as engine secrets. The migration note is in
+`naas_abi_marketplace/applications/AGENTS.md`.
+
+## Decision (2026-11-05): linkedin and the people module
+
+**Context.** The in-engine `linkedin` application imported the people domain
+module (graph builders, privacy check, profile documents) for its
+`ActOfConnectionsOnLinkedInExportPipeline`, which turns a member's
+`Connections.csv` into acts of connection in the people graphs. A remote
+module cannot import a domain module.
+
+**Decision.** That pipeline is people work: it moved to
+`domains/intelligence/modules/people/pipelines/`, with the LinkedIn ontology it
+instantiates (`ontologies/modules/LinkedInOntology.*`, `ActOfConnectionProcess`,
+the generated classes) and the CSV reader (`utils/linkedin_connections_csv.py`).
+The remote `linkedin` module keeps what talks to LinkedIn (the Voyager API with
+the member's cookies, the Google page searches of `google_search`) and what
+reads the connections back: the query templates, rewritten for what the
+pipeline writes (`abi:Person`, `linkedin:hasConnectionOwner` /
+`hasConnectedPerson`; the in-engine ones queried `linkedin:involvesAgent`,
+which nothing wrote), and the name embeddings for the KG agent, as a durable
+workflow run once at start instead of at every engine load.
+
+**Not ported.** `LinkedInExportIntegration` (ZIP export reader) and the
+`LinkedInExportConnectionsPipeline` / `LinkedInExportProfilePipeline` (an older
+graph model, no caller): the people pipeline replaces them.
+
+## Decision (2026-11-05): powerpoint
+
+The in-engine PowerPoint agent never ran (it read an undefined
+`naas_api_key`; its template was not in the repository). The remote module ports
+the integration, the slide-import pipeline and the create-from-template workflow,
+with a plain agent using them as tools instead of the custom LangGraph. Its
+default template is generated: `templates/make_template.py` writes
+`TemplateMinimal.pptx` (title, content and two-column slides; each text shape's
+alt text says what goes in it). `template_path` points at a real template in
+object storage.
+
+## Decision (2026-11-05): layout of the remote application modules
+
+**Context.** A remote module must not import `naas_abi_core`, and
+`naas-abi-marketplace` depends on it, so the ports cannot live in that
+distribution. The SDK runs one `ABIModule` per process.
+
+**Decision.** One new distribution, `naas-abi-marketplace-modules`, holding one
+subpackage per application under the `naas_abi_apps` namespace, with one extra
+per application and one Dockerfile parametrized by `APP`. Module ids are
+`applications.<app>`. Secrets come from the engine's `secret` service.
+
+**Consequences.**
+- One lockfile, one test run and one CI job for all ports, instead of 48
+  repositories; each image still installs only its application's extra.
+- Each application is still its own process, deployable and restartable alone.
+- In-engine consumers of an application call it over NATS (`get_agent`,
+  durable workflows), or keep their own copy of a raw client (cleanup decision).
+- The 27 placeholder agents (no tools) are not ported: they were removed from
+  the marketplace (#1423).
+
+## Not ported yet
+
+- `x` (24k lines): its durable flows run on core's in-engine workflow host
+  and read its job records, its dataset is core's DuckLake service, and its
+  `x_proxy` app is served by the engine. Split into sub-issues of #1423.
+- Of `naas`, only the agent and the integration are ported; its ontology YAML
+  workflows (core's `OntologyYaml`) stay in-engine with `ontology_engineer`.
+
+## Not ported (decided, #1423)
+
+- `git` stays in-engine. Its agent runs `git`, `make` and `gh` in the working
+  directory of the process, and `abi chat naas_abi_marketplace.applications.git
+  GitAgent` loads it in the CLI process (`make commit`, `make pr` in projects).
+  A remote module runs elsewhere (a container, another cwd).
+- `openrouter` is left to `naas_abi_marketplace.ai.openrouter`, which serves
+  the OpenRouter models through the engine's model registry with the same API
+  integration. The per-model agents of `applications.openrouter` are not
+  ported; the module was removed.

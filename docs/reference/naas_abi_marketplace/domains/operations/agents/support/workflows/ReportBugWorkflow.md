@@ -53,10 +53,10 @@ from naas_abi_marketplace.domains.operations.agents.support.workflows.ReportBugW
     ReportBugWorkflowConfiguration,
     ReportBugParameters,
 )
-from naas_abi_marketplace.applications.github.integrations.GitHubIntegration import (
+from naas_abi_marketplace.domains.operations.modules.support.integrations.GitHubIntegration import (
     GitHubIntegrationConfiguration,
 )
-from naas_abi_marketplace.applications.github.integrations.GitHubGraphqlIntegration import (
+from naas_abi_marketplace.domains.operations.modules.support.integrations.GitHubGraphqlIntegration import (
     GitHubGraphqlIntegrationConfiguration,
 )
 
