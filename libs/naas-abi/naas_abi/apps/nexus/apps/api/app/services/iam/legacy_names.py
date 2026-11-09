@@ -2,8 +2,9 @@
 
 The moves that predate container paths (``feature_overrides``, ``role_features``,
 ``policy_tree``) still read and write ``abi:<org>:<workspace>`` scopes until the
-move of the names (``container_names``) rewrites them. Nothing else imports this:
-every other name is built by ``names``.
+move of the names (``container_names``) rewrites them, as does the move of the role
+data of an install from before IAM (``bootstrap.migrate_role_data_before_names``).
+Nothing else imports this: every other name is built by ``names``.
 """
 
 from __future__ import annotations

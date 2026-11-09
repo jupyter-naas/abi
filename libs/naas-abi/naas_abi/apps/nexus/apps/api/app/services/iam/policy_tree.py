@@ -27,7 +27,12 @@ decide now. ``migrate_sets`` keeps every user's decision as it was:
   grants something else (files, graphs, ...) or denies keeps that part, attached
   as before; its modules and features move to a sub-policy beside it;
 * a service account was never bounded by a set: it gets the same grants without
-  a parent.
+  a parent;
+* an install from before IAM held any role (``bootstrap.moved_from_before_iam``)
+  had no sets and no module scope: everyone holding a role in a workspace used
+  what the workspace had turned on. There, the holders of every role in a
+  workspace get that workspace's module scopes like its admins and owners
+  (``World.module_roles``), so nobody loses what the toggles gave them.
 
 What cannot be kept exactly stops the move, logged and named: nothing is
 recorded, and Nexus refuses every module scope and feature until a start moves
@@ -543,6 +548,13 @@ class World:
     pending: Sequence[Any]
     kinds: Mapping[str, str]  # principal -> user | group | service_account
     members: Mapping[str, Sequence[str]]  # group -> its static members
+    # The roles whose holders used a workspace's module scopes by their role: its
+    # admins and owners; every role for an install from before IAM held any role.
+    module_roles: frozenset[str] = frozenset(ROLES_WITH_MODULES)
+
+    @property
+    def before_iam(self) -> bool:
+        return self.module_roles != frozenset(ROLES_WITH_MODULES)
 
     def orgs(self) -> list[str]:
         return sorted({*self.org_names, *self.workspaces.values(), *(o for o, _ in self.sets)})
@@ -725,19 +737,34 @@ def _roles(world: World, result: Plan) -> None:
     of it granting every module scope, so within it (the role never brought a
     feature, so the access policy itself, which bounds features too, is not
     theirs). A service account, never bounded by a set, gets every module scope
-    there, within what the workspace had turned off (``_for_accounts``)."""
+    there, within what the workspace had turned off (``_for_accounts``). For an
+    install from before IAM, the holders of the other roles get it too, in the
+    workspaces they held them in (``World.module_roles``)."""
     held: dict[str, str] = {}
 
     def of_roles(place: Place) -> str:
         node = _node(place)
         if node not in held:
             access = result.policies[node]
+            label = access.name.removesuffix(" access")
+            if world.before_iam:
+                name = f"{label} modules (its people)"
+                description = (
+                    f"The modules {place.scope} uses, within its access: what the people "
+                    "holding a role there used before IAM, as the workspace had turned "
+                    "them on." + MADE
+                )
+            else:
+                name = f"{label} modules (admins and owners)"
+                description = (
+                    f"The modules {place.scope} uses, within its access: what its admins "
+                    "and owners held by their role before no role held a module scope." + MADE
+                )
             held[node] = result.add(
                 NewPolicy(
                     f"roles:{node}",
-                    f"{access.name.removesuffix(' access')} modules (admins and owners)",
-                    f"The modules {place.scope} uses, within its access: what its admins "
-                    "and owners held by their role before no role held a module scope." + MADE,
+                    name,
+                    description,
                     f"abi:{place.org}:-",
                     node,
                     tuple(_every_module_scope(world)),
@@ -746,8 +773,11 @@ def _roles(world: World, result: Plan) -> None:
         return held[node]
 
     for policy_id, scope, principal in _grantees(world):
-        if policy_id not in ROLES_WITH_MODULES or scope is None:
+        if policy_id not in world.module_roles or scope is None:
             continue
+        # A member or a viewer used what their workspace had turned on, not the
+        # organization's (an install from before IAM only).
+        workspaces_only = policy_id not in ROLES_WITH_MODULES
         reached = scope
         if principal.startswith("pending:") and scope.endswith(":-"):
             # An invited org owner or admin holds the role org-wide once signed
@@ -755,9 +785,11 @@ def _roles(world: World, result: Plan) -> None:
             reached = scope[: -len("-")] + "*"
         if world.kinds.get(principal) != "service_account":
             for place in _places(world, reached):
+                if workspaces_only and place.workspace == "-":
+                    continue
                 if _known(world, place):
                     result.grant(of_roles(place), principal, place.scope)
-        accounts = _service_accounts(world, principal)
+        accounts = [] if workspaces_only else _service_accounts(world, principal)
         if accounts:
             _for_accounts(
                 world,
@@ -1424,7 +1456,9 @@ def read_iam(iam: Any) -> dict[str, Any]:
     }
 
 
-def build_world(nexus: Mapping[str, Any], held: Mapping[str, Any]) -> World:
+def build_world(
+    nexus: Mapping[str, Any], held: Mapping[str, Any], *, before_iam: bool = False
+) -> World:
     sets = dict(held["sets"])
     for workspace_id, features in nexus["overrides"].items():
         org = nexus["workspaces"][workspace_id]
@@ -1443,6 +1477,7 @@ def build_world(nexus: Mapping[str, Any], held: Mapping[str, Any]) -> World:
         pending=held["pending"],
         kinds=held["kinds"],
         members=held["members"],
+        module_roles=frozenset(roles.ROLES if before_iam else ROLES_WITH_MODULES),
     )
 
 
@@ -1464,10 +1499,14 @@ async def migrate_sets(db: AsyncSession) -> Report | None:
             )
             return None
 
+    from naas_abi.apps.nexus.apps.api.app.services.iam import bootstrap
+
+    before_iam = await bootstrap.moved_from_before_iam(db)
+
     def work(nexus: Mapping[str, Any]) -> Report:
         iam = runtime.iam()
         with as_service_account("engine"):
-            world = build_world(nexus, read_iam(iam))
+            world = build_world(nexus, read_iam(iam), before_iam=before_iam)
             return apply(iam, world, plan(world))
 
     try:

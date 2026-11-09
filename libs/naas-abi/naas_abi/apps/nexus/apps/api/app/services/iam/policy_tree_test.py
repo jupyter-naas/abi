@@ -759,6 +759,98 @@ async def test_a_case_it_cannot_keep_stops_the_move(nexus_db, caplog):
     container_names.set_pending(False)
 
 
+def _world_before_iam() -> LegacyNexusIam:
+    """An install from before IAM held any role, its role data just moved
+    (``bootstrap.migrate_role_data_before_names``): roles alone, no set, no
+    policy of its own, and no role holding a module scope. What each workspace
+    turned on decided, for everyone holding a role there."""
+    nexus = LegacyNexusIam(FLAGS)
+    with as_service_account("engine"):
+        nexus.iam.register_catalog(module_scopes.CATALOG)
+        nexus.iam._register_catalog(module_catalog(DECLARED, "acme.people"))
+    scopes = {ws: nexus.workspace(org, ws) for ws, org in WORKSPACES.items()}
+    nexus.grant("alice", "owner", nexus.org("org-1"))
+    nexus.grant("bob", "admin", scopes["ws-a"])
+    nexus.grant("carol", "member", scopes["ws-a"])
+    nexus.grant("frank", "viewer", scopes["ws-b"])
+    nexus.grant("ivan", "member", scopes["ws-b"])
+    nexus.grant("henry", "member", nexus.org("org-1"))  # the organization, no workspace
+    with as_service_account("engine"):
+        nexus.iam.create_pending_grant("builtin", "zoe@example.com", roles.MEMBER, scopes["ws-a"])
+    return nexus
+
+
+async def _upgrade_before_iam(nexus: LegacyNexusIam, nexus_db) -> policy_tree.Report | None:
+    with as_service_account("engine"):
+        nexus.iam._refresh_builtin_policies()
+    nexus.iam.invalidate()
+    async with nexus_db() as db:
+        await _previous_database(db)
+        await db.execute(
+            text("INSERT INTO iam_migrations (name, applied_at, report) VALUES (:n, :at, :r)"),
+            {"n": "iam_roles_v1", "at": NOW, "r": json.dumps({"before_iam": True})},
+        )
+        await db.commit()
+        report = await policy_tree.migrate_sets(db)
+        await _rewrite(nexus, db)
+    nexus.iam.invalidate()
+    return report
+
+
+def _uses(nexus: LegacyNexusIam, user: str, ws: str, kind: str, module: str, name: str) -> bool:
+    with use_call_context(NexusIam.context(user)):
+        resource = _new(ws, f"module:{kind}/{module}/{name}")
+        return nexus.iam.authorize(ACTION_OF[kind], resource).allowed
+
+
+@pytest.mark.asyncio
+async def test_an_install_from_before_iam_gives_every_role_what_its_workspace_turned_on(
+    nexus_db,
+):
+    """Before IAM, a member or a viewer used what the workspace had turned on, as
+    its admins did: so they do after the move, within the workspace's access, and
+    nowhere they held no role."""
+    nexus = _world_before_iam()
+    with nexus.installed():
+        assert await _upgrade_before_iam(nexus, nexus_db) is not None
+        for user in ("bob", "carol"):  # ws-a's admin and its member alike
+            assert _uses(nexus, user, "ws-a", "agent", "acme.people", "A"), user
+            assert _uses(nexus, user, "ws-a", "app", "acme.market", "prices"), user
+            assert not _uses(nexus, user, "ws-a", "agent", "acme.people", "B"), user  # off
+            assert not _uses(nexus, user, "ws-a", "app", "acme.market", "charts"), user  # never on
+        for user in ("frank", "ivan"):  # ws-b's viewer and member
+            assert _uses(nexus, user, "ws-b", "agent", "acme.crm", "Closer"), user
+            assert _uses(nexus, user, "ws-b", "app", "acme.market", "charts"), user
+            assert _uses(nexus, user, "ws-b", "pipeline", "acme.crm", "load"), user
+            assert not _uses(nexus, user, "ws-b", "workflow", "acme.crm", "sync"), user  # off
+            assert not _uses(nexus, user, "ws-a", "agent", "acme.people", "A"), user
+        # A member of the organization alone held no workspace.
+        assert not _uses(nexus, "henry", "ws-a", "agent", "acme.people", "A")
+        with as_service_account("engine"):
+            by_name = {p.id: p.name for p in nexus.iam._all_policies()}
+            pending = {
+                (g.email, by_name.get(g.policy_id, g.policy_id))
+                for g in nexus.iam.list_pending_grants()
+            }
+            names = set(by_name.values())
+    # An invitation to a member's role carries what a member uses.
+    assert ("zoe@example.com", "Workspace ws-a modules (its people)") in pending
+    assert "Workspace ws-a modules (its people)" in names
+    assert not any(name.endswith("modules (admins and owners)") for name in names)
+
+
+@pytest.mark.asyncio
+async def test_not_from_before_iam_a_member_gets_no_module_scope_by_the_move(nexus_db):
+    """The same roles in an install that had IAM: only admins and owners held
+    module scopes by their role, and the move keeps it so."""
+    nexus = _world_before_iam()
+    with nexus.installed():
+        assert await _upgrade(nexus, nexus_db) is not None
+        assert _uses(nexus, "bob", "ws-a", "agent", "acme.people", "A")
+        assert not _uses(nexus, "carol", "ws-a", "agent", "acme.people", "A")
+        assert not _uses(nexus, "ivan", "ws-b", "agent", "acme.crm", "Closer")
+
+
 @pytest.mark.asyncio
 async def test_pending_invitations_get_the_access_of_their_role(nexus_db):
     nexus = _world()
