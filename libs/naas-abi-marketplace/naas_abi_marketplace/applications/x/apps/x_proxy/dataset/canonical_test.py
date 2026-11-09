@@ -877,11 +877,11 @@ def test_a_users_request_migrates_the_x_tables_with_iam_enforced(dataset) -> Non
     )
     from naas_abi_core.engine.IEngine import IEngine
     from naas_abi_core.services.dataset.iam_catalog import CATALOG
+    from naas_abi_core.services.iam import roles
     from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import (
         IAMStoreMemory,
     )
     from naas_abi_core.services.iam.enforcement import internal_call
-    from naas_abi_core.services.iam import roles
     from naas_abi_core.services.iam.IAMService import (
         LEGACY_NEXUS_ISSUER,
         IAMService,
