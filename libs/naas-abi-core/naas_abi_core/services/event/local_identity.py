@@ -14,6 +14,7 @@ import hashlib
 import subprocess
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Any
 
 from naas_abi_core.services.event.context import (
     event_actor_user_id,
@@ -57,7 +58,8 @@ def bind_local_identity() -> Iterator[None]:
 
     An identity already set (e.g. by an API request) is left alone.
     """
-    tokens = []
+    # A ContextVar and its Token, or a call-context field and its FieldToken.
+    tokens: list[tuple[Any, Any]] = []
     if event_actor_user_id.get() is None and event_author_id.get() is None:
         email = git_user_email()
         if email:
