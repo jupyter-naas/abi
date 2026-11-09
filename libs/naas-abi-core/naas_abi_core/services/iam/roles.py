@@ -425,6 +425,46 @@ def _grant_statements(
     return statements
 
 
+def stored_platform_grants(
+    viewer: Policy | None, member: Policy | None
+) -> list[PlatformGrant]:
+    """The ``PlatformGrant`` list the stored platform policies were generated from.
+
+    ``_grant_statements`` writes one statement per resource, with a ``sid`` of
+    ``GrantViewer…`` in the viewer policy and ``GrantMember…`` in the member one.
+    Reading them back lets any IAM instance regenerate the policies (a catalog
+    registered by another process, the engine's boot) without forgetting the
+    grants a different instance set: the stored policies are where every
+    instance reads them. A resource whose member actions equal the viewer's is a
+    grant with ``member_writes=False``."""
+    viewer_prefix, member_prefix = _sid("grantViewer"), _sid("grantMember")
+
+    def actions_by_resource(policy: Policy | None, prefix: str) -> dict[str, set[str]]:
+        found: dict[str, set[str]] = {}
+        if policy is None:
+            return found
+        for statement in policy.document.statements:
+            if statement.effect != "Allow" or not (statement.sid or "").startswith(
+                prefix
+            ):
+                continue
+            for resource in statement.resources:
+                found.setdefault(resource, set()).update(statement.actions)
+        return found
+
+    viewers = actions_by_resource(viewer, viewer_prefix)
+    members = actions_by_resource(member, member_prefix)
+    grouped: dict[tuple[str, bool], list[str]] = {}
+    for resource in dict.fromkeys([*viewers, *members]):
+        service = resource.split(":")[3]
+        member_writes = members.get(resource, set()) != viewers.get(resource, set())
+        grouped.setdefault((service, member_writes), []).append(resource)
+    return [
+        PlatformGrant(service, tuple(resources), member_writes=member_writes)
+        for (service, member_writes), resources in grouped.items()
+    ]
+
+
 # The built-in identity provider's admin app edits who a ``sub`` is (a user's
 # email, for one), which is who becomes the platform admin: only the engine
 # opens it. ``discovery:OpenApp`` on ``app/*`` comes with every workspace

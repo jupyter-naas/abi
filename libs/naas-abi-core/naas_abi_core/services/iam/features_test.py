@@ -172,3 +172,62 @@ def test_platform_grants_reach_members_by_level(h, iam):
     # A regeneration (a catalog change) keeps the grants.
     iam._register_catalog(NEXUS)
     assert h.allowed("source_control:GetFile", repo, viewer)
+
+
+def _grant_resources(iam, policy_id: str) -> set[str]:
+    return {
+        resource
+        for statement in iam.store.get_policy(policy_id).document.statements
+        for resource in statement.resources
+    }
+
+
+def test_platform_grants_survive_a_regeneration_by_another_instance(h, iam):
+    """Another process (a module approval, the engine's boot) regenerates the
+    managed policies from its own registry: the grants stay, as stored."""
+    from naas_abi_core.services.iam.IAMService import IAMService
+    from naas_abi_core.services.iam.kernel_catalogs import kernel_catalogs
+
+    for catalog in kernel_catalogs():
+        iam._register_catalog(catalog)
+    iam._register_catalog(NEXUS)
+    repo = "abi:-:-:source_control:repo/abi%2Fmonorepo"
+    read_only = "abi:-:-:nexus:feature/*"
+    with as_service_account("engine"):
+        iam.set_platform_grants(
+            [
+                roles.PlatformGrant("source_control", (repo,)),
+                roles.PlatformGrant("nexus", (read_only,), member_writes=False),
+            ]
+        )
+    for policy_id in (roles.PLATFORM_VIEWER, roles.PLATFORM_MEMBER):
+        assert {repo, read_only} <= _grant_resources(iam, policy_id)
+
+    # A second instance on the same store knows nothing of the grants it did not set.
+    other = IAMService(iam.store)
+    other.bootstrap()
+    changed = ActionCatalog(
+        service="nexus",
+        version=2,
+        resource_types=NEXUS.resource_types,
+        actions=(*NEXUS.actions, ActionSpec("ListFeatures", "list", ("feature",))),
+    )
+    with as_service_account("engine"):
+        other.register_catalog(changed)
+    before = {p.id: p.document for p in iam._all_policies()}
+    for policy_id in (roles.PLATFORM_VIEWER, roles.PLATFORM_MEMBER):
+        assert {repo, read_only} <= _grant_resources(iam, policy_id)
+    member = iam.store.get_policy(roles.PLATFORM_MEMBER).document.statements
+    assert any(
+        "nexus:ListFeatures" in s.actions and read_only in s.resources for s in member
+    )
+    # The viewer's reads of ``nexus`` and the member's are the same: no writes granted.
+    viewer = iam.store.get_policy(roles.PLATFORM_VIEWER).document.statements
+    assert any(
+        "nexus:UseFeature" in s.actions and read_only in s.resources for s in viewer
+    )
+
+    # And a regeneration changes nothing further.
+    with as_service_account("engine"):
+        other._refresh_builtin_policies()
+    assert {p.id: p.document for p in iam._all_policies()} == before

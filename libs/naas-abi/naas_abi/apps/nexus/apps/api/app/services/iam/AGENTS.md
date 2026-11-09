@@ -248,7 +248,7 @@ with them (core `services/iam/AGENTS.md`, "Sets"). Nexus:
   also require their action on `dataset/<ns>`. A Deny on `dataset/<ns>` therefore hides the namespace from all four.
 - **Kernel resources need placements.** Nexus places what it creates and registers `placement_source`s for
   what exists, applied at every boot and when a workspace is created (`on_workspace_created`). Two
-  platform-level exceptions are deployment grants (`iam.set_platform_grants`): the shared repository that
+  platform-level exceptions are deployment grants (`iam.set_platform_grants`, stored in the platform policies so any process's regeneration keeps them): the shared repository that
   slides, documents, sheets and code use (viewers read, members write) and the platform's datasets (read for
   every role: `bootstrap.dataset_grants`). The shared repository separates workspaces by Nexus's branch naming only; a per-workspace
   repository is the way to make IAM enforce it.
