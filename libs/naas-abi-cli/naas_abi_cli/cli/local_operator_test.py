@@ -67,6 +67,10 @@ class _Agent:
 @pytest.fixture
 def engine(tmp_path, monkeypatch):
     _Engine.store = _store(tmp_path)
+    # The terminal acts for its git author when there is one, and that user's own
+    # grants bound the call: these tests read as the engine alone, whatever the
+    # machine's git config says.
+    monkeypatch.setattr(local_identity, "git_user_email", lambda: None)
     monkeypatch.setattr("naas_abi_core.engine.Engine.Engine", _Engine)
     # The package exports a ``run`` group that hides the ``run`` module.
     monkeypatch.setattr(
