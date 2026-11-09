@@ -99,24 +99,6 @@ _ROUTE_UNSLASHED_PAYLOAD_RE = re.compile(
 )
 
 
-def _frame_ancestor_headers(request: Request) -> dict[str, str]:
-    ancestors = ["'self'"]
-    for header in (request.headers.get("origin"), request.headers.get("referer")):
-        if not header:
-            continue
-        try:
-            from urllib.parse import urlparse
-
-            origin = f"{urlparse(header).scheme}://{urlparse(header).netloc}".rstrip(
-                "/"
-            )
-            if origin and origin not in ancestors:
-                ancestors.append(origin)
-        except Exception:  # noqa: BLE001,S110
-            pass
-    return {"Content-Security-Policy": f"frame-ancestors {' '.join(ancestors)};"}
-
-
 def _media_type(name: str, default: str = "application/octet-stream") -> str:
     guessed, _ = mimetypes.guess_type(name)
     if guessed:
@@ -162,8 +144,7 @@ def _serve_object(
             last_exc = exc
             continue
         etag = f'"{hashlib.sha256(content).hexdigest()}"'
-        headers = _frame_ancestor_headers(request)
-        headers["ETag"] = etag
+        headers = {"ETag": etag}
         full_path = f"{prefix}/{name}"
         if "/media/" in full_path or "/_next/static/" in full_path:
             headers["Cache-Control"] = "private, max-age=31536000, immutable"
@@ -219,13 +200,13 @@ def _html_rel(path: str) -> tuple[str, str] | None:
 
 
 def _dataset_json_response(
-    request: Request, status: int, content: bytes, cache_headers: dict[str, str]
+    status: int, content: bytes, cache_headers: dict[str, str]
 ) -> Response:
     return Response(
         content=content,
         status_code=status,
         media_type="application/json; charset=utf-8",
-        headers={**_frame_ancestor_headers(request), **cache_headers},
+        headers=cache_headers,
     )
 
 
@@ -524,7 +505,7 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
                 page,
                 per_page,
             )
-            return _dataset_json_response(request, status, content, cache_headers)
+            return _dataset_json_response(status, content, cache_headers)
 
         if self._dataset_read_enabled() and rel == "globals/graph.json":
             status, content, cache_headers = await run_in_threadpool(
@@ -533,7 +514,7 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
                 _GRAPH_TOTALS_KEY,
                 self._dataset_graph_totals,
             )
-            return _dataset_json_response(request, status, content, cache_headers)
+            return _dataset_json_response(status, content, cache_headers)
 
         if rel == "dataset/users/search.json":
             query = str(request.query_params.get("q") or "")[:200]
@@ -563,7 +544,7 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
                 page,
                 per_page,
             )
-            return _dataset_json_response(request, status, content, cache_headers)
+            return _dataset_json_response(status, content, cache_headers)
 
         if self._dataset_read_enabled() and rel.startswith("dataset/users/"):
             suffix = rel[len("dataset/users/") :]
@@ -593,9 +574,7 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
                     ),
                     lambda: self._dataset_user_posts(username, page, per_page, kind),
                 )
-                return _dataset_json_response(
-                    request, status, content, cache_headers
-                )
+                return _dataset_json_response(status, content, cache_headers)
 
         if self._dataset_read_enabled() and rel.startswith("dataset/posts/"):
             suffix = rel[len("dataset/posts/") :]
@@ -609,10 +588,7 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
                 return Response(
                     content=content,
                     media_type="application/json; charset=utf-8",
-                    headers={
-                        **_frame_ancestor_headers(request),
-                        "Cache-Control": "private, max-age=31536000, immutable",
-                    },
+                    headers={"Cache-Control": "private, max-age=31536000, immutable"},
                 )
             tweet_id = suffix.removesuffix(".json")
             if not tweet_id.isdigit():
@@ -623,7 +599,7 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
                 ("post", tweet_id),
                 lambda: self._dataset_post(tweet_id),
             )
-            return _dataset_json_response(request, status, content, cache_headers)
+            return _dataset_json_response(status, content, cache_headers)
 
         if self._dataset_read_enabled() and _DATASET_MEDIA_RE.fullmatch(rel):
             from naas_abi_marketplace.applications.x.apps.x_proxy.dataset.media_resolve import (
