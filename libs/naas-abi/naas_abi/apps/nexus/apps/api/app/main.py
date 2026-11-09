@@ -620,27 +620,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                     origin = str(origin).rstrip("/")
                     if origin and origin not in ancestors:
                         ancestors.append(origin)
-                # Allow the embedding page even when it is not listed in config
-                # (e.g. http://localhost:3042 during local dev). Never for a
-                # remote module's app: only Nexus may frame it.
-                presented = (
-                    ()
-                    if request.url.path.startswith("/app-remote/")
-                    else (request.headers.get("origin"), request.headers.get("referer"))
-                )
-                for header in presented:
-                    if not header:
-                        continue
-                    try:
-                        from urllib.parse import urlparse
-
-                        parsed = urlparse(header)
-                        # "Origin: null" (a sandboxed page) names no origin.
-                        ref_origin = f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
-                        if parsed.netloc and ref_origin not in ancestors:
-                            ancestors.append(ref_origin)
-                    except Exception:
-                        pass
+                # Only configured origins may frame these paths. Local dev
+                # origins arrive through the CORS origins (`abi dev up` sets
+                # ABI_CORS_EXTRA_ORIGINS), never through the request's own
+                # Origin or Referer.
                 response.headers["Content-Security-Policy"] = embed_csp(
                     response.headers.get("Content-Security-Policy"), ancestors
                 )

@@ -136,6 +136,31 @@ def test_snapshots_and_assets_still_serve() -> None:
     assert "javascript" in asset.headers["content-type"]
 
 
+def test_responses_do_not_name_the_page_that_asked_in_a_framing_policy() -> None:
+    # frame-ancestors for /app-html/ comes from the API's security middleware,
+    # built from configured origins. The app adds none from Origin / Referer.
+    client = _client(_published())
+    asker = {"Origin": "https://evil.example", "Referer": "https://other.example/page"}
+    for path in (
+        "/",
+        "/users/search/",
+        "/globals/scenarios.json",
+        "/_next/static/chunks/main.js",
+    ):
+        response = client.get(f"{BASE}{path}", headers=asker)
+        assert response.status_code == 200, path
+        policy = response.headers.get("content-security-policy", "")
+        assert "evil.example" not in policy and "other.example" not in policy, path
+        assert "frame-ancestors" not in policy, path
+        assert response.headers["etag"], path
+        assert "cache-control" in response.headers, path
+
+    etag = client.get(f"{BASE}/").headers["etag"]
+    revalidated = client.get(f"{BASE}/", headers={**asker, "If-None-Match": etag})
+    assert revalidated.status_code == 304
+    assert "content-security-policy" not in revalidated.headers
+
+
 def test_search_tweet_indexes_are_served() -> None:
     client = _client(
         _published(
