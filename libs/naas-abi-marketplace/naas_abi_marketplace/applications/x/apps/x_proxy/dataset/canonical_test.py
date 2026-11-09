@@ -881,12 +881,31 @@ def test_a_users_request_migrates_the_x_tables_with_iam_enforced(dataset) -> Non
         IAMStoreMemory,
     )
     from naas_abi_core.services.iam.enforcement import internal_call
-    from naas_abi_core.services.iam.IAMService import IAMService
+    from naas_abi_core.services.iam import roles
+    from naas_abi_core.services.iam.IAMService import (
+        LEGACY_NEXUS_ISSUER,
+        IAMService,
+    )
 
     iam = IAMService(IAMStoreMemory())
     iam.bootstrap()
     with internal_call():
         iam.register_catalog(CATALOG)
+        # What a deployment holds (Nexus ``shared_repo_grants``): the platform's
+        # datasets are read by every workspace member, and the user is one.
+        iam.set_platform_grants(
+            [
+                roles.PlatformGrant(
+                    "dataset",
+                    ("abi:-:-:dataset:namespace/*", "abi:-:-:dataset:dataset/*"),
+                    member_writes=False,
+                )
+            ]
+        )
+        iam.put_scope("org-1")
+        iam.put_scope("org-1", "ws-1")
+        member = iam.ensure_user(LEGACY_NEXUS_ISSUER, "nexus-1")
+        iam.attach_policy(roles.MEMBER, member.id, "abi:org-1:ws-1")
     dataset.set_services(IEngine.Services(iam=iam))
     nexus_call = CallContext(
         principal=service_account("api"), on_behalf_of=user("nexus-1")
