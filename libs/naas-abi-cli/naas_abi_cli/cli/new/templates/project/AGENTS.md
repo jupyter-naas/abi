@@ -92,7 +92,7 @@ modules:
       # fields declared in Configuration
 ```
 
-The `{% raw %}{{ secret.X }}{% endraw %}` syntax in config files is resolved by the `secret` service against `.env` / Naas / dotenv adapters.
+The `{% raw %}{{ secret.X }}{% endraw %}` syntax in config files is resolved by the `secret` service against `.env` / Naas / dotenv adapters. Secrets the engine keeps for itself (`iam/...`, `idp/...`) are in `.env.sidecar`, next to `.env`: docker compose reads `.env` and would refuse such names. Both files stay out of git and out of the image (`.env.*`).
 
 ## Commands
 

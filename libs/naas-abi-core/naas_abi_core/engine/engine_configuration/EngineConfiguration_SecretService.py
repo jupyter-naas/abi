@@ -29,6 +29,10 @@ class DotenvSecretConfiguration(BaseModel):
           read_only: false
           # Read the process environment before the file.
           environment_first: false
+          # Keys whose names docker compose cannot read from a dotenv file
+          # (the engine's own, such as iam/signing-keys/<id>). Default:
+          # <path>.sidecar, so they never break the compose project's .env.
+          sidecar_path: ".env.sidecar"
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -36,6 +40,7 @@ class DotenvSecretConfiguration(BaseModel):
     path: str = ".env"
     read_only: bool = False
     environment_first: bool = False
+    sidecar_path: str | None = None
 
 
 class NaasSecretConfiguration(BaseModel):

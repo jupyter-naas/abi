@@ -220,4 +220,6 @@ def test_a_dotenv_secret_is_one_line_per_key(tmp_path):
             adapter.remove(key)
     assert path.read_text() == "A=1\n"
     adapter.set("shared/ok", "v")
-    assert "shared/ok" in path.read_text()
+    # A path-like key is valid, kept in the sidecar: compose reads .env.
+    assert "shared/ok" in (tmp_path / ".env.sidecar").read_text()
+    assert path.read_text() == "A=1\n"

@@ -110,3 +110,89 @@ def test_environment_first_lets_the_environment_win_over_the_file(
     adapter.set(key, "changed")
     assert adapter.get(key) == "changed"
     assert dotenv_values(path)[key] == "changed"
+
+
+PEM = "-----BEGIN PRIVATE KEY-----\nMIGHAgEAMBMGByqGSM49\nAgEGCCqGSM49AwEHBG0w\n-----END PRIVATE KEY-----\n"
+
+
+def test_keys_compose_cannot_read_go_to_the_sidecar(tmp_path, monkeypatch):
+    # IAM and the IdP keep their keys under iam/... and idp/...: docker compose
+    # refuses a .env with such a name ("unexpected character "/"").
+    monkeypatch.delenv("ABI_DOTENV_SIDECAR_TEST", raising=False)
+    path = tmp_path / ".env"
+    path.write_text("A=1\n")
+    adapter = DotenvSecretSecondaryAdaptor(str(path))
+
+    adapter.set("iam/signing-keys/k1", PEM)
+    adapter.set("idp/code-key", "abc")
+    adapter.set("ABI_DOTENV_SIDECAR_TEST", "plain")
+
+    assert dotenv_values(path) == {"A": "1", "ABI_DOTENV_SIDECAR_TEST": "plain"}
+    sidecar = tmp_path / ".env.sidecar"
+    assert dotenv_values(sidecar) == {"iam/signing-keys/k1": PEM, "idp/code-key": "abc"}
+    assert sidecar.stat().st_mode & 0o777 == 0o600
+    # Not environment variables: child processes do not inherit them.
+    import os
+
+    assert "iam/signing-keys/k1" not in os.environ
+    assert adapter.get("iam/signing-keys/k1") == PEM
+    assert adapter.list()["idp/code-key"] == "abc"
+
+    reopened = DotenvSecretSecondaryAdaptor(str(path))
+    assert reopened.get("iam/signing-keys/k1") == PEM
+    assert reopened.get("A") == "1"
+
+    reopened.remove("idp/code-key")
+    assert reopened.get("idp/code-key") is None
+    assert "idp/code-key" not in dotenv_values(sidecar)
+    assert DotenvSecretSecondaryAdaptor(str(path)).get("idp/code-key") is None
+
+
+def test_a_dotenv_an_earlier_engine_wrote_its_keys_into_is_repaired(tmp_path):
+    path = tmp_path / ".env"
+    path.write_text("A=1\n")
+    # What 3.7.0 left behind: the keys written with set_key into .env itself.
+    from dotenv import set_key
+
+    set_key(str(path), "iam/signing-keys/k1", PEM)
+    set_key(str(path), "B", "2")
+
+    adapter = DotenvSecretSecondaryAdaptor(str(path))
+
+    assert dotenv_values(path) == {"A": "1", "B": "2"}
+    assert "/" not in path.read_text()
+    assert dotenv_values(tmp_path / ".env.sidecar") == {"iam/signing-keys/k1": PEM}
+    assert adapter.get("iam/signing-keys/k1") == PEM
+
+
+def test_a_read_only_file_is_not_repaired_but_its_sidecar_is_read(tmp_path):
+    path, sidecar = tmp_path / "coding.env", tmp_path / "coding.env.sidecar"
+    path.write_text("A=1\niam/old=x\n")
+    sidecar.write_text("idp/code-key=abc\n")
+
+    adapter = DotenvSecretSecondaryAdaptor(str(path), read_only=True)
+
+    assert path.read_text() == "A=1\niam/old=x\n"
+    assert adapter.get("idp/code-key") == "abc"
+    assert adapter.get("iam/old") == "x"
+
+
+def test_the_sidecar_path_can_be_configured(tmp_path):
+    path, sidecar = tmp_path / ".env", tmp_path / "secrets" / "engine.env"
+    path.touch()
+    adapter = DotenvSecretSecondaryAdaptor(str(path), sidecar_path=str(sidecar))
+    adapter.set("iam/job-trigger-seal", "seal")
+    assert dotenv_values(sidecar) == {"iam/job-trigger-seal": "seal"}
+    assert path.read_text() == ""
+
+
+def test_names_compose_reads_stay_in_the_file(tmp_path):
+    path = tmp_path / ".env"
+    path.touch()
+    adapter = DotenvSecretSecondaryAdaptor(str(path))
+    for key in ("A_B", "a.b", "a-b", "_x"):
+        adapter.set(key, "v")
+    for key in ("iam/x", "x:y", "1A"):
+        adapter.set(key, "v")
+    assert set(dotenv_values(path)) == {"A_B", "a.b", "a-b", "_x"}
+    assert set(dotenv_values(tmp_path / ".env.sidecar")) == {"iam/x", "x:y", "1A"}
