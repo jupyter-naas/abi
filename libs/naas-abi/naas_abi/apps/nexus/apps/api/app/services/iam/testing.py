@@ -16,6 +16,7 @@ from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz as authz_module
 from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
 from naas_abi.apps.nexus.apps.api.app.services.iam.bootstrap import (
+    dataset_grants,
     feature_plan,
     shared_repo_grants,
 )
@@ -57,7 +58,7 @@ class NexusIam:
                     org_overlays=org_overlays or {},
                 )
             )
-            self.iam.set_platform_grants(shared_repo_grants("abi/monorepo"))
+            self.iam.set_platform_grants([*shared_repo_grants("abi/monorepo"), *dataset_grants()])
         self.authz = authz_module.AUTHZ
 
     # -- the world: orgs, workspaces and who holds what -------------------------
@@ -97,6 +98,28 @@ class NexusIam:
                     "statements": [
                         {
                             "effect": "Allow",
+                            "actions": list(actions),
+                            "resources": list(resources),
+                        }
+                    ],
+                },
+            )
+            self.iam.attach_policy(policy.id, principal.id, scope)
+        return policy.id
+
+    def deny(
+        self, user_id: str, actions: Sequence[str], resources: Sequence[str], scope: str
+    ) -> str:
+        """As ``allow``, with a Deny statement: what an admin writes to hide a resource."""
+        with as_service_account("engine"):
+            principal = self.iam.ensure_user(LEGACY_NEXUS_ISSUER, user_id, provider="nexus")
+            policy = self.iam.create_policy(
+                f"deny-{user_id}-{uuid.uuid4().hex[:8]}",
+                {
+                    "version": "2026-10-13",
+                    "statements": [
+                        {
+                            "effect": "Deny",
                             "actions": list(actions),
                             "resources": list(resources),
                         }

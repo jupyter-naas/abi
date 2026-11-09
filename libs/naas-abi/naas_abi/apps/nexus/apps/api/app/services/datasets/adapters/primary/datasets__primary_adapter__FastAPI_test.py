@@ -158,3 +158,52 @@ def test_a_role_without_the_datasets_feature_is_refused(tmp_path) -> None:
         assert denied.post("/datasets/clockify/query", json=QUERY).status_code == 403
         allowed = _client(tmp_path / "b", "member")
         assert allowed.get("/datasets/", params=params).status_code == 200
+
+
+def _second_namespace(tmp_path, user: str) -> TestClient:
+    client = _client(tmp_path, user)
+    service = client.app.dependency_overrides[get_datasets_service]()
+    warehouse = service._dataset
+    warehouse.create(
+        DatasetSpec(
+            name="secrets",
+            namespace="hr",
+            columns=(ColumnSpec(name="who", type="string"),),
+        )
+    )
+    return client
+
+
+def test_a_policy_on_a_namespace_hides_it_from_list_and_query(tmp_path, team) -> None:
+    team.deny(
+        "member",
+        ["nexus:*"],
+        ["abi:-:-:nexus:dataset/hr", "abi:-:-:nexus:dataset/hr/*"],
+        team.workspace("org-1", "ws-1"),
+    )
+    client = _second_namespace(tmp_path, "member")
+    params = {"workspace_id": "ws-1"}
+
+    listed = client.get("/datasets/", params=params).json()["datasets"]
+    assert {(d["namespace"], d["name"]) for d in listed} == {("clockify", "hours")}
+
+    hr = {"workspace_id": "ws-1", "sql": "SELECT * FROM secrets"}
+    assert client.post("/datasets/hr/query", json=hr).status_code == 403
+    assert client.post("/datasets/clockify/query", json=QUERY).status_code == 200
+    # Another member, with no such policy, still sees both.
+    other = _second_namespace(tmp_path / "other", "viewer")
+    names = {d["namespace"] for d in other.get("/datasets/", params=params).json()["datasets"]}
+    assert names == {"clockify", "hr"}
+
+
+def test_a_query_names_no_workspace_the_caller_is_not_in(tmp_path, team) -> None:
+    team.workspace("org-2", "ws-2")
+    client = _client(tmp_path, "member")
+
+    # Namespaces are platform-wide, so the workspace only carries membership:
+    # a stranger to it is refused whatever namespace is asked.
+    assert (
+        client.post("/datasets/clockify/query", json={**QUERY, "workspace_id": "ws-2"}).status_code
+        == 403
+    )
+    assert client.get("/datasets/", params={"workspace_id": "ws-2"}).status_code == 403

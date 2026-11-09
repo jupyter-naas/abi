@@ -134,9 +134,7 @@ export default function ProfilePage() {
       const { authFetch } = await import('@/stores/auth');
       const payload: Record<string, string> = {};
       const trimmedName = name.trim();
-      const trimmedEmail = email.trim();
       if (trimmedName) payload.name = trimmedName;
-      if (trimmedEmail) payload.email = trimmedEmail;
       payload.organization = organization.trim();
       payload.job_title = jobTitle.trim();
       payload.bio = bio.trim();
@@ -263,9 +261,13 @@ export default function ProfilePage() {
             <input
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="account-profile-field-input"
+              readOnly
+              aria-readonly="true"
+              className="account-profile-field-input account-profile-field-input-readonly"
             />
+            <p className="account-profile-field-hint">
+              Your identity provider manages your email address, so it can&apos;t be changed here.
+            </p>
           </div>
           <div className="account-profile-field">
             <label className="account-profile-field-label">Organization</label>

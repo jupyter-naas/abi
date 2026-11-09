@@ -124,14 +124,21 @@ def shared_repo_grants(repo_id: str) -> list[roles.PlatformGrant]:
                 f"abi:-:-:source_control:proposal/{repo}/*",
             ),
         ),
-        # The datasets of the platform's modules are read by every workspace's
-        # members, as they were before roles: nothing links a namespace to one
-        # workspace, and Nexus only reads them.
+    ]
+
+
+def dataset_grants() -> list[roles.PlatformGrant]:
+    """Datasets are platform-wide: the engine's dataset service is global and
+    nothing links a namespace to one workspace. Every workspace's members read
+    them (viewers and members alike; Nexus only reads them), on the kernel's
+    resources and on Nexus's own, which is what a policy denies to hide one."""
+    return [
         roles.PlatformGrant(
             "dataset",
             ("abi:-:-:dataset:namespace/*", "abi:-:-:dataset:dataset/*"),
             member_writes=False,
         ),
+        roles.PlatformGrant("nexus", ("abi:-:-:nexus:dataset/*",), member_writes=False),
     ]
 
 
@@ -147,7 +154,7 @@ async def register_catalog(db: AsyncSession | None, flags: FeatureFlagsConfig) -
         else feature_plan(flags, org_overlays={})
     )
 
-    grants = shared_repo_grants(settings.coding_repo_id)
+    grants = [*shared_repo_grants(settings.coding_repo_id), *dataset_grants()]
 
     def work() -> None:
         iam = runtime.iam()

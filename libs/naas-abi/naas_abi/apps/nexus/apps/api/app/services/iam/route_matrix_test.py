@@ -139,8 +139,16 @@ LEVELS = {
     "admin": (False, False, True, True),
 }
 # Platform-level types are reached by the platform admin alone, bar the model
-# list the built-in roles carry (roles.PLATFORM_TYPES).
-PLATFORM_VIEWER_ACTIONS = {"ListProviderModels", "GetProviderModel"}
+# list the built-in roles carry (roles.PLATFORM_TYPES) and the datasets of the
+# platform, which every workspace role reads (``bootstrap.dataset_grants``).
+PLATFORM_VIEWER_ACTIONS = {
+    "ListProviderModels",
+    "GetProviderModel",
+    "ListDatasets",
+    "GetDataset",
+    "PreviewDataset",
+    "QueryDataset",
+}
 
 
 def level_of(action: str) -> str:
