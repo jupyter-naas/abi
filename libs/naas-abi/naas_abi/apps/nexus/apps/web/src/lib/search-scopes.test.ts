@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { allowedWebEngines, availableScopes, FEATURE_SCOPES, isScopeOn, matchScore, rankItems, RESERVED_SCOPE_IDS, scopeGroups, WEB_SCOPE_DEF, formatHitCount } from './search-scopes';
 import { blankTopic } from './search-topics';

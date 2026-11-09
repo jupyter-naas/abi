@@ -789,7 +789,10 @@ cd apps/api && uv run pytest tests/ -v
 cd apps/api && uv run mypy app/
 cd apps/api && uv run ruff check app/
 cd apps/web && pnpm typecheck
+cd apps/web && pnpm test
 ```
+
+**Web tests run on vitest only.** `pnpm test` runs every `src/**/*.test.ts` and is a pull request check (`nexus-web-tests` in `.github/workflows/pull_request.yml`), so it must stay green. Import `test`/`describe`/`it` from `vitest`, never from `node:test`: vitest finds no suite in a `node:test` file and the file fails. `node:assert/strict` is fine. A test that describes a behaviour not built yet is `it.skip` with a comment saying what is missing, not a failing test.
 
 ## Conventional commits
 

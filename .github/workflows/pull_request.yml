@@ -64,6 +64,27 @@ jobs:
         working-directory: libs/naas-abi-cli
         run: uv run pytest -q
 
+  # The Nexus web app's vitest suite (`pnpm test`): every *.test.ts under src/
+  # runs on vitest, none on node:test.
+  nexus-web-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.0
+      - name: Install dependencies
+        working-directory: libs/naas-abi/naas_abi/apps/nexus
+        run: pnpm install --frozen-lockfile
+      - name: Run the web test suite
+        working-directory: libs/naas-abi/naas_abi/apps/nexus/apps/web
+        run: pnpm test
+
   check:
     runs-on: ubuntu-latest
     strategy:

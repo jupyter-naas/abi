@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { iconTarget, iconTargetKey, pickerPosition, searchIconNames, validIconPaths } from './ontology-icon-library';
 
 test('search accepts multiple words and hyphens without depending on remote search', () => {
