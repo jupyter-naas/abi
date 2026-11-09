@@ -27,7 +27,7 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     OrganizationModel,
     WorkspaceModel,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam import legacy_names, role_features
+from naas_abi.apps.nexus.apps.api.app.services.iam import bootstrap, legacy_names, role_features
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import Memberships
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
@@ -326,6 +326,56 @@ async def test_every_user_keeps_exactly_their_features(nexus_db):
     # The org-wide holders' are their organization's.
     assert (org_container("org-1"), "Features of owner") in owned
     assert (org_container("org-2"), "Features of admin") in owned
+
+
+async def _from_before_iam(db) -> None:
+    """The role data came from an install from before IAM held any role."""
+    await db.execute(
+        text("INSERT INTO iam_migrations (name, applied_at, report) VALUES (:n, :at, :r)"),
+        {"n": bootstrap.MIGRATION_NAME, "at": NOW, "r": json.dumps({bootstrap.BEFORE_IAM: True})},
+    )
+    await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_an_install_from_before_iam_keeps_the_features_its_configuration_gave(nexus_db):
+    """Before IAM, Nexus stored no feature policy: it computed each role's features
+    from its configuration (``role_baseline``, the organizations' overrides and
+    stored overlays). Moved from such an install, everyone keeps exactly those:
+    the decisions of an IAM that stored them from the same configuration."""
+    reference = _previous(_world())
+    with reference.installed():
+        reference.iam.bootstrap()
+        reference.iam.invalidate()
+        before = _decisions(reference)
+    nexus = _world()
+    with nexus.installed():
+        nexus.iam.bootstrap()
+        nexus.iam.invalidate()
+        assert _old_ids(nexus) == []
+        assert not any(_decisions(nexus, users=("bob", "dave")).values())
+        async with nexus_db() as db:
+            await _previous_database(db, nexus)
+            await _from_before_iam(db)
+            assert await role_features.migrate_role_features(db, FLAGS)
+            assert _decisions(nexus) == before
+            assert not await _has_table(db, "organization_role_features")
+        nexus.rewrite()
+        assert _decisions(nexus) == before
+
+
+@pytest.mark.asyncio
+async def test_without_feature_policies_and_not_from_before_iam_nothing_is_made_up(nexus_db):
+    """An install that had IAM moves what IAM had in force, never the configuration:
+    with no feature policy stored, no role brings a feature."""
+    nexus = _world()
+    with nexus.installed():
+        nexus.iam.bootstrap()
+        nexus.iam.invalidate()
+        async with nexus_db() as db:
+            await _previous_database(db, nexus)
+            await role_features.migrate_role_features(db, FLAGS)
+        assert not any(_decisions(nexus, users=("bob", "carol", "dave")).values())
 
 
 @pytest.mark.asyncio

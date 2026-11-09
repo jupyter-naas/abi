@@ -184,7 +184,10 @@ a catalog, run the route matrix.
   and the org-wide roles, recorded in `iam_migrations` as `role_features_v1`). It reads what IAM has in force,
   never the configuration: the stored `builtin.features.<key>` an older version made (from `role_baseline`,
   `organization_overrides` and `organization_role_features`, within `enabled_features`) and the roles held now,
-  choosing for each role the most specific key as the older IAM did (`key_for`). Then:
+  choosing for each role the most specific key as the older IAM did (`key_for`). An install from before IAM held
+  any role (`iam_roles_v1` recorded with `before_iam`) stored none: its Nexus computed them from the configuration
+  on each request, so that is what it had in force, and the keys come from it (`configured_features`: the same
+  settings and overlay table, within `enabled_features`; read with the configuration the start runs with). Then:
   - a role held at a workspace becomes the workspace's "Features of <role>", attached there; a role held
     org-wide (`abi:<org>:*`) becomes the organization's "Features of <role>", attached org-wide, so it still
     reaches the organization's workspaces made later; a group holding the role gets it like a person;
@@ -310,7 +313,10 @@ sub-policy's parent is detached, so its retirement is not waited for; recorded i
   pending invitation as a pending grant listed on its Nexus invitation, an org owner's or admin's for every
   workspace, as the org-wide mirror will) gets, at each place the role reached, "<W> modules (admins and owners)":
   a sub-policy of that place's access granting every module scope. Not the access policy itself: it bounds
-  features too, and no role brought a feature.
+  features too, and no role brought a feature. An install from before IAM held any role (`iam_roles_v1` recorded
+  with `before_iam`) had no module scope and no set: everyone holding a role in a workspace used what it had turned
+  on. There every role's holders get it, members and viewers in the workspaces they held a role in (not at the
+  organization's own level), as "<W> modules (its people)" (`World.module_roles`).
 - **Customer policies.** One that grants module scopes or features moves under the access policy of its owner (a
   workspace's under "<W> access", an org's under "<O> access", the "Features of <role>" included), split from what
   else it grants (files, graphs, Denies stay in it, its modules and features move to a sub-policy beside it). An
@@ -370,10 +376,15 @@ register them as containers and rewrite every stored name in one transaction (`i
   the old grammar (feature overrides, role features, sets), this move, then `migrate_role_data` and
   `sync_org_wide_roles` in the new grammar (`container_names.before_names`). The moves before it read the
   roles IAM holds, so first an organization owner's or admin's missing org-wide mirror is made in the old
-  grammar (`mirror_old_org_wide`); and while Nexus still keeps memberships IAM does not hold (the move of the
-  role data, `iam_roles_v1`, not recorded: an install from before #360), nothing moves and nothing is recorded,
-  an error says so, and every module scope and feature stays refused (`role_data_pending`): such an install
-  upgrades through a version that moved its role data first, never by recording moves that moved nothing.
+  grammar (`mirror_old_org_wide`). While Nexus still keeps memberships IAM does not hold (the move of the role
+  data, `iam_roles_v1`, not recorded: an install from before IAM held any role, `role_data_pending`), those move
+  first, in the old grammar (`bootstrap.migrate_role_data_before_names`: the memberships and `owner_id` fallbacks
+  as role attachments at `abi:<org>:-` and `abi:<org>:<ws>`, an org owner's or admin's org-wide too, the
+  superadmin flags as `builtin.platform_admin`, as `api` for no user, no container registered), recorded as
+  `iam_roles_v1` with `before_iam`, so `migrate_role_data` finds it done. The moves then give that install's
+  people what its login gave them: the role features its configuration computed (`role_features`) and, for every
+  role in a workspace, what the workspace had turned on (`policy_tree`). If that move fails, nothing moves and
+  nothing is recorded, an error says so, and every module scope and feature stays refused until a start moves it.
 - **Several API processes.** The moves run in one process at a time (`container_names.moves_lock`): on
   PostgreSQL a session advisory lock, on a connection of its own, that the other processes wait for at start,
   then find each move recorded and skip it. SQLite has no lock between processes: an install on SQLite starts

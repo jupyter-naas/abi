@@ -9,7 +9,11 @@ does.
 
 ``migrate_role_features`` keeps every user's features exactly as they were,
 from what IAM has in force, never from the configuration: the stored
-``builtin.features.*`` and the roles held now.
+``builtin.features.*`` and the roles held now. An install from before IAM held
+any role stored none: its Nexus computed each role's features from the
+configuration on every request (``role_baseline``, ``organization_overrides``
+and the organizations' stored overlays), so those are what it had in force
+(``configured_features``), read once here.
 
 * Each role held at a workspace becomes the workspace's policy "Features of
   <role>" attached there; a role held org-wide (``abi:<org>:*``) the
@@ -124,6 +128,30 @@ def stored_features(policies: Iterable[Any]) -> dict[str, tuple[str, ...]]:
         }
         found[policy.id.removeprefix(OLD_PREFIX)] = tuple(sorted(features))
     return found
+
+
+def configured_features(
+    flags: FeatureFlagsConfig, overlays: Mapping[str, Mapping[str, Sequence[str]]]
+) -> dict[str, tuple[str, ...]]:
+    """``{key: features}`` as an install from before IAM computed them, in the keys
+    of ``stored_features``: the deployment's role features (``<role>``), and each
+    organization's that a setting or a stored overlay changed (``<org>.<role>``),
+    each within the features the deployment has (``enabled_features``)."""
+    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import enabled_feature_catalog
+
+    enabled = set(enabled_feature_catalog(flags))
+
+    def kept(features: Iterable[str]) -> tuple[str, ...]:
+        return tuple(sorted({f for f in features if f in enabled}))
+
+    keys = {role: kept(f) for role, f in resolve_role_baseline(flags).items()}
+    for org in sorted({*flags.organization_overrides, *overlays}):
+        resolved = resolve_role_baseline(
+            flags, organization_id=org, organization_override=overlays.get(org)
+        )
+        for role, features in resolved.items():
+            keys[f"{org}.{role}"] = kept(features)
+    return keys
 
 
 def key_for(role: str, org: str, workspace: str, keys: Mapping[str, tuple[str, ...]]) -> str | None:
@@ -471,11 +499,22 @@ async def migrate_role_features(db: AsyncSession, flags: FeatureFlagsConfig) -> 
         return None
     rows = (await db.execute(text("SELECT id, organization_id FROM workspaces"))).all()
     workspaces = [(str(ws), str(org) if org else None) for ws, org in rows]
+    from naas_abi.apps.nexus.apps.api.app.services.iam import bootstrap
+
+    # An install from before IAM stored no feature policy: what it had in force
+    # was computed from the configuration (see the module).
+    configured = (
+        configured_features(flags, await read_overlays(db))
+        if await bootstrap.moved_from_before_iam(db)
+        else None
+    )
 
     def work() -> MoveReport:
         iam = runtime.iam()
         with as_service_account("engine"):
             keys = stored_features(iam.retired_policies())
+            if not keys and configured is not None:
+                keys = configured
             return move(iam, workspaces, keys)
 
     try:
@@ -540,6 +579,7 @@ __all__ = [
     "policy_name",
     "read_overlays",
     "recorded",
+    "configured_features",
     "resolve_role_baseline",
     "stored_features",
     "warn_deprecated_settings",

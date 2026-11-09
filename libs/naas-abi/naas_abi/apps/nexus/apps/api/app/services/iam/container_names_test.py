@@ -14,11 +14,17 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 from naas_abi.apps.nexus.apps.api.app import models  # noqa: F401 - the Nexus tables
-from naas_abi.apps.nexus.apps.api.app.services.iam import container_names
+from naas_abi.apps.nexus.apps.api.app.models import (
+    OrganizationModel,
+    UserModel,
+    WorkspaceModel,
+)
+from naas_abi.apps.nexus.apps.api.app.services.iam import bootstrap, container_names
 from naas_abi.apps.nexus.apps.api.app.services.iam.bootstrap import shared_repo_grants
 from naas_abi.apps.nexus.apps.api.app.services.iam.catalog import NEXUS_CATALOG
 from naas_abi.apps.nexus.apps.api.app.services.iam.container_names import (
@@ -282,23 +288,135 @@ def test_a_placement_of_a_workspace_gone_names_nothing_and_never_fails(tmp_path)
     assert iam.resolve_placement("triple_store", "gone") == UNRESOLVED
 
 
+async def _iam_migrations(db) -> None:
+    # The table Nexus's SQL migrations make (``0059_iam_role_data.sql``).
+    await db.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS iam_migrations (name VARCHAR(128) PRIMARY KEY, "
+            "applied_at TIMESTAMP NOT NULL, report TEXT)"
+        )
+    )
+
+
+async def _before_iam_install(db) -> None:
+    """An install from before IAM held any role: Nexus's rows are the only record.
+    org-1's owner (``owner_id``) and admin, ws-1's owner (``owner_id``), member and
+    viewer, a workspace in no organization, and a superadmin."""
+    await _iam_migrations(db)
+    now = datetime(2026, 1, 1)
+    db.add(
+        OrganizationModel(
+            id="org-1", name="Org", slug="org-1", owner_id="u-owner", created_at=now, updated_at=now
+        )
+    )
+    for ws, org in (("ws-1", "org-1"), ("ws-2", None)):
+        db.add(
+            WorkspaceModel(
+                id=ws,
+                name=ws,
+                slug=ws,
+                owner_id="u-owner",
+                organization_id=org,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+    db.add(
+        UserModel(
+            id="u-root",
+            email="root@example.com",
+            name="Root",
+            is_superadmin=True,
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    await db.flush()
+    for table, place, user, role in (
+        ("organization_members", "organization_id", "u-admin", "admin"),
+        ("workspace_members", "workspace_id", "u-member", "member"),
+        ("workspace_members", "workspace_id", "u-viewer", "viewer"),
+    ):
+        target = "org-1" if table == "organization_members" else "ws-1"
+        await db.execute(
+            text(
+                f"INSERT INTO {table} (id, {place}, user_id, role, created_at) "
+                "VALUES (:id, :place, :user, :role, CURRENT_TIMESTAMP)"
+            ),
+            {"id": f"m-{user}", "place": target, "user": user, "role": role},
+        )
+    await db.commit()
+
+
+def _held(world: LegacyNexusIam) -> set[tuple[str, str, str | None]]:
+    """``(Nexus user, policy, scope)`` of every built-in role a user holds."""
+    with as_service_account("api"):
+        found = set()
+        for attachment in world.iam.list_attachments():
+            if not attachment.policy_id.startswith("builtin."):
+                continue
+            principal = world.iam.get_principal(attachment.principal_id)
+            if principal.kind != "user":
+                continue
+            found.add((str(principal.subject), attachment.policy_id, attachment.scope))
+        return found
+
+
 @pytest.mark.asyncio
-async def test_the_moves_wait_while_nexus_keeps_memberships_iam_does_not(nexus_db):
-    """The moves before container paths read the roles IAM holds: with role data
-    not moved yet, nothing runs and nothing is recorded (and it is said)."""
+async def test_an_install_from_before_iam_moves_its_role_data_first(nexus_db):
+    """Nexus kept every membership itself: before the moves, which read the roles
+    IAM holds, the role data moves into IAM in their grammar, recorded as coming
+    from before IAM; then the moves run."""
+    ran: list[str] = []
+
+    async def moves() -> None:
+        ran.append("moves")
+
+    world = LegacyNexusIam()
+    async with nexus_db() as db:
+        await _before_iam_install(db)
+        assert await container_names.role_data_pending(db)
+        with world.installed():
+            assert await container_names.before_names(db, moves) is True
+        assert ran == ["moves"]
+        assert not await container_names.role_data_pending(db)
+        assert await bootstrap.moved_from_before_iam(db)
+        report = json.loads(
+            (
+                await db.execute(
+                    text("SELECT report FROM iam_migrations WHERE name = :n"),
+                    {"n": bootstrap.MIGRATION_NAME},
+                )
+            ).scalar()
+        )
+        assert (report["orgs"], report["workspaces"], report["platform_admins"]) == (1, 2, 1)
+        # Recorded: the move of today finds it done and adds nothing.
+        assert (await bootstrap.migrate_role_data(db)).applied is False
+    assert _held(world) == {
+        # An organization's owner and admin are held below it too, as Nexus mirrored them.
+        ("u-owner", "builtin.owner", "abi:org-1:-"),
+        ("u-owner", "builtin.owner", "abi:org-1:*"),
+        ("u-admin", "builtin.admin", "abi:org-1:-"),
+        ("u-admin", "builtin.admin", "abi:org-1:*"),
+        ("u-owner", "builtin.owner", "abi:org-1:ws-1"),
+        ("u-owner", "builtin.owner", "abi:_none:ws-2"),
+        ("u-member", "builtin.member", "abi:org-1:ws-1"),
+        ("u-viewer", "builtin.viewer", "abi:org-1:ws-1"),
+        ("u-root", "builtin.platform_admin", None),
+    }
+
+
+@pytest.mark.asyncio
+async def test_without_the_role_data_moved_the_moves_wait(nexus_db):
+    """The role data could not be moved (no IAM to move it into): nothing runs and
+    nothing is recorded; once it is in IAM, the moves run."""
     ran: list[str] = []
 
     async def moves() -> None:
         ran.append("moves")
 
     async with nexus_db() as db:
-        # The table Nexus's SQL migrations make (``0059_iam_role_data.sql``).
-        await db.execute(
-            text(
-                "CREATE TABLE IF NOT EXISTS iam_migrations (name VARCHAR(128) PRIMARY KEY, "
-                "applied_at TIMESTAMP NOT NULL, report TEXT)"
-            )
-        )
+        await _iam_migrations(db)
         await db.execute(
             text(
                 "INSERT INTO workspace_members (id, workspace_id, user_id, role, created_at) "
@@ -310,6 +428,7 @@ async def test_the_moves_wait_while_nexus_keeps_memberships_iam_does_not(nexus_d
         assert await container_names.before_names(db, moves) is False
         assert ran == []
         assert not await container_names.recorded(db, container_names.MIGRATION_NAME)
+        assert not await container_names.recorded(db, bootstrap.MIGRATION_NAME)
         # Once the role data is in IAM, the moves run.
         await db.execute(
             text(
@@ -319,6 +438,7 @@ async def test_the_moves_wait_while_nexus_keeps_memberships_iam_does_not(nexus_d
         )
         await db.commit()
         assert not await container_names.role_data_pending(db)
+        assert not await bootstrap.moved_from_before_iam(db)
         world = LegacyNexusIam()
         with world.installed():
             assert await container_names.before_names(db, moves) is True

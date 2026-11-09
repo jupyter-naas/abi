@@ -692,20 +692,26 @@ def mirror_old_org_wide(iam: Any) -> int:
 async def before_names(db: AsyncSession, moves: Callable[[], Awaitable[None]]) -> bool:
     """Run the moves written for the grammar before container paths (``moves``),
     unless the names are rewritten already. They read the roles IAM holds: while
-    Nexus still keeps memberships IAM does not (``role_data_pending``), nothing
-    runs and nothing is recorded, and False says so (an install that old upgrades
-    through a version that moved them first). Org-wide mirrors missing are made
-    first."""
+    Nexus still keeps memberships IAM does not (``role_data_pending``, an install
+    from before IAM held any role), those are moved first, in the moves' grammar
+    (``bootstrap.migrate_role_data_before_names``). Org-wide mirrors missing are
+    made first. False when the moves cannot run: the role data could not be
+    moved, and nothing else is."""
     if await recorded(db, MIGRATION_NAME):
         return True
     if await role_data_pending(db):
-        _log.error(
-            "Nexus still keeps memberships IAM does not hold (the move of the role "
-            "data, iam_roles_v1, is not recorded): the moves to container paths wait, "
-            "and module scopes and features are refused. Upgrade through a version "
-            "that moved the role data into IAM first (feat/permission-system)."
-        )
-        return False
+        from naas_abi.apps.nexus.apps.api.app.services.iam import bootstrap
+
+        try:
+            await bootstrap.migrate_role_data_before_names(db)
+        except Exception:  # noqa: BLE001 - nothing recorded: tried again at the next start
+            await db.rollback()
+            _log.exception(
+                "Nexus still keeps memberships IAM does not hold, and moving them failed "
+                "(iam_roles_v1 is not recorded): the moves to container paths wait, and "
+                "module scopes and features are refused until a start moves them."
+            )
+            return False
     made = await run_in_threadpool(mirror_old_org_wide, runtime.iam())
     if made:
         _log.info("Org-wide roles of the old grammar given to %d owner(s) and admin(s)", made)

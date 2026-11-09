@@ -2262,7 +2262,10 @@ with `call_context.inside(container)` (the SDK's `with engine.inside(container):
 Fresh installs enforce from the start; `authorizer: allow_all` is the only opt-out and must be written down.
 For an install that predates IAM, Nexus moves what it kept itself once, at start
 (`libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/iam/bootstrap.py`, `migrate_role_data`; see the
-AGENTS.md there), and IAM is the only record afterwards:
+AGENTS.md there), and IAM is the only record afterwards. An install from before IAM held any role (Nexus kept
+every membership, its login decided the rest) upgrades in one start: its role data moves first, in the grammar the
+moves below read (`migrate_role_data_before_names`), its role features come from its configuration, and every role
+in a workspace keeps what the workspace had turned on:
 
 | Before | In IAM |
 |---|---|
