@@ -288,6 +288,9 @@ class ApiConfiguration(BaseModel):
     logo_path: str = "assets/logo.png"
     favicon_path: str = "assets/favicon.ico"
     cors_origins: list[str] = ["http://localhost:9879"]
+    # Serve /openapi.json, /docs and /redoc. Unset: on for local development
+    # only (ENV unset, local or dev). Off, /openapi.json needs the API key.
+    docs_enabled: bool | None = None
     reload: bool = True
     host: str = "0.0.0.0"  # nosec B104 - default binds all interfaces
     port: int = 9879

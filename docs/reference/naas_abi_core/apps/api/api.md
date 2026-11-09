@@ -6,7 +6,7 @@
   - agent APIs under `/agents`
   - workflow/pipeline/tool process APIs when present
   - module-defined routes and module public assets
-- Serves custom Swagger/ReDoc endpoints and a simple HTML landing page.
+- Serves a simple HTML landing page, and the OpenAPI schema with custom Swagger/ReDoc pages when `api.docs_enabled` allows them (unset: local development only, i.e. `ENV` unset, `local` or `dev`). Otherwise `/openapi.json` answers API key holders only, and there are no Swagger/ReDoc pages.
 - Enforces an API key via bearer auth, accepting the token from either:
   - `Authorization: Bearer <token>` header, or
   - `?token=<token>` query parameter.
@@ -15,7 +15,7 @@
 
 ### Application objects
 - `app: fastapi.FastAPI`
-  - Base FastAPI instance (`docs_url=None`, `redoc_url=None`) with custom docs routes.
+  - Base FastAPI instance (`docs_url=None`, `redoc_url=None`, `openapi_url=None`); `mount_api_docs` adds the docs routes when they are enabled.
 
 - `get_app() -> fastapi.FastAPI`
   - Loads runtime routes once (engine/module/agent mounting) and returns the configured `app`.
@@ -46,14 +46,18 @@
 ### Endpoints defined in this module
 - `GET /branding/{name}` (no schema)
   - Serves configured logo/favicon files when they are local files.
-- `GET /docs` (no schema)
-  - Swagger UI using configured favicon.
-- `GET /redoc` (no schema)
-  - ReDoc using configured favicon.
+- `GET /openapi.json`, `GET /docs`, `GET /redoc` (no schema)
+  - OpenAPI schema, Swagger UI and ReDoc using configured favicon. Mounted only when `api_docs_enabled(...)` is true; otherwise only `/openapi.json`, behind the API key.
 - `GET /` (no schema)
   - HTML landing page rendered from `API_LANDING_HTML`.
 
 ### Utilities
+- `api_docs_enabled(configuration: ApiConfiguration, env: str | None) -> bool`
+  - `api.docs_enabled` when set; otherwise true only for `ENV` unset, `local` or `dev`.
+- `mount_openapi_schema(target: FastAPI, *, dependencies=None) -> None`
+  - Registers `/openapi.json` on `target`, with optional route dependencies.
+- `mount_api_docs(target: FastAPI, *, title: str, favicon_url: str) -> None`
+  - Registers `/openapi.json`, `/docs` and `/redoc` on `target`.
 - `resolve_branding_asset(configured: str) -> tuple[str, str | None]`
   - Resolves configured branding paths/URLs into a browser URL and optional local file path.
 - `trusted_proxy_ips() -> str`

@@ -12,15 +12,16 @@ import asyncio
 import html
 import os
 import subprocess
+from collections.abc import Sequence
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from importlib.resources import files
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, params, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 # Authentication
 from fastapi.security import HTTPBearer
@@ -139,7 +140,15 @@ async def _lifespan(app: FastAPI):
 # Init API
 TITLE = api_runtime_configuration.title
 DESCRIPTION = api_runtime_configuration.description
-app = FastAPI(title=TITLE, docs_url=None, redoc_url=None, lifespan=_lifespan)
+# /openapi.json, /docs and /redoc are mounted below, according to
+# api_docs_enabled.
+app = FastAPI(
+    title=TITLE,
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+    lifespan=_lifespan,
+)
 
 
 def resolve_branding_asset(configured: str) -> tuple[str, str | None]:
@@ -362,22 +371,59 @@ def custom_openapi():
 app.openapi = custom_openapi  # type: ignore[method-assign]
 
 
-@app.get("/docs", include_in_schema=False)
-def overridden_swagger():
-    return get_swagger_ui_html(
-        openapi_url="/openapi.json",
-        title=TITLE,
-        swagger_favicon_url=favicon_url,
-    )
+# ENV values of local development: the compose templates set ``local``, the
+# local image ``dev``, and a bare ``uv run`` or the test suite sets none.
+_LOCAL_DEVELOPMENT_ENVS = frozenset({"", "local", "dev"})
 
 
-@app.get("/redoc", include_in_schema=False)
-def overridden_redoc():
-    return get_redoc_html(
-        openapi_url="/openapi.json",
-        title=TITLE,
-        redoc_favicon_url=favicon_url,
-    )
+def api_docs_enabled(configuration: ApiConfiguration, env: str | None) -> bool:
+    """Whether the API serves ``/openapi.json``, ``/docs`` and ``/redoc``.
+
+    ``api.docs_enabled`` decides when it is set. Unset, the pages are served
+    for local development only: ENV unset, ``local`` or ``dev``.
+    """
+    if configuration.docs_enabled is not None:
+        return configuration.docs_enabled
+    return (env or "").strip().lower() in _LOCAL_DEVELOPMENT_ENVS
+
+
+def mount_openapi_schema(
+    target: FastAPI, *, dependencies: Sequence[params.Depends] | None = None
+) -> None:
+    """Serve ``target``'s OpenAPI schema at ``/openapi.json``."""
+
+    @target.get("/openapi.json", include_in_schema=False, dependencies=dependencies)
+    def openapi_schema():
+        return JSONResponse(target.openapi())
+
+
+def mount_api_docs(target: FastAPI, *, title: str, favicon_url: str) -> None:
+    """Serve the OpenAPI schema and its Swagger UI and ReDoc pages on ``target``."""
+    mount_openapi_schema(target)
+
+    @target.get("/docs", include_in_schema=False)
+    def overridden_swagger():
+        return get_swagger_ui_html(
+            openapi_url="/openapi.json",
+            title=title,
+            swagger_favicon_url=favicon_url,
+        )
+
+    @target.get("/redoc", include_in_schema=False)
+    def overridden_redoc():
+        return get_redoc_html(
+            openapi_url="/openapi.json",
+            title=title,
+            redoc_favicon_url=favicon_url,
+        )
+
+
+if api_docs_enabled(api_runtime_configuration, os.getenv("ENV")):
+    mount_api_docs(app, title=TITLE, favicon_url=favicon_url)
+else:
+    # No pages, but callers holding the API key (the MCP server lists the
+    # agents from it) still read the schema.
+    mount_openapi_schema(app, dependencies=[Depends(is_token_valid)])
 
 
 def render_landing_html(title: str, description: str, logo: str, favicon: str) -> str:

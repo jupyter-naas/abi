@@ -23,7 +23,8 @@
     - `local_backends(owned: Iterable[str]) -> dict[str, str]`: returns a mapping of owned service names to their local storage locations (when applicable).
 
 - `ApiConfiguration`
-  - API server settings: `title`, `description`, `logo_path`, `favicon_path`, `cors_origins`, `reload`, `host`, `port`.
+  - API server settings: `title`, `description`, `logo_path`, `favicon_path`, `cors_origins`, `docs_enabled`, `reload`, `host`, `port`.
+  - `docs_enabled` serves `/openapi.json`, `/docs` and `/redoc`. Unset, they are on for local development only (`ENV` unset, `local` or `dev`) and off for deployed stacks, where `/openapi.json` answers API key holders only.
 
 - `DiscoveryConfiguration`
   - NATS discovery settings: `project`, `lease_seconds`.
