@@ -127,8 +127,12 @@ async def describe_dataset(
     namespace: str,
     name: str,
     workspace_id: str = Query(..., min_length=1, max_length=100),
+    current_user: User = Depends(get_current_user_required),
     datasets_service: DatasetsService = Depends(get_datasets_service),
 ):
+    # The guard decided on ``dataset/<namespace>/<name>``; a policy on the namespace
+    # alone (``dataset/<namespace>``) must hide it here as it does in list and query.
+    await authz.require("GetDataset", user=current_user, workspace=workspace_id, id=namespace)
     try:
         return _to_info(datasets_service.describe(name, namespace=namespace))
     except Exception as exc:
@@ -146,8 +150,11 @@ async def preview_dataset(
     workspace_id: str = Query(..., min_length=1, max_length=100),
     limit: int | None = Query(default=None, ge=1, le=1000),
     snapshot_id: int | None = Query(default=None, ge=0),
+    current_user: User = Depends(get_current_user_required),
     datasets_service: DatasetsService = Depends(get_datasets_service),
 ):
+    # As ``describe_dataset``: the namespace's own resource is checked too.
+    await authz.require("PreviewDataset", user=current_user, workspace=workspace_id, id=namespace)
     try:
         return _to_query(
             datasets_service.preview(

@@ -207,3 +207,25 @@ def test_a_query_names_no_workspace_the_caller_is_not_in(tmp_path, team) -> None
         == 403
     )
     assert client.get("/datasets/", params={"workspace_id": "ws-2"}).status_code == 403
+
+
+def test_a_policy_on_the_namespace_alone_hides_every_route(tmp_path, team) -> None:
+    # ``dataset/hr`` with no ``/*``: what an admin writes to hide a namespace.
+    team.deny(
+        "member",
+        ["nexus:*"],
+        ["abi:-:-:nexus:dataset/hr"],
+        team.workspace("org-1", "ws-1"),
+    )
+    client = _second_namespace(tmp_path, "member")
+    params = {"workspace_id": "ws-1"}
+
+    listed = client.get("/datasets/", params=params).json()["datasets"]
+    assert {d["namespace"] for d in listed} == {"clockify"}
+    assert client.get("/datasets/hr/secrets", params=params).status_code == 403
+    assert client.get("/datasets/hr/secrets/preview", params=params).status_code == 403
+    hr = {"workspace_id": "ws-1", "sql": "SELECT * FROM secrets"}
+    assert client.post("/datasets/hr/query", json=hr).status_code == 403
+    # The other namespace is untouched.
+    assert client.get("/datasets/clockify/hours", params=params).status_code == 200
+    assert client.get("/datasets/clockify/hours/preview", params=params).status_code == 200

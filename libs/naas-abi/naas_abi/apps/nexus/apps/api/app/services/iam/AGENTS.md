@@ -241,9 +241,11 @@ with them (core `services/iam/AGENTS.md`, "Sets"). Nexus:
 - **Datasets are platform-wide, not a workspace's.** The engine's dataset service is global and nothing ties a
   namespace to a workspace, so the Nexus `dataset` type is platform-level (`abi:-:-:nexus:dataset/<ns>/<name>`).
   The workspace a dataset request names carries the `datasets` feature and the caller's membership only (a
-  stranger to it, or a View-as session of another workspace, is refused); it never scopes what is read. List and
-  query agree: `GET /datasets/` keeps what `ListDatasets` allows on `dataset/<ns>/<name>` and on `dataset/<ns>`,
-  and `QueryDataset` is checked on `dataset/<ns>`, so a Deny on a namespace hides it from both.
+  stranger to it, or a View-as session of another workspace, is refused); it never scopes what is read. List,
+  query, describe and preview agree on a namespace: `GET /datasets/` keeps what `ListDatasets` allows on
+  `dataset/<ns>/<name>` and on `dataset/<ns>` (two batched `filter` calls, whatever the number of datasets);
+  `QueryDataset` is checked on `dataset/<ns>`; describe and preview are guarded on `dataset/<ns>/<name>` and
+  also require their action on `dataset/<ns>`. A Deny on `dataset/<ns>` therefore hides the namespace from all four.
 - **Kernel resources need placements.** Nexus places what it creates and registers `placement_source`s for
   what exists, applied at every boot and when a workspace is created (`on_workspace_created`). Two
   platform-level exceptions are deployment grants (`iam.set_platform_grants`): the shared repository that
