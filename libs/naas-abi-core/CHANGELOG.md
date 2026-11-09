@@ -24,6 +24,14 @@
 
 <!-- version list -->
 
+## v3.3.1 (2026-11-09)
+
+### Bug Fixes
+
+- **nexus**: Upgrade an install from before IAM in one start
+  ([`8022ccb`](https://github.com/jupyter-naas/abi/commit/8022ccb15f6b3971ce13d88c077f34f2b0b33fa1))
+
+
 ## v3.3.0 (2026-11-07)
 
 ### Bug Fixes
