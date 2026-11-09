@@ -113,3 +113,23 @@ def test_tools_return_turtle_and_store_pdfs() -> None:
 
     assert "Open" in turtle
     assert storage.objects[("pubmed/pdfs", "PMC2.pdf")] == b"%PDF PMC2"
+
+
+def test_a_pmcid_without_a_pdf_does_not_fail_the_others() -> None:
+    class PartlyMissing(FakeIntegration):
+        def download_pubmed_central_pdf(self, pmcid: str):
+            if pmcid == "PMC404":
+                raise FileNotFoundError("PubMed Central has no PDF for PMC404")
+            return super().download_pubmed_central_pdf(pmcid)
+
+    storage = MemoryStorage()
+    pipeline = PubMedPipeline(
+        PubMedPipelineConfiguration(), integration=PartlyMissing()
+    )
+    tools = {t.name: t for t in build_tools(pipeline, storage, "pubmed/pdfs")}
+
+    report = asyncio.run(tools["download_pdf"].ainvoke({"pmcids": ["PMC404", "PMC2"]}))
+
+    assert storage.objects == {("pubmed/pdfs", "PMC2.pdf"): b"%PDF PMC2"}
+    assert "PMC404: not downloaded (PubMed Central has no PDF for PMC404)" in report
+    assert "PMC2: saved as pubmed/pdfs/PMC2.pdf" in report

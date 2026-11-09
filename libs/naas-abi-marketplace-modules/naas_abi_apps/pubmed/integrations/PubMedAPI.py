@@ -1,5 +1,4 @@
 import hashlib
-import io
 import logging
 import re
 from collections.abc import Callable
@@ -582,10 +581,7 @@ class PubMedIntegration(Integration):
         return self._summaries(unique_ids)
 
     def download_pubmed_central_pdf(self, pmcid: str) -> BinaryIO:
-        """Download a PDF from PubMed Central using its PMCID and return as a binary IO object"""
-        pubmed_central_downloader = PubMedCentralDownloader()
-        pdf_bytes = pubmed_central_downloader.open_pmc_pdf_stream(pmcid)
-        if isinstance(pdf_bytes, bytes):
-            return io.BytesIO(pdf_bytes)
-        # If already a BinaryIO, just return it
-        return pdf_bytes
+        """The PDF of a PubMed Central article (PMCID), from the PMC open access
+        dataset. FileNotFoundError when PMC has none for it."""
+        downloader = PubMedCentralDownloader(timeout=self.__configuration.timeout)
+        return downloader.open_pmc_pdf_stream(pmcid)

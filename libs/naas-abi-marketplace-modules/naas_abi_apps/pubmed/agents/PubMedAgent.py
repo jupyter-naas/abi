@@ -38,16 +38,20 @@ def build_tools(pipeline: PubMedPipeline, storage: Any, prefix: str) -> list[Any
     async def download_pdf(pmcids: list[str]) -> str:
         slots = asyncio.Semaphore(DOWNLOADS)
 
-        async def one(pmcid: str) -> None:
+        async def one(pmcid: str) -> str:
             async with slots:
-                stream = await asyncio.to_thread(
-                    pipeline.integration.download_pubmed_central_pdf, pmcid
-                )
-                content = await asyncio.to_thread(stream.read)
-                await storage.put_object(prefix, f"{pmcid}.pdf", content)
+                try:
+                    stream = await asyncio.to_thread(
+                        pipeline.integration.download_pubmed_central_pdf, pmcid
+                    )
+                    content = await asyncio.to_thread(stream.read)
+                    await storage.put_object(prefix, f"{pmcid}.pdf", content)
+                except Exception as exc:  # noqa: BLE001 - one failure per PMCID, reported
+                    return f"- {pmcid}: not downloaded ({exc})"
+                return f"- {pmcid}: saved as {prefix}/{pmcid}.pdf"
 
-        await asyncio.gather(*(one(pmcid) for pmcid in pmcids))
-        return f"PDFs downloaded and saved under {prefix}."
+        # One line per PMCID: a paper without a PDF does not fail the others.
+        return "\n".join(await asyncio.gather(*(one(pmcid) for pmcid in pmcids)))
 
     return [
         StructuredTool(
