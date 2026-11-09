@@ -7,17 +7,33 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
+class AgentSuggestion(_message.Message):
+    __slots__ = ("label", "value", "description")
+    LABEL_FIELD_NUMBER: _ClassVar[int]
+    VALUE_FIELD_NUMBER: _ClassVar[int]
+    DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    label: str
+    value: str
+    description: str
+    def __init__(self, label: _Optional[str] = ..., value: _Optional[str] = ..., description: _Optional[str] = ...) -> None: ...
+
 class AgentDescriptor(_message.Message):
-    __slots__ = ("name", "description", "contract_major", "capabilities")
+    __slots__ = ("name", "description", "contract_major", "capabilities", "display_name", "avatar_url", "suggestions")
     NAME_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
     CONTRACT_MAJOR_FIELD_NUMBER: _ClassVar[int]
     CAPABILITIES_FIELD_NUMBER: _ClassVar[int]
+    DISPLAY_NAME_FIELD_NUMBER: _ClassVar[int]
+    AVATAR_URL_FIELD_NUMBER: _ClassVar[int]
+    SUGGESTIONS_FIELD_NUMBER: _ClassVar[int]
     name: str
     description: str
     contract_major: int
     capabilities: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, name: _Optional[str] = ..., description: _Optional[str] = ..., contract_major: _Optional[int] = ..., capabilities: _Optional[_Iterable[str]] = ...) -> None: ...
+    display_name: str
+    avatar_url: str
+    suggestions: _containers.RepeatedCompositeFieldContainer[AgentSuggestion]
+    def __init__(self, name: _Optional[str] = ..., description: _Optional[str] = ..., contract_major: _Optional[int] = ..., capabilities: _Optional[_Iterable[str]] = ..., display_name: _Optional[str] = ..., avatar_url: _Optional[str] = ..., suggestions: _Optional[_Iterable[_Union[AgentSuggestion, _Mapping]]] = ...) -> None: ...
 
 class JobTrigger(_message.Message):
     __slots__ = ("kind", "spec", "time_zone", "filter", "input")
@@ -76,7 +92,7 @@ class ModelDescriptor(_message.Message):
     def __init__(self, name: _Optional[str] = ..., description: _Optional[str] = ..., kind: _Optional[str] = ...) -> None: ...
 
 class AppDescriptor(_message.Message):
-    __slots__ = ("name", "title", "description", "category", "icon_emoji", "entry", "contract_major", "max_upload_bytes")
+    __slots__ = ("name", "title", "description", "category", "icon_emoji", "entry", "contract_major", "max_upload_bytes", "avatar_url")
     NAME_FIELD_NUMBER: _ClassVar[int]
     TITLE_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
@@ -85,6 +101,7 @@ class AppDescriptor(_message.Message):
     ENTRY_FIELD_NUMBER: _ClassVar[int]
     CONTRACT_MAJOR_FIELD_NUMBER: _ClassVar[int]
     MAX_UPLOAD_BYTES_FIELD_NUMBER: _ClassVar[int]
+    AVATAR_URL_FIELD_NUMBER: _ClassVar[int]
     name: str
     title: str
     description: str
@@ -93,7 +110,8 @@ class AppDescriptor(_message.Message):
     entry: str
     contract_major: int
     max_upload_bytes: int
-    def __init__(self, name: _Optional[str] = ..., title: _Optional[str] = ..., description: _Optional[str] = ..., category: _Optional[str] = ..., icon_emoji: _Optional[str] = ..., entry: _Optional[str] = ..., contract_major: _Optional[int] = ..., max_upload_bytes: _Optional[int] = ...) -> None: ...
+    avatar_url: str
+    def __init__(self, name: _Optional[str] = ..., title: _Optional[str] = ..., description: _Optional[str] = ..., category: _Optional[str] = ..., icon_emoji: _Optional[str] = ..., entry: _Optional[str] = ..., contract_major: _Optional[int] = ..., max_upload_bytes: _Optional[int] = ..., avatar_url: _Optional[str] = ...) -> None: ...
 
 class ModuleDescriptor(_message.Message):
     __slots__ = ("module_id", "package_version", "contract_major", "dependencies", "agents", "jobs", "models", "apps", "listers")

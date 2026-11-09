@@ -39,6 +39,8 @@ class AppDescriptor:
     max_upload_bytes: int = 0
     # The folder its files are served from; None: the ASGI app serves everything.
     root: Path | None = None
+    # Tile image: an https:// URL or a /modules/<path> asset (never bytes).
+    avatar_url: str = ""
 
     def __post_init__(self) -> None:
         if not APP_NAME.fullmatch(self.name):
@@ -50,6 +52,13 @@ class AppDescriptor:
             raise ValueError(f"App {self.name}: entry must be a relative path")
         if self.max_upload_bytes < 0:
             raise ValueError(f"App {self.name}: max_upload_bytes must not be negative")
+        from naas_abi_sdk.discovery import valid_avatar_url
+
+        if not valid_avatar_url(self.avatar_url):
+            raise ValueError(
+                f"App {self.name}: avatar_url must be an https:// URL or a "
+                "/modules/<path> asset"
+            )
 
     @property
     def upload_limit(self) -> int:
@@ -67,6 +76,7 @@ class AppDescriptor:
             entry=self.entry,
             contract_major=self.contract_major,
             max_upload_bytes=self.max_upload_bytes,
+            avatar_url=self.avatar_url,
         )
 
 
@@ -90,6 +100,16 @@ def _size(value: Any) -> int:
     return value
 
 
+def _avatar(manifest: dict) -> str:
+    """The manifest's ``avatar_url`` when a remote module can publish it (an
+    https:// URL or a /modules/<path> asset). A module-relative path only an
+    in-engine module serves is left out: the tile shows ``icon_emoji``."""
+    from naas_abi_sdk.discovery import valid_avatar_url
+
+    value = _text(manifest, "avatar_url").strip()
+    return value if value and valid_avatar_url(value) else ""
+
+
 def read_app(folder: Path) -> AppDescriptor:
     """The app in ``folder``, described by its ``manifest.json``."""
     try:
@@ -107,6 +127,7 @@ def read_app(folder: Path) -> AppDescriptor:
         entry=_entry(manifest.get("url")),
         max_upload_bytes=_size(manifest.get("max_upload_bytes")),
         root=folder,
+        avatar_url=_avatar(manifest),
     )
 
 

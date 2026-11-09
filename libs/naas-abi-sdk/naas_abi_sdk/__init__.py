@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from naas_abi_sdk.client import ABIClient
     from naas_abi_sdk.discovery import (
         AgentDescriptor,
+        AgentSuggestion,
         DiscoveryConfiguration,
         ModelDescriptor,
     )
@@ -60,6 +61,7 @@ _EXPORTS = {
     "WorkflowConfiguration": "naas_abi_sdk.workflow",
     "WorkflowParameters": "naas_abi_sdk.workflow",
     "AgentDescriptor": "naas_abi_sdk.discovery",
+    "AgentSuggestion": "naas_abi_sdk.discovery",
     "AgentProxy": "naas_abi_sdk.agent",
     "AgentState": "naas_abi_sdk.agent",
     "AppDescriptor": "naas_abi_sdk.apps",
@@ -84,6 +86,7 @@ __all__ = [
     "AgentDescriptor",
     "AgentProxy",
     "AgentState",
+    "AgentSuggestion",
     "AppDescriptor",
     "BaseModule",
     "DiscoveryConfiguration",
