@@ -15,6 +15,7 @@ from click.testing import CliRunner
 from naas_abi_core.engine.call_context import current_call_context
 from naas_abi_core.engine.IEngine import IEngine
 from naas_abi_core.services.event import local_identity
+from naas_abi_core.services.event.context import event_author_id
 from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import IAMStoreMemory
 from naas_abi_core.services.iam.enforcement import internal_call
 from naas_abi_core.services.iam.IAMService import IAMService
@@ -77,6 +78,8 @@ def engine(tmp_path, monkeypatch):
         importlib.import_module("naas_abi_cli.cli.run"), "Engine", _Engine
     )
     seen.clear()
+    # The developer case: a git author is set (CI runners have none).
+    monkeypatch.setattr(local_identity, "git_user_email", lambda: "dev@example.com")
     return _Engine
 
 
@@ -123,8 +126,10 @@ def test_terminal_work_runs_as_the_engine_for_its_git_author(monkeypatch):
     with as_local_operator():
         context = current_call_context()
         assert context.principal.name == "engine"
-        assert context.user is not None
-        assert context.user.id == local_identity.email_actor_id("ada@example.com")
+        # The author labels events; the engine acts for no user, or IAM would
+        # bound it by a user who holds nothing.
+        assert context.user is None and context.on_behalf_of is None
+        assert event_author_id.get() == local_identity.email_actor_id("ada@example.com")
         assert context.triggered_via == "cli"
     assert current_call_context().principal.kind == "anonymous"
 

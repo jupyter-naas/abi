@@ -15,6 +15,7 @@ from contextlib import contextmanager
 
 from naas_abi_core.services.event.context import (
     event_actor_user_id,
+    event_author_id,
     event_triggered_via,
 )
 
@@ -48,15 +49,17 @@ def git_user_email() -> str | None:
 def bind_local_identity() -> Iterator[None]:
     """Stamp events published inside the block with the terminal user.
 
+    The git author is a label (``event_author_id``), not the user the call acts
+    for: it never sets ``on_behalf_of``, so IAM bounds the terminal's work by
+    the account running it, not by a user who may hold nothing.
+
     An identity already set (e.g. by an API request) is left alone.
     """
     tokens = []
     if event_actor_user_id.get() is None:
         email = git_user_email()
         if email:
-            tokens.append(
-                (event_actor_user_id, event_actor_user_id.set(email_actor_id(email)))
-            )
+            tokens.append((event_author_id, event_author_id.set(email_actor_id(email))))
     if event_triggered_via.get() is None:
         tokens.append((event_triggered_via, event_triggered_via.set("cli")))
     try:

@@ -26,6 +26,7 @@ from naas_abi_core.services.event.adapters.secondary.EventSQLiteAdapter import (
 from naas_abi_core.services.event.context import (
     event_actor_user_id,
     event_actor_workspace_id,
+    event_author_id,
     event_triggered_via,
 )
 from naas_abi_core.services.event.EventService import EventService
@@ -73,6 +74,24 @@ def test_publish_leaves_identity_empty_outside_a_request(tmp_path) -> None:
     assert stored.actor_user_id is None
     assert stored.actor_workspace_id is None
     assert stored.triggered_via is None
+
+
+def test_the_author_label_names_the_actor_of_a_call_with_no_user(tmp_path) -> None:
+    service = _service(tmp_path)
+    token = event_author_id.set("email-sha256:abc")
+    try:
+        service.publish(ObjectStored(key="a.txt"))
+        # A call's own user wins over the label.
+        user_token = event_actor_user_id.set("usr-1")
+        try:
+            service.publish(ObjectStored(key="b.txt"))
+        finally:
+            event_actor_user_id.reset(user_token)
+    finally:
+        event_author_id.reset(token)
+
+    actors = {e.key: e.actor_user_id for e in service.query()}
+    assert actors == {"a.txt": "email-sha256:abc", "b.txt": "usr-1"}
 
 
 def test_caller_supplied_identity_wins_over_context(tmp_path) -> None:

@@ -102,7 +102,13 @@ workspace and how it started, unless the event sets its own. `context.py`'s
 `event_actor_user_id`, `event_actor_workspace_id` and `event_triggered_via`
 (and `agent_user_id`/`agent_workspace_id`, the same objects) are views of that
 context with a ContextVar-like `get`/`set`/`reset`; setting the user sets
-`on_behalf_of`. There is no second source of identity.
+`on_behalf_of`. The one exception is `event_author_id`, a plain ContextVar the
+terminal sets (`bind_local_identity`, from the git author): it labels the events
+of a call that acts for no user and is never part of `CallContext`.
+
+Decision: attribution never bounds authorization. A terminal runs as `engine`
+for nobody; had the git author been set as `on_behalf_of`, IAM would bound the
+engine by that user, who holds nothing, and refuse every enforced read.
 
 The Nexus System app (Data tab) browses the log read-only through these: event
 types as folders, events newest first. The log is append-only by design.

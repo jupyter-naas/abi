@@ -13,6 +13,11 @@ or sets them like ContextVars:
 * ``event_actor_workspace_id``: ``CallContext.workspace_id``;
 * ``event_triggered_via``: ``CallContext.triggered_via``.
 
+A fourth, ``event_author_id``, is a plain ContextVar and not a view: a label
+for the events of work that acts for no user (a terminal's git author). It is
+read only when stamping events and never reaches ``CallContext``, so it cannot
+widen or narrow what IAM lets the call do.
+
 ``set`` returns a token that ``reset`` takes back, like a ContextVar's. A
 reset restores that one field, so tokens can be reset in any order.
 
@@ -23,6 +28,7 @@ reset restores that one field, so tokens can be reset in any order.
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -103,3 +109,6 @@ event_actor_workspace_id = CallContextField(
 event_triggered_via = CallContextField(
     "triggered_via", lambda context: context.triggered_via, lambda value: value or None
 )
+# Who the events of a user-less call name as their actor, when the call has no
+# user: attribution only. Authorization never reads it (``on_behalf_of`` does).
+event_author_id: ContextVar[str | None] = ContextVar("event_author_id", default=None)
