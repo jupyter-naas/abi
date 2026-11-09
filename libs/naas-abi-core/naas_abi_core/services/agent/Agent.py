@@ -1975,15 +1975,43 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                 if tool_calls_changed or content_changed:
                     if not kept and _content_effectively_empty(new_content):
                         continue
+                    # OpenAI-compatible serializers fall back to the raw
+                    # ``additional_kwargs["tool_calls"]`` when ``tool_calls`` is
+                    # empty, which re-sends the stripped call as a ``tool_use``
+                    # with no ``tool_result`` (Anthropic rejects it with a 400).
+                    additional_kwargs = dict(
+                        getattr(m, "additional_kwargs", {}) or {}
+                    )
+                    raw_calls = additional_kwargs.get("tool_calls")
+                    if isinstance(raw_calls, list):
+                        raw_kept = [
+                            tc
+                            for tc in raw_calls
+                            if not (
+                                isinstance(tc, dict) and tc.get("id") in inbound_ids
+                            )
+                        ]
+                        if raw_kept:
+                            additional_kwargs["tool_calls"] = raw_kept
+                        else:
+                            additional_kwargs.pop("tool_calls")
                     m = AIMessage(
                         content=new_content,
                         tool_calls=kept,
                         id=m.id,
-                        additional_kwargs=dict(
-                            getattr(m, "additional_kwargs", {}) or {}
-                        ),
+                        additional_kwargs=additional_kwargs,
                     )
             cleaned.append(m)
+        # What the supervisor said while handing off ("Sure, one moment.") was
+        # for the user. Left last, it makes the sub-agent's request end on an
+        # assistant turn, which models without prefill reject with a 400.
+        if (
+            cleaned
+            and isinstance(cleaned[-1], AIMessage)
+            and not cleaned[-1].tool_calls
+            and cleaned[-1] is not messages[-1]
+        ):
+            cleaned.pop()
         return cleaned
 
     def call_model(
