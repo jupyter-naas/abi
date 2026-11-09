@@ -4,6 +4,7 @@ against the ModelRegistry during on_load."""
 from __future__ import annotations
 
 import os
+from typing import cast
 
 import pytest
 from naas_abi_core.engine.engine_configuration.EngineConfiguration import GlobalConfig
@@ -29,7 +30,7 @@ def _make_module(api_key: str = "test-key-not-used"):
     services = IEngine.Services(model_registry=registry)
     engine = _DummyEngine(services=services)
     proxy = EngineProxy(
-        engine=engine,
+        engine=cast(IEngine, engine),
         module_name="naas_abi_marketplace.ai.anthropic",
         module_dependencies=ModuleDependencies(
             modules=[], services=[ModelRegistryService]
