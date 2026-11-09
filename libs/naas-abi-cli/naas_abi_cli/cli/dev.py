@@ -1149,9 +1149,20 @@ def _stop_service(name: str, port: int, force: bool = False) -> None:
 # =============================================================================
 
 
-def _dev_modules(strict: bool = True) -> dict:
+def _last_run_on_nats() -> bool:
+    """Whether the last `abi dev up` ran in NATS mode (its overlay has a broker),
+    as with `--with-nats` on a project config without a `nats:` block."""
+    try:
+        return bool(read_overlay(_dev_dir() / DEV_OVERLAY_FILENAME).get("nats"))
+    except (OSError, ValueError):
+        return False
+
+
+def _dev_modules(strict: bool = True, *, with_nats: bool | None = None) -> dict:
     """The enabled `dev.modules` by name. ``strict=False`` (stopping, status)
-    reports an invalid block and carries on without modules."""
+    reports an invalid block and carries on without modules. ``with_nats``: the
+    mode of the run (`abi dev up`); otherwise NATS mode is the project's own or
+    the one the last run was in."""
     try:
         modules = load_dev_modules()
     except Exception as exc:
@@ -1162,8 +1173,12 @@ def _dev_modules(strict: bool = True) -> dict:
             f"Invalid `dev.modules` in the project config: {exc}"
         ) from exc
     # The built-in IdP, unless the project declares it or has providers of its
-    # own. It is a module over NATS: a project without NATS has none.
-    if _project_declares_nats():
+    # own. It is a module over NATS: a run without NATS has none. The run's
+    # mode, not the config's block, decides: `--with-nats` on a project without
+    # one writes the IdP's issuer into the overlay, so it has to be served.
+    if with_nats is None:
+        with_nats = _project_declares_nats() or _last_run_on_nats()
+    if with_nats:
         modules = with_builtin_idp(modules, _project_identity())
     clashes = sorted(set(modules) & set(KNOWN_SERVICES))
     if clashes:
@@ -2134,7 +2149,7 @@ def dev_up(
     if with_nats is None:
         # The project's own mode: NATS only when its config enables it.
         with_nats = _project_declares_nats()
-    modules = _dev_modules()
+    modules = _dev_modules(with_nats=with_nats)
     core, named_modules = _split_selection(services, modules)
     if services:
         # Only what was named, plus nats/jaeger when the mode asks for them.

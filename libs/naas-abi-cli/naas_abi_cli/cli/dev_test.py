@@ -978,6 +978,9 @@ def test_tracing_without_nats_has_no_nats_block(monkeypatch, tmp_path) -> None:
 # =============================================================================
 
 
+_DEV_MODULES = dev._dev_modules  # the real one; the `stack` fixture fakes it
+
+
 def _modules(*names: str) -> dict:
     from naas_abi_core.engine.engine_configuration.EngineConfiguration_Dev import (
         DevModuleConfiguration,
@@ -998,7 +1001,9 @@ def stack(monkeypatch, tmp_path):
     ports = dict(dev.SERVICE_PORT_BASES)
     (tmp_path / "instance.json").write_text("{}")
     monkeypatch.setattr(
-        dev, "_dev_modules", lambda strict=True: _modules("researcher", "orchestrator")
+        dev,
+        "_dev_modules",
+        lambda strict=True, **_: _modules("researcher", "orchestrator"),
     )
     monkeypatch.setattr(dev, "_load_or_create_instance", lambda: {"ports": ports})
     monkeypatch.setattr(dev, "_instance_path", lambda: tmp_path / "instance.json")
@@ -1039,6 +1044,30 @@ def _abi(*args: str):
     from click.testing import CliRunner
 
     return CliRunner().invoke(dev.dev, list(args))
+
+
+def test_with_nats_runs_the_built_in_idp_on_a_project_without_a_nats_block(
+    stack, monkeypatch, tmp_path
+) -> None:
+    """`--with-nats` names the built-in IdP as the engine's provider in the
+    overlay when the project names none: the IdP has to run too, `nats:`
+    block or not, or nothing serves its issuer."""
+    monkeypatch.setattr(dev, "_dev_modules", _DEV_MODULES)
+    monkeypatch.setattr(dev, "load_dev_modules", dict)
+    monkeypatch.setattr(dev, "_project_identity", lambda: None)
+
+    result = _abi("up", "--with-nats", "-d")
+
+    assert result.exit_code == 0, result.output
+    assert [name for _, name in stack][-1] == "idp"
+    overlay = dev.read_overlay(tmp_path / dev.DEV_OVERLAY_FILENAME)
+    (provider,) = overlay["identity"]["providers"]
+    assert provider["issuer"].endswith("/idp")
+
+    # And `abi dev down` (which has no --with-nats) stops it again.
+    stack.clear()
+    assert _abi("down", "--service", "idp").exit_code == 0
+    assert stack == [("stop", "idp")]
 
 
 def test_with_nats_starts_the_dev_modules_after_the_stack(stack) -> None:
@@ -1162,7 +1191,7 @@ def test_up_seeds_the_secrets_of_the_project_nats_block(
     monkeypatch.setattr(
         dev, "ensure_nats_callout_seed", admin_credentials.ensure_nats_callout_seed
     )
-    monkeypatch.setattr(dev, "_dev_modules", lambda strict=True: {})
+    monkeypatch.setattr(dev, "_dev_modules", lambda strict=True, **_: {})
 
     result = _abi("up", mode, "-d")
 
@@ -1556,13 +1585,36 @@ def test_outside_a_dev_project_nothing_changes(monkeypatch) -> None:
     assert not dev.os.environ.get("ABI_CONFIG_OVERLAY")
 
 
-def test_a_project_without_nats_has_no_built_in_identity_provider(monkeypatch) -> None:
-    # The IdP is a module over NATS: the legacy project neither runs nor lists it.
+def test_a_run_without_nats_has_no_built_in_identity_provider(
+    monkeypatch, tmp_path
+) -> None:
+    # The IdP is a module over NATS: an in-process run neither runs nor lists it.
     monkeypatch.setattr(dev, "load_dev_modules", dict)
     monkeypatch.setattr(dev, "_project_identity", lambda: None)
+    monkeypatch.setattr(dev, "_dev_dir", lambda: tmp_path)
 
     monkeypatch.setattr(dev, "_project_declares_nats", lambda: True)
     assert "idp" in dev._dev_modules()
+    assert dev._dev_modules(with_nats=False) == {}
 
     monkeypatch.setattr(dev, "_project_declares_nats", lambda: False)
     assert dev._dev_modules() == {}
+    assert "idp" in dev._dev_modules(with_nats=True)
+
+
+def test_down_and_status_list_the_idp_of_a_with_nats_run(monkeypatch, tmp_path) -> None:
+    """Without the flag, the mode is the one the last `abi dev up` ran in."""
+    monkeypatch.setattr(dev, "load_dev_modules", dict)
+    monkeypatch.setattr(dev, "_project_identity", lambda: None)
+    monkeypatch.setattr(dev, "_project_declares_nats", lambda: False)
+    monkeypatch.setattr(dev, "_dev_dir", lambda: tmp_path)
+    overlay = tmp_path / dev.DEV_OVERLAY_FILENAME
+
+    overlay.write_text('# generated\n{"nats": {"nats_url": "nats://x"}}\n')
+    assert "idp" in dev._dev_modules(strict=False)
+
+    overlay.write_text('# generated\n{"nats": null}\n')
+    assert dev._dev_modules(strict=False) == {}
+
+    overlay.write_text("not json")
+    assert dev._dev_modules(strict=False) == {}

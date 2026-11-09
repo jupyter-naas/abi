@@ -69,6 +69,30 @@ def test_documents_picker_overrides_survive_the_trip_into_nexus_settings() -> No
     assert settings.documents_hidden_template_ids == ["abi/article-light-v1"]
 
 
+def test_a_seeded_users_profile_fields_survive_the_trip_into_nexus_settings() -> None:
+    """A user in config.yaml can set a company and a job title.
+
+    They were `company`/`role` here and `organization`/`job_title` in the
+    Nexus Settings; each refused the other's names, so the API did not start.
+    """
+    from naas_abi.apps.nexus.apps.api.app.core.config import Settings
+
+    dumped = NexusConfig(
+        users=[
+            {
+                "email": "demo@example.com",
+                "name": "Demo",
+                "organization": "Acme",
+                "job_title": "Key Account Manager",
+            }
+        ]
+    ).model_dump(exclude_none=True)
+
+    (user,) = Settings(**dumped).users
+    assert user.organization == "Acme"
+    assert user.job_title == "Key Account Manager"
+
+
 def test_a_slides_template_source_cannot_claim_the_abi_namespace() -> None:
     """Refused on the boot, before a picker can serve the wrong deck.
 
