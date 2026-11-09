@@ -3,9 +3,11 @@ from __future__ import annotations
 import hashlib
 import subprocess
 
+from naas_abi_core.engine.call_context import current_call_context
 from naas_abi_core.services.event import local_identity
 from naas_abi_core.services.event.context import (
     event_actor_user_id,
+    event_author_id,
     event_triggered_via,
 )
 from naas_abi_core.services.event.local_identity import (
@@ -25,10 +27,13 @@ def test_binding_uses_the_git_author_and_marks_the_cli(monkeypatch) -> None:
     monkeypatch.setattr(local_identity, "git_user_email", lambda: "dev@example.com")
 
     with bind_local_identity():
-        assert event_actor_user_id.get() == email_actor_id("dev@example.com")
+        assert event_author_id.get() == email_actor_id("dev@example.com")
+        # A label only: the call acts for nobody, so IAM sees no user.
+        assert event_actor_user_id.get() is None
+        assert current_call_context().on_behalf_of is None
         assert event_triggered_via.get() == "cli"
 
-    assert event_actor_user_id.get() is None
+    assert event_author_id.get() is None
     assert event_triggered_via.get() is None
 
 
@@ -46,7 +51,7 @@ def test_without_a_git_author_there_is_no_actor(monkeypatch) -> None:
     monkeypatch.setattr(local_identity, "git_user_email", lambda: None)
 
     with bind_local_identity():
-        assert event_actor_user_id.get() is None
+        assert event_author_id.get() is None
         assert event_triggered_via.get() == "cli"
 
 
