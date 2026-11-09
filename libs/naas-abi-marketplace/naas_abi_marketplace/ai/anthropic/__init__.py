@@ -17,9 +17,7 @@ from pydantic import SecretStr
 class ABIModule(BaseModule):
     name: str = "Anthropic"
     description: str = "Anthropic's AI safety company providing Claude models for safe and beneficial AI."
-    logo_url: str = (
-        "https://pbs.twimg.com/media/G-K9zwhXoAIMN7W.png"
-    )
+    logo_url: str = "https://pbs.twimg.com/media/G-K9zwhXoAIMN7W.png"
     tags: list[str] = ["anthropic", "claude", "language model"]
     slug: str = "anthropic"
     dependencies: ModuleDependencies = ModuleDependencies(
@@ -52,9 +50,13 @@ class ABIModule(BaseModule):
         api_key = SecretStr(self.configuration.anthropic_api_key)
 
         def anthropic_chat_factory(provider_model_id: str) -> ChatAnthropic:
+            # No temperature/top_p/top_k: current models (and every model from
+            # API version 2026-10-21) reject sampling parameters with a 400.
+            # Explicit max_tokens: langchain's 1024 default is too small once
+            # thinking is on.
             return ChatAnthropic(
                 model_name=provider_model_id,
-                temperature=0,
+                max_tokens_to_sample=8192,
                 max_retries=2,
                 api_key=api_key,
                 timeout=None,

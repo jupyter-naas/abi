@@ -160,3 +160,82 @@ def test_truncate_tool_content_for_sse() -> None:
     out = _truncate_tool_content(huge, _MAX_TOOL_RESULT_CHARS)
     assert out.endswith("...[truncated]...")
     assert len(out) < len(huge)
+
+
+def _thinking_ai(message_id: str, tool_call_id: str | None = None) -> AIMessage:
+    content: list[str | dict] = [
+        {"type": "thinking", "thinking": "", "signature": "sig-" + message_id}
+    ]
+    tool_calls = []
+    if tool_call_id is not None:
+        content.append(
+            {"type": "tool_use", "id": tool_call_id, "name": "read_x", "input": {}}
+        )
+        tool_calls = [{"id": tool_call_id, "name": "read_x", "args": {}}]
+    else:
+        content.append({"type": "text", "text": "done"})
+    return AIMessage(content=content, tool_calls=tool_calls, id=message_id)
+
+
+def test_compact_never_stubs_history_that_carries_thinking_blocks() -> None:
+    # Preserved thinking (Claude Opus 5.5 / Sonnet 5.5 / Haiku 5.5 / Fable 5.1):
+    # editing any message before a replayed thinking block is a 400, so prior
+    # turns must be sent exactly as they were when the block was produced.
+    prior_read = "x" * 200
+    messages: list[AnyMessage] = [
+        HumanMessage(content="first", id="h1"),
+        _thinking_ai("a1", "c1"),
+        _tool(prior_read, "read_slides_section", "c1"),
+        _thinking_ai("a2"),
+        HumanMessage(content="next", id="h2"),
+    ]
+
+    assert compact_old_tool_messages(messages) is messages
+
+
+def test_compact_with_thinking_view_is_stable_across_turns() -> None:
+    # A huge result is capped the same way on every request, so the view the
+    # model saw when it produced a2 is byte-identical on the next turn.
+    huge = "A" * (_MAX_TOOL_RESULT_CHARS + 500)
+    turn_1: list[AnyMessage] = [
+        HumanMessage(content="first", id="h1"),
+        _thinking_ai("a1", "c1"),
+        _tool(huge, "read_slides_deck", "c1"),
+    ]
+    view_1 = compact_old_tool_messages(turn_1)
+
+    turn_2: list[AnyMessage] = turn_1 + [
+        _thinking_ai("a2"),
+        HumanMessage(content="next", id="h2"),
+    ]
+    view_2 = compact_old_tool_messages(turn_2)
+
+    assert view_1[2].content == view_2[2].content
+    assert isinstance(view_2[2].content, str)
+    assert view_2[2].content.endswith("...[truncated]...")
+
+
+def test_refusal_with_no_text_becomes_a_visible_message() -> None:
+    from naas_abi_core.services.agent.Agent import _surface_refusal
+
+    refused = AIMessage(
+        content=[{"type": "thinking", "thinking": "", "signature": "s"}],
+        response_metadata={"stop_reason": "refusal"},
+        id="a1",
+    )
+    out = _surface_refusal(refused)
+    assert isinstance(out.content, str)
+    assert "declined" in out.content
+    assert out.id == "a1"
+
+
+def test_non_refusal_and_refusal_with_text_are_unchanged() -> None:
+    from naas_abi_core.services.agent.Agent import _surface_refusal
+
+    normal = AIMessage(content="", response_metadata={"stop_reason": "end_turn"})
+    assert _surface_refusal(normal) is normal
+    partial = AIMessage(
+        content="I can help with part of this.",
+        response_metadata={"stop_reason": "refusal"},
+    )
+    assert _surface_refusal(partial) is partial
