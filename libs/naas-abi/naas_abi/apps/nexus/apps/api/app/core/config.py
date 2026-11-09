@@ -7,7 +7,8 @@ from typing import Any, Literal
 
 from naas_abi.apps.nexus.graph_policy_config import WorkspaceGraphPolicyConfig
 from naas_abi.apps.nexus.maps_seed_config import WorkspaceMapsSeedConfig
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+from naas_abi.apps.nexus.user_seed_config import UserSeedConfig
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Namespace under which ABI serves the seed decks it ships. Reserved: a
@@ -361,29 +362,6 @@ class FeatureFlagsConfig(BaseModel):
     # Deprecated, with role_baseline: per-organization role_baseline overlays,
     # keyed by organization id. Read once, by the move of the role features.
     organization_overrides: dict[str, dict[str, list[FeatureKey]]] = Field(default_factory=dict)
-
-
-class UserSeedConfig(BaseModel):
-    """User definition applied on startup (create by email if missing)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    email: EmailStr
-    name: str
-    avatar: str | None = None
-    organization: str | None = None
-    job_title: str | None = None
-    bio: str | None = None
-    is_superadmin: bool = False
-
-    @model_validator(mode="before")
-    @classmethod
-    def _ignore_the_stored_password_setting(cls, data: Any) -> Any:
-        """No password is made for a configured user any more (they sign in at the
-        built-in identity provider): the old setting is accepted and ignored."""
-        if isinstance(data, dict) and "store_credentials_in_secrets" in data:
-            data = {k: v for k, v in data.items() if k != "store_credentials_in_secrets"}
-        return data
 
 
 class OrganizationMemberSeedConfig(BaseModel):

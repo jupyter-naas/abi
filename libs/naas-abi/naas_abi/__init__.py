@@ -26,6 +26,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from naas_abi.apps.nexus.graph_policy_config import WorkspaceGraphPolicyConfig
 from naas_abi.apps.nexus.maps_seed_config import WorkspaceMapsSeedConfig
+from naas_abi.apps.nexus.user_seed_config import UserSeedConfig
 
 
 def _initialize_nexus_service_registry() -> None:
@@ -282,29 +283,6 @@ class SheetsTemplateSourceConfig(BaseModel):
 
     namespace: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=32)
     path: str = Field(min_length=1)
-
-
-class UserSeedConfig(BaseModel):
-    """User definition applied on startup (create by email if missing)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    email: EmailStr
-    name: str
-    avatar: str | None = None
-    company: str | None = None
-    role: str | None = None
-    bio: str | None = None
-    is_superadmin: bool = False
-
-    @model_validator(mode="before")
-    @classmethod
-    def _ignore_the_stored_password_setting(cls, data: Any) -> Any:
-        """No password is made for a configured user any more (they sign in at the
-        built-in identity provider): the old setting is accepted and ignored."""
-        if isinstance(data, dict) and "store_credentials_in_secrets" in data:
-            data = {k: v for k, v in data.items() if k != "store_credentials_in_secrets"}
-        return data
 
 
 class OrganizationMemberSeedConfig(BaseModel):
