@@ -1,6 +1,7 @@
 from typing import Any, Literal
 
 from fastapi import FastAPI
+from naas_abi_core import logger
 from naas_abi_core.module.Module import (
     BaseModule,
     ModuleConfiguration,
@@ -21,7 +22,7 @@ from naas_abi_core.services.object_storage.ObjectStorageService import (
 from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from naas_abi.apps.nexus.graph_policy_config import WorkspaceGraphPolicyConfig
 from naas_abi.apps.nexus.maps_seed_config import WorkspaceMapsSeedConfig
@@ -194,7 +195,7 @@ FeatureKey = Literal[
     "graph",
     "datasets",
     "settings",
-    # Opt-in: only when listed in enabled_features + role_baseline.
+    # Opt-in: only when listed in enabled_features.
     "code",
     # Business slides (Forgejo decks + Monaco). On for members by default.
     "slides",
@@ -231,15 +232,6 @@ def _default_enabled_features() -> list[FeatureKey]:
     return list(_ALL_FEATURES)
 
 
-def _default_role_baseline() -> dict[str, list[FeatureKey]]:
-    return {
-        "owner": list(_ALL_FEATURES),
-        "admin": list(_ALL_FEATURES),
-        "member": ["maps", "chat", "files", "datasets", "skills", "slides", "documents", "sheets"],
-        "viewer": ["maps", "chat", "files", "datasets", "skills", "slides", "documents", "sheets"],
-    }
-
-
 class FeatureFlagsConfig(BaseModel):
     """Feature access policy exposed to Nexus frontend."""
 
@@ -248,13 +240,13 @@ class FeatureFlagsConfig(BaseModel):
     enabled_features: list[FeatureKey] = Field(
         default_factory=_default_enabled_features
     )
-    role_baseline: dict[str, list[FeatureKey]] = Field(
-        default_factory=_default_role_baseline
-    )
-    # Deprecated: workspace feature overrides are managed in Organization
-    # Settings > Workspaces (workspaces.feature_overrides). Still read as a
-    # fallback for workspaces that never saved any.
-    workspace_overrides: dict[str, dict[FeatureKey, bool]] = Field(default_factory=dict)
+    # Deprecated: no role brings a feature, a policy does. Nexus reads these once,
+    # when it moves what each role had into each workspace's policies, then
+    # warns while a configuration still sets them. Left unset (None), Nexus
+    # uses the defaults the role features had.
+    role_baseline: dict[str, list[FeatureKey]] | None = None
+    organization_overrides: dict[str, dict[str, list[FeatureKey]]] | None = None
+    workspace_overrides: dict[str, dict[FeatureKey, bool]] | None = None
 
 
 class SlidesTemplateSourceConfig(BaseModel):
@@ -304,7 +296,15 @@ class UserSeedConfig(BaseModel):
     role: str | None = None
     bio: str | None = None
     is_superadmin: bool = False
-    store_credentials_in_secrets: bool = True
+
+    @model_validator(mode="before")
+    @classmethod
+    def _ignore_the_stored_password_setting(cls, data: Any) -> Any:
+        """No password is made for a configured user any more (they sign in at the
+        built-in identity provider): the old setting is accepted and ignored."""
+        if isinstance(data, dict) and "store_credentials_in_secrets" in data:
+            data = {k: v for k, v in data.items() if k != "store_credentials_in_secrets"}
+        return data
 
 
 class OrganizationMemberSeedConfig(BaseModel):
@@ -410,10 +410,60 @@ class OrganizationSeedConfig(BaseModel):
     default_theme: str | None = None
 
 
+# Settings of the login Nexus used to have: password, magic link, one-time
+# code and refresh tokens. Accepted and ignored so an older configuration loads.
+NEXUS_REMOVED_LOGIN_SETTINGS = frozenset(
+    {
+        "auth_password_enabled",
+        "auth_signup_enabled",
+        "magic_link_allow_signup",
+        "access_token_expire_minutes",
+        "refresh_token_expire_days",
+        "magic_link_expire_minutes",
+        "magic_link_max_active",
+        "magic_link_path",
+        "magic_link_email_subject_template",
+        "magic_link_email_text_template",
+        "magic_link_email_html_template",
+        "otp_code_length",
+        "otp_max_attempts",
+        "log_otp_codes_when_email_unavailable",
+    }
+)
+NEXUS_RENAMED_SETTINGS = {
+    "magic_link_email_app_name": "email_app_name",
+    "rate_limit_login_attempts": "rate_limit_attempts",
+}
+
+
 class NexusConfig(BaseModel):
     """Nexus runtime settings wired into app.core.config.Settings."""
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_the_login_settings_nexus_dropped(cls, data: Any) -> Any:
+        """A project that configured the login Nexus used to have still
+        loads: those keys are ignored, with a note saying why; ``secret_key`` and
+        two renamed settings keep their value."""
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        for old, new in NEXUS_RENAMED_SETTINGS.items():
+            if old in data:
+                data.setdefault(new, data.pop(old))
+        dropped = sorted(k for k in NEXUS_REMOVED_LOGIN_SETTINGS if k in data)
+        for key in dropped:
+            data.pop(key)
+        if dropped:
+            logger.warning(
+                "nexus_config: %s are ignored: Nexus has no login of its own any more "
+                "(people sign in at the identity provider, `abi user migrate` moves the "
+                "old accounts). Remove them from the configuration.",
+                ", ".join(dropped),
+            )
+        return data
 
     app_name: str = "NEXUS API"
     debug: bool = False
@@ -429,63 +479,33 @@ class NexusConfig(BaseModel):
 
     ontology_base_uri: str = "http://ontology.naas.ai/"
 
-    secret_key: str = "change-me-in-production"
-    auth_password_enabled: bool = False
-    auth_signup_enabled: bool = False
+    # Nexus has no login of its own: people sign in at an identity provider
+    # (``identity.providers``). ``secrets_encryption_key`` encrypts workspace
+    # secrets (generated into the secret store as NEXUS_SECRETS_KEY when empty).
+    # ``secret_key`` signs nothing; it is read at start only to move what it once
+    # encrypted under ``secrets_encryption_key``.
+    secrets_encryption_key: str = ""
+    secret_key: str = ""
     pages_sso_secret: str = ""
     pages_sso_expire_seconds: int = 300
-    magic_link_allow_signup: bool = False
-    access_token_expire_minutes: int = 1440
-    refresh_token_expire_days: int = 30
-    magic_link_expire_minutes: int = 15
-    magic_link_path: str = "/auth/magic-link"
-    magic_link_email_app_name: str = "NEXUS"
-    magic_link_email_subject_template: str = "Your {app_name} sign-in code"
-    magic_link_email_text_template: str = (
-        "Your {app_name} sign-in code is: {otp_code}\n\n"
-        "Enter this code in the app to continue.\n\n"
-        "Or use this magic link:\n{magic_link_url}\n\n"
-        "This code and link expire in {expire_minutes} minutes."
-    )
-    magic_link_email_html_template: str = (
-        '<!DOCTYPE html><html><body style="margin:0;padding:0;'
-        'background-color:{background_color};'
-        'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">'
-        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-        'style="background-color:{background_color};padding:48px 16px;">'
-        '<tr><td align="center">'
-        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-        'style="max-width:440px;background-color:{login_card_color};'
-        'padding:40px 48px;border-radius:{login_border_radius}px;">'
-        '<tr><td align="center" style="padding-bottom:24px;">{logo_html}</td></tr>'
-        '<tr><td align="center" style="padding-bottom:24px;">'
-        '<p style="margin:0;font-size:28px;font-weight:600;color:#1a1a1a;">Welcome</p>'
-        '<p style="margin:8px 0 0;font-size:14px;color:#737373;">Sign in to continue</p>'
-        "</td></tr>"
-        '<tr><td align="center" style="padding-bottom:8px;">'
-        '<p style="margin:0;font-size:14px;color:#737373;">Your sign-in code</p>'
-        '<p style="margin:12px 0 0;font-size:28px;letter-spacing:6px;'
-        'font-weight:700;color:#1a1a1a;">{otp_code}</p>'
-        "</td></tr>"
-        '<tr><td align="center" style="padding:24px 0;">'
-        '<a href="{magic_link_url}" style="display:inline-block;background-color:{primary_color};'
-        "color:#ffffff;text-decoration:none;padding:12px 24px;font-size:14px;"
-        'font-weight:500;border-radius:{login_border_radius}px;">Sign in</a>'
-        "</td></tr>"
-        '<tr><td align="center">'
-        '<p style="margin:0;font-size:12px;color:#737373;">'
-        "This code and link expire in {expire_minutes} minutes.</p>"
-        "</td></tr></table>"
-        '<p style="margin:24px 0 0;font-size:12px;color:#737373;">{login_footer_text}</p>'
-        "</td></tr></table></body></html>"
-    )
+    email_app_name: str = "NEXUS"
     email_from_address: EmailStr = "no-reply@nexus.example.com"
     email_from_name: str = "NEXUS"
 
     rate_limit_enabled: bool = True
-    rate_limit_login_attempts: int = 5
+    rate_limit_attempts: int = 5
     rate_limit_ip_attempts: int = 20
     rate_limit_window_seconds: int = 300
+
+    # Sign-in through the engine's identity providers (identity.providers).
+    oidc_session_cookie: str = Field(default="nexus_session", pattern=r"^[A-Za-z0-9_-]{1,64}$")
+    oidc_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
+    oidc_session_max_age_hours: int = Field(default=7 * 24, ge=1, le=90 * 24)
+    oidc_redirect_uri: str | None = None
+    # Origins of relying parties other than Nexus that sign in at the built-in
+    # IdP (/idp): a login page's forms may redirect there, and /idp/authorize
+    # refuses any redirect_uri on another origin. Nexus's own are implied.
+    idp_client_origins: list[str] = Field(default_factory=list)
 
     enable_security_headers: bool = True
     content_security_policy: str | None = None
@@ -518,8 +538,19 @@ class NexusConfig(BaseModel):
 
 # Settings the Nexus ``Settings`` also reads from the environment. Passing
 # NexusConfig's defaults for them as init kwargs would shadow ``SECRET_KEY`` /
+# ``SECRETS_ENCRYPTION_KEY`` /
 # ``ENVIRONMENT`` / ``NEXUS_ENV``, so they are forwarded only when set in yaml.
-_ENV_OVERRIDABLE_NEXUS_FIELDS = ("secret_key", "environment", "nexus_env")
+# ``api_url`` and ``frontend_url`` too: ``abi dev up`` binds each worktree's own
+# ports and tells the API through ``API_URL`` / ``FRONTEND_URL``, which the
+# sign-in redirect URI (``<api_url>/api/auth/oidc/callback``) must follow.
+_ENV_OVERRIDABLE_NEXUS_FIELDS = (
+    "secret_key",
+    "secrets_encryption_key",
+    "environment",
+    "nexus_env",
+    "api_url",
+    "frontend_url",
+)
 
 
 def nexus_settings_kwargs(nexus_config: NexusConfig) -> dict[str, Any]:
@@ -609,7 +640,6 @@ class ABIModule(BaseModule):
                 users:
                     - email: "owner@example.com"
                       name: "Owner User"
-                      store_credentials_in_secrets: true
                 organizations:
                     - name: "My Company"
                       slug: "my-company"
@@ -815,14 +845,13 @@ class ABIModule(BaseModule):
 
         # Expose ABI object storage to Nexus routes.
         app.state.object_storage = self.engine.services.object_storage
-        # Expose Secret service to Nexus startup provisioning.
         app.state.secret_service = self.engine.services.secret
         # Expose ABI triple store to Nexus graph routes.
         app.state.triple_store = self.engine.services.triple_store
-        # Expose the configured email adapter so Nexus magic-link sends use
-        # whichever transport the engine config picked (e.g. `filesystem`
-        # in dev, `smtp` in prod) instead of always constructing an SMTP
-        # client inline.
+        # Expose the configured email adapter so the mail Nexus sends
+        # (invitations) uses whichever transport the engine config picked (e.g.
+        # `filesystem` in dev, `smtp` in prod) instead of always constructing an
+        # SMTP client inline.
         app.state.email_service = self.engine.services.email
         # Expose ABI activity-log service so the Nexus middleware can
         # record one event per HTTP request.
@@ -833,9 +862,16 @@ class ABIModule(BaseModule):
         # in ``on_initialized`` keeps Dagster and CLI engines from racing the
         # API to write a different one.
         from naas_abi.apps.nexus.apps.api.app.core import config as nexus_config
-        from naas_abi.apps.nexus.apps.api.app.core.secret_key import resolve_secret_key
+        from naas_abi.apps.nexus.apps.api.app.core.secret_key import (
+            legacy_secret_keys,
+            resolve_secrets_key,
+        )
 
-        nexus_config.settings.secret_key = resolve_secret_key(
+        nexus_config.settings.secrets_encryption_key = resolve_secrets_key(
+            nexus_config.settings.secrets_encryption_key, self.engine.services.secret
+        )
+        # What the old signing key encrypted moves under the new key at start.
+        app.state.legacy_secret_keys = legacy_secret_keys(
             nexus_config.settings.secret_key, self.engine.services.secret
         )
 

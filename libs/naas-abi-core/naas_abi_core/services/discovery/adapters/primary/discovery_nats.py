@@ -5,16 +5,24 @@ from typing import Any
 
 from google.protobuf.message import DecodeError
 from naas_abi_core import logger
+from naas_abi_core.engine.call_context import CallContext, use_call_context
 from naas_abi_core.engine.nats_auth import (
+    AGENT_AUDIENCE,
+    HOST_AUDIENCE_PREFIX,
     InvalidServiceTokenError,
-    verify_service_token,
+    TokenVerifier,
+    host_audience,
 )
 from naas_abi_core.engine.nats_dispatch import max_concurrent_requests
+from naas_abi_core.engine.nats_identity import caller_context, for_request, refusal
 from naas_abi_core.engine.nats_sessions import stop_delivery
+from naas_abi_core.services.discovery.caller import caller_of
 from naas_abi_core.services.discovery.discovery_service import (
     DiscoveryError,
     DiscoveryService,
 )
+from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
+from naas_abi_core.services.iam.modules import subject_token
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 from naas_abi_sdk import overflow
 from naas_abi_sdk.broker_flush import flush_to_broker
@@ -28,25 +36,42 @@ OPERATIONS: dict[str, tuple[Any, Any, bool]] = {
     "authorize_agent": (pb.AuthorizeAgentRequest, pb.AuthorizeAgentResponse, True),
     "authorize_model": (pb.AuthorizeModelRequest, pb.AuthorizeModelResponse, True),
     "authorize_app": (pb.AuthorizeAppRequest, pb.AuthorizeAppResponse, True),
+    "authorize_job": (pb.AuthorizeJobRequest, pb.AuthorizeJobResponse, True),
     "register": (pb.RegisterRequest, pb.RegisterResponse, True),
     "renew": (pb.RenewRequest, pb.RenewResponse, True),
     "unregister": (pb.UnregisterRequest, pb.UnregisterResponse, True),
-    # Admin identities only (DiscoveryService.admin_identities).
+    # discovery:Evict on the instance's module.
     "evict": (pb.EvictRequest, pb.EvictResponse, True),
     "get_module": (pb.GetModuleRequest, pb.GetModuleResponse, False),
     "list_modules": (pb.ListModulesRequest, pb.ListModulesResponse, False),
 }
 
 
+def _is_for_host(forwarded: CallContext, host: str) -> bool:
+    """Whether a forwarded token is this host's to forward: addressed to it, or a
+    delegation whose acting module is the host itself."""
+    if forwarded.audience == AGENT_AUDIENCE:
+        return forwarded.on_behalf_of is not None and forwarded.principal.id == host
+    return forwarded.audience == host_audience(subject_token(host))
+
+
 class DiscoveryNATS:
     def __init__(
         self,
         service: DiscoveryService,
-        secret: str,
+        verifier: TokenVerifier,
         project: str,
         max_concurrency: int | None = None,
     ):
-        self.service, self.secret, self.project = service, secret, project
+        self.service, self.verifier, self.project = service, verifier, project
+        # What a hosting module forwards as its caller's token: addressed to
+        # that host (``abi:host:<host>``), or a delegation for a user that names
+        # that host as the acting module; never the caller's own ``abi:nats``
+        # token, which a host must not hold, nor one made for another host.
+        # Anything else is refused here.
+        self.caller_verifier = verifier.for_audiences(
+            (AGENT_AUDIENCE,), prefixes=(HOST_AUDIENCE_PREFIX,)
+        )
         self.subscriptions: list[Subscription] = []
         self.max_payload = 512 * 1024
         # Calls side by side, as the kernel services (nats.max_concurrent_requests).
@@ -62,7 +87,9 @@ class DiscoveryNATS:
                     await nc.subscribe(
                         f"abi.discovery.{self.project}.v1.{operation}",
                         queue=f"abi.discovery.{self.project}.owners",
-                        cb=self.calls.callback(partial(self._handle, operation)),
+                        cb=self.calls.callback(
+                            partial(self._handle, operation), requests=True
+                        ),
                     )
                 )
             await flush_to_broker(nc)
@@ -83,9 +110,8 @@ class DiscoveryNATS:
         request_type, response_type, mutation = OPERATIONS[operation]
         response = response_type()
         try:
-            owner = verify_service_token(
-                (msg.headers or {}).get("Nats-Auth-Token", ""), self.secret
-            )
+            context = caller_context(msg.headers, self.verifier)
+            owner = context.principal.id
             # An overflow upload is above the broker limit, so above this cap too.
             if len(msg.data) > self.max_payload or overflow.REQUEST_HEADER in (
                 msg.headers or {}
@@ -94,35 +120,33 @@ class DiscoveryNATS:
                     "PAYLOAD_TOO_LARGE", "Discovery request exceeds limit"
                 )
             request = request_type.FromString(msg.data)
-            if operation == "register" and request.descriptor.module_id != owner:
-                # A module registers as itself (docs/adr/20261014_module-identities.md):
-                # no other identity can take over its agents, jobs, models or apps.
-                raise DiscoveryError(
-                    "PERMISSION_DENIED",
-                    f"Identity {owner!r} cannot register module "
-                    f"{request.descriptor.module_id!r}: a module registers with a "
-                    "token for its own module id",
+            # The caller a hosting module vouches for: its token and the user
+            # it acts for, verified here as a kernel endpoint verifies its own.
+            forwarded = (
+                caller_of(
+                    request.caller_token,
+                    self.caller_verifier,
+                    at=getattr(request, "stored_at", 0.0),
                 )
-            # A caller's token must be bound to the instance asking: one a
-            # module was sent for another instance (or kept) is refused.
-            caller = (
-                verify_service_token(
-                    request.caller_token, self.secret, audience=request.instance_id
-                )
-                if operation in ("authorize_agent", "authorize_model", "authorize_app")
+                if operation.startswith("authorize_")
                 else None
             )
-            handler = getattr(self.service, operation)
-            response = (
-                await handler(request, owner) if mutation else await handler(request)
-            )
-            if caller is not None:
-                response.caller_identity = caller
-                response.caller_admin = caller in self.service.admin_identities
-        except InvalidServiceTokenError:
+            if forwarded is not None and not _is_for_host(forwarded, owner):
+                # Made for another host (or for none): a host that read it from
+                # a request replays it nowhere, not even at another host.
+                raise InvalidServiceTokenError("the caller's token is for another host")
+            with use_call_context(for_request(context, request)):
+                handler = getattr(self.service, operation)
+                if forwarded is not None:
+                    response = await handler(request, owner, forwarded)
+                elif mutation:
+                    response = await handler(request, owner)
+                else:
+                    response = await handler(request)
+        except InvalidServiceTokenError as exc:
             response.error.code, response.error.message = (
                 "UNAUTHENTICATED",
-                "Missing or invalid service token",
+                refusal(exc, "Missing or invalid service token"),
             )
         except DecodeError:
             response.error.code, response.error.message = (
@@ -131,6 +155,11 @@ class DiscoveryNATS:
             )
         except DiscoveryError as exc:
             response.error.code, response.error.message = exc.code, str(exc)
+        except PermissionDeniedError as exc:
+            response.error.code, response.error.message = (
+                "PERMISSION_DENIED",
+                str(exc),
+            )
         except Exception:  # noqa: BLE001 - translate adapter failures at the RPC boundary
             logger.exception("Discovery request failed")
             response.error.code, response.error.message = (

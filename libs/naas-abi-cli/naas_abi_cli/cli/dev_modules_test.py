@@ -1,12 +1,10 @@
 import json
-import os
 import sys
 
 import pytest
 from naas_abi_core.engine.engine_configuration.EngineConfiguration_Dev import (
     DevModuleConfiguration,
 )
-from naas_abi_core.engine.nats_auth import verify_service_token
 
 from naas_abi_cli.cli.dev_modules import (
     load_dev_modules,
@@ -15,62 +13,55 @@ from naas_abi_cli.cli.dev_modules import (
     read_overlay,
 )
 
-SECRET = "s" * 48
-MODULE_PASSWORD = "nats-" + "m" * 40
+KEY = "abi_sk_abcdefghijklmnop_c2VjcmV0"
 OVERLAY = {
     "nats": {
-        # The engine's login; a module logs in as `module` instead.
-        "nats_url": "nats://abi:nats-engine-password@127.0.0.1:13042",
-        "jwt_secret": SECRET,
+        # The engine's login; a module logs in with its own key instead.
+        "nats_url": "nats://engine:nats-engine-password@127.0.0.1:13042",
         "discovery": {"project": "zen"},
     }
 }
 MODULE = DevModuleConfiguration(
     name="probe-researcher",
     module="operations.projects.nats_probe",
-    identity="operations.projects.nats_probe.researcher",
     args=["researcher"],
     env={"NATS_PROBE_DISCOVERY_PROJECT": "${ABI_DISCOVERY_PROJECT}", "KEEP": "$$1"},
 )
 
 
-def test_a_module_gets_the_dev_broker_and_a_service_token(tmp_path):
-    env = module_environment(
-        MODULE,
-        OVERLAY,
-        tmp_path,
-        {"HOME": "/home/me", "NATS_JWT_SECRET": SECRET},
-        nats_password=MODULE_PASSWORD,
-    )
+def test_a_module_gets_the_dev_broker_and_its_own_key_only(tmp_path):
+    base = {
+        "HOME": "/home/me",
+        "NATS_ENGINE_PASSWORD": "engine-pw",
+        "NATS_AUTH_CALLOUT_SEED": "SA-seed",
+        "iam/signing-keys/20261015-0a1b2c3d": "private",
+        "ABI_SERVICE_KEY": "abi_sk_someone-elses",
+    }
+    env = module_environment(MODULE, OVERLAY, tmp_path, base, service_key=KEY)
 
     assert env["HOME"] == "/home/me"
-    assert env["ABI_NATS_URL"] == f"nats://module:{MODULE_PASSWORD}@127.0.0.1:13042"
+    assert env["ABI_NATS_URL"] == "nats://127.0.0.1:13042"
+    assert env["ABI_SERVICE_KEY"] == KEY
     assert env["ABI_DISCOVERY_PROJECT"] == "zen"
-    assert (
-        verify_service_token(env["ABI_SERVICE_TOKEN"], SECRET)
-        == "operations.projects.nats_probe.researcher"
-    )
+    # No signing secret, broker login or other credential reaches it.
+    for withheld in (
+        "NATS_ENGINE_PASSWORD",
+        "NATS_AUTH_CALLOUT_SEED",
+        "NATS_JWT_SECRET",
+    ):
+        assert withheld not in env
+    assert not any(key.startswith("iam/") for key in env)
     assert "OTEL_EXPORTER_OTLP_ENDPOINT" not in env
 
 
-def test_a_module_signs_for_its_identity_and_never_gets_the_secret(tmp_path):
-    from naas_abi_core.engine.nats_auth import module_key
-
-    module = MODULE.model_copy(update={"identity": "zen.nats_probe.researcher"})
-    env = module_environment(
-        module, OVERLAY, tmp_path, {"NATS_JWT_SECRET": SECRET}, nats_password=MODULE_PASSWORD
-    )
-
-    assert SECRET not in env.values()
-    assert env["ABI_MODULE_KEY"] == module_key(SECRET, "zen.nats_probe.researcher")
-    assert (
-        verify_service_token(env["ABI_SERVICE_TOKEN"], SECRET)
-        == "zen.nats_probe.researcher"
-    )
+def test_a_module_runs_as_its_own_module_id():
+    assert MODULE.identity == "probe-researcher"
+    named = DevModuleConfiguration(name="people", module="m", module_id="acme.people")
+    assert named.identity == "acme.people"
 
 
 def test_module_env_names_the_dev_settings(tmp_path):
-    env = module_environment(MODULE, OVERLAY, tmp_path, {}, nats_password=MODULE_PASSWORD)
+    env = module_environment(MODULE, OVERLAY, tmp_path, {}, service_key=KEY)
 
     assert env["NATS_PROBE_DISCOVERY_PROJECT"] == "zen"
     assert env["KEEP"] == "$1"
@@ -84,7 +75,7 @@ def test_tracing_and_the_src_layout_reach_the_module(tmp_path):
     }
 
     env = module_environment(
-        MODULE, overlay, tmp_path, {"PYTHONPATH": "/x"}, nats_password=MODULE_PASSWORD
+        MODULE, overlay, tmp_path, {"PYTHONPATH": "/x"}, service_key=KEY
     )
 
     assert env["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://127.0.0.1:16000"
@@ -140,43 +131,74 @@ def test_an_invalid_dev_block_is_reported(tmp_path, monkeypatch):
         load_dev_modules()
 
 
-def _package(tmp_path, name, body):
-    package = tmp_path / "src" / name
-    package.mkdir(parents=True)
-    (package / "__init__.py").write_text(body)
+# -- the built-in identity provider ---------------------------------------------
 
 
-def test_without_an_identity_a_module_registers_as_its_abimodule(tmp_path):
-    """A dev module's name (``a-b``) is never a module id: read the id its package
-    declares, as naas-abi-module does."""
-    from naas_abi_cli.cli.dev_modules import module_identity
+def test_the_builtin_idp_runs_unless_the_project_has_providers_of_its_own():
+    from naas_abi_cli.cli.dev_modules import has_identity_providers, wants_builtin_idp
 
-    _package(tmp_path, "acme_research", "class ABIModule:\n    module_id = 'acme.research'\n")
-    module = DevModuleConfiguration(name="research", module="acme_research")
-
-    assert module_identity(module, tmp_path, dict(os.environ)) == "acme.research"
-    env = module_environment(
-        module, OVERLAY, tmp_path, dict(os.environ), nats_password=MODULE_PASSWORD
+    assert (
+        wants_builtin_idp(None)
+        and wants_builtin_idp({})
+        and wants_builtin_idp({"providers": []})
     )
-    assert verify_service_token(env["ABI_SERVICE_TOKEN"], SECRET) == "acme.research"
+    assert wants_builtin_idp(
+        {"providers": [{"name": "builtin", "provisioning": "builtin"}]}
+    )
+    assert not wants_builtin_idp(
+        {"providers": [{"name": "okta", "provisioning": "none"}]}
+    )
+    assert not wants_builtin_idp({"providers": [{"name": "okta"}]})
+    assert has_identity_providers({"providers": [{"name": "okta"}]})
+    assert not has_identity_providers({"providers": []}) and not has_identity_providers(
+        None
+    )
 
 
-def test_a_module_whose_id_cannot_be_told_is_refused(tmp_path):
-    from naas_abi_cli.cli.dev_modules import module_identity
+def test_the_idp_dev_module_is_added_unless_the_project_declares_it():
+    from naas_abi_cli.cli.dev_modules import IDP_MODULE, with_builtin_idp
 
-    _package(tmp_path, "no_module_here", "")
-    module = DevModuleConfiguration(name="research", module="no_module_here")
+    added = with_builtin_idp({"probe": MODULE}, None)
+    assert list(added) == ["probe", "idp"]
+    assert (added["idp"].module, added["idp"].identity) == (IDP_MODULE, "idp")
+    declared = DevModuleConfiguration(name="login", module=IDP_MODULE, module_id="idp")
+    assert with_builtin_idp({"login": declared}, None) == {"login": declared}
+    okta = {"providers": [{"name": "okta", "provisioning": "none"}]}
+    assert with_builtin_idp({"probe": MODULE}, okta) == {"probe": MODULE}
 
-    with pytest.raises(ValueError, match="exports no ABIModule.*identity: <module_id>"):
-        module_identity(module, tmp_path, dict(os.environ))
+
+def test_the_identity_block_and_the_idp_environment_agree():
+    from naas_abi_cli.cli.dev_modules import builtin_identity, idp_environment
+
+    origin = "http://localhost:9942"
+    block = builtin_identity(f"{origin}/idp", "s3cret-s3cret-s3cret-s3cret")
+    provider = block["providers"][0]
+    assert block["default_provider"] == provider["name"] == "builtin"
+    assert provider["provisioning"] == "builtin"
+    env = idp_environment(origin, "s3cret-s3cret-s3cret-s3cret")
+    assert env["ABI_IDP_ISSUER"] == provider["issuer"] == f"{origin}/idp"
+    assert env["ABI_IDP_CLIENT_ID"] == provider["client_id"]
+    assert env["ABI_IDP_CLIENT_SECRET"] == provider["client_secret"]
+    assert env["ABI_IDP_REDIRECT_URIS"] == f"{origin}/api/auth/oidc/callback"
+    # The block validates as the engine's configuration.
+    from naas_abi_core.engine.engine_configuration.EngineConfiguration_Identity import (
+        IdentityConfiguration,
+    )
+
+    IdentityConfiguration.model_validate(block)
 
 
-def test_a_module_that_fails_to_import_shows_the_import_error(tmp_path):
-    from naas_abi_cli.cli.dev_modules import module_identity
+def test_the_idp_module_gets_its_configuration_and_other_modules_do_not(tmp_path):
+    from naas_abi_cli.cli.dev_modules import idp_environment, implicit_idp_module
 
-    _package(tmp_path, "broken_module", "import this_dependency_is_missing\n")
-    module = DevModuleConfiguration(name="research", module="broken_module")
-
-    with pytest.raises(ValueError, match="this_dependency_is_missing") as raised:
-        module_identity(module, tmp_path, dict(os.environ))
-    assert "exports no ABIModule" not in str(raised.value)
+    env = module_environment(
+        implicit_idp_module(),
+        OVERLAY,
+        tmp_path,
+        {**idp_environment("http://localhost:9942", "x" * 32)},
+        service_key=KEY,
+    )
+    assert env["ABI_IDP_ISSUER"] == "http://localhost:9942/idp"
+    assert env["ABI_SERVICE_KEY"] == KEY
+    plain = module_environment(MODULE, OVERLAY, tmp_path, {}, service_key=KEY)
+    assert not any(key.startswith("ABI_IDP_") for key in plain)

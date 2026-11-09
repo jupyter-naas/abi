@@ -66,7 +66,7 @@ _RE_SYSTEM_PROMPT = re.compile(
     r'(?:^SYSTEM_PROMPT|^\s+system_prompt\s*(?::[^=\n]*)?)\s*=\s*"""(.*?)"""',
     re.MULTILINE | re.DOTALL,
 )
-_NOT_FUNCTIONAL_RE = re.compile(r'NOT FUNCTIONAL', re.IGNORECASE)
+_NOT_FUNCTIONAL_RE = re.compile(r"NOT FUNCTIONAL", re.IGNORECASE)
 # Marketplace metadata (optional, set by agent author)
 _RE_TIER = re.compile(r'^TIER\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
 _RE_MAINTAINER = re.compile(r'^MAINTAINER\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
@@ -106,7 +106,7 @@ AgentMeta = tuple[
     str | None,  # slug
     str | None,  # agent_type
     str | None,  # system_prompt_preview
-    bool,        # functional
+    bool,  # functional
     str | None,  # tier
     str | None,  # maintainer
     str | None,  # stripe_url
@@ -205,13 +205,17 @@ def _build_catalog() -> list[ModuleInfo]:
             stripe_url: str | None = None
             app_url: str | None = None
 
-            agent_candidates = list((mod_dir / "agents").glob("*.py")) if (mod_dir / "agents").is_dir() else []
+            agent_candidates = (
+                list((mod_dir / "agents").glob("*.py")) if (mod_dir / "agents").is_dir() else []
+            )
             agent_candidates += list(mod_dir.glob("*Agent.py"))
 
             for agent_file in agent_candidates:
                 if agent_file.name.startswith("_"):
                     continue
-                n, d, lurl, mdl, slg, atype, spp, func, tr, maint, surl, aurl = _scan_agent_file(agent_file)
+                n, d, lurl, mdl, slg, atype, spp, func, tr, maint, surl, aurl = _scan_agent_file(
+                    agent_file
+                )
                 if n:
                     name, description, logo_url = n, d, lurl
                     model, slug, agent_type = mdl, slg, atype

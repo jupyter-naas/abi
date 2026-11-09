@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import json
-from types import SimpleNamespace
 
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from naas_abi.apps.nexus.apps.api.app.services.graph.testing import acting_as_header, knowledge_team
 from naas_abi.apps.nexus.apps.api.app.services.maps.adapters.primary.objects import (
     get_maps_objects,
 )
@@ -81,19 +81,12 @@ def test_layer_features_keep_the_layer_feature_types() -> None:
 
 
 @pytest.fixture
-def client(monkeypatch):
+def client():
     settings = InMemoryMapsSettingsStore()
     feeds = MapsLayoutService(InMemoryMapsLayoutStore(), settings)
     layers = MapsFeedLayerService(InMemoryMapsFeedLayerStore(), settings, feeds)
     objects = _Objects({DATA: json.dumps(COLLECTION).encode(), LOGO: b"\x00\x00\x01\x00icon"})
 
-    async def member(user_id, workspace_id):
-        if workspace_id != "ws-1":
-            raise HTTPException(status_code=403, detail="no access")
-        return "member"
-
-    for module in (layers_api, layouts_api):
-        monkeypatch.setattr(module, "require_workspace_access", member)
     feed = MapsLayout(
         id="acme-facilities", title="Acme", feed_type="object_storage", logo_path=LOGO
     )
@@ -118,16 +111,16 @@ def client(monkeypatch):
     app = FastAPI()
     app.include_router(layers_api.router, prefix="/api/maps/feed-layers")
     app.include_router(layouts_api.router, prefix="/api/maps/layouts")
-    for module in (layers_api, layouts_api):
-        app.dependency_overrides[module.get_current_user_required] = lambda: SimpleNamespace(id="u")
-        app.dependency_overrides[module.get_current_user_released] = lambda: SimpleNamespace(id="u")
+    acting_as_header(app)
     app.dependency_overrides[layouts_api.get_maps_layout_service] = lambda: feeds
     app.dependency_overrides[layouts_api.maps_workspace_defaults] = WorkspaceMapsDefaults
     app.dependency_overrides[layers_api.get_maps_feed_layer_service] = lambda: layers
     app.dependency_overrides[get_maps_objects] = lambda: objects
-    test_client = TestClient(app)
+    # ``member`` is a member of ``ws-1`` only.
+    test_client = TestClient(app, headers={"x-user": "member"})
     test_client.objects = objects  # type: ignore[attr-defined]
-    return test_client
+    with knowledge_team():
+        yield test_client
 
 
 def test_layer_data_is_read_from_the_layer_record(client) -> None:

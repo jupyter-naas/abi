@@ -15,7 +15,10 @@ starts **RUNNING**; ``x_dataset_compaction`` can also be launched by hand.
 from __future__ import annotations
 
 import dagster as dg
-from naas_abi_core.orchestrations.DagsterOrchestration import DagsterOrchestration
+from naas_abi_core.orchestrations.DagsterOrchestration import (
+    DagsterOrchestration,
+    as_engine,
+)
 
 _JOB_NAME = "x_dataset_compaction"
 _OP_NAME = "x_dataset_compaction_op"
@@ -42,6 +45,7 @@ class XDatasetCompactionOrchestration(DagsterOrchestration):
     @classmethod
     def New(cls) -> XDatasetCompactionOrchestration:
         @dg.op(name=_OP_NAME)
+        @as_engine
         def compaction_op(_context) -> dict:
             return _run_compaction()
 

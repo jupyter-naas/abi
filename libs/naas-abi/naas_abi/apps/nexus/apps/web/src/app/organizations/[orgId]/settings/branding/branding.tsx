@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { ExternalLink, Eye, Save } from 'lucide-react';
-import { useAuthStore } from '@/stores/auth';
+import { selectSession, useAuthStore } from '@/stores/auth';
 import { useOrganizationStore } from '@/stores/organization';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
 import {
@@ -29,7 +29,7 @@ export default function OrganizationBrandingPage() {
   const params = useParams();
   const orgId = params.orgId as string;
   const authReady = usePersistedAuthReady();
-  const token = useAuthStore((state) => state.token);
+  const token = useAuthStore(selectSession);
   const { fetchOrganizations } = useOrganizationStore();
   const brandingRef = useRef<OrgBrandingSettingsHandle>(null);
 

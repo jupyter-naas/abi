@@ -1,0 +1,1062 @@
+// NATS-RPC contract for IAM, the kernel service every other one asks.
+// Authorization, policies, tokens, service accounts and module manifests:
+// core's services/iam/AGENTS.md.
+//
+// Subjects: abi.iam.v1.<operation>, one per Request/Response pair below
+// (abi.iam.v1.authorize, abi.iam.v1.create_policy, ...).
+// Change events: abi.iam.v1.changed carries a ChangeEvent (core NATS fan-out).
+//
+// Token and Jwks need no credentials: a service key is exchanged at
+// abi.iam.v1.token for an abi:nats access token, and abi.iam.v1.jwks returns
+// the engine's public signing keys.
+//
+// Decisions (Authorize, Filter, Explain without principal_id) are about the
+// caller the server verifies from the request's credentials, never about a
+// request field. Every other operation is authorized with IAM's own iam:*
+// catalog. Errors: PERMISSION_DENIED (the caller can see the resource),
+// GRANT_NOT_HELD (a change would give more than the caller holds; the message
+// names the statement, action and resource),
+// NOT_FOUND (it cannot, or the record does not exist), CONFLICT (a taken
+// identity or name, an attached policy, a managed one), REVISION_CONFLICT,
+// INVALID_ARGUMENT (a policy's message lists every error).
+syntax = "proto3";
+
+package abi.iam.v1;
+
+import "google/protobuf/timestamp.proto";
+import "naas_abi_proto/common/v1/common.proto";
+
+// -- records ---------------------------------------------------------------
+
+// A user, a group or a service account. kind: user | group | service_account;
+// status: active | suspended | deleted.
+message Principal {
+  string id = 1;
+  string kind = 2;
+  string status = 3;
+  optional string name = 4;
+  optional string issuer = 5;
+  optional string subject = 6;
+  optional string provider = 7;
+  optional string email = 8;
+  bool email_verified = 9;
+  optional string display_name = 10;
+  // Before container paths: a group's org.
+  reserved 11;
+  reserved "org";
+  optional string owner_id = 12;
+  google.protobuf.Timestamp created_at = 13;
+  google.protobuf.Timestamp updated_at = 14;
+  // Groups: the container that owns them and names them, or abi: (the
+  // platform). Empty: the platform.
+  string owner_scope = 15;
+}
+
+// A stored policy; the document is the JSON policy document.
+message Policy {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  string document_json = 4;
+  bool managed = 5;
+  int32 revision = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+  // The container that owns the policy and names it, or abi: (the platform).
+  // Empty: the platform.
+  string owner_scope = 9;
+  // The policy this one is a sub-policy of; empty: none.
+  string parent_id = 10;
+}
+
+message Attachment {
+  string id = 1;
+  string policy_id = 2;
+  string principal_id = 3;
+  // A container's name, below one (<container>/*) or abi: (the platform);
+  // absent for none.
+  optional string scope = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+// A policy attached at a scope to someone who has not signed in yet: claimed at
+// the first sign-in through `provider` with `email` verified.
+message PendingGrant {
+  string id = 1;
+  string provider = 2;
+  string email = 3;
+  string policy_id = 4;
+  optional string scope = 5;
+  optional string created_by = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+// An IdP group's members hold `policy_id` at `scope`, through the ABI group
+// `group_id` that is mapped to the claim value and carries the attachment.
+message IdpBinding {
+  string provider = 1;
+  string claim_value = 2;
+  string group_id = 3;
+  string policy_id = 4;
+  optional string scope = 5;
+  optional string attachment_id = 6;
+}
+
+message GroupMapping {
+  string provider = 1;
+  string claim_value = 2;
+  string group_id = 3;
+}
+
+// (service, id_key) -> container; id_key is exact or ends with "*".
+message Placement {
+  string service = 1;
+  string id_key = 2;
+  // Before container paths: the org and the workspace.
+  reserved 3, 4;
+  reserved "org", "workspace";
+  // A container's name, abi: for the platform.
+  string container = 5;
+}
+
+// A registered container: its type, its id (unique within its type) and the
+// container it sits in (abi: for the platform). name is its path.
+message Container {
+  string service = 1;
+  string type = 2;
+  string id = 3;
+  string parent = 4;
+  string name = 5;
+}
+
+// The catalog format of a service's actions (services/iam/AGENTS.md).
+message ResourceType {
+  string name = 1;
+  // opaque | path | singleton
+  string id = 2;
+  // placed | platform
+  string placement = 3;
+  // Its id is the prefix of its children's ids (a document namespace). Called
+  // container before container paths: the field number is that one's.
+  bool id_prefix = 4;
+  bool personal = 5;
+  string description = 6;
+  // A module scope: what a module exposes, never reached by the viewer and
+  // member roles (services/iam/module_scopes.py).
+  bool module_scope = 7;
+  // Reached through a policy only: no built-in role holds it.
+  bool policy_only = 8;
+  // A container: a step of the names of what it holds (services/iam/AGENTS.md,
+  // "Containers").
+  bool container = 9;
+  // A container type at which a role brings the platform companions.
+  bool platform_companions = 10;
+  // A container type: the containers it may sit in, <service>:<type> each, "-"
+  // for the platform; empty: any.
+  repeated string parents = 11;
+}
+
+message ActionSpec {
+  string name = 1;
+  // list | read | write | admin
+  string level = 2;
+  repeated string resource_types = 3;
+  bool creates = 4;
+  repeated string subjects = 5;
+  string description = 6;
+  // An admin action no role below owner holds.
+  bool owner_only = 7;
+  // Deleting a container of its type.
+  bool deletes = 8;
+}
+
+// Platform-level resources of a first-party catalog that the roles' platform
+// companions reach (services/iam/roles.py): <type>/<id> patterns, and the
+// actions each column holds on them.
+message PlatformAccess {
+  repeated string resources = 1;
+  repeated string viewer = 2;
+  repeated string member = 3;
+  repeated string self = 4;
+}
+
+message ActionCatalog {
+  string service = 1;
+  int32 version = 2;
+  repeated ResourceType resource_types = 3;
+  repeated ActionSpec actions = 4;
+  // The module that declared this catalog; empty for a kernel service's.
+  string module = 5;
+  repeated PlatformAccess platform_access = 6;
+  // The catalog format (services/iam/catalog.py CATALOG_FORMAT); 0 or 1: written
+  // before the flags existed, so a first-party catalog holds nothing for roles.
+  int32 format = 7;
+  // Who publishes it (services/iam/AGENTS.md, "Publishers and listing"):
+  // empty is the engine, "naas_abi" Nexus's; a module's catalog is its module's.
+  string publisher = 8;
+}
+
+// reason: allow | explicit_deny | implicit_deny | suspended | sealed.
+// visible tells a denied caller's "not found" from "permission denied" (§5.4).
+message Decision {
+  bool allowed = 1;
+  bool visible = 2;
+  string reason = 3;
+}
+
+// The statement of a parent that allowed what a sub-policy's Allow did.
+message BoundingStatement {
+  string policy_id = 1;
+  int32 statement_index = 2;
+  optional string sid = 3;
+}
+
+// side: actor | user | token.
+// bounded_by: for an Allow of a sub-policy, the statement of each policy of its
+// chain that allowed it too, nearest first. through: for a parent's statement
+// reached through a sub-policy, the sub-policies, the attached one first.
+message DecidingStatement {
+  string side = 1;
+  string principal_id = 2;
+  string effect = 3;
+  optional string policy_id = 4;
+  int32 statement_index = 5;
+  optional string sid = 6;
+  optional string attachment_id = 7;
+  optional string scope = 8;
+  optional string via_group = 9;
+  repeated BoundingStatement bounded_by = 10;
+  repeated string through = 11;
+}
+
+message Explanation {
+  bool allowed = 1;
+  string reason = 2;
+  string action = 3;
+  string resource = 4;
+  optional DecidingStatement statement = 5;
+}
+
+// A key's record; the key itself is only ever in CreateKeyResponse.value.
+// kind: service (abi_sk_) | personal (abi_pk_) | grant (abi_gk_, a link).
+// audience, resource and scope_json: what narrows a personal key or a grant
+// the one audience it is exchanged for, the environment or link
+// target it is bound to, and the token's abi_scope as a JSON list of Allow
+// statements (absent: no narrowing).
+message Key {
+  string key_id = 1;
+  string principal_id = 2;
+  string kind = 3;
+  string description = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp expires_at = 6;
+  google.protobuf.Timestamp last_used_at = 7;
+  google.protobuf.Timestamp revoked_at = 8;
+  string audience = 9;
+  string resource = 10;
+  optional string scope_json = 11;
+}
+
+// A module's permission manifest version; document_json is the
+// policy document as submitted. status: pending | approved | rejected | superseded.
+message Manifest {
+  string principal_id = 1;
+  string sha256 = 2;
+  string module_id = 3;
+  string project = 4;
+  string document_json = 5;
+  string status = 6;
+  google.protobuf.Timestamp submitted_at = 7;
+  google.protobuf.Timestamp decided_at = 8;
+  optional string decided_by = 9;
+  string reason = 10;
+}
+
+// Published on abi.iam.v1.changed after every change; caches drop their
+// entries, and everything on a revision gap.
+message ChangeEvent {
+  int64 revision = 1;
+}
+
+// -- decisions ---------------------------------------------------------------
+
+message AuthorizeRequest {
+  abi.common.v1.CallContext context = 1;
+  string action = 2;
+  string resource = 3;
+}
+message AuthorizeResponse {
+  abi.common.v1.CallError error = 1;
+  Decision decision = 2;
+}
+
+// A decision on an action a module declares (services/iam/module_scopes.py):
+// IAM names the resource, <type>/<parts> of the action's catalog, in
+// container or else the container of the call, platform-level without one.
+message AuthorizeDeclaredRequest {
+  abi.common.v1.CallContext context = 1;
+  string action = 2;
+  string resource_type = 3;
+  repeated string parts = 4;
+  // Before container paths: a workspace id.
+  reserved 5;
+  reserved "workspace_id";
+  string container = 6;
+}
+message AuthorizeDeclaredResponse {
+  abi.common.v1.CallError error = 1;
+  Decision decision = 2;
+  string resource = 3;
+}
+
+message FilterRequest {
+  abi.common.v1.CallContext context = 1;
+  string action = 2;
+  repeated string resources = 3;
+}
+message FilterResponse {
+  abi.common.v1.CallError error = 1;
+  repeated string allowed = 2;
+  repeated string prefix_hints = 3;
+}
+
+// Without principal_id, explains the caller. Needs iam:Explain on the principal.
+message ExplainRequest {
+  abi.common.v1.CallContext context = 1;
+  string action = 2;
+  string resource = 3;
+  optional string principal_id = 4;
+}
+message ExplainResponse {
+  abi.common.v1.CallError error = 1;
+  Explanation explanation = 2;
+}
+
+// What the caller may grant at a scope: per catalog, the actions they hold
+// there and the resource patterns (${scope}/...) they hold them on, minus
+// their Denies. About the caller, so it needs no iam: action.
+message GrantableAction {
+  string action = 1;
+  repeated string resources = 2;
+  // What a Deny of the caller takes back from resources.
+  repeated string excluded = 3;
+}
+message GrantableCatalog {
+  string service = 1;
+  repeated GrantableAction actions = 2;
+}
+message GrantableRequest {
+  abi.common.v1.CallContext context = 1;
+  string scope = 2;
+  // What a sub-policy of this policy may grant: within its chain. Empty: none.
+  string parent = 3;
+  // For a new sub-policy: refused as create_policy would refuse the parent.
+  bool derive = 4;
+}
+message GrantableResponse {
+  abi.common.v1.CallError error = 1;
+  repeated GrantableCatalog catalogs = 2;
+}
+
+// The existing resources of a type that the caller may list, in a container
+// (services/iam/AGENTS.md, "Publishers and listing"). About the caller, so it
+// needs no iam: action.
+message ListedResource {
+  // The canonical name.
+  string name = 1;
+  // The decoded id within its type.
+  string id = 2;
+  string label = 3;
+  string description = 4;
+}
+message ListResourcesRequest {
+  abi.common.v1.CallContext context = 1;
+  string service = 2;
+  string type = 3;
+  // A container, below one (<container>/*) or abi: (the platform, the default).
+  string scope = 4;
+  // Kept: the resources whose id or label contains it, case folded.
+  string text = 5;
+  // The last name of the previous page; empty: the first page.
+  string cursor = 6;
+  // At most this many; 0: the default (50); at most 200.
+  uint32 limit = 7;
+  // The module catalog's: that module's items only.
+  string module = 8;
+}
+message ListResourcesResponse {
+  abi.common.v1.CallError error = 1;
+  repeated ListedResource items = 2;
+  // Empty at the end.
+  string next_cursor = 3;
+  // False: the type has no lister, or its lister failed: offered as wildcards.
+  bool listed = 4;
+}
+
+// -- principals ------------------------------------------------------------------
+
+message EnsureUserRequest {
+  abi.common.v1.CallContext context = 1;
+  string issuer = 2;
+  string subject = 3;
+  optional string provider = 4;
+  optional string email = 5;
+  bool email_verified = 6;
+  optional string display_name = 7;
+}
+message EnsureUserResponse {
+  abi.common.v1.CallError error = 1;
+  Principal principal = 2;
+}
+
+message CreateServiceAccountRequest {
+  abi.common.v1.CallContext context = 1;
+  string name = 2;
+  optional string owner_id = 3;
+}
+message CreateServiceAccountResponse {
+  abi.common.v1.CallError error = 1;
+  Principal principal = 2;
+}
+
+message GetPrincipalRequest {
+  abi.common.v1.CallContext context = 1;
+  string principal_id = 2;
+}
+message GetPrincipalResponse {
+  abi.common.v1.CallError error = 1;
+  Principal principal = 2;
+}
+
+message ListPrincipalsRequest {
+  abi.common.v1.CallContext context = 1;
+  optional string kind = 2;
+  int32 limit = 3;
+  optional string after = 4;
+  // Only those whose id, name, email or display name holds it, in any case.
+  optional string text = 5;
+}
+message ListPrincipalsResponse {
+  abi.common.v1.CallError error = 1;
+  repeated Principal principals = 2;
+  optional string next_after = 3;
+}
+
+message SuspendPrincipalRequest {
+  abi.common.v1.CallContext context = 1;
+  string principal_id = 2;
+}
+message SuspendPrincipalResponse {
+  abi.common.v1.CallError error = 1;
+  Principal principal = 2;
+}
+
+message ResumePrincipalRequest {
+  abi.common.v1.CallContext context = 1;
+  string principal_id = 2;
+}
+message ResumePrincipalResponse {
+  abi.common.v1.CallError error = 1;
+  Principal principal = 2;
+}
+
+message DeletePrincipalRequest {
+  abi.common.v1.CallContext context = 1;
+  string principal_id = 2;
+}
+message DeletePrincipalResponse {
+  abi.common.v1.CallError error = 1;
+  Principal principal = 2;
+}
+
+// -- groups ------------------------------------------------------------------------
+
+message CreateGroupRequest {
+  abi.common.v1.CallContext context = 1;
+  string name = 2;
+  // Before container paths: an org.
+  reserved 3;
+  reserved "org";
+  // The owner: abi: (the platform, the default) or a container's name.
+  optional string scope = 4;
+}
+message CreateGroupResponse {
+  abi.common.v1.CallError error = 1;
+  Principal group = 2;
+}
+
+message GetGroupRequest {
+  abi.common.v1.CallContext context = 1;
+  string group_id = 2;
+}
+message GetGroupResponse {
+  abi.common.v1.CallError error = 1;
+  Principal group = 2;
+}
+
+message ListGroupsRequest {
+  abi.common.v1.CallContext context = 1;
+  int32 limit = 2;
+  optional string after = 3;
+  // The groups this container owns (and those of the containers above it the
+  // caller attaches to there); absent: every group the caller may list.
+  optional string scope = 4;
+}
+message ListGroupsResponse {
+  abi.common.v1.CallError error = 1;
+  repeated Principal groups = 2;
+  optional string next_after = 3;
+}
+
+message DeleteGroupRequest {
+  abi.common.v1.CallContext context = 1;
+  string group_id = 2;
+}
+message DeleteGroupResponse {
+  abi.common.v1.CallError error = 1;
+  Principal group = 2;
+}
+
+message AddGroupMemberRequest {
+  abi.common.v1.CallContext context = 1;
+  string group_id = 2;
+  string member_id = 3;
+}
+message AddGroupMemberResponse {
+  abi.common.v1.CallError error = 1;
+}
+
+message RemoveGroupMemberRequest {
+  abi.common.v1.CallContext context = 1;
+  string group_id = 2;
+  string member_id = 3;
+}
+message RemoveGroupMemberResponse {
+  abi.common.v1.CallError error = 1;
+  bool removed = 2;
+}
+
+message ListGroupMembersRequest {
+  abi.common.v1.CallContext context = 1;
+  string group_id = 2;
+}
+message ListGroupMembersResponse {
+  abi.common.v1.CallError error = 1;
+  repeated string member_ids = 2;
+}
+
+// The groups a principal is a member of that the caller may read (iam:GetGroup),
+// at every level.
+message ListPrincipalGroupsRequest {
+  abi.common.v1.CallContext context = 1;
+  string principal_id = 2;
+}
+message ListPrincipalGroupsResponse {
+  abi.common.v1.CallError error = 1;
+  repeated Principal groups = 2;
+}
+
+message MapIdpGroupRequest {
+  abi.common.v1.CallContext context = 1;
+  string provider = 2;
+  string claim_value = 3;
+  string group_id = 4;
+}
+message MapIdpGroupResponse {
+  abi.common.v1.CallError error = 1;
+  GroupMapping mapping = 2;
+}
+
+message UnmapIdpGroupRequest {
+  abi.common.v1.CallContext context = 1;
+  string provider = 2;
+  string claim_value = 3;
+  string group_id = 4;
+}
+message UnmapIdpGroupResponse {
+  abi.common.v1.CallError error = 1;
+  bool removed = 2;
+}
+
+message ListIdpGroupMappingsRequest {
+  abi.common.v1.CallContext context = 1;
+  string group_id = 2;
+}
+message ListIdpGroupMappingsResponse {
+  abi.common.v1.CallError error = 1;
+  repeated GroupMapping mappings = 2;
+}
+
+// -- policies and attachments --------------------------------------------------------
+
+message CreatePolicyRequest {
+  abi.common.v1.CallContext context = 1;
+  string name = 2;
+  // A policy document as JSON (or YAML) text.
+  string document_json = 3;
+  string description = 4;
+  // The owner: abi: (the platform, the default) or a container's name.
+  optional string scope = 5;
+  // The policy it is a sub-policy of; absent: none.
+  optional string parent = 6;
+}
+message CreatePolicyResponse {
+  abi.common.v1.CallError error = 1;
+  Policy policy = 2;
+}
+
+message GetPolicyRequest {
+  abi.common.v1.CallContext context = 1;
+  string policy_id = 2;
+}
+message GetPolicyResponse {
+  abi.common.v1.CallError error = 1;
+  Policy policy = 2;
+}
+
+message ListPoliciesRequest {
+  abi.common.v1.CallContext context = 1;
+  int32 limit = 2;
+  optional string after = 3;
+  // The policies this scope owns, and those above it the caller may attach
+  // there; absent: every policy the caller may list.
+  optional string scope = 4;
+}
+message ListPoliciesResponse {
+  abi.common.v1.CallError error = 1;
+  repeated Policy policies = 2;
+  optional string next_after = 3;
+}
+
+// The policies the caller may attach at a scope: those owned there or above it,
+// written for it, that the caller may attach there and may know of (listed at
+// their owner, or attached at the scope or above).
+message AttachablePoliciesRequest {
+  abi.common.v1.CallContext context = 1;
+  // Absent: unscoped.
+  optional string scope = 2;
+  // Absent: to anyone.
+  optional string principal_id = 3;
+  int32 limit = 4;
+  optional string after = 5;
+}
+message AttachablePoliciesResponse {
+  abi.common.v1.CallError error = 1;
+  repeated Policy policies = 2;
+  optional string next_after = 3;
+}
+
+message UpdatePolicyRequest {
+  abi.common.v1.CallContext context = 1;
+  string policy_id = 2;
+  int32 expected_revision = 3;
+  optional string document_json = 4;
+  optional string name = 5;
+  optional string description = 6;
+  // Absent keeps the parent, "" removes it, an id sets it.
+  optional string parent = 7;
+}
+message UpdatePolicyResponse {
+  abi.common.v1.CallError error = 1;
+  Policy policy = 2;
+}
+
+message DeletePolicyRequest {
+  abi.common.v1.CallContext context = 1;
+  string policy_id = 2;
+}
+message DeletePolicyResponse {
+  abi.common.v1.CallError error = 1;
+}
+
+// The direct sub-policies of a policy the caller may list.
+message ListSubPoliciesRequest {
+  abi.common.v1.CallContext context = 1;
+  string policy_id = 2;
+}
+message ListSubPoliciesResponse {
+  abi.common.v1.CallError error = 1;
+  repeated Policy policies = 2;
+}
+
+message AttachPolicyRequest {
+  abi.common.v1.CallContext context = 1;
+  string policy_id = 2;
+  string principal_id = 3;
+  optional string scope = 4;
+}
+message AttachPolicyResponse {
+  abi.common.v1.CallError error = 1;
+  Attachment attachment = 2;
+}
+
+message DetachPolicyRequest {
+  abi.common.v1.CallContext context = 1;
+  string policy_id = 2;
+  string principal_id = 3;
+  optional string scope = 4;
+}
+message DetachPolicyResponse {
+  abi.common.v1.CallError error = 1;
+  bool detached = 2;
+}
+
+message ListAttachmentsRequest {
+  abi.common.v1.CallContext context = 1;
+  optional string principal_id = 2;
+  optional string policy_id = 3;
+}
+message ListAttachmentsResponse {
+  abi.common.v1.CallError error = 1;
+  repeated Attachment attachments = 2;
+}
+
+// -- placements, scopes, catalogs ------------------------------------------------------
+
+message PutPlacementRequest {
+  abi.common.v1.CallContext context = 1;
+  Placement placement = 2;
+}
+message PutPlacementResponse {
+  abi.common.v1.CallError error = 1;
+  Placement placement = 2;
+}
+
+message DeletePlacementRequest {
+  abi.common.v1.CallContext context = 1;
+  string service = 2;
+  string id_key = 3;
+}
+message DeletePlacementResponse {
+  abi.common.v1.CallError error = 1;
+  bool deleted = 2;
+}
+
+message ListPlacementsRequest {
+  abi.common.v1.CallContext context = 1;
+  optional string service = 2;
+}
+message ListPlacementsResponse {
+  abi.common.v1.CallError error = 1;
+  repeated Placement placements = 2;
+}
+
+// -- containers (services/iam/AGENTS.md, "Containers") ----------------------
+
+// A create on the container's name as placed: the type's create action there.
+message RegisterContainerRequest {
+  abi.common.v1.CallContext context = 1;
+  string service = 2;
+  string type = 3;
+  string id = 4;
+  // abi: (the platform, the default) or a registered container's name.
+  string parent = 5;
+}
+message RegisterContainerResponse {
+  abi.common.v1.CallError error = 1;
+  Container container = 2;
+}
+
+// The type's delete action on the container's name; what it owns goes with it.
+message DeleteContainerRequest {
+  abi.common.v1.CallContext context = 1;
+  string service = 2;
+  string type = 3;
+  string id = 4;
+}
+message DeleteContainerResponse {
+  abi.common.v1.CallError error = 1;
+  bool deleted = 2;
+}
+
+// A registered container's name (its path), empty for an unknown one.
+message GetContainerRequest {
+  abi.common.v1.CallContext context = 1;
+  string service = 2;
+  string type = 3;
+  string id = 4;
+}
+message GetContainerResponse {
+  abi.common.v1.CallError error = 1;
+  string name = 2;
+}
+
+message RegisterCatalogRequest {
+  abi.common.v1.CallContext context = 1;
+  ActionCatalog catalog = 2;
+}
+message RegisterCatalogResponse {
+  abi.common.v1.CallError error = 1;
+  // False when a higher version is already registered.
+  bool registered = 2;
+}
+
+// -- tokens -----------------------------------------------------------------------
+
+// abi.iam.v1.token: a service account's key for an access token. No
+// credentials: the key is one. Errors: UNAUTHENTICATED ("invalid key").
+message TokenRequest {
+  abi.common.v1.CallContext context = 1;
+  string key = 2;
+  // The token's audience: "abi:nats" (default) for the kernel services, or
+  // "abi:host:<sa>" for the one module host a caller addresses (an agent, a
+  // model, an app; <sa> is the subject token its subjects carry): a token the
+  // kernel services refuse and discovery accepts from that host only.
+  string audience = 3;
+}
+message TokenResponse {
+  abi.common.v1.CallError error = 1;
+  string access_token = 2;
+  // Seconds; at most 600.
+  int32 expires_in = 3;
+  // The service account the token names.
+  string principal_id = 4;
+  string name = 5;
+}
+
+// abi.iam.v1.jwks: the public signing keys (RFC 7517) and the issuer, as JSON
+// {"issuer": ..., "keys": [...]}. No credentials.
+message JwksRequest {
+  abi.common.v1.CallContext context = 1;
+}
+message JwksResponse {
+  abi.common.v1.CallError error = 1;
+  string jwks_json = 2;
+}
+
+// abi.iam.v1.exchange_token: RFC 8693 token exchange. The requester
+// is the caller (the Nats-Auth-Token); it needs iam:ExchangeToken on the
+// audience. subject_token_type: RFC 8693's id_token, access_token or jwt types, or
+// urn:abi:params:oauth:token-type:api_key (an abi_pk_ or abi_gk_ key) or
+// urn:abi:params:oauth:token-type:session (a signed-in user a first-party
+// service vouches for: the subject token is the user's principal id, groups and
+// session_id what that service saw). audience: abi:session or one of
+// abi:delegated:{agent,app,preview,coding,api-key}. resource: the discovery
+// resource an agent token is for (the acting module is read off it). scope_json:
+// the token's abi_scope. Errors: UNAUTHENTICATED (a refused subject),
+// PERMISSION_DENIED, INVALID_ARGUMENT.
+message ExchangeTokenRequest {
+  abi.common.v1.CallContext context = 1;
+  string grant_type = 2;
+  string subject_token = 3;
+  string subject_token_type = 4;
+  string audience = 5;
+  string resource = 6;
+  optional string scope_json = 7;
+  repeated string groups = 8;
+  string session_id = 9;
+  int32 ttl_seconds = 10;
+}
+message ExchangeTokenResponse {
+  abi.common.v1.CallError error = 1;
+  string access_token = 2;
+  string issued_token_type = 3;
+  string token_type = 4;
+  // Seconds; at most 600.
+  int32 expires_in = 5;
+  string audience = 6;
+  // The user the token names.
+  string principal_id = 7;
+}
+
+// abi.iam.v1.revoke_tokens: every token issued so far to or for the principal
+// stops working, and so do its links and coding keys (its personal API keys
+// too with include_keys). iam:RevokeTokens on the principal.
+message RevokeTokensRequest {
+  abi.common.v1.CallContext context = 1;
+  string principal_id = 2;
+  bool include_keys = 3;
+}
+message RevokeTokensResponse {
+  abi.common.v1.CallError error = 1;
+}
+
+// -- service accounts and keys ------------------------------------------------------
+
+message FindServiceAccountRequest {
+  abi.common.v1.CallContext context = 1;
+  string name = 2;
+}
+message FindServiceAccountResponse {
+  abi.common.v1.CallError error = 1;
+  Principal principal = 2;
+}
+
+message CreateKeyRequest {
+  abi.common.v1.CallContext context = 1;
+  string principal_id = 2;
+  string description = 3;
+  google.protobuf.Timestamp expires_at = 4;
+  // A user's keys: kind personal (default) or grant, the audience,
+  // the resource it is bound to and its scope. A service account's: none.
+  string kind = 5;
+  string audience = 6;
+  string resource = 7;
+  optional string scope_json = 8;
+}
+message CreateKeyResponse {
+  abi.common.v1.CallError error = 1;
+  Key key = 2;
+  // The whole key, shown this once.
+  string value = 3;
+}
+
+message ListKeysRequest {
+  abi.common.v1.CallContext context = 1;
+  string principal_id = 2;
+}
+message ListKeysResponse {
+  abi.common.v1.CallError error = 1;
+  repeated Key keys = 2;
+}
+
+message RevokeKeyRequest {
+  abi.common.v1.CallContext context = 1;
+  string principal_id = 2;
+  string key_id = 3;
+}
+message RevokeKeyResponse {
+  abi.common.v1.CallError error = 1;
+  Key key = 2;
+}
+
+// -- module manifests ---------------------------------------------------------------
+
+// The calling module's own manifest: the caller must be the service account
+// module/<project>/<module_id>. approved_now: this call approved it (auto
+// approval), so connections opened before carry older broker permissions.
+// in_force: an approved version (this one or an earlier one) grants now.
+message SubmitManifestRequest {
+  abi.common.v1.CallContext context = 1;
+  string module_id = 2;
+  string project = 3;
+  string document_json = 4;
+}
+message SubmitManifestResponse {
+  abi.common.v1.CallError error = 1;
+  Manifest manifest = 2;
+  bool approved_now = 3;
+  bool in_force = 4;
+}
+
+// Without sha256: the latest version.
+message GetManifestRequest {
+  abi.common.v1.CallContext context = 1;
+  string principal_id = 2;
+  optional string sha256 = 3;
+}
+message GetManifestResponse {
+  abi.common.v1.CallError error = 1;
+  Manifest manifest = 2;
+}
+
+message ListManifestsRequest {
+  abi.common.v1.CallContext context = 1;
+  optional string principal_id = 2;
+  optional string status = 3;
+}
+message ListManifestsResponse {
+  abi.common.v1.CallError error = 1;
+  repeated Manifest manifests = 2;
+}
+
+// Without sha256: the latest pending version. document_json, when set,
+// narrows it: that document is approved instead.
+message ApproveManifestRequest {
+  abi.common.v1.CallContext context = 1;
+  string principal_id = 2;
+  optional string sha256 = 3;
+  optional string document_json = 4;
+}
+message ApproveManifestResponse {
+  abi.common.v1.CallError error = 1;
+  Manifest manifest = 2;
+}
+
+message RejectManifestRequest {
+  abi.common.v1.CallContext context = 1;
+  string principal_id = 2;
+  optional string sha256 = 3;
+  string reason = 4;
+}
+message RejectManifestResponse {
+  abi.common.v1.CallError error = 1;
+  Manifest manifest = 2;
+}
+
+// -- invitations and IdP group bindings --------------------------------------------------
+
+message CreatePendingGrantRequest {
+  abi.common.v1.CallContext context = 1;
+  string provider = 2;
+  string email = 3;
+  string policy_id = 4;
+  optional string scope = 5;
+}
+message CreatePendingGrantResponse {
+  abi.common.v1.CallError error = 1;
+  PendingGrant grant = 2;
+}
+
+message ListPendingGrantsRequest {
+  abi.common.v1.CallContext context = 1;
+  optional string provider = 2;
+  optional string email = 3;
+  optional string policy_id = 4;
+}
+message ListPendingGrantsResponse {
+  abi.common.v1.CallError error = 1;
+  repeated PendingGrant grants = 2;
+}
+
+message RevokePendingGrantRequest {
+  abi.common.v1.CallContext context = 1;
+  string grant_id = 2;
+}
+message RevokePendingGrantResponse {
+  abi.common.v1.CallError error = 1;
+  bool revoked = 2;
+}
+
+message ClaimPendingGrantsRequest {
+  abi.common.v1.CallContext context = 1;
+  string principal_id = 2;
+}
+message ClaimPendingGrantsResponse {
+  abi.common.v1.CallError error = 1;
+  repeated Attachment attachments = 2;
+}
+
+message BindIdpGroupRequest {
+  abi.common.v1.CallContext context = 1;
+  string provider = 2;
+  string claim_value = 3;
+  string policy_id = 4;
+  optional string scope = 5;
+}
+message BindIdpGroupResponse {
+  abi.common.v1.CallError error = 1;
+  IdpBinding binding = 2;
+}
+
+message UnbindIdpGroupRequest {
+  abi.common.v1.CallContext context = 1;
+  string provider = 2;
+  string claim_value = 3;
+  string policy_id = 4;
+  optional string scope = 5;
+}
+message UnbindIdpGroupResponse {
+  abi.common.v1.CallError error = 1;
+  bool removed = 2;
+}
+
+message ListIdpBindingsRequest {
+  abi.common.v1.CallContext context = 1;
+  optional string provider = 2;
+  optional string policy_id = 3;
+}
+message ListIdpBindingsResponse {
+  abi.common.v1.CallError error = 1;
+  repeated IdpBinding bindings = 2;
+}

@@ -10,10 +10,10 @@ Shared connection, token, timeout, and reply handling live in
 ``naas_abi_core.engine.nats_rpc.NatsRPCClient``. Calls are never replayed
 by the transport after failure; a timeout may hide a completed operation.
 
-Stage 1 auth model (see ``naas_abi_core.engine.nats_auth``): a JWT asserting
-``service_identity`` is issued once and attached on the ``Nats-Auth-Token``
-header of every request, reissued only when it is close to expiry rather
-than on every call. ``CodingEnvironmentPrimaryAdapterNATS`` must read the
+Auth (see ``naas_abi_core.engine.nats_auth``): the client's credentials
+(the engine's own tokens, or a service key's) put an ES256 engine token on
+the ``Nats-Auth-Token`` header of every request, renewed at half its
+life. ``CodingEnvironmentPrimaryAdapterNATS`` must read the
 token from that exact header -- both sides read ``AUTH_HEADER`` from
 ``coding_environment_nats_contract``, a neutral module neither adapter owns,
 so this file never has to import from the primary adapter's module (or vice
@@ -32,6 +32,7 @@ already works unmodified against this adapter.
 
 from __future__ import annotations
 
+from naas_abi_core.engine.nats_auth import TokenSource
 from naas_abi_core.engine.nats_rpc import NatsRPCClient
 from naas_abi_core.proto.coding_environment.v1 import coding_environment_pb2
 from naas_abi_core.proto.common.v1 import common_pb2
@@ -53,6 +54,7 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
     WorkspaceStatus,
     WorkspaceTemplate,
 )
+from naas_abi_core.services.iam.guard import raise_authorization_error
 
 
 def _pb_to_template(pb: coding_environment_pb2.WorkspaceTemplate) -> WorkspaceTemplate:
@@ -102,6 +104,7 @@ def _raise_for_error(error: common_pb2.CallError) -> None:
     ``CallError.status`` when the originating exception set one.
     """
     status = error.status if error.HasField("status") else None
+    raise_authorization_error(error.code, error.message)
     if error.code == "PROVISION_FAILED":
         raise ProvisionFailedError(error.message, status=status)
     if error.code == "PROVISION_TIMEOUT":
@@ -133,14 +136,12 @@ class CodingEnvironmentSecondaryAdapterNATSClient(
     def __init__(
         self,
         nats_url: str,
-        jwt_secret: str,
-        service_identity: str,
+        credentials: TokenSource,
         timeout_seconds: float = 10.0,
     ) -> None:
         super().__init__(
             nats_url,
-            jwt_secret,
-            service_identity,
+            credentials,
             timeout_seconds,
             auth_header=AUTH_HEADER,
         )
@@ -149,7 +150,16 @@ class CodingEnvironmentSecondaryAdapterNATSClient(
     # ICodingEnvironmentAdapter.
     # ------------------------------------------------------------------
 
-    def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
+    def ensure_user(
+        self,
+        *,
+        external_id: str,
+        email: str,
+        username: str,
+        vouched_email: bool = False,
+    ) -> str:
+        # The owner decides what it vouches for, from its own verified caller.
+        del vouched_email
         request = coding_environment_pb2.EnsureUserRequest(
             context=self._context(),
             external_id=external_id,
@@ -164,6 +174,11 @@ class CodingEnvironmentSecondaryAdapterNATSClient(
         if response.HasField("error"):
             _raise_for_error(response.error)
         return response.user_id
+
+    def find_user(self, *, external_id: str) -> str | None:
+        raise NotImplementedError(
+            "Orchestrator users are resolved by the owning service, from the call"
+        )
 
     def list_templates(self) -> list[WorkspaceTemplate]:
         request = coding_environment_pb2.ListTemplatesRequest(context=self._context())

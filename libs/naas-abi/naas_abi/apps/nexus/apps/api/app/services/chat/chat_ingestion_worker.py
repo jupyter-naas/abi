@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import logging
+from dataclasses import replace
 from typing import Any
 
 from fastapi import FastAPI
@@ -31,6 +33,31 @@ def publish_chat_ingestion_job(payload: dict[str, Any]) -> None:
         CHAT_INGESTION_ROUTING_KEY,
         json.dumps(payload).encode(),
     )
+
+
+async def _as_uploader(payload: dict[str, Any]) -> None:
+    """Run a queued job as the request that queued it ran: ``api`` on behalf
+    of the user who uploaded the file, so the user bounds every kernel call.
+    The queue's consumer thread has no caller of its own.
+
+    A job that names no user runs as nobody, never as ``api`` alone: its
+    kernel calls are denied, and the job records its failure as any other."""
+    from naas_abi_core.engine.call_context import (
+        ANONYMOUS,
+        as_service_account,
+        use_call_context,
+        user,
+    )
+
+    user_id = str(payload.get("user_id") or "")
+    if not user_id:
+        logger.error("chat ingestion payload missing user_id: %s", payload.get("job_id"))
+        with use_call_context(ANONYMOUS):
+            await process_chat_ingestion_job(payload)
+        return
+    with as_service_account("api") as context:
+        with use_call_context(replace(context, on_behalf_of=user(user_id))):
+            await process_chat_ingestion_job(payload)
 
 
 async def _emit_ingestion_event(workspace_id: str, payload: dict[str, Any]) -> None:
@@ -140,9 +167,12 @@ async def process_chat_ingestion_job(payload: dict[str, Any]) -> None:
 
         # Run the heavy ingestion work in a thread so we don't block the
         # uvicorn event loop during PDF conversion and embedding calls.
+        # In this job's context: the executor thread would otherwise have none.
         result = await loop.run_in_executor(
             None,
+            contextvars.copy_context().run,
             lambda: ingestion_service.ingest_from_path(
+                workspace_id=str(payload["workspace_id"]),
                 user_id=str(payload["user_id"]),
                 conversation_id=str(payload["conversation_id"]),
                 source_path=str(payload["source_path"]),
@@ -245,9 +275,7 @@ def start_chat_ingestion_consumer(app: FastAPI) -> None:
 
     def _callback(body: bytes) -> None:
         payload = json.loads(body.decode())
-        future = asyncio.run_coroutine_threadsafe(
-            process_chat_ingestion_job(payload), loop
-        )
+        future = asyncio.run_coroutine_threadsafe(_as_uploader(payload), loop)
         future.result()  # block the pika thread until the job is done
 
     consumer_thread = module.engine.services.bus.dequeue(

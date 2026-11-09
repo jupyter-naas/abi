@@ -18,25 +18,27 @@ from uuid import uuid4
 
 import jinja2
 import yaml
+from naas_abi_core.engine.nats_nkeys import PREFIX_ACCOUNT, KeyPair
 from rich.prompt import Prompt
 
 import naas_abi_cli
 
 from ..admin_credentials import (
     ADMIN_EMAIL,
-    ADMIN_EMAIL_KEY,
-    ADMIN_PASSWORD_KEY,
+    IDP_CLIENT_SECRET,
+    NATS_CALLOUT_ISSUER,
+    NATS_CALLOUT_SEED,
     NATS_PASSWORDS,
-    ensure_admin_credentials,
+    ensure_idp_client_secret,
+    ensure_nats_callout_seed,
     ensure_nats_passwords,
-    ensure_nats_secret,
-    generate_admin_password,
     generate_nats_password,
 )
 from .local import (
     DEFAULT_ENV_VALUES,
     _build_hosts_from_domain,
     _build_nexus_api_url,
+    _discovery_project,
     _read_env_vars,
     compose_project_name,
     project_uses_nats,
@@ -96,7 +98,11 @@ def _stack_name(project_path: str) -> str:
 
 
 def _render_compose(
-    nats: bool, include_coding: bool, wildcard_cert: bool, seed_keys: list[str]
+    nats: bool,
+    include_coding: bool,
+    wildcard_cert: bool,
+    seed_keys: list[str],
+    discovery_project: str,
 ) -> str:
     with open(
         os.path.join(_templates("dokploy"), COMPOSE_FILE), "r", encoding="utf-8"
@@ -109,6 +115,7 @@ def _render_compose(
         trim_blocks=True,
     ).render(
         NATS=nats,
+        DISCOVERY_PROJECT=discovery_project,
         INCLUDE_CODING=include_coding,
         CODER_WILDCARD_CERT=wildcard_cert,
         SECRETS_DIR=SECRETS_DIR,
@@ -454,10 +461,6 @@ def _env_layout(
         ("NEXUS_WEB_IMAGE", fixed(DEFAULT_ENV_VALUES["NEXUS_WEB_IMAGE"])),
         ("NEXUS_WEB_TAG", fixed(DEFAULT_ENV_VALUES["NEXUS_WEB_TAG"])),
     ]
-    admin: list[tuple[str, Callable[[], str]]] = [
-        (ADMIN_EMAIL_KEY, fixed(ADMIN_EMAIL)),
-        (ADMIN_PASSWORD_KEY, generate_admin_password),
-    ]
     infrastructure: list[tuple[str, Callable[[], str]]] = [
         ("ABI_API_KEY", uuid),
         ("POSTGRES_USER", fixed(DEFAULT_ENV_VALUES["POSTGRES_USER"])),
@@ -475,9 +478,23 @@ def _env_layout(
             fixed(DEFAULT_ENV_VALUES["FUSEKI_COMPACT_INTERVAL_SECONDS"]),
         ),
     ]
+    sign_in: list[tuple[str, Callable[[], str]]] = []
     if nats:
         infrastructure += [(key, generate_nats_password) for key in NATS_PASSWORDS]
-        infrastructure.append(("NATS_JWT_SECRET", lambda: secrets.token_urlsafe(48)))
+        # The account key the broker's auth callout is signed with: the seed
+        # stays with the engine, nats.conf trusts its public key.
+        callout = KeyPair.create(PREFIX_ACCOUNT)
+        infrastructure += [
+            (NATS_CALLOUT_SEED, lambda: callout.seed),
+            (NATS_CALLOUT_ISSUER, lambda: callout.public_key),
+        ]
+        sign_in = [
+            # Nexus signs in to the built-in identity provider as this client.
+            (IDP_CLIENT_SECRET, lambda: secrets.token_urlsafe(32)),
+            # The service key of module/<project>/idp, created once the stack
+            # is up (`abi iam service-account create ... --key`).
+            ("IDP_SERVICE_KEY", _fixed("")),
+        ]
     else:
         infrastructure += [
             ("RABBITMQ_USER", fixed(DEFAULT_ENV_VALUES["RABBITMQ_USER"])),
@@ -486,9 +503,18 @@ def _env_layout(
 
     sections = [
         ("Stack: hosts and routing", stack),
-        ("Nexus admin login (generated for this stack)", admin),
         ("Infrastructure (generated)", infrastructure),
     ]
+    if sign_in:
+        sections.append(
+            (
+                (
+                    "Sign-in: the built-in identity provider. There is no admin "
+                    f"password: {ADMIN_EMAIL} signs in with the code it emails."
+                ),
+                sign_in,
+            )
+        )
     if include_coding:
         coding: list[tuple[str, Callable[[], str]]] = []
         if wildcard_resolver:
@@ -655,7 +681,12 @@ def _print_next_steps(
             "--wildcard-cert-resolver <name>."
         )
     print(
-        f"5. Deploy, then sign in at https://{web} with the admin login in {ENV_FILE}."
+        f"5. Deploy, then sign in at https://{web} as {ADMIN_EMAIL}: the built-in "
+        "identity provider emails a code (there is no password). It starts once "
+        'its service key exists: see "Sign-in" in the guide.'
+    )
+    print(
+        "Guide: https://github.com/jupyter-naas/abi/blob/main/docs/site/docs/user-guide/deploy/dokploy.md\n"
     )
     print("Guide: https://docs.naas.ai/user-guide/deploy/dokploy.md\n")
 
@@ -755,6 +786,7 @@ def setup_dokploy_deploy(
             include_coding=include_coding,
             wildcard_cert=wildcard_cert,
             seed_keys=seed_keys,
+            discovery_project=_discovery_project(project_path),
         ),
         CONFIG_FILE: dokploy_config,
         **_render_deploy_files(
@@ -767,9 +799,7 @@ def setup_dokploy_deploy(
             },
         ),
     }
-    files[ENV_FILE], empty = _render_env(
-        sections, existing, overrides, regenerate
-    )
+    files[ENV_FILE], empty = _render_env(sections, existing, overrides, regenerate)
     # Dokploy writes the Environment tab to .env in the build context: keep it
     # out of the image.
     for name, entries in (
@@ -792,10 +822,10 @@ def setup_dokploy_deploy(
 
     # Validators: they keep valid values and replace a shipped default or a
     # value too short to be safe.
-    ensure_admin_credentials(env_path)
     if nats:
         ensure_nats_passwords(env_path)
-        ensure_nats_secret(env_path)
+        ensure_nats_callout_seed(env_path)
+        ensure_idp_client_secret(env_path)
 
     _print_next_steps(
         hosts, include_coding=include_coding, wildcard_cert=wildcard_cert, empty=empty

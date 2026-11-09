@@ -39,18 +39,18 @@ Done on this branch.
 
 ## Streaming as the way past the 8 MiB NATS limit
 
-Most endpoints are still one request and one reply. The broker `max_payload` stays 8 MiB. A unary call that does not fit is spilled through the overflow host (`docs/adr/20261003_nats-rpc-overflow.md`). Both sides still hold the whole value, up to 256 MiB. Above that, or when the overflow host is full, the call fails with `PAYLOAD_TOO_LARGE`.
+Most endpoints are still one request and one reply. The broker `max_payload` stays 8 MiB. A unary call that does not fit is spilled through the overflow host. Both sides still hold the whole value, up to 256 MiB. Above that, or when the overflow host is full, the call fails with `PAYLOAD_TOO_LARGE`.
 
-Streaming exists for specific large reads and writes: object storage, model token streams, triple-store `query_stream` and `export`, dataset `query_stream` and `write_stream`, vector listing, and event and activity-log `query_stream` (`docs/adr/20261003_nats-streamed-results.md`). Document `find` and vector search stay unary. Agent requests over 128 KiB are rejected, including overflow uploads (`agent_host.py`).
+Streaming exists for specific large reads and writes: object storage, model token streams, triple-store `query_stream` and `export`, dataset `query_stream` and `write_stream`, vector listing, and event and activity-log `query_stream`. Document `find` and vector search stay unary. Agent requests over 128 KiB are rejected, including overflow uploads (`agent_host.py`).
 
 - Move the remaining large reads and writes onto streamed APIs.
 - Decide whether ordinary small calls stay unary. Overflow already covers the 8 MiB broker limit for those calls, up to 256 MiB, while still buffering the whole value.
 
 ## Add and remove remote modules on the network
 
-With `nats.discovery` enabled, a remote module registers on start and unregisters on shutdown. Lookups skip expired leases. The registry holds at most 256 live instances and one 512 KiB snapshot (`docs/adr/20260923_module-discovery-registry.md`).
+With `nats.discovery` enabled, a remote module registers on start and unregisters on shutdown. Lookups skip expired leases. The registry holds at most 256 live instances and one 512 KiB snapshot.
 
-Modules loaded from engine config are not in that registry. Their jobs are reached by name (`docs/adr/20261001_nats-jobs.md`). A crash waits out the lease. Standalone shutdown now drains in-flight runs before unregister. Unregister still does not clear a claim whose run did not finish.
+Modules loaded from engine config are not in that registry. Their jobs are reached by name. A crash waits out the lease. Standalone shutdown now drains in-flight runs before unregister. Unregister still does not clear a claim whose run did not finish.
 
 - Add and remove engine-configured modules the same way, or document that only standalone SDK modules join and leave at runtime.
 - On remove, finish or release that module's runs and claims.

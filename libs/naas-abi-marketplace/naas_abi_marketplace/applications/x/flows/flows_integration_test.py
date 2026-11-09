@@ -23,7 +23,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
     NATSJobsConfiguration,
 )
 from naas_abi_core.engine.engine_loaders.EngineJobLoader import EngineJobLoader
-from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.module.workflows_test import Documents
 from naas_abi_marketplace.applications.x import XSearchRecentTweetsFilesConfiguration
 from naas_abi_marketplace.applications.x.flows import (
@@ -41,7 +41,6 @@ from naas_abi_sdk.jobs import JobRun, runs_collection  # type: ignore[import-not
 from naas_abi_sdk.transport import Transport  # type: ignore[import-not-found]
 from naas_abi_sdk.workflows import WorkflowRun  # type: ignore[import-not-found]
 
-SECRET = "x-flows-integration-secret-32-bytes"
 PROJECT = "xflows"
 MODULE_ID = "naas_abi_marketplace.applications.x"
 
@@ -98,10 +97,10 @@ def loader(url, docs):
     return EngineJobLoader(
         NATSConfiguration(
             nats_url=url,
-            jwt_secret=SECRET,
             discovery=DiscoveryConfiguration(project=PROJECT),
             jobs=NATSJobsConfiguration(interrupt_grace_seconds=0.2),
         ),
+        credentials=TEST_TOKENS.source("engine"),
         documents_factory=lambda transport, module_id: docs,
         host_options={
             "fetch_timeout_seconds": 0.2,
@@ -123,7 +122,7 @@ def start_host(url, docs, *filters, files=None):
 
 
 async def record_of(url, docs, run_id, job, timeout=30):
-    transport = Transport(url, issue_service_token("caller", SECRET))
+    transport = Transport(url, TEST_TOKENS.token("caller"))
     try:
         run = WorkflowRun(
             JobRun(transport, PROJECT, MODULE_ID, job, run_id, docs), poll_seconds=0.2

@@ -40,6 +40,8 @@ _FRAMEWORK_PACKAGES = {
     # naas-abi-core's nats extra (in [all]) needs both; they follow the submodule.
     "naas-abi-proto",
     "naas-abi-sdk",
+    # The built-in identity provider `abi dev up` runs.
+    "naas-abi-idp",
 }
 
 

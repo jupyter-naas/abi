@@ -1,8 +1,9 @@
 """HTTP routes for workspace Maps basemaps, mounted under ``/api/maps/basemaps``.
 
-Reading (list, preview) needs workspace access; creating, editing, deleting,
-hiding and uploading previews needs a workspace owner or admin — the same
-model as ``/api/maps/layouts``.
+Reading (list, preview) is for everybody who sees the workspace's maps;
+creating, editing, deleting, hiding and uploading previews is for its admins
+(the IAM actions of the ``basemap`` type say so) — the same model as
+``/api/maps/layouts``.
 """
 
 from __future__ import annotations
@@ -11,11 +12,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user_required
-from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
-    get_workspace_role,
-    require_workspace_access,
-    require_workspace_admin,
-)
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import guard
 from naas_abi.apps.nexus.apps.api.app.services.maps.adapters.primary.workspace_defaults import (
     maps_workspace_defaults,
 )
@@ -41,6 +39,7 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.settings.adapters.secondary.
     PostgresMapsSettingsStore,
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.workspace_config import WorkspaceMapsDefaults
+from naas_abi.apps.nexus.apps.api.app.services.view_as.active import viewing
 from pydantic import BaseModel, Field
 
 router = APIRouter()
@@ -94,7 +93,7 @@ def _http_error(exc: Exception) -> HTTPException:
     return HTTPException(status_code=500, detail=f"Basemap operation failed: {exc}")
 
 
-@router.get("")
+@router.get("", dependencies=[guard("ListBasemaps", literal="-")])
 async def list_basemaps(
     request: Request,
     response: Response,
@@ -103,30 +102,31 @@ async def list_basemaps(
     service: MapsBasemapService = Depends(get_maps_basemap_service),
     defaults: WorkspaceMapsDefaults = Depends(maps_workspace_defaults),
 ) -> dict[str, Any]:
-    await require_workspace_access(current_user.id, workspace_id)
     response.headers["Cache-Control"] = "no-store"
     listed = await service.list(
         workspace_id,
         seeds=basemap_seeds(request),
         revisions=basemap_seed_revisions(request),
         enabled_custom=defaults.custom_basemaps,
+        seed=not viewing(),  # a page load writes nothing in a view
     )
-    role = await get_workspace_role(current_user.id, workspace_id)
+    can_edit = await authz.allowed(
+        "UpdateBasemap", user=current_user, workspace=workspace_id, id="-"
+    )
     return {
         "basemaps": [basemap.to_dict() for basemap in listed.basemaps],
         "hidden": sorted(listed.hidden),
-        "can_edit": role in ("owner", "admin"),
+        "can_edit": can_edit,
     }
 
 
-@router.get("/{basemap_id}/preview")
+@router.get("/{basemap_id}/preview", dependencies=[guard("GetBasemap", id="basemap_id")])
 async def get_basemap_preview(
     basemap_id: str,
     workspace_id: str = Query(..., min_length=1),
     current_user=Depends(get_current_user_required),
     service: MapsBasemapService = Depends(get_maps_basemap_service),
 ) -> Response:
-    await require_workspace_access(current_user.id, workspace_id)
     try:
         preview = await service.get_preview(workspace_id, basemap_id)
     except Exception as exc:
@@ -136,7 +136,7 @@ async def get_basemap_preview(
     )
 
 
-@router.put("/{basemap_id}/preview")
+@router.put("/{basemap_id}/preview", dependencies=[guard("UpdateBasemap", id="basemap_id")])
 async def upload_basemap_preview(
     basemap_id: str,
     request: Request,
@@ -145,7 +145,6 @@ async def upload_basemap_preview(
     service: MapsBasemapService = Depends(get_maps_basemap_service),
 ) -> dict[str, Any]:
     """Replace the preview: raw image body, its type in ``Content-Type``."""
-    await require_workspace_admin(current_user.id, workspace_id)
     declared = request.headers.get("content-length")
     if declared and declared.isdigit() and int(declared) > MAX_PREVIEW_BYTES:
         raise HTTPException(status_code=413, detail="Preview is too large")
@@ -167,7 +166,9 @@ async def upload_basemap_preview(
     return saved.to_dict()
 
 
-@router.put("/{basemap_id}/visibility")
+@router.put(
+    "/{basemap_id}/visibility", dependencies=[guard("SetBasemapVisibility", id="basemap_id")]
+)
 async def set_basemap_visibility(
     basemap_id: str,
     body: VisibilityIn,
@@ -175,7 +176,6 @@ async def set_basemap_visibility(
     current_user=Depends(get_current_user_required),
     service: MapsBasemapService = Depends(get_maps_basemap_service),
 ) -> dict[str, Any]:
-    await require_workspace_admin(current_user.id, workspace_id)
     try:
         hidden = await service.set_hidden(
             workspace_id, basemap_id, body.hidden, user_id=current_user.id
@@ -185,7 +185,7 @@ async def set_basemap_visibility(
     return {"hidden": sorted(hidden)}
 
 
-@router.put("/{basemap_id}")
+@router.put("/{basemap_id}", dependencies=[guard("UpdateBasemap", id="basemap_id")])
 async def save_basemap(
     basemap_id: str,
     body: BasemapIn,
@@ -193,7 +193,6 @@ async def save_basemap(
     current_user=Depends(get_current_user_required),
     service: MapsBasemapService = Depends(get_maps_basemap_service),
 ) -> dict[str, Any]:
-    await require_workspace_admin(current_user.id, workspace_id)
     basemap = MapsBasemap(
         id=basemap_id,
         title=body.title,
@@ -208,14 +207,13 @@ async def save_basemap(
     return saved.to_dict()
 
 
-@router.delete("/{basemap_id}")
+@router.delete("/{basemap_id}", dependencies=[guard("DeleteBasemap", id="basemap_id")])
 async def delete_basemap(
     basemap_id: str,
     workspace_id: str = Query(..., min_length=1),
     current_user=Depends(get_current_user_required),
     service: MapsBasemapService = Depends(get_maps_basemap_service),
 ) -> dict[str, str]:
-    await require_workspace_admin(current_user.id, workspace_id)
     try:
         await service.delete(workspace_id, basemap_id)
     except Exception as exc:

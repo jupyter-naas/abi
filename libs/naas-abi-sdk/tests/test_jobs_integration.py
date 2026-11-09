@@ -12,9 +12,9 @@ import shutil
 import time
 from datetime import datetime, timedelta, timezone
 
-import broker_users
 import pytest
 from nats.js.errors import NotFoundError
+from nats_broker import running_broker
 
 from naas_abi_sdk.job_host import JobHost, ensure_stream
 from naas_abi_sdk.jobs import (
@@ -92,9 +92,9 @@ class Documents:
         ]
 
 
-@pytest.fixture(params=broker_users.KINDS)
-def broker(request, tmp_path):
-    with broker_users.running_broker(request.param, tmp_path, PROJECT) as url:
+@pytest.fixture
+def broker(tmp_path):
+    with running_broker(tmp_path) as url:
         yield url
 
 
@@ -143,6 +143,11 @@ def test_manual_trigger_runs_once_and_reports(broker):
     assert record["status"] == "SUCCEEDED"
     assert record["result"] == {"echo": {"x": 1}}
     assert record["logs"] == ["hello"] and record["trigger"]["kind"] == "manual"
+    # When its trigger leaves the stream: stored time + its 168 h Nats-TTL.
+    lifetime = datetime.fromisoformat(record["trigger_expires_at"]) - (
+        datetime.fromisoformat(record["fired_at"])
+    )
+    assert lifetime == timedelta(hours=168)
     assert len(docs.runs("echo")) == 1
 
 
@@ -307,17 +312,20 @@ def test_events_trigger_runs(broker):
     assert record["result"] == {"subject": "evt.itest.e-1", "data": {"key": "a.csv"}}
 
 
-def test_restart_with_fewer_triggers_purges_the_stale_schedule(broker):
+def test_restart_with_fewer_triggers_removes_the_stale_schedule(broker):
     async def handler(ctx):
         return None
 
-    async def schedules_on(js, descriptor):
+    async def schedules_on(js, descriptor, *, any_message=False):
         subjects = job_subjects(PROJECT, MODULE, descriptor.name)
         found = []
         for index in range(3):
             with contextlib.suppress(NotFoundError):
-                await js.get_last_msg(stream_name(PROJECT), subjects.schedule(index))
-                found.append(index)
+                msg = await js.get_last_msg(
+                    stream_name(PROJECT), subjects.schedule(index)
+                )
+                if any_message or (msg.headers or {}).get("Nats-Schedule"):
+                    found.append(index)
         return found
 
     async def scenario():
@@ -334,12 +342,17 @@ def test_restart_with_fewer_triggers_purges_the_stale_schedule(broker):
         host = _host(broker, Documents(), [(one, handler)])
         await host.start()
         await host.close()
-        return before, await schedules_on(js, one)
+        after = await schedules_on(js, one)
+        # Rolled up by a message that expires in a second (no purge: a host
+        # writes only its own subjects).
+        await asyncio.sleep(2.5)
+        return before, after, await schedules_on(js, one, any_message=True)
 
-    before, after = asyncio.run(scenario())
+    before, after, left = asyncio.run(scenario())
 
     assert before == [0, 1]
     assert after == [0]
+    assert left == [0]
 
 
 def test_long_timeout_is_not_hit_by_fast_jobs(broker):
@@ -440,6 +453,7 @@ def test_a_module_triggers_its_own_job_once_per_idempotency_key(broker):
 
 
 def test_event_filters_and_skipped_runs_on_a_real_broker(broker):
+    import nats
 
     docs = Documents()
     puts = OnEvent("evt.itest.>", filter={"prefix": {"prefix": "naas/"}})
@@ -452,7 +466,7 @@ def test_event_filters_and_skipped_runs_on_a_real_broker(broker):
     async def scenario():
         host = _host(broker, docs, [(descriptor, handler)])
         await host.start()
-        nc = await broker_users.connect(broker)
+        nc = await nats.connect(broker)
         try:
             for n, (prefix, key) in enumerate(
                 [("other/", "a.csv"), ("naas/", "b.csv"), ("naas/", "empty.csv")]
@@ -764,6 +778,11 @@ def test_the_reaper_fails_retries_whose_trigger_left_the_stream(broker):
         expiring = await _publish_trigger(broker, "sync", "1s")
         kept = await _publish_trigger(broker, "sync", "1h")
         due = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+        # As the host records them when it takes a trigger (stored time + TTL).
+        expires = {
+            expiring: datetime.now(timezone.utc) + timedelta(seconds=1),
+            kept: datetime.now(timezone.utc) + timedelta(hours=1),
+        }
         for sequence in (expiring, kept):
             await docs.put(
                 runs_collection(PROJECT),
@@ -777,6 +796,7 @@ def test_the_reaper_fails_retries_whose_trigger_left_the_stream(broker):
                     "sequence": sequence,
                     "heartbeat_at": due,
                     "retry_at": due,
+                    "trigger_expires_at": expires[sequence].isoformat(),
                 },
             )
         await asyncio.sleep(2.5)  # the 1 s trigger expires
@@ -822,12 +842,9 @@ def test_a_recreated_jobs_stream_runs_triggers_that_reuse_old_sequences(broker):
 
     async def scenario():
         first_id = await run_once(1)
-        # Lost or recreated by an operator: modules may not delete streams.
-        nc = await Transport(broker_users.as_engine(broker), "t").connect()
-        await nc.jetstream().delete_stream(stream_name(PROJECT))
+        nc = await Transport(broker, "t").connect()
+        await nc.jetstream().delete_stream(stream_name(PROJECT))  # lost or recreated
         await nc.close()
-        # The engine creates it again at its next start.
-        await broker_users.prepare_async(broker, PROJECT)
         return first_id, await run_once(2)
 
     first_id, second_id = asyncio.run(scenario())
@@ -930,23 +947,3 @@ def test_a_trigger_for_a_new_job_sent_before_its_host_starts_runs_once(broker):
     assert executions == [record["run_id"]]
     assert len(docs.runs("fresh")) == 1
     assert max_ack_pending == 3  # start() applies the new generation's limits
-
-
-def test_a_module_that_may_not_create_the_jobs_stream_says_so(broker):
-    """The engine creates it; a module that finds it missing gets the reason, not
-    a JetStream timeout."""
-    if "nats://module:" not in broker:
-        pytest.skip("an open broker lets anyone create streams")
-    from naas_abi_sdk.streams import StreamNotCreated
-
-    async def scenario():
-        nc = await broker_users.connect(broker)
-        try:
-            with pytest.raises(
-                StreamNotCreated, match="may not create or update streams"
-            ):
-                await ensure_stream(nc.jetstream(timeout=1), "unprepared")
-        finally:
-            await nc.close()
-
-    asyncio.run(scenario())

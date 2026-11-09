@@ -9,10 +9,10 @@ import click
 
 import naas_abi_cli
 from naas_abi_cli.cli.admin_credentials import (
-    ADMIN_PASSWORD_KEY,
-    ensure_admin_credentials,
+    ADMIN_EMAIL,
+    ensure_idp_client_secret,
+    ensure_nats_callout_seed,
     ensure_nats_passwords,
-    ensure_nats_secret,
 )
 from naas_abi_cli.cli.deploy.local import (
     LEGACY_EXTRAS,
@@ -130,14 +130,14 @@ def _cd_argument(project_path: str) -> str:
     return shlex.quote(relative)
 
 
-def _print_next_steps(project_path: str, admin_email: str, nats: bool) -> None:
+def _print_next_steps(project_path: str, nats: bool) -> None:
     """Report where the project landed and how to start it."""
     click.echo()
     click.secho(f"✓ Project created at {project_path}", fg="green", bold=True)
     click.echo()
     click.echo(
-        f"Admin login: {admin_email} — its generated password is in .env "
-        f"as {ADMIN_PASSWORD_KEY}."
+        f"Admin: {ADMIN_EMAIL} signs in with the code the identity provider mails to "
+        "that address (`abi dev code` prints it)."
     )
     click.echo()
     click.secho("Next steps:", bold=True)
@@ -310,22 +310,24 @@ def new_project(
         )
 
     env_path = Path(project_path) / ".env"
-    # The one seeded account gets a password generated for this project only.
-    admin_email, _password = ensure_admin_credentials(env_path)
     if with_nats:
-        # The configs name these: the token signing secret, and the broker
-        # users' passwords (the engine logs in as `abi`, modules as `module`).
-        ensure_nats_secret(env_path)
+        # The configs name these: the broker users' passwords (the engine logs
+        # in as `engine`, its auth callout as `auth`) and the callout's account
+        # seed. Modules log in with their own service keys.
         ensure_nats_passwords(env_path)
+        ensure_nats_callout_seed(env_path)
+        # The secret of the client ABI signs in to the built-in identity
+        # provider with (`abi dev up` runs it; docker-compose runs it too).
+        ensure_idp_client_secret(env_path)
 
     # Run dependency install without shell to avoid quoting issues on paths with spaces.
     # ai-openrouter is the marketplace extra the generated config.yaml enables:
     # one gateway key serves both defaults — Gemma 4 for chat and
     # text-embedding-3-small for embeddings.
     # naas-abi-core[all] includes the nats extra. A NATS project also adds the
-    # SDK with its agent extra, which the remote modules under src/ import. A
-    # classic one adds the legacy extras, which [all] leaves out: Dagster and
-    # RabbitMQ.
+    # SDK with its agent extra, which the remote modules under src/ import, and
+    # naas-abi-idp, the built-in identity provider. A classic one adds the
+    # legacy extras, which [all] leaves out: Dagster and RabbitMQ.
     core_extras = ",".join(("all",) if with_nats else ("all", *LEGACY_EXTRAS))
     subprocess.run(
         [
@@ -335,7 +337,9 @@ def new_project(
             "naas-abi-marketplace[ai-openrouter]",
             "naas-abi",
             "naas-abi-cli",
-            *(["naas-abi-sdk[agent]"] if with_nats else []),
+            # The SDK with its agent extra, which the remote modules under src/
+            # import, and the built-in identity provider `abi dev up` runs.
+            *(["naas-abi-sdk[agent]", "naas-abi-idp"] if with_nats else []),
         ],
         cwd=project_path,
         check=True,
@@ -356,4 +360,4 @@ def new_project(
             "project's .env (or export it), then run `abi config validate` there."
         ) from exc
 
-    _print_next_steps(project_path, admin_email, with_nats)
+    _print_next_steps(project_path, with_nats)

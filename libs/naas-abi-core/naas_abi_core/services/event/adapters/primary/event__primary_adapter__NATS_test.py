@@ -10,7 +10,7 @@ import asyncio
 
 import pytest
 
-from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_test_tokens import OTHER_TOKENS, TEST_TOKENS
 from naas_abi_core.proto.event.v1 import event_pb2
 from naas_abi_core.services.event.adapters.primary.event__primary_adapter__NATS import (
     AUTH_HEADER,
@@ -24,7 +24,7 @@ from naas_abi_core.services.event.EventPort import (
     StoredEvent,
 )
 
-SECRET = "test-shared-secret"
+SECRET = TEST_TOKENS.verifier
 
 
 class _FakeRequest:
@@ -81,7 +81,9 @@ class _StubAdapter(IEventAdapter):
         newest_first: bool = False,
         search: str | None = None,
     ) -> list[StoredEvent]:
-        rows = [e for e in self.events if event_type is None or e.event_type == event_type]
+        rows = [
+            e for e in self.events if event_type is None or e.event_type == event_type
+        ]
         if since_seq is not None:
             rows = [e for e in rows if e.seq > since_seq]
         if until_seq is not None:
@@ -92,7 +94,9 @@ class _StubAdapter(IEventAdapter):
         return rows
 
     def max_seq(self, event_type: str | None = None) -> int:
-        rows = [e for e in self.events if event_type is None or e.event_type == event_type]
+        rows = [
+            e for e in self.events if event_type is None or e.event_type == event_type
+        ]
         return max((e.seq for e in rows), default=0)
 
     def get_cursor(self, consumer_id: str, event_type: str) -> int:
@@ -121,18 +125,22 @@ class _StubAdapter(IEventAdapter):
                 event_type=t,
                 count=sum(e.event_type == t for e in self.events),
                 last_seq=max(e.seq for e in self.events if e.event_type == t),
-                last_timestamp=[e for e in self.events if e.event_type == t][-1].timestamp,
+                last_timestamp=[e for e in self.events if e.event_type == t][
+                    -1
+                ].timestamp,
             )
             for t in types
         ]
 
 
 def _valid_token() -> str:
-    return issue_service_token("api", SECRET)
+    return TEST_TOKENS.token("api")
 
 
 def _append_request(
-    event_id: str = "evt-1", event_type: str = "t", timestamp: str = "2020-01-01T00:00:00Z"
+    event_id: str = "evt-1",
+    event_type: str = "t",
+    timestamp: str = "2020-01-01T00:00:00Z",
 ) -> bytes:
     return event_pb2.AppendRequest(
         event_id=event_id, event_type=event_type, timestamp=timestamp, payload=b"x"
@@ -181,7 +189,7 @@ def test_malformed_token_returns_unauthenticated():
 
 def test_token_signed_with_wrong_secret_returns_unauthenticated():
     adapter = EventPrimaryAdapterNATS(_StubAdapter(), SECRET)
-    wrong_secret_token = issue_service_token("api", "a-different-secret")
+    wrong_secret_token = OTHER_TOKENS.token("api")
     request = _FakeRequest(
         data=_append_request(), headers={AUTH_HEADER: wrong_secret_token}
     )
@@ -405,6 +413,77 @@ def test_unexpected_exception_maps_to_internal_and_does_not_leak_message():
 # ---------------------------------------------------------------------------
 
 
+def test_every_endpoint_goes_through_the_event_service_and_never_broadcasts():
+    """A remote EventService publishes and broadcasts on its side; here the
+    engine's EventService only stores, so each event goes out once."""
+    from unittest.mock import MagicMock
+
+    from naas_abi_core.services.event.EventService import EventService
+
+    bus = MagicMock()
+    stub = _StubAdapter()
+    service = EventService(stub, bus=bus)
+    calls: list[str] = []
+    for name in (
+        "append_stored",
+        "query_stored",
+        "max_seq",
+        "get_cursor",
+        "set_cursor",
+        "query_stored_for_consumer",
+        "event_types",
+    ):
+        original = getattr(service, name)
+
+        def record(*args, _name=name, _original=original, **kwargs):
+            calls.append(_name)
+            return _original(*args, **kwargs)
+
+        setattr(service, name, record)
+    adapter = EventPrimaryAdapterNATS(service, SECRET)
+
+    def call(handler, message) -> None:
+        request = _FakeRequest(
+            data=message.SerializeToString(), headers={AUTH_HEADER: _valid_token()}
+        )
+        asyncio.run(handler(request))
+        assert request.responses, handler
+
+    call(
+        adapter._handle_append,
+        event_pb2.AppendRequest(
+            event_id="e1", event_type="t", timestamp="2026-01-01", payload=b"x"
+        ),
+    )
+    call(adapter._handle_query, event_pb2.QueryRequest(event_type="t"))
+    call(adapter._handle_max_seq, event_pb2.MaxSeqRequest())
+    call(
+        adapter._handle_set_cursor,
+        event_pb2.SetCursorRequest(consumer_id="c", event_type="t", last_seq=0),
+    )
+    call(
+        adapter._handle_get_cursor,
+        event_pb2.GetCursorRequest(consumer_id="c", event_type="t"),
+    )
+    call(
+        adapter._handle_query_for_consumer,
+        event_pb2.QueryForConsumerRequest(consumer_id="c", event_type="t"),
+    )
+    call(adapter._handle_list_event_types, event_pb2.ListEventTypesRequest())
+
+    assert calls == [
+        "append_stored",
+        "query_stored",
+        "max_seq",
+        "set_cursor",
+        "get_cursor",
+        "query_stored_for_consumer",
+        "event_types",
+    ]
+    assert stub.max_seq() == 1
+    bus.publish.assert_not_called()
+
+
 def test_stop_without_start_is_a_noop():
     adapter = EventPrimaryAdapterNATS(_StubAdapter(), SECRET)
     asyncio.run(adapter.stop())  # must not raise
@@ -412,7 +491,13 @@ def test_stop_without_start_is_a_noop():
 
 @pytest.mark.parametrize(
     "method_name",
-    ["publish", "subscribe", "iter_query", "iter_query_for_consumer", "seek_consumer_to_end"],
+    [
+        "publish",
+        "subscribe",
+        "iter_query",
+        "iter_query_for_consumer",
+        "seek_consumer_to_end",
+    ],
 )
 def test_stub_adapter_domain_only_methods_are_not_wired_to_any_endpoint(method_name):
     # Defence-in-depth check on the test double itself: the primary adapter

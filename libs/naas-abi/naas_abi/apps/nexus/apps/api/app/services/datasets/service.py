@@ -59,9 +59,7 @@ class DatasetsService:
         snapshot_id: int | None = None,
     ) -> DatasetQueryResultData:
         self.describe(name, namespace=namespace)
-        capped = clamp_limit(
-            limit, default=DEFAULT_PREVIEW_LIMIT, maximum=MAX_PREVIEW_LIMIT
-        )
+        capped = clamp_limit(limit, default=DEFAULT_PREVIEW_LIMIT, maximum=MAX_PREVIEW_LIMIT)
         return self._execute(
             preview_sql(name, capped),
             namespace=namespace,
@@ -81,9 +79,7 @@ class DatasetsService:
         self._require_dataset()
         self._require_identifier("namespace", namespace)
         cleaned = assert_read_only_sql(sql)
-        capped = clamp_limit(
-            limit, default=DEFAULT_QUERY_LIMIT, maximum=MAX_QUERY_LIMIT
-        )
+        capped = clamp_limit(limit, default=DEFAULT_QUERY_LIMIT, maximum=MAX_QUERY_LIMIT)
         return self._execute(
             cleaned,
             namespace=namespace,
@@ -139,9 +135,7 @@ class DatasetsService:
         return DatasetInfoData(
             name=info.name,
             namespace=info.namespace,
-            columns=tuple(
-                DatasetColumnData(name=col.name, type=col.type) for col in info.columns
-            ),
+            columns=tuple(DatasetColumnData(name=col.name, type=col.type) for col in info.columns),
             partitions=tuple(
                 DatasetPartitionData(column=part.column, transform=part.transform)
                 for part in info.partitions

@@ -25,18 +25,20 @@ import { useOrganizationStore } from '@/stores/organization';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useConfirm } from '@/components/ui/dialogs';
+import { IdpGroupBindings } from '@/components/invitations/idp-group-bindings';
+import { PendingInvitations } from '@/components/invitations/pending-invitations';
 import { ColumnResizeHandle } from '@/components/shell/column-resize-handle';
 import { ColumnFilterPopover } from '@/components/graph/explore/ColumnFilterPopover';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { isBlank, type ColumnFilterState } from '@/lib/graph-query/filters';
 import type { FacetBucket } from '@/lib/graph-query/types';
-import { rowMatchesColumnFilter } from './users-table-filter';
+import { rowMatchesColumnFilter } from '@/components/settings/users-table/users-table-filter';
 import { SearchBox } from '@/components/settings/search-box';
 import { matchesSearch } from '@/app/settings/lib/search';
 import {
   downloadUsersExport,
   type UsersExportFormat,
-} from './users-table-export';
+} from '@/components/settings/users-table/users-table-export';
 import '../components/org-settings-components.css';
 import './users.css';
 
@@ -798,10 +800,18 @@ export default function OrgUsersPage() {
         </div>
 
         <p className="org-settings-footnote">
-          Click a user to open their organization profile. Create user
-          creates the account if it does not exist yet and emails a sign-in
-          code.
+          Click a user to open their organization profile. Create user invites
+          the person through the identity provider: the account is made there
+          if it does not exist yet, and they sign in with the code it emails.
         </p>
+
+        <PendingInvitations
+          scope="organizations"
+          id={orgId}
+          canManage={canManage}
+        />
+
+        <IdpGroupBindings scope="organizations" id={orgId} canManage={canManage} />
       </div>
 
       {openPickerUserId &&

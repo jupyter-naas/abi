@@ -12,11 +12,7 @@ from typing import Any, cast
 
 import pytest
 import rdflib
-from naas_abi_core.engine.nats_auth import (
-    issue_module_token,
-    issue_service_token,
-    module_key,
-)
+from naas_abi_core.engine.nats_test_tokens import OTHER_TOKENS, TEST_TOKENS
 from naas_abi_core.proto.triple_store.v1 import triple_store_pb2
 from naas_abi_core.services.triple_store.adapters.primary.triple_store__primary_adapter__NATS import (
     AUTH_HEADER,
@@ -33,7 +29,7 @@ from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreSe
 from rdflib import Graph, Literal, URIRef
 from rdflib.namespace import XSD
 
-SECRET = "test-shared-secret"
+SECRET = TEST_TOKENS.verifier
 
 
 class _FakeRequest:
@@ -120,7 +116,9 @@ class _StubPort(ITripleStorePort):
     def create_graph(self, graph_name: URIRef) -> None:
         key = str(graph_name)
         if key in self._known_graphs:
-            raise Exceptions.GraphAlreadyExistsError(f"Graph {graph_name} already exists")
+            raise Exceptions.GraphAlreadyExistsError(
+                f"Graph {graph_name} already exists"
+            )
         self._known_graphs.add(key)
         self._ds.graph(URIRef(key))
 
@@ -183,7 +181,7 @@ class _DomainOnlyStub:
 
 
 def _valid_token() -> str:
-    return issue_service_token("api", SECRET)
+    return TEST_TOKENS.token("api")
 
 
 def _insert_request(
@@ -238,7 +236,7 @@ def test_malformed_token_returns_unauthenticated():
 
 def test_token_signed_with_wrong_secret_returns_unauthenticated():
     adapter = TripleStorePrimaryAdapterNATS(_StubPort(), SECRET)
-    wrong_secret_token = issue_service_token("api", "a-different-secret")
+    wrong_secret_token = OTHER_TOKENS.token("api")
     request = _FakeRequest(
         data=_insert_request(), headers={AUTH_HEADER: wrong_secret_token}
     )
@@ -318,7 +316,9 @@ def test_create_clear_drop_list_graphs_roundtrip():
     graph_name = "http://test.example.org/managed"
 
     create_request = _FakeRequest(
-        data=triple_store_pb2.CreateGraphRequest(graph_name=graph_name).SerializeToString(),
+        data=triple_store_pb2.CreateGraphRequest(
+            graph_name=graph_name
+        ).SerializeToString(),
         headers={AUTH_HEADER: _valid_token()},
         subject="abi.svc.triple_store.v1.create_graph",
     )
@@ -343,7 +343,9 @@ def test_create_clear_drop_list_graphs_roundtrip():
     stub.insert(g, URIRef(graph_name))
 
     clear_request = _FakeRequest(
-        data=triple_store_pb2.ClearGraphRequest(graph_name=graph_name).SerializeToString(),
+        data=triple_store_pb2.ClearGraphRequest(
+            graph_name=graph_name
+        ).SerializeToString(),
         headers={AUTH_HEADER: _valid_token()},
         subject="abi.svc.triple_store.v1.clear_graph",
     )
@@ -354,7 +356,9 @@ def test_create_clear_drop_list_graphs_roundtrip():
     assert len(stub.get()) == 0
 
     drop_request = _FakeRequest(
-        data=triple_store_pb2.DropGraphRequest(graph_name=graph_name).SerializeToString(),
+        data=triple_store_pb2.DropGraphRequest(
+            graph_name=graph_name
+        ).SerializeToString(),
         headers={AUTH_HEADER: _valid_token()},
         subject="abi.svc.triple_store.v1.drop_graph",
     )
@@ -418,9 +422,7 @@ def test_handle_view_event_dispatches_on_a_raw_port():
     adapter = TripleStorePrimaryAdapterNATS(stub, SECRET)
     request = _FakeRequest(
         data=triple_store_pb2.HandleViewEventRequest(
-            view=triple_store_pb2.TriplePattern(
-                predicate="http://test.example.org/p"
-            ),
+            view=triple_store_pb2.TriplePattern(predicate="http://test.example.org/p"),
             event=triple_store_pb2.ONTOLOGY_EVENT_TYPE_INSERT,
             triple=triple_store_pb2.TriplePattern(
                 subject="http://test.example.org/s",
@@ -519,7 +521,9 @@ def test_query_ask_encodes_boolean():
     stub = _StubPort()
     adapter = TripleStorePrimaryAdapterNATS(stub, SECRET)
     request = _FakeRequest(
-        data=triple_store_pb2.QueryRequest(query="ASK { ?s ?p ?o }").SerializeToString(),
+        data=triple_store_pb2.QueryRequest(
+            query="ASK { ?s ?p ?o }"
+        ).SerializeToString(),
         headers={AUTH_HEADER: _valid_token()},
         subject="abi.svc.triple_store.v1.query",
     )
@@ -851,8 +855,39 @@ def test_every_port_method_has_a_handler(endpoint_name):
     assert hasattr(adapter, f"_handle_{endpoint_name}")
 
 
+def test_an_updates_empty_result_travels_as_an_empty_select():
+    # Adapters answer a SPARQL update with rdflib's bare Result("SELECT"), which
+    # has no bindings at all: it must encode, not fail the call with INTERNAL.
+    import rdflib.query
+    from naas_abi_core.services.triple_store.adapters.primary.triple_store__primary_adapter__NATS import (
+        _query_result_to_pb,
+    )
+
+    encoded = _query_result_to_pb(rdflib.query.Result("SELECT"))
+    assert encoded.result_type == "SELECT"
+    assert not encoded.select.rows
+
+
+def test_only_the_services_own_refusals_cross_as_invalid_argument():
+    from naas_abi_core.services.triple_store.TripleStorePorts import Exceptions
+
+    refused = Exceptions.InvalidRequest("A SPARQL update is not a query")
+    assert TripleStorePrimaryAdapterNATS._transfer_error(refused) == (
+        "INVALID_ARGUMENT",
+        str(refused),
+    )
+    # A backend's ValueError (rdflib, a store's client) may name paths or
+    # connection strings: it is an internal error, logged and never sent.
+    assert (
+        TripleStorePrimaryAdapterNATS._transfer_error(
+            ValueError("bad store at /srv/oxigraph")
+        )
+        is None
+    )
+
+
 # ---------------------------------------------------------------------------
-# load_schema: a module loads its own ontology, as itself.
+# load_schema: a module's ontology, sent as its content.
 # ---------------------------------------------------------------------------
 
 _SCHEMA_GRAPH = URIRef("http://ontology.naas.ai/graph/schema")
@@ -867,8 +902,10 @@ def _service() -> tuple[TripleStoreService, _StubPort]:
     return TripleStoreService(stub), stub
 
 
-def _module_token(module_id: str) -> str:
-    return issue_module_token(module_id, module_key(SECRET, module_id))
+def _token() -> str:
+    # Who may load is the domain service's decision (TripleStoreService
+    # authorization tests); this service is wired to no IAM.
+    return TEST_TOKENS.token("api")
 
 
 def _load_schema(
@@ -904,78 +941,20 @@ SELECT ?path WHERE {{ GRAPH <{_SCHEMA_GRAPH}> {{
     }
 
 
-def test_load_schema_accepts_a_module_under_its_own_id():
-    service, stub = _service()
-    adapter = TripleStorePrimaryAdapterNATS(service, SECRET)
-
-    response = _load_schema(
-        adapter, _module_token("foo"), "module/foo/modules/FooOntology.ttl"
-    )
-
-    assert not response.HasField("error")
-    assert response.changed is True
-    assert _schema_sources(stub) == {"module/foo/modules/FooOntology.ttl"}
-    assert (
-        URIRef("http://example.org/Thing"),
-        rdflib.RDF.type,
-        URIRef("http://example.org/Class"),
-    ) in stub.get()
-
-
 def test_load_schema_of_unchanged_content_reports_no_change():
     service, _ = _service()
     adapter = TripleStorePrimaryAdapterNATS(service, SECRET)
     source = "module/foo/FooOntology.ttl"
 
-    assert _load_schema(adapter, _module_token("foo"), source).changed is True
-    assert _load_schema(adapter, _module_token("foo"), source).changed is False
-
-
-def test_load_schema_refuses_a_module_under_another_modules_id():
-    service, stub = _service()
-    adapter = TripleStorePrimaryAdapterNATS(service, SECRET)
-    before = len(list(stub.get()))
-
-    response = _load_schema(adapter, _module_token("a"), "module/b/FooOntology.ttl")
-
-    assert response.error.code == "PERMISSION_DENIED"
-    assert response.error.retryable is False
-    assert response.changed is False
-    assert len(list(stub.get())) == before
-    assert _schema_sources(stub) == set()
-
-
-@pytest.mark.parametrize("identity", ["api", "engine", "dagster"])
-def test_load_schema_accepts_first_party_identities_for_any_module(identity):
-    service, stub = _service()
-    adapter = TripleStorePrimaryAdapterNATS(service, SECRET)
-
-    response = _load_schema(
-        adapter, issue_service_token(identity, SECRET), "module/b/FooOntology.ttl"
-    )
-
-    assert not response.HasField("error")
-    assert _schema_sources(stub) == {"module/b/FooOntology.ttl"}
-
-
-def test_load_schema_module_id_with_dots_and_colons_is_its_own_identity():
-    service, stub = _service()
-    adapter = TripleStorePrimaryAdapterNATS(service, SECRET)
-    module_id = "acme.crm:v2"
-
-    response = _load_schema(
-        adapter, _module_token(module_id), f"module/{module_id}/a/b.ttl"
-    )
-
-    assert not response.HasField("error")
-    assert _schema_sources(stub) == {f"module/{module_id}/a/b.ttl"}
+    assert _load_schema(adapter, _token(), source).changed is True
+    assert _load_schema(adapter, _token(), source).changed is False
 
 
 def test_load_schema_requires_a_valid_token():
     service, stub = _service()
     adapter = TripleStorePrimaryAdapterNATS(service, SECRET)
 
-    for token in (None, "not-a-jwt", issue_service_token("api", "another-secret")):
+    for token in (None, "not-a-jwt", OTHER_TOKENS.token("api")):
         response = _load_schema(adapter, token, "module/foo/FooOntology.ttl")
         assert response.error.code == "UNAUTHENTICATED"
     assert _schema_sources(stub) == set()
@@ -1009,8 +988,8 @@ def test_load_schema_refuses_a_malformed_source(source):
     service, stub = _service()
     adapter = TripleStorePrimaryAdapterNATS(service, SECRET)
 
-    # Even the engine's own identity: the key must be well formed.
-    response = _load_schema(adapter, issue_service_token("engine", SECRET), source)
+    # Whoever calls: the key must be well formed.
+    response = _load_schema(adapter, _token(), source)
 
     assert response.error.code == "INVALID_ARGUMENT"
     assert _schema_sources(stub) == set()
@@ -1036,12 +1015,10 @@ def test_load_schema_refuses_invalid_turtle_and_writes_nothing():
     service, stub = _service()
     adapter = TripleStorePrimaryAdapterNATS(service, SECRET)
     source = "module/foo/FooOntology.ttl"
-    assert _load_schema(adapter, _module_token("foo"), source).changed is True
+    assert _load_schema(adapter, _token(), source).changed is True
     before = set(stub.get())
 
-    response = _load_schema(
-        adapter, _module_token("foo"), source, b"ex:Thing a ex:Class"
-    )
+    response = _load_schema(adapter, _token(), source, b"ex:Thing a ex:Class")
 
     assert response.error.code == "INVALID_ARGUMENT"
     assert response.error.retryable is False
@@ -1053,7 +1030,7 @@ def test_load_schema_refuses_content_that_is_not_utf8():
     adapter = TripleStorePrimaryAdapterNATS(service, SECRET)
 
     response = _load_schema(
-        adapter, _module_token("foo"), "module/foo/FooOntology.ttl", b"\xff\xfe\x00"
+        adapter, _token(), "module/foo/FooOntology.ttl", b"\xff\xfe\x00"
     )
 
     assert response.error.code == "INVALID_ARGUMENT"
@@ -1063,6 +1040,6 @@ def test_load_schema_refuses_content_that_is_not_utf8():
 def test_load_schema_over_a_raw_port_returns_not_supported():
     adapter = TripleStorePrimaryAdapterNATS(_StubPort(), SECRET)
 
-    response = _load_schema(adapter, _module_token("foo"), "module/foo/FooOntology.ttl")
+    response = _load_schema(adapter, _token(), "module/foo/FooOntology.ttl")
 
     assert response.error.code == "NOT_SUPPORTED"

@@ -8,6 +8,7 @@ import time
 from unittest.mock import Mock
 
 import pytest
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 
 pytest.importorskip("opentelemetry.sdk")
 
@@ -31,7 +32,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
 )
 from opentelemetry.trace import SpanKind, StatusCode
 
-SECRET = "tracing-integration-secret-32-bytes!"
+SECRET = TEST_TOKENS.verifier
 pytestmark = pytest.mark.integration
 
 
@@ -81,7 +82,7 @@ def test_a_kernel_call_is_one_trace_from_caller_to_service(broker, monkeypatch):
 
         backend.get.side_effect = get
         primary = KeyValuePrimaryAdapterNATS(backend, SECRET)
-        client = KeyValueSecondaryAdapterNATSClient(broker, SECRET, "test")
+        client = KeyValueSecondaryAdapterNATSClient(broker, TEST_TOKENS.source("test"))
 
         async def record(msg):
             if msg.headers:
@@ -152,7 +153,9 @@ def test_a_chunked_upload_is_one_span_with_its_totals(broker, monkeypatch, tmp_p
         nc = await nats.connect(broker)
         owner = ObjectStorageService(ObjectStorageSecondaryAdapterFS(str(tmp_path)))
         primary = ObjectStoragePrimaryAdapterNATS(owner, SECRET)
-        client = ObjectStorageSecondaryAdapterNATSClient(broker, SECRET, "test")
+        client = ObjectStorageSecondaryAdapterNATSClient(
+            broker, TEST_TOKENS.source("test")
+        )
         try:
             await primary.start(nc)
             await nc.flush()
@@ -182,7 +185,6 @@ def test_a_chunked_upload_is_one_span_with_its_totals(broker, monkeypatch, tmp_p
 def test_a_remote_model_call_is_one_trace_through_the_engine(broker, monkeypatch):
     """SDK model proxy -> transfer -> engine session span -> model span."""
     from langchain_core.language_models.fake_chat_models import FakeListChatModel
-    from naas_abi_core.engine.nats_auth import issue_service_token
     from naas_abi_core.models.Model import ChatModel
     from naas_abi_core.services.model_registry.adapters.primary.model_registry_nats import (
         ModelRegistryNATS,
@@ -226,7 +228,7 @@ def test_a_remote_model_call_is_one_trace_through_the_engine(broker, monkeypatch
         primary = ModelRegistryNATS(owner, SECRET)
         try:
             await primary.start(nc)
-            token = issue_service_token("module", SECRET)
+            token = TEST_TOKENS.token("module")
             async with ABIClient(broker, token) as client:
                 registry = RemoteRegistry(client.model_registry)
                 chat = (await registry.get_chat_model("chat")).model
@@ -408,7 +410,7 @@ def test_a_kernel_service_runs_its_synchronous_calls_on_parallel_threads(broker)
 
         backend.get.side_effect = get
         primary = KeyValuePrimaryAdapterNATS(backend, SECRET)
-        client = KeyValueSecondaryAdapterNATSClient(broker, SECRET, "test")
+        client = KeyValueSecondaryAdapterNATSClient(broker, TEST_TOKENS.source("test"))
         try:
             await primary.start(nc)
             await nc.flush()

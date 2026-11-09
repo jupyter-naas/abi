@@ -1,7 +1,7 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { useAuthStore } from '@/stores/auth';
+import { getAuthHeader, hasSession } from '@/stores/auth';
 import type { LayoutEntry } from '../lib/layouts';
 import { layoutsApi } from '../lib/layouts-api';
 import { fetchMapsFeedPins } from '../lib/maps-feed';
@@ -11,9 +11,8 @@ import { MapsFeedCanvas } from './maps-feed-canvas';
 export function MapsLayoutFeed({ layout }: { layout: LayoutEntry }) {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const fetchPins = async (signal: AbortSignal) => {
-    const token = useAuthStore.getState().token;
-    if (!token) throw new Error('Not authenticated');
-    return fetchMapsFeedPins(layoutsApi.feedUrl(workspaceId, layout.id), signal, { Authorization: `Bearer ${token}` });
+    if (!hasSession()) throw new Error('Not authenticated');
+    return fetchMapsFeedPins(layoutsApi.feedUrl(workspaceId, layout.id), signal, getAuthHeader());
   };
   return (
     <MapsFeedCanvas

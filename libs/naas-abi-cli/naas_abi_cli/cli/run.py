@@ -2,6 +2,7 @@ import click
 from naas_abi_core.engine.Engine import Engine
 
 from naas_abi_cli.cli.engine_role import use_auto_engine_role
+from naas_abi_cli.cli.local_operator import as_local_operator
 
 
 @click.group("run")
@@ -32,4 +33,6 @@ def run_script(ctx: click.Context, path: str):
     # argparse/click inside the script can parse them.
     script_args = list(ctx.args)
     sys.argv = [path, *script_args]
-    runpy.run_path(path, run_name="__main__")
+    # The script is the local operator's: it runs as the engine.
+    with as_local_operator():
+        runpy.run_path(path, run_name="__main__")

@@ -208,7 +208,13 @@ class GraphQueryService:
         return self._assemble(spec, compiled, rows, count, ckey, page, page_limit, include_sparql)
 
     async def facets(
-        self, *, spec: ListSpec, workspace_id: str, target_column_id: str, search: str = "", limit: int = 50
+        self,
+        *,
+        spec: ListSpec,
+        workspace_id: str,
+        target_column_id: str,
+        search: str = "",
+        limit: int = 50,
     ) -> FacetResultData:
         """Distinct values + counts for one column under the other columns' filters."""
         owned = self._owned_graphs(workspace_id)
@@ -219,7 +225,9 @@ class GraphQueryService:
         capped = max(1, min(int(limit), guards.QueryGuards.MAX_FACET_CARDINALITY))
         ctx = CompileContext(fts_backend="jena_text" if self._store.supports_fulltext() else "none")
         try:
-            sparql = compile_facet(spec, ctx, target_column_id=target_column_id, search=search, limit=capped)
+            sparql = compile_facet(
+                spec, ctx, target_column_id=target_column_id, search=search, limit=capped
+            )
         except GraphQuerySpecError as exc:
             # Unfacetable (e.g. a measure) → graceful refusal, not an error.
             return FacetResultData(column_id=target_column_id, faceted=False, reason=str(exc))
@@ -231,12 +239,19 @@ class GraphQueryService:
             if "v" in r
         )
         return FacetResultData(
-            column_id=target_column_id, faceted=True, buckets=buckets,
-            distinct_count=len(buckets), truncated=truncated,
+            column_id=target_column_id,
+            faceted=True,
+            buckets=buckets,
+            distinct_count=len(buckets),
+            truncated=truncated,
         )
 
     async def discover_columns(
-        self, *, workspace_id: str, graph_uris: list[str], class_uris: list[str],
+        self,
+        *,
+        workspace_id: str,
+        graph_uris: list[str],
+        class_uris: list[str],
         force_refresh: bool = False,
     ) -> tuple:
         """Ontology ∪ data column discovery for an anchored class (ownership-guarded)."""
@@ -253,8 +268,10 @@ class GraphQueryService:
         # Column discovery fires ~5 SPARQL queries and rarely changes → cache it (the "add
         # column" dropdown latency). A cache miss/failure falls through to a live discovery.
         ckey = self._cache_namespace + columns_cache_key(
-            workspace_id=workspace_id, graph_uris=graph_uris,
-            class_uris=class_uris, type_graph_uris=type_graph_uris,
+            workspace_id=workspace_id,
+            graph_uris=graph_uris,
+            class_uris=class_uris,
+            type_graph_uris=type_graph_uris,
         )
         cached = None if force_refresh else self._columns_cache.fetch(ckey)
         if cached is not None:
@@ -270,7 +287,12 @@ class GraphQueryService:
         return cols
 
     async def search_entities(
-        self, *, workspace_id: str, graph_uris: list[str], query: str, limit: int = 20,
+        self,
+        *,
+        workspace_id: str,
+        graph_uris: list[str],
+        query: str,
+        limit: int = 20,
         class_uris: list[str] | None = None,
     ) -> tuple:
         """Free-text search for classes ∪ individuals across the given (or all owned) graphs."""
@@ -286,7 +308,12 @@ class GraphQueryService:
         if not q:
             raise GraphQuerySpecError("query must be non-empty")
         return await asyncio.to_thread(
-            _search_entities, self._store, graph_uris=targets, query=q, limit=limit, class_uris=class_uris
+            _search_entities,
+            self._store,
+            graph_uris=targets,
+            query=q,
+            limit=limit,
+            class_uris=class_uris,
         )
 
     # ── Internals ─────────────────────────────────────────────────────────────────
@@ -299,7 +326,9 @@ class GraphQueryService:
         if illegal:
             raise GraphAccessError(f"workspace does not own graph(s): {sorted(illegal)}")
 
-    def _page_from_cursor(self, spec: ListSpec | AggregateSpec, cursor: str | None, limit: int) -> Page:
+    def _page_from_cursor(
+        self, spec: ListSpec | AggregateSpec, cursor: str | None, limit: int
+    ) -> Page:
         # Fetch one extra row to detect "has_more" without a second request.
         probe = limit + 1
         if cursor is None:
@@ -340,7 +369,9 @@ class GraphQueryService:
         for raw in kept:
             cells: dict[str, CellData] = {}
             for col in compiled.columns:
-                var = compiled.var_for_column[col.id].lstrip("?")  # "col_<id>" / "dim_<id>" / "m_<id>"
+                var = compiled.var_for_column[col.id].lstrip(
+                    "?"
+                )  # "col_<id>" / "dim_<id>" / "m_<id>"
                 binding = raw.get(var)
                 if binding is None:  # OPTIONAL miss → cell absent (sparse row)
                     continue
@@ -379,7 +410,9 @@ class GraphQueryService:
             row_uris=row_uris,
         )
 
-    def _next_cursor(self, compiled: CompiledQuery, kept: list[dict], page: Page, limit: int) -> str | None:
+    def _next_cursor(
+        self, compiled: CompiledQuery, kept: list[dict], page: Page, limit: int
+    ) -> str | None:
         if not kept:
             return None
         if compiled.uses_offset_fallback:

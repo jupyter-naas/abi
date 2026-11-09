@@ -24,6 +24,7 @@ import { useAppsStore } from '@/stores/apps';
 import { useFilesStore } from '@/stores/files';
 import { officeCreateKindFromHref, pushOfficeCreate } from '@/components/office/office-create-state';
 import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
+import { useOpensWorkspaceSettings } from '@/hooks/use-workspace-settings-access';
 
 export function QuickOpen() {
   const router = useRouter();
@@ -64,7 +65,7 @@ export function QuickOpen() {
   const canCode = useFeature('code');
   const canSlides = useFeature('slides');
   const canDocuments = useFeature('documents');
-  const canSettingsWorkspace = useFeature('settings.workspace');
+  const canSettingsWorkspace = useOpensWorkspaceSettings();
 
   const featureOn: Record<string, boolean> = {
     apps: canApps,
@@ -180,7 +181,7 @@ export function QuickOpen() {
       .slice(0, 20)
       .map((c) => ({ id: c.id, title: c.title }));
     const listedApps = apps
-      .filter((a) => a.enabled && a.installed && a.url)
+      .filter((a) => a.installed && a.url)
       .map((a) => ({ id: a.app_id, name: a.name }));
     const files = starredItems
       .filter((item) => item.workspaceId === currentWorkspaceId)

@@ -37,6 +37,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from naas_abi_sdk.call_context import use_call_context
 from naas_abi_sdk.jobs import (
     TERMINAL_STATUSES,
     JobContext,
@@ -788,6 +789,26 @@ class FlowRuntime:
         return self.module_documents(module_id) if self.module_documents else None
 
 
+class _AsHost:
+    """``target``'s methods, each called in the host's own context: a run's
+    bookkeeping is the module's, never the user the run executes for."""
+
+    def __init__(self, target: Any, context: Any) -> None:
+        self._target, self._context = target, context
+
+    def __getattr__(self, name: str) -> Any:
+        attribute = getattr(self._target, name)
+        if not callable(attribute):
+            return attribute
+
+        async def call(*args: Any, **kwargs: Any) -> Any:
+            with use_call_context(self._context):
+                value = attribute(*args, **kwargs)
+                return await value if inspect.isawaitable(value) else value
+
+        return call
+
+
 @dataclass
 class FlowContext(JobContext):
     """A workflow run's context: ``JobContext`` plus durable steps and child runs.
@@ -795,16 +816,24 @@ class FlowContext(JobContext):
     Step keys name journal entries: they must be unique within a run and the same
     on every attempt (derive them from your inputs, not from time or randomness).
     A step result is the JSON a replay would return, also on the first run.
+
+    ``host_context``: the host's own call context. A run started for a user
+    executes its handler and its steps' functions for that user, but writes its
+    journal, starts and follows its children and cancels them as the module.
     """
 
     runtime: FlowRuntime | None = field(default=None, repr=False)
     fired_at: str = ""
+    host_context: Any = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         if self.runtime is None:
             raise ValueError("A FlowContext needs the runtime of its host")
+        documents = self.runtime.documents
+        if self.host_context is not None:
+            documents = _AsHost(documents, self.host_context)
         self._journal = StepJournal(
-            self.runtime.documents, self.runtime.project, self.run_id, self.fired_at
+            documents, self.runtime.project, self.run_id, self.fired_at
         )
         self._notices = CompletionNotices(
             self.runtime.transport, poll_seconds=self.runtime.poll_seconds
@@ -815,6 +844,12 @@ class FlowContext(JobContext):
         self._children: dict[str, JobRun] = {}
 
     # --- steps -----------------------------------------------------------------------
+
+    def _as_host(self) -> Any:
+        """The host's own context, for a block of bookkeeping."""
+        if self.host_context is None:
+            return contextlib.nullcontext()
+        return use_call_context(self.host_context)
 
     def _claim(self, key: str) -> None:
         check_step_key(key)
@@ -1013,7 +1048,8 @@ class FlowContext(JobContext):
             )
 
     async def _await_run(self, run: JobRun) -> dict[str, Any]:
-        return await self._race(self._notices.wait(run))
+        with self._as_host():  # the child's record is read as the module
+            return await self._race(self._notices.wait(run))
 
     async def _call(self, key: str, module_id: str, workflow: str, input: Any) -> Any:
         rt = self.runtime
@@ -1044,10 +1080,11 @@ class FlowContext(JobContext):
             )
             # The run id and step attempt make the trigger one message inside the
             # stream's duplicate window, should this host die before it journals the child.
-            run = await proxy.trigger(
-                payload,
-                idempotency_key=f"{self.run_id}/{key}/{started_step['attempt']}",
-            )
+            with self._as_host():  # a module hands no user to another
+                run = await proxy.trigger(
+                    payload,
+                    idempotency_key=f"{self.run_id}/{key}/{started_step['attempt']}",
+                )
             child = {"module_id": module_id, "workflow": workflow, "run_id": run.run_id}
             await journal.set_child(key, child)
         self._children[key] = run
@@ -1138,7 +1175,8 @@ class FlowContext(JobContext):
         )
         for key, run in list(self._children.items()):
             try:
-                await run.cancel()
+                with self._as_host():
+                    await run.cancel()
                 await self._journal.finish(key, "CANCELLED", error=error)
             except Exception:
                 logger.warning(

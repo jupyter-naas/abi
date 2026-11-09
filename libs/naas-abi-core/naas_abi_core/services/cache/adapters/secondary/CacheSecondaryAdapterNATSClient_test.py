@@ -3,7 +3,6 @@ import shutil
 import socket
 import subprocess
 import time
-from datetime import UTC, datetime, timedelta
 from threading import Event as ThreadingEvent
 from threading import Thread
 from unittest.mock import AsyncMock
@@ -11,6 +10,8 @@ from unittest.mock import AsyncMock
 import nats
 import pytest
 from naas_abi_core import logger
+from naas_abi_core.engine.nats_auth import StaticTokenSource
+from naas_abi_core.engine.nats_test_tokens import OTHER_TOKENS, TEST_TOKENS
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.services.cache.adapters.primary.cache__primary_adapter__NATS import (
     CachePrimaryAdapterNATS,
@@ -32,7 +33,7 @@ from naas_abi_core.services.cache.tests.cache__secondary_adapter__generic_test i
     GenericCacheAdapterTest,
 )
 
-JWT_SECRET = "test-shared-secret"
+JWT_SECRET = TEST_TOKENS.verifier
 
 
 # ---------------------------------------------------------------------------
@@ -43,18 +44,22 @@ JWT_SECRET = "test-shared-secret"
 def test_init_is_lazy(monkeypatch):
     connect = AsyncMock()
     monkeypatch.setattr(nats, "connect", connect)
-    CacheSecondaryAdapterNATSClient("nats://127.0.0.1:4222", JWT_SECRET, "api")
+    CacheSecondaryAdapterNATSClient("nats://127.0.0.1:4222", TEST_TOKENS.source("api"))
     connect.assert_not_called()
 
 
 def test_close_without_connecting_is_a_noop():
-    client = CacheSecondaryAdapterNATSClient("nats://127.0.0.1:4222", JWT_SECRET, "api")
+    client = CacheSecondaryAdapterNATSClient(
+        "nats://127.0.0.1:4222", TEST_TOKENS.source("api")
+    )
     client.close()  # must not raise, must not connect
 
 
 def test_context_manager_calls_close():
     closed = []
-    client = CacheSecondaryAdapterNATSClient("nats://127.0.0.1:4222", JWT_SECRET, "api")
+    client = CacheSecondaryAdapterNATSClient(
+        "nats://127.0.0.1:4222", TEST_TOKENS.source("api")
+    )
     client.close = lambda: closed.append(True)  # type: ignore[method-assign]
 
     with client:
@@ -103,41 +108,6 @@ def test_raise_for_error_maps_unauthenticated_to_runtime_error():
 # ---------------------------------------------------------------------------
 
 
-def test_token_is_issued_once_and_reused(monkeypatch):
-    calls: list[str] = []
-
-    def fake_issue(identity: str, secret: str) -> str:
-        calls.append(identity)
-        return f"token-{len(calls)}"
-
-    monkeypatch.setattr("naas_abi_core.engine.nats_rpc.issue_service_token", fake_issue)
-
-    client = CacheSecondaryAdapterNATSClient("nats://127.0.0.1:4222", JWT_SECRET, "api")
-
-    assert client._current_token() == "token-1"
-    assert client._current_token() == "token-1"
-    assert calls == ["api"]
-
-
-def test_token_is_reissued_when_close_to_expiry(monkeypatch):
-    calls: list[str] = []
-
-    def fake_issue(identity: str, secret: str) -> str:
-        calls.append(identity)
-        return f"token-{len(calls)}"
-
-    monkeypatch.setattr("naas_abi_core.engine.nats_rpc.issue_service_token", fake_issue)
-
-    client = CacheSecondaryAdapterNATSClient("nats://127.0.0.1:4222", JWT_SECRET, "api")
-    assert client._current_token() == "token-1"
-
-    # Simulate the token being almost expired.
-    client._token_expires_at = datetime.now(UTC) + timedelta(seconds=1)
-
-    assert client._current_token() == "token-2"
-    assert calls == ["api", "api"]
-
-
 # ---------------------------------------------------------------------------
 # Real round trip: a live NATS container, a real CachePrimaryAdapterNATS
 # wrapping a real CacheFSAdapter, and the client talking to it over the
@@ -155,9 +125,9 @@ class _PrimaryAdapterServer:
     long as a test needs it -- the server-side mirror of the client's own
     background loop, since nats-py has no synchronous API on either side."""
 
-    def __init__(self, nats_url: str, jwt_secret: str, wrapped_adapter) -> None:
+    def __init__(self, nats_url: str, verifier, wrapped_adapter) -> None:
         self._nats_url = nats_url
-        self._jwt_secret = jwt_secret
+        self._verifier = verifier
         self._wrapped_adapter = wrapped_adapter
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: Thread | None = None
@@ -191,7 +161,7 @@ class _PrimaryAdapterServer:
 
     async def _start_async(self) -> None:
         self._nc = await nats.connect(self._nats_url)
-        self._primary = CachePrimaryAdapterNATS(self._wrapped_adapter, self._jwt_secret)
+        self._primary = CachePrimaryAdapterNATS(self._wrapped_adapter, self._verifier)
         await self._primary.start(self._nc)
 
     def stop(self) -> None:
@@ -299,8 +269,7 @@ class TestCacheSecondaryAdapterNATSClient:
 
         client = CacheSecondaryAdapterNATSClient(
             nats_url=nats_url,
-            jwt_secret=JWT_SECRET,
-            service_identity="api",
+            credentials=TEST_TOKENS.source("api"),
             timeout_seconds=10.0,
         )
         yield client
@@ -368,8 +337,7 @@ def test_wrong_secret_surfaces_as_runtime_error(nats_url, tmp_path):
     server.start()
     client = CacheSecondaryAdapterNATSClient(
         nats_url=nats_url,
-        jwt_secret="a-completely-different-secret",
-        service_identity="api",
+        credentials=OTHER_TOKENS.source("api"),
         timeout_seconds=5.0,
     )
     try:
@@ -393,10 +361,16 @@ class TestCacheNATSClientContract(GenericCacheAdapterTest):
         server.start()
         client = CacheSecondaryAdapterNATSClient(
             nats_url=nats_url,
-            jwt_secret=JWT_SECRET,
-            service_identity="api",
+            credentials=TEST_TOKENS.source("api"),
             timeout_seconds=10.0,
         )
         yield client
         client.close()
         server.stop()
+
+
+def test_the_client_presents_its_credentials_token():
+    client = CacheSecondaryAdapterNATSClient(
+        "nats://127.0.0.1:4222", StaticTokenSource("token-1", "api")
+    )
+    assert client._current_token() == "token-1"

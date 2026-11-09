@@ -6,6 +6,7 @@ import pytest
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.model_registry.adapters.primary.model_registry_nats import (
     ModelRegistryNATS,
     _Stream,
@@ -35,6 +36,37 @@ def test_waiting_stream_wakes_on_producer_completion():
         assert (await asyncio.wait_for(waiting, 1)).done
         assert not stream.reading
         await primary._close("id")
+
+    asyncio.run(scenario())
+
+
+def test_a_stream_belongs_to_its_actor_and_the_user_it_acts_for():
+    from naas_abi_core.engine.call_context import CallContext, service_account, user
+
+    ada = CallContext(principal=service_account("api"), on_behalf_of=user("usr-ada"))
+    bob = CallContext(principal=service_account("api"), on_behalf_of=user("usr-bob"))
+
+    async def scenario():
+        primary = ModelRegistryNATS(Mock(), "test")
+        stream = _Stream("api", context=ada)
+        stream.task = asyncio.create_task(asyncio.sleep(0))
+        await stream.task
+        primary.streams["id"] = stream
+        for operation, request in (
+            ("stream_next", pb.StreamNextRequest(stream_id="id")),
+            ("stream_close", pb.StreamCloseRequest(stream_id="id")),
+        ):
+            with pytest.raises(PermissionError):
+                await primary._execute(operation, request, "api", bob)
+        assert "id" in primary.streams  # bob closed nothing
+        read = await primary._execute(
+            "stream_next", pb.StreamNextRequest(stream_id="id"), "api", ada
+        )
+        assert read.done
+        await primary._execute(
+            "stream_close", pb.StreamCloseRequest(stream_id="id"), "api", ada
+        )
+        assert "id" not in primary.streams
 
     asyncio.run(scenario())
 
@@ -77,13 +109,12 @@ def test_provider_errors_are_sanitized_and_mapped():
     from types import SimpleNamespace
     from unittest.mock import AsyncMock
 
-    from naas_abi_core.engine.nats_auth import issue_service_token
     from naas_abi_core.services.model_registry.ModelRegistryPort import (
         ModelNotFoundError,
     )
 
     async def scenario():
-        secret = "model-unit-test-secret-at-least-32-bytes"
+        secret = TEST_TOKENS.verifier
         primary = ModelRegistryNATS(Mock(), secret)
         for error, code in [
             (RuntimeError("private provider details"), "MODEL_ERROR"),
@@ -97,8 +128,8 @@ def test_provider_errors_are_sanitized_and_mapped():
             request.context.timeout_ms = 1000
             msg = SimpleNamespace(
                 data=request.SerializeToString(),
-                headers={"Nats-Auth-Token": issue_service_token("caller", secret)},
-                reply="reply",
+                headers={"Nats-Auth-Token": TEST_TOKENS.token("caller")},
+                reply="_INBOX.reply",
                 respond=AsyncMock(),
                 _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
             )
@@ -180,7 +211,11 @@ def _registry_primary(fail=False):
         ),
     }
     primary = ModelRegistryNATS(Mock(), "test")
-    primary._resolve = lambda ref: (ref.canonical_id, models[ref.canonical_id])
+    primary._resolve = lambda ref, action="Resolve": (
+        ref.canonical_id,
+        models[ref.canonical_id],
+        None,
+    )
     return primary
 
 
@@ -262,15 +297,13 @@ def _one_shot(primary, secret, headers):
     from types import SimpleNamespace
     from unittest.mock import AsyncMock
 
-    from naas_abi_core.engine.nats_auth import issue_service_token
-
     request = _chat_request()
     request.context.timeout_ms = 5000
     msg = SimpleNamespace(
         subject="abi.svc.model_registry.v1.chat",
         data=request.SerializeToString(),
-        headers={"Nats-Auth-Token": issue_service_token("caller", secret), **headers},
-        reply="reply",
+        headers={"Nats-Auth-Token": TEST_TOKENS.token("caller"), **headers},
+        reply="_INBOX.reply",
         respond=AsyncMock(),
         _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
     )
@@ -294,9 +327,9 @@ def _caller_headers():
 def test_a_one_shot_model_call_continues_the_callers_trace(spans):
     from opentelemetry.trace import SpanKind
 
-    secret = "model-unit-test-secret-at-least-32-bytes"
+    secret = TEST_TOKENS.verifier
     primary = _registry_primary()
-    primary.secret = secret
+    primary.verifier = secret
 
     assert not _one_shot(primary, secret, _caller_headers()).HasField("error")
 
@@ -310,9 +343,9 @@ def test_a_one_shot_model_call_continues_the_callers_trace(spans):
 def test_a_failed_one_shot_call_marks_its_server_span(spans):
     from opentelemetry.trace import SpanKind, StatusCode
 
-    secret = "model-unit-test-secret-at-least-32-bytes"
+    secret = TEST_TOKENS.verifier
     primary = _registry_primary(fail=True)
-    primary.secret = secret
+    primary.verifier = secret
 
     assert _one_shot(primary, secret, _caller_headers()).error.code == "MODEL_ERROR"
 

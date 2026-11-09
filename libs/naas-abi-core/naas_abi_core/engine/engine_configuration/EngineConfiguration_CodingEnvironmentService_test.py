@@ -3,6 +3,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_CodingEnviron
     CodingEnvironmentAdapterConfiguration,
     CodingEnvironmentServiceConfiguration,
 )
+from naas_abi_core.engine.nats_test_tokens import TEST_SERVICE_KEY
 from naas_abi_core.services.coding_environment.adapters.secondary.CoderAdapter import (
     CoderAdapter,
 )
@@ -92,8 +93,7 @@ def test_coding_environment_configuration_nats_rpc_adapter_is_lazy():
             adapter="nats_rpc",
             config={
                 "nats_url": "nats://127.0.0.1:4222",
-                "jwt_secret": "test-shared-secret",
-                "service_identity": "api",
+                "service_key": TEST_SERVICE_KEY,
             },
         )
     )

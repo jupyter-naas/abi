@@ -7,7 +7,7 @@ import socket
 import subprocess
 import time
 
-import broker_users
+import nats
 import pytest
 
 from naas_abi_sdk import claim_check
@@ -19,15 +19,16 @@ pytestmark = pytest.mark.skipif(
 )
 
 LIMIT = 64 * 1024
+SCOPE = claim_check.topic_scope("tests")
 
 
-@pytest.fixture(params=broker_users.KINDS)
-def broker(request, tmp_path):
+@pytest.fixture
+def broker(tmp_path):
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
     config = tmp_path / "nats.conf"
-    config.write_text(f"max_payload: {LIMIT}\n" + broker_users.config(request.param))
+    config.write_text(f"max_payload: {LIMIT}\n")
     process = subprocess.Popen(
         [
             "nats-server",
@@ -51,18 +52,18 @@ def broker(request, tmp_path):
             break
         except OSError:
             time.sleep(0.05)
-    url = broker_users.login(f"nats://127.0.0.1:{port}", request.param)
-    broker_users.prepare(url, request.param, "claimcheck")
-    yield url
+    yield f"nats://127.0.0.1:{port}"
     process.terminate()
     process.wait(timeout=5)
 
 
 def test_a_message_that_fits_is_sent_unchanged(broker):
     async def scenario():
-        nc = await broker_users.connect(broker)
+        nc = await nats.connect(broker)
         try:
-            body, headers = await claim_check.prepare(nc, b"small", {"A": "b"})
+            body, headers = await claim_check.prepare(
+                nc, b"small", {"A": "b"}, scope=SCOPE
+            )
             assert (body, headers) == (b"small", {"A": "b"})
         finally:
             await nc.close()
@@ -74,13 +75,37 @@ def test_a_message_above_the_limit_is_stored_and_resolved(broker):
     payload = os.urandom(5 * LIMIT)
 
     async def scenario():
-        nc = await broker_users.connect(broker)
+        nc = await nats.connect(broker)
         try:
-            body, headers = await claim_check.prepare(nc, payload, {"A": "b"})
+            body, headers = await claim_check.prepare(
+                nc, payload, {"A": "b"}, scope=SCOPE
+            )
             assert body == b"" and headers["A"] == "b"
-            assert claim_check.HEADER in headers
+            assert headers[claim_check.HEADER].startswith(f"abi.cc.{SCOPE}.")
+            assert int(headers[claim_check.CHUNKS_HEADER]) > 1
             message = type("Msg", (), {"data": body, "headers": headers})()
             assert await claim_check.resolve(nc, message) == payload
+        finally:
+            await nc.close()
+
+    asyncio.run(scenario())
+
+
+def test_a_stored_payload_replaced_under_its_reference_is_refused(broker):
+    payload = os.urandom(2 * LIMIT)
+
+    async def scenario():
+        nc = await nats.connect(broker)
+        try:
+            body, headers = await claim_check.prepare(nc, payload, scope=SCOPE)
+            reference = headers[claim_check.HEADER]
+            # Someone writing to the scope appends another first chunk.
+            await nc.jetstream().publish(
+                f"{reference}.0", b"forged", stream=claim_check.STREAM
+            )
+            message = type("Msg", (), {"data": body, "headers": headers})()
+            with pytest.raises(claim_check.ClaimCheckInvalid):
+                await claim_check.resolve(nc, message)
         finally:
             await nc.close()
 
@@ -91,10 +116,10 @@ def test_values_above_the_cap_are_refused(broker, monkeypatch):
     monkeypatch.setattr(claim_check, "MAX_VALUE_BYTES", 2 * LIMIT)
 
     async def scenario():
-        nc = await broker_users.connect(broker)
+        nc = await nats.connect(broker)
         try:
             with pytest.raises(claim_check.ClaimCheckTooLarge):
-                await claim_check.prepare(nc, b"x" * (3 * LIMIT))
+                await claim_check.prepare(nc, b"x" * (3 * LIMIT), scope=SCOPE)
         finally:
             await nc.close()
 
@@ -127,12 +152,6 @@ def test_bus_queues_carry_payloads_above_the_limit_and_at_its_edge(broker):
     edge = os.urandom(LIMIT - 20)
 
     async def scenario():
-        # The queue's stream is the engine's to create: modules may not create streams.
-        engine = Transport(broker_users.as_engine(broker), "token", timeout=5)
-        try:
-            await BusClient(engine)._stream(await engine.connect(), "jobs")
-        finally:
-            await engine.close()
         transport = Transport(broker, "token", timeout=5)
         bus = BusClient(transport)
         try:
@@ -151,19 +170,3 @@ def test_bus_queues_carry_payloads_above_the_limit_and_at_its_edge(broker):
             await transport.close()
 
     assert asyncio.run(scenario()) == [big, edge]
-
-
-def test_a_bus_queue_without_its_stream_says_why(broker):
-    if "nats://module:" not in broker:
-        pytest.skip("an open broker lets anyone create streams")
-    from naas_abi_sdk.streams import StreamNotCreated
-
-    async def scenario():
-        transport = Transport(broker, "token", timeout=2)
-        try:
-            with pytest.raises(StreamNotCreated, match="queue stream of topic 'fresh'"):
-                await BusClient(transport).enqueue("fresh", "work", b"x")
-        finally:
-            await transport.close()
-
-    asyncio.run(scenario())

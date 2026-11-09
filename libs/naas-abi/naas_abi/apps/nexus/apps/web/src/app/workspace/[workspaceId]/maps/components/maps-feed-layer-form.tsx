@@ -7,7 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input, Select } from '@/components/ui/input';
 import { SettingsNotice } from '@/components/settings/settings-ui';
 import { cn } from '@/lib/utils';
-import { useAuthStore } from '@/stores/auth';
+import { getAuthHeader } from '@/stores/auth';
 import { mapsCustomFeedUrl } from '../lib/datasets';
 import {
   LayoutApiError,
@@ -70,10 +70,7 @@ export function useFeedTypes(workspaceId: string, feed: WorkspaceMapLayout | nul
     }
     const controller = new AbortController();
     setState({ types: null, error: null });
-    const token = useAuthStore.getState().token;
-    fetchMapsFeedPins(url, controller.signal, {
-      Authorization: `Bearer ${token ?? ''}`,
-    })
+    fetchMapsFeedPins(url, controller.signal, getAuthHeader())
       .then((result) => setState({ types: collectClassLabels(result.pins), error: null }))
       .catch((e: unknown) => {
         if (!controller.signal.aborted) {

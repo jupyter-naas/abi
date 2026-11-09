@@ -1,7 +1,7 @@
 """Serves a module's web apps on instance-addressed NATS subjects.
 
 Nexus forwards each browser request as an ``abi.app.v1.HttpRequest`` and
-returns the ``HttpResponse`` (docs/adr/20261012_remote-module-apps.md). This
+returns the ``HttpResponse``. This
 host authorizes the caller through discovery, then answers with a file of the
 app's folder or, for any other path, the app's ASGI application, called in
 process: no HTTP server, no port.
@@ -44,7 +44,7 @@ from naas_abi_sdk.apps import AppDescriptor
 from naas_abi_sdk.broker_flush import flush_to_broker
 from naas_abi_sdk.concurrency import DEFAULT_LIMIT, ConcurrentCalls
 from naas_abi_sdk.messages import reply
-from naas_abi_sdk.transport import RPCError, is_inbox
+from naas_abi_sdk.transport import RPCError
 
 logger = logging.getLogger(__name__)
 
@@ -69,10 +69,6 @@ CLOSE_SECONDS = 3.0
 DRAIN_IDLE_SECONDS = 1.0
 AUTHORIZATION_SECONDS = 5.0
 MAX_AUTHORIZATIONS = 1024
-# Callers whose user ids an app trusts: Nexus's API, the one process that
-# authenticates users. Any other caller (a module, a script) may call an app,
-# but never on behalf of a user (docs/adr/20261014_module-identities.md).
-USER_CALLERS = frozenset({"api"})
 # The browser assets Nexus serves for in-engine apps.
 STATIC_SUFFIXES = frozenset(
     {
@@ -94,8 +90,8 @@ RESPONSE_HOP_BY_HOP = HOP_BY_HOP - {"content-length"}
 ASGIApp = Callable[[dict, Callable[[], Awaitable[dict]], Callable[[dict], Awaitable[None]]], Awaitable[None]]  # fmt: skip
 
 
-def app_subject(project: str, instance_id: str, name: str) -> str:
-    return f"abi.mod.{project}.{instance_id}.app.{name}.http"
+def app_subject(project: str, service_account: str, instance_id: str, name: str) -> str:
+    return f"abi.mod.{project}.{service_account or '-'}.{instance_id}.app.{name}.http"
 
 
 async def call_app(
@@ -103,17 +99,28 @@ async def call_app(
     project: str,
     instance_id: str,
     request: pb.HttpRequest,
+    *,
+    service_account: str,
 ) -> pb.HttpResponse:
     """Send ``request`` to the app ``request.app`` of one module instance
     (what Nexus does for each browser request); RPCError on an error reply.
     The reply comes once the app starts its response: give ``transport`` a
     timeout above the longest upload (the module stops an idle app itself)."""
     return await transport.call(
-        app_subject(project, instance_id, request.app),
+        app_subject(project, service_account, instance_id, request.app),
         request,
         pb.HttpResponse,
-        instance_id=instance_id,
     )
+
+
+@dataclass(frozen=True)
+class Caller:
+    """A request's verified caller, as discovery answered it."""
+
+    user_id: str = ""
+    principal_id: str = ""
+    principal_kind: str = ""
+    principal_name: str = ""
 
 
 @dataclass
@@ -178,18 +185,17 @@ class AppHost:
         max_concurrency: int = DEFAULT_LIMIT,
         max_uploads: int = MAX_UPLOADS,
         idle_seconds: float = IDLE_SECONDS,
-        user_callers: Iterable[str] = USER_CALLERS,
     ) -> None:
         self.session, self.apps = session, apps
-        self.user_callers = frozenset(user_callers)
         self.subscriptions: list[Any] = []
         self.closing = False
         self.idle_seconds = idle_seconds
         self.calls = ConcurrentCalls(max_concurrency)
         self.uploads = ConcurrentCalls(max_uploads)
-        self._authorized: dict[tuple[str, str], tuple[float, str]] = {}
+        # (token, app) -> (reuse until, the verified caller)
+        self._authorized: dict[tuple[str, str], tuple[float, Caller]] = {}
         # One discovery call per token and app at a time; the others wait for it.
-        self._authorizing: dict[tuple[str, str], asyncio.Future[str]] = {}
+        self._authorizing: dict[tuple[str, str], asyncio.Future[Caller]] = {}
         self._etags: dict[Path, tuple[float, int, str]] = {}
         self._lifespans: list[_Lifespan] = []
         # What each app's lifespan put in its state (ASGI lifespan "state").
@@ -214,7 +220,10 @@ class AppHost:
                 self.subscriptions.append(
                     await nc.subscribe(
                         app_subject(
-                            self.session.client.project, self.session.instance_id, name
+                            self.session.client.project,
+                            self.session.service_account,
+                            self.session.instance_id,
+                            name,
                         ),
                         cb=self._receiver(name),
                     )
@@ -369,8 +378,8 @@ class AppHost:
         send it to another instance) rather than waiting for a slot. The
         subscription's drain waits for its queue to empty, so it ends quickly.
         """
-        call = self.calls.callback(partial(self._handle, name))
-        upload = self.uploads.callback(partial(self._handle, name))
+        call = self.calls.callback(partial(self._handle, name), requests=True)
+        upload = self.uploads.callback(partial(self._handle, name), requests=True)
 
         async def receive(msg: Any) -> None:
             if self.closing:
@@ -410,17 +419,19 @@ class AppHost:
                 raise RPCError("MODULE_UNAVAILABLE", "App is draining")
             if request.app not in ("", name):
                 raise RPCError("INVALID_ARGUMENT", "App request names another app")
-            caller = await self._authorize(
-                name, (msg.headers or {}).get("Nats-Auth-Token", "")
-            )
-            if (request.user_id or request.workspace_id) and (
-                caller not in self.user_callers
-            ):
-                raise RPCError(
-                    "PERMISSION_DENIED",
-                    f"{caller!r} cannot call an app on behalf of a user",
-                )
-            answer = await self._answer(name, request, caller)
+            # The user and the actor are the ones discovery verified, never the
+            # request's fields.
+            caller = await self._authorize(name, msg.headers or {})
+            request.user_id = caller.user_id
+            request.principal_id = caller.principal_id
+            request.principal_kind = caller.principal_kind
+            request.principal_name = caller.principal_name
+            if not caller.user_id:
+                # The container (and the Nexus workspace) a user opened the
+                # app from: with no verified user there is none.
+                request.workspace_id = ""
+                request.context.container = ""
+            answer = await self._answer(name, request)
             response.status = answer.status
             for key, value in answer.headers:
                 response.headers.add(name=key, value=value)
@@ -468,13 +479,16 @@ class AppHost:
         with contextlib.suppress(Exception):
             await reply(msg, failed.SerializeToString())
 
-    async def _authorize(self, name: str, token: str) -> str:
+    async def _authorize(self, name: str, headers: dict) -> Caller:
+        """The verified caller (the actor and the user it acts for, "" for
+        none), once discovery allows it to open this app (discovery:OpenApp)."""
+        token = headers.get("Nats-Auth-Token", "")
+        key = (token, name)
         now = asyncio.get_running_loop().time()
-        cached = self._authorized.get((token, name))
+        cached = self._authorized.get(key)
         if cached is not None and now < cached[0]:
             return cached[1]
         # A page loads many files at once with one token: one discovery call.
-        key = (token, name)
         pending = self._authorizing.get(key)
         if pending is None:
             pending = asyncio.ensure_future(self._ask_discovery(name, token))
@@ -487,7 +501,8 @@ class AppHost:
         if not future.cancelled():
             future.exception()  # retrieved: every waiter may have left
 
-    async def _ask_discovery(self, name: str, token: str) -> str:
+    async def _ask_discovery(self, name: str, token: str) -> Caller:
+        key = (token, name)
         now = asyncio.get_running_loop().time()
         response = await self.session.client._call(
             "authorize_app",
@@ -499,6 +514,12 @@ class AppHost:
             ),
             discovery_pb.AuthorizeAppResponse,
         )
+        caller = Caller(
+            user_id=response.caller_user_id,
+            principal_id=response.caller_principal_id,
+            principal_kind=response.caller_principal_kind,
+            principal_name=response.caller_principal_name,
+        )
         lifetime = min(AUTHORIZATION_SECONDS, _token_expiry(token) - time.time())
         if lifetime > 0:
             if len(self._authorized) >= MAX_AUTHORIZATIONS:
@@ -507,12 +528,10 @@ class AppHost:
                 }
                 while len(self._authorized) >= MAX_AUTHORIZATIONS:
                     del self._authorized[next(iter(self._authorized))]
-            self._authorized[(token, name)] = (now + lifetime, response.caller_identity)
-        return response.caller_identity
+            self._authorized[key] = (now + lifetime, caller)
+        return caller
 
-    async def _answer(
-        self, name: str, request: pb.HttpRequest, caller: str = ""
-    ) -> _Answer:
+    async def _answer(self, name: str, request: pb.HttpRequest) -> _Answer:
         descriptor, asgi = self.apps[name]
         if len(request.body) > MAX_INLINE_REQUEST_BODY:
             return _text(413, "Request too large")
@@ -520,8 +539,8 @@ class AppHost:
             return _text(413, "Request body too large")
         if not request.path.startswith("/"):
             raise RPCError("INVALID_ARGUMENT", "App path must start with /")
-        if request.body_follows and not is_inbox(request.body_inbox):
-            raise RPCError("INVALID_ARGUMENT", "A body inbox must be an inbox subject")
+        if request.body_follows and not request.body_inbox.startswith("_INBOX."):
+            raise RPCError("INVALID_ARGUMENT", "A body inbox must be an _INBOX subject")
         method = request.method.upper()
         if method in ("GET", "HEAD") and descriptor.root is not None:
             found = await self._static(descriptor, request)
@@ -531,7 +550,7 @@ class AppHost:
             return _text(404, "Not found")
         if len(self._streams) >= MAX_STREAMS:
             raise RPCError("MODULE_UNAVAILABLE", "Too many requests in progress")
-        return await self._asgi(asgi, request, caller, descriptor)
+        return await self._asgi(asgi, request, descriptor)
 
     # -- static files ---------------------------------------------------------
 
@@ -612,10 +631,9 @@ class AppHost:
         self,
         app: ASGIApp,
         request: pb.HttpRequest,
-        caller: str = "",
         descriptor: AppDescriptor | None = None,
     ) -> _Answer:
-        call = _AsgiCall(self, app, request, caller, descriptor)
+        call = _AsgiCall(self, app, request, descriptor)
         call.task = asyncio.create_task(call.run())
         self._keep(call.task)
         try:
@@ -637,11 +655,9 @@ class _AsgiCall:
         host: AppHost,
         app: ASGIApp,
         request: pb.HttpRequest,
-        caller: str = "",
         descriptor: AppDescriptor | None = None,
     ) -> None:
         self.host, self.app, self.request = host, app, request
-        self.caller = caller
         self.descriptor = descriptor or AppDescriptor(request.app or "app")
         self.headers_in = _asgi_headers(request)
         loop = asyncio.get_running_loop()
@@ -743,13 +759,22 @@ class _AsgiCall:
             "server": None,
             # A shallow copy of what the app's lifespan stored, as servers pass it.
             "state": dict(self.host._states.get(self.descriptor.name, {})),
-            # Who asked: the user and the workspace they opened the app from,
-            # as Nexus vouches for them (empty when another caller calls the
-            # app), and the caller's service identity.
+            # Who asked, as discovery verified it: request.scope["abi"]["user_id"]
+            # and request.scope["abi"]["principal"]; the container the user
+            # opened the app from, the container its calls are made in (its
+            # name, empty without a verified user), and the Nexus workspace id
+            # of earlier hosts, kept for the apps that read it.
             "abi": {
                 "user_id": request.user_id,
+                "container": request.context.container,
                 "workspace_id": request.workspace_id,
-                "caller": self.caller,
+                # The actor, as discovery verified it: who holds the credential,
+                # which a service may have used to act for the user above.
+                "principal": {
+                    "id": request.principal_id,
+                    "kind": request.principal_kind,
+                    "name": request.principal_name,
+                },
             },
         }
 

@@ -83,16 +83,7 @@ def test_workspace_store_limits_dataset_to_values_graph_clause():
 
     g1 = "http://ontology.example/graph/a"
     g2 = "http://ontology.example/graph/b"
-    scope = GraphAccessScope.resolve(
-        "ws-1",
-        __import__(
-            "naas_abi.apps.nexus.graph_policy_config",
-            fromlist=["WorkspaceGraphPolicyConfig"],
-        ).WorkspaceGraphPolicyConfig(read_all=True),
-        owned=set(),
-        role="owner",
-        catalog={g1, g2},
-    )
+    scope = GraphAccessScope("ws-1", frozenset({g1, g2}), frozenset())
 
     class CaptureStore:
         def __init__(self):
@@ -131,16 +122,7 @@ def test_workspace_store_unions_values_graph_clauses_for_cross_graph_queries():
 
     g1 = "http://ontology.example/graph/data"
     g2 = "http://ontology.example/graph/links"
-    scope = GraphAccessScope.resolve(
-        "ws-1",
-        __import__(
-            "naas_abi.apps.nexus.graph_policy_config",
-            fromlist=["WorkspaceGraphPolicyConfig"],
-        ).WorkspaceGraphPolicyConfig(read_all=True),
-        owned=set(),
-        role="owner",
-        catalog={g1, g2},
-    )
+    scope = GraphAccessScope("ws-1", frozenset({g1, g2}), frozenset())
 
     class CaptureStore:
         def __init__(self):

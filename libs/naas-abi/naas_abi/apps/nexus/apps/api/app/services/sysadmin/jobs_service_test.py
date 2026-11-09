@@ -460,14 +460,16 @@ def test_plain_jobs_and_workflows_without_a_schema_are_not_validated():
     assert validator.seen == []
 
 
-def test_an_api_key_start_is_audited_without_a_user():
+def test_a_personal_key_start_is_audited_for_its_user():
     audit = InMemoryAuditLog()
 
-    run(_flows(audit=audit).trigger("", "acme.flows", "ingest", {"filter": "news"}, via="api_key"))
+    run(
+        _flows(audit=audit).trigger("u1", "acme.flows", "ingest", {"filter": "news"}, via="api_key")
+    )
 
     assert [(r.action.actor_id, r.action.via, r.phase) for r in audit.records] == [
-        ("", "api_key", "requested"),
-        ("", "api_key", "succeeded"),
+        ("u1", "api_key", "requested"),
+        ("u1", "api_key", "succeeded"),
     ]
     assert audit.records[0].action.resource_id == "acme.flows/ingest"
 
@@ -489,7 +491,7 @@ def test_workflow_only_cancel_leaves_plain_job_runs_alone():
 
     with pytest.raises(RunNotFound):
         run(service.cancel("u1", "acme.jobs", "sync:9", workflow_only=True))
-    run(service.cancel("", "acme.flows", "ingest:6", via="api_key", workflow_only=True))
+    run(service.cancel("u1", "acme.flows", "ingest:6", via="api_key", workflow_only=True))
 
     assert control.cancelled == [("acme.flows", "ingest", "ingest:6")]
     assert [(r.action.via, r.phase) for r in audit.records] == [

@@ -374,11 +374,13 @@ def test_get_status_maps_404_and_invalid_uuid_to_not_found() -> None:
 
 def test_ensure_user_returns_existing() -> None:
     session = FakeSession(
-        [("GET", "/users/alice", FakeResponse(200, {"id": "user-1"}))]
+        [("GET", "/users/alice", FakeResponse(200, {"id": "user-1", "email": "a@b.c"}))]
     )
     adapter = _adapter(session)
     assert (
-        adapter.ensure_user(external_id="x", email="a@b.c", username="alice")
+        adapter.ensure_user(
+            external_id="x", email="a@b.c", username="alice", vouched_email=True
+        )
         == "user-1"
     )
 
@@ -405,22 +407,84 @@ def test_ensure_user_activates_dormant_on_create() -> None:
 def test_ensure_user_activates_existing_dormant() -> None:
     session = FakeSession(
         [
-            ("GET", "/users/alice", FakeResponse(200, {"id": "user-1", "status": "dormant"})),
+            (
+                "GET",
+                "/users/alice",
+                FakeResponse(200, {"id": "user-1", "status": "dormant", "email": "a@b.c"}),
+            ),
             ("PUT", "/users/user-1/status/activate", FakeResponse(200, {})),
         ]
     )
     adapter = _adapter(session)
-    assert adapter.ensure_user(external_id="x", email="a@b.c", username="alice") == "user-1"
+    assert (
+        adapter.ensure_user(
+            external_id="x", email="a@b.c", username="alice", vouched_email=True
+        )
+        == "user-1"
+    )
     assert session.find("PUT", "/status/activate") is not None
 
 
 def test_ensure_user_skips_activate_when_active() -> None:
     session = FakeSession(
-        [("GET", "/users/alice", FakeResponse(200, {"id": "user-1", "status": "active"}))]
+        [
+            (
+                "GET",
+                "/users/alice",
+                FakeResponse(200, {"id": "user-1", "status": "active", "email": "a@b.c"}),
+            )
+        ]
     )
     adapter = _adapter(session)
-    assert adapter.ensure_user(external_id="x", email="a@b.c", username="alice") == "user-1"
+    assert (
+        adapter.ensure_user(
+            external_id="x", email="a@b.c", username="alice", vouched_email=True
+        )
+        == "user-1"
+    )
     assert session.find("PUT", "/status/activate") is None
+
+
+@pytest.mark.parametrize(
+    "user, email, vouched",
+    [
+        ({"email": "a@b.c"}, "a@b.c", False),  # nobody vouches for the email
+        ({"email": "bob@b.c"}, "a@b.c", True),  # someone else's user
+        ({"email": "a@b.c", "roles": [{"name": "owner"}]}, "a@b.c", True),
+        ({"email": "a@b.c", "roles": ["user-admin"]}, "a@b.c", True),
+    ],
+)
+def test_an_existing_user_is_never_handed_to_whoever_asks_first(
+    user, email, vouched
+) -> None:
+    """Regression: a display name chosen to match someone else's Coder username
+    (or an administrator's) must not make their environments the caller's."""
+    session = FakeSession(
+        [("GET", "/users/alice", FakeResponse(200, {"id": "user-1", **user}))]
+    )
+    adapter = _adapter(session)
+    with pytest.raises(AccessDeniedError):
+        adapter.ensure_user(
+            external_id="usr-m", email=email, username="alice", vouched_email=vouched
+        )
+    assert adapter.find_user(external_id="usr-m") is None
+
+
+def test_a_user_bound_to_one_principal_is_never_bound_to_another() -> None:
+    session = FakeSession(
+        [("GET", "/users/alice", FakeResponse(200, {"id": "user-1", "email": "a@b.c"}))]
+    )
+    adapter = _adapter(session)
+    adapter.ensure_user(
+        external_id="usr-a", email="a@b.c", username="alice", vouched_email=True
+    )
+    assert adapter.ensure_user(external_id="usr-a", email="x", username="alice") == (
+        "user-1"
+    )
+    with pytest.raises(AccessDeniedError):
+        adapter.ensure_user(
+            external_id="usr-m", email="a@b.c", username="alice", vouched_email=True
+        )
 
 
 def test_get_access_builds_redemption_url() -> None:

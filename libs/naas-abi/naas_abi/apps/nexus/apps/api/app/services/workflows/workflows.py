@@ -1,4 +1,4 @@
-"""Workflows as a script or a super admin sees them: list, start, follow, cancel.
+"""Workflows as a platform admin or their scripts see them: list, start, follow, cancel.
 
 A workflow is a job with ``kind="workflow"`` (sysadmin ``jobs.py``): a typed input
 and output and a journal of steps. This domain is the thin use-case layer over the
@@ -26,10 +26,11 @@ MAX_IDEMPOTENCY_KEY = 200
 
 @dataclass(frozen=True)
 class Caller:
-    """Who starts or cancels: a Nexus user, or the ABI API key (no user id)."""
+    """Who starts or cancels: a Nexus user, and how they signed in (a session,
+    or their personal API key, ``abi_pk_``)."""
 
     via: Literal["user", "api_key"]
-    user_id: str = ""
+    user_id: str
 
 
 class InvalidIdempotencyKey(ValueError):

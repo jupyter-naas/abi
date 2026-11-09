@@ -376,7 +376,7 @@ class JobsAdminService:
         idempotency_key: str | None = None,
         workflow_only: bool = False,
     ) -> str:
-        """Start a run. ``actor_id`` is a user id, empty for ``via="api_key"``. A
+        """Start a run. ``actor_id`` is the user; ``via`` how they signed in. A
         workflow's payload is checked against its input schema first (InvalidInput,
         nothing audited, nothing sent); ``workflow_only`` refuses a plain job."""
         definition = (
@@ -392,7 +392,7 @@ class JobsAdminService:
             if issues:
                 raise InvalidInput(issues)
         control = self._controller()
-        action = AdminAction(actor_id, "jobs", "trigger", f"{module_id}/{job}", via)
+        action = AdminAction(actor_id, "jobs", "trigger", f"{module_id}/{job}", via=via)
         return await run_audited(
             self._audit,
             action,
@@ -414,7 +414,7 @@ class JobsAdminService:
         if found.status not in ACTIVE_STATUSES:
             raise RunNotCancellable(run_id, found.status)
         control = self._controller()
-        action = AdminAction(actor_id, "jobs", "cancel", f"{module_id}/{run_id}", via)
+        action = AdminAction(actor_id, "jobs", "cancel", f"{module_id}/{run_id}", via=via)
         await run_audited(self._audit, action, lambda: control.cancel(module_id, found.job, run_id))
 
 

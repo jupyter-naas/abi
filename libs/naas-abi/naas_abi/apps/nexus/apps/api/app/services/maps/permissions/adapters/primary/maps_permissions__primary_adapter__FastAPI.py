@@ -1,8 +1,8 @@
 """HTTP routes for Maps availability, mounted under ``/api/maps/permissions``.
 
 Settings → Maps → Access: which workspaces may use each deployment layer /
-basemap (seeds) and each custom one this workspace owns. Reading needs a
-workspace owner or admin; changing follows ``permissions/service.py``
+basemap (seeds) and each custom one this workspace owns. Reading is for the
+workspace's administrators (``GetMapsAccess``); changing follows ``permissions/service.py``
 (deployment items and "every workspace" need a platform superadmin; custom
 items only touch workspaces the actor administers).
 """
@@ -14,8 +14,9 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user_required
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
-    require_workspace_admin,
+    is_platform_admin,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import guard
 from naas_abi.apps.nexus.apps.api.app.services.maps.basemaps.adapters.primary.maps_basemaps__primary_adapter__FastAPI import (  # noqa: E501
     get_maps_basemap_service,
 )
@@ -139,7 +140,7 @@ async def _items(
     return items
 
 
-@router.get("")
+@router.get("", dependencies=[guard("GetMapsAccess")])
 async def list_permissions(
     request: Request,
     response: Response,
@@ -150,9 +151,8 @@ async def list_permissions(
     access: MapsAccess = Depends(get_maps_access),
     directory: WorkspaceDirectoryPort = Depends(get_workspace_directory),
 ) -> dict[str, Any]:
-    await require_workspace_admin(current_user.id, workspace_id)
     response.headers["Cache-Control"] = "no-store"
-    superadmin = bool(getattr(current_user, "is_superadmin", False))
+    superadmin = await is_platform_admin(current_user.id)
     items = await _items(request, workspace_id, layouts, basemaps, superadmin)
     policies = {
         KIND_LAYOUT: await access.policy(KIND_LAYOUT),
@@ -169,7 +169,7 @@ async def list_permissions(
     }
 
 
-@router.put("/{kind}/{item_id}")
+@router.put("/{kind}/{item_id}", dependencies=[guard("UpdateMapsAccess")])
 async def update_permission(
     kind: Literal["layout", "basemap"],
     item_id: str,
@@ -182,8 +182,7 @@ async def update_permission(
     access: MapsAccess = Depends(get_maps_access),
     directory: WorkspaceDirectoryPort = Depends(get_workspace_directory),
 ) -> dict[str, Any]:
-    await require_workspace_admin(current_user.id, workspace_id)
-    superadmin = bool(getattr(current_user, "is_superadmin", False))
+    superadmin = await is_platform_admin(current_user.id)
     items = await _items(request, workspace_id, layouts, basemaps, superadmin)
     item = next((i for i in items if i["kind"] == kind and i["item_id"] == item_id), None)
     if item is None:

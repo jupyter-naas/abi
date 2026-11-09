@@ -172,26 +172,19 @@ class ExplorerProjectionTest(unittest.TestCase):
         self.assertTrue(first["has_more"])
         self.assertTrue(second["has_more"])
         self.assertFalse(last["has_more"])
-        keys = [
-            (p["items"][0]["graph_uri"], p["items"][0]["uri"])
-            for p in (first, second, last)
-        ]
+        keys = [(p["items"][0]["graph_uri"], p["items"][0]["uri"]) for p in (first, second, last)]
         self.assertEqual(len(set(keys)), 3)
 
     def test_instance_counts_and_source_graph(self) -> None:
         alice = next(
-            i
-            for i in self.page()["items"]
-            if i["uri"] == str(ALICE) and i["graph_uri"] == G1
+            i for i in self.page()["items"] if i["uri"] == str(ALICE) and i["graph_uri"] == G1
         )
         self.assertEqual(alice["properties_count"], 1)
         self.assertEqual(alice["domain_relations_count"], 1)
         self.assertEqual(alice["range_relations_count"], 0)
 
     def test_class_multiselect_is_union(self) -> None:
-        self.assertEqual(
-            len(self.page(classes=[str(PERSON), str(EMPLOYEE)])["items"]), 3
-        )
+        self.assertEqual(len(self.page(classes=[str(PERSON), str(EMPLOYEE)])["items"]), 3)
         self.assertEqual(len(self.page(classes=[str(EMPLOYEE)])["items"]), 1)
 
     def test_unavailable_class_does_not_widen(self) -> None:
@@ -227,15 +220,11 @@ class ExplorerProjectionTest(unittest.TestCase):
         self.g2.add((ALICE, URIRef("urn:secret"), URIRef("urn:Hidden")))
         data = network(self.store, [G1], [str(EMPLOYEE)], "", 0, 50, SCHEMA)
         self.assertEqual([item["uri"] for item in data["items"]], [str(ALICE)])
-        self.assertEqual(
-            {item["uri"] for item in data["neighbors"]}, {str(CAROL), str(car)}
-        )
+        self.assertEqual({item["uri"] for item in data["neighbors"]}, {str(CAROL), str(car)})
         self.assertEqual({row["graph_uri"] for row in data["relations"]}, {G1})
         self.assertNotIn("urn:secret", [row["predicate"] for row in data["relations"]])
         self.assertEqual(
-            next(
-                item["label"] for item in data["neighbors"] if item["uri"] == str(car)
-            ),
+            next(item["label"] for item in data["neighbors"] if item["uri"] == str(car)),
             "Car one",
         )
 
@@ -312,9 +301,7 @@ class ExplorerProjectionTest(unittest.TestCase):
         self.assertIsNone(k["labeled_instances"])
         self.assertEqual(k["instances"], 3)
         self.assertEqual(k["triples"], len(self.g1) + len(self.g2))
-        self.assertEqual(
-            data["unavailable"], ["labeled_instances", "literal_values", "relations"]
-        )
+        self.assertEqual(data["unavailable"], ["labeled_instances", "literal_values", "relations"])
         self.assertIsNone(data["graph_metrics"][0]["relations"])
 
     def test_consolidation_uses_supplied_snapshots_concurrently(self) -> None:
@@ -325,8 +312,12 @@ class ExplorerProjectionTest(unittest.TestCase):
             return graph_snapshot(store, uri)
 
         data = overview(
-            self.store, self.packs, [G1, G2, EMPTY], SCHEMA,
-            snapshot=snapshot, max_workers=3,
+            self.store,
+            self.packs,
+            [G1, G2, EMPTY],
+            SCHEMA,
+            snapshot=snapshot,
+            max_workers=3,
         )
         self.assertEqual(sorted(calls), [EMPTY, G1, G2])
         self.assertEqual([g["uri"] for g in data["graph_metrics"]], [G1, G2, EMPTY])
@@ -433,7 +424,10 @@ class ExplorerProjectionTest(unittest.TestCase):
                 return dataset.query(query)
 
         data = catalog(
-            RecordingStore(), self.packs, [G1, G2], SCHEMA,
+            RecordingStore(),
+            self.packs,
+            [G1, G2],
+            SCHEMA,
             class_counts={str(PERSON): 3, str(EMPLOYEE): 1},
         )
         self.assertFalse(any("COUNT(DISTINCT ?s)" in q for q in queries))
@@ -475,9 +469,7 @@ class ExplorerEndpointTest(unittest.IsolatedAsyncioTestCase):
 
         config = SimpleNamespace(
             configuration=SimpleNamespace(
-                nexus_config=SimpleNamespace(
-                    ontology_base_uri="http://ontology.naas.ai/nexus/"
-                )
+                nexus_config=SimpleNamespace(ontology_base_uri="http://ontology.naas.ai/nexus/")
             )
         )
         with patch.object(ABIModule, "get_instance", return_value=config):
@@ -496,9 +488,7 @@ class ExplorerEndpointTest(unittest.IsolatedAsyncioTestCase):
         service: Any = SimpleNamespace(
             explorer_catalog=AsyncMock(side_effect=GraphAccessError("denied"))
         )
-        with patch.object(
-            api, "workspace_graph_service", AsyncMock(side_effect=HTTPException(403))
-        ):
+        with patch.object(api, "graph_section_service", AsyncMock(side_effect=HTTPException(403))):
             with self.assertRaises(HTTPException):
                 await api.explorer_catalog(
                     api.ExplorerRequest(workspace_id="ws"),
@@ -506,9 +496,7 @@ class ExplorerEndpointTest(unittest.IsolatedAsyncioTestCase):
                     service,
                 )
         service.explorer_catalog.assert_not_called()
-        with patch.object(
-            api, "workspace_graph_service", AsyncMock(return_value=service)
-        ):
+        with patch.object(api, "graph_section_service", AsyncMock(return_value=service)):
             with self.assertRaises(HTTPException) as caught:
                 await api.explorer_catalog(
                     api.ExplorerRequest(workspace_id="ws", graph_uris=["urn:hidden"]),
@@ -524,9 +512,7 @@ class ExplorerEndpointTest(unittest.IsolatedAsyncioTestCase):
         )
 
         service: Any = SimpleNamespace(explorer_overview=AsyncMock())
-        with patch.object(
-            api, "workspace_graph_service", AsyncMock(side_effect=HTTPException(403))
-        ):
+        with patch.object(api, "graph_section_service", AsyncMock(side_effect=HTTPException(403))):
             with self.assertRaises(HTTPException):
                 await api.explorer_overview(
                     api.ExplorerRequest(workspace_id="ws"),
@@ -542,9 +528,7 @@ class ExplorerEndpointTest(unittest.IsolatedAsyncioTestCase):
         )
 
         service: Any = SimpleNamespace(explorer_instances=AsyncMock())
-        with patch.object(
-            api, "workspace_graph_service", AsyncMock(side_effect=HTTPException(403))
-        ):
+        with patch.object(api, "graph_section_service", AsyncMock(side_effect=HTTPException(403))):
             with self.assertRaises(HTTPException):
                 await api.explorer_instances(
                     api.ExplorerInstancesRequest(workspace_id="ws"),
@@ -562,9 +546,7 @@ class ExplorerEndpointTest(unittest.IsolatedAsyncioTestCase):
         service: Any = SimpleNamespace(
             explorer_network=AsyncMock(side_effect=GraphAccessError("denied"))
         )
-        with patch.object(
-            api, "workspace_graph_service", AsyncMock(side_effect=HTTPException(403))
-        ):
+        with patch.object(api, "graph_section_service", AsyncMock(side_effect=HTTPException(403))):
             with self.assertRaises(HTTPException):
                 await api.explorer_network(
                     api.ExplorerInstancesRequest(workspace_id="ws"),
@@ -572,14 +554,10 @@ class ExplorerEndpointTest(unittest.IsolatedAsyncioTestCase):
                     service,
                 )
         service.explorer_network.assert_not_called()
-        with patch.object(
-            api, "workspace_graph_service", AsyncMock(return_value=service)
-        ):
+        with patch.object(api, "graph_section_service", AsyncMock(return_value=service)):
             with self.assertRaises(HTTPException) as caught:
                 await api.explorer_network(
-                    api.ExplorerInstancesRequest(
-                        workspace_id="ws", graph_uris=["urn:hidden"]
-                    ),
+                    api.ExplorerInstancesRequest(workspace_id="ws", graph_uris=["urn:hidden"]),
                     cast(Any, SimpleNamespace(id="user")),
                     service,
                 )
@@ -598,9 +576,7 @@ class ExplorerEndpointTest(unittest.IsolatedAsyncioTestCase):
         service: Any = SimpleNamespace(
             explorer_overview=AsyncMock(side_effect=GraphAccessError("unavailable"))
         )
-        with patch.object(
-            api, "workspace_graph_service", AsyncMock(return_value=service)
-        ):
+        with patch.object(api, "graph_section_service", AsyncMock(return_value=service)):
             with self.assertRaises(HTTPException) as caught:
                 await api.explorer_overview(
                     api.ExplorerRequest(workspace_id="ws"),

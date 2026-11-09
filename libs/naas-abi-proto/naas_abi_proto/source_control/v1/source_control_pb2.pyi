@@ -317,6 +317,28 @@ class EnsureRepoResponse(_message.Message):
     error: _common_pb2.CallError
     def __init__(self, repo: _Optional[_Union[Repo, _Mapping]] = ..., error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ...) -> None: ...
 
+class CreateRepoRequest(_message.Message):
+    __slots__ = ("context", "owner", "name", "private", "auto_init")
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    OWNER_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    PRIVATE_FIELD_NUMBER: _ClassVar[int]
+    AUTO_INIT_FIELD_NUMBER: _ClassVar[int]
+    context: _common_pb2.CallContext
+    owner: str
+    name: str
+    private: bool
+    auto_init: bool
+    def __init__(self, context: _Optional[_Union[_common_pb2.CallContext, _Mapping]] = ..., owner: _Optional[str] = ..., name: _Optional[str] = ..., private: bool = ..., auto_init: bool = ...) -> None: ...
+
+class CreateRepoResponse(_message.Message):
+    __slots__ = ("repo", "error")
+    REPO_FIELD_NUMBER: _ClassVar[int]
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    repo: Repo
+    error: _common_pb2.CallError
+    def __init__(self, repo: _Optional[_Union[Repo, _Mapping]] = ..., error: _Optional[_Union[_common_pb2.CallError, _Mapping]] = ...) -> None: ...
+
 class ListReposRequest(_message.Message):
     __slots__ = ("context",)
     CONTEXT_FIELD_NUMBER: _ClassVar[int]

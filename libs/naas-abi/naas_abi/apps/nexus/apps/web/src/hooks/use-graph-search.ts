@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { authFetch, useAuthStore } from '@/stores/auth';
+import { authFetch, hasSession, useAuthStore } from '@/stores/auth';
 import { getApiUrl } from '@/lib/config';
 
 export interface GraphSearchHit {
@@ -11,7 +11,7 @@ export interface GraphSearchHit {
 /** Search objects directly; cancel and hide old results when the user or scope changes. */
 export function useGraphSearch(workspaceId: string, graphs: string[], classes: string[], query: string) {
   const userId = useAuthStore(s => s.user?.id);
-  const signedIn = useAuthStore(s => Boolean(s.token));
+  const signedIn = useAuthStore(s => hasSession(s));
   const params = new URLSearchParams({ workspace_id: workspaceId, q: query.trim(), limit: '30' });
   graphs.forEach(uri => params.append('graph_uri', uri));
   classes.forEach(uri => params.append('class_uri', uri));

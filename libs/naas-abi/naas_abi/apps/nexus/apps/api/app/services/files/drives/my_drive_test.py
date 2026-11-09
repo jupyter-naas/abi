@@ -52,7 +52,6 @@ def _user(user_id: str = "user-1") -> UserModel:
         id=user_id,
         email=f"{user_id}@example.com",
         name="Ada",
-        hashed_password="x",
         created_at=T0,
         updated_at=T0,
     )

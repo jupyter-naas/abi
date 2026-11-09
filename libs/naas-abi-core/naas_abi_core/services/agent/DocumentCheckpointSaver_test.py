@@ -17,6 +17,7 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.checkpoint.base import ERROR
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.types import Command
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.agent.DocumentCheckpointSaver import (
     ENGINE_MEMORY_ID,
     ENGINE_MEMORY_NAMESPACE,
@@ -65,7 +66,7 @@ class InProcessTransport:
     def __init__(
         self, root: DocumentService, max_payload: int = 8 * 1024 * 1024
     ) -> None:
-        self.server = DocumentPrimaryAdapterNATS(root, "s" * 32)
+        self.server = DocumentPrimaryAdapterNATS(root, TEST_TOKENS.verifier)
         self.max_payload = max_payload
         self.largest = 0
         self.page_bytes: int | None = None  # the engine's find budget, if any

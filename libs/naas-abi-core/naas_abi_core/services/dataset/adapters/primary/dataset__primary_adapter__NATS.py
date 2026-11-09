@@ -5,9 +5,8 @@ Exposes a real ``IDatasetPort`` as a NATS micro-service (see
 ``naas_abi_core/proto/README.md`` for why it lives there). This is the
 server side; the matching client is ``DatasetSecondaryAdapterNATSClient``.
 
-Stage 1 auth model (see ``naas_abi_core.engine.nats_auth``): one shared
-secret, one claim -- which known first-party process holds the token. Every
-incoming request must carry a valid token in the ``Nats-Auth-Token`` header
+Auth (see ``naas_abi_core.engine.nats_auth``): every incoming request
+must carry an engine token, verified against the JWKS, in the ``Nats-Auth-Token`` header
 (``AUTH_HEADER``, imported from ``dataset_nats_contract`` below -- that's a
 neutral module neither adapter owns, so this file and the client's don't
 depend on each other; see that module's docstring for why).
@@ -26,13 +25,11 @@ import nats
 import nats.micro
 from google.protobuf.message import DecodeError, Message
 from naas_abi_core import logger
-from naas_abi_core.engine.nats_auth import (
-    InvalidServiceTokenError,
-    verify_service_token,
-)
+from naas_abi_core.engine.nats_auth import TokenVerifier
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import (
     RequestPayloadError,
+    authenticate_request,
     request_payload,
     respond_protobuf,
 )
@@ -66,6 +63,7 @@ from naas_abi_core.services.dataset.DatasetPort import (
     DatasetAlreadyExistsError,
     DatasetInfo,
     DatasetNotFoundError,
+    DatasetRequestRefused,
     DatasetSchemaError,
     DatasetSnapshotConflictError,
     DatasetSnapshotInfo,
@@ -77,7 +75,13 @@ from naas_abi_core.services.dataset.DatasetPort import (
     WriteMode,
 )
 from naas_abi_core.services.dataset.DatasetService import DatasetService
+from naas_abi_core.services.iam.enforcement import authorization_error_code
+from naas_abi_core.services.iam.IAMPorts import (
+    PermissionDeniedError,
+    ResourceNotFoundError,
+)
 from nats.micro.request import Request
+from pydantic import ValidationError
 
 __all__ = [
     "AUTH_HEADER",
@@ -179,6 +183,11 @@ def _dataset_snapshot_info_to_pb(
     return pb
 
 
+# What a caller may be told about a request it got wrong: the service's own
+# refusals and the validation of a spec (pydantic's). Any other ``ValueError``
+# comes from a backend (DuckDB, pyarrow) and may name paths or connections.
+REFUSALS = (DatasetRequestRefused, ValidationError)
+
 # The port's exceptions, sent to callers as typed ``DatasetError``s.
 DOMAIN_ERRORS = (
     DatasetNotFoundError,
@@ -186,6 +195,10 @@ DOMAIN_ERRORS = (
     DatasetSnapshotNotFoundError,
     DatasetSnapshotConflictError,
     DatasetSchemaError,
+    # The caller's authorization outcome, and a request it refuses.
+    PermissionDeniedError,
+    ResourceNotFoundError,
+    *REFUSALS,
 )
 
 
@@ -213,16 +226,16 @@ class DatasetPrimaryAdapterNATS(ServiceWithTransfers):
     def __init__(
         self,
         adapter: IDatasetPort | DatasetService,
-        jwt_secret: str,
+        verifier: TokenVerifier,
     ) -> None:
         self._adapter = adapter
-        self._jwt_secret = jwt_secret
+        self._verifier = verifier
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
         self._service: TracedService | None = None
-        # Streamed reads (docs/adr/20261003_nats-streamed-results.md).
+        # Streamed reads.
         self._transfer = TransferHost(
             TRANSFER_PREFIX,
-            jwt_secret,
+            verifier,
             self._transfer_frames,
             operations=("query", "write"),
             chunk_bytes=1024 * 1024,
@@ -357,6 +370,8 @@ class DatasetPrimaryAdapterNATS(ServiceWithTransfers):
 
     @staticmethod
     def _transfer_error(exc: Exception) -> tuple[str, str] | None:
+        if isinstance(exc, REFUSALS):
+            return "INVALID_ARGUMENT", str(exc)
         if isinstance(exc, DatasetSchemaError):
             return "DATASET_SCHEMA_ERROR", str(exc)
         if isinstance(exc, DatasetSnapshotNotFoundError):
@@ -376,14 +391,8 @@ class DatasetPrimaryAdapterNATS(ServiceWithTransfers):
         response_cls: Callable[..., _ResponseT],
         call: Callable[[_RequestT], _ResponseT],
     ) -> None:
-        if not self._is_authenticated(request):
-            await self._respond_error(
-                request,
-                response_cls,
-                self._error(
-                    "UNAUTHENTICATED", "missing or invalid auth token", retryable=False
-                ),
-            )
+        caller = await authenticate_request(request, self._verifier, response_cls)
+        if caller is None:
             return
 
         parsed_request = request_cls()
@@ -412,7 +421,7 @@ class DatasetPrimaryAdapterNATS(ServiceWithTransfers):
             # ONE connection (nats_runtime), so run the call on a worker thread:
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
-            response = await self._dispatch.call(call, parsed_request)
+            response = await self._dispatch.call(call, parsed_request, caller)
         except DOMAIN_ERRORS as exc:
             await self._respond_error(request, response_cls, self._domain_error(exc))
             return
@@ -429,20 +438,14 @@ class DatasetPrimaryAdapterNATS(ServiceWithTransfers):
 
         await respond_protobuf(request, response, response_cls)
 
-    def _is_authenticated(self, request: Request) -> bool:
-        headers = request.headers or {}
-        token = headers.get(AUTH_HEADER)
-        if not token:
-            return False
-        try:
-            verify_service_token(token, self._jwt_secret)
-        except InvalidServiceTokenError:
-            return False
-        return True
-
     @classmethod
     def _domain_error(cls, exc: Exception) -> dataset_pb2.DatasetError:
         """The wire error for one of the port's exceptions (``DOMAIN_ERRORS``)."""
+        authorization = authorization_error_code(exc)
+        if authorization is not None:
+            return cls._error(authorization, str(exc), retryable=False)
+        if isinstance(exc, REFUSALS):
+            return cls._error("INVALID_ARGUMENT", str(exc), retryable=False)
         if isinstance(exc, DatasetNotFoundError):
             return cls._error(
                 "DATASET_NOT_FOUND",

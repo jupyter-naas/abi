@@ -32,8 +32,18 @@ class CodeServerComposeAdapter(ICodingEnvironmentAdapter):
     def __init__(self, *, url: str) -> None:
         self._url = url.rstrip("/") + "/"
 
-    def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
+    def ensure_user(
+        self,
+        *,
+        external_id: str,
+        email: str,
+        username: str,
+        vouched_email: bool = False,
+    ) -> str:
         # No per-user identity in the shared-container model; echo the caller's id.
+        return external_id
+
+    def find_user(self, *, external_id: str) -> str | None:
         return external_id
 
     def list_templates(self) -> list[WorkspaceTemplate]:

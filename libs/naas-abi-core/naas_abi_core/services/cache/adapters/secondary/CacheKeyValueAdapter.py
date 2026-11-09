@@ -11,18 +11,22 @@ from naas_abi_core.services.cache.CachePort import (
     check_page_limit,
     paginate_keys,
 )
+from naas_abi_core.services.iam.enforcement import own_storage
 from naas_abi_core.services.keyvalue.KeyValuePorts import (
     MAX_KEYS_PER_PAGE,
     KVNotFoundError,
 )
+from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 
 _DIGEST = re.compile(r"[0-9a-f]{64}")
-from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 
 
 class CacheKeyValueAdapter(ICacheAdapter):
     def __init__(self, keyvalue: KeyValueService, prefix: str = "cache") -> None:
         self.keyvalue = keyvalue
+        # The cache's own entries: stored as the engine, the caller was
+        # authorized on the cache key.
+        self._storage = own_storage(keyvalue)
         self.prefix = prefix
 
     def _key(self, key: str) -> str:
@@ -30,24 +34,24 @@ class CacheKeyValueAdapter(ICacheAdapter):
 
     def get(self, key: str) -> CachedData:
         try:
-            return CachedData.model_validate_json(self.keyvalue.get(self._key(key)))
+            return CachedData.model_validate_json(self._storage.get(self._key(key)))
         except KVNotFoundError as exc:
             raise CacheNotFoundError(key) from exc
 
     def set(self, key: str, value: CachedData) -> None:
-        self.keyvalue.set(self._key(key), value.model_dump_json().encode())
+        self._storage.set(self._key(key), value.model_dump_json().encode())
 
     def set_if_absent(self, key: str, value: CachedData) -> bool:
-        return self.keyvalue.set_if_not_exists(
+        return self._storage.set_if_not_exists(
             self._key(key), value.model_dump_json().encode()
         )
 
     def exists(self, key: str) -> bool:
-        return self.keyvalue.exists(self._key(key))
+        return self._storage.exists(self._key(key))
 
     def delete(self, key: str) -> None:
         try:
-            self.keyvalue.delete(self._key(key))
+            self._storage.delete(self._key(key))
         except KVNotFoundError as exc:
             raise CacheNotFoundError(key) from exc
 
@@ -60,7 +64,7 @@ class CacheKeyValueAdapter(ICacheAdapter):
         keys: list[str] = []
         cursor: str | None = None
         while True:
-            page = self.keyvalue.list_keys(
+            page = self._storage.list_keys(
                 storage_prefix, limit=MAX_KEYS_PER_PAGE, after=cursor
             )
             for stored in page.keys:
@@ -68,7 +72,7 @@ class CacheKeyValueAdapter(ICacheAdapter):
                     continue
                 try:
                     keys.append(
-                        CachedData.model_validate_json(self.keyvalue.get(stored)).key
+                        CachedData.model_validate_json(self._storage.get(stored)).key
                     )
                 except KVNotFoundError:
                     continue  # deleted while listing

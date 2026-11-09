@@ -1,6 +1,6 @@
 """The engine ownership lease: who serves the kernel services on a NATS account.
 
-See docs/adr/20261006_single-serving-engine.md.
+See ``AGENTS.md`` here, "Decisions".
 """
 
 from __future__ import annotations

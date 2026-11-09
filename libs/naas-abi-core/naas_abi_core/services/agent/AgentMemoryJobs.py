@@ -2,7 +2,7 @@
 
 Not a module: ``Engine.job_owners`` hosts these jobs under
 ``AGENT_MEMORY_JOBS_OWNER`` in NATS mode, when the Document Service backs the
-agent checkpointer (docs/adr/20261002_engine-agent-memory-in-documents.md).
+agent checkpointer.
 Handlers are sync and run in a worker thread.
 
 - ``agent_memory_migrate`` has no trigger. An admin runs it from the Nexus System

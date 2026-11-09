@@ -2,6 +2,7 @@ import asyncio
 import threading
 
 import pytest
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.engine.nats_transfer import (
     TransferError,
     TransferHost,
@@ -54,6 +55,49 @@ def test_sequences_caller_capacity_and_upload_budgets():
         assert host.buffered_upload_bytes == 0
 
     asyncio.run(scenario())
+
+
+def test_a_session_belongs_to_its_actor_and_the_user_it_acts_for():
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        current_call_context,
+        service_account,
+        user,
+    )
+
+    seen: list[CallContext] = []
+
+    async def handler(*args):
+        seen.append(current_call_context())
+        yield b"frame"
+
+    ada = CallContext(principal=service_account("api"), on_behalf_of=user("usr-ada"))
+    bob = CallContext(principal=service_account("api"), on_behalf_of=user("usr-bob"))
+    api = CallContext(principal=service_account("api"))
+
+    async def scenario():
+        host = TransferHost("test", "secret", handler, operations=("get",))
+        opened = await host._execute(
+            "open", pb.OpenRequest(operation="get"), "api", None, ada
+        )
+        for other in (bob, api):
+            with pytest.raises(TransferError, match="another caller"):
+                await host._execute(
+                    "start", pb.StartRequest(id=opened.id), "api", None, other
+                )
+        await host._execute("start", pb.StartRequest(id=opened.id), "api", None, ada)
+        await host.sessions[opened.id].task
+        with pytest.raises(TransferError, match="another caller"):
+            await host._execute("read", pb.ReadRequest(id=opened.id), "api", None, bob)
+        read = await host._execute(
+            "read", pb.ReadRequest(id=opened.id), "api", None, ada
+        )
+        await host.stop()
+        return read
+
+    read = asyncio.run(scenario())
+    assert read.data == b"frame"
+    assert seen == [ada]  # the handler ran as the opener, user included
 
 
 def test_stuck_backend_does_not_block_expiry_or_stop_and_keeps_file_open():
@@ -142,7 +186,7 @@ def test_producer_failure_is_logged_without_a_followup_read(monkeypatch):
     asyncio.run(scenario())
 
 
-SECRET = "transfer-unit-test-secret-at-least-32-bytes"
+SECRET = TEST_TOKENS.verifier
 PREFIX = "abi.svc.object_storage.v1.transfer"
 
 
@@ -180,7 +224,7 @@ class _Caller:
         msg = SimpleNamespace(
             data=request.SerializeToString(),
             headers=self.headers,
-            reply="inbox",
+            reply="_INBOX.reply",
             respond=AsyncMock(),
             _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
         )
@@ -211,9 +255,8 @@ class _Caller:
 
 
 def _headers(caller="api"):
-    from naas_abi_core.engine.nats_auth import issue_service_token
 
-    return {"Nats-Auth-Token": issue_service_token(caller, SECRET)}
+    return {"Nats-Auth-Token": TEST_TOKENS.token(caller)}
 
 
 def test_a_session_span_continues_the_caller_and_parents_the_handler(spans):

@@ -9,10 +9,10 @@ Shared connection, token, timeout, and reply handling live in
 ``naas_abi_core.engine.nats_rpc.NatsRPCClient``. Calls are never replayed
 by the transport after failure; a timeout may hide a completed operation.
 
-Stage 1 auth model (see ``naas_abi_core.engine.nats_auth``): a JWT asserting
-``service_identity`` is issued once and attached on the ``Nats-Auth-Token``
-header of every request, reissued only when it is close to expiry rather
-than on every call. ``EmailPrimaryAdapterNATS`` must read the token from
+Auth (see ``naas_abi_core.engine.nats_auth``): the client's credentials
+(the engine's own tokens, or a service key's) put an ES256 engine token on
+the ``Nats-Auth-Token`` header of every request, renewed at half its
+life. ``EmailPrimaryAdapterNATS`` must read the token from
 that exact header -- both sides read ``AUTH_HEADER`` from
 ``email_nats_contract``, a neutral module neither adapter owns, so this
 file never has to import from the primary adapter's module (or vice versa)
@@ -21,6 +21,7 @@ just to agree on a header name.
 
 from __future__ import annotations
 
+from naas_abi_core.engine.nats_auth import TokenSource
 from naas_abi_core.engine.nats_rpc import NatsRPCClient
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.email.v1 import email_pb2
@@ -36,6 +37,7 @@ from naas_abi_core.services.email.EmailPorts import (
     SentEmailsNotKept,
     SentEmailSummary,
 )
+from naas_abi_core.services.iam.guard import raise_authorization_error
 
 
 def _attachment_to_pb(attachment: EmailAttachment) -> email_pb2.EmailAttachment:
@@ -83,10 +85,12 @@ def _raise_for_error(error: common_pb2.CallError) -> None:
     """Raise the exception matching ``error.code``.
 
     Must stay exactly symmetric with how ``EmailPrimaryAdapterNATS`` encodes
-    errors: ``SENT_EMAILS_NOT_KEPT`` and ``SENT_EMAIL_NOT_FOUND`` map back to
-    their ``EmailPorts`` exceptions; every other failure the server can report
-    -- including its own catch-all -- falls through to ``RuntimeError``.
+    errors: ``PERMISSION_DENIED`` and ``NOT_FOUND`` map back to IAM's errors,
+    ``SENT_EMAILS_NOT_KEPT`` and ``SENT_EMAIL_NOT_FOUND`` to their
+    ``EmailPorts`` exceptions; every other failure the server can report --
+    including its own catch-all -- falls through to ``RuntimeError``.
     """
+    raise_authorization_error(error.code, error.message)
     if error.code == "SENT_EMAILS_NOT_KEPT":
         raise SentEmailsNotKept(error.message)
     if error.code == "SENT_EMAIL_NOT_FOUND":
@@ -100,14 +104,12 @@ class EmailSecondaryAdapterNATSClient(NatsRPCClient, IEmailAdapter):
     def __init__(
         self,
         nats_url: str,
-        jwt_secret: str,
-        service_identity: str,
+        credentials: TokenSource,
         timeout_seconds: float = 10.0,
     ) -> None:
         super().__init__(
             nats_url,
-            jwt_secret,
-            service_identity,
+            credentials,
             timeout_seconds,
             auth_header=AUTH_HEADER,
         )

@@ -104,6 +104,14 @@ class ObjectStorageSecondaryAdapterFS(IObjectStorageAdapter):
                     queue.put(obj)
             return objects
 
+    def folders(self, entries: list[str]) -> set[str]:
+        """Its listings name directories without a trailing ``/``."""
+        return {
+            entry
+            for entry in entries
+            if os.path.isdir(os.path.join(self.base_path, entry))
+        }
+
     def list_objects_recursive(
         self, prefix: str, queue: Queue | None = None
     ) -> list[str]:

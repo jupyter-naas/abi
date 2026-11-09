@@ -26,16 +26,11 @@ import type { FacetBucket } from '@/lib/graph-query/types';
 import { matchesSearch } from '@/app/settings/lib/search';
 import { OTHERS_GROUP } from '@/lib/workspace-picker';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
-import { rowMatchesColumnFilter } from '../users/users-table-filter';
-import { downloadTableExport, type UsersExportFormat } from '../users/users-table-export';
+import { rowMatchesColumnFilter } from '@/components/settings/users-table/users-table-filter';
+import { downloadTableExport, type UsersExportFormat } from '@/components/settings/users-table/users-table-export';
 import { isOrgAdminRole, orgSettingsSectionPath } from '../lib/nav';
-import { featureLabel } from '../lib/feature-labels';
+import { featureLabel } from '@/lib/feature-labels';
 import { BulkEditModal } from './bulk-edit-modal';
-import {
-  WorkspaceFeaturesModal,
-  type OverridesSource,
-  type WorkspaceFeatureCatalog,
-} from './workspace-features-modal';
 import '../components/org-settings-components.css';
 import '../users/users.css';
 import './workspaces.css';
@@ -52,10 +47,8 @@ interface OrgWorkspace {
   workspace_group?: string | null;
   organization_logo_url?: string | null;
   organization_logo_rectangle_url?: string | null;
-  /** Features on for at least one role, after the overrides. */
+  /** The deployment's enabled features, as the API lists them (there is no workspace set). */
   features?: string[];
-  feature_overrides?: Record<string, boolean>;
-  feature_overrides_source?: OverridesSource;
 }
 
 type ColumnId = 'workspace' | 'group' | 'owner' | 'members' | 'features' | 'created';
@@ -125,8 +118,8 @@ function countFacets(values: string[]): FacetBucket[] {
  * Organization Settings > Workspaces: every workspace of the organization in a
  * table (search, sort, filters, export), like Organization Settings > Users.
  * Click a row to open the workspace's settings. Admins can select rows to
- * bulk edit their group, and click a workspace's features to manage its
- * feature overrides.
+ * bulk edit their group. Who uses which module or feature in a workspace is
+ * decided by policies, on Roles & permissions.
  */
 export default function OrganizationWorkspacesPage() {
   const params = useParams();
@@ -150,8 +143,6 @@ export default function OrganizationWorkspacesPage() {
   );
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [featuresWorkspaceId, setFeaturesWorkspaceId] = useState<string | null>(null);
-  const [featureCatalog, setFeatureCatalog] = useState<WorkspaceFeatureCatalog | null>(null);
   const canManage = isOrgAdminRole(viewerRole);
 
   useEffect(() => {
@@ -173,9 +164,6 @@ export default function OrganizationWorkspacesPage() {
         setViewerRole(role);
         if (isOrgAdminRole(role)) {
           void fetchMembers(orgId);
-          void authFetch(`/api/organizations/${orgId}/workspace-features`).then(async (res) => {
-            if (res.ok && !cancelled) setFeatureCatalog(await res.json());
-          });
           const membersRes = await authFetch(`/api/organizations/${orgId}/member-workspaces`);
           if (membersRes.ok && !cancelled) {
             const data: { memberships: { workspace_id: string }[] } = await membersRes.json();
@@ -356,32 +344,6 @@ export default function OrganizationWorkspacesPage() {
     mergeWorkspaces(data.workspaces);
     setSelected(new Set());
     setBulkOpen(false);
-  };
-
-  const featuresWorkspace = workspaces.find((w) => w.id === featuresWorkspaceId) ?? null;
-  const featuresOverrides = useMemo(
-    () => featuresWorkspace?.feature_overrides ?? {},
-    [featuresWorkspace]
-  );
-
-  const saveFeatures = async (overrides: Record<string, boolean> | null) => {
-    if (!featuresWorkspace) return;
-    const res = await authFetch(
-      `/api/organizations/${orgId}/workspaces/${featuresWorkspace.id}/features`,
-      {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ overrides }),
-      }
-    );
-    if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      throw new Error(
-        typeof data?.detail === 'string' ? data.detail : `Failed to save (HTTP ${res.status}).`
-      );
-    }
-    mergeWorkspaces([await res.json()]);
-    setFeaturesWorkspaceId(null);
   };
 
   return (
@@ -632,13 +594,9 @@ export default function OrganizationWorkspacesPage() {
                       <td>{ownerName(workspace)}</td>
                       <td>{cellValues(workspace, 'members')[0]}</td>
                       <td>
-                        <button
-                          type="button"
+                        <span
                           className="org-workspaces-features"
-                          onClick={() => setFeaturesWorkspaceId(workspace.id)}
-                          title={`${features.join(', ') || 'No features'}\n${
-                            canManage ? 'Click to manage feature overrides' : 'Click to show features'
-                          }`}
+                          title={features.join(', ') || 'No features'}
                         >
                           {features.length ? (
                             <>
@@ -656,19 +614,7 @@ export default function OrganizationWorkspacesPage() {
                           ) : (
                             <span className="org-settings-users-email">None</span>
                           )}
-                          {workspace.feature_overrides_source && (
-                            <span
-                              className="org-workspaces-feature-source"
-                              title={
-                                workspace.feature_overrides_source === 'database'
-                                  ? 'Overrides saved in the app'
-                                  : 'Overrides from the deployment config'
-                              }
-                            >
-                              {workspace.feature_overrides_source === 'database' ? 'custom' : 'config'}
-                            </span>
-                          )}
-                        </button>
+                        </span>
                       </td>
                       <td>
                         <span className="org-settings-users-email">
@@ -676,13 +622,15 @@ export default function OrganizationWorkspacesPage() {
                         </span>
                       </td>
                       <td>
-                        <Link
-                          href={`/workspace/${workspace.id}/home`}
-                          className="org-settings-users-secondary-button org-workspaces-open"
-                        >
-                          <ExternalLink size={14} />
-                          Open
-                        </Link>
+                        <div className="org-workspaces-actions">
+                          <Link
+                            href={`/workspace/${workspace.id}/home`}
+                            className="org-settings-users-secondary-button org-workspaces-open"
+                          >
+                            <ExternalLink size={14} />
+                            Open
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -695,7 +643,8 @@ export default function OrganizationWorkspacesPage() {
         <p className="org-settings-footnote">
           Members counts workspace members; org owners and admins reach every workspace anyway.
           Workspaces inherit the organization branding unless they set their own logo. Features
-          lists what at least one role can open; click it to override the role defaults.
+          lists the features the deployment enables; who may use each module and feature in a
+          workspace is decided by policies, on Roles &amp; permissions.
         </p>
 
         <BulkEditModal
@@ -704,16 +653,6 @@ export default function OrganizationWorkspacesPage() {
           groups={existingGroups}
           onClose={() => setBulkOpen(false)}
           onApply={applyBulkEdit}
-        />
-        <WorkspaceFeaturesModal
-          open={featuresWorkspace !== null}
-          workspaceName={featuresWorkspace?.name ?? ''}
-          overrides={featuresOverrides}
-          source={featuresWorkspace?.feature_overrides_source ?? null}
-          catalog={featureCatalog}
-          canEdit={canManage}
-          onClose={() => setFeaturesWorkspaceId(null)}
-          onSave={saveFeatures}
         />
       </div>
     </div>

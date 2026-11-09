@@ -17,6 +17,7 @@ Subscribers do **not** automatically replay history; for catch-up use `query` / 
 event/
 ├── EventPort.py            # IEventAdapter, IEventService, StoredEvent, exceptions
 ├── EventService.py         # main service
+├── iam_catalog.py          # the event:* actions and resource types
 ├── EventFactory.py         # EventSQLite_find_storage
 ├── EventCodec.py           # to_event_dict / serialize / from_event_dict / deserialize
 ├── EventFilter.py          # build_where (SQL pushdown) + matches (in-memory eval)
@@ -28,6 +29,7 @@ event/
 │   ├── EventPostgreSQLAdapter.py    # shared by every engine
 │   └── EventPostgreSQLArchive.py    # hourly job: events older than 7 days -> Dataset Service
 ├── tests/event__secondary_adapter__generic_test.py   # contracts: every adapter, every store
+├── tests/event_authorization_test.py   # IAM: in process and over NATS
 └── ontologies/
     ├── modules/EventOntology.{ttl,py}    # RDFEntity, Process, LogProcess (canonical bases)
     └── classes/                          # auto-generated event classes
@@ -81,12 +83,75 @@ subscribe(event_class, callback, filter=None) -> Thread
 # Raw access by type IRI (admin views, tools without the event classes):
 event_types() -> list[EventTypeSummary]
 query_stored(event_type=None, since_seq=None, until_seq=None, limit=None,
-             newest_first=False, search=None) -> list[StoredEvent]
+             newest_first=False, search=None, *, since_timestamp=None,
+             until_timestamp=None, filter=None) -> list[StoredEvent]
 get_stored(seq) -> StoredEvent          # EventNotFoundError if absent
+
+# Stored-level operations a remote EventService asks of this log (the NATS
+# endpoints). None broadcasts: the remote publisher already did.
+append_stored(event_id, event_type, timestamp, payload) -> StoredEvent
+max_seq(event_type=None) -> int
+get_cursor(consumer_id, event_type) -> int
+set_cursor(consumer_id, event_type, last_seq) -> None
+query_stored_for_consumer(consumer_id, event_type, limit=None, filter=None)
 ```
+
+`publish` stamps `actor_user_id`, `actor_container` and `triggered_via` from
+the call's `CallContext` (`engine/call_context.py`): the call's user, the
+container the call is made in (its name, `CallContext.container`) and how it
+started, unless the event sets its own. Events recorded before container paths
+keep their `actor_workspace_id`: the field stays on `LogProcess` so they still
+read, and nothing writes it. `context.py`'s `event_actor_user_id`,
+`event_actor_container` and `event_triggered_via` (and
+`agent_user_id`/`agent_container`, the same objects) are views of that
+context with a ContextVar-like `get`/`set`/`reset`; setting the user sets
+`on_behalf_of`. There is no second source of identity.
 
 The Nexus System app (Data tab) browses the log read-only through these: event
 types as folders, events newest first. The log is append-only by design.
+
+## Authorization
+
+`EventService` checks every operation with IAM when it is wired with it (an
+owner); a facade over NATS is not, and the owner it calls checks, as the
+request's verified caller. The catalog is `iam_catalog.py`, registered at boot;
+the cross-cutting guard is described in
+[`services/iam/AGENTS.md`](../iam/AGENTS.md) ("Enforcing in a domain service").
+
+Resource types: `event_type/<class IRI>` (opaque id, placed by prefix) and
+`cursor/<consumer>/<event type>` (path id, placed). Levels: `ListEventTypes`
+list; `Query`, `QueryStream`, `MaxSeq`, `QueryForConsumer`, `GetCursor` read;
+`Append`, `SetCursor` write. The NATS subject of an action is the operation
+under `abi.svc.event.v1.` (`query`, `max_seq`, `append`, ...); a streamed read
+uses the `transfer.*` subjects.
+
+| Operation | Action | Resource |
+|---|---|---|
+| `publish`, `append_stored` | `event:Append` | `event_type/<class IRI>` |
+| `query`, `query_stored`, `iter_query`, `get_stored`, `subscribe` | `event:Query` | the type; with no type, only the types the caller may Query |
+| `query_stream`, `query_stored_stream` | `event:QueryStream` | as `Query` |
+| `max_seq(type)` | `event:MaxSeq` | the type |
+| `max_seq()` | `event:MaxSeq` | the newest seq of the types the caller may ask, 0 for none |
+| `event_types()` | `event:ListEventTypes` | each type listed |
+| `get_cursor`, `set_cursor` | `event:GetCursor`, `event:SetCursor` | `cursor/<consumer>/<type>` |
+| `query_for_consumer`, `query_stored_for_consumer`, `iter_query_for_consumer` | `event:QueryForConsumer` | the type and the cursor |
+| `seek_consumer_to_end` | `GetCursor`, `SetCursor`, `MaxSeq` | the cursor, the type |
+
+- A type is placed by prefix (`iam:PutPlacement`); unplaced, it is platform-level.
+- A caller who cannot see a type gets `EventNotFoundError` (`EVENT_NOT_FOUND`),
+  as if it held no events; one who can see it but not perform the action gets
+  `PermissionDeniedError` (`PERMISSION_DENIED`). `get_stored` of an invisible
+  type's row and of a missing seq fail the same way.
+- A read with no type filters per type (an "all" call is filtered per item). `limit` applies after
+  filtering; a type first appended after the types were listed is left out.
+- `subscribe` is checked once, when subscribing; live events are not checked one
+  by one.
+- Over NATS, a streamed read first pins its snapshot with `max_seq`, so it also
+  needs `MaxSeq` (every role grants both).
+- `emit(event)` is how a kernel service records its own audit event: stamped
+  with the call's user, appended as the engine (the caller was authorized for
+  the operation, not for the log), never raising. Kernel services emit through
+  it, never through `publish`.
 
 ## Filter DSL
 
@@ -110,8 +175,7 @@ EventBridge-style: `eq`, `prefix`, `suffix`, `contains`, `in`, `gt`, `gte`, `lt`
 
 `EventPostgreSQLAdapter` filter semantics follow SQLite's, with two deliberate
 differences: numeric ranges ignore values that are not numbers, and LIKE
-wildcards in prefix, suffix and contains match literally. Decision:
-`docs/adr/20261006_shared-event-and-activity-log-storage.md`.
+wildcards in prefix, suffix and contains match literally.
 
 ### Archive (`EventPostgreSQLArchive.py`)
 
@@ -128,7 +192,7 @@ from service adapters. Each run:
    are deleted.
 
 Idle consumers are logged and left behind. Archived events are read with SQL on
-the dataset. Decision: `docs/adr/20261006_event-log-archive.md`.
+the dataset.
 
 ## Factory (`EventFactory.py`)
 
@@ -146,6 +210,7 @@ EventFactory.EventServicePostgreSQL(dsn, schema="abi_event", bus=None) -> EventS
 
 ```bash
 uv run pytest libs/naas-abi-core/naas_abi_core/services/event/EventService_test.py
+uv run pytest libs/naas-abi-core/naas_abi_core/services/event/tests/event_authorization_test.py --import-mode=importlib
 uv run pytest libs/naas-abi-core/naas_abi_core/services/event/adapters/secondary/EventSQLiteAdapter_test.py
 # PostgreSQL (EVENT_TEST_POSTGRES_DSN), with the activity log on PostgreSQL documents:
 EVENT_TEST_POSTGRES_DSN=... DOCUMENT_TEST_POSTGRES_DSN=... make test-event-core
@@ -176,11 +241,29 @@ search, cursors and type summaries. The SQLite and PostgreSQL adapters run it.
 protobuf endpoints. `adapters/secondary/EventSecondaryAdapterNATSClient.py` implements the outbound
 port. Wire contracts live under `naas_abi_core/proto/event/v1/`.
 
+The wire contract is the durable-log port's (`IEventAdapter`): a remote
+`EventService` serializes, stamps and broadcasts its events on its side and
+only stores them here. The primary still wraps the engine's `EventService` and
+calls its stored-level operations, so every remote call reaches the domain
+service; none of them broadcasts, so each event goes out once. Given a bare
+`IEventAdapter` (tests), it serves it through an `EventService` of its own.
+
+Every primary runs its domain call as the verified caller: it authenticates the
+request with `nats_rpc.authenticate_request` (built on `engine/nats_identity.py`,
+it answers a refusal itself) and hands that `CallContext`
+(`engine/call_context.py`) to its dispatcher. The actor is the
+token's identity; the user it acts for is named by the token itself: a
+delegated token (`abi:delegated:agent`, `act` the acting service, `sub` the user)
+made by IAM's token exchange, never a header (the old `Abi-On-Behalf-Of` header is
+refused); trace and container come from the request's `context`. Never read identity from request fields
+(`principal_id` and `tenant_id` are reserved). Clients of `api` and `engine` send a
+delegation for the current call's user, and the call's trace and container. The domain service then authorizes the call (see "Authorization").
+
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception
 mapping in the adapter. Primaries use `respond_protobuf` for bounded replies.
 Requests and replies above the broker limit (8 MiB, or lower) overflow as
-transfer frames up to 256 MiB (docs/adr/20261003_nats-rpc-overflow.md); above
+transfer frames up to 256 MiB; above
 that, at the overflow host's capacity, or with an older peer, the call fails
 with non-retryable `PAYLOAD_TOO_LARGE`. Micro-service error headers raise
 instead of becoming an empty success. Overflowed values are held whole in
@@ -195,7 +278,7 @@ primary answers non-retryable `INVALID_FILTER`, and the client raises
 ### Streamed queries
 
 `IEventAdapter.query_stream(...)` reads what `query` returns, as the caller
-iterates, inside the `with` (docs/adr/20261003_nats-streamed-results.md). The
+iterates, inside the `with`. The
 highest `seq` (of `event_type` when given) is pinned when the block opens:
 events appended while it is read are not included, so the stream always ends.
 The port's default reads `STREAM_PAGE` (500) events at a time by keyset on

@@ -1,13 +1,14 @@
 """HTTP routes for workspace Maps layouts, mounted under ``/api/maps/layouts``.
 
-Reading (list, get, feed) needs workspace access; creating, editing,
-deleting, hiding, recoloring and previewing layouts needs a workspace owner or
-admin. Every SPARQL query runs through the workspace-scoped graph store,
-narrowed to the layout's graphs, so a layout only ever reads what the
-workspace may read. Feed layers (``feed_type=geojson_url``) are fetched by the
-web proxy at ``/api/maps/custom/{id}``, which reads the record from here.
-Stored feeds (``object_storage``) are served by ``/api/maps/feed-layers/{id}/data``;
-their logo by ``/{id}/logo`` here.
+Reading (list, get, feed) is for everybody who sees the workspace's maps;
+creating, editing, deleting, hiding, recoloring and previewing layouts is for
+its admins (the IAM actions of the ``layout`` type say so). Every SPARQL query
+runs through the workspace-scoped graph store, narrowed to the layout's graphs,
+so a layout only ever reads what the caller may read. Feed layers
+(``feed_type=geojson_url``) are fetched by the web proxy at
+``/api/maps/custom/{id}``, which reads the record from here. Stored feeds
+(``object_storage``) are served by ``/api/maps/feed-layers/{id}/data``; their
+logo by ``/{id}/logo`` here.
 """
 
 from __future__ import annotations
@@ -20,9 +21,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user_required
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
     get_current_user_released,
-    get_workspace_role,
-    require_workspace_access,
-    require_workspace_admin,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.access import GraphAccessScope
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
@@ -34,6 +32,8 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.query.adapters.secondary.gr
     GraphQueryTripleStoreAdapter,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.port import IGraphQueryStore
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
 from naas_abi.apps.nexus.apps.api.app.services.maps.adapters.primary.objects import (
     get_maps_cache,
     get_maps_objects,
@@ -76,6 +76,7 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.settings.adapters.secondary.
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.storage_keys import image_content_type
 from naas_abi.apps.nexus.apps.api.app.services.maps.workspace_config import WorkspaceMapsDefaults
+from naas_abi.apps.nexus.apps.api.app.services.view_as.active import viewing
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
@@ -161,7 +162,9 @@ async def _scoped_store(
     )
     from naas_abi.apps.nexus.apps.api.app.services.registry import ServiceRegistry
 
-    graph = await workspace_graph_service(ServiceRegistry.instance().graph, user_id, workspace_id)
+    graph = await workspace_graph_service(
+        ServiceRegistry.instance().graph, user_id, workspace_id, feature=None
+    )
     assert graph.access_scope is not None
     scope = _layout_scope(graph.access_scope, graphs)
     return GraphQueryTripleStoreAdapter(WorkspaceGraphStore(graph._get_catalog_store(), scope))
@@ -205,7 +208,7 @@ def _layout(layout_id: str, body: LayoutIn) -> MapsLayout:
     )
 
 
-@router.get("")
+@router.get("", dependencies=[guard("ListLayouts", literal="-")])
 async def list_layouts(
     request: Request,
     response: Response,
@@ -214,7 +217,6 @@ async def list_layouts(
     service: MapsLayoutService = Depends(get_maps_layout_service),
     defaults: WorkspaceMapsDefaults = Depends(maps_workspace_defaults),
 ) -> dict[str, Any]:
-    await require_workspace_access(current_user.id, workspace_id)
     response.headers["Cache-Control"] = "no-store"
     listed = await service.list(
         workspace_id,
@@ -222,24 +224,27 @@ async def list_layouts(
         revisions=layout_seed_revisions(request),
         enabled_feeds=defaults.feeds,
         extra_feed_ids=graph_feed_ids(request),
+        seed=not viewing(),  # a page load writes nothing in a view
     )
-    role = await get_workspace_role(current_user.id, workspace_id)
+    can_edit = await authz.allowed(
+        "UpdateLayout", user=current_user, workspace=workspace_id, id="-"
+    )
     return {
         "layouts": [layout.to_dict() for layout in listed.layouts],
         "hidden": sorted(listed.hidden),
         "colors": listed.colors,
-        "can_edit": role in ("owner", "admin"),
+        "can_edit": can_edit,
     }
 
 
-@router.post("/preview")
+@router.post("/preview", dependencies=[declares("PreviewLayout"), declares("triple_store:Query")])
 async def preview_layout(
     body: PreviewIn,
     current_user=Depends(get_current_user_required),
     service: MapsLayoutService = Depends(get_maps_layout_service),
 ) -> dict[str, Any]:
     """Run an unsaved layout: its validation errors, or its pin count and first pins."""
-    await require_workspace_admin(current_user.id, body.workspace_id)
+    await authz.require("PreviewLayout", user=current_user, workspace=body.workspace_id, id="-")
     layout = _layout("preview", body)
     errors = service.validate(layout)
     if errors:
@@ -257,7 +262,10 @@ async def preview_layout(
     }
 
 
-@router.post("/feed-visibility")
+@router.post(
+    "/feed-visibility",
+    dependencies=[guard("SetLayoutVisibility", literal="-")],
+)
 async def set_feeds_visibility(
     body: FeedsVisibilityIn,
     workspace_id: str = Query(..., min_length=1),
@@ -265,7 +273,6 @@ async def set_feeds_visibility(
     service: MapsLayoutService = Depends(get_maps_layout_service),
 ) -> dict[str, Any]:
     """Switch several feeds off or on at once (Settings → Maps bulk action)."""
-    await require_workspace_admin(current_user.id, workspace_id)
     try:
         hidden = await service.set_feeds_hidden(
             workspace_id, body.ids, body.hidden, user_id=current_user.id
@@ -275,7 +282,10 @@ async def set_feeds_visibility(
     return {"hidden_feeds": sorted(hidden)}
 
 
-@router.get("/{layout_id}/logo")
+@router.get(
+    "/{layout_id}/logo",
+    dependencies=[declares("GetLayout")],
+)
 async def layout_logo(
     layout_id: str,
     request: Request,
@@ -286,12 +296,9 @@ async def layout_logo(
     cache: MapsCache = Depends(get_maps_cache),
 ) -> Response:
     """The feed's logo, read from object storage at the key its record names."""
-
-    await cache.member(
-        current_user.id,
-        workspace_id,
-        lambda: require_workspace_access(current_user.id, workspace_id),
-    )
+    # Decided by IAM at every request (in process, no database connection held);
+    # only what the layout resolves to is cached.
+    await authz.require("GetLayout", user=current_user, workspace=workspace_id, id=layout_id)
 
     async def resolve() -> dict[str, str]:
         return {"logo_path": (await service.get(workspace_id, layout_id)).logo_path}
@@ -321,7 +328,10 @@ async def layout_logo(
     return Response(content=content, media_type=content_type, headers=headers)
 
 
-@router.get("/{layout_id}/feed")
+@router.get(
+    "/{layout_id}/feed",
+    dependencies=[guard("GetLayout", id="layout_id"), declares("triple_store:Query")],
+)
 async def layout_feed(
     layout_id: str,
     response: Response,
@@ -329,7 +339,6 @@ async def layout_feed(
     current_user=Depends(get_current_user_required),
     service: MapsLayoutService = Depends(get_maps_layout_service),
 ) -> dict[str, Any]:
-    await require_workspace_access(current_user.id, workspace_id)
     response.headers["Cache-Control"] = "no-store"
     try:
         layout = await service.get(workspace_id, layout_id)
@@ -339,7 +348,10 @@ async def layout_feed(
         raise _http_error(exc) from exc
 
 
-@router.get("/{layout_id}")
+@router.get(
+    "/{layout_id}",
+    dependencies=[guard("GetLayout", id="layout_id")],
+)
 async def get_layout(
     layout_id: str,
     response: Response,
@@ -348,7 +360,6 @@ async def get_layout(
     service: MapsLayoutService = Depends(get_maps_layout_service),
 ) -> dict[str, Any]:
     """One layer record (the web feed proxy reads ``feed_url`` from here)."""
-    await require_workspace_access(current_user.id, workspace_id)
     response.headers["Cache-Control"] = "no-store"
     try:
         return (await service.get(workspace_id, layout_id)).to_dict()
@@ -356,7 +367,10 @@ async def get_layout(
         raise _http_error(exc) from exc
 
 
-@router.put("/{layout_id}/color")
+@router.put(
+    "/{layout_id}/color",
+    dependencies=[guard("UpdateLayout", id="layout_id")],
+)
 async def set_layout_color(
     layout_id: str,
     body: ColorIn,
@@ -365,7 +379,6 @@ async def set_layout_color(
     service: MapsLayoutService = Depends(get_maps_layout_service),
 ) -> dict[str, Any]:
     """Default pin / group-by-country color of any layer; null resets a built-in."""
-    await require_workspace_admin(current_user.id, workspace_id)
     try:
         colors = await service.set_color(
             workspace_id, layout_id, body.color, user_id=current_user.id
@@ -375,7 +388,10 @@ async def set_layout_color(
     return {"colors": colors}
 
 
-@router.put("/{layout_id}/visibility")
+@router.put(
+    "/{layout_id}/visibility",
+    dependencies=[guard("SetLayoutVisibility", id="layout_id")],
+)
 async def set_layout_visibility(
     layout_id: str,
     body: VisibilityIn,
@@ -384,7 +400,6 @@ async def set_layout_visibility(
     service: MapsLayoutService = Depends(get_maps_layout_service),
 ) -> dict[str, Any]:
     """Hide or show any layout (built-in or custom) in this workspace."""
-    await require_workspace_admin(current_user.id, workspace_id)
     try:
         hidden = await service.set_hidden(
             workspace_id, layout_id, body.hidden, user_id=current_user.id
@@ -394,7 +409,10 @@ async def set_layout_visibility(
     return {"hidden": sorted(hidden)}
 
 
-@router.put("/{layout_id}/feed-visibility")
+@router.put(
+    "/{layout_id}/feed-visibility",
+    dependencies=[guard("SetLayoutVisibility", id="layout_id")],
+)
 async def set_feed_visibility(
     layout_id: str,
     body: VisibilityIn,
@@ -403,7 +421,6 @@ async def set_feed_visibility(
     service: MapsLayoutService = Depends(get_maps_layout_service),
 ) -> dict[str, Any]:
     """Switch a whole feed (every layer drawn from it) off or on in this workspace."""
-    await require_workspace_admin(current_user.id, workspace_id)
     try:
         hidden = await service.set_feed_hidden(
             workspace_id, layout_id, body.hidden, user_id=current_user.id
@@ -413,7 +430,7 @@ async def set_feed_visibility(
     return {"hidden_feeds": sorted(hidden)}
 
 
-@router.put("/{layout_id}")
+@router.put("/{layout_id}", dependencies=[guard("UpdateLayout", id="layout_id")])
 async def save_layout(
     layout_id: str,
     body: LayoutIn,
@@ -422,7 +439,6 @@ async def save_layout(
     current_user=Depends(get_current_user_required),
     service: MapsLayoutService = Depends(get_maps_layout_service),
 ) -> dict[str, Any]:
-    await require_workspace_admin(current_user.id, workspace_id)
     try:
         saved = await service.save(
             workspace_id,
@@ -435,7 +451,7 @@ async def save_layout(
     return saved.to_dict()
 
 
-@router.delete("/{layout_id}")
+@router.delete("/{layout_id}", dependencies=[guard("DeleteLayout", id="layout_id")])
 async def delete_layout(
     layout_id: str,
     workspace_id: str = Query(..., min_length=1),
@@ -443,7 +459,6 @@ async def delete_layout(
     layers: MapsFeedLayerService = Depends(get_maps_feed_layer_service),
 ) -> dict[str, str]:
     """Delete a feed and every layer on it."""
-    await require_workspace_admin(current_user.id, workspace_id)
     try:
         await layers.delete_feed(workspace_id, layout_id)
     except Exception as exc:

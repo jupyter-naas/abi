@@ -15,6 +15,8 @@ vector_store/
 ├── IVectorStorePort.py
 ├── VectorStoreService.py
 ├── VectorStoreFactory.py
+├── iam_catalog.py                  # IAM action catalog
+├── VectorStoreService_authorization_test.py  # authorization contract
 ├── adapters/
 │   ├── QdrantAdapter.py
 │   ├── QdrantInMemoryAdapter.py
@@ -100,6 +102,54 @@ VectorStoreFactory.get_service() -> VectorStoreService    # singleton
 VectorStoreFactory.reset()                                # clear singleton
 ```
 
+## Authorization
+
+Every operation is checked in the domain service against IAM
+(`ResourceGuard`, see "Enforcing in a data service" in
+[`../iam/AGENTS.md`](../iam/AGENTS.md)),
+for the caller of the current `CallContext`, so in process and over NATS answer
+the same. The catalog is `iam_catalog.py`, registered by the serving engine at
+boot. A caller who cannot see a resource gets `CollectionNotFoundError` (`COLLECTION_NOT_FOUND`; `get_document` returns None); one who can see it but not
+act gets `PermissionDeniedError` (`PERMISSION_DENIED`). A service not wired into
+an engine with IAM (a library use, a NATS facade whose server checks) does not
+check. The contract test is `VectorStoreService_authorization_test.py`: no policy, granted and denied
+principals, in process and over NATS.
+
+Resource types: `collection/<name>` (`path`, placed container),
+`vector/<collection>/<id>` (`path`) and `service/-` (singleton, platform).
+
+| Action | Level | Resource | Subject (`abi.svc.vector_store.v1.`) |
+|---|---|---|---|
+| `ListCollections` | list | each `collection/<name>` | `list_collections` |
+| `GetCollectionInfo` | read | `collection/<name>` | `get_collection_info` |
+| `CreateCollection` | write | `collection/<name>` (creates) | `create_collection` |
+| `DeleteCollection` | admin | `collection/<name>` | `delete_collection` |
+| `ListVectors` | list | each `vector/<c>/<id>`; the collection is checked first | `list_vectors` |
+| `ListVectorsStream` | list | as `ListVectors` | transfer subjects, operation `list_vectors` |
+| `Search` | read | `collection/<name>` (hits are not item-filtered) | `search` |
+| `CountVectors` | read | `collection/<name>` | `count_vectors` |
+| `GetVector` | read | `vector/<c>/<id>` | `get_vector` |
+| `StoreVectors` | write | `vector/<c>/<id>` for each document | `store_vectors` |
+| `UpdateVector` | write | `vector/<c>/<id>` | `update_vector` |
+| `DeleteVectors` | write | `vector/<c>/<id>` for each id | `delete_vectors` |
+| `Initialize` | admin | `service/-` | `initialize` |
+| `Close` | admin | `service/-` | `close` |
+
+* A new collection is placed in the container of the call, or on the
+  platform (the create rule of "Enforcing in a data service" in
+  [`../iam/AGENTS.md`](../iam/AGENTS.md)); the placement is dropped with the
+  collection. A call naming several vectors (`StoreVectors`, `DeleteVectors`)
+  needs the action on each, checked with one filter; one denial fails the whole
+  call.
+* `list_vectors` and the stream first need the collection to be visible, then
+  keep the vectors the caller may list: a page can be shorter than `limit`
+  while `next_cursor` continues.
+* `search` and `count` are checked once, on the collection: hits are not
+  filtered per item. A Deny on one vector id still lets a search return it
+  while `get_vector` refuses it: Deny the collection to hide it.
+* `initialize` of a store not yet initialized and `close` are administration
+  of `service/-`.
+
 ## Tests
 
 ```bash
@@ -133,11 +183,22 @@ protobuf endpoints, one per port method (`list_vectors` and `get_collection_info
 included). `adapters/secondary/VectorStoreSecondaryAdapterNATSClient.py` implements the outbound
 port. Wire contracts live under `naas_abi_core/proto/vector_store/v1/`.
 
+Every primary runs its domain call as the verified caller: it authenticates the
+request with `nats_rpc.authenticate_request` (built on `engine/nats_identity.py`,
+it answers a refusal itself) and hands that `CallContext`
+(`engine/call_context.py`) to its dispatcher. The actor is the
+token's identity; the user it acts for is named by the token itself: a
+delegated token (`abi:delegated:agent`, `act` the acting service, `sub` the user)
+made by IAM's token exchange, never a header (the old `Abi-On-Behalf-Of` header is
+refused); trace and container come from the request's `context`. Never read identity from request fields
+(`principal_id` and `tenant_id` are reserved). Clients of `api` and `engine` send a
+delegation for the current call's user, and the call's trace and container. The domain service authorizes the call on that context (see "Authorization").
+
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception
 mapping in the adapter. Primaries use `respond_protobuf` for bounded replies.
 Requests and replies above the broker limit (8 MiB, or lower) overflow as
-transfer frames up to 256 MiB (docs/adr/20261003_nats-rpc-overflow.md); above
+transfer frames up to 256 MiB (`naas_abi_core/engine/nats_rpc.py`); above
 that, at the overflow host's capacity, or with an older peer, the call fails
 with non-retryable `PAYLOAD_TOO_LARGE`. Micro-service error headers raise
 instead of becoming an empty success. Overflowed values are held whole in
@@ -169,6 +230,12 @@ Run the colocated NATS tests with `--import-mode=importlib`; shared regressions
 are in `engine/nats_rpc_test.py` and `engine/nats_rpc_integration_test.py`.
 The latter uses a local `nats-server` executable without Docker.
 
-NATS primaries emit mutation audit events through an injected owner-side event
-publisher. Remote VectorStoreService facades must remain unwired for events to
-avoid duplicating them. Failures in audit publication do not fail persistence.
+The NATS primary wraps the engine's `VectorStoreService`, so every remote call
+reaches the domain service through its port-shaped methods (`create_collection`,
+`store_documents`, `search`, `update_vector`, `delete_vectors`, `list_vectors`,
+...). They take the port's arguments as given, so the wire keeps the port's
+contract; the convenience methods (`add_documents`, `search_similar`,
+`update_document`, `delete_documents`, `list_documents`) validate and then call
+them. The service initializes its adapter and emits the mutation audit events,
+once. Remote VectorStoreService facades must remain unwired for events to avoid
+duplicating them. Failures in audit publication do not fail persistence.

@@ -1,0 +1,19 @@
+# The permission scenario (examples/permission_scenario): the repository's
+# config.yaml plus two SDK modules standing in for People Intelligence (P,
+# dev.people: agents Recruiter and Scout, action dev_people:ExportReport) and
+# Market Intelligence (M, dev.market: app prices).
+#   ENV=scenario uv run abi dev up -d
+{% include "config.yaml" %}
+
+dev:
+  modules:
+    - name: people
+      module: scenario_people
+      module_id: dev.people
+      env:
+        PYTHONPATH: "examples/permission_scenario"
+    - name: market
+      module: scenario_market
+      module_id: dev.market
+      env:
+        PYTHONPATH: "examples/permission_scenario"

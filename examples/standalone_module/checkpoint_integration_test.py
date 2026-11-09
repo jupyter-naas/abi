@@ -5,11 +5,11 @@ import sys
 from typing import TypedDict
 
 import pytest
-from naas_abi_core.engine.nats_auth import issue_service_token
 from naas_abi_core.engine.nats_rpc_integration_test import (  # noqa: F401 - pytest fixture
     SECRET,
     broker,
 )
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.document.adapters.secondary.DocumentSecondaryAdapterNATSClient_test import (
     document_host,  # noqa: F401 - pytest fixture
 )
@@ -38,7 +38,7 @@ def test_checkpoint_resume_from_second_process_and_isolation(document_host):  # 
     builder.add_node("approval", approval)
     builder.add_edge(START, "approval")
     builder.add_edge("approval", END)
-    token = issue_service_token("checkpoint-test", SECRET)
+    token = TEST_TOKENS.token("checkpoint-test")
     config = {"configurable": {"thread_id": "conversation"}}
 
     async def scenario():

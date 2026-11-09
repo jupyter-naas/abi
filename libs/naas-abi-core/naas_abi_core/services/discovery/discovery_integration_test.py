@@ -2,11 +2,8 @@ import asyncio
 
 import nats
 import pytest
-from naas_abi_core.engine.nats_auth import (
-    issue_service_token,
-    module_key,
-)
 from naas_abi_core.engine.nats_rpc_integration_test import SECRET, broker  # noqa: F401
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.discovery.discovery_factory import start_discovery
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 
@@ -14,13 +11,6 @@ pytestmark = [
     pytest.mark.integration,
     pytest.mark.parametrize("broker", [8 * 1024 * 1024], indirect=True),
 ]
-
-
-def _module_token(module_id: str):
-    """A module's token: signed with its own key, for its own module id. Calls to other modules get tokens bound to them."""
-    from naas_abi_sdk.service_token import ModuleToken
-
-    return ModuleToken(module_id, module_key(SECRET, module_id))
 
 
 def test_registry_auth_expiry_restart_and_sdk_dependency_runner(broker):  # noqa: F811
@@ -43,7 +33,7 @@ def test_registry_auth_expiry_restart_and_sdk_dependency_runner(broker):  # noqa
         url, _ = broker
         nc = await nats.connect(url)
         primary = await start_discovery(nc, SECRET, lease_seconds=1)
-        transport = Transport(url, issue_service_token("test", SECRET), timeout=0.5)
+        transport = Transport(url, TEST_TOKENS.token("test"), timeout=0.5)
         client = DiscoveryClient(transport)
         provider_started, stop = asyncio.Event(), asyncio.Event()
         provider_task = None
@@ -79,7 +69,7 @@ def test_registry_auth_expiry_restart_and_sdk_dependency_runner(broker):  # noqa
                 run_module(
                     Consumer,
                     url=url,
-                    token=_module_token("consumer"),
+                    token=transport.token,
                     timeout=0.5,
                     discovery=config,
                 )
@@ -90,7 +80,7 @@ def test_registry_auth_expiry_restart_and_sdk_dependency_runner(broker):  # noqa
                 run_module(
                     Provider,
                     url=url,
-                    token=_module_token("research"),
+                    token=transport.token,
                     timeout=0.5,
                     discovery=config,
                 )
@@ -130,11 +120,7 @@ def test_registry_auth_expiry_restart_and_sdk_dependency_runner(broker):  # noqa
                 instance_id="orphan",
                 lease_token="x" * 32,
             )
-            orphan = DiscoveryClient(Transport(url, _module_token("orphan"), timeout=0.5))
-            try:
-                await orphan._call("register", req, pb.RegisterResponse)
-            finally:
-                await orphan.transport.close()
+            await client._call("register", req, pb.RegisterResponse)
             await asyncio.sleep(1.1)
             with pytest.raises(RPCError, match="MODULE_NOT_FOUND"):
                 await client.get_module("orphan")
@@ -160,7 +146,7 @@ def test_two_registry_owners_do_not_duplicate_mutations(broker):  # noqa: F811
         primaries = [await start_discovery(nc, SECRET) for _ in range(2)]
         for primary in primaries:
             primary.service.register = AsyncMock(wraps=primary.service.register)
-        transport = Transport(broker[0], _module_token("replicated"))
+        transport = Transport(broker[0], TEST_TOKENS.token("test"))
         try:
             for _ in range(4):
                 await transport.call(
@@ -192,19 +178,43 @@ def test_two_registry_owners_do_not_duplicate_mutations(broker):  # noqa: F811
 
 
 def test_admins_evict_a_live_instance_which_registers_again(broker):  # noqa: F811
+    """Evicting is discovery:Evict, a policy: api holds it, a module whose
+    policy covers only its own registration does not."""
     discovery = pytest.importorskip("naas_abi_sdk.discovery")
     transport_module = pytest.importorskip("naas_abi_sdk.transport")
+    from naas_abi_core.services.iam.tests.authorization_contract import (
+        contract_iam,
+    )
+    from naas_abi_core.services.iam.tests.iam_harness import IAMHarness, statement
+
+    iam = contract_iam()
+    harness = IAMHarness(iam)
+    research = harness.service_account("research")
+    harness.grant(
+        research.id,
+        statement(
+            "Allow",
+            [
+                "discovery:Register",
+                "discovery:Renew",
+                "discovery:Unregister",
+                "discovery:GetModule",
+                "discovery:ListModules",
+            ],
+            ["abi:discovery:module/evict/research"],
+        ),
+    )
 
     async def scenario():
         url, _ = broker
         nc = await nats.connect(url)
-        primary = await start_discovery(nc, SECRET, project="evict", lease_seconds=2)
+        primary = await start_discovery(
+            nc, SECRET, project="evict", lease_seconds=2, iam=iam
+        )
         module = transport_module.Transport(
-            url, issue_service_token("research", SECRET), timeout=2
+            url, TEST_TOKENS.token("research"), timeout=2
         )
-        admin = transport_module.Transport(
-            url, issue_service_token("api", SECRET), timeout=2
-        )
+        admin = transport_module.Transport(url, TEST_TOKENS.token("api"), timeout=2)
         session = discovery.DiscoverySession(
             discovery.DiscoveryClient(module, "evict"),
             pb.ModuleDescriptor(module_id="research", contract_major=1),
@@ -247,7 +257,7 @@ def test_concurrent_registrations_through_two_owners_all_succeed(broker):  # noq
     async def scenario():
         nc = await nats.connect(broker[0])
         primaries = [await start_discovery(nc, SECRET) for _ in range(2)]
-        transport = Transport(broker[0], _module_token("crowd"))
+        transport = Transport(broker[0], TEST_TOKENS.token("test"))
         try:
             responses = await asyncio.gather(
                 *(

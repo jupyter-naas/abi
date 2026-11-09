@@ -7,7 +7,7 @@ from typing import Any, Literal
 from naas_abi.apps.nexus.apps.api.app.services.providers.model_catalog import (
     list_catalog_providers,
 )
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 
 def _valid_provider_types() -> list[str]:
@@ -86,6 +86,17 @@ class ProviderConfigRequest(BaseModel):
     account_id: str | None = None
     model: str
     llm_model: str | None = None
+    # Set by ``resolve_provider`` from a remote agent's row, never read from a
+    # request: the workspace its run is placed in.
+    _run_workspace_id: str | None = PrivateAttr(default=None)
+
+    @property
+    def run_workspace_id(self) -> str | None:
+        return self._run_workspace_id
+
+    def placed_in(self, workspace_id: str | None) -> ProviderConfigRequest:
+        self._run_workspace_id = workspace_id
+        return self
 
     def model_post_init(self, __context: Any) -> None:
         if self.type not in VALID_PROVIDER_TYPES:

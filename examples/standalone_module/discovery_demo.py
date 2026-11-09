@@ -9,6 +9,9 @@ from pathlib import Path
 
 from naas_abi_sdk import BaseModule, ModuleDependencies, run_module
 from naas_abi_sdk.discovery import AgentDescriptor, DiscoveryConfiguration
+from naas_abi_sdk.listers import Listed, ListerQuery, lister
+from naas_abi_sdk.permissions import default_manifest
+from naas_abi_sdk.services.errors import NotFound, PermissionDenied
 from naas_abi_sdk.transport import RPCError
 
 ROOT = Path(os.environ["DISCOVERY_REPORT_DIR"])
@@ -30,8 +33,23 @@ class ResearchAgent:
         yield {"event": "done", "data": "[DONE]"}
 
 
+# The actions the provider declares: its own catalog, ``demo_research``, sent
+# with its manifest and registered when the manifest is approved.
+BRIEFS = {
+    "resource_types": [
+        {"name": "brief", "id": "path", "description": "A research brief."}
+    ],
+    "actions": [
+        {"name": "ExportBrief", "level": "read", "resource_types": ["brief"]},
+        {"name": "DeleteBrief", "level": "write", "resource_types": ["brief"]},
+    ],
+}
+CONSUMER_DEPENDENCIES = ModuleDependencies(modules=("demo.research",))
+
+
 class Provider(BaseModule):
     module_id = "demo.research"
+    iam_catalog = BRIEFS
     agents = (
         AgentDescriptor(
             "Researcher",
@@ -44,14 +62,54 @@ class Provider(BaseModule):
     async def on_initialized(self):
         self.expose_agent("Researcher", ResearchAgent())
 
+    @lister("brief")
+    async def briefs(self, query: ListerQuery):
+        """Its briefs, for the policy builder: IAM asks over NATS and keeps
+        what the caller may list."""
+        return [
+            Listed(f"abi:demo_research:brief/{name}", name, label=f"Brief {name}")
+            for name in ("q1", "q2", "q3")
+        ]
+
     async def run(self):
+        # Its own actions, for itself: the approval let it act on its catalog.
+        await self.require_action("ExportBrief", "brief", "q3")
         (ROOT / "provider-ready").write_text(str(os.getpid()))
         await asyncio.Event().wait()
 
 
 class Consumer(BaseModule):
     module_id = "demo.consumer"
-    dependencies = ModuleDependencies(modules=("demo.research",))
+    dependencies = CONSUMER_DEPENDENCIES
+    # Granted the provider's ExportBrief, not its DeleteBrief.
+    permissions = {
+        **default_manifest(CONSUMER_DEPENDENCIES),
+        "statements": [
+            *default_manifest(CONSUMER_DEPENDENCIES)["statements"],
+            {
+                "sid": "ExportResearchBriefs",
+                "effect": "Allow",
+                "actions": ["demo_research:ExportBrief"],
+                # Its briefs at the platform and in any container.
+                "resources": [
+                    "abi:demo_research:brief/*",
+                    "abi:*/demo_research:brief/*",
+                ],
+            },
+        ],
+    }
+
+    async def declared_actions(self) -> dict[str, str]:
+        """IAM decides on the provider's declared actions for this module."""
+        iam = self.engine.services.iam
+        found = {}
+        for action in ("ExportBrief", "DeleteBrief"):
+            try:
+                await iam.require_declared(f"demo_research:{action}", "brief", ["q3"])
+                found[action] = "allowed"
+            except (PermissionDenied, NotFound):
+                found[action] = "refused"
+        return found
 
     async def run(self):
         provider = self.engine.modules["demo.research"]
@@ -74,6 +132,16 @@ class Consumer(BaseModule):
         while (await handle.status()).status == "CANCELLING":
             await asyncio.sleep(0.05)
         assert (await handle.status()).status == "CANCELLED"
+        declared = await self.declared_actions()
+        assert declared == {"ExportBrief": "allowed", "DeleteBrief": "refused"}
+        # The provider's lister, asked by IAM over NATS: the briefs this module
+        # may act on (ExportBrief on every brief; the type has no list action).
+        listed = await self.engine.services.iam.list_resources(
+            "demo_research", "brief", text="q"
+        )
+        assert listed["listed"], listed
+        assert [i["id"] for i in listed["items"]] == ["q1", "q2", "q3"], listed
+        assert listed["items"][0]["label"] == "Brief q1"
         (ROOT / "agent-proxy.json").write_text(
             json.dumps(
                 {
@@ -81,6 +149,8 @@ class Consumer(BaseModule):
                     "stream_events": events,
                     "deduplicated": True,
                     "cancelled": True,
+                    "declared_actions": declared,
+                    "listed_briefs": [i["id"] for i in listed["items"]],
                 }
             )
         )
@@ -170,10 +240,12 @@ async def main():
     if len(sys.argv) == 1:
         await orchestrate()
     else:
+        module = Provider if sys.argv[1] == "provider" else Consumer
+        keys = json.loads(Path(os.environ["DEMO_KEYS"]).read_text())
         await run_module(
-            Provider if sys.argv[1] == "provider" else Consumer,
+            module,
             url=os.environ["ABI_NATS_URL"],
-            token=os.environ["ABI_SERVICE_TOKEN"],
+            token=keys[module.module_id],
             timeout=1,
             discovery=DiscoveryConfiguration(startup_timeout=15, refresh_seconds=0.05),
         )

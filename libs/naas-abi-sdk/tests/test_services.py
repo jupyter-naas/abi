@@ -262,7 +262,7 @@ def test_transfer_timeout_never_falls_back_to_unary_write():
     assert client._transport.call.await_count == 1
 
 
-# --- streamed triple store reads (docs/adr/20261003_nats-streamed-results.md)
+# --- streamed triple store reads
 
 
 class StreamTransport:

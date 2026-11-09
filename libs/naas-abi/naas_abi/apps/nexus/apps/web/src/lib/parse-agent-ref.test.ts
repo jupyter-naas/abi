@@ -19,12 +19,10 @@ describe('pickAgentByRef', () => {
   const roster = [
     {
       id: 'apps',
-      enabled: true,
       class_name: 'naas_abi.agents.AppsAgent/AppsAgent',
     },
     {
       id: 'cuas',
-      enabled: true,
       class_name: 'operations.counter_uas.agents.CounterUASAgent/CounterUASAgent',
     },
   ];

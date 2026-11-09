@@ -24,8 +24,7 @@ class ActivityLogService(_GeneratedActivityLogService):
     async def query_stream(
         self, actor_id: str, query: ActivityLogQuery | None = None
     ) -> AsyncIterator[AsyncIterator[ActivityEvent]]:
-        """``query``, read as the caller iterates, inside the block
-        (docs/adr/20261003_nats-streamed-results.md). The snapshot is pinned
+        """``query``, read as the caller iterates, inside the block. The snapshot is pinned
         when the block opens: events recorded while it is read are not
         included. Leaving the block closes the session."""
         newest = await self.query(

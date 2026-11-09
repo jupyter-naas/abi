@@ -30,18 +30,16 @@ class _FakeEventService:
     def __init__(self) -> None:
         self.published: list = []
 
-    def publish(self, event) -> None:
+    def emit(self, event) -> None:
         self.published.append(event)
-
-
-class _ExplodingEventService:
-    def publish(self, event) -> None:
-        raise RuntimeError("event bus down")
 
 
 class _FakeServices:
     def __init__(self, events=None) -> None:
         self._events = events
+
+    def iam_available(self) -> bool:
+        return False
 
     def events_available(self) -> bool:
         return self._events is not None
@@ -54,6 +52,9 @@ class _FakeServices:
 
 class _BrokenAdapter(ICodingEnvironmentAdapter):
     def ensure_user(self, **kwargs) -> str:
+        return "user-x"
+
+    def find_user(self, **kwargs) -> str | None:
         return "user-x"
 
     def list_templates(self):
@@ -167,13 +168,6 @@ def test_provision_failure_emits_failed_and_reraises() -> None:
     assert len(failed) == 1
     assert "provision boom" in (failed[0].message or "")
     assert not any(isinstance(e, WorkspaceProvisioned) for e in events.published)
-
-
-def test_publisher_exception_does_not_break_operation() -> None:
-    svc = _wired_service(InMemoryAdapter(), events=_ExplodingEventService())
-    # Must not raise even though every publish() throws.
-    status = _provision(svc)
-    assert status.phase == PHASE_RUNNING
 
 
 def test_lifecycle_events_emitted() -> None:

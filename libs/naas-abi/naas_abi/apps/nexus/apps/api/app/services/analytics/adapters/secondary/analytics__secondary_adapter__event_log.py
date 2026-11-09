@@ -58,7 +58,9 @@ def _content_key(event: dict[str, Any]) -> str:
     """
     # Without the email: the log copy of a legacy pickle no longer carries it.
     content = {k: v for k, v in event.items() if k != "user_email"}
-    return hashlib.sha256(json.dumps(content, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+    return hashlib.sha256(
+        json.dumps(content, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
 
 
 class AnalyticsSecondaryAdapterEventLog(AnalyticsStoragePort):

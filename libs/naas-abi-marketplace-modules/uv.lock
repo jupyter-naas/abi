@@ -1615,7 +1615,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-proto"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "../naas-abi-proto" }
 dependencies = [
     { name = "protobuf" },
@@ -1632,7 +1632,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-sdk"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "../naas-abi-sdk" }
 dependencies = [
     { name = "naas-abi-proto" },

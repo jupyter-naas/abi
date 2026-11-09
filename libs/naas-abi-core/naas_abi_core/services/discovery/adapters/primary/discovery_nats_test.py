@@ -2,26 +2,26 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_auth import host_audience
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.discovery.adapters.primary.discovery_nats import (
     DiscoveryNATS,
 )
+from naas_abi_core.services.iam.modules import subject_token
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 
-SECRET = "discovery-unit-test-secret-32-bytes"
+SECRET = TEST_TOKENS.verifier
 
 
 def test_authentication_precedes_domain_mutations_and_binds_caller():
     async def scenario():
         service = AsyncMock()
-        primary = DiscoveryNATS(service, SECRET, "test")
+        primary = DiscoveryNATS(service, TEST_TOKENS.verifier, "test")
         service.register.return_value = pb.RegisterResponse()
         msg = SimpleNamespace(
-            data=pb.RegisterRequest(
-                descriptor=pb.ModuleDescriptor(module_id="caller")
-            ).SerializeToString(),
+            data=pb.RegisterRequest().SerializeToString(),
             headers={},
-            reply="reply",
+            reply="_INBOX.reply",
             respond=AsyncMock(),
             _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
         )
@@ -33,60 +33,15 @@ def test_authentication_precedes_domain_mutations_and_binds_caller():
             == "UNAUTHENTICATED"
         )
         service.register.assert_not_awaited()
-        msg.headers = {"Nats-Auth-Token": issue_service_token("caller", SECRET)}
+        msg.headers = {"Nats-Auth-Token": TEST_TOKENS.token("caller")}
         await primary._handle("register", msg)
         assert service.register.call_args.args[1] == "caller"
 
     asyncio.run(scenario())
 
 
-def _register_as(primary, identity, module_id, *, module_token=False):
-    from naas_abi_core.engine.nats_auth import issue_module_token, module_key
-
-    token = (
-        issue_module_token(identity, module_key(SECRET, identity))
-        if module_token
-        else issue_service_token(identity, SECRET)
-    )
-    msg = SimpleNamespace(
-        data=pb.RegisterRequest(
-            descriptor=pb.ModuleDescriptor(module_id=module_id, contract_major=1),
-            instance_id=module_id.replace(".", "-") + "-1",
-            lease_token="t" * 32,
-        ).SerializeToString(),
-        headers={"Nats-Auth-Token": token},
-        reply="reply",
-        respond=AsyncMock(),
-        _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
-    )
-
-    async def send():
-        await primary._handle("register", msg)
-        return pb.RegisterResponse.FromString(msg._client.publish.call_args.args[1])
-
-    return send()
-
-
-def test_a_module_registers_only_under_its_own_identity():
-    """Another module cannot claim a module id, and so its app routes (A7)."""
-    from naas_abi_core.services.discovery.discovery_service import DiscoveryService
-    from naas_abi_core.services.discovery.discovery_service_test import MemoryRegistry
-
-    async def scenario():
-        primary = DiscoveryNATS(DiscoveryService(MemoryRegistry()), SECRET, "test")
-        refused = await _register_as(primary, "acme.intruder", "acme.research", module_token=True)
-        assert refused.error.code == "PERMISSION_DENIED"
-        assert "acme.intruder" in refused.error.message
-        # First-party identities do not register modules either.
-        assert (await _register_as(primary, "api", "acme.research")).error.code == "PERMISSION_DENIED"
-        accepted = await _register_as(primary, "acme.research", "acme.research", module_token=True)
-        assert accepted.error.code == ""
-        assert accepted.instance.descriptor.module_id == "acme.research"
-
-    asyncio.run(scenario())
-
-
-def test_evict_is_an_authenticated_admin_mutation():
+def test_evict_is_an_authenticated_mutation_decided_by_iam():
+    from naas_abi_core.engine.call_context import as_service_account
     from naas_abi_core.services.discovery.adapters.primary.discovery_nats import (
         OPERATIONS,
     )
@@ -95,17 +50,25 @@ def test_evict_is_an_authenticated_admin_mutation():
         MemoryRegistry,
         registration,
     )
+    from naas_abi_core.services.iam.tests.authorization_contract import (
+        contract_iam,
+    )
+    from naas_abi_core.services.iam.tests.iam_harness import IAMHarness
 
     async def scenario():
-        service = DiscoveryService(MemoryRegistry())
-        await service.register(registration("research", "r-1"), "research")
-        primary = DiscoveryNATS(service, SECRET, "test")
+        iam = contract_iam()
+        # Recorded, holding no policy: it may not evict, nor see the module.
+        IAMHarness(iam).service_account("research")
+        service = DiscoveryService(MemoryRegistry(), project="test", iam=iam)
+        with as_service_account("engine"):
+            await service.register(registration("research", "r-1"), "research")
+        primary = DiscoveryNATS(service, TEST_TOKENS.verifier, "test")
 
         async def evict_as(identity):
             msg = SimpleNamespace(
                 data=pb.EvictRequest(instance_id="r-1").SerializeToString(),
-                headers={"Nats-Auth-Token": issue_service_token(identity, SECRET)},
-                reply="reply",
+                headers={"Nats-Auth-Token": TEST_TOKENS.token(identity)},
+                reply="_INBOX.reply",
                 respond=AsyncMock(),
                 _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
             )
@@ -113,7 +76,7 @@ def test_evict_is_an_authenticated_admin_mutation():
             return pb.EvictResponse.FromString(msg._client.publish.call_args.args[1])
 
         assert OPERATIONS["evict"][2] is True
-        assert (await evict_as("research")).error.code == "PERMISSION_DENIED"
+        assert (await evict_as("research")).error.code == "INSTANCE_NOT_FOUND"
         evicted = await evict_as("api")
         assert evicted.error.code == ""
         assert evicted.instance.instance_id == "r-1"
@@ -127,14 +90,14 @@ def test_an_overflow_uploaded_request_is_refused_as_too_large():
     # empty body and must not be parsed as an empty (valid) request.
     async def scenario():
         service = AsyncMock()
-        primary = DiscoveryNATS(service, SECRET, "test")
+        primary = DiscoveryNATS(service, TEST_TOKENS.verifier, "test")
         msg = SimpleNamespace(
             data=b"",
             headers={
-                "Nats-Auth-Token": issue_service_token("caller", SECRET),
+                "Nats-Auth-Token": TEST_TOKENS.token("caller"),
                 "Abi-Overflow-Request": f"{'a' * 32}:upload",
             },
-            reply="reply",
+            reply="_INBOX.reply",
             _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
         )
         await primary._handle("register", msg)
@@ -145,38 +108,114 @@ def test_an_overflow_uploaded_request_is_refused_as_too_large():
     asyncio.run(scenario())
 
 
-def test_authorize_agent_names_the_caller_and_whether_it_is_an_admin():
+# The host forwarding is "research" (its token below): tokens for it name it.
+HOST = host_audience(subject_token("research"))
+AGENT = "abi:delegated:agent"
+
+
+def _authorize_agent_as_host(primary):
+    async def authorize(token: str):
+        msg = SimpleNamespace(
+            data=pb.AuthorizeAgentRequest(
+                instance_id="r-1", agent_name="Researcher", caller_token=token
+            ).SerializeToString(),
+            headers={"Nats-Auth-Token": TEST_TOKENS.token("research")},
+            reply="_INBOX.reply",
+            _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
+        )
+        await primary._handle("authorize_agent", msg)
+        return pb.AuthorizeAgentResponse.FromString(
+            msg._client.publish.call_args.args[1]
+        )
+
+    return authorize
+
+
+def test_authorize_agent_verifies_the_forwarded_caller():
     async def scenario():
         service = AsyncMock()
-        service.admin_identities = frozenset({"api", "engine"})
         service.authorize_agent.return_value = pb.AuthorizeAgentResponse()
-        primary = DiscoveryNATS(service, SECRET, "test")
+        primary = DiscoveryNATS(service, TEST_TOKENS.verifier, "test")
+        authorize = _authorize_agent_as_host(primary)
 
-        async def authorize(caller, audience="r-1"):
-            msg = SimpleNamespace(
-                data=pb.AuthorizeAgentRequest(
-                    instance_id="r-1",
-                    agent_name="Researcher",
-                    caller_token=issue_service_token(caller, SECRET, audience=audience),
-                ).SerializeToString(),
-                headers={"Nats-Auth-Token": issue_service_token("research", SECRET)},
-                reply="reply",
-                _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
+        # A caller acting alone: a token addressed to this host.
+        await authorize(TEST_TOKENS.token("orchestrator", audience=HOST))
+        _, owner, caller = service.authorize_agent.call_args.args
+        assert (owner, caller.principal.id, caller.on_behalf_of) == (
+            "research",
+            "orchestrator",
+            None,
+        )
+        # A host holds a token addressed to hosts, never the caller's own: the
+        # kernel's token (``abi:nats``) is refused here, so a host handed one
+        # would be refused too, and a host token buys nothing at any kernel
+        # service (they accept ``abi:nats`` and agent delegations only).
+        own = await authorize(TEST_TOKENS.token("api", audience="abi:nats"))
+        assert own.error.code == "UNAUTHENTICATED"
+        # ... and so is one made for another host: a module that read api's
+        # token from a request to its own agent replays it nowhere else.
+        elsewhere = await authorize(
+            TEST_TOKENS.token(
+                "api", audience=host_audience(subject_token("another-host"))
             )
-            await primary._handle("authorize_agent", msg)
-            return pb.AuthorizeAgentResponse.FromString(
-                msg._client.publish.call_args.args[1]
-            )
-
-        module = await authorize("orchestrator")
-        assert (module.caller_identity, module.caller_admin) == ("orchestrator", False)
-        api = await authorize("api")
-        assert (api.caller_identity, api.caller_admin) == ("api", True)
-        # A token bound to another instance, or to none, is not this caller's.
-        assert (await authorize("api", audience="r-2")).error.code == "UNAUTHENTICATED"
-        assert (await authorize("api", audience=None)).error.code == "UNAUTHENTICATED"
+        )
+        assert elsewhere.error.code == "UNAUTHENTICATED"
+        assert service.authorize_agent.await_count == 1
 
     asyncio.run(scenario())
+
+
+def test_authorize_agent_accepts_a_delegation_for_the_user_naming_this_host():
+    async def scenario():
+        service = AsyncMock()
+        service.authorize_agent.return_value = pb.AuthorizeAgentResponse()
+        primary = DiscoveryNATS(service, TEST_TOKENS.verifier, "test")
+        authorize = _authorize_agent_as_host(primary)
+
+        def delegation(actor="research", audience=AGENT, user="user-1", **extra):
+            return TEST_TOKENS.token(
+                user, kind="user", audience=audience, actor=actor, **extra
+            )
+
+        accepted = await authorize(delegation(groups=("grp_1",)))
+        assert accepted.error.code == ""
+        _, owner, caller = service.authorize_agent.call_args.args
+        # The host is the actor and the user the one it acts for.
+        assert (owner, caller.principal.id, caller.user.id) == (
+            "research",
+            "research",
+            "user-1",
+        )
+        assert caller.on_behalf_of.groups == frozenset({"grp_1"})
+        assert service.authorize_agent.await_count == 1
+
+        # A delegation naming another module: this host read it from a request
+        # and replays it nowhere, not even to ask discovery as itself.
+        stolen = await authorize(delegation(actor="another-host"))
+        assert stolen.error.code == "UNAUTHENTICATED"
+        # No other kind of delegated token is a caller either.
+        for audience in (
+            "abi:session",
+            "abi:delegated:app",
+            "abi:delegated:preview",
+            "abi:delegated:coding",
+            "abi:delegated:api-key",
+        ):
+            refused = await authorize(delegation(audience=audience))
+            assert refused.error.code == "UNAUTHENTICATED", audience
+        assert service.authorize_agent.await_count == 1
+
+    asyncio.run(scenario())
+
+
+def test_the_on_behalf_of_field_is_gone_from_every_authorize_request():
+    for message in (
+        pb.AuthorizeAgentRequest,
+        pb.AuthorizeModelRequest,
+        pb.AuthorizeAppRequest,
+        pb.AuthorizeJobRequest,
+    ):
+        assert "caller_on_behalf_of" not in message.DESCRIPTOR.fields_by_name
 
 
 def test_stopping_under_load_answers_every_request_it_was_sent(tmp_path):
@@ -202,8 +241,8 @@ def test_stopping_under_load_answers_every_request_it_was_sent(tmp_path):
     async def stop_once(url: str) -> int:
         service = DiscoveryService(MemoryRegistry())
         old_nc, new_nc, client_nc = [await nats.connect(url) for _ in range(3)]
-        old = DiscoveryNATS(service, SECRET, "test")
-        new = DiscoveryNATS(service, SECRET, "test")
+        old = DiscoveryNATS(service, TEST_TOKENS.verifier, "test")
+        new = DiscoveryNATS(service, TEST_TOKENS.verifier, "test")
         await old.start(old_nc)
         await new.start(new_nc)
         lost, sending = [], asyncio.Event()
@@ -252,7 +291,7 @@ def test_stop_ends_delivery_at_the_broker_before_draining(monkeypatch):
         return SimpleNamespace(name=name, drain=drain)
 
     monkeypatch.setattr(discovery_nats, "stop_delivery", stop_delivery, raising=False)
-    primary = DiscoveryNATS(AsyncMock(), SECRET, "test")
+    primary = DiscoveryNATS(AsyncMock(), TEST_TOKENS.verifier, "test")
     subscriptions = [subscription("a"), subscription("b")]
     primary.subscriptions = list(subscriptions)
 
@@ -287,8 +326,8 @@ class _Subscriber:
 def _lookup_message():
     return SimpleNamespace(
         data=pb.GetModuleRequest(module_id="research").SerializeToString(),
-        headers={"Nats-Auth-Token": issue_service_token("caller", SECRET)},
-        reply="reply",
+        headers={"Nats-Auth-Token": TEST_TOKENS.token("caller")},
+        reply="_INBOX.reply",
         subject="abi.discovery.test.v1.get_module",
         _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
     )
@@ -309,7 +348,7 @@ def test_lookups_are_answered_side_by_side_and_stop_waits_for_them(monkeypatch):
             return pb.GetModuleResponse()
 
         service = SimpleNamespace(get_module=get_module)
-        primary = DiscoveryNATS(service, SECRET, "test")
+        primary = DiscoveryNATS(service, TEST_TOKENS.verifier, "test")
         nc = _Subscriber()
         await primary.start(nc)
         messages = [_lookup_message() for _ in range(3)]

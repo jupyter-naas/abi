@@ -9,8 +9,8 @@ import pytest
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
-from naas_abi_core.engine.nats_auth import issue_service_token
 from naas_abi_core.engine.nats_rpc_integration_test import SECRET, broker  # noqa: F401
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.models.Model import ChatModel
 from naas_abi_core.services.model_registry.adapters.primary.model_registry_nats import (
     ModelRegistryNATS,
@@ -74,11 +74,11 @@ def test_large_objects_stream_through_small_broker(broker, tmp_path):  # noqa: F
         )
         await primary.start(nc)
         content = bytes(range(256)) * 8192
-        sync_client = ObjectStorageSecondaryAdapterNATSClient(broker[0], SECRET, "sync")
+        sync_client = ObjectStorageSecondaryAdapterNATSClient(
+            broker[0], TEST_TOKENS.source("sync")
+        )
         try:
-            async with ABIClient(
-                broker[0], issue_service_token("sdk", SECRET)
-            ) as client:
+            async with ABIClient(broker[0], TEST_TOKENS.token("sdk")) as client:
                 storage = ObjectFacade(client.object_storage)
                 await storage.put_object_stream("files", "large", BoundedInput(content))
                 async with storage.get_object_stream("files", "large") as stream:
@@ -108,9 +108,7 @@ def test_large_objects_stream_through_small_broker(broker, tmp_path):  # noqa: F
                 opened = await client._transport.call(
                     f"{prefix}.open", pb.OpenRequest(operation="put"), pb.OpenResponse
                 )
-                async with ABIClient(
-                    broker[0], issue_service_token("other", SECRET)
-                ) as other:
+                async with ABIClient(broker[0], TEST_TOKENS.token("other")) as other:
                     with pytest.raises(RPCError, match="PERMISSION_DENIED"):
                         await other._transport.call(
                             f"{prefix}.close",
@@ -174,7 +172,7 @@ def test_large_history_results_and_slow_generation(broker):  # noqa: F811
         try:
             # Total generation and first-token waits exceed every per-RPC timeout.
             async with ABIClient(
-                broker[0], issue_service_token("sdk", SECRET), timeout=0.15
+                broker[0], TEST_TOKENS.token("sdk"), timeout=0.15
             ) as client:
                 model = (
                     await ModelFacade(client.model_registry).get_chat_model("large")
@@ -217,9 +215,7 @@ def test_transfer_limits_reject_before_backend_mutation(broker, tmp_path):  # no
         )
         await primary.start(nc)
         try:
-            async with ABIClient(
-                broker[0], issue_service_token("sdk", SECRET)
-            ) as client:
+            async with ABIClient(broker[0], TEST_TOKENS.token("sdk")) as client:
                 storage = ObjectFacade(client.object_storage)
                 with pytest.raises(RPCError, match="PAYLOAD_TOO_LARGE"):
                     await storage.put_object("files", "existing", b"too large")
@@ -278,9 +274,7 @@ def test_two_engine_owners_execute_once_and_route_transfer_sessions(broker, tmp_
         try:
             for primary in models + storage:
                 await primary.start(nc)
-            async with ABIClient(
-                broker[0], issue_service_token("two-owners", SECRET)
-            ) as client:
+            async with ABIClient(broker[0], TEST_TOKENS.token("two-owners")) as client:
                 proxy = (
                     await ModelFacade(client.model_registry).get_chat_model("count")
                 ).model
@@ -350,7 +344,9 @@ def test_object_entry_errors_and_legacy_owner_fallback(broker, tmp_path):  # noq
         nc = await nats.connect(broker[0])
         primary = ObjectStoragePrimaryAdapterNATS(owner, SECRET)
         await primary.start(nc)
-        sync_client = ObjectStorageSecondaryAdapterNATSClient(broker[0], SECRET, "sync")
+        sync_client = ObjectStorageSecondaryAdapterNATSClient(
+            broker[0], TEST_TOKENS.source("sync")
+        )
 
         def missing_sync():
             with (
@@ -360,9 +356,7 @@ def test_object_entry_errors_and_legacy_owner_fallback(broker, tmp_path):  # noq
                 pytest.fail("Missing object entered the context body")
 
         try:
-            async with ABIClient(
-                broker[0], issue_service_token("sdk", SECRET)
-            ) as client:
+            async with ABIClient(broker[0], TEST_TOKENS.token("sdk")) as client:
                 storage = ObjectFacade(client.object_storage)
                 with pytest.raises(ObjectNotFound):
                     async with storage.get_object_stream("files", "missing"):

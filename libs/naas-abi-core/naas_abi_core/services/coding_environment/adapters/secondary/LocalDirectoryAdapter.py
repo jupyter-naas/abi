@@ -264,11 +264,22 @@ class LocalDirectoryAdapter(ICodingEnvironmentAdapter):
         base = record.get("harness_base")
         return str(base) if base else None
 
-    def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
-        del email, username
+    def ensure_user(
+        self,
+        *,
+        external_id: str,
+        email: str,
+        username: str,
+        vouched_email: bool = False,
+    ) -> str:
+        del email, username, vouched_email
         if external_id not in self._users:
             self._users[external_id] = external_id
         return self._users[external_id]
+
+    def find_user(self, *, external_id: str) -> str | None:
+        # A local user is the principal itself.
+        return external_id
 
     def list_templates(self) -> list[WorkspaceTemplate]:
         return [

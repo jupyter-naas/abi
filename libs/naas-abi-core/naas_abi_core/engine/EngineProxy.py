@@ -17,6 +17,8 @@ from naas_abi_core.services.dataset.DatasetService import DatasetService
 from naas_abi_core.services.document.DocumentService import DocumentService
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.event.EventService import EventService
+from naas_abi_core.services.iam.IAMPorts import IIAMService
+from naas_abi_core.services.identity.IdentityPorts import IIdentityService
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
 from naas_abi_core.services.model_registry.ModelRegistryService import (
     ModelRegistryService,
@@ -94,7 +96,10 @@ class ServicesProxy:
         return self.__engine.services.dataset
 
     def dataset_available(self) -> bool:
-        if not self.__unlocked and DatasetService not in self.__module_dependencies.services:
+        if (
+            not self.__unlocked
+            and DatasetService not in self.__module_dependencies.services
+        ):
             return False
         return self.__engine.services.dataset_available()
 
@@ -110,7 +115,10 @@ class ServicesProxy:
             return self.__document_view
 
     def document_available(self) -> bool:
-        if not self.__unlocked and DocumentService not in self.__module_dependencies.services:
+        if (
+            not self.__unlocked
+            and DocumentService not in self.__module_dependencies.services
+        ):
             return False
         return self.__engine.services.document_available()
 
@@ -163,7 +171,10 @@ class ServicesProxy:
         return self.__engine.services.activity_log
 
     def activity_log_available(self) -> bool:
-        if not self.__unlocked and ActivityLogService not in self.__module_dependencies.services:
+        if (
+            not self.__unlocked
+            and ActivityLogService not in self.__module_dependencies.services
+        ):
             return False
         return self.__engine.services.activity_log_available()
 
@@ -174,7 +185,10 @@ class ServicesProxy:
         return self.__engine.services.events
 
     def events_available(self) -> bool:
-        if not self.__unlocked and EventService not in self.__module_dependencies.services:
+        if (
+            not self.__unlocked
+            and EventService not in self.__module_dependencies.services
+        ):
             return False
         return self.__engine.services.events_available()
 
@@ -200,11 +214,32 @@ class ServicesProxy:
         return self.__engine.services.coding_environment
 
     @property
+    def iam(self) -> IIAMService:
+        # A kernel service every module may ask, with no dependency declaration:
+        # it answers for the caller's own CallContext and authorizes its own
+        # operations, so reaching it grants nothing.
+        return self.__engine.services.iam
+
+    def iam_available(self) -> bool:
+        return self.__engine.services.iam_available()
+
+    @property
+    def identity(self) -> IIdentityService:
+        # A kernel service like IAM: no dependency declaration, and it
+        # authorizes every operation for the caller's own CallContext.
+        return self.__engine.services.identity
+
+    def identity_available(self) -> bool:
+        return self.__engine.services.identity_available()
+
+    @property
     def document_admin(self) -> DocumentService:
         """The engine's document root: ``namespaces()`` and ``for_namespace(ns)``.
 
         Platform administration across module namespaces, for the unlocked proxy
-        (the platform module) only. Module proxies keep their scoped ``document``.
+        (the platform module) only: in process a module has no identity of its
+        own, so the code keeps other modules to their namespace-bound
+        ``document``. IAM still authorizes every call for its caller.
         """
         if not self.__unlocked:
             raise PermissionError(
@@ -306,6 +341,17 @@ class EngineProxy:
                 "listing the engine's job owners needs the unlocked engine proxy"
             )
         return self.__engine.job_owners()
+
+    def service_credentials(self, name: str = "engine", audience: str | None = None):
+        """``Engine.service_credentials``: the tokens of the engine's service
+        accounts (``api`` for Nexus), for the unlocked proxy (the platform
+        module) only. A module holds none of the engine's identities."""
+        if not self.__unlocked:
+            raise PermissionError(
+                f"Module {self.__module_name} is not the platform module: "
+                "the engine's service credentials need the unlocked engine proxy"
+            )
+        return self.__engine.service_credentials(name, audience)  # type: ignore[attr-defined]
 
     @property
     def configuration(self):

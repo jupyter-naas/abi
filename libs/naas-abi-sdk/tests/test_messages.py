@@ -53,3 +53,19 @@ def test_reply_needs_a_reply_subject():
     request = SimpleNamespace(reply="", _client=Client(1024), headers=None)
     with pytest.raises(ValueError):
         asyncio.run(messages.reply(request, b"ok"))
+
+
+def test_replies_go_to_inboxes_only():
+    from naas_abi_sdk.messages import reply_allowed
+
+    assert reply_allowed("_INBOX.abcdefghijklmnop.x")
+    for subject in (
+        None,
+        "",
+        "$JS.API.STREAM.PURGE.ABI_JOBS_default",
+        "abi.iam.v1.changed",
+        "_INBOX.>",
+        "_INBOX.*",
+        "_INBOXX.x",
+    ):
+        assert not reply_allowed(subject), subject

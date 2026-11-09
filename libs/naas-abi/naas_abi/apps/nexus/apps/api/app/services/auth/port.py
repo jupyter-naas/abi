@@ -10,7 +10,6 @@ class AuthUserRecord:
     id: str
     email: str
     name: str
-    hashed_password: str
     created_at: datetime
     avatar: str | None = None
     organization: str | None = None
@@ -21,29 +20,11 @@ class AuthUserRecord:
     is_superadmin: bool = False
 
 
-@dataclass
-class PasswordResetTokenRecord:
-    id: str
-    user_id: str
-    token: str
-    expires_at: datetime
-    used: bool
-    created_at: datetime
-
-
-@dataclass
-class MagicLinkTokenRecord:
-    id: str
-    user_id: str
-    token: str
-    expires_at: datetime
-    used: bool
-    created_at: datetime
-    otp_code_hash: str | None = None
-    otp_attempts: int = 0
-
-
 class AuthPersistencePort(ABC):
+    """Nexus's user rows, for the account's own routes. Nexus signs nobody in:
+    people are created by their identity provider's first sign-in
+    (``services/oidc``) and by invitations."""
+
     @abstractmethod
     async def get_user_by_id(self, user_id: str) -> AuthUserRecord | None:
         raise NotImplementedError
@@ -53,39 +34,10 @@ class AuthPersistencePort(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def user_exists_with_email(self, email: str, exclude_user_id: str | None = None) -> bool:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def create_user(
-        self,
-        user_id: str,
-        email: str,
-        name: str,
-        hashed_password: str,
-        now: datetime,
-    ) -> AuthUserRecord:
-        """Create a user account with no workspace membership."""
-        raise NotImplementedError
-
-    @abstractmethod
-    async def create_user_with_default_workspace(
-        self,
-        user_id: str,
-        email: str,
-        name: str,
-        hashed_password: str,
-        now: datetime,
-    ) -> AuthUserRecord:
-        """Create a user plus an owned workspace named ``{name}`` (public signup)."""
-        raise NotImplementedError
-
-    @abstractmethod
     async def update_user_profile(
         self,
         user_id: str,
         name: str | None,
-        email: str | None,
         organization: str | None,
         job_title: str | None,
         bio: str | None,
@@ -96,98 +48,9 @@ class AuthPersistencePort(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def update_user_password(self, user_id: str, hashed_password: str, now: datetime) -> bool:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def create_password_change_event(
-        self,
-        user_id: str,
-        changed_at: datetime,
-        ip_address: str | None,
-        user_agent: str | None,
-    ) -> None:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def mark_unused_password_reset_tokens_used(self, user_id: str) -> None:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def create_password_reset_token(
-        self,
-        token_id: str,
-        user_id: str,
-        token: str,
-        expires_at: datetime,
-        created_at: datetime,
-    ) -> None:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def get_password_reset_token(self, token: str) -> PasswordResetTokenRecord | None:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def mark_password_reset_token_used(self, token_id: str) -> None:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def mark_unused_magic_link_tokens_used(
-        self,
-        user_id: str,
-        keep_latest_unused: int = 0,
-    ) -> None:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def create_magic_link_token(
-        self,
-        token_id: str,
-        user_id: str,
-        token: str,
-        expires_at: datetime,
-        created_at: datetime,
-        otp_code_hash: str | None = None,
-    ) -> None:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def get_magic_link_token(self, token: str) -> MagicLinkTokenRecord | None:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def get_latest_unused_magic_link_for_user(
-        self, user_id: str
-    ) -> MagicLinkTokenRecord | None:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def list_unused_magic_links_for_user(self, user_id: str) -> list[MagicLinkTokenRecord]:
-        """Unused OTP challenges for a user, newest first."""
-        raise NotImplementedError
-
-    @abstractmethod
-    async def increment_magic_link_otp_attempts(self, token_id: str) -> int:
-        """Increment OTP attempt counter; return the new count."""
-        raise NotImplementedError
-
-    @abstractmethod
-    async def mark_magic_link_token_used(self, token_id: str) -> None:
-        raise NotImplementedError
-
-    @abstractmethod
     async def update_user_avatar(
         self, user_id: str, avatar_url: str, now: datetime
     ) -> AuthUserRecord | None:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def list_users(self) -> list[AuthUserRecord]:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def count_superadmins(self) -> int:
         raise NotImplementedError
 
     @abstractmethod
@@ -202,12 +65,6 @@ class AuthPersistencePort(ABC):
     ) -> dict[str, str | None] | None:
         """The user's member profile (organization, job_title, bio) in the
         organization owning ``workspace_id``; None outside an organization."""
-        raise NotImplementedError
-
-    @abstractmethod
-    async def set_user_superadmin(
-        self, user_id: str, is_superadmin: bool, now: datetime
-    ) -> AuthUserRecord | None:
         raise NotImplementedError
 
     @abstractmethod

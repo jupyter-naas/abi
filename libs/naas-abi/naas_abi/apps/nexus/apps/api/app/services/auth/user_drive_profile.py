@@ -3,8 +3,8 @@
 ``naas_abi/my-drive/<user_id>/``:
 
 - ``.settings/user/user.json``: the account (Account Settings > Profile), as stored.
-- ``.settings/user/org_member.json``: their organization memberships (role and
-  member profile set by org admins in Organization Settings > Users).
+- ``.settings/user/org_member.json``: their organization memberships (the role IAM
+  holds, and the member profile set by org admins in Organization Settings > Users).
 - ``.USER.md``: a readable summary built from the two files and the picture URL,
   with account values filled from member profiles where the account has none
   (``account_fallbacks``, org -> account only).
@@ -55,32 +55,63 @@ def _iso(value: datetime | None) -> str | None:
 
 
 async def load_memberships(db: AsyncSession, user_id: str) -> list[dict[str, Any]]:
-    """The user's memberships with their member profile, oldest first."""
-    rows = await db.execute(
-        select(OrganizationMemberModel, OrganizationModel.name, OrganizationModel.slug)
-        .join(OrganizationModel, OrganizationModel.id == OrganizationMemberModel.organization_id)
-        .where(OrganizationMemberModel.user_id == user_id)
-        .order_by(OrganizationMemberModel.created_at, OrganizationMemberModel.id)
+    """The user's organizations with their member profile, oldest first. The role is
+    the one IAM holds (``services/iam/memberships``); the profile is what the
+    organization set, if anything."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+
+    roles = await MEMBERSHIPS.scopes_of(user_id, level="org")
+    if not roles:
+        return []
+    organizations = {
+        org.id: org
+        for org in (
+            await db.execute(select(OrganizationModel).where(OrganizationModel.id.in_(roles)))
+        )
+        .scalars()
+        .all()
+    }
+    profiles = {
+        member.organization_id: member
+        for member in (
+            await db.execute(
+                select(OrganizationMemberModel).where(OrganizationMemberModel.user_id == user_id)
+            )
+        )
+        .scalars()
+        .all()
+    }
+    found = []
+    for org_id, role in roles.items():
+        organization = organizations.get(org_id)
+        if organization is None:
+            continue
+        member = profiles.get(org_id)
+        found.append(
+            (
+                member.created_at if member is not None else None,
+                {
+                    "organization_id": org_id,
+                    "organization_name": organization.name,
+                    "organization_slug": organization.slug,
+                    "role": role,
+                    "member_since": _iso(member.created_at) if member is not None else None,
+                    "profile": {
+                        "avatar": member.avatar if member else None,
+                        "organization": member.organization_name if member else None,
+                        "job_title": member.job_title if member else None,
+                        "service_line": member.service_line if member else None,
+                        "country": member.country if member else None,
+                        "interest": member.interest if member else None,
+                        "bio": member.bio if member else None,
+                    },
+                },
+            )
+        )
+    found.sort(
+        key=lambda item: (item[0] is None, item[0] or datetime.min, item[1]["organization_id"])
     )
-    return [
-        {
-            "organization_id": member.organization_id,
-            "organization_name": name,
-            "organization_slug": slug,
-            "role": member.role,
-            "member_since": _iso(member.created_at),
-            "profile": {
-                "avatar": member.avatar,
-                "organization": member.organization_name,
-                "job_title": member.job_title,
-                "service_line": member.service_line,
-                "country": member.country,
-                "interest": member.interest,
-                "bio": member.bio,
-            },
-        }
-        for member, name, slug in rows.all()
-    ]
+    return [membership for _, membership in found]
 
 
 def org_member_document(user_id: str, memberships: list[dict[str, Any]]) -> dict[str, Any]:

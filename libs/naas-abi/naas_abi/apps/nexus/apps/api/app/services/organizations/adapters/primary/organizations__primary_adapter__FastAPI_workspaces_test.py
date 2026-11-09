@@ -4,6 +4,7 @@ from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
@@ -22,6 +23,11 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import WorkspaceService
 
 
+@pytest.fixture(autouse=True)
+def _team(team):
+    return team
+
+
 def _store() -> dict[str, OrganizationWorkspaceRecord]:
     return {
         ws.id: ws
@@ -37,9 +43,9 @@ def _store() -> dict[str, OrganizationWorkspaceRecord]:
 
 
 def _client(*, role: str, store: dict[str, OrganizationWorkspaceRecord]) -> TestClient:
+    """``role``: the team member (``owner``, ``admin``, ``member``) who calls."""
     org_adapter = SimpleNamespace(
-        get_organization_role=AsyncMock(return_value=role),
-        get_organization_role_features=AsyncMock(return_value=None),
+        db=None,
         get_organization_by_id=AsyncMock(return_value=None),
         list_workspaces_for_org=AsyncMock(side_effect=lambda org_id: list(store.values())),
     )
@@ -50,25 +56,18 @@ def _client(*, role: str, store: dict[str, OrganizationWorkspaceRecord]) -> Test
         )
         return store[workspace_id]
 
-    async def _set_overrides(workspace_id, overrides):
-        store[workspace_id] = replace(store[workspace_id], feature_overrides=overrides)
-        return store[workspace_id]
-
-    ws_adapter = SimpleNamespace(
-        update_workspace=AsyncMock(side_effect=_update),
-        set_workspace_feature_overrides=AsyncMock(side_effect=_set_overrides),
-    )
+    ws_adapter = SimpleNamespace(update_workspace=AsyncMock(side_effect=_update))
 
     app = FastAPI()
     app.include_router(org_api.router, prefix="/organizations")
     app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
-        id="user-1", email="admin@example.com", name="Admin"
+        id=role, email="admin@example.com", name="Admin"
     )
     app.dependency_overrides[org_api.get_organization_service] = lambda: OrganizationService(
         adapter=org_adapter
     )
-    app.dependency_overrides[org_api.get_workspace_service_for_org_invite] = (
-        lambda: WorkspaceService(adapter=ws_adapter)
+    app.dependency_overrides[org_api.get_workspace_service_for_org_invite] = lambda: (
+        WorkspaceService(adapter=ws_adapter)
     )
     return TestClient(app)
 
@@ -105,52 +104,38 @@ def test_bulk_update_refuses_members_and_foreign_workspaces() -> None:
     assert store["ws-1"].workspace_group is None
 
 
-def test_feature_overrides_are_saved_then_reset_to_the_config() -> None:
-    store = _store()
-    client = _client(role="admin", store=store)
+def test_the_listing_shows_the_deployments_features_for_each_workspace(team) -> None:
+    from naas_abi.apps.nexus.apps.api.app.core.config import settings
+    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import enabled_feature_catalog
 
-    saved = client.put(
-        "/organizations/org-1/workspaces/ws-1/features",
-        json={"overrides": {"maps": False, "graph": True}},
+    resp = _client(role="admin", store=_store()).get("/organizations/org-1/workspaces")
+
+    features = {ws["id"]: ws["features"] for ws in resp.json()}
+    # No set narrows a workspace's: who uses each is a policy's.
+    assert features["ws-1"] == features["ws-2"] == enabled_feature_catalog(settings.feature_flags)
+    assert all("feature_overrides" not in ws for ws in resp.json())
+
+
+def test_the_old_feature_overrides_route_is_gone() -> None:
+    resp = _client(role="admin", store=_store()).put(
+        "/organizations/org-1/workspaces/ws-1/features", json={"overrides": {}}
     )
-    assert saved.status_code == 200, saved.text
-    assert saved.json()["feature_overrides"] == {"maps": False, "graph": True}
-    assert saved.json()["feature_overrides_source"] == "database"
-    assert "maps" not in saved.json()["features"]
-    assert "graph" in saved.json()["features"]
-
-    reset = client.put("/organizations/org-1/workspaces/ws-1/features", json={"overrides": None})
-    assert reset.status_code == 200
-    assert store["ws-1"].feature_overrides is None
-    assert "maps" in reset.json()["features"]
+    assert resp.status_code in (404, 405)
 
 
-def test_feature_overrides_reject_settings_and_features_outside_the_catalog() -> None:
-    client = _client(role="admin", store=_store())
-
-    pinned = client.put(
-        "/organizations/org-1/workspaces/ws-1/features", json={"overrides": {"settings": False}}
-    )
-    # "code" is a known FeatureKey but off in the default enabled catalog.
-    outside = client.put(
-        "/organizations/org-1/workspaces/ws-1/features", json={"overrides": {"code": True}}
-    )
-    missing = client.put(
-        "/organizations/org-1/workspaces/ws-9/features", json={"overrides": {}}
-    )
-
-    assert (pinned.status_code, outside.status_code, missing.status_code) == (400, 400, 404)
-
-
-def test_workspace_features_lists_the_catalog_and_role_defaults() -> None:
+def test_the_create_forms_feature_choice_is_gone() -> None:
+    """No role brings a feature and a new workspace grants none: the create form
+    chooses none, so the route that fed it is gone."""
     resp = _client(role="owner", store=_store()).get("/organizations/org-1/workspace-features")
+    assert resp.status_code in (404, 405)
 
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["pinned"] == ["settings"]
-    assert body["roles"] == ["owner", "admin", "member", "viewer"]
-    assert "maps" in body["role_baseline"]["member"]
-    assert "code" not in body["catalog"]
+
+def test_the_role_features_routes_are_gone() -> None:
+    client = _client(role="owner", store=_store())
+    assert client.get("/organizations/org-1/roles/features").status_code in (404, 405)
+    assert client.put(
+        "/organizations/org-1/roles/features", json={"role_baseline": {}}
+    ).status_code in (404, 405)
 
 
 def test_listing_resolves_module_logo_paths(monkeypatch) -> None:
@@ -165,5 +150,8 @@ def test_listing_resolves_module_logo_paths(monkeypatch) -> None:
     resp = _client(role="admin", store=store).get("/organizations/org-1/workspaces")
 
     logos = {ws["slug"]: ws["logo_url"] for ws in resp.json()}
-    assert logos["axa"] == "https://api.example.com/modules/src/external/axa/assets/public/axa-logo.png"
+    assert (
+        logos["axa"]
+        == "https://api.example.com/modules/src/external/axa/assets/public/axa-logo.png"
+    )
     assert logos["edf"] is None

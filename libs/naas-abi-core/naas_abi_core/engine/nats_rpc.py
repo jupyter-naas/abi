@@ -9,10 +9,9 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from contextlib import contextmanager
-from datetime import UTC, datetime, timedelta
 from threading import Event as ThreadingEvent
 from threading import RLock, Thread
 from typing import Any, Self, TypeVar, cast
@@ -20,10 +19,20 @@ from typing import Any, Self, TypeVar, cast
 from google.protobuf.message import Message
 from naas_abi_core import logger
 from naas_abi_core.engine import nats_overflow
+from naas_abi_core.engine.call_context import (
+    CallContext,
+    Principal,
+    current_call_context,
+)
 from naas_abi_core.engine.nats_auth import (
-    DEFAULT_TTL,
     InvalidServiceTokenError,
-    issue_service_token,
+    TokenSource,
+    TokenVerifier,
+)
+from naas_abi_core.engine.nats_identity import (
+    caller_context,
+    refusal,
+    request_envelope,
 )
 from naas_abi_core.engine.nats_naming import connection_name, rpc_client_role
 from naas_abi_core.engine.nats_transfer import TransferError
@@ -44,7 +53,6 @@ from nats.aio.client import Client as NATSClient
 from nats.errors import MaxPayloadError, NoRespondersError
 from nats.micro.request import ERROR_CODE_HEADER, ERROR_HEADER, Request
 
-_TOKEN_RENEWAL_MARGIN = timedelta(minutes=5)
 _ResponseT = TypeVar("_ResponseT", bound=Message)
 
 
@@ -84,8 +92,7 @@ class RequestPayloadError(Exception):
 async def request_payload(request: Request) -> bytes:
     """The request's protobuf body, read from its overflow upload when it has one.
 
-    Primaries call this instead of reading ``request.data`` (see
-    docs/adr/20261003_nats-rpc-overflow.md).
+    Primaries call this instead of reading ``request.data``.
     """
     headers = request.headers or {}
     transfer_id = headers.get(overflow.REQUEST_HEADER)
@@ -104,6 +111,26 @@ async def request_payload(request: Request) -> bytes:
         raise RequestPayloadError(
             "DEADLINE_EXCEEDED", "Reading the overflowed request timed out"
         ) from exc
+
+
+async def authenticate_request(
+    request: Request, verifier: TokenVerifier, response_cls: Callable[..., Message]
+) -> CallContext | None:
+    """The verified caller of a ``nats.micro`` request (``nats_identity``).
+
+    A refused caller is answered here, UNAUTHENTICATED and not retryable, and
+    ``None`` comes back: the primary has nothing left to do.
+    """
+    try:
+        return caller_context(request.headers, verifier)
+    except InvalidServiceTokenError as exc:
+        message = refusal(exc, "missing or invalid auth token")
+    response = response_cls()
+    _call_error(response).CopyFrom(
+        common_pb2.CallError(code="UNAUTHENTICATED", message=message, retryable=False)
+    )
+    await respond_protobuf(request, response, response_cls)
+    return None
 
 
 def _call_error(response: Message) -> common_pb2.CallError:
@@ -130,6 +157,8 @@ async def respond_protobuf(
 
     Error replies also carry their code in the ``Abi-Error-Code`` header (for the
     traffic view, which never reads payloads) and fail the current trace span.
+    (``nats_tracing.traced_handler`` drops a request whose reply subject is
+    not an inbox before it runs.)
     """
     payload = response.SerializeToString()
     code = _error_code(response)
@@ -258,29 +287,35 @@ class _Reply:
         self.data, self.headers = data, headers
 
 
+class _CurrentUser:
+    """Marks "the user of the current call" as a ``_call`` default."""
+
+
+CURRENT_USER = _CurrentUser()
+
+
 class NatsRPCClient:
     """Owns one lazy connection and loop; domain subclasses own wire mappings."""
 
     def __init__(
         self,
         nats_url: str,
-        jwt_secret: str,
-        service_identity: str,
+        credentials: TokenSource,
         timeout_seconds: float = 10.0,
         *,
         auth_header: str = "Nats-Auth-Token",
     ) -> None:
+        """``credentials``: the engine's own tokens, or a service key's
+        (``nats_credentials``). Never a signing secret."""
         self._auth_header = auth_header
         self._nats_url = nats_url
-        self._jwt_secret = jwt_secret
-        self._service_identity = service_identity
+        self._credentials = credentials
+        self._service_identity = credentials.identity
         self._timeout_seconds = timeout_seconds
 
         self._loop: asyncio.AbstractEventLoop | None = None
         self._loop_thread: Thread | None = None
         self._nc: NATSClient | None = None
-        self._token: str | None = None
-        self._token_expires_at: datetime | None = None
         # Protect loop lifecycle and token bookkeeping, never network waits.
         # Connection initialization is serialized separately on the owning loop.
         self._call_lock = RLock()
@@ -396,30 +431,52 @@ class NatsRPCClient:
                 )
 
     # ------------------------------------------------------------------
-    # Auth: issue once, reissue only when close to expiry.
+    # Auth: the credentials renew their token at half its life.
     # ------------------------------------------------------------------
 
-    def _current_token(self) -> str:
-        now = datetime.now(UTC)
-        if (
-            self._token is None
-            or self._token_expires_at is None
-            or now >= self._token_expires_at - _TOKEN_RENEWAL_MARGIN
-        ):
-            self._token = issue_service_token(self._service_identity, self._jwt_secret)
-            self._token_expires_at = now + DEFAULT_TTL
-        return self._token
+    def _current_token(
+        self,
+        user: Principal | None = None,
+        scope: Sequence[Mapping[str, Any]] | None | _CurrentUser = CURRENT_USER,
+    ) -> str:
+        """The token of a call: the source's own, or, for a source that carries
+        users (``api``, ``engine``) and a call made for one, a delegation that
+        names the user and this process as the actor. ``scope``: what limits
+        the call (a key's), as the current call's by default; a stream passes
+        the one it captured with its user."""
+        if user is None:
+            return self._credentials.token_for(None, None, None)
+        if isinstance(scope, _CurrentUser):
+            scope = current_call_context().scope
+        return self._credentials.token_for(user, None, scope)
 
     # ------------------------------------------------------------------
     # RPC plumbing.
     # ------------------------------------------------------------------
 
     def _context(self, timeout_seconds: float | None = None) -> common_pb2.CallContext:
-        """The call's context; ``timeout_seconds`` as passed to ``_call``."""
+        """The call's context; ``timeout_seconds`` as passed to ``_call``.
+
+        The trace and the container are the current call's. Identity
+        never travels here: the server reads it from the headers (``_call``).
+        """
+        current = current_call_context()
         return common_pb2.CallContext(
-            trace_id=str(uuid.uuid4()),
+            trace_id=current.trace_id or str(uuid.uuid4()),
             timeout_ms=int(self._deadline(timeout_seconds) * 1000),
+            container=current.container or "",
         )
+
+    def _served_user(self) -> Principal | None:
+        """The user the current call acts for, read when the call is made, in
+        the caller's thread. Whether it travels is the credentials' decision:
+        only a source allowed to carry users (``api``, ``engine``) sends a
+        delegation; any other identity calls as itself."""
+        return current_call_context().user
+
+    def _served_scope(self) -> Sequence[Mapping[str, Any]] | None:
+        """The limit of the current call (a scoped key's), read with the user."""
+        return current_call_context().scope
 
     def _deadline(self, timeout_seconds: float | None) -> float:
         return self._timeout_seconds if timeout_seconds is None else timeout_seconds
@@ -432,14 +489,20 @@ class NatsRPCClient:
         *,
         transfer: TransferTrace | None = None,
         timeout_seconds: float | None = None,
+        user: Principal | None | _CurrentUser = CURRENT_USER,
+        scope: Sequence[Mapping[str, Any]] | None | _CurrentUser = CURRENT_USER,
     ) -> _ResponseT:
         """One request/reply. ``timeout_seconds`` replaces the client's default
         deadline for this call only (a long operation); overflow chunks keep
-        the default, each being small."""
+        the default, each being small. ``user``: the user the call acts for,
+        captured once for a whole stream; by default the current call's. So is
+        ``scope``, the limit that travels with it."""
         payload = request.SerializeToString()
-        with self._call_lock:
-            token = self._current_token()
-        headers = {self._auth_header: token}
+        if isinstance(user, _CurrentUser):
+            user = self._served_user()
+        token = self._current_token(user, scope)
+        call_headers = {self._auth_header: token}
+        headers = dict(call_headers)
         # The span starts in the calling thread, whose context holds the parent
         # (e.g. a request handler); the trace travels in the headers.
         with client_span(
@@ -460,7 +523,7 @@ class NatsRPCClient:
                 )
             headers[overflow.ACCEPT_HEADER] = "1"
             trace = TransferTrace(span)
-            chunk = self._chunk_call(token, trace)
+            chunk = self._chunk_call(call_headers, request, trace)
             upload = None
             try:
                 try:
@@ -544,16 +607,35 @@ class NatsRPCClient:
 
     # ------------------------------------------------------------------
     # Overflow: payloads above the broker limit travel as transfer frames
-    # (naas_abi_sdk.overflow, docs/adr/20261003_nats-rpc-overflow.md).
+    # (naas_abi_sdk.overflow).
     # ------------------------------------------------------------------
 
-    def _chunk_call(self, token: str, trace: TransferTrace) -> overflow.Call:
-        """One overflow exchange, counted on the call's span (``trace``)."""
+    def _chunk_envelope(self, request: Message) -> common_pb2.CallContext:
+        """The overflow chunks' ``context``: the call's own trace and container."""
+        envelope = self._context()
+        sent = request_envelope(request)
+        if sent is not None:
+            envelope.trace_id = sent.trace_id or envelope.trace_id
+            envelope.container = sent.container or envelope.container
+        return envelope
+
+    def _chunk_call(
+        self,
+        call_headers: dict[str, str],
+        call_request: Message,
+        trace: TransferTrace,
+    ) -> overflow.Call:
+        """One overflow exchange, counted on the call's span (``trace``), sent
+        as the call it belongs to: its token, its user, its trace and container.
+        The envelope is built on the first chunk: most calls never overflow."""
+        envelopes: list[common_pb2.CallContext] = []
 
         async def call(subject: str, request: Any, response_cls: Any) -> Any:
-            request.context.CopyFrom(self._context())
+            if not envelopes:
+                envelopes.append(self._chunk_envelope(call_request))
+            request.context.CopyFrom(envelopes[0])
             payload = request.SerializeToString()
-            headers = {self._auth_header: token}
+            headers = dict(call_headers)
             with client_span(subject, headers, size=len(payload), transfer=trace):
                 msg = await asyncio.wait_for(
                     self._do_request_async(
@@ -610,7 +692,7 @@ class NatsRPCClient:
 
     # ------------------------------------------------------------------
     # Streamed reads: a domain's transfer/v1 stream, read as the caller
-    # iterates (docs/adr/20261003_nats-streamed-results.md).
+    # iterates.
     # ------------------------------------------------------------------
 
     @contextmanager
@@ -636,15 +718,22 @@ class NatsRPCClient:
         # One span for the whole stream (totals as attributes), not one per frame.
         with transfer_span(prefix, operation) as trace:
             nc = self._run_coro(self._ensure_connection_async())
+            # One trace and one user for the whole stream, captured here: frames
+            # may be read from another thread, or after the caller's context.
+            envelope = self._context()
+            served = self._served_user()
+            limit = self._served_scope()
 
             def exchange(request: Any, response_cls: Any) -> Any:
                 name = type(request).__name__.removesuffix("Request").lower()
-                request.context.CopyFrom(self._context())
+                request.context.CopyFrom(envelope)
                 response = self._call(
                     transfer_subject(prefix, name, getattr(request, "id", "")),
                     request,
                     response_cls,
                     transfer=trace,
+                    user=served,
+                    scope=limit,
                 )
                 if response.HasField("error"):
                     raise_error(response.error)

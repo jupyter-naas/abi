@@ -11,8 +11,8 @@ from rich.console import Console
 from rich.table import Table
 
 from .admin_credentials import (
+    ensure_nats_callout_seed,
     ensure_nats_passwords,
-    ensure_nats_secret,
     ensure_rabbitmq_credentials,
 )
 from .deploy.local import project_uses_nats
@@ -121,7 +121,7 @@ def _show_error_logs(error_services: list[str]) -> None:
 
 
 def _ensure_stack_secrets(project: Path) -> None:
-    """Generate the broker's passwords and the engine's NATS secret into
+    """Generate the broker's passwords and the auth callout's seed into
     ``.env`` before Compose reads it, when the project runs on NATS: the `nats`
     service refuses to start without its passwords, and the engine cannot
     render its `nats:` block without them. Kept when already set."""
@@ -129,7 +129,7 @@ def _ensure_stack_secrets(project: Path) -> None:
         return
     env_path = project / ".env"
     ensure_nats_passwords(env_path)
-    ensure_nats_secret(env_path)
+    ensure_nats_callout_seed(env_path)
 
 
 def _use_profile(profile: str) -> None:

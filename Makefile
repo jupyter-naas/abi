@@ -665,7 +665,8 @@ oxigraph-status: check-docker
 	@docker compose --profile local ps oxigraph
 
 # Start the local Docker stack, on NATS. `abi stack start` generates the
-# broker's passwords and NATS_JWT_SECRET into .env before Compose reads it.
+# broker's passwords and the seed of its auth callout into .env before Compose
+# reads it.
 local-up: check-docker
 	@echo "🚀 Starting local services..."
 	@if ! uv run abi stack start; then \
@@ -915,6 +916,7 @@ clean:
 test-sdk:
 	$(MAKE) -C libs/naas-abi-proto test
 	$(MAKE) -C libs/naas-abi-sdk test
+	$(MAKE) -C libs/naas-abi-idp test
 
 demo-sdk:
 	$(MAKE) -C examples/standalone_module demo

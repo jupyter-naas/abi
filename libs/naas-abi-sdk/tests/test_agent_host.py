@@ -12,6 +12,8 @@ from naas_abi_sdk.services.errors import DocumentNotFound, VersionConflict
 from naas_abi_sdk.services.models import Document
 from naas_abi_sdk.transport import RPCError
 
+WORKSPACE = "abi:nexus:organization/o-1/nexus:workspace/ws-1"
+
 
 class Documents:
     def __init__(self):
@@ -65,6 +67,7 @@ def host(documents, handler, owner="owner", live=None):
     listed = (owner,) if live is None else live
     session = SimpleNamespace(
         instance_id=owner,
+        service_account="sa1",
         descriptor=SimpleNamespace(module_id="provider", contract_major=1),
         client=SimpleNamespace(
             project="default",
@@ -516,7 +519,7 @@ def _rpc(owner, operation, message):
     return msg, sent
 
 
-def test_platform_admins_may_cancel_another_callers_run():
+def test_discovery_decides_who_may_poll_or_cancel_a_run():
     from naas_abi_sdk.agent_host import _hash
 
     async def scenario():
@@ -526,13 +529,15 @@ def test_platform_admins_may_cancel_another_callers_run():
         await owner._submit("agent", key, "caller", request())
         cancel = pb.CancelRequest(invocation_id="id", output_format=2)
 
-        # Another caller is refused.
+        # Without discovery's decision on the run, another caller cannot see it.
         owner._authorize = AsyncMock(return_value=("someone", False))
         msg, sent = _rpc(owner, "cancel", cancel)
         await owner._handle_operation("agent", "cancel", msg)
-        assert pb.CancelResponse.FromString(sent[0]).error.code == "PERMISSION_DENIED"
+        assert (
+            pb.CancelResponse.FromString(sent[0]).error.code == "INVOCATION_NOT_FOUND"
+        )
 
-        # A platform admin (discovery's admin identities) may cancel it.
+        # Discovery allowed this caller to cancel it (discovery:CancelAgentRun).
         task = owner.runs[key].task
         owner._authorize = AsyncMock(return_value=("api", True))
         msg, sent = _rpc(owner, "cancel", cancel)
@@ -543,12 +548,8 @@ def test_platform_admins_may_cancel_another_callers_run():
         assert (await docs.get(owner.runs_collection, key)).data[
             "status"
         ] == "CANCELLED"
-
-        # Admin rights cover cancelling only, not reading someone's output.
-        status = pb.StatusRequest(invocation_id="id", output_format=2)
-        msg, sent = _rpc(owner, "status", status)
-        await owner._handle_operation("agent", "status", msg)
-        assert pb.StatusResponse.FromString(sent[0]).error.code == "PERMISSION_DENIED"
+        # The run's recorded owner went to discovery with the poll.
+        assert owner._authorize.call_args.args[2:] == ("cancel", "id", "caller")
 
     asyncio.run(scenario())
 
@@ -564,7 +565,7 @@ def _token(identity="caller", expires_in=3600.0):
     return f"header.{body.decode()}.signature"
 
 
-def authorizing(identity="caller", admin=False):
+def authorizing(identity="caller", decided=False):
     """A host whose discovery authorizes every call, counting them."""
     from naas_abi_proto.discovery.v1 import discovery_pb2 as discovery_pb
 
@@ -572,29 +573,40 @@ def authorizing(identity="caller", admin=False):
     owner.session.lease_token = "l" * 32
     owner.session.client._call = AsyncMock(
         return_value=discovery_pb.AuthorizeAgentResponse(
-            caller_identity=identity, caller_admin=admin
+            caller_identity=identity, run_authorized=decided
         )
     )
     return owner
 
 
+def _ask(owner, agent, token, submit):
+    headers = {"Nats-Auth-Token": token}
+    if submit:
+        return owner._authorize(agent, headers, "submit")
+    return owner._authorize(agent, headers, "status", "id", "caller")
+
+
 def test_polls_reuse_discovery_authorization_and_submits_always_ask():
     async def scenario():
-        owner = authorizing(admin=True)
+        owner = authorizing(decided=True)
         token = _token()
         for _ in range(5):  # status and event polls
-            assert await owner._authorize("agent", token, False) == ("caller", True)
+            assert await _ask(owner, "agent", token, False) == ("caller", True)
         assert owner.session.client._call.await_count == 1
         # Every submit asks discovery (it checks the provider is READY).
-        await owner._authorize("agent", token, True)
-        await owner._authorize("agent", token, True)
+        await _ask(owner, "agent", token, True)
+        await _ask(owner, "agent", token, True)
         assert owner.session.client._call.await_count == 3
         # Per caller token and agent.
-        await owner._authorize("other-agent", token, False)
-        await owner._authorize("agent", _token(expires_in=60), False)
+        await _ask(owner, "other-agent", token, False)
+        await _ask(owner, "agent", _token(expires_in=60), False)
         assert owner.session.client._call.await_count == 5
-        await owner._authorize("agent", token, False)
+        await _ask(owner, "agent", token, False)
         assert owner.session.client._call.await_count == 5
+        # The user is in the token; the run's owner went with the poll.
+        sent = owner.session.client._call.call_args.args[1]
+        assert sent.caller_token.startswith("header.") and sent.run_owner == "caller"
+        assert not hasattr(sent, "caller_on_behalf_of")
 
     asyncio.run(scenario())
 
@@ -603,11 +615,11 @@ def test_an_authorization_ends_when_the_token_expires():
     async def scenario():
         owner = authorizing()
         expiring = _token(expires_in=0.05)
-        await owner._authorize("agent", expiring, False)
-        await owner._authorize("agent", expiring, False)
+        await _ask(owner, "agent", expiring, False)
+        await _ask(owner, "agent", expiring, False)
         assert owner.session.client._call.await_count == 1
         await asyncio.sleep(0.1)  # well within the reuse window
-        await owner._authorize("agent", expiring, False)
+        await _ask(owner, "agent", expiring, False)
         assert owner.session.client._call.await_count == 2
 
     asyncio.run(scenario())
@@ -619,11 +631,11 @@ def test_an_authorization_is_reused_for_a_short_window(monkeypatch):
     async def scenario():
         owner = authorizing()
         lasting = _token()
-        await owner._authorize("agent", lasting, False)
-        await owner._authorize("agent", lasting, False)
+        await _ask(owner, "agent", lasting, False)
+        await _ask(owner, "agent", lasting, False)
         assert owner.session.client._call.await_count == 1
         await asyncio.sleep(0.1)
-        await owner._authorize("agent", lasting, False)
+        await _ask(owner, "agent", lasting, False)
         assert owner.session.client._call.await_count == 2
 
     asyncio.run(scenario())
@@ -635,13 +647,13 @@ def test_refusals_and_unreadable_tokens_are_never_reused():
         owner.session.client._call.side_effect = RPCError("UNAUTHENTICATED", "bad")
         for _ in range(2):
             with pytest.raises(RPCError, match="UNAUTHENTICATED"):
-                await owner._authorize("agent", _token(), False)
+                await _ask(owner, "agent", _token(), False)
         assert owner.session.client._call.await_count == 2
 
         owner = authorizing()
         for token in ("opaque", "a.bm90IGpzb24.c", _token(expires_in=-1)):
-            await owner._authorize("agent", token, False)
-            await owner._authorize("agent", token, False)
+            await _ask(owner, "agent", token, False)
+            await _ask(owner, "agent", token, False)
         assert owner.session.client._call.await_count == 6
 
     asyncio.run(scenario())
@@ -654,10 +666,10 @@ def test_remembered_authorizations_are_bounded(monkeypatch):
         owner = authorizing()
         tokens = [_token(f"caller-{i}") for i in range(5)]
         for token in tokens:
-            await owner._authorize("agent", token, False)
+            await _ask(owner, "agent", token, False)
         assert len(owner._authorized) == 3
         # The most recent ones are kept.
-        await owner._authorize("agent", tokens[-1], False)
+        await _ask(owner, "agent", tokens[-1], False)
         assert owner.session.client._call.await_count == 5
 
     asyncio.run(scenario())
@@ -835,7 +847,9 @@ def test_calls_run_side_by_side_and_close_answers_them_first():
             await asyncio.wait_for(
                 callbacks["status"](
                     SimpleNamespace(
-                        subject="abi.agent.default.owner.agent.v1.status", headers={}
+                        subject="abi.agent.default.owner.agent.v1.status",
+                        headers={},
+                        reply="_INBOX.caller.1",
                     )
                 ),
                 timeout=1,
@@ -852,3 +866,225 @@ def test_calls_run_side_by_side_and_close_answers_them_first():
         await asyncio.wait_for(closing, timeout=2)
 
     asyncio.run(scenario())
+
+
+# -- the delegation a run executes with ----------------------------------------
+
+
+def _delegation_token(sub="caller", act="sa_module", aud="abi:delegated:agent"):
+    import base64
+    import json
+    import time
+
+    claims = {"sub": sub, "aud": aud, "exp": time.time() + 600}
+    if act is not None:
+        claims["act"] = {"sub": act}
+    body = base64.urlsafe_b64encode(json.dumps(claims).encode()).rstrip(b"=")
+    return f"header.{body.decode()}.signature"
+
+
+class Seen:
+    """A handler recording the context its run executes in."""
+
+    def __init__(self):
+        from naas_abi_sdk.call_context import current_call_context
+
+        self.current = current_call_context
+        self.contexts = []
+
+    async def invoke(self, prompt, context):
+        self.contexts.append(self.current())
+        return "result"
+
+
+def _delegated_request(token):
+    submit = request()
+    submit.delegated_token = token
+    return submit
+
+
+def test_a_run_executes_as_the_module_for_the_user_it_was_delegated():
+    from naas_abi_sdk.call_context import user
+
+    async def scenario():
+        seen = Seen()
+        owner = host(Documents(), seen)
+        token = _delegation_token()
+        doc = await owner._submit("agent", "key", "caller", _delegated_request(token))
+        await owner.runs["key"].task
+        [context] = seen.contexts
+        assert context.principal.id == "sa_module"
+        assert context.principal.kind == "service_account"
+        assert context.on_behalf_of == user("caller")
+        assert context.delegated_token == token
+        assert doc.data["caller"] == "caller"
+        # The token is a credential: it is never written to the run's record.
+        stored = await owner.documents.get(owner.runs_collection, "key")
+        assert token not in repr(stored.data)
+
+    asyncio.run(scenario())
+
+
+class OwnDocuments(Documents):
+    """Documents recording whether each write carried a user's delegation."""
+
+    def __init__(self):
+        super().__init__()
+        self.delegated: list[str] = []
+
+    async def put(self, collection, id, data, if_version=None):
+        from naas_abi_sdk.call_context import current_call_context
+
+        if current_call_context().delegated_token:
+            self.delegated.append(f"{collection}/{id}")
+        return await super().put(collection, id, data, if_version=if_version)
+
+    async def delete(self, collection, id, if_version=None):
+        from naas_abi_sdk.call_context import current_call_context
+
+        if current_call_context().delegated_token:
+            self.delegated.append(f"delete {collection}/{id}")
+        return await super().delete(collection, id, if_version=if_version)
+
+
+class SeenStream(Seen):
+    async def stream_invoke(self, prompt, context):
+        self.contexts.append(self.current())
+        yield {"event": "message", "data": "one"}
+        self.contexts.append(self.current())
+        yield {"event": "done", "data": "[DONE]"}
+
+
+@pytest.mark.parametrize("mode", ["invoke", "stream"])
+def test_the_hosts_own_records_are_never_the_users(mode):
+    """The run, its events and its claim are the module's records, which a user
+    holds no right to: only the handler's calls carry the delegation."""
+
+    async def scenario():
+        seen, docs = SeenStream(), OwnDocuments()
+        owner = host(docs, seen)
+        token = _delegation_token()
+        submit = _delegated_request(token)
+        submit.mode = mode
+        await owner._submit("agent", "key", "caller", submit)
+        await owner.runs["key"].task
+        assert seen.contexts and all(c.delegated_token == token for c in seen.contexts)
+        assert docs.delegated == []
+        stored = await docs.get(owner.runs_collection, "key")
+        assert stored.data["status"] == "SUCCEEDED"
+
+    asyncio.run(scenario())
+
+
+def test_a_streaming_handler_keeps_one_context_across_its_steps():
+    """What a handler sets before a yield is there after it, and every step
+    (its first included) runs for the user; the host's writes never do."""
+    import contextvars
+
+    marker = contextvars.ContextVar("marker", default="unset")
+
+    class Stateful(Seen):
+        async def stream_invoke(self, prompt, context):
+            marker.set("set before the first yield")
+            self.contexts.append(self.current())
+            yield {"event": "message", "data": "one"}
+            self.contexts.append(self.current())
+            self.after = marker.get()
+            yield {"event": "done", "data": "[DONE]"}
+
+    async def scenario():
+        seen, docs = Stateful(), OwnDocuments()
+        owner = host(docs, seen)
+        token = _delegation_token()
+        submit = _delegated_request(token)
+        submit.mode = "stream"
+        await owner._submit("agent", "key", "caller", submit)
+        await owner.runs["key"].task
+        assert seen.after == "set before the first yield"
+        assert [c.delegated_token for c in seen.contexts] == [token, token]
+        assert docs.delegated == []
+        stored = await docs.get(owner.runs_collection, "key")
+        assert stored.data["status"] == "SUCCEEDED"
+
+    asyncio.run(scenario())
+
+
+def test_a_streaming_handler_that_raises_fails_the_run():
+    class Broken:
+        async def stream_invoke(self, prompt, context):
+            yield {"event": "message", "data": "one"}
+            raise RuntimeError("boom")
+
+    async def scenario():
+        docs = Documents()
+        owner = host(docs, Broken())
+        submit = request()
+        submit.mode = "stream"
+        await owner._submit("agent", "key", "caller", submit)
+        await owner.runs["key"].task
+        stored = await docs.get(owner.runs_collection, "key")
+        assert stored.data["status"] == "FAILED"
+
+    asyncio.run(scenario())
+
+
+def test_a_delegated_run_is_in_the_container_of_its_submit():
+    async def scenario():
+        seen = Seen()
+        owner = host(Documents(), seen)
+        submit = _delegated_request(_delegation_token())
+        submit.context.container = WORKSPACE
+        await owner._submit("agent", "key", "caller", submit)
+        await owner.runs["key"].task
+        [context] = seen.contexts
+        assert context.container == WORKSPACE and context.user is not None
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        "",
+        "garbage",
+        "a.b.c",
+        _delegation_token(sub="someone-else"),  # not the run's owner
+        _delegation_token(aud="abi:nats"),  # not a delegation
+        _delegation_token(aud="abi:session"),
+        _delegation_token(act=None),  # names no module
+    ],
+)
+def test_a_delegation_that_is_not_for_the_run_owner_is_dropped(token):
+    async def scenario():
+        seen = Seen()
+        owner = host(Documents(), seen)
+        await owner._submit("agent", "key", "caller", _delegated_request(token))
+        await owner.runs["key"].task
+        [context] = seen.contexts
+        assert context.delegated_token is None and context.user is None
+
+    asyncio.run(scenario())
+
+
+ULID = "01J8Z3K5M7N9P2Q4R6S8T0V2WX"
+
+
+def test_a_delegation_names_this_hosts_own_account_or_is_dropped():
+    """A submitter may hand over a delegation made for another module (it is
+    verified by the engine, but it is not this host's to carry): only one that
+    names this host's own account as the actor becomes the run's context."""
+
+    async def scenario(actor, kept):
+        seen = Seen()
+        owner = host(Documents(), seen)
+        owner.session.service_account = ULID
+        token = _delegation_token(act=actor)
+        await owner._submit("agent", "key", "caller", _delegated_request(token))
+        await owner.runs["key"].task
+        [context] = seen.contexts
+        assert (context.delegated_token == token) is kept
+        assert (context.user is not None) is kept
+
+    asyncio.run(scenario(f"sa_{ULID}", True))
+    asyncio.run(scenario("sa_01J8Z3K5M7N9P2Q4R6S8T0V2WY", False))
+    asyncio.run(scenario("engine", False))

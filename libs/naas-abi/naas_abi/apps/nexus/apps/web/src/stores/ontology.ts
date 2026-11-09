@@ -529,7 +529,7 @@ export const useOntologyStore = create<OntologyState>()(
         set({ loadingReference: true, error: null });
         try {
           const baseUrl = getApiUrl();
-          const response = await authFetch(`${baseUrl}/api/ontology/import`, {
+          const response = await authFetch(`${baseUrl}/api/ontology/import${ontologyApiQuery()}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ filePath }),
@@ -578,7 +578,7 @@ export const useOntologyStore = create<OntologyState>()(
         set({ loadingReference: true, error: null });
         try {
           const baseUrl = getApiUrl();
-          const response = await authFetch(`${baseUrl}/api/ontology/import`, {
+          const response = await authFetch(`${baseUrl}/api/ontology/import${ontologyApiQuery()}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ content, filename }),

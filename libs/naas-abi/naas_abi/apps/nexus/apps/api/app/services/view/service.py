@@ -262,9 +262,7 @@ class ViewService:
                 assert isinstance(row, ResultRow)
 
                 filter_uri = (
-                    str(row.filter_uri)
-                    if hasattr(row, "filter_uri") and row.filter_uri
-                    else None
+                    str(row.filter_uri) if hasattr(row, "filter_uri") and row.filter_uri else None
                 )
                 label = str(row.label) if hasattr(row, "label") and row.label else None
                 s = _normalize_filter_part(str(row.s) if hasattr(row, "s") and row.s else None)
@@ -448,8 +446,7 @@ class ViewService:
     def _visibility_clause(self, query, user_id: str | None):
         if user_id:
             return query.where(
-                (GraphViewModel.visibility == "workspace")
-                | (GraphViewModel.creator_id == user_id)
+                (GraphViewModel.visibility == "workspace") | (GraphViewModel.creator_id == user_id)
             )
         return query.where(GraphViewModel.visibility == "workspace")
 
@@ -538,7 +535,9 @@ class ViewService:
         await self._db.refresh(model)
         return _model_to_dict(model, workspace_id)
 
-    async def list_folders(self, workspace_id: str, *, user_id: str | None = None) -> list[dict[str, Any]]:
+    async def list_folders(
+        self, workspace_id: str, *, user_id: str | None = None
+    ) -> list[dict[str, Any]]:
         """Folder tree derived from distinct ``path`` values (folders are implicit)."""
         if self._db is None:
             raise ViewServiceUnavailableError("Database session is not available")
@@ -558,7 +557,14 @@ class ViewService:
         folders = []
         for fp in sorted(all_folders):
             total = sum(c for pp, c in direct.items() if pp == fp or pp.startswith(fp + "/"))
-            folders.append({"path": fp, "name": fp.split("/")[-1], "view_count": direct.get(fp, 0), "total_count": total})
+            folders.append(
+                {
+                    "path": fp,
+                    "name": fp.split("/")[-1],
+                    "view_count": direct.get(fp, 0),
+                    "total_count": total,
+                }
+            )
         return folders
 
     async def rename_folder(
@@ -577,26 +583,52 @@ class ViewService:
             raise ValueError("Cannot move a folder into its own subtree")
 
         like = old.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        subtree = (GraphViewModel.path == old) | (GraphViewModel.path.like(f"{like}/%", escape="\\"))
-        moved = (await self._db.execute(
-            select(GraphViewModel).where(GraphViewModel.workspace_id == workspace_id, subtree)
-        )).scalars().all()
+        subtree = (GraphViewModel.path == old) | (
+            GraphViewModel.path.like(f"{like}/%", escape="\\")
+        )
+        moved = (
+            (
+                await self._db.execute(
+                    select(GraphViewModel).where(
+                        GraphViewModel.workspace_id == workspace_id, subtree
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
 
         if not merge:
-            dest_keys = {((new if m.path == old else f"{new}/{m.path[len(old) + 1:]}" if new else m.path[len(old) + 1:]), m.name) for m in moved}
-            existing = (await self._db.execute(
-                select(GraphViewModel.path, GraphViewModel.name).where(
-                    GraphViewModel.workspace_id == workspace_id, ~subtree
+            dest_keys = {
+                (
+                    (
+                        new
+                        if m.path == old
+                        else f"{new}/{m.path[len(old) + 1 :]}"
+                        if new
+                        else m.path[len(old) + 1 :]
+                    ),
+                    m.name,
                 )
-            )).all()
+                for m in moved
+            }
+            existing = (
+                await self._db.execute(
+                    select(GraphViewModel.path, GraphViewModel.name).where(
+                        GraphViewModel.workspace_id == workspace_id, ~subtree
+                    )
+                )
+            ).all()
             clash = {(p, n) for p, n in existing} & dest_keys
             if clash:
                 first = sorted(clash)[0]
-                raise ValueError(f"Destination already contains a view named '{first[1]}' at '{first[0]}'. Pass merge=true to combine.")
+                raise ValueError(
+                    f"Destination already contains a view named '{first[1]}' at '{first[0]}'. Pass merge=true to combine."
+                )
 
         # Per-row prefix rewrite (portable across Postgres/SQLite; subtree is small + workspace-scoped).
         for m in moved:
-            tail = "" if m.path == old else m.path[len(old) + 1:]
+            tail = "" if m.path == old else m.path[len(old) + 1 :]
             m.path = new if m.path == old else (f"{new}/{tail}" if new else tail)
         await self._db.commit()
         return {"status": "renamed", "from_path": old, "to_path": new, "updated_count": len(moved)}
@@ -706,9 +738,9 @@ class ViewService:
             raise ValueError("Network views do not support legacy network endpoint")
         if self._access_scope is None:
             raise GraphAccessError("A workspace graph scope is required")
-        self._access_scope.require(workspace_id, [
-            _resolve_graph_uri(g) for g in view_info.get("graph_names", [])
-        ])
+        self._access_scope.require(
+            workspace_id, [_resolve_graph_uri(g) for g in view_info.get("graph_names", [])]
+        )
         graph_filters_resolved = self.get_graph_filters(view_info.get("graph_filters", []))
         return _list_individuals(
             triple_store=self._get_triple_store(),
@@ -746,6 +778,8 @@ class ViewService:
 
         instances_by_class = [
             {"type": node_type, "count": count}
-            for node_type, count in sorted(type_counts.items(), key=lambda item: (-item[1], item[0]))
+            for node_type, count in sorted(
+                type_counts.items(), key=lambda item: (-item[1], item[0])
+            )
         ]
         return {"kpis": kpis, "instances_by_class": instances_by_class}

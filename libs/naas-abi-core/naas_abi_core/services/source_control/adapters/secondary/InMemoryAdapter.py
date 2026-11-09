@@ -8,6 +8,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     REVIEW_APPROVED,
     REVIEW_CHANGES_REQUESTED,
     REVIEW_COMMENT,
+    AccessDeniedError,
     Branch,
     BranchNameConflictError,
     BranchNotFoundError,
@@ -24,6 +25,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     Proposal,
     ProposalNotFoundError,
     Repo,
+    RepoExistsError,
     RepoNotFoundError,
     Review,
     SourceControlError,
@@ -50,6 +52,8 @@ class InMemoryAdapter(ISourceControlAdapter):
 
     def __init__(self) -> None:
         self._users: dict[str, str] = {}  # username -> user id
+        self._owners: dict[str, str] = {}  # username -> external id
+        self._forge_users: dict[str, str] = {}  # external id -> username
         self._repos: dict[str, dict] = {}  # repo_id -> record
         self._counter = 0
 
@@ -71,10 +75,27 @@ class InMemoryAdapter(ISourceControlAdapter):
 
     # -- Port implementation ------------------------------------------------
 
-    def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
+    def ensure_user(
+        self,
+        *,
+        external_id: str,
+        email: str,
+        username: str,
+        vouched_email: bool = False,
+    ) -> str:
+        bound = self._owners.get(username)
+        if bound is not None and bound != external_id:
+            raise AccessDeniedError(
+                f"Forge user {username} belongs to another principal"
+            )
         if username not in self._users:
             self._users[username] = self._next_id("user")
+        self._owners[username] = external_id
+        self._forge_users[external_id] = username
         return self._users[username]
+
+    def find_user(self, *, external_id: str) -> str | None:
+        return self._forge_users.get(external_id)
 
     def ensure_repo(
         self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
@@ -99,6 +120,16 @@ class InMemoryAdapter(ISourceControlAdapter):
                 "files": {"README.md": f"# {name}\n"} if auto_init else {},
             }
         return self._to_repo(self._repos[repo_id])
+
+    def create_repo(
+        self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
+    ) -> Repo:
+        repo_id = f"{owner}/{name}"
+        if any(existing.lower() == repo_id.lower() for existing in self._repos):
+            raise RepoExistsError(f"Repository {repo_id} exists")
+        return self.ensure_repo(
+            owner=owner, name=name, private=private, auto_init=auto_init
+        )
 
     def list_contents(
         self, *, repo_id: str, path: str = "", ref: str | None = None
@@ -460,5 +491,5 @@ class InMemoryAdapter(ISourceControlAdapter):
         record["merge_sha"] = sha
         return MergeResult(merged=True, sha=sha, message="merged")
 
-    def mint_git_token(self, *, user_id: str) -> str:
+    def mint_git_token(self, *, user_id: str, external_id: str | None = None) -> str:
         return self._next_id("git-token")

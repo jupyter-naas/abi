@@ -109,7 +109,6 @@ class OrganizationWorkspaceRecord:
     logo_emoji: str | None = None
     workspace_group: str | None = None
     # Saved in Organization Settings > Workspaces; None = config overrides apply.
-    feature_overrides: dict[str, bool] | None = None
 
 
 @dataclass
@@ -128,6 +127,9 @@ class OrganizationMemberRecord:
     service_line: str | None = None
     country: str | None = None
     interest: str | None = None
+    # Their IAM principal (``Member.principal_id``): an account linked from the old
+    # login has another id in IAM than in Nexus. What the access pages link to.
+    principal_id: str | None = None
 
 
 @dataclass
@@ -186,6 +188,7 @@ class UserRecord:
     id: str
     email: str
     name: str | None = None
+    bio: str | None = None
 
 
 @dataclass
@@ -197,6 +200,8 @@ class OrganizationDomainRecord:
     verification_token: str | None = None
     created_at: datetime | None = None
     verified_at: datetime | None = None
+    # The identity provider a login with an email of this domain goes to.
+    provider: str | None = None
 
 
 @dataclass
@@ -208,22 +213,16 @@ class OrganizationDomainCreateInput:
     created_at: datetime | None = None
 
 
-@dataclass
-class OrganizationRoleFeaturesRecord:
-    organization_id: str
-    role_baseline: dict[str, list[str]]
-    updated_by: str | None = None
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
-
-
 class OrganizationPermissionPort(ABC):
+    """The organizations Nexus keeps. Who belongs to them and with which role is
+    IAM's (``services/iam/memberships``), not this port's."""
+
     @abstractmethod
-    async def get_organization_role(self, user_id: str, org_id: str) -> str | None:
+    async def list_all_organizations(self) -> list[OrganizationRecord]:
         raise NotImplementedError
 
     @abstractmethod
-    async def list_organizations_for_user(self, user_id: str) -> list[OrganizationRecord]:
+    async def get_users_by_ids(self, user_ids: list[str]) -> dict[str, UserRecord]:
         raise NotImplementedError
 
     @abstractmethod
@@ -251,28 +250,7 @@ class OrganizationPermissionPort(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def list_workspaces_for_org_and_user(
-        self, org_id: str, user_id: str
-    ) -> list[OrganizationWorkspaceRecord]:
-        raise NotImplementedError
-
-    @abstractmethod
     async def list_workspaces_for_org(self, org_id: str) -> list[OrganizationWorkspaceRecord]:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def list_workspace_memberships_for_org(
-        self, org_id: str
-    ) -> list[OrganizationWorkspaceMembershipRecord]:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def list_organization_members(self, org_id: str) -> list[OrganizationMemberRecord]:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def list_all_organization_memberships(self) -> list[UserOrganizationMembershipRecord]:
-        """Every user's organizations across the platform (Platform Settings)."""
         raise NotImplementedError
 
     @abstractmethod
@@ -280,32 +258,22 @@ class OrganizationPermissionPort(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def is_organization_member(self, org_id: str, user_id: str) -> bool:
+    async def get_member_account(self, user_id: str) -> OrganizationMemberAccountRecord | None:
+        """The member's platform account (users row), as the account settings show it."""
         raise NotImplementedError
 
     @abstractmethod
-    async def add_organization_member(
-        self, org_id: str, user_id: str, role: str, created_at: datetime
-    ) -> OrganizationMemberRecord:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def get_organization_member(
+    async def get_organization_member_profile(
         self, org_id: str, user_id: str
-    ) -> OrganizationMemberRecord | None:
+    ) -> OrganizationMemberProfileRecord | None:
+        """What this organization set for the member; None when it set nothing."""
         raise NotImplementedError
 
     @abstractmethod
-    async def update_organization_member_role(
-        self, org_id: str, user_id: str, role: str
-    ) -> OrganizationMemberRecord | None:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def get_organization_member_details(
-        self, org_id: str, user_id: str
-    ) -> OrganizationMemberDetailsRecord | None:
-        """The membership with the account and the org profile kept apart."""
+    async def list_organization_member_profiles(
+        self, org_id: str
+    ) -> dict[str, OrganizationMemberProfileRecord]:
+        """Every member profile this organization set, by user id."""
         raise NotImplementedError
 
     @abstractmethod
@@ -321,8 +289,9 @@ class OrganizationPermissionPort(ABC):
         service_line: str | None = None,
         country: str | None = None,
         interest: str | None = None,
-    ) -> OrganizationMemberRecord | None:
-        """Set the member's profile in this org; ``None`` leaves a field unchanged."""
+    ) -> OrganizationMemberProfileRecord:
+        """Set the member's profile in this org (kept from the first edit on);
+        ``None`` leaves a field unchanged."""
         raise NotImplementedError
 
     @abstractmethod
@@ -330,10 +299,6 @@ class OrganizationPermissionPort(ABC):
         self, org_id: str, user_id: str, avatar: str | None
     ) -> str | None:
         """Set (or clear, with ``None``) the org avatar; returns the previous org avatar."""
-        raise NotImplementedError
-
-    @abstractmethod
-    async def delete_organization_member(self, org_id: str, user_id: str) -> bool:
         raise NotImplementedError
 
     @abstractmethod
@@ -363,21 +328,24 @@ class OrganizationPermissionPort(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def delete_organization(self, org_id: str) -> bool:
+        """Remove an organization row (a failed create takes its row back)."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def lock_organization(self, org_id: str) -> bool:
+        """Hold the organization's row for writing until the transaction ends (a
+        workspace made in it meanwhile waits, then finds it gone); False when there
+        is none."""
+        raise NotImplementedError
+
+    @abstractmethod
     async def delete_organization_domain(self, org_id: str, domain_id: str) -> bool:
         raise NotImplementedError
 
     @abstractmethod
-    async def get_organization_role_features(
-        self, org_id: str
-    ) -> OrganizationRoleFeaturesRecord | None:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def upsert_organization_role_features(
-        self,
-        org_id: str,
-        role_baseline: dict[str, list[str]],
-        updated_by: str | None,
-        now: datetime,
-    ) -> OrganizationRoleFeaturesRecord:
+    async def set_organization_domain_provider(
+        self, org_id: str, domain_id: str, provider: str | None
+    ) -> OrganizationDomainRecord | None:
+        """Route the domain's logins to ``provider`` (None: the default provider)."""
         raise NotImplementedError

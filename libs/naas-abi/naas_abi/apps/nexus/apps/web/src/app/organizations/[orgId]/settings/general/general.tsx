@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Building2, Globe, Save } from 'lucide-react';
-import { useAuthStore } from '@/stores/auth';
+import { selectSession, useAuthStore } from '@/stores/auth';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
 import { OrgSettingsSectionCard } from '../components/org-settings-section-card';
 import { isOrgAdminRole } from '../lib/nav';
@@ -27,7 +27,7 @@ export default function OrganizationGeneralPage() {
   const params = useParams();
   const orgId = params.orgId as string;
   const authReady = usePersistedAuthReady();
-  const token = useAuthStore((state) => state.token);
+  const token = useAuthStore(selectSession);
 
   const [name, setName] = useState('');
   const [initialName, setInitialName] = useState('');

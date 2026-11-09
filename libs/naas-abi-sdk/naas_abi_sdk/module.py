@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import logging
 import math
 import os
 import signal
 import socket
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Iterable
+from contextlib import AbstractContextManager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -17,6 +19,7 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from naas_abi_sdk import lifeline, telemetry
 from naas_abi_sdk.apps import AppDescriptor, discover_apps
+from naas_abi_sdk.call_context import CallContext, inside
 from naas_abi_sdk.catalog import OPERATIONS
 from naas_abi_sdk.client import ABIClient
 from naas_abi_sdk.components import by_name, discover_components
@@ -27,11 +30,13 @@ from naas_abi_sdk.discovery import (
     DiscoverySession,
     ModelDescriptor,
     ModulesProxy,
+    discovery_job_authorizer,
     module_descriptor,
     validate_rollout_id,
 )
 from naas_abi_sdk.health import HealthServer
 from naas_abi_sdk.jobs import JobsMixin
+from naas_abi_sdk.listers import ListerHost, check_listers, declared_listers
 from naas_abi_sdk.ontologies import (
     OntologyFile,
     OntologyLoader,
@@ -40,7 +45,6 @@ from naas_abi_sdk.ontologies import (
     module_ontology_files,
 )
 from naas_abi_sdk.services import service_proxy
-from naas_abi_sdk.transport import MODULE_INBOX_PREFIX
 
 if TYPE_CHECKING:
     from naas_abi_sdk.bus import BusClient
@@ -52,6 +56,8 @@ if TYPE_CHECKING:
         DocumentService,
         EmailService,
         EventService,
+        IAMService,
+        IdentityService,
         KeyValueService,
         ModelRegistryService,
         ObjectStorageService,
@@ -86,6 +92,9 @@ class _ServicesAccess:
         self._allowed = {
             self._aliases.get(name, name) for name in dependencies.services
         }
+        # Needs no declaration: IAM answers for the module's own identity and
+        # authorizes its own operations, so reaching it grants nothing.
+        self._allowed.add("iam")
         unknown = self._allowed - (set(OPERATIONS) | {"bus", "kv", "events"})
         if unknown:
             raise ValueError(f"Unknown remote services: {sorted(unknown)}")
@@ -100,6 +109,8 @@ class ServicesProxy(_ServicesAccess):
     email: EmailService
     event: EventService
     events: EventService
+    iam: IAMService
+    identity: IdentityService
     keyvalue: KeyValueService
     kv: KeyValueService
     object_storage: ObjectStorageService
@@ -160,6 +171,20 @@ class EngineProxy:
         )
         self.services = ServicesProxy(client, dependencies, module_name)
         self.rpc = RPCServicesProxy(client, dependencies, module_name)
+        self._client = client
+
+    @staticmethod
+    def inside(container: str | None) -> AbstractContextManager[CallContext]:
+        """``with engine.inside(container):`` makes the block's calls in
+        ``container`` (``call_context.inside``)."""
+        return inside(container)
+
+    @property
+    def principal_id(self) -> str:
+        """The service account this module runs as (its ``sa_`` id), known once
+        its key was exchanged; empty for a transport holding a plain token."""
+        credentials = getattr(self._client._transport, "credentials", None)
+        return getattr(credentials, "principal_id", "") or ""
 
 
 Config = TypeVar("Config", bound=ModuleConfiguration)
@@ -182,6 +207,14 @@ class BaseModule(JobsMixin, Generic[Config]):
     # Web apps it serves over NATS. None: one per apps/<name>/manifest.json
     # next to the module's package (naas_abi_sdk.apps.discover_apps).
     apps: tuple[AppDescriptor, ...] | None = None
+    # The permission manifest an admin approves (naas_abi_sdk.permissions):
+    # a policy document. None: permissions.yaml beside the module, else the
+    # defaults of ``dependencies``.
+    permissions: dict[str, Any] | None = None
+    # Actions of its own (naas_abi_sdk.permissions.module_catalog): a catalog of
+    # resource types and actions, sent with the manifest and registered when it
+    # is approved. None: iam_catalog.yaml beside the module, else none.
+    iam_catalog: dict[str, Any] | None = None
     # The .ttl files it sends to the engine's schema graph once the instance serves
     # (naas_abi_sdk.ontologies). None: every ontologies/**/*.ttl next to the module's
     # package, except under "sandbox". A tuple names the files, relative to ontologies/
@@ -247,6 +280,49 @@ class BaseModule(JobsMixin, Generic[Config]):
         if not inspect.iscoroutinefunction(handler.invoke):
             raise TypeError("Model handler.invoke must be async")
         self._model_handlers[name] = handler
+
+    def expose_lister(self, type_name: str, handler) -> None:
+        """List ``type_name``, a type of this module's catalog, with ``handler``
+        (``(query: ListerQuery) -> Iterable[Listed]``, sync or async), before
+        ``on_load`` returns; ``@lister`` does the same on a method
+        (``naas_abi_sdk.listers``)."""
+        handlers = self.__dict__.setdefault("_lister_handlers", {})
+        if type_name in handlers:
+            raise ValueError(f"Lister already registered: {type_name}")
+        handlers[type_name] = handler
+
+    async def require_action(
+        self,
+        action: str,
+        resource_type: str,
+        parts: str | Iterable[str],
+        *,
+        container: str | None = None,
+    ) -> None:
+        """Enforce one of this module's declared actions for the call it serves.
+
+        IAM decides for the current context: during a run for a user (an agent
+        invocation or a job carrying a delegation) the user's policies and the
+        module's approved manifest must both allow it. The resource is
+        ``<container>/<service>:<type>/<id>``, in ``container`` (a container's
+        name) else the container of the call (a declared container type's own
+        resource is the container). Raises ``PermissionDenied`` (or ``NotFound`` for a caller who sees
+        nothing of it)."""
+        service = self.__dict__.get("_declared_service")
+        if service is None:
+            # Read once: the catalog is the one the manifest sent at start.
+            from naas_abi_sdk.permissions import module_catalog
+
+            catalog = module_catalog(type(self))
+            if catalog is None:
+                raise ValueError(f"{type(self).__name__} declares no catalog")
+            service = self.__dict__["_declared_service"] = str(catalog["service"])
+        await self.engine.services.iam.require_declared(
+            f"{service}:{action}",
+            resource_type,
+            [parts] if isinstance(parts, str) else list(parts),
+            container=container,
+        )
 
     @classmethod
     def get_apps(cls) -> tuple[AppDescriptor, ...]:
@@ -568,6 +644,86 @@ def _health_bind(port: int | None, host: str) -> tuple[str, int] | None:
     return bind_host, port
 
 
+# How often a module waiting for its manifest's approval asks again.
+APPROVAL_POLL_SECONDS = 5.0
+
+
+async def _await_approval(
+    client: ABIClient, module_type: type[BaseModule], identity: str
+) -> None:
+    """Submit the module's permission manifest and wait until it is approved.
+
+    Only for a module running on a service key of a module account
+    (``module/<project>/<module_id>``). An approval that lands after this
+    connection opened reconnects it: the broker computes the new
+    connection's subjects from the approved policy.
+    """
+    from naas_abi_proto.iam.v1 import iam_pb2
+
+    from naas_abi_sdk.credentials import ServiceKey, module_account
+    from naas_abi_sdk.permissions import module_manifest
+
+    transport = client._transport
+    credentials = getattr(transport, "credentials", None)
+    if not isinstance(credentials, ServiceKey):
+        return  # a process of the engine, with its own tokens
+    await transport.access_token()  # the exchange names the account
+    account = module_account(credentials.name)
+    if account is None:
+        return  # a script's or CI's account: its policies are attached directly
+    project, module_id = account
+    if module_id != identity:
+        raise ValueError(
+            f"This module is {identity!r}, but its service key belongs to "
+            f"{credentials.name}: run it with that module's key"
+        )
+    document = json.dumps(module_manifest(module_type), sort_keys=True)
+    log = logging.getLogger(__name__)
+    waited = False
+    while True:
+        submitted = await client.iam.submit_manifest(
+            iam_pb2.SubmitManifestRequest(
+                module_id=module_id, project=project, document_json=document
+            )
+        )
+        if submitted.HasField("error") and submitted.error.code:
+            raise RuntimeError(
+                f"Manifest refused ({submitted.error.code}): {submitted.error.message}"
+            )
+        status = submitted.manifest.status
+        if status == "rejected":
+            raise RuntimeError(
+                f"The permission manifest of {credentials.name} was rejected"
+                + (
+                    f": {submitted.manifest.reason}"
+                    if submitted.manifest.reason
+                    else ""
+                )
+            )
+        if status == "approved" or submitted.in_force:
+            if status != "approved":
+                log.warning(
+                    "%s runs on its approved permissions; a new manifest %s waits "
+                    "for approval (abi iam module approve %s)",
+                    identity,
+                    submitted.manifest.sha256[:12],
+                    credentials.name,
+                )
+            if submitted.approved_now or waited:
+                await transport.reconnect()
+            return
+        if not waited:
+            log.warning(
+                "%s waits for the approval of its permission manifest %s: "
+                "abi iam module approve %s",
+                identity,
+                submitted.manifest.sha256[:12],
+                credentials.name,
+            )
+        waited = True
+        await asyncio.sleep(APPROVAL_POLL_SECONDS)
+
+
 async def run_module(
     module_type: type[BaseModule],
     *,
@@ -614,16 +770,14 @@ async def run_module(
     telemetry.configure_from_env(identity)
     # Named after the module so the broker's /connz shows which module is which.
     connection_options.setdefault("name", f"{identity}@{socket.gethostname()}")
-    # A module reads its replies on the module inbox prefix, however it logs in
-    # (URL, user/password options, creds or token): the broker user `module` may
-    # not subscribe to _INBOX.>, where the engine's replies go.
-    connection_options.setdefault("inbox_prefix", MODULE_INBOX_PREFIX)
     # NATS gone for good stops the module (SIGTERM drains it), and its supervisor
     # restarts it, instead of a process that serves nothing.
     async with (
         ABIClient(url, token, timeout=timeout, **connection_options) as client,
         lifeline.stopping_on_loss(),
     ):
+        # Before anything else: an unapproved module can call nothing.
+        await _await_approval(client, module_type, identity)
         dependencies = module_type.get_dependencies()
         discovery_client = (
             DiscoveryClient(client._transport, discovery.project) if discovery else None
@@ -650,6 +804,7 @@ async def run_module(
         agent_host = None
         model_host = None
         app_host = None
+        lister_host = None
         job_host = None
         jobs_after_cutover: asyncio.Task | None = None
         ontologies_task: asyncio.Task | None = None
@@ -702,6 +857,21 @@ async def run_module(
 
                 model_host = ModelHost(registration, module._model_handlers)
                 await model_host.start()
+            listers = declared_listers(module)
+            if listers:
+                # Its subject carries the account discovery returned at registration;
+                # the instance stays STARTING (IAM asks READY ones only) until the
+                # renew below marks it initialized, after the host subscribed.
+                if registration is None:
+                    raise ValueError("Listers require discovery")
+                from naas_abi_sdk.permissions import module_catalog
+
+                catalog = module_catalog(module_type)
+                check_listers(listers, catalog)
+                lister_host = ListerHost(
+                    registration, str((catalog or {}).get("service", "")), listers
+                )
+                await lister_host.start()
             apps = module_type.get_apps()
             if apps:
                 if registration is None:
@@ -730,6 +900,7 @@ async def run_module(
                     raise ValueError(
                         "Job hosting requires discovery and a document service dependency"
                     )
+                from naas_abi_sdk.broker_control import for_transport
                 from naas_abi_sdk.job_host import JobHost
 
                 job_host = JobHost(
@@ -739,6 +910,8 @@ async def run_module(
                     discovery.project,
                     {j.name: (j, module._job_handlers[j.name]) for j in module.jobs},
                     instance_id=registration.instance_id,
+                    authorize=discovery_job_authorizer(registration),
+                    control=for_transport(client._transport),
                 )
                 if not registration.rollout_id:
                     await _host_jobs(job_host, module)
@@ -880,6 +1053,8 @@ async def run_module(
                     await model_host.close()
                 if app_host:
                     await app_host.close()
+                if lister_host:
+                    await lister_host.close()
                 if agent_host:
                     await agent_host.close()
                 await _invoke(module.on_unloaded)

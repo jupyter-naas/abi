@@ -22,6 +22,7 @@ from typing import Any
 
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.port import (
     DEFAULT_MAX_UPLOAD_BYTES,
+    INTERNAL_MODULES,
     AppRequest,
     AppResponse,
     RemoteApp,
@@ -51,6 +52,9 @@ MAX_MISSES = 1024
 ANSWER_AFTER_UPLOAD_SECONDS = 65.0
 # How long the module has to take the error of an upload the browser dropped.
 CUT_NOTICE_SECONDS = 2.0
+# Where a module's streamed answer is pulled from: the reply inbox its service account
+# may publish to (its own connection prefix starts with this).
+_INBOX_PREFIX = "_INBOX."
 # The module is gone or going: another READY instance may answer.
 # Each is raised before the app ran the request, so even a POST is safe to resend.
 _RETRY_ELSEWHERE = {"MODULE_UNAVAILABLE", "LEASE_EXPIRED", "UNAVAILABLE"}
@@ -65,8 +69,9 @@ _STATUS = {
 class _Snapshot:
     taken: float
     apps: list[RemoteApp]
-    # (module_id, app) -> READY instance ids serving it
-    instances: dict[tuple[str, str], list[str]]
+    # (module_id, app) -> (service account, instance id) of each READY instance serving
+    # it: both name its subject.
+    instances: dict[tuple[str, str], list[tuple[str, str]]]
 
 
 class _Client:
@@ -147,7 +152,7 @@ class DiscoveryRemoteAppDirectory:
 
     async def _read(self, client: _Client) -> _Snapshot:
         apps: dict[tuple[str, str], RemoteApp] = {}
-        instances: dict[tuple[str, str], list[str]] = {}
+        instances: dict[tuple[str, str], list[tuple[str, str]]] = {}
         after = ""
         while True:
             page, after = await client.discovery.list_modules(limit=100, after_instance_id=after)
@@ -172,12 +177,18 @@ class DiscoveryRemoteAppDirectory:
                             getattr(app, "max_upload_bytes", 0),
                         ),
                     )
-                    instances.setdefault(key, []).append(instance.instance_id)
+                    instances.setdefault(key, []).append(
+                        (instance.service_account, instance.instance_id)
+                    )
             if not after:
                 break
         return _Snapshot(
             self._now(),
-            sorted(apps.values(), key=lambda a: (a.module_id, a.name)),
+            # The platform's own modules are not in the catalog.
+            sorted(
+                (a for a in apps.values() if a.module_id not in INTERNAL_MODULES),
+                key=lambda a: (a.module_id, a.name),
+            ),
             instances,
         )
 
@@ -185,6 +196,8 @@ class DiscoveryRemoteAppDirectory:
         return list((await self._snapshot(self._client())).apps)
 
     async def upload_limit(self, module_id: str, app: str) -> int:
+        if module_id in INTERNAL_MODULES:
+            return DEFAULT_MAX_UPLOAD_BYTES
         snapshot = await self._snapshot(self._client())
         found = next(
             (a for a in snapshot.apps if (a.module_id, a.name) == (module_id, app)),
@@ -192,19 +205,28 @@ class DiscoveryRemoteAppDirectory:
         )
         return found.upload_limit if found else DEFAULT_MAX_UPLOAD_BYTES
 
-    async def forward(self, module_id: str, app: str, request: AppRequest) -> AppResponse:
+    async def forward(
+        self,
+        module_id: str,
+        app: str,
+        request: AppRequest,
+        *,
+        service_account: str | None = None,
+    ) -> AppResponse:
         from naas_abi_proto.app.v1 import app_pb2 as pb
         from naas_abi_sdk.app_streams import BodySource
 
+        if module_id in INTERNAL_MODULES and service_account is None:
+            raise RemoteAppUnavailable(404, "App not published by a ready module")
         client = self._client()
         key = (module_id, app)
         snapshot = await self._snapshot(client)
-        candidates = list(snapshot.instances.get(key, ()))
+        candidates = self._bound(snapshot, module_id, app, service_account)
         missed = client.misses.get(key)
         if not candidates and (missed is None or self._now() - missed >= MISS_SECONDS):
             # Just started? Read discovery again before answering 404.
             snapshot = await self._snapshot(client, max_age=MISS_SNAPSHOT_SECONDS)
-            candidates = list(snapshot.instances.get(key, ()))
+            candidates = self._bound(snapshot, module_id, app, service_account)
             if not candidates:
                 if len(client.misses) >= MAX_MISSES:
                     client.misses.clear()
@@ -222,6 +244,8 @@ class DiscoveryRemoteAppDirectory:
             user_id=request.user_id,
             workspace_id=request.workspace_id,
         )
+        # The container the app is opened in: where its calls are made.
+        message.context.container = request.container
         for name, value in request.headers:
             message.headers.add(name=name, value=value)
         source: BodySource | None = None
@@ -238,9 +262,9 @@ class DiscoveryRemoteAppDirectory:
         random.shuffle(candidates)
         last = "No ready instance answered"
         try:
-            for instance_id in candidates[:2]:  # one retry, elsewhere
+            for instance in candidates[:2]:  # one retry, elsewhere
                 try:
-                    response = await self._send(client, instance_id, message, source, pump)
+                    response = await self._send(client, instance, message, source, pump)
                 except _Retry as exc:
                     last = exc.reason
                     client.snapshot = None  # that instance is gone or going
@@ -256,10 +280,22 @@ class DiscoveryRemoteAppDirectory:
             if source is not None:
                 await source.close()
 
+    @staticmethod
+    def _bound(
+        snapshot: _Snapshot, module_id: str, app: str, service_account: str | None
+    ) -> list[tuple[str, str]]:
+        """The ready instances of the app; with ``service_account``, only those
+        that run as that account."""
+        return [
+            instance
+            for instance in snapshot.instances.get((module_id, app), ())
+            if service_account is None or instance[0] == service_account
+        ]
+
     async def _send(
         self,
         client: _Client,
-        instance_id: str,
+        instance: tuple[str, str],
         message: Any,
         source: Any,
         pump: asyncio.Task | None = None,
@@ -270,12 +306,14 @@ class DiscoveryRemoteAppDirectory:
 
         call = self._call_app or call_app
         transport = client.transport if source is None else client.upload_transport
+        service_account, instance_id = instance
+        sent = call(
+            transport, client.project, instance_id, message, service_account=service_account
+        )
         try:
             if source is None:
-                return await call(transport, client.project, instance_id, message)
-            return await _upload(
-                call(transport, client.project, instance_id, message), source, pump
-            )
+                return await sent
+            return await _upload(sent, source, pump)
         except RPCError as exc:
             if exc.code in _RETRY_ELSEWHERE:
                 raise _Retry(str(exc)) from exc
@@ -286,12 +324,10 @@ class DiscoveryRemoteAppDirectory:
             raise RemoteAppUnavailable(504, "The app did not answer in time") from exc
 
     async def _answer(self, client: _Client, response: Any) -> AppResponse:
-        from naas_abi_sdk.transport import is_inbox
-
         headers = tuple((h.name, h.value) for h in response.headers)
         if not response.body_follows:
             return AppResponse(response.status or 200, headers, response.body)
-        if not is_inbox(response.body_inbox):
+        if not response.body_inbox.startswith(_INBOX_PREFIX):
             raise RemoteAppUnavailable(502, "The app answered with an invalid body inbox")
         nc = await client.transport.connect()
         return AppResponse(

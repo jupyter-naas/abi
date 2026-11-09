@@ -54,8 +54,10 @@ services:
 """
 _NATS_BLOCK = """\
 nats:
-  nats_url: "nats://abi:{{ secret.NATS_ABI_PASSWORD }}@nats:4222"
-  jwt_secret: "{{ secret.NATS_JWT_SECRET }}"
+  nats_url: "nats://engine:{{ secret.NATS_ENGINE_PASSWORD }}@nats:4222"
+  auth_callout:
+    nats_url: "nats://auth:{{ secret.NATS_AUTH_PASSWORD }}@nats:4222"
+    issuer_seed: "{{ secret.NATS_AUTH_CALLOUT_SEED }}"
 """
 
 # Off the Dokploy stack: Caddy is replaced by Traefik, the rest is dropped.
@@ -157,7 +159,7 @@ def test_the_stack_runs_the_images_of_the_local_stack(
     # the older copy either (fuseki-compact's `||` on a line of its own is a
     # shell syntax error that restarts the container forever).
     # nats: the local stack refuses an empty broker password in a shell wrapper,
-    # this one at interpolation (`${NATS_ABI_PASSWORD:?...}`).
+    # this one at interpolation (`${NATS_ENGINE_PASSWORD:?...}`).
     scripts = sorted(shared - {"nats"})
     for key in ("entrypoint", "command"):
         assert {name: dokploy[name].get(key) for name in scripts} == {
@@ -286,7 +288,9 @@ def test_abi_is_built_from_the_project_dockerfile_without_a_source_mount(
     built = [name for name, service in services.items() if "build" in service]
 
     assert "abi" in built
-    for name in built:
+    # The built-in identity provider is an SDK module with an image of its own.
+    assert ("idp" in built) is nats
+    for name in set(built) - {"idp"}:
         service = services[name]
         assert service["build"] == {"context": ".", "dockerfile": "Dockerfile"}
         for volume in service.get("volumes", []):
@@ -315,9 +319,13 @@ def test_the_env_holds_every_variable_the_compose_needs(
     assert env["PUBLIC_API_HOST"] == "api.example.com"
     assert env["NEXUS_API_URL"] == "https://api.example.com"
     assert env["ABI_STACK_NAME"] == "demoproject"
-    assert len(env["NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD"]) >= 16
-    assert ("NATS_JWT_SECRET" in env) is nats
-    assert ("NATS_ABI_PASSWORD" in env) is nats
+    # No admin password and no signing secret: people sign in at the built-in
+    # identity provider, and the broker's auth callout has its own key pair.
+    assert not any(key.startswith("NEXUS_USER_") for key in env)
+    assert "NATS_JWT_SECRET" not in env
+    assert ("NATS_ENGINE_PASSWORD" in env) is nats
+    assert ("NATS_AUTH_CALLOUT_SEED" in env) is nats
+    assert ("ABI_IDP_CLIENT_SECRET" in env) is nats
     assert ("RABBITMQ_PASSWORD" in env) is not nats
     # Every secret the config reads is listed, commented out until filled in:
     # an empty variable would still win over the engine's secrets file.
@@ -354,7 +362,7 @@ def test_the_env_is_stable_across_reruns_unless_regenerated(tmp_path: Path) -> N
 
     _deploy(project, include_coding=True, regenerate=True)
     third = _env(project)
-    for key in ("POSTGRES_PASSWORD", "NATS_ABI_PASSWORD", "CODER_ADMIN_PASSWORD"):
+    for key in ("POSTGRES_PASSWORD", "NATS_ENGINE_PASSWORD", "CODER_ADMIN_PASSWORD"):
         assert third[key] != first[key], key
     assert third["PUBLIC_WEB_HOST"] == first["PUBLIC_WEB_HOST"]
     backups = list((project / ".abi-backups" / "deploy-dokploy").glob("*/.env.dokploy"))
@@ -375,11 +383,16 @@ def test_regenerate_replaces_the_secrets_and_keeps_everything_else(
     _deploy(project, domain=None, regenerate=True)
     after = _env(project)
 
-    for key in ("PUBLIC_WEB_HOST", "PUBLIC_API_HOST", "NEXUS_API_URL", "ABI_STACK_NAME"):
+    for key in (
+        "PUBLIC_WEB_HOST",
+        "PUBLIC_API_HOST",
+        "NEXUS_API_URL",
+        "ABI_STACK_NAME",
+    ):
         assert after[key] == first[key], key
     assert after["NEXUS_WEB_TAG"] == "v2"
     assert after["MY_KEY"] == "kept"
-    for key in ("POSTGRES_PASSWORD", "ABI_API_KEY", "NATS_ABI_PASSWORD"):
+    for key in ("POSTGRES_PASSWORD", "ABI_API_KEY", "NATS_ENGINE_PASSWORD"):
         assert after[key] != first[key], key
 
 

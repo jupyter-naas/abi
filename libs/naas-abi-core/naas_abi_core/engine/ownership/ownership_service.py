@@ -1,6 +1,6 @@
 """Whether this engine may serve the kernel services: claim, stand by, keep, release.
 
-The state machine of docs/adr/20261006_single-serving-engine.md, over any
+The state machine of ``AGENTS.md`` here ("Decisions"), over any
 ``EngineLeasePort``. Expiry is observed, never computed from timestamps: an
 engine is gone when its lease's revision has not moved for a full lease period
 on the observer's own clock, so clocks are never compared across hosts.

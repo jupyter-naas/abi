@@ -16,16 +16,14 @@ import time
 
 import nats
 import pytest
-from naas_abi_core.engine.nats_auth import ServiceTokenSource, module_key
 from naas_abi_core.engine.nats_test_server import (
-    login,
     native_nats_server,
     nats_server_binary,
 )
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.discovery.discovery_factory import start_discovery
 
-SECRET = "app-shutdown-integration-test-secret-32b"
-PASSWORDS = {"abi": "nats-abi-shutdown", "module": "nats-module-shutdown"}
+SECRET = TEST_TOKENS.verifier
 # Docker's default grace period, less a margin for a loaded test machine.
 GRACE_SECONDS = 8.0
 pytestmark = [
@@ -43,7 +41,6 @@ MODULE = textwrap.dedent(
 
     from naas_abi_sdk import BaseModule, DiscoveryConfiguration, run_module
     from naas_abi_sdk.apps import AppDescriptor
-    from naas_abi_sdk.service_token import ModuleToken
 
 
     async def events(scope, receive, send):
@@ -73,7 +70,7 @@ MODULE = textwrap.dedent(
         run_module(
             Streamer,
             url=os.environ["NATS_URL"],
-            token=ModuleToken("acme.streamer", os.environ["ABI_MODULE_KEY"]),
+            token=os.environ["ABI_TOKEN"],
             discovery=DiscoveryConfiguration(),
         )
     )
@@ -83,20 +80,18 @@ MODULE = textwrap.dedent(
 
 @pytest.fixture
 def broker(tmp_path):
-    with native_nats_server(tmp_path, jetstream=True, users=PASSWORDS) as url:
-        yield (
-            login(url, "abi", PASSWORDS["abi"]),
-            login(url, "module", PASSWORDS["module"]),
-        )
+    with native_nats_server(tmp_path, jetstream=True) as url:
+        yield url
 
 
 def test_sigterm_with_a_stream_open_ends_the_module_and_fails_the_stream(
     broker, tmp_path
 ):
-    engine, module = broker
+    url = broker
     from naas_abi_proto.app.v1 import app_pb2
     from naas_abi_sdk.app_host import call_app
     from naas_abi_sdk.app_streams import pull_body
+    from naas_abi_sdk.credentials import host_audience
     from naas_abi_sdk.discovery import DiscoveryClient
     from naas_abi_sdk.transport import RPCError, Transport
 
@@ -104,7 +99,7 @@ def test_sigterm_with_a_stream_open_ends_the_module_and_fails_the_stream(
     script.write_text(MODULE)
 
     async def scenario():
-        nc = await nats.connect(engine)
+        nc = await nats.connect(url)
         registry = await start_discovery(nc, SECRET)
         process = await asyncio.create_subprocess_exec(
             sys.executable,
@@ -112,13 +107,20 @@ def test_sigterm_with_a_stream_open_ends_the_module_and_fails_the_stream(
             env={
                 **os.environ,
                 "PYTHONPATH": os.pathsep.join(sys.path),
-                "NATS_URL": module,
-                "ABI_MODULE_KEY": module_key(SECRET, "acme.streamer"),
+                "NATS_URL": url,
+                "ABI_TOKEN": TEST_TOKENS.token("acme.streamer"),
             },
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
         )
-        nexus = Transport(engine, ServiceTokenSource("api", SECRET), timeout=10)
+        nexus = Transport(
+            url,
+            TEST_TOKENS.token("api"),
+            timeout=10,
+            host_token=lambda recipient: TEST_TOKENS.token(
+                "api", audience=host_audience(recipient)
+            ),
+        )
         try:
             assert process.stdout is not None
             line = await asyncio.wait_for(process.stdout.readline(), 30)
@@ -129,6 +131,7 @@ def test_sigterm_with_a_stream_open_ends_the_module_and_fails_the_stream(
                 "default",
                 instance.instance_id,
                 app_pb2.HttpRequest(app="events", method="GET", path="/stream"),
+                service_account=instance.service_account,
             )
             assert answer.body_follows
             stream = pull_body(await nexus.connect(), answer.body_inbox)

@@ -1,29 +1,22 @@
 """NATS RPC primary adapter for the cache kernel domain.
 
-Exposes a real ``ICacheAdapter`` as a NATS micro-service (see
+Exposes one tier of the ``CacheService`` as a NATS micro-service (see
 ``naas_abi_core/proto/cache/v1/cache.proto`` for the wire contract and
 ``naas_abi_core/proto/README.md`` for why it lives there). This is the
 server side; the matching client is ``CacheSecondaryAdapterNATSClient``.
 
-Unlike ``object_storage``, this adapter wraps the raw ``ICacheAdapter`` --
-never ``SingleTierCacheService``/``CacheService`` -- and that is a deliberate
-choice, not an oversight: reading ``SingleTierCacheService`` shows that
-``event_publisher`` (and tiering) is layered entirely *outside* the
-``ICacheAdapter`` boundary. ``SingleTierCacheService`` calls the raw
-adapter's five methods (``get``/``set``/``set_if_absent``/``delete``/
-``exists``) and does its own event publication (``CacheSet``/
-``CacheDeleted``/``CacheError``) and TTL/tier bookkeeping around that --
-nothing the adapter itself needs to know about, and nothing that changes
-adapter-level behaviour. So wrapping the raw adapter here is correct: the
-tiering + eventing logic keeps running unaffected wherever a tier's config
-is loaded, including on the machine holding the NATS client adapter for
-this contract -- there is no ``ICacheDomain`` layer to preserve, the way
-``ObjectStoragePrimaryAdapterNATS`` has to accept an ``IObjectStorageDomain``
-to keep its event publishing intact.
+The wire contract is one tier's ``ICacheAdapter``: a remote
+``CacheService`` backed by ``CacheSecondaryAdapterNATSClient`` keeps its
+tiering and (de)serialization on its side and stores raw ``CachedData`` here.
+Every endpoint goes through this engine's ``CacheService`` -- the view of the
+tier it serves (``SingleTierCacheService``: ``get_entry``, ``put_entry``,
+``delete``, ...) -- so a check in the domain service covers remote callers
+too. That view emits the mutation audit events (``CacheSet``/
+``CacheDeleted``/``CacheError``), once: a remote facade stays unwired for
+events.
 
-Stage 1 auth model (see ``naas_abi_core.engine.nats_auth``): one shared
-secret, one claim -- which known first-party process holds the token. Every
-incoming request must carry a valid token in the ``Nats-Auth-Token`` header
+Auth (see ``naas_abi_core.engine.nats_auth``): every incoming request
+must carry an engine token, verified against the JWKS, in the ``Nats-Auth-Token`` header
 (``AUTH_HEADER``, imported from ``cache_nats_contract`` below -- that's a
 neutral module neither adapter owns, so this file and the client's don't
 depend on each other; see that module's docstring for why).
@@ -38,13 +31,11 @@ import nats
 import nats.micro
 from google.protobuf.message import DecodeError, Message
 from naas_abi_core import logger
-from naas_abi_core.engine.nats_auth import (
-    InvalidServiceTokenError,
-    verify_service_token,
-)
+from naas_abi_core.engine.nats_auth import TokenVerifier
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import (
     RequestPayloadError,
+    authenticate_request,
     request_payload,
     respond_protobuf,
 )
@@ -65,10 +56,11 @@ from naas_abi_core.services.cache.CachePort import (
     DataType,
     ICacheAdapter,
 )
-from naas_abi_core.services.cache.ontologies.modules.CacheEventOntology import (
-    CacheDeleted,
-    CacheError,
-    CacheSet,
+from naas_abi_core.services.cache.CacheService import SingleTierCacheService
+from naas_abi_core.services.iam.enforcement import authorization_error_code
+from naas_abi_core.services.iam.IAMPorts import (
+    PermissionDeniedError,
+    ResourceNotFoundError,
 )
 from nats.micro.request import Request
 
@@ -113,70 +105,38 @@ def _pb_to_cached_data(pb: cache_pb2.CachedData) -> CachedData:
 
 
 class CachePrimaryAdapterNATS(ServicePrimary):
-    """Serves one cache tier's ``ICacheAdapter`` over NATS RPC (request/reply).
+    """Serves one cache tier over NATS RPC (request/reply).
 
     Registers one NATS micro-service endpoint per ``ICacheAdapter`` method.
     Each endpoint authenticates the caller via ``Nats-Auth-Token`` before
-    doing anything else, then decodes the Protobuf request, calls straight
-    through to the wrapped adapter, and encodes a Protobuf response. Errors
-    -- auth failures, known domain exceptions, anything unexpected -- are
-    always reported as a normal response carrying a populated ``CallError``,
-    never as a crashed handler or a raw NATS-level error.
+    doing anything else, then decodes the Protobuf request, calls the tier's
+    ``SingleTierCacheService`` as that caller (its ``CallContext``), and
+    encodes a Protobuf response. Errors -- auth failures, known domain
+    exceptions, anything unexpected -- are always reported as a normal
+    response carrying a populated ``CallError``, never as a crashed handler
+    or a raw NATS-level error.
     """
 
     def __init__(
         self,
-        adapter: ICacheAdapter,
-        jwt_secret: str,
+        tier: SingleTierCacheService | ICacheAdapter,
+        verifier: TokenVerifier,
         *,
         subject_prefix: str = SUBJECT_PREFIX,
         tiers: tuple[str, ...] = (),
-        event_publisher: Callable[[object], None] | None = None,
         tier_name: str = "cold",
     ) -> None:
         self._subject_prefix = subject_prefix
         self._tiers = tiers
-        self._event_publisher = event_publisher
-        self._tier_name = tier_name
-        self._adapter = adapter
-        self._jwt_secret = jwt_secret
+        # A bare adapter (tests) is served through a tier view of its own.
+        self._adapter = (
+            tier
+            if isinstance(tier, SingleTierCacheService)
+            else SingleTierCacheService(tier, tier_name=tier_name)
+        )
+        self._verifier = verifier
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
         self._service: TracedService | None = None
-
-    def _emit_set(self, key: str, value: CachedData) -> None:
-        self._emit(
-            CacheSet(
-                key=key,
-                tier=self._tier_name,
-                data_type=value.data_type.value,
-                size_bytes=len(value.data),
-            )
-        )
-
-    def _invoke(self, call, request):
-        try:
-            return call(request)
-        except CacheNotFoundError:
-            raise
-        except Exception as exc:
-            operation = call.__name__.removeprefix("_call_")
-            if operation in {"set", "set_if_absent", "delete"}:
-                self._emit(
-                    CacheError(
-                        key=request.key,
-                        tier=self._tier_name,
-                        operation=operation,
-                        message=str(exc),
-                    )
-                )
-            raise
-
-    def _emit(self, event: object) -> None:
-        if self._event_publisher is not None:
-            try:
-                self._event_publisher(event)
-            except Exception as exc:  # noqa: BLE001 - audit is fail-open
-                logger.warning("NATS mutation audit failed: {}", type(exc).__name__)
 
     async def start(self, nc: nats.NATS) -> None:
         """Register the ``cache`` NATS service on ``nc``.
@@ -252,14 +212,8 @@ class CachePrimaryAdapterNATS(ServicePrimary):
         response_cls: Callable[..., _ResponseT],
         call: Callable[[_RequestT], _ResponseT],
     ) -> None:
-        if not self._is_authenticated(request):
-            await self._respond_error(
-                request,
-                response_cls,
-                "UNAUTHENTICATED",
-                "missing or invalid auth token",
-                retryable=False,
-            )
+        caller = await authenticate_request(request, self._verifier, response_cls)
+        if caller is None:
             return
 
         parsed_request = request_cls()
@@ -286,9 +240,17 @@ class CachePrimaryAdapterNATS(ServicePrimary):
             # ONE connection (nats_runtime), so run the call on a worker thread:
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
-            response = await self._dispatch.call(
-                lambda req: self._invoke(call, req), parsed_request
+            response = await self._dispatch.call(call, parsed_request, caller)
+        except (PermissionDeniedError, ResourceNotFoundError) as exc:
+            # The caller's authorization outcome, decided by the domain.
+            await self._respond_error(
+                request,
+                response_cls,
+                authorization_error_code(exc) or "PERMISSION_DENIED",
+                str(exc),
+                retryable=False,
             )
+            return
         except CacheNotFoundError as exc:
             await self._respond_error(
                 request, response_cls, "CACHE_NOT_FOUND", str(exc), retryable=False
@@ -315,17 +277,6 @@ class CachePrimaryAdapterNATS(ServicePrimary):
             return
 
         await respond_protobuf(request, response, response_cls)
-
-    def _is_authenticated(self, request: Request) -> bool:
-        headers = request.headers or {}
-        token = headers.get(AUTH_HEADER)
-        if not token:
-            return False
-        try:
-            verify_service_token(token, self._jwt_secret)
-        except InvalidServiceTokenError:
-            return False
-        return True
 
     @staticmethod
     async def _respond_error(
@@ -354,8 +305,8 @@ class CachePrimaryAdapterNATS(ServicePrimary):
         )
 
     def _call_get(self, req: cache_pb2.GetRequest) -> cache_pb2.GetResponse:
-        data = self._adapter.get(req.key)
-        return cache_pb2.GetResponse(value=_cached_data_to_pb(data))
+        entry = self._adapter.get_entry(req.key)
+        return cache_pb2.GetResponse(value=_cached_data_to_pb(entry.cached))
 
     async def _handle_set(self, request: Request) -> None:
         await self._handle(
@@ -366,8 +317,7 @@ class CachePrimaryAdapterNATS(ServicePrimary):
         )
 
     def _call_set(self, req: cache_pb2.SetRequest) -> cache_pb2.SetResponse:
-        self._adapter.set(req.key, _pb_to_cached_data(req.value))
-        self._emit_set(req.key, _pb_to_cached_data(req.value))
+        self._adapter.put_entry(req.key, _pb_to_cached_data(req.value))
         return cache_pb2.SetResponse()
 
     async def _handle_set_if_absent(self, request: Request) -> None:
@@ -381,9 +331,9 @@ class CachePrimaryAdapterNATS(ServicePrimary):
     def _call_set_if_absent(
         self, req: cache_pb2.SetIfAbsentRequest
     ) -> cache_pb2.SetIfAbsentResponse:
-        wrote = self._adapter.set_if_absent(req.key, _pb_to_cached_data(req.value))
-        if wrote:
-            self._emit_set(req.key, _pb_to_cached_data(req.value))
+        wrote = self._adapter.put_entry_if_absent(
+            req.key, _pb_to_cached_data(req.value)
+        )
         return cache_pb2.SetIfAbsentResponse(value=wrote)
 
     async def _handle_delete(self, request: Request) -> None:
@@ -396,7 +346,6 @@ class CachePrimaryAdapterNATS(ServicePrimary):
 
     def _call_delete(self, req: cache_pb2.DeleteRequest) -> cache_pb2.DeleteResponse:
         self._adapter.delete(req.key)
-        self._emit(CacheDeleted(key=req.key, tier=self._tier_name))
         return cache_pb2.DeleteResponse()
 
     async def _handle_exists(self, request: Request) -> None:
@@ -416,8 +365,14 @@ class CachePrimaryAdapterNATS(ServicePrimary):
             request,
             cache_pb2.DescribeRequest,
             cache_pb2.DescribeResponse,
-            lambda _: cache_pb2.DescribeResponse(tiers=self._tiers),
+            self._call_describe,
         )
+
+    def _call_describe(
+        self, _: cache_pb2.DescribeRequest
+    ) -> cache_pb2.DescribeResponse:
+        self._adapter.require_describe()
+        return cache_pb2.DescribeResponse(tiers=self._tiers)
 
     async def _handle_list_keys(self, request: Request) -> None:
         await self._handle(

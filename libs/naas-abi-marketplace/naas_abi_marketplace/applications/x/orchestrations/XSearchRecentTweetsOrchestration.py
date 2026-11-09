@@ -36,7 +36,10 @@ Launchpad example (for a filter named ``ai_llms``)::
 
 import dagster as dg
 from naas_abi_core import logger
-from naas_abi_core.orchestrations.DagsterOrchestration import DagsterOrchestration
+from naas_abi_core.orchestrations.DagsterOrchestration import (
+    DagsterOrchestration,
+    as_engine,
+)
 from naas_abi_marketplace.applications.x import (
     ABIModule,
     XTweetSearchWorkflowConfiguration,
@@ -192,6 +195,7 @@ def _build_search_recent_tweets_definitions(
     description = _trigger_description(config)
 
     @dg.op(name=op_name, config_schema=_SEARCH_RECENT_TWEETS_OP_CONFIG_SCHEMA)
+    @as_engine
     def search_recent_tweets_op(context) -> list[str]:
         return run_search_workflow_for_filter(config, context.op_config or {})
 

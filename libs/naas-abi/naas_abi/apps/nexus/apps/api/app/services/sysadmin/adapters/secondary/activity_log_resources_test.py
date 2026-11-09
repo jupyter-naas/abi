@@ -175,6 +175,25 @@ def test_users_show_by_name_when_known(service):
     assert ada.id == quote("user:u1", safe="")
 
 
+def test_principal_ids_recorded_since_iam_are_named_too(service):
+    """Actors are now the call's principal id: Nexus and IAM user ids, or a
+    service account's name; the older ``user:<id>`` form still reads."""
+    _request(service, actor="user-0123456789ab")
+    _request(service, actor="usr_01jabcdefghjkmnpqrstvwxyz0")
+    _request(service, actor="api")
+
+    async def names(ids):
+        return {"user-0123456789ab": ("Ada Lovelace", "ada@example.com")}
+
+    page = asyncio.run(ActivityLogResources(service, actor_names=names).list())
+    by_actor = {e.attributes["actor"]: e for e in page.entries}
+
+    assert by_actor["user-0123456789ab"].name == "Ada Lovelace"
+    assert by_actor["user-0123456789ab"].attributes["kind"] == "user"
+    assert by_actor["usr_01jabcdefghjkmnpqrstvwxyz0"].attributes["kind"] == "user"
+    assert by_actor["api"].attributes["kind"] == "service"
+
+
 def test_names_are_best_effort(service):
     async def broken(ids):
         raise RuntimeError("db down")
@@ -202,3 +221,24 @@ def test_sql_actor_names_reads_the_users_table(tmp_path):
         return found
 
     assert asyncio.run(run()) == {"u1": ("Ada", "ada@example.com")}
+
+
+@pytest.mark.parametrize(
+    "actor, kind",
+    [
+        ("user-0123456789ab", "user"),
+        ("usr_01jabcdefghjkmnpqrstvwxyz0", "user"),
+        # Signup, invite and magic-link users have uuid4 ids.
+        ("3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b", "user"),
+        ("user:legacy-id", "user"),
+        ("api", "service"),
+        ("research-module", "service"),
+        ("anonymous", "anonymous"),
+    ],
+)
+def test_an_actor_is_classified_by_its_id(actor, kind):
+    from naas_abi.apps.nexus.apps.api.app.services.sysadmin.adapters.secondary.activity_log_resources import (
+        actor_kind,
+    )
+
+    assert actor_kind(actor) == kind

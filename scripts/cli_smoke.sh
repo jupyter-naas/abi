@@ -23,8 +23,9 @@
 #   4. `abi dev up -d`, then waits for the API's /docs, the remote module READY
 #      in discovery with its workflows, the agents and apps in Nexus, its ontologies in
 #      the engine's schema graph, and the Nexus web app; calls the module's
-#      workflow and pipeline by name as durable workflows, with the module's own
-#      token, and reads a run's record (scripts/cli_smoke_processes.py);
+#      workflow and pipeline by name as durable workflows, as the module itself
+#      (a key of its own account), and reads a run's record
+#      (scripts/cli_smoke_processes.py);
 #   5. `abi dev down`.
 # On failure it prints `abi dev status` and `abi dev logs` and exits non-zero.
 #
@@ -85,7 +86,8 @@ export PATH="$WORK/bin:$PATH"
 PROJECT=""        # the project `abi dev` runs in, while it runs
 VARIANT=""
 PROCESS_CHECKS=() # cli_smoke_processes.py's arguments, when the variant has any
-PROCESS_MODULE_ID=""  # the module id they name (its key is derived from it)
+PROCESS_MODULE_ID=""  # the module id they name: the probe holds a key of its account
+PROCESS_PROJECT=""    # its discovery project (the account is module/<project>/<module id>)
 
 dump_logs() {
     local logs="$WORK/logs/$VARIANT"
@@ -158,11 +160,6 @@ write_ontology() {
 TTL
 }
 
-# Reads KEY from the project's .env (the broker user `module`'s password).
-env_value() {
-    sed -n "s/^$1=//p" .env | head -n 1 | tr -d "'\""
-}
-
 start_and_check() {
     step "abi dev up -d"
     abi dev up -d
@@ -172,13 +169,15 @@ start_and_check() {
         --api "http://localhost:$(port api)" \
         --web "http://localhost:$(port nexus-web)" \
         --oxigraph "http://localhost:$(port oxigraph)" \
-        --env-file .env --timeout "$TIMEOUT" "$@"
+        --mail-dir storage/email --timeout "$TIMEOUT" "$@"
     if [[ ${#PROCESS_CHECKS[@]} -gt 0 ]]; then
         step "the remote module's workflow and pipeline over NATS"
-        # Signed as the module itself, with its key: a module acts only as itself.
-        # The broker login and the key go through the environment, not argv.
-        ABI_NATS_URL="nats://module:$(env_value NATS_MODULE_PASSWORD)@127.0.0.1:$(port nats)" \
-            ABI_MODULE_KEY="$(abi module key "$PROCESS_MODULE_ID")" \
+        # As the module itself, with a key of its own service account: the
+        # broker's auth callout logs it in. The key goes through the
+        # environment, not argv.
+        ABI_NATS_URL="nats://127.0.0.1:$(port nats)" \
+            ABI_SERVICE_KEY="$(abi iam key create "module/$PROCESS_PROJECT/$PROCESS_MODULE_ID" \
+                --description "CLI smoke probe" --expires-in-days 1 2>/dev/null)" \
             uv run python "$REPO/scripts/cli_smoke_processes.py" \
             --timeout "$TIMEOUT" "${PROCESS_CHECKS[@]}"
         PROCESS_CHECKS=()
@@ -225,8 +224,9 @@ smoke_nats() {
         || fail "a scaffold did not write its test"
 
     PROCESS_MODULE_ID=nats_smoke.research
+    PROCESS_PROJECT=nats_smoke
     PROCESS_CHECKS=(
-        --module-id "$PROCESS_MODULE_ID" --project nats_smoke
+        --module-id "$PROCESS_MODULE_ID" --project "$PROCESS_PROJECT"
         --workflow digest_workflow --pipeline catalog_pipeline
     )
     start_and_check \
@@ -251,7 +251,8 @@ smoke_without_nats() {
     enable_module tools
     (cd src/tools && abi new agent helper agents)
 
-    start_and_check --agents "Tools,Helper"
+    # No built-in identity provider without NATS: no sign-in, so no roster to read.
+    start_and_check --no-sign-in
 }
 
 step "uv tool install the CLI from $REPO/libs/naas-abi-cli (in $WORK)"

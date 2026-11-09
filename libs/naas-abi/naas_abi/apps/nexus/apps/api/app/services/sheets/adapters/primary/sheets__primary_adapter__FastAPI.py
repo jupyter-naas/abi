@@ -19,7 +19,6 @@ import mimetypes
 import re
 import secrets
 import time
-from datetime import timedelta
 from importlib import resources
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
@@ -34,7 +33,6 @@ from fastapi.responses import Response
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
-    require_workspace_access,
 )
 from naas_abi.apps.nexus.apps.api.app.core.config import (
     ABI_SHEETS_TEMPLATE_NAMESPACE,
@@ -42,7 +40,16 @@ from naas_abi.apps.nexus.apps.api.app.core.config import (
 )
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.models import CodingEnvironmentModel
-from naas_abi.apps.nexus.apps.api.app.services.auth.service import create_access_token
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment import agent_credentials
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment.repo_access import (
+    ensure_shared_repo,
+)
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares
+from naas_abi.apps.nexus.apps.api.app.services.iam.office_guards import (
+    project_guard,
+    readable_projects,
+)
 from naas_abi_core.services.coding_environment.adapters.secondary.CoderAdapter import (
     _sanitize_coder_username,
 )
@@ -79,15 +86,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-async def require_sheets_write(user_id: str, workspace_id: str) -> None:
-    role = await require_workspace_access(user_id, workspace_id)
-    if role not in {"owner", "admin", "member"}:
-        raise HTTPException(
-            status_code=403, detail="Sheets editing requires a workspace writer role"
-        )
-
-
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
+
+# The kind of project this router serves: the feature and the id prefix IAM decides on.
+_KIND = "sheets"
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 # A template id is ``<namespace>/<stem>``, or a bare stem from before the
@@ -265,7 +267,7 @@ def _ensure_coding_repo(sc: SourceControlService) -> str:
     if not sep or not owner or not name or "/" in name:
         raise HTTPException(status_code=503, detail=_FORGEJO_NOT_CONFIGURED)
     try:
-        sc.ensure_repo(owner=owner, name=name)
+        ensure_shared_repo(sc, owner=owner, name=name)
     except SourceControlError as exc:
         raise _source_control_http_error(exc) from exc
     except (OSError, TimeoutError) as exc:
@@ -1294,7 +1296,7 @@ def _git_clone_url(sc: SourceControlService, repo_id: str, *, username: str, tok
     """
     owner, _, name = repo_id.partition("/")
     try:
-        repo = sc.ensure_repo(owner=owner, name=name)
+        repo = ensure_shared_repo(sc, owner=owner, name=name)
         clone_url = str(getattr(repo, "clone_url", "") or "").strip()
     except Exception:
         clone_url = ""
@@ -1363,13 +1365,16 @@ def _project_from_meta(
     )
 
 
-@router.get("/projects", response_model=list[ProjectResponse])
+@router.get(
+    "/projects",
+    response_model=list[ProjectResponse],
+    dependencies=[project_guard("ListProjects", _KIND, id=(), literal="-")],
+)
 async def list_projects(
     workspace_id: str,
     request: Request,
     current_user: User = Depends(get_current_user_required),
 ) -> list[ProjectResponse]:
-    await require_workspace_access(current_user.id, workspace_id)
     sc, repo_id = _sheets_sc(request)
     ws_seg = _workspace_segment(workspace_id)
     ns_prefix = f"{_BRANCH_PREFIX}{ws_seg}/"
@@ -1420,19 +1425,32 @@ async def list_projects(
         return out
 
     try:
-        return await run_in_threadpool(_list)
+        projects = await run_in_threadpool(_list)
     except SourceControlError as exc:
         raise _source_control_http_error(exc) from exc
+    return await readable_projects(
+        projects, kind=_KIND, workspace_id=workspace_id, user=current_user
+    )
 
 
-@router.post("/projects", response_model=ProjectResponse)
+@router.post(
+    "/projects",
+    response_model=ProjectResponse,
+    dependencies=[declares("CreateProject")],
+)
 async def create_project(
     body: ProjectCreateRequest,
     request: Request,
     current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
 ) -> ProjectResponse:
-    await require_sheets_write(current_user.id, body.workspace_id)
+    await authz.require(
+        "CreateProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, "-"),
+        feature=_KIND,
+    )
     slug = body.slug or _slugify(body.title)
     if not _SLUG_RE.match(slug):
         raise HTTPException(
@@ -1552,14 +1570,16 @@ async def create_project(
     return project
 
 
-@router.get("/projects/{slug}", response_model=ProjectResponse)
+@router.get(
+    "/projects/{slug}",
+    response_model=ProjectResponse,
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def get_project(
     slug: str,
     workspace_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user_required),
 ) -> ProjectResponse:
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _sheets_sc(request)
@@ -1593,7 +1613,11 @@ async def get_project(
         raise _source_control_http_error(exc) from exc
 
 
-@router.patch("/projects/{slug}", response_model=ProjectResponse)
+@router.patch(
+    "/projects/{slug}",
+    response_model=ProjectResponse,
+    dependencies=[declares("UpdateProject")],
+)
 async def update_project(
     slug: str,
     body: ProjectUpdateRequest,
@@ -1601,7 +1625,13 @@ async def update_project(
     current_user: User = Depends(get_current_user_required),
 ) -> ProjectResponse:
     """Rename (title) and/or archive a deck. Slug and git folder stay put."""
-    await require_sheets_write(current_user.id, body.workspace_id)
+    await authz.require(
+        "UpdateProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     if body.title is None and body.archived is None:
@@ -1665,19 +1695,21 @@ async def update_project(
         raise _source_control_http_error(exc) from exc
 
 
-@router.get("/projects/{slug}/workbook", response_model=WorkbookResponse)
+@router.get(
+    "/projects/{slug}/workbook",
+    response_model=WorkbookResponse,
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def get_workbook(
     slug: str,
     workspace_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
 ) -> WorkbookResponse:
     """Load deck HTML for Preview/Code.
 
     Git storage is authoritative; sidecars are best-effort mirrors.
     """
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _sheets_sc(request)
@@ -1720,16 +1752,17 @@ async def get_workbook(
         raise _source_control_http_error(exc) from exc
 
 
-@router.get("/projects/{slug}/assets/{filename}")
+@router.get(
+    "/projects/{slug}/assets/{filename}",
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def get_project_asset(
     slug: str,
     filename: str,
     workspace_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user_required),
 ) -> Response:
     """Serve a file from the deck ``assets/`` folder (preview / export)."""
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     if not _ASSET_FILENAME_RE.match(filename) or ".." in filename:
@@ -1759,12 +1792,14 @@ async def get_project_asset(
         raise _source_control_http_error(exc) from exc
 
 
-@router.get("/projects/{slug}/export/xlsx")
+@router.get(
+    "/projects/{slug}/export/xlsx",
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def export_workbook_xlsx(
     slug: str,
     workspace_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user_required),
 ) -> Response:
     """Download the live workbook as XLSX (JSON block or ``sheet-grid`` table).
 
@@ -1773,7 +1808,6 @@ async def export_workbook_xlsx(
     from naas_abi.apps.nexus.sheets.html_io import grid_from_table_html, parse_workbook_html
     from naas_abi.apps.nexus.sheets.xlsx_export import workbook_to_xlsx_bytes
 
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _sheets_sc(request)
@@ -1815,7 +1849,10 @@ class WorkbookEvaluateRequest(BaseModel):
     html: str = Field(..., min_length=1, max_length=2_000_000)
 
 
-@router.post("/evaluate")
+@router.post(
+    "/evaluate",
+    dependencies=[declares("EvaluateProject")],
+)
 async def evaluate_workbook_preview(
     body: WorkbookEvaluateRequest,
     current_user: User = Depends(get_current_user_required),
@@ -1826,14 +1863,23 @@ async def evaluate_workbook_preview(
     )
     from naas_abi.apps.nexus.sheets.html_io import parse_workbook_html
 
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require(
+        "EvaluateProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, "-"),
+        feature=_KIND,
+    )
     if len(body.html) > 2_000_000:
         raise HTTPException(status_code=422, detail="Workbook draft is too large")
     try:
         workbook = parse_workbook_html(body.html)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    if len(workbook.sheets) > 256 or sum(len(row) for tab in workbook.sheets for row in tab.rows) > 100_000:
+    if (
+        len(workbook.sheets) > 256
+        or sum(len(row) for tab in workbook.sheets for row in tab.rows) > 100_000
+    ):
         raise HTTPException(status_code=422, detail="Calculate up to 100,000 cells")
 
     def calculate() -> dict:
@@ -1843,7 +1889,11 @@ async def evaluate_workbook_preview(
     return await run_in_threadpool(calculate)
 
 
-@router.put("/projects/{slug}/workbook", response_model=WorkbookResponse)
+@router.put(
+    "/projects/{slug}/workbook",
+    response_model=WorkbookResponse,
+    dependencies=[declares("SaveProject")],
+)
 async def put_deck(
     slug: str,
     body: WorkbookUpdateRequest,
@@ -1852,7 +1902,13 @@ async def put_deck(
     db: AsyncSession = Depends(get_db),
 ) -> WorkbookResponse:
     """Save deck: commit Forgejo snapshot and dual-write Coder sidecar when ready."""
-    await require_sheets_write(current_user.id, body.workspace_id)
+    await authz.require(
+        "SaveProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _sheets_sc(request)
@@ -2005,7 +2061,11 @@ def _save_live_deck_html(
     return commit.sha or None, "sidecar" if sidecar_ok else "forgejo"
 
 
-@router.post("/projects/{slug}/apply-template", response_model=WorkbookResponse)
+@router.post(
+    "/projects/{slug}/apply-template",
+    response_model=WorkbookResponse,
+    dependencies=[declares("ApplyProjectTemplate")],
+)
 async def apply_template(
     slug: str,
     body: ApplyTemplateRequest,
@@ -2014,13 +2074,19 @@ async def apply_template(
     db: AsyncSession = Depends(get_db),
 ) -> WorkbookResponse:
     """Rewrite the open deck from a seed template (HTML source of truth)."""
+    await authz.require(
+        "ApplyProjectTemplate",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     if body.template_id not in _known_template_ids():
         raise HTTPException(
             status_code=422,
             detail=f"Unknown template_id '{body.template_id}'.",
         )
     seed, catalog_assets = _load_seed_bundle(body.template_id)
-    await require_sheets_write(current_user.id, body.workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _sheets_sc(request)
@@ -2091,15 +2157,17 @@ async def apply_template(
         raise _source_control_http_error(exc) from exc
 
 
-@router.get("/projects/{slug}/history", response_model=list[CommitResponse])
+@router.get(
+    "/projects/{slug}/history",
+    response_model=list[CommitResponse],
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def list_history(
     slug: str,
     workspace_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user_required),
     limit: int = 20,
 ) -> list[CommitResponse]:
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _sheets_sc(request)
@@ -2134,13 +2202,16 @@ async def list_history(
         raise _source_control_http_error(exc) from exc
 
 
-@router.get("/projects/{slug}/history/diff", response_model=WorkbookDiffResponse)
+@router.get(
+    "/projects/{slug}/history/diff",
+    response_model=WorkbookDiffResponse,
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def get_history_diff(
     slug: str,
     workspace_id: str,
     base: str,
     request: Request,
-    current_user: User = Depends(get_current_user_required),
     head: str | None = None,
 ) -> WorkbookDiffResponse:
     """Files changed between two commits on the deck branch, for the Files panel.
@@ -2149,7 +2220,6 @@ async def get_history_diff(
     e.g. the branch head when the chat session opened this deck). ``head``
     defaults to the current branch tip.
     """
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _sheets_sc(request)
@@ -2166,6 +2236,9 @@ async def get_history_diff(
             resolved_head = commits[0].sha
         if resolved_head == base:
             return WorkbookDiffResponse(base=base, head=resolved_head, files=[])
+        # base and head come from the client and may be any commit of the shared
+        # repository: only this project's own files are reported.
+        project_dir = paths["project_path"].rsplit("/", 1)[0] + "/"
         diff = sc.get_diff(repo_id=repo_id, base=base, head=resolved_head)
         return WorkbookDiffResponse(
             base=base,
@@ -2179,6 +2252,7 @@ async def get_history_diff(
                     old_path=f.old_path,
                 )
                 for f in diff.files
+                if f.path.startswith(project_dir) or (f.old_path or "").startswith(project_dir)
             ],
         )
 
@@ -2190,15 +2264,17 @@ async def get_history_diff(
         raise _source_control_http_error(exc) from exc
 
 
-@router.get("/projects/{slug}/version", response_model=WorkbookVersionResponse)
+@router.get(
+    "/projects/{slug}/version",
+    response_model=WorkbookVersionResponse,
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def get_workbook_version(
     slug: str,
     workspace_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user_required),
 ) -> WorkbookVersionResponse:
     """0.x semver derived from Conventional Commits history; see `_semver_from_commits`."""
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _sheets_sc(request)
@@ -2481,13 +2557,14 @@ async def _ensure_runtime_impl(
         repo_url = _git_clone_url(sc, repo_id, username=username, token=token)
         ws_secret = secrets.token_hex(16)
         ws_base = expected_base
-        claims: dict[str, str] = {"sub": current_user.id}
-        if ws_base:
-            claims["ws_base"] = ws_base
-            claims["ws_secret"] = ws_secret
-        agent_token, _ = create_access_token(
-            data=claims,
-            expires_delta=timedelta(days=settings.coding_agent_token_days),
+        # The agent in the workspace holds a key of the user's made for this
+        # environment (``coding_environment.agent_credentials``), never a
+        # session token: bound to the sidecar, narrowed to this workspace.
+        agent_token = agent_credentials.mint_agent_key(
+            user_id=current_user.id,
+            workspace_id=workspace_id,
+            sidecar_base=ws_base,
+            label=label,
         )
         params: dict[str, str] = {
             "repo_url": repo_url,
@@ -2687,7 +2764,11 @@ async def _ensure_runtime_impl(
     )
 
 
-@router.post("/projects/{slug}/runtime", response_model=RuntimeResponse)
+@router.post(
+    "/projects/{slug}/runtime",
+    response_model=RuntimeResponse,
+    dependencies=[project_guard("EnsureProjectRuntime", _KIND)],
+)
 async def ensure_runtime(
     slug: str,
     workspace_id: str,
@@ -2695,7 +2776,6 @@ async def ensure_runtime(
     current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
 ) -> RuntimeResponse:
-    await require_sheets_write(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     return await _ensure_runtime_impl(
@@ -2707,15 +2787,17 @@ async def ensure_runtime(
     )
 
 
-@router.get("/projects/{slug}/tree", response_model=ProjectTreeResponse)
+@router.get(
+    "/projects/{slug}/tree",
+    response_model=ProjectTreeResponse,
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def get_project_tree(
     slug: str,
     workspace_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user_required),
 ) -> ProjectTreeResponse:
     """List the presentation folder (workbook.html, assets/, …) for the sidebar tree."""
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _sheets_sc(request)
@@ -2879,13 +2961,15 @@ class SeedTemplateResponse(BaseModel):
         return data
 
 
-@router.get("/templates", response_model=list[SeedTemplateResponse])
+@router.get(
+    "/templates",
+    response_model=list[SeedTemplateResponse],
+    dependencies=[project_guard("ListProjectTemplates", _KIND, id=(), literal="-")],
+)
 async def list_seed_templates(
     workspace_id: str,
-    current_user: User = Depends(get_current_user_required),
 ) -> list[SeedTemplateResponse]:
     """List seed templates with slide outlines for the Slides sidebar."""
-    await require_workspace_access(current_user.id, workspace_id)
     return [SeedTemplateResponse(**row) for row in _list_seed_template_records()]
 
 
@@ -2997,7 +3081,11 @@ async def _run_workbook_tab_mutation(
         raise _source_control_http_error(exc) from exc
 
 
-@router.get("/projects/{slug}/slides", response_model=SlidesListResponse)
+@router.get(
+    "/projects/{slug}/slides",
+    response_model=SlidesListResponse,
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def list_workbook_tabs(
     slug: str,
     workspace_id: str,
@@ -3006,7 +3094,6 @@ async def list_workbook_tabs(
     db: AsyncSession = Depends(get_db),
 ) -> SlidesListResponse:
     """Outline of workbook tabs (JSON model). No HTML body."""
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _sheets_sc(request)
@@ -3047,7 +3134,11 @@ async def list_workbook_tabs(
         raise _source_control_http_error(exc) from exc
 
 
-@router.post("/projects/{slug}/sheets/insert", response_model=SlideMutationResponse)
+@router.post(
+    "/projects/{slug}/sheets/insert",
+    response_model=SlideMutationResponse,
+    dependencies=[declares("EditProject")],
+)
 async def insert_workbook_tab(
     slug: str,
     body: SlideInsertRequest,
@@ -3058,7 +3149,13 @@ async def insert_workbook_tab(
     """Insert a sheet tab after ``after_index`` (-1 appends)."""
     from naas_abi.apps.nexus.sheets.tab_mutations import insert_workbook_tab
 
-    await require_sheets_write(current_user.id, body.workspace_id)
+    await authz.require(
+        "EditProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     return await _run_workbook_tab_mutation(
         slug=slug,
         workspace_id=body.workspace_id,
@@ -3075,7 +3172,11 @@ async def insert_workbook_tab(
     )
 
 
-@router.post("/projects/{slug}/sheets/delete", response_model=SlideMutationResponse)
+@router.post(
+    "/projects/{slug}/sheets/delete",
+    response_model=SlideMutationResponse,
+    dependencies=[declares("EditProject")],
+)
 async def delete_workbook_tab(
     slug: str,
     body: SlideIndexRequest,
@@ -3086,7 +3187,13 @@ async def delete_workbook_tab(
     """Delete the tab at index. Refuses the last tab."""
     from naas_abi.apps.nexus.sheets.tab_mutations import delete_workbook_tab
 
-    await require_sheets_write(current_user.id, body.workspace_id)
+    await authz.require(
+        "EditProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     return await _run_workbook_tab_mutation(
         slug=slug,
         workspace_id=body.workspace_id,
@@ -3098,7 +3205,11 @@ async def delete_workbook_tab(
     )
 
 
-@router.post("/projects/{slug}/sheets/duplicate", response_model=SlideMutationResponse)
+@router.post(
+    "/projects/{slug}/sheets/duplicate",
+    response_model=SlideMutationResponse,
+    dependencies=[declares("EditProject")],
+)
 async def duplicate_workbook_tab(
     slug: str,
     body: SlideIndexRequest,
@@ -3109,7 +3220,13 @@ async def duplicate_workbook_tab(
     """Duplicate the tab at index and insert the copy after it."""
     from naas_abi.apps.nexus.sheets.tab_mutations import duplicate_workbook_tab
 
-    await require_sheets_write(current_user.id, body.workspace_id)
+    await authz.require(
+        "EditProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     return await _run_workbook_tab_mutation(
         slug=slug,
         workspace_id=body.workspace_id,
@@ -3121,7 +3238,11 @@ async def duplicate_workbook_tab(
     )
 
 
-@router.post("/projects/{slug}/sheets/reorder", response_model=SlideMutationResponse)
+@router.post(
+    "/projects/{slug}/sheets/reorder",
+    response_model=SlideMutationResponse,
+    dependencies=[declares("EditProject")],
+)
 async def reorder_workbook_tabs_route(
     slug: str,
     body: SlideReorderRequest,
@@ -3132,7 +3253,13 @@ async def reorder_workbook_tabs_route(
     """Move one tab (from_index/to_index) or apply a full ``order`` permutation."""
     from naas_abi.apps.nexus.sheets.tab_mutations import reorder_workbook_tabs
 
-    await require_sheets_write(current_user.id, body.workspace_id)
+    await authz.require(
+        "EditProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     return await _run_workbook_tab_mutation(
         slug=slug,
         workspace_id=body.workspace_id,

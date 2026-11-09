@@ -12,8 +12,8 @@ import shutil
 import time
 from collections import Counter
 
-import broker_users
 import pytest
+from nats_broker import running_broker
 from test_jobs_integration import PROJECT, _until
 from test_workflows import MemoryDocuments, model
 
@@ -42,9 +42,9 @@ pytestmark = pytest.mark.skipif(
 REPORTS, PARENT, CHILD = "acme.reports", "acme.parent", "acme.child"
 
 
-@pytest.fixture(params=broker_users.KINDS)
-def broker(request, tmp_path):
-    with broker_users.running_broker(request.param, tmp_path, PROJECT) as url:
+@pytest.fixture
+def broker(tmp_path):
+    with running_broker(tmp_path) as url:
         yield url
 
 

@@ -8,7 +8,7 @@ import { TopNavProvider } from '@/components/shell/topnav-content';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { clearAuthFlagCookie } from '@/lib/auth-session';
 import { discardDeferredStorage } from '@/lib/deferred-storage';
-import { useAuthStore } from '@/stores/auth';
+import { hasSession, selectSession, useAuthStore } from '@/stores/auth';
 
 // Catches unhandled promise rejections (not caught by React error boundaries)
 // Next.js uses thrown sentinels (NEXT_REDIRECT, NEXT_NOT_FOUND) to drive
@@ -141,7 +141,7 @@ export default function WorkspaceShellLayout({
   // Narrow selectors: this shell must not re-render on every streamed chat chunk.
   const workspaceCount = useWorkspaceStore((s) => s.workspaces.length);
   const fetchWorkspaces = useWorkspaceStore((s) => s.fetchWorkspaces);
-  const token = useAuthStore((s) => s.token);
+  const token = useAuthStore(selectSession);
   const [authReady, setAuthReady] = useState(false);
   const [membershipChecked, setMembershipChecked] = useState(false);
 
@@ -158,7 +158,7 @@ export default function WorkspaceShellLayout({
       // Persist already has the token. Paint the shell now; /me validates in
       // the background so every workspace page is not gated on that round-trip.
       // No token yet: wait for checkAuth in case a refresh cookie can recover.
-      if (useAuthStore.getState().token && !cancelled) {
+      if (hasSession() && !cancelled) {
         setAuthReady(true);
       }
       await useAuthStore.getState().checkAuth();

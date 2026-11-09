@@ -30,7 +30,7 @@ def test_the_activity_log_lives_in_the_document_service_by_default():
 
 
 def test_in_nats_mode_the_default_is_the_document_service():
-    configuration = engine_configuration(nats={"jwt_secret": "x" * 32})
+    configuration = engine_configuration(nats={})
 
     assert configuration.services.activity_log.activity_log_adapter.adapter == "document"
 

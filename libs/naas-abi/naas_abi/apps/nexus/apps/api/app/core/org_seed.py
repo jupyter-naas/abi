@@ -11,17 +11,20 @@ People are managed in the platform (Org > Users, workspace Members, Admin >
 Users). Config ``members`` lists are deprecated and ignored: existing rows are
 kept, and ``core.users_import`` replays a snapshot without overwriting roles.
 
-It can also mirror configured user credentials into the Secret service.
+Nexus has no login of its own: a configured user is a person of the built-in
+identity provider. Their Nexus account is made here without a password, and they
+are made to exist at the provider (``provision_seed_users``); their first sign-in
+there, with the address verified by the code mailed to it, links the account
+(``services/oidc``), which keeps the roles configured here.
 """
 
+import asyncio
 import logging
-import re
-import secrets
+from contextvars import ContextVar
 from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
-import bcrypt
 from naas_abi.apps.nexus.apps.api.app.core.config import (
     OrganizationSeedConfig,
     WorkspaceSeedConfig,
@@ -31,16 +34,11 @@ from naas_abi.apps.nexus.apps.api.app.core.database import async_engine
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.models import (
     AppConfigModel,
-    OrganizationMemberModel,
     OrganizationModel,
     UserModel,
-    WorkspaceMemberModel,
     WorkspaceModel,
 )
-from naas_abi.apps.nexus.apps.api.app.services.auth.default_passwords import (
-    SHIPPED_DEFAULT_PASSWORDS,
-    is_known_default_password,
-)
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container, workspace_container
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -103,56 +101,6 @@ def _normalize_email(email: str) -> str:
     return email.strip().lower()
 
 
-def _hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-
-
-def _generate_password() -> str:
-    # URL-safe random password (~32 chars) suitable for bootstrap credentials.
-    return secrets.token_urlsafe(24)
-
-
-def _has_shipped_default_password(hashed_password: str | None) -> bool:
-    """True when the stored hash opens with a password ABI once shipped."""
-    if not hashed_password:
-        return False
-    encoded = hashed_password.encode("utf-8")
-    for candidate in SHIPPED_DEFAULT_PASSWORDS:
-        try:
-            if bcrypt.checkpw(candidate.encode("utf-8"), encoded):
-                return True
-        except ValueError:
-            return False
-    return False
-
-
-def _secret_prefix_for_email(email: str) -> str:
-    return re.sub(r"[^A-Z0-9]", "_", _normalize_email(email).upper())
-
-
-def _get_user_credentials_from_secret_service(
-    secret_service: Any,
-    email: str,
-) -> tuple[str, str] | None:
-    """Return (email, password) if both exist in secret service, else None."""
-    email_prefix = _secret_prefix_for_email(email)
-    stored_email = secret_service.get(f"NEXUS_USER_{email_prefix}_EMAIL")
-    stored_password = secret_service.get(f"NEXUS_USER_{email_prefix}_PASSWORD")
-    if stored_email and stored_password:
-        return (str(stored_email), str(stored_password))
-    return None
-
-
-def _store_user_credentials_in_secret_service(
-    secret_service: Any,
-    email: str,
-    password: str,
-) -> None:
-    email_prefix = _secret_prefix_for_email(email)
-    secret_service.set(f"NEXUS_USER_{email_prefix}_EMAIL", email)
-    secret_service.set(f"NEXUS_USER_{email_prefix}_PASSWORD", password)
-
-
 async def _get_user_by_email(session: AsyncSession, email: str) -> UserModel | None:
     result = await session.execute(
         select(UserModel).where(UserModel.email == _normalize_email(email))
@@ -165,32 +113,36 @@ async def _get_user_by_id(session: AsyncSession, user_id: str) -> UserModel | No
     return result.scalar_one_or_none()
 
 
+# What this seeding run declares, applied to IAM once the rows are committed:
+# role attachments are the only record of memberships.
+_declared_roles: ContextVar[list[tuple[str, str, str]] | None] = ContextVar(
+    "nexus_seed_roles", default=None
+)
+_declared_scopes: ContextVar[list[tuple[str | None, str | None]] | None] = ContextVar(
+    "nexus_seed_scopes", default=None
+)
+
+
+def _declare_role(user_id: str, role: str, scope: str) -> None:
+    declared = _declared_roles.get()
+    if declared is not None:
+        declared.append((user_id, role, scope))
+
+
+def _declare_scope(org_id: str | None, workspace_id: str | None) -> None:
+    declared = _declared_scopes.get()
+    if declared is not None:
+        declared.append((org_id, workspace_id))
+
+
 async def _ensure_org_member(
     session: AsyncSession,
     organization_id: str,
     user_id: str,
     role: str,
 ) -> None:
-    result = await session.execute(
-        select(OrganizationMemberModel).where(
-            (OrganizationMemberModel.organization_id == organization_id)
-            & (OrganizationMemberModel.user_id == user_id)
-        )
-    )
-    membership = result.scalar_one_or_none()
-    if membership is None:
-        session.add(
-            OrganizationMemberModel(
-                id=str(uuid4()),
-                organization_id=organization_id,
-                user_id=user_id,
-                role=role,
-                created_at=datetime.now(UTC).replace(tzinfo=None),
-            )
-        )
-        return
-
-    membership.role = role
+    _declare_scope(organization_id, None)
+    _declare_role(user_id, role, org_container(organization_id))
 
 
 async def _ensure_workspace_member(
@@ -198,69 +150,24 @@ async def _ensure_workspace_member(
     workspace_id: str,
     user_id: str,
     role: str,
+    organization_id: str | None = None,
 ) -> None:
-    result = await session.execute(
-        select(WorkspaceMemberModel).where(
-            (WorkspaceMemberModel.workspace_id == workspace_id)
-            & (WorkspaceMemberModel.user_id == user_id)
-        )
-    )
-    membership = result.scalar_one_or_none()
-    if membership is None:
-        session.add(
-            WorkspaceMemberModel(
-                id=str(uuid4()),
-                workspace_id=workspace_id,
-                user_id=user_id,
-                role=role,
-                created_at=datetime.now(UTC).replace(tzinfo=None),
-            )
-        )
-        return
-
-    membership.role = role
+    _declare_scope(organization_id, workspace_id)
+    _declare_role(user_id, role, workspace_container(organization_id, workspace_id))
 
 
-async def _upsert_users(
-    session: AsyncSession,
-    secret_service: Any | None,
-) -> dict[str, UserModel]:
+async def _upsert_users(session: AsyncSession) -> dict[str, UserModel]:
     users_by_email: dict[str, UserModel] = {}
     now = datetime.now(UTC).replace(tzinfo=None)
 
     for user_cfg in settings.users:
         normalized_email = _normalize_email(str(user_cfg.email))
         user = await _get_user_by_email(session, normalized_email)
-        password_to_use: str | None = None
-        password_from_secrets = False
         if user is None:
-            # Prefer credentials from secret service when configured
-            if secret_service is not None and user_cfg.store_credentials_in_secrets:
-                stored = _get_user_credentials_from_secret_service(secret_service, normalized_email)
-                if stored is not None and is_known_default_password(stored[1]):
-                    logger.warning(
-                        "Ignoring the published default password stored for email=%s; "
-                        "generating a new one",
-                        normalized_email,
-                    )
-                elif stored is not None:
-                    _email, password_to_use = stored
-                    password_from_secrets = True
-                    logger.info(
-                        "Creating user email=%s using password from secret service",
-                        normalized_email,
-                    )
-            if password_to_use is None:
-                password_to_use = _generate_password()
-                logger.info(
-                    "Creating user email=%s with generated password",
-                    normalized_email,
-                )
             user = UserModel(
                 id=f"user-{uuid4().hex[:12]}",
                 email=normalized_email,
                 name=user_cfg.name,
-                hashed_password=_hash_password(password_to_use),
                 avatar=user_cfg.avatar,
                 organization=user_cfg.organization,
                 job_title=user_cfg.job_title,
@@ -271,23 +178,6 @@ async def _upsert_users(
             )
             session.add(user)
             logger.info("Created user email=%s from config", normalized_email)
-            # Store credentials in secret service only when we generated them (not when we read from secrets)
-            if (
-                secret_service is not None
-                and user_cfg.store_credentials_in_secrets
-                and password_to_use is not None
-                and not password_from_secrets
-            ):
-                _store_user_credentials_in_secret_service(
-                    secret_service=secret_service,
-                    email=normalized_email,
-                    password=password_to_use,
-                )
-            elif user_cfg.store_credentials_in_secrets and secret_service is None:
-                logger.warning(
-                    "User email=%s created with generated password, but no secret service is available to store credentials.",
-                    normalized_email,
-                )
         else:
             logger.info(
                 "User email=%s already exists; skipping config-driven updates",
@@ -300,28 +190,6 @@ async def _upsert_users(
                 user.is_superadmin = True
                 user.updated_at = now
                 logger.info("Promoted email=%s to superadmin from config", normalized_email)
-            if _has_shipped_default_password(user.hashed_password):
-                rotated = _generate_password()
-                user.hashed_password = _hash_password(rotated)
-                user.updated_at = now
-                if secret_service is not None and user_cfg.store_credentials_in_secrets:
-                    _store_user_credentials_in_secret_service(
-                        secret_service=secret_service,
-                        email=normalized_email,
-                        password=rotated,
-                    )
-                    logger.warning(
-                        "Replaced the published default password of email=%s; the new "
-                        "one is stored in the secret store as NEXUS_USER_%s_PASSWORD",
-                        normalized_email,
-                        _secret_prefix_for_email(normalized_email),
-                    )
-                else:
-                    logger.warning(
-                        "Replaced the published default password of email=%s; sign in "
-                        "with a magic link or reset the password",
-                        normalized_email,
-                    )
 
         users_by_email[normalized_email] = user
 
@@ -421,7 +289,9 @@ async def _upsert_workspace(
             organization.slug,
         )
 
-    await _ensure_workspace_member(session, workspace.id, workspace.owner_id, "owner")
+    await _ensure_workspace_member(
+        session, workspace.id, workspace.owner_id, "owner", workspace.organization_id
+    )
     _warn_ignored_members("workspace", workspace_cfg.slug, len(workspace_cfg.members))
 
     await _seed_workspace_apps(session, workspace.id, workspace_cfg.apps)
@@ -432,7 +302,8 @@ async def _seed_workspace_apps(
     workspace_id: str,
     app_ids: list[str] | None,
 ) -> None:
-    """Insert missing enabled rows for seeded catalog apps. Existing rows win."""
+    """Insert the missing rows of seeded catalog apps (installed in the
+    workspace; who opens one is a policy's). Existing rows win."""
     if not app_ids:
         return
     now = datetime.now(UTC).replace(tzinfo=None)
@@ -453,13 +324,12 @@ async def _seed_workspace_apps(
                 id=f"app-{uuid4().hex[:12]}",
                 workspace_id=workspace_id,
                 app_id=app_id,
-                enabled=True,
                 created_at=now,
                 updated_at=now,
             )
         )
         logger.info(
-            "Seeded app_id=%s enabled on workspace_id=%s",
+            "Seeded app_id=%s on workspace_id=%s",
             app_id,
             workspace_id,
         )
@@ -516,26 +386,182 @@ async def _upsert_organization(
         await _upsert_workspace(session, workspace_cfg, organization, users_by_email)
 
 
-async def apply_configuration_seeds(secret_service: Any | None = None) -> None:
+def sync_platform_admins(iam: Any, users_by_email: dict[str, UserModel]) -> None:
+    """``users[].is_superadmin`` as IAM's ``builtin.platform_admin`` attachment.
+
+    The configuration only promotes, as ``is_superadmin`` itself does: a platform
+    administrator is demoted in Admin > Users (IAM's attachment), never by leaving
+    the flag out of the config. A user of the old login
+    that has not linked yet: IAM knows it as the user of issuer
+    ``urn:abi:nexus`` whose subject is the Nexus user id, the id Nexus names on
+    every kernel call it makes for them.
+    """
+    from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER
+    from naas_abi_core.services.iam.roles import PLATFORM_ADMIN
+
+    for user_cfg in settings.users:
+        user = users_by_email.get(_normalize_email(str(user_cfg.email)))
+        if user is None:
+            continue
+        # Found as it is: ensuring it again would write the profile of the old
+        # login over the one a linked identity provider vouches for.
+        principal = iam.resolve_user(user.id) or iam.ensure_user(
+            LEGACY_NEXUS_ISSUER,
+            user.id,
+            provider="nexus",
+            email=user.email,
+            display_name=user.name,
+        )
+        if user_cfg.is_superadmin:
+            iam.attach_policy(PLATFORM_ADMIN, principal.id)
+
+
+async def _apply_declared_roles(
+    scopes: list[tuple[str | None, str | None]],
+    roles: list[tuple[str, str, str]],
+) -> None:
+    """The configuration's scopes and roles, as the system: the configuration is
+    declarative, so the role it names is the role held."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+
+    for org_id, workspace_id in dict.fromkeys(scopes):
+        if workspace_id is None and org_id is not None:
+            await MEMBERSHIPS.register_org(org_id)
+        elif workspace_id is not None:
+            await MEMBERSHIPS.register_workspace(org_id, workspace_id)
+    granted, kept = await MEMBERSHIPS.seed(list(dict.fromkeys(roles)), replace=True)
+    logger.info("Configured memberships in IAM: %d changed, %d already held", granted, kept)
+
+
+def _engine_iam() -> Any | None:
+    """The engine's IAM, when Nexus runs in a loaded engine."""
+    try:
+        from naas_abi import ABIModule
+
+        services = ABIModule.get_instance().engine.services
+        return services.iam if services.iam_available() else None
+    except Exception:  # no engine: Nexus alone, or tests
+        return None
+
+
+async def apply_configuration_seeds() -> None:
     """Apply config-driven user/org/workspace provisioning."""
     if not settings.users and not settings.organizations:
         return
 
+    roles_token = _declared_roles.set([])
+    scopes_token = _declared_scopes.set([])
+    try:
+        return await _apply_configuration_seeds()
+    finally:
+        _declared_roles.reset(roles_token)
+        _declared_scopes.reset(scopes_token)
+
+
+async def _apply_configuration_seeds() -> None:
     async_session = sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
     async with async_session() as session:
         async with session.begin():
-            users_by_email = await _upsert_users(
-                session=session,
-                secret_service=secret_service,
-            )
+            users_by_email = await _upsert_users(session=session)
             for org_cfg in settings.organizations:
                 try:
                     await _upsert_organization(session, org_cfg, users_by_email)
                 except Exception:
                     logger.exception("Failed to apply config for org slug=%s", org_cfg.slug)
 
+    iam = _engine_iam()
+    if iam is not None:
+        try:
+            # Blocking IAM calls; to_thread keeps the caller's context ("api").
+            await asyncio.to_thread(sync_platform_admins, iam, users_by_email)
+        except Exception:
+            logger.exception("Failed to apply users[].is_superadmin to IAM")
+        try:
+            await _apply_declared_roles(_declared_scopes.get() or [], _declared_roles.get() or [])
+        except Exception:
+            logger.exception("Failed to apply the configured memberships to IAM")
+
+    if settings.users:
+        _provision_in_background([(str(u.email).strip().lower(), u.name) for u in settings.users])
+
     logger.info(
         "Configuration seeds applied (users=%d, organizations=%d)",
         len(settings.users),
         len(settings.organizations),
     )
+
+
+# -- the configured users at the built-in identity provider -----------------------------------
+
+# The provider runs as a module: the API may boot before it answers.
+_PROVISION_RETRY_SECONDS = 5.0
+_PROVISION_ATTEMPTS = 60
+_provisioning_tasks: set[asyncio.Task[None]] = set()
+
+
+def _builtin_provider(identity: Any) -> str | None:
+    """The built-in identity provider (``provisioning: builtin``), when there is one."""
+    for provider in identity.list_providers():
+        if getattr(provider, "provisioning", None) == "builtin":
+            return str(provider.name)
+    return None
+
+
+def provision_seed_users(identity: Any, users: list[tuple[str, str]]) -> list[str]:
+    """Make each ``(email, name)`` exist at the built-in provider, as ``api``.
+
+    Returns the emails made or found. ``ProviderUnavailableError`` when the
+    provider does not answer yet (the caller tries again); no built-in provider
+    configured: nobody is provisioned, and nothing is an error (the provider's
+    people are made in the provider, or nobody signs in)."""
+    from naas_abi_core.engine.call_context import as_service_account
+
+    with as_service_account("api"):
+        provider = _builtin_provider(identity)
+        if provider is None:
+            return []
+        done: list[str] = []
+        for email, name in users:
+            made = identity.provision_user(provider, email, name=name)
+            logger.info(
+                "Configured user %s %s at the %s identity provider: they sign in with the "
+                "code it emails to that address",
+                email,
+                "created" if getattr(made, "created", False) else "found",
+                provider,
+            )
+            done.append(email)
+        return done
+
+
+async def _provision_when_ready(identity: Any, users: list[tuple[str, str]]) -> None:
+    from naas_abi_core.services.identity.IdentityPorts import ProviderUnavailableError
+
+    for attempt in range(_PROVISION_ATTEMPTS):
+        try:
+            await asyncio.to_thread(provision_seed_users, identity, users)
+            return
+        except ProviderUnavailableError as exc:
+            if attempt == 0:
+                logger.info(f"The built-in identity provider is not ready yet: {exc}")
+            await asyncio.sleep(_PROVISION_RETRY_SECONDS)
+        except Exception:  # noqa: BLE001 - never stops the API; `abi user migrate` redoes it
+            logger.exception("Could not provision the configured users at the identity provider")
+            return
+    logger.warning(
+        "The built-in identity provider never answered: run `abi user migrate --apply` "
+        "once it is up to make the configured users exist there"
+    )
+
+
+def _provision_in_background(users: list[tuple[str, str]]) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.oidc.adapters.secondary.engine import (
+        default_identity,
+    )
+
+    identity = default_identity()
+    if identity is None:
+        return
+    task = asyncio.create_task(_provision_when_ready(identity, users))
+    _provisioning_tasks.add(task)
+    task.add_done_callback(_provisioning_tasks.discard)
