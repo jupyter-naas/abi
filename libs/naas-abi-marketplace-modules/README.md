@@ -30,11 +30,19 @@ reaches the engine only over NATS with `naas-abi-sdk`. None imports
 
 ```bash
 uv sync --extra pennylane      # the extra of the application (sec-gov for sec_gov)
-ABI_NATS_URL=nats://module:<NATS_MODULE_PASSWORD>@127.0.0.1:4222 \
-ABI_MODULE_KEY=$(abi module key applications.pennylane) \
+ABI_NATS_URL=nats://127.0.0.1:4222 \
+ABI_SERVICE_KEY=abi_sk_... \
 ABI_DISCOVERY_PROJECT=<project> \
 uv run python -m naas_abi_apps.pennylane
 ```
+
+Each module runs as the service account `module/<project>/<module id>` (here
+`module/<project>/applications.pennylane`), on its own key: create it in the
+project with `abi iam service-account create module/<project>/applications.pennylane --key`
+(shown once). The URL carries no login: the key logs in to the broker. At start
+the module submits its permission manifest (derived from its declared services)
+and waits for `abi iam module approve module/<project>/applications.pennylane`;
+`abi dev up` creates the key and approves by itself.
 
 It is up when it logs `READY`; its agent then appears in Nexus. Credentials are
 engine secrets (e.g. `PENNYLANE_API_KEY`), read through the `secret` service.
@@ -48,7 +56,7 @@ dev:
   modules:
     - name: pennylane
       module: naas_abi_apps.pennylane
-      identity: applications.pennylane
+      module_id: applications.pennylane
 ```
 
 and, for Docker, a service built from this folder:
@@ -64,8 +72,8 @@ services:
       args: { APP: pennylane }
     restart: unless-stopped
     environment:
-      - ABI_NATS_URL=nats://module:${NATS_MODULE_PASSWORD}@nats:4222
-      - ABI_MODULE_KEY=${ABI_MODULE_KEY_PENNYLANE:?abi module key applications.pennylane}
+      - ABI_NATS_URL=nats://nats:4222
+      - ABI_SERVICE_KEY=${ABI_SERVICE_KEY_PENNYLANE:?abi iam service-account create module/<project>/applications.pennylane --key}
       - ABI_DISCOVERY_PROJECT=<project>
     depends_on: { abi: { condition: service_healthy } }
     networks: [abi-network]

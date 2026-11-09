@@ -3,9 +3,13 @@ handle signals before ``run_module`` takes over, and run from the environment.
 
 Environment of ``python -m naas_abi_apps.<app>``:
 
-- ``ABI_NATS_URL``: the broker, logged in as the user ``module``;
+- ``ABI_NATS_URL``: the broker (``nats://host:4222``), no login in it;
+- ``ABI_SERVICE_KEY``: the module's service key (``abi_sk_...``), of the
+  account ``module/<project>/<module id>``. It logs in to the broker and is
+  exchanged for the engine's tokens. ``abi dev up`` creates it; elsewhere
+  ``abi iam service-account create module/<project>/<module id> --key``, then
+  ``abi iam module approve`` once the module has submitted its manifest;
 - ``ABI_DISCOVERY_PROJECT``: the project whose engine hosts discovery;
-- ``ABI_MODULE_KEY`` (or ``ABI_SERVICE_TOKEN``): signs the module's tokens;
 - ``<APP>_<FIELD>``: a configuration field, e.g. ``PENNYLANE_CHAT_MODEL``;
 - ``ABI_HEALTH_PORT``, ``OTEL_EXPORTER_OTLP_ENDPOINT``, ``LOG_LEVEL``.
 """
@@ -21,10 +25,10 @@ from collections.abc import Awaitable, Mapping
 from typing import Any, TypeVar
 
 from naas_abi_sdk import DiscoveryConfiguration, run_module
-from naas_abi_sdk.service_token import ModuleToken, token_from_env
 
 DEFAULT_NATS_URL = "nats://127.0.0.1:4222"
 DEFAULT_DISCOVERY_PROJECT = "default"
+SERVICE_KEY_PREFIX = "abi_sk_"
 NOT_READY_NOTICE_SECONDS = 15.0
 
 T = TypeVar("T")
@@ -47,7 +51,8 @@ async def serve_until_stopped(
         if loop.time() >= notice:
             logger.warning(
                 "%s not READY after %.0f s (discovery status %s): is the "
-                "engine's discovery running, and ABI_MODULE_KEY this module's?",
+                "engine's discovery running, ABI_SERVICE_KEY this module's, "
+                "and its manifest approved (abi iam module approve)?",
                 module.module_id,
                 loop.time() - started,
                 status,
@@ -109,9 +114,16 @@ def configuration_from(
     return configuration_class(**values)
 
 
-def token_from(env: Mapping[str, str], module_id: str) -> str | ModuleToken:
-    """The module calls the engine as itself: a token for its module id."""
-    return token_from_env(env, module_id)
+def service_key(env: Mapping[str, str], module_id: str) -> str:
+    """The module's service key: it holds a key, never a signing secret, so
+    without one it does not start."""
+    key = env.get("ABI_SERVICE_KEY", "")
+    if not key.startswith(SERVICE_KEY_PREFIX):
+        raise SystemExit(
+            "Set ABI_SERVICE_KEY to this module's service key (abi_sk_...): "
+            f"abi iam service-account create module/<project>/{module_id} --key"
+        )
+    return key
 
 
 def main(
@@ -122,12 +134,13 @@ def main(
         level=env.get("LOG_LEVEL", "INFO"),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    key = service_key(env, module_class.module_id)
     asyncio.run(
         run_until_signalled(
             run_module(
                 module_class,
                 url=env.get("ABI_NATS_URL") or DEFAULT_NATS_URL,
-                token=token_from(env, module_class.module_id),
+                token=key,
                 configuration=configuration_from(
                     module_class.Configuration, env_prefix, env
                 ),

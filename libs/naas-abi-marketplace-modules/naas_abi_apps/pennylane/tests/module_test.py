@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from naas_abi_apps.common.runtime import configuration_from, token_from
+import pytest
+from naas_abi_apps.common.runtime import configuration_from, main
 from naas_abi_apps.common.testing import no_core_import
 from naas_abi_apps.pennylane import MODULE_ID, ABIModule
 from naas_abi_apps.pennylane.__main__ import ENV_PREFIX
@@ -40,8 +41,20 @@ def test_no_api_key_means_no_tools() -> None:
     assert len(tools_for("token")) == 4
 
 
-def test_the_module_calls_the_engine_as_its_module_id() -> None:
-    assert token_from({"ABI_MODULE_KEY": "k"}, MODULE_ID).identity == MODULE_ID
+def test_the_module_needs_its_service_key() -> None:
+    # It holds a key, never a signing secret: no key, no start.
+    for env in ({}, {"ABI_SERVICE_KEY": "a-token"}):
+        with pytest.raises(SystemExit, match=f"module/<project>/{MODULE_ID}"):
+            main(ABIModule, ENV_PREFIX, env)
+
+
+def test_its_manifest_defaults_from_its_dependencies() -> None:
+    from naas_abi_sdk.permissions import module_manifest
+
+    actions = {
+        a for s in module_manifest(ABIModule)["statements"] for a in s["actions"]
+    }
+    assert {"document:*", "model_registry:*", "secret:*"} <= actions
 
 
 def test_the_module_never_imports_abi_core() -> None:
