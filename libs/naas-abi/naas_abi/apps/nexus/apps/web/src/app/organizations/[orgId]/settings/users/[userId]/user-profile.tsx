@@ -8,11 +8,13 @@ import { getApiUrl } from '@/lib/config';
 import { authFetch, useAuthStore } from '@/stores/auth';
 import { useOrganizationStore } from '@/stores/organization';
 import { useConfirm } from '@/components/ui/dialogs';
+import { ROLE_LABELS as BUILT_IN_ROLE_LABELS, assignableRoles, changeMemberRole, roleChangeable } from '@/components/access/roles/role-change';
 import { AccountPageHeader } from '@/app/account/components/account-page-header';
 import { AccountSectionCard } from '@/app/account/components/account-section-card';
 import { orgSettingsSectionPath } from '../../lib/nav';
 import {
   changedProfileFields,
+  saveMemberChanges,
   PROFILE_FIELDS,
   type MemberDetails,
   type MemberProfileField,
@@ -77,7 +79,7 @@ export default function OrgUserProfilePage() {
   const orgId = params.orgId as string;
   const userId = params.userId as string;
   const authUser = useAuthStore((state) => state.user);
-  const { updateMemberProfile, uploadMemberAvatar, removeMemberAvatar, removeMember } =
+  const { updateMemberProfile, uploadMemberAvatar, removeMemberAvatar, removeMember, fetchMembers } =
     useOrganizationStore();
   const { confirm, dialog: confirmDialog } = useConfirm();
 
@@ -140,7 +142,7 @@ export default function OrgUserProfilePage() {
   const { member, account, organization_profile: orgProfile, workspaces } = details;
   const isSelf = member.user_id === authUser?.id;
   const isOwner = member.role === 'owner';
-  const canEditOrgRole = !isOwner && !isSelf;
+  const canEditOrgRole = roleChangeable({ role: member.role, inherited: false, userId: member.user_id, selfId: authUser?.id });
   const canRemove = !isOwner && !isSelf;
   const changes = changedProfileFields(orgProfile, draft);
   const roleChanged = canEditOrgRole && orgRole !== member.role;
@@ -153,15 +155,22 @@ export default function OrgUserProfilePage() {
     setError('');
     setSaving(true);
     try {
-      await updateMemberProfile(orgId, member.user_id, {
-        ...changes,
-        ...(roleChanged ? { role: orgRole } : {}),
+      const failed = await saveMemberChanges({
+        profile: Object.keys(changes).length > 0 ? () => updateMemberProfile(orgId, member.user_id, changes) : null,
+        // The same role change as Roles & permissions › People & roles.
+        role: roleChanged
+          ? () => changeMemberRole({ level: 'organization', organizationId: orgId }, member.user_id, orgRole)
+          : null,
+        // The Users list reads the members' roles from the store.
+        refreshed: () => fetchMembers(orgId),
       });
       await load();
+      if (failed) {
+        setError(failed);
+        return;
+      }
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-    } catch (err) {
-      setError(formatError(err, 'Failed to save'));
     } finally {
       setSaving(false);
     }
@@ -386,12 +395,13 @@ export default function OrgUserProfilePage() {
               }
             >
               {isOwner ? (
-                <option value="owner">Owner</option>
+                <option value="owner">{BUILT_IN_ROLE_LABELS.owner}</option>
               ) : (
-                <>
-                  <option value="member">Member</option>
-                  <option value="admin">Admin</option>
-                </>
+                assignableRoles('organization').map((role) => (
+                  <option key={role} value={role}>
+                    {BUILT_IN_ROLE_LABELS[role]}
+                  </option>
+                ))
               )}
             </select>
           </div>

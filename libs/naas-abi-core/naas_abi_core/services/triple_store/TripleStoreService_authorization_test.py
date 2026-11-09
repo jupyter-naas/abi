@@ -1,0 +1,700 @@
+"""The triple store passes the authorization contract.
+
+A caller cannot read a graph it may not read through ``FROM``, ``FROM NAMED``,
+``GRAPH <iri>``, ``GRAPH ?g``, the default graph, a stream or an export, in
+process or over NATS; a SPARQL Update touches only graphs it may write.
+"""
+
+from __future__ import annotations
+
+import pytest
+from naas_abi_core.engine.engine_loaders.EngineNATSDependencies import (
+    RemoteTripleStoreService,
+)
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
+from naas_abi_core.services.iam.tests.data_service_contract import (
+    ANY_OK,
+    DENY,
+    HIDDEN,
+    NOT_FOUND,
+    SECRET,
+    Case,
+    DataServiceContract,
+    Expect,
+    ok,
+)
+from naas_abi_core.services.triple_store.adapters.primary.triple_store__primary_adapter__NATS import (
+    TripleStorePrimaryAdapterNATS,
+)
+from naas_abi_core.services.triple_store.adapters.secondary.TripleStoreSecondaryAdapterNATSClient import (
+    TripleStoreSecondaryAdapterNATSClient,
+)
+from naas_abi_core.services.triple_store.adaptors.secondary.TripleStoreService__SecondaryAdaptor__OxigraphEmbedded import (
+    TripleStoreService__SecondaryAdaptor__OxigraphEmbedded as OxigraphEmbedded,
+)
+from naas_abi_core.services.triple_store.iam_catalog import CATALOG
+from naas_abi_core.services.triple_store.TripleStorePorts import Exceptions
+from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
+from rdflib import Graph, Literal, URIRef
+
+P = URIRef("http://p")
+SHARED, PRIVATE, FROZEN = (
+    URIRef(f"http://g/{n}") for n in ("shared", "private", "frozen")
+)
+INVALID = Expect("invalid")
+
+
+class _Bus:
+    """The bus a wired triple store notifies; nobody listens here."""
+
+    def publish_many(self, *_args, **_kwargs) -> None:
+        return None
+
+
+def _triple(value: str) -> Graph:
+    graph = Graph()
+    graph.add((URIRef(f"http://s/{value.replace(' ', '-')}"), P, Literal(value)))
+    return graph
+
+
+def _objects(result) -> list[str]:
+    return sorted(str(row[0]) for row in result)
+
+
+def _streamed(store, query: str) -> list[str]:
+    with store.query_stream(query) as result:
+        return sorted(str(next(iter(row.values()))) for row in result.rows)
+
+
+def _exported(store, graph=None) -> list[str]:
+    with store.export(graph) as triples:
+        return sorted(str(o) for _, p, o in triples if p == P)
+
+
+def _name(iri: URIRef) -> str:
+    from naas_abi_core.services.iam.names import encode_segment
+
+    return f"abi:triple_store:graph/{encode_segment(str(iri))}"
+
+
+class TestTripleStoreAuthorization(DataServiceContract):
+    catalog = CATALOG
+
+    def build_owner(self, tmp_path):
+        return TripleStoreService(OxigraphEmbedded(str(tmp_path / "oxigraph")))
+
+    def other_services(self, iam):
+        return {"bus": _Bus()}
+
+    def seed(self, owner):
+        from pyoxigraph import DefaultGraph, NamedNode, Quad
+        from pyoxigraph import Literal as OxLiteral
+
+        for graph in (SHARED, PRIVATE, FROZEN):
+            owner.insert(_triple(f"in {graph.rsplit('/', 1)[-1]}"), graph)
+        # The store's own default graph holds data too.
+        owner.adapter._store.add(
+            Quad(
+                NamedNode("http://s/default"),
+                NamedNode(str(P)),
+                OxLiteral("in default"),
+                DefaultGraph(),
+            )
+        )
+
+    def build_primary(self, owner):
+        return TripleStorePrimaryAdapterNATS(owner, SECRET)
+
+    def build_remote(self, url, identity):
+        return RemoteTripleStoreService(
+            TripleStoreSecondaryAdapterNATSClient(url, TEST_TOKENS.source(identity))
+        )
+
+    def close_remote(self, remote):
+        remote.adapter.close()
+
+    # Prefix patterns (`graph/<encoded iri>*`), as a role scoped to a graph
+    # family has: they match any name that starts like the graph.
+    def granted_resources(self):
+        return [_name(SHARED) + "*"]
+
+    def denied_resources(self):
+        return [_name(PRIVATE) + "*"]
+
+    def read_only_resources(self):
+        return [_name(FROZEN) + "*"]
+
+    def outcome_of(self, exc):
+        if isinstance(exc, Exceptions.GraphNotFoundError):
+            return NOT_FOUND
+        if isinstance(exc, ValueError):
+            return "invalid"
+        return None
+
+    def cases(self):
+        return [
+            *self.hostile_name_cases(),
+            *self.escaped_name_cases(),
+            *self.graph_cases(),
+        ]
+
+    @staticmethod
+    def escaped_name_cases():
+        """A prefixed name may escape characters of its local part (``g:\\/x``).
+        The grammar drops the backslash and some stores do; rdflib keeps it, so
+        IAM would check ``http://g\\/private`` while the store runs
+        ``http://g/private``, a graph a Deny names. The escaped forms are no
+        IRI: refused before any check, for everyone, queries and updates."""
+        requests = {
+            "drop": "PREFIX g: <http://g> DROP GRAPH g:\\/private",
+            "copy into a readable graph": (
+                "PREFIX h: <http:> INSERT { GRAPH <http://g/shared> { ?s ?p ?o } } "
+                "WHERE { GRAPH h:\\/\\/g\\/private { ?s ?p ?o } }"
+            ),
+            "dot escape": "PREFIX g: <http://g/> CLEAR GRAPH g:private\\.x",
+            "dash escape": "PREFIX g: <http://g/> CREATE GRAPH g:private\\-x",
+            "add": (
+                "PREFIX g: <http://g/> ADD GRAPH g:private\\~x TO <http://g/shared>"
+            ),
+            "query": (
+                "PREFIX g: <http://g> SELECT ?o WHERE { GRAPH g:\\/private { ?s ?p ?o } }"
+            ),
+        }
+        invalid = {"nobody": INVALID, "granted": INVALID, "denied": INVALID}
+        return [
+            Case(f"escaped name: {name}", lambda t, r=request: t.query(r), **invalid)
+            for name, request in requests.items()
+        ]
+
+    @staticmethod
+    def hostile_name_cases():
+        """A graph name IAM would match under ``shared*`` but that is not an
+        IRI: it would be checked as text and run as SPARQL (``>``, ``{``, a
+        space, a newline close the IRI or the block). Refused before the check
+        for everyone, so the checked name is the executed one and there is no
+        denied or not-found oracle."""
+        hostile = [
+            f"{SHARED}> {{ ?s ?p ?o }} }} ; DROP ALL ; INSERT DATA {{ GRAPH <{SHARED}",
+            f"{SHARED}{{x",
+            f"{SHARED} x",
+            f"{SHARED}\nx",
+            f"{SHARED}>",
+            f"{PRIVATE}>",
+        ]
+        invalid = {"nobody": INVALID, "granted": INVALID, "denied": INVALID}
+        cases = []
+        for number, name in enumerate(hostile):
+            graph = URIRef(name)
+            operations = {
+                "insert": lambda t, g=graph: t.insert(_triple("x"), g),
+                "remove": lambda t, g=graph: t.remove(_triple("x"), g),
+                "create_graph": lambda t, g=graph: t.create_graph(g),
+                "clear_graph": lambda t, g=graph: t.clear_graph(g),
+                "drop_graph": lambda t, g=graph: t.drop_graph(g),
+                "get_subject_graph in": lambda t, g=graph: t.get_subject_graph(
+                    "http://s/in-shared", str(g)
+                ),
+                "get_subject_graph of": lambda t, n=name: t.get_subject_graph(
+                    n, str(SHARED)
+                ),
+                "get_subject_graph across": lambda t, n=name: t.get_subject_graph(n),
+            }
+            for operation, call in operations.items():
+                cases.append(
+                    Case(f"{operation}, hostile name {number}", call, **invalid)
+                )
+        return cases
+
+    def graph_cases(self):
+        any_graph = f"SELECT ?o WHERE {{ GRAPH ?g {{ ?s <{P}> ?o }} }}"
+        default = f"SELECT ?o WHERE {{ ?s <{P}> ?o }}"
+        visible = ["in frozen", "in shared"]
+        return [
+            Case(
+                "list graphs",
+                lambda t: [
+                    g for g in t.list_graphs() if str(g).startswith("http://g/")
+                ],
+                nobody=ok([]),
+                granted=ok([str(SHARED)]),
+                denied=ok([str(FROZEN), str(SHARED)]),
+                view=lambda graphs: sorted(str(g) for g in graphs),
+            ),
+            Case(
+                "GRAPH ?g sees only readable graphs",
+                lambda t: t.query(any_graph),
+                nobody=ok([]),
+                granted=ok(["in shared"]),
+                denied=ok(visible),
+                view=_objects,
+            ),
+            Case(
+                "the default graph is a graph like any other",
+                lambda t: t.query(default),
+                nobody=ok([]),
+                granted=ok([]),
+                denied=ok(["in default"]),
+                view=_objects,
+            ),
+            Case(
+                "FROM a forbidden graph",
+                lambda t: t.query(
+                    f"SELECT ?o FROM <{PRIVATE}> WHERE {{ ?s <{P}> ?o }}"
+                ),
+                nobody=HIDDEN,
+                granted=HIDDEN,
+                denied=HIDDEN,
+            ),
+            Case(
+                "FROM NAMED a forbidden graph",
+                lambda t: t.query(
+                    f"SELECT ?o FROM NAMED <{PRIVATE}> WHERE {{ GRAPH ?g {{ ?s ?p ?o }} }}"
+                ),
+                nobody=HIDDEN,
+                granted=HIDDEN,
+                denied=HIDDEN,
+            ),
+            Case(
+                "GRAPH <forbidden>",
+                lambda t: t.query(
+                    f"SELECT ?o WHERE {{ GRAPH <{PRIVATE}> {{ ?s ?p ?o }} }}"
+                ),
+                nobody=HIDDEN,
+                granted=HIDDEN,
+                denied=HIDDEN,
+            ),
+            Case(
+                "GRAPH <forbidden> inside FILTER EXISTS",
+                lambda t: t.query(
+                    f"ASK {{ FILTER EXISTS {{ GRAPH <{PRIVATE}> {{ ?s ?p ?o }} }} }}"
+                ),
+                nobody=HIDDEN,
+                granted=HIDDEN,
+                denied=HIDDEN,
+            ),
+            Case(
+                "FROM a readable graph",
+                lambda t: t.query(f"SELECT ?o FROM <{SHARED}> WHERE {{ ?s <{P}> ?o }}"),
+                nobody=HIDDEN,
+                granted=ok(["in shared"]),
+                denied=ok(["in shared"]),
+                view=_objects,
+            ),
+            Case(
+                "stream GRAPH ?g",
+                lambda t: _streamed(t, any_graph),
+                nobody=ok([]),
+                granted=ok(["in shared"]),
+                denied=ok(visible),
+            ),
+            Case(
+                "stream FROM a forbidden graph",
+                lambda t: _streamed(
+                    t, f"SELECT ?o FROM <{PRIVATE}> WHERE {{ ?s <{P}> ?o }}"
+                ),
+                nobody=HIDDEN,
+                granted=HIDDEN,
+                denied=HIDDEN,
+            ),
+            Case(
+                "export a forbidden graph",
+                lambda t: _exported(t, PRIVATE),
+                nobody=HIDDEN,
+                granted=HIDDEN,
+                denied=HIDDEN,
+            ),
+            Case(
+                "export a readable graph",
+                lambda t: _exported(t, SHARED),
+                nobody=HIDDEN,
+                granted=ok(["in shared"]),
+                denied=ok(["in shared"]),
+            ),
+            Case(
+                "export the default graph",
+                lambda t: _exported(t),
+                nobody=ok([]),
+                granted=ok([]),
+                denied=ok(["in default"]),
+            ),
+            Case(
+                "SERVICE needs every graph",
+                lambda t: t.query(
+                    "SELECT * WHERE { SERVICE <http://elsewhere/sparql> { ?s ?p ?o } }"
+                ),
+                nobody=DENY,
+                granted=DENY,
+                denied=DENY,
+            ),
+            Case(
+                "an unparsable request",
+                lambda t: t.query("SELEKT nothing"),
+                nobody=INVALID,
+                granted=INVALID,
+                denied=INVALID,
+            ),
+            Case(
+                "insert into a read-only graph",
+                lambda t: t.insert(_triple("x"), FROZEN),
+                nobody=HIDDEN,
+                granted=HIDDEN,
+                denied=DENY,
+            ),
+            Case(
+                "INSERT DATA into a read-only graph",
+                lambda t: t.query(
+                    f'INSERT DATA {{ GRAPH <{FROZEN}> {{ <http://s/x> <{P}> "x" }} }}'
+                ),
+                nobody=HIDDEN,
+                granted=HIDDEN,
+                denied=DENY,
+            ),
+            Case(
+                "DROP a forbidden graph",
+                lambda t: t.query(f"DROP GRAPH <{PRIVATE}>"),
+                nobody=HIDDEN,
+                granted=HIDDEN,
+                denied=HIDDEN,
+            ),
+            Case(
+                "an update reaching out through SERVICE, USING its own graph",
+                lambda t: t.query(
+                    f"INSERT {{ GRAPH <{SHARED}> {{ ?s ?p ?o }} }} USING <{SHARED}> "
+                    "WHERE { SERVICE <http://127.0.0.1:1/query> "
+                    f"{{ GRAPH <{PRIVATE}> {{ ?s ?p ?o }} }} }}"
+                ),
+                nobody=HIDDEN,
+                granted=DENY,
+                denied=DENY,
+            ),
+            Case(
+                "LOAD a forbidden graph of the store into a readable one",
+                lambda t: t.query(f"LOAD <{PRIVATE}> INTO GRAPH <{SHARED}>"),
+                nobody=HIDDEN,
+                granted=DENY,
+                denied=DENY,
+            ),
+            Case(
+                "CLEAR ALL",
+                lambda t: t.query("CLEAR ALL"),
+                nobody=DENY,
+                granted=DENY,
+                denied=DENY,
+            ),
+            Case(
+                "a subject across graphs",
+                lambda t: t.get_subject_graph("http://s/in-private"),
+                nobody=ok([]),
+                granted=ok([]),
+                denied=ok([]),
+                view=lambda graph: sorted(str(o) for o in graph.objects()),
+            ),
+            Case(
+                "a readable subject across graphs",
+                lambda t: t.get_subject_graph("http://s/in-shared"),
+                nobody=ok([]),
+                granted=ok(["in shared"]),
+                denied=ok(["in shared"]),
+                view=lambda graph: sorted(str(o) for o in graph.objects()),
+            ),
+            Case(
+                "insert into a readable graph",
+                lambda t: t.insert(_triple("new"), SHARED),
+                nobody=HIDDEN,
+                granted=ANY_OK,
+                denied=ANY_OK,
+            ),
+        ]
+
+
+def test_on_a_union_store_an_update_reading_the_default_graph_needs_every_graph(
+    tmp_path,
+):
+    """Fuseki's default graph is the union of the named graphs: copying it into
+    a readable graph would copy the forbidden ones too."""
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        service_account,
+        use_call_context,
+    )
+    from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
+
+    contract = TestTripleStoreAuthorization()
+    owner, _ = contract._owner(tmp_path)
+    owner.adapter.union_default_graph = True  # as Fuseki declares
+    copy = f"INSERT {{ GRAPH <{SHARED}> {{ ?s ?p ?o }} }} WHERE {{ ?s ?p ?o }}"
+    for principal in ("granted", "denied"):
+        with use_call_context(CallContext(principal=service_account(principal))):
+            with pytest.raises(PermissionDeniedError):
+                owner.query(copy)
+            with pytest.raises((PermissionDeniedError, Exceptions.GraphNotFoundError)):
+                owner.query("DELETE WHERE { ?s ?p ?o }")
+
+
+def test_a_view_never_runs_an_update_even_for_a_caller_allowed_every_graph(
+    tmp_path,
+):
+    """``query_view`` is a read: the shortcut for broad callers must not let an
+    update through it."""
+    from naas_abi_core.services.iam.enforcement import internal_call
+
+    contract = TestTripleStoreAuthorization()
+    owner, _ = contract._owner(tmp_path)
+    with internal_call():
+        with pytest.raises(ValueError, match="not a query"):
+            owner.query_view("any", f"DROP GRAPH <{SHARED}>")
+        assert SHARED in owner.list_graphs()
+
+
+class _RecordingBus(_Bus):
+    def __init__(self) -> None:
+        self.subscriptions: list[str] = []
+
+    def subscribe(self, _topic, routing_key, _callback) -> None:
+        self.subscriptions.append(routing_key)
+
+
+def test_a_subscription_is_a_read_of_the_graph_it_names(tmp_path):
+    """Its messages are the graph's triples: a graph the caller cannot read
+    cannot be followed, and ``*`` follows every graph, so it needs them all."""
+    from naas_abi_core.engine.call_context import use_call_context
+    from naas_abi_core.engine.IEngine import IEngine
+    from naas_abi_core.services.iam.enforcement import internal_call
+    from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
+    from naas_abi_core.services.iam.tests.data_service_contract import caller
+
+    contract = TestTripleStoreAuthorization()
+    owner, iam = contract._owner(tmp_path)
+    bus = _RecordingBus()
+    owner.set_services(IEngine.Services(iam=iam, bus=bus))
+    anything = (None, None, None)
+
+    def follow(principal: str, graph: URIRef | str) -> None:
+        with use_call_context(caller(principal)):
+            owner.subscribe(anything, lambda _data: None, graph_name=graph)
+
+    # Allowed nothing: the graphs do not exist for it.
+    with pytest.raises(Exceptions.GraphNotFoundError):
+        follow("nobody", SHARED)
+    # Allowed `shared` only: that graph, not the others, not every graph.
+    follow("granted", SHARED)
+    assert len(bus.subscriptions) == 1
+    with pytest.raises(Exceptions.GraphNotFoundError):
+        follow("granted", PRIVATE)
+    with pytest.raises(PermissionDeniedError):
+        follow("granted", "*")
+    # Allowed everything but `private`: Deny beats Allow, for `*` too.
+    follow("denied", SHARED)
+    with pytest.raises(Exceptions.GraphNotFoundError):
+        follow("denied", PRIVATE)
+    with pytest.raises(PermissionDeniedError):
+        follow("denied", "*")
+    assert len(bus.subscriptions) == 2
+    # A caller allowed every graph follows every graph.
+    with internal_call():
+        owner.subscribe(anything, lambda _data: None)
+    assert bus.subscriptions[-1].startswith("ts.*.g.*.")
+
+
+# --- a module's ontology into the schema graph (LoadSchema) ---------------------
+
+SCHEMA_GRAPH = URIRef("http://ontology.naas.ai/graph/schema")
+MODULE_ACCOUNT = "module/acme/foo"
+
+
+def _ontology(name: str) -> str:
+    return f"@prefix ex: <http://example.org/> .\nex:{name} a ex:Class .\n"
+
+
+def _schema_owner(tmp_path):
+    """A wired store, a module account allowed its own ontologies (as its
+    default manifest asks) and an account allowed nothing."""
+    from naas_abi_core.engine.IEngine import IEngine
+    from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import (
+        IAMStoreMemory,
+    )
+    from naas_abi_core.services.iam.enforcement import internal_call
+    from naas_abi_core.services.iam.IAMService import IAMService
+    from naas_abi_core.services.iam.tests.iam_harness import document, statement
+
+    iam = IAMService(IAMStoreMemory())
+    iam.bootstrap()
+    with internal_call():
+        iam.register_catalog(CATALOG)
+        module = iam.create_service_account(MODULE_ACCOUNT)
+        own = iam.create_policy(
+            "foo-ontologies",
+            document(
+                statement(
+                    "Allow",
+                    ["triple_store:LoadSchema"],
+                    ["abi:triple_store:schema/module/foo/*"],
+                )
+            ),
+        )
+        iam.attach_policy(own.id, module.id)
+        iam.create_service_account("nobody")
+    owner = TripleStoreService(OxigraphEmbedded(str(tmp_path / "schema-store")))
+    owner.set_services(IEngine.Services(iam=iam, bus=_Bus()))
+    return owner
+
+
+def _schema_classes(owner) -> set[str]:
+    from naas_abi_core.services.iam.enforcement import internal_call
+
+    with internal_call():
+        rows = owner.query(
+            f"SELECT ?s WHERE {{ GRAPH <{SCHEMA_GRAPH}> "
+            "{ ?s a <http://example.org/Class> } }"
+        )
+        return {str(row[0]).removeprefix("http://example.org/") for row in rows}
+
+
+def test_a_module_loads_its_own_ontologies_and_no_one_elses(tmp_path):
+    from naas_abi_core.engine.call_context import as_service_account, use_call_context
+    from naas_abi_core.services.iam.IAMPorts import ResourceNotFoundError
+    from naas_abi_core.services.iam.tests.data_service_contract import caller
+
+    owner = _schema_owner(tmp_path)
+    with use_call_context(caller(MODULE_ACCOUNT)):
+        # The bookkeeping writes the shared schema graph, which the module was
+        # not granted: its LoadSchema on the source is what it needs.
+        assert owner.load_schema_content("module/foo/A.ttl", _ontology("Own")) is True
+        assert owner.load_schema_content("module/foo/A.ttl", _ontology("Own")) is False
+        # Another module's source does not exist for it: nothing is written.
+        with pytest.raises(ResourceNotFoundError):
+            owner.load_schema_content("module/bar/B.ttl", _ontology("Stolen"))
+    with use_call_context(caller("nobody")), pytest.raises(ResourceNotFoundError):
+        owner.load_schema_content("module/foo/A.ttl", _ontology("Nobody"))
+    # The engine loads any source.
+    with as_service_account("engine"):
+        assert owner.load_schema_content("module/bar/B.ttl", _ontology("Bar")) is True
+    assert _schema_classes(owner) == {"Own", "Bar"}
+
+
+def test_over_nats_the_caller_of_a_load_is_the_verified_token(tmp_path):
+    import asyncio
+
+    from naas_abi_core.proto.triple_store.v1 import triple_store_pb2
+
+    owner = _schema_owner(tmp_path)
+    primary = TripleStorePrimaryAdapterNATS(owner, SECRET)
+
+    class Request:
+        def __init__(self, token: str, source: str, text: str) -> None:
+            self.subject = "abi.svc.triple_store.v1.load_schema"
+            self.headers = {"Nats-Auth-Token": token}
+            self.data = triple_store_pb2.LoadSchemaRequest(
+                source=source, content_ttl=text.encode()
+            ).SerializeToString()
+            self.responses: list[bytes] = []
+
+        async def respond(self, data: bytes = b"", headers=None) -> None:
+            self.responses.append(data)
+
+    def load(identity: str, source: str, text: str):
+        request = Request(TEST_TOKENS.token(identity), source, text)
+        asyncio.run(primary._handle_load_schema(request))  # type: ignore[arg-type]
+        response = triple_store_pb2.LoadSchemaResponse()
+        response.ParseFromString(request.responses[0])
+        return response
+
+    assert load(MODULE_ACCOUNT, "module/foo/A.ttl", _ontology("Own")).changed is True
+    refused = load(MODULE_ACCOUNT, "module/bar/B.ttl", _ontology("Stolen"))
+    assert (refused.error.code, refused.changed) == ("NOT_FOUND", False)
+    assert load("nobody", "module/foo/A.ttl", _ontology("Nobody")).error.code == (
+        "NOT_FOUND"
+    )
+    assert _schema_classes(owner) == {"Own"}
+
+
+# --- the schema graph is written only through LoadSchema ------------------------
+
+
+def _default_manifest_module(tmp_path):
+    """A wired store and a module whose approved manifest is the SDK's default
+    for a module declaring ``triple_store``: every action on graphs and views,
+    LoadSchema on its own sources."""
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        Principal,
+        as_service_account,
+        use_call_context,
+    )
+    from naas_abi_core.engine.IEngine import IEngine
+    from naas_abi_core.services.iam.tests.authorization_contract import contract_iam
+    from naas_abi_sdk.module import ModuleDependencies
+    from naas_abi_sdk.permissions import default_manifest
+
+    iam = contract_iam()
+    with as_service_account("engine"):
+        account = iam.create_service_account("module/acme/foo")
+    module = CallContext(
+        principal=Principal(id=account.id, kind="service_account", name=account.name)
+    )
+    with use_call_context(module):
+        iam.submit_manifest(
+            "foo",
+            "acme",
+            default_manifest(ModuleDependencies(services=("triple_store",))),
+        )
+    with as_service_account("engine"):
+        iam.approve_manifest(account.id)
+    owner = TripleStoreService(OxigraphEmbedded(str(tmp_path / "manifest-store")))
+    owner.set_services(IEngine.Services(iam=iam, bus=_Bus()))
+    with as_service_account("engine"):
+        owner.load_schema_content("module/bar/B.ttl", _ontology("Bar"))
+    return owner, module
+
+
+def test_a_modules_graph_grant_does_not_reach_the_schema_graph(tmp_path):
+    from naas_abi_core.engine.call_context import use_call_context
+    from naas_abi_core.services.iam.IAMPorts import (
+        PermissionDeniedError,
+        ResourceNotFoundError,
+    )
+
+    owner, module = _default_manifest_module(tmp_path)
+    own_graph = URIRef("http://g/foo-data")
+    forged = Graph()
+    forged.add(
+        (
+            URIRef("http://example.org/Bar"),
+            URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+            URIRef("http://example.org/Stolen"),
+        )
+    )
+    with use_call_context(module):
+        # Its own graphs and its own ontology: allowed.
+        owner.insert(_triple("mine"), own_graph)
+        assert owner.load_schema_content("module/foo/A.ttl", _ontology("Own"))
+        # The schema graph, directly: refused, whatever the statement.
+        for write in (
+            lambda: owner.insert(forged, SCHEMA_GRAPH),
+            lambda: owner.remove(forged, SCHEMA_GRAPH),
+            lambda: owner.clear_graph(SCHEMA_GRAPH),
+            lambda: owner.drop_graph(SCHEMA_GRAPH),
+            lambda: owner.query(
+                f"INSERT DATA {{ GRAPH <{SCHEMA_GRAPH}> {{ <urn:x> <urn:p> <urn:o> }} }}"
+            ),
+            lambda: owner.query(
+                f"DELETE WHERE {{ GRAPH <{SCHEMA_GRAPH}> {{ ?s ?p ?o }} }}"
+            ),
+            lambda: owner.query("CLEAR ALL"),
+            lambda: owner.query(
+                "INSERT { GRAPH ?g { <urn:x> <urn:p> <urn:o> } } WHERE { GRAPH ?g { ?s ?p ?o } }"
+            ),
+        ):
+            with pytest.raises(PermissionDeniedError):
+                write()
+        # Another module's source does not exist for it.
+        with pytest.raises(ResourceNotFoundError):
+            owner.load_schema_content("module/bar/B.ttl", _ontology("Stolen"))
+        # Reading the schema graph stays open to it.
+        assert "Bar" in {
+            str(row[0]).removeprefix("http://example.org/")
+            for row in owner.query(
+                f"SELECT ?s WHERE {{ GRAPH <{SCHEMA_GRAPH}> {{ ?s a <http://example.org/Class> }} }}"
+            )
+        }
+    assert _schema_classes(owner) == {"Own", "Bar"}

@@ -3,7 +3,7 @@
 .account-layout-root {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: calc(100vh - var(--view-banner-height, 0px));
   background-color: var(--background-hex);
 }
 

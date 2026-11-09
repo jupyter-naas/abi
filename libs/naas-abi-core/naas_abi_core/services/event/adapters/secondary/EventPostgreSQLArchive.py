@@ -4,8 +4,7 @@ Hourly, ``event_archive`` moves the events older than the retention window
 (7 days by default) into the dataset ``events_archive``, in the namespace named
 after the adapter's schema, partitioned by month. It then deletes them from
 PostgreSQL. Archived events are read with SQL on the dataset; the event service
-reads what is left in PostgreSQL. See
-docs/adr/20261006_event-log-archive.md.
+reads what is left in PostgreSQL.
 
 Exactly once: the archive's highest ``seq`` is where the last run stopped. A run
 first deletes what an interrupted run archived but did not delete, then moves

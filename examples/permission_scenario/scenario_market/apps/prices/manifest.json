@@ -1,0 +1,7 @@
+{
+  "name": "Prices",
+  "description": "Market prices, the app of M.",
+  "category": "module",
+  "icon_emoji": "📈",
+  "url": "html:index.html"
+}

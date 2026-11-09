@@ -8,7 +8,7 @@ RPC overflow (nats_rpc.py, sdk transport.py), transfer streams, claim checks
 
 A new raw send fails this test: route it through one of those helpers, or add
 it here with the reason it can never exceed the limit.
-(docs/adr/20261003_nats-rpc-overflow.md, docs/adr/20261003_nats-claim-check.md)
+
 """
 
 import re
@@ -30,6 +30,22 @@ SEND = re.compile(
 )
 
 REVIEWED = {
+    "naas-abi-core/naas_abi_core/engine/nats_auth_callout.py": (
+        1,
+        "auth callout answer: one signed JWT naming one policy's subjects",
+    ),
+    "naas-abi-core/naas_abi_core/engine/nats_credentials.py": (
+        1,
+        "key exchange and JWKS requests: a key, or nothing",
+    ),
+    "naas-abi-sdk/naas_abi_sdk/credentials.py": (
+        2,
+        "key exchange: the key, then one token; a delegation's renewal: one token",
+    ),
+    "naas-abi-sdk/naas_abi_sdk/app_streams.py": (
+        2,
+        "body pulls and their cancel: a sequence number or a flag",
+    ),
     "naas-abi-core/naas_abi_core/engine/nats_overflow.py": (
         1,
         "overflow fetch: transfer read/start/close requests, a few bytes each",
@@ -46,6 +62,10 @@ REVIEWED = {
         2,
         "engine lease record: one holder description, a few hundred bytes",
     ),
+    "naas-abi-core/naas_abi_core/services/iam/adapters/primary/iam__primary_adapter__NATS.py": (
+        1,
+        "abi.iam.v1.changed: a ChangeEvent holding one int64 revision",
+    ),
     "naas-abi-core/naas_abi_core/services/bus/adapters/secondary/NATSJetStreamAdapter.py": (
         2,
         "bus publish/enqueue: claim_check.prepare (JetStream header reserved)",
@@ -61,24 +81,41 @@ REVIEWED = {
             "min(32 KiB, a quarter of the broker limit), else its part count"
         ),
     ),
-    "naas-abi-sdk/naas_abi_sdk/app_streams.py": (
-        2,
-        "body pulls and their cancel: a BodyPull of a sequence number or a flag",
-    ),
     "naas-abi-sdk/naas_abi_sdk/bus.py": (
-        2,
-        "bus publish/enqueue: claim_check.prepare (JetStream header reserved)",
+        3,
+        (
+            "bus publish/enqueue (again once its stream exists): claim_check.prepare "
+            "(JetStream header reserved)"
+        ),
     ),
     "naas-abi-sdk/naas_abi_sdk/claim_check.py": (
-        1,
-        "object store put: chunks sized to half the broker limit",
+        2,
+        (
+            "stored chunks (again once the stream exists): at most the broker limit "
+            "less 1 KiB for subject and headers"
+        ),
     ),
     "naas-abi-sdk/naas_abi_sdk/job_host.py": (
         3,
         (
             "schedule messages carry b'{}' or their trigger input (at most 4 KiB, "
             "Cron/Every); the event bridge's trigger goes through "
-            "claim_check.prepare; completion notices are a run id and a status"
+            "claim_check.prepare with trigger_reserve; completion notices are a run "
+            "id and a status"
+        ),
+    ),
+    "naas-abi-sdk/naas_abi_sdk/broker_control.py": (
+        1,
+        (
+            "a few names and numbers; a trigger's body is claim-checked first "
+            "(jobs.trigger_reserve: base64 and the engine's headers)"
+        ),
+    ),
+    "naas-abi-core/naas_abi_core/engine/nats_broker_control.py": (
+        3,
+        (
+            "a trigger: refused above the broker limit, headers counted, before it is "
+            "published (twice: again once the stream exists); a cancel carries a run id"
         ),
     ),
     "naas-abi-sdk/naas_abi_sdk/jobs.py": (

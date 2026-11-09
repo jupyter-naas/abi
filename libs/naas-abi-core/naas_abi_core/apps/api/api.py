@@ -13,6 +13,7 @@ import html
 import os
 import subprocess
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from importlib.resources import files
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
@@ -250,6 +251,17 @@ oauth2_scheme = api_key_scheme
 
 # Update the token validation dependency
 async def is_token_valid(token: str = Depends(api_key_scheme)):
+    """The credential of a request to the engine's own API (``/agents``,
+    ``/pipelines``, ``/workflows`` and ``/tools``): the deployment's key
+    (``ABI_API_KEY``) and nothing else.
+
+    Keys of IAM (a person's ``abi_pk_``, a service account's ``abi_sk_``) are
+    refused here on purpose. These routes run an agent, a pipeline, a workflow
+    or a tool and decide nothing themselves: only the core-service calls made
+    further down are checked by IAM, so a key's limit and its owner's policies
+    would not bound what the invocation does, nor what it does with the
+    deployment's own credentials. The deployment key is the one credential
+    here."""
     from naas_abi_core.apps.api.abi_api_key_auth import is_abi_api_token_valid
 
     if not is_abi_api_token_valid(token):
@@ -258,7 +270,28 @@ async def is_token_valid(token: str = Depends(api_key_scheme)):
             detail="Invalid authentication credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    _call_as_api_key_holder()
     return True
+
+
+def _call_as_api_key_holder() -> None:
+    """The rest of this request runs as ``api``: the deployment's key holder.
+
+    The deployment's one shared key is the credential of these routes, and it
+    calls as ``api``, which holds the enumerated ``builtin.api`` policy. A request
+    already acting for a signed-in user keeps its context. Set in the request's
+    own task, so the endpoint (and a sync endpoint's worker thread, which
+    copies the context) sees it, and no other request does.
+    """
+    from naas_abi_core.engine.call_context import (
+        current_call_context,
+        service_account,
+        set_call_context,
+    )
+
+    context = current_call_context()
+    if context.principal.kind == "anonymous":
+        set_call_context(replace(context, principal=service_account("api")))
 
 
 # Create Agents API Router
@@ -439,8 +472,13 @@ def _load_runtime_routes():
 
 
 def get_app() -> FastAPI:
+    from naas_abi_core.engine.call_context import as_service_account
+
     try:
-        _load_runtime_routes()
+        # Still boot: agents resolve their models, modules seed data, and the
+        # warmup thread starts here. The engine's own work, for no caller.
+        with as_service_account("engine"):
+            _load_runtime_routes()
     except BaseException:
         _abandon_engine()
         raise

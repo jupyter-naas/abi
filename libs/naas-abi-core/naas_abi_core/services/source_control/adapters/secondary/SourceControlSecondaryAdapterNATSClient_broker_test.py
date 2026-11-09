@@ -7,6 +7,7 @@ import subprocess
 import time
 
 import pytest
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.source_control.adapters.secondary.InMemoryAdapter import (
     InMemoryAdapter,
 )
@@ -62,8 +63,7 @@ def remote(nats_url):
     server.start()
     client = SourceControlSecondaryAdapterNATSClient(
         nats_url=nats_url,
-        jwt_secret=JWT_SECRET,
-        service_identity="api",
+        credentials=TEST_TOKENS.source("api"),
         timeout_seconds=10.0,
     )
     yield client, wrapped

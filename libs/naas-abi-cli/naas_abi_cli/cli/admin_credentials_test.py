@@ -7,8 +7,6 @@ import pytest
 
 from naas_abi_cli.cli.admin_credentials import (
     ADMIN_EMAIL,
-    ADMIN_PASSWORD_KEY,
-    ensure_admin_credentials,
     ensure_api_key,
 )
 
@@ -22,49 +20,19 @@ def _env(path: Path) -> dict[str, str]:
     return values
 
 
-def test_admin_password_is_generated_when_missing(tmp_path: Path) -> None:
-    env = tmp_path / ".env"
+def test_the_seeded_admin_has_no_password() -> None:
+    """Nexus has no login of its own: the admin signs in at the identity provider
+    with a code mailed to its address, so no password is ever generated."""
+    from naas_abi_cli.cli import admin_credentials
 
-    email, password = ensure_admin_credentials(env)
-
-    assert email == ADMIN_EMAIL
-    assert len(password) >= 24
-    assert _env(env)[ADMIN_PASSWORD_KEY] == password
-    assert _env(env)["NEXUS_USER_ADMIN_EXAMPLE_COM_EMAIL"] == ADMIN_EMAIL
-
-
-def test_each_project_gets_a_different_password(tmp_path: Path) -> None:
-    first = ensure_admin_credentials(tmp_path / "a.env")[1]
-    second = ensure_admin_credentials(tmp_path / "b.env")[1]
-
-    assert first != second
-
-
-@pytest.mark.parametrize("default", ["Admin1234!", "admin"])
-def test_a_shipped_default_password_is_replaced_in_place(tmp_path: Path, default: str) -> None:
-    env = tmp_path / ".env"
-    env.write_text(
-        "OTHER=1\n"
-        f"NEXUS_USER_ADMIN_PASSWORD={default}\n"
-        f"{ADMIN_PASSWORD_KEY}={default}\n"
-        "LAST=2\n"
-    )
-
-    _email, password = ensure_admin_credentials(env)
-
-    values = _env(env)
-    assert password != default
-    assert values[ADMIN_PASSWORD_KEY] == password
-    assert "NEXUS_USER_ADMIN_PASSWORD" not in values
-    assert values["OTHER"] == "1" and values["LAST"] == "2"
-    assert env.read_text().count(ADMIN_PASSWORD_KEY) == 1
-
-
-def test_a_custom_password_is_kept(tmp_path: Path) -> None:
-    env = tmp_path / ".env"
-    env.write_text(f"{ADMIN_PASSWORD_KEY}=my-own-strong-pw\n")
-
-    assert ensure_admin_credentials(env)[1] == "my-own-strong-pw"
+    assert ADMIN_EMAIL == "admin@example.com"
+    for name in (
+        "ensure_admin_credentials",
+        "generate_admin_password",
+        "ADMIN_PASSWORD_KEY",
+        "ADMIN_EMAIL_KEY",
+    ):
+        assert not hasattr(admin_credentials, name)
 
 
 @pytest.mark.parametrize("existing", [None, "abi"])
@@ -89,27 +57,35 @@ def test_a_custom_api_key_is_kept(tmp_path: Path) -> None:
     assert ensure_api_key(env) == "configured-key"
 
 
-def test_ensure_nats_secret_generates_once_and_keeps_it(tmp_path):
-    from naas_abi_cli.cli.admin_credentials import ensure_nats_secret
+def test_the_callout_seed_is_generated_once_with_its_issuer(tmp_path):
+    from naas_abi_cli.cli.admin_credentials import (
+        ensure_nats_callout_seed,
+        nats_callout_issuer,
+    )
 
     env = tmp_path / ".env"
     env.write_text("OTHER=1\n")
 
-    first = ensure_nats_secret(env)
-    second = ensure_nats_secret(env)
+    first = ensure_nats_callout_seed(env)
+    second = ensure_nats_callout_seed(env)
 
-    assert first == second and len(first) >= 32
-    assert "OTHER=1" in env.read_text()
-    assert f"NATS_JWT_SECRET={first}" in env.read_text()
+    assert first == second and first.startswith("SA")
+    issuer = nats_callout_issuer(first)
+    assert issuer.startswith("A") and len(issuer) == 56
+    text = env.read_text()
+    assert f"NATS_AUTH_CALLOUT_SEED={first}" in text
+    assert f"NATS_AUTH_CALLOUT_ISSUER={issuer}" in text
+    assert "OTHER=1" in text
 
 
-def test_ensure_nats_secret_keeps_an_existing_value(tmp_path):
-    from naas_abi_cli.cli.admin_credentials import ensure_nats_secret
+def test_a_seed_that_is_not_an_account_seed_is_replaced(tmp_path):
+    from naas_abi_cli.cli.admin_credentials import ensure_nats_callout_seed
 
     env = tmp_path / ".env"
-    env.write_text("NATS_JWT_SECRET=" + "k" * 40 + "\n")
+    env.write_text("NATS_AUTH_CALLOUT_SEED=not-a-seed\n")
 
-    assert ensure_nats_secret(env) == "k" * 40
+    assert ensure_nats_callout_seed(env).startswith("SA")
+    assert env.read_text().count("NATS_AUTH_CALLOUT_SEED=") == 1
 
 
 def test_ensure_nats_passwords_generates_each_broker_user_once(tmp_path):
@@ -122,8 +98,8 @@ def test_ensure_nats_passwords_generates_each_broker_user_once(tmp_path):
     second = ensure_nats_passwords(env)
 
     assert first == second
-    assert set(first) == {"NATS_ABI_PASSWORD", "NATS_MODULE_PASSWORD"}
-    assert first["NATS_ABI_PASSWORD"] != first["NATS_MODULE_PASSWORD"]
+    assert set(first) == {"NATS_ENGINE_PASSWORD", "NATS_AUTH_PASSWORD"}
+    assert first["NATS_ENGINE_PASSWORD"] != first["NATS_AUTH_PASSWORD"]
     for key, password in first.items():
         assert f"{key}={password}" in env.read_text()
         # nats.conf reads it as a config value ($VAR): it must start with a
@@ -139,13 +115,13 @@ def test_ensure_nats_passwords_replaces_an_empty_or_short_password(tmp_path, val
     from naas_abi_cli.cli.admin_credentials import ensure_nats_passwords
 
     env = tmp_path / ".env"
-    env.write_text(f"NATS_ABI_PASSWORD={value}\nNATS_MODULE_PASSWORD={'m' * 40}\n")
+    env.write_text(f"NATS_ENGINE_PASSWORD={value}\nNATS_AUTH_PASSWORD={'m' * 40}\n")
 
     passwords = ensure_nats_passwords(env)
 
-    assert len(passwords["NATS_ABI_PASSWORD"]) >= 32
-    assert passwords["NATS_MODULE_PASSWORD"] == "m" * 40
-    assert env.read_text().count("NATS_ABI_PASSWORD=") == 1
+    assert len(passwords["NATS_ENGINE_PASSWORD"]) >= 32
+    assert passwords["NATS_AUTH_PASSWORD"] == "m" * 40
+    assert env.read_text().count("NATS_ENGINE_PASSWORD=") == 1
 
 
 @pytest.mark.parametrize(
@@ -154,47 +130,20 @@ def test_ensure_nats_passwords_replaces_an_empty_or_short_password(tmp_path, val
 def test_nats_login_puts_the_user_and_password_in_the_url(url):
     from naas_abi_cli.cli.admin_credentials import nats_login
 
-    assert nats_login(url, "module", "nats-pw_1") == "nats://module:nats-pw_1@127.0.0.1:13042"
-
-
-def test_a_module_key_is_written_for_compose_and_follows_the_secret(tmp_path):
-    from naas_abi_core.engine.nats_auth import module_key
-
-    from naas_abi_cli.cli.admin_credentials import (
-        ensure_module_key,
-        module_key_variable,
+    assert (
+        nats_login(url, "module", "nats-pw_1")
+        == "nats://module:nats-pw_1@127.0.0.1:13042"
     )
 
-    env_path = tmp_path / ".env"
-    env_path.write_text(f"NATS_JWT_SECRET={'s' * 48}\n")
-    key, replaced = ensure_module_key(env_path, "research-bot", "demo.research_bot")
 
-    assert module_key_variable("research-bot") == "ABI_MODULE_KEY_RESEARCH_BOT"
-    assert key == module_key("s" * 48, "demo.research_bot") and not replaced
-    assert f"ABI_MODULE_KEY_RESEARCH_BOT={key}" in env_path.read_text().splitlines()
-    # Idempotent: the same line, once.
-    assert ensure_module_key(env_path, "research-bot", "demo.research_bot") == (key, False)
-    assert env_path.read_text().count("ABI_MODULE_KEY_RESEARCH_BOT=") == 1
+def test_rabbitmq_credentials_are_generated_once(tmp_path):
+    from naas_abi_cli.cli.admin_credentials import ensure_rabbitmq_credentials
 
+    env = tmp_path / ".env"
+    env.write_text("RABBITMQ_PASSWORD=abi\n")
 
-def test_a_stale_module_key_is_replaced_and_reported(tmp_path):
-    from naas_abi_cli.cli.admin_credentials import ensure_module_key
+    user, password = ensure_rabbitmq_credentials(env)
 
-    env_path = tmp_path / ".env"
-    env_path.write_text(f"NATS_JWT_SECRET={'s' * 48}\nABI_MODULE_KEY_BOT=old\n")
-
-    key, replaced = ensure_module_key(env_path, "bot", "demo.bot")
-
-    assert replaced and f"ABI_MODULE_KEY_BOT={key}" in env_path.read_text()
-
-
-def test_no_module_key_without_the_engines_secret(tmp_path):
-    """A secret made up here would not be the one the engine verifies with."""
-    from naas_abi_cli.cli.admin_credentials import MissingNatsSecret, ensure_module_key
-
-    env_path = tmp_path / ".env"
-    env_path.write_text("OTHER=1\n")
-
-    with pytest.raises(MissingNatsSecret):
-        ensure_module_key(env_path, "bot", "demo.bot")
-    assert env_path.read_text() == "OTHER=1\n"
+    assert user == "abi" and password != "abi" and len(password) >= 24
+    assert ensure_rabbitmq_credentials(env) == (user, password)
+    assert _env(env)["RABBITMQ_PASSWORD"] == password

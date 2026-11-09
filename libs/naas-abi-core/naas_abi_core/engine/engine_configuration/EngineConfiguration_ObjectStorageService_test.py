@@ -4,6 +4,7 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_ObjectStorage
     ObjectStorageAdapterNATSConfiguration,
     ObjectStorageServiceConfiguration,
 )
+from naas_abi_core.engine.nats_test_tokens import TEST_SERVICE_KEY
 from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import (
     ObjectStorageSecondaryAdapterFS,
 )
@@ -39,8 +40,7 @@ def test_object_storage_service_configuration_nats_rpc_is_lazy():
             adapter="nats_rpc",
             config=ObjectStorageAdapterNATSConfiguration(
                 nats_url="nats://127.0.0.1:4222",
-                jwt_secret="test-shared-secret",
-                service_identity="api",
+                service_key=TEST_SERVICE_KEY,
             ),
         )
     )

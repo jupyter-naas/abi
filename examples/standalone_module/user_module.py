@@ -41,6 +41,8 @@ class ReportWriter:
 
 
 class ABIModule(BaseModule):
+    module_id = "demo.ergonomic"
+
     @dataclass
     class Configuration(ModuleConfiguration):
         prefix: str = "ergonomic"
@@ -134,10 +136,12 @@ class ABIModule(BaseModule):
         await services.cache.delete("ergonomic")
         assert not await services.cache.exists("ergonomic")
 
-        await services.secret.set("ERGONOMIC_DEMO", "demo-value")
-        assert await services.secret.get("ERGONOMIC_DEMO") == "demo-value"
-        assert (await services.secret.list())["ERGONOMIC_DEMO"] == "demo-value"
-        await services.secret.remove("ERGONOMIC_DEMO")
+        # A module's secrets are named after it: the endpoint serves it no other.
+        name = f"{self.module_id}/ERGONOMIC_DEMO"
+        await services.secret.set(name, "demo-value")
+        assert await services.secret.get(name) == "demo-value"
+        assert (await services.secret.list())[name] == "demo-value"
+        await services.secret.remove(name)
         await services.email.send(
             to_email="demo@example.invalid",
             subject="SDK facade",
@@ -152,9 +156,12 @@ class ABIModule(BaseModule):
                 attributes={"ok": True},
             )
         )
-        assert (await services.activity_log.query("sdk:ergonomic"))[
-            0
-        ].event_type == "demo.facade"
+        # The actor is the caller (this module's service account), never the
+        # event's actor_id field.
+        assert any(
+            e.event_type == "demo.facade"
+            for e in await services.activity_log.query(self.engine.principal_id)
+        )
         await services.events.publish(
             Event("urn:demo:Ergonomic", {"value": "recorded"})
         )
@@ -218,6 +225,16 @@ class ABIModule(BaseModule):
         assert await vectors.get_collection_size("ergonomic") == 1
         await vectors.delete_documents("ergonomic", [vid])
         await vectors.delete_collection("ergonomic")
+
+        # IAM answers for this module's own identity (its service account,
+        # module/default/demo.ergonomic), with no dependency declaration: its
+        # approved manifest grants its own document namespace.
+        iam = services.iam
+        own = "abi:document:collection/demo.ergonomic/runs"
+        other = "abi:document:collection/someone-else/runs"
+        assert (await iam.authorize("document:Find", own)).allowed
+        assert not (await iam.authorize("document:Find", other)).allowed
+        assert (await iam.filter("document:Find", [other, own])).allowed == [own]
         return {
             "status": "passed",
             "module": type(self).__name__,
@@ -234,7 +251,7 @@ async def main():
     report = await run_module(
         ABIModule,
         url=os.environ["ABI_NATS_URL"],
-        token=os.environ["ABI_SERVICE_TOKEN"],
+        token=os.environ["ABI_SERVICE_KEY"],
         timeout=30,
     )
     Path(os.environ["DEMO_REPORT"]).write_text(json.dumps(report))

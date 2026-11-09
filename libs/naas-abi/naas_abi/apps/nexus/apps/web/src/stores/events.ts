@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { authFetch } from '@/stores/auth';
-import type { PlatformEvent } from '@/app/workspace/[workspaceId]/admin/events/bfo-event-projection';
+import type { PlatformEvent } from '@/app/settings/system/events/bfo-event-projection';
 
 export interface EventRow {
   receivedAt: string;
@@ -131,13 +131,9 @@ export const useEventsStore = create<EventsState>((set, get) => ({
 
   checkAccess: async () => {
     try {
-      const res = await authFetch('/api/admin/me');
-      if (!res.ok) {
-        set({ authState: 'denied' });
-        return;
-      }
-      const data = await res.json();
-      set({ authState: data.is_superadmin ? 'authorized' : 'denied' });
+      // The event log is a read: nexus:ReadSystem, which /api/admin/ping asks.
+      const res = await authFetch('/api/admin/ping');
+      set({ authState: res.ok ? 'authorized' : 'denied' });
     } catch {
       set({ authState: 'denied' });
       return;

@@ -13,10 +13,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import get_current_user_required
-from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
-    get_workspace_role,
-    require_workspace_access,
-)
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import guard
 from naas_abi.apps.nexus.apps.api.app.services.maps.adapters.primary.workspace_defaults import (
     graph_feed_ids,
     maps_workspace_defaults,
@@ -45,11 +43,12 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.adapters.primary.map
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.service import MapsLayoutService
 from naas_abi.apps.nexus.apps.api.app.services.maps.workspace_config import WorkspaceMapsDefaults
+from naas_abi.apps.nexus.apps.api.app.services.view_as.active import viewing
 
 router = APIRouter()
 
 
-@router.get("")
+@router.get("", dependencies=[guard("GetMapsCatalog")])
 async def get_catalog(
     request: Request,
     response: Response,
@@ -60,7 +59,6 @@ async def get_catalog(
     feed_layers: MapsFeedLayerService = Depends(get_maps_feed_layer_service),
     defaults: WorkspaceMapsDefaults = Depends(maps_workspace_defaults),
 ) -> dict[str, Any]:
-    await require_workspace_access(current_user.id, workspace_id)
     response.headers["Cache-Control"] = "no-store"
     listed_layouts = await layouts.list(
         workspace_id,
@@ -68,19 +66,24 @@ async def get_catalog(
         revisions=layout_seed_revisions(request),
         enabled_feeds=defaults.feeds,
         extra_feed_ids=graph_feed_ids(request),
+        seed=not viewing(),  # a page load writes nothing in a view
     )
     listed_layers = await feed_layers.list(
         workspace_id,
         seeds=feed_layer_seeds(request),
         revisions=feed_layer_seed_revisions(request),
+        seed=not viewing(),
     )
     listed_basemaps = await basemaps.list(
         workspace_id,
         seeds=basemap_seeds(request),
         revisions=basemap_seed_revisions(request),
         enabled_custom=defaults.custom_basemaps,
+        seed=not viewing(),
     )
-    role = await get_workspace_role(current_user.id, workspace_id)
+    can_edit = await authz.allowed(
+        "UpdateLayout", user=current_user, workspace=workspace_id, id="-"
+    )
     return {
         # Feeds (data sources) and the layers drawn from them.
         "layouts": [layout.to_dict() for layout in listed_layouts.layouts],
@@ -91,5 +94,5 @@ async def get_catalog(
         "basemaps": [basemap.to_dict() for basemap in listed_basemaps.basemaps],
         "hidden_basemaps": sorted(listed_basemaps.hidden),
         "default_basemap_id": DEFAULT_BASEMAP_ID,
-        "can_edit": role in ("owner", "admin"),
+        "can_edit": can_edit,
     }

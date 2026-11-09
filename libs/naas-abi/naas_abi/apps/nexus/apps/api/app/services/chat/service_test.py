@@ -25,11 +25,6 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.service import (
     _render_documents_context_block,
     _render_slides_context_block,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam.port import (
-    RequestContext,
-    TokenData,
-)
-from naas_abi.apps.nexus.apps.api.app.services.iam.service import IAMPermissionError
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import Message as ProviderMessage
 from naas_abi_core.services.agent.context import (
     slides_active_slug,
@@ -70,12 +65,6 @@ def _message(
     )
 
 
-def _context(user_id: str = "user-1") -> RequestContext:
-    return RequestContext(
-        token_data=TokenData(user_id=user_id, scopes=set(), is_authenticated=True)
-    )
-
-
 @pytest.mark.asyncio
 async def test_list_conversations_delegates_to_adapter() -> None:
     adapter = SimpleNamespace(
@@ -84,7 +73,7 @@ async def test_list_conversations_delegates_to_adapter() -> None:
     service = ChatService(adapter=adapter)
 
     result = await service.list_conversations(
-        context=_context(),
+        user_id="user-1",
         workspace_id="ws-1",
         limit=10,
         offset=5,
@@ -122,7 +111,7 @@ async def test_get_or_create_conversation_updates_agent_for_existing_thread() ->
     conversation_id = await service.get_or_create_conversation(
         conversation_id="conv-1",
         workspace_id="ws-1",
-        context=_context(),
+        user_id="user-1",
         request_message="hello",
         agent="bob",
         now=now,
@@ -148,7 +137,7 @@ async def test_get_or_create_conversation_requires_workspace_when_creating() -> 
         await service.get_or_create_conversation(
             conversation_id=None,
             workspace_id=None,
-            context=_context(),
+            user_id="user-1",
             request_message="hello",
             agent="aia",
             now=datetime.now(),
@@ -165,7 +154,7 @@ async def test_create_message_generates_message_id_and_delegates() -> None:
     service = ChatService(adapter=adapter)
 
     message_id = await service.create_message(
-        context=_context(),
+        user_id="user-1",
         conversation_id="conv-1",
         role="user",
         content="Hi",
@@ -195,7 +184,7 @@ async def test_delete_conversation_with_messages_deletes_messages_first() -> Non
     service = ChatService(adapter=adapter)
 
     deleted = await service.delete_conversation_with_messages(
-        context=_context(),
+        user_id="user-1",
         conversation_id="conv-1",
     )
 
@@ -214,7 +203,7 @@ async def test_create_streaming_message_pair_creates_user_then_assistant() -> No
     service = ChatService(adapter=adapter)
 
     user_msg_id, assistant_msg_id = await service.create_streaming_message_pair(
-        context=_context(),
+        user_id="user-1",
         conversation_id="conv-1",
         user_content="hello",
         assistant_agent="aia",
@@ -236,7 +225,7 @@ async def test_create_streaming_message_pair_tags_regenerated_turn() -> None:
     service = ChatService(adapter=adapter)
 
     await service.create_streaming_message_pair(
-        context=_context(),
+        user_id="user-1",
         conversation_id="conv-1",
         user_content="hello",
         assistant_agent="aia",
@@ -265,7 +254,7 @@ async def test_update_message_metadata_merges_into_existing_payload() -> None:
     service = ChatService(adapter=adapter)
 
     await service.update_message_metadata(
-        context=_context(),
+        user_id="user-1",
         conversation_id="conv-1",
         message_id="msg-1",
         metadata={"execution_time": 1.5, "steps": []},
@@ -309,7 +298,7 @@ async def test_build_provider_messages_skips_regenerated_turns() -> None:
     service = ChatService(adapter=adapter)
 
     messages = await service.build_provider_messages_with_agents(
-        context=_context(),
+        user_id="user-1",
         request=CompleteChatInput(
             message="and Y?",
             agent="aia",
@@ -346,7 +335,7 @@ async def test_build_provider_messages_leaves_normal_turn_untouched() -> None:
     service = ChatService(adapter=adapter)
 
     messages = await service.build_provider_messages_with_agents(
-        context=_context(),
+        user_id="user-1",
         request=CompleteChatInput(
             message="what is X?",
             agent="aia",
@@ -370,7 +359,7 @@ async def test_finalize_streaming_response_updates_message_and_touches_conversat
     service = ChatService(adapter=adapter)
 
     await service.finalize_streaming_response(
-        context=_context(),
+        user_id="user-1",
         conversation_id="conv-1",
         assistant_message_id="msg-1",
         content="final answer",
@@ -414,7 +403,7 @@ async def test_get_or_create_conversation_creates_new_for_other_user_conversatio
     conversation_id = await service.get_or_create_conversation(
         conversation_id="conv-1",
         workspace_id="ws-1",
-        context=_context(),
+        user_id="user-1",
         request_message="hello",
         agent="aia",
         now=now,
@@ -422,69 +411,6 @@ async def test_get_or_create_conversation_creates_new_for_other_user_conversatio
 
     assert conversation_id == "conv-new"
     assert adapter.create_conversation.await_count == 1
-
-
-@pytest.mark.asyncio
-async def test_list_messages_denies_when_scope_missing() -> None:
-    now = datetime.now()
-    adapter = SimpleNamespace(
-        get_conversation_by_id_for_user=AsyncMock(
-            return_value=ChatConversationRecord(
-                id="conv-1",
-                workspace_id="ws-1",
-                user_id="user-1",
-                title="Title",
-                agent="aia",
-                created_at=now,
-                updated_at=now,
-            )
-        ),
-    )
-    iam_service = SimpleNamespace(
-        ensure=lambda *args, **kwargs: (_ for _ in ()).throw(
-            IAMPermissionError(scope="chat.message.read")
-        )
-    )
-    service = ChatService(adapter=adapter, iam_service=iam_service)
-
-    with pytest.raises(PermissionError, match="Conversation access denied"):
-        await service.list_messages(context=_context(), conversation_id="conv-1")
-
-
-@pytest.mark.asyncio
-async def test_get_conversation_for_user_denies_when_scope_missing() -> None:
-    adapter = SimpleNamespace(
-        get_conversation_by_id_for_user=AsyncMock(return_value=None),
-    )
-    iam_service = SimpleNamespace(
-        ensure=lambda *args, **kwargs: (_ for _ in ()).throw(
-            IAMPermissionError(scope="chat.conversation.read")
-        )
-    )
-    service = ChatService(adapter=adapter, iam_service=iam_service)
-
-    with pytest.raises(PermissionError, match="Conversation access denied"):
-        await service.get_conversation_for_user(context=_context(), conversation_id="conv-1")
-
-
-@pytest.mark.asyncio
-async def test_get_workspace_secret_denies_when_scope_missing() -> None:
-    adapter = SimpleNamespace(
-        get_workspace_secret=AsyncMock(return_value=None),
-    )
-    iam_service = SimpleNamespace(
-        ensure=lambda *args, **kwargs: (_ for _ in ()).throw(
-            IAMPermissionError(scope="chat.secret.read")
-        )
-    )
-    service = ChatService(adapter=adapter, iam_service=iam_service)
-
-    with pytest.raises(PermissionError, match="Secret access denied"):
-        await service.get_workspace_secret(
-            context=_context(),
-            workspace_id="ws-1",
-            key="OPENAI_API_KEY",
-        )
 
 
 @pytest.mark.asyncio
@@ -505,7 +431,7 @@ async def test_complete_chat_request_without_provider_returns_fallback() -> None
             agent="aia",
             workspace_id="ws-1",
         ),
-        context=_context(),
+        user_id="user-1",
         now=now,
     )
 
@@ -545,7 +471,7 @@ async def test_complete_chat_request_with_provider_uses_completion(monkeypatch) 
     captured: dict = {}
 
     async def _fake_complete_chat(
-        messages, config, system_prompt, thread_id=None, injection_preamble=None
+        messages, config, system_prompt, thread_id=None, injection_preamble=None, workspace_id=None
     ):
         captured["injection_preamble"] = injection_preamble
         return '{"content":"assistant answer"}'
@@ -562,7 +488,7 @@ async def test_complete_chat_request_with_provider_uses_completion(monkeypatch) 
             workspace_id="ws-1",
             messages=[ChatInputMessage(role="user", content="hello")],
         ),
-        context=_context(),
+        user_id="user-1",
         now=now,
     )
 
@@ -612,7 +538,7 @@ async def test_complete_chat_request_forwards_injection_preamble_for_abi(monkeyp
     captured: dict = {}
 
     async def _fake_complete_chat(
-        messages, config, system_prompt, thread_id=None, injection_preamble=None
+        messages, config, system_prompt, thread_id=None, injection_preamble=None, workspace_id=None
     ):
         captured["injection_preamble"] = injection_preamble
         return "assistant answer"
@@ -629,7 +555,7 @@ async def test_complete_chat_request_forwards_injection_preamble_for_abi(monkeyp
             workspace_id="ws-1",
             messages=[ChatInputMessage(role="user", content="hello")],
         ),
-        context=_context(),
+        user_id="user-1",
         now=now,
     )
 
@@ -639,6 +565,64 @@ async def test_complete_chat_request_forwards_injection_preamble_for_abi(monkeyp
     assert _SKILLS_HANDOFF_NOTE.strip() in preamble
     assert "Alice Smith" in preamble
     assert "Acme Corp" in preamble
+
+
+@pytest.mark.asyncio
+async def test_complete_chat_request_runs_a_remote_agent_in_its_own_workspace(monkeypatch) -> None:
+    """The run is placed where its agent was cleared (the resolved provider's
+    workspace), whatever workspace the request names, or none."""
+    now = datetime.now()
+    adapter = SimpleNamespace(
+        get_conversation_by_id_for_user=AsyncMock(return_value=_conversation(now)),
+        create_message=AsyncMock(),
+        touch_conversation=AsyncMock(),
+    )
+    service = ChatService(adapter=adapter, auth_adapter=SimpleNamespace())
+    service.get_or_create_conversation = AsyncMock(return_value="conv-1")
+    service.build_remote_agent_preamble = AsyncMock(return_value=None)
+    service.resolve_provider = AsyncMock(
+        return_value=ResolvedProvider(
+            id="remote-a-9",
+            name="Remote (acme.research)",
+            type="remote",
+            enabled=True,
+            endpoint=None,
+            api_key=None,
+            account_id=None,
+            model="acme.research/Researcher",
+            run_workspace_id="ws-1",
+        )
+    )
+    service.build_provider_messages_with_agents = AsyncMock(
+        return_value=[ChatInputMessage(role="user", content="hello")]
+    )
+    placed: list = []
+
+    async def _fake_complete_chat(
+        messages, config, system_prompt, thread_id=None, injection_preamble=None, workspace_id=None
+    ):
+        placed.append(workspace_id)
+        return "remote answer"
+
+    monkeypatch.setattr(
+        "naas_abi.apps.nexus.apps.api.app.services.chat.service.complete_with_provider",
+        _fake_complete_chat,
+    )
+
+    for named in ("ws-2", None):
+        await service.complete_chat_request(
+            request=CompleteChatInput(
+                message="hello",
+                agent="a-9",
+                workspace_id=named,
+                conversation_id="conv-1",
+                messages=[ChatInputMessage(role="user", content="hello")],
+            ),
+            user_id="user-1",
+            now=now,
+        )
+
+    assert placed == ["ws-1", "ws-1"]
 
 
 _WEAK_SLIDES_MODEL = "gpt-4.1-mini"
@@ -681,7 +665,7 @@ async def _complete_and_capture_llm_model(monkeypatch, message: str) -> str | No
     captured: dict = {}
 
     async def _fake_complete_chat(
-        messages, config, system_prompt, thread_id=None, injection_preamble=None
+        messages, config, system_prompt, thread_id=None, injection_preamble=None, workspace_id=None
     ):
         captured["llm_model"] = config.llm_model
         return "assistant answer"
@@ -702,7 +686,7 @@ async def _complete_and_capture_llm_model(monkeypatch, message: str) -> str | No
                 workspace_id="ws-1",
                 messages=[ChatInputMessage(role="user", content=message)],
             ),
-            context=_context(),
+            user_id="user-1",
             now=now,
         )
     finally:
@@ -745,6 +729,7 @@ async def test_complete_chat_request_keeps_the_selected_model_for_plain_chat(
 # ---------------------------------------------------------------------------
 # Tests: _inject_chat_vector_context (agent retrieval)
 # ---------------------------------------------------------------------------
+
 
 def _make_service_with_no_adapter() -> ChatService:
     return ChatService(adapter=SimpleNamespace())
@@ -932,7 +917,7 @@ def test_inject_skips_chunks_from_other_users(monkeypatch) -> None:
     result, sources = service._inject_chat_vector_context(
         provider_messages=msgs,
         conversation_id="conv-1",
-        user_id="u",    # different from "other-user"
+        user_id="u",  # different from "other-user"
         embedding_model="hash-v1",
         embedding_dimension=32,
     )
@@ -945,6 +930,7 @@ def test_inject_skips_chunks_from_other_users(monkeypatch) -> None:
 # Tests: build_system_prompt (user profile injection on first turn)
 # ---------------------------------------------------------------------------
 
+
 def _user_record(
     name: str = "Alice Smith",
     email: str = "alice@example.com",
@@ -956,7 +942,6 @@ def _user_record(
         id="user-1",
         email=email,
         name=name,
-        hashed_password="x",
         created_at=datetime.now(),
         organization=organization,
         job_title=job_title,
@@ -1042,9 +1027,7 @@ async def test_build_system_prompt_keeps_the_account_when_the_member_profile_loo
 
 @pytest.mark.asyncio
 async def test_build_system_prompt_omits_empty_user_fields() -> None:
-    auth_adapter = SimpleNamespace(
-        get_user_by_id=AsyncMock(return_value=_user_record())
-    )
+    auth_adapter = SimpleNamespace(get_user_by_id=AsyncMock(return_value=_user_record()))
     service = ChatService(adapter=SimpleNamespace(), auth_adapter=auth_adapter)
 
     prompt = await service.build_system_prompt(
@@ -1097,9 +1080,7 @@ async def test_build_system_prompt_without_auth_adapter_returns_base() -> None:
 
 @pytest.mark.asyncio
 async def test_build_system_prompt_swallows_auth_errors() -> None:
-    auth_adapter = SimpleNamespace(
-        get_user_by_id=AsyncMock(side_effect=RuntimeError("db down"))
-    )
+    auth_adapter = SimpleNamespace(get_user_by_id=AsyncMock(side_effect=RuntimeError("db down")))
     service = ChatService(adapter=SimpleNamespace(), auth_adapter=auth_adapter)
 
     prompt = await service.build_system_prompt(
@@ -1124,25 +1105,21 @@ async def test_build_system_prompt_includes_enabled_skills_catalog() -> None:
     disabled_skill = SimpleNamespace(
         slug="disabled-one", name="Disabled", description="", prompt="x", enabled=False
     )
-    skills_service = SimpleNamespace(
-        list_visible_skills=AsyncMock(return_value=[skill, disabled_skill])
-    )
+    list_visible = AsyncMock(return_value=[skill, disabled_skill])
+    skills_service = SimpleNamespace(adapter=SimpleNamespace(list_visible=list_visible))
     service = ChatService(adapter=SimpleNamespace(), skills_service=skills_service)
-    context = SimpleNamespace(actor_user_id="user-1")
-
     prompt = await service.build_system_prompt(
         agent="aia",
         explicit_system_prompt=None,
         prior_messages=[],
         user_id="user-1",
         workspace_id="ws-1",
-        context=context,
     )
 
     assert "/weekly-report" in prompt
     assert "Summarize this week's activity in bullet points." in prompt
     assert "disabled-one" not in prompt
-    skills_service.list_visible_skills.assert_awaited_once_with(context, "ws-1")
+    list_visible.assert_awaited_once_with("ws-1", "user-1")
 
 
 @pytest.mark.asyncio
@@ -1154,27 +1131,25 @@ async def test_build_abi_injection_preamble_includes_skills_and_user_profile() -
         prompt="Avoid robotic phrasing.",
         enabled=True,
     )
-    skills_service = SimpleNamespace(list_visible_skills=AsyncMock(return_value=[skill]))
+    list_visible = AsyncMock(return_value=[skill])
+    skills_service = SimpleNamespace(adapter=SimpleNamespace(list_visible=list_visible))
     auth_adapter = SimpleNamespace(get_user_by_id=AsyncMock(return_value=_user_record()))
     service = ChatService(
         adapter=SimpleNamespace(),
         skills_service=skills_service,
         auth_adapter=auth_adapter,
     )
-    context = SimpleNamespace(actor_user_id="user-1")
-
     preamble = await service.build_abi_injection_preamble(
         prior_messages=[],
         user_id="user-1",
         workspace_id="ws-1",
-        context=context,
     )
 
     assert preamble is not None
     assert "/human-writing" in preamble
     assert "Avoid robotic phrasing." in preamble
     assert "Name: Alice Smith" in preamble
-    skills_service.list_visible_skills.assert_awaited_once_with(context, "ws-1")
+    list_visible.assert_awaited_once_with("ws-1", "user-1")
 
 
 @pytest.mark.asyncio
@@ -1186,20 +1161,18 @@ async def test_build_abi_injection_preamble_keeps_skills_on_follow_up_turns() ->
         prompt="Remove em-dashes.",
         enabled=True,
     )
-    skills_service = SimpleNamespace(list_visible_skills=AsyncMock(return_value=[skill]))
+    list_visible = AsyncMock(return_value=[skill])
+    skills_service = SimpleNamespace(adapter=SimpleNamespace(list_visible=list_visible))
     auth_adapter = SimpleNamespace(get_user_by_id=AsyncMock(return_value=_user_record()))
     service = ChatService(
         adapter=SimpleNamespace(),
         skills_service=skills_service,
         auth_adapter=auth_adapter,
     )
-    context = SimpleNamespace(actor_user_id="user-1")
-
     preamble = await service.build_abi_injection_preamble(
         prior_messages=[SimpleNamespace(role="assistant", content="Hello")],
         user_id="user-1",
         workspace_id="ws-1",
-        context=context,
     )
 
     assert preamble is not None
@@ -1413,37 +1386,34 @@ def test_render_documents_context_block_carries_selected_section() -> None:
 
 
 @pytest.mark.asyncio
-async def test_build_system_prompt_skips_skills_catalog_without_context() -> None:
-    skills_service = SimpleNamespace(list_visible_skills=AsyncMock())
+async def test_build_system_prompt_skips_skills_catalog_without_user() -> None:
+    list_visible = AsyncMock()
+    skills_service = SimpleNamespace(adapter=SimpleNamespace(list_visible=list_visible))
     service = ChatService(adapter=SimpleNamespace(), skills_service=skills_service)
 
     prompt = await service.build_system_prompt(
         agent="aia",
         explicit_system_prompt=None,
         prior_messages=[],
-        user_id="user-1",
+        user_id=None,
         workspace_id="ws-1",
     )
 
     assert prompt == AGENT_SYSTEM_PROMPTS["aia"] + _SKILLS_HANDOFF_NOTE
-    skills_service.list_visible_skills.assert_not_awaited()
+    list_visible.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_build_system_prompt_swallows_skills_catalog_errors() -> None:
-    skills_service = SimpleNamespace(
-        list_visible_skills=AsyncMock(side_effect=RuntimeError("db down"))
-    )
+    list_visible = AsyncMock(side_effect=RuntimeError("db down"))
+    skills_service = SimpleNamespace(adapter=SimpleNamespace(list_visible=list_visible))
     service = ChatService(adapter=SimpleNamespace(), skills_service=skills_service)
-    context = SimpleNamespace(actor_user_id="user-1")
-
     prompt = await service.build_system_prompt(
         agent="aia",
         explicit_system_prompt=None,
         prior_messages=[],
         user_id="user-1",
         workspace_id="ws-1",
-        context=context,
     )
 
     assert prompt == AGENT_SYSTEM_PROMPTS["aia"] + _SKILLS_HANDOFF_NOTE
@@ -1451,9 +1421,7 @@ async def test_build_system_prompt_swallows_skills_catalog_errors() -> None:
 
 @pytest.mark.asyncio
 async def test_build_system_prompt_respects_explicit_override() -> None:
-    auth_adapter = SimpleNamespace(
-        get_user_by_id=AsyncMock(return_value=_user_record())
-    )
+    auth_adapter = SimpleNamespace(get_user_by_id=AsyncMock(return_value=_user_record()))
     service = ChatService(adapter=SimpleNamespace(), auth_adapter=auth_adapter)
 
     prompt = await service.build_system_prompt(
@@ -1488,9 +1456,7 @@ async def test_build_user_context_addendum_returns_block_on_first_turn() -> None
 
 @pytest.mark.asyncio
 async def test_build_user_context_addendum_empty_when_prior_assistant() -> None:
-    auth_adapter = SimpleNamespace(
-        get_user_by_id=AsyncMock(return_value=_user_record())
-    )
+    auth_adapter = SimpleNamespace(get_user_by_id=AsyncMock(return_value=_user_record()))
     service = ChatService(adapter=SimpleNamespace(), auth_adapter=auth_adapter)
 
     addendum = await service.build_user_context_addendum(
@@ -1516,9 +1482,7 @@ async def test_build_user_context_addendum_empty_without_auth_adapter() -> None:
 
 @pytest.mark.asyncio
 async def test_build_user_context_addendum_empty_when_lookup_fails() -> None:
-    auth_adapter = SimpleNamespace(
-        get_user_by_id=AsyncMock(side_effect=RuntimeError("db down"))
-    )
+    auth_adapter = SimpleNamespace(get_user_by_id=AsyncMock(side_effect=RuntimeError("db down")))
     service = ChatService(adapter=SimpleNamespace(), auth_adapter=auth_adapter)
 
     addendum = await service.build_user_context_addendum(

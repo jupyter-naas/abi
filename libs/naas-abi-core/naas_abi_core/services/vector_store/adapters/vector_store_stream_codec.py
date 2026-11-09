@@ -1,4 +1,4 @@
-"""Frames of a streamed vector listing (docs/adr/20261003_nats-streamed-results.md).
+"""Frames of a streamed vector listing over a transfer stream.
 
 Shared by the NATS primary and client; no new protobuf messages. Each frame
 is a ``VectorPage`` holding documents only (no cursor), closed at about

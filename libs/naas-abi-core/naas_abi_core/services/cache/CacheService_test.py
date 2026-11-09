@@ -410,6 +410,10 @@ class _FakeEventService:
     def __init__(self) -> None:
         self.published: list = []
 
+    def emit(self, event):
+        # EventService.emit: the audit event a service records, then publish.
+        return self.publish(event)
+
     def publish(self, event) -> None:
         self.published.append(event)
 
@@ -539,6 +543,10 @@ def test_publisher_exception_does_not_break_mutation() -> None:
     """If the EventService blows up, the cache write must still succeed."""
 
     class _ExplodingEvents:
+        def emit(self, event):
+            # EventService.emit: the audit event a service records, then publish.
+            return self.publish(event)
+
         def publish(self, event):
             raise RuntimeError("event bus down")
 
@@ -631,3 +639,14 @@ def test_pickle_payload_is_valid_base64_of_a_pickle():
     import base64
 
     assert pickle.loads(base64.b64decode(svc.get_entry("n").cached.data)) == 42
+
+
+def test_tiers_sharing_a_name_keep_a_view_each_by_position():
+    from unittest.mock import MagicMock
+
+    first, second = MagicMock(), MagicMock()
+    cache = CacheService(adapters=[("cold", first), ("cold", second)])
+
+    assert cache.tier_at(0).adapter is first
+    assert cache.tier_at(1).adapter is second
+    assert cache.tier("cold").adapter is second  # by name, the last one wins

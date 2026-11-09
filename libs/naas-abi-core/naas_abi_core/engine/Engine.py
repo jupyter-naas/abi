@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import threading
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 if TYPE_CHECKING:
@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     )
 
 from naas_abi_core import logger
+from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.engine.context import (
     get_default_agent_checkpointer,
     set_default_agent_checkpointer,
@@ -30,7 +31,10 @@ from naas_abi_core.engine.engine_loaders.EngineModuleLoader import EngineModuleL
 from naas_abi_core.engine.engine_loaders.EngineOntologyLoader import (
     EngineOntologyLoader,
 )
-from naas_abi_core.engine.engine_loaders.EngineProcessBridge import bridge_processes
+from naas_abi_core.engine.engine_loaders.EngineProcessBridge import (
+    bridge_processes,
+    tag_process_scopes,
+)
 from naas_abi_core.engine.engine_loaders.EngineServiceLoader import EngineServiceLoader
 from naas_abi_core.engine.IEngine import IEngine
 from naas_abi_core.engine.ownership.ownership_service import Claim
@@ -62,6 +66,12 @@ class Engine(IEngine):
     __job_loader_lock: threading.Lock
     # Memory of agents built with memory=None, bound by load() (see context.py).
     __agent_checkpointer: BaseCheckpointSaver | None = None
+    # NATS mode: the engine's own tokens (see __engine_credentials).
+    __credentials: Any = None
+    # A client-role engine's IAM facade: it calls with the engine's key alone.
+    __client_iam: Any = None
+    # IAM's directory of remote modules' listers (a serving engine on NATS).
+    __remote_listers: Any = None
 
     @property
     def configuration(self) -> EngineConfiguration:
@@ -106,7 +116,11 @@ class Engine(IEngine):
 
     def load(self, module_names: list[str] | None = None):
         try:
-            self.__load(module_names)
+            # Boot is the engine's own work, for no caller: loading
+            # modules resolves models, records events and seeds data, each an
+            # authorized operation. Callers served later bring their own context.
+            with as_service_account("engine"):
+                self.__load(module_names)
         except BaseException:
             # A failed load may already hold the lease and serve the kernel
             # subjects. Give them up, or the process keeps answering calls
@@ -175,7 +189,9 @@ class Engine(IEngine):
                 EngineNATSDependencies,
             )
 
-            self.__nats_dependencies = EngineNATSDependencies(self.__configuration.nats)
+            self.__nats_dependencies = EngineNATSDependencies(
+                self.__configuration.nats, self.__job_aware_credentials()
+            )
             dependencies = self.__nats_dependencies.build(self.__services)
             self.__services.wire_services(dependencies)
             self.__nats_runtime_started = True
@@ -185,6 +201,7 @@ class Engine(IEngine):
         logger.debug("Loading engine modules")
         self.__modules = self.__engine_module_loader.load_modules(self, module_names)
         logger.debug("Engine modules loaded")
+        self.__register_module_catalogs()
 
         if self.__services.model_registry_available():
             # Modules registered their models during on_load; now hard-fail if
@@ -228,6 +245,7 @@ class Engine(IEngine):
 
         # Workflow/Pipeline instances exist now; their jobs go to a host below. Done
         # in every NATS engine, hosting or not, so job_owners() lists the same jobs.
+        tag_process_scopes(self.__modules)
         bridge_processes(self.__modules, self.__configuration.nats)
 
         # Module jobs start last: their handlers may use anything initialized above.
@@ -251,7 +269,7 @@ class Engine(IEngine):
         """NATS mode: whether this engine serves now, stands by, or (None) is a client.
 
         Raises ``EngineAlreadyServing`` when another engine serves and this one
-        may not take over (docs/adr/20261006_single-serving-engine.md).
+        may not take over.
         """
         if self.__configuration.nats is None:
             return None
@@ -287,7 +305,9 @@ class Engine(IEngine):
 
         assert self.__configuration.nats is not None
         services = self.__configuration.services
-        self.__nats_dependencies = EngineNATSDependencies(self.__configuration.nats)
+        self.__nats_dependencies = EngineNATSDependencies(
+            self.__configuration.nats, self.__engine_credentials(client=True)
+        )
         self.__nats_runtime_started = True
         return self.__nats_dependencies.build_clients(
             services.model_registry.load(),
@@ -314,7 +334,210 @@ class Engine(IEngine):
             with owned_by(self.__instance_id):
                 primaries = nats_loader.expose_services(self.__services)
                 primaries += nats_loader.expose_overflow(primaries)
+                primaries += nats_loader.expose_auth_callout(self.__services)
             self.__nats_primary_adapters = primaries
+            self.__keep_engine_key()
+            self.__attach_builtin_idp()
+            self.__attach_remote_listers()
+
+    def __attach_builtin_idp(self) -> None:
+        """Point the identity service at the built-in IdP, a module that runs
+        over NATS: its discovery document, JWKS and token endpoint are read
+        through its ``idp`` app, only from the instance running as the service
+        account ``module/<project>/idp``."""
+        from naas_abi_core.engine.call_context import as_service_account
+        from naas_abi_core.engine.nats_auth import host_audience
+        from naas_abi_core.services.iam.IAMPorts import IAMNotFoundError
+        from naas_abi_core.services.iam.modules import account_name, subject_token
+        from naas_abi_core.services.identity.IdentityService import IdentityService
+
+        nats = self.__configuration.nats
+        identity = (
+            self.__services.identity if self.__services.identity_available() else None
+        )
+        if (
+            not isinstance(identity, IdentityService)
+            or nats is None
+            or nats.discovery is None
+        ):
+            return
+        from naas_abi_core.engine.engine_configuration.EngineConfiguration_Identity import (
+            warm_up_in_background,
+        )
+        from naas_abi_core.services.identity.adapters.secondary.IdPAppNATS import (
+            IDP_ADMIN_APP,
+            IDP_APP,
+            IDP_MODULE,
+            IdPAppNATS,
+        )
+
+        project = nats.discovery.project
+        iam = self.__services.iam
+
+        def service_account() -> str | None:
+            with as_service_account("engine"):
+                try:
+                    record = iam.find_service_account(account_name(project, IDP_MODULE))
+                except IAMNotFoundError:
+                    return None
+            return subject_token(record.id)
+
+        def app(name: str) -> IdPAppNATS:
+            return IdPAppNATS(
+                nats_url=nats.nats_url,
+                project=project,
+                token=lambda: self.service_credentials("engine").token(),
+                host_token=lambda recipient: self.service_credentials(
+                    "engine", audience=host_audience(recipient)
+                ).token(),
+                service_account=service_account,
+                app=name,
+            )
+
+        # ``idp``: the sign-in the engine reads; ``admin``: provisioning.
+        if identity.attach_builtin_idp(app(IDP_APP), app(IDP_ADMIN_APP)):
+            warm_up_in_background(identity)
+
+    def __attach_remote_listers(self) -> None:
+        """Let IAM ask remote modules' listers over NATS, as the engine: a type
+        of a module's catalog is listed by a ready instance of that module that
+        names it in discovery (``services/iam/AGENTS.md``, "Publishers and
+        listing")."""
+        from naas_abi_core.engine.nats_auth import host_audience
+        from naas_abi_core.services.iam.adapters.secondary.listers__nats import (
+            NATSModuleListers,
+        )
+        from naas_abi_core.services.iam.IAMService import IAMService
+
+        nats = self.__configuration.nats
+        iam = self.__services.iam if self.__services.iam_available() else None
+        if not isinstance(iam, IAMService) or nats is None or nats.discovery is None:
+            return
+        if self.__remote_listers is not None:
+            self.__remote_listers.close()  # serving again: the previous one goes
+        self.__remote_listers = iam.remote_listers = NATSModuleListers(
+            nats_url=nats.nats_url,
+            project=nats.discovery.project,
+            token=lambda: self.service_credentials("engine").token(),
+            host_token=lambda recipient: self.service_credentials(
+                "engine", audience=host_audience(recipient)
+            ).token(),
+        )
+
+    def service_credentials(
+        self, name: str = "engine", audience: str | None = None
+    ) -> Any:
+        """Tokens of the engine's own service account ``name`` (``engine``,
+        ``api``) for in-process callers over NATS, such as Nexus. Signed here
+        when this engine holds IAM; a client-role engine has ``engine`` only.
+
+        ``audience``: ``nats_auth.host_audience(<host's subject token>)`` for a
+        call to one module host (agent, app, model): the kernel services refuse
+        such a token and discovery accepts it from that host only, so a host
+        that keeps it can use it nowhere else. By default the ``abi:nats``
+        token the kernel services accept, never sent to a host."""
+        from naas_abi_core.engine import nats_credentials
+        from naas_abi_core.services.iam.IAMService import IAMService
+
+        iam = self.__services.iam
+        holds_iam = isinstance(iam, IAMService)
+        if audience is not None and audience != nats_credentials.NATS_AUDIENCE:
+            if not holds_iam:
+                # The engine's key buys a host token over NATS, as any module's.
+                return self.__engine_host_credentials(name, audience)
+            sources = self.__dict__.setdefault("_service_sources", {})
+            if (name, audience) not in sources:
+                sources[(name, audience)] = nats_credentials.issuer_source(
+                    cast(IAMService, iam), name, audience
+                )
+            return sources[(name, audience)]
+        if name == "engine":
+            return self.__engine_credentials(client=not holds_iam)
+        if not holds_iam:
+            raise RuntimeError(f"Only an engine holding IAM signs tokens for {name!r}")
+        sources = self.__dict__.setdefault("_service_sources", {})
+        if name not in sources:
+            sources[name] = nats_credentials.issuer_source(cast(IAMService, iam), name)
+        return sources[name]
+
+    def __job_aware_credentials(self) -> Any:
+        """The engine's tokens, except that an engine module's job (running as
+        its own account, ``job/<module_id>``) calls the kernel with that
+        account's token. Only an engine holding IAM can sign them."""
+        from naas_abi_core.engine import nats_credentials
+        from naas_abi_core.services.iam.IAMService import IAMService
+
+        credentials = self.__engine_credentials()
+        if not isinstance(self.__services.iam, IAMService):
+            return credentials
+        return nats_credentials.JobAccountSource(credentials, self.service_credentials)
+
+    def __engine_host_credentials(self, name: str, audience: str) -> Any:
+        """A client-role engine's tokens for one host: the engine key's
+        exchange for ``audience``."""
+        from naas_abi_core.engine import nats_credentials
+
+        if name != "engine":
+            raise RuntimeError(f"Only an engine holding IAM signs tokens for {name!r}")
+        nats = self.__configuration.nats
+        assert nats is not None
+        key = nats.service_key or self.__configuration.services.secret.local_value(
+            "iam/service-keys/engine"
+        )
+        if not key:
+            raise RuntimeError("This engine holds no service key to call hosts with")
+        return nats_credentials.service_key_source(
+            nats.nats_url,
+            key,
+            identity="engine",
+            audience=audience,
+        )
+
+    def __engine_credentials(self, client: bool = False) -> Any:
+        """The engine's own tokens: signed in this process when it
+        holds IAM; for a client-role engine, exchanged from the engine's key
+        (``nats.service_key``, else the one the serving engine keeps in the
+        secret service)."""
+        from naas_abi_core.engine import nats_credentials
+        from naas_abi_core.services.iam.IAMService import IAMService
+
+        if self.__credentials is not None:
+            return self.__credentials
+        nats = self.__configuration.nats
+        assert nats is not None
+        if not client and isinstance(self.__services.iam, IAMService):
+            self.__credentials = nats_credentials.issuer_source(
+                self.__services.iam, "engine"
+            )
+        else:
+            key = nats.service_key or self.__configuration.services.secret.local_value(
+                "iam/service-keys/engine"
+            )
+            if not key:
+                raise RuntimeError(
+                    "This engine is a client of the serving engine and holds no "
+                    "service key: start the serving engine first (it keeps the "
+                    "engine's key in the secret service), or set nats.service_key."
+                )
+            # The IAM of a client-role engine is the serving engine's, over NATS:
+            # it asks for the delegations of the users this engine serves. It
+            # calls with the engine's own key, never through a delegating source.
+            self.__credentials, self.__client_iam = (
+                nats_credentials.client_engine_credentials(
+                    nats.nats_url, key, call_timeout=nats.client_timeout_seconds
+                )
+            )
+        return self.__credentials
+
+    def __keep_engine_key(self) -> None:
+        """Keep the engine's key in the secret service, for client-role engines."""
+        from naas_abi_core.services.iam.IAMService import IAMService
+
+        if isinstance(self.__services.iam, IAMService):
+            try:
+                self.__services.iam.engine_service_key()
+            except Exception as exc:  # noqa: BLE001 - clients report it themselves
+                logger.warning(f"Could not keep the engine's service key: {exc}")
 
     def __stop_serving(self, drain_seconds: float = 0) -> None:
         """Stop every started primary adapter.
@@ -384,7 +607,15 @@ class Engine(IEngine):
         take-over) thread while request threads may already ask for workflows."""
         with self.__job_loader_lock:
             if self.__job_loader is None:
-                self.__job_loader = EngineJobLoader(self.__configuration.nats)
+                self.__job_loader = EngineJobLoader(
+                    self.__configuration.nats,
+                    iam=self.__services.iam
+                    if self.__services.iam_available()
+                    else None,
+                    credentials=self.__engine_credentials()
+                    if self.__configuration.nats is not None
+                    else None,
+                )
             return self.__job_loader
 
     def __serve_after_handover(self) -> None:
@@ -491,6 +722,26 @@ class Engine(IEngine):
         for module in self.__modules.values():
             module.on_initialized()
 
+    def __register_module_catalogs(self) -> None:
+        """The actions engine modules declare (``iam_catalog.yaml``), registered
+        with IAM as the engine once the modules are loaded: in process on the
+        serving engine, over NATS on a client one."""
+        if self.__services.iam_available():
+            from naas_abi_core.services.iam.module_scopes import (
+                register_module_catalogs,
+            )
+
+            register_module_catalogs(self.__services.iam, self.__modules.values())
+            # What the policy builder lists: the loaded kernel services' resources
+            # and the engine modules' own types, in process on the serving engine.
+            from naas_abi_core.services.iam.kernel_catalogs import register_listers
+
+            with as_service_account("engine"):
+                register_listers(
+                    self.__services.iam,
+                    [*self.__services.all, *self.__modules.values()],
+                )
+
     def shutdown(self) -> None:
         """Gracefully tear down everything ``load()`` started over NATS.
 
@@ -539,6 +790,13 @@ class Engine(IEngine):
         if self.__nats_dependencies is not None:
             self.__nats_dependencies.close()
             self.__nats_dependencies = None
+        if self.__client_iam is not None:
+            self.__client_iam.close()
+            self.__client_iam = None
+        if self.__remote_listers is not None:
+            # Its connection runs on the NATS runtime: closed before it stops.
+            self.__remote_listers.close()
+            self.__remote_listers = None
         nats_runtime.close()
 
 

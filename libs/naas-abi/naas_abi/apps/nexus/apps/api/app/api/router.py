@@ -18,7 +18,9 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints import (
     view,
     websocket,
 )
+from naas_abi.apps.nexus.apps.api.app.services.accounts.handlers import router as accounts_router
 from naas_abi.apps.nexus.apps.api.app.services.agents.handlers import router as agents_router
+from naas_abi.apps.nexus.apps.api.app.services.api_keys.handlers import router as api_keys_router
 from naas_abi.apps.nexus.apps.api.app.services.apps.handlers import router as apps_router
 from naas_abi.apps.nexus.apps.api.app.services.apps.projects.handlers import (
     router as app_projects_router,
@@ -38,6 +40,13 @@ from naas_abi.apps.nexus.apps.api.app.services.documents.handlers import (
     router as documents_router,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.handlers import router as files_router
+from naas_abi.apps.nexus.apps.api.app.services.iam_admin.handlers import (
+    router as iam_admin_router,
+)
+from naas_abi.apps.nexus.apps.api.app.services.invites.adapters.primary.invites__primary_adapter__FastAPI import (  # noqa: E501
+    idp_groups_router,
+    invitations_router,
+)
 from naas_abi.apps.nexus.apps.api.app.services.maps.basemaps.handlers import (
     router as maps_basemaps_router,
 )
@@ -54,6 +63,9 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.permissions.handlers import 
     router as maps_permissions_router,
 )
 from naas_abi.apps.nexus.apps.api.app.services.modules.handlers import router as modules_router
+from naas_abi.apps.nexus.apps.api.app.services.oidc.adapters.primary.oidc__primary_adapter__FastAPI import (  # noqa: E501
+    router as oidc_router,
+)
 from naas_abi.apps.nexus.apps.api.app.services.openai_gateway.handlers import (
     router as openai_gateway_router,
 )
@@ -66,8 +78,14 @@ from naas_abi.apps.nexus.apps.api.app.services.skills.handlers import router as 
 from naas_abi.apps.nexus.apps.api.app.services.slides.handlers import router as slides_router
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.handlers import router as sysadmin_router
 from naas_abi.apps.nexus.apps.api.app.services.tasks.handlers import router as tasks_router
+from naas_abi.apps.nexus.apps.api.app.services.view_as.adapters.primary.view_as__primary_adapter__FastAPI import (  # noqa: E501
+    router as view_as_router,
+)
 from naas_abi.apps.nexus.apps.api.app.services.workflows.handlers import (
     router as workflows_router,
+)
+from naas_abi.apps.nexus.apps.api.app.services.workflows.handlers import (
+    workspace_router as workspace_workflows_router,
 )
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.handlers import (
     router as workspaces_router,
@@ -77,11 +95,22 @@ api_router = APIRouter()
 
 # Include endpoint routers
 api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
+# Personal API keys and their token endpoint: session-only, like the account.
+api_router.include_router(api_keys_router, prefix="/iam", tags=["iam"])
+# The IAM admin pages: policies, attachments, groups, service accounts, approvals.
+api_router.include_router(iam_admin_router, prefix="/iam/admin", tags=["iam-admin"])
+# View as another person, read-only: session only like the rest of /iam.
+api_router.include_router(view_as_router, prefix="/iam/view-as", tags=["iam-view-as"])
+# Sign-in through the engine's identity providers, next to the built-in login.
+api_router.include_router(oidc_router, prefix="/auth/oidc", tags=["auth"])
 api_router.include_router(organizations.router, prefix="/organizations", tags=["organizations"])
 api_router.include_router(
     organizations.public_router, prefix="/organizations", tags=["organizations-public"]
 )
 api_router.include_router(workspaces_router, prefix="/workspaces", tags=["workspaces"])
+# Invitations through the engine's identity providers, and IdP groups bound to roles.
+api_router.include_router(invitations_router, prefix="/invitations", tags=["invitations"])
+api_router.include_router(idp_groups_router, prefix="/idp-groups", tags=["invitations"])
 api_router.include_router(chat_router, prefix="/chat", tags=["chat"])
 api_router.include_router(
     coding_environment_router, prefix="/coding-environments", tags=["coding-environments"]
@@ -120,5 +149,10 @@ api_router.include_router(transcribe.router, prefix="/transcribe", tags=["transc
 api_router.include_router(speech.router, prefix="/speech", tags=["speech"])
 api_router.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
+# Platform Settings > Users: every account and its lifecycle.
+api_router.include_router(accounts_router, prefix="/admin/users", tags=["admin"])
 api_router.include_router(sysadmin_router, prefix="/admin/system", tags=["sysadmin"])
 api_router.include_router(workflows_router, prefix="/workflows", tags=["workflows"])
+api_router.include_router(
+    workspace_workflows_router, prefix="/workspaces/{workspace_id}/workflows", tags=["workflows"]
+)

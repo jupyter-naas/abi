@@ -1,0 +1,573 @@
+"""Every Nexus authorization decision, asked of IAM.
+
+A route asks ``authz.require("UpdateWorkspace", user=current_user,
+workspace=workspace_id)``: the action of the ``nexus`` catalog, on the resource
+it names, for the signed-in user. The decision is IAM's: ``api`` acting on
+behalf of that user, so both must be allowed. There is no role check outside
+IAM and no scope list.
+
+* **Identity** is the call's own ``CallContext`` when it already names this
+  user (the middleware set it from the verified session), else ``api`` on
+  behalf of ``user`` (a route whose ``current_user`` dependency verified it).
+  Never a request field.
+* **Features.** An action of a flagged section needs ``nexus:UseFeature`` on
+  the feature first (``catalog.FEATURE_OF``, or ``feature=`` where the feature
+  depends on the resource, as for slides, documents and sheets). A policy
+  grants it, never a role. A feature outside the deployment's
+  ``enabled_features`` exists nowhere: it is refused to everyone, the platform
+  admin included, before IAM is asked (``feature_exists``).
+* **Denials.** A caller who may not perform the action but sees the workspace
+  (or organization) gets 403. One who sees nothing of it gets 403 "no access".
+  Another user's personal resource (a conversation) is not found: 404.
+* **Module scopes.** What a module exposes (an agent, app, workflow or
+  pipeline: ``ModuleScope``) is decided with the ``module`` catalog, in the
+  workspace where it is used (``require_scope``, ``filter_scopes``): one
+  source of truth for module resources, whoever hosts them. Agents a workspace
+  builds itself stay ``nexus:UseAgent``. IAM's decision is the whole answer:
+  there is no workspace on/off switch and no set narrowing what a listing
+  shows (a workspace that should not offer a module denies it in a policy).
+* **Until the sets are policies** (``policy_tree.pending``: a start that has not
+  moved them yet), every module scope and feature is refused: never wider than
+  before the upgrade.
+"""
+
+from __future__ import annotations
+
+import time
+from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass, replace
+from typing import Any, TypeVar
+
+from fastapi import HTTPException
+from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
+from naas_abi.apps.nexus.apps.api.app.services.iam.catalog import (
+    FEATURE_OF,
+    TYPE_OF,
+    TYPES_BY_NAME,
+)
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
+    PLATFORM,
+    RESERVED_WORKSPACE_IDS,
+    SERVICE,
+    WORKSPACE,
+    nexus_resource,
+    org_container,
+    workspace_container,
+)
+from naas_abi_core.engine.call_context import (
+    ANONYMOUS,
+    CallContext,
+    Principal,
+    current_call_context,
+    service_account,
+    use_call_context,
+)
+from naas_abi_core.services.iam import module_scopes
+from starlette.concurrency import run_in_threadpool
+
+
+def upgrading() -> bool:
+    """Whether the sets and the workspace toggles still wait to become policies
+    (``policy_tree``), or IAM's names to become container paths
+    (``container_names``): module scopes and features are refused meanwhile."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import (
+        container_names,
+        policy_tree,
+    )
+
+    return policy_tree.pending() or container_names.pending()
+
+
+def feature_exists(key: str) -> bool:
+    """Whether the deployment enables ``key`` (``enabled_features``): a feature
+    it does not is usable by nobody, whatever a policy says (nor any while the
+    sets wait to become policies)."""
+    from naas_abi.apps.nexus.apps.api.app.core.feature_flags import feature_enabled
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+
+    return not upgrading() and feature_enabled(live_settings().feature_flags, key)
+
+
+NEXUS_IDENTITY = "api"
+_T = TypeVar("_T")
+# How long a workspace's container is remembered by this process: a change made
+# here forgets it at once (``forget_workspace``); one made elsewhere is seen in this
+# time.
+_CONTAINER_CACHE_SECONDS = 30.0
+
+
+class AuthzDenied(HTTPException):
+    """A refusal, as the HTTP response it is."""
+
+
+@dataclass(frozen=True)
+class ModuleScope:
+    """An agent, app, workflow or pipeline of a module (core ``module_scopes``):
+    ``module`` is the module's stable identifier (an engine module's configured
+    path, a remote module's id), ``name`` the item's own."""
+
+    type: str
+    module: str
+    name: str
+
+    def action(self, action: str | None = None) -> str:
+        """The qualified action: the type's use action by default."""
+        return f"{module_scopes.SERVICE}:{action or module_scopes.USE_ACTION[self.type]}"
+
+    def resource(self, container: str) -> str:
+        """Its name in ``container``, the container it is used in (a workspace's)."""
+        return module_scopes.scope_resource(self.type, self.module, self.name, container=container)
+
+
+@dataclass(frozen=True)
+class Decision:
+    """IAM's decision, with ``feature_disabled`` for a flag that is off."""
+
+    allowed: bool
+    visible: bool
+    reason: str
+
+
+class Authz:
+    def __init__(self) -> None:
+        self._containers: dict[str, tuple[str, float]] = {}
+
+    # -- identity ------------------------------------------------------------
+
+    @staticmethod
+    def user_id(user: Any) -> str | None:
+        if user is None:
+            return None
+        return user if isinstance(user, str) else getattr(user, "id", None)
+
+    def context(self, user: Any = None) -> CallContext:
+        """The call to decide for: the ambient one when it names ``user``."""
+        ambient = current_call_context()
+        user_id = self.user_id(user)
+        named = ambient.on_behalf_of
+        if user_id is None or (named is not None and named.id == user_id):
+            return ambient
+        return replace(
+            ANONYMOUS,
+            principal=service_account(NEXUS_IDENTITY),
+            on_behalf_of=Principal(id=user_id, kind="user"),
+            container=ambient.container,
+            triggered_via=ambient.triggered_via,
+        )
+
+    # -- names ---------------------------------------------------------------
+
+    async def container_of(self, workspace: str) -> str | None:
+        """A workspace's container name, as IAM registered it (in its organization,
+        or at the platform for one in none); None for an unknown workspace and for
+        ids that name none (``-``, ``*``)."""
+        if workspace in RESERVED_WORKSPACE_IDS:
+            return None
+        found = self._containers.get(workspace)
+        now = time.monotonic()
+        if found is not None and found[1] > now:
+            return found[0]
+        container = await run_in_threadpool(runtime.iam().container, SERVICE, WORKSPACE, workspace)
+        if container is not None:
+            self._containers[workspace] = (container, now + _CONTAINER_CACHE_SECONDS)
+        return container
+
+    def forget_workspace(self, workspace: str) -> None:
+        self._containers.pop(workspace, None)
+
+    def forget_workspaces(self) -> None:
+        self._containers.clear()
+
+    async def where(self, *, workspace: str | None = None, org: str | None = None) -> str | None:
+        """The container a decision is made in: the workspace's (looked up, unless
+        ``org`` says where it is), else the organization's, else the platform;
+        None for a workspace IAM does not know."""
+        if workspace is not None:
+            if workspace in RESERVED_WORKSPACE_IDS:
+                return None
+            if org is not None:
+                return workspace_container(org, workspace)
+            return await self.container_of(workspace)
+        return org_container(org) if org is not None else PLATFORM
+
+    async def name(
+        self,
+        action_or_type: str,
+        *,
+        workspace: str | None = None,
+        org: str | None = None,
+        id: str | Sequence[str] = (),
+    ) -> str | None:
+        """The resource name of an action's (or a type's) resource; None when the
+        workspace is unknown to IAM."""
+        type_name = TYPE_OF.get(action_or_type, action_or_type)
+        container = await self.where(workspace=workspace, org=org)
+        if container is None:
+            return None
+        return nexus_resource(type_name, container=container, id=id)
+
+    # -- decisions -----------------------------------------------------------
+
+    @staticmethod
+    def _feature_of(action: str, id: str | Sequence[str], feature: str | None) -> str | None:
+        """The feature a decision on ``action`` needs: the section's, or the one
+        ``UseFeature`` itself names."""
+        if feature is not None:
+            return feature
+        if action == "UseFeature" and isinstance(id, str):
+            return id
+        return FEATURE_OF.get(action)
+
+    async def _decide(self, ctx: CallContext, action: str, resource: str) -> Decision:
+        def run() -> Decision:
+            with use_call_context(ctx):
+                found = runtime.iam().authorize(action, resource)
+            return Decision(found.allowed, found.visible, found.reason)
+
+        return await run_in_threadpool(run)
+
+    async def decide(
+        self,
+        action: str,
+        *,
+        user: Any = None,
+        workspace: str | None = None,
+        org: str | None = None,
+        id: str | Sequence[str] = (),
+        feature: str | None = None,
+    ) -> Decision:
+        """The decision for ``action`` on its resource; the feature's first."""
+        ctx = self.context(user)
+        flag = self._feature_of(action, id, feature)
+        if flag is not None and not feature_exists(flag):
+            return Decision(False, False, "feature_disabled")
+        resource = await self.name(action, workspace=workspace, org=org, id=id)
+        if resource is None:
+            return Decision(False, False, "implicit_deny")
+        if action == "UseFeature":
+            return await self._decide(ctx, "nexus:UseFeature", resource)
+        if flag is not None and workspace is not None:
+            feature_resource = await self.name("feature", workspace=workspace, org=org, id=flag)
+            assert feature_resource is not None
+            used = await self._decide(ctx, "nexus:UseFeature", feature_resource)
+            if not used.allowed:
+                return Decision(False, False, "feature_disabled")
+        return await self._decide(ctx, f"nexus:{action}", resource)
+
+    async def allowed_in_any(
+        self,
+        action: str,
+        *,
+        user: Any,
+        workspaces: Sequence[tuple[str | None, str]],
+        id: str | Sequence[str] = (),
+        feature: str | None = None,
+    ) -> bool:
+        """Whether any of ``workspaces`` (``(org, workspace)`` pairs) lets the user
+        perform ``action``: two ``filter`` calls over all of them (the feature
+        switch, then the action), in one worker thread. A workspace in no
+        organization is ``(None, workspace)``."""
+        ctx = self.context(user)
+        flag = self._feature_of(action, id, feature)
+        type_name = TYPE_OF[action]
+        containers = [workspace_container(org, workspace) for org, workspace in workspaces]
+        if not containers or (flag is not None and not feature_exists(flag)):
+            return False
+
+        def run() -> bool:
+            iam = runtime.iam()
+            candidates = containers
+            with use_call_context(ctx):
+                if flag is not None:
+                    switches = {
+                        container: nexus_resource("feature", container=container, id=flag)
+                        for container in candidates
+                    }
+                    usable = set(iam.filter("nexus:UseFeature", list(switches.values())).allowed)
+                    candidates = [c for c in candidates if switches[c] in usable]
+                    if not candidates:
+                        return False
+                resources = [
+                    nexus_resource(type_name, container=container, id=id)
+                    for container in candidates
+                ]
+                return bool(iam.filter(f"nexus:{action}", resources).allowed)
+
+        return await run_in_threadpool(run)
+
+    async def allowed_ids(
+        self, action: str, *, user: Any, workspace: str, ids: Iterable[str]
+    ) -> set[str]:
+        """The ``ids`` of the workspace's ``action`` resources the user may act on:
+        the action's feature once, then one ``filter`` (a listing asks each row's
+        own right without a call per row)."""
+        wanted = list(dict.fromkeys(ids))
+        container = await self.container_of(workspace) if wanted else None
+        if container is None:
+            return set()
+        ctx = self.context(user)
+        flag = FEATURE_OF.get(action)
+        if flag is not None:
+            if not feature_exists(flag):
+                return set()
+            switch = nexus_resource("feature", container=container, id=flag)
+            if not (await self._decide(ctx, "nexus:UseFeature", switch)).allowed:
+                return set()
+        names = {
+            nexus_resource(TYPE_OF[action], container=container, id=one): one for one in wanted
+        }
+
+        def run() -> set[str]:
+            with use_call_context(ctx):
+                found = runtime.iam().filter(f"nexus:{action}", list(names)).allowed
+            return {names[name] for name in found}
+
+        return await run_in_threadpool(run)
+
+    async def allowed(self, action: str, **target: Any) -> bool:
+        return (await self.decide(action, **target)).allowed
+
+    async def require(
+        self,
+        action: str,
+        *,
+        user: Any = None,
+        workspace: str | None = None,
+        org: str | None = None,
+        id: str | Sequence[str] = (),
+        feature: str | None = None,
+        denied: str | None = None,
+    ) -> None:
+        """Raise ``AuthzDenied`` unless the user may perform ``action``."""
+        decision = await self.decide(
+            action, user=user, workspace=workspace, org=org, id=id, feature=feature
+        )
+        if decision.allowed:
+            return
+        raise await self._refusal(
+            action, decision, user=user, workspace=workspace, org=org, denied=denied
+        )
+
+    async def _refusal(
+        self,
+        action: str,
+        decision: Decision,
+        *,
+        user: Any,
+        workspace: str | None,
+        org: str | None,
+        denied: str | None,
+    ) -> AuthzDenied:
+        if decision.reason == "feature_disabled":
+            # Who sees nothing of the workspace is told so, not about its features.
+            where = await self.name("workspace", workspace=workspace, org=org)
+            ctx = self.context(user)
+            if where is None or not (await self._decide(ctx, "nexus:GetWorkspace", where)).allowed:
+                return AuthzDenied(403, detail="You do not have access to this workspace")
+            return AuthzDenied(403, detail="This feature is not available to you in this workspace")
+        if decision.visible:
+            return AuthzDenied(403, detail=denied or "You do not have permission to do this")
+        # The caller sees nothing of the resource. Where it should be is no
+        # secret for the sections everyone knows (members, domains, servers):
+        # 403. Another user's personal resource is invisible (404), and a caller
+        # who sees nothing of the workspace or organization is told it has no
+        # access there at all.
+        ctx = self.context(user)
+        personal = TYPES_BY_NAME[TYPE_OF[action]].personal if action in TYPE_OF else False
+        if workspace is not None:
+            where = await self.name("workspace", workspace=workspace, org=org)
+            if where is not None and (await self._decide(ctx, "nexus:GetWorkspace", where)).allowed:
+                if personal:
+                    return AuthzDenied(404, detail="Not found")
+                return AuthzDenied(403, detail=denied or "You do not have permission to do this")
+            return AuthzDenied(403, detail="You do not have access to this workspace")
+        if org is not None:
+            where = org_container(org)
+            if (await self._decide(ctx, "nexus:GetOrganization", where)).allowed:
+                return AuthzDenied(403, detail=denied or "You do not have permission to do this")
+            return AuthzDenied(403, detail="You do not have access to this organization")
+        return AuthzDenied(403, detail=denied or "You do not have permission to do this")
+
+    async def filter(
+        self,
+        action: str,
+        items: Iterable[_T],
+        *,
+        user: Any = None,
+        resource_of: Callable[[_T], str],
+    ) -> list[_T]:
+        """The items the user may perform ``action`` on, in order.
+
+        ``resource_of`` names each item (``authz.name`` is async, so build names
+        with ``nexus_resource`` where the container is known).
+        """
+        found = list(items)
+        ctx = self.context(user)
+        names = [resource_of(item) for item in found]
+
+        def run() -> set[str]:
+            with use_call_context(ctx):
+                return set(runtime.iam().filter(f"nexus:{action}", names).allowed)
+
+        allowed = await run_in_threadpool(run)
+        return [item for item, name in zip(found, names, strict=True) if name in allowed]
+
+    # -- module scopes ---------------------------------------------------------
+
+    async def decide_scope(
+        self,
+        scope: ModuleScope,
+        *,
+        user: Any = None,
+        workspace: str,
+        action: str | None = None,
+        feature: str | None = None,
+    ) -> Decision:
+        """The decision on a module scope in ``workspace`` (its use action by
+        default); ``feature`` is a Nexus section the use also needs."""
+        if upgrading():
+            return Decision(False, False, "implicit_deny")
+        container = await self.container_of(workspace)
+        if container is None:
+            return Decision(False, False, "implicit_deny")
+        ctx = self.context(user)
+        if feature is not None:
+            switch = nexus_resource("feature", container=container, id=feature)
+            if (
+                not feature_exists(feature)
+                or not (await self._decide(ctx, "nexus:UseFeature", switch)).allowed
+            ):
+                return Decision(False, False, "feature_disabled")
+        return await self._decide(ctx, scope.action(action), scope.resource(container))
+
+    async def allowed_scope(self, scope: ModuleScope, **target: Any) -> bool:
+        return (await self.decide_scope(scope, **target)).allowed
+
+    async def require_scope(
+        self,
+        scope: ModuleScope,
+        *,
+        user: Any = None,
+        workspace: str,
+        action: str | None = None,
+        feature: str | None = None,
+        denied: str | None = None,
+    ) -> None:
+        """Raise ``AuthzDenied`` unless the user may use ``scope`` in ``workspace``."""
+        decision = await self.decide_scope(
+            scope, user=user, workspace=workspace, action=action, feature=feature
+        )
+        if decision.allowed:
+            return
+        raise await self._refusal(
+            scope.action(action),
+            decision,
+            user=user,
+            workspace=workspace,
+            org=None,
+            denied=denied or f"You may not use this {scope.type} here",
+        )
+
+    async def filter_scopes(
+        self,
+        items: Iterable[_T],
+        *,
+        user: Any = None,
+        workspace: str,
+        scope_of: Callable[[_T], ModuleScope | None],
+        action: str | None = None,
+    ) -> list[_T]:
+        """The items the user may use in ``workspace``, in order; an item with no
+        module scope (``scope_of`` answers None) is kept: another check owns it.
+        IAM's ``filter`` alone decides: no set, no workspace switch."""
+        found = list(items)
+        scopes = [scope_of(item) for item in found]
+        if not any(scopes):
+            return found
+        container = None if upgrading() else await self.container_of(workspace)
+        if container is None:
+            return [item for item, scope in zip(found, scopes, strict=True) if scope is None]
+        ctx = self.context(user)
+        by_action: dict[str, list[str]] = {}
+        for scope in scopes:
+            if scope is not None:
+                by_action.setdefault(scope.action(action), []).append(scope.resource(container))
+
+        def run() -> set[tuple[str, str]]:
+            allowed: set[tuple[str, str]] = set()
+            with use_call_context(ctx):
+                for qualified, names in by_action.items():
+                    allowed.update(
+                        (qualified, name) for name in runtime.iam().filter(qualified, names).allowed
+                    )
+            return allowed
+
+        allowed = await run_in_threadpool(run)
+        return [
+            item
+            for item, scope in zip(found, scopes, strict=True)
+            if scope is None or (scope.action(action), scope.resource(container)) in allowed
+        ]
+
+    async def scope_allowed_in_any(
+        self,
+        scope: ModuleScope,
+        *,
+        user: Any,
+        workspaces: Sequence[tuple[str | None, str]],
+        feature: str | None = None,
+    ) -> str | None:
+        """The first of ``workspaces`` (``(org, workspace)`` pairs, ``None`` for a
+        workspace in no organization) where the user may use ``scope``, else None."""
+        ctx = self.context(user)
+        if upgrading() or (feature is not None and not feature_exists(feature)):
+            return None
+
+        def allows(container: str) -> bool:
+            iam = runtime.iam()
+            with use_call_context(ctx):
+                if (
+                    feature is not None
+                    and not iam.authorize(
+                        "nexus:UseFeature",
+                        nexus_resource("feature", container=container, id=feature),
+                    ).allowed
+                ):
+                    return False
+                return iam.authorize(scope.action(), scope.resource(container)).allowed
+
+        for org, workspace in workspaces:
+            if await run_in_threadpool(allows, workspace_container(org, workspace)):
+                return workspace
+        return None
+
+
+AUTHZ = Authz()
+require = AUTHZ.require
+allowed = AUTHZ.allowed
+allowed_ids = AUTHZ.allowed_ids
+decide = AUTHZ.decide
+filter_allowed = AUTHZ.filter
+name = AUTHZ.name
+require_scope = AUTHZ.require_scope
+allowed_scope = AUTHZ.allowed_scope
+filter_scopes = AUTHZ.filter_scopes
+
+__all__ = [
+    "AUTHZ",
+    "feature_exists",
+    "upgrading",
+    "ModuleScope",
+    "TYPES_BY_NAME",
+    "Authz",
+    "AuthzDenied",
+    "allowed",
+    "allowed_ids",
+    "decide",
+    "filter_allowed",
+    "name",
+    "require",
+    "require_scope",
+    "allowed_scope",
+    "filter_scopes",
+]

@@ -12,17 +12,23 @@ from uuid import uuid4
 from google.protobuf.message import DecodeError
 from langchain_core.messages import AIMessage, AIMessageChunk
 from naas_abi_core import logger
-from naas_abi_core.engine.nats_auth import (
-    InvalidServiceTokenError,
-    verify_service_token,
+from naas_abi_core.engine.call_context import (
+    ANONYMOUS,
+    CallContext,
+    service_account,
+    use_call_context,
 )
+from naas_abi_core.engine.nats_auth import InvalidServiceTokenError, TokenVerifier
+from naas_abi_core.engine.nats_identity import caller_context, for_request, refusal
 from naas_abi_core.engine.nats_sessions import SessionHost, session_owner, until
 from naas_abi_core.engine.nats_transfer import (
     TransferHost,
     drain_shared,
+    same_caller,
     stream_thread,
 )
-from naas_abi_core.models.Model import ChatModel, EmbeddingModel
+from naas_abi_core.models.Model import EmbeddingModel
+from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
 from naas_abi_core.services.model_registry.ModelRegistryPort import (
     DefaultModelNotResolvedError,
     IModelRegistry,
@@ -87,6 +93,10 @@ def _record_usage(span, usage):
             span.set_attribute(f"abi.model.usage.{key}", value)
 
 
+def _acting_for_nobody(caller: str) -> CallContext:
+    return CallContext(principal=service_account(caller)) if caller else ANONYMOUS
+
+
 @dataclass
 class _Stream:
     caller: str
@@ -96,13 +106,20 @@ class _Stream:
     sequence: int = 0
     reading: bool = False
     touched: float = 0
+    # Who opened it, user included: only the same caller may read or close it.
+    # By default ``caller`` acting for nobody, as ``_execute`` assumes.
+    context: CallContext | None = None
+
+    def __post_init__(self) -> None:
+        if self.context is None:
+            self.context = _acting_for_nobody(self.caller)
 
 
 class ModelRegistryNATS(SessionHost):
     def __init__(
         self,
         registry: IModelRegistry,
-        secret: str,
+        verifier: TokenVerifier,
         *,
         stream_ttl: float = 30,
         deadline: float | None = None,
@@ -117,7 +134,7 @@ class ModelRegistryNATS(SessionHost):
             if v is not None
         ):
             raise ValueError("Model deadlines must be finite and positive")
-        self.registry, self.secret = registry, secret
+        self.registry, self.verifier = registry, verifier
         self.owner = session_owner(owner)
         self.stream_ttl, self.deadline = stream_ttl, deadline
         self.subscriptions: list[Any] = []
@@ -139,7 +156,7 @@ class ModelRegistryNATS(SessionHost):
             raise ValueError("Model upload budgets must be finite")
         self.transfer = TransferHost(
             "abi.svc.model_registry.v1.transfer",
-            secret,
+            verifier,
             self._transfer_frames,
             operations=("chat", "stream", "embed"),
             total_seconds=deadline,
@@ -249,9 +266,8 @@ class ModelRegistryNATS(SessionHost):
         request_type, response_type = OPERATIONS[operation]
         response = response_type()
         try:
-            caller = verify_service_token(
-                (msg.headers or {}).get("Nats-Auth-Token", ""), self.secret
-            )
+            context = caller_context(msg.headers, self.verifier)
+            caller = context.principal.id
             # An overflow upload is above the broker limit, so above this cap too.
             if len(msg.data) > self.max_payload or overflow.REQUEST_HEADER in (
                 msg.headers or {}
@@ -262,13 +278,15 @@ class ModelRegistryNATS(SessionHost):
                 self.deadline or float("inf"),
                 max(0.001, request.context.timeout_ms / 1000),
             )
-            response = await asyncio.wait_for(
-                self._execute(operation, request, caller), timeout
-            )
-        except InvalidServiceTokenError:
+            context = for_request(context, request)
+            with use_call_context(context):
+                response = await asyncio.wait_for(
+                    self._execute(operation, request, caller, context), timeout
+                )
+        except InvalidServiceTokenError as exc:
             response.error.code, response.error.message = (
                 "UNAUTHENTICATED",
-                "Invalid service token",
+                refusal(exc, "Invalid service token"),
             )
         except (
             ModelNotFoundError,
@@ -294,6 +312,8 @@ class ModelRegistryNATS(SessionHost):
                 "DEADLINE_EXCEEDED",
                 "Model request timed out; it was not replayed",
             )
+        except PermissionDeniedError as exc:
+            response.error.code, response.error.message = "PERMISSION_DENIED", str(exc)
         except PermissionError:
             response.error.code, response.error.message = (
                 "PERMISSION_DENIED",
@@ -323,9 +343,9 @@ class ModelRegistryNATS(SessionHost):
         if msg.reply:
             await reply(msg, payload)
 
-    def _resolve(self, ref):
-        if ref.kind not in ("", "chat", "embedding"):
-            raise ValueError("Model kind must be chat or embedding")
+    def _resolve(self, ref, action="Resolve"):
+        """``(canonical id, model, run configuration)`` of a reference, checked
+        in the domain service with this operation's ``action``."""
         if len(ref.canonical_id) > 512 or len(ref.provider) > 128:
             raise ValueError("Model identifier is too long")
         canonical = ref.canonical_id
@@ -336,32 +356,14 @@ class ModelRegistryNATS(SessionHost):
                 canonical = self.registry.default_embedding_model_id
             if not canonical:
                 raise DefaultModelNotResolvedError()
-        lookup = {
-            "chat": self.registry.get_chat_model,
-            "embedding": self.registry.get_embedding_model,
-            "": self.registry.get,
-        }[ref.kind]
-        if ref.model_id:
-            for cid, candidate in self.registry.list_registered_models():
-                if (
-                    cid == canonical
-                    and candidate.provider == ref.provider
-                    and candidate.model_id == ref.model_id
-                ):
-                    if (
-                        ref.kind == "chat" and not isinstance(candidate, ChatModel)
-                    ) or (
-                        ref.kind == "embedding"
-                        and not isinstance(candidate, EmbeddingModel)
-                    ):
-                        raise ModelNotFoundError()
-                    return canonical, candidate
-        model = lookup(canonical, ref.provider or None)
-        if ref.model_id and (
-            model.model_id != ref.model_id or str(model.provider) != ref.provider
-        ):
-            raise ModelNotFoundError()
-        return canonical, model
+        model, config = self.registry.resolve_ref(
+            canonical,
+            kind=ref.kind,
+            provider=ref.provider or None,
+            model_id=ref.model_id,
+            action=action,
+        )
+        return canonical, model, config
 
     def _descriptor(self, canonical, model):
         metadata = {
@@ -386,7 +388,7 @@ class ModelRegistryNATS(SessionHost):
             metadata_json=encode_json(metadata),
         )
 
-    async def _chat(self, request):
+    async def _chat(self, request, action="Chat"):
         if request.ref.kind != "chat" or not request.messages:
             raise ValueError("Chat requires a chat reference and messages")
         messages = [decode_message(message) for message in request.messages]
@@ -414,7 +416,9 @@ class ModelRegistryNATS(SessionHost):
             or any(k.startswith("_") for k in (*options, *tool_options))
         ):
             raise ValueError("Runtime configuration is not a generation option")
-        canonical, wrapper = await asyncio.to_thread(self._resolve, request.ref)
+        canonical, wrapper, config = await asyncio.to_thread(
+            self._resolve, request.ref, action
+        )
         model = wrapper.model
         if request.tools_json:
             tools = [decode_json(tool) for tool in request.tools_json]
@@ -423,7 +427,7 @@ class ModelRegistryNATS(SessionHost):
             model = model.bind_tools(tools, **tool_options)
         elif tool_options:
             raise ValueError("Tool options require tool definitions")
-        options = {**options, "stop": list(request.stop) or None}
+        options = {**options, "stop": list(request.stop) or None, "config": config}
         return canonical, wrapper, model, messages, options
 
     async def _produce(self, stream, model, messages, options):
@@ -456,6 +460,8 @@ class ModelRegistryNATS(SessionHost):
 
     @staticmethod
     def _transfer_error(exc):
+        if isinstance(exc, PermissionDeniedError):
+            return "PERMISSION_DENIED", str(exc)
         if isinstance(
             exc,
             (
@@ -481,7 +487,9 @@ class ModelRegistryNATS(SessionHost):
             response = await self._execute(operation, request, "")
             yield response.SerializeToString()
             return
-        canonical, wrapper, model, messages, options = await self._chat(request)
+        canonical, wrapper, model, messages, options = await self._chat(
+            request, "ChatStream"
+        )
         with _model_span("stream", canonical, wrapper, len(messages)) as span:
             usage: dict[str, int] = {}
             iterator = model.astream(messages, **options)
@@ -495,7 +503,19 @@ class ModelRegistryNATS(SessionHost):
                 await iterator.aclose()
                 _record_usage(span, usage)
 
-    async def _execute(self, operation, request, caller):
+    @staticmethod
+    def _owns(stream: _Stream, caller: str, context: CallContext) -> bool:
+        """The same actor acting for the same user as the stream's opener."""
+        return (
+            stream.caller == caller
+            and stream.context is not None
+            and same_caller(stream.context, context)
+        )
+
+    async def _execute(self, operation, request, caller, context=None):
+        """``context``: the verified caller; by default ``caller`` acting for nobody."""
+        if context is None:
+            context = _acting_for_nobody(caller)
         if operation == "list_models":
             entries = await asyncio.to_thread(self.registry.list_registered_models)
             return pb.ListModelsResponse(
@@ -505,17 +525,17 @@ class ModelRegistryNATS(SessionHost):
                 or "",
             )
         if operation == "resolve":
-            cid, model = await asyncio.to_thread(self._resolve, request.ref)
+            cid, model, _ = await asyncio.to_thread(self._resolve, request.ref)
             return pb.ResolveResponse(model=self._descriptor(cid, model))
         if operation == "stream_close":
             stream = self.streams.get(request.stream_id)
-            if stream and stream.caller != caller:
+            if stream and not self._owns(stream, caller, context):
                 raise PermissionError()
             await self._close(request.stream_id)
             return pb.StreamCloseResponse()
         if operation == "stream_next":
             stream = self.streams[request.stream_id]
-            if stream.caller != caller:
+            if not self._owns(stream, caller, context):
                 raise PermissionError()
             if stream.reading or request.sequence != stream.sequence:
                 raise ValueError("Concurrent or out-of-order stream read")
@@ -558,7 +578,9 @@ class ModelRegistryNATS(SessionHost):
                     or (request.query and len(request.texts) != 1)
                 ):
                     raise ValueError("Embedding requires 1..1024 texts (one for query)")
-                canonical, wrapper = await asyncio.to_thread(self._resolve, request.ref)
+                canonical, wrapper, _ = await asyncio.to_thread(
+                    self._resolve, request.ref, "Embed"
+                )
                 with _model_span("embed", canonical, wrapper, len(request.texts)):
                     vectors = (
                         [await wrapper.model.aembed_query(request.texts[0])]
@@ -573,7 +595,8 @@ class ModelRegistryNATS(SessionHost):
                     vectors=[pb.Vector(values=vector) for vector in vectors]
                 )
             canonical, wrapper, model, messages, options = await self._chat(
-                request.chat if operation == "stream_open" else request
+                request.chat if operation == "stream_open" else request,
+                "ChatStream" if operation == "stream_open" else "Chat",
             )
             if operation == "chat":
                 with _model_span("chat", canonical, wrapper, len(messages)) as span:
@@ -583,7 +606,9 @@ class ModelRegistryNATS(SessionHost):
                     raise TypeError("Provider returned a non-AI message")
                 return pb.ChatResponse(message=encode_message(message))
             stream_id = f"{self.owner}:{uuid4().hex}"
-            stream = _Stream(caller, touched=asyncio.get_running_loop().time())
+            stream = _Stream(
+                caller, touched=asyncio.get_running_loop().time(), context=context
+            )
             self.streams[stream_id] = stream
             stream.task = asyncio.create_task(
                 self._produce(stream, model, messages, options)

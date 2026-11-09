@@ -24,6 +24,7 @@ dependencies = [
     { name = "naas-abi" },
     { name = "naas-abi-cli" },
     { name = "naas-abi-core", extra = ["all", "dagster", "rabbitmq"] },
+    { name = "naas-abi-idp" },
     { name = "naas-abi-marketplace", extra = ["ai-chatgpt", "ai-claude", "ai-deepseek", "ai-gemini", "ai-gemma", "ai-grok", "ai-llama", "ai-mistral", "ai-perplexity", "ai-qwen", "applications-algolia", "applications-arxiv", "applications-bodo", "applications-github", "applications-gmail", "applications-googlesearch", "applications-linkedin", "applications-postgres", "applications-powerpoint", "applications-pubmed", "applications-twilio", "applications-x", "applications-yahoofinance", "domains-ontology-engineer"] },
     { name = "openpyxl" },
     { name = "pymupdf" },
@@ -60,6 +61,7 @@ requires-dist = [
     { name = "naas-abi", editable = "libs/naas-abi" },
     { name = "naas-abi-cli", editable = "libs/naas-abi-cli" },
     { name = "naas-abi-core", extras = ["all", "dagster", "rabbitmq"], editable = "libs/naas-abi-core" },
+    { name = "naas-abi-idp", editable = "libs/naas-abi-idp" },
     { name = "naas-abi-marketplace", extras = ["ai-chatgpt"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["ai-claude"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["ai-deepseek"], editable = "libs/naas-abi-marketplace" },
@@ -2361,7 +2363,7 @@ name = "importlib-metadata"
 version = "8.7.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "zipp", marker = "python_full_version < '3.12'" },
+    { name = "zipp" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f3/49/3b30cad09e7771a4982d9975a8cbf64f00d4a1ececb53297f1d9a7be1b10/importlib_metadata-8.7.1.tar.gz", hash = "sha256:49fef1ae6440c182052f407c8d34a68f72efc36db9ca90dc0113398f2fdde8bb", size = 57107, upload-time = "2025-12-21T10:00:19.278Z" }
 wheels = [
@@ -3600,7 +3602,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi"
-version = "3.6.0"
+version = "3.6.3"
 source = { editable = "libs/naas-abi" }
 dependencies = [
     { name = "aiosqlite" },
@@ -3714,7 +3716,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-core"
-version = "3.1.0"
+version = "3.2.0"
 source = { editable = "libs/naas-abi-core" }
 dependencies = [
     { name = "click" },
@@ -3723,6 +3725,7 @@ dependencies = [
     { name = "duckdb" },
     { name = "fastapi" },
     { name = "fastmcp" },
+    { name = "httpx" },
     { name = "langchain-openai" },
     { name = "langgraph" },
     { name = "langgraph-checkpoint-postgres" },
@@ -3734,6 +3737,7 @@ dependencies = [
     { name = "psycopg", extra = ["binary", "pool"] },
     { name = "pydantic" },
     { name = "pydash" },
+    { name = "pyjwt", extra = ["crypto"] },
     { name = "pyoxigraph" },
     { name = "pytz" },
     { name = "pyyaml" },
@@ -3758,7 +3762,7 @@ all = [
     { name = "naas-abi-sdk", extra = ["models", "otel"] },
     { name = "nats-py" },
     { name = "paramiko" },
-    { name = "pyjwt" },
+    { name = "pyjwt", extra = ["crypto"] },
     { name = "qdrant-client" },
     { name = "redis" },
     { name = "sqlite-vec" },
@@ -3775,7 +3779,7 @@ nats = [
     { name = "naas-abi-proto" },
     { name = "naas-abi-sdk", extra = ["models"] },
     { name = "nats-py" },
-    { name = "pyjwt" },
+    { name = "pyjwt", extra = ["crypto"] },
 ]
 qdrant = [
     { name = "qdrant-client" },
@@ -3798,6 +3802,7 @@ requires-dist = [
     { name = "duckdb", specifier = ">=1.5.5" },
     { name = "fastapi", specifier = ">=0.115.5,<0.116" },
     { name = "fastmcp", specifier = ">=2.13.2" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "langchain-openai", specifier = ">=0.3.3,<0.4" },
     { name = "langchain-openai", marker = "extra == 'openrouter'", specifier = ">=0.3.35" },
     { name = "langgraph", specifier = ">=0.6.6" },
@@ -3826,7 +3831,8 @@ requires-dist = [
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.0.0" },
     { name = "pydantic", specifier = ">=2.11.5" },
     { name = "pydash", specifier = ">=8.0.5" },
-    { name = "pyjwt", marker = "extra == 'nats'", specifier = ">=2.11.0" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.11.0" },
+    { name = "pyjwt", extras = ["crypto"], marker = "extra == 'nats'", specifier = ">=2.11.0" },
     { name = "pyoxigraph", specifier = ">=0.5.5" },
     { name = "pytz", specifier = ">=2025.2" },
     { name = "pyyaml", specifier = ">=6.0.3" },
@@ -3858,8 +3864,37 @@ dev = [
 ]
 
 [[package]]
+name = "naas-abi-idp"
+version = "0.1.0"
+source = { editable = "libs/naas-abi-idp" }
+dependencies = [
+    { name = "authlib" },
+    { name = "cryptography" },
+    { name = "naas-abi-proto" },
+    { name = "naas-abi-sdk" },
+    { name = "starlette" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "authlib", specifier = ">=1.6,<2" },
+    { name = "cryptography", specifier = ">=43" },
+    { name = "naas-abi-proto", editable = "libs/naas-abi-proto" },
+    { name = "naas-abi-sdk", editable = "libs/naas-abi-sdk" },
+    { name = "starlette", specifier = ">=0.40" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "pytest", specifier = ">=8" },
+    { name = "ruff" },
+    { name = "uvicorn", specifier = ">=0.30" },
+]
+
+[[package]]
 name = "naas-abi-marketplace"
-version = "3.63.0"
+version = "3.64.1"
 source = { editable = "libs/naas-abi-marketplace" }
 dependencies = [
     { name = "ijson" },
@@ -3985,6 +4020,8 @@ requires-dist = [
     { name = "ratelimit", marker = "extra == 'applications-pubmed'", specifier = ">=2.2.1" },
     { name = "ratelimit-types", marker = "extra == 'applications-pubmed'", specifier = "==0.0.3" },
     { name = "thefuzz", marker = "extra == 'domains-ontology-engineer'", specifier = "==0.22.1" },
+    { name = "torch", marker = "extra == 'domains-document'", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torchvision", marker = "extra == 'domains-document'", index = "https://download.pytorch.org/whl/cpu" },
     { name = "twilio", marker = "extra == 'applications-twilio'", specifier = ">=9.10.0" },
     { name = "twilio-stubs", marker = "extra == 'applications-twilio'", specifier = ">=0.2.0" },
     { name = "types-flask", marker = "extra == 'applications-twilio'", specifier = ">=1.1.6" },
@@ -6401,8 +6438,8 @@ name = "secretstorage"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "jeepney", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "cryptography" },
+    { name = "jeepney" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz", hash = "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be", size = 19884, upload-time = "2025-11-23T19:02:53.191Z" }
 wheels = [

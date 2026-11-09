@@ -695,11 +695,13 @@ export default function MarketplacePage() {
   }, [searchParams]);
 
   useEffect(() => {
+    if (!currentWorkspaceId) return;
     const apiBase = getApiUrl();
+    const workspace = `workspace_id=${encodeURIComponent(currentWorkspaceId)}`;
     setLoading(true);
     Promise.all([
-      authFetch(`${apiBase}/api/modules/`).then((r) => (r.ok ? r.json() : Promise.reject(r.statusText))),
-      authFetch(`${apiBase}/api/modules/config`).then((r) => (r.ok ? r.json() : null)),
+      authFetch(`${apiBase}/api/modules/?${workspace}`).then((r) => (r.ok ? r.json() : Promise.reject(r.statusText))),
+      authFetch(`${apiBase}/api/modules/config?${workspace}`).then((r) => (r.ok ? r.json() : null)),
     ])
       .then(([modules, cfgRes]: [ModulesResponse, { config: MarketplaceConfig } | null]) => {
         setData(modules);
@@ -707,7 +709,7 @@ export default function MarketplacePage() {
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [currentWorkspaceId]);
 
   const allModules = useMemo<ModuleInfo[]>(() => {
     if (!data) return [];

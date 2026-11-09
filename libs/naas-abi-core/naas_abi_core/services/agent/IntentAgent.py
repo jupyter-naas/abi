@@ -358,6 +358,9 @@ class IntentAgent(Agent):
                 f"model routing: {exc}"
             )
             intents = []
+        # The mapper is the template's, over every agent it had: keep the routes
+        # to this copy's sub-agents only.
+        intents = [m for m in intents if self._routable(m["intent"])]
 
         # If we have no intents, we return an empty intent mapping
         if len(intents) == 0:
@@ -747,6 +750,9 @@ Last user message: "{last_human_message.content}"
                     self._notify_ai_message(ai_message, self.name)
 
                     return Command(goto=END, update={"messages": [ai_message]})
+                elif intent.intent_type == IntentType.AGENT and not self._routable(intent):
+                    logger.debug(f"Intent to '{intent.intent_target}', not a sub-agent here")
+                    return Command(goto="call_model")
                 elif intent.intent_type == IntentType.AGENT:
                     logger.debug(
                         f"🤖 Agent intent found, routing to {intent.intent_target}"
@@ -836,10 +842,19 @@ If you endup with a single intent which is of type TOOL, you must call this tool
             logger.debug(f"Injected in system prompt: {updated_system_prompt}")
             return Command(update={"system_prompt": updated_system_prompt})
 
+    def _routable(self, intent: Intent) -> bool:
+        """An agent intent routes only to a sub-agent this agent has: the
+        agents a caller may not use are left out of its turn, and the intents
+        the template mapped to them with them."""
+        if intent.intent_type != IntentType.AGENT or intent.intent_target == "call_model":
+            return True
+        names = {Agent.validate_name(a.name) for a in self._agents}
+        return Agent.validate_name(intent.intent_target) in names
+
     def _populate_duplicate_shell(self, clone: Agent) -> None:
         intent_clone = cast("IntentAgent", clone)
         intent_clone._enable_default_intents = self._enable_default_intents
-        intent_clone._intents = self._intents
+        intent_clone._intents = [i for i in self._intents if intent_clone._routable(i)]
         intent_clone._embedding_model = self._embedding_model
         intent_clone._intent_mapper = self._intent_mapper
         intent_clone._threshold = self._threshold

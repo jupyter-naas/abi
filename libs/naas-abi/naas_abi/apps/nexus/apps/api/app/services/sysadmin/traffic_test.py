@@ -19,7 +19,7 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.traffic import (
         ("abi.svc.model_registry.v1.chat", ("model", "model_registry", "chat")),
         ("abi.svc.cache.v1.tier.0.get", ("service", "cache", "get")),
         ("abi.discovery.zen.v1.list_modules", ("discovery", "zen", "list_modules")),
-        ("abi.agent.zen.inst-1.abc123.v1.submit", ("agent", "zen/inst-1", "submit")),
+        ("abi.agent.zen.sa1.inst-1.abc123.v1.submit", ("agent", "zen/inst-1", "submit")),
         ("abi.jobs.zen.trigger.mh.jh", ("job", "zen", "trigger")),
         ("abi.jobs.zen.schedule.mh.jh.0", ("job", "zen", "schedule")),
         ("evt.0123abcd.http://ontology.naas.ai/abi/x", ("event", "0123abcd", "publish")),

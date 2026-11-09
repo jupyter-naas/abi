@@ -12,79 +12,52 @@ Complete API reference for the NEXUS platform.
 
 ## Authentication
 
-NEXUS uses JWT (JSON Web Tokens) for authentication.
+NEXUS has no login of its own: no password, magic link, one-time code or refresh token, and it signs no token.
+People sign in at an identity provider (the built-in one by default). The login page takes an email, the
+provider emails a 6-digit code, and the browser comes back with an httpOnly session cookie. The web app holds
+that cookie and no bearer token.
 
-### Obtaining Tokens
+### Signing in (browser)
 
-**Endpoint:** `POST /api/auth/login`
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/auth/oidc/providers` | The providers the login page offers, and the default |
+| `POST /api/auth/oidc/route` | Which provider an email signs in with (its organization's verified domain, else the default) |
+| `GET /api/auth/oidc/login?provider=&email=&next=` | Starts the sign-in: redirects to the provider |
+| `GET /api/auth/oidc/callback` | The provider's redirect back; sets the session cookie |
+| `GET /api/auth/oidc/session` | The signed-in user and the session's CSRF token |
+| `POST /api/auth/oidc/logout` | Ends the session |
 
-**Request:**
-```json
-{
-  "email": "alice@example.com",
-  "password": "nexus2026"
-}
-```
+A request that changes state and is authenticated by the cookie carries the session's CSRF token as
+`X-CSRF-Token` (from `GET /api/auth/oidc/session`).
 
-**Response:**
-```json
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "token_type": "bearer",
-  "user": {
-    "id": "user-alice",
-    "email": "alice@example.com",
-    "name": "Alice Johnson",
-    "avatar": "/uploads/avatars/alice.png"
-  }
-}
-```
+In `abi dev` the provider's mail is a file in `storage/email`; `abi dev code` prints the newest sign-in code.
 
-### Using Tokens
+### Using the API from a script
 
-Include the access token in the `Authorization` header:
+Create a personal API key in Nexus under Account, API keys (`abi_pk_...`) and send it as the bearer:
 
 ```
-Authorization: Bearer <access_token>
+Authorization: Bearer abi_pk_...
 ```
 
 **Example (curl):**
 ```bash
 curl http://localhost:8000/api/workspaces \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  -H "Authorization: Bearer abi_pk_..."
 ```
 
 **Example (JavaScript):**
 ```javascript
 fetch('http://localhost:8000/api/workspaces', {
   headers: {
-    'Authorization': `Bearer ${accessToken}`
+    'Authorization': `Bearer ${apiKey}`
   }
 })
 ```
 
-### Refreshing Tokens
-
-Access tokens expire after 24 hours. Use the refresh token to get a new one.
-
-**Endpoint:** `POST /api/auth/refresh`
-
-**Request:**
-```json
-{
-  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
-
-**Response:**
-```json
-{
-  "access_token": "new_token_here",
-  "refresh_token": "new_refresh_token_here",
-  "token_type": "bearer"
-}
-```
+`POST /api/iam/token` exchanges a key for a token of 10 minutes at most. The `/api/auth/*` and `/api/iam/*`
+routes take a signed-in session only, never a key.
 
 ## Core Endpoints
 
@@ -942,7 +915,6 @@ All error responses follow this format:
 
 NEXUS implements rate limiting to prevent abuse:
 
-- **Login:** 5 requests per minute per IP
 - **Chat:** 20 requests per minute per user
 - **API:** 100 requests per minute per user
 
@@ -1012,11 +984,8 @@ Real-time updates via WebSocket:
 import { authApi } from '@/lib/api/auth';
 import { workspacesApi } from '@/lib/api/workspaces';
 
-// Login
-const { access_token } = await authApi.login({
-  email: 'alice@example.com',
-  password: 'nexus2026'
-});
+// The session is the cookie set by the identity provider sign-in:
+// calls made through the app's API client carry it.
 
 // Get workspaces
 const workspaces = await workspacesApi.getAll();
@@ -1027,8 +996,7 @@ const workspaces = await workspacesApi.getAll();
 ```python
 from nexus import NexusClient
 
-client = NexusClient(api_url='http://localhost:8000')
-client.login(email='alice@example.com', password='nexus2026')
+client = NexusClient(api_url='http://localhost:8000', api_key='abi_pk_...')
 
 workspaces = client.workspaces.list()
 ```

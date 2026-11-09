@@ -163,8 +163,8 @@ def describe_subject(subject: str) -> tuple[str, str]:
         return parts[2], parts[-1]
     if subject.startswith("abi.discovery.") and len(parts) == 5:
         return "discovery", parts[4]
-    if subject.startswith("abi.agent.") and len(parts) == 7:
-        return "agent", parts[6]
+    if subject.startswith("abi.agent.") and len(parts) == 8:
+        return "agent", parts[7]
     if subject.startswith("abi.jobs.") and len(parts) >= 4:
         return "jobs", parts[3]
     return "nats", subject

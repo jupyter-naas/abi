@@ -14,7 +14,7 @@ import pytest
 from naas_abi_sdk.workflows import InvalidWorkflowInput
 
 from {{module_name_snake}} import MODULE_ID, ABIModule, jobs
-from {{module_name_snake}}.__main__ import configuration_from, run_until_signalled, token_from
+from {{module_name_snake}}.__main__ import configuration_from, main, run_until_signalled
 from {{module_name_snake}}.agents.{{module_name_pascal}}Agent import NAME
 
 
@@ -127,13 +127,18 @@ def test_the_module_never_imports_abi_core() -> None:
     assert result.returncode == 0, result.stderr
 
 
-def test_the_module_calls_the_engine_as_its_module_id() -> None:
-    """Discovery registers a module only under a token for its own module id."""
-    # The key wins over an issued token: it signs fresh ones, bound to the module called.
-    assert token_from({"ABI_SERVICE_TOKEN": "issued", "ABI_MODULE_KEY": "k"}).identity == MODULE_ID
-    assert token_from({"ABI_SERVICE_TOKEN": "issued"}) == "issued"
-    with pytest.raises(RuntimeError, match="ABI_MODULE_KEY"):
-        token_from({})
+def test_the_module_needs_its_service_key() -> None:
+    # It holds a key, never a signing secret: no key, no start.
+    for env in ({}, {"ABI_SERVICE_KEY": "a-token"}):
+        with pytest.raises(SystemExit, match="ABI_SERVICE_KEY"):
+            main(env)
+
+
+def test_its_manifest_defaults_from_its_dependencies() -> None:
+    from naas_abi_sdk.permissions import module_manifest
+
+    actions = {a for s in module_manifest(ABIModule)["statements"] for a in s["actions"]}
+    assert {"document:*", "model_registry:*"} <= actions
 
 
 def test_sigterm_cancels_the_module_before_it_runs() -> None:

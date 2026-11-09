@@ -4,8 +4,10 @@ import Script from 'next/script';
 import { AnalyticsPageTracker } from '@/components/analytics-page-tracker';
 import { AuthSessionManager } from '@/components/auth-session-manager';
 import { ThemeProvider } from '@/components/theme-provider';
+import { ViewBanner } from '@/components/view-as/view-banner';
 import { TenantProvider } from '@/contexts/tenant-context';
 import { WebSocketProvider } from '@/contexts/websocket-context';
+import { VIEW_STORAGE_GUARD } from '@/lib/view-storage-guard';
 import './globals.css';
 
 const inter = localFont({
@@ -122,6 +124,12 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <body className={`${inter.className} antialiased`}>
+        {/* During a view ("View as") the browser keeps nothing: before any store exists. */}
+        <Script
+          id="nexus-view-storage-guard"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: VIEW_STORAGE_GUARD }}
+        />
         <Script
           id="nexus-runtime-config-inline"
           strategy="beforeInteractive"
@@ -138,6 +146,7 @@ export default function RootLayout({
         >
           <TenantProvider>
             <AuthSessionManager />
+            <ViewBanner />
             <WebSocketProvider>
               <AnalyticsPageTracker />
               {children}

@@ -41,7 +41,7 @@ Templates should not name a ``GRAPH``: they run against the union of the graphs
 the workspace can read (see ``graph/adapters/secondary/scoped_store.py``).
 
 Every name here (topic, role, slot) is meant to map 1:1 onto the generic search
-ontology tracked in ``docs/adr/20261001_nexus-search-topics.md``.
+ontology.
 """
 
 from __future__ import annotations
@@ -112,10 +112,22 @@ ROLE_CONTRACTS: dict[str, RoleContract] = {
         required=frozenset({"title"}),
         optional=frozenset(
             {
-                "item", "subtitle", "snippet", "image", "start", "end", "url", "tags",
+                "item",
+                "subtitle",
+                "snippet",
+                "image",
+                "start",
+                "end",
+                "url",
+                "tags",
                 # Rows that share a group are shown under it (roles under their
                 # employer); a client is the organization a row's work was done for.
-                "group", "group_item", "group_image", "client", "client_item", "client_image",
+                "group",
+                "group_item",
+                "group_image",
+                "client",
+                "client_item",
+                "client_image",
             }
         ),
     ),

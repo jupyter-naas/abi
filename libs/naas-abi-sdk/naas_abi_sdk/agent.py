@@ -14,7 +14,7 @@ from google.protobuf.message import DecodeError
 from naas_abi_proto.agent.v1 import agent_pb2 as pb
 from nats.errors import Error as NATSError
 
-from naas_abi_sdk.transport import RPCError
+from naas_abi_sdk.transport import RPCError, host_recipient
 
 TERMINAL = {"SUCCEEDED", "FAILED", "CANCELLED", "TIMED_OUT"}
 # Wall-clock budget for invoke/stream_invoke when the caller sets no timeout.
@@ -25,9 +25,14 @@ DEFAULT_DEADLINE_SECONDS = 300
 QUIET_SECONDS = 5.0
 
 
-def agent_subject(project: str, instance_id: str, name: str, operation: str) -> str:
+def agent_subject(
+    project: str, service_account: str, instance_id: str, name: str, operation: str
+) -> str:
+    """``service_account``: the instance's, from its discovery record. The
+    broker lets a module subscribe to its own only."""
     digest = hashlib.sha256(name.encode()).hexdigest()
-    return f"abi.agent.{project}.{instance_id}.{digest}.v1.{operation}"
+    sa = service_account or "-"
+    return f"abi.agent.{project}.{sa}.{instance_id}.{digest}.v1.{operation}"
 
 
 @dataclass
@@ -282,15 +287,23 @@ class AgentProxy:
         if not eligible:
             raise RPCError("AGENT_UNAVAILABLE", self.name)
         target = next((i for i in eligible if i.instance_id == owner), eligible[0])
+        subject = agent_subject(
+            self.module.client.project,
+            target.service_account,
+            target.instance_id,
+            self.name,
+            operation,
+        )
+        transport = self.module.client.transport
+        if operation == "submit":
+            # The delegation for the run's own calls: the token this call
+            # carries to the host when it carries the current call's user
+            # handed over again so the run outlives the call.
+            held = await transport.delegated_token(host=host_recipient(subject))
+            if held:
+                request.delegated_token = held
         try:
-            return await self.module.client.transport.call(
-                agent_subject(
-                    self.module.client.project, target.instance_id, self.name, operation
-                ),
-                request,
-                response_type,
-                instance_id=target.instance_id,
-            )
+            return await transport.call(subject, request, response_type)
         except (NATSError, asyncio.TimeoutError, OSError, RPCError):
             self._instances = (0.0, ())
             raise

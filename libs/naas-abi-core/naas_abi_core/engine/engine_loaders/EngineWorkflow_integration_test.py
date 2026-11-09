@@ -25,7 +25,7 @@ from naas_abi_core.engine.engine_loaders.EngineProcessBridge_test import (
     ReportWorkflow,
     TweetsPipeline,
 )
-from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.module.jobs import JobsMixin
 from naas_abi_core.module.workflows import SyncFlowContext, workflow
 from naas_abi_core.module.workflows_test import Documents
@@ -36,7 +36,6 @@ from naas_abi_sdk.transport import Transport
 from naas_abi_sdk.workflows import WorkflowRun, WorkflowRunFailed
 from pydantic import BaseModel
 
-SECRET = "engine-workflow-integration-secret-32"
 PROJECT = "witest"
 REPORTS, SINK, BRIDGED = "acme.reports", "acme.sink", "acme.bridged"
 pytestmark = pytest.mark.integration
@@ -89,7 +88,6 @@ def _wait(predicate, timeout=15.0):
 def _config(url):
     return NATSConfiguration(
         nats_url=url,
-        jwt_secret=SECRET,
         discovery=DiscoveryConfiguration(project=PROJECT),
         jobs=NATSJobsConfiguration(interrupt_grace_seconds=0.2),
     )
@@ -98,6 +96,7 @@ def _config(url):
 def _loader(url, docs):
     return EngineJobLoader(
         _config(url),
+        credentials=TEST_TOKENS.source("engine"),
         documents_factory=lambda transport, module_id: docs,
         host_options={
             "fetch_timeout_seconds": 0.2,
@@ -179,7 +178,7 @@ def _attach(transport, docs, run_id, module_id, name, **kwargs):
 
 
 async def _record(url, docs, run_id, module_id, name, timeout=30):
-    transport = Transport(url, issue_service_token("caller", SECRET))
+    transport = Transport(url, TEST_TOKENS.token("caller"))
     try:
         run = _attach(transport, docs, run_id, module_id, name, poll_seconds=0.2)
         return await run.wait(timeout=timeout), await run.steps()

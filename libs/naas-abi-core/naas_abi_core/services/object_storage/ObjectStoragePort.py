@@ -15,6 +15,11 @@ class Exceptions:
     class ObjectAlreadyExists(Exception):
         pass
 
+    class InvalidObjectPath(ValueError):
+        """A prefix or key that is not a plain path: it climbs (``..``), is
+        absolute or has an empty segment, so the name IAM checks could differ
+        from the object a backend opens."""
+
 
 class ObjectMetaData(BaseModel):
     file_path: str
@@ -65,6 +70,12 @@ class IObjectStorageAdapter(ABC):
     @abstractmethod
     def list_objects(self, prefix: str, queue: Queue | None = None) -> list[str]:
         pass
+
+    def folders(self, entries: list[str]) -> set[str]:
+        """Which of a ``list_objects`` listing's entries are folders. By
+        default those ending in ``/``, as S3 lists its common prefixes; an
+        adapter whose folders carry no marker overrides it."""
+        return {entry for entry in entries if entry.endswith("/")}
 
     @abstractmethod
     def list_objects_recursive(

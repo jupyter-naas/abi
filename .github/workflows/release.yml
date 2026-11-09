@@ -31,9 +31,11 @@ jobs:
 
     env:
       # Released in dependency order: naas-abi-core's nats/otel extras need
-      # naas-abi-proto and naas-abi-sdk, and naas-abi needs naas-abi-core[nats].
+      # naas-abi-proto and naas-abi-sdk, naas-abi-idp (the built-in identity
+      # provider) needs both, and naas-abi needs naas-abi-core[nats].
       naas_abi_proto_dir: libs/naas-abi-proto
       naas_abi_sdk_dir: libs/naas-abi-sdk
+      naas_abi_idp_dir: libs/naas-abi-idp
       naas_abi_core_dir: libs/naas-abi-core
       naas_abi_marketplace_dir: libs/naas-abi-marketplace
       naas_abi_dir: libs/naas-abi
@@ -82,6 +84,11 @@ jobs:
         working-directory: ${{ env.naas_abi_sdk_dir }}
         run: semantic-release -v version
 
+      - name: Release naas-abi-idp
+        id: release-naas-abi-idp
+        working-directory: ${{ env.naas_abi_idp_dir }}
+        run: semantic-release -v version
+
       - name: Release naas-abi-core
         id: release-naas-abi-core
         working-directory: ${{ env.naas_abi_core_dir }}
@@ -111,6 +118,11 @@ jobs:
         if: steps.release-naas-abi-sdk.outputs.released == 'true'
         working-directory: ${{ env.naas_abi_sdk_dir }}
         run: semantic-release publish --tag "${{ steps.release-naas-abi-sdk.outputs.tag }}"
+
+      - name: Publish | Upload naas-abi-idp to GitHub Release Assets
+        if: steps.release-naas-abi-idp.outputs.released == 'true'
+        working-directory: ${{ env.naas_abi_idp_dir }}
+        run: semantic-release publish --tag "${{ steps.release-naas-abi-idp.outputs.tag }}"
 
       - name: Publish | Upload naas-abi-core to GitHub Release Assets
         if: steps.release-naas-abi-core.outputs.released == 'true'
@@ -152,6 +164,12 @@ jobs:
         with:
           packages-dir: ${{ format('{0}/dist', env.naas_abi_sdk_dir) }}
 
+      - name: Publish | Upload naas-abi-idp to PyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
+        if: steps.release-naas-abi-idp.outputs.released == 'true'
+        with:
+          packages-dir: ${{ format('{0}/dist', env.naas_abi_idp_dir) }}
+
       - name: Publish | Upload naas-abi-core to PyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
         if: steps.release-naas-abi-core.outputs.released == 'true'
@@ -180,7 +198,7 @@ jobs:
   # A release whose upload failed (a missing or wrong trusted publisher) is not
   # released again: its tag exists, so semantic-release has nothing to do. Run this
   # job from main (Actions > Release > Run workflow) with the tag, one package at a
-  # time and in dependency order: naas-abi-proto, naas-abi-sdk, naas-abi-core,
+  # time and in dependency order: naas-abi-proto, naas-abi-sdk, naas-abi-idp, naas-abi-core,
   # naas-abi-marketplace, naas-abi, naas-abi-cli. It runs in this file so that the
   # trusted publishers (workflow release.yml, environment pypi) apply. Versions
   # already on PyPI are skipped.

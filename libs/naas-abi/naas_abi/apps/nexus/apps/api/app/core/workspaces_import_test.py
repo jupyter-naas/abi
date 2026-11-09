@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime
 
 import pytest
@@ -12,14 +11,23 @@ from naas_abi.apps.nexus.apps.api.app.core.workspaces_import import (
 from naas_abi.apps.nexus.apps.api.app.models import (
     OrganizationModel,
     UserModel,
-    WorkspaceMemberModel,
     WorkspaceModel,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 NOW = datetime(2026, 1, 1)
-TABLES = (UserModel, OrganizationModel, WorkspaceModel, WorkspaceMemberModel)
+TABLES = (UserModel, OrganizationModel, WorkspaceModel)
+
+
+@pytest.fixture(autouse=True)
+def iam(nexus_iam):
+    """Roles are IAM's: the organization and the leads it knows."""
+    nexus_iam.org("org-1")
+    nexus_iam.user("lead")
+    return nexus_iam
 
 
 @pytest_asyncio.fixture
@@ -35,7 +43,6 @@ async def db():
                     id=uid,
                     email=f"{uid}@example.com",
                     name=uid,
-                    hashed_password="x",
                     created_at=NOW,
                     updated_at=NOW,
                 )
@@ -116,7 +123,7 @@ async def _ws(db: AsyncSession, slug: str) -> WorkspaceModel | None:
 
 @pytest.mark.asyncio
 async def test_fills_a_slug_named_workspace_with_the_snapshot_values(db) -> None:
-    await import_workspaces(db, ENTRIES)
+    report = await import_workspaces(db, ENTRIES)
 
     axa = await _ws(db, "axa")
     assert (axa.name, axa.workspace_group, axa.logo_url) == (
@@ -124,7 +131,8 @@ async def test_fills_a_slug_named_workspace_with_the_snapshot_values(db) -> None
         "Key Accounts",
         "src/external/axa/assets/public/axa-logo.png",
     )
-    assert json.loads(axa.feature_overrides) == {"graph": True, "maps": False}
+    # Its feature overrides grant and narrow nothing: the import records no set.
+    assert not hasattr(report, "feature_sets")
 
 
 @pytest.mark.asyncio
@@ -133,7 +141,6 @@ async def test_keeps_values_changed_in_the_app(db) -> None:
 
     edf = await _ws(db, "edf")
     assert (edf.name, edf.workspace_group) == ("EDF (renamed)", "Energy")
-    assert json.loads(edf.feature_overrides) == {"maps": True}
 
 
 @pytest.mark.asyncio
@@ -146,22 +153,25 @@ async def test_creates_missing_workspaces_and_reports_unknown_organizations(db) 
         "lead",
         "#3b82f6",
     )
-    owner_rows = (
-        (
-            await db.execute(
-                select(WorkspaceMemberModel.role).where(
-                    WorkspaceMemberModel.workspace_id == created.id
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
-    assert owner_rows == ["owner"]
+    # The owner role is IAM's attachment, at the new workspace's container.
+    assert await MEMBERSHIPS.role_at("lead", workspace_container("org-1", created.id)) == "owner"
     assert await _ws(db, "orphan") is None
     # EDF has nothing empty to fill: only AXA counts as updated.
     assert (report.workspaces_created, report.workspaces_updated) == (1, 1)
     assert "organization nope" in report.missing
+
+
+@pytest.mark.asyncio
+async def test_a_dry_run_leaves_iam_alone(db) -> None:
+    report = await import_workspaces(db, ENTRIES, apply=False)
+    created = (await _ws(db, "new-one")).id
+    await db.rollback()
+
+    assert report.created_ids == [created]
+    assert (
+        await MEMBERSHIPS.role_at("lead", f"abi:nexus:organization/org-1/nexus:workspace/{created}")
+        is None
+    )
 
 
 @pytest.mark.asyncio

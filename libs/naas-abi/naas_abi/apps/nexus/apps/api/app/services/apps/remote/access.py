@@ -1,9 +1,10 @@
 """The workspace a remote app opens in.
 
-Apps are enabled per workspace, as the catalog shows them. A remote app's grant
-names one workspace that the user can open and where the app is enabled, and
-the module gets it with each request (``scope["abi"]["workspace_id"]``), so
-its backend can keep each workspace's data apart.
+A remote app's grant names one workspace where IAM lets the user open the app
+(its module scope, ``module:OpenApp``, ``services/apps/scopes.py``), and the
+module gets it with each request (``scope["abi"]["workspace_id"]``), so its
+backend can keep each workspace's data apart. IAM alone decides: a workspace
+keeps no on/off state of its own for an app.
 """
 
 from __future__ import annotations
@@ -12,47 +13,29 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import HTTPException
-from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
-    resolve_app_enabled,
-    workspace_seed_for_slug,
-)
-from naas_abi.apps.nexus.apps.api.app.services.workspaces import WorkspacePermissionError
-
-
-async def enabled_in(registry: Any, workspace: Any, app_id: str) -> bool:
-    """Whether the workspace enables the app: its stored state, else its seed."""
-    states = await registry.apps.get_enabled_states(workspace.id)
-    seed = workspace_seed_for_slug(getattr(workspace, "slug", None))
-    seed_apps = {
-        str(app).strip() for app in (getattr(seed, "apps", None) or ()) if str(app).strip()
-    }
-    return resolve_app_enabled(app_id, states, seed_apps)
+from naas_abi.apps.nexus.apps.api.app.services.apps.scopes import app_scope
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 
 
 async def choose_workspace(
     registry: Any, user_id: str, app_id: str, workspace_id: str | None
 ) -> str:
-    """``workspace_id`` when the user can open it and it enables the app; with
-    none named (an old link), the first of the user's workspaces that does, by
-    slug (then id), so a link always opens the same one."""
+    """``workspace_id`` when IAM lets the user open the app there; with none named
+    (an old link), the first of the user's workspaces that does, by slug (then
+    id), so a link always opens the same one."""
+    scope = app_scope(app_id)
+    if scope is None:
+        raise HTTPException(status_code=404, detail="Unknown app")
     if workspace_id:
-        try:
-            await registry.workspaces.require_workspace_access(
-                user_id=user_id, workspace_id=workspace_id
-            )
-        except WorkspacePermissionError as exc:
-            raise HTTPException(
-                status_code=403, detail="You do not have access to this workspace"
-            ) from exc
-        workspace = await registry.workspaces.get_workspace(workspace_id)
-        if workspace is not None and await enabled_in(registry, workspace, app_id):
-            return workspace.id
-        raise HTTPException(status_code=403, detail="This app is not enabled in this workspace")
+        await authz.require_scope(scope, user=user_id, workspace=workspace_id)
+        return workspace_id
     workspaces = await registry.workspaces.list_workspaces(user_id)
     for workspace in sorted(workspaces, key=lambda w: (getattr(w, "slug", "") or "", w.id)):
-        if await enabled_in(registry, workspace, app_id):
+        if await authz.allowed_scope(scope, user=user_id, workspace=workspace.id):
             return workspace.id
-    raise HTTPException(status_code=403, detail="This app is not enabled in any of your workspaces")
+    raise HTTPException(
+        status_code=403, detail="You may not open this app in any of your workspaces"
+    )
 
 
 async def remote_app_workspace(user_id: str, app_id: str, workspace_id: str | None) -> str:

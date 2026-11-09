@@ -130,11 +130,7 @@ def search_entities(
         if cls is None:
             continue
         cls_uri = cls.value
-        label = (
-            r["label"].value
-            if r.get("label") and r["label"].value
-            else _fragment(cls_uri)
-        )
+        label = r["label"].value if r.get("label") and r["label"].value else _fragment(cls_uri)
         g = r.get("g")
         class_hits.append(
             SearchHitData(

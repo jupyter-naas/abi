@@ -11,20 +11,85 @@ package. The JetStream adapter stores an opaque protobuf snapshot using CAS.
 
 ## Adapters and factory
 NATS primary authenticates issued service tokens; mutations bind to verified
-caller identity plus a lease token. It accepts a registration only when the
-token's identity is the descriptor's module id (a module registers as itself,
-docs/adr/20261014_module-identities.md); the service's own tests treat the owner
-as an opaque lease holder. An authorize call's caller token must be bound to the
-instance asking (``aud``); its own calls refuse a token with an audience.
+caller identity plus a lease token. Each handler runs under the caller's
+`CallContext` (`engine/nats_identity.py`, `engine/call_context.py`).
 `discovery_factory.py` composes the service. Engine exposure is explicit opt-in;
 replicas use a project queue group and share the same JetStream CAS snapshot. No silent in-memory fallback.
 
+## Authorization (`iam_catalog.py`)
+`start_discovery(..., iam=)` wires IAM (the serving engine passes its own); every
+operation is then checked in the domain service with the `discovery` catalog.
+Without IAM (unit tests of the registry) nothing is authorized. Names are
+platform-level: `module/<project>/<module_id>`, `agent|model|app|job/<project>/<module_id>/<name>`,
+`run/<owner>/<project>/<invocation>`, `job_run/<project>/<module_id>/<job>/<run id>`.
+
+- **Registration**: `Register`, `Renew`, `Unregister` on the module, in the
+  provider's context. A module id is held by one principal at a time: another
+  principal cannot register it while live instances of it exist (so nobody can
+  join a running module and take its requests). A module account
+  (`module/<project>/<module_id>`) registers only its own module.
+- **Listing**: `list_modules` shows the modules the caller may list
+  (`ListModules`); `get_module` needs `GetModule` on the module it names (not
+  found otherwise) and shows its instances, so a module looking itself up (its
+  bootstrap allows `GetModule`, not `ListModules`) sees them. Each instance shows
+  only the agents, apps and jobs the caller may list (`ListAgents`, `ListApps`,
+  `ListJobs`).
+- **Use**: `authorize_agent`, `authorize_model`, `authorize_app` and
+  `authorize_job` are a lease check by the hosting module and the check of its
+  **caller**. The host forwards the token it received (`caller_token`; the
+  `Abi-On-Behalf-Of` header and `caller_on_behalf_of` are gone); `caller.py`
+  verifies it as a kernel endpoint does. It is either a host token
+  (`abi:host:<sa>`, the caller acting alone, addressed to that host) or a
+  **delegation** (`abi:delegated:agent`: `sub` the user, `act` the module acting
+  for them, which is the host itself). Discovery accepts a delegation only from the
+  host whose account it names (`DiscoveryNATS._is_for_host`), so a module that read
+  one from a request replays it nowhere, not even at another host. The caller of
+  the checks below is then the module acting for the user, and both sides must
+  allow (`services/iam/AGENTS.md`, "Evaluation"): the module's own side is `builtin.module_bootstrap`'s
+  `OwnHosted` and `OwnRuns` statements (what it hosts, and the runs of the user it
+  acts for), which open no broker subject. Then: `InvokeAgent` on
+  the agent for a submit, `GetAgentRun` / `CancelAgentRun` on the run for a poll
+  or a cancel (the host names the run and its recorded owner), `ChatModel`,
+  `OpenApp`, `TriggerJob` on the job, `CancelJobRun` on the job run. An invisible
+  target gets its own not-found code (`AGENT_NOT_FOUND`, `INVOCATION_NOT_FOUND`,
+  `MODEL_NOT_FOUND`, `APP_NOT_FOUND`, `JOB_NOT_FOUND`, `RUN_NOT_FOUND`), a visible
+  one `PERMISSION_DENIED`. `caller_identity` is the owner of the runs this caller
+  starts: the user it acts for, else itself. `caller_admin` is always false.
+- **Jobs**: a trigger is a stored message: its token (`JobProxy.trigger` adds the
+  transport's credentials) is checked as of `stored_at`, when JetStream stored
+  it. The SDK job host asks before it runs a manual trigger (refused: the run is
+  recorded FAILED and the message terminated) or honours a cancel. Engine-hosted
+  jobs have no lease: `EngineJobLoader.job_authorizer` runs the same check
+  (`require_job`) in process. Scheduled and event triggers are the host's own and
+  are not asked about: the host drops any trigger the engine did not seal. A
+  workflow is a job (`kind`): starting one is `TriggerJob`, its runs are job runs.
+  Every attempt of a manual trigger is asked about, and a trigger `api` or
+  `engine` stored for a user runs as the module for that user (engine
+  `AGENTS.md`, "Who a run runs as"): `caller_identity` names the user the
+  stored delegation must be for.
+- **Module scopes.** Discovery's grants are the broker-side check of using a
+  module's agent, app or workflow, platform-wide: `builtin.platform.member` holds
+  `InvokeAgent` on `agent/*`, `OpenApp` on `app/*` and `TriggerJob` on
+  `workflow/*`. A job of kind `workflow` has that second name
+  (`workflow/<project>/<module_id>/<name>`, `require_job(workflow=True)`): `TriggerJob`
+  on either name starts it, so a module's manifest naming its jobs still covers its
+  workflows, and no role reaches a plain job. An explicit Deny on either name
+  refuses (`trigger_decision`, one rule for discovery, the engine's job host and the
+  broker control): a Deny written on `job/…` before workflows had a second name
+  holds. The broker control refuses a trigger `api` or `engine` stores for a user
+  who may not start the job (`PERMISSION_DENIED`) rather than storing one that
+  would run as the module alone. Which agent, app, workflow or pipeline a user uses in a
+  workspace is its module scope (`module:<type>/<module>/<name>`, core
+  `services/iam/AGENTS.md`, "Module scopes"), which viewers and members do not
+  hold by default. Nexus checks it first, in the workspace of the request, so no
+  user reaches a module's resource in a workspace without it; discovery does not
+  check it (it has no workspace). A remote module's identifier in a scope is its
+  `module_id`, the same as in these names, without the project.
+
 ## Eviction (platform administration)
-`evict` removes a registration whatever its lease. Only `admin_identities`
-(default `api` and `engine`, the Nexus System app and the engine) may call it;
-any other caller gets PERMISSION_DENIED. Identities are Stage 1 service names,
-so this is hygiene between first-party processes, not a security boundary
-against holders of the shared secret. A live owner's next renewal fails with
+`evict` removes a registration whatever its lease: `discovery:Evict` on its
+module, a policy, not a hard-coded identity. A caller who can see the module
+gets PERMISSION_DENIED, anyone else INSTANCE_NOT_FOUND. A live owner's next renewal fails with
 LEASE_EXPIRED and the SDK session registers again under the same instance id
 with a fresh lease token, so eviction clears crashed or stuck registrations;
 stopping a module means stopping its process. Registering an instance id whose
@@ -52,7 +117,7 @@ last write (stored statuses), even if its rollout became incomplete; else the
 oldest. A completing rollout drains older rollouts of its modules, complete or
 not. The cycle check reads edges per generation (own cohort, then the serving
 or one other live generation for the rest) and refuses only cycles through the
-registering module. See the ADR, "Serving generation and dependency cycles".
+registering module.
 
 ## Agent authorization
 `authorize_agent` with `new_invocation` false (status, event and cancel polls)
@@ -72,7 +137,22 @@ its own copy of the registry, in one compare-and-swap. Run side by side, the
 compare-and-swaps on the one registry document would exhaust their five retries
 (`REGISTRY_BUSY`). Reads do not wait for writes.
 
+## Decisions
+**Authorization lives in the registry's domain service, and a module id is bound to its account.**
+*Decision.* Every operation is checked with the `discovery` catalog (platform-level names only), by the registry for
+registration and listing and by the hosting module for use: the host forwards the caller's token and asks discovery
+(`authorize_*`), which verifies it and checks the caller. A module account (`module/<project>/<module_id>`) registers
+only its own module, and a module id is held by one principal at a time. Hosting subjects carry the account's token, and
+a call to a host carries a host token (`abi:host:<sa>`) that discovery accepts only from that host.
+*Consequences.* No module can join a running module's requests, evict another's registration (`discovery:Evict` is a
+policy, not a hard-coded identity), or replay a delegation at another host. An unapproved module is not listed until its
+manifest is approved (`services/iam/AGENTS.md`, "Service accounts, keys, tokens and manifests"). Callers never build
+hosting subjects: they read them from the discovery record.
+
 ## Tests
 Use `uv run pytest .../services/discovery --import-mode=importlib`. Unit tests inject
-a clock and a fake port; integration tests use native nats-server. Add port
+a clock and a fake port; integration tests use native nats-server.
+`discovery_authorization_test.py` pins the caller checks (no policy, granted,
+denied) for agents, models, apps and jobs, run ownership per user, module-name
+binding and list filtering; `caller_test.py` the forwarded caller. Add port
 implementations by implementing both read and compare-and-swap methods.

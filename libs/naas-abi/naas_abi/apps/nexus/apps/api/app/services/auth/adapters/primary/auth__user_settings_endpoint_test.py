@@ -26,7 +26,6 @@ def _client(storage) -> tuple[TestClient, AsyncMock]:
         id="user-1",
         email="alice@example.com",
         name="Alice",
-        hashed_password="secret-hash",
         created_at=NOW,
         organization="Forvis Mazars",
         job_title="Partner",

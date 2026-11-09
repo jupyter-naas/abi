@@ -25,6 +25,17 @@ ROOT = "naas_abi/my-drive/alice"
 USER_DIR = f"{ROOT}/.settings/user"
 
 
+@pytest.fixture(autouse=True)
+def iam(nexus_iam):
+    """Alice is an admin of ``org-fm`` in IAM, where roles live."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container
+
+    scope = nexus_iam.org("org-fm")
+    nexus_iam.grant("alice", "admin", scope)
+    assert scope == org_container("org-fm")
+    return nexus_iam
+
+
 @pytest_asyncio.fixture
 async def db():
     engine = create_async_engine("sqlite+aiosqlite://")
@@ -37,7 +48,6 @@ async def db():
                 id="alice",
                 email="alice@example.com",
                 name="Alice",
-                hashed_password="secret-hash",
                 bio="Account bio",
                 created_at=NOW,
                 updated_at=NOW,

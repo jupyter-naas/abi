@@ -3,20 +3,17 @@ from types import SimpleNamespace
 
 import pytest
 from naas_abi_core.engine import nats_overflow
-from naas_abi_core.engine.nats_auth import (
-    InvalidServiceTokenError,
-    issue_service_token,
-    verify_service_token,
-)
+from naas_abi_core.engine.nats_auth import InvalidServiceTokenError
 from naas_abi_core.engine.nats_overflow import OverflowHost
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.engine.nats_transfer import OPERATIONS, TransferError
 from naas_abi_proto.transfer.v1 import transfer_pb2 as pb
 
-SECRET = "overflow-test-secret-at-least-32-bytes"
+SECRET = TEST_TOKENS.verifier
 
 
 def headers(identity="caller"):
-    return {"Nats-Auth-Token": issue_service_token(identity, SECRET)}
+    return {"Nats-Auth-Token": TEST_TOKENS.token(identity)}
 
 
 class LoopbackNC:
@@ -34,7 +31,7 @@ class LoopbackNC:
         request = OPERATIONS[operation][0].FromString(payload)
         response = OPERATIONS[operation][1]()
         try:
-            caller = verify_service_token(headers["Nats-Auth-Token"], SECRET)
+            caller = SECRET.verify(headers["Nats-Auth-Token"]).subject
             response = await self.host._execute(operation, request, caller, headers)
         except TransferError as exc:
             response.error.code, response.error.message = exc.code, str(exc)

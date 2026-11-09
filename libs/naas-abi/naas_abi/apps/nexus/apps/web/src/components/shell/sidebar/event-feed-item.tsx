@@ -12,7 +12,7 @@ import {
   formatEventDate,
   summarizeBucket,
   type BfoBucketType,
-} from '@/app/workspace/[workspaceId]/admin/events/bfo-event-projection';
+} from '@/app/settings/system/events/bfo-event-projection';
 import type { EventRow } from '@/stores/events';
 
 /** Buckets carried under the title, in BFO book order after Who/What/When. */

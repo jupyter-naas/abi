@@ -24,7 +24,6 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.scoped_s
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphAccessError,
 )
-from naas_abi.apps.nexus.graph_policy_config import WorkspaceGraphPolicyConfig
 from rdflib import OWL, RDF, BNode, Graph, Literal, URIRef
 from rdflib.compare import isomorphic
 
@@ -69,9 +68,7 @@ class ScopedExportTest(unittest.TestCase):
         self.assertFalse(self.raw.queries)
 
     def test_export_of_a_readable_but_absent_graph_is_empty(self):
-        store = WorkspaceGraphStore(
-            self.raw, scope(WorkspaceGraphPolicyConfig(read=["urn:graph:absent"]))
-        )
+        store = WorkspaceGraphStore(self.raw, scope(readable=("urn:graph:absent",), writable=()))
         with store.export(URIRef("urn:graph:absent")) as triples:
             self.assertEqual(list(triples), [])
         self.assertFalse(self.raw.queries)
@@ -86,7 +83,7 @@ class ScopedExportTest(unittest.TestCase):
                 pass
 
     def test_query_stream_without_readable_graphs_never_queries(self):
-        store = WorkspaceGraphStore(self.raw, scope(WorkspaceGraphPolicyConfig()))
+        store = WorkspaceGraphStore(self.raw, scope(readable=(), writable=()))
         with store.query_stream("SELECT ?s WHERE { ?s ?p ?o }") as result:
             self.assertEqual(list(result.rows), [])
         self.assertFalse(self.raw.queries)
@@ -131,7 +128,7 @@ class ServiceExportTest(unittest.IsolatedAsyncioTestCase):
         cls.service_class = access.ServiceIsolationTest.service_class
 
     def service(self, raw, config=None):
-        return self.service_class(lambda: raw, access_scope=scope(config))
+        return self.service_class(lambda: raw, access_scope=config or scope())
 
     async def collect(self, export) -> bytes:
         return b"".join([chunk async for chunk in export.chunks])
@@ -161,7 +158,7 @@ class ServiceExportTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_triples_are_read_lazily_on_one_thread(self):
         raw = OneThreadStore(triples=50_000)
-        config = WorkspaceGraphPolicyConfig(write=[ALPHA], read=[REF, LARGE])
+        config = scope(readable=(ALPHA, REF, LARGE), writable=(ALPHA,))
         export = await self.service(raw, config).export_graph(
             workspace_id="alpha", graph_uri=LARGE, format="nt"
         )
@@ -207,7 +204,7 @@ class HTTPExportTest(unittest.IsolatedAsyncioTestCase):
         async def bind(service, user, workspace):
             return service.for_scope(scope())
 
-        self.patcher = patch.object(self.api, "workspace_graph_service", bind)
+        self.patcher = patch.object(self.api, "graph_section_service", bind)
         self.patcher.start()
         self.client = httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"

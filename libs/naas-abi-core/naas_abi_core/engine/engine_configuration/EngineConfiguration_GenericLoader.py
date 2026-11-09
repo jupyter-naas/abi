@@ -51,7 +51,7 @@ class GenericLoader(BaseModel):
     custom_config: dict[str, Any] | None = None
     # Custom adapters only: true when the adapter keeps its data in a backend every
     # engine reaches (a database or store server), so deploys may hand over without
-    # downtime (docs/adr/20261006_single-serving-engine.md).
+    # downtime.
     shared_storage: bool = False
 
     def local_storage(self) -> str | None:

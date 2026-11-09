@@ -8,13 +8,16 @@ import math
 import random
 import re
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
 from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 from nats.errors import Error as NATSError
 
+from naas_abi_sdk.listers import declared_listers
 from naas_abi_sdk.transport import RPCError, Transport
 
 # Presentation bounds, the same the engine's discovery enforces: descriptors
@@ -152,6 +155,11 @@ class ModuleInstance:
     dependencies: tuple[tuple[str, int], ...] = ()
     models: tuple[ModelDescriptor, ...] = ()
     apps: tuple[Any, ...] = ()  # naas_abi_sdk.apps.AppDescriptor, without root
+    # The registering service account as one subject token, set by discovery:
+    # every hosting subject of the instance carries it (agent_subject, ...).
+    service_account: str = ""
+    # The types of its catalog it lists (naas_abi_sdk.listers).
+    listers: tuple[str, ...] = ()
 
 
 def _instance(value: pb.Instance) -> ModuleInstance:
@@ -168,6 +176,8 @@ def _instance(value: pb.Instance) -> ModuleInstance:
         tuple((x.module_id, x.contract_major) for x in d.dependencies),
         tuple(ModelDescriptor(m.name, m.description, m.kind) for m in d.models),
         _apps(d),
+        value.service_account,
+        tuple(d.listers),
     )
 
 
@@ -271,7 +281,7 @@ class DiscoveryClient:
         ), result.next_after_instance_id
 
     async def evict(self, instance_id: str) -> ModuleInstance:
-        """Remove a registration now (platform admin identities only).
+        """Remove a registration now (discovery:Evict on its module).
 
         A live instance's next renewal fails with LEASE_EXPIRED and its session
         registers again under the same instance id.
@@ -329,8 +339,12 @@ class ModuleProxy:
             connection=UnaryModelConnection(
                 ModuleModelClient(
                     self.client.transport,
-                    model_subject(self.client.project, target.instance_id, name),
-                    target.instance_id,
+                    model_subject(
+                        self.client.project,
+                        target.service_account,
+                        target.instance_id,
+                        name,
+                    ),
                 )
             ),
             ref=ref,
@@ -452,6 +466,9 @@ class DiscoverySession:
         self.rollout_id = rollout_id
         self.rollout_modules = tuple(rollout_modules)
         self.instance_id, self.lease_token = str(uuid4()), uuid4().hex
+        # Discovery's subject token for this process's service account: its
+        # hosting subjects carry it. Known once registered.
+        self.service_account = ""
         self.initialized, self.draining = False, False
         self.lease_seconds, self.confirmed_until = 20.0, 0.0
         self._lock = asyncio.Lock()
@@ -482,6 +499,7 @@ class DiscoverySession:
         self.lease_seconds = result.lease_seconds
         self.confirmed_until = started + result.lease_seconds
         self.status = result.instance.status
+        self.service_account = result.instance.service_account
         self._bound = self.on_registered is None
         if self.on_registered is not None:
             await self.on_registered()
@@ -615,4 +633,47 @@ def module_descriptor(
                 module_type.get_apps() if hasattr(module_type, "get_apps") else ()
             )
         ],
+        listers=sorted(declared_listers(module_type)),
     )
+
+
+def discovery_job_authorizer(session: DiscoverySession):
+    """A job host's authorizer through discovery (``authorize_job``): the host's
+    lease, then the caller's policy, its token checked as of ``stored_at``.
+
+    For an allowed trigger it returns the context the run executes in: the
+    delegation the engine stored with it (``DELEGATION_HEADER``) when it is for
+    the user discovery names and for this module, else None (as itself)."""
+
+    async def authorize(
+        operation: str,
+        job: str,
+        run_id: str,
+        headers: Mapping[str, str],
+        stored_at: datetime | None,
+    ) -> Any:
+        from naas_abi_sdk.call_context import delegation_context
+        from naas_abi_sdk.jobs import DELEGATION_HEADER
+
+        answer = await session.client._call(
+            "authorize_job",
+            pb.AuthorizeJobRequest(
+                instance_id=session.instance_id,
+                lease_token=session.lease_token,
+                job_name=job,
+                operation=operation,
+                run_id=run_id if operation == "cancel" else "",
+                caller_token=headers.get("Nats-Auth-Token", ""),
+                stored_at=stored_at.timestamp() if stored_at is not None else 0.0,
+            ),
+            pb.AuthorizeJobResponse,
+        )
+        if operation != "trigger":
+            return None
+        return delegation_context(
+            headers.get(DELEGATION_HEADER, ""),
+            getattr(answer, "caller_identity", ""),
+            session.service_account,
+        )
+
+    return authorize

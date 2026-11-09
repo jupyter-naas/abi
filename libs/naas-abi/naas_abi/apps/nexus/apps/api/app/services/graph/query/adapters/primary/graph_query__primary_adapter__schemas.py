@@ -14,10 +14,24 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.query import query__schema 
 from pydantic import BaseModel, Field
 
 _Operator = Literal[
-    "eq", "neq", "contains", "notContains", "startsWith", "endsWith",
-    "lt", "lte", "gt", "gte", "between",
-    "in", "notIn", "isEmpty", "isNotEmpty",
-    "is", "isNot", "hasRelation",
+    "eq",
+    "neq",
+    "contains",
+    "notContains",
+    "startsWith",
+    "endsWith",
+    "lt",
+    "lte",
+    "gt",
+    "gte",
+    "between",
+    "in",
+    "notIn",
+    "isEmpty",
+    "isNotEmpty",
+    "is",
+    "isNot",
+    "hasRelation",
 ]
 _Datatype = Literal["string", "number", "date", "boolean", "iri"]
 _Collapse = Literal["first", "concat", "count", "min", "max"]
@@ -198,7 +212,9 @@ class DimensionModel(BaseModel):
     label: str = ""
 
     def to_domain(self) -> d.Dimension:
-        return d.Dimension(self.id, self.show_kind, _path(self.path), self.show_predicate, self.label)
+        return d.Dimension(
+            self.id, self.show_kind, _path(self.path), self.show_predicate, self.label
+        )
 
 
 class MeasureModel(BaseModel):
@@ -210,7 +226,9 @@ class MeasureModel(BaseModel):
     label: str = ""
 
     def to_domain(self) -> d.Measure:
-        return d.Measure(self.id, self.fn, _path(self.path), self.of_kind, self.of_predicate, self.label)
+        return d.Measure(
+            self.id, self.fn, _path(self.path), self.of_kind, self.of_predicate, self.label
+        )
 
 
 class AggregateSpecModel(BaseModel):
@@ -291,15 +309,25 @@ class GraphQueryResponse(BaseModel):
     def from_result(cls, r: d.QueryResultData) -> GraphQueryResponse:
         return cls(
             mode=r.mode,
-            columns=[ColumnMetaModel(id=c.id, label=c.label, datatype=c.datatype, role=c.role) for c in r.columns],
-            rows=[{cid: CellModel(value=cell.value, uri=cell.uri) for cid, cell in row.items()} for row in r.rows],
+            columns=[
+                ColumnMetaModel(id=c.id, label=c.label, datatype=c.datatype, role=c.role)
+                for c in r.columns
+            ],
+            rows=[
+                {cid: CellModel(value=cell.value, uri=cell.uri) for cid, cell in row.items()}
+                for row in r.rows
+            ],
             page=PageInfoModel(
-                limit=r.page.limit, has_more=r.page.has_more,
-                next_cursor=r.page.next_cursor, offset_fallback=r.page.offset_fallback,
+                limit=r.page.limit,
+                has_more=r.page.has_more,
+                next_cursor=r.page.next_cursor,
+                offset_fallback=r.page.offset_fallback,
             ),
             count=CountInfoModel(
-                total=r.count.total, computed_at=r.count.computed_at,
-                status=r.count.status, cache_key=r.count.cache_key,
+                total=r.count.total,
+                computed_at=r.count.computed_at,
+                status=r.count.status,
+                cache_key=r.count.cache_key,
             ),
             resolved_sparql=r.resolved_sparql,
             row_uris=list(r.row_uris),
@@ -333,9 +361,12 @@ class GraphFacetsResponse(BaseModel):
     @classmethod
     def from_domain(cls, r: d.FacetResultData) -> GraphFacetsResponse:
         return cls(
-            column_id=r.column_id, faceted=r.faceted,
+            column_id=r.column_id,
+            faceted=r.faceted,
             buckets=[FacetBucketModel(value=b.value, count=b.count) for b in r.buckets],
-            distinct_count=r.distinct_count, truncated=r.truncated, reason=r.reason,
+            distinct_count=r.distinct_count,
+            truncated=r.truncated,
+            reason=r.reason,
         )
 
 
@@ -374,12 +405,21 @@ class GraphColumnsResponse(BaseModel):
             class_uris=class_uris,
             columns=[
                 DiscoveredColumnModel(
-                    id=c.id, predicate_uri=c.predicate_uri, label=c.label, kind=c.kind,
-                    direction=c.direction, datatype=c.datatype, datatype_source=c.datatype_source,
-                    source=c.source, instance_count=c.instance_count, is_functional=c.is_functional,
+                    id=c.id,
+                    predicate_uri=c.predicate_uri,
+                    label=c.label,
+                    kind=c.kind,
+                    direction=c.direction,
+                    datatype=c.datatype,
+                    datatype_source=c.datatype_source,
+                    source=c.source,
+                    instance_count=c.instance_count,
+                    is_functional=c.is_functional,
                     facetable=c.facetable,
                     target_classes=[
-                        TargetClassModel(uri=t.uri, label=t.label, instance_count=t.instance_count, graph=t.graph)
+                        TargetClassModel(
+                            uri=t.uri, label=t.label, instance_count=t.instance_count, graph=t.graph
+                        )
                         for t in c.target_classes
                     ],
                 )
@@ -411,8 +451,13 @@ class GraphSearchResponse(BaseModel):
             query=query,
             results=[
                 SearchHitModel(
-                    uri=h.uri, label=h.label, kind=h.kind, class_uri=h.class_uri,
-                    class_label=h.class_label, graph_uri=h.graph_uri, instance_count=h.instance_count,
+                    uri=h.uri,
+                    label=h.label,
+                    kind=h.kind,
+                    class_uri=h.class_uri,
+                    class_label=h.class_label,
+                    graph_uri=h.graph_uri,
+                    instance_count=h.instance_count,
                 )
                 for h in hits
             ],

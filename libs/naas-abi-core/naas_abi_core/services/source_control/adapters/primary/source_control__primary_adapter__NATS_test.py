@@ -10,7 +10,7 @@ import asyncio
 from collections.abc import Sequence
 
 from google.protobuf.message import Message
-from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_test_tokens import OTHER_TOKENS, TEST_TOKENS
 from naas_abi_core.proto.source_control.v1 import source_control_pb2
 from naas_abi_core.services.source_control.adapters.primary.source_control__primary_adapter__NATS import (
     AUTH_HEADER,
@@ -39,13 +39,14 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     Proposal,
     ProposalNotFoundError,
     Repo,
+    RepoExistsError,
     RepoNotFoundError,
     Review,
     ValidationError,
     WorkflowRun,
 )
 
-SECRET = "test-shared-secret"
+SECRET = TEST_TOKENS.verifier
 
 
 class _FakeRequest:
@@ -129,8 +130,27 @@ class _StubAdapter(ISourceControlAdapter):
             html_url=f"https://forge.test/pr/{record['number']}",
         )
 
-    def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
+    def ensure_user(
+        self,
+        *,
+        external_id: str,
+        email: str,
+        username: str,
+        vouched_email: bool = False,
+    ) -> str:
         return self._next("user")
+
+    def find_user(self, *, external_id: str) -> str | None:
+        return None
+
+    def create_repo(
+        self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
+    ) -> Repo:
+        if any(r.lower() == f"{owner}/{name}".lower() for r in self.repos):
+            raise RepoExistsError(f"{owner}/{name} exists")
+        return self.ensure_repo(
+            owner=owner, name=name, private=private, auto_init=auto_init
+        )
 
     def ensure_repo(
         self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
@@ -189,7 +209,12 @@ class _StubAdapter(ISourceControlAdapter):
         content = files[path]
         if isinstance(content, bytes):
             return FileContent(
-                path=path, name=path, size=len(content), text=None, is_binary=True, data=content
+                path=path,
+                name=path,
+                size=len(content),
+                text=None,
+                is_binary=True,
+                data=content,
             )
         return FileContent(path=path, name=path, size=len(content), text=content)
 
@@ -256,7 +281,9 @@ class _StubAdapter(ISourceControlAdapter):
 
     def get_diff(self, *, repo_id: str, base: str, head: str) -> Diff:
         self._repo(repo_id)
-        return Diff(files=(DiffFile(path="a.py", status="modified", additions=1, deletions=1),))
+        return Diff(
+            files=(DiffFile(path="a.py", status="modified", additions=1, deletions=1),)
+        )
 
     def create_proposal(
         self,
@@ -299,7 +326,9 @@ class _StubAdapter(ISourceControlAdapter):
 
     def get_proposal_diff(self, *, repo_id: str, number: int) -> Diff:
         self._proposal(repo_id, number)
-        return Diff(files=(DiffFile(path="a.py", status="modified", additions=2, deletions=0),))
+        return Diff(
+            files=(DiffFile(path="a.py", status="modified", additions=2, deletions=0),)
+        )
 
     def list_proposal_commits(self, *, repo_id: str, number: int) -> list[Commit]:
         self._proposal(repo_id, number)
@@ -321,7 +350,9 @@ class _StubAdapter(ISourceControlAdapter):
         line: int | None = None,
     ) -> Comment:
         record = self._proposal(repo_id, number)
-        comment = Comment(id=self._next("comment"), path=path, line=line, body=body, author="stub")
+        comment = Comment(
+            id=self._next("comment"), path=path, line=line, body=body, author="stub"
+        )
         record["comments"].append(comment)
         return comment
 
@@ -383,12 +414,12 @@ class _StubAdapter(ISourceControlAdapter):
             )
         ][:limit]
 
-    def mint_git_token(self, *, user_id: str) -> str:
+    def mint_git_token(self, *, user_id: str, external_id: str | None = None) -> str:
         return self._next("git-token")
 
 
 def _valid_token() -> str:
-    return issue_service_token("api", SECRET)
+    return TEST_TOKENS.token("api")
 
 
 class _UseValidToken:
@@ -436,7 +467,9 @@ def test_missing_token_returns_unauthenticated():
     response = _call(
         adapter,
         "ensure_user",
-        source_control_pb2.EnsureUserRequest(external_id="x", email="a@b.c", username="alice"),
+        source_control_pb2.EnsureUserRequest(
+            external_id="x", email="a@b.c", username="alice"
+        ),
         source_control_pb2.EnsureUserResponse,
         token=None,
     )
@@ -450,7 +483,9 @@ def test_empty_token_header_returns_unauthenticated():
     response = _call(
         adapter,
         "ensure_user",
-        source_control_pb2.EnsureUserRequest(external_id="x", email="a@b.c", username="alice"),
+        source_control_pb2.EnsureUserRequest(
+            external_id="x", email="a@b.c", username="alice"
+        ),
         source_control_pb2.EnsureUserResponse,
         token="",
     )
@@ -462,7 +497,9 @@ def test_malformed_token_returns_unauthenticated():
     response = _call(
         adapter,
         "ensure_user",
-        source_control_pb2.EnsureUserRequest(external_id="x", email="a@b.c", username="alice"),
+        source_control_pb2.EnsureUserRequest(
+            external_id="x", email="a@b.c", username="alice"
+        ),
         source_control_pb2.EnsureUserResponse,
         token="not-a-jwt",
     )
@@ -471,11 +508,13 @@ def test_malformed_token_returns_unauthenticated():
 
 def test_token_signed_with_wrong_secret_returns_unauthenticated():
     adapter = SourceControlPrimaryAdapterNATS(_StubAdapter(), SECRET)
-    wrong_secret_token = issue_service_token("api", "a-different-secret")
+    wrong_secret_token = OTHER_TOKENS.token("api")
     response = _call(
         adapter,
         "ensure_user",
-        source_control_pb2.EnsureUserRequest(external_id="x", email="a@b.c", username="alice"),
+        source_control_pb2.EnsureUserRequest(
+            external_id="x", email="a@b.c", username="alice"
+        ),
         source_control_pb2.EnsureUserResponse,
         token=wrong_secret_token,
     )
@@ -492,7 +531,9 @@ def test_ensure_user_returns_user_id():
     response = _call(
         adapter,
         "ensure_user",
-        source_control_pb2.EnsureUserRequest(external_id="x", email="a@b.c", username="alice"),
+        source_control_pb2.EnsureUserRequest(
+            external_id="x", email="a@b.c", username="alice"
+        ),
         source_control_pb2.EnsureUserResponse,
     )
     assert not response.HasField("error")
@@ -520,7 +561,10 @@ def test_list_repos_returns_created_repos():
     stub.ensure_repo(owner="alice", name="proj")
     adapter = SourceControlPrimaryAdapterNATS(stub, SECRET)
     response = _call(
-        adapter, "list_repos", source_control_pb2.ListReposRequest(), source_control_pb2.ListReposResponse
+        adapter,
+        "list_repos",
+        source_control_pb2.ListReposRequest(),
+        source_control_pb2.ListReposResponse,
     )
     assert not response.HasField("error")
     assert len(response.repos.repos) == 1
@@ -657,7 +701,9 @@ def test_branch_lifecycle_round_trip():
     create_response = _call(
         adapter,
         "create_branch",
-        source_control_pb2.CreateBranchRequest(repo_id="alice/proj", name="feature", from_ref="main"),
+        source_control_pb2.CreateBranchRequest(
+            repo_id="alice/proj", name="feature", from_ref="main"
+        ),
         source_control_pb2.CreateBranchResponse,
     )
     assert not create_response.HasField("error")
@@ -687,7 +733,9 @@ def test_get_diff_returns_files():
     response = _call(
         adapter,
         "get_diff",
-        source_control_pb2.GetDiffRequest(repo_id="alice/proj", base="main", head="feature"),
+        source_control_pb2.GetDiffRequest(
+            repo_id="alice/proj", base="main", head="feature"
+        ),
         source_control_pb2.GetDiffResponse,
     )
     assert not response.HasField("error")
@@ -811,7 +859,10 @@ def test_set_branch_protection_succeeds():
         adapter,
         "set_branch_protection",
         source_control_pb2.SetBranchProtectionRequest(
-            repo_id="alice/proj", branch="main", required_approvals=1, required_checks=["ci"]
+            repo_id="alice/proj",
+            branch="main",
+            required_approvals=1,
+            required_checks=["ci"],
         ),
         source_control_pb2.SetBranchProtectionResponse,
     )
@@ -913,7 +964,9 @@ def test_branch_name_conflict_maps_to_call_error_with_status():
     response = _call(
         adapter,
         "create_branch",
-        source_control_pb2.CreateBranchRequest(repo_id="alice/proj", name="main", from_ref="main"),
+        source_control_pb2.CreateBranchRequest(
+            repo_id="alice/proj", name="main", from_ref="main"
+        ),
         source_control_pb2.CreateBranchResponse,
     )
     assert response.error.code == "BRANCH_NAME_CONFLICT"
@@ -923,7 +976,9 @@ def test_branch_name_conflict_maps_to_call_error_with_status():
 
 def test_merge_conflict_maps_to_call_error_with_status():
     class _Adapter(_StubAdapter):
-        def merge(self, *, repo_id: str, number: int, method: str = "merge") -> MergeResult:
+        def merge(
+            self, *, repo_id: str, number: int, method: str = "merge"
+        ) -> MergeResult:
             raise MergeConflictError("conflicting changes", status=409)
 
     adapter = SourceControlPrimaryAdapterNATS(_Adapter(), SECRET)
@@ -940,7 +995,9 @@ def test_merge_conflict_maps_to_call_error_with_status():
 
 def test_merge_blocked_maps_to_call_error_with_status():
     class _Adapter(_StubAdapter):
-        def merge(self, *, repo_id: str, number: int, method: str = "merge") -> MergeResult:
+        def merge(
+            self, *, repo_id: str, number: int, method: str = "merge"
+        ) -> MergeResult:
             raise MergeBlockedError("not enough approvals", status=423)
 
     adapter = SourceControlPrimaryAdapterNATS(_Adapter(), SECRET)
@@ -957,7 +1014,9 @@ def test_merge_blocked_maps_to_call_error_with_status():
 
 def test_access_denied_maps_to_call_error_with_status():
     class _Adapter(_StubAdapter):
-        def mint_git_token(self, *, user_id: str) -> str:
+        def mint_git_token(
+            self, *, user_id: str, external_id: str | None = None
+        ) -> str:
             raise AccessDeniedError("forbidden", status=403)
 
     adapter = SourceControlPrimaryAdapterNATS(_Adapter(), SECRET)
@@ -1047,16 +1106,43 @@ def test_not_implemented_maps_to_unimplemented_not_retryable():
     assert response.error.retryable is False
 
 
+def test_create_repo_maps_repo_exists_both_ways():
+    adapter = SourceControlPrimaryAdapterNATS(_StubAdapter(), SECRET)
+    first = _call(
+        adapter,
+        "create_repo",
+        source_control_pb2.CreateRepoRequest(owner="alice", name="Proj"),
+        source_control_pb2.CreateRepoResponse,
+    )
+    assert first.repo.name == "Proj"
+    again = _call(
+        adapter,
+        "create_repo",
+        source_control_pb2.CreateRepoRequest(owner="alice", name="proj"),
+        source_control_pb2.CreateRepoResponse,
+    )
+    assert again.error.code == "REPO_EXISTS"
+
+
 def test_unexpected_exception_maps_to_internal_and_does_not_leak_message():
     class _BoomAdapter(_StubAdapter):
-        def ensure_user(self, *, external_id: str, email: str, username: str) -> str:
+        def ensure_user(
+        self,
+        *,
+        external_id: str,
+        email: str,
+        username: str,
+        vouched_email: bool = False,
+    ) -> str:
             raise RuntimeError("some sensitive internal detail")
 
     adapter = SourceControlPrimaryAdapterNATS(_BoomAdapter(), SECRET)
     response = _call(
         adapter,
         "ensure_user",
-        source_control_pb2.EnsureUserRequest(external_id="x", email="a@b.c", username="alice"),
+        source_control_pb2.EnsureUserRequest(
+            external_id="x", email="a@b.c", username="alice"
+        ),
         source_control_pb2.EnsureUserResponse,
     )
     assert response.error.code == "INTERNAL"

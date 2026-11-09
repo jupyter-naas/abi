@@ -19,7 +19,6 @@ import mimetypes
 import re
 import secrets
 import time
-from datetime import timedelta
 from importlib import resources
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
@@ -34,7 +33,6 @@ from fastapi.responses import Response
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
-    require_workspace_access,
 )
 from naas_abi.apps.nexus.apps.api.app.core.config import (
     ABI_SLIDES_TEMPLATE_NAMESPACE,
@@ -42,7 +40,16 @@ from naas_abi.apps.nexus.apps.api.app.core.config import (
 )
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.models import CodingEnvironmentModel
-from naas_abi.apps.nexus.apps.api.app.services.auth.service import create_access_token
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment import agent_credentials
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment.repo_access import (
+    ensure_shared_repo,
+)
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares
+from naas_abi.apps.nexus.apps.api.app.services.iam.office_guards import (
+    project_guard,
+    readable_projects,
+)
 from naas_abi_core.services.coding_environment.adapters.secondary.CoderAdapter import (
     _sanitize_coder_username,
 )
@@ -79,6 +86,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
+
+# The kind of project this router serves: the feature and the id prefix IAM decides on.
+_KIND = "slides"
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 # A template id is ``<namespace>/<stem>``, or a bare stem from before the
@@ -256,7 +266,7 @@ def _ensure_coding_repo(sc: SourceControlService) -> str:
     if not sep or not owner or not name or "/" in name:
         raise HTTPException(status_code=503, detail=_FORGEJO_NOT_CONFIGURED)
     try:
-        sc.ensure_repo(owner=owner, name=name)
+        ensure_shared_repo(sc, owner=owner, name=name)
     except SourceControlError as exc:
         raise _source_control_http_error(exc) from exc
     except (OSError, TimeoutError) as exc:
@@ -271,9 +281,7 @@ def _slides_sc(request: Request) -> tuple[SourceControlService, str]:
 
 def _forge_username(name: str, email: str) -> str:
     def slug(raw: str) -> str:
-        return re.sub(r"[^a-z0-9._-]+", "-", raw.strip().lower()).strip("-._")[:39].strip(
-            "-._"
-        )
+        return re.sub(r"[^a-z0-9._-]+", "-", raw.strip().lower()).strip("-._")[:39].strip("-._")
 
     return slug(name) or slug(email.split("@", 1)[0]) or "abi-user"
 
@@ -388,14 +396,14 @@ def _resolve_project_paths(
     branch_names: set[str] | None = None,
 ) -> dict[str, str] | None:
     """Namespaced or legacy paths when the deck belongs to workspace_id."""
-    names = branch_names if branch_names is not None else {
-        b.name for b in sc.list_branches(repo_id=repo_id)
-    }
+    names = (
+        branch_names
+        if branch_names is not None
+        else {b.name for b in sc.list_branches(repo_id=repo_id)}
+    )
     ns = _paths_for(workspace_id, slug, legacy=False)
     if ns["branch"] in names:
-        meta = _load_project_meta(
-            sc, repo_id=repo_id, path=ns["project_path"], ref=ns["branch"]
-        )
+        meta = _load_project_meta(sc, repo_id=repo_id, path=ns["project_path"], ref=ns["branch"])
         if meta is None:
             return None
         owner = _meta_workspace_id(meta)
@@ -428,9 +436,7 @@ def _claim_workspace_in_meta(
     author_email: str,
 ) -> None:
     """Persist workspace_id on legacy/unscoped project.json when missing."""
-    meta = _load_project_meta(
-        sc, repo_id=repo_id, path=paths["project_path"], ref=paths["branch"]
-    )
+    meta = _load_project_meta(sc, repo_id=repo_id, path=paths["project_path"], ref=paths["branch"])
     if meta is None or _meta_workspace_id(meta) is not None:
         return
     meta = {
@@ -528,9 +534,7 @@ def _seed_file_writes(
     else:
         writes.append(FileWrite(path=paths["assets_gitkeep"], content=""))
     if include_readme:
-        writes.append(
-            FileWrite(path=paths["assets_readme"], content=_ASSETS_README)
-        )
+        writes.append(FileWrite(path=paths["assets_readme"], content=_ASSETS_README))
     return writes
 
 
@@ -707,9 +711,7 @@ def _template_sources() -> list[_TemplateSource]:
                 directory,
             )
             continue
-        sources.append(
-            _TemplateSource(entry.namespace, str(directory), (directory,))
-        )
+        sources.append(_TemplateSource(entry.namespace, str(directory), (directory,)))
     return sources
 
 
@@ -866,12 +868,8 @@ def _list_seed_template_records() -> list[dict]:
         except HTTPException:
             seed = ""
         meta["slides"] = _parse_slide_outline(seed) if seed else []
-        file_assets = [
-            {"name": name, "kind": "file"} for name in _list_seed_asset_names(tid)
-        ]
-        meta["assets"] = file_assets or (
-            _parse_template_assets(seed) if seed else []
-        )
+        file_assets = [{"name": name, "kind": "file"} for name in _list_seed_asset_names(tid)]
+        meta["assets"] = file_assets or (_parse_template_assets(seed) if seed else [])
         rows.append(meta)
     return rows
 
@@ -925,11 +923,7 @@ def _iter_seed_asset_entries(template_id: str):
             yielded = False
             for entry in entries:
                 name = getattr(entry, "name", "") or ""
-                if (
-                    not name
-                    or name in _SKIP_ASSET_NAMES
-                    or not _ASSET_FILENAME_RE.match(name)
-                ):
+                if not name or name in _SKIP_ASSET_NAMES or not _ASSET_FILENAME_RE.match(name):
                     continue
                 try:
                     if hasattr(entry, "is_file") and not entry.is_file():
@@ -1191,15 +1185,11 @@ def _sidecar_tool_call(
         return {"error": f"sidecar {tool_name} failed: {exc}"}
 
 
-def _read_deck_via_sidecar(
-    base: str | None, secret: str | None, *, deck_path: str
-) -> str | None:
+def _read_deck_via_sidecar(base: str | None, secret: str | None, *, deck_path: str) -> str | None:
     """Return deck HTML from the Coder sidecar, or None when unavailable."""
     if not _probe_sidecar(base, secret):
         return None
-    result = _sidecar_tool_call(
-        base, secret, "read_file", {"path": deck_path}, timeout_s=10.0
-    )
+    result = _sidecar_tool_call(base, secret, "read_file", {"path": deck_path}, timeout_s=10.0)
     if result.get("error") or result.get("binary"):
         return None
     content = result.get("content")
@@ -1249,11 +1239,7 @@ def _friendly_git_detail(exc: BaseException) -> str:
         isinstance(exc, RepoNotFoundError) and _is_repo_id_message(repo_hint)
     ):
         return _repo_missing_detail(repo_hint or _repo_id())
-    if (
-        len(text) > 180
-        or text.startswith("{")
-        or "forgejo api request failed" in text.lower()
-    ):
+    if len(text) > 180 or text.startswith("{") or "forgejo api request failed" in text.lower():
         return "Git setup temporarily unavailable"
     return text or "Git setup temporarily unavailable"
 
@@ -1277,9 +1263,7 @@ def _friendly_coding_detail(exc: BaseException) -> str:
     return text or "Coder runtime temporarily unavailable"
 
 
-def _git_clone_url(
-    sc: SourceControlService, repo_id: str, *, username: str, token: str
-) -> str:
+def _git_clone_url(sc: SourceControlService, repo_id: str, *, username: str, token: str) -> str:
     """Clone URL the slides sidecar should use for this repo.
 
     The default targets Forgejo over HTTP, which does not exist in the
@@ -1289,7 +1273,7 @@ def _git_clone_url(
     """
     owner, _, name = repo_id.partition("/")
     try:
-        repo = sc.ensure_repo(owner=owner, name=name)
+        repo = ensure_shared_repo(sc, owner=owner, name=name)
         clone_url = str(getattr(repo, "clone_url", "") or "").strip()
     except Exception:
         clone_url = ""
@@ -1358,13 +1342,16 @@ def _project_from_meta(
     )
 
 
-@router.get("/projects", response_model=list[ProjectResponse])
+@router.get(
+    "/projects",
+    response_model=list[ProjectResponse],
+    dependencies=[project_guard("ListProjects", _KIND, id=(), literal="-")],
+)
 async def list_projects(
     workspace_id: str,
     request: Request,
     current_user: User = Depends(get_current_user_required),
 ) -> list[ProjectResponse]:
-    await require_workspace_access(current_user.id, workspace_id)
     sc, repo_id = _slides_sc(request)
     ws_seg = _workspace_segment(workspace_id)
     ns_prefix = f"{_BRANCH_PREFIX}{ws_seg}/"
@@ -1415,19 +1402,32 @@ async def list_projects(
         return out
 
     try:
-        return await run_in_threadpool(_list)
+        projects = await run_in_threadpool(_list)
     except SourceControlError as exc:
         raise _source_control_http_error(exc) from exc
+    return await readable_projects(
+        projects, kind=_KIND, workspace_id=workspace_id, user=current_user
+    )
 
 
-@router.post("/projects", response_model=ProjectResponse)
+@router.post(
+    "/projects",
+    response_model=ProjectResponse,
+    dependencies=[declares("CreateProject")],
+)
 async def create_project(
     body: ProjectCreateRequest,
     request: Request,
     current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
 ) -> ProjectResponse:
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require(
+        "CreateProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, "-"),
+        feature=_KIND,
+    )
     slug = body.slug or _slugify(body.title)
     if not _SLUG_RE.match(slug):
         raise HTTPException(
@@ -1490,21 +1490,15 @@ async def create_project(
             "updated_at": None,
             "embedded_images": embedded,
             "extracted_images": len(catalog_assets),
-            "assets_note": _assets_note(
-                copied=len(catalog_assets), embedded=embedded
-            ),
+            "assets_note": _assets_note(copied=len(catalog_assets), embedded=embedded),
         }
         # Concurrent/prior create already finished: keep 409. If seed is
         # incomplete (branch exists, deck.html missing), finish seeding.
         if adopted_branch:
             try:
-                existing_deck = sc.get_file(
-                    repo_id=repo_id, path=paths["deck_path"], ref=branch
-                )
+                existing_deck = sc.get_file(repo_id=repo_id, path=paths["deck_path"], ref=branch)
                 if existing_deck.text:
-                    raise BranchNameConflictError(
-                        f"Slides project '{slug}' already exists"
-                    )
+                    raise BranchNameConflictError(f"Slides project '{slug}' already exists")
             except RepoNotFoundError:
                 pass
         commit = sc.upsert_files(
@@ -1544,31 +1538,29 @@ async def create_project(
             db=db,
         )
         if not runtime.ensured:
-            logger.warning(
-                "slides runtime not ensured for %s: %s", slug, runtime.detail
-            )
+            logger.warning("slides runtime not ensured for %s: %s", slug, runtime.detail)
     except Exception:
         logger.exception("slides runtime ensure failed for %s", slug)
 
     return project
 
 
-@router.get("/projects/{slug}", response_model=ProjectResponse)
+@router.get(
+    "/projects/{slug}",
+    response_model=ProjectResponse,
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def get_project(
     slug: str,
     workspace_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user_required),
 ) -> ProjectResponse:
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _slides_sc(request)
 
     def _get() -> ProjectResponse:
-        paths = _resolve_project_paths(
-            sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug
-        )
+        paths = _resolve_project_paths(sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug)
         if paths is None:
             raise RepoNotFoundError(f"slides project {slug}")
         branches = {b.name: b for b in sc.list_branches(repo_id=repo_id)}
@@ -1596,7 +1588,11 @@ async def get_project(
         raise _source_control_http_error(exc) from exc
 
 
-@router.patch("/projects/{slug}", response_model=ProjectResponse)
+@router.patch(
+    "/projects/{slug}",
+    response_model=ProjectResponse,
+    dependencies=[declares("UpdateProject")],
+)
 async def update_project(
     slug: str,
     body: ProjectUpdateRequest,
@@ -1604,7 +1600,13 @@ async def update_project(
     current_user: User = Depends(get_current_user_required),
 ) -> ProjectResponse:
     """Rename (title) and/or archive a deck. Slug and git folder stay put."""
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require(
+        "UpdateProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     if body.title is None and body.archived is None:
@@ -1668,7 +1670,11 @@ async def update_project(
         raise _source_control_http_error(exc) from exc
 
 
-@router.get("/projects/{slug}/deck", response_model=DeckResponse)
+@router.get(
+    "/projects/{slug}/deck",
+    response_model=DeckResponse,
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def get_deck(
     slug: str,
     workspace_id: str,
@@ -1681,15 +1687,12 @@ async def get_deck(
     Prefer the Coder sidecar (live editing SoT) when the slides runtime is
     bound and healthy. Fall back to Forgejo (version snapshot) otherwise.
     """
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _slides_sc(request)
 
     def _resolve() -> dict[str, str]:
-        paths = _resolve_project_paths(
-            sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug
-        )
+        paths = _resolve_project_paths(sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug)
         if paths is None:
             raise RepoNotFoundError(f"slides project {slug}")
         # Do not claim here: get_project already claims on open, and parallel
@@ -1711,9 +1714,7 @@ async def get_deck(
     )
 
     def _get_sidecar() -> str | None:
-        return _read_deck_via_sidecar(
-            sidecar_base, sidecar_secret, deck_path=paths["deck_path"]
-        )
+        return _read_deck_via_sidecar(sidecar_base, sidecar_secret, deck_path=paths["deck_path"])
 
     try:
         sidecar_html = await run_in_threadpool(_get_sidecar)
@@ -1727,9 +1728,7 @@ async def get_deck(
             )
 
         def _get_forgejo() -> DeckResponse:
-            file = sc.get_file(
-                repo_id=repo_id, path=paths["deck_path"], ref=paths["branch"]
-            )
+            file = sc.get_file(repo_id=repo_id, path=paths["deck_path"], ref=paths["branch"])
             if file.is_binary or file.text is None:
                 raise ValidationError("Deck is not UTF-8 text")
             return DeckResponse(
@@ -1749,16 +1748,17 @@ async def get_deck(
         raise _source_control_http_error(exc) from exc
 
 
-@router.get("/projects/{slug}/assets/{filename}")
+@router.get(
+    "/projects/{slug}/assets/{filename}",
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def get_project_asset(
     slug: str,
     filename: str,
     workspace_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user_required),
 ) -> Response:
     """Serve a file from the deck ``assets/`` folder (preview / export)."""
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     if not _ASSET_FILENAME_RE.match(filename) or ".." in filename:
@@ -1766,9 +1766,7 @@ async def get_project_asset(
     sc, repo_id = _slides_sc(request)
 
     def _get() -> Response:
-        paths = _resolve_project_paths(
-            sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug
-        )
+        paths = _resolve_project_paths(sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug)
         if paths is None:
             raise RepoNotFoundError(f"slides project {slug}")
         file = sc.get_file(
@@ -1790,7 +1788,11 @@ async def get_project_asset(
         raise _source_control_http_error(exc) from exc
 
 
-@router.put("/projects/{slug}/deck", response_model=DeckResponse)
+@router.put(
+    "/projects/{slug}/deck",
+    response_model=DeckResponse,
+    dependencies=[declares("SaveProject")],
+)
 async def put_deck(
     slug: str,
     body: DeckUpdateRequest,
@@ -1799,7 +1801,13 @@ async def put_deck(
     db: AsyncSession = Depends(get_db),
 ) -> DeckResponse:
     """Save deck: commit Forgejo snapshot and dual-write Coder sidecar when ready."""
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require(
+        "SaveProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _slides_sc(request)
@@ -1935,9 +1943,7 @@ def _save_live_deck_html(
         author_email=author_email,
     )
     try:
-        meta_file = sc.get_file(
-            repo_id=repo_id, path=paths["project_path"], ref=paths["branch"]
-        )
+        meta_file = sc.get_file(repo_id=repo_id, path=paths["project_path"], ref=paths["branch"])
         if meta_file.text:
             data = _parse_meta(meta_file.text)
             from datetime import UTC, datetime
@@ -1959,7 +1965,11 @@ def _save_live_deck_html(
     return commit.sha or None, "sidecar" if sidecar_ok else "forgejo"
 
 
-@router.post("/projects/{slug}/apply-template", response_model=DeckResponse)
+@router.post(
+    "/projects/{slug}/apply-template",
+    response_model=DeckResponse,
+    dependencies=[declares("ApplyProjectTemplate")],
+)
 async def apply_template(
     slug: str,
     body: ApplyTemplateRequest,
@@ -1968,13 +1978,19 @@ async def apply_template(
     db: AsyncSession = Depends(get_db),
 ) -> DeckResponse:
     """Rewrite the open deck from a seed template (HTML source of truth)."""
+    await authz.require(
+        "ApplyProjectTemplate",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     if body.template_id not in _known_template_ids():
         raise HTTPException(
             status_code=422,
             detail=f"Unknown template_id '{body.template_id}'.",
         )
     seed, catalog_assets = _load_seed_bundle(body.template_id)
-    await require_workspace_access(current_user.id, body.workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _slides_sc(request)
@@ -2008,9 +2024,10 @@ async def apply_template(
         )
         from datetime import UTC, datetime
 
-        meta = _load_project_meta(
-            sc, repo_id=repo_id, path=paths["project_path"], ref=paths["branch"]
-        ) or {}
+        meta = (
+            _load_project_meta(sc, repo_id=repo_id, path=paths["project_path"], ref=paths["branch"])
+            or {}
+        )
         meta["workspace_id"] = body.workspace_id
         meta["template_id"] = body.template_id
         meta["updated_at"] = datetime.now(UTC).isoformat()
@@ -2049,23 +2066,23 @@ async def apply_template(
         raise _source_control_http_error(exc) from exc
 
 
-@router.get("/projects/{slug}/history", response_model=list[CommitResponse])
+@router.get(
+    "/projects/{slug}/history",
+    response_model=list[CommitResponse],
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def list_history(
     slug: str,
     workspace_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user_required),
     limit: int = 20,
 ) -> list[CommitResponse]:
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _slides_sc(request)
 
     def _hist() -> list[CommitResponse]:
-        paths = _resolve_project_paths(
-            sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug
-        )
+        paths = _resolve_project_paths(sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug)
         if paths is None:
             raise RepoNotFoundError(f"slides project {slug}")
         # Scan the same depth as /version so every returned commit's version
@@ -2094,13 +2111,16 @@ async def list_history(
         raise _source_control_http_error(exc) from exc
 
 
-@router.get("/projects/{slug}/history/diff", response_model=DeckDiffResponse)
+@router.get(
+    "/projects/{slug}/history/diff",
+    response_model=DeckDiffResponse,
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def get_history_diff(
     slug: str,
     workspace_id: str,
     base: str,
     request: Request,
-    current_user: User = Depends(get_current_user_required),
     head: str | None = None,
 ) -> DeckDiffResponse:
     """Files changed between two commits on the deck branch, for the Files panel.
@@ -2109,15 +2129,12 @@ async def get_history_diff(
     e.g. the branch head when the chat session opened this deck). ``head``
     defaults to the current branch tip.
     """
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _slides_sc(request)
 
     def _diff() -> DeckDiffResponse:
-        paths = _resolve_project_paths(
-            sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug
-        )
+        paths = _resolve_project_paths(sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug)
         if paths is None:
             raise RepoNotFoundError(f"slides project {slug}")
         resolved_head = head
@@ -2128,6 +2145,9 @@ async def get_history_diff(
             resolved_head = commits[0].sha
         if resolved_head == base:
             return DeckDiffResponse(base=base, head=resolved_head, files=[])
+        # base and head come from the client and may be any commit of the shared
+        # repository: only this project's own files are reported.
+        project_dir = paths["project_path"].rsplit("/", 1)[0] + "/"
         diff = sc.get_diff(repo_id=repo_id, base=base, head=resolved_head)
         return DeckDiffResponse(
             base=base,
@@ -2141,6 +2161,7 @@ async def get_history_diff(
                     old_path=f.old_path,
                 )
                 for f in diff.files
+                if f.path.startswith(project_dir) or (f.old_path or "").startswith(project_dir)
             ],
         )
 
@@ -2152,31 +2173,29 @@ async def get_history_diff(
         raise _source_control_http_error(exc) from exc
 
 
-@router.get("/projects/{slug}/version", response_model=DeckVersionResponse)
+@router.get(
+    "/projects/{slug}/version",
+    response_model=DeckVersionResponse,
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def get_deck_version(
     slug: str,
     workspace_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user_required),
 ) -> DeckVersionResponse:
     """0.x semver derived from Conventional Commits history; see `_semver_from_commits`."""
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _slides_sc(request)
 
     def _version() -> DeckVersionResponse:
-        paths = _resolve_project_paths(
-            sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug
-        )
+        paths = _resolve_project_paths(sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug)
         if paths is None:
             raise RepoNotFoundError(f"slides project {slug}")
         commits = sc.list_commits(
             repo_id=repo_id, ref=paths["branch"], limit=_VERSION_COMMIT_SCAN_LIMIT
         )
-        return DeckVersionResponse(
-            version=_semver_from_commits(commits), commit_count=len(commits)
-        )
+        return DeckVersionResponse(version=_semver_from_commits(commits), commit_count=len(commits))
 
     try:
         return await run_in_threadpool(_version)
@@ -2320,9 +2339,9 @@ async def _ensure_runtime_impl(
     template_id, template_name = picked
 
     author_email = str(current_user.email)
-    coder_username = _sanitize_coder_username(
-        current_user.name or ""
-    ) or _sanitize_coder_username(author_email.split("@", 1)[0])
+    coder_username = _sanitize_coder_username(current_user.name or "") or _sanitize_coder_username(
+        author_email.split("@", 1)[0]
+    )
     expected_base = _build_sidecar_base(coder_username=coder_username, name=name)
 
     # Reuse the dedicated env for this slides/<slug> when already bound.
@@ -2363,9 +2382,7 @@ async def _ensure_runtime_impl(
                 # The adapter is authoritative: a local runtime moves ports
                 # across restarts, so a stored base can be stale (or a Coder
                 # hostname written before the runtime was known).
-                bound = await run_in_threadpool(
-                    _adapter_runtime_binding, coding, existing.id
-                )
+                bound = await run_in_threadpool(_adapter_runtime_binding, coding, existing.id)
                 if bound is not None:
                     existing.sidecar_base, existing.sidecar_secret = bound
                 elif expected_base and not existing.sidecar_base:
@@ -2393,9 +2410,7 @@ async def _ensure_runtime_impl(
                             existing.id,
                         )
                         try:
-                            await run_in_threadpool(
-                                coding.stop, workspace_id=existing.id
-                            )
+                            await run_in_threadpool(coding.stop, workspace_id=existing.id)
                         except CodingEnvironmentError:
                             pass
                         status = await run_in_threadpool(
@@ -2449,13 +2464,14 @@ async def _ensure_runtime_impl(
         repo_url = _git_clone_url(sc, repo_id, username=username, token=token)
         ws_secret = secrets.token_hex(16)
         ws_base = expected_base
-        claims: dict[str, str] = {"sub": current_user.id}
-        if ws_base:
-            claims["ws_base"] = ws_base
-            claims["ws_secret"] = ws_secret
-        agent_token, _ = create_access_token(
-            data=claims,
-            expires_delta=timedelta(days=settings.coding_agent_token_days),
+        # The agent in the workspace holds a key of the user's made for this
+        # environment (``coding_environment.agent_credentials``), never a
+        # session token: bound to the sidecar, narrowed to this workspace.
+        agent_token = agent_credentials.mint_agent_key(
+            user_id=current_user.id,
+            workspace_id=workspace_id,
+            sidecar_base=ws_base,
+            label=label,
         )
         params: dict[str, str] = {
             "repo_url": repo_url,
@@ -2482,9 +2498,7 @@ async def _ensure_runtime_impl(
         )
         # Prefer looking up an existing Coder workspace before create, so a
         # missing Nexus binding does not race into a name-conflict error.
-        existing_envs = await run_in_threadpool(
-            coding.list_environments, user_id=user_id
-        )
+        existing_envs = await run_in_threadpool(coding.list_environments, user_id=user_id)
         prior_ws = next(
             (env for env in existing_envs if env.name in coder_names),
             None,
@@ -2498,22 +2512,16 @@ async def _ensure_runtime_impl(
                     coding.start, workspace_id=prior_ws.id, params=params
                 )
             else:
-                status = await run_in_threadpool(
-                    coding.get_status, workspace_id=prior_ws.id
-                )
+                status = await run_in_threadpool(coding.get_status, workspace_id=prior_ws.id)
                 # Prefer the secret already baked into the running sidecar.
-                on_ws = await run_in_threadpool(
-                    _adapter_get_parameters, coding, prior_ws.id
-                )
+                on_ws = await run_in_threadpool(_adapter_get_parameters, coding, prior_ws.id)
                 baked = (on_ws or {}).get("sidecar_secret") or ""
                 if baked:
                     ws_secret = baked
                 else:
                     # No sidecar secret on the build: stop+start once to inject.
                     try:
-                        await run_in_threadpool(
-                            coding.stop, workspace_id=prior_ws.id
-                        )
+                        await run_in_threadpool(coding.stop, workspace_id=prior_ws.id)
                     except CodingEnvironmentError:
                         pass
                     status = await run_in_threadpool(
@@ -2528,9 +2536,7 @@ async def _ensure_runtime_impl(
                 params=params,
             )
             # Service-level adopt (race / 400 unique): sync sidecar secret.
-            on_ws = await run_in_threadpool(
-                _adapter_get_parameters, coding, status.id
-            )
+            on_ws = await run_in_threadpool(_adapter_get_parameters, coding, status.id)
             baked = (on_ws or {}).get("sidecar_secret") or ""
             if baked and baked != ws_secret:
                 adopted = True
@@ -2560,22 +2566,14 @@ async def _ensure_runtime_impl(
                 )
             adopted = True
             if match.phase in ("stopped", "stopping"):
-                status = await run_in_threadpool(
-                    coding.start, workspace_id=match.id, params=params
-                )
+                status = await run_in_threadpool(coding.start, workspace_id=match.id, params=params)
             else:
-                status = await run_in_threadpool(
-                    coding.get_status, workspace_id=match.id
-                )
-                on_ws = await run_in_threadpool(
-                    _adapter_get_parameters, coding, match.id
-                )
+                status = await run_in_threadpool(coding.get_status, workspace_id=match.id)
+                on_ws = await run_in_threadpool(_adapter_get_parameters, coding, match.id)
                 baked = (on_ws or {}).get("sidecar_secret") or ""
                 if baked:
                     ws_secret = baked
-            bound = await run_in_threadpool(
-                _adapter_runtime_binding, coding, status.id
-            )
+            bound = await run_in_threadpool(_adapter_runtime_binding, coding, status.id)
             if bound is not None:
                 ws_base, ws_secret = bound
         except CodingEnvironmentError as adopt_exc:
@@ -2686,7 +2684,11 @@ async def _ensure_runtime_impl(
     )
 
 
-@router.post("/projects/{slug}/runtime", response_model=RuntimeResponse)
+@router.post(
+    "/projects/{slug}/runtime",
+    response_model=RuntimeResponse,
+    dependencies=[project_guard("EnsureProjectRuntime", _KIND)],
+)
 async def ensure_runtime(
     slug: str,
     workspace_id: str,
@@ -2694,7 +2696,6 @@ async def ensure_runtime(
     current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
 ) -> RuntimeResponse:
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     return await _ensure_runtime_impl(
@@ -2706,23 +2707,23 @@ async def ensure_runtime(
     )
 
 
-@router.get("/projects/{slug}/tree", response_model=ProjectTreeResponse)
+@router.get(
+    "/projects/{slug}/tree",
+    response_model=ProjectTreeResponse,
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def get_project_tree(
     slug: str,
     workspace_id: str,
     request: Request,
-    current_user: User = Depends(get_current_user_required),
 ) -> ProjectTreeResponse:
     """List the presentation folder (deck.html, assets/, …) for the sidebar tree."""
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _slides_sc(request)
 
     def _tree() -> ProjectTreeResponse:
-        paths = _resolve_project_paths(
-            sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug
-        )
+        paths = _resolve_project_paths(sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug)
         if paths is None:
             raise RepoNotFoundError(f"slides project {slug}")
         branch = paths["branch"]
@@ -2744,23 +2745,15 @@ async def get_project_tree(
         names = {e.name for e in entries}
         if "deck.html" not in names:
             entries.append(
-                TreeEntryResponse(
-                    name="deck.html", path=paths["deck_path"], type="file"
-                )
+                TreeEntryResponse(name="deck.html", path=paths["deck_path"], type="file")
             )
         if "assets" not in names:
-            entries.append(
-                TreeEntryResponse(
-                    name="assets", path=paths["assets_dir"], type="dir"
-                )
-            )
+            entries.append(TreeEntryResponse(name="assets", path=paths["assets_dir"], type="dir"))
         entries.sort(key=lambda e: (0 if e.type == "dir" else 1, e.name))
 
         assets: list[TreeEntryResponse] = []
         try:
-            assets_raw = sc.list_contents(
-                repo_id=repo_id, path=paths["assets_dir"], ref=branch
-            )
+            assets_raw = sc.list_contents(repo_id=repo_id, path=paths["assets_dir"], ref=branch)
             assets = [
                 TreeEntryResponse(
                     name=e.name,
@@ -2777,9 +2770,7 @@ async def get_project_tree(
 
         embedded = 0
         assets_note = None
-        meta = _load_project_meta(
-            sc, repo_id=repo_id, path=paths["project_path"], ref=branch
-        ) or {}
+        meta = _load_project_meta(sc, repo_id=repo_id, path=paths["project_path"], ref=branch) or {}
         try:
             embedded = int(meta.get("embedded_images") or 0)
         except (TypeError, ValueError):
@@ -2787,9 +2778,7 @@ async def get_project_tree(
         assets_note = meta.get("assets_note")
         if not embedded:
             try:
-                deck = sc.get_file(
-                    repo_id=repo_id, path=paths["deck_path"], ref=branch
-                )
+                deck = sc.get_file(repo_id=repo_id, path=paths["deck_path"], ref=branch)
                 if deck.text:
                     embedded = _count_embedded_images(deck.text)
             except SourceControlError:
@@ -2801,8 +2790,7 @@ async def get_project_tree(
             entries=entries,
             assets=assets,
             embedded_images=embedded,
-            assets_note=assets_note
-            or _assets_note(copied=len(assets), embedded=embedded),
+            assets_note=assets_note or _assets_note(copied=len(assets), embedded=embedded),
         )
 
     try:
@@ -2880,13 +2868,15 @@ class SeedTemplateResponse(BaseModel):
     assets: list[TemplateAssetItem] = Field(default_factory=list)
 
 
-@router.get("/templates", response_model=list[SeedTemplateResponse])
+@router.get(
+    "/templates",
+    response_model=list[SeedTemplateResponse],
+    dependencies=[project_guard("ListProjectTemplates", _KIND, id=(), literal="-")],
+)
 async def list_seed_templates(
     workspace_id: str,
-    current_user: User = Depends(get_current_user_required),
 ) -> list[SeedTemplateResponse]:
     """List seed templates with slide outlines for the Slides sidebar."""
-    await require_workspace_access(current_user.id, workspace_id)
     return [SeedTemplateResponse(**row) for row in _list_seed_template_records()]
 
 
@@ -2940,9 +2930,7 @@ async def _run_slide_html_mutation(
     )
 
     def _run() -> SlideMutationResponse:
-        paths = _resolve_project_paths(
-            sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug
-        )
+        paths = _resolve_project_paths(sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug)
         if paths is None:
             raise RepoNotFoundError(f"slides project {slug}")
         html = _read_live_deck_html(
@@ -3004,7 +2992,11 @@ async def _run_slide_html_mutation(
         raise _source_control_http_error(exc) from exc
 
 
-@router.get("/projects/{slug}/slides", response_model=SlidesListResponse)
+@router.get(
+    "/projects/{slug}/slides",
+    response_model=SlidesListResponse,
+    dependencies=[project_guard("GetProject", _KIND)],
+)
 async def list_slides(
     slug: str,
     workspace_id: str,
@@ -3013,7 +3005,6 @@ async def list_slides(
     db: AsyncSession = Depends(get_db),
 ) -> SlidesListResponse:
     """Outline of ``<section>`` slides. No HTML body."""
-    await require_workspace_access(current_user.id, workspace_id)
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _slides_sc(request)
@@ -3025,9 +3016,7 @@ async def list_slides(
     )
 
     def _list() -> SlidesListResponse:
-        paths = _resolve_project_paths(
-            sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug
-        )
+        paths = _resolve_project_paths(sc, repo_id=repo_id, workspace_id=workspace_id, slug=slug)
         if paths is None:
             raise RepoNotFoundError(f"slides project {slug}")
         html = _read_live_deck_html(
@@ -3056,7 +3045,11 @@ async def list_slides(
         raise _source_control_http_error(exc) from exc
 
 
-@router.post("/projects/{slug}/slides/insert", response_model=SlideMutationResponse)
+@router.post(
+    "/projects/{slug}/slides/insert",
+    response_model=SlideMutationResponse,
+    dependencies=[declares("EditProject")],
+)
 async def insert_slide(
     slug: str,
     body: SlideInsertRequest,
@@ -3067,7 +3060,13 @@ async def insert_slide(
     """Insert a slide after ``after_index`` (-1 appends). Same mutation as the agent tool."""
     from naas_abi.tools.slides_tools import _insert_slide_html
 
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require(
+        "EditProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     return await _run_slide_html_mutation(
         slug=slug,
         workspace_id=body.workspace_id,
@@ -3084,7 +3083,11 @@ async def insert_slide(
     )
 
 
-@router.post("/projects/{slug}/slides/delete", response_model=SlideMutationResponse)
+@router.post(
+    "/projects/{slug}/slides/delete",
+    response_model=SlideMutationResponse,
+    dependencies=[declares("EditProject")],
+)
 async def delete_slide(
     slug: str,
     body: SlideIndexRequest,
@@ -3095,7 +3098,13 @@ async def delete_slide(
     """Delete the slide at index. Refuses the last slide."""
     from naas_abi.tools.slides_tools import _delete_slide_html
 
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require(
+        "EditProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     return await _run_slide_html_mutation(
         slug=slug,
         workspace_id=body.workspace_id,
@@ -3107,7 +3116,11 @@ async def delete_slide(
     )
 
 
-@router.post("/projects/{slug}/slides/duplicate", response_model=SlideMutationResponse)
+@router.post(
+    "/projects/{slug}/slides/duplicate",
+    response_model=SlideMutationResponse,
+    dependencies=[declares("EditProject")],
+)
 async def duplicate_slide(
     slug: str,
     body: SlideIndexRequest,
@@ -3118,7 +3131,13 @@ async def duplicate_slide(
     """Duplicate the slide at index and insert the copy after it."""
     from naas_abi.tools.slides_tools import _duplicate_slide_html
 
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require(
+        "EditProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     return await _run_slide_html_mutation(
         slug=slug,
         workspace_id=body.workspace_id,
@@ -3130,7 +3149,11 @@ async def duplicate_slide(
     )
 
 
-@router.post("/projects/{slug}/slides/reorder", response_model=SlideMutationResponse)
+@router.post(
+    "/projects/{slug}/slides/reorder",
+    response_model=SlideMutationResponse,
+    dependencies=[declares("EditProject")],
+)
 async def reorder_slides(
     slug: str,
     body: SlideReorderRequest,
@@ -3141,7 +3164,13 @@ async def reorder_slides(
     """Move one slide (from_index/to_index) or apply a full ``order`` permutation."""
     from naas_abi.tools.slides_tools import _reorder_slides_html
 
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require(
+        "EditProject",
+        user=current_user,
+        workspace=body.workspace_id,
+        id=(_KIND, slug),
+        feature=_KIND,
+    )
     return await _run_slide_html_mutation(
         slug=slug,
         workspace_id=body.workspace_id,

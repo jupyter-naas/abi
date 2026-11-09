@@ -34,17 +34,16 @@ class _Agents:
         self.records = {r.id: r for r in records}
         self.deleted: list[str] = []
 
-    async def list_workspace_agents(self, context, workspace_id):
+    async def list_workspace_agents(self, workspace_id):
         return list(self.records.values())
 
-    async def create_agent(self, context, data):
+    async def create_agent(self, data):
         now = datetime(2026, 10, 1)
         record = AgentRecord(
             id=f"a-{len(self.records) + 1}",
             workspace_id=data.workspace_id,
             name=data.name,
             description=data.description or "",
-            enabled=data.enabled,
             class_name=data.class_name,
             module_path=data.module_path,
             system_prompt=data.system_prompt,
@@ -57,7 +56,7 @@ class _Agents:
         self.records[record.id] = record
         return record
 
-    async def update_agent(self, context, agent_id, updates):
+    async def update_agent(self, agent_id, updates):
         known = {f.name for f in fields(AgentRecord)}
         changes = {
             f.name: getattr(updates, f.name)
@@ -67,7 +66,7 @@ class _Agents:
         self.records[agent_id] = replace(self.records[agent_id], **changes)
         return self.records[agent_id]
 
-    async def delete_agent(self, context, agent_id):
+    async def delete_agent(self, agent_id):
         self.deleted.append(agent_id)
         return self.records.pop(agent_id, None) is not None
 
@@ -77,9 +76,7 @@ def _record(
     class_name: str,
     *,
     provider: str = "abi",
-    enabled: bool = True,
     default: bool = False,
-    override: bool | None = None,
 ):
     now = datetime(2026, 10, 1)
     return AgentRecord(
@@ -87,7 +84,6 @@ def _record(
         workspace_id="ws",
         name=class_name.rsplit("/", 1)[-1],
         description="",
-        enabled=enabled,
         class_name=class_name,
         module_path=class_name.split("/", 1)[0],
         system_prompt=None,
@@ -97,8 +93,15 @@ def _record(
         created_at=now,
         updated_at=now,
         is_default=default,
-        enabled_override=override,
     )
+
+
+class _NoSession:
+    async def __aenter__(self):
+        return None
+
+    async def __aexit__(self, *exc):
+        return False
 
 
 @pytest.fixture
@@ -110,12 +113,19 @@ def seed(monkeypatch):
         return "ws"
 
     monkeypatch.setattr(sync, "_workspace_slug", slug)
-    monkeypatch.setattr(sync, "workspace_seed_for_slug", lambda s: state["seed"])
+
+    async def catalog_seed(workspace_id):
+        return state["seed"]
+
+    monkeypatch.setattr(sync, "_workspace_catalog_seed", catalog_seed)
+    monkeypatch.setattr(
+        "naas_abi.apps.nexus.apps.api.app.core.database.AsyncSessionLocal",
+        lambda: _NoSession(),
+    )
     monkeypatch.setattr(sync, "_get_engine_default_agent_class_name", lambda: ZEN)
-    monkeypatch.setattr(sync, "request_context", lambda user: None)
 
     def set_seed(agents):
-        state["seed"] = SimpleNamespace(agents=agents, default_agent=None)
+        state["seed"] = {"agents": agents}
 
     return set_seed
 
@@ -124,7 +134,6 @@ def _sync(agents: _Agents, remote_agents):
     return asyncio.run(
         sync._reconcile_workspace_agents(
             agents,
-            SimpleNamespace(id="u-1"),
             "ws",
             list(agents.records.values()),
             {ZEN: _ZenAgent},
@@ -137,32 +146,36 @@ def _by_class(records):
     return {r.class_name: r for r in records}
 
 
-def test_without_a_roster_discovered_agents_are_created_and_enabled(seed):
+def test_discovered_agents_are_created_with_no_on_off_state(seed):
     agents = _Agents([_record("zen", ZEN, default=True)])
 
-    result = _by_class(_sync(agents, [RESEARCHER]))
+    result = _by_class(_sync(agents, [RESEARCHER, WRITER]))
 
     researcher = result[RESEARCHER.key]
-    assert (researcher.provider, researcher.enabled) == (REMOTE_PROVIDER, True)
+    assert researcher.provider == REMOTE_PROVIDER
     assert (researcher.name, researcher.description) == (
         "Researcher",
         "Answers research questions.",
     )
     assert researcher.module_path == "acme.research"
-    assert result[ZEN].enabled and result[ZEN].is_default
+    assert WRITER.key in result
+    assert result[ZEN].is_default
+    assert not hasattr(researcher, "enabled")
 
 
-def test_a_roster_restricts_discovered_agents_to_those_it_lists(seed):
+def test_an_agents_seed_no_longer_narrows_the_roster(seed):
+    """Who uses an agent is IAM's: the seed's ``agents:`` list creates or hides
+    no row (its ``default_agent`` still marks the default)."""
     seed(["zen ZenAgent", "acme.research Researcher"])
-    agents = _Agents([_record("zen", ZEN, default=True)])
+    agents = _Agents([_record("zen", ZEN)])
 
     result = _by_class(_sync(agents, [RESEARCHER, WRITER]))
 
-    assert result[RESEARCHER.key].enabled
-    assert not result[WRITER.key].enabled
+    assert {RESEARCHER.key, WRITER.key, ZEN} <= set(result)
+    assert result[ZEN].is_default
 
 
-def test_an_unavailable_remote_agent_is_disabled_not_deleted(seed):
+def test_an_unavailable_remote_agent_is_kept_not_deleted(seed):
     agents = _Agents(
         [_record("zen", ZEN, default=True), _record("r", RESEARCHER.key, provider=REMOTE_PROVIDER)]
     )
@@ -170,18 +183,7 @@ def test_an_unavailable_remote_agent_is_disabled_not_deleted(seed):
     result = _by_class(_sync(agents, []))
 
     assert agents.deleted == []
-    assert result[RESEARCHER.key].enabled is False
-
-
-def test_it_is_enabled_again_when_its_module_returns(seed):
-    agents = _Agents(
-        [
-            _record("zen", ZEN, default=True),
-            _record("r", RESEARCHER.key, provider=REMOTE_PROVIDER, enabled=False),
-        ]
-    )
-
-    assert _by_class(_sync(agents, [RESEARCHER]))[RESEARCHER.key].enabled
+    assert RESEARCHER.key in result
 
 
 def test_unknown_discovery_state_leaves_remote_rows_alone(seed):
@@ -191,7 +193,7 @@ def test_unknown_discovery_state_leaves_remote_rows_alone(seed):
 
     result = _by_class(_sync(agents, None))
 
-    assert result[RESEARCHER.key].enabled
+    assert RESEARCHER.key in result
     assert agents.deleted == []
 
 
@@ -224,102 +226,50 @@ def test_discovery_errors_mean_unknown_not_empty(monkeypatch):
     assert asyncio.run(sync._discovered_remote_agents()) is None
 
 
-# A toggle in the UI is an explicit override: sync keeps it over the roster.
+def test_the_listing_leaves_out_remote_agents_whose_module_is_not_ready(monkeypatch):
+    zen = _record("zen", ZEN, default=True)
+    researcher = _record("r", RESEARCHER.key, provider=REMOTE_PROVIDER)
+    writer = _record("w", WRITER.key, provider=REMOTE_PROVIDER)
+
+    async def discovered():
+        return [RESEARCHER]
+
+    monkeypatch.setattr(sync, "_discovered_remote_agents", discovered)
+    assert [a.id for a in asyncio.run(sync.served_agents([zen, researcher, writer]))] == [
+        "zen",
+        "r",
+    ]
+
+    async def unknown():
+        return None
+
+    # Discovery cannot be read: every row is kept.
+    monkeypatch.setattr(sync, "_discovered_remote_agents", unknown)
+    assert len(asyncio.run(sync.served_agents([zen, researcher, writer]))) == 3
 
 
-def test_a_remote_agent_enabled_by_hand_stays_enabled_outside_the_roster(seed):
-    seed(["zen ZenAgent"])
-    agents = _Agents(
-        [
-            _record("zen", ZEN, default=True),
-            _record("r", RESEARCHER.key, provider=REMOTE_PROVIDER, enabled=True, override=True),
-        ]
-    )
-
-    assert _by_class(_sync(agents, [RESEARCHER]))[RESEARCHER.key].enabled is True
-
-
-def test_a_remote_agent_disabled_by_hand_stays_disabled(seed):
-    agents = _Agents(
-        [
-            _record("zen", ZEN, default=True),
-            _record("r", RESEARCHER.key, provider=REMOTE_PROVIDER, enabled=False, override=False),
-        ]
-    )
-
-    assert _by_class(_sync(agents, [RESEARCHER]))[RESEARCHER.key].enabled is False
-
-
-def test_an_override_still_needs_the_module_and_comes_back_with_it(seed):
-    seed(["zen ZenAgent"])
-    agents = _Agents(
-        [
-            _record("zen", ZEN, default=True),
-            _record("r", RESEARCHER.key, provider=REMOTE_PROVIDER, enabled=True, override=True),
-        ]
-    )
-
-    assert _by_class(_sync(agents, []))[RESEARCHER.key].enabled is False
-    assert _by_class(_sync(agents, [RESEARCHER]))[RESEARCHER.key].enabled is True
-
-
-def test_in_process_agents_keep_their_override_over_the_roster(seed):
-    other = "acme.reports.ReportAgent/ReportAgent"
-    seed(["zen ZenAgent", "acme.reports ReportAgent"])
-    agents = _Agents(
-        [
-            _record("zen", ZEN, default=True),
-            _record("rep", other, enabled=False, override=False),
-            _record("x", "acme.extra.ExtraAgent/ExtraAgent", enabled=True, override=True),
-        ]
-    )
-
-    result = _by_class(
-        asyncio.run(
-            sync._reconcile_workspace_agents(
-                agents,
-                SimpleNamespace(id="u-1"),
-                "ws",
-                list(agents.records.values()),
-                {ZEN: _ZenAgent, other: _ZenAgent, "acme.extra.ExtraAgent/ExtraAgent": _ZenAgent},
-                remote_agents=[],
-            )
-        )
-    )
-
-    assert result[other].enabled is False  # in the roster, but turned off by hand
-    assert result["acme.extra.ExtraAgent/ExtraAgent"].enabled is True  # not in it, turned on by hand
-    assert result[ZEN].enabled is True
-
-
-def test_toggling_enabled_in_the_ui_records_an_override(monkeypatch):
+@pytest.mark.asyncio
+async def test_an_update_changes_the_configuration_only(team):
     from naas_abi.apps.nexus.apps.api.app.services.agents.port import AgentUpdateInput
 
     captured = []
 
     class _Service:
-        async def get_agent(self, context, agent_id):
-            return _record(agent_id, RESEARCHER.key, provider=REMOTE_PROVIDER, enabled=False)
+        async def get_agent(self, agent_id):
+            return replace(
+                _record(agent_id, RESEARCHER.key, provider=REMOTE_PROVIDER),
+                workspace_id="ws-1",
+            )
 
-        async def update_agent(self, context, agent_id, updates):
+        async def update_agent(self, agent_id, updates):
             captured.append(updates)
-            return _record(agent_id, RESEARCHER.key, provider=REMOTE_PROVIDER, override=True)
+            return _record(agent_id, RESEARCHER.key, provider=REMOTE_PROVIDER)
 
-    async def allow(user_id, workspace_id):
-        return "owner"
+    admin = SimpleNamespace(id="admin")
+    await sync.update_agent("r", AgentUpdateInput(name="R", model="gpt-5.5"), admin, _Service())
 
-    monkeypatch.setattr(sync, "require_workspace_access", allow)
-    monkeypatch.setattr(sync, "request_context", lambda user: None)
-
-    asyncio.run(
-        sync.update_agent("r", AgentUpdateInput(enabled=True), SimpleNamespace(id="u-1"), _Service())
-    )
-    asyncio.run(
-        sync.update_agent("r", AgentUpdateInput(name="R"), SimpleNamespace(id="u-1"), _Service())
-    )
-
-    assert (captured[0].enabled, captured[0].enabled_override) == (True, True)
-    assert captured[1].enabled_override is None  # renaming is not a toggle
+    assert (captured[0].name, captured[0].model_id) == ("R", "gpt-5.5")
+    assert not hasattr(captured[0], "enabled")
 
 
 # Presentation: what the module publishes is what the workspace shows.

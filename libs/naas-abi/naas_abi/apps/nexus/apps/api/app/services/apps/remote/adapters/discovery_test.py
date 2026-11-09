@@ -37,7 +37,7 @@ class FakeDiscovery:
 
 
 def _directory(discovery, calls, answers, now=None):
-    async def call_app(transport, project, instance_id, request):
+    async def call_app(transport, project, instance_id, request, *, service_account=""):
         calls.append((instance_id, request))
         answer = answers.pop(0) if answers else pb.HttpResponse(status=200, body=b"ok")
         if isinstance(answer, Exception):
@@ -315,7 +315,7 @@ def test_an_upload_the_browser_drops_frees_its_slot_at_once(broker):
     seen: dict = {}
     apps: list[asyncio.Task] = []
 
-    async def module(transport, project, instance_id, request):
+    async def module(transport, project, instance_id, request, *, service_account=""):
         nc = await transport.connect()
 
         async def app():  # runs in the module's process, apart from this call
@@ -363,7 +363,7 @@ def test_a_response_that_breaks_off_raises_and_closing_tells_the_module(broker):
     async def scenario():
         held: list = []
 
-        async def module(transport, project, instance_id, request):
+        async def module(transport, project, instance_id, request, *, service_account=""):
             source = BodySource(await transport.connect())
             await source.start()
             held.append(source)

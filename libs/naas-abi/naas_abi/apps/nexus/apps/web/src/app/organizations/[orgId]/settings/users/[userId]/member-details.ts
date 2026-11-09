@@ -73,3 +73,37 @@ export function changedProfileFields(
   }
   return changes;
 }
+
+/**
+ * Save a member's changes as two steps said apart: the profile, then the role. A refused role
+ * never hides a saved profile; after a role change the members list is refreshed (``refreshed``).
+ * Returns null when everything was saved, else what was not, with the reason.
+ */
+export async function saveMemberChanges({
+  profile,
+  role,
+  refreshed,
+}: {
+  profile: (() => Promise<unknown>) | null;
+  role: (() => Promise<unknown>) | null;
+  refreshed: () => Promise<unknown>;
+}): Promise<string | null> {
+  const reason = (err: unknown, fallback: string) => (err instanceof Error && err.message ? err.message : fallback);
+  if (profile) {
+    try {
+      await profile();
+    } catch (err) {
+      return `The profile was not saved: ${reason(err, 'Failed to save')}`;
+    }
+  }
+  if (role) {
+    try {
+      await role();
+    } catch (err) {
+      const what = profile ? 'The profile was saved, but the role was not changed' : 'The role was not changed';
+      return `${what}: ${reason(err, 'Failed to change the role')}`;
+    }
+    await refreshed();
+  }
+  return null;
+}

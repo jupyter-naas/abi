@@ -3,8 +3,7 @@
 One ``OverflowHost`` per process, on ``abi.rpc.overflow``, started with the NATS
 primaries. ``respond_protobuf`` parks a reply that does not fit (``park``);
 ``request_payload`` reads a request the client uploaded first (``fetch``). The
-client side and the headers are in ``naas_abi_sdk.overflow``. See
-docs/adr/20261003_nats-rpc-overflow.md.
+client side and the headers are in ``naas_abi_sdk.overflow``.
 """
 
 from __future__ import annotations
@@ -16,7 +15,12 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
-from naas_abi_core.engine.nats_auth import verify_service_token
+from naas_abi_core.engine.nats_auth import (
+    HOST_AUDIENCE_PREFIX,
+    NATS_AUDIENCE,
+    TokenVerifier,
+)
+from naas_abi_core.engine.nats_identity import caller_context
 from naas_abi_core.engine.nats_transfer import (
     TransferError,
     TransferHost,
@@ -52,7 +56,7 @@ async def _echo(operation: str, metadata: bytes, source: Any):
 class OverflowHost(TransferHost):
     def __init__(
         self,
-        secret: str,
+        verifier: TokenVerifier,
         *,
         max_value_bytes: int = overflow.MAX_VALUE_BYTES,
         max_parked_bytes: int = 1024 * 1024 * 1024,
@@ -61,9 +65,16 @@ class OverflowHost(TransferHost):
         idle_seconds: float = 60.0,
         max_sessions: int = 64,
     ) -> None:
+        # An upload or a parked reply belongs to the caller (its identity binds
+        # the session); a module host reading or parking one for its caller
+        # presents the caller's host token (``abi:host:<host>``), the caller
+        # itself its own ``abi:nats`` one.
+        verifier = verifier.for_audiences(
+            (NATS_AUDIENCE,), prefixes=(HOST_AUDIENCE_PREFIX,)
+        )
         super().__init__(
             overflow.PREFIX,
-            secret,
+            verifier,
             _echo,
             operations=(overflow.UPLOAD_OPERATION,),
             chunk_bytes=chunk_bytes,
@@ -90,7 +101,8 @@ class OverflowHost(TransferHost):
 
     async def park(self, headers: Mapping[str, str], data: bytes) -> str:
         """Hold a reply for the request's caller; return its transfer id."""
-        caller = verify_service_token(headers.get(AUTH_HEADER, ""), self.secret)
+        context = caller_context(headers, self.verifier)
+        caller = context.principal.id
         if len(data) > self.max_value_bytes:
             raise TransferError(
                 "PAYLOAD_TOO_LARGE", "Reply exceeds the overflow value limit"
@@ -117,6 +129,7 @@ class OverflowHost(TransferHost):
             touched=asyncio.get_running_loop().time(),
             trace=trace,
             parked=len(data),
+            context=context,
         )
         self.parked_bytes += len(data)
         self.sessions[key] = session
@@ -136,6 +149,8 @@ class OverflowHost(TransferHost):
         through a queue group. The caller's token keeps the session binding.
         """
         forwarded = {AUTH_HEADER: headers.get(AUTH_HEADER, "")}
+        # The caller's user is in its token (a delegation): the upload belongs
+        # to the actor and its user.
         forwarded.update({k: headers[k] for k in _TRACE_HEADERS if k in headers})
 
         async def call(subject: str, request: Any, response_type: Any) -> Any:

@@ -30,6 +30,7 @@ from naas_abi_core.engine.nats_sessions import (
     wait_for_sessions,
 )
 from naas_abi_core.engine.nats_test_server import native_nats_server, nats_server_binary
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.engine.ownership.ownership_service import (
     Claim,
     EngineAlreadyServing,
@@ -47,7 +48,7 @@ from naas_abi_core.services.keyvalue.KeyValuePorts import IKeyValueAdapter
 from naas_abi_sdk import no_responders
 
 SUBJECT = "abi.svc.handover.v1.echo"
-SECRET = "engine-ownership-test-secret-at-least-32-bytes"
+SECRET = TEST_TOKENS.verifier
 pytestmark = pytest.mark.integration
 
 
@@ -87,7 +88,6 @@ class FakeEngine:
         self.loader = EngineOwnershipLoader(
             NATSConfiguration(
                 nats_url=url,
-                jwt_secret="test-only",
                 engine=NATSEngineConfiguration(lease_seconds=1),
             ),
             environ={"ABI_ROLLOUT_ID": rollout_id} if rollout_id else {},
@@ -204,7 +204,7 @@ class KeyValueCallers:
 
     def _run(self, key: str) -> None:
         client = KeyValueSecondaryAdapterNATSClient(
-            self.url, SECRET, "caller", timeout_seconds=5
+            self.url, TEST_TOKENS.source("caller"), timeout_seconds=5
         )
         n = 0
         while not self._stop.is_set():

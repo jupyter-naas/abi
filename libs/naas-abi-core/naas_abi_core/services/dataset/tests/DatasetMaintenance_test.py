@@ -171,7 +171,7 @@ def test_pressure_event_failure_does_not_block_maintenance():
     service = DatasetService(adapter)
     assert service.check_catalog_pressure("events") == 100_000
     events = Mock()
-    events.publish.side_effect = RuntimeError("event store unavailable")
+    events.emit.side_effect = RuntimeError("event store unavailable")
     service.set_services(SimpleNamespace(events_available=lambda: True, events=events))
     assert service.check_catalog_pressure("events") == 100_000
     service.flush("events")

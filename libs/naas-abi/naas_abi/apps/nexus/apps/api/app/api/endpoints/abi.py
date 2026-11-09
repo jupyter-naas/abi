@@ -7,15 +7,11 @@ from datetime import datetime
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
-from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
-    User,
-    get_current_user_required,
-    require_workspace_access,
-)
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.secrets import deprecated_encrypt
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.models import ABIServerModel
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import guard
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -73,31 +69,29 @@ def _to_abi_server(row: ABIServerModel) -> ABIServer:
 # ============ Endpoints ============
 
 
-@router.get("/workspaces/{workspace_id}/abi-servers")
+@router.get(
+    "/workspaces/{workspace_id}/abi-servers", dependencies=[guard("ListAbiServers", literal="-")]
+)
 async def list_abi_servers(
     workspace_id: str,
-    current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
 ) -> list[ABIServer]:
     """List all ABI servers for a workspace."""
-    await require_workspace_access(current_user.id, workspace_id)
-
     result = await db.execute(
         select(ABIServerModel).where(ABIServerModel.workspace_id == workspace_id)
     )
     return [_to_abi_server(row) for row in result.scalars().all()]
 
 
-@router.post("/workspaces/{workspace_id}/abi-servers")
+@router.post(
+    "/workspaces/{workspace_id}/abi-servers", dependencies=[guard("CreateAbiServer", literal="-")]
+)
 async def create_abi_server(
     workspace_id: str,
     server: ABIServerCreate,
-    current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
 ) -> ABIServer:
     """Create a new ABI server for a workspace."""
-    await require_workspace_access(current_user.id, workspace_id)
-
     # Check if endpoint already exists for this workspace
     existing = await db.execute(
         select(ABIServerModel).where(
@@ -128,16 +122,16 @@ async def create_abi_server(
     return _to_abi_server(row)
 
 
-@router.get("/workspaces/{workspace_id}/abi-servers/{server_id}")
+@router.get(
+    "/workspaces/{workspace_id}/abi-servers/{server_id}",
+    dependencies=[guard("GetAbiServer", id="server_id")],
+)
 async def get_abi_server(
     workspace_id: str,
     server_id: str,
-    current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
 ) -> ABIServer:
     """Get a specific ABI server."""
-    await require_workspace_access(current_user.id, workspace_id)
-
     result = await db.execute(
         select(ABIServerModel).where(
             ABIServerModel.id == server_id,
@@ -151,17 +145,17 @@ async def get_abi_server(
     return _to_abi_server(row)
 
 
-@router.put("/workspaces/{workspace_id}/abi-servers/{server_id}")
+@router.put(
+    "/workspaces/{workspace_id}/abi-servers/{server_id}",
+    dependencies=[guard("UpdateAbiServer", id="server_id")],
+)
 async def update_abi_server(
     workspace_id: str,
     server_id: str,
     updates: ABIServerUpdate,
-    current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
 ) -> ABIServer:
     """Update an ABI server."""
-    await require_workspace_access(current_user.id, workspace_id)
-
     result = await db.execute(
         select(ABIServerModel).where(
             ABIServerModel.id == server_id,
@@ -189,16 +183,16 @@ async def update_abi_server(
     return _to_abi_server(row)
 
 
-@router.delete("/workspaces/{workspace_id}/abi-servers/{server_id}")
+@router.delete(
+    "/workspaces/{workspace_id}/abi-servers/{server_id}",
+    dependencies=[guard("DeleteAbiServer", id="server_id")],
+)
 async def delete_abi_server(
     workspace_id: str,
     server_id: str,
-    current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     """Delete an ABI server."""
-    await require_workspace_access(current_user.id, workspace_id)
-
     result = await db.execute(
         select(ABIServerModel).where(
             ABIServerModel.id == server_id,

@@ -13,14 +13,14 @@ from datetime import datetime
 
 import socketio
 from fastapi import FastAPI, HTTPException
-from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
-    decode_token,
-    require_workspace_access,
-)
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
-from naas_abi.apps.nexus.apps.api.app.services.auth.service import is_session_token
-from naas_abi.apps.nexus.apps.api.app.services.refresh_token import is_access_token_revoked
+from naas_abi.apps.nexus.apps.api.app.services.auth.credentials import (
+    SESSION,
+    bearer_credential,
+)
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.view_as import runtime as view_as_runtime
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +48,13 @@ def _workspace_in_session(session: dict, workspace_id: str) -> bool:
     return workspace_id in workspaces
 
 
+def _may_broadcast(session: dict, workspace_id: str) -> bool:
+    """Decided by IAM when the user joined the room (``Broadcast``): a viewer
+    follows a workspace but sends nothing into it."""
+    allowed = session.get("broadcast")
+    return isinstance(allowed, set) and workspace_id in allowed
+
+
 @sio.event
 async def connect(sid, environ, auth):
     """Handle client connection."""
@@ -66,51 +73,59 @@ async def connect(sid, environ, auth):
             token = header_auth.split(" ", 1)[1].strip()
 
     if not token:
-        logger.warning("[WS] Missing token; rejecting connection")
-        return False
+        # A sign-in through an identity provider: its session cookie.
+        cookie_user = await _cookie_session_user(environ)
+        if cookie_user is None:
+            logger.warning("[WS] Missing token; rejecting connection")
+            return False
+        return await _accept(sid, cookie_user)
 
-    payload = decode_token(token)
-    if not payload:
+    # The socket takes a session and nothing else: not an API key, not a coding
+    # agent's key, not a link (app, preview, remote app grant), not an agent's
+    # delegation. A session token that is expired, revoked, or of a suspended
+    # user is no credential at all.
+    credential = await bearer_credential(token)
+    if credential is None:
         logger.warning("[WS] Invalid token; rejecting connection")
         return False
-    if not is_session_token(payload):
-        logger.warning("[WS] Scoped token; rejecting connection")
+    if credential.kind != SESSION:
+        logger.warning(f"[WS] A {credential.kind} credential is no session; rejecting connection")
         return False
 
-    user_id = payload.get("sub")
-    jti = payload.get("jti")
-    if not user_id:
-        logger.warning("[WS] Token missing subject; rejecting connection")
-        return False
+    return await _accept(sid, credential.user_id)
 
-    if jti and await is_access_token_revoked(jti):
-        logger.warning("[WS] Token revoked; rejecting connection")
-        return False
 
-    # Resolve the user's superadmin flag once at connect time so the
-    # admin-events room gate doesn't have to re-query on every event.
-    is_superadmin = False
+async def _cookie_session_user(environ: dict) -> str | None:
+    """The user of the handshake's session cookie, if it names a live session."""
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    from naas_abi.apps.nexus.apps.api.app.services.oidc import runtime as oidc_runtime
+    from starlette.datastructures import Headers
+
+    secret = oidc_runtime.session_secret(Headers({"cookie": environ.get("HTTP_COOKIE", "")}))
+    if secret is None:
+        return None
     try:
-        from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
-        from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.secondary.postgres import (
-            AuthSecondaryAdapterPostgres,
-        )
-
         async with AsyncSessionLocal() as db:
-            adapter = AuthSecondaryAdapterPostgres(db=db)
-            record = await adapter.get_user_by_id(user_id)
-            if record is not None:
-                is_superadmin = bool(record.is_superadmin)
-    except Exception:
-        logger.exception("[WS] failed to resolve user record for sid=%s", sid)
+            session = await oidc_runtime.RUNTIME.service(db).resolve(secret)
+        if session is not None and await view_as_runtime.is_viewing(session.id):
+            # A view (services/view_as) opens no socket: no presence, no room for
+            # the person.
+            logger.warning("[WS] The session is viewing as someone; rejecting connection")
+            return None
+    except Exception:  # noqa: BLE001 - fail closed
+        logger.exception("[WS] session lookup failed")
+        return None
+    return session.user_id if session is not None else None
 
+
+async def _accept(sid: str, user_id: str) -> bool:
     logger.info(f"[WS] Client connected sid={sid} user={user_id}")
 
     # Store user_id with session
     async with sio.session(sid) as session:
         session["user_id"] = user_id
-        session["is_superadmin"] = is_superadmin
         session["workspaces"] = set()
+        session["broadcast"] = set()
 
     return True
 
@@ -159,7 +174,7 @@ async def join_workspace(sid, data):
             return {"error": "unauthorized"}
 
     try:
-        await require_workspace_access(user_id, workspace_id)
+        await authz.require("GetPresence", user=user_id, workspace=workspace_id)
     except HTTPException:
         logger.warning(
             "[WS] Workspace join denied sid=%s user=%s workspace=%s",
@@ -169,12 +184,22 @@ async def join_workspace(sid, data):
         )
         return {"error": "workspace access denied"}
 
+    can_broadcast = await authz.allowed("Broadcast", user=user_id, workspace=workspace_id)
+
     async with sio.session(sid) as session:
         workspaces = session.get("workspaces")
         if not isinstance(workspaces, set):
             workspaces = set()
             session["workspaces"] = workspaces
         workspaces.add(workspace_id)
+        broadcast = session.get("broadcast")
+        if not isinstance(broadcast, set):
+            broadcast = set()
+            session["broadcast"] = broadcast
+        if can_broadcast:
+            broadcast.add(workspace_id)
+        else:
+            broadcast.discard(workspace_id)
 
     # Join Socket.IO room
     sio.enter_room(sid, f"workspace:{workspace_id}")
@@ -215,6 +240,7 @@ async def leave_workspace(sid, data):
     async with sio.session(sid) as session:
         user_id = session.get("user_id")
         session["workspaces"].discard(workspace_id)
+        session.get("broadcast", set()).discard(workspace_id)
 
     # Leave Socket.IO room
     sio.leave_room(sid, f"workspace:{workspace_id}")
@@ -247,6 +273,8 @@ async def typing_start(sid, data):
         user_id = session.get("user_id")
         if not _workspace_in_session(session, workspace_id):
             return {"error": "workspace not joined"}
+        if not _may_broadcast(session, workspace_id):
+            return {"error": "broadcast not allowed"}
 
     # Broadcast to workspace (excluding sender)
     await sio.emit(
@@ -267,6 +295,8 @@ async def typing_stop(sid, data):
         user_id = session.get("user_id")
         if not _workspace_in_session(session, workspace_id):
             return {"error": "workspace not joined"}
+        if not _may_broadcast(session, workspace_id):
+            return {"error": "broadcast not allowed"}
 
     await sio.emit(
         "user_typing",
@@ -286,6 +316,8 @@ async def message_created(sid, data):
     async with sio.session(sid) as session:
         if not _workspace_in_session(session, workspace_id):
             return {"error": "workspace not joined"}
+        if not _may_broadcast(session, workspace_id):
+            return {"error": "broadcast not allowed"}
 
     # Broadcast to all users in workspace
     await sio.emit(
@@ -310,6 +342,8 @@ async def cursor_position(sid, data):
         user_id = session.get("user_id")
         if not _workspace_in_session(session, workspace_id):
             return {"error": "workspace not joined"}
+        if not _may_broadcast(session, workspace_id):
+            return {"error": "broadcast not allowed"}
 
     # Broadcast cursor position
     await sio.emit(
@@ -324,15 +358,13 @@ async def cursor_position(sid, data):
 async def join_admin_events(sid, data=None):
     """Subscribe a connected client to the platform admin event stream.
 
-    Membership is gated by ``user.is_superadmin`` (managed with PATCH /api/admin/users/{id},
-    bootstrapped from config ``users``); non-superadmins receive an error and are
-    not added to the room. Once joined, the client receives every
-    ``platform_event`` emitted by the EventService relay.
+    Membership is the platform administrator's (``nexus:ManageSystem``, decided
+    by IAM on every join, so a role granted or taken away after the socket
+    connected counts; managed with PATCH /api/admin/users/{id}, bootstrapped from
+    config ``users``); anyone else receives an error and is not added to the
+    room. Once joined, the client receives every ``platform_event`` emitted by
+    the EventService relay.
     """
-    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
-    from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.secondary.postgres import (
-        AuthSecondaryAdapterPostgres,
-    )
     from naas_abi.apps.nexus.apps.api.app.services.websocket.admin_events import (
         ADMIN_EVENTS_ROOM,
     )
@@ -340,19 +372,7 @@ async def join_admin_events(sid, data=None):
     async with sio.session(sid) as session:
         user_id = session.get("user_id")
 
-    # Re-check is_superadmin against the DB on every join (don't trust the
-    # cached connect-time flag — the user may have been promoted after their
-    # socket connected).
-    is_superadmin = False
-    try:
-        async with AsyncSessionLocal() as db:
-            adapter = AuthSecondaryAdapterPostgres(db=db)
-            record = await adapter.get_user_by_id(user_id) if user_id else None
-            is_superadmin = bool(record.is_superadmin) if record else False
-    except Exception:
-        logger.exception("[WS] admin events: failed to refresh superadmin flag sid=%s", sid)
-
-    if not is_superadmin:
+    if not user_id or not await authz.allowed("ManageSystem", user=user_id):
         logger.warning("[WS] admin events join denied sid=%s user=%s", sid, user_id)
         return {"error": "superadmin required"}
 

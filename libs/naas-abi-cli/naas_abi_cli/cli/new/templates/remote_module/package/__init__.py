@@ -99,7 +99,8 @@ class ABIModule(BaseModule[{{module_name_pascal}}Configuration]):
             if loop.time() >= notice:  # say why nothing happens yet
                 logger.warning(
                     "%s not READY after %.0f s (discovery status %s): is the "
-                    "engine's discovery running, and ABI_MODULE_KEY this module's?",
+                    "engine's discovery running, ABI_SERVICE_KEY this module's, "
+                    "and its manifest approved (abi iam module approve)?",
                     MODULE_ID,
                     loop.time() - started,
                     status,

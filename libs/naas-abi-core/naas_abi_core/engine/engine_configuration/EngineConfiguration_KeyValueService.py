@@ -7,9 +7,10 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_GenericLoader
 from naas_abi_core.engine.engine_configuration.utils.PydanticModelValidator import (
     pydantic_model_validator,
 )
+from naas_abi_core.engine.nats_credentials import rpc_client
 from naas_abi_core.services.keyvalue.KeyValuePorts import IKeyValueAdapter
 from naas_abi_core.services.keyvalue.KeyValueService import KeyValueService
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class KeyValueAdapterRedisConfiguration(BaseModel):
@@ -48,22 +49,20 @@ class KeyValueAdapterNATSConfiguration(BaseModel):
     """KeyValue adapter NATS RPC client configuration.
 
     Talks to a remote ``KeyValuePrimaryAdapterNATS`` over NATS
-    request/reply -- see docs/specs/rfcs/20260910_distributed-modules-nats-jetstream.md
-    (Stage 1) and naas_abi_core/proto/keyvalue/v1/keyvalue.proto.
+    request/reply -- see naas_abi_core/proto/keyvalue/v1/keyvalue.proto.
 
     KV_adapter:
       adapter: "nats_rpc"
       config:
         nats_url: "nats://127.0.0.1:4222"
-        jwt_secret: "{{ secret.NATS_SERVICE_JWT_SECRET }}"
-        service_identity: "api"
+        service_key: "{{ secret.ABI_UPSTREAM_SERVICE_KEY }}"
     """
 
     model_config = ConfigDict(extra="forbid")
 
     nats_url: str = "nats://127.0.0.1:4222"
-    jwt_secret: str
-    service_identity: str = "api"
+    # A key of the upstream engine (abi_sk_...), exchanged for its tokens.
+    service_key: str = Field(repr=False)
 
 
 class KeyValueAdapterConfiguration(GenericLoader):
@@ -124,7 +123,7 @@ class KeyValueAdapterConfiguration(GenericLoader):
                     KeyValueSecondaryAdapterNATSClient,
                 )
 
-                return KeyValueSecondaryAdapterNATSClient(**self.config)
+                return rpc_client(KeyValueSecondaryAdapterNATSClient, **self.config)
             else:
                 raise ValueError(f"Unknown adapter: {self.adapter}")
         else:

@@ -347,19 +347,21 @@ class MapsLayoutService:
         revisions: Mapping[str, int] | None = None,
         enabled_feeds: frozenset[str] | None = None,
         extra_feed_ids: Iterable[str] = (),
+        seed: bool = True,
     ) -> MapsLayoutList:
         """The workspace's feeds, after applying pending seeds.
 
         ``enabled_feeds`` is the workspace config's feed list (``None``: decide
         nothing). Feeds without a record (built-in, and ``extra_feed_ids`` such
-        as graph layers) are decided with the records.
+        as graph layers) are decided with the records. ``seed=False`` writes none of
+        that: the list is what is stored (a view of someone else changes nothing).
         """
         policy = await self._access.policy(KIND_LAYOUT)
         allowed = [s for s in seeds if policy.allows(s.id, DEPLOYMENT, workspace_id)]
-        if allowed:
+        if allowed and seed:
             await self.ensure_seeded(workspace_id, allowed, revisions)
         visible = await self._visible(workspace_id, policy)
-        if enabled_feeds is not None:
+        if enabled_feeds is not None and seed:
             feed_ids = {layout.id for layout in visible} | (BUILTIN_LAYOUT_IDS - {"all"})
             await self.ensure_initial_feeds(
                 workspace_id, feed_ids | set(extra_feed_ids), enabled_feeds

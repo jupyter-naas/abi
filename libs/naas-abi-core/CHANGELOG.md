@@ -1,6 +1,611 @@
 # CHANGELOG
 
+## Upgrade notes (next release): module scopes
+
+- **Workspace members and viewers need a grant to use what modules expose.** Every
+  agent, app, workflow and pipeline of a module, naas_abi's own included (Abi too), is
+  now a module scope, `module:<type>/<module>/<name>`, granted per workspace. The
+  built-in `viewer` and `member` roles hold none, and the upgrade adds no grant: after
+  it, members and viewers see no module agent in the pickers, no app on the Apps page
+  and no workflow, and chat, `/v1` and app links refuse them, until a policy allows
+  them in their workspace. Admins and owners keep everything. Give access in
+  Nexus (IAM, Policies; the editor suggests the ids) with a policy such as
+  `module:UseAgent` on `${scope}:module:agent/naas_abi/*` (every naas_abi agent) or
+  `module:OpenApp` on `${scope}:module:app/<module>/<app>`, attached to the people or
+  group at the workspace. To keep the old behaviour for a workspace, attach a policy
+  allowing `module:*` on `${scope}:module:*` to its members.
+- The `apps` feature now governs only the apps settings and app projects; opening an
+  app is its module scope.
+- Workspace users start workflows and read their own runs at
+  `/api/workspaces/{ws}/workflows`; Nexus migration `0063` adds `workflow_run_owners`.
+- A module may declare actions of its own (`iam_catalog.yaml` beside an engine
+  module, the manifest's `catalog` for a remote one); see core
+  `services/iam/AGENTS.md`, "Module scopes".
+
 <!-- version list -->
+
+## v3.3.1 (2026-11-09)
+
+### Bug Fixes
+
+- **nexus**: Upgrade an install from before IAM in one start
+  ([`8022ccb`](https://github.com/jupyter-naas/abi/commit/8022ccb15f6b3971ce13d88c077f34f2b0b33fa1))
+
+
+## v3.3.0 (2026-11-07)
+
+### Bug Fixes
+
+- A host token names its host, and discovery accepts it from that host only
+  ([`f557785`](https://github.com/jupyter-naas/abi/commit/f557785bb242b714fe39d9d724de580aff23e34e))
+
+- A revoked user's cached delegation is made again; a key's binding is its own
+  ([`c9accbf`](https://github.com/jupyter-naas/abi/commit/c9accbf06b26067fe900957bae2245739a2bdeac))
+
+- Bound agent-built workflow tools by class; open apps of dotted module paths
+  ([`32a0cf2`](https://github.com/jupyter-naas/abi/commit/32a0cf2ac0dd37e61fc26e2866cc6dc7cd3ac16b))
+
+- Clients that carry users keep carrying them, tokens exchange only for who may, tests follow
+  ([`7f57cb0`](https://github.com/jupyter-naas/abi/commit/7f57cb0a0baad708febec4975cb750957f8317ec))
+
+- Creating a repository never hands over one that exists
+  ([`f4fdb93`](https://github.com/jupyter-naas/abi/commit/f4fdb93269d3137c4afc3eab84a8fbcf1595cef1))
+
+- Default manifests grant no admin action; repository ids are plain segments
+  ([`c4e8b4f`](https://github.com/jupyter-naas/abi/commit/c4e8b4f72d8583d781adab95bcac902db35477c4))
+
+- Final review round 2
+  ([`0eb6cbc`](https://github.com/jupyter-naas/abi/commit/0eb6cbcda98886dc204581e4c91a779407c85f5f))
+
+- Hosts never hold a caller's token; the secret endpoint is an allowlist; no key in logs
+  ([`98cefb3`](https://github.com/jupyter-naas/abi/commit/98cefb3be5f00c9b85f90de18d211f0b535abe99))
+
+- Identity on the engine's tokens; Nexus follows service-account subjects
+  ([`6494051`](https://github.com/jupyter-naas/abi/commit/64940513972e08c7fdc2b4505435c6cf8f62563b))
+
+- Invitations review round 1: owner invites, shared grants, rollbacks, bindings and sign-in claim
+  ([`3f2116c`](https://github.com/jupyter-naas/abi/commit/3f2116ca915296bd8ab4b942b82fb069da66d2f4))
+
+- Modules on service keys meet the caller checks and kernel catalogs
+  ([`872a0d2`](https://github.com/jupyter-naas/abi/commit/872a0d2edd99b1a0dfc2bbae1b772ebd0a747280))
+
+- Nexus signs its own NATS calls and follows the dev ports; docs for the built-in IdP
+  ([`5a1b814`](https://github.com/jupyter-naas/abi/commit/5a1b81421d229ebb80e2043e8a3c38755583f872))
+
+- Platform secrets, fail-closed seals, grants by action and short broker lifetimes
+  ([`e5085d0`](https://github.com/jupyter-naas/abi/commit/e5085d09747193155c4b798e4cae5935503b80bf))
+
+- Review round 1 of delegated tokens and API keys
+  ([`8fa83a5`](https://github.com/jupyter-naas/abi/commit/8fa83a517556fd85a59ee074efb9a60fa6d5953f))
+
+- The engine's invocation routes take the deployment key only; keys with a limit mint nothing
+  ([`278038c`](https://github.com/jupyter-naas/abi/commit/278038c1e7278fc4deae560f079bb0046a2db57e))
+
+- The mypy errors and Document Service tests that fail CI
+  ([`072ed38`](https://github.com/jupyter-naas/abi/commit/072ed38dd7e2e6d4041e3af24a8d4a94eacae112))
+
+- The permission scenario end to end in abi dev up
+  ([`80146d4`](https://github.com/jupyter-naas/abi/commit/80146d44c8223ac98a9a1c84620276762eafd3ec))
+
+- Work that runs for no caller gets an identity of its own
+  ([`1f2c347`](https://github.com/jupyter-naas/abi/commit/1f2c3472c82f51ab743e8b8ac0333f7a4cb5a8cf))
+
+- **abi**: A turn's copy of Abi names only the sub-agents it keeps
+  ([`ecaea43`](https://github.com/jupyter-naas/abi/commit/ecaea439050282ac68b77cf6441bd158afe5fec1))
+
+- **agent**: A turn's copy of an agent leaves out the sub-agents its caller may not use
+  ([`3034534`](https://github.com/jupyter-naas/abi/commit/303453408fa15b4da7cf6deaea4842844c61279d))
+
+- **agent**: PowerPointAgent's copy takes keep too; the sub-agent copy helper is public
+  ([`5a6f7c0`](https://github.com/jupyter-naas/abi/commit/5a6f7c022a3ddae7cf9f3949ef765338ec19a56f))
+
+- **core**: A run started for a user stays reachable to who acts for them
+  ([`fb7075b`](https://github.com/jupyter-naas/abi/commit/fb7075b28c47403e93cd7573c08f71306f1d3718))
+
+- **core**: Close IAM attachment escalations and a fail-open token scope
+  ([`3714748`](https://github.com/jupyter-naas/abi/commit/371474864a149c906b943d6e4446efe9bf775f45))
+
+- **core**: Document service tests give the listing a list
+  ([`071dded`](https://github.com/jupyter-naas/abi/commit/071dded41252d1f7d45bf3b7f4ec2cfbf83713d0))
+
+- **core**: Forge and Coder accounts are never handed to whoever asks first
+  ([`a5d8f14`](https://github.com/jupyter-naas/abi/commit/a5d8f142b8eab46dc0d4c417d73a8b2a63edcf5d))
+
+- **core**: IAM enforces scope confinement when it evaluates
+  ([`09d4956`](https://github.com/jupyter-naas/abi/commit/09d49560feffd17a8982596fe05f8ad250342570))
+
+- **core**: Make check is green: identity_at on the IdentityIAM Protocol, mypy and test guards for
+  naas_abi_idp
+  ([`c815326`](https://github.com/jupyter-naas/abi/commit/c81532608c17b93d038d0b02b1297b4f45b80912))
+
+- **core**: Never log the rendered engine configuration
+  ([`3d36a12`](https://github.com/jupyter-naas/abi/commit/3d36a12189c42cc7503872a1538d0a5495005b88))
+
+- **core**: No transitional grant reaches another principal's agent run
+  ([`608343a`](https://github.com/jupyter-naas/abi/commit/608343aabe175392bd12ef758bc5b2ce2832edfd))
+
+- **core**: The call context copy carries the delegation check
+  ([`8527c02`](https://github.com/jupyter-naas/abi/commit/8527c024b64d74bfbf624d5d7c4a4029533c47e8))
+
+- **core**: Tighten who a call names as its user
+  ([`ac64582`](https://github.com/jupyter-naas/abi/commit/ac64582355b0d07d8edeef6c2786b9c080b81c58))
+
+- **core**: Type the transitional placement branch of the guard
+  ([`435bb4d`](https://github.com/jupyter-naas/abi/commit/435bb4d2a4073642aba9e6d771f05ca58ac2faa0))
+
+- **core**: Unscoped IAM attachments get a name no scope reaches
+  ([`8c349d2`](https://github.com/jupyter-naas/abi/commit/8c349d20e1e1baf8ebead1ca1aa20b7f65bd5e21))
+
+- **dataset**: Spool query_stream so a slow reader never holds the catalog
+  ([`172816b`](https://github.com/jupyter-naas/abi/commit/172816b9296ce18c1f35c79e9cd3c49729cf21b5))
+
+- **deps**: Install naas-abi-proto and naas-abi-sdk wherever they are imported
+  ([`f7685c4`](https://github.com/jupyter-naas/abi/commit/f7685c44230cc7ec34bdbcdbdbb6374d91e4405f))
+
+- **discovery**: A caller who may get a module sees its instances
+  ([`cb378dc`](https://github.com/jupyter-naas/abi/commit/cb378dca9b7eac0926b2be5b0e00e9ab14b4cedb))
+
+- **discovery**: End delivery at the broker before draining on stop
+  ([`7b85c7d`](https://github.com/jupyter-naas/abi/commit/7b85c7d05e077833ced3016f3ce7a559158029aa))
+
+- **discovery**: Keep a serving generation and check cycles per generation
+  ([`c46ffeb`](https://github.com/jupyter-naas/abi/commit/c46ffeb59a6e13a830d9ab6381b763f89f842aeb))
+
+- **discovery**: Let a rollout change jobs, agents and models
+  ([`fdc0f15`](https://github.com/jupyter-naas/abi/commit/fdc0f15eb8ecb6d249864140ca5f9d3a70564505))
+
+- **engine**: Answer the one-shot calls received before a handover
+  ([`03ebd5a`](https://github.com/jupyter-naas/abi/commit/03ebd5ab76f5688517e974ffe8050c1e2bfbc0a3))
+
+- **engine**: Client engines keep the upstream routes of their secret fanout
+  ([`674addf`](https://github.com/jupyter-naas/abi/commit/674addffdbe7d6af9042174cb2729db9e10f6670))
+
+- **engine**: Give long NATS calls their own deadline and run dataset maintenance on the owner
+  ([`a9d3663`](https://github.com/jupyter-naas/abi/commit/a9d3663b6b41e0317b63d5ab589fdc68a56cf6f4))
+
+- **engine**: Give up the lease and the kernel subjects when a start fails
+  ([`7e17638`](https://github.com/jupyter-naas/abi/commit/7e17638daebb22f4273d06eae6d41d3dd10e0856))
+
+- **engine**: Modules reach the identity service through the engine proxy
+  ([`0a8b15b`](https://github.com/jupyter-naas/abi/commit/0a8b15b879a25d4fe2f9bbd34bb36bd5a1a02957))
+
+- **engine**: Serve the local part of a mixed secret fanout again
+  ([`2d4c017`](https://github.com/jupyter-naas/abi/commit/2d4c017d9538399f82e36326566aa588dc168d8f))
+
+- **iam**: A bus topic is checked in the spelling the broker grants
+  ([`c7ae66b`](https://github.com/jupyter-naas/abi/commit/c7ae66b70ef34b9e3ecb6aafd0000a969cc7ef2a))
+
+- **iam**: A declared catalog never stops the engine; one module id, one project
+  ([`d353560`](https://github.com/jupyter-naas/abi/commit/d3535603f08d6cc0eb9d81b66bae96299ba882fe))
+
+- **iam**: A platform Deny is attached at a scope by the platform admin only
+  ([`632fefd`](https://github.com/jupyter-naas/abi/commit/632fefd28a08f66e1a4618cbb92800346913036e))
+
+- **iam**: A view counts what a policy above gives inside the container
+  ([`e298ea3`](https://github.com/jupyter-naas/abi/commit/e298ea34b55f6767687e1441757123498f146a22))
+
+- **iam**: An edit of a sub-policy is checked for what it adds; the allow-nothing sentinel is never
+  checked
+  ([`4199ecd`](https://github.com/jupyter-naas/abi/commit/4199ecd6796768f03ff2d3bf53fd2ca2b5d2f9f5))
+
+- **iam**: An old-grammar owner holds only old-grammar scopes, by the old rules
+  ([`1e1fbaf`](https://github.com/jupyter-naas/abi/commit/1e1fbaf4d8ba1cf1d42edb7d89fabfd97097d583))
+
+- **iam**: Bus wildcards and org workspace assignment are checked
+  ([`ea0d68f`](https://github.com/jupyter-naas/abi/commit/ea0d68f19e3c4834446fea65792e7649bb31d065))
+
+- **iam**: Every bus topic needs cover, in the spelling the broker grants
+  ([`659f8b1`](https://github.com/jupyter-naas/abi/commit/659f8b1f109ed3f20a93d719ba2473c19c2c28d7))
+
+- **iam**: Final review round 1 fixes
+  ([`234fbf1`](https://github.com/jupyter-naas/abi/commit/234fbf17830d50011b4b4c8d18e91169a70b8b18))
+
+- **iam**: Grant only what you hold, review round 1
+  ([`77b7bfd`](https://github.com/jupyter-naas/abi/commit/77b7bfda89f2b80d09abe2ea28515864c7266b65))
+
+- **iam**: Keep the permission branch's grant checks where module scopes meet them
+  ([`2d98530`](https://github.com/jupyter-naas/abi/commit/2d98530ccb7aa2c2c120f0795428d7d0f5c134b9))
+
+- **iam**: Lifting a parent's Deny is checked below it
+  ([`24919bd`](https://github.com/jupyter-naas/abi/commit/24919bdbed0336c1651db33a3c6d01780c9cc7fd))
+
+- **iam**: Members trigger a module's workflows at the broker, never its plain jobs
+  ([`db1f85d`](https://github.com/jupyter-naas/abi/commit/db1f85d83c960853bd3d24f400f639c8f11750b1))
+
+- **iam**: No role widens on a stale catalog; old feature policies stay until moved
+  ([`ebdefa5`](https://github.com/jupyter-naas/abi/commit/ebdefa5a1463d34d40e74a4d8a6425c31aa5be47))
+
+- **iam**: Owned groups and the schema 2 upgrade keep to their org
+  ([`e9073d8`](https://github.com/jupyter-naas/abi/commit/e9073d80fa304c67207e8613198c7a5885d1dcd0))
+
+- **iam**: Past the search budget, a type still leaves out another type's patterns
+  ([`c0d5552`](https://github.com/jupyter-naas/abi/commit/c0d555241df5d97b13575ab9ef844d90f4c6a4be))
+
+- **iam**: Sets follow their org, seeds snapshot no module, migration may run again
+  ([`1961b90`](https://github.com/jupyter-naas/abi/commit/1961b901c412c4ca4fa8c4408f6abc3104cad9a7))
+
+- **iam**: Sub-policies, review round 1
+  ([`056941b`](https://github.com/jupyter-naas/abi/commit/056941be4c6000732498650c95e572c76dc3afbf))
+
+- **iam**: The attach list offers nothing the attach refuses the principal
+  ([`c8f86b4`](https://github.com/jupyter-naas/abi/commit/c8f86b4e0cf57f38e3a1ddc83078e30f2eb804ed))
+
+- **iam**: The builder's publishers skip patterns that cannot name a type
+  ([`3f31923`](https://github.com/jupyter-naas/abi/commit/3f31923920c2564877f78becbe41ace72793cbec))
+
+- **iam**: The chain check keeps a name the parent allows under the owner
+  ([`b7341f1`](https://github.com/jupyter-naas/abi/commit/b7341f170c62a100265f55edf4ebba3f9b1c9225))
+
+- **iam**: The codec reads PlatformAccess.self as an attribute
+  ([`22b70c0`](https://github.com/jupyter-naas/abi/commit/22b70c0caf7dbcb0a280f2614ad20320b0e94b97))
+
+- **iam**: The NATS client sends an empty parent as none
+  ([`03f24f7`](https://github.com/jupyter-naas/abi/commit/03f24f71b1672472e52e204b0e77929d79b83eff))
+
+- **iam**: The principal search folds the text and the columns alike on the server
+  ([`bb09dec`](https://github.com/jupyter-naas/abi/commit/bb09dece318ee11d77ba65fe29ef178d06651e9f))
+
+- **iam**: The principal search lower-cases every letter on SQLite too
+  ([`11b93b4`](https://github.com/jupyter-naas/abi/commit/11b93b4460cf765c756776721bd3b0a2a9968de9))
+
+- **iam**: Two processes registering one container at once both succeed
+  ([`7721b10`](https://github.com/jupyter-naas/abi/commit/7721b10f30dd800955d1f510a6600bdd61f71de7))
+
+- **iam, core**: Review round 1 of publishers and listing
+  ([`8ff2900`](https://github.com/jupyter-naas/abi/commit/8ff29009763ff3cb894ab239972d1b63a35d3b4e))
+
+- **iam, nexus**: A container lists another organisation's policies only where they are known
+  ([`fdd9fda`](https://github.com/jupyter-naas/abi/commit/fdd9fdaef68183ee027ef9a47678ea938c43c8d2))
+
+- **iam, nexus**: A module's pattern names no other module's items
+  ([`ef2f076`](https://github.com/jupyter-naas/abi/commit/ef2f0765cff7944e14f76ead21ee3f6fb6b39a38))
+
+- **iam, nexus**: An old companion follows its own role; manifests hash as before
+  ([`8c451fe`](https://github.com/jupyter-naas/abi/commit/8c451fe3983986fa0b575b36764033366cb223f0))
+
+- **iam, nexus**: Review round 1 of container paths
+  ([`c4a58a5`](https://github.com/jupyter-naas/abi/commit/c4a58a57698605659a157130b248804ca3d0f602))
+
+- **iam, nexus**: Review round 1 of the builder, IAM side
+  ([`b1c86ef`](https://github.com/jupyter-naas/abi/commit/b1c86eff29b97e6cc6fd245c3c931d32f2e10696))
+
+- **iam, nexus**: The attach list is IAM's, and whether a policy is known is one read
+  ([`951a92d`](https://github.com/jupyter-naas/abi/commit/951a92d770d217f682663461fb57f4814a7662ab))
+
+- **identity**: A code exchange and a refresh need Authenticate too
+  ([`101350a`](https://github.com/jupyter-naas/abi/commit/101350a58007dee084b9f1bab4b53a815d61bd14))
+
+- **identity**: A locked Zitadel user is unlocked, not reactivated
+  ([`199212a`](https://github.com/jupyter-naas/abi/commit/199212a9893852253fed8497468d76198cdf97f8))
+
+- **identity**: A Zitadel user never set up is locked to deactivate it
+  ([`b875da3`](https://github.com/jupyter-naas/abi/commit/b875da3cbc0e4e6aab71a2d738c6b446c5fa7a9c))
+
+- **identity**: The admin HTTP helper does not look like a raw NATS send to the broker-limit scan
+  ([`94d119c`](https://github.com/jupyter-naas/abi/commit/94d119c9e9225423220f0b7f0e64fe8f8f0c7d4d))
+
+- **idp**: Review round 1: cookie clearing, credentials changes, shared client addresses, relying
+  parties of the route
+  ([`309dc8e`](https://github.com/jupyter-naas/abi/commit/309dc8eaa7e7eb18cd47164ae65b5bb493bf6084))
+
+- **idp**: The admin app administers for the engine's accounts only
+  ([`7f2ad73`](https://github.com/jupyter-naas/abi/commit/7f2ad73763800ee498603b0222120651544ab1b1))
+
+- **jobs**: A workflow started for a user runs for them, and a Deny on its job name holds
+  ([`f4ee70a`](https://github.com/jupyter-naas/abi/commit/f4ee70a2a5910fc6ac74a164dc9727a342f82272))
+
+- **jobs**: Keep a sync job's slot until its thread exits on a second cancel
+  ([`087ac77`](https://github.com/jupyter-naas/abi/commit/087ac7780ffcb66ee06854ce1cdb78f7b2f32169))
+
+- **log**: Name the module and the error in two skipped-import warnings
+  ([`2f61c0d`](https://github.com/jupyter-naas/abi/commit/2f61c0d85b274eff4c9d453c105d26c1da2435c3))
+
+- **nats**: Retry a transfer open through an engine handover
+  ([`47e5e86`](https://github.com/jupyter-naas/abi/commit/47e5e86f2be01785e134a7acb9267b342fc75e69))
+
+- **nexus**: Offer a sub-policy where IAM lets it be attached
+  ([`7bf3dcf`](https://github.com/jupyter-naas/abi/commit/7bf3dcf20720caadbdc72d4e72c4dcb4409e0da6))
+
+- **nexus**: The move of the sets keeps every decision in the review's cases
+  ([`713f9ef`](https://github.com/jupyter-naas/abi/commit/713f9ef4787faab90d058e9503e7229ba5613c7a))
+
+- **object_storage**: The object lister lists under a plain path only
+  ([`ee979d7`](https://github.com/jupyter-naas/abi/commit/ee979d7f7e301532789d0f007b0013eb71d32702))
+
+- **sdk**: Keep the instance id when a discovery lease is lost
+  ([`db98a9d`](https://github.com/jupyter-naas/abi/commit/db98a9dd7230a1cdac7c859cac206ce4c0e7bc13))
+
+- **triple-store**: The schema graph is written only through LoadSchema
+  ([`3d21012`](https://github.com/jupyter-naas/abi/commit/3d2101264f74a5bcecd2f89369e0b121863e646a))
+
+- **workflows**: A run for a user keeps its bookkeeping the module's own
+  ([`2b73462`](https://github.com/jupyter-naas/abi/commit/2b73462fb3fae3eb65b1b061a0525e965c4b5392))
+
+### Chores
+
+- Leave the formatting of files this work touches as it was
+  ([`f9222f7`](https://github.com/jupyter-naas/abi/commit/f9222f71f465bae2767990c6670218147d7f9079))
+
+- Make check-core pass after the main merge
+  ([`6ccdeb5`](https://github.com/jupyter-naas/abi/commit/6ccdeb51cc33e6a4ffd5995a1e9ef672c5e9e11e))
+
+- **event**: Mark the PostgreSQL adapter's table names safe for bandit
+  ([`da0b643`](https://github.com/jupyter-naas/abi/commit/da0b643bdc766a7ff7c6c3446f5e9326cac6acf7))
+
+### Code Style
+
+- Fix the 25 ruff findings that fail make check
+  ([`ba278ad`](https://github.com/jupyter-naas/abi/commit/ba278ad305e093301c4b24c857a1c3cecaa6ebc8))
+
+- Lint and format the review fixes
+  ([`3dc3a7d`](https://github.com/jupyter-naas/abi/commit/3dc3a7dee21caed844af164c4f185e2c1d651c7b))
+
+### Continuous Integration
+
+- Run every broker suite and fail when nats-server is missing
+  ([`31e2049`](https://github.com/jupyter-naas/abi/commit/31e2049b5e950cea4d7c3233edf436b9d22ab92f))
+
+- Test the built-in IdP on Python 3.10 to 3.12 and in the identity workflow
+  ([`75750d7`](https://github.com/jupyter-naas/abi/commit/75750d7e25d6871aeaa4866793bded05db2783ef))
+
+### Documentation
+
+- Caller identity in CallContext (RFC §10 as built, ADR, AGENTS)
+  ([`3703ceb`](https://github.com/jupyter-naas/abi/commit/3703cebf44e32d21378eb14eac1adc10fb55d9af))
+
+- Engine instance id, session drain and client engines
+  ([`8deefc7`](https://github.com/jupyter-naas/abi/commit/8deefc7d75dc133f7d9875330bf736d64033353e))
+
+- IAM service guide, Service Map row, transitional bootstrap ADR
+  ([`eb1ce46`](https://github.com/jupyter-naas/abi/commit/eb1ce4612857f4452499d4f27b411682cbb5118c))
+
+- Module scopes, declared catalogs and the upgrade note
+  ([`d739301`](https://github.com/jupyter-naas/abi/commit/d73930148c9312a6624717408c80305fce3f0a20))
+
+- Nexus has no login of its own: ADR, RFC, AGENTS, guides and the e2e sign-in
+  ([`0799cd2`](https://github.com/jupyter-naas/abi/commit/0799cd21cf5d8d4a0b2aea37f42183a3031a62dc))
+
+- One-shot calls at the engine handover
+  ([`c1abae7`](https://github.com/jupyter-naas/abi/commit/c1abae78bed6bb27e3c0d34b913c140f23419c5a))
+
+- Plugging in Okta, Entra, Zitadel and Keycloak; identity in CI
+  ([`5c3b711`](https://github.com/jupyter-naas/abi/commit/5c3b711efbbd5f406c59f3b0f31e23a596295e05))
+
+- Point workflow documentation at durable workflows and remote classes
+  ([`029846a`](https://github.com/jupyter-naas/abi/commit/029846a2c7340f39e561be0de8e40d8b386f0021))
+
+- Provisioning, pending grants and IdP group bindings; 502 when a provider cannot make the person
+  ([`f59b482`](https://github.com/jupyter-naas/abi/commit/f59b482bce220000ca30e9eff3f4f67012d7d972))
+
+- Say what things are, not which task built them: stale task numbers and
+  ([`c815326`](https://github.com/jupyter-naas/abi/commit/c81532608c17b93d038d0b02b1297b4f45b80912))
+
+- **iam**: Unusable declared catalogs and one project per module id
+  ([`8bf4b0e`](https://github.com/jupyter-naas/abi/commit/8bf4b0ec3446c874ef1c294d5a197f3f4ac863ad))
+
+- **iam, nexus, examples**: Access policies and default groups, refusals outside the parent, the
+  #1413 journeys
+  ([`5a738e1`](https://github.com/jupyter-naas/abi/commit/5a738e1476e9e965d35dfa1d404827414230b268))
+
+- **iam, nexus, examples**: The specs say what the acceptance run changed
+  ([`d33aece`](https://github.com/jupyter-naas/abi/commit/d33aece73e08d004349bc4763198106f138d1379))
+
+### Features
+
+- Discovery and the model registry check the caller's policy
+  ([`636b1ac`](https://github.com/jupyter-naas/abi/commit/636b1ac463cde0a23fa06c1a424d2426d91153f3))
+
+- Platform tools act for the user who is chatting
+  ([`16d4000`](https://github.com/jupyter-naas/abi/commit/16d400049f597933717a085080050f2a685baa2f))
+
+- The built-in IdP is served at /idp and read over NATS
+  ([`f2f666a`](https://github.com/jupyter-naas/abi/commit/f2f666a6205c96f49b29af7fdb4384ab9fb4f793))
+
+- **activity_log**: Copy the per-actor SQLite logs into documents as a job
+  ([`1ac84c8`](https://github.com/jupyter-naas/abi/commit/1ac84c8cbc367d0e9ec813d5cbc3f97ccc08fcfa))
+
+- **agent**: A module's workflow or pipeline, as a tool, runs within the caller's scopes
+  ([`2ea4306`](https://github.com/jupyter-naas/abi/commit/2ea43062e4f9145ea858dc3ee739da9b2b5bcdd1))
+
+- **agent**: Run the agent memory migration and pruning as engine jobs
+  ([`2eafaf5`](https://github.com/jupyter-naas/abi/commit/2eafaf5a55225cdf41d5a640de8c23550cddbabb))
+
+- **cli**: Abi dev up runs the engine on NATS by default
+  ([`10e1b20`](https://github.com/jupyter-naas/abi/commit/10e1b20c0bfa8a2b61bc7e3af5c839062a45c6d2))
+
+- **core**: Engine tokens, service keys, module manifests and broker confinement
+  ([`5427041`](https://github.com/jupyter-naas/abi/commit/54270410aee2bcba731e258f8008492060e50140))
+
+- **core**: Event and activity_log authorize every operation
+  ([`cfe19d3`](https://github.com/jupyter-naas/abi/commit/cfe19d327e29e0126b848f9605e0b9346c470207))
+
+- **core**: Every kernel call carries a verified CallContext
+  ([`c58683b`](https://github.com/jupyter-naas/abi/commit/c58683bfb1e72d4f1c2f34709c33fb62432925ef))
+
+- **core**: IAM over NATS and the SDK, configured and loaded first
+  ([`bff3bf6`](https://github.com/jupyter-naas/abi/commit/bff3bf6c0dfc7458cdf6ee671d61f08c3b292a9e))
+
+- **core**: IAM policy engine, stores and built-in roles
+  ([`5b743f2`](https://github.com/jupyter-naas/abi/commit/5b743f210cee1b157f36e5573c7e51de83adb22d))
+
+- **core**: IAMFactory composes the service; typing fixes
+  ([`28a31f8`](https://github.com/jupyter-naas/abi/commit/28a31f8234a7938990e127636eeea409f47d98ef))
+
+- **core**: Identity over NATS, in every engine, tested against Zitadel
+  ([`33c1bca`](https://github.com/jupyter-naas/abi/commit/33c1bca64dc89807d5a50a8f798ecfbe012376d5))
+
+- **core**: Identity service verifies OIDC providers' tokens
+  ([`a973f51`](https://github.com/jupyter-naas/abi/commit/a973f51f97a4657221c420963c175e177e3353af))
+
+- **core**: Service guard, runtime catalogs and the email checks
+  ([`ee25d89`](https://github.com/jupyter-naas/abi/commit/ee25d89d88f392ab6a86b263051886adf0dcc29c))
+
+- **core**: Source control and coding environments authorize; bug (b) fixed
+  ([`0c57b78`](https://github.com/jupyter-naas/abi/commit/0c57b786e7c8cc47467358a58e59fba5b88c0ccc))
+
+- **core**: The data services enforce IAM in their domain services
+  ([`1de96d7`](https://github.com/jupyter-naas/abi/commit/1de96d776ab46fa45b4cb10f4ddf1dd96d0806a8))
+
+- **core**: Token exchange, personal and link keys, and revoking a principal's tokens
+  ([`d9c698e`](https://github.com/jupyter-naas/abi/commit/d9c698ece1efd46de4464726058a909d0916203e))
+
+- **core, sdk**: Kernel services list their resources, remote modules serve listers
+  ([`d1f60fa`](https://github.com/jupyter-naas/abi/commit/d1f60fa78b65fbdcd4e85f9bd33893f65fcc2b3d))
+
+- **core, sdk, cli**: The container of the call in every kernel service
+  ([`5f82765`](https://github.com/jupyter-naas/abi/commit/5f82765a103e9c08b1c01fa31d1b1445d28db369))
+
+- **core,sdk**: A delegated token carries the user; the on-behalf-of header is gone
+  ([`2826428`](https://github.com/jupyter-naas/abi/commit/282642841efbb4646e7815a45b7b3b462f64a073))
+
+- **discovery**: Group commit for registry writes
+  ([`8d11c75`](https://github.com/jupyter-naas/abi/commit/8d11c75a438d3404fab13495070b88d26b792427))
+
+- **engine**: One instance id, sessions past the release, backend-free clients
+  ([`ad5b741`](https://github.com/jupyter-naas/abi/commit/ad5b741b00471c7fb729f5fdac9917fa526d5295))
+
+- **engine**: One serving engine per NATS account, shared event and activity storage
+  ([`6416192`](https://github.com/jupyter-naas/abi/commit/6416192db46fdcf390928a8cbccb67562b134d5b))
+
+- **iam**: A sub-policy naming what its parent allows nowhere is refused, not a silent no-op
+  ([`f1a0c53`](https://github.com/jupyter-naas/abi/commit/f1a0c5302b4cb4d0dc2b34bf08c268b7b4fef7d5))
+
+- **iam**: Authorize_declared, the SDK's declared catalogs and require_action
+  ([`e967e72`](https://github.com/jupyter-naas/abi/commit/e967e72d025cded4377488de08099319eff47d45))
+
+- **iam**: Catalogs flag what the roles leave out; core generates no feature policy
+  ([`5665f0e`](https://github.com/jupyter-naas/abi/commit/5665f0ed164917404d9a0015e132c86c947769b7))
+
+- **iam**: Grant only what you hold
+  ([`5f39192`](https://github.com/jupyter-naas/abi/commit/5f3919264b2788f2f91c04d3b57c01d9af50f060))
+
+- **iam**: Iam:ViewAs, and the person holds no more than the viewer
+  ([`bf12555`](https://github.com/jupyter-naas/abi/commit/bf12555e7b416df7b95a97d6f56976da429debd3))
+
+- **iam**: Link an identity provider's identity to a user of the built-in login
+  ([`3f2241a`](https://github.com/jupyter-naas/abi/commit/3f2241acc1b773e68c46dfc328622a23ca3fa016))
+
+- **iam**: Module scopes, and catalogs modules declare
+  ([`cf8bb87`](https://github.com/jupyter-naas/abi/commit/cf8bb87d9eaa5271b15ef216385454920615e0d8))
+
+- **iam**: Organisation and workspace sets bound users' module scopes and features
+  ([`d162b0f`](https://github.com/jupyter-naas/abi/commit/d162b0fe50426c09856b6c76b6df8844902d3724))
+
+- **iam**: Pending grants for invitees and IdP group bindings
+  ([`c7cc263`](https://github.com/jupyter-naas/abi/commit/c7cc2630d96ac5e64d430686314f314092cd0879))
+
+- **iam**: Policies and groups owned by an organisation or a workspace
+  ([`c575aad`](https://github.com/jupyter-naas/abi/commit/c575aad2effaa1f31bebb55eafdf018558c23d4b))
+
+- **iam**: Policies move to another owner; the editor of a sub-policy reads what it may hold within
+  its parent
+  ([`3209301`](https://github.com/jupyter-naas/abi/commit/320930185c0c99a7bc6b14440e0d9477a05b6277))
+
+- **iam**: Resource names are container paths
+  ([`bcce809`](https://github.com/jupyter-naas/abi/commit/bcce809bd35b037056e72456b42594d852c2b872))
+
+- **iam**: Sets removed; no built-in role holds a module scope
+  ([`84633ff`](https://github.com/jupyter-naas/abi/commit/84633ff9b12598155200da3286b50d89e9fcdbb8))
+
+- **iam**: Sub-policies, a policy narrowed by its parent read live
+  ([`ac30519`](https://github.com/jupyter-naas/abi/commit/ac30519d7cdd6ac3d6dfd2fa910155c191f2942d))
+
+- **iam**: Workflow notices and process workflows in the broker grants and manifests
+  ([`c7356cf`](https://github.com/jupyter-naas/abi/commit/c7356cf846941dc22a32638fa89c333d0013a18c))
+
+- **iam, nexus**: What a sub-policy of a parent may grant
+  ([`27e23ee`](https://github.com/jupyter-naas/abi/commit/27e23eecaf4a77302e4f5c4647bcf65f8a423905))
+
+- **iam, sdk, proto**: A principal's groups, and a search for principals
+  ([`5669096`](https://github.com/jupyter-naas/abi/commit/566909670c9fe3d4eca2ad94bfd636023f83eb50))
+
+- **iam, sdk, proto**: Catalogs name their publisher, listing as the caller
+  ([`12901ca`](https://github.com/jupyter-naas/abi/commit/12901cab9049c6e5203c0f13bb92c10ce9294772))
+
+- **identity**: Change and delete a person at their identity provider
+  ([`ce6acad`](https://github.com/jupyter-naas/abi/commit/ce6acadb8d6be20b15a2b7df7bd477c9370be4b3))
+
+- **identity**: The provisioning port, with an adapter per provider setting
+  ([`32a29e9`](https://github.com/jupyter-naas/abi/commit/32a29e99aed9cdb942c7be3e32fe20e695c67da9))
+
+- **jobs**: A job or workflow started for a user runs for that user
+  ([`7ec5df3`](https://github.com/jupyter-naas/abi/commit/7ec5df33e53c5816effac30cbc9db3d350c423b0))
+
+- **nats**: Discovery and the SDK agent and model hosts answer calls side by side
+  ([`079417d`](https://github.com/jupyter-naas/abi/commit/079417d9a6a89510737103bcdebd9607315e0c1d))
+
+- **nats**: Discovery declares and authorizes module apps
+  ([`51614e6`](https://github.com/jupyter-naas/abi/commit/51614e668540da621f386a1cc7d166c6c893173e))
+
+- **nats**: Kernel services handle up to 64 calls at once
+  ([`0cbe866`](https://github.com/jupyter-naas/abi/commit/0cbe866c0413d6b8d29e3b38b4ed92f6215dd2cd))
+
+- **nats**: Stop the process when its NATS connection closes for good
+  ([`0263240`](https://github.com/jupyter-naas/abi/commit/02632400cf9c7413730825735e3172869be6915a))
+
+- **nexus**: A real API keys page; the engine exchanges an IdP token for a session
+  ([`e6f7bce`](https://github.com/jupyter-naas/abi/commit/e6f7bce13cff55fcc623fa31c56f32aaa0db4f90))
+
+- **nexus**: Every authorization decision goes through IAM
+  ([`6eeb927`](https://github.com/jupyter-naas/abi/commit/6eeb9275d0748bf16f3837c081bfbc3ab5eb2804))
+
+- **nexus**: Invitations through the identity providers, IdP group bindings
+  ([`564683e`](https://github.com/jupyter-naas/abi/commit/564683e66c94e9ca8b74883f24f508cfd759cbbd))
+
+- **nexus**: Publishers, resource listing, and nothing lists more than the caller may grant
+  ([`71020a3`](https://github.com/jupyter-naas/abi/commit/71020a3422f86390ef6fc5528dcf3c2d31127f7e))
+
+- **nexus**: The API takes sessions, keys and coding keys where each belongs; links are IAM grants
+  ([`0803aba`](https://github.com/jupyter-naas/abi/commit/0803aba2f1aadb283420940e32b692f1b6c15249))
+
+- **sdk**: Cut module rollouts over without dropping in-flight work
+  ([`a9559d9`](https://github.com/jupyter-naas/abi/commit/a9559d9239a6fdff8261a16df0e52426c3b31d1f))
+
+- **triple-store**: A module's ontology is loaded with triple_store:LoadSchema on its source
+  ([`821918f`](https://github.com/jupyter-naas/abi/commit/821918f75b3ac1eae5617e48934d9dce35dc512b))
+
+### Performance Improvements
+
+- **agents**: Stop reading the whole registry for every agent poll
+  ([`1755a62`](https://github.com/jupyter-naas/abi/commit/1755a623c805b37f59a1ca5d0cbdf8fb8f13e3fb))
+
+### Refactoring
+
+- Review minors for module scopes
+  ([`750e738`](https://github.com/jupyter-naas/abi/commit/750e7389e526924896500b673e1dbdead050381c))
+
+- **jobs**: One job identity per host, the broker request takes its call context
+  ([`335df04`](https://github.com/jupyter-naas/abi/commit/335df046d7355cf2f372f1986336fffa2b6ea57f))
+
+- **nats**: Size broker messages with one function
+  ([`c5f1fe6`](https://github.com/jupyter-naas/abi/commit/c5f1fe6a811c4bffd22a83278fa4acdc4aa15863))
+
+- **nexus**: Group a user's own runs by the action that reads them; type a test's tools
+  ([`18ac381`](https://github.com/jupyter-naas/abi/commit/18ac38120fd153fab4f1886c804dcf144f1a1ab2))
+
+### Testing
+
+- Cover the document and vector store NATS codecs
+  ([`73c03ec`](https://github.com/jupyter-naas/abi/commit/73c03ec49418158ffd2c23c1000bf0906c5d6413))
+
+- The SDK demo reaches identity; client engines get its NATS facade
+  ([`6719f48`](https://github.com/jupyter-naas/abi/commit/6719f4822d77543a35c4758e9852fc59466012fb))
+
+- **core**: NATS adapter stubs take the vouched_email of ensure_user
+  ([`631a087`](https://github.com/jupyter-naas/abi/commit/631a08717b32dee9ef2208875ea20b38ecda3a0f))
+
+- **core**: Review the IAM change-event send against the broker limit
+  ([`e0e6322`](https://github.com/jupyter-naas/abi/commit/e0e63222618a95ac7d06b5f2c4e1b64f6c061296))
+
+- **discovery**: One with for the refused lookup
+  ([`0f79d24`](https://github.com/jupyter-naas/abi/commit/0f79d2458e6b5bfcaee25796b9f8c39b90c9a14c))
+
+- **iam**: A retired policy that is a parent is detached but kept
+  ([`d60d5f0`](https://github.com/jupyter-naas/abi/commit/d60d5f061f6a9148bc336f23b696d98ff74c5357))
+
+- **nats**: Drain the inbox tap before checking the error reply headers
+  ([`69bc862`](https://github.com/jupyter-naas/abi/commit/69bc862b76306d8df08ae64720796ed646e2f917))
+
 
 ## v3.2.0 (2026-11-02)
 

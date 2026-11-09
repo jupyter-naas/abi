@@ -4,12 +4,13 @@ import asyncio
 
 import nats
 import pytest
-from naas_abi_core.engine.nats_auth import module_key
 from naas_abi_core.engine.nats_rpc_integration_test import SECRET, broker  # noqa: F401
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.services.discovery.discovery_factory import start_discovery
 from naas_abi_core.services.document.adapters.secondary.DocumentSecondaryAdapterNATSClient_test import (
     document_host,  # noqa: F401
 )
+from naas_abi_sdk.credentials import host_audience
 
 pytestmark = [
     pytest.mark.integration,
@@ -19,13 +20,11 @@ pytestmark = [
 LARGE = "large-event-" * 5000  # above the inline bound: read in parts
 
 
+def _host_token(name):
+    """What a module's call to another module's host carries: its token, addressed
+    to that host."""
+    return lambda recipient: TEST_TOKENS.token(name, audience=host_audience(recipient))
 
-def _module_token(module_id: str):
-    """A module signs as its own module id with its key; its calls to another
-    module carry tokens bound to it."""
-    from naas_abi_sdk.service_token import ModuleToken
-
-    return ModuleToken(module_id, module_key(SECRET, module_id))
 
 def test_run_events_are_pushed_and_status_is_read_once(document_host):  # noqa: F811
     from naas_abi_sdk import (
@@ -40,6 +39,7 @@ def test_run_events_are_pushed_and_status_is_read_once(document_host):  # noqa: 
         nc = await nats.connect(document_host)
         registry = await start_discovery(nc, SECRET)
         stop = asyncio.Event()
+        token = TEST_TOKENS.token("agent-updates-test")
         # Every agent request crossing the broker, by operation.
         requests: dict[str, int] = {}
 
@@ -104,7 +104,8 @@ def test_run_events_are_pushed_and_status_is_read_once(document_host):  # noqa: 
             run_module(
                 Provider,
                 url=document_host,
-                token=_module_token(Provider.module_id),
+                token=token,
+                host_token=_host_token("agent-updates-test"),
                 discovery=DiscoveryConfiguration(),
             )
         )
@@ -113,7 +114,8 @@ def test_run_events_are_pushed_and_status_is_read_once(document_host):  # noqa: 
                 run_module(
                     Consumer,
                     url=document_host,
-                    token=_module_token(Consumer.module_id),
+                    token=token,
+                    host_token=_host_token("agent-updates-test"),
                     discovery=DiscoveryConfiguration(refresh_seconds=0.05),
                 ),
                 60,

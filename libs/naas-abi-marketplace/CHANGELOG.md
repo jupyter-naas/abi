@@ -2,6 +2,52 @@
 
 <!-- version list -->
 
+## v3.65.0 (2026-11-07)
+
+### Bug Fixes
+
+- **agent**: PowerPointAgent's copy takes keep too; the sub-agent copy helper is public
+  ([`5a6f7c0`](https://github.com/jupyter-naas/abi/commit/5a6f7c022a3ddae7cf9f3949ef765338ec19a56f))
+
+- **iam**: An old-grammar owner holds only old-grammar scopes, by the old rules
+  ([`1e1fbaf`](https://github.com/jupyter-naas/abi/commit/1e1fbaf4d8ba1cf1d42edb7d89fabfd97097d583))
+
+- **marketplace**: Dagster bodies and the matched-tweets backfill have an identity
+  ([`c395a87`](https://github.com/jupyter-naas/abi/commit/c395a871f49728d32559fbbfd389490c55d54483))
+
+### Documentation
+
+- Module scopes, declared catalogs and the upgrade note
+  ([`d739301`](https://github.com/jupyter-naas/abi/commit/d73930148c9312a6624717408c80305fce3f0a20))
+
+### Features
+
+- **core**: Engine tokens, service keys, module manifests and broker confinement
+  ([`5427041`](https://github.com/jupyter-naas/abi/commit/54270410aee2bcba731e258f8008492060e50140))
+
+- **core**: Identity service verifies OIDC providers' tokens
+  ([`a973f51`](https://github.com/jupyter-naas/abi/commit/a973f51f97a4657221c420963c175e177e3353af))
+
+- **core**: The data services enforce IAM in their domain services
+  ([`1de96d7`](https://github.com/jupyter-naas/abi/commit/1de96d776ab46fa45b4cb10f4ddf1dd96d0806a8))
+
+- **nexus**: Every authorization decision goes through IAM
+  ([`6eeb927`](https://github.com/jupyter-naas/abi/commit/6eeb9275d0748bf16f3837c081bfbc3ab5eb2804))
+
+
+## v3.64.1 (2026-11-05)
+
+### Bug Fixes
+
+- **marketplace**: Install CPU-only torch for docling
+  ([`384aeab`](https://github.com/jupyter-naas/abi/commit/384aeab7b2189bd23246b0a874d926b210686327))
+
+### Documentation
+
+- Point workflow documentation at durable workflows and remote classes
+  ([`029846a`](https://github.com/jupyter-naas/abi/commit/029846a2c7340f39e561be0de8e40d8b386f0021))
+
+
 ## v3.64.0 (2026-11-02)
 
 ### Bug Fixes

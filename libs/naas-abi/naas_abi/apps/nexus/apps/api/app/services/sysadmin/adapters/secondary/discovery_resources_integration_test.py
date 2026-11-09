@@ -22,10 +22,11 @@ from naas_abi.apps.nexus.apps.api.app.services.sysadmin.contracts import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.port import SourceUnavailable
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.tests import fixtures
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 
 pytestmark = pytest.mark.integration
 
-SECRET = "sysadmin-discovery-test-secret-32-bytes"
+SECRET = TEST_TOKENS.verifier
 
 
 @pytest.fixture(scope="module")
@@ -66,8 +67,8 @@ def broker(tmp_path_factory):
         process.wait(timeout=5)
 
 
-async def _register(nc, project, module_id, instance_id, version):
-    from naas_abi_core.engine.nats_auth import issue_service_token
+async def _register(nc, project, module_id, instance_id, version, principal=None):
+    """``principal``: the module's account when IAM decides, else its id."""
     from naas_abi_proto.discovery.v1 import discovery_pb2 as pb
 
     request = pb.RegisterRequest(
@@ -84,7 +85,7 @@ async def _register(nc, project, module_id, instance_id, version):
         f"abi.discovery.{project}.v1.register",
         request.SerializeToString(),
         timeout=5,
-        headers={"Nats-Auth-Token": issue_service_token(module_id, SECRET)},
+        headers={"Nats-Auth-Token": TEST_TOKENS.token(principal or module_id)},
     )
     assert not pb.RegisterResponse.FromString(reply.data).error.code
 
@@ -92,8 +93,8 @@ async def _register(nc, project, module_id, instance_id, version):
 class Registry:
     """One fresh discovery project per test, seeded as the contract describes."""
 
-    def __init__(self, broker, identity="api"):
-        self.broker, self.identity = broker, identity
+    def __init__(self, broker, identity="api", iam=None):
+        self.broker, self.identity, self.iam = broker, identity, iam
         self.project = f"p{uuid4().hex[:12]}"
         self.transports = []
 
@@ -101,20 +102,33 @@ class Registry:
         from naas_abi_core.services.discovery.discovery_factory import start_discovery
 
         self.primary = await start_discovery(
-            self.broker.nc, SECRET, self.project, lease_seconds=300
+            self.broker.nc, SECRET, self.project, lease_seconds=300, iam=self.iam
         )
+        # With IAM, a module registers as its own account (its bootstrap).
+        accounts = {}
+        if self.iam is not None:
+            from naas_abi_core.services.iam.tests.iam_harness import IAMHarness
+
+            harness = IAMHarness(self.iam)
+            for module_id in ("acme", "zeta"):
+                name = f"module/{self.project}/{module_id}"
+                accounts[module_id] = harness.service_account(name).id
         for name, value in fixtures.SEED_ITEMS.items():
-            await _register(self.broker.nc, self.project, "acme", name, value.decode())
-        await _register(self.broker.nc, self.project, "zeta", "z-1", "1.0.0")
+            await _register(
+                self.broker.nc,
+                self.project,
+                "acme",
+                name,
+                value.decode(),
+                accounts.get("acme"),
+            )
+        await _register(self.broker.nc, self.project, "zeta", "z-1", "1.0.0", accounts.get("zeta"))
 
     def client(self):
-        from naas_abi_core.engine.nats_auth import issue_service_token
         from naas_abi_sdk.discovery import DiscoveryClient
         from naas_abi_sdk.transport import Transport
 
-        transport = Transport(
-            self.broker.url, lambda: issue_service_token(self.identity, SECRET), timeout=5
-        )
+        transport = Transport(self.broker.url, lambda: TEST_TOKENS.token(self.identity), timeout=5)
         self.transports.append(transport)
         return DiscoveryClient(transport, self.project)
 
@@ -168,11 +182,25 @@ def test_reading_an_instance_shows_its_descriptor(discovery):
 
 
 def test_an_identity_that_may_not_evict_gets_a_reason(broker):
-    registry = Registry(broker, identity="acme")
+    from naas_abi_core.services.iam.tests.authorization_contract import contract_iam
+    from naas_abi_core.services.iam.tests.iam_harness import IAMHarness, statement
+
+    iam = contract_iam()
+    harness = IAMHarness(iam)
+    viewer = harness.service_account("viewer")
+    harness.grant(
+        viewer.id,
+        statement(
+            "Allow",
+            ["discovery:ListModules", "discovery:GetModule"],
+            ["abi:discovery:module/*"],
+        ),
+    )
+    registry = Registry(broker, identity="viewer", iam=iam)
     broker.run(registry.start())
     try:
         discovery = OnLoop(broker, DiscoveryResources(registry.client))
-        with pytest.raises(SourceUnavailable, match="admin identities"):
+        with pytest.raises(SourceUnavailable, match="discovery:Evict"):
             asyncio.run(discovery.delete("acme/alpha"))
         assert "alpha" in {e.name for e in asyncio.run(discovery.list("acme")).entries}
     finally:

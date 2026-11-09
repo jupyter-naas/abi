@@ -3,12 +3,14 @@
 Per-user browser coding environments (Coder-backed) exposed to Nexus:
 provision / start / stop / delete / status / access, plus template listing.
 
-Scoping: every operation requires membership of the given Nexus ``workspace_id``
-(org) via ``require_workspace_access``. Per-environment ownership binding (so a
-member can only act on their own environment ids) lands with the Nexus
-persistence table — see RFC section 9. Listing is scoped to the caller's own
-orchestrator identity (``ensure_user`` -> owner filter), so it needs no such
-table and never leaks another member's environments.
+Authorization: every route is behind the ``code`` feature of the request's
+``workspace_id`` (``ReadCode`` to read, ``WriteCode`` to change anything; the
+default repository is ``SetDefaultRepo``, an admin action). Repositories and
+environments are kernel resources, decided by the kernel with the user's role
+once placed in the workspace: a repository named by a request must belong to
+that workspace (``repo_access``), write access on it is granted only after IAM
+let the user write it, and an environment is personal to its owner
+(``environment/<owner>/<id>``) and to the workspace it was provisioned for.
 
 The core ``CodingEnvironmentService`` is synchronous, so every call is offloaded
 to a worker thread via ``run_in_threadpool`` to avoid blocking the event loop.
@@ -23,7 +25,7 @@ import secrets
 import time
 import urllib.error
 import urllib.request
-from datetime import timedelta
+from dataclasses import replace
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -31,7 +33,6 @@ from fastapi.concurrency import run_in_threadpool
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
-    require_workspace_access,
 )
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
@@ -39,7 +40,24 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     CodingEnvironmentModel,
     WorkspaceModel,
 )
-from naas_abi.apps.nexus.apps.api.app.services.auth.service import create_access_token
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment import agent_credentials
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment.adapters.primary.coding_environment__primary_adapter__guard import (  # noqa: E501
+    KernelRoute,
+    authorize_environment,
+    authorize_repo,
+    get_iam,
+    source_control_error,
+)
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment.repo_access import (
+    RepoNameTaken,
+    belongs_to_workspace,
+    grant_write,
+    place_created_repo,
+)
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
+from naas_abi.apps.nexus.apps.api.app.services.view_as.active import viewing
+from naas_abi_core.engine.call_context import current_call_context, use_call_context
 from naas_abi_core.services.coding_environment.adapters.secondary.CoderAdapter import (
     _sanitize_coder_username,
 )
@@ -59,19 +77,23 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
 from naas_abi_core.services.coding_environment.CodingEnvironmentService import (
     CodingEnvironmentService,
 )
+from naas_abi_core.services.iam.IAMPorts import IIAMService, ResourceNotFoundError
 from naas_abi_core.services.source_control.SourceControlPorts import (
     BranchNameConflictError,
     Repo,
+    RepoExistsError,
+    RepoNotFoundError,
     SourceControlError,
 )
 from naas_abi_core.services.source_control.SourceControlService import (
     SourceControlService,
+    repo_key,
 )
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-router = APIRouter(dependencies=[Depends(get_current_user_required)])
+router = APIRouter(dependencies=[Depends(get_current_user_required)], route_class=KernelRoute)
 
 
 _HTTP_STATUS_BY_ERROR: dict[type[CodingEnvironmentError], int] = {
@@ -160,11 +182,7 @@ def _public_clone_url(repo_id: str) -> str:
 
 def _to_repo_item(repo: Repo) -> RepoListItem:
     repo_id = f"{repo.owner}/{repo.name}"
-    clone_url = (
-        repo.clone_url
-        if repo.clone_url.startswith("file:")
-        else _public_clone_url(repo_id)
-    )
+    clone_url = repo.clone_url if repo.clone_url.startswith("file:") else _public_clone_url(repo_id)
     return RepoListItem(
         repo_id=repo_id,
         name=repo.name,
@@ -182,35 +200,31 @@ def _to_repo_item(repo: Repo) -> RepoListItem:
 _SIDECAR_PORT = 8378
 
 
-def _mint_agent_token(
-    user_id: str, ws_base: str | None = None, ws_secret: str | None = None
+async def _mint_agent_token(
+    user_id: str,
+    workspace_id: str | None,
+    ws_base: str | None,
+    label: str = "",
 ) -> str:
-    """A long-lived access token injected into the workspace so the Continue
-    extension can authenticate to the OpenAI shim as the user.
-
-    When ``ws_base``/``ws_secret`` are given they are embedded as claims so the
-    shim can resolve the caller's coding-workspace exec sidecar (server-derived,
-    never client-supplied) and let workspace tools act on the right container.
-    """
-    claims: dict[str, str] = {"sub": user_id}
-    if ws_base:
-        claims["ws_base"] = ws_base
-    if ws_secret:
-        claims["ws_secret"] = ws_secret
-    token, _ = create_access_token(
-        data=claims,
-        expires_delta=timedelta(days=settings.coding_agent_token_days),
+    """The key the in-workspace agent (the Continue extension) authenticates to
+    the OpenAI gateway with, as the user: a personal key made for this
+    environment, bound to its sidecar (``ws_base``, which the gateway resolves
+    to the sidecar's secret server-side) and narrowed to its workspace
+    (``agent_credentials``). Never a session token."""
+    return await run_in_threadpool(
+        agent_credentials.mint_agent_key,
+        user_id=user_id,
+        workspace_id=workspace_id,
+        sidecar_base=ws_base,
+        label=label,
     )
-    return token
 
 
 def _coder_username(name: str | None, email: str) -> str:
     """The Coder username for this user — same derivation the Coder adapter uses
     for ``ensure_user``, so it matches the workspace owner in the container name
     ``coder-<owner>-<workspace>``."""
-    return _sanitize_coder_username(name or "") or _sanitize_coder_username(
-        email.split("@", 1)[0]
-    )
+    return _sanitize_coder_username(name or "") or _sanitize_coder_username(email.split("@", 1)[0])
 
 
 def _continue_agent_ids() -> list[str]:
@@ -227,9 +241,7 @@ def _continue_agent_ids() -> list[str]:
         ids = [a for a in _list_agent_model_ids() if not a.startswith("_")]
     except Exception:
         ids = []
-    ordered = ([default] if default and default in ids else []) + [
-        a for a in ids if a != default
-    ]
+    ordered = ([default] if default and default in ids else []) + [a for a in ids if a != default]
     return ordered or ([default] if default else ["AbiAgent"])
 
 
@@ -253,8 +265,9 @@ def _prepare_clone(
     username = _forge_username(display_name, email)
     sc.ensure_user(external_id=external_id, email=email, username=username)
     # Per-user push: the user pushes branch-per-workspace changes to a shared
-    # monorepo they don't own, so they need write access.
-    sc.add_collaborator(repo_id=repo_id, username=username, permission="write")
+    # monorepo they don't own, so they need write access. The caller checked
+    # ``_authorize_repo(..., write=True)`` first.
+    grant_write(sc, repo_id, username)
 
     if new_branch:
         existing = {b.name for b in sc.list_branches(repo_id=repo_id)}
@@ -269,7 +282,7 @@ def _prepare_clone(
     if repo and repo.clone_url.startswith("file:"):
         return repo.clone_url, checkout
 
-    token = sc.mint_git_token(user_id=username)
+    token = sc.mint_git_token()
     creds = f"{quote(username, safe='')}:{quote(token, safe='')}"
     repo_url = (
         f"{settings.coding_git_clone_scheme}://{creds}"
@@ -418,13 +431,28 @@ def _to_template(template: WorkspaceTemplate) -> TemplateResponse:
     )
 
 
-@router.get("/templates")
+async def _orchestrator_user(service: CodingEnvironmentService, user: User) -> str:
+    """The caller's orchestrator user, ensured: the service names an environment
+    by its owner, which it finds again (after a restart) only once the owner's
+    orchestrator user is ensured. In a view it is not: ensuring the person's user is a write
+    a page load must not make, and what it would find is private to them."""
+    if viewing():
+        return user.id
+    return await run_in_threadpool(
+        service.ensure_user,
+        external_id=user.id,
+        email=str(user.email),
+        username=user.name,
+    )
+
+
+@router.get(
+    "/templates",
+    dependencies=[guard("ReadCode"), declares("coding_environment:ListTemplates")],
+)
 async def list_templates(
-    workspace_id: str,
-    current_user: User = Depends(get_current_user_required),
     service: CodingEnvironmentService = Depends(_get_coding_environment_service),
 ) -> list[TemplateResponse]:
-    await require_workspace_access(current_user.id, workspace_id)
     try:
         templates = await run_in_threadpool(service.list_templates)
     except CodingEnvironmentError as exc:
@@ -432,48 +460,97 @@ async def list_templates(
     return [_to_template(template) for template in templates]
 
 
-@router.get("/repos")
+@router.get(
+    "/repos",
+    dependencies=[guard("ReadCode"), declares("source_control:ListRepos")],
+)
 async def list_repos(
     workspace_id: str,
-    current_user: User = Depends(get_current_user_required),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
+    iam: IIAMService | None = Depends(get_iam),
 ) -> list[RepoListItem]:
-    """Repositories the user can work in (for the repo selector). The configured
-    default is surfaced first."""
-    await require_workspace_access(current_user.id, workspace_id)
-    if source_control is None:
+    """Repositories the user can work in (for the repo selector): this
+    workspace's and the shared deployment repository, surfaced first."""
+    if source_control is None or iam is None:
         return []
     try:
         repos = await run_in_threadpool(source_control.list_repos)
     except SourceControlError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    items = [_to_repo_item(r) for r in repos]
+    items = [
+        _to_repo_item(r)
+        for r in repos
+        if await run_in_threadpool(belongs_to_workspace, iam, f"{r.owner}/{r.name}", workspace_id)
+    ]
     default = settings.coding_repo_id
     items.sort(key=lambda i: (i.repo_id != default, i.repo_id.lower()))
     return items
 
 
-@router.post("/repos")
+@router.post(
+    "/repos",
+    dependencies=[declares("WriteCode"), declares("source_control:EnsureRepo")],
+)
 async def create_repo(
     body: RepoCreateRequest,
     current_user: User = Depends(get_current_user_required),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
+    iam: IIAMService | None = Depends(get_iam),
+    db: AsyncSession = Depends(get_db),
 ) -> RepoListItem:
-    await require_workspace_access(current_user.id, body.workspace_id)
+    """Create a repository for this workspace, placed in it, and make the
+    creator a writer."""
+    await authz.require("WriteCode", user=current_user, workspace=body.workspace_id)
     if source_control is None or not _repo_owner():
         raise HTTPException(status_code=503, detail="No git backend configured.")
+    if iam is None:
+        raise HTTPException(status_code=503, detail="Authorization is unavailable.")
     username = _forge_username(current_user.name or "", str(current_user.email))
+    repo_id = f"{_repo_owner()}/{body.name}"
+    row = (
+        await db.execute(select(WorkspaceModel).where(WorkspaceModel.id == body.workspace_id))
+    ).scalar_one_or_none()
+    taken = HTTPException(status_code=409, detail="That repository name is taken.")
+    container = await authz.AUTHZ.container_of(body.workspace_id)
+
+    def create() -> Repo:
+        # Created in the workspace's own call context, so the kernel places the
+        # new repository there (the kernel's create rule) and checks the user's
+        # role on it: a workspace role reaches it, the platform's ``EnsureRepo``
+        # is not needed. ``create_repo`` never returns a repository that existed,
+        # in any letter case, so nothing that existed is ever placed here or
+        # granted.
+        context = current_call_context()
+        with use_call_context(replace(context, container=container)):
+            return source_control.create_repo(
+                owner=_repo_owner(),
+                name=body.name,
+                private=body.private,
+                # auto_init=False -> a truly empty repo, so an existing local
+                # history can be pushed to it (the "create new repo, then push"
+                # onboarding flow).
+                auto_init=body.auto_init,
+            )
+
     try:
-        # auto_init=False -> a truly empty repo, so an existing local history can
-        # be pushed to it (the "create new repo, then push" onboarding flow).
-        repo = await run_in_threadpool(
-            source_control.ensure_repo,
-            owner=_repo_owner(),
-            name=body.name,
-            private=body.private,
-            auto_init=body.auto_init,
+        repo = await run_in_threadpool(create)
+    except (RepoExistsError, RepoNotFoundError, ResourceNotFoundError):
+        # Not found, for a create, is a name another workspace or the platform
+        # holds. A refusal of the caller's own (``PermissionDeniedError``) is a 403.
+        raise taken from None
+    except SourceControlError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    if repo_key(f"{repo.owner}/{repo.name}") != repo_key(repo_id):
+        raise taken
+    try:
+        await run_in_threadpool(
+            place_created_repo,
+            iam,
+            repo,
+            body.workspace_id,
+            getattr(row, "organization_id", None),
         )
-        repo_id = f"{repo.owner}/{repo.name}"
+        await authorize_repo(iam, repo_id, body.workspace_id, write=True)
         # Repos are owned by the platform account, so grant the creator write
         # access — otherwise their push is rejected as "repository not found".
         await run_in_threadpool(
@@ -482,105 +559,114 @@ async def create_repo(
             email=str(current_user.email),
             username=username,
         )
-        await run_in_threadpool(
-            source_control.add_collaborator,
-            repo_id=repo_id,
-            username=username,
-            permission="write",
-        )
+        await run_in_threadpool(grant_write, source_control, repo_id, username)
+    except RepoNameTaken:
+        raise taken from None
     except SourceControlError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return _to_repo_item(repo)
 
 
-@router.get("/repo-contents")
+@router.get(
+    "/repo-contents",
+    dependencies=[guard("ReadCode"), declares("source_control:ListContents")],
+)
 async def repo_contents(
     workspace_id: str,
     repo_id: str | None = None,
     path: str = "",
     ref: str | None = None,
-    current_user: User = Depends(get_current_user_required),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
+    iam: IIAMService | None = Depends(get_iam),
 ) -> list[ContentEntryResponse]:
     """Directory listing at ``path`` on ``ref`` — powers the repo file browser."""
-    await require_workspace_access(current_user.id, workspace_id)
     repo = _default_repo_id(repo_id)
     if not repo or source_control is None:
         return []
+    await authorize_repo(iam, repo, workspace_id, write=False)
     try:
         entries = await run_in_threadpool(
             source_control.list_contents, repo_id=repo, path=path, ref=ref
         )
     except SourceControlError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise source_control_error(exc) from exc
     return [
-        ContentEntryResponse(name=e.name, path=e.path, type=e.type, size=e.size)
-        for e in entries
+        ContentEntryResponse(name=e.name, path=e.path, type=e.type, size=e.size) for e in entries
     ]
 
 
-@router.get("/repo-file")
+@router.get(
+    "/repo-file",
+    dependencies=[guard("ReadCode"), declares("source_control:GetFile")],
+)
 async def repo_file(
     workspace_id: str,
     path: str,
     repo_id: str | None = None,
     ref: str | None = None,
-    current_user: User = Depends(get_current_user_required),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
+    iam: IIAMService | None = Depends(get_iam),
 ) -> FileContentResponse:
-    await require_workspace_access(current_user.id, workspace_id)
     repo = _default_repo_id(repo_id)
     if not repo or source_control is None:
         raise HTTPException(status_code=503, detail="No git backend configured.")
+    await authorize_repo(iam, repo, workspace_id, write=False)
     try:
-        f = await run_in_threadpool(
-            source_control.get_file, repo_id=repo, path=path, ref=ref
-        )
+        f = await run_in_threadpool(source_control.get_file, repo_id=repo, path=path, ref=ref)
     except SourceControlError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise source_control_error(exc) from exc
     return FileContentResponse(
         path=f.path, name=f.name, size=f.size, text=f.text, is_binary=f.is_binary
     )
 
 
-@router.get("/repo-commits")
+@router.get(
+    "/repo-commits",
+    dependencies=[guard("ReadCode"), declares("source_control:ListCommits")],
+)
 async def repo_commits(
     workspace_id: str,
     repo_id: str | None = None,
     ref: str | None = None,
     limit: int = 20,
-    current_user: User = Depends(get_current_user_required),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
+    iam: IIAMService | None = Depends(get_iam),
 ) -> list[CommitResponse]:
-    await require_workspace_access(current_user.id, workspace_id)
     repo = _default_repo_id(repo_id)
     if not repo or source_control is None:
         return []
+    await authorize_repo(iam, repo, workspace_id, write=False)
     try:
         commits = await run_in_threadpool(
             source_control.list_commits, repo_id=repo, ref=ref, limit=limit
         )
     except SourceControlError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise source_control_error(exc) from exc
     return [
-        CommitResponse(sha=c.sha, message=c.message, author=c.author, date=c.date)
-        for c in commits
+        CommitResponse(sha=c.sha, message=c.message, author=c.author, date=c.date) for c in commits
     ]
 
 
-@router.post("/git-token")
+@router.post(
+    "/git-token",
+    dependencies=[declares("WriteCode"), declares("source_control:MintGitToken")],
+)
 async def generate_git_token(
     body: GitTokenRequest,
     current_user: User = Depends(get_current_user_required),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
+    iam: IIAMService | None = Depends(get_iam),
 ) -> GitTokenResponse:
     """Mint a personal git access token for the caller (shown once) and grant
-    write access on ``repo_id`` so they can push to it from outside."""
-    await require_workspace_access(current_user.id, body.workspace_id)
+    write access on ``repo_id``, when the caller may write it, so they can push
+    to it from outside."""
+    await authz.require("WriteCode", user=current_user, workspace=body.workspace_id)
     if source_control is None:
         raise HTTPException(status_code=503, detail="No git backend configured.")
     username = _forge_username(current_user.name or "", str(current_user.email))
     repo_id = _default_repo_id(body.repo_id)
+    if repo_id:
+        await authorize_repo(iam, repo_id, body.workspace_id, write=True)
     try:
         await run_in_threadpool(
             source_control.ensure_user,
@@ -589,26 +675,20 @@ async def generate_git_token(
             username=username,
         )
         if repo_id:
-            await run_in_threadpool(
-                source_control.add_collaborator,
-                repo_id=repo_id,
-                username=username,
-                permission="write",
-            )
-        token = await run_in_threadpool(source_control.mint_git_token, user_id=username)
+            await run_in_threadpool(grant_write, source_control, repo_id, username)
+        # The token is the caller's: the service mints for the call's user.
+        token = await run_in_threadpool(source_control.mint_git_token)
     except SourceControlError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise source_control_error(exc) from exc
     return GitTokenResponse(username=username, token=token)
 
 
-@router.get("/default-repo")
+@router.get("/default-repo", dependencies=[guard("ReadCode")])
 async def get_default_repo(
     workspace_id: str,
-    current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
 ) -> DefaultRepoResponse:
     """The team-shared default repo for new workspaces in this Nexus workspace."""
-    await require_workspace_access(current_user.id, workspace_id)
     row = (
         await db.execute(select(WorkspaceModel).where(WorkspaceModel.id == workspace_id))
     ).scalar_one_or_none()
@@ -616,21 +696,22 @@ async def get_default_repo(
     return DefaultRepoResponse(repo_id=repo_id)
 
 
-@router.put("/default-repo")
+@router.put("/default-repo", dependencies=[declares("SetDefaultRepo")])
 async def set_default_repo(
     body: DefaultRepoRequest,
     current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db),
+    iam: IIAMService | None = Depends(get_iam),
 ) -> DefaultRepoResponse:
-    role = await require_workspace_access(current_user.id, body.workspace_id)
-    if role not in ("owner", "admin"):
-        raise HTTPException(
-            status_code=403, detail="Only a workspace owner/admin can set the default repo."
-        )
+    await authz.require(
+        "SetDefaultRepo",
+        user=current_user,
+        workspace=body.workspace_id,
+        denied="Only a workspace owner/admin can set the default repo.",
+    )
+    await authorize_repo(iam, body.repo_id, body.workspace_id, write=False)
     row = (
-        await db.execute(
-            select(WorkspaceModel).where(WorkspaceModel.id == body.workspace_id)
-        )
+        await db.execute(select(WorkspaceModel).where(WorkspaceModel.id == body.workspace_id))
     ).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="Workspace not found.")
@@ -639,36 +720,44 @@ async def set_default_repo(
     return DefaultRepoResponse(repo_id=body.repo_id)
 
 
-@router.get("/branches")
+@router.get(
+    "/branches",
+    dependencies=[guard("ReadCode"), declares("source_control:ListBranches")],
+)
 async def list_repo_branches(
     workspace_id: str,
     repo_id: str | None = None,
-    current_user: User = Depends(get_current_user_required),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
+    iam: IIAMService | None = Depends(get_iam),
 ) -> list[BranchResponse]:
     """Branches of a repo (defaults to the configured one), for picking a source
     branch. Empty when no repo / git backend is configured."""
-    await require_workspace_access(current_user.id, workspace_id)
     repo = _default_repo_id(repo_id)
     if not repo or source_control is None:
         return []
+    await authorize_repo(iam, repo, workspace_id, write=False)
     try:
         branches = await run_in_threadpool(source_control.list_branches, repo_id=repo)
     except SourceControlError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise source_control_error(exc) from exc
     return [BranchResponse(name=b.name, protected=b.protected) for b in branches]
 
 
-@router.post("/branches")
+@router.post(
+    "/branches",
+    dependencies=[declares("WriteCode"), declares("source_control:CreateBranch")],
+)
 async def create_repo_branch(
     body: BranchCreateRequest,
     current_user: User = Depends(get_current_user_required),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
+    iam: IIAMService | None = Depends(get_iam),
 ) -> BranchResponse:
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require("WriteCode", user=current_user, workspace=body.workspace_id)
     repo = _default_repo_id(body.repo_id)
     if not repo or source_control is None:
         raise HTTPException(status_code=503, detail="No git backend configured.")
+    await authorize_repo(iam, repo, body.workspace_id, write=True)
     try:
         branch = await run_in_threadpool(
             source_control.create_branch,
@@ -679,43 +768,43 @@ async def create_repo_branch(
     except BranchNameConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except SourceControlError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise source_control_error(exc) from exc
     return BranchResponse(name=branch.name, protected=branch.protected)
 
 
-@router.delete("/branches")
+@router.delete(
+    "/branches",
+    dependencies=[guard("WriteCode"), declares("source_control:DeleteBranch")],
+)
 async def delete_repo_branch(
     workspace_id: str,
     name: str,
     repo_id: str | None = None,
-    current_user: User = Depends(get_current_user_required),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
+    iam: IIAMService | None = Depends(get_iam),
 ) -> dict[str, bool]:
     """Delete a branch. ``name`` may contain slashes (url-encoded)."""
-    await require_workspace_access(current_user.id, workspace_id)
     repo = _default_repo_id(repo_id)
     if not repo or source_control is None:
         raise HTTPException(status_code=503, detail="No git backend configured.")
+    await authorize_repo(iam, repo, workspace_id, write=True)
     try:
-        await run_in_threadpool(
-            source_control.delete_branch, repo_id=repo, name=name
-        )
+        await run_in_threadpool(source_control.delete_branch, repo_id=repo, name=name)
     except SourceControlError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise source_control_error(exc) from exc
     return {"ok": True}
 
 
-@router.get("/repo")
-async def get_repo(
-    workspace_id: str,
-    current_user: User = Depends(get_current_user_required),
-) -> RepoResponse:
+@router.get("/repo", dependencies=[guard("ReadCode")])
+async def get_repo() -> RepoResponse:
     """The default repo id (back-compat for callers without a selector)."""
-    await require_workspace_access(current_user.id, workspace_id)
     return RepoResponse(repo_id=settings.coding_repo_id)
 
 
-@router.get("")
+@router.get(
+    "",
+    dependencies=[guard("ReadCode"), declares("coding_environment:ListEnvironments")],
+)
 async def list_environments(
     workspace_id: str,
     repo_id: str | None = None,
@@ -723,14 +812,10 @@ async def list_environments(
     service: CodingEnvironmentService = Depends(_get_coding_environment_service),
     db: AsyncSession = Depends(get_db),
 ) -> list[EnvironmentResponse]:
-    await require_workspace_access(current_user.id, workspace_id)
+    if viewing():
+        return []  # the person's coding environments are private to them
     try:
-        user_id = await run_in_threadpool(
-            service.ensure_user,
-            external_id=current_user.id,
-            email=str(current_user.email),
-            username=current_user.name,
-        )
+        user_id = await _orchestrator_user(service, current_user)
         envs = await run_in_threadpool(service.list_environments, user_id=user_id)
     except CodingEnvironmentError as exc:
         raise _http_error(exc) from exc
@@ -761,18 +846,29 @@ async def _repo_by_env(
     return dict(rows)
 
 
-@router.post("")
+@router.post(
+    "",
+    dependencies=[
+        declares("WriteCode"),
+        declares("coding_environment:Provision"),
+        declares("source_control:UpsertFile"),
+    ],
+)
 async def provision_environment(
     body: EnvironmentProvisionRequest,
     current_user: User = Depends(get_current_user_required),
     service: CodingEnvironmentService = Depends(_get_coding_environment_service),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
     db: AsyncSession = Depends(get_db),
+    iam: IIAMService | None = Depends(get_iam),
 ) -> EnvironmentResponse:
-    await require_workspace_access(current_user.id, body.workspace_id)
+    await authz.require("WriteCode", user=current_user, workspace=body.workspace_id)
     params = dict(body.params or {})
     checkout_branch = body.branch or body.source_branch
     repo_id = _default_repo_id(body.repo_id)
+    if repo_id and source_control is not None:
+        # Cloning grants the caller write on the repository: only when they may.
+        await authorize_repo(iam, repo_id, body.workspace_id, write=True)
 
     # Auto-clone the chosen repo on the chosen branch (when a repo + git backend
     # are configured; otherwise the workspace just opens an empty folder).
@@ -792,9 +888,7 @@ async def provision_environment(
             params["git_author_name"] = current_user.name or ""
             params["git_author_email"] = str(current_user.email)
         except SourceControlError as exc:
-            raise HTTPException(
-                status_code=502, detail=f"Git setup failed: {exc}"
-            ) from exc
+            raise HTTPException(status_code=502, detail=f"Git setup failed: {exc}") from exc
 
     params["branch"] = checkout_branch
     if settings.coding_workspace_docker_network:
@@ -818,26 +912,28 @@ async def provision_environment(
     # token + the workspace-reachable Nexus API base so it can talk to abi
     # agents through the OpenAI shim. The agent list is enumerated server-side so
     # Continue's model picker lists every agent the gateway exposes.
-    params["abi_token"] = _mint_agent_token(
-        current_user.id, ws_base=ws_base, ws_secret=ws_secret if ws_base else None
+    params["abi_token"] = await _mint_agent_token(
+        current_user.id, body.workspace_id, ws_base, label=body.name
     )
     params["abi_api_base"] = settings.coding_agent_api_base
     params["abi_agents"] = ",".join(await run_in_threadpool(_continue_agent_ids))
+    container = await authz.AUTHZ.container_of(body.workspace_id)
+
+    def provision() -> WorkspaceStatus:
+        # In the workspace's own call context (it is carried by the body, which
+        # the identity middleware does not read), so the kernel places the new
+        # environment in this workspace.
+        with use_call_context(replace(current_call_context(), container=container)):
+            return service.provision(
+                user_id=user_id,
+                template_id=body.template_id,
+                name=body.name,
+                params=params or None,
+            )
 
     try:
-        user_id = await run_in_threadpool(
-            service.ensure_user,
-            external_id=current_user.id,
-            email=str(current_user.email),
-            username=current_user.name,
-        )
-        status = await run_in_threadpool(
-            service.provision,
-            user_id=user_id,
-            template_id=body.template_id,
-            name=body.name,
-            params=params or None,
-        )
+        user_id = await _orchestrator_user(service, current_user)
+        status = await run_in_threadpool(provision)
     except CodingEnvironmentError as exc:
         raise _http_error(exc) from exc
 
@@ -846,9 +942,12 @@ async def provision_environment(
     binding = await run_in_threadpool(service.get_runtime_binding, workspace_id=status.id)
     if binding:
         sidecar_base, sidecar_secret = binding
-        params["abi_token"] = _mint_agent_token(
-            current_user.id, ws_base=sidecar_base, ws_secret=sidecar_secret
-        )
+        if sidecar_base != ws_base:
+            # The runtime is reached elsewhere than where the key was bound.
+            await run_in_threadpool(agent_credentials.revoke_agent_keys, current_user.id, ws_base)
+            params["abi_token"] = await _mint_agent_token(
+                current_user.id, body.workspace_id, sidecar_base, label=body.name
+            )
 
     # Record which repo this workspace was cloned from so the workspaces list can
     # be scoped per-repo. Best-effort: the workspace already exists in Coder, so a
@@ -927,9 +1026,7 @@ async def lookup_code_bindings(
     service: CodingEnvironmentService | None = None,
 ) -> tuple[str | None, str | None, str | None, str | None]:
     """Return sidecar_base, sidecar_secret, harness_base, environment_id."""
-    label = _code_runtime_label(
-        workspace_id=workspace_id, repo_id=repo_id, branch=branch
-    )
+    label = _code_runtime_label(workspace_id=workspace_id, repo_id=repo_id, branch=branch)
     result = await db.execute(
         select(CodingEnvironmentModel).where(
             CodingEnvironmentModel.workspace_id == workspace_id,
@@ -942,9 +1039,7 @@ async def lookup_code_bindings(
         return None, None, None, None
     harness_base = None
     if service is not None and row.id:
-        harness_base = await run_in_threadpool(
-            service.get_harness_binding, workspace_id=row.id
-        )
+        harness_base = await run_in_threadpool(service.get_harness_binding, workspace_id=row.id)
     return (
         str(row.sidecar_base),
         str(row.sidecar_secret),
@@ -971,7 +1066,15 @@ async def lookup_code_sidecar(
     return sidecar_base, sidecar_secret
 
 
-@router.post("/sandbox/runtime", response_model=SandboxRuntimeResponse)
+@router.post(
+    "/sandbox/runtime",
+    response_model=SandboxRuntimeResponse,
+    dependencies=[
+        guard("WriteCode"),
+        declares("coding_environment:Provision"),
+        declares("source_control:UpsertFile"),
+    ],
+)
 async def ensure_sandbox_runtime(
     workspace_id: str,
     repo_id: str,
@@ -980,13 +1083,13 @@ async def ensure_sandbox_runtime(
     service: CodingEnvironmentService = Depends(_get_coding_environment_service),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
     db: AsyncSession = Depends(get_db),
+    iam: IIAMService | None = Depends(get_iam),
 ) -> SandboxRuntimeResponse:
     """Ensure a local sandbox + sidecar for the open repo (Slides-parity)."""
-    await require_workspace_access(current_user.id, workspace_id)
+    if source_control is not None:
+        await authorize_repo(iam, repo_id, workspace_id, write=True)
     label = _code_runtime_label(workspace_id=workspace_id, repo_id=repo_id, branch=branch)
-    name = _sandbox_workspace_name(
-        workspace_id=workspace_id, repo_id=repo_id, branch=branch
-    )
+    name = _sandbox_workspace_name(workspace_id=workspace_id, repo_id=repo_id, branch=branch)
 
     existing = await db.execute(
         select(CodingEnvironmentModel).where(
@@ -1006,9 +1109,7 @@ async def ensure_sandbox_runtime(
             ready = await run_in_threadpool(
                 _wait_for_sidecar, str(row.sidecar_base), str(row.sidecar_secret)
             )
-        harness_base = await run_in_threadpool(
-            service.get_harness_binding, workspace_id=row.id
-        )
+        harness_base = await run_in_threadpool(service.get_harness_binding, workspace_id=row.id)
         if harness_base:
             harness_ready = await run_in_threadpool(_wait_for_harness, harness_base)
             if not harness_ready:
@@ -1017,9 +1118,7 @@ async def ensure_sandbox_runtime(
                     service.get_harness_binding, workspace_id=row.id
                 )
                 if harness_base:
-                    harness_ready = await run_in_threadpool(
-                        _wait_for_harness, harness_base
-                    )
+                    harness_ready = await run_in_threadpool(_wait_for_harness, harness_base)
         detail = None
         if not ready and not harness_ready:
             detail = "Sidecar and harness not reachable"
@@ -1073,12 +1172,7 @@ async def ensure_sandbox_runtime(
                 detail=str(exc),
             )
 
-    user_id = await run_in_threadpool(
-        service.ensure_user,
-        external_id=current_user.id,
-        email=str(current_user.email),
-        username=current_user.name,
-    )
+    user_id = await _orchestrator_user(service, current_user)
     try:
         status = await run_in_threadpool(
             service.provision,
@@ -1102,15 +1196,10 @@ async def ensure_sandbox_runtime(
         sidecar_base, sidecar_secret = binding
 
     ready = bool(
-        sidecar_base
-        and await run_in_threadpool(_wait_for_sidecar, sidecar_base, sidecar_secret)
+        sidecar_base and await run_in_threadpool(_wait_for_sidecar, sidecar_base, sidecar_secret)
     )
-    harness_base = await run_in_threadpool(
-        service.get_harness_binding, workspace_id=status.id
-    )
-    harness_ready = bool(
-        harness_base and await run_in_threadpool(_wait_for_harness, harness_base)
-    )
+    harness_base = await run_in_threadpool(service.get_harness_binding, workspace_id=status.id)
+    harness_ready = bool(harness_base and await run_in_threadpool(_wait_for_harness, harness_base))
     try:
         db.add(
             CodingEnvironmentModel(
@@ -1146,123 +1235,152 @@ async def ensure_sandbox_runtime(
     )
 
 
-@router.get("/{environment_id}")
+@router.get(
+    "/{environment_id}",
+    dependencies=[guard("ReadCode"), declares("coding_environment:GetStatus")],
+)
 async def get_environment(
     environment_id: str,
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
     service: CodingEnvironmentService = Depends(_get_coding_environment_service),
+    iam: IIAMService | None = Depends(get_iam),
 ) -> EnvironmentResponse:
-    await require_workspace_access(current_user.id, workspace_id)
+    if viewing():
+        # The person's coding environments are private to them: none is found.
+        raise HTTPException(status_code=404, detail="Environment not found")
+    await authorize_environment(iam, environment_id, workspace_id)
     try:
+        await _orchestrator_user(service, current_user)
         status = await run_in_threadpool(service.get_status, workspace_id=environment_id)
-        ui_url = await run_in_threadpool(
-            service.get_workspace_ui_url, workspace_id=environment_id
-        )
+        ui_url = await run_in_threadpool(service.get_workspace_ui_url, workspace_id=environment_id)
     except CodingEnvironmentError as exc:
         raise _http_error(exc) from exc
     return _to_env(status, ui_url=ui_url)
 
 
-@router.get("/{environment_id}/logs")
+@router.get(
+    "/{environment_id}/logs",
+    dependencies=[guard("ReadCode"), declares("coding_environment:GetLogs")],
+)
 async def get_environment_logs(
     environment_id: str,
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
     service: CodingEnvironmentService = Depends(_get_coding_environment_service),
+    iam: IIAMService | None = Depends(get_iam),
 ) -> LogsResponse:
     """Recent provisioning + startup log lines, polled by the IDE to show live
     progress while a workspace is being prepared."""
-    await require_workspace_access(current_user.id, workspace_id)
+    if viewing():
+        # The person's coding environments are private to them: none is found.
+        raise HTTPException(status_code=404, detail="Environment not found")
+    await authorize_environment(iam, environment_id, workspace_id)
     try:
+        await _orchestrator_user(service, current_user)
         lines = await run_in_threadpool(service.get_logs, workspace_id=environment_id)
     except CodingEnvironmentError as exc:
         raise _http_error(exc) from exc
     return LogsResponse(lines=lines)
 
 
-@router.post("/{environment_id}/start")
+@router.post(
+    "/{environment_id}/start",
+    dependencies=[guard("WriteCode"), declares("coding_environment:Start")],
+)
 async def start_environment(
     environment_id: str,
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
     service: CodingEnvironmentService = Depends(_get_coding_environment_service),
+    iam: IIAMService | None = Depends(get_iam),
 ) -> EnvironmentResponse:
-    await require_workspace_access(current_user.id, workspace_id)
+    await authorize_environment(iam, environment_id, workspace_id)
     try:
+        await _orchestrator_user(service, current_user)
         status = await run_in_threadpool(service.start, workspace_id=environment_id)
     except CodingEnvironmentError as exc:
         raise _http_error(exc) from exc
     return _to_env(status)
 
 
-@router.post("/{environment_id}/stop")
+@router.post(
+    "/{environment_id}/stop",
+    dependencies=[guard("WriteCode"), declares("coding_environment:Stop")],
+)
 async def stop_environment(
     environment_id: str,
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
     service: CodingEnvironmentService = Depends(_get_coding_environment_service),
+    iam: IIAMService | None = Depends(get_iam),
 ) -> EnvironmentResponse:
-    await require_workspace_access(current_user.id, workspace_id)
+    await authorize_environment(iam, environment_id, workspace_id)
     try:
+        await _orchestrator_user(service, current_user)
         status = await run_in_threadpool(service.stop, workspace_id=environment_id)
     except CodingEnvironmentError as exc:
         raise _http_error(exc) from exc
     return _to_env(status)
 
 
-@router.delete("/{environment_id}")
+@router.delete(
+    "/{environment_id}",
+    dependencies=[guard("WriteCode"), declares("coding_environment:Delete")],
+)
 async def delete_environment(
     environment_id: str,
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
     service: CodingEnvironmentService = Depends(_get_coding_environment_service),
     db: AsyncSession = Depends(get_db),
+    iam: IIAMService | None = Depends(get_iam),
 ) -> dict[str, str]:
-    await require_workspace_access(current_user.id, workspace_id)
+    await authorize_environment(iam, environment_id, workspace_id)
+    bound = await db.get(CodingEnvironmentModel, environment_id)
     try:
+        await _orchestrator_user(service, current_user)
         await run_in_threadpool(service.delete, workspace_id=environment_id)
     except CodingEnvironmentError as exc:
         raise _http_error(exc) from exc
     try:
         await db.execute(
-            delete(CodingEnvironmentModel).where(
-                CodingEnvironmentModel.id == environment_id
-            )
+            delete(CodingEnvironmentModel).where(CodingEnvironmentModel.id == environment_id)
         )
         await db.commit()
     except Exception:
         await db.rollback()
+    if bound is not None:
+        # The agent's key goes with its environment.
+        await agent_credentials.arevoke_agent_keys(str(bound.user_id), bound.sidecar_base)
     return {"status": "deleted"}
 
 
-@router.get("/{environment_id}/access")
+@router.get(
+    "/{environment_id}/access",
+    dependencies=[guard("WriteCode"), declares("coding_environment:GetAccess")],
+)
 async def get_environment_access(
     environment_id: str,
     workspace_id: str,
     app_slug: str = "code-server",
     current_user: User = Depends(get_current_user_required),
     service: CodingEnvironmentService = Depends(_get_coding_environment_service),
+    iam: IIAMService | None = Depends(get_iam),
 ) -> EnvironmentAccessResponse:
-    await require_workspace_access(current_user.id, workspace_id)
+    if viewing():
+        # The person's coding environments are private to them: none is found.
+        raise HTTPException(status_code=404, detail="Environment not found")
+    await authorize_environment(iam, environment_id, workspace_id)
     try:
-        user_id = await run_in_threadpool(
-            service.ensure_user,
-            external_id=current_user.id,
-            email=str(current_user.email),
-            username=current_user.name,
-        )
+        user_id = await _orchestrator_user(service, current_user)
         access = await run_in_threadpool(
             service.get_access,
             workspace_id=environment_id,
             user_id=user_id,
             app_slug=app_slug,
         )
-        ui_url = await run_in_threadpool(
-            service.get_workspace_ui_url, workspace_id=environment_id
-        )
+        ui_url = await run_in_threadpool(service.get_workspace_ui_url, workspace_id=environment_id)
     except CodingEnvironmentError as exc:
         raise _http_error(exc) from exc
-    return EnvironmentAccessResponse(
-        url=access.url, expires_at=access.expires_at, ui_url=ui_url
-    )
+    return EnvironmentAccessResponse(url=access.url, expires_at=access.expires_at, ui_url=ui_url)

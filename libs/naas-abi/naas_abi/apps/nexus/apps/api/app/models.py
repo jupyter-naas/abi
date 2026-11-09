@@ -142,6 +142,9 @@ class OrganizationDomainModel(Base):
         String, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
     )
     domain = Column(String, nullable=False, unique=True, index=True)  # e.g. "login.company.com"
+    # The identity provider (``identity.providers[].name``) a login with an email
+    # of this domain goes to; None: the default provider.
+    provider = Column(String(64), nullable=True)
     is_verified = Column(Boolean, nullable=False, default=False)
     verification_token = Column(String, nullable=True)  # Token for DNS verification
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
@@ -162,7 +165,6 @@ class UserModel(Base):
     id = Column(String, primary_key=True)
     email = Column(String, unique=True, nullable=False, index=True)
     name = Column(String, nullable=False)
-    hashed_password = Column(String, nullable=False)
     avatar = Column(String, nullable=True)
     organization = Column(String, nullable=True)  # was company (migration 0053)
     job_title = Column(String, nullable=True)  # was role (migration 0054)
@@ -170,8 +172,21 @@ class UserModel(Base):
     linkedin_url = Column(String, nullable=True)  # migration 0063
     github_handle = Column(String, nullable=True)  # migration 0063
     is_superadmin = Column(Boolean, nullable=False, default=False, server_default="false")
+    # A user signed in through an identity provider: one row per (issuer, sub),
+    # whose id is its IAM principal id. The rows of the old built-in login keep
+    # their id (and every row that points at it) and get their identity at the
+    # first sign-in through the built-in provider (``services/oidc``).
+    principal_id = Column(String(255), nullable=True, unique=True)
+    idp_provider = Column(String(64), nullable=True)
+    idp_issuer = Column(String(1024), nullable=True)
+    idp_subject = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+    # A deleted account (Platform Settings > Users): the row stays as the author of
+    # what the person wrote, its email released (migration 0067, services/accounts).
+    deleted_at = Column(DateTime(timezone=False), nullable=True)
+
+    __table_args__ = (UniqueConstraint("idp_issuer", "idp_subject", name="uq_users_idp_identity"),)
 
     # Relationships
     organizations_owned = relationship(
@@ -192,46 +207,48 @@ class UserModel(Base):
     conversations = relationship(
         "ConversationModel", back_populates="user", cascade="all, delete-orphan"
     )
-    password_reset_tokens = relationship(
-        "PasswordResetTokenModel", back_populates="user", cascade="all, delete-orphan"
-    )
-    magic_link_tokens = relationship(
-        "MagicLinkTokenModel", back_populates="user", cascade="all, delete-orphan"
-    )
 
 
 # ============================================
-# Password Reset Tokens
+# Sign-in through identity providers
 # ============================================
 
 
-class PasswordResetTokenModel(Base):
-    __tablename__ = "password_reset_tokens"
+class OidcLoginRequestModel(Base):
+    """A sign-in in flight: single use, ten minutes at most."""
 
-    id = Column(String, primary_key=True)
-    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    token = Column(String, nullable=False, unique=True, index=True)
-    expires_at = Column(DateTime(timezone=False), nullable=False)
-    used = Column(Boolean, nullable=False, default=False)
+    __tablename__ = "oidc_login_requests"
+
+    state_hash = Column(String(64), primary_key=True)
+    provider = Column(String(64), nullable=False)
+    nonce = Column(String(128), nullable=False)
+    code_verifier = Column(String(128), nullable=False)
+    binding_hash = Column(String(64), nullable=False)
+    next_path = Column(String(2048), nullable=True)
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
-
-    # Relationships
-    user = relationship("UserModel", back_populates="password_reset_tokens")
-
-
-class MagicLinkTokenModel(Base):
-    __tablename__ = "magic_link_tokens"
-
-    id = Column(String, primary_key=True)
-    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    token = Column(String, nullable=False, unique=True, index=True)
-    otp_code_hash = Column(String, nullable=True)
-    otp_attempts = Column(Integer, nullable=False, default=0)
     expires_at = Column(DateTime(timezone=False), nullable=False)
-    used = Column(Boolean, nullable=False, default=False)
-    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
 
-    user = relationship("UserModel", back_populates="magic_link_tokens")
+
+class AuthSessionModel(Base):
+    """A browser session the API holds; its id is the SHA-256 of the cookie's secret."""
+
+    __tablename__ = "auth_sessions"
+
+    id = Column(String(64), primary_key=True)
+    user_id = Column(
+        String(255), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    principal_id = Column(String(255), nullable=False)
+    provider = Column(String(64), nullable=False)
+    group_ids = Column(Text, nullable=False, default="[]")
+    refresh_token_enc = Column(Text, nullable=True)
+    id_token_enc = Column(Text, nullable=True)
+    refresh_at = Column(DateTime(timezone=False), nullable=False)
+    expires_at = Column(DateTime(timezone=False), nullable=False)
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    last_seen_at = Column(DateTime(timezone=False), nullable=True)
+    revoked_at = Column(DateTime(timezone=False), nullable=True)
+    user_agent = Column(String(512), nullable=True)
 
 
 # ============================================
@@ -294,8 +311,14 @@ class WorkspaceModel(Base):
         "GraphEdgeModel", back_populates="workspace", cascade="all, delete-orphan"
     )
     secrets = relationship("SecretModel", back_populates="workspace", cascade="all, delete-orphan")
+    # No migration creates ``abi_servers`` (``core/platform_tables.py``): deleting a
+    # workspace leaves its rows, if any, to the foreign key's ON DELETE CASCADE
+    # rather than reading a table that is not there.
     abi_servers = relationship(
-        "ABIServerModel", back_populates="workspace", cascade="all, delete-orphan"
+        "ABIServerModel",
+        back_populates="workspace",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
     inference_servers = relationship(
         "InferenceServerModel", back_populates="workspace", cascade="all, delete-orphan"
@@ -608,27 +631,6 @@ class GraphEdgeModel(Base):
 
 
 # ============================================
-# API Keys
-# ============================================
-
-
-class ApiKeyModel(Base):
-    __tablename__ = "api_keys"
-
-    id = Column(String, primary_key=True)
-    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    workspace_id = Column(
-        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True
-    )
-    name = Column(String, nullable=False)
-    key_hash = Column(String, nullable=False)
-    key_prefix = Column(String, nullable=False)
-    last_used_at = Column(String, nullable=True)
-    expires_at = Column(String, nullable=True)
-    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
-
-
-# ============================================
 # Provider Configurations
 # ============================================
 
@@ -685,9 +687,8 @@ class AgentConfigModel(Base):
         String, nullable=True, index=True
     )  # Provider name (xai, openai, anthropic, etc.)
     is_default = Column(Integer, nullable=False, default=0)
-    enabled = Column(Boolean, nullable=False, default=False)  # Whether agent is available for chat
-    # A user's explicit toggle; sync keeps it over the workspace roster. NULL = follow the roster.
-    enabled_override = Column(Boolean, nullable=True)
+    # The old on/off (``enabled``, ``enabled_override``) stays in the table, unread:
+    # the move of the toggles into policies reads it once (``services/iam/policy_tree``).
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 
@@ -724,31 +725,6 @@ class SkillModel(Base):
 
 
 # ============================================
-# Organization role -> feature overlays
-# ============================================
-
-
-class OrganizationRoleFeaturesModel(Base):
-    """Durable per-organization role_baseline overlay.
-
-    ``role_baseline`` is a JSON object mapping role name to feature keys,
-    e.g. ``{"owner": ["chat", "files"], "admin": [...], ...}``.
-    """
-
-    __tablename__ = "organization_role_features"
-
-    organization_id = Column(
-        String,
-        ForeignKey("organizations.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    role_baseline = Column(Text, nullable=False)  # JSON object
-    updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
-    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
-
-
-# ============================================
 # App Configurations (per-workspace enable state)
 # ============================================
 
@@ -763,7 +739,8 @@ class AppConfigModel(Base):
     # Marketplace app identifier: "<module_path>:<app_name>" (e.g.
     # "naas_abi_marketplace.applications.openrouter:dashboard").
     app_id = Column(String(512), nullable=False, index=True)
-    enabled = Column(Boolean, nullable=False, default=False)
+    # The old on/off (``enabled``) stays in the table, unread: the move of the
+    # toggles into policies reads it once (``services/iam/policy_tree``).
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 
@@ -936,6 +913,91 @@ class MapsSettingsModel(Base):
     settings = Column(Text, nullable=False)  # JSON MapsWorkspaceSettings
     updated_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+
+# ============================================
+# Invitations
+# ============================================
+
+
+class InvitationModel(Base):
+    """An email invited to an organization and/or a workspace through one identity
+    provider. IAM holds the roles as pending grants (``grant_ids``) until the
+    person signs in."""
+
+    __tablename__ = "invitations"
+
+    id = Column(String, primary_key=True)
+    email = Column(String(320), nullable=False)
+    provider = Column(String(64), nullable=False)
+    organization_id = Column(
+        String, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True
+    )
+    org_role = Column(String(16), nullable=True)
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True)
+    workspace_role = Column(String(16), nullable=True)
+    invited_by = Column(String, nullable=True)
+    grant_ids = Column(Text, nullable=False, default="[]")  # JSON list of IAM pending grant ids
+    status = Column(String(16), nullable=False, default="pending")  # pending, accepted, revoked
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+    accepted_at = Column(DateTime(timezone=False), nullable=True)
+    accepted_user_id = Column(String, nullable=True)
+    # JSON object: the member profile set at invitation (see ``invites.port.PROFILE_FIELDS``).
+    profile = Column(Text, nullable=True)
+    # JSON list: the policies the invitation carries beside the roles, at its scope.
+    policy_ids = Column(Text, nullable=True)
+
+
+# ============================================
+# Each organization's and workspace's access policy and default groups
+# ============================================
+
+
+class ContainerDefaultModel(Base):
+    """The IAM access policy and default groups ("<X> members", "<X> admins") of
+    an organization or a workspace, by its IAM container name
+    (``services/iam/container_defaults.py``). IAM holds them; this says which."""
+
+    __tablename__ = "container_defaults"
+
+    container = Column(String(512), primary_key=True)
+    access_policy_id = Column(String(64), nullable=True)
+    members_group_id = Column(String(64), nullable=True)
+    admins_group_id = Column(String(64), nullable=True)
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+
+
+class ProvisionedIdentityModel(Base):
+    """An account ABI made at an identity provider (an invitation's provisioning,
+    ``services/invites``): only those are changed or deleted there by Platform
+    Settings > Users (``services/accounts``)."""
+
+    __tablename__ = "provisioned_identities"
+
+    provider = Column(String(255), primary_key=True)
+    subject = Column(String(255), primary_key=True)
+    email = Column(String(255), nullable=False)
+    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+
+
+# ============================================
+# Workflow runs started from a workspace
+# ============================================
+
+
+class WorkflowRunOwnerModel(Base):
+    """Who started a workflow or pipeline run, and in which workspace: job runs
+    carry no owner of their own (``services/workflows``)."""
+
+    __tablename__ = "workflow_run_owners"
+
+    module_id = Column(String(255), primary_key=True)
+    run_id = Column(String(255), primary_key=True)
+    workflow = Column(String(255), nullable=False)
+    user_id = Column(String(255), nullable=False)
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    started_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
 
 
 # ============================================

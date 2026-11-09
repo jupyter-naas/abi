@@ -11,9 +11,18 @@ the engine's.
 - **Never import `naas_abi_core`** (or `naas_abi`, `naas_abi_marketplace`).
   The Dockerfile fails the build if core is installed, and
   `tests/module_test.py` fails if anything imports it. Use `naas_abi_sdk`.
+- It runs as the service account `module/<project>/{{module_id}}`, on its own
+  key (`ABI_SERVICE_KEY`), never a signing secret. At start it submits its
+  permission manifest and waits until an admin approves it (`abi iam module
+  approve`; `abi dev up` approves by itself): until then it can call nothing,
+  and the broker lets it reach only the subjects the approved policy allows.
 - Reach engine services through `self.engine.services.<name>`, and declare
   each one in `ModuleDependencies(services=(...))`: undeclared calls are
-  refused. Available: `activity_log`, `bus`, `cache`, `coding_environment`,
+  refused, and the manifest defaults from them (its own `{{module_id}}`
+  document and dataset namespaces, every action of the other services). To
+  ask for less or more, set `ABIModule.permissions` or write
+  `permissions.yaml` next to `__init__.py` (a policy document); bus topics
+  are always named there. Available: `activity_log`, `bus`, `cache`, `coding_environment`,
   `dataset`, `document`, `email`, `event`, `keyvalue` (`kv`), `model_registry`,
   `object_storage`, `secret`, `source_control`, `triple_store`,
   `vector_store`. All calls are `async`.
@@ -73,7 +82,7 @@ the engine's.
 |---|---|
 | `abi dev up` (in the project) | started from `dev.modules` in `config.yaml`; `abi dev logs {{module_name}}` |
 | Docker (`abi start`) | the `{{module_name}}` service in `docker-compose.override.yml` |
-| By hand | `ABI_NATS_URL=nats://module:<NATS_MODULE_PASSWORD>@127.0.0.1:4222 ABI_MODULE_KEY=$(abi module key {{module_id}}) python -m {{module_name_snake}}` |
+| By hand | `ABI_NATS_URL=nats://127.0.0.1:4222 ABI_SERVICE_KEY=abi_sk_... python -m {{module_name_snake}}`, the key from `abi iam service-account create module/<project>/{{module_id}} --key` |
 
 It is up when it logs `READY`. `ABI_HEALTH_PORT=8080` opens `/health` and
 `/ready`.

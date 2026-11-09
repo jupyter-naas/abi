@@ -1,16 +1,14 @@
 import re
-from collections.abc import Iterable
 
+from naas_abi_core.engine.nats_auth import TokenVerifier
 from naas_abi_core.services.discovery.adapters.primary.discovery_nats import (
     DiscoveryNATS,
 )
 from naas_abi_core.services.discovery.adapters.secondary.discovery_jetstream import (
     JetStreamRegistry,
 )
-from naas_abi_core.services.discovery.discovery_service import (
-    DEFAULT_ADMIN_IDENTITIES,
-    DiscoveryService,
-)
+from naas_abi_core.services.discovery.discovery_service import DiscoveryService
+from naas_abi_core.services.iam.IAMPorts import IIAMService
 from nats.aio.client import Client
 from nats.js.api import KeyValueConfig
 from nats.js.errors import BucketNotFoundError
@@ -18,11 +16,13 @@ from nats.js.errors import BucketNotFoundError
 
 async def start_discovery(
     nc: Client,
-    secret: str,
+    verifier: TokenVerifier,
     project: str = "default",
     lease_seconds: float = 20,
-    admin_identities: Iterable[str] = DEFAULT_ADMIN_IDENTITIES,
+    iam: IIAMService | None = None,
 ) -> DiscoveryNATS:
+    """Serve discovery for ``project``; with ``iam``, every operation is
+    authorized (the serving engine always passes its IAM)."""
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", project):
         raise ValueError("Invalid discovery project")
     js = nc.jetstream()
@@ -37,9 +37,10 @@ async def start_discovery(
         DiscoveryService(
             JetStreamRegistry(js, bucket, name),
             lease_seconds=lease_seconds,
-            admin_identities=admin_identities,
+            project=project,
+            iam=iam,
         ),
-        secret,
+        verifier,
         project,
     )
     await primary.start(nc)

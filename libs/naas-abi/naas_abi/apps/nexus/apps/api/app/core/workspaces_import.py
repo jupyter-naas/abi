@@ -2,14 +2,16 @@
 
 The config's ``workspaces`` entries only seed resources (agents, apps,
 ontologies, graphs, maps). What the app manages (name, owner, group,
-description, branding and feature overrides) lives in the database, and this
-snapshot restores it. Fill-only, so it is safe to run against a live platform:
+description, branding) lives in the database, and this snapshot restores it.
+Fill-only, so it is safe to run against a live platform:
 
 - creates a workspace whose slug does not exist, under its organization
-  (owner: ``owner_email``, else the organization owner);
+  (owner: ``owner_email``, else the organization owner; the owner role is IAM's, so
+  this runs in an engine: ``main`` opens the project's);
 - on an existing workspace, fills only empty values. A name equal to the
   slug (what the seed sets when the config has no name) counts as empty.
-  ``feature_overrides`` is written only when the workspace never saved any;
+  A snapshot's ``feature_overrides`` are ignored: who uses a feature is a
+  policy's, and an import grants nothing;
 - never deletes anything. Unknown organizations and owners are reported.
 
 Not run on API boot. Usage::
@@ -30,16 +32,12 @@ from uuid import uuid4
 
 import yaml
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
-from naas_abi.apps.nexus.apps.api.app.core.feature_flags import (
-    KNOWN_FEATURE_KEYS,
-    dump_feature_overrides,
-)
-from naas_abi.apps.nexus.apps.api.app.core.org_seed import (
-    _ensure_workspace_member,
-    _get_user_by_email,
-    _normalize_email,
-)
+from naas_abi.apps.nexus.apps.api.app.core.org_seed import _get_user_by_email, _normalize_email
+from naas_abi.apps.nexus.apps.api.app.core.users_import import _in_engine
 from naas_abi.apps.nexus.apps.api.app.models import OrganizationModel, WorkspaceModel
+from naas_abi.apps.nexus.apps.api.app.services.iam import placements
+from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS, Memberships
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -65,6 +63,8 @@ class ImportReport:
     workspaces_created: int = 0
     workspaces_updated: int = 0
     missing: set[str] = field(default_factory=set)
+    # What IAM derives from them, done once the rows are committed.
+    created_ids: list[str] = field(default_factory=list)
 
 
 def load_entries(path: str | Path) -> list[dict[str, Any]]:
@@ -72,15 +72,15 @@ def load_entries(path: str | Path) -> list[dict[str, Any]]:
     return list(data.get("workspaces") or [])
 
 
-def _feature_overrides(entry: dict[str, Any]) -> dict[str, bool] | None:
-    raw = entry.get("feature_overrides")
-    if not isinstance(raw, dict):
-        return None
-    return {str(k): bool(v) for k, v in raw.items() if k in KNOWN_FEATURE_KEYS}
-
-
-async def import_workspaces(session: AsyncSession, entries: list[dict[str, Any]]) -> ImportReport:
-    """Apply ``entries`` fill-only. The caller owns the transaction."""
+async def import_workspaces(
+    session: AsyncSession,
+    entries: list[dict[str, Any]],
+    *,
+    memberships: Memberships = MEMBERSHIPS,
+    apply: bool = True,
+) -> ImportReport:
+    """Apply ``entries`` fill-only. The caller owns the transaction (and, with
+    ``apply=False``, rolls it back: IAM is then left alone)."""
     report = ImportReport()
     now = datetime.now(UTC).replace(tzinfo=None)
     orgs: dict[str, OrganizationModel | None] = {}
@@ -109,7 +109,6 @@ async def import_workspaces(session: AsyncSession, entries: list[dict[str, Any]]
         org = await org_for(str(org_slug)) if org_slug else None
         if org_slug and org is None:
             report.missing.add(f"organization {org_slug}")
-        overrides = _feature_overrides(entry)
 
         workspace = (
             await session.execute(select(WorkspaceModel).where(WorkspaceModel.slug == slug))
@@ -126,15 +125,19 @@ async def import_workspaces(session: AsyncSession, entries: list[dict[str, Any]]
                 name=entry.get("name") or slug,
                 owner_id=owner_id,
                 organization_id=org.id,
-                feature_overrides=dump_feature_overrides(overrides),
                 created_at=now,
                 updated_at=now,
                 **{column: entry.get(key) for key, column in _FILL_FIELDS.items()},
             )
             session.add(workspace)
             await session.flush()
-            await _ensure_workspace_member(session, workspace.id, owner_id, "owner")
+            if apply:
+                # The owner is IAM's attachment; the workspace's scope exists first.
+                scope = await memberships.register_workspace(org.id, workspace.id)
+                await memberships.grant(owner_id, "owner", scope)
+                assert scope == workspace_container(org.id, workspace.id)
             report.workspaces_created += 1
+            report.created_ids.append(workspace.id)
             continue
 
         changed = False
@@ -154,9 +157,6 @@ async def import_workspaces(session: AsyncSession, entries: list[dict[str, Any]]
             if owner_id:
                 workspace.owner_id = owner_id
                 changed = True
-        if overrides is not None and workspace.feature_overrides is None:
-            workspace.feature_overrides = dump_feature_overrides(overrides)
-            changed = True
         if changed:
             workspace.updated_at = now
             report.workspaces_updated += 1
@@ -169,11 +169,15 @@ async def _main(path: str, dry_run: bool) -> ImportReport:
     from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
 
     async with AsyncSessionLocal() as session:
-        report = await import_workspaces(session, load_entries(path))
+        report = await import_workspaces(session, load_entries(path), apply=not dry_run)
         if dry_run:
             await session.rollback()
         else:
             await session.commit()
+            # What IAM derives from the rows: the kernel resources a new workspace's
+            # roles reach.
+            for workspace_id in report.created_ids:
+                await placements.place_new_workspace(session, workspace_id)
     return report
 
 
@@ -182,7 +186,7 @@ def main() -> None:
     parser.add_argument("path", help="Snapshot file, e.g. config.workspaces.yaml")
     parser.add_argument("--dry-run", action="store_true", help="Report without committing")
     args = parser.parse_args()
-    report = asyncio.run(_main(args.path, args.dry_run))
+    report = _in_engine(lambda: asyncio.run(_main(args.path, args.dry_run)))
     print(
         f"{'[dry-run] ' if args.dry_run else ''}workspaces created={report.workspaces_created} "
         f"workspaces updated={report.workspaces_updated}"

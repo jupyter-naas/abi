@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  appHtmlPathPrefix,
   appIframeSandbox,
   isBundledAppHtmlUrl,
   REMOTE_APP_SANDBOX,
@@ -20,17 +19,6 @@ describe('app-html helpers', () => {
       true,
     );
     expect(isBundledAppHtmlUrl('/workspace/primary/apps')).toBe(false);
-  });
-
-  it('derives path_prefix locks for scoped JWTs', () => {
-    expect(appHtmlPathPrefix('/app-html/report/counter_uas/dashboard/')).toBe(
-      '/app-html/report/counter_uas/',
-    );
-    expect(
-      appHtmlPathPrefix(
-        'https://nexus.localhost/app-html/report/counter_uas/map/?report_date=2026-07-26',
-      ),
-    ).toBe('/app-html/report/counter_uas/');
   });
 
   it('appends token without dropping existing query params', () => {

@@ -19,6 +19,8 @@ their existing responsibilities.
 | `adapters/secondary/document_sql.py` | Shared SQL compilation and storage operations |
 | `adapters/secondary/document_codec.py` | Tagged values, shared sort kinds, and SQLite equality/accessor functions |
 | `tests/document__secondary_adapter__generic_test.py` | Reusable adapter contract |
+| `iam_catalog.py` | IAM action catalog and the built-in IdP namespace seal |
+| `DocumentService_authorization_test.py` | Authorization contract; `api` and `engine` cannot read the IdP namespace |
 
 ## Port
 
@@ -87,9 +89,11 @@ The engine root only binds namespaces and cannot perform storage operations.
 
 Platform administration (the Nexus System app) uses the engine root directly:
 `services.document_admin` on the unlocked engine proxy (the platform module only;
-any other proxy raises `PermissionError`) returns it, with `namespaces()` and the
-public `for_namespace(ns)`. `_for_namespace` remains as an alias. Bound views
-raise `PermissionError` for both.
+in process a module has no identity of its own, so any other proxy raises
+`PermissionError`) returns it, with `namespaces()` and the public
+`for_namespace(ns)`. IAM still authorizes every call for its caller (see
+Authorization). `_for_namespace` remains as an alias. Bound
+views raise `PermissionError` for both.
 Each module proxy retains its scoped handle, checking access on every retrieval
 and replacing the handle if the engine installs a different root service.
 
@@ -266,6 +270,68 @@ SQLite-aware backup or stop writers and capture the file with its WAL; copying
 only an active main file can lose committed writes. PostgreSQL uses ordinary
 database backup/restore. Switching adapter configuration does not migrate data.
 
+## Authorization
+
+Every operation is checked in the domain service against IAM
+(`ResourceGuard`, see "Enforcing in a data service" in
+[`../iam/AGENTS.md`](../iam/AGENTS.md)),
+for the caller of the current `CallContext`, so in process and over NATS answer
+the same. The catalog is `iam_catalog.py`, registered by the serving engine at
+boot. A caller who cannot see a resource gets `CollectionNotFound` / `DocumentNotFound`; one who can see it but not
+act gets `PermissionDeniedError` (`PERMISSION_DENIED`). A service not wired into
+an engine with IAM (a library use, a NATS facade whose server checks) does not
+check. The contract test is `DocumentService_authorization_test.py`: no policy, granted and denied
+principals, in process and over NATS.
+
+Resource types (`path`): `namespace/<ns>` and `collection/<ns>/<c>` (placed
+containers) and `document/<ns>/<c>/<id>`.
+
+| Action | Level | Resource | Subject (`abi.svc.document.v1.`) |
+|---|---|---|---|
+| `Namespaces` | list | each `namespace/<ns>` | `namespaces` |
+| `Collections` | list | each `collection/<ns>/<c>` | `collections` |
+| `CollectionSpec` | read | `collection/<ns>/<c>` | `collection_spec` |
+| `EnsureCollection` | admin | `collection/<ns>/<c>` (creates) | `ensure_collection` |
+| `DropCollection` | admin | `collection/<ns>/<c>` | `drop_collection` |
+| `Get` | read | `document/<ns>/<c>/<id>` | `get` |
+| `Find` | read | `collection/<ns>/<c>`, checked once | `find` |
+| `Count` | read | `collection/<ns>/<c>` | `count` |
+| `Put` | write | `document/<ns>/<c>/<id>` | `put` |
+| `Delete` | write | `document/<ns>/<c>/<id>` | `delete` |
+
+* The namespace a view is bound to (`for_namespace`, the SDK's module binding)
+  or a NATS request names is authorized like any other name; the request's
+  namespace is never trusted. A remote module reaches its own namespace, its
+  `module_id`, and no other module's, through its approved manifest, which
+  names each type so a policy on `collection/<module_id>/*` cannot match
+  another namespace's collection of the same name:
+
+  ```yaml
+  resources:
+    - "abi:document:namespace/<module_id>"
+    - "abi:document:collection/<module_id>/*"
+    - "abi:document:document/<module_id>/*"
+  ```
+* Namespace administration is `Namespaces`, `EnsureCollection` and
+  `DropCollection`, granted by policy. No identity holds it by name (there is no
+  `api`/`engine` admin identity, and the unlocked proxy's `document_admin`
+  only hands out the root: IAM authorizes each call for its caller).
+* `ensure_collection` is a create (the create rule of "Enforcing in a data
+  service" in [`../iam/AGENTS.md`](../iam/AGENTS.md)): the first collection of a new
+  namespace places the namespace (exact and `<ns>/*`) in the call's target
+  workspace, or on the platform; an existing namespace nothing placed is the
+  platform's.
+* `namespaces()` and `collections()` list only what the caller may list;
+  `collections()` of a namespace it cannot see is empty. `find`, `iterate`
+  and `count` are checked once, on the collection (`Find`, `Count`); results
+  are not filtered per item. A Deny on `document/ns/c/secret-*` still
+  lets a query return those documents while `get` refuses them: Deny the
+  collection to hide it from queries.
+* Seals (`SEALS`): the built-in IdP's namespace `idp` is its own, wherever a
+  placement puts it; `api` and `engine` cannot read it either.
+* The activity log and the engine's agent memory use their own namespaces as
+  the engine (`own_storage`).
+
 ## Tests
 
 From the repository root:
@@ -298,16 +364,19 @@ backend-specific methods into the module-facing port.
 `adapters/secondary/DocumentSecondaryAdapterNATSClient.py` implements the complete
 storage port, with close disposing only its own transport. Top-level NATS wiring
 injects a remote root into engine module proxies. `adapter: nats_rpc` also accepts
-nats_url, jwt_secret, service_identity and timeout_seconds (default 10), preserving
+nats_url, service_key (a key of the owning engine's IAM) and timeout_seconds (default 10), preserving
 an explicit upstream route without re-exposing it.
 
 The canonical contract is `naas-abi-proto/naas_abi_proto/document/v1/document.proto`.
-Namespaces are explicit on the wire and convention-bound in module proxies, not
-per-module authorization under Stage 1 shared JWT trust. Cross-namespace operations
-(`namespaces`) are authorized explicitly: only the primary's `admin_identities`
-(`api` and `engine` by default) may call them, others get `PERMISSION_DENIED`
-(`PermissionError` on the client). Server domain validation
-is authoritative. Never silently replay storage failures. Engine-owned backend
+The primary builds each call's `CallContext` with `engine/nats_identity.py` and
+runs the domain call under it (`engine/call_context.py`).
+Namespaces are explicit on the wire and convention-bound in module proxies; the
+domain service authorizes the caller on the namespace a request names, like any
+other name (see Authorization). `namespaces` lists what the caller's policies
+cover; no identity is an administrator by name. Outcomes travel as
+`PERMISSION_DENIED` (`PermissionDeniedError` on the client) or the service's own
+`COLLECTION_NOT_FOUND`/`DOCUMENT_NOT_FOUND`. Server domain validation is
+authoritative. Never silently replay storage failures. Engine-owned backend
 resources must not be closed by a remote client.
 
 The adapter's tests reuse the full portable contract through a native nats-server.

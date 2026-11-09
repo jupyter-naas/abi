@@ -69,6 +69,7 @@ import {
   type OntologySpacingValue,
 } from '@/lib/ontology-spacing';
 import { usePublishFeatureResource } from '@/stores/feature-pane';
+import { PrivateToPerson, usePrivateTo } from '@/components/view-as/private-to-person';
 import './browse.css';
 
 type FileWithRelativeDir = { file: File; relativeDir?: string };
@@ -140,7 +141,15 @@ function sortFiles(
 
 const SYSTEM_FILES_READ_ONLY = 'System files (names starting with ".") are read-only.';
 
+/** My Drive is the person's own: in a view it is private, and nothing is asked for. */
 export default function FilesPage() {
+  const activeSource = useFilesStore((s) => s.activeSource);
+  const privateTo = usePrivateTo();
+  if (privateTo && activeSource === 'my-drive') return <PrivateToPerson what="My Drive" />;
+  return <FilesBrowser />;
+}
+
+function FilesBrowser() {
   const router = useRouter();
   const params = useParams();
   const pathname = usePathname();

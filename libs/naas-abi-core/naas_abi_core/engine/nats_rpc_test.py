@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from naas_abi_core.engine.nats_auth import issue_service_token
+from naas_abi_core.engine.nats_test_tokens import TEST_TOKENS
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.dataset.v1 import dataset_pb2
 from naas_abi_core.proto.keyvalue.v1 import keyvalue_pb2
@@ -27,7 +27,9 @@ ADAPTERS = [
     ("triple_store", "TripleStore"),
     ("vector_store", "VectorStore"),
 ]
-SECRET = "rpc-test-secret-at-least-32-bytes-long"
+SECRET = TEST_TOKENS.verifier
+# The container a call is made in: request data, carried as is.
+WS = "abi:nexus:organization/org-1/nexus:workspace/ws-1"
 
 
 def adapter_class(domain, name, primary=False):
@@ -47,7 +49,7 @@ def adapter_class(domain, name, primary=False):
 def client(request, monkeypatch):
     monkeypatch.setattr("nats.connect", AsyncMock(side_effect=ConnectionClosedError()))
     cls = adapter_class(*request.param)
-    with cls("nats://unused:4222", SECRET, "test") as instance:
+    with cls("nats://unused:4222", TEST_TOKENS.source("test")) as instance:
         yield instance
 
 
@@ -159,12 +161,9 @@ def test_client_preserves_reconnecting_connection(client, monkeypatch):
 def primary(request):
     cls = adapter_class(*request.param, primary=True)
     instance = cls.__new__(cls)
-    if request.param[0] == "vector_store":
-        instance._prepare = None
-        instance._event_publisher = None
     from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 
-    instance._jwt_secret = SECRET
+    instance._verifier = SECRET
     instance._dispatch = DomainRPCDispatcher(request.param[0])
     yield instance
     instance._dispatch.close()
@@ -195,7 +194,7 @@ def test_primary_returns_non_retryable_error_for_oversized_reply(primary):
 
     request = SimpleNamespace(
         data=keyvalue_pb2.GetRequest(key="k").SerializeToString(),
-        headers={"Nats-Auth-Token": issue_service_token("test", SECRET)},
+        headers={"Nats-Auth-Token": TEST_TOKENS.token("test")},
         subject="abi.test",
         respond=respond,
     )
@@ -222,7 +221,7 @@ def test_primary_rejects_malformed_protobuf_before_dispatch(primary):
     response_cls = response_class(primary)
     request = SimpleNamespace(
         data=b"\xff",
-        headers={"Nats-Auth-Token": issue_service_token("test", SECRET)},
+        headers={"Nats-Auth-Token": TEST_TOKENS.token("test")},
         subject="abi.test",
         respond=AsyncMock(),
     )
@@ -334,7 +333,7 @@ def test_simultaneous_first_requests_share_completed_connection(monkeypatch):
     nc.connect = AsyncMock(side_effect=connect)
     factory = Mock(return_value=nc)
     monkeypatch.setattr("naas_abi_core.engine.nats_rpc.NATSClient", factory)
-    client = NatsRPCClient("nats://unused:4222", SECRET, "test")
+    client = NatsRPCClient("nats://unused:4222", TEST_TOKENS.source("test"))
 
     async def scenario():
         connections = await asyncio.gather(
@@ -347,7 +346,7 @@ def test_simultaneous_first_requests_share_completed_connection(monkeypatch):
     asyncio.run(scenario())
 
 
-# --- overflow: payloads above the broker limit (docs/adr/20261003_nats-rpc-overflow.md)
+# --- overflow: payloads above the broker limit
 
 OWNER = "b" * 32
 
@@ -385,7 +384,7 @@ def overflow_host():
 def primary_request(data, **headers):
     return SimpleNamespace(
         data=data,
-        headers={"Nats-Auth-Token": issue_service_token("test", SECRET), **headers},
+        headers={"Nats-Auth-Token": TEST_TOKENS.token("test"), **headers},
         subject="abi.test",
         respond=AsyncMock(),
         # The connection it arrived on, as nats.micro's Request carries it.
@@ -607,7 +606,7 @@ def test_primary_counts_reply_headers_against_the_brokers_limit(primary):
 
     request = SimpleNamespace(
         data=keyvalue_pb2.GetRequest(key="k").SerializeToString(),
-        headers={"Nats-Auth-Token": issue_service_token("test", SECRET)},
+        headers={"Nats-Auth-Token": TEST_TOKENS.token("test")},
         subject="abi.test",
         respond=respond,
         _msg=SimpleNamespace(_client=SimpleNamespace(max_payload=limit)),
@@ -634,3 +633,293 @@ def test_uploads_are_regrouped_into_negotiated_chunks_lazily():
     assert [len(chunk) for chunk in upload_chunks(pieces, 4)] == [4, 4, 4, 4, 2]
     assert b"".join(upload_chunks([b"ab", b"cd"], 3)) == b"abcd"
     assert list(upload_chunks([], 4)) == []
+
+
+def _api_client(identity: str = "api"):
+    from naas_abi_core.engine.nats_rpc import NatsRPCClient
+
+    client = NatsRPCClient("nats://unused:4222", TEST_TOKENS.source(identity))
+    return client, connection(
+        client,
+        return_value=SimpleNamespace(
+            data=keyvalue_pb2.GetResponse().SerializeToString(), headers=None
+        ),
+    )
+
+
+@pytest.mark.parametrize("identity", ["api", "engine"])
+def test_a_delegating_client_sends_a_delegation_naming_the_user(identity):
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        service_account,
+        use_call_context,
+        user,
+    )
+    from naas_abi_core.engine.nats_identity import caller_context
+
+    client, nc = _api_client(identity)
+    caller = CallContext(
+        principal=service_account("api"),
+        on_behalf_of=user("usr-ada"),
+        container=WS,
+        trace_id="trace-1",
+    )
+    try:
+        with use_call_context(caller):
+            context = client._context()
+            call(client)
+    finally:
+        client.close()
+    headers = nc.request.call_args.kwargs["headers"]
+    assert "Abi-On-Behalf-Of" not in headers
+    served = caller_context(
+        headers, TEST_TOKENS.verifier_for(("abi:nats", "abi:delegated:agent"))
+    )
+    assert served.principal.id == identity
+    assert served.on_behalf_of is not None and served.on_behalf_of.id == "usr-ada"
+    assert (context.trace_id, context.container) == ("trace-1", WS)
+    assert not context.principal_id and not context.tenant_id
+
+
+def test_another_client_calls_as_itself_and_never_carries_a_user():
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        service_account,
+        use_call_context,
+        user,
+    )
+    from naas_abi_core.engine.nats_identity import caller_context
+
+    client, nc = _api_client("dagster")
+    try:
+        with use_call_context(
+            CallContext(principal=service_account("api"), on_behalf_of=user("u"))
+        ):
+            call(client)
+    finally:
+        client.close()
+    headers = nc.request.call_args.kwargs["headers"]
+    assert "Abi-On-Behalf-Of" not in headers
+    served = caller_context(headers, TEST_TOKENS.verifier)
+    assert served.principal.id == "dagster" and served.on_behalf_of is None
+
+
+def test_a_delegation_that_fails_is_a_failed_call_not_the_clients_own_identity():
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        service_account,
+        use_call_context,
+        user,
+    )
+    from naas_abi_core.engine.nats_auth import (
+        InvalidServiceTokenError,
+        RenewingTokenSource,
+    )
+    from naas_abi_core.engine.nats_rpc import NatsRPCClient
+
+    def refuse(who, recipient, scope=None):
+        raise InvalidServiceTokenError("suspended")
+
+    client = NatsRPCClient(
+        "nats://unused:4222",
+        RenewingTokenSource("api", lambda: TEST_TOKENS.issue("api"), delegate=refuse),
+    )
+    nc = connection(client, return_value=SimpleNamespace(data=b"", headers=None))
+    try:
+        with (
+            use_call_context(
+                CallContext(principal=service_account("api"), on_behalf_of=user("u"))
+            ),
+            pytest.raises(InvalidServiceTokenError),
+        ):
+            call(client)
+    finally:
+        client.close()
+    nc.request.assert_not_called()
+
+
+def test_without_a_user_no_delegation_and_a_fresh_trace():
+    from naas_abi_core.engine.nats_identity import caller_context
+
+    client, nc = _api_client()
+    try:
+        call(client)
+        context = client._context()
+    finally:
+        client.close()
+    headers = nc.request.call_args.kwargs["headers"]
+    assert "Abi-On-Behalf-Of" not in headers
+    assert caller_context(headers, TEST_TOKENS.verifier).on_behalf_of is None
+    assert context.trace_id and not context.container
+
+
+def test_overflow_chunks_travel_as_the_call_they_belong_to(monkeypatch):
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        service_account,
+        use_call_context,
+        user,
+    )
+    from naas_abi_core.engine.nats_identity import caller_context
+    from naas_abi_core.engine.nats_rpc import NatsRPCClient
+    from naas_abi_proto.transfer.v1 import transfer_pb2
+    from naas_abi_sdk.telemetry import TransferTrace
+
+    client = NatsRPCClient("nats://unused:4222", TEST_TOKENS.source("api"))
+    sent = []
+
+    async def request(subject, payload, headers, **kwargs):
+        sent.append((transfer_pb2.CloseRequest.FromString(payload), headers))
+        return SimpleNamespace(data=transfer_pb2.CloseResponse().SerializeToString())
+
+    monkeypatch.setattr(client, "_do_request_async", request)
+    caller = CallContext(principal=service_account("api"), on_behalf_of=user("u1"))
+    call_request = keyvalue_pb2.SetRequest(
+        context=common_pb2.CallContext(trace_id="trace-1", container=WS)
+    )
+    try:
+        with use_call_context(caller):
+            chunk = client._chunk_call(
+                {"Nats-Auth-Token": client._current_token(client._served_user())},
+                call_request,
+                TransferTrace(None),
+            )
+        # Chunks run later, on the client's loop, outside the caller's context.
+        for _ in range(2):
+            asyncio.run(
+                chunk(
+                    "abi.overflow.close",
+                    transfer_pb2.CloseRequest(),
+                    transfer_pb2.CloseResponse,
+                )
+            )
+    finally:
+        client.close()
+    for message, headers in sent:
+        assert (message.context.trace_id, message.context.container) == (
+            "trace-1",
+            WS,
+        )
+        assert "Abi-On-Behalf-Of" not in headers
+        served = caller_context(
+            headers, TEST_TOKENS.verifier_for(("abi:nats", "abi:delegated:agent"))
+        )
+        assert served.on_behalf_of is not None and served.on_behalf_of.id == "u1"
+
+
+def test_a_stream_keeps_the_user_it_was_opened_for(monkeypatch):
+    """Frames read later, from another thread or after the caller's context
+    ended, still carry the opener's user: the host refuses any other."""
+    import threading
+
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        service_account,
+        use_call_context,
+        user,
+    )
+    from naas_abi_core.engine.nats_rpc import NatsRPCClient
+    from naas_abi_proto.transfer.v1 import transfer_pb2
+
+    client = NatsRPCClient("nats://unused:4222", TEST_TOKENS.source("api"))
+    users = []
+    replies = {
+        transfer_pb2.OpenResponse: transfer_pb2.OpenResponse(id="s", chunk_bytes=1024),
+        transfer_pb2.StartResponse: transfer_pb2.StartResponse(),
+        transfer_pb2.ReadResponse: transfer_pb2.ReadResponse(done=True),
+        transfer_pb2.CloseResponse: transfer_pb2.CloseResponse(),
+    }
+
+    def fake_call(subject, request, response_cls, **kwargs):
+        served = kwargs.get("user") or client._served_user()
+        users.append(served.id if served is not None else None)
+        return replies[response_cls]
+
+    monkeypatch.setattr(client, "_call", fake_call)
+    monkeypatch.setattr(
+        client,
+        "_run_coro",
+        lambda coro, **_: (coro.close(), SimpleNamespace(max_payload=1 << 20))[1],
+    )
+    ada = CallContext(principal=service_account("api"), on_behalf_of=user("usr-ada"))
+    try:
+        with use_call_context(ada):
+            stream = client._transfer_stream("abi.t", "get", b"", lambda e: None)
+            frames = stream.__enter__()
+        # Read and close on another thread, outside the opener's context.
+        reader = threading.Thread(
+            target=lambda: (list(frames), stream.__exit__(None, None, None))
+        )
+        reader.start()
+        reader.join()
+    finally:
+        client.close()
+    assert users and set(users) == {"usr-ada"}
+
+
+def test_a_stream_keeps_the_scope_it_was_opened_with(monkeypatch):
+    """A read-only key's stream is as narrow over NATS as in process: frames
+    read from another thread, after the caller's context ended, still carry the
+    opener's scope in their delegation."""
+    import threading
+
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        service_account,
+        use_call_context,
+        user,
+    )
+    from naas_abi_core.engine.nats_rpc import NatsRPCClient
+    from naas_abi_proto.transfer.v1 import transfer_pb2
+
+    read_only = (
+        {"effect": "Allow", "actions": ["object_storage:Get*"], "resources": ["*"]},
+    )
+    seen = []
+
+    class Source:
+        identity = "api"
+
+        def token(self):
+            return "own"
+
+        def token_for(self, who, recipient=None, scope=None):
+            seen.append((who.id if who is not None else None, scope))
+            return "t"
+
+    client = NatsRPCClient("nats://unused:4222", Source())
+    replies = {
+        transfer_pb2.OpenResponse: transfer_pb2.OpenResponse(id="s", chunk_bytes=1024),
+        transfer_pb2.StartResponse: transfer_pb2.StartResponse(),
+        transfer_pb2.ReadResponse: transfer_pb2.ReadResponse(done=True),
+        transfer_pb2.CloseResponse: transfer_pb2.CloseResponse(),
+    }
+
+    def fake_rpc(msg, response_cls, transfer):
+        return replies[response_cls]
+
+    monkeypatch.setattr(client, "_rpc_request", lambda *a, **k: None)
+    monkeypatch.setattr(client, "_rpc_parse", fake_rpc)
+    monkeypatch.setattr(
+        client,
+        "_run_coro",
+        lambda coro, **_: (coro.close(), SimpleNamespace(max_payload=1 << 20))[1],
+    )
+    ada = CallContext(
+        principal=service_account("api"),
+        on_behalf_of=user("usr-ada"),
+        scope=read_only,
+    )
+    try:
+        with use_call_context(ada):
+            stream = client._transfer_stream("abi.t", "get", b"", lambda e: None)
+            frames = stream.__enter__()
+        reader = threading.Thread(
+            target=lambda: (list(frames), stream.__exit__(None, None, None))
+        )
+        reader.start()
+        reader.join()
+    finally:
+        client.close()
+    assert len(seen) >= 4  # open, start, read, close
+    assert all(who == "usr-ada" and scope == read_only for who, scope in seen)

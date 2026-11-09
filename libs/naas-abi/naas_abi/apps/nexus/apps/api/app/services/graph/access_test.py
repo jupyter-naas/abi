@@ -15,11 +15,11 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.scoped_s
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.workspace_policy import (
     config_for_workspace,
-    owned_graphs,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import (
     GraphAccessError,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 from naas_abi.apps.nexus.graph_policy_config import (
     NEXUS_GRAPH,
     SCHEMA_GRAPH,
@@ -104,34 +104,13 @@ def fixtures():
     return store
 
 
-def scope(config=None, role="member", ws="alpha", owned=()):
-    return GraphAccessScope.resolve(
-        ws,
-        config or WorkspaceGraphPolicyConfig(write=[ALPHA], read=[REF]),
-        set(owned),
-        role,
-    )
+def scope(readable=(ALPHA, REF), writable=(ALPHA,), ws="alpha", can_create=True):
+    """A workspace's view as IAM yields it: the graphs the kernel lets the caller
+    read and write (IAM-backed resolution is proven in ``graph_authorization_test``)."""
+    return GraphAccessScope(ws, frozenset(readable), frozenset(writable), can_create)
 
 
 class PolicyTest(unittest.TestCase):
-    def test_missing_grants_expose_only_owned(self):
-        s = scope(WorkspaceGraphPolicyConfig(), owned=[ALPHA])
-        self.assertEqual(s.readable, {ALPHA})
-        self.assertEqual(scope(WorkspaceGraphPolicyConfig()).readable, set())
-
-    def test_explicit_disable_and_viewer(self):
-        s = scope(
-            WorkspaceGraphPolicyConfig(include_owned=False, allow_create=False),
-            owned=[ALPHA],
-        )
-        self.assertFalse(s.readable)
-        self.assertFalse(s.allow_create)
-        self.assertFalse(scope(WorkspaceGraphPolicyConfig(include_owned=False)).allow_create)
-        s = scope(role="viewer")
-        self.assertEqual(s.readable, {ALPHA, REF})
-        self.assertFalse(s.writable)
-        self.assertFalse(s.allow_create)
-
     def test_shared_read_only_and_wrong_workspace(self):
         s = scope()
         s.require("alpha", [REF])
@@ -178,9 +157,7 @@ class PolicyTest(unittest.TestCase):
             config_for_workspace(settings, "two", "team")
 
     def test_policy_fingerprint_changes_on_revocation(self):
-        self.assertNotEqual(
-            scope().cache_key, scope(WorkspaceGraphPolicyConfig(write=[ALPHA])).cache_key
-        )
+        self.assertNotEqual(scope().cache_key, scope(readable=(ALPHA,)).cache_key)
         self.assertNotEqual(scope().cache_key, scope(ws="other").cache_key)
 
 
@@ -226,7 +203,7 @@ class ScopedStoreTest(unittest.TestCase):
             self.assertFalse(
                 list(self.store.query(f"SELECT ?s WHERE {{ GRAPH <{uri}> {{ ?s ?p ?o }} }}"))
             )
-        s = WorkspaceGraphStore(self.raw, scope(WorkspaceGraphPolicyConfig(read=[SCHEMA_GRAPH])))
+        s = WorkspaceGraphStore(self.raw, scope(readable=(ALPHA, REF, SCHEMA_GRAPH)))
         self.assertTrue(
             list(s.query(f"SELECT ?s WHERE {{ GRAPH <{SCHEMA_GRAPH}> {{ ?s ?p ?o }} }}"))
         )
@@ -253,11 +230,8 @@ class ScopedStoreTest(unittest.TestCase):
         )
 
     def test_empty_or_absent_grant_never_queries_or_fetches(self):
-        for config in [
-            WorkspaceGraphPolicyConfig(),
-            WorkspaceGraphPolicyConfig(read=["http://invalid.example/absent"]),
-        ]:
-            s = WorkspaceGraphStore(self.raw, scope(config))
+        for readable in [(), ("http://invalid.example/absent",)]:
+            s = WorkspaceGraphStore(self.raw, scope(readable=readable, writable=()))
             self.assertFalse(list(s.query("SELECT ?s WHERE { GRAPH ?g { ?s ?p ?o } }")))
         self.assertFalse(self.raw.queries)
 
@@ -290,10 +264,9 @@ class ServiceIsolationTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_list_uses_policy_not_store_scan(self):
         missing = "urn:graph:policy-only"
-        access = scope(
-            WorkspaceGraphPolicyConfig(write=[missing], include_owned=False)
+        svc = self.service_class(
+            lambda: self.raw, access_scope=scope(readable=(missing,), writable=(missing,))
         )
-        svc = self.service_class(lambda: self.raw, access_scope=access)
         self.raw.list_graphs = lambda: (_ for _ in ()).throw(
             AssertionError("list_graphs must not scan the store")
         )
@@ -348,24 +321,26 @@ class ServiceIsolationTest(unittest.IsolatedAsyncioTestCase):
                 await method(**args)
         self.assertFalse(self.raw.queries)
 
-    async def test_created_graphs_have_persistent_workspace_ownership_and_unique_ids(
-        self,
-    ):
+    async def test_created_graphs_have_unique_ids(self):
         other = self.service_class(lambda: self.raw, access_scope=scope(ws="beta"))
         a = await self.service.create_graph("alpha", "Same name", None, "user")
         b = await other.create_graph("beta", "Same name", None, "user")
         self.assertNotEqual(a.uri, b.uri)
-        self.assertEqual(owned_graphs(self.raw, "alpha"), {a.uri})
-        self.assertEqual(owned_graphs(self.raw, "beta"), {b.uri})
-        # Fresh request / process reads ownership from persistent metadata.
-        access = scope(WorkspaceGraphPolicyConfig(), owned=owned_graphs(self.raw, "alpha"))
+        # The graph is registered in Nexus's application graph: it lists once
+        # the workspace's view offers it.
+        access = scope(readable=(a.uri,), writable=(a.uri,))
         fresh = self.service_class(lambda: self.raw, access_scope=access)
-        self.assertEqual({g.uri for p in await fresh.list_graphs("alpha") for g in p.graphs}, {a.uri})
+        self.assertEqual(
+            {g.uri for p in await fresh.list_graphs("alpha") for g in p.graphs}, {a.uri}
+        )
         await fresh.update_graph("alpha", a.uri, "Renamed", None)
-        self.assertEqual(owned_graphs(self.raw, "alpha"), {a.uri})
+        packs = await fresh.list_graphs("alpha")
+        self.assertEqual([g.label for p in packs for g in p.graphs], ["Renamed"])
 
     async def test_viewer_and_read_only_mutations_denied(self):
-        viewer = self.service_class(lambda: self.raw, access_scope=scope(role="viewer"))
+        viewer = self.service_class(
+            lambda: self.raw, access_scope=scope(writable=(), can_create=False)
+        )
         for operation in [
             viewer.create_graph("alpha", "X", None, "user"),
             viewer.clear_graph("alpha", ALPHA),
@@ -382,7 +357,7 @@ class ServiceIsolationTest(unittest.IsolatedAsyncioTestCase):
 
         granted = self.service_class(
             lambda: self.raw,
-            access_scope=scope(WorkspaceGraphPolicyConfig(read=[SCHEMA_GRAPH])),
+            access_scope=scope(readable=(ALPHA, REF, SCHEMA_GRAPH)),
         )
         self.assertEqual(
             _get_ontology_label(granted._get_triple_store(), str(PERSON)),
@@ -449,8 +424,13 @@ class HTTPPolicyTest(unittest.IsolatedAsyncioTestCase):
                 raise HTTPException(403, "Workspace unavailable")
             return service.for_scope(scope())
 
-        self.patcher = patch.object(self.api, "workspace_graph_service", bind)
+        self.patcher = patch.object(self.api, "graph_section_service", bind)
         self.patcher.start()
+        # Platform administration is IAM's too: nobody here holds it.
+        self.iam = NexusIam()
+        self.iam.user("user")
+        self.installed = self.iam.installed()
+        self.installed.__enter__()
         self.client = httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         )
@@ -458,6 +438,7 @@ class HTTPPolicyTest(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         await self.client.aclose()
         self.patcher.stop()
+        self.installed.__exit__(None, None, None)
 
     async def test_direct_urls_and_mutations_cannot_escape(self):
         cases = [
@@ -515,7 +496,7 @@ class HTTPPolicyTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(result.status_code, 200, result.text)
         self.assertTrue(result.json()["can_write"])
-        self.assertIn(result.json()["uri"], owned_graphs(self.raw, "alpha"))
+        self.assertIn(URIRef(result.json()["uri"]), self.raw.names)
 
     async def test_workspace_cache_clear_requires_context(self):
         result = await self.client.post("/graph/cache/clear")
@@ -572,11 +553,15 @@ class LegacyPolicyTest(unittest.IsolatedAsyncioTestCase):
         raw = fixtures()
         filter_uri = "http://ontology.naas.ai/nexus/filter/demo"
         meta = Graph()
-        meta.add((URIRef(filter_uri), RDF.type, URIRef("http://ontology.naas.ai/nexus/GraphFilter")))
-        meta.add((URIRef(filter_uri), URIRef("http://ontology.naas.ai/nexus/predicate_uri"), RDF.type))
+        meta.add(
+            (URIRef(filter_uri), RDF.type, URIRef("http://ontology.naas.ai/nexus/GraphFilter"))
+        )
+        meta.add(
+            (URIRef(filter_uri), URIRef("http://ontology.naas.ai/nexus/predicate_uri"), RDF.type)
+        )
         meta.add((URIRef(filter_uri), RDFS.label, Literal("Demo filter")))
         raw.insert(meta, URIRef(NEXUS_GRAPH))
-        access = scope(owned=[ALPHA])
+        access = scope()
         service = ViewService(
             triple_store_getter=lambda: WorkspaceGraphStore(raw, access),
             catalog_store_getter=lambda: raw,
@@ -599,25 +584,6 @@ class LegacyPolicyTest(unittest.IsolatedAsyncioTestCase):
             listed.call_args.kwargs["graph_filters"][0]["predicate_uri"],
             str(RDF.type),
         )
-
-    async def test_workspace_membership_denied_before_policy_or_catalog_access(self):
-        from unittest.mock import AsyncMock, Mock
-
-        from fastapi import HTTPException
-        from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary import (
-            auth__primary_adapter__dependencies as auth,
-        )
-        from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__dependencies import (
-            workspace_graph_service,
-        )
-
-        graph = Mock()
-        with patch.object(
-            auth, "require_workspace_access", AsyncMock(side_effect=HTTPException(403))
-        ):
-            with self.assertRaises(HTTPException):
-                await workspace_graph_service(graph, "outsider", "alpha")
-        graph._get_catalog_store.assert_not_called()
 
     async def test_legacy_network_route_binds_scope_before_execution(self):
         from unittest.mock import AsyncMock
@@ -676,85 +642,3 @@ class EmbeddedAdapterPolicyTest(unittest.TestCase):
                 self.assertNotIn((SECRET, RDF.type, PERSON), exported)
             finally:
                 Adapter._stores.pop(directory, None)
-
-
-class CatalogReadPolicyTest(unittest.IsolatedAsyncioTestCase):
-    def test_catalog_read_is_explicit_and_does_not_grant_write(self):
-        catalog = {ALPHA, BETA, REF, SCHEMA_GRAPH, NEXUS_GRAPH}
-        enabled = WorkspaceGraphPolicyConfig(read_all=True)
-        actual = GraphAccessScope.resolve("staff", enabled, {REF}, "member", catalog=catalog)
-        self.assertEqual(actual.readable, catalog - {NEXUS_GRAPH})
-        self.assertEqual(actual.writable, {REF})
-        viewer = GraphAccessScope.resolve("staff", enabled, {REF}, "viewer", catalog=catalog)
-        self.assertEqual(viewer.readable, actual.readable)
-        self.assertFalse(viewer.writable)
-        self.assertFalse(viewer.allow_create)
-        restricted = GraphAccessScope.resolve(
-            "alpha", WorkspaceGraphPolicyConfig(), {ALPHA}, "member", catalog=catalog
-        )
-        self.assertEqual(restricted.readable, {ALPHA})
-        with self.assertRaises(GraphAccessError):
-            restricted.require("alpha", [BETA])
-        with self.assertRaises(GraphAccessError):
-            actual.require("staff", [BETA], write=True)
-
-    async def test_configured_staff_sees_legacy_and_new_graphs_on_next_request(self):
-        from unittest.mock import AsyncMock
-
-        from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary import (
-            workspace_policy as policy,
-        )
-
-        raw = fixtures()
-        registered = Graph()
-        registered.add(
-            (
-                URIRef("urn:empty-legacy"),
-                RDF.type,
-                URIRef("http://ontology.naas.ai/nexus/KnowledgeGraph"),
-            )
-        )
-        raw.insert(registered, URIRef(NEXUS_GRAPH))
-        from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary import (
-            resource_access_postgres as saved_policies,
-        )
-
-        async def saved_policy(db, workspace_id, kind):
-            return SimpleNamespace(data=WorkspaceGraphPolicyConfig(read_all=workspace_id == "staff-id").model_dump())
-
-        db = SimpleNamespace()
-        with patch.object(saved_policies, "load_resource_policy", new=AsyncMock(side_effect=saved_policy)):
-            first = await policy.load_workspace_scope(db, raw, "staff-id", "member")
-            self.assertEqual(first.readable, {ALPHA, BETA, REF, SCHEMA_GRAPH, "urn:empty-legacy"})
-            self.assertFalse(first.writable)
-            raw.create_graph("urn:newly-added")
-            second = await policy.load_workspace_scope(db, raw, "staff-id", "member")
-            self.assertIn("urn:newly-added", second.readable)
-            self.assertNotEqual(first.cache_key, second.cache_key)
-            other = await policy.load_workspace_scope(db, raw, "alpha-id", "member")
-            self.assertFalse(other.readable)
-            different_org = await policy.load_workspace_scope(db, raw, "other-staff", "member")
-            self.assertFalse(different_org.readable)
-
-    def test_inventory_lists_catalog_read_grants(self):
-        from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.workspace_policy import (
-            catalog_inventory,
-        )
-
-        raw = fixtures()
-        settings = SimpleNamespace(
-            organizations=[
-                SimpleNamespace(
-                    slug="org",
-                    workspaces=[
-                        SimpleNamespace(
-                            slug="staff", graphs=WorkspaceGraphPolicyConfig(read_all=True)
-                        ),
-                    ],
-                )
-            ]
-        )
-        items = catalog_inventory(raw, settings)
-        self.assertEqual({item["uri"] for item in items}, {ALPHA, BETA, REF, SCHEMA_GRAPH})
-        for item in items:
-            self.assertEqual(item["grants"], [{"workspace": "org/staff", "access": "read"}])

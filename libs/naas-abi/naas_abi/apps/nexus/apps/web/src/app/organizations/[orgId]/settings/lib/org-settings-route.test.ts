@@ -61,7 +61,7 @@ describe('parseOrgSettingsRoute', () => {
       orgId: 'org-1',
       isDetail: true,
       section: 'roles',
-      sectionLabel: 'Roles',
+      sectionLabel: 'Roles & permissions',
     });
   });
 

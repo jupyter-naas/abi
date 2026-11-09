@@ -1,12 +1,14 @@
 """``python -m {{module_name_snake}}``: run the module until it is stopped.
 
-Environment (``abi dev up`` and the Compose service set the first four):
+Environment (``abi dev up`` and the Compose service set the first three):
 
-- ``ABI_NATS_URL``: the broker, logged in as the user ``module``
-  (``nats://module:<NATS_MODULE_PASSWORD>@host:4222``);
+- ``ABI_NATS_URL``: the broker (``nats://host:4222``), no login in it;
+- ``ABI_SERVICE_KEY``: this module's service key (``abi_sk_...``), of the
+  account ``module/<project>/{{module_id}}``. It logs in to the broker and is
+  exchanged for the engine's tokens; the module holds no signing secret.
+  ``abi dev up`` creates it; elsewhere ``abi iam service-account create
+  module/<project>/{{module_id}} --key``;
 - ``ABI_DISCOVERY_PROJECT``: the project whose engine hosts discovery;
-- ``ABI_MODULE_KEY``: the module key it signs its tokens with, for its module
-  id (``abi module key {{module_id}}`` prints it), or ``ABI_SERVICE_TOKEN``;
 - ``{{module_name_upper}}_CHAT_MODEL``: a chat model id (default: the engine's);
 - ``ABI_HEALTH_PORT``: opens ``/health`` and ``/ready`` probes;
 - ``OTEL_EXPORTER_OTLP_ENDPOINT``: exports traces;
@@ -24,9 +26,8 @@ from collections.abc import Awaitable, Mapping
 from typing import TypeVar
 
 from naas_abi_sdk import DiscoveryConfiguration, run_module
-from naas_abi_sdk.service_token import ModuleToken, token_from_env
 
-from {{module_name_snake}} import MODULE_ID, ABIModule
+from {{module_name_snake}} import ABIModule
 
 DEFAULT_NATS_URL = "nats://127.0.0.1:4222"
 DEFAULT_DISCOVERY_PROJECT = "{{discovery_project}}"
@@ -71,22 +72,23 @@ def configuration_from(env: Mapping[str, str]) -> ABIModule.Configuration:
     )
 
 
-def token_from(env: Mapping[str, str]) -> str | ModuleToken:
-    """The module calls the engine as itself: a token for its module id."""
-    return token_from_env(env, MODULE_ID)
-
-
 def main(env: Mapping[str, str] = os.environ) -> int:
     logging.basicConfig(
         level=env.get("LOG_LEVEL", "INFO"),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    key = env.get("ABI_SERVICE_KEY", "")
+    if not key.startswith("abi_sk_"):
+        raise SystemExit(
+            "Set ABI_SERVICE_KEY to this module's service key (abi_sk_...): "
+            "abi iam service-account create module/<project>/{{module_id}} --key"
+        )
     asyncio.run(
         run_until_signalled(
             run_module(
                 ABIModule,
                 url=env.get("ABI_NATS_URL") or DEFAULT_NATS_URL,
-                token=token_from(env),
+                token=key,
                 configuration=configuration_from(env),
                 # Model calls stream, but each exchange can take a while.
                 timeout=60,

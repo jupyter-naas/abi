@@ -2,7 +2,7 @@
 
 Every feature tool follows the same rules as the HTTP adapter it mirrors:
 the signed-in user and Nexus workspace come from the chat boundary
-(``agent_user_id`` / ``agent_workspace_id``), membership is checked with the
+(``agent_user_id`` / ``agent_container``), membership is checked with the
 workspace service, and DB work runs on a fresh session (see
 ``nexus_admin_tools._with_db``: tools run on worker threads, so they must not
 reuse the API process's asyncpg pool).
@@ -26,8 +26,8 @@ from naas_abi.tools.nexus_admin_tools import (
     _run_async,
     _with_db,
     _workspace_service,
+    turn_workspace_id,
 )
-from naas_abi_core.services.agent.context import agent_workspace_id
 
 T = TypeVar("T")
 
@@ -40,7 +40,7 @@ def tool_context() -> tuple[str, str] | dict[str, str]:
     user_id = _require_user_id()
     if isinstance(user_id, dict):
         return user_id
-    workspace_id = (agent_workspace_id.get() or "").strip()
+    workspace_id = turn_workspace_id()
     if not workspace_id:
         return {"error": _NO_WORKSPACE}
     return user_id, workspace_id
@@ -115,15 +115,25 @@ def bound_session(db: Any) -> Iterator[None]:
 
 
 def request_context(user_id: str) -> Any:
-    """IAM request context for services that take one (agents, skills, secrets)."""
-    from naas_abi.apps.nexus.apps.api.app.services.iam.port import (
-        RequestContext,
-        TokenData,
-    )
+    """Who is asking, for services that take one (a user-scoped skill is private
+    to its creator). What the caller may do is IAM's: see ``require_action``."""
+    from naas_abi.apps.nexus.apps.api.app.services.skills.service import RequestContext
 
-    return RequestContext(
-        token_data=TokenData(user_id=user_id, scopes={"*"}, is_authenticated=True)
-    )
+    return RequestContext(actor_user_id=user_id)
+
+
+async def require_action(
+    user_id: str, workspace_id: str, action: str, *, id: str | tuple[str, ...] = "-"
+) -> dict[str, str] | None:
+    """None when IAM lets the user perform ``action`` in the workspace (the check
+    its route makes), else an error dict for the model."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ, AuthzDenied
+
+    try:
+        await AUTHZ.require(action, user=user_id, workspace=workspace_id, id=id)
+    except AuthzDenied:
+        return {"error": "You do not have access to this in this workspace."}
+    return None
 
 
 def feature_tool_error(feature: str, exc: BaseException) -> dict[str, str]:

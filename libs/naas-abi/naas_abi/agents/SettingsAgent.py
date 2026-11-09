@@ -28,7 +28,7 @@ API:
 - {_API}/services/workspaces/adapters/primary/workspaces__primary_adapter__FastAPI.py and services/workspaces/service.py: workspaces, members, roles, theme, effective feature_flags.
 - {_API}/services/organizations/adapters/primary/organizations__primary_adapter__FastAPI.py and services/organizations/service.py: organizations, members, invites, branding, role feature overrides.
 - {_API}/services/secrets/service.py and services/secrets/adapters/primary/secrets__primary_adapter__FastAPI.py: encrypted workspace secrets (values masked on read).
-- {_API}/services/iam/service.py, authorization.py, IAM_SPEC.md: scopes and workspace access checks.
+- {_API}/services/iam/authz.py, guards.py, memberships.py and catalog/: IAM decisions, role attachments and the action catalog.
 - {_API}/core/feature_flags.py: build_feature_flags (enabled catalog, role baseline, organization override, workspace override).
 - naas_abi/__init__.py: FeatureFlagsConfig and WorkspaceSeedConfig (config.yaml nexus_config: feature_flags, organizations, workspaces, agents, apps, ontologies).
 Agent: naas_abi/agents/SettingsAgent.py, naas_abi/tools/settings_tools.py, naas_abi/tools/nexus_admin_tools.py."""

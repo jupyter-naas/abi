@@ -10,9 +10,10 @@ from pydantic import BaseModel, ConfigDict, Field
 class ActivityEvent(BaseModel):
     """A single activity log entry.
 
-    ``actor_id`` is opaque — the core service never parses it. Callers
-    pick a convention; the recommended one is ``"<namespace>:<id>"``
-    (e.g. ``"user:abc-123"``, ``"service:triple_store"``, ``"anonymous"``).
+    ``actor_id`` is opaque — the core service never parses it. An
+    ``ActivityLogService`` wired with IAM sets it to the call's principal id
+    (its user, else the calling service account), whatever a caller passes.
+    Logs written before that name actors ``"user:<id>"`` and ``"anonymous"``.
 
     ``event_type`` is a dotted namespace string (e.g. ``"http.request"``,
     ``"triple_store.insert"``). The service never enumerates them.
@@ -114,11 +115,10 @@ class IActivityLogAdapter(ABC):
     def query_stream(
         self, actor_id: str, query: ActivityLogQuery | None = None
     ) -> Iterator[Iterator[ActivityEvent]]:
-        """``query``, read as the caller iterates, inside the block
-        (docs/adr/20261003_nats-streamed-results.md). Events recorded after
-        the block opened are not included, so the stream always ends. This
-        default reads ``STREAM_PAGE`` events at a time by keyset on ``seq``,
-        holding no lock between pages."""
+        """``query``, read as the caller iterates, inside the block. Events
+        recorded after the block opened are not included, so the stream always
+        ends. This default reads ``STREAM_PAGE`` events at a time by keyset on
+        ``seq``, holding no lock between pages."""
         yield paged_events(self.query, actor_id, query)
 
     @abstractmethod

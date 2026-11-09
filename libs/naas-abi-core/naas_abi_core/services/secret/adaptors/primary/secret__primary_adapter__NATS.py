@@ -7,10 +7,14 @@ wire contract and ``naas_abi_core/proto/README.md`` for why it lives
 there). This is the server side; the matching client is
 ``SecretSecondaryAdapterNATSClient``.
 
-Security note: Stage 1's shared-JWT auth (``naas_abi_core.engine.nats_auth``)
-has no per-caller ARN/IAM authorization -- see
-``secret_nats_contract.py``'s docstring. Ported anyway, an explicit,
-accepted, temporary gap, not an oversight.
+Authorization: each call runs as the verified caller, and the ``Secret``
+domain service authorizes it per key against IAM: a key the caller
+may not see reads as missing, a refused write answers ``PERMISSION_DENIED`` or
+``NOT_FOUND``, and ``list`` returns only the keys the caller may list.
+So an endpoint with two layers: the allowlist below (a caller other than ``engine``
+and ``idp`` reaches only the names under its own prefix, in every operation, so
+the broker's passwords and IAM's keys are out of a module's reach whatever its
+policy grants), then the domain's per-key check.
 """
 
 from __future__ import annotations
@@ -22,13 +26,12 @@ import nats
 import nats.micro
 from google.protobuf.message import DecodeError, Message
 from naas_abi_core import logger
-from naas_abi_core.engine.nats_auth import (
-    InvalidServiceTokenError,
-    verify_service_token,
-)
+from naas_abi_core.engine.call_context import current_call_context
+from naas_abi_core.engine.nats_auth import TokenVerifier
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import (
     RequestPayloadError,
+    authenticate_request,
     request_payload,
     respond_protobuf,
 )
@@ -36,14 +39,21 @@ from naas_abi_core.engine.nats_sessions import ServicePrimary
 from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.secret.v1 import secret_pb2
+from naas_abi_core.services.iam.enforcement import authorization_error_code
+from naas_abi_core.services.iam.IAMPorts import (
+    PermissionDeniedError,
+    ResourceNotFoundError,
+)
 from naas_abi_core.services.secret.adaptors.secret_nats_contract import (
     AUTH_HEADER,
     SERVICE_NAME,
     SERVICE_VERSION,
     SUBJECT_PREFIX,
+    may_use,
 )
 from naas_abi_core.services.secret.Secret import Secret
 from naas_abi_core.services.secret.SecretPorts import (
+    InvalidSecretKey,
     ISecretAdapter,
     SecretAuthenticationError,
 )
@@ -56,6 +66,23 @@ __all__ = [
     "SUBJECT_PREFIX",
     "SecretPrimaryAdapterNATS",
 ]
+
+
+class _ReservedSecretError(Exception):
+    pass
+
+
+def _may_use(key: str) -> bool:
+    """Whether the verified caller owns ``key`` (``secret_nats_contract.may_use``)."""
+    principal = current_call_context().principal
+    return may_use(principal.kind, principal.name or principal.id, key)
+
+
+def _checked(key: str) -> str:
+    if not _may_use(key):
+        raise _ReservedSecretError(key)
+    return key
+
 
 _RequestT = TypeVar("_RequestT", bound=Message)
 _ResponseT = TypeVar("_ResponseT", bound=Message)
@@ -88,10 +115,10 @@ class SecretPrimaryAdapterNATS(ServicePrimary):
     def __init__(
         self,
         adapter: ISecretAdapter | Secret,
-        jwt_secret: str,
+        verifier: TokenVerifier,
     ) -> None:
         self._adapter = adapter
-        self._jwt_secret = jwt_secret
+        self._verifier = verifier
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
         self._service: TracedService | None = None
 
@@ -154,14 +181,8 @@ class SecretPrimaryAdapterNATS(ServicePrimary):
         response_cls: Callable[..., _ResponseT],
         call: Callable[[_RequestT], _ResponseT],
     ) -> None:
-        if not self._is_authenticated(request):
-            await self._respond_error(
-                request,
-                response_cls,
-                "UNAUTHENTICATED",
-                "missing or invalid auth token",
-                retryable=False,
-            )
+        caller = await authenticate_request(request, self._verifier, response_cls)
+        if caller is None:
             return
 
         parsed_request = request_cls()
@@ -188,10 +209,34 @@ class SecretPrimaryAdapterNATS(ServicePrimary):
             # ONE connection (nats_runtime), so run the call on a worker thread:
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
-            response = await self._dispatch.call(call, parsed_request)
+            response = await self._dispatch.call(call, parsed_request, caller)
         except SecretAuthenticationError as exc:
             await self._respond_error(
                 request, response_cls, "SECRET_AUTH_FAILED", str(exc), retryable=False
+            )
+            return
+        except InvalidSecretKey as exc:
+            await self._respond_error(
+                request, response_cls, "INVALID_ARGUMENT", str(exc), retryable=False
+            )
+            return
+        except (PermissionDeniedError, ResourceNotFoundError) as exc:
+            # The caller's authorization outcome, checked by the domain.
+            await self._respond_error(
+                request,
+                response_cls,
+                authorization_error_code(exc) or "PERMISSION_DENIED",
+                str(exc),
+                retryable=False,
+            )
+            return
+        except _ReservedSecretError:
+            await self._respond_error(
+                request,
+                response_cls,
+                "PERMISSION_DENIED",
+                "this secret is not the caller's",
+                retryable=False,
             )
             return
         except Exception:  # noqa: BLE001 - a handler must never crash the service
@@ -204,17 +249,6 @@ class SecretPrimaryAdapterNATS(ServicePrimary):
             return
 
         await respond_protobuf(request, response, response_cls)
-
-    def _is_authenticated(self, request: Request) -> bool:
-        headers = request.headers or {}
-        token = headers.get(AUTH_HEADER)
-        if not token:
-            return False
-        try:
-            verify_service_token(token, self._jwt_secret)
-        except InvalidServiceTokenError:
-            return False
-        return True
 
     @staticmethod
     async def _respond_error(
@@ -242,7 +276,7 @@ class SecretPrimaryAdapterNATS(ServicePrimary):
     def _call_get(self, req: secret_pb2.GetRequest) -> secret_pb2.GetResponse:
         # No `default` argument here -- see secret.proto's header comment:
         # the client applies its caller's default locally when unset.
-        value = self._adapter.get(req.key, None)
+        value = self._adapter.get(_checked(req.key), None)
         result = secret_pb2.GetResult()
         if value is not None:
             result.value = str(value)
@@ -254,7 +288,7 @@ class SecretPrimaryAdapterNATS(ServicePrimary):
         )
 
     def _call_set(self, req: secret_pb2.SetRequest) -> secret_pb2.SetResponse:
-        self._adapter.set(req.key, req.value)
+        self._adapter.set(_checked(req.key), req.value)
         return secret_pb2.SetResponse()
 
     async def _handle_remove(self, request: Request) -> None:
@@ -266,7 +300,7 @@ class SecretPrimaryAdapterNATS(ServicePrimary):
         )
 
     def _call_remove(self, req: secret_pb2.RemoveRequest) -> secret_pb2.RemoveResponse:
-        self._adapter.remove(req.key)
+        self._adapter.remove(_checked(req.key))
         return secret_pb2.RemoveResponse()
 
     async def _handle_list(self, request: Request) -> None:
@@ -278,6 +312,8 @@ class SecretPrimaryAdapterNATS(ServicePrimary):
         secrets = self._adapter.list()
         entries = []
         for key, value in secrets.items():
+            if not _may_use(key):
+                continue
             entry = secret_pb2.SecretEntry(key=key)
             if value is not None:
                 entry.value = value

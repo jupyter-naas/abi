@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
@@ -21,7 +21,6 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.projects.adapters.secondary.
 from naas_abi.apps.nexus.apps.api.app.services.apps.projects.service import (
     AppProjectsService,
 )
-from naas_abi.apps.nexus.apps.api.app.services.auth import service as auth_service
 from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import (
     ObjectStorageSecondaryAdapterFS,
 )
@@ -39,7 +38,7 @@ WS = "ws-1"
 
 
 @pytest.fixture
-def client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient:
+def client(team, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient:
     sc = SourceControlService(InMemoryAdapter())
     sc.ensure_repo(owner="abi", name="monorepo")
     service = AppProjectsService(
@@ -53,18 +52,18 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient:
     app.add_api_route("/app-preview/{token}/{path:path}", adapter.serve_app_preview)
     app.add_api_route("/app-preview/{token}", adapter.redirect_app_preview_root)
     app.dependency_overrides[get_current_user_required] = lambda: User.model_construct(
-        id="u-1", email="alice@example.com", name="Alice"
+        id="admin", email="alice@example.com", name="Alice"
     )
     app.dependency_overrides[adapter.get_app_projects_service] = lambda: service
 
-    async def _members_only(user_id: str, workspace_id: str) -> str:
-        if workspace_id != WS:
-            raise HTTPException(status_code=403, detail="Not a member")
-        return "member"
+    # Preview links are IAM grants: the engine's IAM, for this test.
+    from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
+    from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import IAMStoreMemory
+    from naas_abi_core.services.iam.IAMService import IAMService
 
-    monkeypatch.setattr(adapter, "require_workspace_access", _members_only)
-    monkeypatch.setattr(adapter.settings, "secret_key", "test-secret")
-    monkeypatch.setattr(auth_service.settings, "secret_key", "test-secret")
+    iam = IAMService(IAMStoreMemory())
+    iam.bootstrap()
+    monkeypatch.setattr(credentials, "IAM", lambda: iam)
     return TestClient(app)
 
 
@@ -175,10 +174,20 @@ def test_preview_token_is_the_only_key(client: TestClient) -> None:
     token = path.split("/")[2]
 
     assert client.get("/app-preview/forged-token/").status_code == 401
-    session, _ = auth_service.create_access_token({"sub": "u-1"})
-    assert client.get(f"/app-preview/{session}/").status_code == 401
-    # The preview token opens nothing else: it is not a session token.
-    assert auth_service.decode_token(token) is None
+    from jose import jwt
+
+    old_session = jwt.encode(
+        {"sub": "u-1", "aud": "abi:session", "jti": "j"},
+        "the-key-nexus-used-to-sign-with",
+        algorithm="HS256",
+    )
+    assert client.get(f"/app-preview/{old_session}/").status_code == 401
+    # The preview token opens nothing else: it is not a session.
+    import asyncio
+
+    from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
+
+    assert asyncio.run(credentials.bearer_credential(token)) is None
 
 
 def test_media_types() -> None:

@@ -5,9 +5,8 @@ Exposes a real ``IKeyValueAdapter`` as a NATS micro-service (see
 ``naas_abi_core/proto/README.md`` for why it lives there). This is the server
 side; the matching client is ``KeyValueSecondaryAdapterNATSClient``.
 
-Stage 1 auth model (see ``naas_abi_core.engine.nats_auth``): one shared
-secret, one claim -- which known first-party process holds the token. Every
-incoming request must carry a valid token in the ``Nats-Auth-Token`` header
+Auth (see ``naas_abi_core.engine.nats_auth``): every incoming request
+must carry an engine token, verified against the JWKS, in the ``Nats-Auth-Token`` header
 (``AUTH_HEADER``, imported from ``keyvalue_nats_contract`` below -- that's a
 neutral module neither adapter owns, so this file and the client's don't
 depend on each other; see that module's docstring for why).
@@ -30,13 +29,11 @@ import nats
 import nats.micro
 from google.protobuf.message import DecodeError, Message
 from naas_abi_core import logger
-from naas_abi_core.engine.nats_auth import (
-    InvalidServiceTokenError,
-    verify_service_token,
-)
+from naas_abi_core.engine.nats_auth import TokenVerifier
 from naas_abi_core.engine.nats_dispatch import DomainRPCDispatcher
 from naas_abi_core.engine.nats_rpc import (
     RequestPayloadError,
+    authenticate_request,
     request_payload,
     respond_protobuf,
 )
@@ -44,6 +41,11 @@ from naas_abi_core.engine.nats_sessions import ServicePrimary
 from naas_abi_core.engine.nats_tracing import TracedService, add_traced_service
 from naas_abi_core.proto.common.v1 import common_pb2
 from naas_abi_core.proto.keyvalue.v1 import keyvalue_pb2
+from naas_abi_core.services.iam.enforcement import authorization_error_code
+from naas_abi_core.services.iam.IAMPorts import (
+    PermissionDeniedError,
+    ResourceNotFoundError,
+)
 from naas_abi_core.services.keyvalue.adapters.keyvalue_nats_contract import (
     AUTH_HEADER,
     SERVICE_NAME,
@@ -94,10 +96,10 @@ class KeyValuePrimaryAdapterNATS(ServicePrimary):
     def __init__(
         self,
         adapter: IKeyValueAdapter | KeyValueService,
-        jwt_secret: str,
+        verifier: TokenVerifier,
     ) -> None:
         self._adapter = adapter
-        self._jwt_secret = jwt_secret
+        self._verifier = verifier
         self._dispatch = DomainRPCDispatcher(SERVICE_NAME)
         self._service: TracedService | None = None
 
@@ -180,14 +182,8 @@ class KeyValuePrimaryAdapterNATS(ServicePrimary):
         response_cls: Callable[..., _ResponseT],
         call: Callable[[_RequestT], _ResponseT],
     ) -> None:
-        if not self._is_authenticated(request):
-            await self._respond_error(
-                request,
-                response_cls,
-                "UNAUTHENTICATED",
-                "missing or invalid auth token",
-                retryable=False,
-            )
+        caller = await authenticate_request(request, self._verifier, response_cls)
+        if caller is None:
             return
 
         parsed_request = request_cls()
@@ -214,7 +210,17 @@ class KeyValuePrimaryAdapterNATS(ServicePrimary):
             # ONE connection (nats_runtime), so run the call on a worker thread:
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
-            response = await self._dispatch.call(call, parsed_request)
+            response = await self._dispatch.call(call, parsed_request, caller)
+        except (PermissionDeniedError, ResourceNotFoundError) as exc:
+            # The caller's authorization outcome, decided by the domain.
+            await self._respond_error(
+                request,
+                response_cls,
+                authorization_error_code(exc) or "PERMISSION_DENIED",
+                str(exc),
+                retryable=False,
+            )
+            return
         except KVNotFoundError as exc:
             await self._respond_error(
                 request, response_cls, "KV_NOT_FOUND", str(exc), retryable=False
@@ -248,17 +254,6 @@ class KeyValuePrimaryAdapterNATS(ServicePrimary):
             return
 
         await respond_protobuf(request, response, response_cls)
-
-    def _is_authenticated(self, request: Request) -> bool:
-        headers = request.headers or {}
-        token = headers.get(AUTH_HEADER)
-        if not token:
-            return False
-        try:
-            verify_service_token(token, self._jwt_secret)
-        except InvalidServiceTokenError:
-            return False
-        return True
 
     @staticmethod
     async def _respond_error(

@@ -4,6 +4,24 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
+from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ, Authz
+from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
+    CONTAINER_DEFAULTS,
+    ContainerDefaults,
+    defaults_store_of,
+)
+from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
+    MEMBERSHIPS,
+    ROLE_NAMES,
+    Memberships,
+    best,
+)
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
+    nexus_resource,
+    org_below,
+    org_of,
+    workspace_container,
+)
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
     InferenceServerCreateInput,
     InferenceServerRecord,
@@ -15,6 +33,12 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
     WorkspaceStatsRecord,
     WorkspaceUpdateInput,
 )
+from naas_abi_core import logger
+
+
+def scope_of(record: WorkspaceRecord) -> str:
+    """The workspace's container, from its row."""
+    return workspace_container(record.organization_id, record.id)
 
 
 @dataclass
@@ -24,6 +48,20 @@ class WorkspacePermissionError(PermissionError):
 
     def __str__(self) -> str:
         return "workspace_access_denied"
+
+
+@dataclass
+class LastOwnerError(ValueError):
+    """The change would leave the scope without an owner."""
+
+    scope: str
+
+    def __str__(self) -> str:
+        return "last_owner"
+
+
+def _member_id(workspace_id: str, user_id: str) -> str:
+    return f"member-{workspace_id}-{user_id}"
 
 
 @dataclass
@@ -44,11 +82,58 @@ class WorkspaceMemberAlreadyExistsError(ValueError):
 
 
 class WorkspaceService:
-    def __init__(self, adapter: WorkspacePermissionPort):
+    """Workspaces and their members.
+
+    Membership is IAM's: a member holds ``builtin.<role>`` at the workspace's
+    container (``services/iam/memberships``). ``by`` names the signed-in user making
+    a change, whose own rights IAM checks (an admin can never touch an owner).
+    """
+
+    def __init__(
+        self,
+        adapter: WorkspacePermissionPort,
+        memberships: Memberships = MEMBERSHIPS,
+        authz: Authz | None = None,
+        defaults: ContainerDefaults = CONTAINER_DEFAULTS,
+    ):
         self.adapter = adapter
+        self.memberships = memberships
+        self._authz = authz or AUTHZ
+        self.defaults = defaults
+
+    async def _scope(self, workspace_id: str) -> str | None:
+        """The workspace's container, where its roles are attached."""
+        return await self._authz.container_of(workspace_id)
 
     async def get_workspace_role(self, user_id: str, workspace_id: str) -> str | None:
-        return await self.adapter.get_workspace_role(user_id=user_id, workspace_id=workspace_id)
+        """The highest role the user holds in the workspace: their own there, or the
+        one below the organization their org role (owner, admin) carries."""
+        scope = await self._scope(workspace_id)
+        if scope is None:
+            return None
+        org = org_of(scope)
+        held = await self.memberships.roles_of(user_id)
+        wide = held.get(org_below(org)) if org is not None else None
+        return best([r for r in (held.get(scope), wide) if r])
+
+    async def effective_roles(
+        self, user_id: str, workspaces: list[WorkspaceRecord]
+    ) -> list[str | None]:
+        """``get_workspace_role`` of each workspace, from one read of the user's roles."""
+        held = await self.memberships.roles_of(user_id)
+        return [
+            best(
+                [
+                    r
+                    for r in (
+                        held.get(workspace_container(row.organization_id, row.id)),
+                        held.get(org_below(row.organization_id)) if row.organization_id else None,
+                    )
+                    if r
+                ]
+            )
+            for row in workspaces
+        ]
 
     async def require_workspace_access(self, user_id: str, workspace_id: str) -> str:
         role = await self.get_workspace_role(user_id=user_id, workspace_id=workspace_id)
@@ -57,7 +142,20 @@ class WorkspaceService:
         return role
 
     async def list_workspaces(self, user_id: str) -> list[WorkspaceRecord]:
-        return await self.adapter.list_workspaces_for_user(user_id=user_id)
+        """The workspaces IAM lets the user list (``nexus:ListWorkspaces``)."""
+        rows = await self.adapter.list_all_workspaces()
+        return await self._authz.filter(
+            "ListWorkspaces",
+            rows,
+            user=user_id,
+            resource_of=lambda row: nexus_resource(
+                "workspace", container=workspace_container(row.organization_id, row.id)
+            ),
+        )
+
+    async def roles_of(self, user_id: str) -> dict[str, str]:
+        """``{workspace id: role}`` the user holds directly."""
+        return await self.memberships.scopes_of(user_id, level="workspace")
 
     async def get_workspace(self, workspace_id: str) -> WorkspaceRecord | None:
         return await self.adapter.get_workspace_by_id(workspace_id=workspace_id)
@@ -66,65 +164,178 @@ class WorkspaceService:
         return await self.adapter.get_workspace_by_slug(slug=slug)
 
     async def create_workspace(self, workspace: WorkspaceCreateInput) -> WorkspaceRecord:
+        """Create a workspace and make ``owner_id`` its owner.
+
+        The caller checked the right to create it in the organization (bug d:
+        never a request field's say-so). A failure after the row exists in IAM
+        removes the row again.
+        """
         if await self.adapter.workspace_slug_exists(slug=workspace.slug):
             raise WorkspaceSlugAlreadyExistsError(slug=workspace.slug)
-        return await self.adapter.create_workspace(workspace=workspace)
+        record = await self.adapter.create_workspace(workspace=workspace)
+        try:
+            scope = await self.memberships.register_workspace(record.organization_id, record.id)
+            await self.memberships.grant(workspace.owner_id, "owner", scope)
+            # Its access policy (nothing, a sub-policy of its organization's) and
+            # its members and admins groups, the owner in both.
+            await self.defaults.workspace_created(
+                defaults_store_of(self.adapter), record.organization_id, record.id, record.name
+            )
+        except Exception:
+            await self.adapter.delete_workspace(workspace_id=record.id)
+            try:
+                await self.memberships.drop_scope(record.organization_id, record.id)
+                await self.defaults.dropped(defaults_store_of(self.adapter), scope_of(record))
+            except Exception:  # noqa: BLE001 - the original failure is what is raised
+                logger.exception(f"Could not forget the container of workspace {record.id}")
+            raise
+        return record
+
+    async def abandon_workspace(self, record: WorkspaceRecord) -> None:
+        """Undo a creation that failed after its row and IAM scope existed, in a
+        unit of work whose flush may itself have failed: the uncommitted row goes
+        with the rollback, the scope (the owner's grant, the set) is dropped
+        here, never through a delete that the failed session would refuse."""
+        try:
+            await self.adapter.rollback()
+        finally:
+            await self.memberships.drop_scope(record.organization_id, record.id)
+            # The rolled-back session holds no record: only the in-process one goes.
+            await self.defaults.dropped(None, scope_of(record))
 
     async def delete_workspace(self, workspace_id: str) -> bool:
-        return await self.adapter.delete_workspace(workspace_id=workspace_id)
+        record = await self.adapter.get_workspace_by_id(workspace_id=workspace_id)
+        deleted = await self.adapter.delete_workspace(workspace_id=workspace_id)
+        if deleted and record is not None:
+            await self.memberships.drop_scope(record.organization_id, workspace_id)
+            await self.defaults.dropped(defaults_store_of(self.adapter), scope_of(record))
+        return deleted
 
     async def update_workspace(
-        self, workspace_id: str, updates: WorkspaceUpdateInput
+        self, workspace_id: str, updates: WorkspaceUpdateInput, *, by: Any = None
     ) -> WorkspaceRecord | None:
+        """Update the workspace. A new ``owner_id`` becomes its owner in IAM and the
+        previous owner an admin: ``by`` is checked for both (``MembershipDenied``
+        when IAM refuses, owners alone make owners)."""
+        if updates.owner_id is not None:
+            record = await self.adapter.get_workspace_by_id(workspace_id=workspace_id)
+            scope = await self._scope(workspace_id)
+            if record is not None and scope is not None and updates.owner_id != record.owner_id:
+                await self.memberships.grant(updates.owner_id, "owner", scope, by=by)
+                if (
+                    record.owner_id
+                    and await self.memberships.role_at(record.owner_id, scope) == "owner"
+                ):
+                    await self.memberships.grant(record.owner_id, "admin", scope, by=by)
         return await self.adapter.update_workspace(workspace_id=workspace_id, updates=updates)
-
-    async def set_workspace_feature_overrides(
-        self, workspace_id: str, overrides: dict[str, bool] | None
-    ) -> WorkspaceRecord | None:
-        return await self.adapter.set_workspace_feature_overrides(
-            workspace_id=workspace_id, overrides=overrides
-        )
 
     async def get_workspace_stats(self, workspace_id: str) -> WorkspaceStatsRecord | None:
         return await self.adapter.get_workspace_stats(workspace_id=workspace_id)
 
     async def list_workspace_members(self, workspace_id: str) -> list[WorkspaceMemberRecord]:
-        return await self.adapter.list_workspace_members(workspace_id=workspace_id)
+        """The workspace's members, then the owners and admins of its organization
+        who reach it through their org role (``source: "organization"``, read-only:
+        that access is managed in Organization > Users)."""
+        scope = await self._scope(workspace_id)
+        if scope is None:
+            return []
+        members = await self.memberships.members(scope)
+        org = org_of(scope)
+        inherited = await self.memberships.members(org_below(org)) if org is not None else []
+        explicit_ids = {m.user_id for m in members}
+        inherited = [m for m in inherited if m.user_id not in explicit_ids]
+        users = await self.adapter.get_users_by_ids([m.user_id for m in members + inherited])
+        records = [
+            WorkspaceMemberRecord(
+                id=_member_id(workspace_id, member.user_id),
+                workspace_id=workspace_id,
+                user_id=member.user_id,
+                role=member.role,
+                email=users[member.user_id].email,
+                name=users[member.user_id].name,
+                created_at=member.since,
+                principal_id=member.principal_id,
+            )
+            for member in members
+            if member.user_id in users
+        ]
+        records += sorted(
+            (
+                WorkspaceMemberRecord(
+                    id=f"org:{member.user_id}",
+                    workspace_id=workspace_id,
+                    user_id=member.user_id,
+                    role=member.role,
+                    email=users[member.user_id].email,
+                    name=users[member.user_id].name,
+                    created_at=None,
+                    source="organization",
+                    principal_id=member.principal_id,
+                )
+                for member in inherited
+                if member.user_id in users
+            ),
+            key=lambda record: record.email or "",
+        )
+        return records
 
     async def invite_workspace_member(
-        self, workspace_id: str, email: str, role: str
+        self, workspace_id: str, email: str, role: str, *, by: Any
     ) -> WorkspaceMemberRecord | None:
-        """Attach an existing user by email. Callers that support create-on-invite
-        must ensure the user exists (via AuthService.ensure_user_for_invite) first.
-        """
+        """Give an existing user by email a role. Someone with no account is
+        invited through an identity provider instead (``services/invites``).
+        ``MembershipDenied`` when IAM
+        refuses ``by`` this role (granting ``owner`` is the owner's)."""
         normalized_email = email.lower().strip()
         user = await self.adapter.get_user_by_email(email=normalized_email)
         if user is None:
             return None
-        if await self.adapter.is_workspace_member(workspace_id=workspace_id, user_id=user.id):
+        scope = await self._scope(workspace_id)
+        if scope is None:
+            return None
+        if await self.memberships.role_at(user.id, scope) is not None:
             raise WorkspaceMemberAlreadyExistsError(workspace_id=workspace_id, user_id=user.id)
-        return await self.adapter.add_workspace_member(
+        await self.memberships.grant(user.id, role, scope, by=by)
+        return WorkspaceMemberRecord(
+            id=_member_id(workspace_id, user.id),
             workspace_id=workspace_id,
             user_id=user.id,
             role=role,
+            email=user.email,
+            name=user.name,
         )
 
-    async def remove_workspace_member(self, workspace_id: str, user_id: str) -> bool:
-        return await self.adapter.remove_workspace_member(
-            workspace_id=workspace_id, user_id=user_id
-        )
+    async def remove_workspace_member(self, workspace_id: str, user_id: str, *, by: Any) -> bool:
+        scope = await self._scope(workspace_id)
+        if scope is None:
+            return False
+        if await self.memberships.role_at(user_id, scope) == "owner":
+            await self.memberships.check(user_id, None, scope, by=by)
+            await self._keep_an_owner(scope, user_id)
+        return await self.memberships.revoke(user_id, scope, by=by)
 
     async def update_workspace_member(
-        self, workspace_id: str, user_id: str, updates: dict[str, Any]
+        self, workspace_id: str, user_id: str, updates: dict[str, Any], *, by: Any
     ) -> bool:
         role = updates.get("role")
-        if role not in ["admin", "member", "viewer"]:
+        if role not in ROLE_NAMES:
             return False
-        return await self.adapter.update_workspace_member_role(
-            workspace_id=workspace_id,
-            user_id=user_id,
-            role=role,
-        )
+        scope = await self._scope(workspace_id)
+        if scope is None:
+            return False
+        held = await self.memberships.role_at(user_id, scope)
+        if held is None:
+            return False
+        if held == "owner" and role != "owner":
+            await self.memberships.check(user_id, role, scope, by=by)
+            await self._keep_an_owner(scope, user_id)
+        await self.memberships.grant(user_id, role, scope, by=by)
+        return True
+
+    async def _keep_an_owner(self, scope: str, leaving: str) -> None:
+        owners = [m for m in await self.memberships.members(scope) if m.role == "owner"]
+        if all(m.user_id == leaving for m in owners):
+            raise LastOwnerError(scope)
 
     async def list_inference_servers(self, workspace_id: str) -> list[InferenceServerRecord]:
         return await self.adapter.list_inference_servers(workspace_id=workspace_id)

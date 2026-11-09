@@ -13,7 +13,7 @@ User → Next.js (3000) → FastAPI (8000) → PostgreSQL (5432)
 ## Database Schema (Core Tables)
 
 ```sql
-users                 # Who can login
+users                 # People (they sign in at an identity provider)
 organizations         # Companies
 organization_members  # Who belongs to which org
 workspaces           # Projects/teams within orgs
@@ -30,7 +30,7 @@ graph_edges          # Knowledge graph relationships
 ## API Endpoints (Most Used)
 
 ```
-POST   /api/auth/login                 # Login
+GET    /api/auth/oidc/login            # Start the identity-provider sign-in
 GET    /api/auth/me                    # Current user
 GET    /api/workspaces                 # List workspaces
 GET    /api/agents/?workspace_id=...   # List agents
@@ -46,7 +46,8 @@ Full reference: http://localhost:8000/docs
 ```bash
 # Backend (.env or apps/api/.env)
 DATABASE_URL=postgresql+asyncpg://nexus:nexus@localhost:5432/nexus
-SECRET_KEY=your-secret-key-min-32-chars
+# Optional: encrypts workspace secrets (generated as NEXUS_SECRETS_KEY when unset)
+# SECRETS_ENCRYPTION_KEY=...
 CORS_ORIGINS_STR=http://localhost:3000
 
 # Optional (AI providers)
@@ -58,7 +59,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 ```typescript
 // Zustand stores (apps/web/src/stores/)
-useAuthStore()        // User, login, logout
+useAuthStore()        // User, cookie session, sign-in redirect, logout
 useWorkspaceStore()   // Current workspace
 useAgentStore()       // Available agents
 useConversationStore() // Chat history
@@ -133,11 +134,13 @@ ALTER TABLE users ADD COLUMN timezone VARCHAR(50);
 
 ## Authentication Flow
 
-1. User submits email/password → `POST /api/auth/login`
-2. Backend validates → Returns JWT `access_token` + `refresh_token`
-3. Frontend stores tokens in `localStorage`
-4. All requests include `Authorization: Bearer <access_token>`
-5. Token expires (24h) → Use `refresh_token` to get new `access_token`
+1. User enters their email on the login page → `POST /api/auth/oidc/route` picks the provider
+2. Browser goes to the provider (`GET /api/auth/oidc/login`), which emails a 6-digit code (in `abi dev`: `abi dev code`)
+3. Provider redirects back → `GET /api/auth/oidc/callback` sets the httpOnly session cookie
+4. The web app sends the cookie (and `X-CSRF-Token` on writes); it holds no token
+5. Scripts send a personal API key (`abi_pk_...`) as `Authorization: Bearer`
+
+Nexus has no password, magic link or refresh token, and signs no token.
 
 ## Workspaces & Multi-tenancy
 
@@ -195,7 +198,7 @@ cd apps/api && uv run pytest    # Backend only
 ```bash
 # Production .env
 DEBUG=false
-SECRET_KEY=<strong-random-32-chars>
+# SECRETS_ENCRYPTION_KEY=<strong-random>  (or let Nexus generate NEXUS_SECRETS_KEY in the secret store)
 DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/nexus
 CORS_ORIGINS_STR=https://your-domain.com
 
@@ -262,7 +265,7 @@ app.include_router(my_feature.router, prefix="/api/my-feature")
 
 ```bash
 # Strong secrets
-openssl rand -hex 32  # Generate SECRET_KEY
+openssl rand -hex 32  # Generate a key (e.g. SECRETS_ENCRYPTION_KEY)
 
 # Database
 # - Strong password
@@ -270,7 +273,6 @@ openssl rand -hex 32  # Generate SECRET_KEY
 # - SSL enabled
 
 # Rate limiting (already built-in)
-# - Login: 5/min
 # - Chat: 20/min
 # - API: 100/min
 
@@ -296,7 +298,7 @@ apps/web/
   src/
     app/              # Next.js pages (file-based routing)
       workspace/[workspaceId]/  # Workspace pages
-      auth/                     # Login/register
+      auth/                     # Login (identity-provider sign-in)
     components/       # React components
       chat/          # Chat interface
       settings/      # Settings panels
@@ -326,7 +328,7 @@ NEXUS uses BFO (Basic Formal Ontology) to model AI providers:
 
 1. **Database won't start:** `docker ps` → `docker-compose down -v && docker-compose up -d postgres`
 2. **CORS errors:** Check `CORS_ORIGINS_STR` in `.env` includes frontend URL
-3. **401 Unauthorized:** Token expired → Logout/login or implement refresh
+3. **401 Unauthorized:** Session ended or API key revoked → sign in again (`abi dev code` prints the code in dev)
 4. **Port in use:** `lsof -i :3000` or `:8000` → `kill -9 <PID>`
 5. **Migrations fail:** Check sequential numbering in `migrations/` folder
 

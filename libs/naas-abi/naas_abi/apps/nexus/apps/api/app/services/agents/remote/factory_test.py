@@ -18,15 +18,13 @@ def test_no_nats_means_no_remote_agents():
 
 
 def test_nats_without_discovery_means_no_remote_agents():
-    directory = build_remote_agent_directory(NATSConfiguration(jwt_secret="s" * 48))
+    directory = build_remote_agent_directory(NATSConfiguration())
 
     assert asyncio.run(directory.list_agents()) == []
 
 
 def test_discovery_builds_a_discovery_directory_for_the_project():
-    nats = NATSConfiguration(
-        jwt_secret="s" * 48, nats_url="nats://nats:4222", discovery={"project": "zen"}
-    )
+    nats = NATSConfiguration(nats_url="nats://nats:4222", discovery={"project": "zen"})
 
     directory = build_remote_agent_directory(nats)
 

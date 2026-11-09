@@ -25,7 +25,8 @@
 
 import type { AnalyticsEvent, EventName } from '@/app/analytics/lib/types';
 import { getApiUrl } from '@/lib/config';
-import { useAuthStore } from '@/stores/auth';
+import { viewFlagActive } from '@/lib/view-flag';
+import { authCredentials, getAuthHeader, useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
 
 const SESSION_KEY = 'nexus.analytics.session_id';
@@ -157,6 +158,8 @@ export function trackEvent(
   context: TrackContext & { properties?: Record<string, unknown> } = {},
 ): void {
   if (typeof window === 'undefined') return;
+  // A view is not the person's activity, and the server refuses every POST of one.
+  if (viewFlagActive()) return;
 
   const user = getCurrentUser();
   const page_path = context.page_path ?? window.location.pathname;
@@ -188,6 +191,7 @@ export function trackEvent(
     fetch(`${getApiUrl()}/api/analytics/events`, {
       method: 'POST',
       headers: eventHeaders(),
+      credentials: authCredentials(),
       body: JSON.stringify(event),
       keepalive: true,
     }).catch(() => {
@@ -199,27 +203,8 @@ export function trackEvent(
 }
 
 function eventHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  const token = sessionToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
-  return headers;
-}
-
-function sessionToken(): string | undefined {
-  try {
-    const fromStore = useAuthStore.getState().token;
-    if (fromStore) return fromStore;
-  } catch {
-    // Store not ready — fall through to the persisted snapshot.
-  }
-  try {
-    const raw = localStorage.getItem('nexus-auth');
-    if (!raw) return undefined;
-    const token = JSON.parse(raw)?.state?.token;
-    return typeof token === 'string' && token ? token : undefined;
-  } catch {
-    return undefined;
-  }
+  // The session's cookie travels with the request; its CSRF token goes in the header.
+  return { 'Content-Type': 'application/json', ...getAuthHeader('POST') };
 }
 
 /**

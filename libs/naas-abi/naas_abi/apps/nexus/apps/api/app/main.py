@@ -7,6 +7,7 @@ import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
@@ -14,16 +15,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from naas_abi.apps.nexus.apps.api.app.api.router import api_router
-from naas_abi.apps.nexus.apps.api.app.core.config import settings, validate_settings_on_startup
+from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.database import init_db
 from naas_abi.apps.nexus.apps.api.app.core.frame_headers import embed_csp, is_embeddable
 from naas_abi.apps.nexus.apps.api.app.core.logging import configure_logging
+from naas_abi.apps.nexus.apps.api.app.core.user_content import harden_active_content
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat_ingestion_worker import (
     start_chat_ingestion_consumer,
 )
 from naas_abi.apps.nexus.apps.api.app.services.exceptions import (
     register_service_exception_handlers,
 )
+from naas_abi.apps.nexus.apps.api.app.services.idp.paths import is_idp_path
 from naas_abi.apps.nexus.apps.api.app.services.ollama import (
     DEFAULT_MODEL,
     ensure_ollama_ready,
@@ -172,8 +175,12 @@ def _schedule_identity_graph_sync(_published: int = 0, delay_seconds: float = 2.
         return
 
     async def _later() -> None:
+        from naas_abi_core.engine.call_context import as_service_account
+
         await asyncio.sleep(delay_seconds)
-        await _sync_identity_graph()
+        # Housekeeping, whoever's commit scheduled it: Nexus's own account.
+        with as_service_account("api"):
+            await _sync_identity_graph()
 
     _identity_graph_sync_task = loop.create_task(_later())
 
@@ -285,29 +292,234 @@ async def _prefetch_agent_class_registry() -> None:
         _log.exception("Background agent registry pre-fetch failed (non-fatal)")
 
 
-async def _reencrypt_secrets_under_default_keys() -> None:
-    """Move workspace secrets encrypted under a published default key to the real key."""
-    from naas_abi.apps.nexus.apps.api.app.core.config import current_secret_key
+async def _move_secrets_to_the_secrets_key(app: FastAPI) -> None:
+    """Move what the old ``secret_key`` encrypted under the secrets key:
+    workspace secrets and the provider tokens of sessions. Idempotent, and cheap
+    once nothing is left under an old key."""
     from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
-    from naas_abi.apps.nexus.apps.api.app.core.secret_key import (
-        INSECURE_SECRET_KEYS,
-        is_insecure_secret_key,
+    from naas_abi.apps.nexus.apps.api.app.core.secret_key import legacy_secret_keys
+    from naas_abi.apps.nexus.apps.api.app.services.secrets.migration import (
+        move_to_secrets_key,
     )
-    from naas_abi.apps.nexus.apps.api.app.services.secrets.adapters.secondary.postgres import (
-        SecretsSecondaryAdapterPostgres,
-    )
-    from naas_abi.apps.nexus.apps.api.app.services.secrets.service import SecretsService
 
-    if is_insecure_secret_key(current_secret_key()):
-        return
+    log = logging.getLogger(__name__)
+    old_keys = getattr(app.state, "legacy_secret_keys", None)
+    if old_keys is None:
+        # No engine store to ask: the configured key and the published defaults.
+        old_keys = legacy_secret_keys(settings.secret_key, _NoStore())
     async with AsyncSessionLocal() as db:
-        service = SecretsService(adapter=SecretsSecondaryAdapterPostgres(db=db))
-        rewritten = await service.reencrypt_from_keys(sorted(INSECURE_SECRET_KEYS))
-    if rewritten:
-        logging.getLogger(__name__).warning(
-            "Re-encrypted %d workspace secret(s) that were stored under a default key.",
-            rewritten,
+        moved = await move_to_secrets_key(db, old_keys)
+        await db.commit()
+    if moved.secrets or moved.session_tokens:
+        log.warning(
+            "Re-encrypted %d workspace secret(s) and %d session token(s) under the secrets "
+            "key (NEXUS_SECRETS_KEY): the old SECRET_KEY encrypts nothing and signs nothing now.",
+            moved.secrets,
+            moved.session_tokens,
         )
+    if moved.unreadable:
+        log.warning(
+            "%d stored secret(s) or session token(s) are encrypted under a key that is "
+            "not known. If you had set SECRET_KEY, set it again to the old value: they move "
+            "at the next start.",
+            moved.unreadable,
+        )
+
+
+class _NoStore:
+    def get(self, key: str, default: object = None) -> object:
+        return default
+
+    def set(self, key: str, value: str) -> None:  # pragma: no cover - never written
+        raise RuntimeError("no secret store")
+
+
+async def _prepare_iam() -> None:
+    """Register the ``nexus`` catalog; once, move the workspace feature
+    overrides, the role features and the sets into policies, then rewrite IAM's
+    names to container paths (organizations and workspaces become containers);
+    move the role data Nexus kept itself into IAM and give org owners and admins
+    their role below their organization. Without an IAM service every Nexus
+    decision is a refusal, so the failure is logged loudly and boot goes on.
+    Until the sets are moved and the names rewritten, module scopes and features
+    are refused (``authz.upgrading``)."""
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal, async_engine
+    from naas_abi.apps.nexus.apps.api.app.services.iam import (
+        bootstrap,
+        container_defaults,
+        container_names,
+        policy_tree,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.iam import listers as iam_listers
+    from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+
+    log = logging.getLogger(__name__)
+    MEMBERSHIPS.known_user = bootstrap.nexus_user_exists
+    # A role changed in another process's organization or workspace: its default
+    # groups are read from the database.
+    container_defaults.CONTAINER_DEFAULTS.session_factory = AsyncSessionLocal
+    # Refused until the moves below say the sets are policies and the names
+    # container paths: never wider.
+    policy_tree.set_pending(True)
+    container_names.set_pending(True)
+    try:
+        async with AsyncSessionLocal() as db:
+            await bootstrap.register_catalog()
+            # What the policy builder lists of naas_abi's types and the modules'
+            # items; a type left out is offered as wildcards.
+            try:
+                await iam_listers.register()
+            except Exception:  # noqa: BLE001 - listing never stops the API
+                log.exception("naas_abi's listers are not registered")
+            # The moves of the grammar before container paths: they read and write
+            # it, so they run before the names are rewritten (IAM takes it from
+            # them, as the engine or the API acting for nobody). They read the
+            # roles IAM holds: while Nexus keeps memberships IAM does not, nothing
+            # moves, nothing is recorded, and every module scope and feature stays
+            # refused (logged).
+            # One API process moves at a time: the others wait, then find the
+            # moves recorded (PostgreSQL; on SQLite one process starts).
+            async with container_names.moves_lock(async_engine):
+                if not await container_names.before_names(
+                    db, lambda: _move_before_container_paths(db, log)
+                ):
+                    return
+                # IAM's names become container paths, once, organizations and
+                # workspaces registered as containers (after the moves above).
+                await container_names.migrate_names(db)
+                report = await bootstrap.migrate_role_data(db)
+                if report.applied:
+                    log.info("Role data moved into IAM: %s", report)
+                # Org owners and admins reach every workspace of their organization.
+                made = await MEMBERSHIPS.sync_org_wide_roles()
+                if made:
+                    log.info("Organization-wide roles given to %d owner(s) and admin(s)", made)
+                # Nothing left to move: say so to a start that skipped the moves.
+                await policy_tree.migrate_sets(db)
+                # Each organization and workspace has its access policy and its
+                # members and admins groups (made once for those that predate them).
+                await container_defaults.migrate(db)
+    except Exception:
+        log.exception("Nexus could not set up its authorization in IAM: every request is refused")
+
+
+async def _container_defaults_after_seeds() -> None:
+    """The seeds' organizations and workspaces get theirs, once the moves are
+    recorded (before, the move makes their access policies, which ``migrate``
+    adopts at the start that follows), under the moves' lock, so two API processes
+    never make the same container's twice."""
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal, async_engine
+    from naas_abi.apps.nexus.apps.api.app.services.iam import container_defaults, container_names
+
+    if container_defaults.moves_pending():
+        return
+    try:
+        async with container_names.moves_lock(async_engine):
+            async with AsyncSessionLocal() as db:
+                await container_defaults.migrate(db)
+    except Exception:  # noqa: BLE001 - made at the next start; nobody gains anything meanwhile
+        logging.getLogger(__name__).exception(
+            "Access policies and default groups of the seeded organizations and workspaces"
+        )
+
+
+_upgrade_watch_task: asyncio.Task[None] | None = None
+# How often a process that still refuses module scopes and features re-reads
+# whether another API process has recorded the moves.
+UPGRADE_WATCH_SECONDS = 60.0
+
+
+def _watch_upgrade() -> None:
+    """While this process waits for a move (``authz.upgrading``), re-read
+    ``iam_migrations`` every ``UPGRADE_WATCH_SECONDS``: a replica whose start did
+    not make the moves stops refusing once another one has recorded them."""
+    global _upgrade_watch_task
+    from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+
+    if not authz.upgrading() or (_upgrade_watch_task and not _upgrade_watch_task.done()):
+        return
+
+    async def watch() -> None:
+        from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+        from naas_abi.apps.nexus.apps.api.app.services.iam import container_names
+
+        log = logging.getLogger(__name__)
+        while authz.upgrading():
+            await asyncio.sleep(UPGRADE_WATCH_SECONDS)
+            try:
+                async with AsyncSessionLocal() as db:
+                    if not await container_names.refresh_pending(db):
+                        log.info("The moves are recorded: module scopes and features are decided")
+            except Exception:  # noqa: BLE001 - read again at the next tick
+                log.warning("Could not read whether the moves are recorded", exc_info=True)
+
+    _upgrade_watch_task = asyncio.get_running_loop().create_task(watch())
+
+
+async def _move_before_container_paths(db: Any, log: logging.Logger) -> None:
+    """The start-up moves written for the grammar before container paths: the
+    per-workspace feature overrides, the role features and the sets. Each is
+    recorded once done; a failure is retried at the next start and never keeps
+    the rest of authorization from being set up."""
+    from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+    from naas_abi.apps.nexus.apps.api.app.services.iam import (
+        feature_overrides,
+        policy_tree,
+        role_features,
+    )
+
+    try:
+        await feature_overrides.migrate_feature_overrides(db, live_settings().feature_flags)
+    except Exception:
+        await db.rollback()
+        log.exception("The workspace feature overrides were not moved")
+    # No role brings a feature: what each role had in each workspace becomes that
+    # workspace's policy, once, for who holds the role there.
+    try:
+        await role_features.migrate_role_features(db, live_settings().feature_flags)
+    except Exception:
+        await db.rollback()
+        log.exception("The role features were not moved into workspace policies")
+    # The sets and the workspace toggles become a tree of policies, once, nobody
+    # gaining or losing access (after the moves above).
+    await policy_tree.migrate_sets(db)
+
+
+async def _hint_unlinked_users() -> None:
+    """Accounts of the old login that no identity provider signs in yet: they are
+    linked at the first sign-in through the built-in provider, once the provider
+    knows them (``abi user migrate``). Said once at start, beyond the people the
+    configuration lists (those are made at the provider by the seeds)."""
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    from naas_abi.apps.nexus.apps.api.app.services.oidc.adapters.secondary.postgres import (
+        OidcSessionSecondaryAdapterPostgres,
+    )
+
+    try:
+        async with AsyncSessionLocal() as db:
+            unlinked = await OidcSessionSecondaryAdapterPostgres(db).list_legacy_users()
+    except Exception:  # noqa: BLE001 - a hint, never a reason not to start
+        return
+    configured = {str(u.email).strip().lower() for u in settings.users}
+    waiting = [u for u in unlinked if u.email.lower() not in configured]
+    if waiting:
+        logging.getLogger(__name__).warning(
+            "%d account(s) of the old login are not linked to an identity provider yet. "
+            "Run `abi user migrate` (then `--apply`): each person signs in with the code "
+            "the built-in provider mails them, and keeps their roles and data.",
+            len(waiting),
+        )
+
+
+async def _place_workspace_resources() -> None:
+    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+    from naas_abi.apps.nexus.apps.api.app.services.iam import placements
+
+    try:
+        async with AsyncSessionLocal() as db:
+            await placements.place_existing(db)
+    except Exception:
+        logging.getLogger(__name__).exception("Nexus could not place its workspaces' resources")
 
 
 async def _startup(app: FastAPI) -> None:
@@ -321,7 +533,6 @@ async def _startup(app: FastAPI) -> None:
     initialize_nexus_service_registry()
 
     # Validate critical security settings
-    validate_settings_on_startup()
 
     # Initialize database (run migrations) with retry logic
     try:
@@ -332,7 +543,13 @@ async def _startup(app: FastAPI) -> None:
         print("  API will not start without database connection.")
         raise
 
-    await _reencrypt_secrets_under_default_keys()
+    await _move_secrets_to_the_secrets_key(app)
+
+    # Nexus's authorization lives in IAM: its action catalog and feature policies,
+    # and (once) the memberships and superadmin flags it kept itself before.
+    await _prepare_iam()
+    _watch_upgrade()
+    await _hint_unlinked_users()
 
     # Apply config-driven user/org/workspace seeds from config.yaml.
     from naas_abi.apps.nexus.apps.api.app.core.org_seed import apply_configuration_seeds
@@ -342,13 +559,24 @@ async def _startup(app: FastAPI) -> None:
     _install_identity_event_capture()
     # Also before seeds, so users and workspaces the configuration creates get their drives set up.
     _install_drive_writers()
+    from naas_abi_core.engine.call_context import as_service_account
     from naas_abi_core.services.event.context import event_triggered_via
 
-    via = event_triggered_via.set("configuration")
-    try:
-        await apply_configuration_seeds(getattr(app.state, "secret_service", None))
-    finally:
-        event_triggered_via.reset(via)
+    # Housekeeping for no user: Nexus's own service account.
+    with as_service_account("api"):
+        via = event_triggered_via.set("configuration")
+        try:
+            await apply_configuration_seeds()
+        finally:
+            event_triggered_via.reset(via)
+
+    # After seeds, so every workspace of the configuration exists: the kernel
+    # resources Nexus keeps for each are placed in it, which is what lets its
+    # members' roles reach them.
+    await _place_workspace_resources()
+    # The organizations and workspaces the seeds made get their access policy
+    # and default groups (those the routes create get them at once).
+    await _container_defaults_after_seeds()
 
     # Maps feeds, layers and basemaps declared by modules (artifacts/maps/{layers/**,basemaps/*}/manifest.json),
     # then config Maps ids (workspaces[].maps) that nothing provides. Both only
@@ -377,10 +605,12 @@ async def _startup(app: FastAPI) -> None:
     # may have changed users, workspaces and organizations).
     await asyncio.to_thread(_invalidate_settings_cache)
 
-    # After seeds, so seeded users/workspaces are in the graph on first boot.
-    asyncio.create_task(_sync_identity_graph())
-    # After seeds too: users and workspaces created before the drive writers get theirs.
-    asyncio.create_task(_backfill_drives())
+    # Tasks copy the context they are created in: Nexus's own housekeeping.
+    with as_service_account("api"):
+        # After seeds, so seeded users/workspaces are in the graph on first boot.
+        asyncio.create_task(_sync_identity_graph())
+        # After seeds too: users and workspaces created before the drive writers get theirs.
+        asyncio.create_task(_backfill_drives())
 
     try:
         start_chat_ingestion_consumer(app)
@@ -459,6 +689,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await _shutdown(app)
 
 
+# FastAPI's own interactive docs (development only) are HTML with scripts.
+_DOCS_PATHS = frozenset({"/docs", "/redoc", "/docs/oauth2-redirect"})
+
+
+def _with_own_policy(own: str | None, global_policy: str) -> str:
+    own = (own or "").strip().rstrip(";").strip()
+    return f"{own}; {global_policy}" if own else global_policy
+
+
 # Security Headers Middleware
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Add security headers to all responses."""
@@ -469,6 +708,20 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         response: Response = await call_next(request)
+
+        # Not switchable: user bytes of an active type (SVG, HTML, script) never
+        # run on this origin, which holds the session cookie. Sandboxed apps
+        # (embeddable paths) and the dev docs carry policies of their own.
+        # The built-in IdP's login pages are the one active content this origin
+        # serves as itself: they are sandboxed by their own policy (no script),
+        # which the net would turn into a download.
+        trusted = is_idp_path(request.url.path)
+        if (
+            not trusted
+            and not is_embeddable(request.url.path)
+            and request.url.path not in _DOCS_PATHS
+        ):
+            harden_active_content(response.headers)
 
         if settings.enable_security_headers:
             # Prevent MIME type sniffing
@@ -526,9 +779,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 )
 
             # CSP (if configured) — skip bundled and preview app HTML; embed CSP set above.
-            if not embeddable:
+            if not embeddable and not trusted:
+                # The route's own policy (a sandbox) stays in front of the global one.
+                own_policy = response.headers.get("Content-Security-Policy")
                 if settings.content_security_policy:
-                    response.headers["Content-Security-Policy"] = settings.content_security_policy
+                    response.headers["Content-Security-Policy"] = _with_own_policy(
+                        own_policy, settings.content_security_policy
+                    )
                 elif settings.environment == "production":
                     # Strict default CSP for production (no 'unsafe-*').
                     # Generate a per-response nonce in case any HTML is ever served via this app.
@@ -547,7 +804,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                         "connect-src 'self' https:; "
                         "upgrade-insecure-requests"
                     )
-                    response.headers["Content-Security-Policy"] = csp
+                    response.headers["Content-Security-Policy"] = _with_own_policy(own_policy, csp)
                     # Expose nonce for any upstream that may render templates (informational only)
                     response.headers["X-CSP-Nonce"] = nonce
 
@@ -610,7 +867,15 @@ def _configure_middleware(app: FastAPI) -> None:
         "allow_origins": cors_origins,
         "allow_credentials": True,
         "allow_methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        "allow_headers": ["Authorization", "Content-Type", "Accept", "X-Requested-With", "X-Nexus-Cache"],
+        # X-CSRF-Token: a cookie session's requests that change state (services/oidc).
+        "allow_headers": [
+            "Authorization",
+            "Content-Type",
+            "Accept",
+            "X-Requested-With",
+            "X-Nexus-Cache",
+            "X-CSRF-Token",
+        ],
         "expose_headers": ["Content-Length", "Content-Range", "X-Nexus-Cache"],
     }
     # In local development the web dev server can bind any free port (the allocator bumps
@@ -618,7 +883,9 @@ def _configure_middleware(app: FastAPI) -> None:
     # localhost origin to avoid CORS breakage on every restart. Never enabled outside local/dev.
     if settings.nexus_env == "local" or settings.environment == "development":
         cors_kwargs["allow_origin_regex"] = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
-    logger.info(f"[CORS] Configured origins: {cors_origins} (regex: {cors_kwargs.get('allow_origin_regex')})")
+    logger.info(
+        f"[CORS] Configured origins: {cors_origins} (regex: {cors_kwargs.get('allow_origin_regex')})"
+    )
     # Settings pages' 24h API cache. Added before CORS so it sits inside it: cached
     # answers still go out through CORS and get its headers.
     from naas_abi.apps.nexus.apps.api.app.services.settings_cache.middleware import (
@@ -626,6 +893,14 @@ def _configure_middleware(app: FastAPI) -> None:
     )
 
     app.add_middleware(SettingsCacheMiddleware)
+    # During a view (services/view_as): read-only and confined to one workspace. Right
+    # outside the cache, which it must refuse before the cache answers anything, and
+    # inside CORS, so its refusals carry the headers the web app needs to read them.
+    from naas_abi.apps.nexus.apps.api.app.services.view_as.adapters.primary.view_as__primary_adapter__ASGI import (  # noqa: E501
+        ViewGuardMiddleware,
+    )
+
+    app.add_middleware(ViewGuardMiddleware)
     app.add_middleware(CORSMiddleware, **cors_kwargs)
     app.add_middleware(SecurityHeadersMiddleware)
 
@@ -697,9 +972,7 @@ async def serve_provider_logo(provider_id: str) -> FileResponse:
 
     file_path = resolve_provider_logo_for_id(provider_id)
     if file_path is None:
-        raise HTTPException(
-            status_code=404, detail=f"No logo for provider {provider_id!r}"
-        )
+        raise HTTPException(status_code=404, detail=f"No logo for provider {provider_id!r}")
     return FileResponse(file_path)
 
 
@@ -786,6 +1059,20 @@ def _register_routes(app: FastAPI) -> None:
         methods=["GET", "HEAD"],
         include_in_schema=False,
     )
+    # The built-in identity provider, at its issuer URL: public (a login page
+    # has nobody to authenticate yet), forwarded over NATS to the one module
+    # bound to it (services/idp).
+    from naas_abi.apps.nexus.apps.api.app.services.idp.http_routes import (
+        METHODS as IDP_METHODS,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.idp.http_routes import serve_idp
+
+    app.add_api_route(
+        "/idp/{path:path}",
+        serve_idp,
+        methods=IDP_METHODS,
+        include_in_schema=False,
+    )
     app.add_api_route(
         "/app-html/{path:path}",
         serve_app_html,
@@ -848,7 +1135,6 @@ def _mount_static_assets(app: FastAPI) -> None:
     uploads_path = Path(__file__).parent.parent / "uploads"
     uploads_path.mkdir(parents=True, exist_ok=True)
     app.mount("/uploads", StaticFiles(directory=str(uploads_path)), name="uploads")
-
 
 
 def create_app(app: FastAPI | None = None):

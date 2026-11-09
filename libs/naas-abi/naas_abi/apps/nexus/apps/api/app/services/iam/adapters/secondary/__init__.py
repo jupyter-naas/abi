@@ -1,1 +1,0 @@
-"""IAM secondary adapters."""

@@ -181,12 +181,12 @@ def test_from_yaml_content_still_renders_uncommented_jinja_secrets(tmp_path):
 def test_leave_yaml_comments_unrendered_preserves_comment_text():
     source = (
         "key: value\n"
-        "  # api_key: \"{{ secret.MISSING }}\"\n"
+        '  # api_key: "{{ secret.MISSING }}"\n'
         "other: '{{ secret.PRESENT }}'\n"
     )
     masked = EngineConfiguration._leave_yaml_comments_unrendered(source)
 
-    assert "{% raw %}  # api_key: \"{{ secret.MISSING }}\"{% endraw %}\n" in masked
+    assert '{% raw %}  # api_key: "{{ secret.MISSING }}"{% endraw %}\n' in masked
     assert "other: '{{ secret.PRESENT }}'" in masked
     assert not masked.split("other:", 1)[1].startswith("{% raw %}")
 
@@ -199,6 +199,7 @@ def test_leave_yaml_comments_unrendered_preserves_comment_text():
 # `config.yaml` is per-project and cannot express a per-process decision, so
 # the launcher nominates an owner via the environment.
 # =============================================================================
+
 
 def _global_config(dotenv_path: str):
     return EngineConfiguration.from_yaml_content(
@@ -226,9 +227,7 @@ def test_env_override_forces_the_skip_on(tmp_path, monkeypatch, value):
 
 
 @pytest.mark.parametrize("value", ["0", "false", "no", "", "nonsense"])
-def test_non_truthy_env_leaves_the_configured_value_alone(
-    tmp_path, monkeypatch, value
-):
+def test_non_truthy_env_leaves_the_configured_value_alone(tmp_path, monkeypatch, value):
     """Opt-in only: this must never re-enable loading a project turned off."""
     monkeypatch.setenv("ABI_SKIP_ONTOLOGY_LOADING", value)
 
@@ -240,13 +239,8 @@ def test_nats_client_calls_wait_ten_seconds_unless_configured():
         NATSConfiguration,
     )
 
-    assert NATSConfiguration(jwt_secret="test").client_timeout_seconds == 10.0
-    assert (
-        NATSConfiguration(
-            jwt_secret="test", client_timeout_seconds=120
-        ).client_timeout_seconds
-        == 120.0
-    )
+    assert NATSConfiguration().client_timeout_seconds == 10.0
+    assert NATSConfiguration(client_timeout_seconds=120).client_timeout_seconds == 120.0
 
 
 @pytest.mark.parametrize("value", [0, -1, float("nan"), float("inf")])
@@ -257,7 +251,7 @@ def test_nats_client_timeout_must_be_a_positive_finite_number(value):
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError):
-        NATSConfiguration(jwt_secret="test", client_timeout_seconds=value)
+        NATSConfiguration(client_timeout_seconds=value)
 
 
 def test_from_yaml_content_never_logs_a_rendered_secret(tmp_path):

@@ -25,11 +25,17 @@ global_config:
 # starts its own nats-server and overlays the URL, password and monitoring port
 # it bound (.abi/dev/dev.overlay.yaml); these values fit an engine run outside
 # `abi dev` (`abi chat`, `make api`) against the Docker stack's broker
-# (`abi stack start`). Both secrets are generated into .env on first run.
+# (`abi stack start`). The broker passwords and the callout seed are generated
+# into .env on first run.
 # `abi dev up --without-nats` runs the legacy in-process engine instead.
 nats:
-  nats_url: "nats://abi:{{ secret.NATS_ABI_PASSWORD }}@127.0.0.1:4222"
-  jwt_secret: "{{ secret.NATS_JWT_SECRET }}"
+  # The broker user `engine`, and the auth callout the engine answers as `auth`:
+  # every other connection (modules) is admitted by the engine with the subjects
+  # its approved permission manifest allows.
+  nats_url: "nats://engine:{{ secret.NATS_ENGINE_PASSWORD }}@127.0.0.1:4222"
+  auth_callout:
+    nats_url: "nats://auth:{{ secret.NATS_AUTH_PASSWORD }}@127.0.0.1:4222"
+    issuer_seed: "{{ secret.NATS_AUTH_CALLOUT_SEED }}"
   # One engine per project hosts the module registry: this one.
   discovery:
     project: "abi"
@@ -63,15 +69,10 @@ modules:
       ontology_engineer_provider: "openai"
       nexus_config:
         database_url: "sqlite+aiosqlite:///./storage/nexus.db"
-        # Dev convenience: enable password login so the seeded admin user
-        # below can actually sign in. The bootstrap password is auto-
-        # generated on first boot and written to `.env` as
-        # `NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD`.
-        auth_password_enabled: true
-        # Self-registration is off: accounts come from invitations or `users:`
-        # below. Set true to let anyone reaching the login page create an account.
-        auth_signup_enabled: false
-        magic_link_allow_signup: false
+        # Nexus has no login of its own: people sign in at an identity provider
+        # (`identity.providers`; `abi dev up` runs the built-in one, which mails a
+        # code, and `abi dev code` prints it). The `users:` below are made at the
+        # provider when the API starts, and keep the roles configured here.
         tenant:
           tab_title: "ABI"
           # Social sharing preview - shown when the platform URL is shared in
@@ -96,12 +97,6 @@ modules:
             - slides
             - documents
             - code
-          role_baseline:
-            owner: [maps, chat, files, agents, skills, apps, marketplace, search, ontology, graph, datasets, settings, slides, documents, code]
-            admin: [maps, chat, files, agents, skills, apps, marketplace, search, ontology, graph, datasets, settings, slides, documents, code]
-            member: [maps, chat, files, datasets, skills, slides, documents, code]
-            viewer: [maps, chat, files, datasets, skills, slides, documents]
-          workspace_overrides: {}
         marketplace:
           pricing:
             maintenance_standard_usd: 499
@@ -197,6 +192,15 @@ modules:
         priority_option_id: "4fb76f2d"
   
 services:
+  # Who may do what: SQLite here.
+  # Policies are enforced; "authorizer: allow_all" is an explicit opt-out
+  # that warns at boot.
+  iam:
+    store:
+      adapter: "sqlite"
+      path: "storage/iam/iam.sqlite"
+    authorizer: "policy"
+
   # ModelRegistry defaults. Auto-resolved against models registered by the
   # enabled provider modules at boot — if the canonical id below isn't
   # registered after all modules load, ``Engine.load()`` hard-fails.
