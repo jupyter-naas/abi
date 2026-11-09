@@ -3,28 +3,35 @@
  * src/middleware.ts calls it before anything else.
  */
 import {
-  MODULE_SETS_PATH,
   ROLES_PATH,
   SYSTEM_PATH,
   legacySystemTabPath,
   systemViewPath,
 } from '../system/system-tabs';
+import { PLATFORM_ORGANIZATIONS_PATH } from '../organizations/organizations-model';
+import { PLATFORM_USERS_PATH } from '../users/users-model';
 import {
   LEGACY_WORKSPACE_SETTINGS_SLUGS,
   PLATFORM_TABLES_PATH,
   tableFromLegacySlug,
 } from './tables';
 
+/** Modules & features, removed with the sets: what a user may use is policies' alone. */
+const OLD_MODULES_PATH = '/settings/modules';
+
 /** The first segments under /settings that Platform Settings serves, from its section paths. */
 export const PLATFORM_SETTINGS_SECTIONS: readonly string[] = [
   PLATFORM_TABLES_PATH,
   SYSTEM_PATH,
+  PLATFORM_ORGANIZATIONS_PATH,
+  PLATFORM_USERS_PATH,
   ROLES_PATH,
-  MODULE_SETS_PATH,
 ].map((path) => path.split('/')[2]);
 
 // `/workspace/<id>/admin/...`, also behind an org's `/org/<slug>` prefix.
 const WORKSPACE_ADMIN = /^(?:\/org\/[^/]+)?\/workspace\/[^/]+\/admin\/(system|events)(?:\/.*)?$/;
+// `/settings/users/<row id>`: a row of the users table, before Users was a page of its own.
+const OLD_USERS_ROW = /^\/settings\/users\/(.+)$/;
 // `/settings/<table slug>[/<row id>]`, the table pages before the Nexus tables page.
 const OLD_TABLE_PAGE = /^\/settings\/([A-Za-z0-9_]+)(\/.*)?$/;
 
@@ -33,6 +40,9 @@ const OLD_TABLE_PAGE = /^\/settings\/([A-Za-z0-9_]+)(\/.*)?$/;
  * - `/workspace/<id>/admin/system?tab=<tab>` → that System page (Access: Roles & permissions);
  * - `/workspace/<id>/admin/events` → System's Events page;
  * - `/settings/system/access` → Roles & permissions;
+ * - `/settings/modules` (Modules & features, removed) → Roles & permissions;
+ * - `/settings/users/<row id>` → `/settings/tables/users/<row id>` (`/settings/users` itself is
+ *   the Users page);
  * - `/settings/<table>[/<row id>]` → `/settings/tables/<table>[/<row id>]` (`<name>_table`
  *   was the slug of a table named like a legacy workspace settings path).
  */
@@ -45,9 +55,12 @@ export function platformSettingsRedirect(pathname: string, search = ''): string 
     return admin[1] === 'system' ? legacySystemTabPath(params) : `${systemViewPath('events')}${query}`;
   }
 
-  if (pathname === `${SYSTEM_PATH}/access` || pathname.startsWith(`${SYSTEM_PATH}/access/`)) {
-    return `${ROLES_PATH}${query}`;
+  for (const old of [`${SYSTEM_PATH}/access`, OLD_MODULES_PATH]) {
+    if (pathname === old || pathname.startsWith(`${old}/`)) return `${ROLES_PATH}${query}`;
   }
+
+  const usersRow = OLD_USERS_ROW.exec(pathname);
+  if (usersRow) return `${PLATFORM_TABLES_PATH}/users/${usersRow[1]}${query}`;
 
   const table = OLD_TABLE_PAGE.exec(pathname);
   if (table) {

@@ -97,6 +97,15 @@ def test_users_are_created_listed_and_disabled(admin, service):
     assert admin.get("/users/u_missing").status_code == 404
 
 
+def test_a_user_is_deleted(admin, service):
+    user = admin.post("/users", json={"email": "bob@example.com"}).json()
+    cookie, _ = service.create_session(service.get_user(user["id"]), ["otp"])
+    assert admin.delete(f"/users/{user['id']}").status_code == 204
+    assert service.get_session(cookie) is None
+    assert admin.get(f"/users/{user['id']}").status_code == 404
+    assert admin.delete(f"/users/{user['id']}").status_code == 404
+
+
 def test_users_page(admin):
     for i in range(5):
         admin.post("/users", json={"email": f"u{i}@example.com"})

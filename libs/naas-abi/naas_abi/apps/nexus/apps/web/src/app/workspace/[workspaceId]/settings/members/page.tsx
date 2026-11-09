@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Plus, Shield, User, Crown, Trash2, AlertCircle, Mail } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
@@ -11,8 +11,16 @@ import { useConfirm } from '@/components/ui/dialogs';
 import { Input, Select } from '@/components/ui/input';
 import { IdpGroupBindings } from '@/components/invitations/idp-group-bindings';
 import { PendingInvitations } from '@/components/invitations/pending-invitations';
+import { InvitePolicyPicker } from '@/components/invitations/invite-policy-picker';
 import { useInviteProviders } from '@/components/invitations/use-invite-providers';
-import { classifyInviteAnswer, inviteSuccessMessage, providerHint } from '@/lib/invitations';
+import { workspaceAccessScope } from '@/components/access/access-scope';
+import { workspaceOrganization } from '@/components/shell/settings-nav';
+import {
+  classifyInviteAnswer,
+  inviteSuccessMessage,
+  providerHint,
+  workspaceInviteBody,
+} from '@/lib/invitations';
 import { ROLE_LABELS, assignableRoles, changeMemberRole, roleChangeable } from '@/components/access/roles/role-change';
 import {
   SettingsEmpty,
@@ -68,6 +76,8 @@ export default function MembersPage() {
   const [loading, setLoading] = useState(true);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'admin' | 'member' | 'viewer'>('member');
+  // Policies attached at this workspace with the role (features come from policies).
+  const [invitePolicyIds, setInvitePolicyIds] = useState<string[]>([]);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState('');
@@ -78,6 +88,12 @@ export default function MembersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const { confirm: confirmRemove, dialog: confirmDialog } = useConfirm();
+
+  const organizationId = workspaceOrganization(workspace);
+  const inviteScope = useMemo(
+    () => (workspace?.id ? workspaceAccessScope(organizationId, workspace.id).value : null),
+    [organizationId, workspace?.id]
+  );
 
   const membershipRole =
     workspace?.currentUserRole ||
@@ -137,11 +153,14 @@ export default function MembersPage() {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: inviteEmail.trim(),
-            role: inviteRole,
-            provider: providers.providerToSend(),
-          }),
+          body: JSON.stringify(
+            workspaceInviteBody({
+              email: inviteEmail.trim(),
+              role: inviteRole,
+              provider: providers.providerToSend(),
+              policyIds: invitePolicyIds,
+            })
+          ),
         }
       );
 
@@ -157,6 +176,7 @@ export default function MembersPage() {
       await refreshMembers();
       setInviteEmail('');
       setInviteRole('member');
+      setInvitePolicyIds([]);
       setShowInvite(false);
     } catch (error: unknown) {
       console.error('Failed to invite member:', error);
@@ -318,6 +338,7 @@ export default function MembersPage() {
               onClick={() => {
                 setShowInvite(false);
                 setInviteError('');
+                setInvitePolicyIds([]);
               }}
             >
               Cancel
@@ -326,6 +347,13 @@ export default function MembersPage() {
           {providers.known.enabled && providerHint(providers.chosen) && (
             <p className="mt-3 text-xs text-muted-foreground">{providerHint(providers.chosen)}</p>
           )}
+          <InvitePolicyPicker
+            className="mt-4 max-w-xl"
+            scope={showInvite ? inviteScope : null}
+            value={invitePolicyIds}
+            onChange={setInvitePolicyIds}
+            disabled={inviteLoading}
+          />
         </SettingsSection>
       )}
 
@@ -477,7 +505,8 @@ export default function MembersPage() {
         <p className="mt-3 text-xs text-muted-foreground">
           Organization owners and admins have owner or admin access to every workspace of the
           organization without being invited here. People invited here are also added to the
-          organization as members.
+          organization as members. Features (chat, files, graph, …) come from policies granting
+          them, not from the role: pick them when inviting, or attach them in Roles &amp; permissions.
         </p>
       </SettingsSection>
       {confirmDialog}

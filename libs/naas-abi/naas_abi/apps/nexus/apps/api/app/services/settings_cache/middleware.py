@@ -9,6 +9,8 @@ path and query string, so role-dependent answers never leak between users. Only 
 session is cached: an API key, a coding key or any credential with a ``scope`` (it narrows
 what the user sees) is answered live and never reads or fills a session's entries;
 every credential can still reload and invalidate its user's entries.
+A request in a view (``services/view_as``, ``nexus_view`` on the scope's state) neither reads nor fills
+the cache: its user is the person's, whose entries are theirs.
 
 Invalidation uses two generation counters stored in the cache itself:
 
@@ -56,8 +58,9 @@ SETTINGS_PATH_PREFIXES: tuple[str, ...] = (
     "/api/apps",
     "/api/search/topics",
     "/api/graph/list",
-    # The workspaces' sets: a change narrows what their settings pages list.
-    "/api/iam/admin/sets",
+    # Policies, attachments and groups: what the settings pages list is what
+    # the caller may use, so a change there is read again.
+    "/api/iam/admin",
 )
 
 _WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
@@ -124,7 +127,10 @@ def invalidate_on_startup(cache_resolver: Callable[[], Any] = default_cache_reso
 
 def default_user_resolver(scope: Scope) -> str | None:
     """The user the request's credential proved (``RequestIdentityMiddleware``)."""
-    credential = (scope.get("state") or {}).get("nexus_credential")
+    state = scope.get("state") or {}
+    if state.get("nexus_view") is not None:
+        return None  # a view (services/view_as) neither reads nor fills the cache
+    credential = state.get("nexus_credential")
     user_id = getattr(credential, "user_id", None)
     return str(user_id) if user_id else None
 
@@ -137,7 +143,10 @@ def default_entry_variant(scope: Scope) -> str | None:
     user may see, and a coding or API-key credential reaches fewer routes: their
     requests never read or fill the session's entries.
     """
-    credential = (scope.get("state") or {}).get("nexus_credential")
+    state = scope.get("state") or {}
+    if state.get("nexus_view") is not None:
+        return None  # a view never reads or fills the cache: the person's entries are theirs
+    credential = state.get("nexus_credential")
     if credential is None:
         return ""  # no credential in the scope: the resolver of the user speaks alone
     if (

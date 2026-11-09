@@ -127,6 +127,9 @@ class OrganizationMemberRecord:
     service_line: str | None = None
     country: str | None = None
     interest: str | None = None
+    # Their IAM principal (``Member.principal_id``): an account linked from the old
+    # login has another id in IAM than in Nexus. What the access pages link to.
+    principal_id: str | None = None
 
 
 @dataclass
@@ -208,15 +211,6 @@ class OrganizationDomainCreateInput:
     domain: str
     verification_token: str
     created_at: datetime | None = None
-
-
-@dataclass
-class OrganizationRoleFeaturesRecord:
-    organization_id: str
-    role_baseline: dict[str, list[str]]
-    updated_by: str | None = None
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
 
 
 class OrganizationPermissionPort(ABC):
@@ -339,6 +333,13 @@ class OrganizationPermissionPort(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def lock_organization(self, org_id: str) -> bool:
+        """Hold the organization's row for writing until the transaction ends (a
+        workspace made in it meanwhile waits, then finds it gone); False when there
+        is none."""
+        raise NotImplementedError
+
+    @abstractmethod
     async def delete_organization_domain(self, org_id: str, domain_id: str) -> bool:
         raise NotImplementedError
 
@@ -347,20 +348,4 @@ class OrganizationPermissionPort(ABC):
         self, org_id: str, domain_id: str, provider: str | None
     ) -> OrganizationDomainRecord | None:
         """Route the domain's logins to ``provider`` (None: the default provider)."""
-        raise NotImplementedError
-
-    @abstractmethod
-    async def get_organization_role_features(
-        self, org_id: str
-    ) -> OrganizationRoleFeaturesRecord | None:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def upsert_organization_role_features(
-        self,
-        org_id: str,
-        role_baseline: dict[str, list[str]],
-        updated_by: str | None,
-        now: datetime,
-    ) -> OrganizationRoleFeaturesRecord:
         raise NotImplementedError

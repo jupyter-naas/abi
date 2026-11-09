@@ -45,24 +45,18 @@ describe('DEFAULT_SHEETS_TEMPLATE_ID', () => {
  */
 describe('pickWorkspaceDefaultAgent', () => {
   it('prefers the workspace default over Abi', () => {
-    const orchestrator = { id: 'default', enabled: true, isDefault: true };
-    const abi = { id: 'abi', enabled: true, isDefault: false };
+    const orchestrator = { id: 'default', isDefault: true };
+    const abi = { id: 'abi', isDefault: false };
     expect(pickWorkspaceDefaultAgent([abi, orchestrator])?.id).toBe('default');
   });
 
-  it('still picks the workspace default when sync left it disabled', () => {
-    const orchestrator = { id: 'default', enabled: false, isDefault: true };
-    const abi = { id: 'abi', enabled: false, isDefault: false };
-    expect(pickWorkspaceDefaultAgent([abi, orchestrator])?.id).toBe('default');
-  });
 });
 
 describe('pickSheetsOfficeAgent', () => {
-  it('prefers enabled Nexus Sheets over the workspace default', () => {
-    const orchestrator = { id: 'default', enabled: true, isDefault: true, name: 'Orchestrator' };
+  it('prefers listed Nexus Sheets over the workspace default', () => {
+    const orchestrator = { id: 'default', isDefault: true, name: 'Orchestrator' };
     const sheets = {
       id: 'sheets',
-      enabled: true,
       isDefault: false,
       name: 'Sheets',
       class_name: 'naas_abi.agents.SheetsAgent/SheetsAgent',
@@ -71,16 +65,15 @@ describe('pickSheetsOfficeAgent', () => {
   });
 
   it('falls back to the workspace default when Sheets is not on the roster', () => {
-    const orchestrator = { id: 'default', enabled: true, isDefault: true, name: 'Orchestrator' };
-    const abi = { id: 'abi', enabled: true, isDefault: false, name: 'Abi' };
+    const orchestrator = { id: 'default', isDefault: true, name: 'Orchestrator' };
+    const abi = { id: 'abi', isDefault: false, name: 'Abi' };
     expect(pickSheetsOfficeAgent([abi, orchestrator])?.id).toBe('default');
   });
 
   it('ignores an office agent that is not Nexus Sheets', () => {
-    const orchestrator = { id: 'default', enabled: true, isDefault: true, name: 'Orchestrator' };
+    const orchestrator = { id: 'default', isDefault: true, name: 'Orchestrator' };
     const other = {
       id: 'sheet',
-      enabled: true,
       isDefault: false,
       name: 'Office Sheets',
       class_name: 'acme.office.agents.SheetSheetsAgent/SheetSheetsAgent',
@@ -102,7 +95,6 @@ describe('openSheetsAgentPane', () => {
           id: ABI_ID,
           name: 'Abi',
           class_name: 'naas_abi.agents/AbiAgent',
-          enabled: true,
           isDefault: false,
           modelIds: ['gpt-4.1-mini', 'anthropic/claude-sonnet-5'],
         } as Agent,
@@ -110,7 +102,6 @@ describe('openSheetsAgentPane', () => {
           id: DEFAULT_ID,
           name: 'Orchestrator',
           class_name: 'demo.agents/OrchestratorAgent',
-          enabled: true,
           isDefault: true,
           modelIds: ['gpt-4.1-mini'],
         } as Agent,
@@ -120,7 +111,6 @@ describe('openSheetsAgentPane', () => {
                 id: SHEETS_ID,
                 name: 'Sheets',
                 class_name: 'naas_abi.agents.SheetsAgent/SheetsAgent',
-                enabled: true,
                 isDefault: false,
                 modelIds: ['qwen-3.8'],
               } as Agent,
@@ -168,7 +158,7 @@ describe('openSheetsAgentPane', () => {
     expect(useWorkspaceStore.getState().paneAgent).toBe(DEFAULT_ID);
   });
 
-  it('pins Nexus Sheets when the workspace enabled it', () => {
+  it('pins Nexus Sheets when the workspace lists it', () => {
     seedAgents(true);
     openSheetsAgentPane();
 

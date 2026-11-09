@@ -25,11 +25,7 @@ from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__pri
     get_files_service,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.service import FilesService
-from naas_abi.apps.nexus.apps.api.app.services.files.testing import (
-    with_personal_drive_rows,
-)
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
-from naas_abi_core.services.iam import roles
 from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import (  # noqa: E501
     ObjectStorageSecondaryAdapterFS,
 )
@@ -40,8 +36,7 @@ WS2 = "naas_abi/workspace-drive/ws-2"
 
 
 @pytest.fixture(autouse=True)
-def _personal_drive_rows(monkeypatch) -> None:
-    monkeypatch.setattr(roles, "PLATFORM_TYPES", with_personal_drive_rows())
+def _nothing_placed() -> None:
     placement._PLACED.clear()  # each test has its own IAM: nothing is placed in it yet
 
 

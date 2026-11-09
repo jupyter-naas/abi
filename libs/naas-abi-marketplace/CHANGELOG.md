@@ -2,6 +2,118 @@
 
 <!-- version list -->
 
+## v3.65.0 (2026-11-07)
+
+### Bug Fixes
+
+- **agent**: PowerPointAgent's copy takes keep too; the sub-agent copy helper is public
+  ([`5a6f7c0`](https://github.com/jupyter-naas/abi/commit/5a6f7c022a3ddae7cf9f3949ef765338ec19a56f))
+
+- **iam**: An old-grammar owner holds only old-grammar scopes, by the old rules
+  ([`1e1fbaf`](https://github.com/jupyter-naas/abi/commit/1e1fbaf4d8ba1cf1d42edb7d89fabfd97097d583))
+
+- **marketplace**: Dagster bodies and the matched-tweets backfill have an identity
+  ([`c395a87`](https://github.com/jupyter-naas/abi/commit/c395a871f49728d32559fbbfd389490c55d54483))
+
+### Documentation
+
+- Module scopes, declared catalogs and the upgrade note
+  ([`d739301`](https://github.com/jupyter-naas/abi/commit/d73930148c9312a6624717408c80305fce3f0a20))
+
+### Features
+
+- **core**: Engine tokens, service keys, module manifests and broker confinement
+  ([`5427041`](https://github.com/jupyter-naas/abi/commit/54270410aee2bcba731e258f8008492060e50140))
+
+- **core**: Identity service verifies OIDC providers' tokens
+  ([`a973f51`](https://github.com/jupyter-naas/abi/commit/a973f51f97a4657221c420963c175e177e3353af))
+
+- **core**: The data services enforce IAM in their domain services
+  ([`1de96d7`](https://github.com/jupyter-naas/abi/commit/1de96d776ab46fa45b4cb10f4ddf1dd96d0806a8))
+
+- **nexus**: Every authorization decision goes through IAM
+  ([`6eeb927`](https://github.com/jupyter-naas/abi/commit/6eeb9275d0748bf16f3837c081bfbc3ab5eb2804))
+
+
+## v3.64.1 (2026-11-05)
+
+### Bug Fixes
+
+- **marketplace**: Install CPU-only torch for docling
+  ([`384aeab`](https://github.com/jupyter-naas/abi/commit/384aeab7b2189bd23246b0a874d926b210686327))
+
+### Documentation
+
+- Point workflow documentation at durable workflows and remote classes
+  ([`029846a`](https://github.com/jupyter-naas/abi/commit/029846a2c7340f39e561be0de8e40d8b386f0021))
+
+
+## v3.64.0 (2026-11-02)
+
+### Bug Fixes
+
+- **google_search**: Declare Secret so optional key hydration can boot
+  ([`daeb1fd`](https://github.com/jupyter-naas/abi/commit/daeb1fd9c0a71781b66431a0b3de9bc2b7a3e655))
+
+### Code Style
+
+- **people**: Square corners on LinkedIn import toast
+  ([`def1cb3`](https://github.com/jupyter-naas/abi/commit/def1cb38eee6f843f082c85a93ac6a3c12dd1402))
+
+### Features
+
+- **LinkedInImport**: Enhance user option display with email and me label
+  ([`0abd74a`](https://github.com/jupyter-naas/abi/commit/0abd74a4cd5042c3fe5f6d6a2d626a113b41a321))
+
+- **module**: Load optional marketplace secrets without failing Engine.load
+  ([`553749a`](https://github.com/jupyter-naas/abi/commit/553749a0b8e2cf6c0070b809bc5376a9d7470281))
+
+- **people/web**: Enhance results page and shell behavior
+  ([`2353150`](https://github.com/jupyter-naas/abi/commit/2353150755c035c9fb9f74060915fab6305db055))
+
+### Refactoring
+
+- **marketplace**: Hydrate optional secrets in module on_load
+  ([`a1ed7df`](https://github.com/jupyter-naas/abi/commit/a1ed7dfe5113573112419b70b4e3b6a9707632f1))
+
+- **marketplace**: Rely on empty config defaults for optional keys
+  ([`0d982cb`](https://github.com/jupyter-naas/abi/commit/0d982cb5b353a513df6b85fb343e5ffa702f8de5))
+
+
+## v3.63.0 (2026-10-30)
+
+### Features
+
+- **auth,linkedin**: Add owner_linkedin_url support and profile links
+  ([`cb75a36`](https://github.com/jupyter-naas/abi/commit/cb75a362bebc608b001214ced4faa265aaf51c30))
+
+- **linkedin**: Add extensive LinkedIn ontology and related modules
+  ([`497dd6a`](https://github.com/jupyter-naas/abi/commit/497dd6a65c8726ea26db48a4d165538a776eaec5))
+
+- **linkedin**: Align act of connection with the 7 Buckets people vocabulary
+  ([`5562fde`](https://github.com/jupyter-naas/abi/commit/5562fde650da82d04683ca32fd86b63707552f18))
+
+- **people**: Add connections network API and graph payload
+  ([`00a4d91`](https://github.com/jupyter-naas/abi/commit/00a4d91b94e53a068bc436fd5888675313d2f98c))
+
+- **people**: Add sorting by connections count to people search and connections
+  ([`ea7fe94`](https://github.com/jupyter-naas/abi/commit/ea7fe94affdfd64d9337d6d933af27cc15bcf337))
+
+- **people**: Connections tab, list/network toggle and LinkedIn import button
+  ([`a851fdf`](https://github.com/jupyter-naas/abi/commit/a851fdfffc5bf807b22dc4a8c3dbae98a8797bb9))
+
+- **people**: Enhance graph layout and visualization options
+  ([`44ecce2`](https://github.com/jupyter-naas/abi/commit/44ecce2cc9c3bd809b073a710e7aedc5acb3a052))
+
+- **people**: Serve LinkedIn connections from the people datasets
+  ([`af2eaa7`](https://github.com/jupyter-naas/abi/commit/af2eaa776127c02406a9fdf57baa852fc183b36d))
+
+### Refactoring
+
+- **linkedin**: Remove Naas integration references and related code
+  ([`c695145`](https://github.com/jupyter-naas/abi/commit/c6951455d816eb222770691a2d15c4030b4a14f7))
+
+
 ## v3.62.0 (2026-10-26)
 
 ### Bug Fixes

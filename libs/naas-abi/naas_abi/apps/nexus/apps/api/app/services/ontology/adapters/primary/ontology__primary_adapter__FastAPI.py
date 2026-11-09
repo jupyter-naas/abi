@@ -42,11 +42,16 @@ from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology__schema import 
     OntologyPathNotFoundError,
     OntologyServiceUnavailableError,
 )
+from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology_access import readable_paths
 from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology_icons import (
     OntologyIconsService,
     valid_resource_iri,
 )
-from naas_abi.apps.nexus.apps.api.app.services.ontology.service import OntologyService
+from naas_abi.apps.nexus.apps.api.app.services.ontology.service import (
+    OntologyService,
+    remember_listing,
+    remember_listings,
+)
 from pydantic import BaseModel, Field
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
@@ -96,10 +101,24 @@ def _edge_to_schema(edge) -> OntologyOverviewGraphEdge:
 
 async def ontology_catalog_scope(
     workspace_id: str = Query(..., min_length=1),
+    current_user: User = Depends(get_current_user_required),
+    ontology_service: OntologyService = Depends(get_ontology_service),
 ) -> list[str]:
-    """The workspace's ontology assignments. The route's own guard has already
-    authorized the caller for the workspace (it runs before this)."""
-    return await _catalog_refs_for_workspace(workspace_id)
+    """What the caller reads of the workspace's ontologies: its enabled files that
+    IAM lets them get (``GetOntology`` on each, ``ontology_access.readable_paths``),
+    as their paths. Every route reads through it, so a Deny on one ontology takes
+    it out of every list, dictionary and overview, and a path outside it is not
+    found. The route's own guard has already authorized the caller for the
+    workspace (it runs before this)."""
+    # Listed once for the request: the route reads the same files again by these paths.
+    remember_listings()
+    refs = await _catalog_refs_for_workspace(workspace_id)
+    files = await ontology_service.list_ontology_files(catalog_refs=refs)
+    readable = await readable_paths(current_user, workspace_id, [f.path for f in files])
+    narrowed = [f for f in files if f.path in readable]
+    paths = [f.path for f in narrowed]
+    remember_listing(paths, narrowed)
+    return paths
 
 
 async def _catalog_refs_for_workspace(workspace_id: str) -> list[str]:
@@ -583,7 +602,8 @@ async def save_ontology_icon(
     if updates.kind != "file" and valid_resource_iri(updates.resource_id):
         allowed: set[tuple[str, str]] = set()
     else:
-        refs = await _catalog_refs_for_workspace(workspace_id)
+        # What the caller reads of the workspace's ontologies, as every read route.
+        refs = await ontology_catalog_scope(workspace_id, current_user, ontology_service)
         dictionary = await ontology_service.workspace_dictionary(catalog_refs=refs)
         files = await ontology_service.list_ontology_files(catalog_refs=refs)
         allowed = {(item["type"], item["id"]) for item in dictionary["items"]}

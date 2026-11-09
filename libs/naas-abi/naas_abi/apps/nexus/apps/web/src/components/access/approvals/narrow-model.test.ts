@@ -14,9 +14,9 @@ import {
 const document: PolicyDocument = {
   version: '2026-10-13',
   statements: [
-    { sid: 'Read', effect: 'Allow', actions: ['triple_store:Query', 'triple_store:ListGraphs'], resources: ['abi:-:-:triple_store:graph/a', 'abi:-:-:triple_store:graph/b'] },
+    { sid: 'Read', effect: 'Allow', actions: ['triple_store:Query', 'triple_store:ListGraphs'], resources: ['abi:triple_store:graph/a', 'abi:triple_store:graph/b'] },
     { effect: 'Deny', actions: ['triple_store:DropGraph'], resources: ['*'] },
-    { effect: 'Allow', actions: ['event:Publish'], resources: ['abi:-:-:event:type/x'] },
+    { effect: 'Allow', actions: ['event:Publish'], resources: ['abi:event:type/x'] },
   ],
 };
 
@@ -31,14 +31,14 @@ describe('narrow model', () => {
   it('removes unchecked actions and resources, in submitted order', () => {
     let choice = initialChoice(document);
     choice = toggleAction(choice, 0, 'triple_store:ListGraphs');
-    choice = toggleResource(choice, 0, 'abi:-:-:triple_store:graph/b');
+    choice = toggleResource(choice, 0, 'abi:triple_store:graph/b');
     const result = narrowed(document, choice);
     expect(isUnchanged(document, choice)).toBe(false);
     expect(result.statements[0]).toEqual({
       sid: 'Read',
       effect: 'Allow',
       actions: ['triple_store:Query'],
-      resources: ['abi:-:-:triple_store:graph/a'],
+      resources: ['abi:triple_store:graph/a'],
     });
     expect(summaryText(summarize(document, choice))).toBe(
       '1 of 3 actions removed, 1 of 3 resources removed',

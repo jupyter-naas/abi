@@ -59,21 +59,19 @@ export function useAgentList(searchQuery = '') {
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const { agents, fetchAgents, getAgent } = useAgentsStore();
 
-  const enabledAgents = useMemo(
-    () => agents.filter((a: Agent) => a.enabled),
-    [agents]
-  );
+  // The API lists exactly the agents the caller may use in the workspace.
+  const usableAgents = agents;
 
   const filteredAgents = useMemo(
     () =>
       searchQuery.trim()
-        ? enabledAgents.filter(
+        ? usableAgents.filter(
             (a: Agent) =>
               a.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
               a.description.toLowerCase().includes(searchQuery.toLowerCase())
           )
-        : enabledAgents,
-    [enabledAgents, searchQuery]
+        : usableAgents,
+    [usableAgents, searchQuery]
   );
 
   const defaultAgents = useMemo(
@@ -99,7 +97,7 @@ export function useAgentList(searchQuery = '') {
   }, [currentWorkspaceId, fetchAgents]);
 
   return {
-    enabledAgents,
+    usableAgents,
     defaultAgents,
     customAgents,
     filteredAgents,

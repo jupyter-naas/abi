@@ -25,7 +25,18 @@ Level = Literal["list", "read", "write", "admin"]
 Placement = Literal["placed", "platform"]
 
 LEVELS: tuple[Level, ...] = ("list", "read", "write", "admin")
+# The catalog format: 2 since the flags (``policy_only``, ``owner_only``,
+# ``platform_access``) exist. A catalog stored in format 1 says nothing about
+# them, which must never read as "no type is policy only". 3 since container
+# paths: what formats 1 and 2 called ``container`` is ``id_prefix``.
+CATALOG_FORMAT = 3
+FLAGS_FORMAT = 2
 _ID_KINDS = ("opaque", "path", "singleton")
+# Who publishes a catalog (``AGENTS.md``, "Publishers and listing"): the engine
+# (kernel services, ``iam``, ``module``), naas_abi (``nexus``) or a module, by
+# its key.
+ENGINE = "engine"
+NAAS_ABI = "naas_abi"
 _PLACEMENTS = ("placed", "platform")
 
 
@@ -38,13 +49,28 @@ class ResourceType:
     name: str
     id: IdKind = "opaque"
     placement: Placement = "placed"
+    # A container: a step of the names of what it holds, registered with IAM
+    # (``AGENTS.md``, "Containers"). Never placed, never a path type.
     container: bool = False
+    # Its id is the prefix of its children's ids (a document namespace): placed
+    # as a pair, the id and ``<id>/*`` (``AGENTS.md``, "Placements").
+    id_prefix: bool = False
     personal: bool = False
     description: str = ""
     # A module scope: what a module exposes (its agents, apps, workflows,
     # pipelines and the actions it declares). The built-in viewer and member
     # roles never reach one (``roles.py``); admins and owners hold them all.
     module_scope: bool = False
+    # Reached through a policy only: no built-in role holds it at its scope,
+    # owners included (Nexus's features).
+    policy_only: bool = False
+    # A container type at which a role attached brings the platform companions
+    # (``roles.py``; Nexus's workspace).
+    platform_companions: bool = False
+    # A container type: the containers it may sit in, ``<service>:<type>`` each,
+    # ``-`` for the platform; empty: any (Nexus's workspace: an organization or
+    # the platform).
+    parents: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -55,6 +81,24 @@ class ActionSpec:
     creates: bool = False
     subjects: tuple[str, ...] = ()
     description: str = ""
+    # An ``admin`` action no role below owner holds (deleting the scope itself).
+    owner_only: bool = False
+    # Deleting a container of its type (``iam.delete_container``).
+    deletes: bool = False
+
+
+@dataclass(frozen=True)
+class PlatformAccess:
+    """Platform-level resources of a catalog that a role's platform companions
+    reach (``roles.py``, "Platform types" in ``AGENTS.md``): ``viewer`` actions with
+    ``builtin.platform.viewer`` and ``.member``, ``member`` actions with
+    ``.member``, ``self_`` actions with ``builtin.self``. ``resources`` are
+    ``<type>/<id>`` patterns, named ``abi:<service>:<type>/<id>``."""
+
+    resources: tuple[str, ...]
+    viewer: tuple[str, ...] = ()
+    member: tuple[str, ...] = ()
+    self_: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -66,8 +110,28 @@ class ActionCatalog:
     # The module that declared this catalog (``module_scopes.py``), empty for
     # a kernel service's and Nexus's: a module's catalog is its own alone.
     module: str = ""
+    # What the platform companions of the roles reach of this catalog. A
+    # first-party catalog's only: a module's grants nothing to every member.
+    platform_access: tuple[PlatformAccess, ...] = ()
+    # The format it was written in. A first-party catalog of an older format
+    # (stored before the flags existed) holds nothing for the built-in roles
+    # until it is registered again (``roles.py``): its flags are unknown.
+    format: int = CATALOG_FORMAT
+    # Who publishes it: ``ENGINE`` by default, ``NAAS_ABI`` for Nexus's; a
+    # module's catalog is its module's, whatever it says.
+    publisher: str = ENGINE
+
+    @property
+    def flags_known(self) -> bool:
+        """Whether its flags can be read: a module's catalog has none to read
+        (its types are module scopes), a first-party one from format 2."""
+        return bool(self.module) or self.format >= FLAGS_FORMAT
 
     def __post_init__(self) -> None:
+        if self.module and self.publisher != self.module:
+            object.__setattr__(self, "publisher", self.module)
+        if not self.publisher:
+            object.__setattr__(self, "publisher", ENGINE)
         errors = _catalog_errors(self)
         if errors:
             raise CatalogError("; ".join(errors))
@@ -81,7 +145,21 @@ class ActionCatalog:
     def action(self, name: str) -> ActionSpec | None:
         return next((a for a in self.actions if a.name == name), None)
 
-    def to_dict(self) -> dict[str, Any]:
+    def container_action(self, type_name: str, flag: str) -> ActionSpec | None:
+        """The action marked ``flag`` (``creates`` or ``deletes``) on a type."""
+        return next(
+            (
+                a
+                for a in self.actions
+                if getattr(a, flag) and type_name in a.resource_types
+            ),
+            None,
+        )
+
+    def to_dict(self, *, stored: bool = False) -> dict[str, Any]:
+        """The catalog format. ``stored``: with its ``format``, as a store keeps
+        it; left out otherwise, so what a module manifest hashes (its declared
+        catalog) is the same as before the format existed."""
         found: dict[str, Any] = {
             "service": self.service,
             "version": self.version,
@@ -91,9 +169,13 @@ class ActionCatalog:
                     "id": t.id,
                     "placement": t.placement,
                     "container": t.container,
+                    **({"id_prefix": True} if t.id_prefix else {}),
                     "personal": t.personal,
                     "description": t.description,
                     **({"module_scope": True} if t.module_scope else {}),
+                    **({"policy_only": True} if t.policy_only else {}),
+                    **({"platform_companions": True} if t.platform_companions else {}),
+                    **({"parents": list(t.parents)} if t.parents else {}),
                 }
                 for t in self.resource_types
             ],
@@ -105,17 +187,43 @@ class ActionCatalog:
                     "creates": a.creates,
                     "subjects": list(a.subjects),
                     "description": a.description,
+                    **({"owner_only": True} if a.owner_only else {}),
+                    **({"deletes": True} if a.deletes else {}),
                 }
                 for a in self.actions
             ],
         }
         if self.module:
             found["module"] = self.module
+        elif self.publisher != ENGINE:
+            # Written only when it says something: a module's is its module, and
+            # what a module manifest hashes never changes.
+            found["publisher"] = self.publisher
+        if stored:
+            found["format"] = self.format
+        if self.platform_access:
+            found["platform_access"] = [
+                {
+                    "resources": list(row.resources),
+                    "viewer": list(row.viewer),
+                    "member": list(row.member),
+                    "self": list(row.self_),
+                }
+                for row in self.platform_access
+            ]
         return found
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> ActionCatalog:
-        """The catalog format (``AGENTS.md``, "Action catalogs"), as loaded from YAML or JSON."""
+    def from_dict(
+        cls, data: Mapping[str, Any], *, stored: bool = False
+    ) -> ActionCatalog:
+        """The catalog format (``AGENTS.md``, "Action catalogs"), as loaded from YAML or JSON.
+        ``stored``: read back from a store, where a catalog with no ``format`` was
+        written before the flags existed (format 1); anything else is read as
+        written now. A stored catalog of a format before 3 called ``id_prefix``
+        ``container``."""
+        format_ = int(data.get("format", 1 if stored else CATALOG_FORMAT))
+        old = stored and format_ < 3
         try:
             return cls(
                 service=str(data["service"]),
@@ -125,10 +233,16 @@ class ActionCatalog:
                         name=str(t["name"]),
                         id=cast(IdKind, t.get("id", "opaque")),
                         placement=cast(Placement, t.get("placement", "placed")),
-                        container=bool(t.get("container", False)),
+                        container=not old and bool(t.get("container", False)),
+                        id_prefix=bool(
+                            t.get("container" if old else "id_prefix", False)
+                        ),
                         personal=bool(t.get("personal", False)),
                         description=str(t.get("description", "")),
                         module_scope=bool(t.get("module_scope", False)),
+                        policy_only=bool(t.get("policy_only", False)),
+                        platform_companions=bool(t.get("platform_companions", False)),
+                        parents=tuple(t.get("parents", ()) or ()),
                     )
                     for t in data.get("resource_types", ())
                 ),
@@ -140,10 +254,24 @@ class ActionCatalog:
                         creates=bool(a.get("creates", False)),
                         subjects=tuple(a.get("subjects", ())),
                         description=str(a.get("description", "")),
+                        owner_only=bool(a.get("owner_only", False)),
+                        deletes=bool(a.get("deletes", False)),
                     )
                     for a in data.get("actions", ())
                 ),
                 module=str(data.get("module", "") or ""),
+                platform_access=tuple(
+                    PlatformAccess(
+                        resources=tuple(row.get("resources", ())),
+                        viewer=tuple(row.get("viewer", ())),
+                        member=tuple(row.get("member", ())),
+                        self_=tuple(row.get("self", ())),
+                    )
+                    for row in data.get("platform_access", ())
+                ),
+                # Stored before the flags: no "format" key.
+                format=format_,
+                publisher=str(data.get("publisher", "") or ENGINE),
             )
         except (KeyError, TypeError) as exc:
             raise CatalogError(f"Malformed catalog: {exc!r}") from exc
@@ -167,10 +295,38 @@ def _catalog_errors(catalog: ActionCatalog) -> list[str]:
             errors.append(
                 f"resource type {t.name}: placement must be one of {_PLACEMENTS}"
             )
-        if t.module_scope and (t.placement != "placed" or t.personal or t.container):
+        if t.module_scope and (t.placement != "placed" or t.personal or t.id_prefix):
             errors.append(
-                f"resource type {t.name}: a module scope is placed in a workspace, "
-                "neither personal nor a container"
+                f"resource type {t.name}: a module scope is placed in a container, "
+                "neither personal nor an id prefix"
+            )
+        if t.container and (t.id == "path" or t.personal or t.id_prefix):
+            errors.append(
+                f"resource type {t.name}: a container's id is one segment, "
+                "neither personal nor an id prefix"
+            )
+        if t.container and not any(
+            a.creates and t.name in a.resource_types for a in catalog.actions
+        ):
+            errors.append(
+                f"resource type {t.name}: a container type needs an action marked "
+                "creates on it (registering one)"
+            )
+        if t.parents and not t.container:
+            errors.append(f"resource type {t.name}: only a container type names parents")
+        for parent in t.parents:
+            service, colon, type_name = parent.partition(":")
+            if parent != "-" and not (
+                colon and is_valid_service(service) and is_valid_service(type_name)
+            ):
+                errors.append(
+                    f"resource type {t.name}: a parent is <service>:<type> or -, "
+                    f"not {parent!r}"
+                )
+        if t.platform_companions and not t.container:
+            errors.append(
+                f"resource type {t.name}: only a container type brings the "
+                "platform companions"
             )
     action_names = [a.name for a in catalog.actions]
     if len(set(action_names)) != len(action_names):
@@ -185,6 +341,28 @@ def _catalog_errors(catalog: ActionCatalog) -> list[str]:
         for name in a.resource_types:
             if name not in type_names:
                 errors.append(f"action {a.name}: unknown resource type {name!r}")
+        if a.owner_only and a.level != "admin":
+            errors.append(f"action {a.name}: only an admin action is owner-only")
+        if a.deletes and not any(
+            t.container for t in catalog.resource_types if t.name in a.resource_types
+        ):
+            errors.append(
+                f"action {a.name}: only an action on a container type deletes"
+            )
+    if catalog.platform_access and catalog.module:
+        errors.append("a module's catalog declares no platform access")
+    for row in catalog.platform_access:
+        if not row.resources:
+            errors.append("platform access names no resource")
+        for resource in row.resources:
+            type_name, slash, rest = resource.partition("/")
+            if type_name not in type_names or not slash or not rest:
+                errors.append(
+                    f"platform access: {resource!r} is not <type>/<id> of this catalog"
+                )
+        for name in (*row.viewer, *row.member, *row.self_):
+            if name not in action_names:
+                errors.append(f"platform access: unknown action {name!r}")
     return errors
 
 
@@ -226,6 +404,33 @@ class CatalogRegistry:
         if not has_wildcard(pattern):
             return [pattern] if self.is_registered(pattern) else []
         return [action for action in self.actions() if matches(pattern, action)]
+
+    def resource_type(self, service: str, type_name: str) -> ResourceType | None:
+        catalog = self.get(service)
+        return catalog.resource_type(type_name) if catalog is not None else None
+
+    def is_container(self, service: str, type_name: str) -> bool:
+        found = self.resource_type(service, type_name)
+        return found is not None and found.container
+
+    def container_types(self) -> frozenset[tuple[str, str]]:
+        """Every registered container type, ``(service, type)``."""
+        return frozenset(
+            (c.service, t.name)
+            for c in self.all()
+            for t in c.resource_types
+            if t.container
+        )
+
+    def listing_actions(self, service: str, resource_type: str) -> list[str]:
+        """What lets a caller list a resource of the type (``AGENTS.md``,
+        "Publishers and listing"): its ``list`` actions, else any of its actions."""
+        catalog = self.get(service)
+        if catalog is None:
+            return []
+        on = [a for a in catalog.actions if resource_type in a.resource_types]
+        listed = [a for a in on if a.level == "list"]
+        return [catalog.qualified(a.name) for a in (listed or on)]
 
     def actions_on(self, service: str, resource_type: str) -> list[str]:
         """The actions of ``service`` whose catalog lists ``resource_type``.

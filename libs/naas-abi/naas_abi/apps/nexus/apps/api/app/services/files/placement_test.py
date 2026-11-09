@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 from naas_abi.apps.nexus.apps.api.app.services.files import placement
-from naas_abi.apps.nexus.apps.api.app.services.iam import placements
+from naas_abi.apps.nexus.apps.api.app.services.iam import names, placements
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 from naas_abi_core.engine.call_context import use_call_context
 from naas_abi_core.engine.IEngine import IEngine
@@ -63,7 +63,7 @@ async def test_a_placed_drive_covers_exactly_the_drive(team) -> None:
 
     def workspace_of(object_id: str) -> str | None:
         found = team.iam.placement_of("object_storage", object_id)
-        return found.workspace if found else None
+        return names.workspace_of(found.container) if found else None
 
     assert workspace_of("naas_abi/workspace-drive/ws-1") == "ws-1"
     assert workspace_of("naas_abi/workspace-drive/ws-1/docs/a.txt") == "ws-1"
@@ -88,17 +88,17 @@ def test_placing_from_a_commit_hook_waits_for_iam_to_know_the_workspace(nexus_ia
     nexus_iam.workspace("org-1", "ws-new")
     assert placement.place_workspace_drive_sync("ws-new") is True
     found = nexus_iam.iam.placement_of("object_storage", "naas_abi/workspace-drive/ws-new/a")
-    assert (found.org, found.workspace) == ("org-1", "ws-new")
+    assert found.container == names.workspace_container("org-1", "ws-new")
 
 
 @pytest.fixture
 def kernel(tmp_path, nexus_iam: NexusIam):
     """The real object storage, wired to the IAM that holds the workspaces."""
-    nexus_iam.workspace("org-1", "ws-1")
-    nexus_iam.workspace("org-1", "ws-2")
-    nexus_iam.grant("owner", "owner", "abi:org-1:ws-1")
-    nexus_iam.grant("viewer", "viewer", "abi:org-1:ws-1")
-    nexus_iam.grant("other", "member", "abi:org-1:ws-2")
+    one = nexus_iam.workspace("org-1", "ws-1")
+    two = nexus_iam.workspace("org-1", "ws-2")
+    nexus_iam.grant("owner", "owner", one)
+    nexus_iam.grant("viewer", "viewer", one)
+    nexus_iam.grant("other", "member", two)
     storage = ObjectStorageService(ObjectStorageSecondaryAdapterFS(str(tmp_path)))
     storage.set_services(IEngine.Services(iam=nexus_iam.iam))
     return storage

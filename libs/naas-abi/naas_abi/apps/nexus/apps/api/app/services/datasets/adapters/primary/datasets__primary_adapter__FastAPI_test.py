@@ -15,6 +15,7 @@ from naas_abi.apps.nexus.apps.api.app.services.datasets.adapters.primary.dataset
     get_datasets_service,
 )
 from naas_abi.apps.nexus.apps.api.app.services.datasets.service import DatasetsService
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import nexus_resource
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 from naas_abi_core.services.dataset.DatasetFactory import DatasetFactory
 from naas_abi_core.services.dataset.DatasetPort import ColumnSpec, DatasetSpec
@@ -178,7 +179,7 @@ def test_a_policy_on_a_namespace_hides_it_from_list_and_query(tmp_path, team) ->
     team.deny(
         "member",
         ["nexus:*"],
-        ["abi:-:-:nexus:dataset/hr", "abi:-:-:nexus:dataset/hr/*"],
+        [nexus_resource("dataset", id="hr"), nexus_resource("dataset", id=["hr"]) + "/*"],
         team.workspace("org-1", "ws-1"),
     )
     client = _second_namespace(tmp_path, "member")
@@ -214,7 +215,7 @@ def test_a_policy_on_the_namespace_alone_hides_every_route(tmp_path, team) -> No
     team.deny(
         "member",
         ["nexus:*"],
-        ["abi:-:-:nexus:dataset/hr"],
+        [nexus_resource("dataset", id="hr")],
         team.workspace("org-1", "ws-1"),
     )
     client = _second_namespace(tmp_path, "member")

@@ -1,7 +1,7 @@
 """The ``email`` action catalog.
 
 Mail is sent from a sender (``sender/<from address>``, platform-level); a kept
-copy is a message placed in the call's target workspace when it is sent.
+copy is a message placed in the container of the call when it is sent.
 """
 
 from __future__ import annotations

@@ -13,10 +13,17 @@ from naas_abi_core.services.iam.IAMPorts import (
     PermissionDeniedError,
 )
 from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER
-from naas_abi_core.services.iam.tests.iam_harness import graph
+from naas_abi_core.services.iam.tests.iam_harness import graph, workspace
 
 ISSUER = "https://idp.example"
-W1 = "abi:acme:ws1"
+W1 = workspace("ws1", "acme")
+W2 = workspace("ws2", "acme")
+
+
+@pytest.fixture(autouse=True)
+def containers(h):
+    h.register("ws1", "acme")
+    h.register("ws2", "acme")
 
 
 @pytest.fixture
@@ -72,7 +79,7 @@ def test_a_sign_in_that_already_made_its_own_user_is_merged_into_the_existing_on
 ):
     made = sign_in(h)
     assert made.id != legacy.id
-    h.attach(roles.VIEWER, made.id, "abi:acme:ws2")
+    h.attach(roles.VIEWER, made.id, W2)
     h.attach(roles.MEMBER, made.id, W1)  # the same role the legacy user holds
     team = h.group("team")
     with_group = team.id
@@ -82,7 +89,7 @@ def test_a_sign_in_that_already_made_its_own_user_is_merged_into_the_existing_on
 
     assert linked.id == legacy.id
     assert sign_in(h).id == legacy.id
-    assert held(h, legacy) >= {(roles.MEMBER, W1), (roles.VIEWER, "abi:acme:ws2")}
+    assert held(h, legacy) >= {(roles.MEMBER, W1), (roles.VIEWER, W2)}
     assert with_group in h.iam.store.groups_of(legacy.id)
     retired = h.iam.store.get_principal(made.id)
     assert retired.status == "deleted"

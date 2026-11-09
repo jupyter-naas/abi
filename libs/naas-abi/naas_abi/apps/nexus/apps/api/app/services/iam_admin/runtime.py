@@ -8,9 +8,6 @@ from collections.abc import Callable
 from naas_abi.apps.nexus.apps.api.app.services.iam_admin.adapters.secondary.engine import (
     EngineIamGateway,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam_admin.adapters.secondary.sql_directory import (
-    SqlScopeDirectory,
-)
 from naas_abi.apps.nexus.apps.api.app.services.iam_admin.service import IamAdminService
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.adapters.secondary.sql_audit_log import (
     SqlAdminAuditLog,
@@ -28,7 +25,6 @@ def _default() -> IamAdminService:
     return IamAdminService(
         EngineIamGateway(),
         SqlAdminAuditLog(lambda: database.async_engine, prefix=AUDIT_PREFIX),
-        directory=SqlScopeDirectory(lambda: database.async_engine),
     )
 
 

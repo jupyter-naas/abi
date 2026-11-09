@@ -21,10 +21,10 @@ const row = (id: string) => document.querySelector(`[data-person="${id}"]`);
 const bob = member();
 const ann = member({ userId: 'usr_ann', name: 'Ann', email: 'ann@example.com', role: 'admin', inherited: true });
 const analysts = principal({ id: 'grp_1', kind: 'group', name: 'Analysts', display_name: null, email: null });
-const recruiters = attachment({ id: 'att_r', policy_id: 'pol_r', policy_name: 'Recruiters', principal_id: 'usr_bob', principal: principal({ id: 'usr_bob', display_name: 'Bob' }), scope: 'abi:acme:ws-1' });
-const roleRow = attachment({ id: 'att_m', policy_id: 'builtin.member', policy_name: 'Member', principal_id: 'usr_bob', scope: 'abi:acme:ws-1' });
-const groupHolds = attachment({ id: 'att_g', policy_id: 'pol_a', policy_name: 'Analysis', principal_id: 'grp_1', principal: analysts, scope: 'abi:acme:ws-1' });
-const elsewhere = attachment({ id: 'att_x', scope: 'abi:acme:ws-2' });
+const recruiters = attachment({ id: 'att_r', policy_id: 'pol_r', policy_name: 'Recruiters', principal_id: 'usr_bob', principal: principal({ id: 'usr_bob', display_name: 'Bob' }), scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1' });
+const roleRow = attachment({ id: 'att_m', policy_id: 'builtin.member', policy_name: 'Member', principal_id: 'usr_bob', scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1' });
+const groupHolds = attachment({ id: 'att_g', policy_id: 'pol_a', policy_name: 'Analysis', principal_id: 'grp_1', principal: analysts, scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1' });
+const elsewhere = attachment({ id: 'att_x', scope: 'abi:nexus:organization/acme/nexus:workspace/ws-2' });
 
 describe('peopleAt', () => {
   it('shows each person once: their role, their policies here and what their groups give them', () => {
@@ -75,7 +75,7 @@ describe('PeopleView', () => {
     mounted = await mount(PeopleView, { api, can: () => true, scope: wsScope, directory: fakeDirectory([bob, ann]), changeRole: vi.fn() });
     await mounted.flush();
 
-    expect(api.listAttachments).toHaveBeenCalledWith({ scope: 'abi:acme:ws-1' });
+    expect(api.listAttachments).toHaveBeenCalledWith({ scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1' });
     expect(row('usr_bob')?.textContent).toContain('Recruiters');
     expect(row('usr_bob')?.textContent).toContain('Analysts: Analysis');
     expect(row('usr_ann')?.textContent).toContain('from organization');
@@ -99,7 +99,7 @@ describe('PeopleView', () => {
 
     await mounted.click(field('Detach Recruiters from Bob'));
     await mounted.click(button('Confirm detach') ?? null);
-    expect(api.detach).toHaveBeenCalledWith({ policy_id: 'pol_r', principal_id: 'usr_bob', scope: 'abi:acme:ws-1' });
+    expect(api.detach).toHaveBeenCalledWith({ policy_id: 'pol_r', principal_id: 'usr_bob', scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1' });
   });
 
   it('attaches a policy to a person of the scope', async () => {
@@ -108,8 +108,9 @@ describe('PeopleView', () => {
     await mounted.flush();
     expect([...(field('Role of Bob') as HTMLSelectElement).options].map((o) => o.value)).toEqual(['member', 'admin']);
     await mounted.type(field('Principal to attach to'), 'usr_bob');
+    await mounted.select(field('Policy to attach'), 'pol_r');
     await mounted.click(button('Attach policy') ?? null);
-    expect(api.attach).toHaveBeenCalledWith({ policy_id: 'pol_r', principal_id: 'usr_bob', scope: 'abi:acme:-' });
+    expect(api.attach).toHaveBeenCalledWith({ policy_id: 'pol_r', principal_id: 'usr_bob', scope: 'abi:nexus:organization/acme' });
   });
 
   it('shows the platform’s holders, everywhere attached, with no role to change', async () => {
@@ -124,13 +125,13 @@ describe('PeopleView', () => {
   });
 
   it('shows what comes with a role as part of it, with no detach', async () => {
-    const features = attachment({ id: 'att_f', policy_id: 'builtin.features.member', policy_name: 'Features of member', principal_id: 'usr_bob', principal: principal({ id: 'usr_bob' }), scope: 'abi:acme:ws-1' });
-    const api = peopleApi({ listAttachments: vi.fn().mockResolvedValue({ items: [recruiters, roleRow, features] }) });
+    const companion = attachment({ id: 'att_p', policy_id: 'builtin.platform.member', policy_name: 'Platform member', principal_id: 'usr_bob', principal: principal({ id: 'usr_bob' }), scope: 'abi:nexus:organization/acme/nexus:workspace/ws-1' });
+    const api = peopleApi({ listAttachments: vi.fn().mockResolvedValue({ items: [recruiters, roleRow, companion] }) });
     mounted = await mount(PeopleView, { api, can: () => true, scope: wsScope, directory: fakeDirectory([bob]), changeRole: vi.fn() });
     await mounted.flush();
-    expect(row('usr_bob')?.querySelector('[data-with-role]')?.textContent).toContain('Features of member');
-    expect(document.querySelector('[data-held="builtin.features.member"]')).toBeNull();
-    expect(field('Detach Features of member from Bob')).toBeNull();
+    expect(row('usr_bob')?.querySelector('[data-with-role]')?.textContent).toContain('Platform member');
+    expect(document.querySelector('[data-held="builtin.platform.member"]')).toBeNull();
+    expect(field('Detach Platform member from Bob')).toBeNull();
     expect(field('Detach Recruiters from Bob')).not.toBeNull();
   });
 
@@ -156,5 +157,125 @@ describe('PeopleView', () => {
     expect(field('Detach Recruiters from Bob')).toBeNull();
     expect(button('Attach policy')).toBeUndefined();
     expect(api.attachable).not.toHaveBeenCalled();
+  });
+
+  it('opens a person’s page from their row, by their IAM id', async () => {
+    const linked = member({ userId: 'user-1', name: 'Dev Admin', email: 'admin@example.com', role: 'admin' });
+    const held = attachment({ id: 'att_l', policy_id: 'pol_r', policy_name: 'Recruiters', principal_id: 'usr_1', principal: principal({ id: 'usr_1', email: 'admin@example.com' }), scope: wsScope.value });
+    const api = peopleApi({ listAttachments: vi.fn().mockResolvedValue({ items: [held, recruiters, groupHolds] }) });
+    const open = { person: vi.fn(), group: vi.fn() };
+    mounted = await mount(PeopleView, { api, can: () => true, scope: wsScope, directory: fakeDirectory([bob, linked]), open, changeRole: vi.fn() });
+    await mounted.flush();
+
+    await mounted.click(field('Open Dev Admin'));
+    expect(open.person).toHaveBeenLastCalledWith('usr_1', 'Dev Admin');
+    await mounted.click(field('Open Bob'));
+    expect(open.person).toHaveBeenLastCalledWith('usr_bob', 'Bob');
+    await mounted.click(field('Open Analysts'));
+    expect(open.group).toHaveBeenLastCalledWith('grp_1', 'Analysts');
+  });
+
+  it('opens an upgraded account’s page by its IAM id, with only an inherited role here', async () => {
+    // An account linked from the old login: Nexus names it user-olivia, IAM usr_olivia. On a
+    // workspace page she holds nothing attached here (her role is the organization's).
+    const olivia = member({ userId: 'user-olivia', principalId: 'usr_olivia', name: 'Olivia', email: 'olivia@example.com', role: 'admin', inherited: true });
+    const api = peopleApi({ listAttachments: vi.fn().mockResolvedValue({ items: [] }) });
+    const open = { person: vi.fn(), group: vi.fn() };
+    mounted = await mount(PeopleView, { api, can: () => true, scope: wsScope, directory: fakeDirectory([olivia]), open, changeRole: vi.fn() });
+    await mounted.flush();
+    await mounted.click(field('Open Olivia'));
+    expect(open.person).toHaveBeenLastCalledWith('usr_olivia', 'Olivia');
+    // A member whose IAM id nothing says is named, never linked by their Nexus id.
+    await mounted.unmount();
+    mounted = await mount(PeopleView, {
+      api,
+      can: () => true,
+      scope: wsScope,
+      directory: fakeDirectory([member({ userId: 'user-x', name: 'Xavier', email: 'x@example.com' })]),
+      open,
+      changeRole: vi.fn(),
+    });
+    await mounted.flush();
+    expect(field('Open Xavier')).toBeNull();
+  });
+
+  it('shows the person’s page in place of the table', async () => {
+    const api = peopleApi({
+      principalGroups: vi.fn().mockResolvedValue({ items: [] }),
+      listAttachments: vi.fn().mockResolvedValue({ items: [recruiters] }),
+      resources: vi.fn().mockResolvedValue({ items: [] }),
+      access: vi.fn().mockResolvedValue({ actions: {} }),
+    });
+    const onClosePerson = vi.fn();
+    mounted = await mount(PeopleView, { api, can: () => true, scope: wsScope, directory: fakeDirectory([bob]), person: { id: 'usr_bob', label: 'Bob' }, onClosePerson });
+    await mounted.flush();
+    await mounted.flush();
+    expect(document.querySelector('[data-person-page="usr_bob"]')).not.toBeNull();
+    expect(api.listAttachments).toHaveBeenCalledWith({ principal_id: 'usr_bob' });
+    await mounted.click(button('People & roles') ?? null);
+    expect(onClosePerson).toHaveBeenCalled();
+  });
+
+  it('finds anyone at the platform, by a search IAM answers, not only those holding something there', async () => {
+    const root = attachment({ id: 'att_root', policy_id: 'builtin.platform_admin', principal_id: 'usr_root', principal: principal({ id: 'usr_root', display_name: 'Root' }), scope: null });
+    const carol = principal({ id: 'usr_carol', display_name: 'Carol', email: 'carol@example.com' });
+    const api = peopleApi({
+      listAttachments: vi.fn().mockResolvedValue({ items: [root] }),
+      listPrincipals: vi.fn().mockResolvedValue({ items: [carol], next_after: null }),
+    });
+    const open = { person: vi.fn(), group: vi.fn() };
+    mounted = await mount(PeopleView, { api, can: () => true, scope: PLATFORM_ACCESS_SCOPE, directory: fakeDirectory([]), open, searchDelayMs: 0 });
+    await mounted.flush();
+    await mounted.type(field('Filter people'), 'car');
+    await mounted.flush();
+    await mounted.flush();
+    expect(api.listPrincipals).toHaveBeenCalledWith('user', undefined, 'car');
+    expect(document.querySelector('[data-found="usr_carol"]')?.textContent).toContain('carol@example.com');
+    await mounted.click(field('Open Carol'));
+    expect(open.person).toHaveBeenCalledWith('usr_carol', 'Carol');
+  });
+
+  it('shows no previous search’s people while the next one is pending', async () => {
+    const carol = principal({ id: 'usr_carol', display_name: 'Carol', email: 'carol@example.com' });
+    const api = peopleApi({
+      listAttachments: vi.fn().mockResolvedValue({ items: [] }),
+      listPrincipals: vi.fn((_kind: string, _after: unknown, text: string) =>
+        Promise.resolve({ items: text === 'car' ? [carol] : [], next_after: null }),
+      ),
+    });
+    mounted = await mount(PeopleView, { api, can: () => true, scope: PLATFORM_ACCESS_SCOPE, directory: fakeDirectory([]), open: { person: vi.fn() }, searchDelayMs: 30 });
+    await mounted.flush();
+    await mounted.type(field('Filter people'), 'car');
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    await mounted.flush();
+    expect(document.querySelector('[data-found="usr_carol"]')).not.toBeNull();
+    // The next text is pending: Carol, found for "car", is no longer offered.
+    await mounted.type(field('Filter people'), 'carx');
+    expect(document.querySelector('[data-found="usr_carol"]')).toBeNull();
+  });
+
+  it('searches nothing for whoever may not list principals, nor below the platform', async () => {
+    const api = peopleApi({ listPrincipals: vi.fn() });
+    mounted = await mount(PeopleView, { api, can: (a) => a !== 'iam:ListPrincipals', scope: PLATFORM_ACCESS_SCOPE, directory: fakeDirectory([]), searchDelayMs: 0 });
+    await mounted.flush();
+    await mounted.type(field('Filter people'), 'carol');
+    await mounted.flush();
+    await mounted.unmount();
+    mounted = await mount(PeopleView, { api, can: () => true, scope: wsScope, directory: fakeDirectory([bob]), searchDelayMs: 0, changeRole: vi.fn() });
+    await mounted.flush();
+    await mounted.type(field('Filter people'), 'carol');
+    await mounted.flush();
+    expect(api.listPrincipals).not.toHaveBeenCalled();
+  });
+
+  it('names no link where the section it opens is not shown to the caller', async () => {
+    const api = peopleApi();
+    mounted = await mount(PeopleView, { api, can: () => true, scope: wsScope, directory: fakeDirectory([bob]), open: { person: vi.fn() }, changeRole: vi.fn() });
+    await mounted.flush();
+    expect(field('Open Bob')).not.toBeNull();
+    // No Groups section here: the group is named, not linked.
+    expect(field('Open Analysts')).toBeNull();
+    expect(row('grp_1')?.textContent).toContain('Analysts');
+    expect(row('usr_bob')?.querySelector('[data-via] button')).toBeNull();
   });
 });

@@ -21,6 +21,7 @@ import {
 } from '@/components/settings/settings-ui';
 import { getApiUrl } from '@/lib/config';
 import { fetchCurrentBackgroundImage } from '@/lib/home-background';
+import { existingWorkspaceGroups } from '@/lib/workspace-groups';
 import { AccountPageHeader } from '@/app/account/components/account-page-header';
 import { AccountSectionCard } from '@/app/account/components/account-section-card';
 import { authFetch } from '@/stores/auth';
@@ -96,29 +97,16 @@ export default function GeneralSettingsPage() {
     if (workspace) setCustomColor(workspace.theme?.primaryColor || DEFAULT_THEME.primaryColor);
   }, [workspace]);
 
+  const ownGroup = workspace?.group ?? '';
   useEffect(() => {
-    const orgId = workspace?.organizationId;
-    if (!orgId) {
-      setExistingGroups([]);
-      return;
-    }
     let cancelled = false;
-    void authFetch(`/api/organizations/${orgId}/workspaces`)
-      .then(async (res) => {
-        if (!res.ok || cancelled) return;
-        const rows: { workspace_group?: string | null }[] = await res.json();
-        const groups = new Set(
-          rows.map((row) => row.workspace_group?.trim()).filter(Boolean) as string[]
-        );
-        setExistingGroups([...groups].sort((a, b) => a.localeCompare(b)));
-      })
-      .catch(() => {
-        if (!cancelled) setExistingGroups([]);
-      });
+    void existingWorkspaceGroups(workspace?.organizationId, ownGroup).then((groups) => {
+      if (!cancelled) setExistingGroups(groups);
+    });
     return () => {
       cancelled = true;
     };
-  }, [workspace?.organizationId]);
+  }, [workspace?.organizationId, ownGroup]);
 
   // Follow the store when switching workspace or after a save (not on every keystroke).
   const workspaceName = workspace?.name ?? '';
@@ -404,6 +392,7 @@ export default function GeneralSettingsPage() {
               <label className="account-profile-field-label">Owner</label>
               <WorkspaceOwnerSelect
                 orgId={workspace.organizationId}
+                workspaceId={workspace.id}
                 value={ownerId}
                 onChange={setOwnerId}
                 // Only an owner grants, changes or removes an owner.

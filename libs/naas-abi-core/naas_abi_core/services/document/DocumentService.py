@@ -25,6 +25,7 @@ from naas_abi_core.services.document.iam_catalog import (
     NAMESPACE,
 )
 from naas_abi_core.services.iam.enforcement import ResourceGuard
+from naas_abi_core.services.iam.listing import ResourceLister, named_lister
 from naas_abi_core.services.ServiceBase import ServiceBase
 
 
@@ -129,6 +130,18 @@ class DocumentService(ServiceBase):
         """Composition-root hook kept for existing callers; see ``for_namespace``."""
         return self.for_namespace(namespace)
 
+    def iam_listers(self) -> dict[tuple[str, str], ResourceLister]:
+        """What IAM lists of this service for the policy builder (read unchecked:
+        IAM filters it as the caller): its namespaces
+        (the engine's root service only)."""
+        return {
+            (CATALOG.service, "namespace"): named_lister(
+                lambda query: self.__adapter.namespaces(),
+                lambda namespace: self._guard.name("namespace", [namespace]),
+                str,
+            )
+        }
+
     def namespaces(self) -> list[str]:
         """Namespaces holding at least one collection that the caller may list;
         engine root only."""
@@ -140,16 +153,16 @@ class DocumentService(ServiceBase):
 
     def ensure_collection(self, spec: CollectionSpec) -> None:
         """Declare a collection; a create: a new namespace is
-        placed in the call's target workspace, or on the platform."""
+        placed in the container of the call, or on the platform."""
         namespace = self.namespace
         name = validate_name(spec.name)
         commit = self._guard.create(
             "EnsureCollection",
             COLLECTION,
             [namespace, name],
-            container=(NAMESPACE, [namespace]),
+            prefix=(NAMESPACE, [namespace]),
             exists=lambda: name in self.__adapter.collections(namespace),
-            container_exists=lambda: namespace in self.__adapter.namespaces(),
+            prefix_exists=lambda: namespace in self.__adapter.namespaces(),
             not_found=lambda: CollectionNotFound(
                 f"Collection {namespace}/{name} not found"
             ),

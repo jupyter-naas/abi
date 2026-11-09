@@ -22,7 +22,6 @@ export interface AppItem {
   tier?: string | null;
   maintainer?: string | null;
   installed: boolean;
-  enabled: boolean;
 }
 
 interface AppsState {
@@ -31,7 +30,6 @@ interface AppsState {
   workspaceId: string | null;
 
   fetchApps: (workspaceId: string) => Promise<void>;
-  toggleApp: (appId: string) => Promise<void>;
 }
 
 const apiBase = () => getApiUrl();
@@ -61,49 +59,6 @@ export const useAppsStore = create<AppsState>()((set, get) => ({
       console.error('Failed to fetch apps:', error);
       if (get().workspaceId !== workspaceId) return;
       set({ apps: [], loading: false });
-    }
-  },
-
-  toggleApp: async (appId: string) => {
-    const { workspaceId, apps } = get();
-    if (!workspaceId) return;
-    const target = apps.find((a) => a.app_id === appId);
-    if (!target) return;
-
-    const newEnabled = !target.enabled;
-
-    // Optimistic update
-    set({
-      apps: apps.map((a) =>
-        a.app_id === appId ? { ...a, enabled: newEnabled } : a
-      ),
-    });
-
-    try {
-      const response = await authFetch(
-        `${apiBase()}/api/apps/${encodeURIComponent(workspaceId)}/${encodeURIComponent(appId)}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ enabled: newEnabled }),
-        }
-      );
-      if (!response.ok) {
-        // Rollback
-        set({
-          apps: get().apps.map((a) =>
-            a.app_id === appId ? { ...a, enabled: !newEnabled } : a
-          ),
-        });
-        console.error('Failed to toggle app');
-      }
-    } catch (error) {
-      set({
-        apps: get().apps.map((a) =>
-          a.app_id === appId ? { ...a, enabled: !newEnabled } : a
-        ),
-      });
-      console.error('Failed to toggle app:', error);
     }
   },
 }));

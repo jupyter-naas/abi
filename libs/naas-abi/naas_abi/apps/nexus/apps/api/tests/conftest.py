@@ -118,11 +118,10 @@ def _session(user_id: str) -> dict:
 
 
 def _grant(workspace_id: str, user_id: str, role: str) -> None:
-    from naas_abi.apps.nexus.apps.api.app.services.iam.names import NO_ORG
-
     nexus = CURRENT_IAM[0]
+    # A workspace in no organization sits at the platform.
     scope = nexus.workspace(None, workspace_id)
-    assert NO_ORG in scope
+    assert scope == f"abi:nexus:workspace/{workspace_id}"
     nexus.grant(user_id, role, scope)
 
 

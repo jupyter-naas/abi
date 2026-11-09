@@ -16,6 +16,11 @@ from naas_abi.apps.nexus.apps.api.app.services.coding_environment.testing import
     place_repo,
     principal_of,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
+    org_of,
+    workspace_container,
+    workspace_of,
+)
 from naas_abi.apps.nexus.apps.api.app.services.iam.placements import (
     SOURCES,
     place_many,
@@ -62,7 +67,9 @@ def nexus() -> Iterator[NexusIam]:
 
 
 def _placed(nexus: NexusIam, service: str, key: str) -> tuple[str, str]:
-    return nexus.iam.resolve_placement(service, key)
+    """``(org, workspace)`` of the container a resource is placed in, ``-`` for none."""
+    container = nexus.iam.resolve_placement(service, key)
+    return org_of(container) or "-", workspace_of(container) or "-"
 
 
 def test_the_sources_are_registered_for_the_startup() -> None:
@@ -139,6 +146,8 @@ async def test_an_environment_is_placed_in_the_workspace_it_was_provisioned_for(
 async def test_an_environment_placed_elsewhere_stays_there(nexus: NexusIam) -> None:
     member = principal_of(nexus, "member")
     with as_service_account("engine"):
-        nexus.iam.put_placement("coding_environment", f"{member}/env-1", "org-1", "ws-2")
+        nexus.iam.put_placement(
+            "coding_environment", f"{member}/env-1", workspace_container("org-1", "ws-2")
+        )
     db = _Db(environments=[("env-1", "ws-1", "member", None)])
     assert await repo_access.workspace_environments(db) == []

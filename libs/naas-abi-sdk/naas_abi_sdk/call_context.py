@@ -28,7 +28,7 @@ import re
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
 PrincipalKind = Literal["user", "service_account", "anonymous"]
@@ -80,8 +80,10 @@ class CallContext:
     # its principal's tokens were revoked.
     token_issued_at: int | None = None
     scope: tuple[Statement, ...] | None = None  # abi_scope narrowing
-    # The target workspace of a create: a request input, not identity.
-    workspace_id: str | None = None
+    # The container the call is made in (its name, ``abi:...``): where what it
+    # creates is placed and its module scopes are named. A request input, not
+    # identity: IAM checks it is registered under that path (``call_container``).
+    container: str | None = None
     trace_id: str | None = None
     # How the work started ("api", "cli", "configuration", ...), stamped on events.
     triggered_via: str | None = None
@@ -120,6 +122,16 @@ def use_call_context(context: CallContext) -> Iterator[CallContext]:
         yield context
     finally:
         _call_context.reset(token)
+
+
+@contextmanager
+def inside(container: str | None) -> Iterator[CallContext]:
+    """Make the calls of the block in ``container`` (a container's name, None
+    for none): what they create is placed there and their module scopes are
+    named there. Request data, not identity: IAM checks the container."""
+    context = replace(current_call_context(), container=container or None)
+    with use_call_context(context):
+        yield context
 
 
 def set_call_context(context: CallContext) -> Token[CallContext]:

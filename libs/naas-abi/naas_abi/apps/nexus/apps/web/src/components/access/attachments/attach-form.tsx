@@ -8,32 +8,56 @@ import './attachments.css';
 
 export type PrincipalChoice = { id: string; label: string; kind?: PrincipalKind };
 
+/** The built-in policies of IAM's own service accounts and jobs (core `roles.py`). */
+const SERVICE_ACCOUNT_POLICIES = new Set([
+  'builtin.api',
+  'builtin.engine',
+  'builtin.idp',
+  'builtin.job',
+  'builtin.module_bootstrap',
+]);
+
+/** A policy made for a service account: one of IAM's own accounts', or a module's approved
+ *  manifest (`module.<project>.<module>`). */
+export function isServiceAccountPolicy(policyId: string): boolean {
+  return SERVICE_ACCOUNT_POLICIES.has(policyId) || policyId.startsWith('module.');
+}
+
 /** A user's built-in role is a membership (People & roles' role column, Members), never a bare
- *  attachment; a group or a service account takes one. What comes with a role (its feature and
- *  platform companions) is IAM's to attach, offered to nobody. A principal not among the known
+ *  attachment; a group or a service account takes one. What comes with a role (its platform
+ *  companions) is IAM's to attach, offered to nobody. A service account's policy is offered
+ *  only to a service account, never to a person or a group, and `builtin.self`, which every
+ *  user holds already, to neither. A principal not among the known
  *  ones is told by its id. */
 export function offeredTo(policy: AttachablePolicy, principal: PrincipalChoice | undefined): boolean {
   if (isRoleCompanion(policy.id)) return false;
   const kind = principal?.kind ?? (principal ? principalKindOf(principal.id) : 'user');
+  if (isServiceAccountPolicy(policy.id) && kind !== 'service_account') return false;
+  // Every user holds it already, with no attachment (core `roles.SELF`): to a person or a
+  // group, attaching it would change nothing.
+  if (policy.id === 'builtin.self' && kind !== 'service_account') return false;
   return !(roleOfPolicy(policy.id) && kind === 'user');
 }
 
 /**
  * Attach a policy to a principal at a scope (null: platform-wide). The policies offered are
  * those IAM lets the caller attach there (`attachable`). The principal is picked from
- * ``principals`` or typed as an IAM id; with ``principalId`` it is fixed (a group's page).
+ * ``principals`` or typed as an IAM id; with ``principalId`` it is fixed (a group's page, a
+ * person's), of ``principalKind`` (a group by default).
  */
 export function AttachForm({
   api,
   scope,
   principals,
   principalId: fixed,
+  principalKind: fixedKind = 'group',
   onAttached,
 }: {
   api: IamAdminApi;
   scope: string | null;
   principals: PrincipalChoice[];
   principalId?: string;
+  principalKind?: PrincipalKind;
   onAttached: () => void;
 }) {
   const [policies, setPolicies] = useState<AttachablePolicy[] | null>(null);
@@ -46,8 +70,8 @@ export function AttachForm({
   const principal = useMemo<PrincipalChoice | undefined>(
     () =>
       principals.find((p) => p.id === target) ??
-      (target ? { id: target, label: target, kind: fixed ? 'group' : principalKindOf(target) } : undefined),
-    [principals, target, fixed],
+      (target ? { id: target, label: target, kind: fixed ? fixedKind : principalKindOf(target) } : undefined),
+    [principals, target, fixed, fixedKind],
   );
 
   useEffect(() => {
@@ -67,7 +91,8 @@ export function AttachForm({
   }, [api, scope]);
 
   const offered = useMemo(() => (policies ?? []).filter((p) => offeredTo(p, principal)), [policies, principal]);
-  const chosen = offered.some((p) => p.id === policyId) ? policyId : (offered[0]?.id ?? '');
+  // Nothing is chosen until the caller picks a policy: one click never attaches the first.
+  const chosen = offered.some((p) => p.id === policyId) ? policyId : '';
 
   const submit = async () => {
     setBusy(true);
@@ -101,6 +126,7 @@ export function AttachForm({
           disabled={!offered.length}
           onChange={(event) => setPolicyId(event.target.value)}
         >
+          {offered.length > 0 && <option value="">Choose a policy</option>}
           {offered.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name} ({p.id})

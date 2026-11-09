@@ -107,6 +107,7 @@ class PeopleGraphContext:
     creator: str = "people_pipeline"
     people: dict[str, Person] = field(default_factory=dict)
     orgs: dict[str, Organization] = field(default_factory=dict)
+    orgs_by_uri: dict[str, Organization] = field(default_factory=dict)
     sites: dict[str, Site] = field(default_factory=dict)
     skills: dict[str, Skill] = field(default_factory=dict)
     portraits: dict[str, Portrait] = field(default_factory=dict)
@@ -115,17 +116,24 @@ class PeopleGraphContext:
     education_profiles: dict[str, ProfileDocument] = field(default_factory=dict)
     last_role_uri: str | None = None
 
-    def ensure_person(self, first: str, last: str) -> Person:
-        key = f"{first} {last}"
+    def ensure_person(self, first: str, last: str, *, uri: str | None = None) -> Person:
+        """The person named, minted from the name unless the caller knows their IRI.
+
+        A source that identifies people by something steadier than a name (a
+        LinkedIn profile URL, say) passes ``uri``: two people who share a name
+        then stay two people, and the cache is keyed on the IRI instead.
+        """
+        name = " ".join(part for part in (first, last) if part)
+        key = uri or f"{first} {last}"
         if key in self.people:
             return self.people[key]
-        uri = individual_uri(str(ABI), "Person", slug(first, last))
+        uri = uri or individual_uri(str(ABI), "Person", slug(first, last))
         person = Person(
             _uri=uri,
-            label=key,
+            label=name,
             first_name=first,
             last_name=last,
-            full_name=key,
+            full_name=name,
             created=utc_now(),
             creator=self.creator,
         )
@@ -142,8 +150,15 @@ class PeopleGraphContext:
     def ensure_org(self, label: str, *, educational: bool = False) -> Organization:
         if label in self.orgs:
             return self.orgs[label]
+        uri = individual_uri(str(ABI), "Organization", slug(label))
+        # "Mazars" and "MAZARS" are one IRI: the first spelling is its label,
+        # and the second is an alias of the same node, not a second label.
+        known = self.orgs_by_uri.get(uri)
+        if known is not None:
+            self.orgs[label] = known
+            return known
         org = Organization(
-            _uri=individual_uri(str(ABI), "Organization", slug(label)),
+            _uri=uri,
             label=label,
             created=utc_now(),
             creator=self.creator,
@@ -152,6 +167,7 @@ class PeopleGraphContext:
         if educational:
             self.graph.add((URIRef(org._uri), RDF.type, CCO.ont00000564))
         self.orgs[label] = org
+        self.orgs_by_uri[uri] = org
         return org
 
     def ensure_site(self, label: str) -> Site:
@@ -272,6 +288,7 @@ class PeopleGraphContext:
         quote: str | None = None,
         years_of_experience: int | None = None,
         profile: ProfileDocument | None = None,
+        key: str | None = None,
     ) -> ProfileSummary | None:
         """How the person is presented in general, traceable to where it was published.
 
@@ -283,7 +300,8 @@ class PeopleGraphContext:
         # published: keep the summary so the source stays traceable.
         if not any((headline, about, quote, years_of_experience)) and profile is None:
             return None
-        key = person.label or ""
+        # key stands in for the label when the label is not unique.
+        key = key or person.label or ""
         if key in self.profile_summaries:
             return self.profile_summaries[key]
         summary = ProfileSummary(
@@ -405,9 +423,7 @@ class PeopleGraphContext:
         # demonstratesSkill is multi-valued but generated single-valued, so the
         # skills are stated directly rather than through the entity.
         for skill in skills or []:
-            self.graph.add(
-                (URIRef(act_uri), ABI.demonstratesSkill, URIRef(skill._uri))
-            )
+            self.graph.add((URIRef(act_uri), ABI.demonstratesSkill, URIRef(skill._uri)))
         return certification
 
     def add_language(
@@ -508,9 +524,7 @@ class PeopleGraphContext:
             creator=self.creator,
         )
         self.graph += doc.rdf()
-        self.graph.add(
-            (URIRef(person._uri), ABI.hasProfileDocument, URIRef(doc._uri))
-        )
+        self.graph.add((URIRef(person._uri), ABI.hasProfileDocument, URIRef(doc._uri)))
         self.work_profiles[key] = doc
         return doc
 
@@ -531,9 +545,7 @@ class PeopleGraphContext:
             creator=self.creator,
         )
         self.graph += doc.rdf()
-        self.graph.add(
-            (URIRef(person._uri), ABI.hasProfileDocument, URIRef(doc._uri))
-        )
+        self.graph.add((URIRef(person._uri), ABI.hasProfileDocument, URIRef(doc._uri)))
         self.education_profiles[key] = doc
         return doc
 
@@ -612,9 +624,15 @@ class PeopleGraphContext:
         duration: str | None,
         client: Organization | None = None,
         mission_context: str | None = None,
+        person_key: str | None = None,
     ) -> tuple[str, str]:
+        # person_key stands in for the label when the label is not unique (two
+        # LinkedIn connections with the same name): their acts must not merge.
         key = act_of_working_key(
-            person.label or "", org.label or "", client.label if client else None, title
+            person_key or person.label or "",
+            org.label or "",
+            client.label if client else None,
+            title,
         )
 
         temporal_uri = self.add_temporal_region(
@@ -652,9 +670,7 @@ class PeopleGraphContext:
             creator=self.creator,
         )
         self.graph += role.rdf()
-        self.graph.add(
-            (URIRef(person._uri), ABI.hasOccupationRole, URIRef(role._uri))
-        )
+        self.graph.add((URIRef(person._uri), ABI.hasOccupationRole, URIRef(role._uri)))
         self.graph.add((URIRef(role._uri), ABI.hasMission, URIRef(mission._uri)))
         self.graph.add((URIRef(mission._uri), ABI.isMissionOf, URIRef(role._uri)))
 
@@ -675,9 +691,7 @@ class PeopleGraphContext:
         )
         self.graph += working.rdf()
 
-        self.graph.add(
-            (URIRef(person._uri), ABI.hasActOfWorking, URIRef(working_uri))
-        )
+        self.graph.add((URIRef(person._uri), ABI.hasActOfWorking, URIRef(working_uri)))
         if site:
             self.graph.add(
                 (URIRef(person._uri), ABI.hasWorkLocation, URIRef(site._uri))
@@ -685,9 +699,7 @@ class PeopleGraphContext:
         # developsSkill is declared in the shared module, which a process slice does
         # not import, so it is not a field of the entity: the relation is stated here.
         for skill in skills:
-            self.graph.add(
-                (URIRef(working_uri), ABI.developsSkill, URIRef(skill._uri))
-            )
+            self.graph.add((URIRef(working_uri), ABI.developsSkill, URIRef(skill._uri)))
             self.graph.add(
                 (URIRef(skill._uri), ABI.isSkillDevelopedIn, URIRef(working_uri))
             )

@@ -10,6 +10,8 @@ ACTIONS = (
     action("ListAgents", "list", "agent"),
     action("GetAgent", "read", "agent"),
     action("CreateAgent", "write", "agent", feature="agents"),
+    # An agent's configuration (name, prompt, model, the workspace default);
+    # there is no on/off switch: who uses an agent is IAM's alone.
     action("UpdateAgent", "write", "agent", feature="agents"),
     action("DeleteAgent", "write", "agent", feature="agents"),
     # Reconciles the roster with the modules' agents. Every client sends it once

@@ -9,6 +9,9 @@ import { BUILT_IN_ROLES, type BuiltInRole } from './roles/role-change';
 
 export type ScopeMember = {
   userId: string;
+  /** Their IAM principal, when the member routes say it: an account linked from the old
+   *  login has another id in IAM than in Nexus. */
+  principalId?: string;
   name: string;
   email: string;
   role: BuiltInRole | null;
@@ -34,6 +37,7 @@ export function toMembers(rows: unknown): ScopeMember[] {
     return [
       {
         userId,
+        ...(typeof row.principal_id === 'string' && row.principal_id ? { principalId: row.principal_id } : {}),
         name: typeof row.name === 'string' && row.name ? row.name : '',
         email: typeof row.email === 'string' ? row.email : '',
         role: asRole(row.role),

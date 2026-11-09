@@ -105,10 +105,13 @@ def test_the_requester_needs_the_exchange_action(iam):
         use_call_context,
     )
 
-    with use_call_context(
-        CallContext(principal=Principal(account.id, "service_account", account.name))
-    ), pytest.raises(PermissionDeniedError):
-        iam.exchange_token(
-            TokenExchange("ada", TOKEN_TYPE_ID_TOKEN, SESSION_AUDIENCE)
-        )
+    with (
+        use_call_context(
+            CallContext(
+                principal=Principal(account.id, "service_account", account.name)
+            )
+        ),
+        pytest.raises(PermissionDeniedError),
+    ):
+        iam.exchange_token(TokenExchange("ada", TOKEN_TYPE_ID_TOKEN, SESSION_AUDIENCE))
     assert iam.identity_authenticator._identity.calls == []  # never reached the IdP

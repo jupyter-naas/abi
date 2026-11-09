@@ -3602,7 +3602,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi"
-version = "3.4.0"
+version = "3.6.3"
 source = { editable = "libs/naas-abi" }
 dependencies = [
     { name = "aiosqlite" },
@@ -3690,7 +3690,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-cli"
-version = "3.1.0"
+version = "3.2.0"
 source = { editable = "libs/naas-abi-cli" }
 dependencies = [
     { name = "naas-abi" },
@@ -3716,7 +3716,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-core"
-version = "3.1.0"
+version = "3.2.0"
 source = { editable = "libs/naas-abi-core" }
 dependencies = [
     { name = "click" },
@@ -3894,7 +3894,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-marketplace"
-version = "3.62.0"
+version = "3.64.1"
 source = { editable = "libs/naas-abi-marketplace" }
 dependencies = [
     { name = "ijson" },
@@ -4020,6 +4020,8 @@ requires-dist = [
     { name = "ratelimit", marker = "extra == 'applications-pubmed'", specifier = ">=2.2.1" },
     { name = "ratelimit-types", marker = "extra == 'applications-pubmed'", specifier = "==0.0.3" },
     { name = "thefuzz", marker = "extra == 'domains-ontology-engineer'", specifier = "==0.22.1" },
+    { name = "torch", marker = "extra == 'domains-document'", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torchvision", marker = "extra == 'domains-document'", index = "https://download.pytorch.org/whl/cpu" },
     { name = "twilio", marker = "extra == 'applications-twilio'", specifier = ">=9.10.0" },
     { name = "twilio-stubs", marker = "extra == 'applications-twilio'", specifier = ">=0.2.0" },
     { name = "types-flask", marker = "extra == 'applications-twilio'", specifier = ">=1.1.6" },

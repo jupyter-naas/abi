@@ -1,14 +1,18 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import { IamAdminError } from '@/lib/iam-admin/api';
 import type { AttachmentView, GroupView, PrincipalView } from '@/lib/iam-admin/types';
 import { NO_PROVIDERS, fetchInviteProviders, type InviteProviders } from '@/lib/invitations';
 import type { AccessViewProps } from '../access-props';
-import { PLATFORM, ownedHere } from '../access-scope';
+import { PLATFORM, ownedHere, ownerOf } from '../access-scope';
 import { AttachForm } from '../attachments/attach-form';
 import { scopeLabel } from '../attachments/attachments-model';
-import { AttachmentTable } from '../attachments/attachments-table';
+import { holdingRows, levelLabel, scopesOf } from '../holdings/holdings-model';
+import { HoldingsTable } from '../holdings/holdings-table';
+import { useActionsAt, useContainerNames } from '../policies/policy-owners';
+import '../people/people.css';
 import './groups.css';
 
 const message = (e: unknown) => (e instanceof IamAdminError ? e.message : String(e));
@@ -18,18 +22,38 @@ export const principalLabel = (p: PrincipalView) => p.display_name || p.email ||
 type Props = AccessViewProps & {
   /** The identity providers an IdP group can be mapped from (tests pass their own). */
   loadProviders?: () => Promise<InviteProviders>;
+  /** The group whose page is open (`?group=<id>`), from the page's address or a link. */
+  focus?: string | null;
+  /** Told when a group's page opens (its id) or closes (null). */
+  onFocus?: (groupId: string | null) => void;
 };
 
 /**
  * The groups of the scope: those it owns, which its admins create, fill and delete, and
  * (at a workspace) its organization's the caller attaches to there. A group's page lists its
- * members, the policies it holds at this scope, and, where `access` offers IdP mappings (the
- * platform), the IdP group claims that put people in it.
+ * members (each opening their own page), every attachment of the group at every level IAM lets
+ * the caller list, and, where `access` offers IdP mappings (the platform), the IdP group claims
+ * that put people in it.
  */
-export function GroupsView({ api, can, scope, directory, nonce, loadProviders = fetchInviteProviders }: Props) {
+export function GroupsView({
+  api,
+  can,
+  scope,
+  directory,
+  nonce,
+  open,
+  loadProviders = fetchInviteProviders,
+  focus = null,
+  onFocus,
+}: Props) {
   const [groups, setGroups] = useState<PrincipalView[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelectedState] = useState<string | null>(focus);
+  useEffect(() => setSelectedState(focus), [focus]);
+  const setSelected = (id: string | null) => {
+    setSelectedState(id);
+    onFocus?.(id);
+  };
   const [name, setName] = useState('');
   const [deleting, setDeleting] = useState<PrincipalView | null>(null);
   const [counts, setCounts] = useState<Record<string, number>>({});
@@ -60,6 +84,33 @@ export function GroupsView({ api, can, scope, directory, nonce, loadProviders = 
       setError(message(e));
     }
   };
+
+  if (selected) {
+    // Listed here, or reached by a link from another page (a person's, a policy's): a group
+    // owned elsewhere is shown as IAM lets the caller read it, never changed here. The page
+    // needs only the group and its attachments: it opens whether the list was read or not.
+    const listed = groups?.find((g) => g.id === selected);
+    return (
+      <div className="access-group">
+        <button type="button" className="access-person-back" onClick={() => setSelected(null)}>
+          <ArrowLeft size={14} /> Groups
+        </button>
+        <GroupDetail
+          key={selected}
+          api={api}
+          can={can}
+          scope={scope}
+          directory={directory}
+          nonce={nonce}
+          open={open}
+          groupId={selected}
+          owned={!!listed && ownedHere(scope, listed.owner_scope)}
+          loadProviders={loadProviders}
+          onChanged={load}
+        />
+      </div>
+    );
+  }
 
   if (groups === null) {
     return error ? <p className="access-source-note" role="alert">{error}</p> : <p className="access-empty">Loading…</p>;
@@ -101,9 +152,9 @@ export function GroupsView({ api, can, scope, directory, nonce, loadProviders = 
             </thead>
             <tbody>
               {groups.map((group) => (
-                <tr key={group.id} className="access-table-row" data-group={group.id} aria-selected={selected === group.id}>
+                <tr key={group.id} className="access-table-row" data-group={group.id}>
                   <td>
-                    <button type="button" className="access-row-toggle" aria-expanded={selected === group.id} onClick={() => setSelected(selected === group.id ? null : group.id)}>
+                    <button type="button" className="access-row-toggle" onClick={() => setSelected(group.id)}>
                       {group.name ?? group.id}
                     </button>
                   </td>
@@ -127,19 +178,6 @@ export function GroupsView({ api, can, scope, directory, nonce, loadProviders = 
             </tbody>
           </table>
         </div>
-        {selected && (
-          <GroupDetail
-            key={selected}
-            api={api}
-            can={can}
-            scope={scope}
-            directory={directory}
-            groupId={selected}
-            owned={ownedHere(scope, groups.find((g) => g.id === selected)?.owner_scope)}
-            loadProviders={loadProviders}
-            onChanged={load}
-          />
-        )}
       </div>
       {deleting && (
         <div className="access-group-confirm" role="dialog" aria-label="Delete group">
@@ -154,7 +192,6 @@ export function GroupsView({ api, can, scope, directory, nonce, loadProviders = 
               onClick={() => {
                 const target = deleting;
                 setDeleting(null);
-                if (selected === target.id) setSelected(null);
                 void act(() => api.deleteGroup(target.id));
               }}
             >
@@ -174,11 +211,13 @@ function GroupDetail({
   can,
   scope,
   directory,
+  nonce = 0,
+  open,
   groupId,
   owned,
   loadProviders,
   onChanged,
-}: Omit<AccessViewProps, 'nonce'> & {
+}: AccessViewProps & {
   groupId: string;
   /** Owned by this scope: its members change here. One owned above is only attached to. */
   owned: boolean;
@@ -195,16 +234,22 @@ function GroupDetail({
   const [claim, setClaim] = useState('');
   const mapsIdp = can('iam:MapIdpGroup') || can('iam:UnmapIdpGroup');
 
+  // Every attachment of the group, at every level: IAM lists those the caller may (an
+  // empty list when none), whatever the level of this page.
   const loadHeld = useCallback(async () => {
-    if (!can('iam:ListAttachments')) return;
     try {
-      const found = await api.listAttachments({ principal_id: groupId, ...(scope.value ? { scope: scope.value } : {}) });
+      const found = await api.listAttachments({ principal_id: groupId });
       setHeld(found.items);
     } catch (e) {
       setHeld([]);
       setError(message(e));
     }
-  }, [api, can, groupId, scope]);
+  }, [api, groupId]);
+  const rows = useMemo(() => holdingRows(held ?? [], []), [held]);
+  const scopes = useMemo(() => [...scopesOf(rows), group?.owner_scope ?? PLATFORM], [rows, group]);
+  const here = ownerOf(scope);
+  const names = useContainerNames(api, scopes, nonce);
+  const actionsAt = useActionsAt(api, scopes, here, can, nonce);
 
   useEffect(() => {
     let cancelled = false;
@@ -232,7 +277,7 @@ function GroupDetail({
     return () => {
       cancelled = true;
     };
-  }, [api, can, directory, scope, groupId, loadHeld, loadProviders, mapsIdp]);
+  }, [api, can, directory, scope, groupId, loadHeld, loadProviders, mapsIdp, nonce]);
 
   const run = async (call: () => Promise<GroupView>) => {
     try {
@@ -261,7 +306,13 @@ function GroupDetail({
 
   return (
     <div className="access-group-detail" data-group-detail={group.id}>
-      <h3 className="access-group-title">{group.name ?? group.id}</h3>
+      <header className="access-person-header">
+        <h3 className="access-person-name">{group.name ?? group.id}</h3>
+        <span className="access-people-sub" data-group-owner="">
+          Owned by {levelLabel(group.owner_scope ?? PLATFORM, names)}
+        </span>
+        <code className="access-mono">{group.id}</code>
+      </header>
       {error && <p className="access-source-note" role="alert">{error}</p>}
 
       <section className="access-group-section">
@@ -270,7 +321,14 @@ function GroupDetail({
           {group.members.map((m) => (
             <li key={m.id} className="access-group-item" data-member={m.id}>
               <span>
-                {principalLabel(m)} <span className="access-mono">{m.kind === 'service_account' ? 'service account' : m.id}</span>
+                {open?.person && m.kind !== 'group' ? (
+                  <button type="button" className="access-holding-link" aria-label={`Open ${principalLabel(m)}`} onClick={() => open.person?.(m.id, principalLabel(m))}>
+                    {principalLabel(m)}
+                  </button>
+                ) : (
+                  principalLabel(m)
+                )}{' '}
+                <span className="access-mono">{m.kind === 'service_account' ? 'service account' : m.id}</span>
               </span>
               {owned && can('iam:RemoveGroupMember') && (
                 <button type="button" className="access-button" aria-label={`Remove ${principalLabel(m)}`} onClick={() => void run(() => api.removeMember(group.id, m.id))}>
@@ -306,8 +364,15 @@ function GroupDetail({
 
       {held !== null && (
         <section className="access-group-section" aria-label="Policies of the group">
-          <h4 className="access-group-heading">Policies {scope.value ? 'here' : ''}</h4>
-          <AttachmentTable items={held} canDetach={can('iam:DetachPolicy')} onDetach={(a) => void detach(a)} showScope={!scope.value} />
+          <h4 className="access-group-heading">Policies, at every level</h4>
+          <HoldingsTable
+            rows={rows}
+            names={names}
+            actionsAt={actionsAt}
+            here={here}
+            onDetach={(a) => void detach(a)}
+            empty="Nothing you may list is attached to this group."
+          />
           {can('iam:AttachPolicy') && (
             <AttachForm api={api} scope={scope.value} principals={[]} principalId={group.id} onAttached={() => void loadHeld()} />
           )}

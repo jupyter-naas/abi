@@ -1,7 +1,7 @@
 """The ``coding_environment`` action catalog.
 
 An environment is personal: ``environment/<owner principal id>/<id>``, placed
-in the call's target workspace when it is provisioned. The owner and the user
+in the container of the call when it is provisioned. The owner and the user
 come from the call and the service's own records, never ``request.user_id``.
 """
 

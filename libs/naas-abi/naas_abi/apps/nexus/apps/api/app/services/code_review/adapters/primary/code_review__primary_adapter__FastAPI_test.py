@@ -27,6 +27,7 @@ from naas_abi.apps.nexus.apps.api.app.services.coding_environment.testing import
     kernel_services,
     place_repo,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER
@@ -327,7 +328,11 @@ def test_a_user_iam_denies_the_action_is_refused_whatever_the_route_says(
     record = h.admin("ensure_user", LEGACY_NEXUS_ISSUER, "member")
     h.grant(
         record.id,
-        statement("Deny", ["source_control:Merge"], ["abi:org-1:ws-1:source_control:*"]),
+        statement(
+            "Deny",
+            ["source_control:Merge"],
+            [f"{workspace_container('org-1', WS)}/source_control:*"],
+        ),
     )
     resp = client.post("/proposal/merge", json=_body(number=number))
     assert resp.status_code == 403, resp.text

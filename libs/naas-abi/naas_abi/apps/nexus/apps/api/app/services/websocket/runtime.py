@@ -20,6 +20,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.credentials import (
     bearer_credential,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.view_as import runtime as view_as_runtime
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +107,11 @@ async def _cookie_session_user(environ: dict) -> str | None:
     try:
         async with AsyncSessionLocal() as db:
             session = await oidc_runtime.RUNTIME.service(db).resolve(secret)
+        if session is not None and await view_as_runtime.is_viewing(session.id):
+            # A view (services/view_as) opens no socket: no presence, no room for
+            # the person.
+            logger.warning("[WS] The session is viewing as someone; rejecting connection")
+            return None
     except Exception:  # noqa: BLE001 - fail closed
         logger.exception("[WS] session lookup failed")
         return None

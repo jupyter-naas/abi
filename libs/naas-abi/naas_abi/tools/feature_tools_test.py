@@ -3,9 +3,10 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from naas_abi_core.services.agent.context import agent_user_id, agent_workspace_id
+from naas_abi_core.services.agent.context import agent_container, agent_user_id
 
 from naas_abi.agents.feature.context import nexus_feature_context
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from naas_abi.tools import datasets_tools, files_tools, graph_tools, maps_tools
 
 
@@ -13,12 +14,12 @@ from naas_abi.tools import datasets_tools, files_tools, graph_tools, maps_tools
 def _request_context():
     tokens = (
         agent_user_id.set("user-1"),
-        agent_workspace_id.set("ws-1"),
+        agent_container.set(workspace_container(None, "ws-1")),
         nexus_feature_context.set(None),
     )
     yield
     agent_user_id.reset(tokens[0])
-    agent_workspace_id.reset(tokens[1])
+    agent_container.reset(tokens[1])
     nexus_feature_context.reset(tokens[2])
 
 

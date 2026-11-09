@@ -24,8 +24,9 @@ it drops its cache at once instead of within a minute.
 
 ``invite`` and ``group`` act through the engine's services, like
 ``abi chat``: the running engine when there is one, as its own account. They
-work with IAM's own names, an org id and a workspace id (the ones Nexus shows),
-and never send mail: the Nexus invite (``abi user invite``) sends the
+work with an org id and a workspace id (the ones Nexus shows), which they turn
+into the container IAM registered for them (``abi:nexus:organization/<org>``,
+``.../nexus:workspace/<ws>``), and never send mail: the Nexus invite (``abi user invite``) sends the
 invitation email and keeps the invitation list.
 """
 
@@ -218,20 +219,29 @@ def _services(ctx: click.Context) -> Iterator[Any]:
 
 
 def _scope(services: Any, org: str | None, workspace: str | None) -> str:
-    """``abi:<org>:-`` for an org's own roles, ``abi:<org>:<workspace>`` for a
-    workspace's: the org is named, or IAM knows the workspace's."""
-    from naas_abi_core.services.iam.names import scope_name
+    """The container a role is given at: an organisation's for its own roles, a
+    workspace's for a workspace's. Its name is the one IAM registered (Nexus
+    registers its organisations and workspaces), else built from ``--org``."""
+    from naas_abi_core.services.iam.names import container_name
 
+    org_name = container_name("nexus", "organization", org) if org else None
     if workspace is None:
-        if org is None:
+        if org_name is None:
             raise click.UsageError("Name --org, or --workspace")
-        return scope_name(org, "-")
-    org = org or services.iam.workspace_org(workspace)
-    if org is None:
+        return org_name
+    known = services.iam.container("nexus", "workspace", workspace)
+    if org_name is None:
+        if known is None:
+            raise click.UsageError(
+                f"IAM does not know workspace {workspace!r}: name its organization with --org"
+            )
+        return known
+    in_org = container_name("nexus", "workspace", workspace, parent=org_name)
+    if known is not None and known != in_org:
         raise click.UsageError(
-            f"IAM does not know workspace {workspace!r}: name its organization with --org"
+            f"Workspace {workspace!r} is not in organization {org!r}: it is {known}"
         )
-    return scope_name(org, workspace)
+    return in_org
 
 
 def _provider(services: Any, named: str | None) -> str:

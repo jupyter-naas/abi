@@ -1137,7 +1137,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     if (!targetWorkspaceId) return;
 
     try {
-      const { authFetch } = await import('./auth');
+      const { authFetch, useAuthStore } = await import('./auth');
+      // The person's conversations are private: in a view they are not asked for.
+      if (useAuthStore.getState().view) return;
       const response = await authFetch(
         `/api/chat/conversations?workspace_id=${encodeURIComponent(targetWorkspaceId)}`
       );

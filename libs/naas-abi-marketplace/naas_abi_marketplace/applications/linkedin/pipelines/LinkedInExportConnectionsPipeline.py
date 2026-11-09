@@ -364,7 +364,9 @@ class LinkedInExportConnectionsPipeline(Pipeline, BasePipeline):
         # Create act of connection with person and organization
         connected_on_str = row.get("Connected On", "").strip()
         try:
-            connected_on_date = datetime.strptime(connected_on_str, "%d %b %Y").replace(tzinfo=UTC)
+            connected_on_date = datetime.strptime(connected_on_str, "%d %b %Y").replace(
+                tzinfo=UTC
+            )
         except Exception as e:  # noqa: BLE001
             logger.warning(
                 f"Could not parse 'Connected On' date '{connected_on_str}': {e}"

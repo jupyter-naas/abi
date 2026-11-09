@@ -48,13 +48,13 @@ def engine_iam():
 @pytest.fixture(autouse=True)
 def workspaces(monkeypatch) -> list[tuple[str, str, str | None]]:
     """The workspace a grant names (access.py checks it in the database):
-    the one asked for, else "ws-first"; "ws-off" enables no app."""
+    the one asked for, else "ws-first"; in "ws-off" IAM lets the user open no app."""
     asked: list[tuple[str, str, str | None]] = []
 
     async def remote_app_workspace(user_id: str, app_id: str, workspace_id: str | None) -> str:
         asked.append((user_id, app_id, workspace_id))
         if workspace_id == "ws-off":
-            raise HTTPException(status_code=403, detail="This app is not enabled in this workspace")
+            raise HTTPException(status_code=403, detail="You may not use this app here")
         return workspace_id or "ws-first"
 
     monkeypatch.setattr(http.access, "remote_app_workspace", remote_app_workspace)
@@ -229,7 +229,7 @@ def test_the_catalog_url_redirects_to_a_fresh_grant(monkeypatch, forwarded, work
     # It opens this app and does nothing else at the kernel.
     scope = granted.scope
     assert scope is not None and scope[0]["actions"] == ["discovery:OpenApp"]
-    assert scope[0]["resources"] == ["abi:-:-:discovery:app/*/acme.research/console"]
+    assert scope[0]["resources"] == ["abi:discovery:app/*/acme.research/console"]
     # IAM keeps it hashed: eight hours at most.
     assert claims["key"].kind == "grant" and claims["key"].audience == "abi:delegated:app"
     assert claims["exp"] <= (datetime.now(UTC) + timedelta(hours=8)).timestamp() + 1
@@ -1237,3 +1237,103 @@ def test_the_apps_cookies_pass_as_sent(forwarded):
 
     assert response.status_code == 200
     assert dict(forwarded[0].headers)["cookie"] == 'theme="dark blue"; n=a%3Bb'
+
+
+# -- a link made in a view is read-only: the proxy forwards GET and HEAD only ------------------
+
+
+def _made_in_a_view(person: str = "Dave") -> str:
+    from naas_abi.apps.nexus.apps.api.app.services.view_as.port import LinkView
+
+    previous = credentials.configure_iam(lambda: IAM)
+    try:
+        return mint_remote_app_grant(
+            user_id="u-dave",
+            module_id="acme.research",
+            app="console",
+            view=LinkView(mark="abc123", person=person),
+        )
+    finally:
+        credentials.configure_iam(previous)
+
+
+def test_a_link_made_in_a_view_forwards_only_get_and_head(forwarded):
+    client = _client()
+    root = f"/app-remote/{_made_in_a_view()}/acme.research/console"
+
+    assert client.get(f"{root}/").status_code == 200
+    assert client.head(f"{root}/").status_code == 200
+    forwarded.clear()
+    for method in ("post", "put", "patch", "delete"):
+        refused = client.request(method.upper(), f"{root}/api/save", content=b"{}")
+        assert refused.status_code == 403, method
+        assert refused.json() == {"detail": "Read-only: you are viewing as Dave"}
+    assert forwarded == []  # no write ever reached the app
+
+
+def test_a_link_that_no_view_made_forwards_every_method(forwarded):
+    client = _client()
+
+    assert client.post(f"{ROOT}/api/save", content=b"{}").status_code == 200
+    assert read_remote_app_grant(GRANT).view is None
+
+
+def test_the_catalog_url_of_a_view_link_refuses_writes_and_hands_the_view_on(
+    monkeypatch, forwarded
+):
+    from naas_abi.apps.nexus.apps.api.app.services.view_as.port import LinkView
+
+    async def presented(request):
+        request.state.presented_view = LinkView(mark="abc123", person="Dave")
+        return "u-dave", datetime.now(UTC) + timedelta(minutes=5)
+
+    monkeypatch.setattr(http, "_presented_user", presented)
+    client = _client()
+
+    refused = client.post(
+        "/app-html/remote/acme.research/console/api/save", content=b"{}", follow_redirects=False
+    )
+    opened = client.get("/app-html/remote/acme.research/console/", follow_redirects=False)
+
+    assert refused.status_code == 403
+    assert refused.json() == {"detail": "Read-only: you are viewing as Dave"}
+    assert opened.status_code == 307
+    _, _, claims = _grant_of(opened)
+    granted = read_remote_app_grant(claims["grant"])
+    # The fresh grant is the view's too: it cannot be used to write.
+    assert granted is not None and granted.view == LinkView(mark="abc123", person="Dave")
+    assert client.post(f"{opened.headers['location']}api/save", content=b"{}").status_code == 403
+
+
+def test_a_presented_link_is_looked_up_once_and_its_view_is_read_from_it(monkeypatch, forwarded):
+    from naas_abi.apps.nexus.apps.api.app.services.apps import links
+    from naas_abi.apps.nexus.apps.api.app.services.view_as.port import LinkView
+    from naas_abi_core.engine.nats_auth import APP_AUDIENCE
+
+    grant, _ = links.mint_link(
+        user_id="u-dave",
+        audience=APP_AUDIENCE,
+        resource=links.APP_HTML_ROOT,
+        minutes=5,
+        view=LinkView(mark="abc123", person="Dave"),
+    )
+    lookups = []
+    original = links.aopen_link
+
+    async def counting(value, audience):
+        lookups.append(audience)
+        return await original(value, audience)
+
+    monkeypatch.setattr(links, "aopen_link", counting)
+    client = _client()
+
+    refused = client.post(
+        "/app-html/remote/acme.research/console/api/save",
+        content=b"{}",
+        headers={"Authorization": f"Bearer {grant}"},
+        follow_redirects=False,
+    )
+
+    assert refused.status_code == 403
+    assert refused.json() == {"detail": "Read-only: you are viewing as Dave"}
+    assert len(lookups) == 1  # one IAM round trip for the presented link

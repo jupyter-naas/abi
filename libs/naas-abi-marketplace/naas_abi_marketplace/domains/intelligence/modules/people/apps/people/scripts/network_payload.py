@@ -370,20 +370,17 @@ def search_graph_payload(
 
 
 def network_view_config(config: dict[str, Any]) -> dict[str, Any]:
-    """The graph page's settings for a search: rings, no time filter, filters
+    """The graph page's settings for a search: no time filter, filters
     tucked away in the settings panel, kept apart from the profile's."""
     view_config = deepcopy(graph_view_config(config))
     graph = view_config["graph"]
     graph.update(
-        layout="rings",
-        # One sector per organization: who the search found there, together.
-        ring_cluster_class="Organization",
         temporal_filter=False,
         default_view="2d",
         default_distance=NETWORK_DISTANCE,
         max_distance=NETWORK_DISTANCE,
         params_session_key="people-search-graph-params-v1",
-        # Thirty people's rings need to zoom further out than one person.
+        # Thirty people need to zoom further out than one person.
         scale={**graph.get("scale", {}), "min": 0.08},
     )
     defaults = graph.setdefault("view_defaults", {})
@@ -395,6 +392,69 @@ def network_view_config(config: dict[str, Any]) -> dict[str, Any]:
             "legend": False,
         }
     return view_config
+
+
+def free_network_view_config(
+    config: dict[str, Any],
+    *,
+    session_key: str,
+    distance: int = NETWORK_DISTANCE,
+    distance_filter: bool = True,
+) -> dict[str, Any]:
+    """The style the People and Connections networks share: a free network -
+    no rings, rays or sectors, nobody pinned, no cluster pull - the physics
+    alone places the nodes; no labels on the edges. *distance* hops from the
+    root are drawn (all of it without the *distance_filter*)."""
+    view_config = network_view_config(config)
+    graph = view_config["graph"]
+    graph.update(
+        layout="free",
+        ring_cluster_class="",
+        default_distance=distance,
+        max_distance=distance,
+        params_session_key=session_key,
+        # Hundreds of predicates on the edges say nothing the nodes do not:
+        # a selected node's panel names its relations.
+        edge_labels=False,
+        distance_filter=distance_filter,
+    )
+    for view in ("2d", "3d"):
+        graph["view_defaults"][view].update(
+            physics=True, clusterBy="none", clusterPull=0, settleMs=6000
+        )
+    return view_config
+
+
+# Drawn small, their label underneath: the acts and matches tying people.
+COMPACT_CLASSES = {
+    "abi:ActOfWorking",
+    "abi:ActOfStudying",
+    "abi:SearchMatch",
+    "linkedin:ActOfConnection",
+}
+
+
+def short_label(text: str, limit: int = SHORT_VALUE) -> str:
+    text = " ".join(str(text).split())
+    return text if len(text) <= limit else f"{text[: limit - 1]}…"
+
+
+def styled_network(
+    data: dict[str, Any], photos: dict[str, str | None]
+) -> dict[str, Any]:
+    """*data* in the shared network style: people with their portrait (by
+    slug, in *photos*), acts and matches as small nodes with a short label.
+    A copy: *data* may be a cached payload."""
+    styled = deepcopy(data)
+    for person in styled.get("people", []):
+        photo = photos.get(person.get("slug") or "")
+        if photo:
+            person["image"] = photo
+    for entity in styled.get("entities", []):
+        if entity.get("classUri") in COMPACT_CLASSES:
+            entity["compact"] = True
+            entity["label"] = short_label(entity.get("label") or "")
+    return styled
 
 
 @lru_cache(maxsize=32)
@@ -455,12 +515,15 @@ def network(
         query.strip(),
         found["total"],
     )
+    photos = {hit["slug"]: hit.get("photo_url") for hit in found["results"]}
     return {
         "query": found["query"],
         "facet": found["facet"],
         "total": found["total"],
         "shown": len(people),
         "root": search_root_id(query),
-        "data": data,
-        "config": network_view_config(config),
+        "data": styled_network(data, photos),
+        "config": free_network_view_config(
+            config, session_key="people-search-graph-params-v2"
+        ),
     }

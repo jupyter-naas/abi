@@ -70,13 +70,13 @@ class TestObjectStorageAuthorization(DataServiceContract):
         remote.adapter.close()
 
     def granted_resources(self):
-        return ["abi:-:-:object_storage:object/workspaces/ws-1/*"]
+        return ["abi:object_storage:object/workspaces/ws-1/*"]
 
     def denied_resources(self):
-        return ["abi:-:-:object_storage:object/workspaces/ws-2/*"]
+        return ["abi:object_storage:object/workspaces/ws-2/*"]
 
     def read_only_resources(self):
-        return ["abi:-:-:object_storage:object/frozen/*"]
+        return ["abi:object_storage:object/frozen/*"]
 
     def outcome_of(self, exc):
         if isinstance(exc, Exceptions.InvalidObjectPath):
@@ -271,8 +271,8 @@ def test_a_listing_hides_what_a_deny_names_and_a_folder_a_deny_empties(tmp_path)
                     "Deny",
                     ["object_storage:*"],
                     [
-                        "abi:-:-:object_storage:object/workspaces/ws-1/notes.txt",
-                        "abi:-:-:object_storage:object/workspaces/ws-2/*",
+                        "abi:object_storage:object/workspaces/ws-1/notes.txt",
+                        "abi:object_storage:object/workspaces/ws-2/*",
                     ],
                 ),
             ),
@@ -312,13 +312,13 @@ def test_a_file_named_like_a_denied_folder_is_still_listed(tmp_path):
         iam,
         contract,
         "reader",
-        statement("Allow", ["object_storage:*"], ["abi:-:-:object_storage:object/a/*"]),
+        statement("Allow", ["object_storage:*"], ["abi:object_storage:object/a/*"]),
         statement(
             "Deny",
             ["object_storage:*"],
             [
-                "abi:-:-:object_storage:object/a/report/*",
-                "abi:-:-:object_storage:object/a/reports/*",
+                "abi:object_storage:object/a/report/*",
+                "abi:object_storage:object/a/reports/*",
             ],
         ),
     )
@@ -348,7 +348,7 @@ def test_a_suspended_user_sees_no_folder_at_once(tmp_path):
                 statement(
                     "Allow",
                     ["object_storage:*"],
-                    ["abi:-:-:object_storage:object/workspaces/ws-1/*"],
+                    ["abi:object_storage:object/workspaces/ws-1/*"],
                 )
             ),
         )

@@ -5,10 +5,12 @@ level, and ``system`` for the admin-only actions that reach the whole object
 storage tree of the workspace. The drives a user owns (My drive, the storage
 ``abi-platform`` moves data through) are personal, platform-level types named
 ``<type>/<user>/<path>``: they belong to no workspace, and a user reaches
-their own through ``roles.PLATFORM_TYPES``.
+their own through ``PLATFORM_ACCESS`` below (and the object storage under
+them through the kernel's ``roles.PLATFORM_TYPES``).
 """
 
 from naas_abi.apps.nexus.apps.api.app.services.iam.catalog.dsl import action, rtype
+from naas_abi_core.services.iam.catalog import PlatformAccess
 
 TYPES = (
     rtype("file", id="path"),
@@ -40,4 +42,18 @@ ACTIONS = (
     # ``root=true``: the whole datastore, every tenant's and the platform's.
     action("ReadRootStorage", "read", "root_storage"),
     action("WriteRootStorage", "admin", "root_storage"),
+)
+
+# A user's own drive and storage: read by viewers, written by members.
+PLATFORM_ACCESS = (
+    PlatformAccess(
+        ("my_file/${principal.id}", "my_file/${principal.id}/*"),
+        viewer=("ListMyFiles", "GetMyFile"),
+        member=("PutMyFile", "DeleteMyFile"),
+    ),
+    PlatformAccess(
+        ("user_storage/${principal.id}", "user_storage/${principal.id}/*"),
+        viewer=("ListUserStorage", "GetUserStorage"),
+        member=("PutUserStorage",),
+    ),
 )

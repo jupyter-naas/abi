@@ -32,6 +32,7 @@ from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
     get_rate_limit_identifier,
     record_attempt,
 )
+from naas_abi.apps.nexus.apps.api.app.services.view_as.active import viewing
 from naas_abi_core import logger
 from naas_abi_core.services.iam.IAMPorts import (
     IAMConflictError,
@@ -110,6 +111,8 @@ async def list_api_keys(
     current_user: User = Depends(get_current_user_required),
     service: ApiKeyService = Depends(get_api_key_service),
 ) -> list[ApiKeyResponse]:
+    if viewing():
+        return []  # the person's personal keys are private to them
     try:
         keys = await run_in_threadpool(service.list_keys, current_user.id)
     except ApiKeysUnavailable as exc:

@@ -486,6 +486,44 @@ intentMapping:findInterestsQuery a intentMapping:TemplatableSparqlQuery ;
     intentMapping:hasArgument intentMapping:peopleLimitArg .
 
 #-----------------------------------------------------------------
+# Connection queries
+#
+# Who is connected to whom. The acts are LinkedIn's
+# (applications/linkedin, ActOfConnectionProcess.ttl): an act of
+# association between the owner of a data export and one connection,
+# on the same people vocabulary as an act of working.
+#-----------------------------------------------------------------
+
+intentMapping:findConnectionsQuery a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "find_connections"@en ;
+    intentMapping:intentDescription "Return every act of connection between two people: the owner of the LinkedIn export that states it and the person they are connected to (WHO), and the date they connected (WHEN). Useful to answer 'who knows Jane Doe?' or 'how many connections does this person have?'. Backed by the ActOfConnectionsOnLinkedIn ontology." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi:  <http://ontology.naas.ai/abi/>
+        PREFIX linkedin: <http://ontology.naas.ai/abi/linkedin/>
+
+        SELECT DISTINCT ?act ?owner ?ownerSlug ?person ?slug ?connectedOn
+        WHERE {
+          GRAPH <http://ontology.naas.ai/graph/people> {
+            ?act rdf:type linkedin:ActOfConnection ;
+                 linkedin:hasConnectionOwner ?owner ;
+                 linkedin:hasConnectedPerson ?person .
+            ?owner abi:profile_slug ?ownerSlug .
+            ?person abi:profile_slug ?slug .
+            OPTIONAL {
+              ?act abi:occupiesTemporalRegion ?temporal .
+              ?temporal abi:hasFirstInstant ?firstInstant .
+              ?firstInstant abi:instant_date ?connectedOn .
+            }
+          }
+        }
+        ORDER BY ?ownerSlug ?slug
+        LIMIT {{ limit }}
+    """ ;
+    intentMapping:hasArgument intentMapping:peopleLimitArg .
+
+#-----------------------------------------------------------------
 # Query arguments
 #
 # TemplatableSparqlQueryLoader requires all four predicates below on

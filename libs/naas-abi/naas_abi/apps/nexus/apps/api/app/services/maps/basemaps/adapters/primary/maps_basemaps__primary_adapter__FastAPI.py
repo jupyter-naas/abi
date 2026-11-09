@@ -39,6 +39,7 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.settings.adapters.secondary.
     PostgresMapsSettingsStore,
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.workspace_config import WorkspaceMapsDefaults
+from naas_abi.apps.nexus.apps.api.app.services.view_as.active import viewing
 from pydantic import BaseModel, Field
 
 router = APIRouter()
@@ -107,6 +108,7 @@ async def list_basemaps(
         seeds=basemap_seeds(request),
         revisions=basemap_seed_revisions(request),
         enabled_custom=defaults.custom_basemaps,
+        seed=not viewing(),  # a page load writes nothing in a view
     )
     can_edit = await authz.allowed(
         "UpdateBasemap", user=current_user, workspace=workspace_id, id="-"

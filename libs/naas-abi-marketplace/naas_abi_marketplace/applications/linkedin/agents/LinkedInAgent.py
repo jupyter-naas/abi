@@ -107,12 +107,6 @@ Would you like to filter the results on their current organization [organization
             LinkedInIntegrationConfiguration,
             as_tools,
         )
-        from naas_abi_marketplace.applications.naas import ABIModule as NaasABIModule
-        from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
-            NaasIntegrationConfiguration,
-        )
-
-
 
         abi_module = ABIModule.get_instance()
 
@@ -127,50 +121,50 @@ Would you like to filter the results on their current organization [organization
         linkedin_profile_url = module.configuration.linkedin_profile_url
 
         google_search_module = GoogleSearchABIModule.get_instance()
-        google_custom_search_api_key = google_search_module.configuration.google_custom_search_api_key
-        google_custom_search_engine_id = google_search_module.configuration.google_custom_search_engine_id
-
-        naas_api_key = NaasABIModule.get_instance().configuration.naas_api_key
-        naas_integration_config = NaasIntegrationConfiguration(
-            api_key=naas_api_key,
+        google_custom_search_api_key = (
+            google_search_module.configuration.google_custom_search_api_key
+        )
+        google_custom_search_engine_id = (
+            google_search_module.configuration.google_custom_search_engine_id
         )
 
         tools: list = []
 
-        linkedin_integration_config = LinkedInIntegrationConfiguration(
-            li_at=li_at,
-            JSESSIONID=JSESSIONID,
-            linkedin_url=linkedin_profile_url,
-            naas_integration_config=naas_integration_config,
-        )
-        tools += as_tools(linkedin_integration_config)
-
-        google_programmable_search_engine_integration_config = (
-            GoogleProgrammableSearchEngineIntegrationConfiguration(
-                api_key=google_custom_search_api_key,
-                search_engine_id=google_custom_search_engine_id,
+        # The LinkedIn and Google tools call those services: without their
+        # credentials the agent keeps only its graph queries.
+        if li_at and JSESSIONID and linkedin_profile_url:
+            linkedin_integration_config = LinkedInIntegrationConfiguration(
+                li_at=li_at,
+                JSESSIONID=JSESSIONID,
+                linkedin_url=linkedin_profile_url,
             )
-        )
+            tools += as_tools(linkedin_integration_config)
 
-        search_linkedin_profile_page_workflow_config = (
-            SearchLinkedInProfilePageWorkflowConfiguration(
+        if google_custom_search_api_key and google_custom_search_engine_id:
+            google_programmable_search_engine_integration_config = (
+                GoogleProgrammableSearchEngineIntegrationConfiguration(
+                    api_key=google_custom_search_api_key,
+                    search_engine_id=google_custom_search_engine_id,
+                )
+            )
+
+            search_linkedin_profile_page_workflow_config = SearchLinkedInProfilePageWorkflowConfiguration(
                 integration_config=google_programmable_search_engine_integration_config
             )
-        )
-        search_linkedin_profile_page_workflow = SearchLinkedInProfilePageWorkflow(
-            search_linkedin_profile_page_workflow_config
-        )
-        tools += search_linkedin_profile_page_workflow.as_tools()
+            search_linkedin_profile_page_workflow = SearchLinkedInProfilePageWorkflow(
+                search_linkedin_profile_page_workflow_config
+            )
+            tools += search_linkedin_profile_page_workflow.as_tools()
 
-        search_linkedin_organization_page_workflow_config = (
-            SearchLinkedInOrganizationPageWorkflowConfiguration(
+            search_linkedin_organization_page_workflow_config = SearchLinkedInOrganizationPageWorkflowConfiguration(
                 integration_config=google_programmable_search_engine_integration_config
             )
-        )
-        search_linkedin_organization_page_workflow = SearchLinkedInOrganizationPageWorkflow(
-            search_linkedin_organization_page_workflow_config
-        )
-        tools += search_linkedin_organization_page_workflow.as_tools()
+            search_linkedin_organization_page_workflow = (
+                SearchLinkedInOrganizationPageWorkflow(
+                    search_linkedin_organization_page_workflow_config
+                )
+            )
+            tools += search_linkedin_organization_page_workflow.as_tools()
 
         linkedin_tools = [
             "linkedin_search_connections_by_person_name",
@@ -178,8 +172,8 @@ Would you like to filter the results on their current organization [organization
             "linkedin_get_connection_information",
             "linkedin_search_email_address_by_person_uri",
         ]
-        sparql_query_tools_list = TemplatableSparqlQueryABIModule.get_instance().get_tools(
-            linkedin_tools
+        sparql_query_tools_list = (
+            TemplatableSparqlQueryABIModule.get_instance().get_tools(linkedin_tools)
         )
         tools += sparql_query_tools_list
 
@@ -237,7 +231,8 @@ Would you like to filter the results on their current organization [organization
         ]
 
         system_prompt = cls.system_prompt.replace(
-            "[TOOLS]", "\n".join([f"- {tool.name}: {tool.description}" for tool in tools])
+            "[TOOLS]",
+            "\n".join([f"- {tool.name}: {tool.description}" for tool in tools]),
         ).replace("[LINKEDIN_PROFILE_URL]", linkedin_profile_url)
 
         if agent_configuration is None:

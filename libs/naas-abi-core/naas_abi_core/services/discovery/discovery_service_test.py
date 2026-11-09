@@ -456,11 +456,11 @@ def test_evicting_is_a_policy_not_an_identity():
         ops, viewer = h.service_account("ops"), h.service_account("viewer")
         h.grant(
             ops.id,
-            statement("Allow", ["discovery:Evict"], ["abi:-:-:discovery:module/*"]),
+            statement("Allow", ["discovery:Evict"], ["abi:discovery:module/*"]),
         )
         h.grant(
             viewer.id,
-            statement("Allow", ["discovery:GetModule"], ["abi:-:-:discovery:module/*"]),
+            statement("Allow", ["discovery:GetModule"], ["abi:discovery:module/*"]),
         )
         service = DiscoveryService(MemoryRegistry(), clock=lambda: 0.0, iam=iam)
         with as_service_account("engine"):

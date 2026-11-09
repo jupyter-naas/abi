@@ -54,10 +54,12 @@ def test_the_engine_loads_a_bootstrapped_iam_first(tmp_path):
     assert iam.store.find_service_account("engine") is not None
     with as_service_account("engine"):
         # The engine holds the kernel services, not whatever a policy could name.
-        assert iam.authorize("triple_store:DropGraph", "abi:-:-:triple_store:graph/g").allowed
-        assert not iam.authorize("anything:Goes", "abi:-:-:any:thing/x").allowed
+        assert iam.authorize(
+            "triple_store:DropGraph", "abi:triple_store:graph/g"
+        ).allowed
+        assert not iam.authorize("anything:Goes", "abi:any:thing/x").allowed
     with as_service_account("someone-else-unknown"):
-        assert not iam.authorize("iam:CreatePolicy", "abi:-:-:iam:policy/p").allowed
+        assert not iam.authorize("iam:CreatePolicy", "abi:iam:policy/p").allowed
     assert (tmp_path / "iam.sqlite").exists()
 
 

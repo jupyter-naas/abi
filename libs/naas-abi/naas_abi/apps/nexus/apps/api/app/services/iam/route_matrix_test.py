@@ -28,12 +28,14 @@ from naas_abi.apps.nexus.apps.api.app.main_public_routes_test import PUBLIC_ROUT
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AuthzDenied
 from naas_abi.apps.nexus.apps.api.app.services.iam.catalog import (
     LEVEL_OF,
+    NEXUS_ACTIONS,
     TYPE_OF,
     TYPES_BY_NAME,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import Declared, Guard
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_scope
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
+from naas_abi.apps.nexus.apps.api.app.services.view_as.reads_by_post import READS_BY_POST
 
 # Signed-in routes about the caller's own account or the platform's login: no
 # workspace role applies. (method, path) -> why.
@@ -56,9 +58,19 @@ ACCOUNT_ROUTES: dict[tuple[str, str], str] = {
         "/api/invitations/providers",
     ): "the identity providers an invitation can go through: no tenant data",
     ("GET", "/api/platform/cli"): "the abi-platform CLI script, the same text for everyone",
+    (
+        "DELETE",
+        "/api/iam/view-as",
+    ): "Stop: ends the caller's own view; it gives up a right and asks none",
     ("GET", "/api/iam/admin/access"): "what the caller may do, decided by IAM for the caller only",
     ("GET", "/api/iam/admin/grantable"): (
         "what the caller may grant, decided by IAM for the caller only"
+    ),
+    ("GET", "/api/iam/admin/publishers"): (
+        "what the caller may grant, by publisher, decided by IAM for the caller only"
+    ),
+    ("GET", "/api/iam/admin/resources"): (
+        "what the caller may list of a type, filtered by IAM as the caller"
     ),
     (
         "GET",
@@ -66,69 +78,9 @@ ACCOUNT_ROUTES: dict[tuple[str, str], str] = {
     ): "the caller's own presence; another user's is refused",
 }
 
-# Reads that travel as POST (a query body): a viewer may send them.
-READS_BY_POST: dict[tuple[str, str], str] = {
-    (
-        "POST",
-        "/api/graph/explorer/catalog",
-    ): "reads graphs: the body names the workspace and graphs",
-    (
-        "POST",
-        "/api/graph/explorer/overview",
-    ): "reads graphs: the body names the workspace and graphs",
-    (
-        "POST",
-        "/api/graph/explorer/instances",
-    ): "reads graphs: the body names the workspace and graphs",
-    (
-        "POST",
-        "/api/graph/explorer/network",
-    ): "reads graphs: the body names the workspace and graphs",
-    (
-        "POST",
-        "/api/graph/analyze",
-    ): "counts the triples of an uploaded file in memory; stores nothing",
-    ("POST", "/api/graph/discovery/relation-targets"): "reads graphs: the body names the filters",
-    ("POST", "/api/graph/discovery/properties"): "reads graphs: the body names the filters",
-    ("POST", "/api/graph/discovery/instances"): "reads graphs: the body names the filters",
-    ("POST", "/api/graph/discovery/instance-detail"): "reads graphs: the body names the individual",
-    ("POST", "/api/graph/discovery/relation-types"): "reads graphs: the body names the filters",
-    ("POST", "/api/graph/discovery/relations"): "reads graphs: the body names the filters",
-    (
-        "POST",
-        "/api/graph/discovery/triples-export",
-    ): "serializes the triples the body carries; reads nothing",
-    ("POST", "/api/graph/network/node-properties"): "reads graphs: the body names the node",
-    ("POST", "/api/graph/network/node-instances"): "reads graphs: the body names the node",
-    ("POST", "/api/graph/query"): "read-only query over graphs: the body carries the spec",
-    ("POST", "/api/graph/query/facets"): "read-only query over graphs: the body carries the spec",
-    (
-        "POST",
-        "/api/view/filters/preview",
-    ): "previews triples of graphs: the body carries the filters",
-    ("POST", "/api/datasets/{namespace}/query"): "read-only SQL: the body carries the query",
-    (
-        "POST",
-        "/api/search/private",
-    ): "a search of the workspace's sources: the body carries the query",
-    ("POST", "/api/iam/admin/simulate"): "explains a decision (iam:Explain): changes nothing",
-    ("POST", "/api/apps/access-token"): "mints a link to an app the caller may use",
-    ("POST", "/api/apps/remote-grant"): "mints a link to an app the caller may use",
-    ("POST", "/api/apps/sso-token"): "mints a sign-in token for a portal the caller may use",
-    ("POST", "/api/app-projects/{slug}/preview-token"): "mints a link to view a draft",
-    (
-        "POST",
-        "/api/chat/conversations/{conversation_id}/export",
-    ): "downloads a conversation the caller owns",
-    (
-        "POST",
-        "/api/v1/chat/completions",
-    ): "runs an agent for the caller (UseAgent); the gateway stores nothing",
-    ("POST", "/api/speech"): "synthesizes speech for the caller; stores nothing",
-    ("POST", "/api/speech/"): "synthesizes speech for the caller; stores nothing",
-    ("POST", "/api/transcribe"): "transcribes audio for the caller; stores nothing",
-    ("POST", "/api/transcribe/"): "transcribes audio for the caller; stores nothing",
-}
+# Reads that travel as POST (a query body): a viewer may send them. The list is app code
+# (``view_as.reads_by_post``): the read-only guard of a view reads it too.
+READS_BY_POST_ROUTES = {entry.key for entry in READS_BY_POST}
 
 WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 ROLES = ("viewer", "member", "admin", "owner")
@@ -139,8 +91,8 @@ LEVELS = {
     "admin": (False, False, True, True),
 }
 # Platform-level types are reached by the platform admin alone, bar the model
-# list the built-in roles carry (roles.PLATFORM_TYPES) and the datasets of the
-# platform, which every workspace role reads (``bootstrap.dataset_grants``).
+# list the platform companions carry (the catalog's PLATFORM_ACCESS): the model list
+# and the datasets of the platform, which every workspace role reads.
 PLATFORM_VIEWER_ACTIONS = {
     "ListProviderModels",
     "GetProviderModel",
@@ -217,14 +169,14 @@ def test_every_route_declares_the_action_it_authorizes(table) -> None:
 
 def test_the_allowlists_have_no_stale_entries(table) -> None:
     assert sorted(set(ACCOUNT_ROUTES) - set(table)) == []
-    assert sorted(set(READS_BY_POST) - set(table)) == []
+    assert sorted(set(READS_BY_POST_ROUTES) - set(table)) == []
     assert sorted(set(ACCOUNT_ROUTES) & set(PUBLIC_ROUTES)) == []
 
 
 def test_a_write_method_never_authorizes_only_a_read(table) -> None:
     offenders = []
     for key, calls in table.items():
-        if key[0] not in WRITE_METHODS or key in READS_BY_POST:
+        if key[0] not in WRITE_METHODS or key in READS_BY_POST_ROUTES:
             continue
         declared = _declared(calls)
         if declared and all(level_of(d.action) in ("list", "read") for d in declared):
@@ -252,7 +204,7 @@ def world():
     )
     nexus = NexusIam(flags)
     workspace = nexus.workspace("org-1", "ws-1")
-    organization = org_scope("org-1")
+    organization = org_container("org-1")
     for role in ROLES:
         nexus.grant(role, role, workspace)
         nexus.grant(role, role, organization)
@@ -269,8 +221,8 @@ def _guards(table) -> list[tuple[tuple[str, str], Guard]]:
     )
 
 
-# Admin-level actions only an owner holds (roles.py ``_OWNER_ONLY_ACTIONS``).
-OWNER_ONLY_ACTIONS = {"DeleteWorkspace", "DeleteOrganization"}
+# Admin-level actions only an owner holds: flagged ``owner_only`` in the catalog.
+OWNER_ONLY_ACTIONS = {a.spec.name for a in NEXUS_ACTIONS if a.spec.owner_only}
 
 
 def _expected(guard: Guard) -> tuple[bool, ...]:

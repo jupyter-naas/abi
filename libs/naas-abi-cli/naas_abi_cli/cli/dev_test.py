@@ -571,7 +571,8 @@ def test_nats_config_file_is_rewritten_on_every_launch(monkeypatch, tmp_path) ->
     dev._launch_nats(_spec("nats", 13380))
 
     assert "max_payload: 8MB" in config_path.read_text()
-    assert "1MB" not in config_path.read_text()
+    # The limit, not "1MB" anywhere: a generated password may contain it.
+    assert "max_payload: 1MB" not in config_path.read_text()
 
 
 def _env_value(path: Path, key: str) -> str:

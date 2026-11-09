@@ -7,6 +7,7 @@ import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { opensRolesAndPermissions } from '@/components/access/access-sections';
+import { organizationContainer } from '@/components/access/access-scope';
 import { useIamAccess } from '@/lib/iam-admin/use-access';
 import { SettingsLayoutNav } from '@/components/settings/settings-layout-nav';
 import {
@@ -14,8 +15,10 @@ import {
   SettingsNavItem,
   useWorkspaceReturnPath,
 } from '@/components/settings/settings-shell';
+import { SettingsNoAccess } from '@/components/settings/settings-no-access';
 import {
   orgSectionRedirect,
+  orgSettingsAccess,
   orgSettingsIndexPath,
   orgSettingsNavForRole,
   orgSettingsSectionPath,
@@ -57,12 +60,25 @@ export default function OrganizationSettingsLayout({
   const router = useRouter();
   const params = useParams();
   const orgId = params.orgId as string;
-  const [viewerRole, setViewerRole] = useState<string | null>(null);
+  // The caller's role, for the organization it was read for: a client-side move to
+  // another organization knows no role there until its own read answers.
+  const [viewer, setViewer] = useState<{ orgId: string; role: string | null } | null>(null);
+  // Whether the organization was read (its answer, or a refusal): the role is known.
+  const roleKnown = !!orgId && viewer?.orgId === orgId;
+  const viewerRole = roleKnown ? viewer.role : null;
   // Roles & permissions is shown to whoever would see a section of it at the organization.
-  const { access, loading: accessLoading } = useIamAccess(orgId ? `abi:${orgId}:-` : undefined, undefined, {
+  const { access, loading: accessLoading } = useIamAccess(orgId ? organizationContainer(orgId) : undefined, undefined, {
     skip: !orgId,
   });
   const holdsIam = opensRolesAndPermissions(access);
+  // The account menu's rule, for this organization: its owners and admins, or whoever IAM
+  // shows a Roles & permissions section here. Anyone else sees no section.
+  const settingsAccess = orgSettingsAccess({
+    role: viewerRole,
+    roleKnown,
+    holdsIam,
+    accessSettled: !accessLoading,
+  });
   const visibleNav = useMemo(() => orgSettingsNavForRole(viewerRole, { holdsIam }), [viewerRole, holdsIam]);
   const sectionHrefs = useMemo(
     () => (orgId ? visibleNav.map((item) => orgSettingsSectionPath(orgId, item.slug)) : []),
@@ -94,7 +110,7 @@ export default function OrganizationSettingsLayout({
         if (response.ok) {
           const data = await response.json();
           setOrgName(data.name);
-          setViewerRole(data.current_user_role ?? null);
+          setViewer({ orgId, role: data.current_user_role ?? null });
           const radius = data.loginBorderRadius ?? data.login_border_radius ?? '0';
           setBorderRadius(radius);
           setOrgColors({
@@ -110,6 +126,9 @@ export default function OrganizationSettingsLayout({
         }
       } catch (error) {
         console.error('Failed to fetch organization:', error);
+      } finally {
+        // A refused or failed read leaves no role: decided as no role.
+        setViewer((current) => (current?.orgId === orgId ? current : { orgId, role: null }));
       }
     };
 
@@ -131,11 +150,12 @@ export default function OrganizationSettingsLayout({
     const target = orgSectionRedirect({
       section,
       role: viewerRole,
+      roleKnown,
       holdsIam,
       accessSettled: !accessLoading,
     });
     if (target) router.replace(orgSettingsSectionPath(orgId, target));
-  }, [orgId, viewerRole, section, holdsIam, accessLoading, router]);
+  }, [orgId, viewerRole, roleKnown, section, holdsIam, accessLoading, router]);
 
   const workspaceHref = useWorkspaceReturnPath(
     currentWorkspaceId ? `/workspace/${currentWorkspaceId}/maps` : '/',
@@ -159,7 +179,8 @@ export default function OrganizationSettingsLayout({
     : orgName || 'Organization Settings';
 
   const showNav = !showMobileDetail;
-  const showMain = !showMobileList;
+  // On a phone the section list is the index; with no section, the refusal is shown instead.
+  const showMain = !showMobileList || settingsAccess === 'none';
 
   return (
     <SettingsLayoutRoot key={layoutKey} brand={orgColors} borderRadius={borderRadius}>
@@ -216,7 +237,11 @@ export default function OrganizationSettingsLayout({
         {showMain && (
           <div className="org-settings-layout-main">
             <div className="org-settings-layout-content">
-              {children}
+              {settingsAccess === 'none' ? (
+                <SettingsNoAccess of="organization" />
+              ) : settingsAccess === 'unknown' ? null : (
+                children
+              )}
             </div>
           </div>
         )}

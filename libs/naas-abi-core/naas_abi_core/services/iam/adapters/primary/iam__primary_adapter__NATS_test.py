@@ -22,12 +22,18 @@ from naas_abi_core.services.iam.adapters.primary.iam__primary_adapter__NATS impo
 )
 from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import IAMStoreMemory
 from naas_abi_core.services.iam.IAMService import IAMService
-from naas_abi_core.services.iam.tests.iam_harness import document, statement
+from naas_abi_core.services.iam.tests.iam_harness import (
+    NEXUS,
+    IAMHarness,
+    document,
+    statement,
+    workspace,
+)
 
 pytestmark = pytest.mark.integration
 naas_abi_sdk = pytest.importorskip("naas_abi_sdk")
 
-GRAPH = "abi:org-1:ws-1:triple_store:graph/g"
+WS1 = workspace("ws-1")
 
 
 @pytest.mark.parametrize("broker", [1024 * 1024], indirect=True)
@@ -39,6 +45,8 @@ def test_sdk_modules_reach_iam_over_nats(broker):  # noqa: F811 - imported fixtu
     url, _ = broker
     service = IAMService(IAMStoreMemory())
     service.bootstrap()
+    service._register_catalog(NEXUS)
+    IAMHarness(service).register("ws-1")
     # The module's account, with its manifest approved: its own collections.
     with as_service_account("engine"):
         account = service.create_service_account("module/acme/people")
@@ -52,7 +60,7 @@ def test_sdk_modules_reach_iam_over_nats(broker):  # noqa: F811 - imported fixtu
                 statement(
                     "Allow",
                     ["document:*"],
-                    ["abi:-:-:document:collection/${module.id}/*"],
+                    ["abi:document:collection/${module.id}/*"],
                 )
             ),
         )
@@ -80,13 +88,11 @@ def test_sdk_modules_reach_iam_over_nats(broker):  # noqa: F811 - imported fixtu
                 ),
             )
             assert policy["document"]["statements"][0]["sid"] == "ReadPolicies"
-            attachment = await admin.attach_policy(
-                roles.ADMIN, bob["id"], "abi:org-1:ws-1"
-            )
-            assert attachment["scope"] == "abi:org-1:ws-1"
+            attachment = await admin.attach_policy(roles.ADMIN, bob["id"], WS1)
+            assert attachment["scope"] == WS1
             explanation = await admin.explain(
                 "iam:ListAttachments",
-                f"abi:org-1:ws-1:iam:attachment/x/{bob['id']}",
+                f"{WS1}/iam:attachment/x/{bob['id']}",
                 principal_id=bob["id"],
             )
             assert explanation["allowed"] and explanation["statement"]["policy_id"] == (
@@ -97,8 +103,8 @@ def test_sdk_modules_reach_iam_over_nats(broker):  # noqa: F811 - imported fixtu
 
             # A module asks about itself: its own namespaces, not another's.
             iam = ServicesProxy(module, ModuleDependencies(), "people").iam
-            own = "abi:-:-:document:collection/people/contacts"
-            other = "abi:-:-:document:collection/billing/invoices"
+            own = "abi:document:collection/people/contacts"
+            other = "abi:document:collection/billing/invoices"
             assert (await iam.authorize("document:Find", own)).allowed
             assert not (await iam.authorize("document:Find", other)).allowed
             assert (await iam.filter("document:Find", [other, own])).allowed == [own]

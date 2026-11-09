@@ -494,7 +494,7 @@ class NexusSignInContract(NexusHarness):
         [
             (SignInError("unsupported_pkce", "no S256"), "sign_in_failed"),
             (
-                PermissionDeniedError("identity:SignIn", "abi:-:-:identity:provider/x"),
+                PermissionDeniedError("identity:SignIn", "abi:identity:provider/x"),
                 "sign_in_failed",
             ),
             (RuntimeError("boom"), "sign_in_failed"),
@@ -614,7 +614,9 @@ class NexusFirstSignInContract(NexusHarness):
             await db.commit()
         with as_service_account("engine"):
             principal = iam.ensure_user(LEGACY_ISSUER, user_id, provider="nexus")
-            iam.attach_policy("builtin.member", principal.id, "abi:acme:ws1")
+            iam.attach_policy(
+                "builtin.member", principal.id, "abi:nexus:organization/acme/nexus:workspace/ws1"
+            )
         return principal
 
     @pytest.mark.asyncio
@@ -645,7 +647,7 @@ class NexusFirstSignInContract(NexusHarness):
         held = {
             (a.policy_id, a.scope) for a in iam.store.list_attachments(principal_id=principal.id)
         }
-        assert ("builtin.member", "abi:acme:ws1") in held
+        assert ("builtin.member", "abi:nexus:organization/acme/nexus:workspace/ws1") in held
         assert [
             p.id for p in iam.store.list_principals("user", limit=100).items if p.status == "active"
         ] == [principal.id]
