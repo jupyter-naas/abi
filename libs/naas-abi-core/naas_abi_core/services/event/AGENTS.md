@@ -110,6 +110,20 @@ Decision: attribution never bounds authorization. A terminal runs as `engine`
 for nobody; had the git author been set as `on_behalf_of`, IAM would bound the
 engine by that user, who holds nothing, and refuse every enforced read.
 
+Consequences:
+
+- `agent_user_id` is the same object as `event_actor_user_id`, so in `abi chat`
+  and `abi run script` it is `None` with a git email, as it already was without
+  one. Tools that guard on it (`slides_tools`, `documents_tools`,
+  `sheets_tools`, `sheets_workbook_storage`, `nexus_admin_tools`) take their
+  no-user path (an error, or no memo key) from the terminal.
+- Readers of the actor outside `EventService` that want the terminal author
+  read `event_actor_user_id.get() or event_author_id.get()` (Nexus identity
+  events do).
+- `event_author_id` is not in `CallContext`, so it does not travel over NATS:
+  events published by remote modules or bus handlers on behalf of a terminal
+  call do not name the git author.
+
 The Nexus System app (Data tab) browses the log read-only through these: event
 types as folders, events newest first. The log is append-only by design.
 
