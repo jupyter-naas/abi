@@ -7,7 +7,7 @@ A support-focused `IntentAgent` factory that configures an agent to gather user 
 - `create_agent(agent_shared_state: Optional[AgentSharedState] = None, agent_configuration: Optional[AgentConfiguration] = None) -> IntentAgent`
   - Builds and returns a configured `SupportAgent`.
   - Loads support-domain configuration (GitHub project ID and default repository).
-  - Pulls GitHub access token from the GitHub application module.
+  - Reads the GitHub access token from the engine secret `GITHUB_ACCESS_TOKEN`.
   - Wires tools from GitHub REST + GraphQL integrations plus workflow tools for:
     - reporting bugs (`report_bug`)
     - feature requests (`feature_request`)
@@ -22,14 +22,13 @@ A support-focused `IntentAgent` factory that configures an agent to gather user 
 - Support domain module configuration (via `naas_abi_marketplace.domains.operations.agents.support.ABIModule.get_instance().configuration`):
   - `github_project_id`
   - `default_repository`
-- GitHub application module configuration (via `naas_abi_marketplace.applications.github.ABIModule.get_instance().configuration`):
-  - `github_access_token`
+- Engine secret `GITHUB_ACCESS_TOKEN` (the in-engine GitHub application module was removed; the support module owns its GitHub REST and GraphQL clients).
 - Model provider:
   - `naas_abi_marketplace.domains.operations.agents.support.models.default.get_model()`
 - Tools are sourced and filtered from:
-  - `naas_abi_marketplace.applications.github.integrations.GitHubIntegration.as_tools()`
+  - `naas_abi_marketplace.domains.operations.modules.support.integrations.GitHubIntegration.as_tools()`
     - Keeps: `github_list_repository_contributors`, `github_list_organization_repositories`
-  - `naas_abi_marketplace.applications.github.integrations.GitHubGraphqlIntegration.as_tools()`
+  - `naas_abi_marketplace.domains.operations.modules.support.integrations.GitHubGraphqlIntegration.as_tools()`
     - Keeps: `githubgraphql_list_priorities`, `githubgraphql_get_project_node_id`
   - Workflow toolsets:
     - `ReportBugWorkflow(...).as_tools()`

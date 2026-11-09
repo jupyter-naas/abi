@@ -7,7 +7,12 @@ A comprehensive marketplace of pre-built modules, agents, integrations, and work
 `naas-abi-marketplace` is a collection of modular components that extend the ABI framework with:
 
 - **AI Agent Modules**: Integration with major AI providers (ChatGPT, Claude, Gemini, Grok, Mistral, etc.)
-- **Application Modules**: Four application modules run in-engine:
+- **Application Modules**: four application modules run in-engine (listed below)
+- **Domain Expert Modules**: specialized agents for professional roles (listed below)
+
+### Application Modules
+
+Four application modules run in-engine:
 
 - `applications.git` - Git operations and repository management (runs in the CLI's working directory)
 - `applications.bodo` - Bodo platform integration
@@ -15,21 +20,12 @@ A comprehensive marketplace of pre-built modules, agents, integrations, and work
 - `applications.x` - X (Twitter) recent-tweets ingestion and the Recent Tweets app
 
 The other applications (GitHub, LinkedIn, Google Search, PostgreSQL, PowerPoint,
-Pennylane, Agicap, ArXiv, PubMed, ...) are **remote modules**: each runs in its
-own process and reaches the engine over NATS. They live in
+Pennylane, Agicap, ArXiv, PubMed, Sanax, SEC EDGAR, ...) are **remote modules**:
+each runs in its own process and reaches the engine over NATS. They live in
 [`libs/naas-abi-marketplace-modules`](../naas-abi-marketplace-modules/README.md)
-(jupyter-naas/abi#1423).
-- `applications.salesforce` - Salesforce CRM integration
-- `applications.hubspot` - HubSpot CRM integration
-- `applications.zoho` - Zoho suite integration
-- `applications.mercury` - Mercury platform integration
-- `applications.sanax` - Sanax integration
-
-**Data Sources:**
-- `applications.datagouv` - French open data portal
-- `applications.worldbank` - World Bank data
-- `applications.openweathermap` - Weather data API
-- `applications.openrouter` - OpenRouter API integration
+(jupyter-naas/abi#1423). Their in-engine versions were removed: a configuration
+that still loads one (e.g. `naas_abi_marketplace.applications.github`) fails at
+load. OpenRouter models come from `naas_abi_marketplace.ai.openrouter`.
 
 **Usage Example:**
 
@@ -37,13 +33,13 @@ own process and reaches the engine over NATS. They live in
 from naas_abi_core.engine.Engine import Engine
 
 engine = Engine()
-engine.load(module_names=["naas_abi_marketplace.applications.github"])
+engine.load(module_names=["naas_abi_marketplace.applications.git"])
 
-# Access GitHub agent
-from naas_abi_marketplace.applications.github.agents.GitHubAgent import GitHubAgent
+# Access the Git agent
+from naas_abi_marketplace.applications.git.agents.GitAgent import GitAgent
 
-agent = GitHubAgent.New()
-response = agent.invoke("List open issues in repository jupyter-naas/abi")
+agent = GitAgent.New()
+response = agent.invoke("Summarize the staged changes")
 ```
 
 ### Domain Expert Modules
@@ -139,16 +135,9 @@ modules:
     config:
       anthropic_api_key: "${ANTHROPIC_API_KEY}"
   
-  # Applications
-  - module: naas_abi_marketplace.applications.github
+  # Applications (in-engine; the others run as remote modules)
+  - module: naas_abi_marketplace.applications.git
     enabled: true
-    config:
-      github_token: "${GITHUB_TOKEN}"
-  
-  - module: naas_abi_marketplace.applications.linkedin
-    enabled: true
-    config:
-      linkedin_api_key: "${LINKEDIN_API_KEY}"
   
   # Domain Experts
   - module: naas_abi_marketplace.domains.signals
@@ -166,7 +155,7 @@ Many modules are marked as "soft" dependencies, meaning they're optional and won
 # In naas_abi module dependencies
 modules=[
     "naas_abi_marketplace.ai.anthropic#soft",  # Optional
-    "naas_abi_marketplace.applications.github#soft",  # Optional
+    "naas_abi_marketplace.applications.git#soft",  # Optional
 ]
 ```
 
@@ -181,7 +170,7 @@ engine = Engine()
 engine.load(module_names=[
     "naas_abi_marketplace.ai.chatgpt",
     "naas_abi_marketplace.ai.anthropic",
-    "naas_abi_marketplace.applications.github",
+    "naas_abi_marketplace.applications.git",
     "naas_abi_marketplace.domains.signals"
 ])
 ```
