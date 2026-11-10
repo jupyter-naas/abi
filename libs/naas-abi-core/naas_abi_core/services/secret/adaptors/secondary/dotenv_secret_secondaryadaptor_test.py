@@ -290,3 +290,49 @@ def test_loading_the_engine_config_reads_the_bootstrap_dotenv_only(tmp_path):
     assert adapter is not None and adapter.get("A") == "1"
     assert path.read_text() == before
     assert not (tmp_path / ".env.sidecar").exists()
+
+
+def test_the_repair_gives_both_files_the_owner_of_the_env(tmp_path, monkeypatch):
+    # A root container repairing a bind-mounted .env the host user owns: both
+    # files must end up the user's, or `abi deploy local` stops on them.
+    import os
+
+    from naas_abi_core.services.secret.adaptors.secondary.dotenv_secret_secondaryadaptor import (
+        move_keys_to_sidecar,
+    )
+
+    path = tmp_path / ".env"
+    _three_seven_env(path)
+    real_stat = os.stat
+    user = (real_stat(path).st_uid + 1, real_stat(path).st_gid + 1)
+    # What the files look like: .env stays the user's until it is replaced.
+    owners = {str(path): user}
+
+    def stat(p, *args, **kwargs):
+        st = real_stat(p, *args, **kwargs)
+        if str(p) not in owners:
+            return st
+        fields = list(st)
+        fields[4], fields[5] = owners[str(p)]
+        return os.stat_result(fields)
+
+    real_replace = os.replace
+
+    def replace(source, destination):
+        # The renamed file brings its own owner: this process's, unless
+        # chowned before the rename.
+        real_replace(source, destination)
+        st = real_stat(destination)
+        owners[str(destination)] = owners.pop(str(source), (st.st_uid, st.st_gid))
+
+    def chown(p, uid, gid):
+        owners[str(p)] = (uid, gid)
+
+    monkeypatch.setattr(os, "stat", stat)
+    monkeypatch.setattr(os, "chown", chown)
+    monkeypatch.setattr(os, "replace", replace)
+
+    move_keys_to_sidecar(str(path))
+
+    assert owners[str(path)] == user
+    assert owners[str(tmp_path / ".env.sidecar")] == user

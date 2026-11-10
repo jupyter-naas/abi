@@ -89,11 +89,18 @@ def _joined(lines: list[str]) -> str:
 
 def _rewrite(path: str, content: str, owner_of: str) -> None:
     """Replace ``path`` with ``content`` in one rename. It keeps its mode (a new
-    file is readable by its owner only) and gets the owner of ``owner_of``."""
+    file is readable by its owner only) and gets the owner ``owner_of`` has
+    before anything is replaced, ``path`` itself included: a process running
+    as root must not leave a bind-mounted file to root."""
     try:
         mode: int | None = stat.S_IMODE(os.stat(path).st_mode)
     except FileNotFoundError:
         mode = None
+    try:
+        owner = os.stat(owner_of)
+        uid_gid: tuple[int, int] | None = (owner.st_uid, owner.st_gid)
+    except OSError:
+        uid_gid = None
     descriptor, temporary = tempfile.mkstemp(
         prefix=".tmp_", dir=os.path.dirname(os.path.abspath(path))
     )
@@ -102,12 +109,22 @@ def _rewrite(path: str, content: str, owner_of: str) -> None:
             destination.write(content)
         if mode is not None:
             os.chmod(temporary, mode)
+        if uid_gid is not None:
+            _chown(temporary, uid_gid, path)
         os.replace(temporary, path)
     except BaseException:
         if os.path.exists(temporary):
             os.unlink(temporary)
         raise
-    _give_owner(path, owner_of)
+
+
+def _chown(path: str, uid_gid: tuple[int, int], shown_as: str) -> None:
+    try:
+        current = os.stat(path)
+        if (current.st_uid, current.st_gid) != uid_gid:
+            os.chown(path, *uid_gid)
+    except OSError as exc:
+        logger.warning(f"Could not give {shown_as} its owner back: {exc}")
 
 
 def _give_owner(path: str, owner_of: str) -> None:
