@@ -160,6 +160,18 @@
   box-shadow: var(--shadow-focus);
 }
 
+.account-profile-field-input-readonly {
+  color: var(--muted-foreground-hex);
+  cursor: default;
+}
+
+.account-profile-field-hint {
+  margin: 6px 0 0;
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-xs);
+  color: var(--muted-foreground-hex);
+}
+
 .account-profile-bio-header {
   display: flex;
   align-items: center;

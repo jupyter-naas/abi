@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v3.3.1 (2026-11-10)
+
+### Bug Fixes
+
+- **cli**: The git author labels terminal events and never bounds the engine's access
+  ([`18eacf4`](https://github.com/jupyter-naas/abi/commit/18eacf479193ef2be464e39bd71e6aecf4e7b6bf))
+
+### Testing
+
+- **cli**: Local operator tests no longer depend on the machine's git identity
+  ([`31bb132`](https://github.com/jupyter-naas/abi/commit/31bb1325fb32a09227997984214b795731588dd5))
+
+
 ## v3.3.0 (2026-11-07)
 
 ### Bug Fixes
