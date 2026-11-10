@@ -40,6 +40,7 @@ from naas_abi.apps.nexus.apps.api.app.services.search.topics.topics__schema impo
     SearchTopicNotFoundError,
     SearchTopicValidationError,
 )
+from naas_abi.apps.nexus.apps.api.app.services.view_as.active import viewing
 from pydantic import BaseModel, Field
 
 router = APIRouter()
@@ -158,6 +159,12 @@ def _http_error(exc: Exception) -> HTTPException:
     return HTTPException(status_code=502, detail=f"Topic query failed: {exc}")
 
 
+async def _placed_search_cache(workspace_id: str) -> SearchCache:
+    """The workspace's cache, placed in it (a write: never asked in a view)."""
+    await ensure_search_cache_placed(workspace_id)
+    return _search_cache()
+
+
 @router.get("/contract")
 async def get_contract() -> dict[str, Any]:
     """The placeholders and variables each query role accepts (for the settings editor)."""
@@ -244,22 +251,24 @@ async def topic_results(
     try:
         topic = await service.get_topic(workspace_id, topic_id)
         store, scope_key = await _scoped(current_user.id, workspace_id, topic.graphs)
-        await ensure_search_cache_placed(workspace_id)
-        cache = _search_cache()
-        key = cache.key(
-            workspace_id,
-            scope=scope_key,
-            topic=topic.to_dict(),
-            request={"role": "results", "q": q.strip(), "limit": limit, "offset": offset},
-        )
-        if (cached := cache.fetch(key)) is not None:
-            return cached
+        # A view writes nothing: no placement, no key (it may start a generation), no entry.
+        cache = None if viewing() else await _placed_search_cache(workspace_id)
+        if cache is not None:
+            key = cache.key(
+                workspace_id,
+                scope=scope_key,
+                topic=topic.to_dict(),
+                request={"role": "results", "q": q.strip(), "limit": limit, "offset": offset},
+            )
+            if (cached := cache.fetch(key)) is not None:
+                return cached
         results = asdict(
             await service.search(workspace_id, topic_id, q, store, limit=limit, offset=offset)
         )
     except Exception as exc:
         raise _http_error(exc) from exc
-    cache.store(key, results)
+    if cache is not None:
+        cache.store(key, results)
     return results
 
 
@@ -274,20 +283,21 @@ async def topic_detail(
     try:
         topic = await service.get_topic(workspace_id, topic_id)
         store, scope_key = await _scoped(current_user.id, workspace_id, topic.graphs)
-        await ensure_search_cache_placed(workspace_id)
-        cache = _search_cache()
-        key = cache.key(
-            workspace_id,
-            scope=scope_key,
-            topic=topic.to_dict(),
-            request={"role": "detail", "uri": uri},
-        )
-        if (cached := cache.fetch(key)) is not None:
-            return cached
+        cache = None if viewing() else await _placed_search_cache(workspace_id)
+        if cache is not None:
+            key = cache.key(
+                workspace_id,
+                scope=scope_key,
+                topic=topic.to_dict(),
+                request={"role": "detail", "uri": uri},
+            )
+            if (cached := cache.fetch(key)) is not None:
+                return cached
         detail = asdict(await service.detail(workspace_id, topic_id, uri, store))
     except Exception as exc:
         raise _http_error(exc) from exc
-    cache.store(key, detail)
+    if cache is not None:
+        cache.store(key, detail)
     return detail
 
 

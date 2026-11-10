@@ -51,7 +51,7 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
     WorkspacePermissionError,
     WorkspaceSlugAlreadyExistsError,
 )
-from naas_abi_core.services.iam.IAMPorts import GrantNotHeldError
+from naas_abi_core.services.iam.IAMPorts import GrantNotHeldError, IAMNotFoundError
 from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError as IAMDeniedError
 
 DetailResolver = Callable[[Exception], str]
@@ -100,6 +100,9 @@ EXCEPTION_TO_HTTP: dict[type[Exception], tuple[int, DetailResolver]] = {
     # The engine's IAM said no to what a request asked of it (a key's own limit
     # included): a refusal of the caller, not a failure of the server.
     IAMDeniedError: (403, lambda _exc: "This credential is not allowed to do that"),
+    # What IAM does not show the caller (a policy they may not see or attach,
+    # an invitation carrying it): as if it did not exist.
+    IAMNotFoundError: (404, _default_detail),
     SecretAlreadyExistsError: (400, lambda _exc: "Secret with this key already exists"),
     SecretNotFoundError: (404, lambda _exc: "Secret not found"),
     UserNotFoundError: (404, lambda _exc: "User not found"),

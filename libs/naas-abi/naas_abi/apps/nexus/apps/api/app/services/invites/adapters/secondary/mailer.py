@@ -41,7 +41,7 @@ class EngineInvitationMailer(InvitationMailer):
             # inviting person's mail, and belongs to no workspace.
             with (
                 as_service_account("api") as context,
-                use_call_context(replace(context, workspace_id=None)),
+                use_call_context(replace(context, container=None)),
             ):
                 service.send(
                     to_email=mail.to_email,

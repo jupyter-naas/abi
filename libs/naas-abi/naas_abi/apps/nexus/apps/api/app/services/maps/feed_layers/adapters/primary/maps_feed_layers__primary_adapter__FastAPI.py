@@ -50,6 +50,7 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.objects import (
     layer_features,
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.seeds import maps_seed_registry
+from naas_abi.apps.nexus.apps.api.app.services.view_as.active import viewing
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
@@ -113,6 +114,7 @@ async def list_feed_layers(
         workspace_id,
         seeds=feed_layer_seeds(request),
         revisions=feed_layer_seed_revisions(request),
+        seed=not viewing(),  # a page load writes nothing in a view
     )
     return {"layers": [layer.to_dict() for layer in layers]}
 
@@ -140,7 +142,7 @@ async def feed_layer_data(
     await authz.require("GetFeedLayer", user=current_user, workspace=workspace_id, id=layer_id)
 
     async def resolve() -> dict[str, Any]:
-        layer, feed = await service.data_source(workspace_id, layer_id)
+        layer, feed = await service.data_source(workspace_id, layer_id, seed=not viewing())
         return {"layer": layer.to_dict(), "feed": feed.to_dict()}
 
     try:
@@ -183,7 +185,7 @@ async def get_feed_layer(
 ) -> dict[str, Any]:
     response.headers["Cache-Control"] = "no-store"
     try:
-        return (await service.get(workspace_id, layer_id)).to_dict()
+        return (await service.get(workspace_id, layer_id, seed=not viewing())).to_dict()
     except Exception as exc:
         raise _http_error(exc) from exc
 

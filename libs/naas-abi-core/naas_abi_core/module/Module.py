@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import glob
 import os
-from typing import Generic, Self, cast
+from typing import Any, Generic, Self, cast
 
 from fastapi import FastAPI
 from naas_abi_core import logger
@@ -195,20 +195,28 @@ class BaseModule(JobsMixin, Generic[TConfig]):
         module class), registered by the engine once the module is loaded."""
         return self.__iam_catalog
 
+    def iam_listers(self) -> dict[tuple[str, str], Any]:
+        """The listers of this module's own types (its declared catalog), by
+        ``(service, type)``: ``listing.ResourceLister`` each, registered by the
+        engine once the module is loaded (``AGENTS.md`` of ``services/iam``,
+        "Publishers and listing"). None by default: its types are offered as
+        wildcards."""
+        return {}
+
     def require_action(
         self,
         action: str,
         type_name: str,
         parts: str | list[str] | tuple[str, ...],
         *,
-        workspace: str | None = None,
+        container: str | None = None,
     ) -> None:
         """Enforce one of this module's declared actions for the caller.
 
-        The resource is ``abi:<org>:<ws>:<service>:<type>/<id>`` in the
-        workspace of the call (``CallContext.workspace_id``), unless
-        ``workspace`` names one. Raises ``PermissionDeniedError`` when IAM
-        refuses it.
+        The resource is ``<container>/<service>:<type>/<id>``, in the container
+        of the call (``CallContext.container``) unless ``container`` names one
+        (a declared container type's own resource is the container). Raises
+        ``PermissionDeniedError`` when IAM refuses it.
         """
         if self.__iam_catalog is None:
             raise ValueError(f"Module {self.module_key} declares no catalog")
@@ -216,7 +224,7 @@ class BaseModule(JobsMixin, Generic[TConfig]):
             self.__iam_catalog.qualified(action),
             type_name,
             [parts] if isinstance(parts, str) else list(parts),
-            workspace=workspace,
+            container=container,
         )
 
     def on_load(self):

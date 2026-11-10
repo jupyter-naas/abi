@@ -53,6 +53,7 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.projects.service import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz, placements
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
+from naas_abi.apps.nexus.apps.api.app.services.view_as.runtime import audited_open
 from naas_abi_core.services.source_control.SourceControlPorts import (
     SourceControlError,
 )
@@ -570,12 +571,15 @@ async def preview_token(
     await _run(service.get_project, key)  # 404 before minting
     minutes = min(settings.app_preview_token_expire_minutes, 8 * 60)
     try:
-        token = await asyncio.to_thread(
-            mint_preview_token,
-            user_id=str(current_user.id),
-            workspace_id=key.workspace_id,
-            slug=key.slug,
-            minutes=minutes,
+        token = await audited_open(
+            f"preview {key.slug}",
+            lambda: asyncio.to_thread(
+                mint_preview_token,
+                user_id=str(current_user.id),
+                workspace_id=key.workspace_id,
+                slug=key.slug,
+                minutes=minutes,
+            ),
         )
     except LinkLimitReached as exc:
         raise HTTPException(status_code=429, detail=str(exc)) from exc

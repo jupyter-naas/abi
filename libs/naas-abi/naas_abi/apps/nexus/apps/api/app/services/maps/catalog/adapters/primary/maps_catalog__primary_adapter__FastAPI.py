@@ -43,6 +43,7 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.adapters.primary.map
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.layouts.service import MapsLayoutService
 from naas_abi.apps.nexus.apps.api.app.services.maps.workspace_config import WorkspaceMapsDefaults
+from naas_abi.apps.nexus.apps.api.app.services.view_as.active import viewing
 
 router = APIRouter()
 
@@ -65,17 +66,20 @@ async def get_catalog(
         revisions=layout_seed_revisions(request),
         enabled_feeds=defaults.feeds,
         extra_feed_ids=graph_feed_ids(request),
+        seed=not viewing(),  # a page load writes nothing in a view
     )
     listed_layers = await feed_layers.list(
         workspace_id,
         seeds=feed_layer_seeds(request),
         revisions=feed_layer_seed_revisions(request),
+        seed=not viewing(),
     )
     listed_basemaps = await basemaps.list(
         workspace_id,
         seeds=basemap_seeds(request),
         revisions=basemap_seed_revisions(request),
         enabled_custom=defaults.custom_basemaps,
+        seed=not viewing(),
     )
     can_edit = await authz.allowed(
         "UpdateLayout", user=current_user, workspace=workspace_id, id="-"

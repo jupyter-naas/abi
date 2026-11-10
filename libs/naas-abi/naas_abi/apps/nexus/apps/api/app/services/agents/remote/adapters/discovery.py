@@ -87,9 +87,15 @@ class DiscoveryRemoteAgentDirectory:
         from naas_abi_core.engine.call_context import current_call_context, use_call_context
 
         current = current_call_context()
-        # The submit carries the turn's workspace (the request's context): the
-        # module's run, and IAM for what it does there, place the call there.
-        in_workspace = replace(current, workspace_id=workspace_id) if workspace_id else current
+        # The submit carries the turn's workspace, its container (the request's
+        # context): the module's run, and IAM for what it does there, place the
+        # call there. A workspace IAM does not know names no container.
+        container = None
+        if workspace_id:
+            from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+
+            container = await AUTHZ.container_of(workspace_id)
+        in_workspace = replace(current, container=container) if workspace_id else current
         try:
             proxy = await self._open_agent(self._client(), module_id, name)
             scoped = proxy.duplicate(agent_shared_state=AgentState(thread_id))

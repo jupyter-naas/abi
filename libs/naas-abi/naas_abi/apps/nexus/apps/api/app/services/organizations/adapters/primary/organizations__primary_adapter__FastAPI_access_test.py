@@ -19,6 +19,7 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
 )
 
 ORG = OrganizationRecord(id="org-1", name="Acme", slug="acme", owner_id="owner")
+OTHER = OrganizationRecord(id="org-2", name="Beta", slug="beta", owner_id="someone")
 
 
 @pytest.fixture
@@ -28,6 +29,7 @@ def client_for(team):
     def make(user: str) -> TestClient:
         adapter = SimpleNamespace(
             get_organization_by_id=AsyncMock(return_value=ORG),
+            list_all_organizations=AsyncMock(return_value=[ORG, OTHER]),
             list_organization_member_profiles=AsyncMock(return_value={}),
             get_users_by_ids=AsyncMock(
                 side_effect=lambda ids: {
@@ -74,3 +76,19 @@ def test_member_cannot_list_domains(client_for) -> None:
 
 def test_member_cannot_read_billing(client_for) -> None:
     assert client_for("member").get("/organizations/org-1/billing").status_code == 403
+
+
+def test_the_organization_list_carries_the_callers_role_in_each(client_for, team) -> None:
+    """One answer for the account menu: each listed organization with the caller's
+    role there (an IAM role attachment), none where they hold none."""
+    team.grant("admin", "viewer", team.org("org-2"))
+    for user, roles in (
+        ("admin", {"org-1": "admin", "org-2": "viewer"}),
+        ("member", {"org-1": "member"}),
+        ("stranger", {}),
+    ):
+        resp = client_for(user).get("/organizations")
+        assert resp.status_code == 200
+        listed = {o["id"]: o["current_user_role"] for o in resp.json()}
+        assert {k: v for k, v in listed.items() if v} == roles, user
+        assert set(roles) <= set(listed), user

@@ -3,9 +3,12 @@ import {
   classifyInviteAnswer,
   defaultInviteProvider,
   inviteSuccessMessage,
+  invitablePolicies,
   invitationRoles,
+  policyIdsToSend,
   providerHint,
   providerToSend,
+  workspaceInviteBody,
   type Invitation,
   type InviteProvider,
   type InviteProviders,
@@ -125,5 +128,37 @@ describe('invitationRoles', () => {
   it('lists both roles', () => {
     expect(invitationRoles(invitation)).toBe('Organization member · Workspace viewer');
     expect(invitationRoles({ ...invitation, org_role: null, workspace_role: null })).toBe('—');
+  });
+});
+
+describe('the policies an invitation carries', () => {
+  it('offers customer policies only, never a managed built-in one', () => {
+    const items = [
+      { id: 'builtin.member', name: 'Member', managed: true },
+      { id: 'builtin.platform.member', name: 'Platform member', managed: true },
+      { id: 'pol_features', name: 'Features of member', managed: false },
+      { id: 'pol_graph', name: 'Graph readers', managed: false },
+    ];
+    expect(invitablePolicies(items).map((p) => p.id)).toEqual(['pol_features', 'pol_graph']);
+  });
+
+  it('names policy_ids only when some are picked', () => {
+    expect(policyIdsToSend([])).toEqual({});
+    expect(policyIdsToSend(undefined)).toEqual({});
+    expect(policyIdsToSend(['pol_1', 'pol_2'])).toEqual({ policy_ids: ['pol_1', 'pol_2'] });
+  });
+
+  it('sends the picked policies with a workspace invitation', () => {
+    expect(workspaceInviteBody({ email: 'bob@example.com', role: 'member', policyIds: ['pol_1'] })).toEqual({
+      email: 'bob@example.com',
+      role: 'member',
+      provider: undefined,
+      policy_ids: ['pol_1'],
+    });
+    expect(workspaceInviteBody({ email: 'bob@example.com', role: 'viewer', provider: 'okta' })).toEqual({
+      email: 'bob@example.com',
+      role: 'viewer',
+      provider: 'okta',
+    });
   });
 });

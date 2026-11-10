@@ -10,7 +10,6 @@ import { useModelsStore, modelDisplayName } from '@/stores/models';
 import { useServersStore } from '@/stores/servers';
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { useConfirm } from '@/components/ui/dialogs';
 import { Input, Textarea } from '@/components/ui/input';
 import {
@@ -54,7 +53,6 @@ export default function AgentsPage() {
   const [mounted, setMounted] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
   const [modelFilter, setModelFilter] = useState('all');
   const [newAgent, setNewAgent] = useState({
     name: '',
@@ -69,7 +67,6 @@ export default function AgentsPage() {
     agents,
     addAgent,
     deleteAgent,
-    toggleAgent,
     fetchAgents,
   } = useAgentsStore();
   const { fetchServers } = useServersStore();
@@ -114,7 +111,6 @@ export default function AgentsPage() {
       provider: null,
       modelId: null,
       logoUrl: null,
-      enabled: true,
       tools: ['search_knowledge', 'search_files', 'read_ontology'],
       capabilities: { memory: true, reasoning: false, vision: false },
       intentMappings: [],
@@ -175,8 +171,6 @@ export default function AgentsPage() {
   const query = searchQuery.trim().toLowerCase();
   const filteredAgents = displayAgents
     .filter((agent) => {
-      if (statusFilter === 'enabled' && !agent.enabled) return false;
-      if (statusFilter === 'disabled' && agent.enabled) return false;
       const hasModel = getModelIds(agent).length > 0;
       if (modelFilter === 'assigned' && !hasModel) return false;
       if (modelFilter === 'unassigned' && hasModel) return false;
@@ -187,7 +181,6 @@ export default function AgentsPage() {
       );
     })
     .sort((a, b) => a.name.localeCompare(b.name));
-  const enabledCount = displayAgents.filter((agent) => agent.enabled).length;
 
   if (!mounted) {
     return <SettingsLoading label="Loading agents…" />;
@@ -208,8 +201,8 @@ export default function AgentsPage() {
     <div className="space-y-6">
       <SettingsPageHeader
         title="Agents"
-        badge={`${enabledCount} enabled`}
-        description="The agents of this workspace's modules and those it builds: turn each on or off for everyone in it"
+        badge={`${displayAgents.length} ${displayAgents.length === 1 ? 'agent' : 'agents'}`}
+        description="The agents of this workspace you may use, from its modules and those it builds. Who uses each is decided by policies, on Roles & permissions."
         actions={
           <Button onClick={() => setShowAddForm(true)}>
             <Plus size={16} />
@@ -294,30 +287,18 @@ export default function AgentsPage() {
             onSearchChange={setSearchQuery}
             searchPlaceholder="Search agents..."
             filters={
-              <>
-                <SettingsFilterSelect
-                  label="Status"
-                  value={statusFilter}
-                  onChange={setStatusFilter}
-                  options={[
-                    { value: 'all', label: 'All statuses' },
-                    { value: 'enabled', label: 'Enabled' },
-                    { value: 'disabled', label: 'Disabled' },
-                  ]}
-                />
-                <SettingsFilterSelect
-                  label="Model"
-                  value={modelFilter}
-                  onChange={setModelFilter}
-                  options={[
-                    { value: 'all', label: 'All models' },
-                    { value: 'assigned', label: 'Model assigned' },
-                    { value: 'unassigned', label: 'No model' },
-                  ]}
-                />
-              </>
+              <SettingsFilterSelect
+                label="Model"
+                value={modelFilter}
+                onChange={setModelFilter}
+                options={[
+                  { value: 'all', label: 'All models' },
+                  { value: 'assigned', label: 'Model assigned' },
+                  { value: 'unassigned', label: 'No model' },
+                ]}
+              />
             }
-            meta={`${countLabel(filteredAgents.length, displayAgents.length, 'agent')} · ${enabledCount} enabled`}
+            meta={countLabel(filteredAgents.length, displayAgents.length, 'agent')}
           />
 
           <div className={settingsTable.wrapper}>
@@ -326,14 +307,13 @@ export default function AgentsPage() {
                 <tr className={settingsTable.headRow}>
                   <th className={settingsTable.th}>Agent</th>
                   <th className={settingsTable.th}>Models</th>
-                  <th className={cn(settingsTable.th, 'w-24')}>Enabled</th>
                   <th className={cn(settingsTable.th, 'w-24')}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredAgents.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="p-8 text-center text-muted-foreground">
+                    <td colSpan={3} className="p-8 text-center text-muted-foreground">
                       No agents match the current search and filters
                     </td>
                   </tr>
@@ -404,14 +384,6 @@ export default function AgentsPage() {
                             </div>
                           );
                         })()}
-                      </td>
-                      <td className={settingsTable.td} onClick={(e) => e.stopPropagation()}>
-                        <Checkbox
-                          checked={agent.enabled}
-                          onCheckedChange={() => toggleAgent(agent.id)}
-                          aria-label={agent.enabled ? 'Disable agent' : 'Enable agent'}
-                          title={agent.enabled ? 'Disable agent' : 'Enable agent'}
-                        />
                       </td>
                       <td className={settingsTable.td}>
                         <div className="flex items-center gap-1">

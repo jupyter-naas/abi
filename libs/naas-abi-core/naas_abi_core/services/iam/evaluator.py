@@ -6,28 +6,32 @@
       3. d_P = principal_decision(P); d_U likewise, ALLOW without a user
       4. either is EXPLICIT_DENY                        -> DENY (explicit)
       5. either is not ALLOW                            -> DENY (implicit)
-      6. a bounded side, a module scope or a feature,
-         outside the org's or the workspace's set       -> DENY (outside_set)
-      7. the token narrows and no statement matches     -> DENY (implicit)
-      8.                                                -> ALLOW
+      6. the token narrows and no statement matches     -> DENY (implicit)
+      7.                                                -> ALLOW
 
 Nothing is allowed without a matching Allow; an explicit Deny wins over any
 number of Allows; on behalf of a user, actor and user must both be allowed.
-A user's Allow on a module scope or a feature counts only within the sets of
-the resource's org and workspace (``sets.py``), unless the user holds
-``builtin.platform_admin``.
+An Allow of a sub-policy counts only where each
+policy of its chain allows too (``EffectiveStatement.bounds``); the chain's
+Denies reach the principal as statements of their own ("Sub-policies").
+
+A statement attached below a container (``<container>/*``) counts at that
+container and at every container under it: its ``${scope}`` is each container
+on the resource's path from it down (``_scopes``). One attached at the platform
+never reaches the platform's own policies, groups and unscoped attachments
+(``names.platform_own``): ``${scope}`` names none of them.
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Literal
 
 from naas_abi_core.engine.call_context import CallContext
-from naas_abi_core.services.iam import sets
 from naas_abi_core.services.iam.IAMPorts import (
+    BoundingStatement,
     DecidingStatement,
     Decision,
     EffectiveStatement,
@@ -39,11 +43,17 @@ from naas_abi_core.services.iam.IAMPorts import (
     Subject,
 )
 from naas_abi_core.services.iam.names import (
+    PLATFORM,
+    container_of_scope,
     encode_segment,
+    is_below,
     literal_prefix,
     matches,
     parse_resource_name,
+    path_of,
+    platform_own,
     substitute,
+    within,
 )
 from naas_abi_core.services.iam.policy import Statement
 
@@ -54,6 +64,17 @@ Outcome = Literal["allow", "explicit_deny", "implicit_deny"]
 class _Verdict:
     outcome: Outcome
     deciding: DecidingStatement | None = None
+
+
+# The statement of each policy of a sub-policy's chain that allowed what its
+# Allow did, nearest first.
+_Bounding = tuple[BoundingStatement, ...]
+# Whether ``(service, type)`` is a container type.
+IsContainer = Callable[[str, str], bool]
+
+
+def _no_container(service: str, type_name: str) -> bool:
+    return False
 
 
 class Evaluator:
@@ -114,12 +135,6 @@ class Evaluator:
             return False
         user_id = _user_id(ctx)
         sides = [actor] if user is None else [actor, user]
-        if (
-            any(side.bounded for side in sides)
-            and self._source.has_sets()
-            and sets.bounded(self._source.catalogs, service, resource_type)
-        ):
-            return False  # a set may leave some of them out
         return all(
             _spans_type(side, action, service, resource_type, user_id) for side in sides
         )
@@ -150,9 +165,12 @@ class Evaluator:
             return denied("sealed")
         # 3. Each side on its own.
         user_id = _user_id(ctx)
-        d_p = _principal_decision(actor, "actor", action, resource, user_id)
+        is_container = self._source.catalogs.is_container
+        d_p = _principal_decision(
+            actor, "actor", action, resource, user_id, is_container
+        )
         d_u = (
-            _principal_decision(user, "user", action, resource, user_id)
+            _principal_decision(user, "user", action, resource, user_id, is_container)
             if user is not None
             else _Verdict("allow")
         )
@@ -164,36 +182,15 @@ class Evaluator:
         for verdict in (d_p, d_u):
             if verdict.outcome != "allow":
                 return denied("implicit_deny", verdict.deciding)
-        # 6. The sets bound a user's Allow on module scopes and features.
-        if (actor.bounded or (user is not None and user.bounded)) and not (
-            self._within_sets(action, resource)
-        ):
-            return denied("outside_set")
-        # 7. A narrowed token only narrows.
+        # 6. A narrowed token only narrows.
         if ctx.scope is not None:
-            narrowing = _token_allow(ctx, action, resource, actor, user_id)
+            narrowing = _token_allow(
+                ctx, action, resource, actor, user_id, is_container
+            )
             if narrowing is None:
                 return denied("implicit_deny")
-        # 8.
+        # 7.
         return Explanation(True, "allow", action, resource, d_p.deciding)
-
-    def _within_sets(self, action: str, resource: str) -> bool:
-        """Whether the sets of the resource's org and workspace have it (true
-        for a resource they do not bound)."""
-        if not self._source.has_sets():
-            return True
-        try:
-            name = parse_resource_name(resource)
-        except ValueError:
-            return True
-        if not sets.bounded(self._source.catalogs, name.service, name.type):
-            return True
-        org_set, workspace_set = self._source.scope_sets(name.org, name.workspace)
-        return all(
-            sets.allows(found, self._source.catalogs, action, name)
-            for found in (org_set, workspace_set)
-            if found is not None
-        )
 
     def _visible(
         self,
@@ -287,13 +284,77 @@ def _user_id(ctx: CallContext) -> str | None:
 
 
 def _values(
-    effective: EffectiveStatement, principal_id: str, user_id: str | None
+    scope: str | None, principal_id: str, user_id: str | None
 ) -> dict[str, str | None]:
     return {
-        "scope": effective.scope,
+        "scope": scope,
         "principal.id": encode_segment(principal_id),
         "user.id": encode_segment(user_id) if user_id is not None else None,
     }
+
+
+def _scopes(
+    scope: str | None, resource: str, is_container: IsContainer
+) -> list[str | None]:
+    """What ``${scope}`` is for ``resource``: the attachment's container, or,
+    below a container, each container from it down to the resource's own (the
+    resource itself when it is a container)."""
+    if not is_below(scope):
+        return [scope]
+    top = container_of_scope(scope or "")
+    try:
+        name = parse_resource_name(resource)
+    except ValueError:
+        return [top]
+    paths = path_of(name)
+    if is_container(name.service, name.type):
+        paths.append(resource)
+    found: list[str | None] = [path for path in paths if within(path, top)]
+    return found or [top]
+
+
+def _matches(
+    statement: Statement,
+    values: dict[str, str | None],
+    action: str,
+    resource: str,
+) -> bool:
+    if not any(matches(pattern, action) for pattern in statement.actions):
+        return False
+    # The platform's own policies, groups and attachments: no ${scope} names them.
+    shielded = values.get("scope") == PLATFORM and platform_own(resource)
+    for pattern in statement.resources:
+        if shielded and "${scope}" in pattern:
+            continue
+        expanded = substitute(pattern, values)
+        if expanded is not None and matches(expanded, resource):
+            return True
+    return False
+
+
+def _bounding(
+    effective: EffectiveStatement,
+    values: dict[str, str | None],
+    action: str,
+    resource: str,
+) -> _Bounding | None:
+    """For an Allow of a sub-policy, the statement of each policy of its chain
+    that allows the same, its variables filled as the sub-policy's; None when
+    one of them allows nothing of it. Empty for a policy with no parent."""
+    found: list[BoundingStatement] = []
+    for bound in effective.bounds:
+        allowing = next(
+            (
+                (index, statement)
+                for index, statement in bound.allows
+                if _matches(statement, values, action, resource)
+            ),
+            None,
+        )
+        if allowing is None:
+            return None
+        found.append(BoundingStatement(bound.policy_id, allowing[0], allowing[1].sid))
+    return tuple(found)
 
 
 def _statement_matches(
@@ -302,22 +363,28 @@ def _statement_matches(
     resource: str,
     principal_id: str,
     user_id: str | None,
-) -> bool:
-    statement = effective.statement
-    if not any(matches(pattern, action) for pattern in statement.actions):
-        return False
-    values = _values(effective, principal_id, user_id)
-    for pattern in statement.resources:
-        expanded = substitute(pattern, values)
-        if expanded is not None and matches(expanded, resource):
-            return True
-    return False
+    is_container: IsContainer = _no_container,
+) -> _Bounding | None:
+    """None when ``effective`` does not match; else what bounded it (empty for a
+    statement that no chain bounds). Below a container, at the first container
+    of the resource's path where it matches and its chain allows."""
+    for scope in _scopes(effective.scope, resource, is_container):
+        values = _values(scope, principal_id, user_id)
+        if not _matches(effective.statement, values, action, resource):
+            continue
+        if effective.statement.effect == "Deny" or not effective.bounds:
+            return ()
+        bounded = _bounding(effective, values, action, resource)
+        if bounded is not None:
+            return bounded
+    return None
 
 
 def _deciding(
     effective: EffectiveStatement,
     side: Literal["actor", "user", "token"],
     principal_id: str,
+    bounded_by: _Bounding = (),
 ) -> DecidingStatement:
     return DecidingStatement(
         side=side,
@@ -329,6 +396,8 @@ def _deciding(
         attachment_id=effective.attachment_id,
         scope=effective.scope,
         via_group=effective.via_group,
+        bounded_by=bounded_by,
+        through=effective.through,
     )
 
 
@@ -338,21 +407,25 @@ def _principal_decision(
     action: str,
     resource: str,
     user_id: str | None,
+    is_container: IsContainer = _no_container,
 ) -> _Verdict:
-    allow: EffectiveStatement | None = None
+    allow: tuple[EffectiveStatement, _Bounding] | None = None
     for effective in subject.statements:
-        if not _statement_matches(
-            effective, action, resource, subject.principal_id, user_id
-        ):
+        bounded_by = _statement_matches(
+            effective, action, resource, subject.principal_id, user_id, is_container
+        )
+        if bounded_by is None:
             continue
         if effective.statement.effect == "Deny":
             return _Verdict(
                 "explicit_deny", _deciding(effective, side, subject.principal_id)
             )
         if allow is None:
-            allow = effective
+            allow = (effective, bounded_by)
     if allow is not None:
-        return _Verdict("allow", _deciding(allow, side, subject.principal_id))
+        return _Verdict(
+            "allow", _deciding(allow[0], side, subject.principal_id, allow[1])
+        )
     return _Verdict("implicit_deny")
 
 
@@ -396,22 +469,28 @@ def _token_allow(
     resource: str,
     actor: Subject,
     user_id: str | None,
+    is_container: IsContainer = _no_container,
 ) -> EffectiveStatement | None:
     for index, statement in enumerate(token_statements(ctx)):
         effective = EffectiveStatement(statement, "token", index)
-        if _statement_matches(effective, action, resource, actor.principal_id, user_id):
+        if (
+            _statement_matches(
+                effective, action, resource, actor.principal_id, user_id, is_container
+            )
+            is not None
+        ):
             return effective
     return None
 
 
-# Stand-ins for an org, a workspace and an id that no literal character
-# matches: a pattern matching them at both lengths has only wildcards there,
-# a "*" among them, so it matches every non-empty value.
+# Stand-ins for a container's service, type and id, and a resource's id, that no
+# literal character matches: a pattern matching them at both lengths has only
+# wildcards there, a "*" among them, so it matches every non-empty value.
 _PROBES = ("\x00", "\x00\x00")
 
 
-# The literal ":<service>:<type>/<id>" end of a pattern (ids hold no raw ":").
-_NAMED_TYPE = re.compile(r":([a-z][a-z0-9_]*):([a-z][a-z0-9_]*)/[^:]*$")
+# The literal "<service>:<type>/<id>" last step of a pattern (ids hold no raw ":").
+_NAMED_TYPE = re.compile(r"(?:^abi:|/)([a-z][a-z0-9_]*):([a-z][a-z0-9_]*)/[^:]*$")
 
 
 def _may_name_type(pattern: str, service: str, resource_type: str) -> bool:
@@ -429,20 +508,35 @@ def _spans_type(
     resource_type: str,
     user_id: str | None,
 ) -> bool:
-    probes = [f"abi:{p}:{p}:{service}:{resource_type}/{p}" for p in _PROBES]
-    spanning = False
+    # Names of the type at the platform, and in a container, at two lengths.
+    probes = [
+        name
+        for p in _PROBES
+        for name in (
+            f"abi:{service}:{resource_type}/{p}",
+            f"abi:{p}:{p}/{p}/{service}:{resource_type}/{p}",
+        )
+    ]
+    # The platform's and the containers' may be spanned by two patterns
+    # (``names.anywhere``): each pair of probes by one of them.
+    spanned = [False, False]
     for effective in subject.statements:
         statement = effective.statement
         if not any(matches(pattern, action) for pattern in statement.actions):
             continue
         if statement.effect == "Deny":
             return False  # it may deny one of them: check each
-        values = _values(effective, subject.principal_id, user_id)
+        if effective.bounds or effective.scope is not None:
+            continue  # a parent, or a scope, leaves some of them out
+        values = _values(None, subject.principal_id, user_id)
         for pattern in statement.resources:
             expanded = substitute(pattern, values)
-            if expanded is not None and all(matches(expanded, p) for p in probes):
-                spanning = True
-    return spanning
+            if expanded is None:
+                continue
+            for where in (0, 1):
+                if all(matches(expanded, p) for p in probes[where::2]):
+                    spanned[where] = True
+    return all(spanned)
 
 
 def _hints(
@@ -458,10 +552,18 @@ def _hints(
             continue
         if not any(matches(pattern, action) for pattern in statement.actions):
             continue
-        values = _values(effective, principal_id, user_id)
+        scope = effective.scope
+        values = _values(
+            container_of_scope(scope) if scope else None, principal_id, user_id
+        )
         for pattern in statement.resources:
             expanded = substitute(pattern, values)
-            if expanded is not None:
+            if expanded is None:
+                continue
+            if is_below(scope) and "${scope}" in pattern:
+                # Below a container: anything under it, the container included.
+                prefixes.add(container_of_scope(scope or ""))
+            else:
                 prefixes.add(literal_prefix(expanded))
     if "" in prefixes:
         return [""]

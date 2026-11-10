@@ -110,6 +110,8 @@ async def update_me(
             organization=updates.organization,
             job_title=updates.job_title,
             bio=updates.bio,
+            linkedin_url=updates.linkedin_url,
+            github_handle=updates.github_handle,
         )
     except UserNotFoundError as exc:
         raise HTTPException(status_code=404, detail="User not found") from exc

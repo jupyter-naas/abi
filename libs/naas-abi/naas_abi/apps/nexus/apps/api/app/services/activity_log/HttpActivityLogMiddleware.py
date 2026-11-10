@@ -14,6 +14,10 @@ caller, set by ``RequestIdentityMiddleware`` around this one (``api`` on
 behalf of the signed-in user), and the activity log records under the call's
 user. A request with no signed-in user is recorded as Nexus's own ``api``
 account, with ``anonymous: true``, so failed sign-ins stay on the record.
+
+During a view (``services/view_as``) the call is the person's, but the request is the
+viewer's act: the event is recorded under the viewer, with the person and the workspace
+viewed as the attribute ``view_as``. Nothing is recorded as the person's activity.
 """
 
 from __future__ import annotations
@@ -23,11 +27,18 @@ import base64
 import json
 import time
 from collections.abc import Iterable
+from dataclasses import replace
 from typing import Any
 from urllib.parse import parse_qsl
 
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import redact_grant_path
-from naas_abi_core.engine.call_context import as_service_account, current_call_context
+from naas_abi.apps.nexus.apps.api.app.services.view_as.active import current_view
+from naas_abi_core.engine.call_context import (
+    Principal,
+    as_service_account,
+    current_call_context,
+    use_call_context,
+)
 from naas_abi_core.services.activity_log.ActivityLogPort import ActivityEvent
 from naas_abi_core.services.activity_log.ActivityLogService import (
     ActivityLogService,
@@ -215,18 +226,32 @@ class HttpActivityLogMiddleware:
                         content_type=content_type,
                         content_length_header=content_length_header,
                     )
+                    view = current_view()
+                    viewer = (scope.get("state") or {}).get("nexus_viewer")
+                    if view is not None and viewer is not None:
+                        attrs["view_as"] = {
+                            "principal_id": view.person_principal_id,
+                            "workspace_id": view.workspace_id,
+                        }
+                    else:
+                        viewer = None
                     if exc is not None:
                         attrs["error"] = type(exc).__name__
                     # record() is a blocking call (it may cross the bus): keep it
                     # off the event loop so a slow log cannot stall every request.
                     # to_thread copies the context, so the caller's identity follows.
-                    await asyncio.to_thread(self._record, service, headers, attrs)
+                    await asyncio.to_thread(self._record, service, headers, attrs, viewer)
             except Exception:
                 # Activity logging must never break the request path.
                 pass
 
     @staticmethod
-    def _record(service: ActivityLogService, headers: Headers, attrs: dict[str, Any]) -> None:
+    def _record(
+        service: ActivityLogService,
+        headers: Headers,
+        attrs: dict[str, Any],
+        viewer: Principal | None = None,
+    ) -> None:
         def record() -> None:
             # The service names the actor from the call; this is its fallback
             # for a log not wired with IAM.
@@ -239,6 +264,12 @@ class HttpActivityLogMiddleware:
                 )
             )
 
+        if viewer is not None:
+            # During a view the call is the person's, but the request is the viewer's act:
+            # the event names the viewer, and the person only as an attribute.
+            with use_call_context(replace(current_call_context(), on_behalf_of=viewer)):
+                record()
+            return
         if current_call_context().principal.kind != "anonymous":
             record()
             return

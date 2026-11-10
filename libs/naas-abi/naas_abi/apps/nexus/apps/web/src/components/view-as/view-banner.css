@@ -1,0 +1,112 @@
+/* components/view-as — the banner of a view and the refusal toasts */
+
+.view-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 0.5rem);
+  height: var(--view-banner-height, 2.25rem);
+  padding: 0 var(--space-3, 0.75rem);
+  background-color: #92400e;
+  color: #fffbeb;
+  font-size: var(--font-size-sm, 0.875rem);
+  line-height: 1.25;
+}
+
+.view-banner-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.view-banner-error {
+  font-size: var(--font-size-xs, 0.75rem);
+  color: #fecaca;
+}
+
+.view-banner-stop {
+  flex: none;
+  padding: 0 var(--space-3, 0.75rem);
+  border: 1px solid #fffbeb;
+  border-radius: var(--org-border-radius, 0px);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.view-banner-stop:hover:not(:disabled) {
+  background-color: #fffbeb;
+  color: #92400e;
+}
+
+.view-banner-stop:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.view-toasts {
+  position: fixed;
+  right: var(--space-4, 1rem);
+  bottom: var(--space-4, 1rem);
+  z-index: 2001;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 0.5rem);
+  max-width: min(28rem, calc(100vw - 2rem));
+}
+
+.view-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2, 0.5rem);
+  padding: var(--space-2, 0.5rem) var(--space-3, 0.75rem);
+  border: 1px solid #92400e;
+  background-color: var(--card-hex, #fff);
+  color: var(--foreground-hex, #18181b);
+  font-size: var(--font-size-sm, 0.875rem);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.25);
+}
+
+.view-toast-message {
+  flex: 1;
+  margin: 0;
+}
+
+.view-toast-close {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.view-private {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1, 0.25rem);
+  margin: var(--space-6, 1.5rem) auto;
+  padding: var(--space-6, 1.5rem);
+  max-width: 28rem;
+  border: 1px dashed var(--border-hex, #e3e3e7);
+  text-align: center;
+  color: var(--muted-foreground-hex, #71717a);
+}
+
+.view-private-title {
+  margin: 0;
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--foreground-hex, #18181b);
+}
+
+.view-private-note {
+  margin: 0;
+  font-size: var(--font-size-sm, 0.875rem);
+}

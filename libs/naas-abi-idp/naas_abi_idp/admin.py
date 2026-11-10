@@ -3,7 +3,7 @@
 A second app of the module (``admin``), never on the public route: Nexus serves
 only the ``idp`` app at ``/idp``. It is for services (the provisioning port, the
 CLI), which reach it with ``abi.app.v1`` requests and are authorized by
-discovery's ``OpenApp`` on ``abi:-:-:discovery:app/<project>/idp/admin``.
+discovery's ``OpenApp`` on ``abi:discovery:app/<project>/idp/admin``.
 
 Discovery's ``OpenApp`` is a read-level action, so it is not enough: a service
 account that holds a workspace role holds it too. The app therefore checks the
@@ -49,7 +49,7 @@ class AdminAPI:
         routes = [
             Route("/users", self.users, methods=["GET", "POST"]),
             Route("/users/by-email", self.user_by_email, methods=["GET"]),
-            Route("/users/{user_id}", self.user, methods=["GET", "PATCH"]),
+            Route("/users/{user_id}", self.user, methods=["GET", "PATCH", "DELETE"]),
             Route("/users/{user_id}/disable", self.disable, methods=["POST"]),
             Route("/users/{user_id}/enable", self.enable, methods=["POST"]),
             Route("/groups", self.groups, methods=["GET", "POST"]),
@@ -105,6 +105,13 @@ class AdminAPI:
 
     async def user(self, request: Request) -> Response:
         user_id = request.path_params["user_id"]
+        if request.method == "DELETE":
+
+            def delete() -> Any:
+                self.service.delete_user(user_id)
+                return 204, None
+
+            return await self._run(request, delete)
         if request.method == "GET":
             return await self._run(
                 request, lambda: self.service.get_user(user_id).public()
@@ -247,6 +254,8 @@ class AdminAPI:
         status = 200
         if isinstance(result, tuple):
             status, result = result
+        if status == 204:
+            return Response(status_code=204, headers={"Cache-Control": "no-store"})
         return JSONResponse(
             result, status_code=status, headers={"Cache-Control": "no-store"}
         )

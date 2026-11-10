@@ -669,8 +669,7 @@ if __name__ == "__main__":
     turtle_path = "libs/naas-abi-marketplace/naas_abi_marketplace/applications/linkedin/pipelines/insert_Florent_Ravenel.ttl"
     imported_ontologies = [
         "libs/naas-abi-marketplace/naas_abi_marketplace/domains/signals/pipelines/ontology_engineer/ontologies/BFO7BucketsProcessOntology.ttl",
-        "libs/naas-abi-marketplace/naas_abi_marketplace/applications/linkedin/ontologies/imports/LinkedInOntology.ttl",
-        "libs/naas-abi-marketplace/naas_abi_marketplace/applications/linkedin/ontologies/modules/ActOfConnectionsOnLinkedIn.ttl",
+        "libs/naas-abi-marketplace/naas_abi_marketplace/applications/linkedin/ontologies/modules/LinkedInOntology.ttl",
     ]
     ontology_name = "Alice Dupont's Act of Connections on LinkedIn"
     display_individuals_classes = False

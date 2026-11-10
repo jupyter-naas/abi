@@ -7,6 +7,7 @@ network); ``ABI_REQUIRE_ZITADEL=1`` (CI) turns that skip into a failure.
 from __future__ import annotations
 
 import secrets
+import time
 
 import pytest
 
@@ -64,6 +65,58 @@ def test_the_user_is_the_one_zitadel_knows(zitadel):
     assert user["userId"] == created.subject
     # The address is verified by whoever receives Zitadel's code, not asserted.
     assert user["human"]["email"].get("isVerified", False) is False
+
+
+def test_a_user_is_renamed_deactivated_reactivated_and_deleted(zitadel):
+    provisioning = adapter(zitadel)
+    address = email()
+    created = provisioning.ensure_user(address, name="Bob Builder")
+    renamed = provisioning.update_user(created.subject, name="Robert Builder")
+    assert renamed is not None and renamed.name == "Robert Builder"
+    assert renamed.email == address and renamed.disabled is False
+    off = provisioning.update_user(created.subject, disabled=True)
+    assert off is not None and off.disabled is True
+    again = provisioning.update_user(created.subject, disabled=True)
+    assert again is not None and again.disabled is True
+    on = provisioning.update_user(created.subject, disabled=False)
+    assert on is not None and on.disabled is False
+    assert provisioning.delete_user(created.subject) is True
+    assert provisioning.delete_user(created.subject) is False
+    assert provisioning.update_user(created.subject, disabled=True) is None
+    # Zitadel's user search follows its projections: the deleted user leaves it shortly.
+    deadline = time.monotonic() + 10
+    while provisioning.find_user(address) is not None and time.monotonic() < deadline:
+        time.sleep(0.2)
+    assert provisioning.find_user(address) is None
+
+
+def test_a_user_never_set_up_is_locked_to_deactivate_it(zitadel):
+    """A user still initial (made elsewhere, here through the v1 API, never set up):
+    Zitadel refuses /deactivate for it, so it is locked; reactivating unlocks it."""
+    address = email()
+    made = zitadel.api(
+        "POST",
+        "/management/v1/users/human",
+        {
+            "userName": address,
+            "profile": {"firstName": "Ini", "lastName": "Tial"},
+            "email": {"email": address},
+        },
+    )
+    subject = made["userId"]
+    assert (
+        zitadel.api("GET", f"/v2/users/{subject}")["user"]["state"]
+        == "USER_STATE_INITIAL"
+    )
+    provisioning = adapter(zitadel)
+    off = provisioning.update_user(subject, disabled=True)
+    assert off is not None and off.disabled is True
+    assert (
+        zitadel.api("GET", f"/v2/users/{subject}")["user"]["state"]
+        == "USER_STATE_LOCKED"
+    )
+    on = provisioning.update_user(subject, disabled=False)
+    assert on is not None and on.disabled is False
 
 
 def test_a_name_may_be_a_single_word(zitadel):

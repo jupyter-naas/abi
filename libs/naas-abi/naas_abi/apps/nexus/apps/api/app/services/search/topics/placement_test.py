@@ -68,11 +68,13 @@ async def test_existing_workspaces_come_from_the_workspaces_table() -> None:
 @pytest.mark.asyncio
 async def test_a_placed_cache_covers_the_workspaces_keys_only(team) -> None:
     await placement.ensure_search_cache_placed("ws-1")
+    ws_1 = team.iam.container("nexus", "workspace", "ws-1")
+    assert ws_1 is not None
 
-    def workspace_of(key: str) -> str | None:
+    def container_of(key: str) -> str | None:
         found = team.iam.placement_of("cache", key)
-        return found.workspace if found else None
+        return found.container if found else None
 
-    assert all(workspace_of(key) == "ws-1" for key in cache_keys("ws-1"))
-    assert all(workspace_of(key) is None for key in cache_keys("ws-2"))
-    assert workspace_of("search_topics_generation_x") is None
+    assert all(container_of(key) == ws_1 for key in cache_keys("ws-1"))
+    assert all(container_of(key) is None for key in cache_keys("ws-2"))
+    assert container_of("search_topics_generation_x") is None

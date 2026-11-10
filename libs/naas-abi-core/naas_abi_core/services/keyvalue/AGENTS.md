@@ -147,9 +147,9 @@ it answers a refusal itself) and hands that `CallContext`
 token's identity; the user it acts for is named by the token itself: a
 delegated token (`abi:delegated:agent`, `act` the acting service, `sub` the user)
 made by IAM's token exchange, never a header (the old `Abi-On-Behalf-Of` header is
-refused); trace and target workspace come from the request's `context`. Never read identity from request fields
+refused); trace and container come from the request's `context`. Never read identity from request fields
 (`principal_id` and `tenant_id` are reserved). Clients of `api` and `engine` send a
-delegation for the current call's user, and the call's trace and workspace. The domain service authorizes the call on that context (see "Authorization").
+delegation for the current call's user, and the call's trace and container. The domain service authorizes the call on that context (see "Authorization").
 
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception

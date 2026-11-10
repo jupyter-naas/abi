@@ -36,6 +36,7 @@ from naas_abi_core.services.event.EventPort import (
 from naas_abi_core.services.event.iam_catalog import CATALOG
 from naas_abi_core.services.event.ontologies.modules.EventOntology import LogProcess
 from naas_abi_core.services.iam.guard import ServiceGuard
+from naas_abi_core.services.iam.listing import ResourceLister, named_lister
 from naas_abi_core.services.ServiceBase import ServiceBase
 
 
@@ -70,7 +71,7 @@ def _stamp(event: Any) -> None:
     actor = served.id if served is not None else event_author_id.get()
     for field_name, value in (
         ("actor_user_id", actor),
-        ("actor_workspace_id", context.workspace_id),
+        ("actor_container", context.container),
         ("triggered_via", context.triggered_via),
     ):
         if getattr(event, field_name, None) is None and value is not None:
@@ -262,6 +263,17 @@ class EventService(ServiceBase, IEventService):
             search=search,
         ) as rows:
             yield (self._reconstruct(row, event_class) for row in rows)
+
+    def iam_listers(self) -> dict[tuple[str, str], ResourceLister]:
+        """What IAM lists of this service for the policy builder: its event types.
+        Read unchecked: IAM filters it as the caller (``list_resources``)."""
+        return {
+            (CATALOG.service, "event_type"): named_lister(
+                lambda query: self._adapter.list_event_types(),
+                lambda summary: self._guard.name("event_type", summary.event_type),
+                lambda summary: summary.event_type,
+            )
+        }
 
     def event_types(self) -> list[EventTypeSummary]:
         """The event types present that the caller may list."""

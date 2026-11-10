@@ -37,6 +37,8 @@ const WebSocketContext = createContext<WebSocketContextType | null>(null);
 export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((state) => state.user);
   const token = useAuthStore(selectSession);
+  // The server refuses the handshake of a view: no presence, no room, so none is tried.
+  const viewing = useAuthStore((state) => state.view !== null);
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [presenceUsers, setPresenceUsers] = useState<string[]>([]);
@@ -44,7 +46,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
 
   // Initialize socket connection
   useEffect(() => {
-    if (!user || !token) {
+    if (!user || !token || viewing) {
       setSocket(null);
       setIsConnected(false);
       return;
@@ -141,7 +143,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     return () => {
       socketInstance.disconnect();
     };
-  }, [user, token]);
+  }, [user, token, viewing]);
 
   const joinWorkspace = useCallback((workspaceId: string) => {
     if (!socket) return;

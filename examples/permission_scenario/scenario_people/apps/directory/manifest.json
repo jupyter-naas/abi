@@ -1,0 +1,7 @@
+{
+  "name": "Directory",
+  "description": "People directory, the app of P.",
+  "category": "module",
+  "icon_emoji": "📇",
+  "url": "html:index.html"
+}

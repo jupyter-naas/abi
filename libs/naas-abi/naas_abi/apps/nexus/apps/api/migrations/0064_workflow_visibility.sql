@@ -1,12 +1,7 @@
--- Workflows and pipelines a workspace's admins turned on or off for everyone in
--- it (workspace settings, Workflows). An item never switched is on; a hidden one
--- is refused when used, like an app or an agent turned off.
-CREATE TABLE IF NOT EXISTS workflow_visibility (
-    workspace_id VARCHAR(255) NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    type VARCHAR(32) NOT NULL,
-    module_id VARCHAR(255) NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    enabled BOOLEAN NOT NULL DEFAULT TRUE,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (workspace_id, type, module_id, name)
-);
+-- Migration: workflows and pipelines turned on or off in a workspace
+--
+-- Retired. The table workflow_visibility held what a workspace's admins turned
+-- off for everyone in it. Policies decide alone now: at start, Nexus turns what
+-- was turned off into Denies of each workspace's access policy, then drops the
+-- table (services/iam/policy_tree.py). A new database never makes it. The file
+-- stays so migration numbers keep their meaning; it has no statement.

@@ -4,8 +4,8 @@
   --org-settings-header-height: 56px;
   display: flex;
   flex-direction: row;
-  height: 100vh;
-  height: 100dvh;
+  height: calc(100vh - var(--view-banner-height, 0px));
+  height: calc(100dvh - var(--view-banner-height, 0px));
   background-color: var(--background-hex);
 }
 

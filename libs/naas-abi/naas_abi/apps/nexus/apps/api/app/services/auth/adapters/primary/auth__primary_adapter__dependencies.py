@@ -51,6 +51,8 @@ def to_user_schema(user: AuthUserRecord, *, is_superadmin: bool | None = None) -
         organization=user.organization,
         job_title=user.job_title,
         bio=user.bio,
+        linkedin_url=user.linkedin_url,
+        github_handle=user.github_handle,
         is_superadmin=bool(is_superadmin),
         created_at=user.created_at,
     )

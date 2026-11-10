@@ -76,6 +76,7 @@ from naas_abi.apps.nexus.apps.api.app.services.maps.settings.adapters.secondary.
 )
 from naas_abi.apps.nexus.apps.api.app.services.maps.storage_keys import image_content_type
 from naas_abi.apps.nexus.apps.api.app.services.maps.workspace_config import WorkspaceMapsDefaults
+from naas_abi.apps.nexus.apps.api.app.services.view_as.active import viewing
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
@@ -223,6 +224,7 @@ async def list_layouts(
         revisions=layout_seed_revisions(request),
         enabled_feeds=defaults.feeds,
         extra_feed_ids=graph_feed_ids(request),
+        seed=not viewing(),  # a page load writes nothing in a view
     )
     can_edit = await authz.allowed(
         "UpdateLayout", user=current_user, workspace=workspace_id, id="-"

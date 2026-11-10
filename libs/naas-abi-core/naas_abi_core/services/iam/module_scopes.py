@@ -1,11 +1,11 @@
-"""Module scopes: what modules expose, grantable per workspace one item at a time.
+"""Module scopes: what modules expose, grantable per container one item at a time.
 
 Two kinds, both marked ``module_scope`` in their catalog so the built-in
 viewer and member roles never reach them (``roles.py``) and the UI finds them:
 
 * **Automatic.** Every agent, app, workflow and pipeline of every module,
   engine or remote, is a resource of the ``module`` catalog below:
-  ``abi:<org>:<ws>:module:<type>/<module>/<name>``. ``<module>`` is the
+  ``<container>/module:<type>/<module>/<name>``. ``<module>`` is the
   module's stable identifier (``module_key``): an engine module's configured
   path (``naas_abi``, ``naas_abi_marketplace.applications.github``), the same in every
   install; a remote module's id (``acme.people``), the same across restarts.
@@ -15,10 +15,12 @@ viewer and member roles never reach them (``roles.py``) and the UI finds them:
   at load; a remote module's travels with its manifest and is registered when
   the manifest is approved. ``module_catalog`` checks one.
 
-The name is placed in the workspace of the call, never looked up: a module
-scope is a permission to use something in a workspace, not data a workspace
-owns. A user claiming another workspace gets what they hold there, which is
-what using it there needs (``AGENTS.md``, "Module scopes").
+The name is placed in the container of the call (a workspace, a module's
+project), never looked up: a module scope is a permission to use something in
+a container, not data a container owns. A user claiming another container gets
+what they hold there, which is what using it there needs (``AGENTS.md``,
+"Module scopes"). A declared container type is the exception: its resource is
+the container itself, registered with IAM ("Containers").
 """
 
 from __future__ import annotations
@@ -34,7 +36,7 @@ from naas_abi_core.services.iam.catalog import (
     CatalogError,
     ResourceType,
 )
-from naas_abi_core.services.iam.names import NONE, resource_name
+from naas_abi_core.services.iam.names import PLATFORM, resource_name
 
 SERVICE = "module"
 VERSION = 1
@@ -79,16 +81,16 @@ CATALOG = ActionCatalog(
     version=VERSION,
     resource_types=(
         _type(
-            AGENT, "agent/<module>/<name>: an agent of a module, used in a workspace."
+            AGENT, "agent/<module>/<name>: an agent of a module, used in a container."
         ),
-        _type(APP, "app/<module>/<name>: an app of a module, opened in a workspace."),
+        _type(APP, "app/<module>/<name>: an app of a module, opened in a container."),
         _type(
             WORKFLOW,
-            "workflow/<module>/<name>: a workflow of a module, run in a workspace.",
+            "workflow/<module>/<name>: a workflow of a module, run in a container.",
         ),
         _type(
             PIPELINE,
-            "pipeline/<module>/<name>: a pipeline of a module, run in a workspace.",
+            "pipeline/<module>/<name>: a pipeline of a module, run in a container.",
         ),
     ),
     actions=(
@@ -113,14 +115,13 @@ def scope_resource(
     module: str,
     name: str,
     *,
-    org: str = NONE,
-    workspace: str = NONE,
+    container: str = PLATFORM,
 ) -> str:
-    """``abi:<org>:<ws>:module:<type>/<module>/<name>``."""
+    """``<container>/module:<type>/<module>/<name>``."""
     if type_name not in TYPES:
         raise ValueError(f"Unknown module scope type {type_name!r}")
     return resource_name(
-        SERVICE, type_name, [module, name], kind="path", org=org, workspace=workspace
+        SERVICE, type_name, [module, name], kind="path", container=container
     )
 
 
@@ -231,10 +232,9 @@ def declared_resource(
     type_name: str,
     parts: str | Sequence[str],
     *,
-    org: str = NONE,
-    workspace: str = NONE,
+    container: str = PLATFORM,
 ) -> str:
-    """A resource of a module's own catalog, at the workspace of the call."""
+    """A resource of a module's own catalog, in the container of the call."""
     declared = catalog.resource_type(type_name)
     if declared is None:
         raise ValueError(f"{catalog.service} declares no resource type {type_name!r}")
@@ -243,8 +243,7 @@ def declared_resource(
         type_name,
         parts,
         kind=declared.id,
-        org=org,
-        workspace=workspace,
+        container=container,
     )
 
 

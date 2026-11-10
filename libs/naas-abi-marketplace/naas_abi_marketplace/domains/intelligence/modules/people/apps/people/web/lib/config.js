@@ -33,7 +33,7 @@ import { isBundledInNexus, nexusAuthHeaders, nexusWorkspaceId } from "./nexus.js
 
 const cachedByWorkspace = new Map();
 
-export async function loadAppConfig() {
+export function loadAppConfig() {
   const workspaceId = isBundledInNexus() ? nexusWorkspaceId() : "";
   const cacheKey = workspaceId || "__standalone__";
   if (cachedByWorkspace.has(cacheKey)) return cachedByWorkspace.get(cacheKey);
@@ -41,11 +41,18 @@ export async function loadAppConfig() {
   if (workspaceId) {
     url += `?workspace_id=${encodeURIComponent(workspaceId)}`;
   }
-  const response = await fetch(url, { headers: nexusAuthHeaders() });
-  if (!response.ok) throw new Error(`config → ${response.status}`);
-  const config = await response.json();
-  cachedByWorkspace.set(cacheKey, config);
-  return config;
+  // Boot and the shell may ask together. Share the in-flight read as well as
+  // the result, and let a later call retry a failed request.
+  const request = (async () => {
+    const response = await fetch(url, { headers: nexusAuthHeaders() });
+    if (!response.ok) throw new Error(`config → ${response.status}`);
+    return response.json();
+  })();
+  cachedByWorkspace.set(cacheKey, request);
+  request.catch(() => {
+    if (cachedByWorkspace.get(cacheKey) === request) cachedByWorkspace.delete(cacheKey);
+  });
+  return request;
 }
 
 export function applyTheme(config) {
@@ -78,7 +85,9 @@ export function applyBrand(config) {
     if (FAVICON_TYPES[extension]) link.type = FAVICON_TYPES[extension];
     document.head.appendChild(link);
   }
-  if (brand.font_stylesheet_url) {
+  if (brand.font_stylesheet_url && !Array.from(
+    document.querySelectorAll('link[rel="stylesheet"]'),
+  ).some((link) => link.href === new URL(brand.font_stylesheet_url, document.baseURI).href)) {
     const link = document.createElement("link");
     link.rel = "stylesheet";
     link.href = brand.font_stylesheet_url;

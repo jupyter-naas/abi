@@ -30,7 +30,7 @@ from naas_abi_core.services.model_registry.ModelRegistryService import (
     ModelRegistryService,
 )
 
-CHAT = "abi:-:-:model_registry:model/demo-chat"
+CHAT = "abi:model_registry:model/demo-chat"
 
 
 def _registry() -> ModelRegistryService:
@@ -111,7 +111,7 @@ class TestEmbed(ModelRegistryContract):
     ACTION = "model_registry:Embed"
 
     def resource(self, owner):
-        return "abi:-:-:model_registry:model/demo-embedding"
+        return "abi:model_registry:model/demo-embedding"
 
     def call(self, service):
         if isinstance(service, ModelRegistryNATSClient):

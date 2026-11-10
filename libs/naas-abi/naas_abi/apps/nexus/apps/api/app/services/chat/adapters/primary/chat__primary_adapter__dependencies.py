@@ -28,6 +28,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.port import ChatConversation
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import Message as ProviderMessage
 from naas_abi.apps.nexus.apps.api.app.services.registry import ServiceRegistry, get_service_registry
+from naas_abi.apps.nexus.apps.api.app.services.view_as.active import viewing
 from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 from naas_abi_core.services.vector_store.VectorStoreService import VectorStoreService
@@ -58,7 +59,11 @@ async def own_conversation(
 
     A conversation is personal: one that is not the caller's is "not found",
     and the owner is known only after loading it, so routes authorize here.
+
+    In a view it is the person's, and private to them: never found.
     """
+    if viewing():
+        raise HTTPException(status_code=404, detail="Conversation not found")
     row = await chat_service.get_conversation_for_user(
         user_id=current_user.id,
         conversation_id=conversation_id,
@@ -126,10 +131,8 @@ async def authorize_agent_use(
     for one the workspace built.
 
     A chat turn runs the agent with its workspace's provider settings, so the
-    agent's own workspace decides, not the workspace the client names. One its
-    workspace turned off is refused to everyone: a module's agent by the rule of
-    its scope (``authz.require_scope``: hidden when none of the workspace's rows
-    of it is on, as the roster shows it), one the workspace built by its row. An id
+    agent's own workspace decides, not the workspace the client names. IAM's
+    decision is the whole answer: no workspace switch turns an agent off. An id
     that is no workspace agent (an in-process agent named directly) has no row
     to ask about: the in-process runtime runs only the agents the caller may
     use where the turn is stored (``caller_usable_agents``).
@@ -150,9 +153,6 @@ async def authorize_agent_use(
         id=agent.id,
         feature="chat",
     )
-    if not agent.enabled:
-        # Turned off in its workspace, by its admins: for everyone.
-        raise HTTPException(status_code=403, detail="This agent is turned off in this workspace")
 
 
 async def authorize_turn(

@@ -52,13 +52,13 @@ class TestKeyValueAuthorization(DataServiceContract):
         remote.adapter.close()
 
     def granted_resources(self):
-        return ["abi:-:-:keyvalue:key/shared%3A*"]
+        return ["abi:keyvalue:key/shared%3A*"]
 
     def denied_resources(self):
-        return ["abi:-:-:keyvalue:key/private%3A*"]
+        return ["abi:keyvalue:key/private%3A*"]
 
     def read_only_resources(self):
-        return ["abi:-:-:keyvalue:key/frozen%3A*"]
+        return ["abi:keyvalue:key/frozen%3A*"]
 
     def outcome_of(self, exc):
         return NOT_FOUND if isinstance(exc, KVNotFoundError) else None

@@ -15,6 +15,8 @@ class AuthUserRecord:
     organization: str | None = None
     job_title: str | None = None
     bio: str | None = None
+    linkedin_url: str | None = None
+    github_handle: str | None = None
     is_superadmin: bool = False
 
 
@@ -39,21 +41,16 @@ class AuthPersistencePort(ABC):
         organization: str | None,
         job_title: str | None,
         bio: str | None,
+        linkedin_url: str | None = None,
+        github_handle: str | None = None,
     ) -> AuthUserRecord | None:
+        """None leaves a field as it is; an empty string clears it."""
         raise NotImplementedError
 
     @abstractmethod
     async def update_user_avatar(
         self, user_id: str, avatar_url: str, now: datetime
     ) -> AuthUserRecord | None:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def list_users(self) -> list[AuthUserRecord]:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def count_superadmins(self) -> int:
         raise NotImplementedError
 
     @abstractmethod
@@ -68,12 +65,6 @@ class AuthPersistencePort(ABC):
     ) -> dict[str, str | None] | None:
         """The user's member profile (organization, job_title, bio) in the
         organization owning ``workspace_id``; None outside an organization."""
-        raise NotImplementedError
-
-    @abstractmethod
-    async def set_user_superadmin(
-        self, user_id: str, is_superadmin: bool, now: datetime
-    ) -> AuthUserRecord | None:
         raise NotImplementedError
 
     @abstractmethod

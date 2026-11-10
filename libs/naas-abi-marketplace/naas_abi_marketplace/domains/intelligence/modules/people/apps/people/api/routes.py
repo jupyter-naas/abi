@@ -16,7 +16,7 @@ import asyncio
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import Response
@@ -28,6 +28,7 @@ from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.config
     public_config,
 )
 from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts import (
+    connections_payload,
     profile_payload,
 )
 from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts import (
@@ -51,6 +52,7 @@ from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.script
 )
 from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.people_resolver import (
     WORKSPACE_BACKENDS,
+    is_supplementary_graph,
     resolve_sparql_snapshot,
     resolve_workspace_dataset,
     resolve_workspace_graph,
@@ -141,8 +143,17 @@ def build_router(config_path: Path | None = None) -> APIRouter:
                 store, graph_iris = await resolve_workspace_dataset(
                     settings, workspace_id=workspace_id, user_id=user_id
                 )
+                # The graph pages merge these graphs on demand. A user's
+                # LinkedIn graph holds their whole network and adds nothing a
+                # profile's graph shows, so it is not merged in.
                 return PeopleRequestContext(
-                    store=store, live_graph=None, graph_iris=graph_iris
+                    store=store,
+                    live_graph=None,
+                    graph_iris=tuple(
+                        iri
+                        for iri in graph_iris
+                        if not is_supplementary_graph(settings, iri)
+                    ),
                 )
             snapshot = await resolve_sparql_snapshot(
                 settings, workspace_id=workspace_id, user_id=user_id
@@ -168,6 +179,7 @@ def build_router(config_path: Path | None = None) -> APIRouter:
         q: str = Query("", max_length=200),
         facet: str = Query("", max_length=120),
         page: int = Query(1, ge=1, le=1000),
+        sort: Literal["", "connections"] = Query(""),
         ctx: PeopleRequestContext = Depends(_people_context),
     ) -> dict:
         # In a thread: the routes share one event loop, and the page asks for
@@ -180,6 +192,7 @@ def build_router(config_path: Path | None = None) -> APIRouter:
                 query=q,
                 facet=facet,
                 page=page,
+                sort=sort,
             )
         except DatasetsMissingError as exc:
             raise HTTPException(status_code=404, detail=exc.as_detail()) from exc
@@ -232,6 +245,62 @@ def build_router(config_path: Path | None = None) -> APIRouter:
             payload["related"] = profile_payload.related(ctx.store, settings, slug=slug)
             return payload
         except profile_payload.ProfileNotFoundError as exc:
+            raise HTTPException(
+                status_code=404, detail=f"No profile for {slug}"
+            ) from exc
+        except DatasetsMissingError as exc:
+            raise HTTPException(status_code=404, detail=exc.as_detail()) from exc
+
+    @router.get("/people/{slug}/connections")
+    async def get_person_connections(
+        slug: str,
+        ctx: PeopleRequestContext = Depends(_people_context),
+    ) -> dict:
+        """Who the person is connected to: the Connections tab, from datasets."""
+        try:
+            return await asyncio.to_thread(
+                connections_payload.connections, ctx.store, config(), slug=slug
+            )
+        except connections_payload.PersonNotFoundError as exc:
+            raise HTTPException(
+                status_code=404, detail=f"No profile for {slug}"
+            ) from exc
+        except DatasetsMissingError as exc:
+            raise HTTPException(status_code=404, detail=exc.as_detail()) from exc
+
+    @router.get("/connections/network")
+    async def get_most_connected_network(
+        q: str = Query("", max_length=200),
+        facet: str = Query("", max_length=120),
+        ctx: PeopleRequestContext = Depends(_people_context),
+    ) -> dict:
+        """The Connections tab's network before a person is chosen: the
+        search's most connected people and what ties them."""
+        try:
+            return await asyncio.to_thread(
+                connections_payload.most_connected_network,
+                ctx.store,
+                config(),
+                query=q,
+                facet=facet,
+            )
+        except DatasetsMissingError as exc:
+            raise HTTPException(status_code=404, detail=exc.as_detail()) from exc
+
+    @router.get("/people/{slug}/connections/network")
+    async def get_person_connections_network(
+        slug: str,
+        ctx: PeopleRequestContext = Depends(_people_context),
+    ) -> dict:
+        """The person and their connections only, as a graph page payload."""
+        try:
+            return await asyncio.to_thread(
+                connections_payload.connections_network,
+                ctx.store,
+                config(),
+                slug=slug,
+            )
+        except connections_payload.PersonNotFoundError as exc:
             raise HTTPException(
                 status_code=404, detail=f"No profile for {slug}"
             ) from exc

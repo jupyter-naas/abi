@@ -82,3 +82,21 @@ class IdentityClient:
             request,
             pb.FindProvisionedUserResponse,
         )
+
+    async def update_provisioned_user(
+        self, request: pb.UpdateProvisionedUserRequest
+    ) -> pb.UpdateProvisionedUserResponse:
+        return await self._transport.call(
+            "abi.identity.v1.update_provisioned_user",
+            request,
+            pb.UpdateProvisionedUserResponse,
+        )
+
+    async def delete_provisioned_user(
+        self, request: pb.DeleteProvisionedUserRequest
+    ) -> pb.DeleteProvisionedUserResponse:
+        return await self._transport.call(
+            "abi.identity.v1.delete_provisioned_user",
+            request,
+            pb.DeleteProvisionedUserResponse,
+        )

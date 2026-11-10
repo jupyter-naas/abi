@@ -74,7 +74,11 @@ def test_a_link_route_answers_429_at_the_limit_not_500(nexus_iam, monkeypatch):
 
     # The caller may use apps in the workspace the request names: only the
     # link is refused, and with a 429.
-    nexus_iam.grant("ada", "owner", nexus_iam.workspace("org-1", "ws-1"))
+    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
+
+    workspace = nexus_iam.workspace("org-1", "ws-1")
+    nexus_iam.grant("ada", "owner", workspace)
+    nexus_iam.allow_scope("ada", ModuleScope("app", "acme.ops", "map"), workspace)
     monkeypatch.setattr(routes, "mint_app_html_access_token", full)
     monkeypatch.setattr(routes, "_app_id_of_prefix", lambda prefix: "acme.ops:map")
     user = type("User", (), {"id": "ada"})()

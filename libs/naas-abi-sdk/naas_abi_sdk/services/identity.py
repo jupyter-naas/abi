@@ -3,7 +3,7 @@
 The engine verifies providers' ID tokens and resolves them to IAM users; a
 module declares ``identity`` among its services and holds the ``identity:*``
 actions it needs (``VerifyToken``, ``Authenticate``, ``SignIn`` on
-``abi:-:-:identity:provider/<name>``). Client secrets never leave the engine:
+``abi:identity:provider/<name>``). Client secrets never leave the engine:
 a module acting as a relying party asks the engine to build the authorization
 URL, redeem the code and refresh.
 
@@ -124,4 +124,30 @@ class IdentityService(ServiceProxy):
     ) -> dict[str, Any] | None:
         return await self._request(
             "find_provisioned_user", provider=provider, email=email
+        )
+
+    async def update_provisioned_user(
+        self,
+        provider: str,
+        subject: str,
+        *,
+        name: str | None = None,
+        disabled: bool | None = None,
+    ) -> dict[str, Any] | None:
+        """Rename the provider's user ``subject``, or disable (enable) their
+        sign-in there; ``None`` when the provider has no such user."""
+        return await self._request(
+            "update_provisioned_user",
+            provider=provider,
+            subject=subject,
+            name=name,
+            disabled=disabled,
+        )
+
+    async def delete_provisioned_user(self, provider: str, subject: str) -> bool:
+        """Delete the provider's user ``subject``: False when it had none."""
+        return bool(
+            await self._request(
+                "delete_provisioned_user", provider=provider, subject=subject
+            )
         )

@@ -67,7 +67,9 @@ src/marketplace/applications/linkedin/
 │   ├── LinkedInIntegration.py     # Primary integration client
 │   └── LinkedInIntegration_test.py # Integration tests
 ├── ontologies/                     # Semantic data models
-│   └── LinkedInOntology.ttl       # LinkedIn ontology definitions
+│   ├── modules/LinkedInOntology.ttl   # LinkedIn ontology (processes consolidated in)
+│   ├── processes/ActOfConnectionProcess.ttl
+│   └── queries/LinkedInSparqlQueries.ttl
 └── README.md                       # This documentation
 ```
 

@@ -182,7 +182,7 @@ def test_config_superadmins_become_iam_platform_admins(monkeypatch: pytest.Monke
         )
         with use_call_context(ctx):
             # Outside the grants a plain Nexus user holds.
-            return iam.authorize("nexus:ManageSystem", "abi:-:-:nexus:system/-").allowed
+            return iam.authorize("nexus:ManageSystem", "abi:nexus:system/-").allowed
 
     with as_service_account("api"):
         org_seed.sync_platform_admins(iam, rows)

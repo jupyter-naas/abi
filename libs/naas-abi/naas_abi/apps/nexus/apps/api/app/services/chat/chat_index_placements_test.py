@@ -12,6 +12,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.chat_index_placements import
     conversation_indexes,
     place_conversation_index,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_of
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.names import encode_id
@@ -19,7 +20,7 @@ from naas_abi_core.services.iam.names import encode_id
 
 def _placed(nexus: NexusIam, service: str) -> dict[str, str]:
     with as_service_account("api"):
-        return {p.id_key: p.workspace for p in nexus.iam.list_placements(service)}
+        return {p.id_key: workspace_of(p.container) for p in nexus.iam.list_placements(service)}
 
 
 @pytest.mark.asyncio

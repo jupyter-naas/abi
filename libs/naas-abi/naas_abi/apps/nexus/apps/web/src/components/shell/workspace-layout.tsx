@@ -290,7 +290,7 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
   if (isMobile) {
     return (
       <div
-        className="flex h-[100dvh] w-screen flex-col overflow-hidden bg-background"
+        className="flex h-[calc(100dvh-var(--view-banner-height,0px))] w-screen flex-col overflow-hidden bg-background"
         style={themeStyles}
         data-org-branded="true"
         data-mobile-shell="true"
@@ -379,7 +379,7 @@ export function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
 
   return (
     <div
-      className="flex h-screen w-screen overflow-hidden bg-background"
+      className="flex h-[calc(100vh-var(--view-banner-height,0px))] w-screen overflow-hidden bg-background"
       style={themeStyles}
       data-org-branded="true"
     >

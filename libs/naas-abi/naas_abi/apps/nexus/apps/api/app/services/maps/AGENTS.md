@@ -23,6 +23,14 @@ Optional `coverage: {pins: [...]}` provides city summaries from the same scoped 
 
 Run `pytest` on this directory (service and colocated API tests). Frontend contract tests live beside `maps/lib/maps-feed.ts`, `maps-basemaps.ts`, `maps-country-cluster.ts` and `permissions-api.ts`.
 
+## In a view
+
+A page load never writes in a view of another person (`../view_as/AGENTS.md`, "Page loads that write"). The three `list`s
+(`MapsLayoutService`, `MapsBasemapService`, `MapsFeedLayerService`, and the layer's `get` / `data_source`) take
+`seed: bool = True`: with `seed=False` they apply no deployment seed, decide no initial feed or basemap, and give no feed
+its default layer, and answer what is stored. The primary adapters pass `seed=not viewing()`. A new read that seeds takes
+the same flag, or `no_writes_test.py` (view_as) fails.
+
 ## Authorization
 
 Every route authorizes with an IAM action of the `nexus` catalog (`iam/catalog/knowledge.py`): feeds are the `layout` type (`ListLayouts`, `GetLayout`, `UpdateLayout`, `DeleteLayout`, `SetLayoutVisibility`, `PreviewLayout`), a feed's layers `feed_layer` (`ListFeedLayers`, `GetFeedLayer`, `UpdateFeedLayer`, `DeleteFeedLayer`), `basemap` (`ListBasemaps`, `GetBasemap`, `UpdateBasemap`, `DeleteBasemap`, `SetBasemapVisibility`), the catalog read `GetMapsCatalog` and `maps_access` (`GetMapsAccess`, `UpdateMapsAccess`). Viewers read, admins author; `can_edit` in a read is `authz.allowed("UpdateLayout" ...)`. Never check a role. The workspaces a user may grant to (`permissions/adapters/secondary/postgres.py`) are the ones IAM lets them `UpdateWorkspace`; a platform administrator is `is_platform_admin`. Tests act as a user of `graph/testing.knowledge_team` (`acting_as_header`).

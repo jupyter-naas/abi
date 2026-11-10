@@ -8,6 +8,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
 from naas_abi.apps.nexus.apps.api.app.core.config import get_settings
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
+from naas_abi.apps.nexus.apps.api.app.services.iam_admin.runtime import get_iam_admin_service
 from naas_abi.apps.nexus.apps.api.app.services.modules import scopes
 from naas_abi.apps.nexus.apps.api.app.services.modules.schema import (
     MarketplaceConfigResponse,
@@ -47,14 +48,21 @@ async def list_module_scopes(
 ) -> dict[str, Any]:
     """Every module with its agents, apps, workflows, pipelines and declared
     actions, as the scopes a policy grants (``modules/scopes.py``): for the
-    admins of the workspace or the organization named."""
+    admins of the workspace or the organization named and whoever may write
+    policies there, narrowed to what the caller may grant there."""
     if not workspace_id and not organization_id:
         raise HTTPException(status_code=422, detail="Name a workspace_id or an organization_id")
-    await authz.require(
-        "ListModuleScopes",
-        user=current_user,
-        workspace=workspace_id,
-        org=None if workspace_id else organization_id,
-        id="-",
-    )
-    return {"modules": await scopes.gather()}
+    org = None if workspace_id else organization_id
+    container = await authz.AUTHZ.where(workspace=workspace_id, org=org)
+    admin = get_iam_admin_service()
+    # Its admins, or whoever builds policies there.
+    if container is None or not await admin.writes_policies(current_user, container):
+        await authz.require(
+            "ListModuleScopes", user=current_user, workspace=workspace_id, org=org, id="-"
+        )
+    if container is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    # Only what the caller may grant there: nothing lists more to someone who
+    # may grant less (IAM's ``grantable``, as the caller).
+    grantable = await admin.grantable(current_user, container)
+    return {"modules": scopes.granted(await scopes.gather(), grantable["catalogs"])}

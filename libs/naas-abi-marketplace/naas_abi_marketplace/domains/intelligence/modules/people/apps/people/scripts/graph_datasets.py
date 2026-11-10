@@ -98,6 +98,14 @@ def dataset_version(
     return service.namespace_version(namespace)
 
 
+def _written_tables(service: DatasetService, namespace: str) -> set[str] | None:
+    """The tables *namespace* holds, or None if the service cannot say."""
+    try:
+        return {info.name for info in service.list(namespace=namespace)}
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def read_namespace(
     service: DatasetService, config: dict[str, Any], namespace: str
 ) -> dict[str, list[dict[str, Any]]] | None:
@@ -105,7 +113,13 @@ def read_namespace(
     if dataset_version(service, config, namespace) is None:
         return None
     tables: dict[str, list[dict[str, Any]]] = {}
+    written = _written_tables(service, namespace)
     for logical, table in config["data"]["tables"].items():
+        if written is not None and table not in written and logical != "people":
+            # Written before this table existed (connections): read as empty,
+            # without a failing query the adapter would log as an error.
+            tables[logical] = []
+            continue
         try:
             tables[logical] = ds.query(
                 service, f"SELECT * FROM {table}", namespace=namespace, table=table
@@ -119,22 +133,60 @@ def read_namespace(
     return tables
 
 
+# People columns a later source may fill when the first left them empty.
+FILLED_COLUMNS = ("linkedin_url",)
+
+
 def merge_tables(
     config: dict[str, Any], sources: list[dict[str, list[dict[str, Any]]]]
 ) -> MemoryPeopleStore:
     """One store over *sources*, in that order.
 
     A person found in two of them is kept from the first, with that source's
-    sections only, so a profile never mixes two sources.
+    sections only, so a profile never mixes two sources. Shared tables
+    (``ds.SHARED_TABLES``: connections) are the exception: each source states
+    its own, so they are united, one row per key, the first source's kept.
+
+    A person's LinkedIn URL is the other exception: kept from the first source
+    that states it (``FILLED_COLUMNS``). A people graph that never knew it
+    (a curated directory) still gets it from the person's own LinkedIn import.
     """
     merged: dict[str, list[dict[str, Any]]] = {
         logical: [] for logical in config["data"]["tables"]
     }
     seen: set[str] = set()
+    shared_keys: dict[str, set[tuple[Any, ...]]] = {
+        logical: set() for logical in ds.SHARED_TABLES
+    }
+    kept: dict[str, dict[str, Any]] = {}
     for tables in sources:
         own = {row["slug"] for row in tables.get("people", [])} - seen
+        for row in tables.get("people", []):
+            first = kept.get(row["slug"])
+            if first is None:
+                continue
+            for column in FILLED_COLUMNS:
+                if not first.get(column) and row.get(column):
+                    first[column] = row[column]
         for logical, rows in tables.items():
-            merged[logical].extend(row for row in rows if row.get("slug") in own)
+            if logical not in merged:
+                continue
+            if logical in ds.SHARED_TABLES:
+                key_columns = ds.SHARED_TABLES[logical]
+                for row in rows:
+                    key = tuple(row.get(column) for column in key_columns)
+                    if key not in shared_keys[logical]:
+                        shared_keys[logical].add(key)
+                        merged[logical].append(row)
+                continue
+            taken = [
+                dict(row) if logical == "people" else row
+                for row in rows
+                if row.get("slug") in own
+            ]
+            merged[logical].extend(taken)
+            if logical == "people":
+                kept.update((row["slug"], row) for row in taken)
         seen |= own
     return MemoryPeopleStore(merged, config)
 

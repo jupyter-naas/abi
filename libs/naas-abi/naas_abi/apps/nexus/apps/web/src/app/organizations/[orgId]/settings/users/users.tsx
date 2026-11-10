@@ -32,13 +32,13 @@ import { ColumnFilterPopover } from '@/components/graph/explore/ColumnFilterPopo
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { isBlank, type ColumnFilterState } from '@/lib/graph-query/filters';
 import type { FacetBucket } from '@/lib/graph-query/types';
-import { rowMatchesColumnFilter } from './users-table-filter';
+import { rowMatchesColumnFilter } from '@/components/settings/users-table/users-table-filter';
 import { SearchBox } from '@/components/settings/search-box';
 import { matchesSearch } from '@/app/settings/lib/search';
 import {
   downloadUsersExport,
   type UsersExportFormat,
-} from './users-table-export';
+} from '@/components/settings/users-table/users-table-export';
 import '../components/org-settings-components.css';
 import './users.css';
 

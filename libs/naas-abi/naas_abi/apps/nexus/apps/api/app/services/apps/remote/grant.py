@@ -24,6 +24,7 @@ from datetime import datetime
 from urllib.parse import unquote_plus
 
 from naas_abi.apps.nexus.apps.api.app.services.apps import links
+from naas_abi.apps.nexus.apps.api.app.services.view_as.port import LinkView
 from naas_abi_core.engine.nats_auth import APP_AUDIENCE
 
 GRANT_SCOPE = "app-remote"
@@ -65,6 +66,7 @@ class RemoteAppGrant:
     app: str
     workspace_id: str = ""
     scope: tuple[dict, ...] | None = None
+    view: LinkView | None = None  # the view that made it: the proxy forwards GET and HEAD only
 
 
 def is_segment(module_id: str, app: str) -> bool:
@@ -80,9 +82,11 @@ def mint_remote_app_grant(
     minutes: int = 60,
     not_after: datetime | None = None,
     workspace_id: str = "",
+    view: LinkView | None = None,
 ) -> str:
     """A grant for one user to open one app in one workspace; it never outlives
-    ``not_after`` (the credential it was exchanged for)."""
+    ``not_after`` (the credential it was exchanged for). ``view``: the view whose link
+    this one is made from (a link made in a view is the view's, whoever mints it)."""
     if not user_id:
         raise ValueError("a remote app grant needs a user")
     if not is_segment(module_id, app):
@@ -95,6 +99,7 @@ def mint_remote_app_grant(
         minutes=minutes,
         not_after=not_after,
         description=f"remote app: {module_id}/{app}"[:200],
+        view=view,
     )
     return value
 
@@ -118,6 +123,7 @@ def read_remote_app_grant(token: str) -> RemoteAppGrant | None:
         app=app,
         workspace_id=workspace_id,
         scope=link.scope,
+        view=link.view,
     )
 
 

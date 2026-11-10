@@ -42,7 +42,7 @@ async def list_agents(workspace_id: str) -> list[str]:
     return []
 
 
-@router.get("/search", dependencies=[guard("ListWorkspaces", workspace=None, org="org_id")])
+@router.get("/search", dependencies=[guard("GetOrganization", workspace=None, org="org_id")])
 async def by_org(org_id: str) -> str:
     return org_id
 

@@ -5,7 +5,6 @@ import { useParams } from 'next/navigation';
 import { Workflow } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   SettingsEmpty,
   SettingsFilterSelect,
@@ -19,17 +18,14 @@ import {
 import {
   fetchWorkflowSettings,
   filterWorkflows,
-  putWorkflowSetting,
-  withSwitched,
   workflowKey,
   type WorkflowSetting,
 } from './workflows-model';
 
 /**
- * Workspace settings › Workflows: the workflows and pipelines of the workspace's set, each
- * on or off for everyone in it. One turned off is refused when started, here and as an
- * agent's tool. Who may run each is set in Roles & permissions; what the set holds, on the
- * organization's Modules & features page.
+ * Workspace settings › Workflows: the workflows and pipelines of the workspace's modules,
+ * read-only. Who may run each is decided by policies alone, on Roles & permissions: there is
+ * no workspace on/off switch.
  */
 export default function WorkflowsSettingsPage() {
   const workspaceId = useParams()?.workspaceId as string | undefined;
@@ -37,7 +33,6 @@ export default function WorkflowsSettingsPage() {
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [type, setType] = useState('all');
-  const [status, setStatus] = useState('all');
 
   const load = useCallback(async () => {
     if (!workspaceId) return;
@@ -56,29 +51,14 @@ export default function WorkflowsSettingsPage() {
   }, [load]);
 
   const all = useMemo(() => items ?? [], [items]);
-  const shown = useMemo(() => filterWorkflows(all, { query, type, status }), [all, query, type, status]);
-  const enabledCount = all.filter((item) => item.enabled).length;
-
-  const toggle = async (item: WorkflowSetting) => {
-    if (!workspaceId) return;
-    const key = workflowKey(item);
-    const enabled = !item.enabled;
-    setError('');
-    setItems((current) => withSwitched(current ?? [], key, enabled));
-    try {
-      await putWorkflowSetting(workspaceId, item, enabled);
-    } catch (err) {
-      setItems((current) => withSwitched(current ?? [], key, !enabled));
-      setError(err instanceof Error ? err.message : 'Could not save.');
-    }
-  };
+  const shown = useMemo(() => filterWorkflows(all, { query, type }), [all, query, type]);
 
   return (
     <div className="space-y-6">
       <SettingsPageHeader
         title="Workflows"
-        badge={items ? `${enabledCount} enabled` : undefined}
-        description="Turn the workflows and pipelines of this workspace on or off for everyone in it"
+        badge={items ? countLabel(all.length, all.length, 'item') : undefined}
+        description="The workflows and pipelines of this workspace's modules. Who runs each is decided by policies, on Roles & permissions."
       />
 
       {error && <SettingsNotice tone="error">{error}</SettingsNotice>}
@@ -89,7 +69,7 @@ export default function WorkflowsSettingsPage() {
         <SettingsEmpty
           icon={<Workflow size={40} className="opacity-40" />}
           title="No workflows in this workspace"
-          description="The modules of this workspace's set run no workflow or pipeline."
+          description="The modules of this workspace run no workflow or pipeline."
         />
       ) : (
         <div className="space-y-4">
@@ -98,30 +78,18 @@ export default function WorkflowsSettingsPage() {
             onSearchChange={setQuery}
             searchPlaceholder="Search workflows..."
             filters={
-              <>
-                <SettingsFilterSelect
-                  label="Type"
-                  value={type}
-                  onChange={setType}
-                  options={[
-                    { value: 'all', label: 'All types' },
-                    { value: 'workflow', label: 'Workflows' },
-                    { value: 'pipeline', label: 'Pipelines' },
-                  ]}
-                />
-                <SettingsFilterSelect
-                  label="Status"
-                  value={status}
-                  onChange={setStatus}
-                  options={[
-                    { value: 'all', label: 'All statuses' },
-                    { value: 'enabled', label: 'Enabled' },
-                    { value: 'disabled', label: 'Disabled' },
-                  ]}
-                />
-              </>
+              <SettingsFilterSelect
+                label="Type"
+                value={type}
+                onChange={setType}
+                options={[
+                  { value: 'all', label: 'All types' },
+                  { value: 'workflow', label: 'Workflows' },
+                  { value: 'pipeline', label: 'Pipelines' },
+                ]}
+              />
             }
-            meta={`${countLabel(shown.length, all.length, 'item')} · ${enabledCount} enabled`}
+            meta={countLabel(shown.length, all.length, 'item')}
           />
 
           <div className={settingsTable.wrapper}>
@@ -131,13 +99,12 @@ export default function WorkflowsSettingsPage() {
                   <th className={settingsTable.th}>Name</th>
                   <th className={settingsTable.th}>Type</th>
                   <th className={settingsTable.th}>Module</th>
-                  <th className={cn(settingsTable.th, 'w-24')}>Enabled</th>
                 </tr>
               </thead>
               <tbody>
                 {shown.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="p-8 text-center text-muted-foreground">
+                    <td colSpan={3} className="p-8 text-center text-muted-foreground">
                       No workflows match the current search and filters
                     </td>
                   </tr>
@@ -156,14 +123,6 @@ export default function WorkflowsSettingsPage() {
                         <Badge variant={item.type === 'pipeline' ? 'warning' : 'primary'}>{item.type}</Badge>
                       </td>
                       <td className={cn(settingsTable.td, 'truncate text-muted-foreground')}>{item.module_id}</td>
-                      <td className={settingsTable.td}>
-                        <Checkbox
-                          checked={item.enabled}
-                          onCheckedChange={() => void toggle(item)}
-                          aria-label={item.enabled ? `Disable ${item.display_name}` : `Enable ${item.display_name}`}
-                          title={item.enabled ? 'Disable for everyone in the workspace' : 'Enable'}
-                        />
-                      </td>
                     </tr>
                   ))
                 )}

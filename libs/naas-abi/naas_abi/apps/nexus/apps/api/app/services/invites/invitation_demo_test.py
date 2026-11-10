@@ -34,7 +34,7 @@ from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__prima
     router as auth_router,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_scope, workspace_scope
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container, workspace_container
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 from naas_abi.apps.nexus.apps.api.app.services.identity_events.middleware import (
     RequestIdentityMiddleware,
@@ -253,7 +253,7 @@ def allow_provisioning(iam, principal_id: str) -> None:
                     {
                         "effect": "Allow",
                         "actions": ["identity:ProvisionUser", "identity:FindProvisionedUser"],
-                        "resources": ["abi:-:-:identity:provider/*"],
+                        "resources": ["abi:identity:provider/*"],
                     }
                 ],
             },
@@ -279,8 +279,8 @@ async def alice(nexus, idp):
         )
         await db.flush()
         await db.commit()
-    await MEMBERSHIPS.grant(me["id"], "owner", org_scope(ORG))
-    await MEMBERSHIPS.grant(me["id"], "owner", workspace_scope(ORG, WS))
+    await MEMBERSHIPS.grant(me["id"], "owner", org_container(ORG))
+    await MEMBERSHIPS.grant(me["id"], "owner", workspace_container(ORG, WS))
     # Making accounts in the provider's directory is a right of its own that
     # platform operators give (an organization's owner does not hold it).
     _, iam, _ = nexus
@@ -321,8 +321,8 @@ async def test_the_rfc_demo_invite_bob_and_he_signs_in_a_member_of_w(nexus, idp,
     with as_service_account("engine"):
         pending = iam.list_pending_grants(provider="builtin", email="bob@example.com")
     assert {(g.policy_id, g.scope) for g in pending} == {
-        (roles.MEMBER, f"abi:{ORG}:-"),
-        (roles.MEMBER, f"abi:{ORG}:{WS}"),
+        (roles.MEMBER, f"abi:nexus:organization/{ORG}"),
+        (roles.MEMBER, f"abi:nexus:organization/{ORG}/nexus:workspace/{WS}"),
     }
     # Bob was told, and the invitation holds no code: the IdP mails that on sign-in.
     ((subject, text),) = mail.kept("bob@example.com")
@@ -345,8 +345,8 @@ async def test_the_rfc_demo_invite_bob_and_he_signs_in_a_member_of_w(nexus, idp,
     # 5. Bob is a member of W, in Nexus and in IAM.
     me = (await bob.get("/api/auth/me")).json()
     assert me["email"] == "bob@example.com"
-    assert await MEMBERSHIPS.role_at(me["id"], workspace_scope(ORG, WS)) == "member"
-    assert await MEMBERSHIPS.role_at(me["id"], org_scope(ORG)) == "member"
+    assert await MEMBERSHIPS.role_at(me["id"], workspace_container(ORG, WS)) == "member"
+    assert await MEMBERSHIPS.role_at(me["id"], org_container(ORG)) == "member"
     # What the admin set about Bob when inviting him is his profile in the organization.
     details = (await alice.get(f"/api/organizations/{ORG}/members/{me['id']}")).json()
     assert details["organization_profile"]["job_title"] == "CTO"
@@ -354,7 +354,10 @@ async def test_the_rfc_demo_invite_bob_and_he_signs_in_a_member_of_w(nexus, idp,
         stored = (await db.execute(select(InvitationModel))).scalar_one()
         assert (stored.status, stored.accepted_user_id) == ("accepted", me["id"])
     attached = {(a.policy_id, a.scope) for a in iam.store.list_attachments(principal_id=me["id"])}
-    assert {(roles.MEMBER, f"abi:{ORG}:{WS}"), (roles.MEMBER, f"abi:{ORG}:-")} <= attached
+    assert {
+        (roles.MEMBER, f"abi:nexus:organization/{ORG}/nexus:workspace/{WS}"),
+        (roles.MEMBER, f"abi:nexus:organization/{ORG}"),
+    } <= attached
     with as_service_account("engine"):
         assert iam.list_pending_grants() == []
     organizations = (await bob.get("/api/organizations")).json()
@@ -425,7 +428,7 @@ class TestProviderManagedInTheProvider:
         bob = await sign_in_as(idp, "bob@example.com")
         me = (await bob.get("/api/auth/me")).json()
         assert [o["id"] for o in (await bob.get("/api/organizations")).json()] == [ORG]
-        assert (roles.MEMBER, f"abi:{ORG}:{WS}") in {
+        assert (roles.MEMBER, f"abi:nexus:organization/{ORG}/nexus:workspace/{WS}") in {
             (a.policy_id, a.scope) for a in iam.store.list_attachments(principal_id=me["id"])
         }
 
@@ -438,8 +441,8 @@ async def test_only_admins_invite_list_and_revoke(nexus, idp, alice):
     carol_user = idp.create_user("carol@example.com")
     carol = await sign_in(idp, carol_user)
     me = (await carol.get("/api/auth/me")).json()
-    await MEMBERSHIPS.grant(me["id"], "member", org_scope(ORG))
-    await MEMBERSHIPS.grant(me["id"], "member", workspace_scope(ORG, WS))
+    await MEMBERSHIPS.grant(me["id"], "member", org_container(ORG))
+    await MEMBERSHIPS.grant(me["id"], "member", workspace_container(ORG, WS))
     assert (await invite_bob(carol, email="dave@example.com")).status_code in (403, 422)
     for method, path in (
         ("GET", f"/api/invitations/organizations/{ORG}"),
@@ -493,8 +496,8 @@ async def test_inviting_to_a_workspace_alone(nexus, idp, alice):
     assert result.json()["invitation"]["workspace_role"] == "viewer"
     bob = await sign_in_as(idp, "bob@example.com")
     me = (await bob.get("/api/auth/me")).json()
-    assert await MEMBERSHIPS.roles_of(me["id"]) == {workspace_scope(ORG, WS): "viewer"}
-    assert (roles.VIEWER, f"abi:{ORG}:{WS}") in {
+    assert await MEMBERSHIPS.roles_of(me["id"]) == {workspace_container(ORG, WS): "viewer"}
+    assert (roles.VIEWER, f"abi:nexus:organization/{ORG}/nexus:workspace/{WS}") in {
         (a.policy_id, a.scope) for a in iam.store.list_attachments(principal_id=me["id"])
     }
 
@@ -569,7 +572,7 @@ async def test_an_idp_group_is_bound_to_a_role_and_its_members_arrive_with_it(ne
     }
     # (IAM's feature companions of a role are not part of what the binding holds.)
     held = {(p, sc) for p, sc in held if not p.startswith("builtin.features.")}
-    assert held == {(roles.VIEWER, f"abi:{ORG}:{WS}")}
+    assert held == {(roles.VIEWER, f"abi:nexus:organization/{ORG}/nexus:workspace/{WS}")}
     assert me["email"] == "rita@example.com"
 
     removed = await alice.delete(
@@ -607,7 +610,7 @@ async def test_an_admin_cannot_invite_an_owner_but_an_owner_can(nexus, idp, alic
     carol_user = idp.create_user("carol@example.com")
     carol = await sign_in(idp, carol_user)
     me = (await carol.get("/api/auth/me")).json()
-    await MEMBERSHIPS.grant(me["id"], "admin", org_scope(ORG))
+    await MEMBERSHIPS.grant(me["id"], "admin", org_container(ORG))
     refused = await carol.post(
         f"/api/organizations/{ORG}/members/invite",
         json={"email": "dave@example.com", "role": "owner"},
@@ -650,7 +653,10 @@ async def test_two_workspace_invitations_of_one_person_survive_one_revoke(nexus,
     assert (await alice.delete(f"/api/invitations/{first['id']}")).status_code == 200
     with as_service_account("engine"):
         held = {(g.policy_id, g.scope) for g in iam.list_pending_grants()}
-    assert held == {(roles.MEMBER, f"abi:{ORG}:-"), (roles.MEMBER, f"abi:{ORG}:ws-2")}
+    assert held == {
+        (roles.MEMBER, f"abi:nexus:organization/{ORG}"),
+        (roles.MEMBER, f"abi:nexus:organization/{ORG}/nexus:workspace/ws-2"),
+    }
     assert (await alice.delete(f"/api/invitations/{second['id']}")).status_code == 200
     with as_service_account("engine"):
         assert iam.list_pending_grants() == []
@@ -708,7 +714,9 @@ async def test_an_organization_anyone_made_creates_no_accounts_in_the_providers_
     # that manages its own people.
     with as_service_account("engine"):
         pending = iam.list_pending_grants(provider="builtin", email="victim@corp.example")
-    assert {(g.policy_id, g.scope) for g in pending} == {(roles.MEMBER, f"abi:{org_id}:-")}
+    assert {(g.policy_id, g.scope) for g in pending} == {
+        (roles.MEMBER, f"abi:nexus:organization/{org_id}")
+    }
 
 
 @pytest.mark.asyncio
@@ -765,7 +773,7 @@ async def test_a_user_who_holds_the_right_provisions_at_the_provider(nexus, idp,
 async def _workspace_admin(idp, email="wadmin@example.com"):
     user = await sign_in(idp, idp.create_user(email))
     me = (await user.get("/api/auth/me")).json()
-    await MEMBERSHIPS.grant(me["id"], "admin", workspace_scope(ORG, WS))
+    await MEMBERSHIPS.grant(me["id"], "admin", workspace_container(ORG, WS))
     return user
 
 
@@ -778,7 +786,7 @@ async def test_a_workspace_admin_cannot_resend_or_withdraw_an_org_invitation(nex
     assert (await wadmin.delete(f"/api/invitations/{invited['id']}")).status_code == 403
     with as_service_account("engine"):
         held = {(g.policy_id, g.scope) for g in iam.list_pending_grants(email="bob@example.com")}
-    assert (roles.MEMBER, f"abi:{ORG}:-") in held
+    assert (roles.MEMBER, f"abi:nexus:organization/{ORG}") in held
     # The organization's admin may do all three.
     assert (await alice.post(f"/api/invitations/{invited['id']}/resend")).status_code == 200
     assert (await alice.delete(f"/api/invitations/{invited['id']}")).status_code == 200
@@ -797,7 +805,10 @@ async def test_a_workspace_admin_re_inviting_leaves_the_org_invitation_alone(nex
     assert again.status_code == 409, again.text
     with as_service_account("engine"):
         held = {(g.policy_id, g.scope) for g in iam.list_pending_grants(email="bob@example.com")}
-    assert held == {(roles.MEMBER, f"abi:{ORG}:-"), (roles.MEMBER, f"abi:{ORG}:{WS}")}
+    assert held == {
+        (roles.MEMBER, f"abi:nexus:organization/{ORG}"),
+        (roles.MEMBER, f"abi:nexus:organization/{ORG}/nexus:workspace/{WS}"),
+    }
     listed = (await alice.get(f"/api/invitations/organizations/{ORG}")).json()["invitations"]
     assert [(i["id"], i["org_role"], i["workspace_role"]) for i in listed] == [
         (invited["id"], "member", "member")
@@ -809,4 +820,7 @@ async def test_a_workspace_admin_re_inviting_leaves_the_org_invitation_alone(nex
     assert renewed.status_code == 200, renewed.text
     with as_service_account("engine"):
         held = {(g.policy_id, g.scope) for g in iam.list_pending_grants(email="bob@example.com")}
-    assert held == {(roles.MEMBER, f"abi:{ORG}:-"), (roles.VIEWER, f"abi:{ORG}:{WS}")}
+    assert held == {
+        (roles.MEMBER, f"abi:nexus:organization/{ORG}"),
+        (roles.VIEWER, f"abi:nexus:organization/{ORG}/nexus:workspace/{WS}"),
+    }

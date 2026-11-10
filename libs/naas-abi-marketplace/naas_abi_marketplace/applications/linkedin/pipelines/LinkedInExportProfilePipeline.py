@@ -240,7 +240,9 @@ class LinkedInExportProfilePipeline(Pipeline, BasePipeline):
                 try:
                     if birth_date_str:
                         # Common LinkedIn export format: 'Aug 18, 1992'
-                        date_obj = datetime.strptime(birth_date_str, "%b %d, %Y").replace(tzinfo=UTC)
+                        date_obj = datetime.strptime(
+                            birth_date_str, "%b %d, %Y"
+                        ).replace(tzinfo=UTC)
                         return date_obj.strftime("%Y-%m-%d")
                 except Exception:  # noqa: BLE001,S110
                     pass

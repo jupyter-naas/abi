@@ -6,6 +6,7 @@ import re
 import shutil
 import traceback
 from collections.abc import Callable
+from contextvars import ContextVar
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -59,6 +60,27 @@ _cache = CacheFactory.CacheFS_find_storage(subpath="nexus/ontology")
 # buckets are stored; unresolved and entity-only results are retried each time.
 # Cleared one IRI at a time by OntologyService.refresh_bfo_bucket.
 _bfo_bucket_cache = CacheFactory.CacheFS_find_storage(subpath="nexus/ontology_bfo_buckets")
+
+# The ontology files one request listed, by catalog refs (``remember_listings``):
+# each parses every file it lists, and a request lists the same ones several times.
+_listings: ContextVar[dict[tuple[str, ...] | None, list[Any]] | None] = ContextVar(
+    "ontology_listings", default=None
+)
+
+
+def remember_listings() -> None:
+    """Keep, for the rest of this request (its context), what ``list_ontology_files``
+    lists, by its catalog refs: the ontology routes list the workspace's files to
+    narrow them, then read them again through the service."""
+    _listings.set({})
+
+
+def remember_listing(catalog_refs: list[str] | None, files: list[Any]) -> None:
+    """Record ``files`` as the listing of ``catalog_refs`` for this request."""
+    memo = _listings.get()
+    if memo is not None:
+        memo[None if catalog_refs is None else tuple(catalog_refs)] = list(files)
+
 
 # In-memory cache for graphs loaded with owl:imports resolved (avoids re-fetching remote ontologies)
 _graph_with_imports_cache: dict[str, Graph] = {}
@@ -1106,9 +1128,22 @@ class OntologyService:
     async def list_ontology_files(
         self, catalog_refs: list[str] | None = None
     ) -> list[OntologyFileItemData]:
-        """List ontology files from registered modules, optionally seed-filtered."""
+        """List ontology files from registered modules, optionally seed-filtered;
+        once per request and catalog refs after ``remember_listings``."""
         if catalog_refs == []:
             return []
+        memo = _listings.get()
+        key = None if catalog_refs is None else tuple(catalog_refs)
+        if memo is not None and key in memo:
+            return list(memo[key])
+        files = await self._list_ontology_files(catalog_refs)
+        if memo is not None:
+            memo[key] = list(files)
+        return files
+
+    async def _list_ontology_files(
+        self, catalog_refs: list[str] | None
+    ) -> list[OntologyFileItemData]:
         try:
             abi_module = self._get_abi_module()
             abi_ontologies: list[str] = list(abi_module.ontologies)

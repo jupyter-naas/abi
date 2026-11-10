@@ -41,6 +41,8 @@ export default function ProfilePage() {
   const [organization, setOrganization] = useState('');
   const [jobTitle, setJobTitle] = useState('');
   const [bio, setBio] = useState('');
+  const [linkedinUrl, setLinkedinUrl] = useState('');
+  const [githubHandle, setGithubHandle] = useState('');
   const [saved, setSaved] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState('');
@@ -53,6 +55,8 @@ export default function ProfilePage() {
       setOrganization(authUser.organization || '');
       setJobTitle(authUser.job_title || '');
       setBio(authUser.bio || '');
+      setLinkedinUrl(authUser.linkedin_url || '');
+      setGithubHandle(authUser.github_handle || '');
       setAvatarUrl(authUser.avatar || '');
     }
   }, [authUser]);
@@ -140,6 +144,8 @@ export default function ProfilePage() {
       payload.organization = organization.trim();
       payload.job_title = jobTitle.trim();
       payload.bio = bio.trim();
+      payload.linkedin_url = linkedinUrl.trim();
+      payload.github_handle = githubHandle.trim();
 
       const response = await authFetch('/api/auth/me', {
         method: 'PATCH',
@@ -165,6 +171,8 @@ export default function ProfilePage() {
           organization: updated.organization,
           job_title: updated.job_title,
           bio: updated.bio,
+          linkedin_url: updated.linkedin_url ?? undefined,
+          github_handle: updated.github_handle ?? undefined,
         });
       }
       setSaved(true);
@@ -284,6 +292,26 @@ export default function ProfilePage() {
               value={jobTitle}
               onChange={(e) => setJobTitle(e.target.value)}
               placeholder="Your job title"
+              className="account-profile-field-input"
+            />
+          </div>
+          <div className="account-profile-field">
+            <label className="account-profile-field-label">LinkedIn profile</label>
+            <input
+              type="url"
+              value={linkedinUrl}
+              onChange={(e) => setLinkedinUrl(e.target.value)}
+              placeholder="https://www.linkedin.com/in/your-name"
+              className="account-profile-field-input"
+            />
+          </div>
+          <div className="account-profile-field">
+            <label className="account-profile-field-label">GitHub username</label>
+            <input
+              type="text"
+              value={githubHandle}
+              onChange={(e) => setGithubHandle(e.target.value)}
+              placeholder="your-github-username"
               className="account-profile-field-input"
             />
           </div>

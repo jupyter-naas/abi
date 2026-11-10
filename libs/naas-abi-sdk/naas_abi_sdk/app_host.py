@@ -427,9 +427,10 @@ class AppHost:
             request.principal_kind = caller.principal_kind
             request.principal_name = caller.principal_name
             if not caller.user_id:
-                # The workspace a user opened the app from: with no verified
-                # user there is none.
+                # The container (and the Nexus workspace) a user opened the
+                # app from: with no verified user there is none.
                 request.workspace_id = ""
+                request.context.container = ""
             answer = await self._answer(name, request)
             response.status = answer.status
             for key, value in answer.headers:
@@ -759,10 +760,13 @@ class _AsgiCall:
             # A shallow copy of what the app's lifespan stored, as servers pass it.
             "state": dict(self.host._states.get(self.descriptor.name, {})),
             # Who asked, as discovery verified it: request.scope["abi"]["user_id"]
-            # and request.scope["abi"]["principal"]; the workspace the user
-            # opened the app from (empty without a verified user).
+            # and request.scope["abi"]["principal"]; the container the user
+            # opened the app from, the container its calls are made in (its
+            # name, empty without a verified user), and the Nexus workspace id
+            # of earlier hosts, kept for the apps that read it.
             "abi": {
                 "user_id": request.user_id,
+                "container": request.context.container,
                 "workspace_id": request.workspace_id,
                 # The actor, as discovery verified it: who holds the credential,
                 # which a service may have used to act for the user above.

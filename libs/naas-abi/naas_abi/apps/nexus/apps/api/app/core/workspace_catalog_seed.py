@@ -51,9 +51,7 @@ def resolve_agent_ref(raw: str, registry: Mapping[str, Any]) -> str | None:
     for class_name in registry:
         if not class_name.endswith(suffix):
             continue
-        if class_name == f"{module_name}/{agent_name}" or class_name.startswith(
-            f"{module_name}."
-        ):
+        if class_name == f"{module_name}/{agent_name}" or class_name.startswith(f"{module_name}."):
             return class_name
     matches = [key for key in registry if key.endswith(suffix)]
     if len(matches) == 1:
@@ -68,17 +66,6 @@ def resolve_agent_refs(refs: list[str] | None, registry: Mapping[str, Any]) -> s
         if class_name:
             resolved.add(class_name)
     return resolved
-
-
-def resolve_app_enabled(
-    app_id: str,
-    enabled_by_app_id: Mapping[str, bool],
-    seed_apps: set[str],
-) -> bool:
-    """DB row wins; otherwise the seed list; otherwise off."""
-    if app_id in enabled_by_app_id:
-        return enabled_by_app_id[app_id]
-    return app_id in seed_apps
 
 
 def _posix(path: str) -> str:
@@ -184,8 +171,4 @@ def filter_ontology_catalog(
         return list(items)
     if not seed_refs:
         return []
-    return [
-        item
-        for item in items
-        if ontology_matches_seed(item.path, item.module_name, seed_refs)
-    ]
+    return [item for item in items if ontology_matches_seed(item.path, item.module_name, seed_refs)]

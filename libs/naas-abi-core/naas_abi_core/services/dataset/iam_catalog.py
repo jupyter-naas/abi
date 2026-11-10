@@ -34,7 +34,7 @@ CATALOG = ActionCatalog(
     service=SERVICE,
     version=1,
     resource_types=(
-        ResourceType(NAMESPACE, id="path", container=True, description="A namespace."),
+        ResourceType(NAMESPACE, id="path", id_prefix=True, description="A namespace."),
         ResourceType(DATASET, id="path", description="A dataset, in its namespace."),
         ResourceType(
             CATALOG_TYPE,

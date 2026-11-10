@@ -20,6 +20,8 @@ Discovery rule:
 1. Find the closest `AGENTS.md` walking up from your working file.
 2. If none exists for the scope you're modifying, create one following the structure of the service files below.
 
+Workflows, pipelines and jobs (`@job`, durable `@workflow`, `Workflow` / `Pipeline` classes in engine and remote modules, and the `workflow.<slug>` / `pipeline.<slug>` bridge) are documented in [`libs/naas-abi-sdk/README.md`](libs/naas-abi-sdk/README.md) (Jobs › Workflows; Workflows, pipelines and integrations) and [`libs/naas-abi-core/naas_abi_core/module/AGENTS.md`](libs/naas-abi-core/naas_abi_core/module/AGENTS.md) (Jobs, Workflows, Workflow/Pipeline bridge).
+
 ## Service Map
 
 Core services live under `libs/naas-abi-core/naas_abi_core/services/`. Each has its own `AGENTS.md`:
@@ -60,7 +62,7 @@ The marketplace (`libs/naas-abi-marketplace/`) is a registry of pluggable module
 | AI provider modules | Claude, ChatGPT, Gemini, Grok, Mistral, Llama, Qwen, DeepSeek, Gemma, Perplexity, Bedrock | `libs/naas-abi-marketplace/naas_abi_marketplace/ai/` |
 | Application integrations | GitHub, LinkedIn, Postgres, Notion, Salesforce, Slack, … (47 apps) | `libs/naas-abi-marketplace/naas_abi_marketplace/applications/` |
 | Domain expert agents | Software Engineer, Accountant, DevOps, Data Engineer, … (24 roles) | `libs/naas-abi-marketplace/naas_abi_marketplace/domains/` |
-| Reference scaffolds | Demo agents, workflows, Streamlit apps, Dagster orchestration | `libs/naas-abi-marketplace/naas_abi_marketplace/__demo__/` |
+| Reference scaffolds | Demo agents, workflows, Streamlit apps, and a legacy Dagster orchestration (projects without NATS only; NATS projects schedule with `@job` and `@workflow` triggers) | `libs/naas-abi-marketplace/naas_abi_marketplace/__demo__/` |
 
 ## Extra Rules Discovery
 
@@ -137,6 +139,9 @@ uvx ruff format
 # Lint only
 uvx ruff check libs/naas-abi-core libs/naas-abi libs/naas-abi-cli
 uvx ruff check libs/naas-abi-marketplace
+
+# Wheel and sdist size of every published package, against the 10 MiB budget
+make check-package-size
 ```
 
 Direct mypy examples:
@@ -381,6 +386,22 @@ in-process and uses the `bus:` adapter below.
 - When a change introduces or updates an architecture-level decision (boundaries, ownership, cross-cutting configuration, major tradeoffs), write it into the nearest `AGENTS.md` (Decision / Consequences). Do not add narrative docs under `docs/`.
 - Product docs live at https://docs.naas.ai. Do not revive a docs site or ADR tree in this repository.
 
+## Decision: PyPI size limit and package-size budget
+
+PyPI caps a project at 10 GiB in total (`MAX_PROJECT_SIZE` in `pypi/warehouse`). `naas-abi` hit it on 2026-10-22: about 30 releases a month at ~45 MB each (wheel + sdist), of which ~20 MB per file was the images under `libs/naas-abi/naas_abi/apps/nexus/apps/api/public/`. Every upload since then was refused with `400 Project size too large`. PyPI has no deletion API, so the space was freed by hand, by deleting the large 1.x releases.
+
+Decision:
+
+- Every file (wheel and sdist) of every package the Release job publishes (`naas-abi-proto`, `naas-abi-sdk`, `naas-abi-idp`, `naas-abi-core`, `naas-abi-marketplace`, `naas-abi`, `naas-abi-cli`) stays under **10 MiB**.
+- `make check-package-size` (`scripts/check_package_size.sh`) builds the seven packages, prints each file's size and fails, naming the file, when one is over budget. `PACKAGE_SIZE_BUDGET_MIB` overrides the budget. The `package-size` job in `.github/workflows/pull_request.yml` runs it on every pull request to `main`.
+- Images under `api/public` are sized for display: avatars and organization logos ≤ 256 px, logos ≤ 512 px. The Nexus API serves them as `/avatars`, `/organizations` and `/logos`.
+
+Consequences:
+
+- A change that bloats a package (a bundled asset, a dataset, a model) fails the pull request instead of failing the release.
+- Large data belongs in object storage or a download at runtime, not in a published package.
+- Deleted PyPI releases are gone for good and their filenames cannot be reused, so deleting is a last resort. The size is the thing to keep down.
+
 ## Quick Cheat Sheet
 
 ```bash
@@ -392,6 +413,7 @@ cd libs/naas-abi/naas_abi/apps/nexus/apps/web && pnpm install && cd ../../../../
 # Development
 make deps           # Install/sync dependencies
 make check          # Lint + type check
+make check-package-size  # Wheel/sdist size vs the 10 MiB budget
 make fmt            # Format code
 make test           # Run tests
 uv build            # Build packages

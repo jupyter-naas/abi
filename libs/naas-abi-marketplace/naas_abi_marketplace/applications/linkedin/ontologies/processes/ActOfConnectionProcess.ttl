@@ -1,0 +1,134 @@
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix dc:    <http://purl.org/dc/terms/> .
+@prefix dc11:  <http://purl.org/dc/elements/1.1/> .
+@prefix bfo:   <http://purl.obolibrary.org/obo/> .
+@prefix cco:   <https://www.commoncoreontologies.org/> .
+@prefix abi:   <http://ontology.naas.ai/abi/> .
+@prefix linkedin: <http://ontology.naas.ai/abi/linkedin/> .
+
+linkedin:ActOfConnectionProcess a owl:Ontology ;
+  # Process slice for one LinkedIn connection, on the same vocabulary as
+  # abi:ActOfWorking (people module, ActOfWorkingProcess.ttl), so a connected
+  # person and a person from the corporate website are the same kind of node.
+  #
+  # Seven-bucket mapping for one row of a LinkedIn Connections.csv:
+  #   WHO          Person (the export owner and the connection), abi:Person
+  #   WHAT         ActOfConnection (the act of association itself)
+  #   WHEN         TemporalRegion, bounded by the TemporalInstant of "Connected On"
+  #   WHERE        none: LinkedIn does not say where a connection was made
+  #   WHY          ConnectionRole (SDC) borne by each participant
+  #   HOW IT IS    none of its own: Company and Position are an abi:ActOfWorking
+  #                of the connection, the URL and email are stated on the Person
+  #                (abi:linkedin_url, abi:email_address)
+  #   HOW WE KNOW  ConnectionsExportFile, the export the row was read from
+  owl:imports <http://ontology.naas.ai/abi/Ontology> ;
+  owl:imports <http://ontology.naas.ai/abi/PersonOntology> ;
+  owl:imports <http://ontology.naas.ai/abi/PeopleOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/EventOntology> ;
+  owl:imports <https://www.commoncoreontologies.org/AgentOntology> ;
+  abi:pythonPackage "naas_abi_marketplace.applications.linkedin" ;
+  abi:ontologyResource "ontologies/processes/ActOfConnectionProcess.ttl" ;
+  abi:pythonResource "ontologies/processes/ActOfConnectionProcess.py" ;
+  dc:title "Act of Connection on LinkedIn"@en ;
+  dc:description "Process slice for an act of connection on LinkedIn - a CCO Act of Association between the owner of a LinkedIn data export and one of their connections, over the temporal region that starts on the connection date, realizing a connection role in each participant and read from the export file."@en ;
+  dc:license <https://creativecommons.org/licenses/by/4.0/> ;
+  dc11:contributor "Florent Ravenel" ;
+  dc11:date "2026-10-28"^^xsd:date .
+
+#################################################################
+#    Classes - WHAT
+#################################################################
+
+linkedin:ActOfConnection a owl:Class ;
+  rdfs:subClassOf cco:ont00000433 ,
+    [ a owl:Restriction ; owl:onProperty abi:hasParticipant ; owl:qualifiedCardinality "2"^^xsd:nonNegativeInteger ; owl:onClass abi:Person ] ,
+    [ a owl:Restriction ; owl:onProperty linkedin:hasConnectionOwner ; owl:qualifiedCardinality "1"^^xsd:nonNegativeInteger ; owl:onClass abi:Person ] ,
+    [ a owl:Restriction ; owl:onProperty linkedin:hasConnectedPerson ; owl:qualifiedCardinality "1"^^xsd:nonNegativeInteger ; owl:onClass abi:Person ] ,
+    [ a owl:Restriction ; owl:onProperty abi:occupiesTemporalRegion ; owl:someValuesFrom abi:TemporalRegion ] ,
+    [ a owl:Restriction ; owl:onProperty abi:realizes ; owl:someValuesFrom linkedin:ConnectionRole ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasSourceDocument ; owl:someValuesFrom linkedin:ConnectionsExportFile ] ;
+  rdfs:label "Act of Connection"@en ;
+  skos:definition "An Act of Association in which two people become connected on LinkedIn, from the connection date on, as stated by the LinkedIn data export of one of them."@en ;
+  skos:example "Alice Dupont connected with Jane Smith on LinkedIn on 23 Oct 2025, as Alice's Connections.csv states."@en .
+
+#################################################################
+#    Classes - WHY
+#################################################################
+
+linkedin:ConnectionRole a owl:Class ;
+  rdfs:subClassOf abi:Role ,
+    [ a owl:Restriction ; owl:onProperty linkedin:isConnectionRoleOf ; owl:someValuesFrom abi:Person ] ,
+    [ a owl:Restriction ; owl:onProperty abi:hasRealization ; owl:someValuesFrom linkedin:ActOfConnection ] ;
+  rdfs:label "Connection Role"@en ;
+  skos:definition "A role that inheres in a person in virtue of being connected with another person on LinkedIn, realized in the act of connection."@en ;
+  skos:example "The role Jane bears as one of Alice's LinkedIn connections."@en .
+
+#################################################################
+#    Classes - HOW WE KNOW
+#################################################################
+
+linkedin:ConnectionsExportFile a owl:Class ;
+  rdfs:subClassOf abi:ProfileDocument ;
+  rdfs:label "Connections Export File"@en ;
+  skos:definition "The Connections.csv file of a LinkedIn data export, from which the acts of connection of its owner are read. abi:source_url carries where the file is kept."@en ;
+  skos:example "uploads/linkedin/20261028T101500Z_Complete_LinkedInDataExport_01-20-2026/Connections.csv"@en ;
+  rdfs:comment "A profile document of the export owner: it is what the owner published about their network, and every act of connection read from it points back to it through abi:hasSourceDocument, as an act of working points to the profile document it was read from."@en .
+
+#################################################################
+#    Object properties
+#################################################################
+
+# WHO <-> WHAT - the participant who exported the data.
+linkedin:hasConnectionOwner a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:hasParticipant ;
+  owl:inverseOf linkedin:isConnectionOwnerIn ;
+  rdfs:label "has connection owner"@en ;
+  skos:definition "Relates an act of connection to the participant whose LinkedIn data export states it."@en ;
+  rdfs:domain linkedin:ActOfConnection ;
+  rdfs:range  abi:Person .
+
+linkedin:isConnectionOwnerIn a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:participatesIn ;
+  owl:inverseOf linkedin:hasConnectionOwner ;
+  rdfs:label "is connection owner in"@en ;
+  skos:definition "Relates a person to an act of connection stated by their own LinkedIn data export."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  linkedin:ActOfConnection .
+
+# WHO <-> WHAT - the participant listed in the export.
+linkedin:hasConnectedPerson a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:hasParticipant ;
+  owl:inverseOf linkedin:isConnectedPersonIn ;
+  rdfs:label "has connected person"@en ;
+  skos:definition "Relates an act of connection to the participant listed as a connection in the export owner's LinkedIn data export."@en ;
+  rdfs:domain linkedin:ActOfConnection ;
+  rdfs:range  abi:Person .
+
+linkedin:isConnectedPersonIn a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:participatesIn ;
+  owl:inverseOf linkedin:hasConnectedPerson ;
+  rdfs:label "is connected person in"@en ;
+  skos:definition "Relates a person to an act of connection in which they are listed as the export owner's connection."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  linkedin:ActOfConnection .
+
+# WHO <-> WHY
+linkedin:hasConnectionRole a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:bearerOf ;
+  owl:inverseOf linkedin:isConnectionRoleOf ;
+  rdfs:label "has connection role"@en ;
+  skos:definition "Relates a person to a connection role they bear."@en ;
+  rdfs:domain abi:Person ;
+  rdfs:range  linkedin:ConnectionRole .
+
+linkedin:isConnectionRoleOf a owl:ObjectProperty ;
+  rdfs:subPropertyOf abi:inheresIn ;
+  owl:inverseOf linkedin:hasConnectionRole ;
+  rdfs:label "is connection role of"@en ;
+  skos:definition "Relates a connection role to the person it inheres in."@en ;
+  rdfs:domain linkedin:ConnectionRole ;
+  rdfs:range  abi:Person .

@@ -54,7 +54,10 @@ Engine configuration: `engine/engine_configuration/EngineConfiguration_Identity.
 `ProviderUnavailableError` when the provider cannot be reached.
 
 **`ProvisioningPort`** (secondary): `ensure_user(email, name=)` makes the person exist at
-the provider (creating them when it has none) and `find_user(email)` looks. One adapter
+the provider (creating them when it has none) and `find_user(email)` looks;
+`update_user(subject, name=, disabled=)` renames the provider's user or disables (enables)
+their sign-in there (`None`: no such user) and `delete_user(subject)` deletes them (`False`:
+none), both keyed by the provider's id for the person (the `sub` of their tokens). One adapter
 per provider's `provisioning` setting: `builtin` calls the IdP's admin app
 over NATS, `zitadel` and `keycloak` their admin APIs, `none` raises `NotImplementedError`
 (that provider's users are managed in the provider). A `ProvisionedUser` names the
@@ -98,11 +101,16 @@ identity.refresh("acme", refresh_token=..., principal_id=sign_in.user.principal_
 identity.revoke("acme", refresh_token=...)
 identity.provision_user("acme", "bob@example.com", name="Bob")  # ProvisionedUser
 identity.find_provisioned_user("acme", "bob@example.com")  # or None
+# The platform's Users page: by the provider's id for the person.
+identity.update_provisioned_user(
+    "acme", subject, name="Bob B", disabled=True
+)  # or None
+identity.delete_provisioned_user("acme", subject)  # False: the provider had none
 identity.end_session_url("acme", id_token_hint=..., post_logout_redirect_uri=...)
 ```
 
 - **Authorization.** Every call is checked with the `identity` catalog on
-  `abi:-:-:identity:provider/<name>` for the current `CallContext`:
+  `abi:identity:provider/<name>` for the current `CallContext`:
   `ListProviders`, `GetProvider`, `VerifyToken` (no side effect),
   `Authenticate` (creates or refreshes the IAM user, as `engine`) and `SignIn`
   (the relying-party operations). `exchange_code` and `refresh` resolve the
@@ -112,7 +120,10 @@ identity.end_session_url("acme", id_token_hint=..., post_logout_redirect_uri=...
   `ProvisionUser` (admin) and `FindProvisionedUser` (read) are an administrator's: the
   inviting person's own rights (`iam:AttachPolicy` at the scope) are checked where the
   invitation is made (Nexus, `abi iam invite`), and the provisioning call is made as `api`
-  or `engine` for nobody.
+  or `engine` for nobody. `UpdateProvisionedUser` and `DeleteProvisionedUser` (admin) are the
+  platform administrator's (Nexus's Platform settings › Users: rename, deactivate, reactivate,
+  delete): Nexus calls as `api` on their behalf, so their own rights bound the call; `api`
+  holds both in its enumerated statements, a module needs a grant.
 - **Pending grants.** `authenticate` (so a code exchange and a refresh too) calls
   `iam.claim_pending_grants` for the user it resolved, as the engine: what an invitation
   granted that email on that provider attaches at the first sign-in with it verified
@@ -180,7 +191,15 @@ admits only the engine's own accounts, `naas_abi_idp.admin`); `zitadel` needs
 `manage-users` and `view-users`); `none` takes no `admin`. Validated at load. Zitadel makes
 the user with an unverified email and `sendCode`, Keycloak with `emailVerified: false` and
 its verify/update-password mail, so only the mailbox's owner verifies it; the built-in IdP
-verifies by mailing a code at every sign-in. Over NATS a refusal of a provider that
+verifies by mailing a code at every sign-in. Disabling or deleting a user: the built-in
+IdP ends their sessions and revokes their refresh tokens (`POST /users/{id}/disable`,
+`DELETE /users/{id}` of its admin app); Keycloak's user is set `enabled: false` (its sessions
+are logged out) or deleted; Zitadel's is deactivated (only a change is sent: Zitadel refuses
+deactivating an inactive user) or deleted, and a locked one (too many failed sign-ins, shown as
+disabled) is unlocked to reactivate it (Zitadel refuses `/reactivate` for it) and unlocked then
+deactivated to deactivate it; one still initial (made elsewhere, never set up), which Zitadel only
+deletes, is locked to deactivate it and unlocked to reactivate it (Zitadel then makes it active)
+(`ProvisioningZitadel_test.py`, and the pinned binary in `tests/zitadel_provisioning_test.py`). Over NATS a refusal of a provider that
 cannot be provisioned is the wire code `UNIMPLEMENTED` (`NotImplementedError`).
 
 Step-by-step guides for Okta, Entra ID, Zitadel and Keycloak are user documentation:
@@ -330,7 +349,7 @@ against each configured issuer's discovery document and JWKS: exact `iss`; an as
 most every 30 s. It resolves `(issuer, sub)` to the IAM user, maps the groups claim and refuses suspended principals.
 It also runs the provider side of a relying party's sign-in, so client secrets never leave the engine. It is
 exposed over NATS as `abi.identity.v1.*` and to SDK modules as `engine.services.identity`, and authorized by its own
-`identity:*` catalog on `abi:-:-:identity:provider/<name>`; the IAM user is written as `engine` once the caller holds
+`identity:*` catalog on `abi:identity:provider/<name>`; the IAM user is written as `engine` once the caller holds
 `identity:Authenticate`, as placements are.
 *Consequences.* Nexus has no login code (no passwords, magic links, codes, reset, signup or refresh tokens of its
 own) and `secret_key` signs and encrypts nothing. Group changes and offboarding reach ABI within ten minutes through

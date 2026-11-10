@@ -10,8 +10,9 @@ A ``root`` flag lifts that scoping to the whole datastore (all tenants *and*
 platform-internal objects) — i.e. full, unscoped access. It is gated on
 IAM (``nexus:ReadRootStorage`` / ``nexus:WriteRootStorage``, platform admins
 only): a caller who may not passing ``root`` gets a 403 and stays confined to their
-own ``users/<id>/`` namespace. The namespace is theirs through ``roles.PLATFORM_TYPES``
-(``nexus:*UserStorage``, and the kernel's own check on ``object_storage``).
+own ``users/<id>/`` namespace. The namespace is theirs through the platform
+companions of their roles (``nexus:*UserStorage``, the ``nexus`` catalog's
+``PLATFORM_ACCESS``; and the kernel's own check on ``object_storage``).
 
 The domain service (``engine.services.object_storage``) is synchronous, so calls
 run in a threadpool; downloads stream 1 MiB at a time so a multi-GB object never

@@ -296,16 +296,18 @@ Which workspace a graph belongs to is an IAM placement, never a triple in the
 graph store:
 
 * `create_graph` applies the create rule (`ResourceGuard.create`): a graph
-  created while the call names a target workspace is placed in it
-  (`iam.workspace_org`), otherwise on the platform; a name an existing placement
-  covers keeps it, and a mismatching target workspace is refused.
+  created while the call names a container is placed in it (once IAM checked
+  the container is registered under that path, `iam.call_container`; an unknown
+  one is refused as not found), otherwise on the platform; a name an existing placement
+  covers keeps it, and a mismatching container of the call is refused.
   `drop_graph` drops the placement. An `Insert` into a graph nobody placed is
   checked against the platform's name for it.
 * A workspace's roles reach exactly the graphs placed in it. That is the whole
   ownership model: the kernel keeps no per-workspace graph list of its own.
 * Sharing a graph with another workspace is an Allow statement naming the graph
-  wherever it is placed (`abi:*:*:triple_store:graph/<iri>`). A policy attached
-  at a scope may only allow `${scope}:` resources, so such a grant is attached
+  wherever it is placed (`abi:triple_store:graph/<iri>` and
+  `abi:*/triple_store:graph/<iri>`, `names.anywhere`). A policy attached
+  at a scope may only allow `${scope}` and `${scope}/...` resources, so such a grant is attached
   without scope. `ClearGraph` and `DropGraph` are never shared: lifecycle stays
   with the owning workspace.
 * The Nexus graph service owns the editable assignments (what a workspace reads,
@@ -354,9 +356,9 @@ it answers a refusal itself) and hands that `CallContext`
 token's identity; the user it acts for is named by the token itself: a
 delegated token (`abi:delegated:agent`, `act` the acting service, `sub` the user)
 made by IAM's token exchange, never a header (the old `Abi-On-Behalf-Of` header is
-refused); trace and target workspace come from the request's `context`. Never read identity from request fields
+refused); trace and container come from the request's `context`. Never read identity from request fields
 (`principal_id` and `tenant_id` are reserved). Clients of `api` and `engine` send a
-delegation for the current call's user, and the call's trace and workspace; the domain service authorizes on that
+delegation for the current call's user, and the call's trace and container; the domain service authorizes on that
 context (Authorization above).
 
 Clients inherit connection, JWT renewal, deadlines, and error handling from

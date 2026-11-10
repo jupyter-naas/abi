@@ -6,8 +6,6 @@ import pytest
 from naas_abi.apps.nexus.apps.api.app.services.identity_graph.iris import (
     deployment_site_iri,
     feature_iri,
-    feature_override_iri,
-    feature_policy_iri,
     organization_iri,
     organization_membership_iri,
     organization_profile_iri,
@@ -91,9 +89,6 @@ PLATFORM = PlatformSnapshot(
     host=HOST,
     applied_at=BOOT,
     enabled_features=["chat", "files", "slides"],
-    role_baseline={"owner": ["chat", "files", "slides"], "viewer": ["chat"]},
-    workspace_overrides={"acme": {"files": False}},
-    organization_overrides={"org-1": {"member": ["chat", "slides"]}},
     tenant={"tab_title": "Bob AI Platform", "primary_color": "#0057B8", "show_powered_by": False},
     settings={"abi_agent_model": "qwen-3.8", "nexus_config.magic_link_allow_signup": "false"},
     workspace_seeds={
@@ -114,9 +109,7 @@ def _snapshot(**overrides) -> IdentitySnapshot:
         "memberships": [BOB_IN_ACME, ALICE_OWNS_ACME],
         "organizations": [ORG],
         "organization_memberships": [BOB_IN_ORG],
-        "app_configs": [
-            IdentityAppConfig(workspace_id="ws-1", app_id="external.acme:web", enabled=True)
-        ],
+        "app_configs": [IdentityAppConfig(workspace_id="ws-1", app_id="external.acme:web")],
         "agent_configs": [
             IdentityAgentConfig(
                 id="agc-1",
@@ -124,11 +117,9 @@ def _snapshot(**overrides) -> IdentitySnapshot:
                 name="Bob",
                 class_name="BobAgent",
                 module_path="bob",
-                enabled=True,
                 is_default=True,
             )
         ],
-        "organization_role_features": {},
         "platform": PLATFORM,
     }
     values.update(overrides)
@@ -273,41 +264,22 @@ def test_app_and_agent_configurations_are_parts_of_the_workspace() -> None:
 
     app, agent = workspace_app_iri("ws-1", "external.acme:web"), workspace_agent_iri("agc-1")
     assert (app, NEXUS.isPartOf, workspace_iri("ws-1")) in graph
-    assert (app, NEXUS.app_enabled, Literal(True)) in graph
+    # The old on/off is no fact of the graph: policies decide who uses it.
+    assert not list(graph.triples((app, NEXUS.app_enabled, None)))
     assert (agent, NEXUS.isPartOf, workspace_iri("ws-1")) in graph
     assert (agent, NEXUS.class_name, Literal("BobAgent")) in graph
     assert (agent, NEXUS.is_default_agent, Literal(True)) in graph
 
 
-def test_platform_configuration_enables_features_and_holds_policies() -> None:
+def test_platform_configuration_enables_features_and_holds_no_role_policy() -> None:
     graph = build_identity_graph(_snapshot())
 
     config = platform_configuration_iri(HOST)
     assert {str(f) for f in graph.objects(config, NEXUS.enablesFeature)} == {
         str(feature_iri(k)) for k in ("chat", "files", "slides")
     }
-    viewer = feature_policy_iri("viewer")
-    assert (viewer, NEXUS.policy_role, Literal("viewer")) in graph
-    assert set(graph.objects(viewer, NEXUS.grantsFeature)) == {feature_iri("chat")}
-    overlay = feature_policy_iri("member", "org-1")
-    assert (overlay, NEXUS.appliesToOrganization, organization_iri("org-1")) in graph
-    override = feature_override_iri("ws-1", "files")
-    assert (override, NEXUS.overridesWorkspace, workspace_iri("ws-1")) in graph
-    assert (override, NEXUS.feature_enabled, Literal(False)) in graph
-    for part in (viewer, overlay, override):
-        assert (config, NEXUS.hasPart, part) in graph
-
-
-def test_organization_role_feature_rows_overlay_the_baseline() -> None:
-    graph = build_identity_graph(
-        _snapshot(organization_role_features={"org-1": {"viewer": ["chat", "files"]}})
-    )
-
-    overlay = feature_policy_iri("viewer", "org-1")
-    assert set(graph.objects(overlay, NEXUS.grantsFeature)) == {
-        feature_iri("chat"),
-        feature_iri("files"),
-    }
+    # No role brings a feature: the configuration holds no feature policy.
+    assert not list(graph.subjects(NEXUS.grantsFeature, None))
 
 
 def test_settings_and_tenant_branding_are_parts_of_the_configuration() -> None:

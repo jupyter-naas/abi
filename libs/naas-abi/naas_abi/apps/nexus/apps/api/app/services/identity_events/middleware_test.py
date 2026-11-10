@@ -7,12 +7,13 @@ from naas_abi.apps.nexus.apps.api.app.services.identity_events import middleware
 from naas_abi.apps.nexus.apps.api.app.services.identity_events.middleware import (
     RequestIdentityMiddleware,
 )
-from naas_abi_core.engine.call_context import ANONYMOUS, current_call_context
+from naas_abi_core.engine.call_context import current_call_context
 from naas_abi_core.services.event.context import (
+    event_actor_container,
     event_actor_user_id,
-    event_actor_workspace_id,
     event_triggered_via,
 )
+from naas_abi_core.services.iam.names import UNRESOLVED
 
 
 def _app() -> FastAPI:
@@ -23,7 +24,7 @@ def _app() -> FastAPI:
         context = current_call_context()
         return {
             "user": event_actor_user_id.get(),
-            "workspace": event_actor_workspace_id.get(),
+            "workspace": event_actor_container.get(),
             "via": event_triggered_via.get(),
             "principal": context.principal.id,
             "on_behalf_of": context.on_behalf_of.id if context.on_behalf_of else None,
@@ -57,7 +58,12 @@ def _session(user: str = "usr-1", **fields) -> Credential:
     return Credential(kind="session", user_id=user, **fields)
 
 
-def test_identity_is_set_for_the_request_and_cleared_after(monkeypatch) -> None:
+WS1 = "abi:nexus:organization/org-1/nexus:workspace/ws-1"
+
+
+def test_identity_is_set_for_the_request_and_cleared_after(monkeypatch, nexus_iam) -> None:
+    nexus_iam.workspace("org-1", "ws-1")
+    outside = current_call_context()
     _credentials(monkeypatch, {"good": _session()})
     client = TestClient(_app())
 
@@ -68,23 +74,23 @@ def test_identity_is_set_for_the_request_and_cleared_after(monkeypatch) -> None:
     # Nexus calls as ``api`` on behalf of the signed-in user.
     assert body == {
         "user": "usr-1",
-        "workspace": "ws-1",
+        "workspace": WS1,
         "via": "api",
         "principal": "api",
         "on_behalf_of": "usr-1",
     }
     assert event_actor_user_id.get() is None
-    assert event_actor_workspace_id.get() is None
-    assert current_call_context() == ANONYMOUS
+    assert current_call_context() == outside
 
 
-def test_sync_endpoints_see_it_too_and_query_workspace_works(monkeypatch) -> None:
+def test_sync_endpoints_see_it_too_and_query_workspace_works(monkeypatch, nexus_iam) -> None:
+    nexus_iam.workspace(None, "ws-9")
     _credentials(monkeypatch, {"t": _session()})
     client = TestClient(_app())
 
     body = client.get("/api/files?workspace_id=ws-9", headers={"Authorization": "Bearer t"}).json()
 
-    assert body["user"] == "usr-1" and body["workspace"] == "ws-9"
+    assert body["user"] == "usr-1" and body["workspace"] == "abi:nexus:workspace/ws-9"
     assert (body["principal"], body["on_behalf_of"]) == ("api", "usr-1")
 
 
@@ -146,3 +152,18 @@ def test_a_scope_narrows_the_context(monkeypatch) -> None:
 
     TestClient(app).get("/api/narrowed", headers={"Authorization": "Bearer k"})
     assert seen["scope"] == scope
+
+
+def test_a_workspace_iam_does_not_know_is_a_container_nobody_registered(
+    monkeypatch, nexus_iam
+) -> None:
+    """A deleted (or unknown) workspace: the call is made in ``UNRESOLVED``, so
+    what it creates is not found, never placed on the platform. No workspace in
+    the path: no container."""
+    _credentials(monkeypatch, {"good": _session()})
+    client = TestClient(_app())
+    headers = {"Authorization": "Bearer good"}
+
+    gone = client.get("/api/workspaces/ws-gone/members", headers=headers).json()
+    assert gone["workspace"] == UNRESOLVED
+    assert client.get("/api/files", headers=headers).json()["workspace"] is None

@@ -1,7 +1,7 @@
 """The identity domain service: configured providers, verified users.
 
 Every operation is authorized with the ``identity`` catalog on the provider it
-concerns (``abi:-:-:identity:provider/<name>``), for the caller of the current
+concerns (``abi:identity:provider/<name>``), for the caller of the current
 ``CallContext``. Once a caller is allowed ``identity:Authenticate``, the user is
 created or refreshed in IAM as the engine: the caller is authorized for the
 sign-in, not for IAM administration.
@@ -24,6 +24,7 @@ import jwt
 from naas_abi_core import logger
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.IAMPorts import FilterResult, PrincipalRecord
+from naas_abi_core.services.iam.listing import ResourceLister, named_lister
 from naas_abi_core.services.iam.names import resource_name
 from naas_abi_core.services.identity.iam_catalog import SERVICE
 from naas_abi_core.services.identity.IdentityPorts import (
@@ -116,6 +117,19 @@ def _text(value: str | None) -> str | None:
     return value or None
 
 
+def _subject(value: str) -> str:
+    """A provider's id for a user: never blank, never a path of its admin API."""
+    subject = (value or "").strip()
+    if (
+        not subject
+        or len(subject) > 255
+        or any(c in subject for c in "/?#\\")
+        or any(c.isspace() or not c.isprintable() for c in subject)
+    ):
+        raise ValueError(f"{value!r} is not a user id at the provider")
+    return subject
+
+
 def provider_resource(name: str) -> str:
     return resource_name(SERVICE, "provider", name)
 
@@ -180,6 +194,18 @@ class IdentityService(IIdentityService):
     @property
     def default_provider(self) -> str | None:
         return self._default
+
+    def iam_listers(self) -> dict[tuple[str, str], ResourceLister]:
+        """What IAM lists of this service for the policy builder: its providers.
+        Read unchecked: IAM filters it as the caller (``list_resources``)."""
+        return {
+            (SERVICE, "provider"): named_lister(
+                lambda query: [p.public() for p in self._providers.values()],
+                lambda provider: provider_resource(provider.name),
+                lambda provider: provider.name,
+                lambda provider: provider.display_name,
+            )
+        }
 
     def list_providers(self) -> list[ProviderInfo]:
         allowed = set(
@@ -299,6 +325,27 @@ class IdentityService(IIdentityService):
     ) -> ProvisionedUser | None:
         self._provider("identity:FindProvisionedUser", provider)
         return self._provisioning[provider].find_user(_email(email))
+
+    def update_provisioned_user(
+        self,
+        provider: str,
+        subject: str,
+        *,
+        name: str | None = None,
+        disabled: bool | None = None,
+    ) -> ProvisionedUser | None:
+        """Rename the provider's user ``subject``, or disable or enable their
+        sign-in there (a platform administrator's: ``identity:UpdateProvisionedUser``,
+        Nexus calls as ``api`` on their behalf). A blank name changes nothing."""
+        self._provider("identity:UpdateProvisionedUser", provider)
+        return self._provisioning[provider].update_user(
+            _subject(subject), name=_text(name), disabled=disabled
+        )
+
+    def delete_provisioned_user(self, provider: str, subject: str) -> bool:
+        """Delete the provider's user ``subject`` (``identity:DeleteProvisionedUser``)."""
+        self._provider("identity:DeleteProvisionedUser", provider)
+        return self._provisioning[provider].delete_user(_subject(subject))
 
     def _authorize_token(self, action: str, token: str) -> IdentityProvider:
         """The provider whose issuer the token names, once the caller may
