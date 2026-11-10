@@ -4,6 +4,7 @@ const authFetch = vi.fn();
 
 vi.mock('@/stores/auth', () => ({
   authFetch: (...args: unknown[]) => authFetch(...args),
+  hasSession: () => true,
 }));
 
 import {

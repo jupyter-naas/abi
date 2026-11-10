@@ -333,7 +333,6 @@ class IAMService(IIAMService, PolicySource):
         self._policies = _TTLCache(cache_ttl_seconds, cache_size)
         # Every placement, their index, and the registry of containers.
         self._placements = _TTLCache(cache_ttl_seconds, 3)
-        self._platform_grants: tuple[roles.PlatformGrant, ...] = ()
         self._floors = _TTLCache(cache_ttl_seconds, 1)
         self._pending_index: tuple[int, frozenset[tuple[str, str]]] | None = None
         self._listeners: list[Callable[[int], None]] = []
@@ -4444,15 +4443,35 @@ class IAMService(IIAMService, PolicySource):
     def set_platform_grants(self, grants: Sequence[roles.PlatformGrant]) -> None:
         """The deployment's own platform-level resources every workspace member
         reaches by role level (``roles.PlatformGrant``: Nexus's shared repository).
-        Replaces the previous set; kept in memory and applied again whenever the
-        managed policies are regenerated. Needs ``iam:RegisterCatalog`` on ``nexus``."""
+        Replaces the previous set. The grants live in the stored platform policies
+        (``builtin.platform.viewer`` / ``member``), which every regeneration of the
+        managed policies, by any instance, reads them back from
+        (``roles.stored_platform_grants``). Needs ``iam:RegisterCatalog`` on ``nexus``."""
         self.require("iam:RegisterCatalog", catalog_resource("nexus"))
-        self._platform_grants = tuple(grants)
-        self._refresh_builtin_policies()
+        self._refresh_builtin_policies(tuple(grants))
         self._changed()
 
-    def _refresh_builtin_policies(self) -> None:
-        for policy in roles.builtin_policies(self._registry, self._platform_grants):
+    def _stored_platform_grants(self) -> tuple[roles.PlatformGrant, ...]:
+        def stored(policy_id: str) -> Policy | None:
+            try:
+                return self.store.get_policy(policy_id)
+            except IAMNotFoundError:
+                return None
+
+        return tuple(
+            roles.stored_platform_grants(
+                stored(roles.PLATFORM_VIEWER), stored(roles.PLATFORM_MEMBER)
+            )
+        )
+
+    def _refresh_builtin_policies(
+        self, grants: tuple[roles.PlatformGrant, ...] | None = None
+    ) -> None:
+        """Regenerate the managed policies. ``grants`` replaces the platform grants
+        (``set_platform_grants``); otherwise the ones already stored are kept."""
+        if grants is None:
+            grants = self._stored_platform_grants()
+        for policy in roles.builtin_policies(self._registry, grants):
             self.store.put_managed_policy(policy)
 
     # =========================================================================

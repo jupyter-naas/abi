@@ -1,4 +1,4 @@
-import test from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { compactNetworkPositions, type LayoutBox } from './compact-network-layout';
 const boxes: LayoutBox[] = Array.from({length: 25}, (_, i) => ({id: String(i), label: 'Term ' + i, width: 128, height: i % 4 === 0 ? 86 : 64, primary: i === 0}));

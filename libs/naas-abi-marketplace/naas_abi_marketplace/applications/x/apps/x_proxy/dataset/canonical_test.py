@@ -871,22 +871,51 @@ def test_a_users_request_migrates_the_x_tables_with_iam_enforced(dataset) -> Non
     engine, as the module's own storage."""
     from naas_abi_core.engine.call_context import (
         CallContext,
+        as_service_account,
         service_account,
         use_call_context,
         user,
     )
     from naas_abi_core.engine.IEngine import IEngine
     from naas_abi_core.services.dataset.iam_catalog import CATALOG
+    from naas_abi_core.services.iam import roles
     from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import (
         IAMStoreMemory,
     )
     from naas_abi_core.services.iam.enforcement import internal_call
-    from naas_abi_core.services.iam.IAMService import IAMService
+    from naas_abi_core.services.iam.IAMService import (
+        LEGACY_NEXUS_ISSUER,
+        IAMService,
+    )
+    from naas_abi_core.services.iam.names import PLATFORM
+    from naas_abi_core.services.iam.tests.iam_harness import NEXUS
 
     iam = IAMService(IAMStoreMemory())
     iam.bootstrap()
     with internal_call():
         iam.register_catalog(CATALOG)
+        iam.register_catalog(NEXUS)
+        # What a deployment holds (Nexus ``shared_repo_grants``): the platform's
+        # datasets are read by every workspace member, and the user is one.
+        iam.set_platform_grants(
+            [
+                roles.PlatformGrant(
+                    "dataset",
+                    (
+                        f"{PLATFORM}dataset:namespace/*",
+                        f"{PLATFORM}dataset:dataset/*",
+                    ),
+                    member_writes=False,
+                )
+            ]
+        )
+    with as_service_account("api"):
+        org = iam.register_container("nexus", "organization", "org-1")
+        workspace = iam.register_container(
+            "nexus", "workspace", "ws-1", parent=org.name
+        )
+        member = iam.ensure_user(LEGACY_NEXUS_ISSUER, "nexus-1")
+        iam.attach_policy(roles.MEMBER, member.id, workspace.name)
     dataset.set_services(IEngine.Services(iam=iam))
     nexus_call = CallContext(
         principal=service_account("api"), on_behalf_of=user("nexus-1")

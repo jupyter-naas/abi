@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { buildOntologyDashboard, dashboardTerms, dashboardRoute, dashboardFilesRoute, dashboardCoverage, dashboardOntologies, dashboardKindRoute, dashboardRestrictions, type OntologyDeclaration } from './ontology-dashboard';
 import type { DictionaryTerm } from './ontology-dictionary-tree';

@@ -1122,7 +1122,14 @@ attachment per scope.
   name both, so the module id `idp` is reserved: an admin creates its account,
   nothing else does.
 - **`builtin.platform.viewer` / `.member`**: attached and detached by IAM in step
-  with the role attachments that bring them (above).
+  with the role attachments that bring them (above). They also carry the deployment's **platform grants**
+  (`set_platform_grants`, `roles.PlatformGrant`: Nexus's shared repository and the kernel's datasets) as
+  `GrantViewer…` / `GrantMember…` statements. Those statements are the only storage of the grants: every
+  regeneration of the managed policies (a changed catalog registered by any process, a module approval, the
+  engine's boot) reads them back (`roles.stored_platform_grants`) and rebuilds them against its registry, so an
+  instance that never called `set_platform_grants` does not drop them. Only `set_platform_grants` replaces
+  the set; a grant whose catalog is not registered yet is not stored, so register `nexus` first. A catalog's own
+  `platform_access` needs no such storage: it is read from the registered catalog.
 - **`builtin.module_bootstrap`**: a module account before approval (see "Service accounts,
   keys, tokens and manifests").
 - **`LEGACY_NEXUS_ISSUER`** (`urn:abi:nexus`): a Nexus user named on a call by its Nexus id resolves to IAM's user of

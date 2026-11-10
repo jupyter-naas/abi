@@ -219,7 +219,7 @@ describe('drill-down spine', () => {
     expect(carried?.label).toBe('PDFPaperFile · path')
     expect(carried?.source).toEqual({
       kind: 'property',
-      predicate: D + 'path',
+      predicate: 'http://x/path', // the column's own predicate (see col())
       path: [
         { predicate: D + 'has_extracted_item', direction: 'in', quantifier: 'one' },
         { predicate: D + 'has_chunks', direction: 'in', quantifier: 'one' },
@@ -236,7 +236,7 @@ describe('drill-down spine', () => {
         kind: 'source',
         source: {
           kind: 'property',
-          predicate: D + 'path',
+          predicate: 'http://x/path', // the column's own predicate (see col())
           path: [
             { predicate: D + 'has_extracted_item', direction: 'in', quantifier: 'one' },
             { predicate: D + 'has_chunks', direction: 'in', quantifier: 'one' },

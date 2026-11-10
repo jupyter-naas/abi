@@ -29,6 +29,7 @@ from naas_abi.apps.nexus.apps.api.app.services.datasets.datasets__schema import 
 from naas_abi.apps.nexus.apps.api.app.services.datasets.service import DatasetsService
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import nexus_resource
 from naas_abi_core.services.dataset.DatasetPort import (
     DatasetNotFoundError,
     DatasetSnapshotNotFoundError,
@@ -88,12 +89,32 @@ def _http_error(exc: Exception) -> HTTPException:
 async def list_datasets(
     workspace_id: str = Query(..., min_length=1, max_length=100),
     namespace: str | None = Query(default=None, max_length=128),
+    current_user: User = Depends(get_current_user_required),
     datasets_service: DatasetsService = Depends(get_datasets_service),
 ):
     try:
         items = datasets_service.list(namespace=namespace)
     except Exception as exc:
         raise _http_error(exc) from exc
+    # Namespaces are platform-wide (``dataset/<namespace>/<name>``): the listing
+    # keeps what the caller may list, and a namespace refused as a whole (what a
+    # policy on ``dataset/<namespace>`` denies, as the query is) is left out.
+    items = await authz.filter_allowed(
+        "ListDatasets",
+        items,
+        user=current_user,
+        resource_of=lambda item: nexus_resource("dataset", id=[item.namespace, item.name]),
+    )
+    namespaces = {item.namespace for item in items}
+    visible = set(
+        await authz.filter_allowed(
+            "ListDatasets",
+            sorted(namespaces),
+            user=current_user,
+            resource_of=lambda one: nexus_resource("dataset", id=one),
+        )
+    )
+    items = [item for item in items if item.namespace in visible]
     return DatasetListResponse(datasets=[_to_info(item) for item in items], total=len(items))
 
 
@@ -106,8 +127,12 @@ async def describe_dataset(
     namespace: str,
     name: str,
     workspace_id: str = Query(..., min_length=1, max_length=100),
+    current_user: User = Depends(get_current_user_required),
     datasets_service: DatasetsService = Depends(get_datasets_service),
 ):
+    # The guard decided on ``dataset/<namespace>/<name>``; a policy on the namespace
+    # alone (``dataset/<namespace>``) must hide it here as it does in list and query.
+    await authz.require("GetDataset", user=current_user, workspace=workspace_id, id=namespace)
     try:
         return _to_info(datasets_service.describe(name, namespace=namespace))
     except Exception as exc:
@@ -125,8 +150,11 @@ async def preview_dataset(
     workspace_id: str = Query(..., min_length=1, max_length=100),
     limit: int | None = Query(default=None, ge=1, le=1000),
     snapshot_id: int | None = Query(default=None, ge=0),
+    current_user: User = Depends(get_current_user_required),
     datasets_service: DatasetsService = Depends(get_datasets_service),
 ):
+    # As ``describe_dataset``: the namespace's own resource is checked too.
+    await authz.require("PreviewDataset", user=current_user, workspace=workspace_id, id=namespace)
     try:
         return _to_query(
             datasets_service.preview(
@@ -151,7 +179,9 @@ async def query_namespace(
     current_user: User = Depends(get_current_user_required),
     datasets_service: DatasetsService = Depends(get_datasets_service),
 ):
-    # The workspace is in the body, so the check happens here, not in a guard.
+    # The workspace is in the body, so the check happens here, not in a guard. It
+    # carries the feature and the caller's membership; the namespace is
+    # platform-wide, so the resource is ``dataset/<namespace>`` whatever it is.
     await authz.require(
         "QueryDataset", user=current_user, workspace=payload.workspace_id, id=namespace
     )

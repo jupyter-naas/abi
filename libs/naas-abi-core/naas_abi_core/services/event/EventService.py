@@ -24,6 +24,7 @@ from naas_abi_core import logger
 from naas_abi_core.engine.call_context import as_service_account, current_call_context
 from naas_abi_core.services.bus.BusService import BusService
 from naas_abi_core.services.event import EventCodec, EventFilter
+from naas_abi_core.services.event.context import event_author_id
 from naas_abi_core.services.event.EventPort import (
     EventNotFoundError,
     EventTypeSummary,
@@ -67,8 +68,9 @@ def _stamp(event: Any) -> None:
     """Who and where from the call's context, unless the event says otherwise."""
     context = current_call_context()
     served = context.user
+    actor = served.id if served is not None else event_author_id.get()
     for field_name, value in (
-        ("actor_user_id", served.id if served is not None else None),
+        ("actor_user_id", actor),
         ("actor_container", context.container),
         ("triggered_via", context.triggered_via),
     ):

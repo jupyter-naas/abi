@@ -456,11 +456,19 @@ chain from an old-grammar world (`testing.LegacyNexusIam`) through their move an
   actions of memberships, scopes, placements, keys and shared-graph policies. Each engine module's jobs
   run as their own account `job/<module_id>` holding `builtin.job`. Acting on behalf of a user never opens
   a sealed resource.
+- **Datasets are platform-wide, not a workspace's.** The engine's dataset service is global and nothing ties a
+  namespace to a workspace, so the Nexus `dataset` type is platform-level (`abi:nexus:dataset/<ns>/<name>`, reached through the catalog's `PLATFORM_ACCESS`).
+  The workspace a dataset request names carries the `datasets` feature and the caller's membership only (a
+  stranger to it, or a View-as session of another workspace, is refused); it never scopes what is read. List,
+  query, describe and preview agree on a namespace: `GET /datasets/` keeps what `ListDatasets` allows on
+  `dataset/<ns>/<name>` and on `dataset/<ns>` (two batched `filter` calls, whatever the number of datasets);
+  `QueryDataset` is checked on `dataset/<ns>`; describe and preview are guarded on `dataset/<ns>/<name>` and
+  also require their action on `dataset/<ns>`. A Deny on `dataset/<ns>` therefore hides the namespace from all four.
 - **Kernel resources need placements.** Nexus places what it creates and registers `placement_source`s for
   what exists, applied at every boot and when a workspace is created (`on_workspace_created`). Two
-  platform-level exceptions are deployment grants (`iam.set_platform_grants`): the shared repository that
-  slides, documents, sheets and code use (viewers read, members write) and the platform's datasets (read for
-  every role). The shared repository separates workspaces by Nexus's branch naming only; a per-workspace
+  platform-level exceptions are deployment grants (`iam.set_platform_grants`, stored in the platform policies so any process's regeneration keeps them): the shared repository that
+  slides, documents, sheets and code use (viewers read, members write) and the kernel's datasets (read for
+  every role). Nexus's own `dataset` type is `PLATFORM_ACCESS` of its catalog, not a grant. The shared repository separates workspaces by Nexus's branch naming only; a per-workspace
   repository is the way to make IAM enforce it.
 - **Roles are for users, and only users Nexus knows become IAM users.** An id from a request path never
   creates an IAM principal; a `usr_` id must name a user record, never a service account or a group. A

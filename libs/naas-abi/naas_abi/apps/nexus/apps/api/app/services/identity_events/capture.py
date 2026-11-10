@@ -43,7 +43,7 @@ from naas_abi.apps.nexus.apps.api.app.services.identity_events.events import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.identity_graph import iris
 from naas_abi_core import logger
-from naas_abi_core.services.event.context import event_actor_user_id
+from naas_abi_core.services.event.context import event_actor_user_id, event_author_id
 from sqlalchemy import event as sa_event
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session
@@ -307,7 +307,7 @@ class IdentityEventCapture:
     def _after_flush(self, session: Session, _flush_context: Any) -> None:
         try:
             staged: list[tuple[int, int, NexusIdentityEvent]] = []
-            actor = event_actor_user_id.get()
+            actor = event_actor_user_id.get() or event_author_id.get()
             for op, objects in (
                 ("create", session.new),
                 ("update", session.dirty),

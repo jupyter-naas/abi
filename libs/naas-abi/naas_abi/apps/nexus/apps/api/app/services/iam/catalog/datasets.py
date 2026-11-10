@@ -1,8 +1,16 @@
-"""Datasets: ``dataset/<namespace>/<name>`` (the engine's dataset service holds them)."""
+"""Datasets: ``dataset/<namespace>/<name>`` (the engine's dataset service holds them).
+
+The dataset service is global: a namespace belongs to no workspace, so the type is
+platform-level (``abi:nexus:dataset/...``). The workspace a request names only
+carries the ``datasets`` feature and the caller's membership; the roles' platform
+companions reach the namespaces (``PLATFORM_ACCESS``), and a policy that denies
+``dataset/<namespace>`` hides it from every workspace.
+"""
 
 from naas_abi.apps.nexus.apps.api.app.services.iam.catalog.dsl import action, rtype
+from naas_abi_core.services.iam.catalog import PlatformAccess
 
-TYPES = (rtype("dataset", id="path"),)
+TYPES = (rtype("dataset", id="path", platform=True),)
 
 ACTIONS = (
     action("ListDatasets", "list", "dataset", feature="datasets"),
@@ -10,4 +18,13 @@ ACTIONS = (
     action("PreviewDataset", "read", "dataset", feature="datasets"),
     # Read-only SQL over a namespace: ``dataset/<namespace>``.
     action("QueryDataset", "read", "dataset", feature="datasets"),
+)
+
+# Every workspace viewer and member reads the datasets of the platform (nothing links
+# a namespace to a workspace, and Nexus only reads them).
+PLATFORM_ACCESS = (
+    PlatformAccess(
+        ("dataset/*",),
+        viewer=("ListDatasets", "GetDataset", "PreviewDataset", "QueryDataset"),
+    ),
 )

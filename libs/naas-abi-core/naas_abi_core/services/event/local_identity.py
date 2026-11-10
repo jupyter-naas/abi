@@ -1,9 +1,11 @@
 """Identity for work started from a terminal (``abi chat``, git tooling agents).
 
-A terminal has no Nexus session, but it has a git author. The actor becomes
-``email-sha256:<sha256 of the lower-cased git user.email>``: the event log still
-holds no readable email, and the deploying app can match the hash to an account
-(Nexus: ``nexus:user_email_sha256`` in graph/nexus-identity).
+A terminal has no Nexus session, but it has a git author. The author is a label
+for events (``event_author_id``), never the user the work acts for:
+``email-sha256:<sha256 of the lower-cased git user.email>``. An event published
+with no user of its own names it as its actor; the event log still holds no
+readable email, and the deploying app can match the hash to an account (Nexus:
+``nexus:user_email_sha256`` in graph/nexus-identity).
 """
 
 from __future__ import annotations
@@ -12,9 +14,11 @@ import hashlib
 import subprocess
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Any
 
 from naas_abi_core.services.event.context import (
     event_actor_user_id,
+    event_author_id,
     event_triggered_via,
 )
 
@@ -48,15 +52,18 @@ def git_user_email() -> str | None:
 def bind_local_identity() -> Iterator[None]:
     """Stamp events published inside the block with the terminal user.
 
+    The git author is a label (``event_author_id``), not the user the call acts
+    for: it never sets ``on_behalf_of``, so IAM bounds the terminal's work by
+    the account running it, not by a user who may hold nothing.
+
     An identity already set (e.g. by an API request) is left alone.
     """
-    tokens = []
-    if event_actor_user_id.get() is None:
+    # A ContextVar and its Token, or a call-context field and its FieldToken.
+    tokens: list[tuple[Any, Any]] = []
+    if event_actor_user_id.get() is None and event_author_id.get() is None:
         email = git_user_email()
         if email:
-            tokens.append(
-                (event_actor_user_id, event_actor_user_id.set(email_actor_id(email)))
-            )
+            tokens.append((event_author_id, event_author_id.set(email_actor_id(email))))
     if event_triggered_via.get() is None:
         tokens.append((event_triggered_via, event_triggered_via.set("cli")))
     try:

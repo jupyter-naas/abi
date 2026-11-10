@@ -1,4 +1,4 @@
-import test from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { filterSystems, selectedSystems, systemFilterRoute, systemOntologyPaths } from './ontology-system-filter';
 import { buildOntologySystems } from './ontology-system-graph';
