@@ -1,87 +1,136 @@
 import os
 import re
+import stat
+import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from threading import Lock
 from typing import Any
 
 from dotenv import dotenv_values, find_dotenv, set_key, unset_key
+from dotenv.parser import parse_stream
 from naas_abi_core.services.secret.SecretPorts import ISecretAdapter, checked_key
 from naas_abi_core.utils.Logger import logger
 
-# The names every reader of a dotenv file takes: docker compose (interpolation
-# and env_file), shells, `abi deploy local`. A name outside it, such as
-# ``iam/signing-keys/<id>``, makes compose refuse the whole file ("unexpected
-# character "/" in variable name").
-DOTENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_.-]*")
+# The names docker compose reads from a dotenv file, for interpolation and
+# env_file alike (checked against compose v5.6, any character first). Any other
+# name, such as ``iam/signing-keys/<id>``, makes compose refuse the whole file
+# ("unexpected character "/" in variable name").
+COMPOSE_NAME = re.compile(r"[A-Za-z0-9_.\[\]-]+")
 
 SIDECAR_SUFFIX = ".sidecar"
 
 
-def is_dotenv_name(key: str) -> bool:
-    return bool(DOTENV_NAME.fullmatch(key))
+def is_compose_name(key: str) -> bool:
+    return bool(COMPOSE_NAME.fullmatch(key))
 
 
 def sidecar_path_of(path: str) -> str:
-    """Where the keys with other names go: ``.env`` -> ``.env.sidecar``."""
+    """Where the keys with other names are kept: ``.env`` -> ``.env.sidecar``."""
     return f"{path}{SIDECAR_SUFFIX}"
 
 
-def move_keys_to_sidecar(path: str, sidecar_path: str | None = None) -> list[str]:
-    """Move the keys of ``path`` that are not dotenv names to its sidecar.
+def move_keys_to_sidecar(path: str) -> list[str]:
+    """Move the keys of the dotenv file ``path`` that compose cannot read to
+    its sidecar, and return their names.
 
-    Repairs a ``.env`` an earlier engine wrote them into, which docker compose
-    then refused. Returns the names moved; values are never logged.
+    Repairs a ``.env`` an earlier engine wrote its own keys into, which docker
+    compose then refused. Each file is rewritten once, the sidecar first, and
+    the lines move as they are. Values are never logged.
     """
-    sidecar = sidecar_path or sidecar_path_of(path)
+    sidecar = sidecar_path_of(path)
     if not os.path.exists(path):
         return []
-    values = dotenv_values(path, interpolate=False)
+    with open(path, encoding="utf-8") as source:
+        bindings = list(parse_stream(source))
     moved = [
-        key
-        for key, value in values.items()
-        if value is not None and not is_dotenv_name(key)
+        binding
+        for binding in bindings
+        if binding.key is not None and not is_compose_name(binding.key)
     ]
     if not moved:
         return []
-    _create_like(sidecar, path)
-    for key in moved:
-        with _keep_owner(sidecar):
-            set_key(sidecar, key, str(values[key]))
-    for key in moved:
-        with _keep_owner(path):
-            unset_key(path, key)
-    logger.warning(
-        f"Moved {len(moved)} secret(s) from {path} to {sidecar}, where names "
-        f"docker compose cannot read are kept: {', '.join(moved)}"
+    names = {binding.key for binding in moved}
+
+    kept_in_sidecar = []
+    if os.path.exists(sidecar):
+        with open(sidecar, encoding="utf-8") as source:
+            kept_in_sidecar = [
+                binding.original.string
+                for binding in parse_stream(source)
+                if binding.key not in names
+            ]
+    _rewrite(
+        sidecar,
+        _joined(kept_in_sidecar + [binding.original.string for binding in moved]),
+        owner_of=path,
     )
-    return moved
+    _rewrite(
+        path,
+        _joined(
+            [
+                binding.original.string
+                for binding in bindings
+                if binding.key not in names
+            ]
+        ),
+        owner_of=path,
+    )
+    logger.warning(
+        f"Moved {len(names)} secret(s) docker compose cannot read from {path} "
+        f"to {sidecar}: {', '.join(sorted(str(name) for name in names))}"
+    )
+    return sorted(str(name) for name in names)
 
 
-def _create_like(path: str, like: str) -> None:
-    """Create ``path`` empty, readable by its owner only, owned as ``like``."""
-    if os.path.exists(path):
-        return
-    directory = os.path.dirname(path)
-    if directory:
-        os.makedirs(directory, exist_ok=True)
-    os.close(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
+def _joined(lines: list[str]) -> str:
+    return "".join(line if line.endswith("\n") else f"{line}\n" for line in lines)
+
+
+def _rewrite(path: str, content: str, owner_of: str) -> None:
+    """Replace ``path`` with ``content`` in one rename. It keeps its mode (a new
+    file is readable by its owner only) and gets the owner of ``owner_of``."""
     try:
-        owner = os.stat(like)
-        os.chown(path, owner.st_uid, owner.st_gid)
+        mode: int | None = stat.S_IMODE(os.stat(path).st_mode)
+    except FileNotFoundError:
+        mode = None
+    descriptor, temporary = tempfile.mkstemp(
+        prefix=".tmp_", dir=os.path.dirname(os.path.abspath(path))
+    )
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as destination:
+            destination.write(content)
+        if mode is not None:
+            os.chmod(temporary, mode)
+        os.replace(temporary, path)
+    except BaseException:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+        raise
+    _give_owner(path, owner_of)
+
+
+def _give_owner(path: str, owner_of: str) -> None:
+    try:
+        owner, current = os.stat(owner_of), os.stat(path)
+        if (current.st_uid, current.st_gid) != (owner.st_uid, owner.st_gid):
+            os.chown(path, owner.st_uid, owner.st_gid)
     except OSError as exc:
-        logger.warning(f"Could not give {path} the owner of {like}: {exc}")
+        logger.warning(f"Could not give {path} the owner of {owner_of}: {exc}")
 
 
 @contextmanager
-def _keep_owner(path: str) -> Iterator[None]:
+def _keep_owner(path: str, owner_of: str | None = None) -> Iterator[None]:
     """python-dotenv rewrites the file through a new one. Give it back the
-    old file's owner: a container running as root must not leave the
-    project's bind-mounted .env unwritable for its user."""
+    old file's owner (or, for a file it creates, the owner of ``owner_of``):
+    a container running as root must not leave the project's bind-mounted
+    files unwritable for its user."""
     try:
         before = os.stat(path)
     except OSError:
         yield
+        if owner_of is not None and os.path.exists(path):
+            _give_owner(path, owner_of)
         return
     yield
     try:
@@ -95,13 +144,15 @@ def _keep_owner(path: str) -> Iterator[None]:
 class DotenvSecretSecondaryAdaptor(ISecretAdapter):
     """Secrets in a dotenv file.
 
-    The file holds only names every dotenv reader takes (``DOTENV_NAME``).
-    Others, such as the keys the engine keeps for itself
-    (``iam/signing-keys/<id>``, ``idp/code-key``), go to a sidecar file,
-    ``<path>.sidecar`` unless ``sidecar_path`` says otherwise: docker compose
-    reads the project's ``.env`` too, and refuses it with such a name in it.
-    Keys an earlier version wrote into the file are moved to the sidecar when
-    the adapter opens it.
+    The file holds only names docker compose reads (``COMPOSE_NAME``): compose
+    reads the project's ``.env`` too, and refuses all of it over one other
+    name. Other keys, such as the ones the engine keeps for itself
+    (``iam/signing-keys/<id>``, ``idp/code-key``), go to the sidecar
+    ``<path>.sidecar``, readable by its owner only. Reads cover both files.
+
+    Opening the adapter never writes. ``move_keys_to_sidecar`` repairs a file
+    an earlier version wrote such keys into; the secret service's
+    configuration runs it before opening a writable adapter.
 
     ``read_only`` serves a file another process owns, such as one on a volume
     mounted read-only: ``set`` and ``remove`` leave it alone, so the service
@@ -118,10 +169,9 @@ class DotenvSecretSecondaryAdaptor(ISecretAdapter):
         path: str = ".env",
         read_only: bool = False,
         environment_first: bool = False,
-        sidecar_path: str | None = None,
     ):
         self.path = path
-        self.sidecar_path = sidecar_path or sidecar_path_of(path)
+        self.sidecar_path = sidecar_path_of(path)
         self.read_only = read_only
         self.environment_first = environment_first
         self._lock = Lock()
@@ -136,8 +186,6 @@ class DotenvSecretSecondaryAdaptor(ISecretAdapter):
         logger.debug(f"dotenv is using the file: {self.path}")
         logger.debug(f"dotenv discoverable file is: {find_dotenv()}")
 
-        if not self.read_only:
-            move_keys_to_sidecar(self.path, self.sidecar_path)
         self.secrets = dotenv_values(self.path)
         if os.path.exists(self.sidecar_path):
             self.secrets.update(dotenv_values(self.sidecar_path, interpolate=False))
@@ -163,16 +211,15 @@ class DotenvSecretSecondaryAdaptor(ISecretAdapter):
             self._skip_write("set", key)
             return
         with self._lock:
-            if is_dotenv_name(key):
+            if is_compose_name(key):
                 os.environ[key] = value
-                path = self.path
+                with _keep_owner(self.path):
+                    set_key(self.path, key, value)
             else:
-                # Not an environment variable either: kept out of os.environ,
-                # which child processes inherit.
-                path = self.sidecar_path
-                _create_like(path, self.path)
-            with _keep_owner(path):
-                set_key(path, key, value)
+                # Kept out of os.environ too, which child processes inherit.
+                # set_key creates a missing sidecar in one rename, mode 0600.
+                with _keep_owner(self.sidecar_path, owner_of=self.path):
+                    set_key(self.sidecar_path, key, value)
             self.secrets[key] = value
 
     def remove(self, key: str):
@@ -181,7 +228,7 @@ class DotenvSecretSecondaryAdaptor(ISecretAdapter):
             self._skip_write("remove", key)
             return
         with self._lock:
-            if is_dotenv_name(key):
+            if is_compose_name(key):
                 with _keep_owner(self.path):
                     unset_key(self.path, key)
             elif os.path.exists(self.sidecar_path):
