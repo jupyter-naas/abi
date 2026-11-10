@@ -24,6 +24,23 @@
 
 <!-- version list -->
 
+## v3.3.2 (2026-11-10)
+
+### Bug Fixes
+
+- **cli**: The git author labels terminal events and never bounds the engine's access
+  ([`18eacf4`](https://github.com/jupyter-naas/abi/commit/18eacf479193ef2be464e39bd71e6aecf4e7b6bf))
+
+- **event**: The terminal author guards, labels identity events, and its limits are recorded
+  ([`67713af`](https://github.com/jupyter-naas/abi/commit/67713af455cf85c00f74dd30f4bfdfe0972f33e9))
+
+- **event**: Type the terminal identity tokens for both a ContextVar and a call-context field
+  ([`6d34455`](https://github.com/jupyter-naas/abi/commit/6d344552fb36c4c94f9be95a210558fd4921d373))
+
+- **iam**: Platform grants survive a regeneration of the managed policies by any instance
+  ([`6ba1e4a`](https://github.com/jupyter-naas/abi/commit/6ba1e4a23c0c5132f7cb6713fa1ec473683ae75b))
+
+
 ## v3.3.1 (2026-11-09)
 
 ### Bug Fixes
