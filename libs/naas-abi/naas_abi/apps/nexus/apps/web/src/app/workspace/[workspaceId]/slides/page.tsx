@@ -103,7 +103,7 @@ export default function SlidesIndexPage() {
   // ChatInterface is unmounted then, so a leftover Documents bind would
   // otherwise persist until a deck is opened.
   useEffect(() => {
-    const agents = useAgentsStore.getState().agents.filter((a) => a.enabled);
+    const agents = useAgentsStore.getState().agents;
     const slides = pickPaneOfficeAgent(agents, { onSlides: true });
     if (slides && useWorkspaceStore.getState().paneAgent !== slides.id) {
       useWorkspaceStore.getState().setPaneAgent(slides.id);
