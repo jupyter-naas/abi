@@ -24,6 +24,28 @@
 
 <!-- version list -->
 
+## v3.7.2 (2026-11-10)
+
+### Bug Fixes
+
+- **event**: The terminal author guards, labels identity events, and its limits are recorded
+  ([`67713af`](https://github.com/jupyter-naas/abi/commit/67713af455cf85c00f74dd30f4bfdfe0972f33e9))
+
+- **iam**: Platform grants survive a regeneration of the managed policies by any instance
+  ([`6ba1e4a`](https://github.com/jupyter-naas/abi/commit/6ba1e4a23c0c5132f7cb6713fa1ec473683ae75b))
+
+- **nexus**: A namespace policy also hides describe and preview of its datasets
+  ([`902366e`](https://github.com/jupyter-naas/abi/commit/902366e6184f2794cdfbebc6b81e0298804fa33a))
+
+- **nexus**: Datasets are platform-wide, and the profile email is read-only
+  ([`c580e09`](https://github.com/jupyter-naas/abi/commit/c580e0949b7e8ff96ccb13a39200e4a5666407be))
+
+### Testing
+
+- **nexus-web**: Make pnpm test green and run it on pull requests
+  ([`4c5b439`](https://github.com/jupyter-naas/abi/commit/4c5b439f920ae27cb782d04fe8e85574a3140d49))
+
+
 ## v3.7.1 (2026-11-09)
 
 ### Bug Fixes
