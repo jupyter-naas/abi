@@ -1,7 +1,7 @@
 # EngineConfiguration_ObjectStorageService
 
 ## What it is
-Pydantic configuration models for wiring an `ObjectStorageService` with a selectable object storage adapter (`fs`, `s3`, `naas`, `r2`, `nats_rpc`, or `custom`), plus loader helpers to instantiate the configured adapter.
+Pydantic configuration models for wiring an `ObjectStorageService` with a selectable object storage adapter (`fs`, `s3`, `naas`, `r2`, `azure_blob`, `nats_rpc`, or `custom`), plus loader helpers to instantiate the configured adapter.
 
 ## Public API
 
@@ -43,6 +43,17 @@ Pydantic configuration models for wiring an `ObjectStorageService` with a select
     - `base_prefix: str = ""`
   - `extra="forbid"`
 
+- `ObjectStorageAdapterAzureBlobConfiguration`
+  - Azure Blob Storage adapter config (needs the `naas-abi-core[azure]` extra).
+  - Fields:
+    - `container_name: str`
+    - `account_url: str | None = None` (blob endpoint, used as given: private endpoints and sovereign clouds work)
+    - `base_prefix: str = ""`
+    - `managed_identity_client_id: str | None = None` (user-assigned managed identity; default `AZURE_CLIENT_ID`, else system-assigned)
+    - `connection_string: str | None = None` (not shown in `repr`)
+  - Exactly one of `account_url` (Entra ID through `DefaultAzureCredential`, no account key) or `connection_string` (Azurite, account key, SAS); `managed_identity_client_id` only with `account_url`.
+  - `extra="forbid"`
+
 - `ObjectStorageAdapterNATSConfiguration`
   - NATS RPC client adapter config (talks to a remote object storage service over NATS request/reply).
   - Fields:
@@ -54,14 +65,14 @@ Pydantic configuration models for wiring an `ObjectStorageService` with a select
 - `ObjectStorageAdapterConfiguration` (extends `GenericLoader`)
   - Selects an adapter and loads an `IObjectStorageAdapter`.
   - Fields:
-    - `adapter: Literal["fs", "s3", "naas", "r2", "nats_rpc", "custom"]`
-    - `config: (FS|S3|Naas|R2|NATS)|None = None`
+    - `adapter: Literal["fs", "s3", "naas", "r2", "azure_blob", "nats_rpc", "custom"]`
+    - `config: (FS|S3|Naas|R2|AzureBlob|NATS)|None = None`
   - Methods:
     - `validate_adapter() -> Self` (Pydantic `@model_validator(mode="after")`)
       - Asserts `config` is present when `adapter != "custom"`.
       - Validates `config` against the adapter-specific pydantic model via `pydantic_model_validator(...)`.
     - `load() -> IObjectStorageAdapter`
-      - For `fs`/`s3`/`naas`/`r2`/`nats_rpc`: imports and instantiates the corresponding secondary adapter using `**config.model_dump()`.
+      - For `fs`/`s3`/`naas`/`r2`/`azure_blob`/`nats_rpc`: imports and instantiates the corresponding secondary adapter using `**config.model_dump()`.
       - For `custom`: delegates to `GenericLoader.load()`.
     - `local_storage() -> str | None`
       - Returns a human-readable description of where objects live:
@@ -88,6 +99,7 @@ Pydantic configuration models for wiring an `ObjectStorageService` with a select
   - `naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterS3`
   - `naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterNaas`
   - `naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterR2`
+  - `naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterAzureBlob`
   - `naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterNATSClient`
 
 ## Usage
@@ -110,9 +122,22 @@ service = cfg.load()  # ObjectStorageService with FS adapter
 print(cfg.object_storage_adapter.local_storage())  # "files under storage/datastore"
 ```
 
+Azure Blob Storage with a managed identity, in `config.yaml`:
+
+```yaml
+services:
+  object_storage:
+    object_storage_adapter:
+      adapter: "azure_blob"
+      config:
+        account_url: "https://mystorageaccount.blob.core.windows.net"
+        container_name: "abi"
+        base_prefix: "datastore"
+```
+
 ## Caveats
 
 - `config` is required for all adapters except `custom` (`assert` enforced in both validation and `load()`).
 - All adapter config models set `extra="forbid"`: unknown fields cause validation errors.
 - `adapter="custom"` bypasses built-in instantiation and uses `GenericLoader` behavior (not defined in this file).
-- `local_storage()` only reports a location for `fs` and `custom`; returns `None` for `s3`, `naas`, `r2`, and `nats_rpc`.
+- `local_storage()` only reports a location for `fs` and `custom`; returns `None` for `s3`, `naas`, `r2`, `azure_blob`, and `nats_rpc`.

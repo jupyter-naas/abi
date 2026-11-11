@@ -3285,7 +3285,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi-core"
-version = "3.3.0"
+version = "3.3.3"
 source = { editable = "../naas-abi-core" }
 dependencies = [
     { name = "click" },
@@ -3332,6 +3332,8 @@ dagster = [
 
 [package.metadata]
 requires-dist = [
+    { name = "azure-identity", marker = "extra == 'azure'", specifier = ">=1.21.0,<2" },
+    { name = "azure-storage-blob", marker = "extra == 'azure'", specifier = ">=12.25.1,<13" },
     { name = "boto3", marker = "extra == 'aws'", specifier = ">=1.38.19,<2" },
     { name = "boto3-stubs", marker = "extra == 'aws'", specifier = ">=1.42.19" },
     { name = "click", specifier = ">=8.1.1,<8.2" },
@@ -3352,6 +3354,7 @@ requires-dist = [
     { name = "loguru", specifier = ">=0.7.2,<0.8" },
     { name = "msal", marker = "extra == 'microsoft'", specifier = ">=1.37.0" },
     { name = "naas-abi-core", extras = ["aws"], marker = "extra == 'all'" },
+    { name = "naas-abi-core", extras = ["azure"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["microsoft"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["nats"], marker = "extra == 'all'" },
     { name = "naas-abi-core", extras = ["openrouter"], marker = "extra == 'all'" },
@@ -3393,7 +3396,7 @@ requires-dist = [
     { name = "types-pyyaml", specifier = ">=6.0.12.20250915" },
     { name = "types-tqdm", specifier = ">=4.67.0.20250809" },
 ]
-provides-extras = ["ssh", "aws", "qdrant", "sqlite-vec", "all", "openrouter", "dagster", "redis", "rabbitmq", "nats", "microsoft", "otel"]
+provides-extras = ["ssh", "aws", "azure", "qdrant", "sqlite-vec", "all", "openrouter", "dagster", "redis", "rabbitmq", "nats", "microsoft", "otel"]
 
 [package.metadata.requires-dev]
 dev = [

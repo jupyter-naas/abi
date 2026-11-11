@@ -35,6 +35,9 @@ pip install naas-abi-core[otel]
 # Qdrant vector store, AWS S3 object storage, SSH tunnels, Redis, OpenRouter
 pip install naas-abi-core[qdrant,aws,ssh,redis,openrouter]
 
+# Azure Blob Storage object storage (Entra ID: managed identity, no account key)
+pip install naas-abi-core[azure]
+
 # Every supported extra (nats and otel included)
 pip install naas-abi-core[all]
 
@@ -235,6 +238,8 @@ Manages file storage for documents, reports, and generated content.
 **Supported Backends:**
 - AWS S3 (optional, requires `[aws]` extra)
 - MinIO
+- Cloudflare R2 (optional, requires `[aws]` extra)
+- Azure Blob Storage (optional, requires `[azure]` extra), with a managed identity
 - Local file system
 - Custom adapters
 

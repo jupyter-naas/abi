@@ -97,6 +97,57 @@ class ObjectStorageAdapterR2Configuration(BaseModel):
     base_prefix: str = ""
 
 
+class ObjectStorageAdapterAzureBlobConfiguration(BaseModel):
+    """Object storage adapter Azure Blob Storage configuration.
+
+    Authenticates with Microsoft Entra ID (``DefaultAzureCredential``: managed
+    identity, workload identity, Azure CLI login), so no account key is stored.
+    ``account_url`` is used as given: a private endpoint or a sovereign cloud
+    endpoint works. ``managed_identity_client_id`` selects a user-assigned
+    managed identity (default: ``AZURE_CLIENT_ID``, else system-assigned).
+    Needs the ``naas-abi-core[azure]`` extra.
+
+    object_storage_adapter:
+      adapter: "azure_blob"
+      config:
+        account_url: "https://mystorageaccount.blob.core.windows.net"
+        container_name: "abi"
+        base_prefix: "datastore"
+        managed_identity_client_id: "{{ secret.AZURE_CLIENT_ID }}"
+
+    ``connection_string`` replaces ``account_url`` for a store reached without
+    Entra ID (the Azurite emulator, an account key or a SAS):
+
+    object_storage_adapter:
+      adapter: "azure_blob"
+      config:
+        connection_string: "{{ secret.AZURE_STORAGE_CONNECTION_STRING }}"
+        container_name: "abi"
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    container_name: str
+    account_url: str | None = None
+    base_prefix: str = ""
+    managed_identity_client_id: str | None = None
+    connection_string: str | None = Field(default=None, repr=False)
+
+    @model_validator(mode="after")
+    def validate_credentials(self) -> Self:
+        if bool(self.account_url) == bool(self.connection_string):
+            raise ValueError(
+                "azure_blob needs exactly one of account_url (Entra ID) or "
+                "connection_string"
+            )
+        if self.connection_string and self.managed_identity_client_id:
+            raise ValueError(
+                "managed_identity_client_id applies to account_url, not to "
+                "connection_string"
+            )
+        return self
+
+
 class ObjectStorageAdapterNATSConfiguration(BaseModel):
     """Object storage adapter NATS RPC client configuration.
 
@@ -118,17 +169,20 @@ class ObjectStorageAdapterNATSConfiguration(BaseModel):
 
 
 class ObjectStorageAdapterConfiguration(GenericLoader):
-    adapter: Literal["fs", "s3", "naas", "r2", "nats_rpc", "custom"]
+    adapter: Literal["fs", "s3", "naas", "r2", "azure_blob", "nats_rpc", "custom"]
     config: (
         ObjectStorageAdapterFSConfiguration
         | ObjectStorageAdapterS3Configuration
         | ObjectStorageAdapterNaasConfiguration
         | ObjectStorageAdapterR2Configuration
+        | ObjectStorageAdapterAzureBlobConfiguration
         | ObjectStorageAdapterNATSConfiguration
         | None
     ) = None
 
-    __MAPPING: dict[Literal["fs", "s3", "naas", "r2"], tuple[str, str]] = {
+    __MAPPING: dict[
+        Literal["fs", "s3", "naas", "r2", "azure_blob"], tuple[str, str]
+    ] = {
         "fs": (
             "abi.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS",
             "ObjectStorageSecondaryAdapterFS",
@@ -144,6 +198,10 @@ class ObjectStorageAdapterConfiguration(GenericLoader):
         "r2": (
             "abi.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterR2",
             "ObjectStorageSecondaryAdapterR2",
+        ),
+        "azure_blob": (
+            "abi.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterAzureBlob",
+            "ObjectStorageSecondaryAdapterAzureBlob",
         ),
     }
 
@@ -177,6 +235,12 @@ class ObjectStorageAdapterConfiguration(GenericLoader):
                 ObjectStorageAdapterR2Configuration,
                 self.config,
                 "Invalid configuration for services.object_storage.object_storage_adapter 'r2' adapter",
+            )
+        if self.adapter == "azure_blob":
+            pydantic_model_validator(
+                ObjectStorageAdapterAzureBlobConfiguration,
+                self.config,
+                "Invalid configuration for services.object_storage.object_storage_adapter 'azure_blob' adapter",
             )
         if self.adapter == "nats_rpc":
             pydantic_model_validator(
@@ -217,6 +281,14 @@ class ObjectStorageAdapterConfiguration(GenericLoader):
                 )
 
                 return ObjectStorageSecondaryAdapterR2(**self.config.model_dump())
+            elif self.adapter == "azure_blob":
+                from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterAzureBlob import (
+                    ObjectStorageSecondaryAdapterAzureBlob,
+                )
+
+                return ObjectStorageSecondaryAdapterAzureBlob(
+                    **self.config.model_dump()
+                )
             elif self.adapter == "nats_rpc":
                 from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterNATSClient import (
                     ObjectStorageSecondaryAdapterNATSClient,
@@ -244,7 +316,7 @@ class ObjectStorageAdapterConfiguration(GenericLoader):
             return f"files under {base_path}"
         if self.adapter == "custom":
             return self.custom_local_storage()
-        return None  # s3, naas, r2; nats_rpc is another engine's
+        return None  # s3, naas, r2, azure_blob; nats_rpc is another engine's
 
 
 class ObjectStorageServiceConfiguration(BaseModel):
