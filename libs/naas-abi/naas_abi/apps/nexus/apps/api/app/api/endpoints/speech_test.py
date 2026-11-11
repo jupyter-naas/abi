@@ -118,3 +118,18 @@ def test_speech_needs_the_chat_feature(monkeypatch: pytest.MonkeyPatch) -> None:
         response = _signed_in_client("member").post("/api/speech", json={"text": "hello"})
 
     assert response.status_code == 403
+
+
+def test_speech_is_refused_when_direct_model_providers_are_off(
+    team: NexusIam, direct_model_providers_off: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Speech calls OpenAI or OpenRouter directly, outside the model registry:
+    an isolated deployment refuses it before any key is read."""
+    monkeypatch.setattr(speech, "resolve_speech_backend", lambda: pytest.fail("reached"))
+
+    response = _signed_in_client("member").post("/api/speech", json={"text": "hello"})
+
+    assert response.status_code == 503
+    assert response.json()["error"].startswith(
+        "Speech synthesis calls a model provider directly, outside the model registry"
+    )

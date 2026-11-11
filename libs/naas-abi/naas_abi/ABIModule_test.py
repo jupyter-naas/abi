@@ -259,3 +259,29 @@ def test_nexus_urls_follow_the_environment_unless_yaml_sets_them(
         **nexus_settings_kwargs(NexusConfig(api_url="https://abi.example"))
     )
     assert configured.api_url == "https://abi.example"
+
+
+def test_direct_model_providers_follow_the_yaml_else_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An isolated deployment turns direct model providers off in its yaml
+    (``nexus_config.direct_model_providers_enabled: false``) or, when the yaml
+    does not say, with DIRECT_MODEL_PROVIDERS_ENABLED=false."""
+    from naas_abi import nexus_settings_kwargs
+    from naas_abi.apps.nexus.apps.api.app.core.config import Settings
+
+    def enabled(nexus_config: NexusConfig) -> bool:
+        return Settings(
+            **nexus_settings_kwargs(nexus_config)
+        ).direct_model_providers_enabled
+
+    monkeypatch.delenv("DIRECT_MODEL_PROVIDERS_ENABLED", raising=False)
+    assert enabled(NexusConfig()) is True
+    assert (
+        enabled(NexusConfig.model_validate({"direct_model_providers_enabled": False}))
+        is False
+    )
+
+    monkeypatch.setenv("DIRECT_MODEL_PROVIDERS_ENABLED", "false")
+    assert enabled(NexusConfig()) is False
+    assert enabled(NexusConfig(direct_model_providers_enabled=True)) is True

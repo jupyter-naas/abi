@@ -1,6 +1,11 @@
 """
 AI Provider Service - Handles communication with different AI backends.
 Supports: Anthropic (Claude), OpenAI, Ollama, Cloudflare Workers AI, and custom OpenAI-compatible endpoints.
+
+Every provider here but ABI agents and remote agents calls a model outside the
+engine's model registry: each refuses before building a client when the
+deployment turns ``direct_model_providers_enabled`` off
+(``services/direct_model_providers.py``).
 """
 
 import importlib
@@ -14,6 +19,9 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import httpx
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
+from naas_abi.apps.nexus.apps.api.app.services.direct_model_providers import (
+    ensure_direct_model_providers_enabled,
+)
 from naas_abi.apps.nexus.apps.api.app.services.ollama import resolve_endpoint
 from pydantic import BaseModel
 
@@ -226,12 +234,22 @@ def validated_provider_endpoint(config: ProviderConfig) -> str | None:
     return config.endpoint.rstrip("/") if config.endpoint else None
 
 
+def _ensure_direct_provider_enabled(config: ProviderConfig) -> None:
+    """Refuse a provider that calls its model outside the model registry when the
+    deployment turned direct model providers off, before any client exists."""
+    ensure_direct_model_providers_enabled(
+        f"The chat provider '{config.name}' ({config.type})",
+        hint="Chat with an agent whose model is registered in the model registry.",
+    )
+
+
 async def complete_with_anthropic(
     messages: list[Message],
     config: ProviderConfig,
     system_prompt: str | None,
 ) -> str:
     """Complete chat using Anthropic Claude API."""
+    _ensure_direct_provider_enabled(config)
     if not HAS_ANTHROPIC:
         raise RuntimeError("anthropic package not installed. Run: uv add anthropic")
 
@@ -277,6 +295,7 @@ async def complete_with_openai(
     system_prompt: str | None,
 ) -> str:
     """Complete chat using OpenAI API."""
+    _ensure_direct_provider_enabled(config)
     if not HAS_OPENAI:
         raise RuntimeError("openai package not installed. Run: uv add openai")
 
@@ -317,6 +336,7 @@ async def complete_with_ollama(
     system_prompt: str | None,
 ) -> str:
     """Complete chat using Ollama local API (non-streaming). Supports multimodal (images)."""
+    _ensure_direct_provider_enabled(config)
     # Falls back to the platform-resolved endpoint, which is not necessarily
     # localhost (containers, WSL).
     endpoint = validated_provider_endpoint(config) or resolve_endpoint()
@@ -360,6 +380,7 @@ async def stream_with_ollama(
     Handles Qwen3-style models that output 'thinking' tokens separately from 'content'.
     Wraps thinking in <think></think> tags so the frontend can render them.
     """
+    _ensure_direct_provider_enabled(config)
     import json
 
     endpoint = validated_provider_endpoint(config) or resolve_endpoint()
@@ -417,6 +438,7 @@ async def stream_with_openai_compatible(
     system_prompt: str | None,
 ) -> AsyncGenerator[str, None]:
     """Stream chat using OpenAI-compatible API (OpenAI, XAI, Mistral, OpenRouter, etc)."""
+    _ensure_direct_provider_enabled(config)
     import json
     import logging
 
@@ -533,6 +555,7 @@ async def complete_with_cloudflare(
     system_prompt: str | None,
 ) -> str:
     """Complete chat using Cloudflare Workers AI API."""
+    _ensure_direct_provider_enabled(config)
     # Use env vars as fallback
     api_key = config.api_key or settings.cloudflare_api_token
     account_id = config.account_id or settings.cloudflare_account_id
@@ -593,6 +616,7 @@ async def stream_with_cloudflare(
     system_prompt: str | None,
 ) -> AsyncGenerator[str, None]:
     """Stream chat using Cloudflare Workers AI API with SSE."""
+    _ensure_direct_provider_enabled(config)
     import json
 
     # Use env vars as fallback
@@ -660,6 +684,7 @@ async def complete_with_custom(
     system_prompt: str | None,
 ) -> str:
     """Complete chat using custom OpenAI-compatible endpoint."""
+    _ensure_direct_provider_enabled(config)
     endpoint = validated_provider_endpoint(config)
     if not endpoint:
         raise UnsafeProviderEndpointError("Custom endpoint URL is required")
@@ -936,6 +961,7 @@ async def stream_with_ollama_tools(
     tools: list[dict] | None = None,
 ) -> AsyncGenerator[str, None]:
     """Stream chat with Ollama, supporting tool calls. Handles tool execution loop."""
+    _ensure_direct_provider_enabled(config)
     import json
 
     endpoint = validated_provider_endpoint(config) or resolve_endpoint()
