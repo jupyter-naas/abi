@@ -26,20 +26,26 @@ export default function NewDocumentsProjectPage() {
     const templateId = officeCreateTemplateId(
       typeof window === 'undefined' ? null : new URLSearchParams(window.location.search),
     );
-    void import('@/lib/create-documents-project').then(({ documentsApiErrorMessage, startNewDocument }) =>
-      startNewDocument(
-        workspaceId,
-        (href) => {
-          setOfficeCreatePhase('opening');
-          router.replace(href);
-        },
-        templateId,
-      ).catch((e) => {
-        failOfficeCreate(
-          documentsApiErrorMessage((e as Error).message, 'Could not create the document.'),
+    void (async () => {
+      const fallback = 'Could not create the document.';
+      let errorMessage = (detail: unknown) => (detail ? String(detail) : fallback);
+      try {
+        // A failed chunk load (deploy, network) must surface too, not spin.
+        const lib = await import('@/lib/create-documents-project');
+        const { documentsApiErrorMessage, startNewDocument } = lib;
+        errorMessage = (detail) => documentsApiErrorMessage(detail, fallback);
+        await startNewDocument(
+          workspaceId,
+          (href) => {
+            setOfficeCreatePhase('opening');
+            router.replace(href);
+          },
+          templateId,
         );
-      }),
-    );
+      } catch (e) {
+        failOfficeCreate(errorMessage((e as Error).message));
+      }
+    })();
   }, [workspaceId, router]);
 
   return <OfficeCreateLoader kind="document" phase={phase} error={error} />;

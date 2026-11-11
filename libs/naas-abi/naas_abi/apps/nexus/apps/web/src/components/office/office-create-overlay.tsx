@@ -8,6 +8,7 @@ import {
   clearOfficeCreate,
   isOfficeCreateNewPath,
   isOfficeCreateProjectPath,
+  officeCreateDismissHref,
   prefetchOfficeCreate,
   useOfficeCreateStore,
 } from './office-create-state';
@@ -45,14 +46,33 @@ function useOfficeCreateRouteSync(pathname: string | null) {
   }, [kind, pathname]);
 }
 
+/** A failed create must not hold the canvas: leaving the page dismisses it. */
+function useOfficeCreateErrorRelease(pathname: string | null, error: string | null) {
+  const failedOn = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!error) {
+      failedOn.current = null;
+      return;
+    }
+    if (failedOn.current === null) {
+      failedOn.current = pathname || '';
+      return;
+    }
+    if (failedOn.current !== (pathname || '')) clearOfficeCreate();
+  }, [error, pathname]);
+}
+
 /** Covers the open office surface the instant File → New sets the store flag. */
 export function OfficeCreateOverlay() {
   const pathname = usePathname();
+  const router = useRouter();
   const kind = useOfficeCreateStore((s) => s.kind);
   const phase = useOfficeCreateStore((s) => s.phase);
   const error = useOfficeCreateStore((s) => s.error);
   useOfficeCreatePrefetch();
   useOfficeCreateRouteSync(pathname);
+  useOfficeCreateErrorRelease(pathname, error);
 
   if (!kind) return null;
 
@@ -62,6 +82,24 @@ export function OfficeCreateOverlay() {
       data-testid="office-create-overlay"
     >
       <OfficeCreateLoader kind={kind} phase={phase} error={error} />
+      {error ? (
+        <div className="flex justify-center bg-muted pb-10">
+          <button
+            type="button"
+            className="rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground hover:bg-accent"
+            data-testid="office-create-dismiss"
+            onClick={() => {
+              // `/new` has nothing under the overlay but its own spinner: leave
+              // for the section index; the route change releases the error.
+              const index = officeCreateDismissHref(pathname);
+              if (index) router.replace(index);
+              else clearOfficeCreate();
+            }}
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

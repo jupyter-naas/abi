@@ -1,45 +1,52 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Loader2 } from 'lucide-react';
-import { Header } from '@/components/shell/header';
-import { SlidesMenuBar } from '@/components/slides/slides-menu-bar';
-import { SlidesStatusBar } from '@/components/slides/slides-status-bar';
-import { slidesApiErrorMessage, startNewPresentation } from '@/lib/create-slides-project';
+import { OfficeCreateLoader } from '@/components/office/office-create-loader';
+import { officeCreateTemplateId } from '@/components/office/office-create';
+import {
+  beginOfficeCreate,
+  failOfficeCreate,
+  setOfficeCreatePhase,
+  useOfficeCreateStore,
+} from '@/components/office/office-create-state';
 
 export default function NewSlidesProjectPage() {
   const params = useParams();
   const router = useRouter();
   const workspaceId = typeof params?.workspaceId === 'string' ? params.workspaceId : '';
-  const base = `/workspace/${workspaceId}/slides`;
-  const [error, setError] = useState<string | null>(null);
   const started = useRef(false);
+  const phase = useOfficeCreateStore((s) => s.phase);
+  const error = useOfficeCreateStore((s) => s.error);
 
   useEffect(() => {
     if (!workspaceId || started.current) return;
     started.current = true;
-    void startNewPresentation(workspaceId, (href) => router.replace(href)).catch((e) => {
-      setError(slidesApiErrorMessage((e as Error).message, 'Could not create the deck.'));
-    });
+    if (!useOfficeCreateStore.getState().kind) beginOfficeCreate('deck');
+    const templateId = officeCreateTemplateId(
+      typeof window === 'undefined' ? null : new URLSearchParams(window.location.search),
+    );
+    void (async () => {
+      const fallback = 'Could not create the deck.';
+      let errorMessage = (detail: unknown) => (detail ? String(detail) : fallback);
+      try {
+        // A failed chunk load (deploy, network) must surface too, not spin.
+        const lib = await import('@/lib/create-slides-project');
+        const { slidesApiErrorMessage, startNewPresentation } = lib;
+        errorMessage = (detail) => slidesApiErrorMessage(detail, fallback);
+        await startNewPresentation(
+          workspaceId,
+          (href) => {
+            setOfficeCreatePhase('opening');
+            router.replace(href);
+          },
+          templateId,
+        );
+      } catch (e) {
+        failOfficeCreate(errorMessage((e as Error).message));
+      }
+    })();
   }, [workspaceId, router]);
 
-  return (
-    <div className="flex h-full flex-col">
-      <Header
-        title="New Presentation"
-        nav={<SlidesMenuBar onNewPresentation={() => router.push(`${base}/new`)} />}
-      />
-      {error && (
-        <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-xs text-red-600">
-          {error}
-        </div>
-      )}
-      <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
-        {!error && <Loader2 size={16} className="animate-spin" />}
-        {error || 'Opening Minimal Light…'}
-      </div>
-      <SlidesStatusBar />
-    </div>
-  );
+  return <OfficeCreateLoader kind="deck" phase={phase} error={error} />;
 }
