@@ -23,6 +23,7 @@ Install specific module groups based on your needs:
 
 ```bash
 # AI Agents
+pip install naas-abi-marketplace[ai-azure]
 pip install naas-abi-marketplace[ai-chatgpt]
 pip install naas-abi-marketplace[ai-claude]
 pip install naas-abi-marketplace[ai-gemini]

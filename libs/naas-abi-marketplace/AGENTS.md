@@ -69,6 +69,8 @@ Each contains:
 
 **To add a new model**: drop a new file under `models/` exposing `CANONICAL_ID` + a `model` instance — no further wiring needed.
 
+Exception: `azure/` registers the deployments listed in its configuration (`chat_deployments`, `embedding_deployments`) from `on_load` instead of `models/` files, and authenticates with Microsoft Entra ID by default (no API key). See [`ai/AGENTS.md`](naas_abi_marketplace/ai/AGENTS.md).
+
 ### `applications/` — third-party integrations
 
 47 apps including: `airtable`, `aws`, `git`, `github`, `gmail`, `google_*`, `hubspot`, `linkedin`, `notion`, `postgres`, `salesforce`, `sendgrid`, `slack`, … Full grouped index in [`applications/AGENTS.md`](naas_abi_marketplace/applications/AGENTS.md).

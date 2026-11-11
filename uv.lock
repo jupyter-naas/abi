@@ -25,7 +25,7 @@ dependencies = [
     { name = "naas-abi-cli" },
     { name = "naas-abi-core", extra = ["all", "dagster", "rabbitmq"] },
     { name = "naas-abi-idp" },
-    { name = "naas-abi-marketplace", extra = ["ai-chatgpt", "ai-claude", "ai-deepseek", "ai-gemini", "ai-gemma", "ai-grok", "ai-llama", "ai-mistral", "ai-perplexity", "ai-qwen", "applications-algolia", "applications-arxiv", "applications-bodo", "applications-github", "applications-gmail", "applications-googlesearch", "applications-linkedin", "applications-postgres", "applications-powerpoint", "applications-pubmed", "applications-twilio", "applications-x", "applications-yahoofinance", "domains-ontology-engineer"] },
+    { name = "naas-abi-marketplace", extra = ["ai-azure", "ai-chatgpt", "ai-claude", "ai-deepseek", "ai-gemini", "ai-gemma", "ai-grok", "ai-llama", "ai-mistral", "ai-perplexity", "ai-qwen", "applications-algolia", "applications-arxiv", "applications-bodo", "applications-github", "applications-gmail", "applications-googlesearch", "applications-linkedin", "applications-postgres", "applications-powerpoint", "applications-pubmed", "applications-twilio", "applications-x", "applications-yahoofinance", "domains-ontology-engineer"] },
     { name = "openpyxl" },
     { name = "pymupdf" },
     { name = "pymupdf4llm" },
@@ -62,6 +62,7 @@ requires-dist = [
     { name = "naas-abi-cli", editable = "libs/naas-abi-cli" },
     { name = "naas-abi-core", extras = ["all", "dagster", "rabbitmq"], editable = "libs/naas-abi-core" },
     { name = "naas-abi-idp", editable = "libs/naas-abi-idp" },
+    { name = "naas-abi-marketplace", extras = ["ai-azure"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["ai-chatgpt"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["ai-claude"], editable = "libs/naas-abi-marketplace" },
     { name = "naas-abi-marketplace", extras = ["ai-deepseek"], editable = "libs/naas-abi-marketplace" },
@@ -456,6 +457,35 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/6b/6c/c88eac87468c607f88bc24df1f3b31445ee6fc9ba123b09e666adf687cd9/authlib-1.6.8.tar.gz", hash = "sha256:41ae180a17cf672bc784e4a518e5c82687f1fe1e98b0cafaeda80c8e4ab2d1cb", size = 165074, upload-time = "2026-02-14T04:02:17.941Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9b/73/f7084bf12755113cd535ae586782ff3a6e710bfbe6a0d13d1c2f81ffbbfa/authlib-1.6.8-py2.py3-none-any.whl", hash = "sha256:97286fd7a15e6cfefc32771c8ef9c54f0ed58028f1322de6a2a7c969c3817888", size = 244116, upload-time = "2026-02-14T04:02:15.579Z" },
+]
+
+[[package]]
+name = "azure-core"
+version = "1.41.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a6/f3/b416179e408990df5db0d516283022dde0f5d0111d98c1a848e41853e81c/azure_core-1.41.0.tar.gz", hash = "sha256:f46ff5dfcd230f25cf1c19e8a34b8dc08a337b2503e268bb600a16c00db8ad5a", size = 381042, upload-time = "2026-05-07T23:30:54.302Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5b/db/325c6d7312d2200251c52323878281045aaffcb5586612296484e4280eaa/azure_core-1.41.0-py3-none-any.whl", hash = "sha256:522b4011e8180b1a3dcd2024396a4e7fe9ac37fb8597db47163d230b5efe892d", size = 220920, upload-time = "2026-05-07T23:30:56.357Z" },
+]
+
+[[package]]
+name = "azure-identity"
+version = "1.25.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-core" },
+    { name = "cryptography" },
+    { name = "msal" },
+    { name = "msal-extensions" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c5/0e/3a63efb48aa4a5ae2cfca61ee152fbcb668092134d3eb8bfda472dd5c617/azure_identity-1.25.3.tar.gz", hash = "sha256:ab23c0d63015f50b630ef6c6cf395e7262f439ce06e5d07a64e874c724f8d9e6", size = 286304, upload-time = "2026-03-13T01:12:20.892Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/49/9a/417b3a533e01953a7c618884df2cb05a71e7b68bdbce4fbdb62349d2a2e8/azure_identity-1.25.3-py3-none-any.whl", hash = "sha256:f4d0b956a8146f30333e071374171f3cfa7bdb8073adb8c3814b65567aa7447c", size = 192138, upload-time = "2026-03-13T01:12:22.951Z" },
 ]
 
 [[package]]
@@ -3374,6 +3404,18 @@ wheels = [
 ]
 
 [[package]]
+name = "msal-extensions"
+version = "1.3.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "msal" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/01/99/5d239b6156eddf761a636bded1118414d161bd6b7b37a9335549ed159396/msal_extensions-1.3.1.tar.gz", hash = "sha256:c5b0fd10f65ef62b5f1d62f4251d51cbcaf003fcedae8c91b040a488614be1a4", size = 23315, upload-time = "2025-03-14T23:51:03.902Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5e/75/bd9b7bb966668920f06b200e84454c8f3566b102183bc55c5473d96cb2b9/msal_extensions-1.3.1-py3-none-any.whl", hash = "sha256:96d3de4d034504e969ac5e85bae8106c8373b5c6568e4c8fa7af2eca9dbe6bca", size = 20583, upload-time = "2025-03-14T23:51:03.016Z" },
+]
+
+[[package]]
 name = "multidict"
 version = "6.7.1"
 source = { registry = "https://pypi.org/simple" }
@@ -3602,7 +3644,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi"
-version = "3.6.3"
+version = "3.8.0"
 source = { editable = "libs/naas-abi" }
 dependencies = [
     { name = "aiosqlite" },
@@ -3690,7 +3732,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-cli"
-version = "3.2.0"
+version = "3.3.1"
 source = { editable = "libs/naas-abi-cli" }
 dependencies = [
     { name = "naas-abi" },
@@ -3716,7 +3758,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-core"
-version = "3.2.0"
+version = "3.3.3"
 source = { editable = "libs/naas-abi-core" }
 dependencies = [
     { name = "click" },
@@ -3894,7 +3936,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-marketplace"
-version = "3.64.1"
+version = "3.65.0"
 source = { editable = "libs/naas-abi-marketplace" }
 dependencies = [
     { name = "ijson" },
@@ -3903,6 +3945,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+ai-azure = [
+    { name = "azure-identity" },
+]
 ai-chatgpt = [
     { name = "pdfplumber" },
 ]
@@ -3988,6 +4033,7 @@ domains-ontology-engineer = [
 requires-dist = [
     { name = "algoliasearch", marker = "extra == 'applications-algolia'", specifier = ">=4.35.0" },
     { name = "arxiv", marker = "extra == 'applications-arxiv'", specifier = ">=2.1.3,<3" },
+    { name = "azure-identity", marker = "extra == 'ai-azure'", specifier = ">=1.16.1" },
     { name = "beautifulsoup4", marker = "extra == 'applications-googlesearch'", specifier = ">=4.12.0" },
     { name = "boto3", marker = "extra == 'applications-bodo'", specifier = ">=1.38.19,<2" },
     { name = "docling", marker = "extra == 'domains-document'", specifier = ">=2.0.0" },
@@ -4029,7 +4075,7 @@ requires-dist = [
     { name = "yahooquery", marker = "extra == 'applications-yahoofinance'", specifier = "==2.4.1" },
     { name = "yfinance", marker = "extra == 'applications-yahoofinance'", specifier = "==0.2.66" },
 ]
-provides-extras = ["ai-bedrock", "ai-chatgpt", "ai-claude", "ai-deepseek", "ai-gemini", "ai-gemma", "ai-grok", "ai-llama", "ai-mistral", "ai-ollama", "ai-openrouter", "ai-perplexity", "ai-qwen", "applications-agicap", "applications-airtable", "applications-algolia", "applications-arxiv", "applications-bodo", "applications-datagouv", "applications-exchangeratesapi", "applications-git", "applications-github", "applications-gmail", "applications-google-calendar", "applications-google-drive", "applications-google-sheets", "applications-googlesearch", "applications-hubspot", "applications-linkedin", "applications-naas", "applications-nebari", "applications-newsapi", "applications-notion", "applications-openrouter", "applications-openweathermap", "applications-pennylane", "applications-postgres", "applications-powerpoint", "applications-pubmed", "applications-sanax", "applications-sendgrid", "applications-sharepoint", "applications-spotify", "applications-twilio", "applications-worldbank", "applications-x", "applications-yahoofinance", "domains-ontology-engineer", "domains-document"]
+provides-extras = ["ai-azure", "ai-bedrock", "ai-chatgpt", "ai-claude", "ai-deepseek", "ai-gemini", "ai-gemma", "ai-grok", "ai-llama", "ai-mistral", "ai-ollama", "ai-openrouter", "ai-perplexity", "ai-qwen", "applications-agicap", "applications-airtable", "applications-algolia", "applications-arxiv", "applications-bodo", "applications-datagouv", "applications-exchangeratesapi", "applications-git", "applications-github", "applications-gmail", "applications-google-calendar", "applications-google-drive", "applications-google-sheets", "applications-googlesearch", "applications-hubspot", "applications-linkedin", "applications-naas", "applications-nebari", "applications-newsapi", "applications-notion", "applications-openrouter", "applications-openweathermap", "applications-pennylane", "applications-postgres", "applications-powerpoint", "applications-pubmed", "applications-sanax", "applications-sendgrid", "applications-sharepoint", "applications-spotify", "applications-twilio", "applications-worldbank", "applications-x", "applications-yahoofinance", "domains-ontology-engineer", "domains-document"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -4041,7 +4087,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-proto"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "libs/naas-abi-proto" }
 dependencies = [
     { name = "protobuf" },
@@ -4058,7 +4104,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-sdk"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "libs/naas-abi-sdk" }
 dependencies = [
     { name = "naas-abi-proto" },
