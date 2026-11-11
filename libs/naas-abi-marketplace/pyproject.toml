@@ -81,6 +81,12 @@ prerelease = true
 prerelease_token = "dev"
 
 [project.optional-dependencies]
+# Azure AI Foundry (Azure OpenAI) speaks through langchain-openai, already a
+# naas-abi-core dependency. azure-identity supplies the Entra ID token for
+# resources with key access disabled (managed identity, az login, ...).
+ai-azure = [
+    "azure-identity>=1.16.1",
+]
 ai-bedrock = [
     "langchain-aws>=0.2.10",
 ]
