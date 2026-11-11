@@ -297,3 +297,164 @@ def test_a_turn_runs_only_the_agents_its_caller_may_use() -> None:
         agent_workspace_enabled_class_names.reset(token)
     # A caller outside Nexus's routes: nothing is narrowed.
     assert [a.name for a in _turn_copy(lead, "t-1")._agents] == ["Helper", "Hidden"]
+
+
+def _provider(provider_type: str, *, endpoint: str | None = None) -> ProviderConfig:
+    return ProviderConfig(
+        id="p1",
+        name=f"{provider_type} provider",
+        type=provider_type,
+        enabled=True,
+        endpoint=endpoint,
+        api_key="k",
+        account_id="acct",
+        model="some-model",
+    )
+
+
+@pytest.fixture
+def no_outbound_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Any SDK client or HTTP client a provider builds fails the test."""
+    from naas_abi.apps.nexus.apps.api.app.services import provider_runtime
+
+    def built(*_args, **_kwargs):
+        pytest.fail("a client was built for a refused provider")
+
+    monkeypatch.setattr(provider_runtime.httpx, "AsyncClient", built)
+    if provider_runtime.HAS_OPENAI:
+        monkeypatch.setattr(provider_runtime.openai, "OpenAI", built)
+    if provider_runtime.HAS_ANTHROPIC:
+        monkeypatch.setattr(provider_runtime.anthropic, "Anthropic", built)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("provider_type", "endpoint"),
+    [
+        ("openai", None),
+        ("anthropic", None),
+        ("cloudflare", None),
+        ("custom", "https://models.example.com"),
+        ("ollama", "http://localhost:11434"),
+    ],
+)
+async def test_a_direct_provider_refuses_to_complete_when_direct_providers_are_off(
+    direct_model_providers_off: None,
+    no_outbound_client: None,
+    provider_type: str,
+    endpoint: str | None,
+) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.direct_model_providers import (
+        DirectModelProviderDisabledError,
+    )
+
+    with pytest.raises(DirectModelProviderDisabledError) as refused:
+        await complete_chat(
+            [Message(role="user", content="hello")],
+            _provider(provider_type, endpoint=endpoint),
+            None,
+            injection_preamble=None,
+        )
+
+    message = str(refused.value)
+    assert f"The chat provider '{provider_type} provider' ({provider_type})" in message
+    assert "outside the model registry" in message
+    assert "direct_model_providers_enabled: false" in message
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("stream", "provider_type"),
+    [
+        ("stream_with_openai_compatible", "openai"),
+        ("stream_with_openai_compatible", "anthropic"),
+        ("stream_with_openai_compatible", "openrouter"),
+        ("stream_with_cloudflare", "cloudflare"),
+        ("stream_with_ollama", "ollama"),
+        ("stream_with_ollama_tools", "ollama"),
+    ],
+)
+async def test_a_direct_provider_refuses_to_stream_when_direct_providers_are_off(
+    direct_model_providers_off: None,
+    no_outbound_client: None,
+    stream: str,
+    provider_type: str,
+) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services import provider_runtime
+    from naas_abi.apps.nexus.apps.api.app.services.direct_model_providers import (
+        DirectModelProviderDisabledError,
+    )
+
+    chunks = getattr(provider_runtime, stream)(
+        [Message(role="user", content="hello")], _provider(provider_type), None
+    )
+    with pytest.raises(DirectModelProviderDisabledError, match="outside the model registry"):
+        async for _chunk in chunks:
+            pytest.fail("a refused provider streamed a chunk")
+
+
+@pytest.mark.asyncio
+async def test_the_openai_provider_calls_openai_while_direct_providers_are_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The default keeps direct providers: the OpenAI client is built with the
+    provider's key and answers."""
+    from types import SimpleNamespace
+
+    from naas_abi.apps.nexus.apps.api.app.core import config
+    from naas_abi.apps.nexus.apps.api.app.services import provider_runtime
+
+    if not provider_runtime.HAS_OPENAI:
+        pytest.skip("openai is not installed")
+    monkeypatch.setattr(config.settings, "direct_model_providers_enabled", True)
+    built: list[str] = []
+
+    class _Client:
+        def __init__(self, api_key: str) -> None:
+            built.append(api_key)
+            self.chat = SimpleNamespace(completions=self)
+
+        def create(self, **_kwargs):
+            message = SimpleNamespace(content="direct answer")
+            return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+
+    monkeypatch.setattr(provider_runtime.openai, "OpenAI", _Client)
+
+    answer = await complete_chat(
+        [Message(role="user", content="hello")],
+        _provider("openai"),
+        None,
+        injection_preamble=None,
+    )
+
+    assert answer == "direct answer"
+    assert built == ["k"]
+
+
+@pytest.mark.asyncio
+async def test_an_agent_still_answers_when_direct_providers_are_off(
+    direct_model_providers_off: None,
+    no_outbound_client: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ABI agents resolve their model in the model registry: they are not a
+    direct provider and keep answering."""
+
+    class _Agent:
+        async def ainvoke(self, prompt: str, thread_id: str | None = None) -> str:
+            return "agent answer"
+
+    monkeypatch.setattr(
+        "naas_abi.apps.nexus.apps.api.app.services.provider_runtime._resolve_inprocess_abi_agent",
+        lambda _model: _Agent(),
+    )
+
+    answer = await complete_chat(
+        [Message(role="user", content="hello")],
+        _provider("abi", endpoint="inprocess://abi"),
+        None,
+        thread_id="conv-1",
+        injection_preamble=None,
+    )
+
+    assert answer == "agent answer"

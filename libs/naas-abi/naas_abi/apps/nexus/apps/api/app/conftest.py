@@ -17,6 +17,15 @@ def secrets_key(monkeypatch):
 
 
 @pytest.fixture
+def direct_model_providers_off(monkeypatch):
+    """A deployment that turned ``direct_model_providers_enabled`` off: no model
+    call outside the model registry (``services/direct_model_providers.py``)."""
+    from naas_abi.apps.nexus.apps.api.app.core import config
+
+    monkeypatch.setattr(config.settings, "direct_model_providers_enabled", False)
+
+
+@pytest.fixture
 def nexus_iam():
     """A real IAM installed as Nexus's: orgs, workspaces and role attachments are
     set up on it (``workspace``, ``grant``) and routes decide with it. Features

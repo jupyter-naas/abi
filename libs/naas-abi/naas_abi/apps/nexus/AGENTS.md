@@ -96,6 +96,28 @@ Chat streaming receives three wire formats (OpenAI JSON-per-line, Anthropic type
 
 Event types: `token | thinking | tool_call | link | file | error | done`. See `docs/ESSENTIALS.md` for protocol examples.
 
+## Model calls outside the model registry
+
+Agents (in-process and remote) resolve their chat model in the engine's model registry. A few Nexus paths call a provider's API themselves instead:
+
+- the chat providers of `apps/api/app/services/provider_runtime.py` that are not agents (`openai`, `anthropic`, `xai`, `mistral`, `google`, `openrouter`, `perplexity`, `cloudflare`, `ollama`, `custom`), whether sent by the client or set on an agent with a workspace key;
+- speech and transcription (`apps/api/app/api/endpoints/speech.py`, `transcribe.py`: OpenAI or OpenRouter);
+- chat file embeddings whose model is not registered (`apps/api/app/services/chat/chat_file_embeddings.py` falls back to OpenAI with `OPENAI_API_KEY`).
+
+`direct_model_providers_enabled` (on by default) governs all of them, in `apps/api/app/services/direct_model_providers.py`. An **isolated or customer-hosted deployment** (no internet egress, models served by its own cloud through the registry) turns it off in the `naas_abi` module's `nexus_config`, or with `DIRECT_MODEL_PROVIDERS_ENABLED=false` when the yaml does not set it:
+
+```yaml
+modules:
+  - module: naas_abi
+    config:
+      nexus_config:
+        direct_model_providers_enabled: false
+```
+
+Off, each of those paths refuses before it builds a client: a chat turn fails with `DirectModelProviderDisabledError` (the stream's `error`), speech and transcription answer 503, and chat file embeddings fail naming the embedding model to register. Agents keep answering. On, the OpenAI fallback of chat file embeddings logs a warning that it bypasses the registry.
+
+Decision: direct model providers stay on by default; a sovereign deployment turns them off with one setting. Consequences: existing deployments (workspace provider keys, the embeddings fallback, speech) behave as before; a new path that calls a model outside the registry calls `ensure_direct_model_providers_enabled` (or checks `direct_model_providers_enabled()`) before building its client, and gets a refusal test with the `direct_model_providers_off` fixture (`apps/api/app/conftest.py`).
+
 ## Multi-tenancy and IAM
 
 Everything below `organizations` is scoped to `workspace_id`: agents, conversations, secrets, graph nodes, inference servers.
