@@ -55,6 +55,12 @@ aws = [
     "boto3>=1.38.19,<2",
     "boto3-stubs>=1.42.19"
 ]
+# Azure Blob Storage object storage adapter. azure-identity authenticates with
+# Entra ID (managed identity, workload identity, az login): no account key.
+azure = [
+    "azure-storage-blob>=12.25.1,<13",
+    "azure-identity>=1.21.0,<2",
+]
 qdrant = [
     "qdrant-client>=1.14.3",
 ]
@@ -68,6 +74,7 @@ sqlite-vec = [
 all = [
     "naas-abi-core[ssh]",
     "naas-abi-core[aws]",
+    "naas-abi-core[azure]",
     "naas-abi-core[qdrant]",
     "naas-abi-core[sqlite-vec]",
     "naas-abi-core[openrouter]",

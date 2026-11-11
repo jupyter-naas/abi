@@ -579,7 +579,7 @@ test-local-embedded-core: deps
 # Run core integration tests using testcontainers
 test-integration-core: deps check-docker
 	@ echo "🔍 Running core integration tests (testcontainers)..."
-	@ cd libs/naas-abi-core && uv sync --all-extras && uv run pytest naas_abi_core/services/triple_store/adaptors/secondary/ApacheJenaTDB2_integration_test.py naas_abi_core/services/triple_store/adaptors/secondary/Oxigraph_integration_test.py -m integration -v
+	@ cd libs/naas-abi-core && uv sync --all-extras && uv run pytest naas_abi_core/services/triple_store/adaptors/secondary/ApacheJenaTDB2_integration_test.py naas_abi_core/services/triple_store/adaptors/secondary/Oxigraph_integration_test.py naas_abi_core/services/object_storage/adapters/secondary/ObjectStorageSecondaryAdapterAzureBlob_integration_test.py -m integration -v
 
 # Run document unit tests and the optional PostgreSQL adapter contract
 test-document-core:

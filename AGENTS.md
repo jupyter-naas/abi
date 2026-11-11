@@ -40,7 +40,7 @@ Core services live under `libs/naas-abi-core/naas_abi_core/services/`. Each has 
 | `identity` | The OIDC providers the engine trusts: ID tokens verified against each issuer's discovery and JWKS, `(issuer, sub)` resolved to IAM users, the provider side of a relying party's PKCE sign-in | [services/identity/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/identity/AGENTS.md) |
 | `keyvalue` | Bytes-in/out KV store with TTL + atomic CAS/CAD | [services/keyvalue/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/keyvalue/AGENTS.md) |
 | `model_registry` | Canonical-ID catalog of chat/embedding models | [services/model_registry/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/model_registry/AGENTS.md) |
-| `object_storage` | S3-style blob storage (FS / S3 / Naas) | [services/object_storage/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/object_storage/AGENTS.md) |
+| `object_storage` | S3-style blob storage (FS / S3 / R2 / Azure Blob / Naas) | [services/object_storage/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/object_storage/AGENTS.md) |
 | `ontology` | LLM-powered NER against an RDF/OWL ontology | [services/ontology/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/ontology/AGENTS.md) |
 | `secret` | Layered secret store (dotenv / Naas / base64) | [services/secret/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/secret/AGENTS.md) |
 | `triple_store` | RDF/SPARQL named-graph store + view subscriptions | [services/triple_store/AGENTS.md](libs/naas-abi-core/naas_abi_core/services/triple_store/AGENTS.md) |

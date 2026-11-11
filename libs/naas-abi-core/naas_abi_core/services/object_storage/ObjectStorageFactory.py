@@ -76,3 +76,27 @@ class ObjectStorageFactory:
                 base_prefix,
             )
         )
+
+    @staticmethod
+    def ObjectStorageServiceAzureBlob(
+        container_name: str,
+        account_url: str | None = None,
+        base_prefix: str = "",
+        managed_identity_client_id: str | None = None,
+        connection_string: str | None = None,
+    ) -> ObjectStorageService:
+        # Imported here: the Azure SDK is the optional `azure` extra, and this
+        # factory must stay importable without it.
+        from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterAzureBlob import (
+            ObjectStorageSecondaryAdapterAzureBlob,
+        )
+
+        return ObjectStorageService(
+            ObjectStorageSecondaryAdapterAzureBlob(
+                container_name=container_name,
+                account_url=account_url,
+                base_prefix=base_prefix,
+                managed_identity_client_id=managed_identity_client_id,
+                connection_string=connection_string,
+            )
+        )

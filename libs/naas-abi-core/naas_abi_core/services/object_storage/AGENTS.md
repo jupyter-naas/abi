@@ -20,7 +20,8 @@ object_storage/
 │   ├── ObjectStorageSecondaryAdapterFS.py
 │   ├── ObjectStorageSecondaryAdapterS3.py
 │   ├── ObjectStorageSecondaryAdapterNaas.py
-│   └── ObjectStorageSecondaryAdapterR2.py
+│   ├── ObjectStorageSecondaryAdapterR2.py
+│   └── ObjectStorageSecondaryAdapterAzureBlob.py
 └── ontologies/                     # ObjectPut, ObjectDeleted
 ```
 
@@ -67,6 +68,7 @@ get_object_metadata(prefix, key) -> ObjectMetaData
 | `ObjectStorageSecondaryAdapterS3` | AWS S3 (boto3). `endpoint_url` enables MinIO |
 | `ObjectStorageSecondaryAdapterNaas` | Naas workspace storage (wraps S3 with credential refresh) |
 | `ObjectStorageSecondaryAdapterR2` | Cloudflare R2 (subclasses S3 adapter, derives endpoint from `account_id`, forces `region_name="auto"`) |
+| `ObjectStorageSecondaryAdapterAzureBlob` | Azure Blob Storage (`azure-storage-blob`, `[azure]` extra). Entra ID via `DefaultAzureCredential` by default (managed identity, workload identity, `az login`); `managed_identity_client_id` picks a user-assigned identity; `connection_string` is the explicit alternative (Azurite, account key, SAS). Same blob layout as S3: `<base_prefix>/<prefix>/<key>` |
 
 ## Factory (`ObjectStorageFactory.py`)
 
@@ -82,6 +84,26 @@ ObjectStorageFactory.ObjectStorageServiceNaas(
 ObjectStorageFactory.ObjectStorageServiceR2(
     account_id, access_key_id, secret_access_key, bucket_name, base_prefix="",
 )
+ObjectStorageFactory.ObjectStorageServiceAzureBlob(
+    container_name, account_url=None, base_prefix="",
+    managed_identity_client_id=None, connection_string=None,
+)
+```
+
+Engine configuration (`EngineConfiguration_ObjectStorageService.py`), adapter
+`azure_blob`:
+
+```yaml
+object_storage:
+  object_storage_adapter:
+    adapter: "azure_blob"
+    config:
+      account_url: "https://mystorageaccount.blob.core.windows.net"
+      container_name: "abi"
+      base_prefix: "datastore"
+      # Optional: a user-assigned managed identity (default: AZURE_CLIENT_ID,
+      # else the system-assigned identity).
+      managed_identity_client_id: "{{ secret.AZURE_CLIENT_ID }}"
 ```
 
 ## Authorization
@@ -139,7 +161,15 @@ leading and trailing `/`, joined to the key with one `/`. Nexus places its
 uv run pytest libs/naas-abi-core/naas_abi_core/services/object_storage/ObjectStorageService_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/object_storage/adapters/secondary/ObjectStorageSecondaryAdapterFS_test.py
 uv run pytest libs/naas-abi-core/naas_abi_core/services/object_storage/adapters/secondary/ObjectStorageSecondaryAdapterS3_test.py
+uv run pytest libs/naas-abi-core/naas_abi_core/services/object_storage/adapters/secondary/ObjectStorageSecondaryAdapterAzureBlob_test.py
+# Against the Azurite emulator in Docker (testcontainers; skipped without Docker)
+uv run pytest libs/naas-abi-core/naas_abi_core/services/object_storage/adapters/secondary/ObjectStorageSecondaryAdapterAzureBlob_integration_test.py -m integration
 ```
+
+The FS, S3, NATS client and Azure Blob tests subclass `ObjectStorageSecondaryAdapterContract`
+(`tests/object_storage__secondary_adapter__generic_test.py`). The Azure Blob unit
+test runs it on an in-memory fake of `ContainerClient`; its integration test runs
+it on Azurite, through `connection_string`.
 
 ## Adding a new adapter
 
@@ -147,6 +177,41 @@ uv run pytest libs/naas-abi-core/naas_abi_core/services/object_storage/adapters/
 2. `list_objects` must implement **depth-1** semantics — list direct children of the given prefix, not the full subtree.
 3. `get_object_metadata` must populate at least `file_path`, `file_name`, `file_size_bytes`, `mime_type`. Timestamps / permissions / encoding optional.
 4. Add a `ObjectStorageFactory.<Name>(...)` builder.
+
+## Decision: Azure Blob Storage authenticates with Entra ID
+
+Customer-hosted deployments on Azure keep their files in the customer's storage
+account, reached natively (no S3 gateway) and without a stored key.
+
+Decision:
+
+* `ObjectStorageSecondaryAdapterAzureBlob` authenticates with Microsoft Entra ID
+  through `DefaultAzureCredential` when given `account_url`: a managed identity
+  on Azure compute, workload identity on AKS, `az login` on a laptop. The
+  identity needs a data-plane role on the container (*Storage Blob Data
+  Contributor*). `managed_identity_client_id` is passed to the credential only
+  when set, since an explicit `None` would make it ignore `AZURE_CLIENT_ID`.
+* `account_url` is used as given, so a private endpoint, a custom domain or a
+  sovereign cloud works; nothing derives it from an account name.
+* `connection_string` (account key or SAS) is the explicit, secondary option,
+  exclusive with `account_url`: for the Azurite emulator and stores without
+  Entra ID.
+* The Azure SDK is the optional `naas-abi-core[azure]` extra (in `[all]`), like
+  boto3 in `[aws]`. The engine configuration and `ObjectStorageFactory` import
+  the adapter only when it is used, so neither needs the extra; importing the
+  adapter without it raises an install hint.
+* Directory entries of a hierarchical-namespace (Data Lake Storage Gen2)
+  account, listed by the Blob API as zero-byte blobs with `hdi_isfolder`
+  metadata, are not objects: both listings skip them.
+
+Consequences:
+
+* No storage secret in the configuration of an Azure deployment; access is
+  granted and revoked with Azure RBAC.
+* A missing blob is `ObjectNotFound`; a missing container is a configuration
+  error and surfaces as the SDK's `ResourceNotFoundError`.
+* Constructing the adapter makes no request: credentials are resolved on the
+  first operation, so a wrong identity fails there, not at engine load.
 
 ## NATS RPC adapters
 
