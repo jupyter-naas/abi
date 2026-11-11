@@ -29,6 +29,9 @@ class DotenvSecretConfiguration(BaseModel):
           read_only: false
           # Read the process environment before the file.
           environment_first: false
+
+    Keys whose names docker compose cannot read from a dotenv file (the
+    engine's own, such as iam/signing-keys/<id>) are kept in ``<path>.sidecar``.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -164,8 +167,14 @@ class SecretAdapterConfiguration(GenericLoader):
             elif self.adapter == "dotenv":
                 from naas_abi_core.services.secret.adaptors.secondary.dotenv_secret_secondaryadaptor import (
                     DotenvSecretSecondaryAdaptor,
+                    move_keys_to_sidecar,
                 )
 
+                assert isinstance(self.config, DotenvSecretConfiguration)
+                if not self.config.read_only:
+                    # Keys an earlier engine wrote into the file, where
+                    # docker compose refuses them.
+                    move_keys_to_sidecar(self.config.path)
                 return DotenvSecretSecondaryAdaptor(**self.config.model_dump())
             elif self.adapter == "naas":
                 from naas_abi_core.services.secret.adaptors.secondary.NaasSecret import (
