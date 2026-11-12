@@ -46,6 +46,8 @@ from naas_abi.apps.nexus.apps.api.app.services.coding_environment.adapters.prima
     authorize_environment,
     authorize_repo,
     get_iam,
+    require_path,
+    require_ref,
     source_control_error,
 )
 from naas_abi.apps.nexus.apps.api.app.services.coding_environment.repo_access import (
@@ -580,6 +582,8 @@ async def repo_contents(
     iam: IIAMService | None = Depends(get_iam),
 ) -> list[ContentEntryResponse]:
     """Directory listing at ``path`` on ``ref`` — powers the repo file browser."""
+    require_path(path, root_ok=True)
+    require_ref(ref)
     repo = _default_repo_id(repo_id)
     if not repo or source_control is None:
         return []
@@ -607,6 +611,8 @@ async def repo_file(
     source_control: SourceControlService | None = Depends(_get_source_control_service),
     iam: IIAMService | None = Depends(get_iam),
 ) -> FileContentResponse:
+    require_path(path)
+    require_ref(ref)
     repo = _default_repo_id(repo_id)
     if not repo or source_control is None:
         raise HTTPException(status_code=503, detail="No git backend configured.")
@@ -632,6 +638,7 @@ async def repo_commits(
     source_control: SourceControlService | None = Depends(_get_source_control_service),
     iam: IIAMService | None = Depends(get_iam),
 ) -> list[CommitResponse]:
+    require_ref(ref)
     repo = _default_repo_id(repo_id)
     if not repo or source_control is None:
         return []
@@ -754,6 +761,8 @@ async def create_repo_branch(
     iam: IIAMService | None = Depends(get_iam),
 ) -> BranchResponse:
     await authz.require("WriteCode", user=current_user, workspace=body.workspace_id)
+    require_ref(body.name, "branch")
+    require_ref(body.source_branch, "source branch")
     repo = _default_repo_id(body.repo_id)
     if not repo or source_control is None:
         raise HTTPException(status_code=503, detail="No git backend configured.")
@@ -784,6 +793,7 @@ async def delete_repo_branch(
     iam: IIAMService | None = Depends(get_iam),
 ) -> dict[str, bool]:
     """Delete a branch. ``name`` may contain slashes (url-encoded)."""
+    require_ref(name, "branch")
     repo = _default_repo_id(repo_id)
     if not repo or source_control is None:
         raise HTTPException(status_code=503, detail="No git backend configured.")
@@ -863,6 +873,8 @@ async def provision_environment(
     iam: IIAMService | None = Depends(get_iam),
 ) -> EnvironmentResponse:
     await authz.require("WriteCode", user=current_user, workspace=body.workspace_id)
+    require_ref(body.source_branch, "source branch")
+    require_ref(body.branch, "branch")
     params = dict(body.params or {})
     checkout_branch = body.branch or body.source_branch
     repo_id = _default_repo_id(body.repo_id)

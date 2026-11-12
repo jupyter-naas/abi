@@ -9,6 +9,7 @@ Manage repositories, files, branches, proposals, reviews, and checks through int
 - `SourceControlPorts.py`: port, value types, and domain errors.
 - `SourceControlService.py`: service orchestration and event publication.
 - `SourceControlFactory.py`: composition helpers.
+- `names.py`: what a repository segment, file path, ref, commit and username may be.
 - `adapters/primary/`: NATS RPC server.
 - `adapters/secondary/`: local/provider implementations and NATS RPC client.
 - `tests/`: generic adapter contract tests.
@@ -89,6 +90,28 @@ Actions by resource (the NATS subject is the operation under
 - Audit events go through `EventService.emit`.
 - Tests: `tests/source_control_authorization_test.py` (the `AuthorizationContract`
   for `GetFile` and `AddCollaborator`, forge-user binding, placement, lists).
+
+## Names
+
+Every value the service passes to an adapter names something inside one
+repository (`names.py`), whoever calls (Nexus, a module over NATS, in process):
+
+- a **file path** has no empty, `.`, `..` or `.git` segment, no `?`, `#`, `\`
+  or control character (a leading `/` and, for a listing, a trailing `/` are
+  accepted);
+- a **branch or ref** follows `git check-ref-format` (no `..`, `~`, `^`, `:`,
+  space, `@{`, leading `-` or `.`), and has no `#` or `?`;
+- `get_diff` takes two **commit ids** (7 to 64 hexadecimal digits);
+- a **username** is one segment of letters, digits, `.`, `_` and `-`.
+
+Anything else is `ValidationError` (422) before IAM or the adapter sees it. The
+adapters keep the same property on their own: the Forgejo adapter percent-encodes
+every segment it builds from a value and refuses a URL that would leave
+`/api/v1/repos/{owner}/{name}/`; the local git adapter writes only inside the
+repository's tree, never in `.git` or through a symbolic link, puts
+`--end-of-options` and `--` before refs and paths, and runs every git command with
+`core.hooksPath=/dev/null` and `core.fsmonitor=false`. Tests:
+`tests/source_control_names_test.py`.
 
 ## Adapters
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import posixpath
 import re
 import secrets
 import threading
@@ -95,6 +96,36 @@ def _branch_write_lock(repo_id: str, branch: str) -> threading.Lock:
         return lock
 
 
+def _seg(value: object) -> str:
+    """One URL path segment made from a request value: percent-encoded, so a
+    ``/``, ``?`` or ``#`` in it stays part of the name, and never a dot or
+    empty segment."""
+    text = str(value)
+    if text in ("", ".", ".."):
+        raise ValidationError(f"Invalid name: {text!r}")
+    return quote(text, safe="")
+
+
+def _segs(value: str) -> str:
+    """A ``/``-separated name (a file path, a branch) as encoded segments, its
+    separators kept; the repository root is the empty string."""
+    inner = value.strip("/")
+    if not inner:
+        return ""
+    return "/".join(_seg(part) for part in inner.split("/"))
+
+
+def _route(path: str) -> str:
+    return path.split("?", 1)[0]
+
+
+def _plain_route(path: str) -> bool:
+    """No dot segment and no fragment: the server receives the path as built."""
+    if "#" in path:
+        return False
+    return not any(part in (".", "..") for part in _route(path).split("/"))
+
+
 def _is_upsert_race(exc: BaseException) -> bool:
     text = str(exc or "").lower()
     if any(marker in text for marker in _UPSERT_RETRY_MARKERS):
@@ -141,6 +172,8 @@ class ForgejoAdapter(ISourceControlAdapter):
         basic_auth: tuple[str, str] | None = None,
         raw: bool = False,
     ) -> Any:
+        if not _plain_route(path):
+            raise ValidationError(f"Invalid API path: {path!r}")
         url = f"{self._base_url}/api/v1{path}"
         if basic_auth is not None:
             creds = f"{basic_auth[0]}:{basic_auth[1]}".encode()
@@ -192,6 +225,25 @@ class ForgejoAdapter(ISourceControlAdapter):
             f"Forgejo API request failed ({status}): {detail}", status=status
         )
 
+    @staticmethod
+    def _repo(repo_id: str, tail: str = "") -> str:
+        """The API path of a repository (``/repos/{owner}/{name}``), then
+        ``tail``, already encoded. The result stays under the repository."""
+        owner, sep, name = repo_id.partition("/")
+        if not sep or not owner or not name or "/" in name:
+            raise RepoNotFoundError(f"Repository {repo_id} not found")
+        base = f"/repos/{_seg(owner)}/{_seg(name)}"
+        path = f"{base}{tail}"
+        route = posixpath.normpath(_route(path))
+        if not _plain_route(path) or not (
+            route == base or route.startswith(f"{base}/")
+        ):
+            raise ValidationError(f"Invalid path in repository {repo_id}")
+        return path
+
+    def _contents(self, repo_id: str, path: str, query: str = "") -> str:
+        return self._repo(repo_id, f"/contents/{_segs(path)}{query}")
+
     # -- Port implementation ------------------------------------------------
 
     def ensure_user(
@@ -220,7 +272,7 @@ class ForgejoAdapter(ISourceControlAdapter):
             # One account per principal: follow a new username by renaming.
             self._request(
                 "POST",
-                f"/admin/users/{own}/rename",
+                f"/admin/users/{_seg(own)}/rename",
                 json={"new_username": username},
             )
             renamed = self._user(username)
@@ -245,7 +297,7 @@ class ForgejoAdapter(ISourceControlAdapter):
 
     def _user(self, username: str) -> dict | None:
         try:
-            user = self._request("GET", f"/users/{username}")
+            user = self._request("GET", f"/users/{_seg(username)}")
         except SourceControlError as exc:
             if exc.status != 404:
                 raise
@@ -272,7 +324,7 @@ class ForgejoAdapter(ISourceControlAdapter):
     def _bind(self, username: str, external_id: str, **fields: Any) -> None:
         self._request(
             "PATCH",
-            f"/admin/users/{username}",
+            f"/admin/users/{_seg(username)}",
             json={"login_name": external_id, "source_id": 0, **fields},
         )
 
@@ -296,14 +348,14 @@ class ForgejoAdapter(ISourceControlAdapter):
         self, *, owner: str, name: str, private: bool = True, auto_init: bool = True
     ) -> Repo:
         try:
-            repo = self._request("GET", f"/repos/{owner}/{name}")
+            repo = self._request("GET", self._repo(f"{owner}/{name}"))
             return self._to_repo(repo)
         except SourceControlError as exc:
             if exc.status != 404:
                 raise
         created = self._request(
             "POST",
-            f"/admin/users/{owner}/repos",
+            f"/admin/users/{_seg(owner)}/repos",
             json={"name": name, "private": private, "auto_init": auto_init},
         )
         return self._to_repo(created)
@@ -316,7 +368,7 @@ class ForgejoAdapter(ISourceControlAdapter):
         try:
             created = self._request(
                 "POST",
-                f"/admin/users/{owner}/repos",
+                f"/admin/users/{_seg(owner)}/repos",
                 json={"name": name, "private": private, "auto_init": auto_init},
             )
         except SourceControlError as exc:
@@ -344,7 +396,7 @@ class ForgejoAdapter(ISourceControlAdapter):
         # already a collaborator. ``repo_id`` is "owner/name".
         self._request(
             "PUT",
-            f"/repos/{repo_id}/collaborators/{username}",
+            self._repo(repo_id, f"/collaborators/{_seg(username)}"),
             json={"permission": permission},
         )
 
@@ -352,9 +404,7 @@ class ForgejoAdapter(ISourceControlAdapter):
         self, *, repo_id: str, path: str = "", ref: str | None = None
     ) -> list[ContentEntry]:
         query = f"?ref={quote(ref, safe='')}" if ref else ""
-        result = self._request(
-            "GET", f"/repos/{repo_id}/contents/{path.lstrip('/')}{query}"
-        )
+        result = self._request("GET", self._contents(repo_id, path, query))
         items = result if isinstance(result, list) else [result]
         entries = [
             ContentEntry(
@@ -373,9 +423,7 @@ class ForgejoAdapter(ISourceControlAdapter):
         self, *, repo_id: str, path: str, ref: str | None = None
     ) -> FileContent:
         query = f"?ref={quote(ref, safe='')}" if ref else ""
-        result = self._request(
-            "GET", f"/repos/{repo_id}/contents/{path.lstrip('/')}{query}"
-        )
+        result = self._request("GET", self._contents(repo_id, path, query))
         raw = result.get("content") or ""
         text: str | None = None
         is_binary = False
@@ -442,6 +490,8 @@ class ForgejoAdapter(ISourceControlAdapter):
         author_email: str | None = None,
     ) -> Commit:
         clean_path = path.lstrip("/")
+        file_url = self._contents(repo_id, clean_path)
+        at_branch = f"?ref={quote(branch, safe='')}"
         raw = content if isinstance(content, bytes) else content.encode("utf-8")
         encoded = base64.b64encode(raw).decode("ascii")
         payload: dict[str, Any] = {
@@ -455,10 +505,7 @@ class ForgejoAdapter(ISourceControlAdapter):
 
         existing_sha: str | None = None
         try:
-            existing = self._request(
-                "GET",
-                f"/repos/{repo_id}/contents/{clean_path}?ref={quote(branch, safe='')}",
-            )
+            existing = self._request("GET", f"{file_url}{at_branch}")
             if isinstance(existing, dict):
                 existing_sha = existing.get("sha") or None
         except RepoNotFoundError:
@@ -467,31 +514,21 @@ class ForgejoAdapter(ISourceControlAdapter):
         try:
             if existing_sha:
                 payload["sha"] = existing_sha
-                result = self._request(
-                    "PUT", f"/repos/{repo_id}/contents/{clean_path}", json=payload
-                )
+                result = self._request("PUT", file_url, json=payload)
             else:
-                result = self._request(
-                    "POST", f"/repos/{repo_id}/contents/{clean_path}", json=payload
-                )
+                result = self._request("POST", file_url, json=payload)
         except SourceControlError as exc:
             # Create raced: another writer already created the path. Adopt by
             # refetching the blob SHA and updating.
             if existing_sha is None and _is_upsert_race(exc):
                 try:
-                    existing = self._request(
-                        "GET",
-                        f"/repos/{repo_id}/contents/{clean_path}"
-                        f"?ref={quote(branch, safe='')}",
-                    )
+                    existing = self._request("GET", f"{file_url}{at_branch}")
                 except RepoNotFoundError:
                     raise exc from exc
                 if not isinstance(existing, dict) or not existing.get("sha"):
                     raise exc from exc
                 payload["sha"] = existing["sha"]
-                result = self._request(
-                    "PUT", f"/repos/{repo_id}/contents/{clean_path}", json=payload
-                )
+                result = self._request("PUT", file_url, json=payload)
             else:
                 raise
 
@@ -559,16 +596,14 @@ class ForgejoAdapter(ISourceControlAdapter):
         author_email: str | None = None,
     ) -> Commit:
         ops: list[dict[str, Any]] = []
+        at_branch = f"?ref={quote(branch, safe='')}"
         for item in files:
             clean_path = item.path.lstrip("/")
+            file_url = self._contents(repo_id, clean_path)
             if item.delete:
                 # Forgejo needs the blob sha to delete; a missing file is a no-op.
                 try:
-                    existing = self._request(
-                        "GET",
-                        f"/repos/{repo_id}/contents/{clean_path}"
-                        f"?ref={quote(branch, safe='')}",
-                    )
+                    existing = self._request("GET", f"{file_url}{at_branch}")
                 except RepoNotFoundError:
                     continue
                 if isinstance(existing, dict) and existing.get("sha"):
@@ -591,11 +626,7 @@ class ForgejoAdapter(ISourceControlAdapter):
                 "operation": "create",
             }
             try:
-                existing = self._request(
-                    "GET",
-                    f"/repos/{repo_id}/contents/{clean_path}"
-                    f"?ref={quote(branch, safe='')}",
-                )
+                existing = self._request("GET", f"{file_url}{at_branch}")
                 if isinstance(existing, dict) and existing.get("sha"):
                     op["operation"] = "update"
                     op["sha"] = existing["sha"]
@@ -616,7 +647,7 @@ class ForgejoAdapter(ISourceControlAdapter):
 
         try:
             result = self._request(
-                "POST", f"/repos/{repo_id}/contents", json=payload
+                "POST", self._repo(repo_id, "/contents"), json=payload
             )
         except SourceControlError as exc:
             # Older Gitea builds have no change-files route. Leftover: one
@@ -633,7 +664,7 @@ class ForgejoAdapter(ISourceControlAdapter):
                     if clean_path in delete_shas:
                         self._request(
                             "DELETE",
-                            f"/repos/{repo_id}/contents/{clean_path}",
+                            self._contents(repo_id, clean_path),
                             json={
                                 "sha": delete_shas[clean_path],
                                 "message": message,
@@ -668,35 +699,35 @@ class ForgejoAdapter(ISourceControlAdapter):
         self, *, repo_id: str, ref: str | None = None, limit: int = 20
     ) -> list[Commit]:
         query = f"?limit={limit}" + (f"&sha={quote(ref, safe='')}" if ref else "")
-        result = self._request("GET", f"/repos/{repo_id}/commits{query}")
+        result = self._request("GET", self._repo(repo_id, f"/commits{query}"))
         items = result if isinstance(result, list) else []
         return [self._to_commit(c) for c in items]
 
     def list_branches(self, *, repo_id: str) -> list[Branch]:
-        branches = self._request("GET", f"/repos/{repo_id}/branches")
+        branches = self._request("GET", self._repo(repo_id, "/branches"))
         items = branches if isinstance(branches, list) else []
         return [self._to_branch(b) for b in items]
 
     def create_branch(self, *, repo_id: str, name: str, from_ref: str) -> Branch:
         branch = self._request(
             "POST",
-            f"/repos/{repo_id}/branches",
+            self._repo(repo_id, "/branches"),
             json={"new_branch_name": name, "old_ref_name": from_ref},
         )
         return self._to_branch(branch)
 
     def delete_repo(self, *, repo_id: str) -> None:
         # 204 on success; a missing repo is a 404, mapped to RepoNotFoundError.
-        self._request("DELETE", f"/repos/{repo_id}")
+        self._request("DELETE", self._repo(repo_id))
 
     def delete_branch(self, *, repo_id: str, name: str) -> None:
-        # The branch name may contain slashes (feature/x); Forgejo's route is a
-        # wildcard, so it must stay raw (not percent-encoded).
-        self._request("DELETE", f"/repos/{repo_id}/branches/{name}")
+        # The branch name may contain slashes (feature/x): Forgejo's route is a
+        # wildcard, so each segment is encoded and the slashes kept.
+        self._request("DELETE", self._repo(repo_id, f"/branches/{_segs(name)}"))
 
     def get_diff(self, *, repo_id: str, base: str, head: str) -> Diff:
         compare = self._request(
-            "GET", f"/repos/{repo_id}/compare/{base}...{head}"
+            "GET", self._repo(repo_id, f"/compare/{_segs(base)}...{_segs(head)}")
         )
         files = compare.get("files", []) if isinstance(compare, dict) else []
         return Diff(files=tuple(self._to_diff_file(f) for f in files))
@@ -719,60 +750,60 @@ class ForgejoAdapter(ISourceControlAdapter):
         }
         if reviewers:
             payload["assignees"] = reviewers
-        pull = self._request("POST", f"/repos/{repo_id}/pulls", json=payload)
+        pull = self._request("POST", self._repo(repo_id, "/pulls"), json=payload)
         return self._to_proposal(repo_id, pull)
 
     def list_proposals(self, *, repo_id: str, state: str = "open") -> list[Proposal]:
         pulls = self._request(
-            "GET", f"/repos/{repo_id}/pulls?state={state}"
+            "GET", self._repo(repo_id, f"/pulls?state={quote(state, safe='')}")
         )
         items = pulls if isinstance(pulls, list) else []
         return [self._to_proposal(repo_id, p) for p in items]
 
     def get_proposal(self, *, repo_id: str, number: int) -> Proposal:
-        pull = self._request("GET", f"/repos/{repo_id}/pulls/{number}")
+        pull = self._request("GET", self._repo(repo_id, f"/pulls/{int(number)}"))
         return self._to_proposal(repo_id, pull, self._count_approvals(repo_id, number))
 
     def _count_approvals(self, repo_id: str, number: int) -> int:
-        reviews = self._request("GET", f"/repos/{repo_id}/pulls/{number}/reviews")
+        reviews = self._request("GET", self._repo(repo_id, f"/pulls/{int(number)}/reviews"))
         items = reviews if isinstance(reviews, list) else []
         return sum(
             1 for r in items if r.get("state") == "APPROVED" and not r.get("dismissed")
         )
 
     def get_proposal_diff(self, *, repo_id: str, number: int) -> Diff:
-        files = self._request("GET", f"/repos/{repo_id}/pulls/{number}/files")
+        files = self._request("GET", self._repo(repo_id, f"/pulls/{int(number)}/files"))
         items = files if isinstance(files, list) else []
         # The files endpoint returns metadata only (no `patch` hunks), so fetch
         # the raw unified diff and attach each file's hunks by path.
         try:
-            raw = self._request("GET", f"/repos/{repo_id}/pulls/{number}.diff", raw=True)
+            raw = self._request("GET", self._repo(repo_id, f"/pulls/{int(number)}.diff"), raw=True)
         except SourceControlError:
             raw = ""
         patches = _split_unified_diff(raw if isinstance(raw, str) else "")
         return Diff(files=tuple(self._to_diff_file(f, patches) for f in items))
 
     def list_proposal_commits(self, *, repo_id: str, number: int) -> list[Commit]:
-        result = self._request("GET", f"/repos/{repo_id}/pulls/{number}/commits")
+        result = self._request("GET", self._repo(repo_id, f"/pulls/{int(number)}/commits"))
         items = result if isinstance(result, list) else []
         return [self._to_commit(c) for c in items]
 
     def list_comments(self, *, repo_id: str, number: int) -> list[Comment]:
         comments = self._request(
-            "GET", f"/repos/{repo_id}/issues/{number}/comments"
+            "GET", self._repo(repo_id, f"/issues/{int(number)}/comments")
         )
         items = comments if isinstance(comments, list) else []
         return [self._to_comment(c) for c in items]
 
     def list_workflow_runs(self, *, repo_id: str, limit: int = 20) -> list[WorkflowRun]:
         result = self._request(
-            "GET", f"/repos/{repo_id}/actions/tasks?limit={limit}"
+            "GET", self._repo(repo_id, f"/actions/tasks?limit={int(limit)}")
         )
         runs = result.get("workflow_runs", []) if isinstance(result, dict) else []
         return [self._to_workflow_run(r) for r in runs]
 
     def list_reviews(self, *, repo_id: str, number: int) -> list[Review]:
-        reviews = self._request("GET", f"/repos/{repo_id}/pulls/{number}/reviews")
+        reviews = self._request("GET", self._repo(repo_id, f"/pulls/{int(number)}/reviews"))
         items = reviews if isinstance(reviews, list) else []
         # Keep only meaningful, current review events: drop dismissed/stale ones
         # and the "review requested" placeholders that carry no submitted state.
@@ -794,7 +825,7 @@ class ForgejoAdapter(ISourceControlAdapter):
         if path is not None:
             review = self._request(
                 "POST",
-                f"/repos/{repo_id}/pulls/{number}/reviews",
+                self._repo(repo_id, f"/pulls/{int(number)}/reviews"),
                 json={
                     "event": "COMMENT",
                     "body": body,
@@ -813,7 +844,7 @@ class ForgejoAdapter(ISourceControlAdapter):
             )
         comment = self._request(
             "POST",
-            f"/repos/{repo_id}/issues/{number}/comments",
+            self._repo(repo_id, f"/issues/{int(number)}/comments"),
             json={"body": body},
         )
         return self._to_comment(comment)
@@ -824,17 +855,17 @@ class ForgejoAdapter(ISourceControlAdapter):
         forge_event = _REVIEW_EVENTS.get(event.lower(), event.upper())
         review = self._request(
             "POST",
-            f"/repos/{repo_id}/pulls/{number}/reviews",
+            self._repo(repo_id, f"/pulls/{int(number)}/reviews"),
             json={"event": forge_event, "body": body},
         )
         return self._to_review(review)
 
     def list_checks(self, *, repo_id: str, number: int) -> list[Check]:
-        pull = self._request("GET", f"/repos/{repo_id}/pulls/{number}")
+        pull = self._request("GET", self._repo(repo_id, f"/pulls/{int(number)}"))
         sha = (pull.get("head", {}) or {}).get("sha")
         if not sha:
             return []
-        statuses = self._request("GET", f"/repos/{repo_id}/commits/{sha}/statuses")
+        statuses = self._request("GET", self._repo(repo_id, f"/commits/{_seg(sha)}/statuses"))
         items = statuses if isinstance(statuses, list) else []
         return [self._to_check(s) for s in items]
 
@@ -848,7 +879,7 @@ class ForgejoAdapter(ISourceControlAdapter):
     ) -> None:
         self._request(
             "POST",
-            f"/repos/{repo_id}/branch_protections",
+            self._repo(repo_id, "/branch_protections"),
             json={
                 "branch_name": branch,
                 "enable_approvals_whitelist": False,
@@ -861,7 +892,7 @@ class ForgejoAdapter(ISourceControlAdapter):
     def merge(self, *, repo_id: str, number: int, method: str = "merge") -> MergeResult:
         result = self._request(
             "POST",
-            f"/repos/{repo_id}/pulls/{number}/merge",
+            self._repo(repo_id, f"/pulls/{int(number)}/merge"),
             json={"Do": method},
         )
         if isinstance(result, dict) and result.get("sha"):

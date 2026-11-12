@@ -7,6 +7,11 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import NoReturn
 
+from naas_abi_core.services.source_control.names import (
+    path_segments,
+    ref_ok,
+    segment_ok,
+)
 from naas_abi_core.services.source_control.SourceControlPorts import (
     AccessDeniedError,
     Branch,
@@ -27,7 +32,17 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     RepoNotFoundError,
     Review,
     SourceControlError,
+    ValidationError,
     WorkflowRun,
+)
+
+# Every git call runs with the repository's hooks and fsmonitor turned off:
+# what a repository's files or config say never runs as the engine.
+_SAFE_GIT = (
+    "-c",
+    "core.hooksPath=/dev/null",
+    "-c",
+    "core.fsmonitor=false",
 )
 
 
@@ -56,9 +71,43 @@ class LocalGitAdapter(ISourceControlAdapter):
 
     def _repo_path(self, repo_id: str) -> Path:
         owner, _, name = repo_id.partition("/")
-        if not owner or not name:
+        if not segment_ok(owner) or not segment_ok(name):
             raise RepoNotFoundError(repo_id)
         return self._root / owner / name
+
+    @staticmethod
+    def _ref(ref: str) -> str:
+        """A ref as git reads it: never an option, a range or an expression."""
+        if not ref_ok(ref):
+            raise ValidationError(f"Invalid ref: {ref!r}")
+        return ref
+
+    @staticmethod
+    def _rel(path: str) -> str:
+        """A file path relative to the repository root, inside its tree."""
+        segments = path_segments(path)
+        if not segments:
+            raise ValidationError(f"Invalid path: {path!r}")
+        return "/".join(segments)
+
+    def _target(self, repo_path: Path, path: str) -> tuple[str, Path]:
+        """Where a write of ``path`` lands: inside the repository, never in
+        ``.git``, and through no symbolic link."""
+        rel = self._rel(path)
+        root = repo_path.resolve()
+        current = root
+        for part in rel.split("/"):
+            current = current / part
+            if current.is_symlink():
+                raise ValidationError(f"Invalid path: {path!r}")
+        target = (root / rel).resolve()
+        try:
+            inside = target.relative_to(root)
+        except ValueError:
+            raise ValidationError(f"Invalid path: {path!r}") from None
+        if not inside.parts or inside.parts[0].lower() == ".git":
+            raise ValidationError(f"Invalid path: {path!r}")
+        return rel, target
 
     def _run(
         self,
@@ -67,7 +116,7 @@ class LocalGitAdapter(ISourceControlAdapter):
         env: dict[str, str] | None = None,
     ) -> str:
         result = subprocess.run(
-            ["git", *args],
+            ["git", *_SAFE_GIT, *args],
             cwd=cwd,
             capture_output=True,
             text=True,
@@ -88,7 +137,7 @@ class LocalGitAdapter(ISourceControlAdapter):
         if not self._repo_exists(repo_id):
             raise RepoNotFoundError(repo_id)
         if ref:
-            return ref
+            return self._ref(ref)
         return self._run("rev-parse", "--abbrev-ref", "HEAD", cwd=path)
 
     def _to_repo(self, repo_id: str) -> Repo:
@@ -110,6 +159,11 @@ class LocalGitAdapter(ISourceControlAdapter):
             html_url=path.as_uri(),
             private=True,
             empty=not any(path.iterdir()),
+        )
+
+    def _checkout(self, repo_path: Path, branch: str, env: dict[str, str]) -> None:
+        self._run(
+            "checkout", "--end-of-options", self._ref(branch), "--", cwd=repo_path, env=env
         )
 
     def _unsupported(self, feature: str) -> NoReturn:
@@ -208,8 +262,12 @@ class LocalGitAdapter(ISourceControlAdapter):
         # directory name as the tree entry itself, so the caller gets the
         # folder back as its own only child instead of what is inside it. The
         # repo root is the exception, where "." is the way to say the top tree.
+        if tree_path:
+            tree_path = self._rel(tree_path)
         spec = f"{tree_path}/" if tree_path else "."
-        output = self._run("ls-tree", "-l", ref_name, spec, cwd=repo_path)
+        output = self._run(
+            "ls-tree", "-l", "--end-of-options", ref_name, "--", spec, cwd=repo_path
+        )
         entries: list[ContentEntry] = []
         for line in output.splitlines():
             if not line.strip():
@@ -234,10 +292,10 @@ class LocalGitAdapter(ISourceControlAdapter):
         if not self._repo_exists(repo_id):
             raise RepoNotFoundError(repo_id)
         ref_name = self._resolve_ref(repo_id, ref)
-        spec = f"{ref_name}:{path.lstrip('/')}"
+        spec = f"{ref_name}:{self._rel(path)}"
         try:
             raw = subprocess.check_output(
-                ["git", "show", spec],
+                ["git", *_SAFE_GIT, "show", "--end-of-options", spec],
                 cwd=repo_path,
                 stderr=subprocess.STDOUT,
             )
@@ -274,14 +332,16 @@ class LocalGitAdapter(ISourceControlAdapter):
         if not self._repo_exists(repo_id):
             raise RepoNotFoundError(repo_id)
         env = _git_env(author_name or "abi", author_email or "abi@local")
-        self._run("checkout", branch, cwd=repo_path, env=env)
-        target = repo_path / path.lstrip("/")
+        self._rel(path)  # refused before the working tree changes
+        self._checkout(repo_path, branch, env)
+        # Checked again on the branch's own tree, whose links may differ.
+        rel, target = self._target(repo_path, path)
         target.parent.mkdir(parents=True, exist_ok=True)
         if isinstance(content, bytes):
             target.write_bytes(content)
         else:
             target.write_text(content, encoding="utf-8")
-        self._run("add", path.lstrip("/"), cwd=repo_path, env=env)
+        self._run("add", "--", rel, cwd=repo_path, env=env)
         self._run("commit", "-m", message, cwd=repo_path, env=env)
         sha = self._run("rev-parse", "HEAD", cwd=repo_path, env=env)
         return Commit(sha=sha, message=message, author=author_name or "abi")
@@ -303,12 +363,13 @@ class LocalGitAdapter(ISourceControlAdapter):
         if not self._repo_exists(repo_id):
             raise RepoNotFoundError(repo_id)
         env = _git_env(author_name or "abi", author_email or "abi@local")
-        self._run("checkout", branch, cwd=repo_path, env=env)
+        for item in writes:
+            self._rel(item.path)  # refused before the working tree changes
+        self._checkout(repo_path, branch, env)
         added: list[str] = []
         removed: list[str] = []
         for item in writes:
-            rel = item.path.lstrip("/")
-            target = repo_path / rel
+            rel, target = self._target(repo_path, item.path)
             if item.delete:
                 if target.is_file():
                     removed.append(rel)
@@ -336,9 +397,10 @@ class LocalGitAdapter(ISourceControlAdapter):
         ref_name = self._resolve_ref(repo_id, ref)
         output = self._run(
             "log",
-            ref_name,
-            f"-n{limit}",
+            f"-n{int(limit)}",
             "--pretty=format:%H%x09%s%x09%an%x09%ai",
+            "--end-of-options",
+            ref_name,
             # Slides branches (slides/<ws>/<slug>) shadow a real deck directory
             # of the same name; without this git treats the ref as ambiguous.
             "--",
@@ -379,11 +441,12 @@ class LocalGitAdapter(ISourceControlAdapter):
         repo_path = self._repo_path(repo_id)
         if not self._repo_exists(repo_id):
             raise RepoNotFoundError(repo_id)
+        name, from_ref = self._ref(name), self._ref(from_ref)
         existing = {branch.name for branch in self.list_branches(repo_id=repo_id)}
         if name in existing:
             raise BranchNameConflictError(name)
-        self._run("branch", name, from_ref, cwd=repo_path)
-        sha = self._run("rev-parse", name, cwd=repo_path)
+        self._run("branch", "--end-of-options", name, from_ref, cwd=repo_path)
+        sha = self._run("rev-parse", "--verify", f"refs/heads/{name}", cwd=repo_path)
         return Branch(name=name, commit_sha=sha)
 
     def delete_branch(self, *, repo_id: str, name: str) -> None:
@@ -393,7 +456,7 @@ class LocalGitAdapter(ISourceControlAdapter):
         existing = {branch.name for branch in self.list_branches(repo_id=repo_id)}
         if name not in existing:
             raise BranchNotFoundError(name)
-        self._run("branch", "-D", name, cwd=repo_path)
+        self._run("branch", "-D", "--end-of-options", self._ref(name), cwd=repo_path)
 
     def get_diff(self, *, repo_id: str, base: str, head: str) -> Diff:
         del repo_id, base, head

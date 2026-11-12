@@ -61,6 +61,7 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
 from naas_abi_core.services.coding_environment.CodingEnvironmentService import (
     CodingEnvironmentService,
 )
+from naas_abi_core.services.source_control.names import commit_ok
 from naas_abi_core.services.source_control.SourceControlPorts import (
     BranchNameConflictError,
     Commit,
@@ -2222,6 +2223,9 @@ async def get_history_diff(
     """
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
+    # Commits by id only: base and head go into the forge's compare URL.
+    if not commit_ok(base) or (head and not commit_ok(head)):
+        raise HTTPException(status_code=422, detail="base and head are commit ids")
     sc, repo_id = _sheets_sc(request)
 
     def _diff() -> WorkbookDiffResponse:

@@ -685,3 +685,55 @@ def test_the_section_is_refused_to_a_role_whose_feature_is_off() -> None:
             assert resp.status_code == 403, user
         client.as_user("admin")
         assert client.get("/repos", params=_query()).status_code == 200
+
+
+# --- names stay inside the repository -----------------------------------------------
+
+_OUTSIDE_PATHS = ["../../victim/contents/secret.txt", "a/../../x", ".git/config", "a//b", "x?y#z"]
+_OUTSIDE_REFS = ["../../victim", "-x", "--output=/tmp/x", "a..b", "x#y", "a/./b", "a b"]
+
+
+def _spy(client: Client, monkeypatch) -> list[str]:
+    """Records every call that reaches the source control adapter."""
+    calls: list[str] = []
+    adapter = client.source_control.adapter
+    for name in ("get_file", "list_contents", "list_commits", "create_branch", "delete_branch"):
+        original = getattr(adapter, name)
+
+        def record(*args, _name=name, _original=original, **kwargs):
+            calls.append(_name)
+            return _original(*args, **kwargs)
+
+        monkeypatch.setattr(adapter, name, record)
+    return calls
+
+
+@pytest.mark.parametrize("path", _OUTSIDE_PATHS)
+def test_the_code_routes_keep_file_paths_inside_the_repository(
+    client: Client, monkeypatch, path: str
+) -> None:
+    calls = _spy(client, monkeypatch)
+    assert client.get("/repo-file", params=_query(path=path)).status_code == 422
+    assert client.get("/repo-contents", params=_query(path=path)).status_code == 422
+    assert calls == []
+
+
+@pytest.mark.parametrize("ref", _OUTSIDE_REFS)
+def test_the_code_routes_keep_branches_and_refs_inside_the_repository(
+    client: Client, monkeypatch, ref: str
+) -> None:
+    calls = _spy(client, monkeypatch)
+    responses = [
+        client.get("/repo-file", params=_query(path="README.md", ref=ref)),
+        client.get("/repo-contents", params=_query(ref=ref)),
+        client.get("/repo-commits", params=_query(ref=ref)),
+        client.delete("/branches", params=_query(name=ref)),
+        client.post("/branches", json={"workspace_id": WS, "name": ref, "source_branch": "main"}),
+        client.post("/branches", json={"workspace_id": WS, "name": "b", "source_branch": ref}),
+        client.post(
+            "",
+            json={"workspace_id": WS, "name": "dev", "template_id": "tmpl-default", "branch": ref},
+        ),
+    ]
+    assert [r.status_code for r in responses] == [422] * len(responses)
+    assert calls == []

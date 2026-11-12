@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import re
-
 from naas_abi_core.engine.call_context import (
     ANONYMOUS_PRINCIPAL,
     as_service_account,
@@ -12,6 +10,14 @@ from naas_abi_core.services.iam.guard import PLACEMENT_WRITER, ServiceGuard
 from naas_abi_core.services.iam.listing import ResourceLister, named_lister
 from naas_abi_core.services.ServiceBase import ServiceBase
 from naas_abi_core.services.source_control.iam_catalog import CATALOG
+from naas_abi_core.services.source_control.names import (
+    commit_ok,
+    file_path_ok,
+    ref_ok,
+    repo_id_ok,
+    segment_ok,
+    username_ok,
+)
 from naas_abi_core.services.source_control.ontologies.modules.SourceControlEventOntology import (
     ProposalMergeBlocked,
     ProposalMerged,
@@ -40,19 +46,32 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     WorkflowRun,
 )
 
-# One path segment of a repository id (owner, name): the local adapter makes
-# directories of them and the forge puts them in URLs, so never ``..`` or a
-# separator, whoever asks (a module over NATS included).
-_SEGMENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+
+def _invalid(what: str, value: object) -> ValidationError:
+    return ValidationError(f"Invalid {what}: {value!r}")
 
 
-def _segment_ok(value: str) -> bool:
-    return bool(_SEGMENT.fullmatch(value)) and value not in (".", "..")
+def _check_path(path: str, *, root_ok: bool = False) -> None:
+    """A file path stays inside the repository's tree: no dot or empty
+    segment, no ``.git``, no query, fragment or control character."""
+    if not file_path_ok(path, root_ok=root_ok):
+        raise _invalid("path", path)
 
 
-def _repo_id_ok(repo_id: str) -> bool:
-    owner, sep, name = repo_id.partition("/")
-    return bool(sep) and _segment_ok(owner) and _segment_ok(name)
+def _check_ref(ref: str | None, what: str = "ref") -> None:
+    """A branch, tag or commit by git's rules, never an option (``-x``)."""
+    if ref is not None and not ref_ok(ref):
+        raise _invalid(what, ref)
+
+
+def _check_commit(sha: str, what: str) -> None:
+    if not commit_ok(sha):
+        raise _invalid(what, sha)
+
+
+def _check_username(username: str) -> None:
+    if not username_ok(username):
+        raise _invalid("username", username)
 
 
 def _repo_missing(repo_id: str):
@@ -128,7 +147,7 @@ class SourceControlService(ServiceBase):
     def _known_repo_id(repo_id: str) -> None:
         """No repository has an id that is not ``<owner>/<name>`` of plain
         segments: it is not found, whatever the caller may do."""
-        if not _repo_id_ok(repo_id):
+        if not repo_id_ok(repo_id):
             raise _repo_missing(repo_id)()
 
     def _repo(self, action: str, repo_id: str) -> None:
@@ -176,6 +195,7 @@ class SourceControlService(ServiceBase):
         ``external_id`` is ignored once the service checks: the principal is the
         call's (``EnsureUser`` on its own ``forge_user``, which every user holds).
         """
+        _check_username(username)
         if not self._guard.enforcing:
             # A facade: the owner it calls binds the call's principal.
             return self._adapter.ensure_user(
@@ -265,7 +285,7 @@ class SourceControlService(ServiceBase):
 
     @staticmethod
     def _new_repo_id(owner: str, name: str) -> str:
-        if not (_segment_ok(owner) and _segment_ok(name)):
+        if not (segment_ok(owner) and segment_ok(name)):
             raise ValidationError(
                 "A repository's owner and name are letters, digits, '.', '_' "
                 "and '-', starting with a letter or a digit"
@@ -309,6 +329,7 @@ class SourceControlService(ServiceBase):
         self, *, repo_id: str, username: str, permission: str = "write"
     ) -> None:
         """Grant a forge user access: ``AddCollaborator``, an admin action."""
+        _check_username(username)
         self._repo("AddCollaborator", repo_id)
         self._adapter.add_collaborator(
             repo_id=repo_id, username=username, permission=permission
@@ -317,12 +338,16 @@ class SourceControlService(ServiceBase):
     def list_contents(
         self, *, repo_id: str, path: str = "", ref: str | None = None
     ) -> list[ContentEntry]:
+        _check_path(path, root_ok=True)
+        _check_ref(ref)
         self._repo("ListContents", repo_id)
         return self._adapter.list_contents(repo_id=repo_id, path=path, ref=ref)
 
     def get_file(
         self, *, repo_id: str, path: str, ref: str | None = None
     ) -> FileContent:
+        _check_path(path)
+        _check_ref(ref)
         self._repo("GetFile", repo_id)
         return self._adapter.get_file(repo_id=repo_id, path=path, ref=ref)
 
@@ -337,6 +362,8 @@ class SourceControlService(ServiceBase):
         author_name: str | None = None,
         author_email: str | None = None,
     ) -> Commit:
+        _check_path(path)
+        _check_ref(branch, "branch")
         self._on_branch("UpsertFile", repo_id, branch)
         return self._adapter.upsert_file(
             repo_id=repo_id,
@@ -358,6 +385,10 @@ class SourceControlService(ServiceBase):
         author_name: str | None = None,
         author_email: str | None = None,
     ) -> Commit:
+        for item in files:
+            if item.path:  # an empty path is no write: adapters skip it
+                _check_path(item.path)
+        _check_ref(branch, "branch")
         self._on_branch("UpsertFiles", repo_id, branch)
         return self._adapter.upsert_files(
             repo_id=repo_id,
@@ -371,6 +402,7 @@ class SourceControlService(ServiceBase):
     def list_commits(
         self, *, repo_id: str, ref: str | None = None, limit: int = 20
     ) -> list[Commit]:
+        _check_ref(ref)
         self._repo("ListCommits", repo_id)
         return self._adapter.list_commits(repo_id=repo_id, ref=ref, limit=limit)
 
@@ -384,16 +416,22 @@ class SourceControlService(ServiceBase):
         )
 
     def create_branch(self, *, repo_id: str, name: str, from_ref: str) -> Branch:
+        _check_ref(name, "branch")
+        _check_ref(from_ref)
         self._on_branch("CreateBranch", repo_id, name)
         return self._adapter.create_branch(
             repo_id=repo_id, name=name, from_ref=from_ref
         )
 
     def delete_branch(self, *, repo_id: str, name: str) -> None:
+        _check_ref(name, "branch")
         self._on_branch("DeleteBranch", repo_id, name)
         self._adapter.delete_branch(repo_id=repo_id, name=name)
 
     def get_diff(self, *, repo_id: str, base: str, head: str) -> Diff:
+        """Files changed between two commits, named by their ids."""
+        _check_commit(base, "base")
+        _check_commit(head, "head")
         self._repo("GetDiff", repo_id)
         return self._adapter.get_diff(repo_id=repo_id, base=base, head=head)
 
@@ -409,6 +447,10 @@ class SourceControlService(ServiceBase):
         target_branch: str,
         reviewers: list[str] | None = None,
     ) -> Proposal:
+        _check_ref(source_branch, "source branch")
+        _check_ref(target_branch, "target branch")
+        for reviewer in reviewers or []:
+            _check_username(reviewer)
         # Inside an existing repository: it takes the repository's placement.
         self._on_proposal("CreateProposal", repo_id, "-")
         proposal = self._adapter.create_proposal(
@@ -473,6 +515,8 @@ class SourceControlService(ServiceBase):
         path: str | None = None,
         line: int | None = None,
     ) -> Comment:
+        if path is not None:
+            _check_path(path)
         self._on_proposal("AddComment", repo_id, number)
         return self._adapter.add_comment(
             repo_id=repo_id, number=number, body=body, path=path, line=line
@@ -507,6 +551,7 @@ class SourceControlService(ServiceBase):
         required_approvals: int,
         required_checks: list[str],
     ) -> None:
+        _check_ref(branch, "branch")
         self._on_branch("SetBranchProtection", repo_id, branch)
         self._adapter.set_branch_protection(
             repo_id=repo_id,
