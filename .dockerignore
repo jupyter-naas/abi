@@ -1,0 +1,24 @@
+# Images built from the repository root (docker/images/, Dockerfile.mcp, the
+# demo apps) never receive secrets or local state: settings reach a container
+# as environment variables or through a secret adapter, not as files.
+# `.git` stays: the release image reads its version from the tags.
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example
+# The CLI's .env templates, which `abi new project` and `abi deploy local`
+# render in the released image.
+!libs/naas-abi-cli/naas_abi_cli/cli/deploy/templates/local/.env
+!libs/naas-abi-cli/naas_abi_cli/cli/new/templates/project/.env
+**/.venv
+**/node_modules
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+storage/
+.abi-backups/
+.snapshots/
+.abi/stack/
+.dagster/

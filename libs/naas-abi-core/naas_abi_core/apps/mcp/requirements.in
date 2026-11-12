@@ -1,0 +1,5 @@
+# The packages mcp_server.py imports; requirements.txt pins them.
+fastmcp
+mcp
+httpx
+python-dotenv

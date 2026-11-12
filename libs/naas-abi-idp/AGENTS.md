@@ -50,6 +50,7 @@ IdPs, MFA policies.
 | `adapters/memory.py` | In-memory adapters (tests, the generic identity suite) |
 | `models.py` | The records; `secrets_hash.py` scrypt, SHA-256 and HMAC helpers |
 | `Dockerfile` | SDK-only image (named contexts `abi_proto`, `abi_sdk`) |
+| `requirements.txt`, `build-requirements.txt` | What the image installs, with hashes: `uv export --frozen --no-dev --no-emit-project --no-emit-package naas-abi-proto --no-emit-package naas-abi-sdk --format requirements-txt -o requirements.txt` after any change to `uv.lock` (`tests/test_image.py` fails until then); hatchling for the local packages |
 
 ## Design
 

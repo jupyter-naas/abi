@@ -1,4 +1,5 @@
-FROM node:20-alpine
+# Node 24 LTS, pinned by digest: bump the tag and the digest together.
+FROM node:24.22.3-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5
 
 WORKDIR /app
 
@@ -29,6 +30,12 @@ ENV NEXT_PUBLIC_WS_PATH=$NEXT_PUBLIC_WS_PATH
 RUN pnpm install --frozen-lockfile
 RUN pnpm build
 RUN chmod +x /app/docker-entrypoint.sh
+# The server runs as `node`. It writes only the runtime config (the entrypoint)
+# and Next's cache; the rest of the image stays root's.
+RUN touch public/runtime-config.js \
+    && mkdir -p .next/cache \
+    && chown node:node public/runtime-config.js .next/cache
+USER node
 
 ENV NODE_ENV=production
 ENV PORT=3000
@@ -37,4 +44,6 @@ ENV NEXT_TELEMETRY_DISABLED=1
 EXPOSE 3000
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
-CMD ["pnpm", "start", "--hostname", "0.0.0.0", "--port", "3000"]
+# `next start` itself (the `start` script): pnpm is set up for root at build
+# time, and the server needs nothing fetched at start.
+CMD ["node_modules/.bin/next", "start", "--hostname", "0.0.0.0", "--port", "3000"]
