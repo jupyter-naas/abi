@@ -8,6 +8,7 @@ the literal. These two must not drift back together.
 """
 
 import importlib
+import os
 import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -1566,3 +1567,39 @@ def test_a_project_without_nats_has_no_built_in_identity_provider(monkeypatch) -
 
     monkeypatch.setattr(dev, "_project_declares_nats", lambda: False)
     assert dev._dev_modules() == {}
+
+
+def test_nexus_web_keeps_to_the_bind_host(monkeypatch, tmp_path) -> None:
+    captured: dict = {}
+    web = tmp_path / "libs/naas-abi/naas_abi/apps/nexus/apps/web"
+    (web / "node_modules").mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        dev, "_spawn", lambda spec, cmd, cwd, env: captured.update(cmd=cmd) or 1234
+    )
+    monkeypatch.setattr(
+        dev.shutil, "which", lambda name: "/usr/bin/pnpm" if name == "pnpm" else None
+    )
+
+    dev._launch_nexus_web(_spec("nexus-web", PORTS["nexus-web"]), PORTS)
+
+    cmd = captured["cmd"]
+    assert cmd[cmd.index("--hostname") + 1] == dev.BIND_HOST == "127.0.0.1"
+
+
+def test_dev_logs_and_storage_keep_owner_only(monkeypatch, tmp_path) -> None:
+    import stat
+
+    monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
+    monkeypatch.setattr(dev, "_dev_dir", lambda: tmp_path / ".abi" / "dev")
+    previous = os.umask(0o022)
+    try:
+        dev._ensure_storage_layout()
+    finally:
+        os.umask(previous)
+    for folder in (
+        tmp_path / "storage",
+        tmp_path / ".abi/dev",
+        tmp_path / ".abi/dev/logs",
+    ):
+        assert stat.S_IMODE(folder.stat().st_mode) == 0o700

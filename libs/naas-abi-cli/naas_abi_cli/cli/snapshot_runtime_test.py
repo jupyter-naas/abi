@@ -1,4 +1,5 @@
 import io
+import os
 import tarfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -394,11 +395,16 @@ def test_extract_storage_clears_then_extracts_via_helper(
 
     rt.extract_storage(tmp_path / "dest", archive)
 
-    joined = " ".join(calls[0])
-    assert "rm -rf /dest/storage" in joined
-    assert "tar xzf /in/storage.tar.gz -C /dest" in joined
-    # Clear happens before extract, so restore stays point-in-time (no orphans).
-    assert joined.index("rm -rf") < joined.index("tar xzf")
+    script = calls[0][-1]
+    # Extracted into a fresh directory, then swapped in for the old storage/,
+    # so restore stays point-in-time (no orphans), and handed to the host user.
+    assert "tar xzf /in/storage.tar.gz -C /dest/.storage-restore" in script
+    assert script.index("tar xzf") < script.index("rm -rf /dest/storage")
+    assert script.index("rm -rf /dest/storage") < script.index(
+        "mv /dest/.storage-restore/storage /dest/storage"
+    )
+    if hasattr(os, "getuid"):
+        assert script.endswith(f"chown -R {os.getuid()}:{os.getgid()} /dest/storage")
 
 
 def test_import_rejects_colliding_id_and_force_replaces(tmp_path: Path) -> None:
@@ -857,3 +863,80 @@ def test_extract_storage_rejects_escaping_symlink(tmp_path: Path) -> None:
         tar.addfile(info)
     with pytest.raises(click.ClickException, match="unsafe link"):
         rt.extract_storage(tmp_path / "dest", archive)
+
+
+def _storage_archive(path: Path, *members: tarfile.TarInfo) -> Path:
+    import io
+
+    with tarfile.open(path, "w:gz") as tar:
+        for member in members:
+            payload = b"x" if member.isfile() else b""
+            member.size = len(payload)
+            tar.addfile(member, io.BytesIO(payload) if payload else None)
+    return path
+
+
+def _member(
+    name: str, kind: bytes = tarfile.REGTYPE, mode: int = 0o644
+) -> tarfile.TarInfo:
+    info = tarfile.TarInfo(name)
+    info.type = kind
+    info.mode = mode
+    return info
+
+
+@pytest.mark.parametrize(
+    "member",
+    [
+        _member(".git/hooks/pre-commit", mode=0o755),
+        _member("docker-compose.yml"),
+        _member("storage/../.env"),
+        _member("storagex/file"),
+        _member("storage/run.sh", mode=0o4755),
+        _member("storage/shared", mode=0o2755),
+        _member("storage/pipe", kind=tarfile.FIFOTYPE),
+        _member("storage/dev", kind=tarfile.CHRTYPE),
+    ],
+    ids=lambda m: m.name,
+)
+def test_storage_restore_keeps_to_storage(tmp_path: Path, monkeypatch, member) -> None:
+    calls: list = []
+    monkeypatch.setattr(rt, "run_docker", lambda args, **kw: calls.append(args))
+    archive = _storage_archive(
+        tmp_path / "storage.tar.gz", _member("storage", tarfile.DIRTYPE, 0o755), member
+    )
+    with pytest.raises(click.ClickException, match="Refusing"):
+        rt.extract_storage(tmp_path / "dest", archive)
+    assert calls == []
+
+
+def test_storage_restore_keeps_links_inside_storage(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(rt, "run_docker", lambda args, **kw: None)
+    link = _member("storage/link", tarfile.SYMTYPE)
+    link.linkname = "../.env"
+    archive = _storage_archive(tmp_path / "storage.tar.gz", link)
+    with pytest.raises(click.ClickException, match="unsafe link"):
+        rt.extract_storage(tmp_path / "dest", archive)
+    inside = _member("storage/link", tarfile.SYMTYPE)
+    inside.linkname = "data/file"
+    rt.extract_storage(
+        tmp_path / "dest", _storage_archive(tmp_path / "ok.tar.gz", inside)
+    )
+
+
+def test_snapshot_export_keeps_owner_only(tmp_path: Path) -> None:
+    import stat
+
+    source_root = tmp_path / "source"
+    rt.snapshots_root(source_root).mkdir(parents=True)
+    _make_snapshot_dir(rt.snapshots_root(source_root), "20260630-140509")
+    previous = os.umask(0o022)
+    try:
+        archive = rt.export_snapshot(
+            "20260630-140509", tmp_path / "snap.tar.gz", root=source_root
+        )
+    finally:
+        os.umask(previous)
+    assert stat.S_IMODE(archive.stat().st_mode) == 0o600

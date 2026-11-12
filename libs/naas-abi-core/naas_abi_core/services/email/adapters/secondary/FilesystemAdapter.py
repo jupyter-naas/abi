@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import os
 import re
 import threading
 import time
@@ -92,9 +93,17 @@ class FilesystemAdapter(IEmailAdapter):
             cc_emails=cc_emails,
         )
 
+        # Mails carry sign-in codes and links: their owner's only.
         self._directory.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(self._directory, 0o700)
+        except PermissionError:  # another user's folder (a container's): kept as is
+            pass
         message_id = self._next_message_id()
-        (self._directory / f"{message_id}{_SUFFIX}").write_bytes(bytes(msg))
+        path = self._directory / f"{message_id}{_SUFFIX}"
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(bytes(msg))
         return message_id
 
     # ------------------------------------------------------------------ kept mail

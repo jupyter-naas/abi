@@ -87,6 +87,7 @@ from naas_abi_cli.cli.dev_modules import (
     wants_builtin_idp,
     with_builtin_idp,
 )
+from naas_abi_cli.cli.private_dir import private_directory
 
 DEV_DIR_NAME = ".abi/dev"
 INSTANCE_FILENAME = "instance.json"
@@ -364,15 +365,24 @@ def _pid_alive(pid: int) -> bool:
 
 
 def _ensure_storage_layout() -> None:
-    (_project_root() / "storage").mkdir(parents=True, exist_ok=True)
-    (_dev_dir() / "logs").mkdir(parents=True, exist_ok=True)
+    # storage/ holds the dev stack's data and sign-in mails, .abi/dev/ its keys
+    # and logs: their owner's only.
+    private_directory(_project_root() / "storage")
+    private_directory(_dev_dir())
+    private_directory(_dev_dir() / "logs")
 
 
 def _spawn(spec: ServiceSpec, cmd: list[str], cwd: Path, env: dict[str, str]) -> int:
     log_file = _log_path(spec)
     log_file.parent.mkdir(parents=True, exist_ok=True)
-    # Truncate per session so each `dev up` shows a fresh log.
-    log_fh = open(log_file, "wb", buffering=0)
+    # Truncate per session so each `dev up` shows a fresh log. Owner-only: a
+    # service may log what it was handed.
+    log_fh = os.fdopen(
+        os.open(log_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600),
+        "wb",
+        buffering=0,
+    )
+    os.chmod(log_file, 0o600)
     process = subprocess.Popen(
         cmd,
         cwd=str(cwd),
@@ -955,10 +965,10 @@ def _launch_nexus_web(spec: ServiceSpec, ports: dict[str, int]) -> int:
     env["NEXT_PUBLIC_NEXUS_ENV"] = env.get("NEXT_PUBLIC_NEXUS_ENV", "local")
     env["NODE_ENV"] = env.get("NODE_ENV", "development")
 
-    if runner.endswith("pnpm"):
-        cmd = [runner, "exec", "next", "dev", "--port", str(spec.port)]
-    else:
-        cmd = [runner, "next", "dev", "--port", str(spec.port)]
+    # next dev listens on every interface unless told otherwise: BIND_HOST,
+    # like every other `abi dev` service.
+    args = ["next", "dev", "--hostname", BIND_HOST, "--port", str(spec.port)]
+    cmd = [runner, "exec", *args] if runner.endswith("pnpm") else [runner, *args]
     return _spawn(spec, cmd, web_dir, env)
 
 

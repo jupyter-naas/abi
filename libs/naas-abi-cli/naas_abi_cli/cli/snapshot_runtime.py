@@ -23,6 +23,7 @@ import hashlib
 import json
 import os
 import shutil
+import stat
 import subprocess
 import tarfile
 from collections.abc import Callable
@@ -33,7 +34,7 @@ from pathlib import Path
 import click
 
 from .bootstrap import find_abi_project_root
-from .private_dir import keep_out_of_git
+from .private_dir import keep_out_of_git, private_directory, private_file
 from .stack_runtime import run_compose
 
 # Stateful volumes worth snapshotting, by their docker-compose volume key.
@@ -566,15 +567,64 @@ def _safe_extract(tar: tarfile.TarFile, dest: Path) -> None:
         tar.extractall(dest)  # nosec B202
 
 
+def _assert_storage_members(tar: tarfile.TarFile, root: Path) -> None:
+    """Accept only what a storage archive holds: regular files, directories and
+    links under ``storage/``, with no setuid or setgid bit, whose links stay
+    under ``storage/`` too."""
+    storage = (root / STORAGE_DIRNAME).resolve()
+
+    def _within(path: Path) -> bool:
+        resolved = path.resolve()
+        return resolved == storage or storage in resolved.parents
+
+    for member in tar.getmembers():
+        name = os.path.normpath(member.name)
+        if os.path.isabs(member.name) or not (
+            name == STORAGE_DIRNAME or name.startswith(STORAGE_DIRNAME + "/")
+        ):
+            raise click.ClickException(
+                f"Refusing to extract unsafe path from archive: {member.name}"
+            )
+        if not (member.isfile() or member.isdir() or member.issym() or member.islnk()):
+            raise click.ClickException(
+                f"Refusing to extract a special file from archive: {member.name}"
+            )
+        if member.mode & (stat.S_ISUID | stat.S_ISGID):
+            raise click.ClickException(
+                f"Refusing to extract a setuid or setgid file from archive: {member.name}"
+            )
+        if member.issym() or member.islnk():
+            if member.issym():
+                link_target = root.resolve() / os.path.dirname(name) / member.linkname
+            else:  # hardlink target is relative to the archive root
+                link_target = root.resolve() / member.linkname
+            if os.path.isabs(member.linkname) or not _within(link_target):
+                raise click.ClickException(
+                    "Refusing to extract unsafe link from archive: "
+                    f"{member.name} -> {member.linkname}"
+                )
+
+
 def extract_storage(root: Path, src_file: Path) -> None:
-    # Validate member paths (and link targets) on the host first -- the guard
-    # `_safe_extract` would otherwise apply -- then clear + extract inside the
-    # root helper. The helper is needed because storage/ can contain root-owned
-    # files/dirs the host user cannot remove. Clearing first keeps restore a
-    # faithful point-in-time copy (no stale post-snapshot files survive).
+    """Replace ``root/storage`` with the archive's ``storage/``.
+
+    The members are checked on the host first (``_assert_storage_members``).
+    The root helper, needed because storage/ can hold root-owned files the host
+    user cannot remove, extracts into a fresh directory, then swaps it in for
+    the old storage/ (so restore stays a point-in-time copy, with no stale
+    files) and hands it to the host user.
+    """
     with tarfile.open(src_file, "r:gz") as tar:
-        _assert_safe_members(tar, root)
+        _assert_storage_members(tar, root)
+    staging = "/dest/.storage-restore"
     dest_storage = f"/dest/{STORAGE_DIRNAME}"
+    script = (
+        f"set -e; rm -rf {staging} && mkdir -m 700 {staging}"
+        f" && tar xzf /in/{src_file.name} -C {staging}"
+        f" && rm -rf {dest_storage}"
+        f" && mv {staging}/{STORAGE_DIRNAME} {dest_storage}"
+        f" && rmdir {staging}" + _chown_to_host(dest_storage)
+    )
     run_docker(
         [
             "run",
@@ -586,7 +636,7 @@ def extract_storage(root: Path, src_file: Path) -> None:
             HELPER_IMAGE,
             "sh",
             "-c",
-            f"rm -rf {dest_storage} && tar xzf /in/{src_file.name} -C /dest",
+            script,
         ]
     )
 
@@ -618,6 +668,10 @@ def export_snapshot(
             f"Destination '{dest}' already exists. Use --force to overwrite."
         )
     dest.parent.mkdir(parents=True, exist_ok=True)
+    # The archive holds the stack's data: its owner's only.
+    if dest.exists():
+        dest.unlink()
+    private_file(dest)
     with tarfile.open(dest, "w:gz") as tar:
         tar.add(snap_dir, arcname=snapshot_id)
     return dest
@@ -629,7 +683,8 @@ def import_snapshot(src: Path, root: Path | None = None, force: bool = False) ->
     if not src.exists():
         raise click.ClickException(f"Archive not found: {src}")
     base = snapshots_root(root)
-    base.mkdir(parents=True, exist_ok=True)
+    # Snapshots copy the stack's volumes and .env: their owner's only.
+    private_directory(base)
     keep_out_of_git(base)
     with tarfile.open(src, "r:gz") as tar:
         # Skip members with no path parts ('.', './', '') so a `tar -C dir .`
@@ -754,6 +809,8 @@ def create_snapshot(
     if snap_dir.exists():
         raise click.ClickException(f"Snapshot '{snapshot_id}' already exists.")
     volumes_dir = snap_dir / VOLUMES_DIRNAME
+    # Snapshots copy the stack's volumes and .env: their owner's only.
+    private_directory(snapshots_root(root))
     volumes_dir.mkdir(parents=True)
     keep_out_of_git(snapshots_root(root))
 

@@ -22,7 +22,7 @@ from ..admin_credentials import (
     ensure_nats_passwords,
     generate_data_service_secret,
 )
-from ..private_dir import keep_out_of_git
+from ..private_dir import keep_out_of_git, private_directory, private_file
 from ..utils.Copier import Copier
 
 LOCAL_ENV_MARKER = "# Added by abi deploy local command execution"
@@ -553,7 +553,11 @@ def _backup_local_deploy_files(
     backup_root = os.path.join(project_path, BACKUP_DIRECTORY)
     backup_timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     backup_path = os.path.join(backup_root, backup_timestamp)
+    # The backup holds a copy of .env: every level its owner's only.
+    private_directory(os.path.dirname(backup_root))
+    private_directory(backup_root)
     os.makedirs(backup_path, exist_ok=False)
+    os.chmod(backup_path, 0o700)
     # The backup holds a copy of .env.
     keep_out_of_git(Path(backup_root).parent)
 
@@ -562,7 +566,8 @@ def _backup_local_deploy_files(
         if os.path.isdir(source_path):
             shutil.copytree(source_path, destination_path)
         else:
-            shutil.copy2(source_path, destination_path)
+            private_file(destination_path)
+            shutil.copyfile(source_path, destination_path)
 
     return backup_path
 
@@ -688,6 +693,10 @@ def setup_local_deploy(
     _require_writable_env(os.path.join(project_path, ".env"))
     if not regenerate:
         refuse_outdated_stack(project_path)
+    # .env holds the stack's secrets: its owner's only, before anything is
+    # written to it.
+    os.makedirs(project_path, exist_ok=True)
+    private_file(os.path.join(project_path, ".env"))
     if nats is None:
         detected = project_uses_nats(project_path)
         nats = True if detected is None else detected

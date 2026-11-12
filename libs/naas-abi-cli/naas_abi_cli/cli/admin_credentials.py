@@ -16,6 +16,8 @@ import secrets
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
+from .private_dir import private_file
+
 # The account the project templates seed (``users:`` of the Nexus configuration).
 ADMIN_EMAIL = "admin@example.com"
 API_KEY = "ABI_API_KEY"
@@ -76,6 +78,7 @@ def _set(lines: list[str], key: str, value: str) -> list[str]:
 
 
 def _write(env_path: Path, lines: list[str]) -> None:
+    private_file(env_path)
     env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

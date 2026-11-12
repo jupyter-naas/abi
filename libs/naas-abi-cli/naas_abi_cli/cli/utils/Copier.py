@@ -7,6 +7,8 @@ import jinja2
 from jinja2 import Environment, meta
 from rich.prompt import Prompt
 
+from ..private_dir import is_secret_file, private_file
+
 
 class ValueProvider(dict):
     def collect_values(self, template_string: str) -> None:
@@ -42,6 +44,9 @@ class Copier:
         relative = os.path.relpath(destination_path, self.destination_path)
         if os.path.normpath(relative) in self.keep and os.path.exists(destination_path):
             return
+        if is_secret_file(destination_path):
+            # A rendered .env holds secrets: its owner's only from the start.
+            private_file(destination_path)
         with open(destination_path, "w", encoding="utf-8") as file:
             file.write(self._template_file(template_path))
         self._generated_files.append(destination_path)

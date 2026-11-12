@@ -167,3 +167,23 @@ class TestFilesystemAdapterKeptMail:
 
     def test_listing_an_empty_or_missing_directory(self, tmp_path: Path) -> None:
         assert FilesystemAdapter(directory=str(tmp_path / "missing")).list_sent() == []
+
+
+def test_sent_mail_keeps_owner_only(tmp_path: Path) -> None:
+    import os
+    import stat
+
+    previous = os.umask(0o022)
+    try:
+        directory = tmp_path / "email"
+        FilesystemAdapter(directory=str(directory)).send(
+            to_email="alice@example.com",
+            subject="Your sign-in code",
+            text_body="Your sign-in code is: 123456",
+            from_email="noreply@example.com",
+        )
+    finally:
+        os.umask(previous)
+    (mail,) = directory.iterdir()
+    assert stat.S_IMODE(mail.stat().st_mode) == 0o600
+    assert stat.S_IMODE(directory.stat().st_mode) == 0o700

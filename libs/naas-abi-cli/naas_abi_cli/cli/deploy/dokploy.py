@@ -35,6 +35,7 @@ from ..admin_credentials import (
     generate_data_service_secret,
     generate_nats_password,
 )
+from ..private_dir import is_secret_file, private_directory, private_file
 from .local import (
     DEFAULT_ENV_VALUES,
     _build_hosts_from_domain,
@@ -653,8 +654,12 @@ def _backup_env(project_path: str, env_path: Path) -> str | None:
         return None
     timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     backup_path = os.path.join(project_path, BACKUP_DIRECTORY, timestamp)
-    os.makedirs(backup_path, exist_ok=True)
-    shutil.copy2(env_path, os.path.join(backup_path, ENV_FILE))
+    # A copy of the secrets: every level its owner's only.
+    private_directory(os.path.join(project_path, os.path.dirname(BACKUP_DIRECTORY)))
+    private_directory(backup_path)
+    backup_file = os.path.join(backup_path, ENV_FILE)
+    private_file(backup_file)
+    shutil.copyfile(env_path, backup_file)
     return backup_path
 
 
@@ -825,6 +830,8 @@ def setup_dokploy_deploy(
     for name, content in files.items():
         target = os.path.join(project_path, name)
         os.makedirs(os.path.dirname(target), exist_ok=True)
+        if is_secret_file(name):
+            private_file(target)
         with open(target, "w", encoding="utf-8", newline="") as out:
             out.write(content)
 
