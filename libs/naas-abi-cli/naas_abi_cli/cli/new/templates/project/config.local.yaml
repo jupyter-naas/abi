@@ -112,7 +112,7 @@ modules:
           show_powered_by: false
           login_footer_text: "© ABI AI Platform"
         users:
-          - email: "admin@example.com"
+          - email: "{% endraw %}{{ admin_email }}{% raw %}"
             name: "ABI Admin"
             # Platform-wide admin (admin console, live event stream). Config only
             # promotes on boot; manage superadmins in Platform Settings > Users.
@@ -120,7 +120,7 @@ modules:
         organizations:
           - name: "ABI"
             slug: "abi"
-            owner_email: "admin@example.com"
+            owner_email: "{% endraw %}{{ admin_email }}{% raw %}"
             primary_color: "#34D399"
             accent_color: "#34D399"
             login_footer_text: "© ABI"
@@ -128,7 +128,7 @@ modules:
             workspaces:
               - name: "ABI"
                 slug: "abi"
-                owner_email: "admin@example.com"
+                owner_email: "{% endraw %}{{ admin_email }}{% raw %}"
                 primary_color: "#34D399"
                 accent_color: "#34D399"
 

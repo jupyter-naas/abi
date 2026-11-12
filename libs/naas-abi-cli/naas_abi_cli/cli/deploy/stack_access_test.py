@@ -489,3 +489,87 @@ def test_upgrade_with_regenerate_keeps_compose_config_and_env_in_agreement(
     assert all(len(env[key]) >= 16 for key in DATA_SERVICE_SECRETS)
     # The next run without --regenerate goes through.
     setup_local_deploy(str(project), base_domain="localhost", nats=True)
+
+
+# -- The tailnet --------------------------------------------------------------
+
+
+def test_headscale_keeps_a_default_deny_tailnet(tmp_path: Path) -> None:
+    import json
+
+    setup_local_deploy(
+        str(tmp_path), base_domain="example.com", include_headscale=True, nats=True
+    )
+    headscale = tmp_path / ".deploy/docker/headscale"
+    config = yaml.safe_load((headscale / "config.yaml").read_text())
+    assert config["policy"] == {"mode": "file", "path": "/etc/headscale/acl.hujson"}
+    policy_text = "\n".join(
+        line
+        for line in (headscale / "acl.hujson").read_text().splitlines()
+        if not line.strip().startswith("//")
+    )
+    policy = json.loads(re.sub(r"\s//.*", "", policy_text))
+    # One rule, between an address no node holds.
+    assert policy["hosts"] == {"nowhere": "192.0.2.1/32"}
+    assert policy["acls"] == [
+        {"action": "accept", "src": ["nowhere"], "dst": ["nowhere:*"]}
+    ]
+
+    service = yaml.safe_load((tmp_path / "docker-compose.yml").read_text())["services"][
+        "headscale"
+    ]
+    assert (
+        "./.deploy/docker/headscale/acl.hujson:/etc/headscale/acl.hujson:ro"
+        in service["volumes"]
+    )
+
+
+def test_headscale_keeps_metrics_and_grpc_inside_its_container(tmp_path: Path) -> None:
+    setup_local_deploy(
+        str(tmp_path), base_domain="example.com", include_headscale=True, nats=True
+    )
+    config = yaml.safe_load(
+        (tmp_path / ".deploy/docker/headscale/config.yaml").read_text()
+    )
+    assert config["metrics_listen_addr"].startswith("127.0.0.1:")
+    assert config["grpc_listen_addr"].startswith("127.0.0.1:")
+    assert config["grpc_allow_insecure"] is False
+    for compose in (tmp_path / "docker-compose.yml",):
+        ports = yaml.safe_load(compose.read_text())["services"]["headscale"]["ports"]
+        assert ports == ["127.0.0.1:${HEADSCALE_SERVER_PORT}:8080"]
+    # The service an older compose gets added (abi deploy local --with-headscale).
+    from naas_abi_cli.cli.deploy.local import HEADSCALE_DOCKER_COMPOSE_SNIPPET
+
+    snippet = yaml.safe_load("services:" + HEADSCALE_DOCKER_COMPOSE_SNIPPET)[
+        "services"
+    ]["headscale"]
+    assert snippet["ports"] == ["127.0.0.1:${HEADSCALE_SERVER_PORT}:8080"]
+
+
+@pytest.mark.parametrize(
+    "config",
+    [REPO / "config.yaml", REPO / "config.local.yaml"],
+    ids=["root", "root-local"],
+)
+def test_repository_config_keeps_its_administrator_out_of_the_file(
+    config: Path,
+) -> None:
+    from naas_abi_cli.cli.admin_credentials import configured_superadmins
+
+    text = config.read_text()
+    assert "admin@example.com" not in text
+    assert "{{ secret.NEXUS_USER_ADMIN_EMAIL }}" in text
+    assert set(configured_superadmins(text)) <= {"secret:NEXUS_USER_ADMIN_EMAIL"}
+
+
+def test_upgrade_keeps_an_older_headscale_until_it_regenerates(tmp_path: Path) -> None:
+    import click
+
+    (tmp_path / "docker-compose.yml").write_text(
+        "services:\n  headscale:\n    image: docker.io/headscale/headscale:stable\n"
+    )
+    (tmp_path / ".deploy").mkdir()
+    with pytest.raises(click.ClickException, match="headscale has no ACL policy"):
+        setup_local_deploy(
+            str(tmp_path), base_domain="example.com", include_headscale=True, nats=True
+        )

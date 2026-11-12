@@ -56,7 +56,7 @@ abi dev up
 
 ### Web UI
 
-The main interface. Chat with Abi, switch agents, manage your workspace, and access your knowledge graph. Open [http://localhost:3042](http://localhost:3042) and sign in as `admin@example.com` with the code the identity provider emails (no password; `abi dev code` prints it).
+The main interface. Chat with Abi, switch agents, manage your workspace, and access your knowledge graph. Open [http://localhost:3042](http://localhost:3042) and sign in as the platform administrator (`NEXUS_USER_ADMIN_EMAIL` in `.env`, asked for at the first `abi dev up`) with the code the identity provider emails (no password; `abi dev code` prints it).
 
 <div align="center">
   <img src="https://docs.naas.ai/abi/Screenshot_Local_WebUI.png" alt="ABI web UI" width="800">
@@ -199,7 +199,7 @@ nats       http://127.0.0.1:13000  ● ready
 api        http://127.0.0.1:9879   ● ready
 nexus-web  http://127.0.0.1:12000  ● ready
 
-Sign in: admin@example.com, with the emailed code (`abi dev code`)
+Sign in: the platform administrator (`NEXUS_USER_ADMIN_EMAIL`), with the emailed code (`abi dev code`)
 ```
 
 There is no admin password: the built-in identity provider emails a 6-digit code to the address, and in `abi dev` the mail is a file in `storage/email`.

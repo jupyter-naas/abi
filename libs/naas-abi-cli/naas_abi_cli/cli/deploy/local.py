@@ -16,11 +16,13 @@ from rich.prompt import Prompt
 import naas_abi_cli
 
 from ..admin_credentials import (
+    configured_superadmins,
     ensure_data_service_secrets,
     ensure_idp_client_secret,
     ensure_nats_callout_seed,
     ensure_nats_passwords,
     generate_data_service_secret,
+    is_placeholder_address,
 )
 from ..private_dir import keep_out_of_git, private_directory, private_file
 from ..utils.Copier import Copier
@@ -61,7 +63,6 @@ DEFAULT_ENV_VALUES: dict[str, str] = {
     "NEXUS_WEB_IMAGE": "ghcr.io/jupyter-naas/nexus-web",
     "NEXUS_WEB_TAG": "latest",
     "NEXUS_WEB_PORT": "3042",
-    "NEXUS_USER_ADMIN_EMAIL": "admin@example.com",
     "HEADSCALE_SERVER_URL": "headscale.localhost",
     "HEADSCALE_SERVER_PORT": "8083",
     "HEADSCALE_METRICS_PORT": "9090",
@@ -90,11 +91,11 @@ HEADSCALE_DOCKER_COMPOSE_SNIPPET = """
     restart: unless-stopped
     command: ["server"]
     ports:
-      - ${HEADSCALE_SERVER_PORT}:8080
-      - ${HEADSCALE_METRICS_PORT}:9090
-      - ${HEADSCALE_GRPC_PORT}:50443
+      # Clients reach it through Caddy; metrics and gRPC stay in the container.
+      - 127.0.0.1:${HEADSCALE_SERVER_PORT}:8080
     volumes:
       - ./.deploy/docker/headscale/config.yaml:/etc/headscale/config.yaml:ro
+      - ./.deploy/docker/headscale/acl.hujson:/etc/headscale/acl.hujson:ro
       - ./.deploy/docker/headscale/extra-records.json:/var/lib/headscale/extra-records.json:ro
       - headscale_data:/var/lib/headscale
       - headscale_run:/var/run/headscale
@@ -123,6 +124,11 @@ def _copy_headscale_templates(deploy_path: str, values: dict[str, object]) -> No
     headscale_extra_records_path = os.path.join(
         deploy_path, "docker/headscale/extra-records.json"
     )
+    if not os.path.exists(os.path.join(deploy_path, "docker/headscale/acl.hujson")):
+        raise FileNotFoundError(
+            "Missing rendered Headscale ACL policy (docker/headscale/acl.hujson). "
+            "Ensure the naas-abi-cli package includes the local deploy headscale templates."
+        )
     if not os.path.exists(headscale_config_path):
         raise FileNotFoundError(
             f"Missing rendered Headscale config at {headscale_config_path}. "
@@ -599,6 +605,43 @@ _OLD_MONITORING_URL = re.compile(
 )
 
 
+def _configured_admin(project_path: str) -> str:
+    """The first superadmin of the project's config.local.yaml, else ""."""
+    path = os.path.join(project_path, "config.local.yaml")
+    if not os.path.exists(path):
+        return ""
+    with open(path, "r", encoding="utf-8") as config_file:
+        admins = configured_superadmins(config_file.read())
+    return admins[0] if admins else ""
+
+
+def refuse_placeholder_admins(project_path: str) -> None:
+    """Refuse to deploy a project whose config.local.yaml makes an address that
+    receives no mail its platform administrator: nobody would get its sign-in
+    codes, and every such project would share it."""
+    path = os.path.join(project_path, "config.local.yaml")
+    if not os.path.exists(path):
+        return
+    with open(path, "r", encoding="utf-8") as config_file:
+        admins = configured_superadmins(config_file.read())
+    placeholders = [email for email in admins if is_placeholder_address(email)]
+    if placeholders:
+        edits = "\n".join(
+            f'  - email: "{email}"  ->  - email: "<the administrator\'s address>"\n'
+            f'    owner_email: "{email}"  ->  owner_email: "<the administrator\'s address>"'
+            for email in placeholders
+        )
+        raise click.ClickException(
+            f"config.local.yaml makes {', '.join(placeholders)} a platform "
+            "administrator: that address receives no mail, so nobody would get its "
+            "sign-in codes. In config.local.yaml, under the Nexus module's "
+            "`nexus_config:`, replace it everywhere (`users:` and each "
+            "`owner_email:`):\n"
+            + edits
+            + "\nthen run the command again. `abi dev` keeps accepting it."
+        )
+
+
 def upgrade_data_service_config(text: str) -> str:
     """``text`` (a config) with the stack's Redis password, Qdrant API key and
     NATS monitoring address, where it has the lines older projects shipped."""
@@ -631,6 +674,8 @@ def outdated_stack(compose_text: str) -> list[str]:
         missing.append("the broker has no nats-monitor network")
     if "\n  coder:\n" in compose_text and "coder-owner" not in compose_text:
         missing.append("coding workspaces and CI jobs have no networks of their own")
+    if "\n  headscale:\n" in compose_text and "acl.hujson" not in compose_text:
+        missing.append("headscale has no ACL policy mounted")
     return missing
 
 
@@ -681,8 +726,12 @@ def setup_local_deploy(
     regenerate: bool = False,
     backup: bool = True,
     nats: bool | None = None,
+    admin_email: str | None = None,
 ) -> None:
     """Render the docker-compose stack into ``project_path``.
+
+    ``admin_email`` is the platform administrator (`abi new project` asks
+    for it); by default, the superadmin of the project's config.local.yaml.
 
     ``nats`` picks the stack: True runs the engine on the `nats` service (no
     RabbitMQ, no Dagster), False keeps the classic stack. None (``abi deploy
@@ -749,6 +798,7 @@ def setup_local_deploy(
         "DISCOVERY_PROJECT": _discovery_project(project_path),
         "CODING_WORKSPACE_DOCKER_NETWORK": coding_network,
         "CODING_CI_DOCKER_NETWORK": ci_network,
+        "NEXUS_USER_ADMIN_EMAIL": admin_email or _configured_admin(project_path),
         "POSTGRES_PASSWORD": str(uuid4()),
         "MINIO_ROOT_PASSWORD": str(uuid4()),
         "RABBITMQ_PASSWORD": str(uuid4()),

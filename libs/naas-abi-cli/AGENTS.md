@@ -109,13 +109,15 @@ only.
 ### Signing in during development
 
 Nexus signs people in at an identity provider, so a fresh project has no password.
-`abi dev up` prints how to sign in as `admin@example.com` (`ADMIN_EMAIL`, the account
-`users:` of the Nexus configuration seeds: the API makes it exist at the built-in
-provider when it starts, and its first sign-in links it). In dev the email adapter writes
+`abi dev up` prints how to sign in as the platform administrator: the superadmin
+`users:` of the Nexus configuration seeds, the address `abi new project --admin-email`
+asked for (this repository's configs read it from `NEXUS_USER_ADMIN_EMAIL` in `.env`, which
+`abi dev up` and `abi stack start` ask for once). The API makes it exist at the built-in
+provider when it starts, and its first sign-in links it. In dev the email adapter writes
 messages to `storage/email`, so the 6-digit code is one command away:
 
 ```bash
-abi dev code                          # the newest code mailed to admin@example.com
+abi dev code                          # the newest code mailed to the administrator
 abi dev code --email bob@example.com  # an address; --email "" for anyone's
 ```
 
@@ -297,3 +299,24 @@ Consequences:
   keeps the rest of the Docker API from it.
 - Tests: `deploy/coding_stack_test.py`; the route's in
   `coding_environment__primary_adapter__FastAPI_test.py`.
+
+## Decision: the platform administrator and the tailnet
+
+Decision:
+
+- `abi new project` asks for the platform administrator's address (`--admin-email`) and
+  writes it into `config.yaml` and `config.local.yaml` (`users:`, `owner_email`). An
+  address whose domain receives no mail (`example.com`, `.test`, `.invalid`, ...,
+  `is_placeholder_address`) is accepted with a warning: it works with `abi dev`, where
+  codes are files. `abi deploy local` and `abi deploy dokploy` refuse a config that makes
+  one a superadmin (`refuse_placeholder_admins`), and the Nexus API logs a warning at
+  start for each (`org_seed.warn_on_placeholder_superadmins`).
+- The headscale `abi deploy local --with-headscale` renders applies `acl.hujson`, which
+  allows no connection until rules are added; its metrics listen on the container's
+  loopback, its gRPC admin API on loopback without plaintext (the CLI uses the unix
+  socket), and only its HTTP port is published, on 127.0.0.1, behind Caddy.
+
+Consequences:
+
+- Scripts that run `abi new project` pass `--admin-email` (`scripts/cli_smoke.sh`).
+- Tests: `new/project_test.py`, `deploy/local_test.py`, `deploy/stack_access_test.py`.

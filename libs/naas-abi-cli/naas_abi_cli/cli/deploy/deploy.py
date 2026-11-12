@@ -13,7 +13,12 @@ from rich.console import Console
 from rich.markdown import Markdown
 
 from .dokploy import DokployDeployError, setup_dokploy_deploy
-from .local import ensure_legacy_extras, project_uses_nats, setup_local_deploy
+from .local import (
+    ensure_legacy_extras,
+    project_uses_nats,
+    refuse_placeholder_admins,
+    setup_local_deploy,
+)
 
 
 @click.group("deploy")
@@ -279,6 +284,7 @@ def local_deploy(
     extras they need added to its pyproject.toml.
     """
     project_path = os.getcwd()
+    refuse_placeholder_admins(project_path)
     setup_local_deploy(
         project_path,
         include_headscale=headscale,
@@ -337,6 +343,7 @@ def dokploy_deploy(
             "--headscale is not supported on Dokploy yet: deploy Headscale "
             "separately, or use `abi deploy local --headscale`."
         )
+    refuse_placeholder_admins(os.getcwd())
     try:
         setup_dokploy_deploy(
             os.getcwd(),

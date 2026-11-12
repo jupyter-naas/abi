@@ -545,3 +545,18 @@ def test_a_workspace_seeded_without_a_name_is_named_after_its_slug(
 
     created = session.add.call_args.args[0]
     assert (created.slug, created.name, created.owner_id) == ("valeo", "valeo", "user-1")
+
+
+def test_start_keeps_a_warning_for_a_superadmin_that_receives_no_mail(caplog) -> None:
+    users = [
+        UserSeedConfig(email="admin@example.com", name="Admin", is_superadmin=True),
+        UserSeedConfig(email="ops@company.dev", name="Ops", is_superadmin=True),
+        UserSeedConfig(email="root@mail.example.com", name="Root", is_superadmin=True),
+        UserSeedConfig(email="dev@example.org", name="Dev"),
+    ]
+    with caplog.at_level("WARNING"):
+        found = org_seed.warn_on_placeholder_superadmins(users)
+    assert found == ["admin@example.com", "root@mail.example.com"]
+    assert "admin@example.com" in caplog.text
+    assert "ops@company.dev" not in caplog.text
+    assert "dev@example.org" not in caplog.text  # not a superadmin

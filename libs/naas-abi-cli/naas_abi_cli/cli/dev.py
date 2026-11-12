@@ -64,7 +64,10 @@ from rich.table import Table
 from rich.text import Text
 
 from naas_abi_cli.cli.admin_credentials import (
+    ADMIN_ADDRESS_ENV,
     ADMIN_EMAIL,
+    configured_superadmins,
+    ensure_admin_email,
     ensure_api_key,
     ensure_idp_client_secret,
     ensure_nats_callout_seed,
@@ -1577,6 +1580,22 @@ class _KeyboardReader:
 RECENT_DUMP_LINES = 30
 
 
+def _admin_address() -> str:
+    """The platform administrator of the project's config.yaml (the first
+    superadmin), read from .env when the config names it as a secret."""
+    config = _project_root() / "config.yaml"
+    admins = configured_superadmins(config.read_text()) if config.exists() else []
+    for email in admins:
+        if email.startswith("secret:"):
+            env = _project_root() / ".env"
+            for line in env.read_text().splitlines() if env.exists() else []:
+                if line.startswith(email[len("secret:") :] + "="):
+                    return line.split("=", 1)[1].strip()
+            continue
+        return email
+    return ADMIN_EMAIL
+
+
 def _sign_in_hint(ports: dict[str, int]) -> list[str]:
     """How to sign in to a fresh stack: Nexus has no password. The built-in
     identity provider mails a code to the address, and in dev the mail is a file."""
@@ -1584,7 +1603,7 @@ def _sign_in_hint(ports: dict[str, int]) -> list[str]:
     where = f"http://{BROWSER_HOST}:{web}" if web else _api_origin(ports)
     return [
         (
-            f"Sign in: {where} as {ADMIN_EMAIL}. The identity provider mails a sign-in "
+            f"Sign in: {where} as {_admin_address()}. The identity provider mails a sign-in "
             "code to that address; in dev the mail is a file in storage/email."
         ),
         "Print the code: `abi dev code`",
@@ -2173,6 +2192,11 @@ def dev_up(
     config_overlay: Path | None = None
     _ensure_default_api_key_env()
     _ensure_project_nats_env()
+    # A config that reads its platform administrator from .env (the ABI
+    # repository's own): asked for once, kept there.
+    config = _project_root() / "config.yaml"
+    if config.exists() and f"secret.{ADMIN_ADDRESS_ENV}" in config.read_text():
+        ensure_admin_email(_project_root() / ".env")
     # The built-in IdP, the default identity provider in NATS mode: its client
     # secret is generated into .env (the engine's config reads it from there),
     # and a project that names no provider gets it through the overlay.
@@ -2305,13 +2329,16 @@ def dev_up(
 @dev.command("code")
 @click.option(
     "--email",
-    default=ADMIN_EMAIL,
-    show_default=True,
-    help="The address the code was mailed to; empty for anyone's.",
+    default=None,
+    help="The address the code was mailed to (default: the config's platform "
+    "administrator); empty for anyone's.",
 )
-def dev_code(email: str) -> None:
+def dev_code(email: str | None) -> None:
     """Print the newest sign-in code the identity provider mailed (dev mail is a file)."""
     from naas_abi_cli.cli.dev_mail import latest_sign_in_code
+
+    if email is None:
+        email = _admin_address()
 
     directory = _project_root() / "storage" / "email"
     found = latest_sign_in_code(directory, email or None)

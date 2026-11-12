@@ -125,7 +125,7 @@ modules:
         # A: List seed users here. They are made at the built-in identity provider, which
         #    mails each a sign-in code; there is no password.
         users:
-          - email: "admin@example.com"
+          - email: "{{ secret.NEXUS_USER_ADMIN_EMAIL }}"
             name: "Local Admin"
           - email: "member@example.com"
             name: "Local Member"
@@ -137,18 +137,18 @@ modules:
         organizations:
           - name: "ABI"
             slug: "abi"
-            owner_email: "admin@example.com"
+            owner_email: "{{ secret.NEXUS_USER_ADMIN_EMAIL }}"
             primary_color: "#34D399"
             accent_color: "#34D399"
             workspaces:
               - name: "Primary"
                 slug: "primary"
-                owner_email: "admin@example.com"
+                owner_email: "{{ secret.NEXUS_USER_ADMIN_EMAIL }}"
                 primary_color: "#34D399"
                 accent_color: "#34D399"
               - name: "Secondary"
                 slug: "secondary"
-                owner_email: "admin@example.com"
+                owner_email: "{{ secret.NEXUS_USER_ADMIN_EMAIL }}"
                 primary_color: "#34D399"
                 accent_color: "#34D399"
 

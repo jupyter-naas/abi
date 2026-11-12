@@ -104,26 +104,26 @@ modules:
             cta_url: "https://naas.ai/enterprise"
             enterprise_categories: ["domain"]
         users:
-          - email: "admin@example.com"
+          - email: "{{ secret.NEXUS_USER_ADMIN_EMAIL }}"
             name: "Dev Admin"
             is_superadmin: true
         organizations:
           - name: "Dev"
             slug: "dev"
-            owner_email: "admin@example.com"
+            owner_email: "{{ secret.NEXUS_USER_ADMIN_EMAIL }}"
             workspaces:
               - name: "Default"
                 slug: "default"
-                owner_email: "admin@example.com"
+                owner_email: "{{ secret.NEXUS_USER_ADMIN_EMAIL }}"
               - name: "Alpha"
                 slug: "alpha"
-                owner_email: "admin@example.com"
+                owner_email: "{{ secret.NEXUS_USER_ADMIN_EMAIL }}"
               - name: "Beta"
                 slug: "beta"
-                owner_email: "admin@example.com"
+                owner_email: "{{ secret.NEXUS_USER_ADMIN_EMAIL }}"
               - name: "Gamma"
                 slug: "gamma"
-                owner_email: "admin@example.com"
+                owner_email: "{{ secret.NEXUS_USER_ADMIN_EMAIL }}"
   
   - module: naas_abi_marketplace.ai.chatgpt
     enabled: true

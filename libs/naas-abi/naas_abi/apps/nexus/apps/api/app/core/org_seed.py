@@ -156,9 +156,44 @@ async def _ensure_workspace_member(
     _declare_role(user_id, role, workspace_container(organization_id, workspace_id))
 
 
+# Domains that receive no mail (RFC 2606, RFC 6761, mDNS).
+_PLACEHOLDER_DOMAINS = frozenset({"example.com", "example.net", "example.org", "localhost"})
+_PLACEHOLDER_SUFFIXES = (".example", ".invalid", ".test", ".localhost", ".local")
+
+
+def is_placeholder_address(email: str) -> bool:
+    """Whether ``email``'s domain receives no mail: the identity provider's
+    sign-in codes for it reach nobody."""
+    domain = email.rsplit("@", 1)[-1].strip().lower().rstrip(".")
+    # The reserved domains and every name under them (mail.example.com).
+    return domain.endswith(_PLACEHOLDER_SUFFIXES) or any(
+        domain == reserved or domain.endswith("." + reserved)
+        for reserved in _PLACEHOLDER_DOMAINS
+    )
+
+
+def warn_on_placeholder_superadmins(users: list[Any]) -> list[str]:
+    """Log a warning for each configured superadmin whose address receives no
+    mail, and return them."""
+    found = [
+        str(user.email)
+        for user in users
+        if user.is_superadmin and is_placeholder_address(str(user.email))
+    ]
+    for email in found:
+        logger.warning(
+            "users: makes %s a platform administrator, an address that receives "
+            "no mail: nobody gets its sign-in codes. Put the administrator's own "
+            "address in the configuration.",
+            email,
+        )
+    return found
+
+
 async def _upsert_users(session: AsyncSession) -> dict[str, UserModel]:
     users_by_email: dict[str, UserModel] = {}
     now = datetime.now(UTC).replace(tzinfo=None)
+    warn_on_placeholder_superadmins(list(settings.users))
 
     for user_cfg in settings.users:
         normalized_email = _normalize_email(str(user_cfg.email))

@@ -547,7 +547,8 @@ def test_setup_local_deploy_makes_no_admin_password(tmp_path: Path) -> None:
     setup_local_deploy(str(tmp_path), base_domain="localhost")
 
     values = _env_values(tmp_path / ".env")
-    assert values["NEXUS_USER_ADMIN_EMAIL"] == "admin@example.com"
+    # No config.local.yaml here to read the administrator from.
+    assert values["NEXUS_USER_ADMIN_EMAIL"] == ""
     # The admin signs in at the identity provider with a mailed code.
     assert not [
         key for key in values if key.startswith("NEXUS_USER_") and "PASSWORD" in key
@@ -572,7 +573,8 @@ def test_regenerating_does_not_bring_a_password_back(tmp_path: Path) -> None:
     )
 
     values = _env_values(tmp_path / ".env")
-    assert values["NEXUS_USER_ADMIN_EMAIL"] == "admin@example.com"
+    # No config.local.yaml here to read the administrator from.
+    assert values["NEXUS_USER_ADMIN_EMAIL"] == ""
     assert "NEXUS_USER_ADMIN_PASSWORD" not in values
     assert "NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD" not in values
 

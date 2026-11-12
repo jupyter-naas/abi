@@ -6,14 +6,14 @@ server_url: https://{{ HEADSCALE_SERVER_URL }}:443
 # Address to listen to / bind to on the server.
 listen_addr: 0.0.0.0:8080
 
-# Address to listen to /metrics and /debug.
-metrics_listen_addr: 0.0.0.0:9090
+# Address to listen to /metrics and /debug: the container's loopback only
+# (`docker compose exec headscale wget -qO- http://127.0.0.1:9090/metrics`).
+metrics_listen_addr: 127.0.0.1:9090
 
-# Address to listen for gRPC.
-grpc_listen_addr: 0.0.0.0:50443
-
-# Allow the gRPC admin interface to run in insecure mode for local deploy.
-grpc_allow_insecure: true
+# The gRPC admin API: the container's loopback, and never without TLS. The
+# `headscale` CLI in the container uses the unix socket below.
+grpc_listen_addr: 127.0.0.1:50443
+grpc_allow_insecure: false
 
 # TS2021 Noise protocol configuration.
 noise:
@@ -62,8 +62,9 @@ policy:
   # The mode can be "file" or "database".
   mode: file
 
-  # If mode is "file", this points to the ACL policy file.
-  path: ""
+  # If mode is "file", this points to the ACL policy file. acl.hujson, next
+  # to this file, denies every connection between nodes until it lists one.
+  path: /etc/headscale/acl.hujson
 
 dns:
   # Whether to use MagicDNS.

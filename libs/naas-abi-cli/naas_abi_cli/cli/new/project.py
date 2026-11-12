@@ -9,10 +9,11 @@ import click
 
 import naas_abi_cli
 from naas_abi_cli.cli.admin_credentials import (
-    ADMIN_EMAIL,
     ensure_idp_client_secret,
     ensure_nats_callout_seed,
     ensure_nats_passwords,
+    is_email_address,
+    is_placeholder_address,
 )
 from naas_abi_cli.cli.deploy.local import (
     LEGACY_EXTRAS,
@@ -130,13 +131,28 @@ def _cd_argument(project_path: str) -> str:
     return shlex.quote(relative)
 
 
-def _print_next_steps(project_path: str, nats: bool) -> None:
+def _admin_email(ctx: click.Context, param: click.Parameter, value: str) -> str:
+    value = (value or "").strip()
+    if not is_email_address(value):
+        raise click.BadParameter(f"{value!r} is not an email address")
+    if is_placeholder_address(value):
+        click.secho(
+            f"{value} receives no mail: it works with `abi dev` (codes are files "
+            "in storage/email), and `abi deploy` refuses it. Change it in "
+            "config.local.yaml (`users:`) before deploying.",
+            fg="yellow",
+            err=True,
+        )
+    return value
+
+
+def _print_next_steps(project_path: str, nats: bool, admin_email: str) -> None:
     """Report where the project landed and how to start it."""
     click.echo()
     click.secho(f"✓ Project created at {project_path}", fg="green", bold=True)
     click.echo()
     click.echo(
-        f"Admin: {ADMIN_EMAIL} signs in with the code the identity provider mails to "
+        f"Admin: {admin_email} signs in with the code the identity provider mails to "
         "that address (`abi dev code` prints it)."
     )
     click.echo()
@@ -219,6 +235,17 @@ def _print_next_steps(project_path: str, nats: bool) -> None:
         "Threaded into local deploy when --with-local-deploy is enabled."
     ),
 )
+@click.option(
+    "--admin-email",
+    prompt="Platform administrator's email address",
+    callback=_admin_email,
+    help=(
+        "The platform administrator (superadmin, owner of the seeded "
+        "organization and workspace), who signs in with the codes mailed to "
+        "it. `abi deploy` refuses an address that receives no mail "
+        "(example.com, .test, .invalid, ...)."
+    ),
+)
 def new_project(
     project_name: str | None,
     project_path: str | None,
@@ -229,6 +256,7 @@ def new_project(
     abi_source: str,
     with_nats: bool,
     base_domain: str,
+    admin_email: str,
 ):
     if with_nats and not with_abi_submodule:
         raise click.UsageError(NATS_NEEDS_SUBMODULE)
@@ -286,6 +314,7 @@ def new_project(
             "include_coding": with_coding,
             "use_local_abi_sources": abi_submodule_added,
             "nats": with_nats,
+            "admin_email": admin_email,
         }
     )
 
@@ -307,6 +336,7 @@ def new_project(
             include_coding=with_coding,
             base_domain=base_domain,
             nats=with_nats,
+            admin_email=admin_email,
         )
 
     env_path = Path(project_path) / ".env"
@@ -360,4 +390,4 @@ def new_project(
             "project's .env (or export it), then run `abi config validate` there."
         ) from exc
 
-    _print_next_steps(project_path, with_nats)
+    _print_next_steps(project_path, with_nats, admin_email)

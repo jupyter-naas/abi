@@ -147,3 +147,26 @@ def test_rabbitmq_credentials_are_generated_once(tmp_path):
     assert user == "abi" and password != "abi" and len(password) >= 24
     assert ensure_rabbitmq_credentials(env) == (user, password)
     assert _env(env)["RABBITMQ_PASSWORD"] == password
+
+
+@pytest.mark.parametrize(
+    "email, placeholder",
+    [
+        ("admin@example.com", True),
+        ("admin@mail.example.com", True),
+        ("admin@a.b.example.org", True),
+        ("admin@example.net", True),
+        ("dev@abi.test", True),
+        ("dev@host.invalid", True),
+        ("root@localhost", True),
+        ("ops@acme.dev", False),
+        ("ops@notexample.com", False),
+        ("ops@example.com.au", False),
+    ],
+)
+def test_placeholder_address_keeps_reserved_names_and_their_subdomains(
+    email: str, placeholder: bool
+) -> None:
+    from naas_abi_cli.cli.admin_credentials import is_placeholder_address
+
+    assert is_placeholder_address(email) is placeholder
