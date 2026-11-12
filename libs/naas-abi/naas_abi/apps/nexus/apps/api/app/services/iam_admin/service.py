@@ -610,6 +610,23 @@ class IamAdminService:
             validate_scope(scope)
 
         def attach(session: IIAMService) -> dict[str, Any]:
+            # A user is given a role or a policy at a container only once related
+            # to it (a membership, an accepted invitation), unless the caller may
+            # attach it unscoped (the platform admin); anyone else is invited. An
+            # unrelated user is answered as an unknown one. Asked only of a
+            # caller who may attach there: anyone else gets IAM's own refusal,
+            # whoever the principal is.
+            if (
+                scope is not None
+                and session.authorize(
+                    "iam:AttachPolicy", attachment_resource(policy_id, principal_id, scope)
+                ).allowed
+                and not self._gateway.belongs(principal_id, scope)
+                and not session.authorize(
+                    "iam:AttachPolicy", attachment_resource(policy_id, principal_id, None)
+                ).allowed
+            ):
+                raise IAMNotFoundError("Policy or principal not found")
             attachment = session.attach_policy(policy_id, principal_id, scope)
             policy = self._gateway.policy(policy_id)
             return views.attachment_view(

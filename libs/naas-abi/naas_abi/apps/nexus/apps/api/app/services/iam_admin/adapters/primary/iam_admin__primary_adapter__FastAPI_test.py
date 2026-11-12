@@ -329,6 +329,20 @@ def _principal_id(world, user: str) -> str:
 def test_an_org_admin_attaches_roles_in_their_org_only(world):
     member = _principal_id(world, "stranger")
     scope = org_container("org-1")
+    # Not related to org-1 yet: answered as an unknown principal, with no
+    # profile, and nothing is attached (such a user is invited instead).
+    unrelated = post(
+        world, "/attachments", "admin", policy_id="builtin.viewer", principal_id=member, scope=scope
+    )
+    assert unrelated.status_code == 404
+    assert "principal" not in unrelated.json()
+    assert not [
+        a
+        for a in get(world, f"/attachments?scope={scope}", "admin").json()["items"]
+        if a["principal_id"] == member
+    ]
+    # Related to it (a membership of one of its workspaces): attached.
+    world.nexus.grant("stranger", "viewer", world.nexus.workspace("org-1", "ws-related"))
     attached = post(
         world, "/attachments", "admin", policy_id="builtin.viewer", principal_id=member, scope=scope
     )
@@ -369,6 +383,23 @@ def test_an_org_admin_attaches_roles_in_their_org_only(world):
         headers=as_("admin"),
     )
     assert again.status_code == 404
+
+
+def test_attach_keeps_membership_from_who_may_not_attach(world):
+    """A caller who may not attach there gets the same answer for a principal
+    related to the org and for one that is not: nothing tells them apart."""
+    related = _principal_id(world, "related")
+    world.nexus.grant("related", "viewer", world.nexus.workspace("org-1", "ws-rel"))
+    unrelated = _principal_id(world, "unrelated")
+    scope = org_container("org-1")
+    answers = [
+        post(
+            world, "/attachments", "member", policy_id="builtin.viewer", principal_id=p, scope=scope
+        )
+        for p in (related, unrelated)
+    ]
+    assert answers[0].status_code == answers[1].status_code
+    assert answers[0].status_code in (403, 404)
 
 
 def test_a_member_attaches_nothing(world):
@@ -935,9 +966,10 @@ def test_a_workspace_admin_manages_its_own_policies_and_groups(world, ws2):
     assert added.status_code == 200, added.text
     assert [m["id"] for m in added.json()["members"]] == [colleague]
 
-    # Users of another org and service accounts never join.
+    # Users of another org and service accounts never join; another org's user is
+    # answered as an unknown principal.
     outsider = _principal_id(world, "outsider")
-    assert put(world, f"/groups/{group['id']}/members/{outsider}", "ws2admin").status_code == 422
+    assert put(world, f"/groups/{group['id']}/members/{outsider}", "ws2admin").status_code == 404
     with as_service_account("engine"):
         account = world.nexus.iam.create_service_account("ci/nightly")
     assert put(world, f"/groups/{group['id']}/members/{account.id}", "ws2admin").status_code == 422

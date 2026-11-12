@@ -772,18 +772,23 @@ class Uncovered:
 class Holdings:
     sides: Sequence[Side]
     catalogs: CatalogRegistry
-    _allows: dict[tuple[int, str], tuple[str, ...]] = field(default_factory=dict)
+    _allows: dict[tuple[int, str, bool], tuple[str, ...]] = field(default_factory=dict)
     _denies: dict[tuple[int, str], tuple[tuple[str, str | None], ...]] = field(
         default_factory=dict
     )
 
     # -- what one side holds for one action ------------------------------------
 
-    def _allowed(self, index: int, action: str) -> tuple[str, ...]:
-        key = (index, action)
+    def _allowed(
+        self, index: int, action: str, *, on_containers: bool
+    ) -> tuple[str, ...]:
+        """What side ``index`` holds ``action`` on, for the names of one of its
+        types: ``on_containers``, a container type's, which a ``${scope}``
+        held below a container reaches (``containers_only``); never another
+        type's, even of an action on both."""
+        key = (index, action, on_containers)
         if key not in self._allows:
             side = self.sides[index]
-            on_containers = self._on_containers(action)
             platform_own = self._on_platform_own(action)
             self._allows[key] = (
                 tuple(
@@ -847,16 +852,22 @@ class Holdings:
         exist, each container only in the containers its catalog names (no
         organisation in a workspace), for asking what a pattern may name rather
         than what a grant must cover."""
+        return [u for u, _container in self._typed_universes(action, existing=existing)]
+
+    def _typed_universes(
+        self, action: str, *, existing: bool = False
+    ) -> list[tuple[Universe, bool]]:
+        """``_universes``, each with whether it is a container type's."""
         try:
             service, name = split_action(action)
         except ValueError:
-            return [EVERYTHING]
+            return [(EVERYTHING, False)]
         catalog = self.catalogs.get(service)
         if catalog is None and service in UNCATALOGUED:
-            return [UNCATALOGUED[service][1]]
+            return [(UNCATALOGUED[service][1], False)]
         spec = catalog.action(name) if catalog is not None else None
         if spec is None or not spec.resource_types:
-            return [EVERYTHING]
+            return [(EVERYTHING, False)]
         containers = self.catalogs.container_types()
         nesting = (
             frozenset(
@@ -869,13 +880,16 @@ class Holdings:
             else frozenset()
         )
         return [
-            universe(
-                service,
-                t,
-                containers,
-                declared.parents if declared else (),
-                nesting,
-                existing and declared is not None and declared.id != "path",
+            (
+                universe(
+                    service,
+                    t,
+                    containers,
+                    declared.parents if declared else (),
+                    nesting,
+                    existing and declared is not None and declared.id != "path",
+                ),
+                self.catalogs.is_container(service, t),
             )
             for t in spec.resource_types
             for declared in [catalog.resource_type(t) if catalog is not None else None]
@@ -957,7 +971,7 @@ class Holdings:
                     bounds = _chain_bounds(parents, action, scope)
                     if bounds is None:
                         continue  # the chain allows it nowhere: not granted
-                    universes = self._universes(action)
+                    universes = self._typed_universes(action)
                     for grant in grants:
                         try:
                             reason = self._refusal(action, grant, universes, bounds)
@@ -973,16 +987,24 @@ class Holdings:
         self,
         action: str,
         grant: str,
-        universes: list[Universe],
+        universes: list[tuple[Universe, bool]],
         bounds: Bounds = (),
     ) -> str | None:
         for index, side in enumerate(self.sides):
-            allowed = self._allowed(index, action)
-            if not all(covered(grant, allowed, u, bounds) for u in universes):
+            # Each type's names, against what is held for that type.
+            if not all(
+                covered(
+                    grant,
+                    self._allowed(index, action, on_containers=container),
+                    u,
+                    bounds,
+                )
+                for u, container in universes
+            ):
                 return side.lacks
         for index in range(len(self.sides)):
             for pattern, policy_id in self._denied(index, action):
-                if any(overlaps(grant, (pattern,), u, bounds) for u in universes):
+                if any(overlaps(grant, (pattern,), u, bounds) for u, _c in universes):
                     return (
                         f"a Deny of policy {policy_id} refuses {shown(pattern)}"
                         if policy_id
@@ -1031,11 +1053,16 @@ class Holdings:
     ) -> GrantableAction | None:
         if not self.sides:
             return None
-        universes = self._universes(action)
+        typed = self._typed_universes(action)
+        universes = [u for u, _container in typed]
         denies = [
             d for i in range(len(self.sides)) for d, _policy in self._denied(i, action)
         ]
         on_containers = self._on_containers(action)
+        # What is held below a container on ``${scope}`` alone counts for the
+        # containers under it, so it is offered only for an action on
+        # container types alone.
+        containers_only = bool(typed) and all(c for _u, c in typed)
 
         def keeps(restricted: str) -> bool:
             if (restricted == scope or on_containers) and not any(
@@ -1046,9 +1073,9 @@ class Holdings:
                 # that does not sit in this one (its ``parents``).
                 return False
             if not all(
-                covered(restricted, self._allowed(i, action), u)
+                covered(restricted, self._allowed(i, action, on_containers=c), u)
                 for i in range(1, len(self.sides))
-                for u in universes
+                for u, c in typed
             ):
                 return False
             return not (
@@ -1058,7 +1085,9 @@ class Holdings:
         kept: list[str] = []
         excluded: set[str] = set()
         for restricted in (
-            r for pattern in self._allowed(0, action) for r in _restrict(pattern, scope)
+            r
+            for pattern in self._allowed(0, action, on_containers=containers_only)
+            for r in _restrict(pattern, scope)
         ):
             if restricted not in kept and keeps(restricted):
                 kept.append(restricted)

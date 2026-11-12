@@ -182,7 +182,8 @@ attachments `att_`). Ids never change and are never reused.
   container holds only **users of its top container** (the first step of its owner's
   path: an organisation for its workspaces' groups): users with an attachment of their
   own at that container or below it. Service accounts never join one: a module's account
-  is approved by its manifest. A user whose last attachment within that top container is
+  is approved by its manifest. A user of no relation to it is answered as an unknown
+  principal (`IAMNotFoundError`), so adding one tells nothing of who exists elsewhere. A user whose last attachment within that top container is
   detached (`detach_policy`, or `delete_container` of the container it was at) leaves
   the groups owned within it. Platform groups take any user or service account.
 - **Where it is attached.** A group owned by a container receives attachments only at
@@ -1410,6 +1411,21 @@ through the SDK, the CLI and Nexus alike.
 
 Attaching what is attached already, inviting again, binding again or adding a member a
 group holds grants nothing new and is not checked.
+
+**Removing a restriction.** `detach_policy`, `revoke_pending_grant` and
+`unbind_idp_group` of a customer policy holding a Deny are decided like attaching it there
+(`IAMService._require_lift`: `iam:AttachPolicy` on the attachment, holding what its Allows
+give), and the principal it restricts (the caller, or a group the caller is in, stored or in
+its token; for an invitation, the caller's own provider and email) never removes it unless
+it may attach it unscoped (the platform admin). A built-in or managed policy's Denies come
+with its own Allows, which leave with it: `iam:DetachPolicy` alone decides those.
+
+**Held below a container.** A `${scope}` held below a container (`<container>/*`) reaches
+each container under it, as the evaluator reads it, and nothing else: it counts for the
+names of an action's container types only (`Holdings._allowed(on_containers=)`), never for
+another type of the same action, so a grant on `${scope}/<type>/*` of a non-container type
+needs a holding of its own. `grantable` offers it only for an action on container types
+alone.
 
 **The rule.** Take each Allow statement of the grant at the scope (`${scope}` filled; at a
 scope, `policy.within_scope` applied first). Every action it matches must be allowed to the

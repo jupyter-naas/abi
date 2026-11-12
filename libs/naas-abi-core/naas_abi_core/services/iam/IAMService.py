@@ -1502,6 +1502,10 @@ class IAMService(IIAMService, PolicySource):
         group = self._require_group("iam:DeleteGroup", group_id)
         if group.status == "deleted":
             return group
+        # Deleting it removes what is attached to it, its Denies included.
+        self._require_lift_attachments(
+            group_id, group_id, restricts_caller=lambda: self._caller_is(group_id)
+        )
         return self._delete_group(group)
 
     def _delete_group(self, group: PrincipalRecord) -> PrincipalRecord:
@@ -1517,7 +1521,10 @@ class IAMService(IIAMService, PolicySource):
         scope (``_require_held``), but for the companions IAM keeps in step with
         the group's roles (``_companions``): they follow the roles."""
         group = self._require_group("iam:AddGroupMember", group_id)
-        member = self._get_principal(member_id)
+        try:
+            member = self._get_principal(member_id)
+        except IAMNotFoundError:
+            raise IAMNotFoundError(f"Principal {member_id} not found") from None
         if member.kind == "group":
             raise ValueError("Groups cannot contain groups")
         if "deleted" in (group.status, member.status):
@@ -1530,10 +1537,9 @@ class IAMService(IIAMService, PolicySource):
                     "users only (a module's account is approved by its manifest)"
                 )
             if not self._belongs_to(member_id, top):
-                raise ValueError(
-                    f"Group {group_id} belongs to {group.owner_scope}: "
-                    f"{member_id} holds nothing in {top}"
-                )
+                # Answered as for an unknown principal: whether one exists
+                # outside the group's container is not the caller's to learn.
+                raise IAMNotFoundError(f"Principal {member_id} not found")
         if member_id in self.store.list_group_members(group_id):
             return
         attachments = self.store.list_attachments(principal_id=group_id)
@@ -1557,6 +1563,12 @@ class IAMService(IIAMService, PolicySource):
 
     def remove_group_member(self, group_id: str, member_id: str) -> bool:
         self._require_group("iam:RemoveGroupMember", group_id)
+        if member_id in self.store.list_group_members(group_id):
+            # Leaving the group drops what is attached to it for the member, its
+            # Denies included: decided like attaching them to the member.
+            self._require_lift_attachments(
+                group_id, member_id, restricts_caller=lambda: self._is_caller(member_id)
+            )
         removed = self.store.remove_group_member(group_id, member_id)
         if removed:
             self._changed()
@@ -1942,6 +1954,7 @@ class IAMService(IIAMService, PolicySource):
             parent_id=parent_id,
         )
         check_owned_document(updated.document, current.owner_scope)
+        self._require_keeps_own_denies(current, updated)
         attachments = self.store.list_attachments(policy_id=policy_id)
         if not updated.document.confined_to_scope and any(
             a.scope is not None for a in attachments
@@ -2446,7 +2459,9 @@ class IAMService(IIAMService, PolicySource):
             return
         self._require_unscoped_attach(policy_id, principal_id)
 
-    def _require_unscoped_attach(self, policy_id: str, principal_id: str) -> None:
+    def _require_unscoped_attach(
+        self, policy_id: str, principal_id: str, message: str | None = None
+    ) -> None:
         """``iam:AttachPolicy`` on the unscoped attachment: what attaching, at a
         scope, a policy whose chain denies beyond ``${scope}/`` takes."""
         unscoped = attachment_resource(policy_id, principal_id, None)
@@ -2454,11 +2469,147 @@ class IAMService(IIAMService, PolicySource):
             raise PermissionDeniedError(
                 "iam:AttachPolicy",
                 unscoped,
-                message=(
+                message=message
+                or (
                     f"{policy_id} denies beyond ${{scope}}, so only whoever may "
                     "attach it unscoped (the platform admin) attaches it at a scope"
                 ),
             )
+
+    def _require_lift(
+        self,
+        policy_id: str,
+        grantee: str,
+        scope: str | None,
+        *,
+        restricts_caller: Callable[[], bool],
+    ) -> None:
+        """What removing a customer policy that holds a Deny takes: the same as
+        attaching it there (``iam:AttachPolicy``, and holding what its Allows
+        give), and, when it restricts the caller itself, what attaching it
+        unscoped takes (the platform admin). Removing it widens what its grantee
+        may do, so whoever it was imposed on cannot lift it.
+
+        ``grantee`` is the attachment's principal as its resource names it (a
+        user, a group, an invitee). A built-in or managed policy's Denies come
+        with its own Allows, which go with it: only ``iam:DetachPolicy``
+        decides those. A first-party account acting for no user is not checked.
+        """
+        policy = self._find_policy(policy_id)
+        if policy is None or policy.managed or not self._denies_carried(policy):
+            return
+        ctx = current_call_context()
+        if ctx.on_behalf_of is None and self._first_party(ctx.principal):
+            return
+        self._require_attach(policy_id, grantee, scope)
+        self._require_held(
+            policy.document, [scope], policy_id=policy_id, parents=self._parents(policy)
+        )
+        if restricts_caller():
+            self._require_unscoped_attach(
+                policy_id,
+                grantee,
+                f"{policy_id} restricts you: only whoever may attach it unscoped "
+                "(the platform admin) removes it",
+            )
+
+    def _require_lift_attachments(
+        self, holder_id: str, grantee: str, *, restricts_caller: Callable[[], bool]
+    ) -> None:
+        """``_require_lift`` for each attachment of ``holder_id`` (a group) that
+        the change removes from ``grantee`` (a member, or the group itself)."""
+        for attachment in self.store.list_attachments(principal_id=holder_id):
+            self._require_lift(
+                attachment.policy_id,
+                grantee,
+                attachment.scope,
+                restricts_caller=restricts_caller,
+            )
+
+    def _denies_carried(self, policy: Policy) -> set[Statement]:
+        """The Denies a customer policy imposes on whoever holds it: its own, and
+        those of the customer policies of its chain (a sub-policy's parents),
+        which leave with it. A built-in or managed parent's Denies come with its
+        own Allows, held through its own attachments: not counted."""
+        chain, _whole = self._chain(policy, fresh=True)
+        return {
+            statement
+            for document in (
+                policy.document,
+                *(p.document for p in chain if not p.managed),
+            )
+            for statement in document.statements
+            if statement.effect == "Deny"
+        }
+
+    def _require_keeps_own_denies(self, current: Policy, updated: Policy) -> None:
+        """An edit that drops or changes a Deny a customer policy carries (its
+        own, or its chain's: a new or no parent) is not made by a principal it
+        restricts, unless it may attach the policy unscoped: as for removing it.
+        A policy's Denies reach whoever holds it and whoever holds a policy
+        below it (a sub-policy, at any depth): attached to them, to a group
+        they are in, or waiting for them in an invitation."""
+        if current.managed:
+            return
+        if not self._denies_carried(current) - self._denies_carried(updated):
+            return
+        ctx = current_call_context()
+        if ctx.on_behalf_of is None and self._first_party(ctx.principal):
+            return
+        for held in (current, *(sub for sub, _above in self._below(current.id))):
+            for attachment in self.store.list_attachments(policy_id=held.id):
+                if self._caller_is(attachment.principal_id):
+                    self._refuse_lifting(current.id, attachment.principal_id)
+            for grant in self.store.list_pending_grants(policy_id=held.id):
+                if self._invited_caller(grant):
+                    self._refuse_lifting(
+                        current.id, _invitee(grant.provider, grant.email)
+                    )
+
+    def _refuse_lifting(self, policy_id: str, grantee: str) -> None:
+        self._require_unscoped_attach(
+            policy_id,
+            grantee,
+            f"{policy_id} restricts you: only whoever may attach it unscoped "
+            "(the platform admin) lifts its Denies",
+        )
+
+    def _invited_caller(self, grant: PendingGrant) -> bool:
+        """Whether ``grant`` invites the caller (its provider and email)."""
+        return any(
+            record.provider == grant.provider
+            and (record.email or "").strip().lower() == grant.email
+            for record in self._callers()
+        )
+
+    def _is_caller(self, principal_id: str) -> bool:
+        """Whether ``principal_id`` is the caller itself (its actor or its user)."""
+        return any(principal_id == record.id for record in self._callers())
+
+    def _callers(self) -> list[PrincipalRecord]:
+        """The stored principals the current call is made by: its actor, and the
+        user it acts for."""
+        ctx = current_call_context()
+        found: list[PrincipalRecord] = []
+        for principal in (ctx.principal, ctx.on_behalf_of):
+            if principal is None:
+                continue
+            record = self._resolve(principal)
+            if record is not None:
+                found.append(record)
+        return found
+
+    def _caller_is(self, principal_id: str) -> bool:
+        """Whether ``principal_id`` is the caller, or a group the caller is in
+        (stored, or carried in its token)."""
+        ctx = current_call_context()
+        for principal in (ctx.principal, ctx.on_behalf_of):
+            if principal is not None and principal_id in principal.groups:
+                return True
+        return any(
+            principal_id == record.id or principal_id in self.store.groups_of(record.id)
+            for record in self._callers()
+        )
 
     def _attach(
         self,
@@ -2538,6 +2689,12 @@ class IAMService(IIAMService, PolicySource):
             "iam:DetachPolicy",
             attachment_resource(policy_id, principal_id, scope),
             not_found=lambda: IAMNotFoundError("Attachment not found"),
+        )
+        self._require_lift(
+            policy_id,
+            principal_id,
+            scope,
+            restricts_caller=lambda: self._caller_is(principal_id),
         )
         detached = self.store.detach(policy_id, principal_id, scope)
         if detached:
@@ -3265,6 +3422,12 @@ class IAMService(IIAMService, PolicySource):
             _grant_resource(grant),
             not_found=lambda: IAMNotFoundError("Pending grant not found"),
         )
+        self._require_lift(
+            grant.policy_id,
+            _invitee(grant.provider, grant.email),
+            grant.scope,
+            restricts_caller=lambda: self._invited_caller(grant),
+        )
         removed = self.store.remove_pending_grant(grant_id)
         if removed:
             self._changed()
@@ -3393,6 +3556,13 @@ class IAMService(IIAMService, PolicySource):
         if scope is not None:
             validate_scope(scope)
         self._require_detach_binding(policy_id, provider, claim_value, scope)
+        bound = self._binding_groups(provider, claim_value)
+        self._require_lift(
+            policy_id,
+            _bound_group(provider, claim_value),
+            scope,
+            restricts_caller=lambda: any(self._caller_is(g) for g in bound),
+        )
         # Only the groups bindings made: the caller was authorized for these, not
         # for a hand-made group that maps the same claim.
         removed = False
