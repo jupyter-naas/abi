@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from naas_abi.apps.nexus.apps.api.app.services.agents.port import (
     AgentCreateInput,
     AgentPersistencePort,
@@ -7,6 +9,22 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.port import (
     AgentUpdateInput,
     InferenceServerRecord,
 )
+
+# A model id names one model or one agent on a server, and it is placed in
+# provider URLs: a name, never a path or a query.
+_MODEL_ID = re.compile(r"[A-Za-z0-9@][A-Za-z0-9._:@+/-]{0,199}")
+
+
+def model_id_refusal(value: str | None) -> str | None:
+    """Why ``value`` cannot be an agent's ``model_id``, or None when it can."""
+    if value is None or value == "":
+        return None
+    if not _MODEL_ID.fullmatch(value) or any(part in {"", ".", ".."} for part in value.split("/")):
+        return (
+            "model_id must be a model name: letters, digits and . _ : @ + / -, "
+            "with no empty, '.' or '..' part between slashes"
+        )
+    return None
 
 
 class AgentService:

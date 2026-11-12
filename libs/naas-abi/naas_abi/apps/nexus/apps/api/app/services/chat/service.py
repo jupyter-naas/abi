@@ -38,12 +38,20 @@ from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import Message a
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
     ProviderConfig,
     check_ollama_status,
+    client_error_message,
 )
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
     complete_chat as complete_with_provider,
 )
 from naas_abi.apps.nexus.apps.api.app.services.secrets_crypto import decrypt_secret_value
 from naas_abi.apps.nexus.apps.api.app.services.skills.service import SkillService
+
+
+class ProviderNotConfiguredError(ValueError):
+    """A request named a provider the workspace's configuration does not provide."""
+
+    def __init__(self) -> None:
+        super().__init__("This provider is not configured for the workspace.")
 
 
 @dataclass
@@ -1140,12 +1148,16 @@ class ChatService:
         )
 
         has_images = bool(request.images) or any(m.images for m in request.messages if m.images)
-        provider = await self.resolve_provider(
-            provider=request.provider,
-            has_images=has_images,
-            agent_id=request.agent,
-            workspace_id=request.workspace_id,
-        )
+        not_configured: str | None = None
+        try:
+            provider = await self.resolve_provider(
+                provider=request.provider,
+                has_images=has_images,
+                agent_id=request.agent,
+                workspace_id=request.workspace_id,
+            )
+        except ProviderNotConfiguredError as exc:
+            provider, not_configured = None, str(exc)
 
         provider_used: str | None = None
         context_sources: list[str] = []
@@ -1229,11 +1241,19 @@ class ChatService:
                 response_content = self._unwrap_json_content(response_content)
                 provider_used = f"{provider.name} ({provider.model})"
             except Exception as exc:
+                logging.getLogger(__name__).warning(
+                    "Provider %s failed: %s", provider.name, exc, exc_info=True
+                )
                 response_content = (
-                    f"**Error calling {provider.name}:**\n\n{str(exc)}\n\n"
+                    f"**Error calling {provider.name}:**\n\n{client_error_message(exc)}\n\n"
                     "Please check your provider configuration in Settings."
                 )
                 provider_used = f"{provider.name} (error)"
+        elif not_configured:
+            response_content = (
+                f"**{not_configured}**\n\n"
+                "Ask a workspace admin to configure it in Settings, or choose another agent."
+            )
         else:
             response_content = (
                 "**No AI provider available.**\n\n"
@@ -1353,22 +1373,33 @@ class ChatService:
         workspace_id: str | None = None,
     ) -> ResolvedProvider | None:
         incoming_llm = getattr(provider, "llm_model", None) if provider else None
-        # A remote agent is reached only through its agent row (sync + roster),
-        # never by naming its key in a client-supplied provider payload.
-        if provider and getattr(provider, "type", None) == "remote":
-            provider = None
-        if provider and getattr(provider, "enabled", False):
-            return ResolvedProvider(
-                id=provider.id,
-                name=provider.name,
-                type=provider.type,
-                enabled=provider.enabled,
-                endpoint=provider.endpoint,
-                api_key=provider.api_key,
-                account_id=provider.account_id,
-                model=provider.model,
-                llm_model=incoming_llm,
-            )
+        named = (
+            getattr(provider, "type", None)
+            if provider and getattr(provider, "enabled", False)
+            else None
+        )
+        # A request names a provider type and a model, nothing to connect to:
+        # endpoints, keys and accounts come from the workspace's configuration
+        # (its agent rows, secrets and ABI server) or the platform's Ollama.
+        # A remote agent is reached only through its agent row (sync + roster).
+        if (
+            provider
+            and getattr(provider, "enabled", False)
+            and getattr(provider, "type", None) == "ollama"
+        ):
+            selected = await self._platform_ollama_model(getattr(provider, "model", None))
+            if selected:
+                return ResolvedProvider(
+                    id="ollama",
+                    name="Ollama",
+                    type="ollama",
+                    enabled=True,
+                    endpoint=resolve_endpoint(),
+                    api_key=None,
+                    account_id=None,
+                    model=selected,
+                    llm_model=incoming_llm,
+                )
 
         if agent_id:
             try:
@@ -1422,6 +1453,25 @@ class ChatService:
                             llm_model=incoming_llm,
                         )
 
+                    if agent.provider == "cloudflare" and agent.model_id:
+                        token = await self.get_workspace_secret(
+                            workspace_id, "CLOUDFLARE_API_TOKEN"
+                        )
+                        account = await self.get_workspace_secret(
+                            workspace_id, "CLOUDFLARE_ACCOUNT_ID"
+                        )
+                        if token and account:
+                            return ResolvedProvider(
+                                id="agent-cloudflare",
+                                name="CLOUDFLARE (via Agent)",
+                                type="cloudflare",
+                                enabled=True,
+                                endpoint=None,
+                                api_key=decrypt_secret_value(token.encrypted_value),
+                                account_id=decrypt_secret_value(account.encrypted_value),
+                                model=agent.model_id,
+                            )
+
                     secret_key_map = {
                         "xai": "XAI_API_KEY",
                         "openai": "OPENAI_API_KEY",
@@ -1429,6 +1479,7 @@ class ChatService:
                         "mistral": "MISTRAL_API_KEY",
                         "google": "GOOGLE_API_KEY",
                         "openrouter": "OPENROUTER_API_KEY",
+                        "perplexity": "PERPLEXITY_API_KEY",
                     }
                     endpoint_map = {
                         "xai": "https://api.x.ai/v1",
@@ -1437,6 +1488,7 @@ class ChatService:
                         "mistral": "https://api.mistral.ai/v1",
                         "google": "https://generativelanguage.googleapis.com/v1beta",
                         "openrouter": "https://openrouter.ai/api/v1",
+                        "perplexity": "https://api.perplexity.ai",
                     }
 
                     secret_key = secret_key_map.get(agent.provider)
@@ -1483,6 +1535,11 @@ class ChatService:
                     "Failed to resolve agent provider", exc_info=True
                 )
 
+        # A provider the request named, which the workspace does not configure,
+        # is an error: never a substitute model the user did not choose.
+        if named and named not in ("ollama", "remote"):
+            raise ProviderNotConfiguredError()
+
         ollama_status = await check_ollama_status()
         if ollama_status["status"] == "online" and ollama_status["models"]:
             # An image request needs a vision model; anything else should land
@@ -1503,6 +1560,16 @@ class ChatService:
                 account_id=None,
                 model=model,
             )
+        return None
+
+    @staticmethod
+    async def _platform_ollama_model(model: str | None) -> str | None:
+        """``model`` when the platform's Ollama is online and has it installed."""
+        if not model:
+            return None
+        status = await check_ollama_status()
+        if status.get("status") == "online" and model in (status.get("models") or []):
+            return model
         return None
 
     @classmethod

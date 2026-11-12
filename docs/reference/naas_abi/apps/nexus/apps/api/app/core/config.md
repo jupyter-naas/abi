@@ -70,6 +70,7 @@
     - Rate limiting: `rate_limit_*`
     - Security headers: `enable_security_headers`, `content_security_policy`
     - Integrations: `abi_api_url`, `abi_api_key`, `openai_api_key`, `anthropic_api_key`, `cloudflare_*`
+    - Chat providers: `provider_allowed_origins`, origins (`host:port` or a URL) of model servers on the deployment's own network (a workspace's ABI server, a model gateway). Provider calls reach public addresses and these origins only; Ollama calls also reach the platform Ollama's origin.
     - Local AI: `enable_ollama_autostart`
   - Post-init hook:
     - Forces `enable_ollama_autostart = False` unless `environment == "development"` or `nexus_env == "local"`.

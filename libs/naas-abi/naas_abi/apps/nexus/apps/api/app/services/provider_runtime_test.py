@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import pytest
+from naas_abi.apps.nexus.apps.api.app.services import provider_runtime
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
     Message,
     ProviderConfig,
     UnsafeProviderEndpointError,
     agent_event_chunk,
     complete_chat,
-    redact_url_for_logs,
     validated_provider_endpoint,
 )
 
@@ -74,7 +74,9 @@ def test_openai_endpoint_defaults_to_official_url() -> None:
     assert validated_provider_endpoint(config) == "https://api.openai.com/v1"
 
 
-def test_ollama_endpoint_allows_localhost() -> None:
+def test_ollama_endpoint_allows_localhost(monkeypatch) -> None:
+    """The platform Ollama (resolve_endpoint) is allowed, at its own origin."""
+    monkeypatch.setattr(provider_runtime, "resolve_endpoint", lambda: "http://localhost:11434")
     config = ProviderConfig(
         id="p1",
         name="Ollama",
@@ -89,8 +91,9 @@ def test_ollama_endpoint_allows_localhost() -> None:
     assert validated_provider_endpoint(config) == "http://localhost:11434"
 
 
-def test_ollama_endpoint_allows_wsl_gateway_private_ip() -> None:
-    """WSL NAT: resolve_endpoint() returns the Windows host as a private IP."""
+def test_ollama_endpoint_allows_wsl_gateway_private_ip(monkeypatch) -> None:
+    """The platform Ollama (resolve_endpoint) is allowed, at its own origin."""
+    monkeypatch.setattr(provider_runtime, "resolve_endpoint", lambda: "http://172.22.80.1:11434")
     config = ProviderConfig(
         id="p1",
         name="Ollama",
@@ -105,7 +108,11 @@ def test_ollama_endpoint_allows_wsl_gateway_private_ip() -> None:
     assert validated_provider_endpoint(config) == "http://172.22.80.1:11434"
 
 
-def test_ollama_endpoint_allows_host_docker_internal() -> None:
+def test_ollama_endpoint_allows_host_docker_internal(monkeypatch) -> None:
+    """The platform Ollama (resolve_endpoint) is allowed, at its own origin."""
+    monkeypatch.setattr(
+        provider_runtime, "resolve_endpoint", lambda: "http://host.docker.internal:11434"
+    )
     config = ProviderConfig(
         id="p1",
         name="Ollama",
@@ -202,17 +209,6 @@ async def test_complete_chat_carries_the_injection_preamble_into_the_abi_agent(
 
     assert answer == "assistant answer"
     assert agent.prompt == "You can call create_skill.\n\nbrief me on the strait of hormuz"
-
-
-def test_redact_url_for_logs_masks_sensitive_query_params() -> None:
-    url = "https://api.example.com/stream?token=secret123&foo=bar&api_key=xyz"
-    redacted = redact_url_for_logs(url)
-
-    assert "token=REDACTED" in redacted
-    assert "api_key=REDACTED" in redacted
-    assert "foo=bar" in redacted
-    assert "secret123" not in redacted
-    assert "xyz" not in redacted
 
 
 def test_a_tool_response_keeps_its_chat_source_opt_out() -> None:

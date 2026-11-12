@@ -632,6 +632,12 @@ class Settings(BaseSettings):
     abi_api_url: str = "http://localhost:8001"
     abi_api_key: str | None = None
 
+    # Origins (``host:port`` or a URL) of model servers on the deployment's own
+    # network: a workspace's ABI server, a model gateway. Chat providers reach
+    # public addresses only, plus these origins and, for Ollama calls, the
+    # platform Ollama's origin.
+    provider_allowed_origins: list[str] = Field(default_factory=list)
+
     # OpenAI (for embeddings/fallback)
     openai_api_key: str | None = None
 

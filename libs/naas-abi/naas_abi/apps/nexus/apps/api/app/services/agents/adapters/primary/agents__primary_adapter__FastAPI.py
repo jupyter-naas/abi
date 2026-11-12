@@ -35,6 +35,7 @@ from naas_abi.apps.nexus.apps.api.app.services.agents.remote.port import (
 from naas_abi.apps.nexus.apps.api.app.services.agents.scopes import (
     agent_class_label,
 )
+from naas_abi.apps.nexus.apps.api.app.services.agents.service import model_id_refusal
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares
 from naas_abi.apps.nexus.apps.api.app.services.registry import (
@@ -1031,9 +1032,16 @@ async def create_agent(
     agent_service: AgentService = Depends(get_agent_service),
 ) -> AgentRecord:
     await authz.require("CreateAgent", user=current_user, workspace=agent.workspace_id, id="-")
+    _check_model_id(agent.model_id)
     created_agent = await agent_service.create_agent(data=agent)
     logger.debug("Agent created: %s", created_agent)
     return created_agent
+
+
+def _check_model_id(value: str | None) -> None:
+    refusal = model_id_refusal(value)
+    if refusal is not None:
+        raise HTTPException(status_code=422, detail=refusal)
 
 
 async def _load_agent(
@@ -1055,6 +1063,7 @@ async def update_agent(
     agent_service: AgentService = Depends(get_agent_service),
 ) -> AgentRecord:
     await _load_agent(agent_service, current_user, "UpdateAgent", agent_id)
+    _check_model_id(updates.model)
     updated_agent = await agent_service.update_agent(
         agent_id=agent_id,
         updates=AgentUpdateInput(

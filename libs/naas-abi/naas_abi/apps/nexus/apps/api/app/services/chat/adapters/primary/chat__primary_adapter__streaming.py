@@ -22,9 +22,11 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__prima
 from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__primary_adapter__schemas import (
     ChatRequest,
 )
+from naas_abi.apps.nexus.apps.api.app.services.chat.service import ProviderNotConfiguredError
 from naas_abi.apps.nexus.apps.api.app.services.ollama import DEFAULT_CHAT_MODEL_TAG
 from naas_abi.apps.nexus.apps.api.app.services.provider_runtime import (
     ProviderConfig,
+    client_error_message,
     stream_with_abi_inprocess,
     stream_with_cloudflare,
     stream_with_ollama,
@@ -297,12 +299,21 @@ async def stream_chat_response(
             request.agent = resolved_agent
 
     has_images = bool(request.images) or any(m.images for m in request.messages if m.images)
-    provider = await resolve_provider(
-        request.provider,
-        has_images,
-        request.agent,
-        request.workspace_id,
-    )
+    try:
+        provider = await resolve_provider(
+            request.provider,
+            has_images,
+            request.agent,
+            request.workspace_id,
+        )
+    except ProviderNotConfiguredError as exc:
+        message = str(exc)
+
+        async def not_configured_stream():
+            yield f"data: {json.dumps({'error': message})}\n\n"
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(not_configured_stream(), media_type="text/event-stream")
 
     logger.info(
         "✓ Resolved provider: %s, model=%s",
@@ -901,7 +912,7 @@ async def stream_chat_response(
 
             yield "data: [DONE]\n\n"
         except Exception as exc:
-            escaped_error = json.dumps(str(exc))[1:-1]
+            escaped_error = json.dumps(client_error_message(exc))[1:-1]
             logger.error(
                 "Stream error: %s provider_type=%s provider_name=%s provider_model=%s agent=%s",
                 str(exc),

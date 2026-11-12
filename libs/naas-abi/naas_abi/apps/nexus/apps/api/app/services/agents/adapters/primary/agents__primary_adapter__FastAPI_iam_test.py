@@ -410,3 +410,42 @@ async def test_a_turn_does_not_pick_a_remote_agent_whose_module_is_not_ready(
     roster, _ = await adapter.usable_roster(world.agents, "member", "ws-1")
     assert roster == []
     assert adapter.pick_workspace_chat_agent_id(roster, None) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "model_id",
+    [
+        "../../admin/users/delete?all=1&",
+        "agent?token=x",
+        "a/../b",
+        "..",
+        "a#b",
+        "with space",
+        "/leading",
+    ],
+)
+async def test_agent_rows_keep_model_ids_to_names(world, model_id: str) -> None:
+    async with world.as_("owner") as http:
+        created = await http.post(
+            "/", json={"workspace_id": "ws-1", "name": "x", "provider": "abi", "model_id": model_id}
+        )
+        updated = await http.patch("/plain", json={"model": model_id})
+    assert created.status_code == 422
+    assert updated.status_code == 422
+    assert world.agents.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "model_id",
+    ["gpt-4o-mini", "qwen3:8b", "anthropic/claude-3.5-sonnet", "@cf/meta/llama-3.1-8b-instruct"],
+)
+async def test_agent_rows_still_take_model_names(world, model_id: str) -> None:
+    async with world.as_("owner") as http:
+        created = await http.post(
+            "/", json={"workspace_id": "ws-1", "name": "x", "provider": "abi", "model_id": model_id}
+        )
+        updated = await http.patch("/plain", json={"model": model_id})
+    assert created.status_code == 200, created.text
+    assert updated.status_code == 200, updated.text

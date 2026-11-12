@@ -32,6 +32,9 @@ the workspace built is `nexus:UseAgent` and the roles. The rows hold each agent'
   (`pick_workspace_chat_agent_id`, `pick_workspace_*_agent_id`) pick among the agents the caller may use. Chat
   (`authorize_agent_use`), `/v1` and the in-process turn (`bind_usable_agents`, `caller_usable_class_names`) ask IAM
   alone.
+- **A `model_id` is a name.** `POST /` and `PATCH /{id}` refuse one that is not letters, digits and `. _ : @ + / -`
+  with no empty, `.` or `..` part (`model_id_refusal`, 422): it names a model or an agent on a workspace's ABI
+  server, and chat places it in that server's URL as one encoded path segment, with the server's token in a header.
 - **A remote agent is listed while its module is READY** (`_served`, from discovery; all rows when discovery cannot
   be read). Its row is kept while the module is away, never deleted.
 - **A remote agent runs in its own workspace.** The run is placed in its agent row's workspace, the one

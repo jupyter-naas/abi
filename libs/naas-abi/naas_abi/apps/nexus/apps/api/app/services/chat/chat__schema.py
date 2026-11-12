@@ -37,14 +37,13 @@ class ChatInputMessage:
 
 @dataclass(frozen=True)
 class ChatProviderConfigInput:
+    """The provider a request names: a type and a model, nothing to connect to."""
+
     id: str
     name: str
     type: str
     enabled: bool
     model: str
-    endpoint: str | None = None
-    api_key: str | None = None
-    account_id: str | None = None
     llm_model: str | None = None
 
 
