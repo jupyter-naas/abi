@@ -267,3 +267,33 @@ Consequences:
   same rewrite to `config.dokploy.yaml`. A config whose lines differ is left as it is.
 - Tests: `deploy/stack_access_test.py` renders every Compose file and runs the Fuseki,
   Redis and Qdrant start scripts.
+
+## Decision: the coding stack's networks and Coder's owner
+
+Decision:
+
+- Coding workspaces join the `coding` network (`CODING_WORKSPACE_DOCKER_NETWORK`,
+  `<project>_coding`, `${ABI_STACK_NAME}-coding` on Dokploy): coderd, Forgejo and the
+  API, which calls each workspace's exec sidecar by container name. No data service is
+  on it. CI job containers run on the `ci` network (Forgejo only) with
+  `docker_host: "-"`, so no job gets the Docker socket.
+- The workspace template (`.deploy/docker/coder_prototype/*/main.tf`) starts
+  code-server on `127.0.0.1` (the Coder agent proxies it behind Coder's sign-in), keeps
+  the system's trust store as the image ships it, maps no host address, and fixes
+  `docker_network` at creation (`mutable = false`). Nexus sets it from its
+  configuration: `POST /api/coding-environments` takes only the template parameters
+  in `CLIENT_TEMPLATE_PARAMS` (`dev_port`) from the client and refuses any other.
+- Coder's owner exists before coderd serves anyone: the `coder-owner` one-shot runs
+  coderd on its own loopback, creates the owner from `CODER_ADMIN_*`, and exits;
+  `coder` starts once it succeeded. coderd runs as its own user and provisions
+  through `coder-docker`, a Docker API proxy limited to containers, images, networks
+  and volumes (no exec start, no swarm, no secrets) on an internal network.
+
+Consequences:
+
+- `abi deploy local` moves an older project's `CODING_WORKSPACE_DOCKER_NETWORK` off
+  `<project>_abi-network`; workspaces made before keep their network until rebuilt.
+- coderd can still create containers through `coder-docker`: that is its job. The proxy
+  keeps the rest of the Docker API from it.
+- Tests: `deploy/coding_stack_test.py`; the route's in
+  `coding_environment__primary_adapter__FastAPI_test.py`.

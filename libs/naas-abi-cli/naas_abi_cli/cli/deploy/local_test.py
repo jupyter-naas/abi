@@ -375,7 +375,7 @@ def test_setup_local_deploy_can_include_coding(tmp_path: Path) -> None:
     assert runner_cfg.exists()
     runner_content = runner_cfg.read_text(encoding="utf-8")
     assert "{{" not in runner_content
-    assert "_abi-network" in runner_content
+    assert "_ci" in runner_content
     # one-shot bootstrap wiring: coding-init service + script, abi/act-runner wait
     assert "\n  coding-init:" in compose_content
     assert compose_content.count("condition: service_completed_successfully") >= 2
@@ -387,7 +387,7 @@ def test_setup_local_deploy_can_include_coding(tmp_path: Path) -> None:
     # .env scaffolding
     assert "CODER_ACCESS_URL=" in env_content
     assert "CODING_WORKSPACE_DOCKER_NETWORK=" in env_content
-    assert "_abi-network" in env_content
+    assert "_coding" in env_content
     # admin passwords generated (complexity-safe); runner secret is 40-hex;
     # the two admin *tokens* start blank (minted by coding-init on first up)
     assert re.search(r"^CODER_ADMIN_PASSWORD=Abi1!\S+", env_content, re.MULTILINE)

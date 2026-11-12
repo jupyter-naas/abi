@@ -91,8 +91,9 @@ x-abi-template: &abi_template
     # Override to point at a remote/dedicated Ollama server instead of the host.
     - ABI_OLLAMA_BASE_URL=${ABI_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
 {% if INCLUDE_CODING %}
-    # Coding workspaces: the network Coder attaches workspaces to (so they can
-    # reach forgejo:3000 + coderd), and the public git base for clone URLs.
+    # Coding workspaces: the network Coder attaches workspaces to (the
+    # `coding` network: Forgejo, coderd and this API, no data service), and
+    # the public git base for clone URLs.
     - CODING_WORKSPACE_DOCKER_NETWORK=${CODING_WORKSPACE_DOCKER_NETWORK}
     - CODING_GIT_PUBLIC_BASE=https://git.${PUBLIC_WEB_HOST:-localhost}
 {% endif %}
@@ -135,6 +136,10 @@ x-abi-template: &abi_template
     - abi-network
     # The broker's monitoring port (nats.monitoring_url): the engine only.
     - nats-monitor
+{% if INCLUDE_CODING %}
+    # Workspaces reach the API here, and the API their exec sidecars.
+    - coding
+{% endif %}
 
 services:
   nexus-web:
@@ -663,23 +668,24 @@ services:
   # ---------------------------------------------------------------------------
   # Coder - per-user browser IDE workspaces (coding_environment service)
   # ---------------------------------------------------------------------------
-  # Provisions workspaces as sibling Docker containers via the mounted socket.
-  # `user: root` + docker.sock is required for that; for production prefer a
-  # docker-socket-proxy or a Kubernetes template over a bind-mounted socket.
+  # Provisions workspaces as sibling Docker containers through coder-docker, a
+  # Docker API limited to what that needs; it runs as its own user. It starts
+  # once coder-owner made its owner.
   coder:
     image: ghcr.io/coder/coder:v2.34.1
     pull_policy: always
     restart: unless-stopped
-    user: root
     depends_on:
       postgres:
         condition: service_healthy
+      coder-owner:
+        condition: service_completed_successfully
+      coder-docker:
+        condition: service_started
     ports:
       - "127.0.0.1:7080:7080"
-    # Let the coder container resolve the Caddy edge host (self access-url check).
-    extra_hosts:
-      - "coder.${PUBLIC_WEB_HOST:-localhost}:host-gateway"
     environment:
+      DOCKER_HOST: "tcp://coder-docker:2375"
       CODER_PG_CONNECTION_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/coder?sslmode=disable"
       CODER_HTTP_ADDRESS: "0.0.0.0:7080"
       # Agent connect-back URL. Workspaces reach coderd by its service name on
@@ -696,10 +702,90 @@ services:
       # which expired the IDE page weekly; allow up to ~1y.
       CODER_MAX_ADMIN_TOKEN_LIFETIME: "8760h"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - coder_data:/home/coder
     networks:
       - abi-network
+      - coding
+      - coder-docker
+
+  # ---------------------------------------------------------------------------
+  # coder-owner - one-shot, before Coder starts. Coder makes whoever calls
+  # POST /api/v2/users/first its owner while it has no user: the first time,
+  # this runs coderd on its own loopback (the migrations run there, with no
+  # provisioner, so it never takes a workspace build), creates the owner from
+  # CODER_ADMIN_*, and leaves a marker in Coder's volume; later runs only check
+  # the marker. It also hands Coder's volume to the user Coder runs as (Coder
+  # ran as root before). Coder starts only once it succeeded.
+  # ---------------------------------------------------------------------------
+  coder-owner:
+    image: ghcr.io/coder/coder:v2.34.1
+    pull_policy: always
+    restart: "no"
+    user: "0:0"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      CODER_PG_CONNECTION_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/coder?sslmode=disable"
+      CODER_TELEMETRY_ENABLE: "false"
+      CODER_PROVISIONER_DAEMONS: "0"
+      CODER_ADMIN_EMAIL: "${CODER_ADMIN_EMAIL:-}"
+      CODER_ADMIN_USERNAME: "${CODER_ADMIN_USERNAME:-admin}"
+      CODER_ADMIN_PASSWORD: "${CODER_ADMIN_PASSWORD:-}"
+    volumes:
+      - coder_data:/home/coder
+    entrypoint:
+      - sh
+      - -c
+      - |
+        set -eu
+        chown -R 1000:1000 /home/coder
+        if [ -f /home/coder/.abi-coder-owner ]; then echo "Coder owner exists"; exit 0; fi
+        [ -n "$$CODER_ADMIN_EMAIL" ] && [ -n "$$CODER_ADMIN_PASSWORD" ] || { echo "CODER_ADMIN_EMAIL or CODER_ADMIN_PASSWORD is empty: run abi deploy" >&2; exit 1; }
+        /opt/coder server --http-address 127.0.0.1:7080 --access-url http://127.0.0.1:7080 >/tmp/coderd.log 2>&1 &
+        pid=$$!
+        i=0
+        until curl -fsS http://127.0.0.1:7080/api/v2/buildinfo >/dev/null 2>&1; do
+          i=$$((i + 1))
+          if [ "$$i" -ge 180 ] || ! kill -0 "$$pid" 2>/dev/null; then tail -n 20 /tmp/coderd.log >&2; exit 1; fi
+          sleep 1
+        done
+        if curl -fsS http://127.0.0.1:7080/api/v2/users/first >/dev/null 2>&1; then
+          echo "Coder owner exists"
+        else
+          printf '{"email":"%s","username":"%s","password":"%s","name":"Admin","trial":false}' \
+            "$$CODER_ADMIN_EMAIL" "$$CODER_ADMIN_USERNAME" "$$CODER_ADMIN_PASSWORD" \
+            | curl -fsS -X POST http://127.0.0.1:7080/api/v2/users/first -H 'Content-Type: application/json' -d @- >/dev/null
+          echo "Coder owner created"
+        fi
+        kill "$$pid"
+        wait "$$pid" 2>/dev/null || true
+        touch /home/coder/.abi-coder-owner
+        chown 1000:1000 /home/coder/.abi-coder-owner
+    networks:
+      - abi-network
+
+  # ---------------------------------------------------------------------------
+  # coder-docker - the Docker API Coder provisions workspaces with: containers,
+  # images, networks and volumes, nothing else (no exec, no swarm, no secrets).
+  # Coder runs as its own user and never holds the socket.
+  # ---------------------------------------------------------------------------
+  coder-docker:
+    image: tecnativa/docker-socket-proxy:0.3.0@sha256:9e4b9e7517a6b660f2cc903a19b257b1852d5b3344794e3ea334ff00ae677ac2
+    restart: unless-stopped
+    environment:
+      CONTAINERS: "1"
+      IMAGES: "1"
+      NETWORKS: "1"
+      VOLUMES: "1"
+      INFO: "1"
+      VERSION: "1"
+      POST: "1"
+      EXEC: "0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - coder-docker
 
   # ---------------------------------------------------------------------------
   # Forgejo - git host + in-app code review backend (source_control service)
@@ -730,13 +816,14 @@ services:
       - forgejo_data:/data
     networks:
       - abi-network
+      - coding
+      - ci
 
   # ---------------------------------------------------------------------------
   # Forgejo Actions runner (CI). coding-init registers it server-side with the
   # shared FORGEJO_RUNNER_REGISTRATION_TOKEN (40-hex), so the runner just uses
-  # the same value. Mounts docker.sock to spawn job containers; they join this
-  # project's network (see act-runner-config.yaml) so `checkout` can reach
-  # forgejo:3000.
+  # the same value. Mounts docker.sock to spawn job containers, which run on
+  # the `ci` network (Forgejo only) without the socket (act-runner-config.yaml).
   act-runner:
     image: gitea/act_runner:latest
     pull_policy: always
@@ -754,7 +841,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./.deploy/docker/act-runner-config.yaml:/config.yaml:ro
     networks:
-      - abi-network
+      - ci
 
   # ---------------------------------------------------------------------------
   # coding-init - one-shot bootstrap, runs on every `up` (idempotent). Waits for
@@ -884,6 +971,19 @@ volumes:
 networks:
   abi-network:
     driver: bridge  # Default Docker bridge network for internal communication
+{% if INCLUDE_CODING %}
+  # Coding workspaces (CODING_WORKSPACE_DOCKER_NETWORK): coderd, Forgejo and
+  # the API, none of the data services.
+  coding:
+    driver: bridge
+  # CI job containers (act-runner-config.yaml): Forgejo only.
+  ci:
+    driver: bridge
+  # coderd and its Docker API.
+  coder-docker:
+    driver: bridge
+    internal: true
+{% endif %}
   # The NATS monitoring port, shared by the broker and the engine only: it
   # lists every connection and subscription, and has no login.
   nats-monitor:

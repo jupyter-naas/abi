@@ -278,14 +278,15 @@ def compose_project_name(project_path: str) -> str:
     return re.sub(r"[^a-z0-9_-]", "", base) or "abi"
 
 
-def _compose_project_network(project_path: str) -> str:
-    """The docker network the coding workspaces attach to.
+def _compose_project_network(project_path: str, name: str = "coding") -> str:
+    """A network of the project's compose stack, as Docker names it.
 
-    The bridge network is ``<compose project>_abi-network``. Users can override
+    ``coding`` is the one the coding workspaces attach to, ``ci`` the one CI
+    jobs run on: ``<compose project>_<name>``. Users can override
     CODING_WORKSPACE_DOCKER_NETWORK in .env (e.g. when they set
     COMPOSE_PROJECT_NAME).
     """
-    return f"{compose_project_name(project_path)}_abi-network"
+    return f"{compose_project_name(project_path)}_{name}"
 
 
 def _copy_coding_templates(deploy_path: str, values: dict[str, object]) -> None:
@@ -623,6 +624,8 @@ def outdated_stack(compose_text: str) -> list[str]:
         missing.append("Fuseki has no engine user")
     if "\n  nats:\n" in compose_text and "nats-monitor" not in compose_text:
         missing.append("the broker has no nats-monitor network")
+    if "\n  coder:\n" in compose_text and "coder-owner" not in compose_text:
+        missing.append("coding workspaces and CI jobs have no networks of their own")
     return missing
 
 
@@ -723,6 +726,7 @@ def setup_local_deploy(
     )
 
     coding_network = _compose_project_network(project_path)
+    ci_network = _compose_project_network(project_path, "ci")
 
     template_values = {
         **DEFAULT_ENV_VALUES,
@@ -735,6 +739,7 @@ def setup_local_deploy(
         # identity provider's service account is module/<project>/idp).
         "DISCOVERY_PROJECT": _discovery_project(project_path),
         "CODING_WORKSPACE_DOCKER_NETWORK": coding_network,
+        "CODING_CI_DOCKER_NETWORK": ci_network,
         "POSTGRES_PASSWORD": str(uuid4()),
         "MINIO_ROOT_PASSWORD": str(uuid4()),
         "RABBITMQ_PASSWORD": str(uuid4()),
@@ -873,6 +878,14 @@ def setup_local_deploy(
         }
         # Older projects reached coderd through the host's published port,
         # which is now bound to this machine only.
+        # Workspaces used to join the stack's own network, with its data
+        # services: move them to the `coding` network.
+        if _get_env_var(
+            local_env_target_path, "CODING_WORKSPACE_DOCKER_NETWORK"
+        ) == _compose_project_network(project_path, "abi-network"):
+            _replace_env_var(
+                local_env_target_path, "CODING_WORKSPACE_DOCKER_NETWORK", coding_network
+            )
         if _get_env_var(local_env_target_path, "CODER_ACCESS_URL") == (
             _OLD_CODER_ACCESS_URL
         ):

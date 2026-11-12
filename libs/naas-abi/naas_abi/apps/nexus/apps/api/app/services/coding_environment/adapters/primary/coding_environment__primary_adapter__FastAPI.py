@@ -291,6 +291,34 @@ def _prepare_clone(
     return repo_url, checkout
 
 
+# The template parameters a client may set, each with the values it takes.
+# Every other parameter (the repository, the network, the tokens, the API base)
+# is the server's: a request that names one is refused.
+CLIENT_TEMPLATE_PARAMS: dict[str, re.Pattern[str]] = {
+    # The port the Preview app proxies to.
+    "dev_port": re.compile(r"[1-9][0-9]{0,4}"),
+}
+
+
+def client_template_params(raw: dict[str, str] | None) -> dict[str, str]:
+    """The client's template parameters, checked against
+    ``CLIENT_TEMPLATE_PARAMS``; 422 for any other name or a value out of range."""
+    params: dict[str, str] = {}
+    for key, value in (raw or {}).items():
+        pattern = CLIENT_TEMPLATE_PARAMS.get(key)
+        if pattern is None:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Template parameter {key!r} is set by the server",
+            )
+        if not pattern.fullmatch(value) or (key == "dev_port" and int(value) > 65535):
+            raise HTTPException(
+                status_code=422, detail=f"Invalid value for template parameter {key!r}"
+            )
+        params[key] = value
+    return params
+
+
 class EnvironmentProvisionRequest(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     name: str = Field(..., min_length=1, max_length=100, pattern=r"^[a-z0-9][a-z0-9-]*$")
@@ -863,7 +891,7 @@ async def provision_environment(
     iam: IIAMService | None = Depends(get_iam),
 ) -> EnvironmentResponse:
     await authz.require("WriteCode", user=current_user, workspace=body.workspace_id)
-    params = dict(body.params or {})
+    params = client_template_params(body.params)
     checkout_branch = body.branch or body.source_branch
     repo_id = _default_repo_id(body.repo_id)
     if repo_id and source_control is not None:

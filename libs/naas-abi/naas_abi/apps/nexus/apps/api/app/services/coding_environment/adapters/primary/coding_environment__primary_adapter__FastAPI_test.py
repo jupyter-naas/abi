@@ -311,6 +311,58 @@ def test_create_repo_is_empty_with_clone_url(client: Client) -> None:
     assert branches == []
 
 
+def _recorded_params(client: Client) -> list[dict]:
+    seen: list[dict] = []
+    real = client.environments.provision
+
+    def recording(**kwargs):
+        seen.append(dict(kwargs.get("params") or {}))
+        return real(**kwargs)
+
+    client.environments.provision = recording  # type: ignore[method-assign]
+    return seen
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"docker_network": "abi_default"},
+        {"repo_url": "file:///srv/abi"},
+        {"abi_api_base": "http://elsewhere:9879"},
+        {"sidecar_secret": "chosen"},
+        {"dev_port": "0"},
+        {"dev_port": "70000"},
+        {"dev_port": "3000; id"},
+    ],
+)
+def test_provisioning_keeps_template_parameters_to_the_server(
+    client: Client, params: dict[str, str]
+) -> None:
+    seen = _recorded_params(client)
+    resp = client.post(
+        "",
+        json={"workspace_id": WS, "name": "dev", "template_id": "tmpl-default", "params": params},
+    )
+    assert resp.status_code == 422, resp.text
+    assert seen == []
+
+
+def test_provisioning_keeps_the_network_and_repository_of_the_server(
+    client: Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from naas_abi.apps.nexus.apps.api.app.core.config import settings
+
+    monkeypatch.setattr(settings, "coding_workspace_docker_network", "acme_coding")
+    seen = _recorded_params(client)
+    client.provision(params={"dev_port": "5173"})
+
+    (params,) = seen
+    assert params["dev_port"] == "5173"
+    assert params["docker_network"] == "acme_coding"
+    assert params["repo_url"].endswith(f"/{MONOREPO}.git")
+    assert params["abi_api_base"] == settings.coding_agent_api_base
+
+
 def test_the_agent_holds_a_key_of_the_user_bound_to_its_sidecar_never_a_session(
     engine_iam,
 ) -> None:

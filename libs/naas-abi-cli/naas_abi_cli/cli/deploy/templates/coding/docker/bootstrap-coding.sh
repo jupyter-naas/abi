@@ -5,7 +5,7 @@
 # hiccup; re-running `up` retries. With CODING_INIT_STRICT=1 (Dokploy) it exits
 # 1 when an admin token is still missing at the end, so the deploy fails
 # visibly instead of starting abi without it. It:
-#   1. mints a long-lived Coder admin token (create first user + API token),
+#   1. mints a long-lived Coder admin token for the owner `coder-owner` made,
 #   2. creates a Forgejo admin and mints an access token (Forgejo CLI as `git`),
 #   3. registers the Forgejo Actions runner with the shared 40-hex secret,
 # writing the two tokens into a dotenv file abi reads at startup (its dotenv
@@ -56,6 +56,15 @@ set_env() {
 
 env_has() { grep -qE "^$1=.+" "$ENV_FILE" 2>/dev/null; }
 
+# Set KEY=VALUE in ENV_FILE, replacing a value already there.
+replace_env() {
+  _k="$1"; _v="$2"; _tmp="$(mktemp)"
+  grep -vE "^${_k}=" "$ENV_FILE" > "$_tmp" 2>/dev/null || true
+  printf '%s=%s\n' "$_k" "$_v" >> "$_tmp"
+  cat "$_tmp" > "$ENV_FILE"
+  rm -f "$_tmp"
+}
+
 wait_url() {
   _i=0
   while [ "$_i" -lt 90 ]; do
@@ -71,10 +80,7 @@ if env_has CODER_ADMIN_TOKEN; then
 else
   log "waiting for Coder..."
   if wait_url "$CODER_URL/api/v2/buildinfo"; then
-    curl -fsS -X POST "$CODER_URL/api/v2/users/first" -H 'Content-Type: application/json' \
-      -d "$(printf '{"email":"%s","username":"%s","password":"%s","name":"Admin","trial":false}' \
-            "$CODER_ADMIN_EMAIL" "$CODER_ADMIN_USERNAME" "$CODER_ADMIN_PASSWORD")" \
-      >/dev/null 2>&1 || log "  (Coder first user already exists)"
+    # The owner exists before Coder starts (the coder-owner service).
     SESSION="$(curl -fsS -X POST "$CODER_URL/api/v2/users/login" -H 'Content-Type: application/json' \
       -d "$(printf '{"email":"%s","password":"%s"}' "$CODER_ADMIN_EMAIL" "$CODER_ADMIN_PASSWORD")" \
       2>/dev/null | jq -r '.session_token // empty')"
@@ -166,16 +172,27 @@ fi
 if [ -n "${TEMPLATE_DIR:-}" ] && [ -f "$TEMPLATE_DIR/main.tf" ] && [ -n "$CODER_CID" ] && [ -n "$CODER_TOK" ]; then
   TPL_COUNT="$(curl -fsS -H "Coder-Session-Token: $CODER_TOK" \
     "$CODER_URL/api/v2/templates" 2>/dev/null | jq 'length' 2>/dev/null || echo 0)"
-  if [ "${TPL_COUNT:-0}" != "0" ]; then
-    log "Coder templates already present ($TPL_COUNT) : skipping push"
+  # The template's content, hashed: a changed template (its network, its
+  # editor's address, ...) is pushed as a new version of abi-code-server.
+  TPL_HASH="$(cd "$TEMPLATE_DIR" && find . -type f | sort | xargs sha256sum | sha256sum | cut -d' ' -f1)"
+  TPL_PUSHED="$(grep -E '^CODER_TEMPLATE_SHA256=' "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2-)"
+  if [ "${TPL_COUNT:-0}" != "0" ] && [ "$TPL_PUSHED" = "$TPL_HASH" ]; then
+    log "Coder template abi-code-server is current : skipping push"
   else
-    log "pushing Coder template abi-code-server..."
+    if [ "${TPL_COUNT:-0}" != "0" ]; then
+      log "pushing a new version of Coder template abi-code-server..."
+      log "  existing workspaces keep the template they were built from:"
+      log "  delete and recreate them to move them to the new one"
+    else
+      log "pushing Coder template abi-code-server..."
+    fi
     docker exec "$CODER_CID" rm -rf /tmp/template >/dev/null 2>&1 || true
     if docker cp "$TEMPLATE_DIR" "$CODER_CID:/tmp/template" >/dev/null 2>&1 \
       && docker exec -e CODER_SESSION_TOKEN="$CODER_TOK" "$CODER_CID" \
            coder templates push abi-code-server -d /tmp/template --yes \
            --url http://127.0.0.1:7080 >/dev/null 2>&1; then
       log "Coder template abi-code-server pushed"
+      replace_env CODER_TEMPLATE_SHA256 "$TPL_HASH"
     else
       log "WARN: Coder template push failed"
     fi
