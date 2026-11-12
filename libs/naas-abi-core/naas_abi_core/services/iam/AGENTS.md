@@ -1107,7 +1107,13 @@ attachment per scope.
   policy) and of the groups it keeps (`ContainerAccessAndGroups`: each organisation's and
   workspace's members and admins groups, Nexus `services/iam/AGENTS.md`), and denies
   `dataset:QueryUnchecked`; `builtin.job` is what the account
-  `job/<module_id>` of an engine module's jobs holds. The three hold every module scope,
+  `job/<module_id>` of an engine module's jobs holds: the kernel services a job works with
+  on what the platform holds (`abi:<service>:*`, never an organisation's or a workspace's,
+  for a run made for a user too: the account and the user both decide), its own secrets
+  (`secret/${module.id}/...`: for a jobs account `${module.id}` is its module's,
+  `modules.variables`), and a Deny of `dataset:QueryUnchecked`. The kernel's own
+  maintenance jobs (owners `naas_abi_core.*`) run as the engine
+  (`EngineJobLoader.job_identity`). The three hold every module scope,
   `module:*` and each module's own catalog (`<service>:*`, generated as modules
   register), on behalf of users who must hold it too. Nobody holds `*` but the platform
   admin. A retired policy (`roles.RETIRED_POLICIES`: the old `builtin.transitional.*`) is

@@ -235,7 +235,10 @@ login, and `auth`, the callout responder's. There is no shared `abi` or `module`
   process (its calls over NATS carry the engine's delegation for the user, so there they are
   bounded by the engine and the user). A
   module's own trigger, a schedule or an event runs as the module alone: a module never hands a user
-  to another, as with agents. A schedule's input is the schedule's body, validated (a JSON object of
+  to another, as with agents. An engine module's job is triggered by the engine, or by `api` (for
+  a user or for none): another caller's trigger (a module's) is refused (`job_authorizer`), since
+  the run would act with the job account's rights rather than the caller's. The kernel's own
+  maintenance jobs (owners `naas_abi_core.*`) run as the engine. A schedule's input is the schedule's body, validated (a JSON object of
   4 KiB at most) and sealed by the engine.
 - **Sealed triggers.** Every trigger, schedule and cancel the engine writes carries a seal
   (`Abi-Job-Seal`, an HMAC over where it is delivered, its kind, its body, its claim-check headers

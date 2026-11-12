@@ -49,6 +49,7 @@ _PROJECT = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _MODULE_ID = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
 _ACCOUNT = re.compile(r"^module/([^/]+)/([^/]+)$")
 _NOT_IDENTIFIER = re.compile(r"[^a-z0-9]+")
+_JOB_ACCOUNT = "job/"  # roles.job_account_name
 
 
 # Module ids that name the core's own namespaces (the engine's agent memory,
@@ -100,16 +101,30 @@ def policy_id(project: str, module_id: str) -> str:
 
 
 def variables(name: str | None) -> dict[str, str | None]:
-    """The module variables for the principal named ``name`` (None: unresolved)."""
+    """The module variables for the principal named ``name`` (None: unresolved).
+    The account of an engine module's jobs (``job/<module_id>``) has its module's
+    id, and no project."""
     parsed = parse_account(name)
     if parsed is None:
-        return dict.fromkeys(MODULE_VARIABLES)
+        engine_module = _engine_module(name)
+        return {
+            **dict.fromkeys(MODULE_VARIABLES),
+            "module.id": encode_segment(engine_module) if engine_module else None,
+        }
     project, module_id = parsed
     return {
         "module.project": encode_segment(project),
         "module.id": encode_segment(module_id),
         "module.dataset_namespace": dataset_namespace(project, module_id),
     }
+
+
+def _engine_module(name: str | None) -> str | None:
+    """The module id of an engine module's jobs account, ``job/<module_id>``."""
+    if not name or not name.startswith(_JOB_ACCOUNT):
+        return None
+    module_id = name[len(_JOB_ACCOUNT) :]
+    return module_id if _MODULE_ID.match(module_id) else None
 
 
 def dataset_namespace(project: str, module_id: str) -> str:

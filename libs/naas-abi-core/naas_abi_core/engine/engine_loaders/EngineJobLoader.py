@@ -81,12 +81,19 @@ def as_engine(
 def job_identity(iam: Any, module_id: str) -> str:
     """The account an engine module's jobs run as: ``job/<module_id>``, holding
     ``builtin.job`` only, created when first needed. Without an IAM service this
-    engine owns (a client-role engine, tests) the jobs run as the engine."""
+    engine owns (a client-role engine, tests) the jobs run as the engine, and so
+    do the kernel's own maintenance jobs (owners ``naas_abi_core.*``: datasets,
+    agent memory, the event archive, the activity log)."""
     from naas_abi_core.engine.call_context import as_service_account
     from naas_abi_core.services.iam import roles
     from naas_abi_core.services.iam.IAMPorts import IAMNotFoundError
+    from naas_abi_core.services.iam.modules import reserved_module_id
 
-    if iam is None or not hasattr(iam, "create_service_account"):
+    if (
+        iam is None
+        or not hasattr(iam, "create_service_account")
+        or reserved_module_id(module_id)
+    ):
         return ENGINE_IDENTITY
     name = roles.job_account_name(module_id)
     with as_service_account(ENGINE_IDENTITY):
@@ -148,8 +155,9 @@ def job_authorizer(
 
     An allowed trigger that ``api`` or ``engine`` stored for a user runs as the
     module's job account (``identity``) for that user, with the caller's scope;
-    any other runs as the account alone (a module never hands a user to
-    another, as with agents).
+    one they stored for no user runs as the account alone. Any other caller's
+    trigger (a module's) is refused: the run would act with the job account's
+    rights, not the caller's, and a module never hands a user to another.
     """
     from naas_abi_core.engine.call_context import (
         CallContext,
@@ -209,7 +217,13 @@ def job_authorizer(
         except PermissionDeniedError as exc:
             raise RPCError("PERMISSION_DENIED", str(exc)) from exc
         first_party = caller.principal.name in (ENGINE_IDENTITY, "api")
-        if operation != "trigger" or caller.on_behalf_of is None or not first_party:
+        if operation == "trigger" and not first_party:
+            raise RPCError(
+                "PERMISSION_DENIED",
+                f"A job of engine module {module_id!r} is run by the engine, or "
+                "through Nexus for a user: not for another caller",
+            )
+        if operation != "trigger" or caller.on_behalf_of is None:
             return None
         return CallContext(
             principal=service_account(identity),
