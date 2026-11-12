@@ -658,6 +658,11 @@ check: deps check-core check-marketplace check-nexus
 check-package-size:
 	@ scripts/check_package_size.sh
 
+# Fail when uv.lock or the Nexus API's lock holds a package with an advisory
+# that .github/advisories-allowlist.txt does not record
+check-advisories:
+	@ scripts/check_advisories.sh
+
 # Build Nexus web app to catch frontend build errors before commit
 check-nexus: deps
 	@echo ""

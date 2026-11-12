@@ -1,0 +1,37 @@
+# Dependency updates, each held back until its release is a week old (the same
+# cooldown as `exclude-newer` in the root pyproject.toml).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: uv
+    directories:
+      - /
+      - /libs/naas-abi/naas_abi/apps/nexus/apps/api
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: npm
+    directory: /libs/naas-abi/naas_abi/apps/nexus
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: docker
+    directories:
+      - /libs/naas-abi/naas_abi/apps/nexus
+      - /libs/naas-abi-idp
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7

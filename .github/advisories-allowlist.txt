@@ -1,0 +1,58 @@
+# Advisories `scripts/check_advisories.sh` lets through, one per line:
+#   <id> <ignore|until-fixed>  # <package> <version>: <why it stays>
+# `until-fixed` stops ignoring an advisory once a fixed release exists.
+# Remove a line once the lock moves past it: the check fails on any other.
+
+GHSA-45c3-73f7-pv4m ignore  # dnspython 2.8.0: dnspython 2.9 needs Python 3.11, the Nexus API supports 3.10
+GHSA-wj6h-64fc-37mp until-fixed  # ecdsa 0.19.2: no fixed release; pulled in by python-jose
+PYSEC-2026-1325 until-fixed  # ecdsa 0.19.2: no fixed release; pulled in by python-jose
+GHSA-7xgj-8392-5q4r ignore  # fastmcp 3.4.0: its fixed releases need starlette>=1.0, held by fastapi<0.116 (naas-abi-core); lifted with the FastAPI upgrade
+GHSA-gr75-jv2w-4656 ignore  # langchain-anthropic 0.3.22: held by langchain-anthropic<0.4; lifted with the LangChain 1.x upgrade
+PYSEC-2026-2556 ignore  # langchain-anthropic 0.3.22: held by langchain-anthropic<0.4; lifted with the LangChain 1.x upgrade
+GHSA-2g6r-c272-w58r ignore  # langchain-core 0.3.86: held by the LangChain 0.3 integrations; lifted with the LangChain 1.x upgrade
+GHSA-qh6h-p6c9-ff54 ignore  # langchain-core 0.3.86: held by the LangChain 0.3 integrations; lifted with the LangChain 1.x upgrade
+PYSEC-2026-2193 ignore  # langchain-core 0.3.86: held by the LangChain 0.3 integrations; lifted with the LangChain 1.x upgrade
+PYSEC-2026-2562 ignore  # langchain-core 0.3.86: held by the LangChain 0.3 integrations; lifted with the LangChain 1.x upgrade
+GHSA-r7w7-9xr2-qq2r ignore  # langchain-openai 0.3.35: held by langchain-openai<0.4; lifted with the LangChain 1.x upgrade
+PYSEC-2026-76 ignore  # langchain-openai 0.3.35: held by langchain-openai<0.4; lifted with the LangChain 1.x upgrade
+GHSA-g48c-2wqr-h844 ignore  # langgraph 1.0.1: held by the LangChain 0.3 integrations; lifted with the LangChain 1.x upgrade
+PYSEC-2026-83 ignore  # langgraph 1.0.1: held by the LangChain 0.3 integrations; lifted with the LangChain 1.x upgrade
+GHSA-fjqc-hq36-qh5p ignore  # langgraph-checkpoint 3.0.1: held by langgraph-checkpoint<4 (naas-abi-sdk); lifted with the LangGraph upgrade
+GHSA-mhr3-j7m5-c7c9 ignore  # langgraph-checkpoint 3.0.1: held by langgraph-checkpoint<4 (naas-abi-sdk); lifted with the LangGraph upgrade
+PYSEC-2026-2573 ignore  # langgraph-checkpoint 3.0.1: held by langgraph-checkpoint<4 (naas-abi-sdk); lifted with the LangGraph upgrade
+PYSEC-2026-2574 ignore  # langgraph-checkpoint 3.0.1: held by langgraph-checkpoint<4 (naas-abi-sdk); lifted with the LangGraph upgrade
+GHSA-47pj-3jcm-6whg ignore  # langgraph-checkpoint-postgres 3.0.5: held by langgraph-checkpoint<4; lifted with the LangGraph upgrade
+GHSA-6hmw-9432-67qq ignore  # langgraph-checkpoint-postgres 3.0.5: held by langgraph-checkpoint<4; lifted with the LangGraph upgrade
+PYSEC-2026-3635 ignore  # langgraph-checkpoint-postgres 3.0.5: held by langgraph-checkpoint<4; lifted with the LangGraph upgrade
+GHSA-fvww-7h3r-vfhp ignore  # langgraph-sdk 0.2.15: held by langgraph 1.0; lifted with the LangGraph upgrade
+GHSA-w39p-vh2g-g8g5 ignore  # langgraph-sdk 0.2.15: held by langgraph 1.0; lifted with the LangGraph upgrade
+PYSEC-2026-2575 ignore  # langgraph-sdk 0.2.15: held by langgraph 1.0; lifted with the LangGraph upgrade
+PYSEC-2026-4240 ignore  # langgraph-sdk 0.2.15: held by langgraph 1.0; lifted with the LangGraph upgrade
+GHSA-5h93-6whr-6q8j ignore  # mcp 1.27.2: its fixed releases need starlette>=1.0, held by fastapi<0.116 (naas-abi-core); lifted with the FastAPI upgrade
+GHSA-84m7-p3x7-pcfv ignore  # mcp 1.27.2: its fixed releases need starlette>=1.0, held by fastapi<0.116 (naas-abi-core); lifted with the FastAPI upgrade
+GHSA-rwrf-2pqf-9j8j ignore  # mcp 1.27.2: its fixed releases need starlette>=1.0, held by fastapi<0.116 (naas-abi-core); lifted with the FastAPI upgrade
+GHSA-vj7q-gjh5-988w ignore  # mcp 1.27.2: its fixed releases need starlette>=1.0, held by fastapi<0.116 (naas-abi-core); lifted with the FastAPI upgrade
+GHSA-w4fh-qvv9-3v23 ignore  # mcp 1.27.2: its fixed releases need starlette>=1.0, held by fastapi<0.116 (naas-abi-core); lifted with the FastAPI upgrade
+PYSEC-2026-3483 ignore  # mcp 1.27.2: its fixed releases need starlette>=1.0, held by fastapi<0.116 (naas-abi-core); lifted with the FastAPI upgrade
+GHSA-r374-rxx8-8654 ignore  # paramiko 3.5.1: held by paramiko<4 (naas-abi-core)
+PYSEC-2026-2858 until-fixed  # paramiko 3.5.1: held by paramiko<4 (naas-abi-core)
+GHSA-6w46-j5rx-g56g ignore  # pytest 8.4.2: held by pytest<9 (dev dependency, never deployed)
+PYSEC-2026-1845 ignore  # pytest 8.4.2: held by pytest<9 (dev dependency, never deployed)
+GHSA-3qf3-8w2g-rqmx until-fixed  # python-jose 3.5.0: no fixed release; a declared dependency of naas-abi that only a Nexus API test imports
+PYSEC-2026-4298 until-fixed  # python-jose 3.5.0: no fixed release; a declared dependency of naas-abi that only a Nexus API test imports
+GHSA-gc5v-m9x4-r6x2 ignore  # requests 2.32.5: held by arxiv<=2.4.1 (requests<2.33), the arxiv application's dependency
+PYSEC-2026-2275 ignore  # requests 2.32.5: held by arxiv<=2.4.1 (requests<2.33), the arxiv application's dependency
+GHSA-2c2j-9gv5-cj73 ignore  # starlette 0.46.2: held by fastapi<0.116 (naas-abi-core); lifted with the FastAPI upgrade
+GHSA-7f5h-v6xp-fcq8 ignore  # starlette 0.46.2: held by fastapi<0.116 (naas-abi-core); lifted with the FastAPI upgrade
+GHSA-82w8-qh3p-5jfq ignore  # starlette 0.46.2: held by fastapi<0.116 (naas-abi-core); lifted with the FastAPI upgrade
+GHSA-86qp-5c8j-p5mr ignore  # starlette 0.46.2: held by fastapi<0.116 (naas-abi-core); lifted with the FastAPI upgrade
+GHSA-jp82-jpqv-5vv3 ignore  # starlette 0.46.2: held by fastapi<0.116 (naas-abi-core); lifted with the FastAPI upgrade
+GHSA-wqp7-x3pw-xc5r ignore  # starlette 0.46.2: held by fastapi<0.116 (naas-abi-core); lifted with the FastAPI upgrade
+GHSA-x746-7m8f-x49c ignore  # starlette 0.46.2: held by fastapi<0.116 (naas-abi-core); lifted with the FastAPI upgrade
+PYSEC-2026-161 ignore  # starlette 0.46.2: held by fastapi<0.116 (naas-abi-core); lifted with the FastAPI upgrade
+PYSEC-2026-1941 ignore  # starlette 0.46.2: held by fastapi<0.116 (naas-abi-core); lifted with the FastAPI upgrade
+PYSEC-2026-1942 ignore  # starlette 0.46.2: held by fastapi<0.116 (naas-abi-core); lifted with the FastAPI upgrade
+PYSEC-2026-2280 ignore  # starlette 0.46.2: held by fastapi<0.116 (naas-abi-core); lifted with the FastAPI upgrade
+PYSEC-2026-2281 ignore  # starlette 0.46.2: held by fastapi<0.116 (naas-abi-core); lifted with the FastAPI upgrade
+PYSEC-2026-248 ignore  # starlette 0.46.2: held by fastapi<0.116 (naas-abi-core); lifted with the FastAPI upgrade
+PYSEC-2026-249 ignore  # starlette 0.46.2: held by fastapi<0.116 (naas-abi-core); lifted with the FastAPI upgrade

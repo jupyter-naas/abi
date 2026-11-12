@@ -1,5 +1,6 @@
 [project]
-name = "abi"
+# Never published: a name under the naas-abi- prefix ABI holds on PyPI.
+name = "naas-abi-workspace"
 version = "0.1.0"
 description = "Agentic Brain Infrastructure - AI Operating System"
 authors = [
@@ -166,6 +167,11 @@ log_cli = true
 log_cli_level = "INFO"
 log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"
 log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+
+[tool.uv]
+# Release-age cooldown: a version is resolved once it has been on the index for
+# a week. Needs uv 0.9.17 or later.
+exclude-newer = "7 days"
 
 [tool.uv.sources]
 naas-abi-proto = {path = "libs/naas-abi-proto", editable = true}

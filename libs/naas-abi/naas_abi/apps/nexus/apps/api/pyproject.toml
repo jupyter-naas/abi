@@ -3,7 +3,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "nexus-api"
+# Never published: a name under the naas-abi- prefix ABI holds on PyPI.
+name = "naas-abi-nexus-api"
 version = "0.0.1"
 description = "NEXUS Platform API - ABI Integration Layer"
 requires-python = ">=3.10"
@@ -108,3 +109,8 @@ packages = ["app"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.uv]
+# Release-age cooldown: a version is resolved once it has been on the index
+# for a week. Needs uv 0.9.17 or later.
+exclude-newer = "7 days"

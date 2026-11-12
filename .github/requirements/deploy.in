@@ -1,0 +1,3 @@
+# The deploy jobs' client of the naas.ai API (deploy_api.yml).
+naas-python
+pydantic==2.7.4

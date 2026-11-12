@@ -10,6 +10,11 @@ on:
     types: 
       - completed
 
+# Pulls the built image with the job's own token.
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   # Only a release cut from main deploys. A release from v2 (2.x fixes) or dev
   # (prereleases) is built from a commit that main does not contain; its image
@@ -17,7 +22,8 @@ jobs:
   # answers "identical" or "ahead" when main contains the built commit.
   gate:
     runs-on: ubuntu-latest
-    if: github.repository == 'jupyter-naas/abi'
+    # Only after a build that succeeded: otherwise :latest is not this release.
+    if: github.repository == 'jupyter-naas/abi' && github.event.workflow_run.conclusion == 'success'
     outputs:
       from_main: ${{ steps.channel.outputs.from_main }}
     steps:
@@ -41,13 +47,13 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
 
       - name: Cache Docker layers
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
         with:
           path: /tmp/.buildx-cache
           key: ${{ runner.os }}-buildx-${{ github.sha }}
@@ -55,16 +61,16 @@ jobs:
             ${{ runner.os }}-buildx-
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.ACCESS_TOKEN }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Install naas-python
         run: |
-          pip install naas-python --upgrade
-          pip install --upgrade pydantic==2.7.4
+          # Pinned with hashes: the steps below hand it production secrets.
+          pip install --require-hashes -r .github/requirements/deploy.txt
       
       - name: Create Naas Container registry
         run: |
@@ -196,13 +202,13 @@ jobs:
       REGISTRY_NAME: ${{ github.event.repository.name }}-demo-streamlit
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
 
       - name: Cache Docker layers
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
         with:
           path: /tmp/.buildx-cache
           key: ${{ runner.os }}-buildx-${{ github.sha }}
@@ -210,16 +216,16 @@ jobs:
             ${{ runner.os }}-buildx-
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.ACCESS_TOKEN }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Install naas-python
         run: |
-          pip install naas-python --upgrade
-          pip install --upgrade pydantic==2.7.4
+          # Pinned with hashes: the steps below hand it production secrets.
+          pip install --require-hashes -r .github/requirements/deploy.txt
       
       - name: Create Naas Container registry
         run: |
@@ -272,13 +278,13 @@ jobs:
       REGISTRY_NAME: ${{ github.event.repository.name }}-mcp-server
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
 
       - name: Cache Docker layers
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
         with:
           path: /tmp/.buildx-cache
           key: ${{ runner.os }}-buildx-${{ github.sha }}
@@ -286,16 +292,16 @@ jobs:
             ${{ runner.os }}-buildx-
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.ACCESS_TOKEN }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Install naas-python
         run: |
-          pip install naas-python --upgrade
-          pip install --upgrade pydantic==2.7.4
+          # Pinned with hashes: the steps below hand it production secrets.
+          pip install --require-hashes -r .github/requirements/deploy.txt
       
       - name: Create Naas Container registry
         run: |
