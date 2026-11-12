@@ -313,7 +313,8 @@ def test_a_malformed_catalog_file_leaves_the_module_without_one(tmp_path):
 
 def test_one_module_id_declares_a_catalog_in_one_project_only(h, iam):
     """The service comes from the module id: the same id in another project
-    would replace the first's catalog, so its declaring manifest is refused."""
+    would replace the first's catalog, so its manifest is refused (a module id
+    runs in one project, catalog or not)."""
     manifest = {
         **document(statement("Allow", ["triple_store:Query"], ["*"])),
         "catalog": DECLARED,
@@ -325,12 +326,9 @@ def test_one_module_id_declares_a_catalog_in_one_project_only(h, iam):
     second = h.service_account("module/other/acme.people")
     with h.as_(second), pytest.raises(IAMConflictError):
         iam.submit_manifest("acme.people", "other", manifest)
-    # Without a catalog, the other project's module is as before.
-    with h.as_(second):
-        plain = iam.submit_manifest(
-            "acme.people", "other", document(*manifest["statements"])
-        )
-    assert plain.manifest.status == "pending"
+    # Without a catalog too: the id is the first project's.
+    with h.as_(second), pytest.raises(IAMConflictError):
+        iam.submit_manifest("acme.people", "other", document(*manifest["statements"]))
 
 
 # -- declared actions in the container of the call ----------------------------------

@@ -6,6 +6,15 @@
   policy ``module.<project>.<module_id>``, attached to the account.
 * Until then the account holds ``builtin.module_bootstrap`` only, which it
   keeps: its own discovery record and its own manifest.
+* A module id names one module of the platform: the module's own namespaces
+  (document namespace, secret prefix, checkpoint scope, schema sources) are
+  named by it. An id the core reserves (``RESERVED_MODULE_IDS``), the id of an
+  engine module (its jobs' account ``job/<module_id>``), or one another
+  project's account already holds is refused at submission and approval, and
+  such an account holds nothing (``module_id_holder``).
+* A module's dataset namespace is derived from its project and id
+  (``dataset_namespace``): a dataset namespace is an identifier, which a
+  module id need not be.
 * A manifest may also carry the module's own catalog under ``catalog``
   (``module_scopes.module_catalog``): part of what the admin approves, so a
   changed catalog is a new version. Approving registers it, and the approved
@@ -38,6 +47,19 @@ from naas_abi_core.services.iam.policy import (
 _PROJECT = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _MODULE_ID = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
 _ACCOUNT = re.compile(r"^module/([^/]+)/([^/]+)$")
+_NOT_IDENTIFIER = re.compile(r"[^a-z0-9]+")
+
+
+# Module ids that name the core's own namespaces (the engine's agent memory,
+# the activity log) or the shared ones (``default``): no module runs as them.
+RESERVED_MODULE_IDS = frozenset({"default", "naas_abi_core"})
+_RESERVED_PREFIXES = ("naas_abi_core.",)
+
+
+def reserved_module_id(module_id: str) -> bool:
+    """Whether ``module_id`` names one of the core's own namespaces."""
+    folded = module_id.lower()
+    return folded in RESERVED_MODULE_IDS or folded.startswith(_RESERVED_PREFIXES)
 
 
 def check_module(project: str, module_id: str) -> None:
@@ -85,7 +107,18 @@ def variables(name: str | None) -> dict[str, str | None]:
     return {
         "module.project": encode_segment(project),
         "module.id": encode_segment(module_id),
+        "module.dataset_namespace": dataset_namespace(project, module_id),
     }
+
+
+def dataset_namespace(project: str, module_id: str) -> str:
+    """The dataset namespace of the module ``module_id`` of ``project``: an
+    identifier (``^[A-Za-z][A-Za-z0-9_]*$``), the id in lower case with every
+    other character an underscore, then a digest of the project and the id, so
+    no other module's matches (``acme.crm`` of ``p``: ``m_acme_crm_<digest>``)."""
+    slug = _NOT_IDENTIFIER.sub("_", module_id.lower()).strip("_")
+    digest = hashlib.sha256(f"{project}/{module_id}".encode()).hexdigest()[:12]
+    return f"m_{slug}_{digest}" if slug else f"m_{digest}"
 
 
 def manifest_sha256(document: Mapping[str, Any]) -> str:
@@ -157,10 +190,13 @@ def bind(document: PolicyDocument, project: str, module_id: str) -> PolicyDocume
 NAMESPACE_SERVICES = ("document", "dataset")
 
 
-def namespace_placements(module_id: str) -> list[tuple[str, str]]:
-    namespace = encode_segment(module_id)
+def namespace_placements(project: str, module_id: str) -> list[tuple[str, str]]:
+    namespaces = {
+        "document": encode_segment(module_id),
+        "dataset": dataset_namespace(project, module_id),
+    }
     return [
         (service, key)
         for service in NAMESPACE_SERVICES
-        for key in (namespace, f"{namespace}/*")
+        for key in (namespaces[service], f"{namespaces[service]}/*")
     ]

@@ -613,8 +613,8 @@ def test_over_nats_the_caller_of_a_load_is_the_verified_token(tmp_path):
 
 def _default_manifest_module(tmp_path):
     """A wired store and a module whose approved manifest is the SDK's default
-    for a module declaring ``triple_store``: every action on graphs and views,
-    LoadSchema on its own sources."""
+    for a module declaring ``triple_store``: every action on its own graphs and
+    views, reading the schema graph, LoadSchema on its own sources."""
     from naas_abi_core.engine.call_context import (
         CallContext,
         Principal,
@@ -653,9 +653,10 @@ def test_a_modules_graph_grant_does_not_reach_the_schema_graph(tmp_path):
         PermissionDeniedError,
         ResourceNotFoundError,
     )
+    from naas_abi_sdk.permissions import module_graph
 
     owner, module = _default_manifest_module(tmp_path)
-    own_graph = URIRef("http://g/foo-data")
+    own_graph = URIRef(module_graph("foo", "data"))
     forged = Graph()
     forged.add(
         (

@@ -1972,19 +1972,36 @@ iam.broker_permissions(principal, key)  # records from authenticate_key; never c
   `builtin.module_bootstrap` only: discovery `Register`, `Renew`, `Unregister`, `GetModule`
   on their own `module/<project>/<module_id>` and `iam:SubmitManifest` / `GetManifest` on
   their own manifest; `iam:RegisterCatalog` is refused. Approval writes the managed policy
-  `module.<project>.<module_id>` (`${module.id}`, `${module.project}` bound), attaches it,
-  and places the module's document and dataset namespaces at platform level. A changed
+  `module.<project>.<module_id>` (`${module.id}`, `${module.project}` and
+  `${module.dataset_namespace}` bound), attaches it, and places the module's document
+  namespace (its id) and dataset namespace (`modules.dataset_namespace`: an identifier
+  from its project and id) at platform level. A changed
   manifest is a new pending version while the approved one stays in force; approving or
   rejecting without a version decides the pending one only; a superseded version submitted
   again (a rollback) is pending again.
+- **One module id, one module.** A module's own namespaces (document namespace, secret
+  prefix `<module id>/`, checkpoint scope, schema sources) are named by its module id,
+  so the id is held by one account of the platform (`_module_id_refused`): submission
+  and approval refuse (`IAMConflictError`), and the account holds nothing (its subject
+  has no statements, its bootstrap included), when the id is reserved by the core
+  (`modules.RESERVED_MODULE_IDS`: `default`, `naas_abi_core` and `naas_abi_core.*`, the
+  engine's agent memory and activity log), when an engine module has it (an account
+  `job/<module_id>` exists), or when an older account `module/<other project>/<id>`
+  holds it. Deleting that account frees the id. The core's own document namespaces
+  (`naas_abi_core.*`) are also sealed to the engine.
 - **The manifest flow.** A module declares its permissions either in `permissions.yaml`
   beside its `BaseModule` (a policy document) or by defaulting them from
   `ModuleDependencies` (each declared service maps to its catalog's actions on the
-  module's own namespaces; `secret` is `secret/<module id>/...` only, `email` is `Send`
-  alone, `triple_store` is graphs and views plus `LoadSchema` on its own ontologies
-  (`schema/module/<module id>/...`; the triple store refuses direct writes to the
-  shared schema graph to whoever may not load every schema, so `graph/*` does not
-  reach it), `dataset` denies `QueryUnchecked`, `source_control`
+  module's own namespaces, on the platform, never `abi:*/...`: `secret` is
+  `secret/<module id>/...` only, `cache` and `keyvalue` keys `<module id>/...`,
+  `object_storage` the prefix `<module id>/`, `vector_store` collections
+  `<module id>/...`, `dataset` its own namespace (`${module.dataset_namespace}`, which
+  `default` names for a module account, `DatasetService`), `email` is `Send` alone,
+  `triple_store` is its own graphs (`http://ontology.naas.ai/graph/module/<module id>/...`)
+  and views (`<module id>/...`), reading the schema graph, plus `LoadSchema` on its own
+  ontologies (`schema/module/<module id>/...`; the triple store refuses direct writes to
+  the shared schema graph to whoever may not load every schema), any other service
+  what the platform holds; `dataset` denies `QueryUnchecked`, `source_control`
   denies `AddCollaborator`: no
   default grants an admin action, and a Deny is not overridden by an Allow of the same
   policy, so a module needing one writes its own manifest).

@@ -72,6 +72,7 @@ MARKS = {
     "user.id": "\x02",
     "module.id": "\x03",
     "module.project": "\x04",
+    "module.dataset_namespace": "\x05",
 }
 _SHOWN = {mark: "${" + name + "}" for name, mark in MARKS.items()}
 _MARK_CHARS = frozenset(MARKS.values())

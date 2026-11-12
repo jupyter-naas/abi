@@ -4,7 +4,9 @@
 ``document/<ns>/<c>/<id>``. Namespace administration is ``Namespaces``,
 ``EnsureCollection`` and ``DropCollection``, granted by policy like any other
 action: no identity holds it implicitly. The built-in IdP's namespace is
-sealed to it (``SEALS``): not even ``api`` or ``engine`` reach it.
+sealed to it (``SEALS``): not even ``api`` or ``engine`` reach it. The core's
+own namespaces (``naas_abi_core.*``: the engine's agent memory, the activity
+log) are sealed to the engine.
 """
 
 from __future__ import annotations
@@ -67,6 +69,9 @@ CATALOG = ActionCatalog(
 
 # Sealed to the built-in IdP, wherever a placement puts it.
 IDP_NAMESPACE = "idp"
+# The core's own namespaces, sealed to the engine: ``naas_abi_core.services.agent``
+# (the engine's agent memory), ``naas_abi_core.services.activity_log``.
+CORE_NAMESPACES = "naas_abi_core.*"
 SEALS: tuple[Seal, ...] = (
     # Sealed at any placement: the platform's and every container's.
     *(
@@ -75,6 +80,15 @@ SEALS: tuple[Seal, ...] = (
             f"document:namespace/{IDP_NAMESPACE}",
             f"document:collection/{IDP_NAMESPACE}/*",
             f"document:document/{IDP_NAMESPACE}/*",
+        )
+        for pattern in anywhere(rest)
+    ),
+    *(
+        Seal(pattern, "engine")
+        for rest in (
+            f"document:namespace/{CORE_NAMESPACES}",
+            f"document:collection/{CORE_NAMESPACES}",
+            f"document:document/{CORE_NAMESPACES}",
         )
         for pattern in anywhere(rest)
     ),

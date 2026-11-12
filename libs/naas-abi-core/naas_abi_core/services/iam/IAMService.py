@@ -338,6 +338,10 @@ class IAMService(IIAMService, PolicySource):
         self._listeners: list[Callable[[int], None]] = []
         self._seen_revision: int | None = None
         self._seal_key: bytes | None = None
+        # The account holding each module id (``_module_id_holder``): an older
+        # account never appears later, so the holder only changes when it is
+        # deleted, which a point lookup sees.
+        self._module_id_holders: dict[str, str] = {}
         self._seal_lock = threading.Lock()
         self._approve_lock = threading.Lock()
         for catalog in store.list_catalogs():
@@ -535,6 +539,10 @@ class IAMService(IIAMService, PolicySource):
         record = self._resolve(principal)
         status = record.status if record is not None else "active"
         statements: list[EffectiveStatement] = []
+        if record is not None and self._module_id_refused(record) is not None:
+            # A module id names one module: an account of a reserved id, or of
+            # one another account holds, holds nothing.
+            return Subject(principal.id, status, ())
         for attachment, group in self._held_attachments(principal, record):
             statements += self._statements_of(
                 attachment.policy_id, attachment, group, fresh=fresh
@@ -3956,6 +3964,9 @@ class IAMService(IIAMService, PolicySource):
         """
         modules.check_module(project, module_id)
         account = self._calling_module_account(project, module_id)
+        refused = self._module_id_refused(account)
+        if refused is not None:
+            raise IAMConflictError(refused)
         self.require(
             "iam:SubmitManifest",
             manifest_resource(account.id),
@@ -4139,6 +4150,73 @@ class IAMService(IIAMService, PolicySource):
             )
         return record
 
+    def _module_id_refused(self, account: PrincipalRecord) -> str | None:
+        """Why the module account ``account`` may not hold its module id, or
+        None (also for an account that is not a module's).
+
+        A module id names one module of the platform, whose namespaces it
+        names: refused when the core reserves it, when an engine module has it
+        (its jobs' account ``job/<module_id>``), or when an older account of
+        another project holds it. A deleted account holds nothing."""
+        parsed = modules.parse_account(account.name)
+        if parsed is None or account.kind != "service_account":
+            return None
+        project, module_id = parsed
+        if modules.reserved_module_id(module_id):
+            return f"Module id {module_id!r} is reserved"
+        engine_module = self.store.find_service_account(
+            roles.job_account_name(module_id)
+        )
+        if engine_module is not None and engine_module.status != "deleted":
+            return f"Module id {module_id!r} is an engine module's"
+        holder = self._module_id_holder(module_id)
+        if holder is not None and holder.id != account.id:
+            return (
+                f"Module id {module_id!r} is held by {holder.name!r}: one module "
+                f"id runs in one project, not also in {project!r}"
+            )
+        return None
+
+    def _module_id_holder(self, module_id: str) -> PrincipalRecord | None:
+        """The account that holds ``module_id``: of the module accounts of that
+        id not deleted, the one created first."""
+        cached = self._module_id_holders.get(module_id)
+        if cached is not None:
+            try:
+                record = self.store.get_principal(cached)
+            except IAMNotFoundError:
+                record = None
+            if record is not None and record.status != "deleted":
+                return record
+        found: list[PrincipalRecord] = []
+        after: str | None = None
+        while True:
+            page = self.store.list_principals(
+                "service_account", limit=500, after=after, text=f"/{module_id}"
+            )
+            for record in page.items:
+                parsed = modules.parse_account(record.name)
+                if (
+                    parsed is not None
+                    and parsed[1] == module_id
+                    and record.status != "deleted"
+                ):
+                    found.append(record)
+            if page.next_after is None:
+                break
+            after = page.next_after
+        if not found:
+            return None
+        holder = min(
+            found,
+            key=lambda r: (
+                r.created_at.timestamp() if r.created_at else float("inf"),
+                r.id,
+            ),
+        )
+        self._module_id_holders[module_id] = holder.id
+        return holder
+
     def _manifest(
         self,
         principal_id: str,
@@ -4181,6 +4259,9 @@ class IAMService(IIAMService, PolicySource):
         self, record: ManifestRecord, document: PolicyDocument, *, decided_by: str
     ) -> ManifestRecord:
         account = self._get_principal(record.principal_id)
+        refused = self._module_id_refused(account)
+        if refused is not None:
+            raise IAMConflictError(refused)
         bound = modules.bind(document, record.project, record.module_id)
         _refuse_reserved_topics(bound)
         self._refuse_nested_topics(account.id, bound)
@@ -4210,7 +4291,9 @@ class IAMService(IIAMService, PolicySource):
             if other.sha256 != record.sha256:
                 self.store.put_manifest(replace(other, status="superseded"))
         placed = {(p.service, p.id_key) for p in self.store.list_placements()}
-        for service, id_key in modules.namespace_placements(record.module_id):
+        for service, id_key in modules.namespace_placements(
+            record.project, record.module_id
+        ):
             if (service, id_key) not in placed:
                 self.store.put_placement(Placement(service, id_key))
         approved = self.store.put_manifest(

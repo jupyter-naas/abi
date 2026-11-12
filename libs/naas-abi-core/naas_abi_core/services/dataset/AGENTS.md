@@ -238,6 +238,13 @@ an engine with IAM (a library use, a NATS facade whose server checks) does not
 check. The contract test is `DatasetService_authorization_test.py`: no policy, granted and denied
 principals, in process and over NATS.
 
+For a module's account (`module/<project>/<module_id>`), the namespace `default`
+is the module's own, `modules.dataset_namespace(project, module_id)`
+(`m_<id>_<digest>`), which its default manifest grants
+(`${module.dataset_namespace}`): modules never share `default`, and a module
+reaches the platform's `default` only by a manifest naming it. Other callers'
+`default` is unchanged (`DatasetService_module_namespace_test.py`).
+
 The cross-cutting pattern (`ResourceGuard`, errors, the create rule) is in
 [services/iam/AGENTS.md](../iam/AGENTS.md), "Enforcing in a data service". The
 engine-hosted facades reach datasets over NATS through an adapter that is itself

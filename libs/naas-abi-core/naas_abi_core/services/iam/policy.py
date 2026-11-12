@@ -39,7 +39,11 @@ Effect = Literal["Allow", "Deny"]
 # Variables a stored policy may use in its resources. The module ones resolve
 # for a module's service account, ``module/<project>/<id>``, and are bound when
 # its manifest is approved; for any other principal they match nothing.
-MODULE_VARIABLES = frozenset({"module.id", "module.project"})
+# ``module.dataset_namespace`` is the module's own dataset namespace
+# (``modules.dataset_namespace``).
+MODULE_VARIABLES = frozenset(
+    {"module.id", "module.project", "module.dataset_namespace"}
+)
 POLICY_VARIABLES = frozenset({"scope", "principal.id", "user.id"}) | MODULE_VARIABLES
 # What a policy attached at a scope writes each resource pattern as: the
 # container itself, ``${scope}``, or what it holds, ``${scope}/...``.

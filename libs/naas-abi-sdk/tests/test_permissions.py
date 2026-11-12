@@ -19,11 +19,11 @@ def test_defaults_reach_the_modules_own_namespaces_and_declared_services():
         "abi:document:document/${module.id}/*",
     ]
     assert statements["UseDataset"]["actions"] == ["dataset:*"]
-    # Where the SDK's dataset facade writes (a module id is no dataset identifier).
+    # Its own namespace, derived from its project and id when it is approved
+    # (what ``default`` names for a module): never the shared ``default``.
     assert statements["UseDataset"]["resources"] == [
-        "abi:dataset:namespace/default",
-        "abi:dataset:dataset/default/*",
-        "abi:dataset:catalog/-",
+        "abi:dataset:namespace/${module.dataset_namespace}",
+        "abi:dataset:dataset/${module.dataset_namespace}/*",
     ]
     assert statements["NoDatasetAdmin"]["effect"] == "Deny"
     assert statements["NoDatasetAdmin"]["actions"] == ["dataset:QueryUnchecked"]
@@ -37,16 +37,23 @@ def test_defaults_reach_the_modules_own_namespaces_and_declared_services():
     ]
     assert statements["UseKeyvalue"]["actions"] == ["keyvalue:*"]
     assert statements["UseKeyvalue"]["resources"] == [
-        "abi:keyvalue:*",
-        "abi:*/keyvalue:*",
+        "abi:keyvalue:key/${module.id}%2F*"
     ]
+    # Its own graphs and views, and reading the schema graph.
     assert statements["UseTripleStore"]["resources"] == [
-        # The platform's and those of every container (core's names.anywhere).
-        "abi:triple_store:graph/*",
-        "abi:*/triple_store:graph/*",
-        "abi:triple_store:view/*",
-        "abi:*/triple_store:view/*",
+        (
+            "abi:triple_store:graph/"
+            "http%3A%2F%2Fontology.naas.ai%2Fgraph%2Fmodule%2F${module.id}%2F*"
+        ),
+        "abi:triple_store:view/${module.id}%2F*",
     ]
+    assert statements["ReadSchema"]["resources"] == [
+        "abi:triple_store:graph/http%3A%2F%2Fontology.naas.ai%2Fgraph%2Fschema"
+    ]
+    assert not any(
+        a.split(":")[1] in ("Insert", "Remove", "ClearGraph", "DropGraph")
+        for a in statements["ReadSchema"]["actions"]
+    )
     # Its own ontologies only: a source names the module that loads it.
     assert statements["OwnOntologies"]["actions"] == ["triple_store:LoadSchema"]
     assert statements["OwnOntologies"]["resources"] == [
@@ -54,6 +61,64 @@ def test_defaults_reach_the_modules_own_namespaces_and_declared_services():
     ]
     # Bus topics are declared, never defaulted.
     assert not any("bus:" in a for s in manifest["statements"] for a in s["actions"])
+
+
+def test_default_manifest_keeps_every_grant_in_the_modules_own_namespace():
+    """No default Allow reaches a container (``abi:*/...``, an organization's or
+    a workspace's data) or a name that is not the module's own."""
+    services = (
+        "activity_log",
+        "cache",
+        "coding_environment",
+        "dataset",
+        "document",
+        "email",
+        "event",
+        "identity",
+        "keyvalue",
+        "model_registry",
+        "object_storage",
+        "secret",
+        "source_control",
+        "triple_store",
+        "vector_store",
+    )
+    manifest = default_manifest(ModuleDependencies(services=services))
+    allows = [s for s in manifest["statements"] if s["effect"] == "Allow"]
+    assert {s["sid"] for s in allows} >= {
+        f"Use{''.join(p.title() for p in service.split('_'))}" for service in services
+    }
+    for statement in allows:
+        for resource in statement["resources"]:
+            assert resource.startswith("abi:"), resource
+            assert not resource.startswith("abi:*"), (statement["sid"], resource)
+    owned = {
+        "UseCache": ["abi:cache:key/${module.id}%2F*"],
+        "UseObjectStorage": ["abi:object_storage:object/${module.id}/*"],
+        "UseVectorStore": [
+            "abi:vector_store:collection/${module.id}%2F*",
+            "abi:vector_store:vector/${module.id}%2F*",
+        ],
+    }
+    statements = _by_sid(manifest)
+    for sid, resources in owned.items():
+        assert statements[sid]["resources"] == resources
+    # Event types are shared classes: the platform's events only.
+    assert statements["UseEvent"]["resources"] == ["abi:event:*"]
+
+
+def test_module_graph_names_a_graph_the_default_grants():
+    from naas_abi_sdk.permissions import module_graph
+
+    assert module_graph("acme.people", "contacts") == (
+        "http://ontology.naas.ai/graph/module/acme.people/contacts"
+    )
+    for name in ("", "a/b"):
+        try:
+            module_graph("acme.people", name)
+        except ValueError:
+            continue
+        raise AssertionError(f"accepted {name!r}")
 
 
 def test_defaults_grant_no_admin_action_and_no_kept_mail():

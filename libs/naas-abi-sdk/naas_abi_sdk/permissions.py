@@ -3,20 +3,30 @@
 The manifest is a policy document (``version`` and ``statements`` of
 ``effect``, ``actions`` and ``resources``). A module declares it as
 ``BaseModule.permissions``, or in ``permissions.yaml`` beside the module's
-code; otherwise it defaults from ``ModuleDependencies``:
+code; otherwise it defaults from ``ModuleDependencies``. A default grant stays
+in the module's own namespace, on the platform: it never reaches a container
+(an organization's or a workspace's data), nor another module's names. A module
+that needs more names it in a manifest of its own, where the admin sees it.
 
 * ``document``: everything on the module's own namespace, ``${module.id}``;
 * ``secret``: the secrets named ``<module id>/...``; never every secret;
-* ``dataset``: the namespace ``default`` the SDK's facade writes to, and the
-  catalog, without unchecked SQL (``dataset:QueryUnchecked`` is denied);
-* ``triple_store``: every action on graphs and views, and its own ontologies
-  only (``LoadSchema`` on ``schema/module/<module id>/...``);
+* ``dataset``: the module's own namespace, ``${module.dataset_namespace}``
+  (what the namespace ``default`` names for a module), without unchecked SQL
+  (``dataset:QueryUnchecked`` is denied);
+* ``cache`` and ``keyvalue``: the keys named ``<module id>/...``;
+* ``object_storage``: the objects under the prefix ``<module id>/``;
+* ``vector_store``: the collections named ``<module id>/...``;
+* ``triple_store``: every action on its own graphs (``module_graph``: IRIs
+  under ``http://ontology.naas.ai/graph/module/<module id>/``) and its own
+  views (``<module id>/...``), reading the schema graph, and its own
+  ontologies only (``LoadSchema`` on ``schema/module/<module id>/...``);
 * ``email``: sending only. The platform keeps a copy of the mail it sends,
   sign-in codes included, so listing, reading and deleting kept messages is
   asked for by name;
 * ``source_control``: every action but ``AddCollaborator``, an admin action
   that grants a forge user access to any repository (name it to ask for it);
-* any other service it declares: every action of that service;
+* any other service it declares (``event`` among them): every action of that
+  service on what the platform holds, never on what a container holds;
 * the modules it depends on: their agents, models and apps, and the runs it
   starts (never the built-in identity provider's ``admin`` app);
 * its own jobs, when it declares some, each by name (``@job`` and ``@workflow``
@@ -25,8 +35,8 @@ code; otherwise it defaults from ``ModuleDependencies``:
   consumers of the jobs its manifest names, and only those. A job declared in
   ``on_load`` is not known here: a module declaring one writes its manifest.
 
-``${module.id}`` and ``${module.project}`` are bound when the manifest is
-approved. Bus topics have no default: a module using the bus declares them,
+``${module.id}``, ``${module.project}`` and ``${module.dataset_namespace}`` are
+bound when the manifest is approved. Bus topics have no default: a module using the bus declares them,
 ``bus:*`` on ``abi:bus:topic/<topic>``.
 
 A module may also declare actions of its own (``BaseModule.iam_catalog``, or
@@ -59,8 +69,23 @@ _ALIASES = {"kv": "keyvalue", "events": "event"}
 
 def _anywhere(rest: str) -> tuple[str, str]:
     """``rest`` at the platform and in any container (core's ``names.anywhere``):
-    ``abi:<rest>`` and ``abi:*/<rest>``."""
+    ``abi:<rest>`` and ``abi:*/<rest>``. For Denies only: a default never
+    allows anything in a container."""
     return (f"abi:{rest}", f"abi:*/{rest}")
+
+
+# The IRIs of a module's own graphs, and the schema graph's (both encoded, as a
+# graph's id is: its IRI, every character outside RFC 3986 unreserved escaped).
+MODULE_GRAPHS = "http://ontology.naas.ai/graph/module/"
+_MODULE_GRAPHS_ID = "http%3A%2F%2Fontology.naas.ai%2Fgraph%2Fmodule%2F"
+_SCHEMA_GRAPH_ID = "http%3A%2F%2Fontology.naas.ai%2Fgraph%2Fschema"
+
+
+def module_graph(module_id: str, name: str) -> str:
+    """The IRI of the module's own graph ``name``, which the default grants."""
+    if not name or "/" in name:
+        raise ValueError(f"A graph name is one non-empty segment: {name!r}")
+    return f"{MODULE_GRAPHS}{module_id}/{name}"
 
 
 _OWN_NAMESPACES = {
@@ -70,23 +95,39 @@ _OWN_NAMESPACES = {
         "abi:document:document/${module.id}/*",
     ),
     "secret": ("abi:secret:secret/${module.id}%2F*",),
-    # The SDK's dataset facade writes to the namespace "default" (a dataset
-    # namespace is an identifier, ^[A-Za-z][A-Za-z0-9_]*$, which a module id
-    # need not be): granted until the SDK maps a module to a namespace of its own.
+    # A dataset namespace is an identifier, which a module id need not be: the
+    # module's own is derived from its project and id when it is approved.
     "dataset": (
-        "abi:dataset:namespace/default",
-        "abi:dataset:dataset/default/*",
-        "abi:dataset:catalog/-",
+        "abi:dataset:namespace/${module.dataset_namespace}",
+        "abi:dataset:dataset/${module.dataset_namespace}/*",
     ),
-    # Graphs and views; the schemas it loads are its own (``OwnOntologies``).
+    "cache": ("abi:cache:key/${module.id}%2F*",),
+    "keyvalue": ("abi:keyvalue:key/${module.id}%2F*",),
+    "object_storage": ("abi:object_storage:object/${module.id}/*",),
+    "vector_store": (
+        "abi:vector_store:collection/${module.id}%2F*",
+        "abi:vector_store:vector/${module.id}%2F*",
+    ),
+    # Its own graphs and views; the schemas it loads are its own (``OwnOntologies``).
     "triple_store": (
-        *_anywhere("triple_store:graph/*"),
-        *_anywhere("triple_store:view/*"),
+        f"abi:triple_store:graph/{_MODULE_GRAPHS_ID}${{module.id}}%2F*",
+        "abi:triple_store:view/${module.id}%2F*",
     ),
 }
 # What a service grants besides its default statement: (sid, actions, resources).
 _ALSO = {
     "triple_store": (
+        (
+            "ReadSchema",
+            (
+                "triple_store:Get",
+                "triple_store:GetSubjectGraph",
+                "triple_store:Query",
+                "triple_store:QueryStream",
+                "triple_store:Export",
+            ),
+            (f"abi:triple_store:graph/{_SCHEMA_GRAPH_ID}",),
+        ),
         (
             "OwnOntologies",
             ("triple_store:LoadSchema",),
@@ -125,7 +166,8 @@ def default_manifest(
         {_ALIASES.get(s, s) for s in dependencies.services} - {"bus", "iam"}
     )
     for service in services:
-        resources = _OWN_NAMESPACES.get(service, _anywhere(f"{service}:*"))
+        # Any other service: what the platform holds, never a container.
+        resources = _OWN_NAMESPACES.get(service, (f"abi:{service}:*",))
         statements.append(
             _statement(
                 f"Use{_sid(service)}",

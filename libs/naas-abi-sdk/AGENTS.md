@@ -297,21 +297,30 @@ A module asks for what it needs as a policy document (the language of core's
 
 1. `BaseModule.permissions` (a dict), else
 2. `permissions.yaml` beside the module's code (JSON also reads without PyYAML), else
-3. a default derived from `ModuleDependencies` (`default_manifest`): `document` is the
-   module's own namespace (`${module.id}`); `secret` the names `<module id>/...`;
-   `dataset` the namespace `default` and the catalog, with `dataset:QueryUnchecked`
-   denied; `email` sending only (the platform keeps a copy of what is sent, sign-in
+3. a default derived from `ModuleDependencies` (`default_manifest`), which stays in the
+   module's own namespace on the platform and never reaches a container: `document` is
+   the module's own namespace (`${module.id}`); `secret` the names `<module id>/...`;
+   `cache` and `keyvalue` the keys `<module id>/...`; `object_storage` the prefix
+   `<module id>/`; `vector_store` the collections `<module id>/...`; `dataset` its own
+   namespace (`${module.dataset_namespace}`, which `default` names for a module), with
+   `dataset:QueryUnchecked` denied; `triple_store` its own graphs (`module_graph(id,
+   name)`) and views (`<module id>/...`), reading the schema graph, and `LoadSchema` on
+   its own ontologies; `email` sending only (the platform keeps a copy of what is sent, sign-in
    codes included, so reading it is named in a manifest); `source_control` all but
-   `AddCollaborator`; any other declared service every action of it; the dependency
+   `AddCollaborator`; any other declared service (`event` among them) every action of
+   it on what the platform holds; the dependency
    modules' agents, models and apps (never the identity provider's `admin` app) and
    the runs the module starts, for it and for the user it acts for; its own jobs, each
    by name. `bus` has no default: a module using it declares `bus:*` on
-   `abi:bus:topic/<topic>`. Default grants contain no admin action. A grant meant for
-   every container names both forms of core's `names.anywhere` (`abi:<service>:*` and
-   `abi:*/<service>:*`, the platform and any container); a platform resource is
-   `abi:<service>:<type>/<id>`.
+   `abi:bus:topic/<topic>`. Default grants contain no admin action. A module that needs
+   another container's data names it in a manifest of its own, where the admin sees it
+   (core's `names.anywhere`: `abi:<service>:*` and `abi:*/<service>:*`, the platform and
+   any container); a platform resource is `abi:<service>:<type>/<id>`.
 
-`${module.id}` and `${module.project}` are bound when the manifest is approved.
+`${module.id}`, `${module.project}` and `${module.dataset_namespace}` are bound when the
+manifest is approved. A module id is one module of the platform: an id another
+project's module holds, an engine module's or one the core reserves (`default`,
+`naas_abi_core.*`) is refused at submission.
 
 At start, `run_module` calls `_await_approval` before anything else (an unapproved
 module can call nothing but IAM):

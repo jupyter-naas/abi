@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from naas_abi_core.engine.call_context import as_service_account
-from naas_abi_core.services.iam import grants, roles
+from naas_abi_core.services.iam import grants, modules, roles
 from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import IAMStoreMemory
 from naas_abi_core.services.iam.catalog import ActionCatalog, ActionSpec, ResourceType
 from naas_abi_core.services.iam.IAMPorts import (
@@ -1257,11 +1257,13 @@ def test_approval_places_the_module_namespaces_on_the_platform(h, iam):
     _submit(h, account)
     h.admin("approve_manifest", account.id)
     keys = {(p.service, p.id_key) for p in iam.store.list_placements()}
+    own = modules.dataset_namespace("acme", "people")
+    assert own.startswith("m_people_")
     assert {
         ("document", "people"),
         ("document", "people/*"),
-        ("dataset", "people"),
-        ("dataset", "people/*"),
+        ("dataset", own),
+        ("dataset", f"{own}/*"),
     } <= keys
 
 
