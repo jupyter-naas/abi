@@ -249,15 +249,16 @@ services:
   # Stores structured knowledge as RDF triples for semantic reasoning
   # TDB2 provides transactional storage with SPARQL query/update endpoints
   fuseki:
-    # Staying on stain/jena-fuseki (the older community image) for now — this is
-    # only about making the *current* store reliable. Apache does NOT publish a
-    # prebuilt Fuseki image on Docker Hub (the official path is the build-your-own
-    # jena-fuseki-docker kit), so moving off this is a real migration (build an
-    # image + back up + dump-and-reload the TDB2 data), tracked separately.
-    # `pull_policy: always` dropped on purpose: a boot now uses the locally cached
-    # image instead of requiring a registry pull every start (one less thing that
-    # can fail a restart). Re-add it if you'd rather always re-pull.
-    image: stain/jena-fuseki:latest
+    # Apache Fuseki 5.6.0 on the stain/jena-fuseki base, built locally. The
+    # stain image alone ships Fuseki 5.1.0, which leaks one TDB2 read lock per
+    # query: after 65535 requests (under a week of health checks) every query
+    # returns HTTP 500 "Maximum lock count exceeded" and the ABI API cannot
+    # start. See .deploy/docker/fuseki/Dockerfile. The image keeps stain's
+    # layout, so an existing fuseki_data volume is used as is, no reload.
+    # No `image:` on purpose: next to `build:`, Compose would pull that name
+    # instead of building.
+    build:
+      context: ./.deploy/docker/fuseki
     restart: unless-stopped
     ports:
       - 3030:3030
