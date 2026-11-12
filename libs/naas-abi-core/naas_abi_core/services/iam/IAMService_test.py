@@ -1799,3 +1799,14 @@ def test_placements_and_containers_are_read_from_the_store_once(h):
         assert h.iam.resolve_placement("triple_store", "g") == WS
         assert h.iam.placement_of("triple_store", "other") is None
     assert reads == {"placements": 1, "containers": 1}
+
+
+def test_create_policy_keeps_its_text_unread_for_who_may_not_write_it(h, iam):
+    """Authorized before the document is read: a caller who may not create a
+    policy there is refused, whatever the text holds."""
+    stranger = h.user("stranger")
+    unreadable = 'version: "2026-10-13"\nstatements: [&a {}, *a]\n'
+    with h.as_(stranger), pytest.raises((PermissionDeniedError, IAMNotFoundError)):
+        iam.create_policy("x", unreadable)
+    with as_service_account("engine"), pytest.raises(ValueError, match="aliases"):
+        iam.create_policy("x", unreadable)

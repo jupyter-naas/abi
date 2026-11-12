@@ -40,6 +40,7 @@ from naas_abi_core.services.iam.policy import (
     PolicyValidationError,
     Statement,
     bind_variables,
+    load_document_text,
 )
 
 # A project and a module id: one NATS subject token for the project (no dot),
@@ -141,7 +142,7 @@ def split_manifest(
         return document, None
     if isinstance(document, str):
         try:
-            document = yaml.safe_load(document)
+            document = load_document_text(document)
         except yaml.YAMLError as exc:
             raise PolicyValidationError([f"unreadable document: {exc}"]) from exc
     if not isinstance(document, Mapping):

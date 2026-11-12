@@ -251,3 +251,51 @@ def test_within_scope():
     assert within_scope(Statement("Allow", ("*",), ("*",))) is None
     deny = Statement("Deny", ("*",), ("*",))
     assert within_scope(deny) is deny
+
+
+# -- policy text: no anchors or aliases ----------------------------------------------
+
+
+def _expanding(levels: int) -> str:
+    lines = ['version: "2026-10-13"', 'a0: &a0 ["x"]']
+    for i in range(1, levels + 1):
+        lines.append(f"a{i}: &a{i} [" + ",".join([f"*a{i - 1}"] * 10) + "]")
+    lines.append(f"statements: [*a{levels}]")
+    return "\n".join(lines) + "\n"
+
+
+def test_policy_text_keeps_anchors_and_aliases_out():
+    """What is read is never larger than the text: a document naming an anchor
+    or an alias is refused before anything is expanded."""
+    from naas_abi_core.services.iam import modules
+
+    for text in (
+        _expanding(6),
+        (
+            'version: "2026-10-13"\nstatements:\n  - &s {effect: Allow, '
+            'actions: ["a:B"], resources: ["*"]}\n  - *s\n'
+        ),
+    ):
+        with pytest.raises(PolicyValidationError, match="anchors and aliases"):
+            parse_policy_document(text)
+        with pytest.raises(PolicyValidationError, match="anchors and aliases"):
+            modules.split_manifest(text)
+    # Plain YAML and JSON read as before.
+    plain = (
+        'version: "2026-10-13"\nstatements:\n  - effect: Allow\n'
+        '    actions: ["triple_store:Query"]\n    resources: ["*"]\n'
+    )
+    assert parse_policy_document(plain).statements[0].actions == ("triple_store:Query",)
+    as_json = json.dumps(
+        {
+            "version": "2026-10-13",
+            "statements": [
+                {
+                    "effect": "Allow",
+                    "actions": ["triple_store:Query"],
+                    "resources": ["*"],
+                }
+            ],
+        }
+    )
+    assert parse_policy_document(as_json).statements[0].resources == ("*",)

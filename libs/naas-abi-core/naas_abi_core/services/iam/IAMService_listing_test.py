@@ -508,8 +508,57 @@ def test_a_listing_has_a_time_budget(h, team):
             limit=10,
             allowed=lambda names: set(),
             clock=lambda: now[0],
+            seal=lambda name: f"sealed:{name}",
         )
     assert page.listed and page.items == ()
-    # MAX_SECONDS (10) spent after four calls: a short page with a cursor.
+    # MAX_SECONDS (10) spent after four calls: a short page with a cursor, which
+    # names nothing the admin may not list: the last name examined, sealed.
     assert len(calls) == 4
-    assert page.next_cursor == graph("g00049", workspace="ws-2")
+    assert page.next_cursor == f"sealed:{graph('g00049', workspace='ws-2')}"
+
+
+def test_a_listing_cursor_keeps_unreturned_names_sealed(h, team, monkeypatch):
+    """A page that stops on its budget past what it returned carries an opaque
+    cursor: no name of a resource the caller may not list, and good for that
+    caller and listing only."""
+    from naas_abi_core.services.iam import listing
+
+    admin, member = team
+    monkeypatch.setattr(listing, "MAX_EXAMINED", 50)
+    monkeypatch.setattr(listing, "BATCH", 20)
+    hidden = [graph(f"h{i:04d}", workspace="ws-2") for i in range(120)]
+    h.iam.register_lister(
+        "triple_store",
+        "graph",
+        listing.FunctionLister(
+            lambda query: [listing.ListedResource(name=n, id=n) for n in hidden]
+        ),
+    )
+    with h.as_(member):
+        page = h.iam.list_resources("triple_store", "graph", scope="abi:")
+        assert page.items == () and page.next_cursor is not None
+        assert page.next_cursor.startswith(listing.SEALED_CURSOR)
+        assert not any(name in page.next_cursor for name in hidden)
+        assert "ws-2" not in page.next_cursor
+        # It walks on from where it stopped, and ends.
+        seen = 0
+        while page.next_cursor is not None and seen < 10:
+            page = h.iam.list_resources(
+                "triple_store", "graph", scope="abi:", cursor=page.next_cursor
+            )
+            seen += 1
+        assert page.next_cursor is None and page.items == ()
+        sealed = h.iam.list_resources("triple_store", "graph", scope="abi:")
+    # Another caller, or another listing, cannot use it.
+    with h.as_(admin), pytest.raises(ValueError, match="cursor"):
+        h.iam.list_resources(
+            "triple_store", "graph", scope="abi:", cursor=sealed.next_cursor
+        )
+    with h.as_(member), pytest.raises(ValueError, match="cursor"):
+        h.iam.list_resources(
+            "triple_store", "graph", scope="abi:", text="h", cursor=sealed.next_cursor
+        )
+    with h.as_(member), pytest.raises(ValueError, match="cursor"):
+        h.iam.list_resources(
+            "triple_store", "graph", scope="abi:", cursor="~not-a-cursor"
+        )

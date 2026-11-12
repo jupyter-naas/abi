@@ -199,6 +199,12 @@ def _type_of(name: str, service: str, type: str) -> bool:
     return parsed.service == service and parsed.type == type
 
 
+# A cursor that names no resource (``IAMService._seal_cursor``): its prefix, and
+# how long it is good for (seconds).
+SEALED_CURSOR = "~"
+SEALED_CURSOR_TTL = 3600
+
+
 def run_listing(
     lister: ResourceLister,
     query: ListingQuery,
@@ -207,13 +213,18 @@ def run_listing(
     allowed: Callable[[Sequence[str]], set[str]],
     keep: Callable[[ListedResource], bool] = lambda _item: True,
     clock: Callable[[], float] = time.monotonic,
+    seal: Callable[[str], str] | None = None,
 ) -> ResourcePage:
     """Read ``lister`` from ``query.after`` until ``limit`` resources the caller
     may list are found (``allowed``: the names of a batch they may list), at most
     ``MAX_EXAMINED`` candidates and ``MAX_SECONDS`` (then a short page with a
     cursor). ``keep``: a further test of each (a container's registry). What
     falls outside the query (another type, container, text, or out of order) is
-    dropped. A lister that fails gives ``listed`` False."""
+    dropped. A lister that fails gives ``listed`` False.
+
+    A cursor never names a resource the caller was not returned: a page that
+    stops on its budget past the last one it returned carries ``seal(name)``,
+    an opaque cursor, instead (no ``seal``: no cursor, the listing ends there)."""
     found: list[ListedResource] = []
     after = query.after
     examined = 0
@@ -255,7 +266,9 @@ def run_listing(
         if not page.more or not ordered:
             return ResourcePage(tuple(found), None)
         if examined >= MAX_EXAMINED or clock() >= deadline:
-            return ResourcePage(tuple(found), after)
+            if found and found[-1].name == after:
+                return ResourcePage(tuple(found), after)
+            return ResourcePage(tuple(found), seal(after) if seal else None)
 
 
 def clamp_limit(limit: int | None) -> int:

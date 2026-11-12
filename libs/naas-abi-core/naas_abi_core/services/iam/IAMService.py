@@ -235,6 +235,14 @@ def _bound_group(provider: str, claim_value: str) -> str:
     return f"idp:{provider}:{claim_value}"
 
 
+def _cursor_binding(binding: Sequence[str]) -> str:
+    """The caller and listing a sealed cursor is for, as a digest."""
+    import hashlib
+    import json
+
+    return hashlib.sha256(json.dumps(list(binding)).encode()).hexdigest()[:32]
+
+
 def _grant_resource(grant: PendingGrant) -> str:
     return attachment_resource(
         grant.policy_id, _invitee(grant.provider, grant.email), grant.scope
@@ -962,12 +970,21 @@ class IAMService(IIAMService, PolicySource):
         container = listing.listing_scope(scope)
         if len(text) > listing.MAX_TEXT:
             raise ValueError(f"A search text is at most {listing.MAX_TEXT} characters")
+        # A sealed cursor is this caller's, for this listing only.
+        binding = [
+            *self._cursor_holder(),
+            service,
+            type,
+            container,
+            text,
+            module,
+        ]
         query = listing.ListingQuery(
             service=service,
             type=type,
             container=container,
             text=text,
-            after=cursor or "",
+            after=self._open_cursor(binding, cursor or ""),
             module=module,
         )
         actions = self._registry.listing_actions(service, type)
@@ -1001,7 +1018,62 @@ class IAMService(IIAMService, PolicySource):
             limit=listing.clamp_limit(limit),
             allowed=allowed,
             keep=keep,
+            seal=lambda after: self._seal_cursor(binding, after),
         )
+
+    # A listing's cursor past a name the caller was not returned: opaque,
+    # encrypted with a key of this deployment's, for one caller and listing.
+    def _cursor_holder(self) -> list[str]:
+        ctx = current_call_context()
+        return [ctx.principal.id, ctx.user.id if ctx.user is not None else ""]
+
+    def _cursor_cipher(self) -> Any:
+        import base64
+        import hashlib
+        import hmac
+
+        from cryptography.fernet import Fernet
+
+        key = hmac.new(
+            self._trigger_seal_key(), b"listing-cursor", hashlib.sha256
+        ).digest()
+        return Fernet(base64.urlsafe_b64encode(key))
+
+    def _seal_cursor(self, binding: Sequence[str], after: str) -> str:
+        import json
+
+        token = self._cursor_cipher().encrypt(
+            json.dumps([_cursor_binding(binding), after]).encode()
+        )
+        return listing.SEALED_CURSOR + token.decode()
+
+    def _open_cursor(self, binding: Sequence[str], cursor: str) -> str:
+        """The position a cursor stands for: a sealed one opened (only by the
+        caller and listing it was made for, within ``SEALED_CURSOR_TTL``), a name
+        as it is."""
+        if not cursor.startswith(listing.SEALED_CURSOR):
+            return cursor
+        import json
+
+        from cryptography.fernet import InvalidToken
+
+        try:
+            values = json.loads(
+                self._cursor_cipher().decrypt(
+                    cursor[len(listing.SEALED_CURSOR) :].encode(),
+                    ttl=listing.SEALED_CURSOR_TTL,
+                )
+            )
+        except (InvalidToken, ValueError):
+            raise ValueError("Invalid listing cursor") from None
+        if (
+            not isinstance(values, list)
+            or len(values) != 2
+            or values[0] != _cursor_binding(binding)
+            or not isinstance(values[1], str)
+        ):
+            raise ValueError("Invalid listing cursor")
+        return values[1]
 
     def _lister_of(
         self, catalog: ActionCatalog, declared: ResourceType
@@ -1735,9 +1807,11 @@ class IAMService(IIAMService, PolicySource):
         if not name:
             raise ValueError("A policy needs a name")
         owner = self._owner_checked(scope) if scope is not None else PLATFORM_SCOPE
-        parsed = parse_policy_document(document, self._registry)
         policy_id = new_id("pol")
+        # Authorized before the document is read: nobody who may not write a
+        # policy there has its text parsed.
         self.require("iam:CreatePolicy", policy_resource(policy_id, owner))
+        parsed = parse_policy_document(document, self._registry)
         self._check_owner_known(owner)
         check_owned_document(parsed, owner)
         chain: list[Policy] = []
