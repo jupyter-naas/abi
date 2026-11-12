@@ -177,7 +177,7 @@ def _chat(replies):
             messages=[encode_message(HumanMessage("hi"))],
         ).SerializeToString(),
         headers={"Nats-Auth-Token": "token"},
-        reply="_INBOX.1",
+        reply="_INBOX.r.1",
         _client=SimpleNamespace(max_payload=1 << 20, publish=publish),
     )
 

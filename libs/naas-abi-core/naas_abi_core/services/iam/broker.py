@@ -12,9 +12,19 @@ reaches a subject space shared with other accounts.
 
 No connection gets response permissions: they would let a module answer any
 reply subject of a message it receives, and a module chooses the reply
-subject of the messages it sends to itself. It answers requests on
-``_INBOX.>``, where every client receives its replies (and every responder
-answers there only, ``naas_abi_sdk.messages.reply_allowed``).
+subject of the messages it sends to itself. It publishes to inboxes by their
+shape instead (``naas_abi_sdk.messages``): a module's connection names its
+inboxes ``_INBOX.<key id>.m.<nuid>``, any other connection ``_INBOX.<nuid>``.
+
+* ``REPLY_INBOXES``: the reply subject of a request, ``<response inbox>.<token>``
+  (nats-py's), where a module answers what it is asked (every responder
+  answers on reply and stream inboxes only, ``naas_abi_sdk.messages.reply_allowed``);
+* ``STREAM_INBOXES``: a stream inbox, ``<inbox>.stream.<secret>``, where an agent
+  run's updates are pushed or a body is pulled; the secret names it to the two
+  parties the stream was set up between, and nobody else;
+* never a connection's own inboxes (``_INBOX.<nuid>``, ``_INBOX.<key id>.m.<nuid>``),
+  where JetStream delivers what it fetches: anyone who saw one of its reply
+  subjects could predict them.
 
 * **Always**: IAM's read-only and self-service request subjects
   (``IAM_ALWAYS``: ``token``, ``exchange_token``, ``jwks``, ``submit_manifest``, ``get_manifest``,
@@ -25,9 +35,9 @@ answers there only, ``naas_abi_sdk.messages.reply_allowed``).
   ``abi.iam.v1.changed``); the others only for an ``iam:`` action the policy
   allows; the engine's broker
   control (``abi.broker.v1.<operation>``: it checks each request against the
-  same grants); messages to inboxes (``_INBOX.>``: replies, an app's request
-  body to pull, a submitter's run updates: random names); its own inbox
-  prefix, ``_INBOX.<key id>``, the only inboxes it may read (the SDK sets
+  same grants); reply and stream inboxes (``REPLY_INBOXES``,
+  ``STREAM_INBOXES``: answers, an app's request body to pull, a submitter's
+  run updates); its own inbox prefix, ``_INBOX.<key id>.m``, the only inboxes it may read (the SDK sets
   it); the RPC overflow host (``abi.rpc.overflow.>``), whose sessions belong
   to the caller that opened them.
 * **Hosting**, for a module's account: ``abi.agent.<project>.<sa>.>`` and
@@ -52,9 +62,15 @@ answers there only, ``naas_abi_sdk.messages.reply_allowed``).
   and writes its claim checks; ``bus:Consume`` subscribes to it and fetches
   from and acknowledges the consumers of its queue stream. A Deny of an
   action on a topic keeps that topic from it.
-* **Live events** (``evt.>``): ``event:Append`` publishes, and the read
-  actions (``Query``, ``QueryStream``, ``QueryForConsumer``) subscribe.
-  Listing types or cursors reaches neither.
+* **Live events** (``evt.<type hash>``): the read actions (``Query``,
+  ``QueryStream``, ``QueryForConsumer``) subscribe to the live subject of an
+  event type a statement names concretely, only when the account reads it
+  wherever it is (``reads_live_events``): at the platform and in every
+  container, by statements with no parent chain and no scope, with no Deny of
+  that action naming an event type. A live subject carries every container's
+  events of its type and the broker is its only check, so a narrower grant
+  reaches the type through the event service only. No module publishes there:
+  an append goes through the event service, which broadcasts it.
 * **Claim checks** are read through the engine (``read_claim_check``), never
   by direct get: JetStream answers on the reply subject the requester chose,
   and a stream there would store a message of the module's choosing, headers
@@ -184,20 +200,31 @@ IAM_ALWAYS = (
     "delete_container",
     "get_container",
 )
+# Inboxes a module publishes to (``naas_abi_sdk.messages``; a test keeps the
+# names equal). A module's connection's inbox prefix is ``_INBOX.<key id>.m``.
+MODULE_INBOX_TOKEN = "m"
+STREAM_TOKEN = "stream"
+REPLY_INBOXES = ("_INBOX.*.*", f"_INBOX.*.{MODULE_INBOX_TOKEN}.*.*")
+STREAM_INBOXES = (
+    f"_INBOX.*.{STREAM_TOKEN}.*",
+    f"_INBOX.*.{MODULE_INBOX_TOKEN}.*.{STREAM_TOKEN}.*",
+)
 ALWAYS_PUBLISH = (
     *(f"abi.iam.v1.{operation}" for operation in IAM_ALWAYS),
     *(f"abi.broker.v1.{operation}" for operation in BROKER_OPERATIONS),
-    # Inboxes it is handed (random names it never subscribes to but its own).
-    "_INBOX.>",
+    # The reply subjects of the requests it answers, and the stream inboxes it
+    # is handed: never a connection's own inboxes.
+    *REPLY_INBOXES,
+    *STREAM_INBOXES,
     # Requests and replies above the broker limit: sessions bound to the caller.
     "abi.rpc.overflow.>",
 )
-# Live pub/sub of a service besides its request subjects: per action, what it
-# lets a module publish and subscribe. Any other action of the service reaches
-# neither.
-LIVE_SUBJECTS = {"event": ("evt.>",)}
-LIVE_PUBLISH_ACTIONS = {"event": ("Append",)}
-LIVE_SUBSCRIBE_ACTIONS = {"event": ("Query", "QueryStream", "QueryForConsumer")}
+# Live events: the actions that read them subscribe to the live subject of each
+# event type their statement names in every container. Any other action of the
+# service reaches none, and no module publishes there.
+LIVE_EVENT_ACTIONS = ("Query", "QueryStream", "QueryForConsumer")
+_EVERY_CONTAINER_EVENT_TYPE = "abi:*/event:event_type/"
+_PLATFORM_EVENT_TYPE = "abi:event:event_type/"
 # The bus has no catalog: its two actions, publishing (and enqueueing) on a
 # topic, and consuming from it (subscribing, dequeuing).
 BUS_ACTIONS = ("Publish", "Consume")
@@ -405,6 +432,96 @@ def _topics(resources: Iterable[str]) -> list[str]:
     return topics
 
 
+# --- live events -------------------------------------------------------------------------
+
+
+def live_event_subject(event_type: str) -> str:
+    """The live subject root of an event type (``EventService.class_iri_to_topic``)."""
+    return "evt." + hashlib.sha256(event_type.encode("utf-8")).hexdigest()[:32]
+
+
+def live_event_subjects(event_type: str) -> tuple[str, str]:
+    """What a subscriber of an event type's live events reads: its subject,
+    and the routing keys under it."""
+    root = live_event_subject(event_type)
+    return (root, f"{root}.>")
+
+
+def live_event_types(resources: Iterable[str]) -> list[str]:
+    """The event types ``resources`` name concretely, at the platform or in
+    every container (``abi:event:event_type/<type>``,
+    ``abi:*/event:event_type/<type>``), each spelled as the service names it:
+    no wildcard, and canonically encoded."""
+    found: list[str] = []
+    for resource in resources:
+        for prefix in (_PLATFORM_EVENT_TYPE, _EVERY_CONTAINER_EVENT_TYPE):
+            if not resource.startswith(prefix):
+                continue
+            encoded = resource[len(prefix) :]
+            if not encoded or any(c in encoded for c in "*?/$"):
+                continue
+            event_type = unquote(encoded)
+            if quote(event_type, safe="") != encoded:
+                continue  # not the service's spelling: it never matches it
+            if event_type not in found:
+                found.append(event_type)
+    return found
+
+
+def reads_live_events(
+    statements: Iterable[EffectiveStatement], principal_id: str, event_type: str
+) -> bool:
+    """Whether ``statements`` read ``event_type`` wherever it is, as the event
+    service would decide each event of its live subject: one read action
+    (``LIVE_EVENT_ACTIONS``) allowed on its name at the platform and in every
+    container, by statements with no parent chain and no scope (either leaves
+    some names out), and no Deny of that action naming any event type (a
+    Deny on one container's would be lost on the live subject)."""
+    from naas_abi_core.services.iam.evaluator import (
+        _PROBES,
+        _may_name_type,
+        _values,
+    )
+    from naas_abi_core.services.iam.names import substitute
+
+    encoded = quote(event_type, safe="")
+    platform = [f"abi:event:event_type/{encoded}"]
+    containers = [f"abi:{p}:{p}/{p}/event:event_type/{encoded}" for p in _PROBES]
+    values = _values(None, principal_id, None)
+    listed = list(statements)
+    for name in LIVE_EVENT_ACTIONS:
+        action = f"event:{name}"
+        relevant = [
+            e
+            for e in listed
+            if any(matches(pattern, action) for pattern in e.statement.actions)
+        ]
+        if any(
+            e.statement.effect == "Deny"
+            and any(
+                _may_name_type(r, "event", "event_type") for r in e.statement.resources
+            )
+            for e in relevant
+        ):
+            continue
+        spanned = [False, False]
+        for effective in relevant:
+            if effective.statement.effect != "Allow":
+                continue
+            if effective.bounds or effective.scope is not None:
+                continue
+            for pattern in effective.statement.resources:
+                expanded = substitute(pattern, values)
+                if expanded is None:
+                    continue
+                for where, probes in enumerate((platform, containers)):
+                    if all(matches(expanded, probe) for probe in probes):
+                        spanned[where] = True
+        if all(spanned):
+            return True
+    return False
+
+
 # --- derivation --------------------------------------------------------------------------
 
 
@@ -420,13 +537,16 @@ def derive(
 
     ``module`` is ``(project, module_id)`` for a module's account.
     """
-    inbox = f"_INBOX.{key_id}"
+    # Its inbox prefix (``naas_abi_sdk.messages.module_inbox_prefix``): a client
+    # with another prefix reads no reply, rather than one anyone may write to.
+    inbox = f"_INBOX.{key_id}.{MODULE_INBOX_TOKEN}"
     allows: list[EffectiveStatement] = []
     blanket_denies: list[str] = []
     # Denies of one resource: (action patterns, resource patterns). Only bus
     # topics are decided per resource here; the services decide the rest.
     resource_denies: list[tuple[tuple[str, ...], tuple[str, ...]]] = []
-    for effective in statements:
+    statements_list = list(statements)
+    for effective in statements_list:
         statement = effective.statement
         if statement.effect == "Deny":
             if any(r == "*" for r in statement.resources):
@@ -460,6 +580,7 @@ def derive(
             if subject not in target:
                 target.append(subject)
 
+    live_types: list[str] = []  # event types named by a read, decided below
     hosted: set[tuple[str, str]] = set()  # own (project, job) to host
     job_triggers: list[str] = []
     job_cancels: list[str] = []
@@ -485,10 +606,10 @@ def derive(
                         hosted |= reach.hosted
                     continue
                 add(publish, _subjects(service, action, catalogs))
-                if action is None or action in LIVE_PUBLISH_ACTIONS.get(service, ()):
-                    add(publish, LIVE_SUBJECTS.get(service, ()))
-                if action is None or action in LIVE_SUBSCRIBE_ACTIONS.get(service, ()):
-                    add(subscribe, LIVE_SUBJECTS.get(service, ()))
+                if service == "event" and (
+                    action is None or action in LIVE_EVENT_ACTIONS
+                ):
+                    live_types += live_event_types(resources)
                 if service == "bus":
                     for resource in resources:
                         for topic in _topics((resource,)):
@@ -504,6 +625,12 @@ def derive(
                                 subscribe=subscribe,
                             )
                             claim_checks = True
+    # The live subject of a type carries its events of every container: granted
+    # only to whoever reads the type wherever it is (the broker is its only check).
+    every = list(statements_list)
+    for event_type in dict.fromkeys(live_types):
+        if reads_live_events(every, principal_id, event_type):
+            add(subscribe, live_event_subjects(event_type))
     if module is not None:
         for project, job in sorted(hosted):
             add(publish, _job_host_api(project, module[1], job))

@@ -3,7 +3,7 @@ import pytest
 from naas_abi_core.services.iam import broker
 from naas_abi_core.services.iam.adapters import iam_nats_codec
 from naas_abi_core.services.iam.catalog import CatalogRegistry
-from naas_abi_core.services.iam.IAMPorts import EffectiveStatement
+from naas_abi_core.services.iam.IAMPorts import Bound, EffectiveStatement
 from naas_abi_core.services.iam.kernel_catalogs import kernel_catalogs
 from naas_abi_core.services.iam.policy import Statement
 
@@ -41,11 +41,15 @@ def test_nothing_granted_reaches_iam_requests_its_inbox_and_its_hosting_only():
     permissions = derive()
     assert "abi.iam.v1.token" in permissions.publish
     assert "abi.iam.v1.submit_manifest" in permissions.publish
-    assert "_INBOX.>" in permissions.publish
+    # Replies and stream inboxes only: never a connection's own inboxes.
+    assert "_INBOX.>" not in permissions.publish
+    assert set(broker.REPLY_INBOXES) | set(broker.STREAM_INBOXES) <= set(
+        permissions.publish
+    )
     assert "abi.rpc.overflow.>" in permissions.publish
     assert js_api(permissions) == []
     assert permissions.subscribe == (
-        f"_INBOX.{KEY}.>",
+        f"_INBOX.{KEY}.m.>",
         f"abi.agent.acme.{SA}.>",
         f"abi.mod.acme.{SA}.>",
     )
@@ -114,10 +118,11 @@ def test_a_pattern_of_another_service_opens_no_discovery_subject():
     )
 
 
-def test_a_service_wildcard_reaches_the_service_and_its_live_subjects():
+def test_a_service_wildcard_reaches_the_service_not_every_live_subject():
     permissions = derive(allow(["event:*"]))
     assert "abi.svc.event.v1.>" in permissions.publish
-    assert "evt.>" in permissions.subscribe
+    assert not any(s.startswith("evt.") for s in permissions.subscribe)
+    assert not any(s.startswith("evt.") for s in permissions.publish)
 
 
 def test_a_catalogued_action_reaches_every_subject_its_endpoint_serves():
@@ -209,18 +214,142 @@ def test_a_deny_on_one_topic_keeps_it_from_that_action_only():
     assert "b.>" in permissions.publish
 
 
-def test_live_events_follow_the_specific_action():
+EVERYWHERE = "abi:*/event:event_type/"
+OWN_TYPE = "https://example.org/ontology#OwnEvent"
+OTHER_TYPE = "https://example.org/ontology#OtherEvent"
+
+
+def _type(event_type: str, prefix: str = EVERYWHERE) -> str:
+    from urllib.parse import quote
+
+    return prefix + quote(event_type, safe="")
+
+
+PLATFORM = "abi:event:event_type/"
+
+
+def _everywhere(event_type: str) -> list[str]:
+    return [_type(event_type, PLATFORM), _type(event_type)]
+
+
+def test_live_events_keep_to_the_types_a_statement_reads_everywhere():
     registry = kernel()
-    appends = derive(allow(["event:Append"]), catalogs=registry)
-    assert "evt.>" in appends.publish and "evt.>" not in appends.subscribe
-    reads = derive(allow(["event:Query"]), catalogs=registry)
-    assert "evt.>" in reads.subscribe and "evt.>" not in reads.publish
+    own = broker.live_event_subjects(OWN_TYPE)
+    reads = derive(allow(["event:Query"], _everywhere(OWN_TYPE)), catalogs=registry)
+    assert set(own) <= set(reads.subscribe)
+    assert broker.live_event_subject(OTHER_TYPE) not in reads.subscribe
+    assert "evt.>" not in reads.subscribe
+    # A live subject carries the type's events at the platform and in every
+    # container: a grant on fewer names reads it through the service only.
+    for narrower in (
+        [_type(OWN_TYPE)],  # every container, not the platform's
+        [_type(OWN_TYPE, PLATFORM)],  # the platform's only
+        [_type(OWN_TYPE, "abi:nexus:organization/o-1/event:event_type/")],
+        ["abi:*/event:event_type/*"],
+        ["*"],
+    ):
+        permissions = derive(allow(["event:Query"], narrower), catalogs=registry)
+        assert not any(s.startswith("evt.") for s in permissions.subscribe), narrower
+    # Listing types or cursors reads no live subject.
     for action in ("ListEventTypes", "GetCursor", "SetCursor", "MaxSeq"):
-        listed = derive(allow([f"event:{action}"]), catalogs=registry)
-        assert "evt.>" not in listed.publish + listed.subscribe, action
-    # Every action: both.
-    every = derive(allow(["event:*"]), catalogs=registry)
-    assert "evt.>" in every.publish and "evt.>" in every.subscribe
+        listed = derive(
+            allow([f"event:{action}"], _everywhere(OWN_TYPE)), catalogs=registry
+        )
+        assert not any(s.startswith("evt.") for s in listed.subscribe), action
+
+
+def test_live_events_keep_to_what_no_deny_bound_or_scope_narrows():
+    registry = kernel()
+    everywhere = allow(["event:*"], _everywhere(OWN_TYPE))
+    for deny in (
+        # One container's events of the type, or another type's: the live
+        # subject would carry them, so neither leaves it granted.
+        Statement(
+            "Deny",
+            ("event:Query", "event:QueryStream", "event:QueryForConsumer"),
+            (_type(OWN_TYPE, "abi:nexus:organization/o-1/event:event_type/"),),
+        ),
+        Statement("Deny", ("event:*",), (_type(OWN_TYPE, PLATFORM),)),
+        Statement("Deny", ("event:*",), ("abi:*/event:event_type/*",)),
+    ):
+        permissions = derive(everywhere, deny, catalogs=registry)
+        assert not any(s.startswith("evt.") for s in permissions.subscribe), deny
+    # A statement bounded by a parent chain, or attached at a scope, leaves some
+    # names out: it grants no live subject.
+    bounded = EffectiveStatement(everywhere, "p", 0, bounds=(Bound("parent", ()),))
+    scoped = EffectiveStatement(everywhere, "p", 0, scope="abi:nexus:organization/o-1")
+    for effective in (bounded, scoped):
+        permissions = broker.derive(
+            principal_id=ACCOUNT,
+            key_id=KEY,
+            statements=[effective],
+            catalogs=registry,
+            module=("acme", "people"),
+        )
+        assert not any(s.startswith("evt.") for s in permissions.subscribe)
+    # A type is read as the service spells it: a non-canonical spelling of the
+    # same type names nothing the service matches.
+    from urllib.parse import quote
+
+    canonical = quote(OWN_TYPE, safe="")
+    odd = canonical.replace("%3A", "%3a").replace("e", "%65", 1)
+    spelled = derive(
+        allow(["event:Query"], [PLATFORM + odd, "abi:*/event:event_type/" + odd]),
+        catalogs=registry,
+    )
+    assert not any(s.startswith("evt.") for s in spelled.subscribe)
+
+
+def test_live_events_are_never_published_by_a_module():
+    registry = kernel()
+    for statement in (
+        allow(["event:Append"], [_type(OWN_TYPE)]),
+        allow(["event:*"], [_type(OWN_TYPE)]),
+        allow(["event:*"]),
+        allow(["*"]),
+    ):
+        permissions = derive(statement, catalogs=registry)
+        assert not any(s.startswith("evt") for s in permissions.publish)
+
+
+def test_live_event_subject_keeps_in_step_with_the_event_service():
+    from naas_abi_core.services.event.EventService import class_iri_to_topic
+
+    assert broker.live_event_subject(OWN_TYPE) == class_iri_to_topic(OWN_TYPE)
+
+
+def test_inbox_publishing_keeps_to_replies_and_streams():
+    """A module answers the reply subject of a request, and pushes to a stream
+    inbox it was handed: never another connection's own inboxes, which anyone
+    who saw one of its reply subjects predicts."""
+    from naas_abi_sdk import messages
+
+    assert broker.MODULE_INBOX_TOKEN == messages.MODULE_INBOX_TOKEN
+    assert broker.STREAM_TOKEN == messages.STREAM_TOKEN
+    publish = derive().publish
+    secret = "a" * 32
+    allowed = (
+        "_INBOX.AbCd1234.AbCd5678ef",  # an engine connection's request reply
+        f"_INBOX.{KEY}.m.AbCd1234.AbCd5678ef",  # a module's request reply
+        f"_INBOX.AbCd1234.stream.{secret}",
+        f"_INBOX.{KEY}.m.AbCd1234.stream.{secret}",
+    )
+    refused = (
+        "_INBOX.AbCd1234",  # an engine connection's own inbox
+        f"_INBOX.{KEY}.m.AbCd1234",  # a module connection's own inbox
+        "_INBOX.a.b.c.d.e.f",
+    )
+    for subject in allowed:
+        assert any(broker.subject_matches(p, subject) for p in publish), subject
+    for subject in refused:
+        assert not any(broker.subject_matches(p, subject) for p in publish), subject
+    assert messages.is_stream_inbox(allowed[2]) and messages.is_stream_inbox(allowed[3])
+    # What a responder answers on is what a module may publish to, no more.
+    for subject in allowed:
+        assert messages.reply_allowed(subject), subject
+    for subject in refused:
+        assert not messages.reply_allowed(subject), subject
+    assert derive().inbox_prefix == messages.module_inbox_prefix(KEY)
 
 
 def test_bus_topics_are_named_never_wildcarded():
@@ -397,7 +526,7 @@ def test_an_account_that_is_not_a_modules_hosts_nothing():
     permissions = derive(OWN_JOBS, module=None)
     # Its inbox, and the notices of the runs it may read: no cancels to host.
     assert permissions.subscribe == (
-        f"_INBOX.{KEY}.>",
+        f"_INBOX.{KEY}.m.>",
         broker.job_done_subject("acme", "people"),
     )
     assert not any("CONSUMER" in s for s in js_api(permissions))

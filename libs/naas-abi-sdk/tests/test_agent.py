@@ -7,6 +7,7 @@ from naas_abi_proto.agent.v1 import agent_pb2 as pb
 
 from naas_abi_sdk.agent import DEFAULT_DEADLINE_SECONDS, AgentProxy, SubmissionUncertain
 from naas_abi_sdk.discovery import AgentDescriptor
+from naas_abi_sdk.messages import is_stream_inbox
 
 
 class Inbox:
@@ -29,7 +30,7 @@ def proxy(*updates):
     descriptor = AgentDescriptor("Researcher", capabilities=("agent.invoke.v1",))
     inbox = Inbox(*updates)
     connection = SimpleNamespace(
-        new_inbox=lambda: "_INBOX.test.1", subscribe=AsyncMock(return_value=inbox)
+        new_inbox=lambda: "_INBOX.test.m.1", subscribe=AsyncMock(return_value=inbox)
     )
     transport = SimpleNamespace(
         call=AsyncMock(),
@@ -40,7 +41,11 @@ def proxy(*updates):
     module = SimpleNamespace(
         client=SimpleNamespace(project="default", transport=transport),
         ready_instances=AsyncMock(
-            return_value=[SimpleNamespace(instance_id="one", service_account="sa1", agents=(descriptor,))]
+            return_value=[
+                SimpleNamespace(
+                    instance_id="one", service_account="sa1", agents=(descriptor,)
+                )
+            ]
         ),
     )
     module.instances = module.ready_instances
@@ -200,7 +205,9 @@ def test_pushed_events_need_no_polling_and_the_end_is_read_once():
     ]
     assert operations(transport) == ["submit", "status"]
     submit, final = (c.args[1] for c in transport.call.call_args_list)
-    assert submit.updates_inbox == "_INBOX.test.1"
+    # A stream inbox of the submitter's: its secret names it, nothing else.
+    assert submit.updates_inbox.startswith("_INBOX.test.m.1.stream.")
+    assert is_stream_inbox(submit.updates_inbox)
     assert final.after_sequence == 2
     assert transport.inbox.unsubscribed
 

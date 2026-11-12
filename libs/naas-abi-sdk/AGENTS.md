@@ -183,7 +183,13 @@ others after 7 days, 1,000 per job) and fail runs lost with a crashed host
 RUNNING/RETRYING with attempts left whose trigger left the stream).
 `OnEvent(filter=...)` drops events before a
 trigger is published; `event_filter.py` mirrors core's `EventFilter.matches`,
-change them together.
+change them together. A module's host subscribes to the live subject of an
+`OnEvent(event_type=...)` only when its manifest reads that type in every container
+(`event:Query` on `abi:*/event:event_type/<encoded type>`): a live subject carries
+every container's events of its type, so the default manifest grants none. Only the
+engine publishes live events (`services.event.EventService.publish` appends, and the
+event service broadcasts); `subscribe` returns `LiveEvents`, which drops a message
+declaring another class.
 
 Who a run runs as: every attempt of a manual trigger is authorized
 (`discovery_job_authorizer`, `discovery:TriggerJob`), and the authorizer returns the
@@ -260,7 +266,7 @@ seal is checked by asking the engine, `broker_control.py`).
   a key or a `ServiceKey` as its `token`, and `run_module(token=...)` passes it on.
   A process of the engine passes bare tokens (a string or a callable) instead.
 - **The key does two things.** It logs in to the broker (user `sa`, the key as
-  password, inbox prefix `_INBOX.<key id>`, which only this key's connections can
+  password, inbox prefix `_INBOX.<key id>.m`, which only this key's connections can
   read), and the broker's auth callout gives the connection the subjects its
   approved policy allows. It is also exchanged at `abi.iam.v1.token` for an access
   token of the audience `abi:nats` (ten minutes at most, exchanged again at half its

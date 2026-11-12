@@ -200,9 +200,11 @@ login, and `auth`, the callout responder's. There is no shared `abi` or `module`
   the broker only narrows further. IAM changes reach other engines on `abi.iam.v1.changed`
   (`abi iam` publishes it after each write); a connected module keeps its broker permissions
   until it reconnects, and the SDK reconnects once its manifest is approved.
-- **Inboxes.** A client's inbox prefix is `_INBOX.<key id>` (a subject token), so it reads no
-  other's replies. Modules may also publish to `_INBOX.>` (app request bodies and run updates
-  go to inboxes the module is handed).
+- **Inboxes.** A module client's inbox prefix is `_INBOX.<key id>.m`, so it reads no
+  other's replies. A module publishes to the reply subjects of the requests it answers and to
+  the stream inboxes it is handed (`naas_abi_sdk.messages.stream_inbox`: app request bodies,
+  run updates; each ends with a secret), never to another connection's own inboxes
+  (`services/iam/broker.py`, `REPLY_INBOXES`, `STREAM_INBOXES`).
 - **Broker control** (`nats_broker_control.py`, `abi.broker.v1.<operation>`,
   `naas_abi_sdk.broker_control`). Behind the callout a module creates no stream or consumer
   (their subjects travel in the request body, which the broker never reads), gets no stream

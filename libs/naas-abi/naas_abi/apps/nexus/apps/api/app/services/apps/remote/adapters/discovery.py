@@ -52,9 +52,6 @@ MAX_MISSES = 1024
 ANSWER_AFTER_UPLOAD_SECONDS = 65.0
 # How long the module has to take the error of an upload the browser dropped.
 CUT_NOTICE_SECONDS = 2.0
-# Where a module's streamed answer is pulled from: the reply inbox its service account
-# may publish to (its own connection prefix starts with this).
-_INBOX_PREFIX = "_INBOX."
 # The module is gone or going: another READY instance may answer.
 # Each is raised before the app ran the request, so even a POST is safe to resend.
 _RETRY_ELSEWHERE = {"MODULE_UNAVAILABLE", "LEASE_EXPIRED", "UNAVAILABLE"}
@@ -324,10 +321,14 @@ class DiscoveryRemoteAppDirectory:
             raise RemoteAppUnavailable(504, "The app did not answer in time") from exc
 
     async def _answer(self, client: _Client, response: Any) -> AppResponse:
+        # Where a module's streamed answer is pulled from: a stream inbox of the
+        # module's (its secret names it), never a wildcard nor a service subject.
+        from naas_abi_sdk.messages import is_stream_inbox
+
         headers = tuple((h.name, h.value) for h in response.headers)
         if not response.body_follows:
             return AppResponse(response.status or 200, headers, response.body)
-        if not response.body_inbox.startswith(_INBOX_PREFIX):
+        if not is_stream_inbox(response.body_inbox):
             raise RemoteAppUnavailable(502, "The app answered with an invalid body inbox")
         nc = await client.transport.connect()
         return AppResponse(

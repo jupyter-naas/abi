@@ -14,6 +14,7 @@ from google.protobuf.message import DecodeError
 from naas_abi_proto.agent.v1 import agent_pb2 as pb
 from nats.errors import Error as NATSError
 
+from naas_abi_sdk.messages import stream_inbox
 from naas_abi_sdk.transport import RPCError, host_recipient
 
 TERMINAL = {"SUCCEEDED", "FAILED", "CANCELLED", "TIMED_OUT"}
@@ -324,7 +325,8 @@ class AgentProxy:
         handle = self.invocation(invocation_id or str(uuid4()))
         # Subscribed before submitting, so no update can come before it.
         connection = await self.module.client.transport.connect()
-        inbox = connection.new_inbox()
+        # A stream inbox: no one but the agent's owner can name it.
+        inbox = stream_inbox(connection)
         handle._updates = await connection.subscribe(inbox)
         try:
             response = await self._rpc(

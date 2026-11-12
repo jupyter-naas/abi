@@ -130,7 +130,13 @@ def _raise_for_error(error: common_pb2.CallError) -> None:
 
 
 class EventSecondaryAdapterNATSClient(NatsRPCClient, IEventAdapter):
-    """Calls a remote ``EventPrimaryAdapterNATS`` over NATS RPC."""
+    """Calls a remote ``EventPrimaryAdapterNATS`` over NATS RPC.
+
+    The owner broadcasts what is appended through it (``owner_broadcasts``):
+    an ``EventService`` over this adapter does not broadcast again.
+    """
+
+    owner_broadcasts = True
 
     def __init__(
         self,

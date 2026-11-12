@@ -2045,18 +2045,25 @@ short:
 
 | Source | Publish | Subscribe |
 |---|---|---|
-| Always | IAM's read-only and self-service operations (`broker.IAM_ALWAYS`: `token`, `exchange_token`, `jwks`, `submit_manifest`, `get_manifest`, `find_service_account`, `authorize`, `authorize_declared`, `filter`, `grantable`, and `register_container`, `delete_container`, `get_container`, which IAM decides with the container type's own actions: create, delete, and any action of the type for a read; never `abi.iam.v1.changed`), the engine's broker control `abi.broker.v1.*`, `_INBOX.>`, `abi.rpc.overflow.>` | its own inbox prefix `_INBOX.<key id>` |
+| Always | IAM's read-only and self-service operations (`broker.IAM_ALWAYS`: `token`, `exchange_token`, `jwks`, `submit_manifest`, `get_manifest`, `find_service_account`, `authorize`, `authorize_declared`, `filter`, `grantable`, and `register_container`, `delete_container`, `get_container`, which IAM decides with the container type's own actions: create, delete, and any action of the type for a read; never `abi.iam.v1.changed`), the engine's broker control `abi.broker.v1.*`, reply and stream inboxes (`broker.REPLY_INBOXES`, `STREAM_INBOXES`), `abi.rpc.overflow.>` | its own inboxes `_INBOX.<key id>.m.>` |
 | Hosting | the completion notices of its own jobs' runs (`abi.jobdone.<project>.<module hash>.<job hash>`) | `abi.agent.<project>.<sa>.>`, `abi.mod.<project>.<sa>.>`; its jobs' consumers |
 | `discovery:GetJobRun` on `job_run/<project>/<module>/...` | none | that module's (or job's) completion notices: a notice only wakes a waiter, which reads the run record again |
 | Each action with an Allow (any resource) and no Deny on every resource | that action's catalog `subjects` (a stream action adds the service's transfer subjects); a service without a registered catalog grants its whole `abi.svc.<service>.v1.>` | none |
 | `discovery:InvokeAgent`, `GetAgentRun`, `CancelAgentRun`, `ChatModel`, `OpenApp`, `TriggerJob`, `ScheduleJob`, `CancelJobRun` | the hosting subjects of the modules the resources name | none |
-| `bus:Publish` / `bus:Consume`, `event:*` | the topic and its claim checks / `evt.>` by action (`event:Append` publishes, `Query`, `QueryStream`, `QueryForConsumer` subscribe) | the topic, its queue consumers |
+| `bus:Publish` / `bus:Consume` | the topic and its claim checks | the topic, its queue consumers |
+| `event:Query`, `QueryStream`, `QueryForConsumer` on `abi:*/event:event_type/<type>` (a concrete type, in every container) | none: only the engine publishes live events | that type's live subject, `evt.<type hash>` (`broker.live_event_types`); a grant on fewer containers reads through the event service only, since a live subject carries every container's events of its type |
 | Everything else | denied, `$SYS.>` and other `$JS.API.>` included | denied |
 
 `<sa>` is the ULID part of the account's id: hosting subjects carry it as a whole token,
 because NATS wildcards cannot match part of a token. A permission ending in `*` also
 matches a client's literal `>` or `*`, so every grant keeps the account's own tokens before
-its first wildcard. There are no response permissions: a module answers on `_INBOX.>`.
+its first wildcard. There are no response permissions (a module would mint one by sending
+itself a message with the reply subject it wants). A module publishes to inboxes by their
+shape: a module's connection names its inboxes `_INBOX.<key id>.m.<nuid>`, any other
+`_INBOX.<nuid>`; it publishes to the reply subject of a request (`<response inbox>.<token>`)
+and to stream inboxes (`<inbox>.stream.<secret>`, `naas_abi_sdk.messages.stream_inbox`:
+pushed run updates, pulled bodies), never to a connection's own inboxes, which anyone who
+saw one of its reply subjects predicts.
 `_derive` keeps `roles.DELEGATION_SIDS` out of the derivation: the module's side of a
 delegation opens no broker subject. Broker permissions lag policy by at most the callout
 user's life (five minutes, ten at most); services enforce every change at once, so the

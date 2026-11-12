@@ -1373,8 +1373,9 @@ def test_broker_permissions_follow_the_approved_policy(h, iam):
     key = h.admin("create_key", account.id).record
     sa = account.id.removeprefix("sa_")
     before = iam.broker_permissions(account, key)
-    assert before.inbox_prefix == f"_INBOX.{key.key_id}"
-    assert f"_INBOX.{key.key_id}.>" in before.subscribe
+    assert before.inbox_prefix == f"_INBOX.{key.key_id}.m"
+    assert f"_INBOX.{key.key_id}.m.>" in before.subscribe
+    assert f"_INBOX.{key.key_id}.>" not in before.subscribe
     assert "_INBOX.>" not in before.subscribe
     assert f"abi.agent.acme.{sa}.>" in before.subscribe
     assert f"abi.mod.acme.{sa}.>" in before.subscribe

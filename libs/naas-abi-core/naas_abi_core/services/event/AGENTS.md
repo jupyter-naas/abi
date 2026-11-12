@@ -165,7 +165,12 @@ uses the `transfer.*` subjects.
 - A read with no type filters per type (an "all" call is filtered per item). `limit` applies after
   filtering; a type first appended after the types were listed is left out.
 - `subscribe` is checked once, when subscribing; live events are not checked one
-  by one.
+  by one, but an event whose `_class_uri` is not the subscribed type is dropped.
+- Live events (`evt.<type hash>`) are published by the engine only: `publish` and
+  `append_stored` (a module's append over NATS) broadcast after the append. A
+  module's connection subscribes to the live subject of a type only when its
+  policy reads that type in every container (`broker.live_event_types`): a live
+  subject carries every container's events of its type.
 - Over NATS, a streamed read first pins its snapshot with `max_seq`, so it also
   needs `MaxSeq` (every role grants both).
 - `emit(event)` is how a kernel service records its own audit event: stamped

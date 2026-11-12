@@ -224,7 +224,7 @@ class _Caller:
         msg = SimpleNamespace(
             data=request.SerializeToString(),
             headers=self.headers,
-            reply="_INBOX.reply",
+            reply="_INBOX.reply.1",
             respond=AsyncMock(),
             _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
         )

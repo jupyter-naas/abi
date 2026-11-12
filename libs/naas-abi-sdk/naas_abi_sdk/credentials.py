@@ -23,6 +23,8 @@ from typing import TYPE_CHECKING, Any
 
 from naas_abi_proto.iam.v1 import iam_pb2 as pb
 
+from naas_abi_sdk.messages import module_inbox_prefix
+
 if TYPE_CHECKING:
     from naas_abi_sdk.transport import Transport
 
@@ -82,7 +84,7 @@ class ServiceKey:
 
     @property
     def inbox_prefix(self) -> str:
-        return f"_INBOX.{self.key_id}"
+        return module_inbox_prefix(self.key_id)
 
     def connect_options(self) -> dict[str, Any]:
         """nats-py ``connect`` options logging in with this key."""

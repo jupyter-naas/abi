@@ -129,7 +129,7 @@ def test_provider_errors_are_sanitized_and_mapped():
             msg = SimpleNamespace(
                 data=request.SerializeToString(),
                 headers={"Nats-Auth-Token": TEST_TOKENS.token("caller")},
-                reply="_INBOX.reply",
+                reply="_INBOX.reply.1",
                 respond=AsyncMock(),
                 _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
             )
@@ -303,7 +303,7 @@ def _one_shot(primary, secret, headers):
         subject="abi.svc.model_registry.v1.chat",
         data=request.SerializeToString(),
         headers={"Nats-Auth-Token": TEST_TOKENS.token("caller"), **headers},
-        reply="_INBOX.reply",
+        reply="_INBOX.reply.1",
         respond=AsyncMock(),
         _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
     )
