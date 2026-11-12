@@ -489,11 +489,10 @@ def test_setup_local_deploy_hardens_fuseki_for_reliability(tmp_path: Path) -> No
     fuseki = _service_block(compose_text, "fuseki", "fuseki-compact")
     lines = [line.strip() for line in fuseki.splitlines()]
 
-    # Image intentionally unchanged for now (staying on the community image;
-    # migrating off it is a separate backup + dump-and-reload job).
-    assert [line for line in lines if line.startswith("image:")] == [
-        "image: stain/jena-fuseki:latest"
-    ]
+    # Built from .deploy/docker/fuseki, never pulled: stain/jena-fuseki is
+    # Fuseki 5.1.0, which fails every request after 65535 queries.
+    assert not any(line.startswith("image:") for line in lines)
+    assert "context: ./.deploy/docker/fuseki" in lines
 
     # Heap + memory caps so an OOM can't Docker-kill the JVM mid-write (the
     # unclean kill that corrupts TDB2).
@@ -513,6 +512,37 @@ def test_setup_local_deploy_hardens_fuseki_for_reliability(tmp_path: Path) -> No
     backup_script = tmp_path / ".deploy" / "docker" / "fuseki" / "backup.sh"
     assert backup_script.exists()
     assert "--compact" in backup_script.read_text(encoding="utf-8")
+
+
+def test_setup_local_deploy_builds_a_fuseki_without_the_read_lock_leak(
+    tmp_path: Path,
+) -> None:
+    # Fuseki 5.1.0 leaks one TDB2 read lock per query (apache/jena#2755, fixed
+    # in 5.2.0); the deployment builds 5.6.0 from a checked download.
+    setup_local_deploy(str(tmp_path), base_domain="localhost")
+    fuseki_dir = tmp_path / ".deploy" / "docker" / "fuseki"
+
+    dockerfile = (fuseki_dir / "Dockerfile").read_text(encoding="utf-8")
+    version = re.search(
+        r"^ARG FUSEKI_VERSION=(\d+)\.(\d+)\.(\d+)$", dockerfile, re.MULTILINE
+    )
+    assert version is not None
+    assert tuple(int(part) for part in version.groups()) >= (5, 2, 0)
+    assert re.search(r"^ARG FUSEKI_SHA512=[0-9a-f]{128}$", dockerfile, re.MULTILINE)
+    assert "sha512sum -c -" in dockerfile
+    assert "COPY --chmod=755 fuseki-server-launcher.sh /jena-fuseki/fuseki-server" in (
+        dockerfile
+    )
+
+    # The launcher turns off Shiro session storage, which a 5.1-era shiro.ini
+    # enables and Fuseki 5.6 (no session manager) answers with HTTP 500.
+    launcher = (fuseki_dir / "fuseki-server-launcher.sh").read_text(encoding="utf-8")
+    assert launcher.startswith("#!/bin/bash\n")
+    assert (
+        "securityManager.subjectDAO.sessionStorageEvaluator.sessionStorageEnabled = false"
+        in launcher
+    )
+    assert 'exec /jena-fuseki/fuseki-server.dist "$@"' in launcher
 
 
 def test_setup_local_deploy_ships_a_nats_config_raising_max_payload_to_8mb(
