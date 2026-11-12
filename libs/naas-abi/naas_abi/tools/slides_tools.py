@@ -29,9 +29,7 @@ import struct
 import unicodedata
 from collections import OrderedDict
 from typing import Any
-from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlparse
-from urllib.request import Request, urlopen
 
 from langchain_core.tools import BaseTool, tool
 from naas_abi_core.services.agent.context import (
@@ -51,6 +49,7 @@ from naas_abi_core.services.source_control.SourceControlPorts import (
     BranchNameConflictError,
     SourceControlError,
 )
+from naas_abi_core.utils import outbound
 
 from naas_abi.agents.feature.context import turn_workspace_id
 from naas_abi.agents.slides import (
@@ -63,7 +62,6 @@ from naas_abi.agents.slides import (
     reject_unresearched_slides_write,
     resolve_deck_title,
 )
-from naas_abi.tools.web_tools import _blocked_host_reason, _http_only_opener
 
 logger = logging.getLogger(__name__)
 
@@ -290,34 +288,31 @@ def _extract_profile_portrait_candidates(
 
 
 def _fetch_public_profile_page(url: str) -> dict[str, str]:
-    """Fetch raw public HTML for image metadata, with the web safety checks."""
+    """Fetch raw public HTML for image metadata through the guarded client."""
     parsed = urlparse((url or "").strip())
     if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
         return {"error": "Profile URL must be an absolute http(s) URL."}
-    blocked = _blocked_host_reason(url)
-    if blocked is not None:
-        return {"error": f"Profile URL is not public: {blocked}."}
-    request = Request(
-        url,
-        headers={
-            "Accept": "text/html,application/xhtml+xml",
-            "User-Agent": "Nexus Slides portrait resolver/1.0",
-        },
-    )
     try:
-        with _http_only_opener().open(
-            request, timeout=_PROFILE_FETCH_TIMEOUT_SECONDS
-        ) as response:
-            final_url = response.geturl()
-            final_blocked = _blocked_host_reason(final_url)
-            if final_blocked is not None:
-                return {"error": f"Profile redirect is not public: {final_blocked}."}
-            raw = response.read(_PROFILE_FETCH_MAX_BYTES + 1)
-            content_type = response.headers.get("Content-Type", "")
-    except (HTTPError, URLError, TimeoutError, OSError) as exc:
+        response = outbound.fetch(
+            url,
+            headers={
+                "Accept": "text/html,application/xhtml+xml",
+                "User-Agent": "Nexus Slides portrait resolver/1.0",
+            },
+            max_bytes=_PROFILE_FETCH_MAX_BYTES,
+            timeout=_PROFILE_FETCH_TIMEOUT_SECONDS,
+        )
+    except outbound.OutboundRefused as exc:
+        return {"error": f"Profile URL is not public: {exc}."}
+    except outbound.OutboundError as exc:
         return {"error": f"Unable to fetch profile page: {exc}"}
-    if len(raw) > _PROFILE_FETCH_MAX_BYTES:
+    if response.status_code >= 400:
+        return {"error": f"Unable to fetch profile page: HTTP {response.status_code}"}
+    if response.truncated:
         return {"error": "Profile page exceeds the 200 KB safety limit."}
+    raw = response.content
+    content_type = response.headers.get("content-type", "")
+    final_url = response.url
     if "html" not in content_type.casefold() and not raw.lstrip().startswith(b"<"):
         return {"error": "Profile URL did not return an HTML page."}
     charset_match = re.search(r"charset\s*=\s*([\w.-]+)", content_type, re.IGNORECASE)
@@ -469,28 +464,27 @@ def _download_remote_image(url: str) -> dict[str, Any]:
     parsed = urlparse((url or "").strip())
     if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
         return {"error": "Image URL must be an absolute http(s) URL."}
-    blocked = _blocked_host_reason(url)
-    if blocked is not None:
-        return {"error": f"Image URL is not public: {blocked}."}
-    request = Request(
-        url,
-        headers={
-            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*;q=0.8",
-            "User-Agent": "Nexus Slides image asset fetcher/1.0",
-        },
-    )
     try:
-        with urlopen(request, timeout=_REMOTE_IMAGE_TIMEOUT_SECONDS) as response:  # nosec B310
-            declared = (response.headers.get_content_type() or "").lower()
-            final_url = response.geturl()
-            final_blocked = _blocked_host_reason(final_url)
-            if final_blocked is not None:
-                return {"error": f"Image redirect is not public: {final_blocked}."}
-            payload = response.read(_REMOTE_IMAGE_MAX_BYTES + 1)
-    except (HTTPError, URLError, TimeoutError, OSError) as exc:
+        response = outbound.fetch(
+            url,
+            headers={
+                "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*;q=0.8",
+                "User-Agent": "Nexus Slides image asset fetcher/1.0",
+            },
+            max_bytes=_REMOTE_IMAGE_MAX_BYTES,
+            timeout=_REMOTE_IMAGE_TIMEOUT_SECONDS,
+        )
+    except outbound.OutboundRefused as exc:
+        return {"error": f"Image URL is not public: {exc}."}
+    except outbound.OutboundError as exc:
         return {"error": f"Unable to download image URL: {exc}"}
-    if len(payload) > _REMOTE_IMAGE_MAX_BYTES:
+    if response.status_code >= 400:
+        return {"error": f"Unable to download image URL: HTTP {response.status_code}"}
+    if response.truncated:
         return {"error": "Remote image exceeds the 5 MB safety limit."}
+    declared = response.content_type
+    final_url = response.url
+    payload = response.content
     media_type = declared
     if media_type not in _IMAGE_EXTENSIONS:
         guessed = mimetypes.guess_type(urlparse(final_url).path)[0] or ""

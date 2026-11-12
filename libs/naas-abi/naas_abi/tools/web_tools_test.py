@@ -1,15 +1,13 @@
 import tomllib
-import urllib.error
-import urllib.request
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from naas_abi_core.utils.outbound import FetchedResponse
 
 from naas_abi.tools.web_tools import (
     _ddgs_search,
     _html_to_text,
-    _http_only_opener,
     make_web_fetch_tool,
     make_web_search_tool,
     reset_web_tool_turn,
@@ -63,21 +61,20 @@ def test_web_search_empty_and_caps() -> None:
         mock.assert_called_with("q", 20)
 
 
-def _mock_opener(response: MagicMock) -> MagicMock:
-    opener = MagicMock()
-    opener.open.return_value = response
-    return opener
+_FETCH = "naas_abi_core.utils.outbound.fetch"
+_CONNECT = "naas_abi_core.utils.outbound.httpcore.SyncBackend.connect_tcp"
 
 
 def _html_response(
     body: bytes, content_type: str = "text/html; charset=utf-8"
-) -> MagicMock:
-    resp = MagicMock()
-    resp.read.return_value = body
-    resp.headers.get.return_value = content_type
-    resp.__enter__.return_value = resp
-    resp.__exit__.return_value = False
-    return resp
+) -> FetchedResponse:
+    return FetchedResponse(
+        url="https://example.com/",
+        status_code=200,
+        headers={"content-type": content_type},
+        content=body,
+        truncated=False,
+    )
 
 
 def test_web_fetch_rejects_non_http_and_strips_html() -> None:
@@ -86,10 +83,7 @@ def test_web_fetch_rejects_non_http_and_strips_html() -> None:
     assert "Error" in tool.invoke({"url": "ftp://example.com/file"})
 
     resp = _html_response(b"<html><body><p>Hello world</p></body></html>")
-    with patch(
-        "naas_abi.tools.web_tools._http_only_opener",
-        return_value=_mock_opener(resp),
-    ):
+    with patch(_FETCH, return_value=resp):
         result = tool.invoke({"url": "https://example.com"})
     assert "Hello world" in result
     assert "<p>" not in result
@@ -112,31 +106,23 @@ def test_web_fetch_refuses_every_scheme_but_http_and_https(url: str) -> None:
     web_fetch is bound into every agent, and its argument comes from whatever
     the model decided to read: a link off a search result, a URL quoted in a
     page it just fetched, or an instruction planted in either. `file:///etc/passwd`
-    is a one-line prompt injection away from being read out into the transcript,
-    and urllib opens it without complaint because the default opener registers
-    a FileHandler.
+    must never be read out into the transcript, so only http and https are
+    spoken, before any connection opens.
     """
     tool = make_web_fetch_tool()
-    opener = MagicMock()
 
-    with patch(
-        "naas_abi.tools.web_tools._http_only_opener",
-        return_value=opener,
-    ):
+    with patch(_CONNECT) as connect:
         result = tool.invoke({"url": url})
 
     assert "Error" in result
     assert "http" in result
-    opener.open.assert_not_called()
+    connect.assert_not_called()
 
 
 def test_web_fetch_accepts_an_uppercase_scheme() -> None:
     """Scheme comparison is case-insensitive per RFC 3986, unlike startswith."""
     resp = _html_response(b"<p>ok</p>")
-    with patch(
-        "naas_abi.tools.web_tools._http_only_opener",
-        return_value=_mock_opener(resp),
-    ):
+    with patch(_FETCH, return_value=resp):
         assert "ok" in make_web_fetch_tool().invoke({"url": "HTTPS://example.com"})
 
 
@@ -163,24 +149,17 @@ def test_web_fetch_refuses_metadata_and_private_hosts(url: str) -> None:
     loopback ranges are the same shape one hop down: the live API and Nexus are
     on loopback ports on the machine running the agent.
 
-    This is a host deny list on the URL as written, not SSRF protection. A
-    public hostname that resolves to 127.0.0.1 still gets through, because
-    closing that needs the address pinned between resolution and connect. What
-    it does close is every target reachable by writing the address down, which
-    is the whole of the metadata problem, since 169.254.169.254 is a fixed
-    literal with no name to look up.
+    Addresses and local names written in the URL are refused before any
+    connection opens; names that resolve to such addresses are covered in
+    web_fetch_public_test.py.
     """
     tool = make_web_fetch_tool()
-    opener = MagicMock()
 
-    with patch(
-        "naas_abi.tools.web_tools._http_only_opener",
-        return_value=opener,
-    ):
+    with patch(_CONNECT) as connect:
         result = tool.invoke({"url": url})
 
     assert "Error" in result
-    opener.open.assert_not_called()
+    connect.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -199,29 +178,8 @@ def test_web_fetch_still_opens_ordinary_public_urls(url: str) -> None:
     would break fetching most pages on the web.
     """
     resp = _html_response(b"<p>public</p>")
-    with patch(
-        "naas_abi.tools.web_tools._http_only_opener",
-        return_value=_mock_opener(resp),
-    ):
+    with patch(_FETCH, return_value=resp):
         assert "public" in make_web_fetch_tool().invoke({"url": url})
-
-
-def test_web_fetch_opener_cannot_speak_a_non_http_scheme() -> None:
-    """Validating the URL the model gave is not enough on its own.
-
-    urllib follows redirects, and HTTPRedirectHandler permits ftp:// as a
-    redirect target, so an approved https:// URL can hand the fetch a scheme
-    the guard never saw. Registering only the http/https handlers means there
-    is nothing left in the opener that could serve one: no FileHandler, no
-    FTPHandler, no DataHandler. Asserting on handle_open rather than on a live
-    redirect keeps this a unit test.
-    """
-    opener = _http_only_opener()
-
-    assert set(opener.handle_open) <= {"http", "https", "unknown"}
-    assert "file" not in opener.handle_open
-    assert "ftp" not in opener.handle_open
-    assert "data" not in opener.handle_open
 
 
 def test_web_search_reaches_the_ddgs_backend() -> None:
@@ -318,10 +276,7 @@ def test_web_fetch_marks_truncated_pages() -> None:
     tool = make_web_fetch_tool()
     resp = _html_response(b"A" * 10_000, content_type="text/plain")
 
-    with patch(
-        "naas_abi.tools.web_tools._http_only_opener",
-        return_value=_mock_opener(resp),
-    ):
+    with patch(_FETCH, return_value=resp):
         result = tool.invoke({"url": "https://x.com", "max_length": 100})
 
     assert "truncated" in result
@@ -331,10 +286,7 @@ def test_web_fetch_marks_truncated_pages() -> None:
 def test_web_fetch_rejects_the_same_url_twice() -> None:
     tool = make_web_fetch_tool()
     resp = _html_response(b"<p>ok</p>")
-    with patch(
-        "naas_abi.tools.web_tools._http_only_opener",
-        return_value=_mock_opener(resp),
-    ):
+    with patch(_FETCH, return_value=resp):
         assert "ok" in tool.invoke(
             {"url": "https://www.forvismazars.com/il/en/offices"}
         )
@@ -349,16 +301,12 @@ def test_web_fetch_rejects_truncated_oss_url_then_repeat() -> None:
         "https://routify-file-proxy-sg.oss-ap-southeast-1.aliyuncs.com/x"
         "?OSSAccessKeyId=LTAI5t…QVZr"
     )
-    opener = MagicMock()
-    with patch(
-        "naas_abi.tools.web_tools._http_only_opener",
-        return_value=opener,
-    ):
+    with patch(_FETCH) as fetch:
         first = tool.invoke({"url": url})
         second = tool.invoke({"url": url})
     assert "truncated" in first.lower() or "ellipsis" in first.lower()
     assert "already ran" in second
-    opener.open.assert_not_called()
+    fetch.assert_not_called()
 
 
 def test_web_search_drops_truncated_result_urls() -> None:
@@ -385,17 +333,18 @@ def test_web_search_drops_truncated_result_urls() -> None:
 
 def test_web_fetch_reports_transport_failures_as_text() -> None:
     """Returned, not raised: the caller is a model reading a tool result."""
+    from naas_abi_core.utils.outbound import OutboundError
+
     tool = make_web_fetch_tool()
-    http_error = urllib.error.HTTPError(
-        url="https://x.com", code=404, msg="Not Found", hdrs=MagicMock(), fp=None
+    missing = FetchedResponse(
+        url="https://x.com/missing",
+        status_code=404,
+        headers={"content-type": "text/html"},
+        content=b"Not Found",
+        truncated=False,
     )
-    with patch.object(
-        urllib.request.OpenerDirector, "open", side_effect=http_error, autospec=True
-    ):
+    with patch(_FETCH, return_value=missing):
         assert "404" in tool.invoke({"url": "https://x.com/missing"})
 
-    unreachable = urllib.error.URLError("Name not resolved")
-    with patch.object(
-        urllib.request.OpenerDirector, "open", side_effect=unreachable, autospec=True
-    ):
+    with patch(_FETCH, side_effect=OutboundError("the host could not be reached")):
         assert "Could not reach" in tool.invoke({"url": "https://nonexistent.invalid"})

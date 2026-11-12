@@ -10,11 +10,15 @@ from naas_abi_core import logger
 from naas_abi_core.integration.integration import Integration, IntegrationConfiguration
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
+from naas_abi_core.utils import outbound
 from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_marketplace.ai.chatgpt import ABIModule
 from pydantic import BaseModel, Field
 
 cache = CacheFactory.CacheFS_find_storage(subpath="openai_responses")
+
+_MAX_PDF_BYTES = 20 * 1024 * 1024
+_PDF_FETCH_TIMEOUT_SECONDS = 30.0
 
 
 @dataclass
@@ -255,15 +259,29 @@ class OpenAIResponsesIntegration(Integration):
         system_prompt: str = "You are a helpful assistant that can analyze and describe any aspect of PDF documents in detail. You can identify objects, people, scenes, colors, composition, lighting, emotions, actions, text, and other visual elements. Please provide clear and comprehensive descriptions based on what you observe in the PDF document.",
         return_text: bool = False,
     ) -> dict | str:
-        # Download PDF and extract text
+        # Download the PDF from a public address and extract its text
         pdf_text = ""
         try:
-            pdf_bytes = requests.get(pdf_url).content
-            with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+            fetched = outbound.fetch(
+                pdf_url,
+                headers={"Accept": "application/pdf"},
+                max_bytes=_MAX_PDF_BYTES,
+                timeout=_PDF_FETCH_TIMEOUT_SECONDS,
+            )
+        except outbound.OutboundRefused as e:
+            return f"The PDF URL was refused: {e}."
+        except outbound.OutboundError as e:
+            return f"The PDF could not be downloaded: {e}."
+        if fetched.status_code >= 400:
+            return f"The PDF could not be downloaded: HTTP {fetched.status_code}."
+        if fetched.truncated:
+            return "The PDF is larger than the download limit."
+        try:
+            with pdfplumber.open(io.BytesIO(fetched.content)) as pdf:
                 pdf_text = "\n".join(page.extract_text() or "" for page in pdf.pages)
         except Exception as e:  # noqa: BLE001
             logger.error(f"Error processing PDF: {e!s}")
-            return str(e)
+            return "The URL did not return a readable PDF."
 
         # Build messages
         messages: list[dict] = []
@@ -282,16 +300,8 @@ class OpenAIResponsesIntegration(Integration):
 
         # Build payload
         payload = {"model": self.model, "input": messages}
+        # The answer carries the document's text: it is returned, not stored.
         response = self._make_request(method="POST", json=payload)
-        output_dir = os.path.join(
-            self.__configuration.datastore_path, "responses", "analyze_pdf", self.model
-        )
-        self.__storage_utils.save_json(
-            response,
-            output_dir,
-            f"{datetime.now(UTC).strftime('%Y-%m-%d_%H-%M-%S')}_{self.model}.json",
-            copy=False,
-        )
 
         # Extract text and annotations from output
         if return_text:

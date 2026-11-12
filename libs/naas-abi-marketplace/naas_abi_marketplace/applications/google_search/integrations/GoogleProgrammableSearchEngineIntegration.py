@@ -9,10 +9,18 @@ from naas_abi_core import logger
 from naas_abi_core.integration.integration import Integration, IntegrationConfiguration
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
+from naas_abi_core.utils import outbound
 from naas_abi_core.utils.StorageUtils import StorageUtils
 from naas_abi_marketplace.applications.google_search import ABIModule
 
 cache = CacheFactory.CacheFS_find_storage(subpath="google_search")
+
+_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+)
+_MAX_PAGE_BYTES = 5 * 1024 * 1024
+_FETCH_TIMEOUT_SECONDS = 30.0
 
 
 @dataclass
@@ -106,71 +114,42 @@ class GoogleProgrammableSearchEngineIntegration(Integration):
         )
         return items
 
-    @cache(
-        lambda self, url: f"googlesearch_extract_{url}",
-        cache_type=DataType.TEXT,
-        ttl=datetime.timedelta(days=1),
-    )
     def extract_content(self, url: str) -> str:
         """
-        Fetch a URL and extract text content from HTML.
-        
+        Fetch a public URL and extract text content from HTML.
+
+        The page is fetched through the guarded outbound client (public
+        addresses only, every redirect checked, size and time capped), and its
+        text is returned to the caller only: it is not cached or stored.
+
         Args:
             url (str): The URL to fetch and extract content from
-            
+
         Returns:
             str: Extracted text content from the HTML page
-            
+
         Raises:
-            requests.RequestException: If the HTTP request fails
-            Exception: If HTML parsing fails
+            outbound.OutboundRefused: If the URL does not lead to a public address
+            outbound.OutboundError: If the page could not be fetched
         """
-        try:
-            # Fetch the URL with a user agent to avoid blocking
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-            }
-            response = requests.get(url, headers=headers, timeout=30)
-            response.raise_for_status()
-            
-            # Parse HTML with BeautifulSoup
-            soup = BeautifulSoup(response.text, "html.parser")
-            
-            # Remove script and style elements
-            for script in soup(["script", "style", "noscript"]):
-                script.decompose()
-            
-            # Extract text content
-            text = soup.get_text(separator=" ", strip=True)
-            
-            # Clean up excessive whitespace
-            lines = (line.strip() for line in text.splitlines())
-            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-            text = " ".join(chunk for chunk in chunks if chunk)
-            
-            # Save to storage
-            def clean_string(string: str) -> str:
-                # Remove special characters except spaces and pipes
-                cleaned = re.sub(r"[^\w\s|]", "", string)
-                cleaned = cleaned.strip()
-                cleaned = cleaned.replace(" ", "_")
-                return cleaned
-            
-            url_clean = clean_string(url)
-            self.__storage_utils.save_text(
-                text,
-                os.path.join(self.__configuration.datastore_path, "extracted_content", url_clean),
-                url_clean + ".txt",
-            )
-            
-            return text
-            
-        except requests.RequestException as e:
-            logger.error(f"Error fetching URL {url}: {e!s}")
-            raise
-        except Exception as e:
-            logger.error(f"Error extracting content from {url}: {e!s}")
-            raise
+        response = outbound.fetch(
+            url,
+            headers={"User-Agent": _USER_AGENT},
+            max_bytes=_MAX_PAGE_BYTES,
+            timeout=_FETCH_TIMEOUT_SECONDS,
+        )
+        if response.status_code >= 400:
+            raise outbound.OutboundError(f"HTTP {response.status_code}")
+
+        soup = BeautifulSoup(response.text(), "html.parser")
+        for script in soup(["script", "style", "noscript"]):
+            script.decompose()
+        text = soup.get_text(separator=" ", strip=True)
+
+        # Clean up excessive whitespace
+        lines = (line.strip() for line in text.splitlines())
+        chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+        return " ".join(chunk for chunk in chunks if chunk)
 
 
 def as_tools(configuration: GoogleProgrammableSearchEngineIntegrationConfiguration):

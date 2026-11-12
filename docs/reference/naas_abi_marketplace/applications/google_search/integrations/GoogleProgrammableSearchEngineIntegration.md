@@ -5,7 +5,7 @@
 - Provides:
   - Web search via the Google Custom Search API with pagination up to `num_results`.
   - HTML page text extraction from a URL using **BeautifulSoup**.
-- Saves outputs to a configured datastore path and caches results on filesystem for **1 day**.
+- Saves search results to a configured datastore path and caches them on filesystem for **1 day**. Extracted page text is returned only: it is neither saved nor cached.
 
 ## Public API
 - `GoogleProgrammableSearchEngineIntegrationConfiguration(IntegrationConfiguration)` (dataclass)
@@ -25,12 +25,9 @@
       `"{datastore_path}/queries/{clean_query}/{clean_query}.json"`
     - Cached for 1 day (cache key includes `query` and `num_results`).
   - `extract_content(url: str) -> str`
-    - Fetches a URL with a browser-like `User-Agent` and `timeout=30`.
+    - Fetches the URL through `naas_abi_core.utils.outbound` (public addresses only, every redirect checked, 5 MB and 30 s caps) with a browser-like `User-Agent`.
     - Parses HTML, removes `script/style/noscript`, returns cleaned visible text.
-    - Persists text to:  
-      `"{datastore_path}/extracted_content/{clean_url}/{clean_url}.txt"`
-    - Cached for 1 day (cache key includes `url`).
-    - Logs and re-raises exceptions.
+    - Raises `OutboundRefused` for a URL that does not lead to a public address, and `OutboundError` when the page cannot be fetched or answers an HTTP error.
 
 - `as_tools(configuration)`
   - Returns two LangChain `StructuredTool` tools:
@@ -42,13 +39,13 @@
   - Google API key (`api_key`)
   - Programmable Search Engine ID (`search_engine_id` / `cx`)
 - Python dependencies:
-  - `requests`
+  - `requests` (search API)
   - `beautifulsoup4` (`bs4`)
   - `naas_abi_core` (integration base classes, logger, cache, storage utilities)
   - `naas_abi_marketplace.applications.google_search.ABIModule`
 - Caching:
   - Filesystem cache from `CacheFactory.CacheFS_find_storage(subpath="google_search")`
-  - TTL: `datetime.timedelta(days=1)` for both search and extraction.
+  - TTL: `datetime.timedelta(days=1)` for search results.
 
 ## Usage
 ### Basic usage
@@ -92,5 +89,5 @@ tools = as_tools(config)
 ## Caveats
 - `query()` **does not accumulate** results across pages: it overwrites `items` on each page fetch, so the returned/saved list reflects **only the last fetched page**.
 - On non-200 responses, `query()` logs an error and stops, then saves whatever `items` currently contains.
-- `extract_content()` may fail on non-HTML pages or blocked sites; it logs and **re-raises** exceptions.
+- `extract_content()` may fail on non-HTML pages or blocked sites; it raises.
 - Saved filenames use a “cleaned” version of query/URL (non-word chars removed, spaces → `_`), which can cause collisions for distinct inputs that clean to the same value.

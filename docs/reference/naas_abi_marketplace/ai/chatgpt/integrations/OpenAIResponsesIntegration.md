@@ -41,15 +41,14 @@ Integration implementation.
   - on parsing error returns `{"error": "...", "content": None}`
 
 #### `analyze_pdf(pdf_url: str, user_prompt: str = "Describe this PDF document:", system_prompt: str = "...", return_text: bool = False) -> dict | str`
-- Downloads the PDF from `pdf_url` and extracts text using `pdfplumber`.
+- Downloads the PDF from `pdf_url` through `naas_abi_core.utils.outbound` (public addresses only, every redirect checked, 20 MB and 30 s caps) and extracts text using `pdfplumber`.
 - Sends extracted text as `input_text` along with `user_prompt`; optionally includes a `system` message.
-- Saves response JSON to:
-  - `{datastore_path}/responses/analyze_pdf/{model}/{timestamp}_{model}.json`
+- Returns the response without saving it: it carries the document's text.
 - If `return_text=True`:
   - extracts `output_text` from message content
   - also collects `url_citation` items in message content and appends an `Annotations:` list (deduped by URL)
   - returns `{"content": <text>}`; if no text, returns a string `"No text content found in output"`
-- On PDF download/extraction error, returns the error as a string.
+- On a refused URL, a download failure or an unreadable PDF, returns a short message as a string.
 
 ### `as_tools(configuration: OpenAIResponsesIntegrationConfiguration) -> list`
 Returns LangChain `StructuredTool` wrappers around the integration:

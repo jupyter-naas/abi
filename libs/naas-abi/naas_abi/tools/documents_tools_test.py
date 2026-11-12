@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from naas_abi_core.services.agent.context import (
     agent_container,
@@ -1284,29 +1284,30 @@ def test_conv_uc4e9gn3zn_rejects_second_fetch_insert_and_read(monkeypatch):
         assert "forvismazars.com/il/en/offices" in found
         assert "routify-file-proxy" not in found
 
-        resp = MagicMock()
-        resp.read.return_value = b"<p>Our offices - Forvis Mazars - Israel</p>"
-        resp.headers.get.return_value = "text/html; charset=utf-8"
-        resp.__enter__.return_value = resp
-        resp.__exit__.return_value = False
-        opener = MagicMock()
-        opener.open.return_value = resp
+        from naas_abi_core.utils.outbound import FetchedResponse
+
+        page = FetchedResponse(
+            url="https://www.forvismazars.com/il/en/offices",
+            status_code=200,
+            headers={"content-type": "text/html; charset=utf-8"},
+            content=b"<p>Our offices - Forvis Mazars - Israel</p>",
+            truncated=False,
+        )
         with patch(
-            "naas_abi.tools.web_tools._http_only_opener",
-            return_value=opener,
-        ):
+            "naas_abi_core.utils.outbound.fetch", return_value=page
+        ) as outbound_fetch:
             first = fetch.invoke({"url": "https://www.forvismazars.com/il/en/offices"})
         assert "Israel" in first
 
         junk = fetch.invoke({"url": _CONV_UC4E9GN3ZN_OSS})
         assert "truncated" in junk.lower() or "ellipsis" in junk.lower()
         assert "Stop" in junk
-        opener.open.assert_called_once()
+        outbound_fetch.assert_called_once()
 
         again = fetch.invoke({"url": _CONV_UC4E9GN3ZN_OSS})
         assert "already ran" in again
         assert "Stop and reply" in again
-        assert opener.open.call_count == 1
+        assert outbound_fetch.call_count == 1
 
         insert = next(t for t in documents_tools() if t.name == "insert_heading")
         read = next(t for t in documents_tools() if t.name == "read_document")

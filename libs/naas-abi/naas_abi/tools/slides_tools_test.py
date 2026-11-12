@@ -101,29 +101,24 @@ def test_redact_data_urls_shrinks_payload_and_counts():
     assert len(redacted) < len(html)
 
 
+def _fetched(url: str, content_type: str, body: bytes):
+    from naas_abi_core.utils.outbound import FetchedResponse
+
+    return FetchedResponse(
+        url=url,
+        status_code=200,
+        headers={"content-type": content_type},
+        content=body,
+        truncated=False,
+    )
+
+
 def test_download_remote_image_rejects_html_returned_with_http_200(monkeypatch):
-    class Headers:
-        def get_content_type(self):
-            return "text/html"
-
-    class Response:
-        headers = Headers()
-
-        def geturl(self):
-            return "https://images.example/photo"
-
-        def read(self, _limit):
-            return b"<html>blocked</html>"
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args):
-            return False
-
     monkeypatch.setattr(
-        "naas_abi.tools.slides_tools.urlopen",
-        lambda *_args, **_kwargs: Response(),
+        "naas_abi_core.utils.outbound.fetch",
+        lambda *_args, **_kwargs: _fetched(
+            "https://images.example/photo", "text/html", b"<html>blocked</html>"
+        ),
     )
     result = _download_remote_image("https://images.example/photo")
     assert "error" in result
@@ -132,29 +127,11 @@ def test_download_remote_image_rejects_html_returned_with_http_200(monkeypatch):
 
 def test_download_remote_image_returns_stable_local_asset_name(monkeypatch):
     payload = b"\x89PNG\r\n\x1a\nvalid-png"
-
-    class Headers:
-        def get_content_type(self):
-            return "image/png"
-
-    class Response:
-        headers = Headers()
-
-        def geturl(self):
-            return "https://images.example/photo.png"
-
-        def read(self, _limit):
-            return payload
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args):
-            return False
-
     monkeypatch.setattr(
-        "naas_abi.tools.slides_tools.urlopen",
-        lambda *_args, **_kwargs: Response(),
+        "naas_abi_core.utils.outbound.fetch",
+        lambda *_args, **_kwargs: _fetched(
+            "https://images.example/photo.png", "image/png", payload
+        ),
     )
     result = _download_remote_image("https://images.example/photo.png")
     assert result["bytes"] == payload

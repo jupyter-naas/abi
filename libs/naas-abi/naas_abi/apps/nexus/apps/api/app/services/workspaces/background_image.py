@@ -11,10 +11,7 @@ FilesService directly, is the only writer.
 
 from __future__ import annotations
 
-import ipaddress
-import socket
 from datetime import datetime
-from urllib.parse import urlsplit
 from uuid import uuid4
 
 from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.drive_roots import (
@@ -25,6 +22,7 @@ from naas_abi.apps.nexus.apps.api.app.services.files.files__schema import (
     RawFileData,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.service import FilesService
+from naas_abi_core.utils import outbound
 
 MAX_BACKGROUND_IMAGE_BYTES = 10 * 1024 * 1024
 URL_FETCH_TIMEOUT_SECONDS = 15.0
@@ -92,53 +90,51 @@ def _fmt(value: float) -> str:
 
 
 def ensure_public_http_url(url: str) -> None:
-    """Refuse anything but http(s) to a host that resolves only to public addresses.
+    """Refuse a wallpaper URL that is not http(s) to a host resolving only to
+    public addresses: the early answer for a form, with a lookup.
 
-    The server fetches this URL on the user's behalf, so it must not reach the
-    internal network (MinIO, metadata endpoints, localhost services).
+    :func:`fetch_image_url` checks again, on the address it connects to.
     """
-    parts = urlsplit(url)
-    if parts.scheme not in ("http", "https") or not parts.hostname:
-        raise BackgroundImageError("Only http(s) image URLs are supported")
     try:
-        infos = socket.getaddrinfo(parts.hostname, parts.port or None, proto=socket.IPPROTO_TCP)
-    except (socket.gaierror, UnicodeError) as exc:
+        host, port = outbound.url_origin(url)
+        outbound.check_url(url)
+        outbound.resolve_public(host, port)
+    except outbound.OutboundRefused as exc:
+        raise BackgroundImageError(_refusal(exc)) from exc
+    except outbound.OutboundError as exc:
         raise BackgroundImageError("Could not resolve the image URL's host") from exc
-    if not infos:
-        raise BackgroundImageError("Could not resolve the image URL's host")
-    for info in infos:
-        address = ipaddress.ip_address(info[4][0])
-        if not address.is_global or address.is_multicast:
-            raise BackgroundImageError("Image URL points to a private or local address")
+
+
+def _refusal(exc: outbound.OutboundRefused) -> str:
+    if exc.reason in (outbound.SCHEME, outbound.INVALID_URL, outbound.NO_HOST):
+        return "Only http(s) image URLs are supported"
+    if exc.reason == outbound.UNRESOLVED:
+        return "Could not resolve the image URL's host"
+    return "Image URL points to a private or local address"
 
 
 async def fetch_image_url(url: str, max_bytes: int = MAX_BACKGROUND_IMAGE_BYTES) -> bytes:
-    """Download an image, re-checking every redirect hop against the SSRF guard."""
-    import httpx
+    """Download an image through the guarded outbound client.
 
-    current = url.strip()
-    async with httpx.AsyncClient(
-        timeout=URL_FETCH_TIMEOUT_SECONDS, follow_redirects=False
-    ) as client:
-        for _ in range(MAX_URL_REDIRECTS + 1):
-            ensure_public_http_url(current)
-            async with client.stream("GET", current) as response:
-                if response.is_redirect and "location" in response.headers:
-                    current = str(response.url.join(response.headers["location"]))
-                    continue
-                if response.status_code != 200:
-                    raise BackgroundImageError(
-                        f"Could not download the image (HTTP {response.status_code})"
-                    )
-                chunks: list[bytes] = []
-                size = 0
-                async for chunk in response.aiter_bytes():
-                    size += len(chunk)
-                    if size > max_bytes:
-                        raise BackgroundImageError(_too_large(max_bytes))
-                    chunks.append(chunk)
-                return b"".join(chunks)
-    raise BackgroundImageError("Too many redirects")
+    The client resolves each host once, connects to the address it checked and
+    checks every redirect hop the same way.
+    """
+    try:
+        response = await outbound.afetch(
+            url.strip(),
+            max_bytes=max_bytes,
+            timeout=URL_FETCH_TIMEOUT_SECONDS,
+            max_redirects=MAX_URL_REDIRECTS,
+        )
+    except outbound.OutboundRefused as exc:
+        raise BackgroundImageError(_refusal(exc)) from exc
+    except outbound.OutboundError as exc:
+        raise BackgroundImageError("Could not download the image") from exc
+    if response.status_code != 200:
+        raise BackgroundImageError(f"Could not download the image (HTTP {response.status_code})")
+    if response.truncated:
+        raise BackgroundImageError(_too_large(max_bytes))
+    return response.content
 
 
 def _too_large(max_bytes: int) -> str:
