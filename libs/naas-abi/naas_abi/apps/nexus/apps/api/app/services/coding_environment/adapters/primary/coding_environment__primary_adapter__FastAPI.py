@@ -67,6 +67,7 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
     AccessDeniedError,
     AgentNeverConnectedError,
     CodingEnvironmentError,
+    InvalidRequestError,
     ProvisionFailedError,
     ProvisionTimeoutError,
     QuotaExceededError,
@@ -104,6 +105,7 @@ _HTTP_STATUS_BY_ERROR: dict[type[CodingEnvironmentError], int] = {
     WorkspaceNameConflictError: 409,
     QuotaExceededError: 429,
     AccessDeniedError: 403,
+    InvalidRequestError: 422,
     ProvisionFailedError: 502,
     ProvisionTimeoutError: 504,
     AgentNeverConnectedError: 504,
@@ -291,6 +293,23 @@ def _prepare_clone(
         f"@{settings.coding_git_clone_host}/{repo_id}.git"
     )
     return repo_url, checkout
+
+
+# Parameters the route sets itself: the repository is chosen by ``repo_id`` and
+# cloned from the platform's forge, never named by the caller.
+_SERVER_PARAMS = frozenset(
+    {
+        "repo_url",
+        "branch",
+        "git_author_name",
+        "git_author_email",
+        "docker_network",
+        "sidecar_secret",
+        "abi_token",
+        "abi_api_base",
+        "abi_agents",
+    }
+)
 
 
 class EnvironmentProvisionRequest(BaseModel):
@@ -875,6 +894,11 @@ async def provision_environment(
     await authz.require("WriteCode", user=current_user, workspace=body.workspace_id)
     require_ref(body.source_branch, "source branch")
     require_ref(body.branch, "branch")
+    if _SERVER_PARAMS & set(body.params or {}):
+        raise HTTPException(
+            status_code=422,
+            detail="Choose the repository with repo_id; these parameters are set by the server.",
+        )
     params = dict(body.params or {})
     checkout_branch = body.branch or body.source_branch
     repo_id = _default_repo_id(body.repo_id)

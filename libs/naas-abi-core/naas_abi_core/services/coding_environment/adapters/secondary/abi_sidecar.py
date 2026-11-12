@@ -1,7 +1,11 @@
 """abi workspace tool-exec sidecar.
 
-Runs beside a local git checkout and exposes path-jailed filesystem tools over
-HTTP. Used by ``local_directory`` coding workspaces and Slides/Coder runtimes.
+Runs beside a local git checkout and exposes filesystem tools, kept inside the
+checkout, and a shell over HTTP. Used by ``local_directory`` coding workspaces
+and Slides/Coder runtimes. The shell is not confined to the checkout: it runs as
+the sidecar's OS user, with the sidecar's environment, so the isolation is the
+runtime's (a per-user container with Coder; none with ``local_directory``,
+which is single-user development only).
 """
 
 from __future__ import annotations
@@ -83,6 +87,9 @@ def _list_dir(body: dict) -> dict:
 
 
 def _run_terminal(body: dict) -> dict:
+    """Run ``command`` through the shell. ``cwd`` (inside the checkout) is
+    where it starts, not a limit: it may reach whatever the sidecar's OS user
+    may."""
     command = body.get("command")
     if not command or not isinstance(command, str):
         raise ValueError("command (string) is required")
@@ -93,7 +100,7 @@ def _run_terminal(body: dict) -> dict:
     try:
         proc = subprocess.run(
             command,
-            shell=True,  # nosec B602 - intentional workspace shell; jailed cwd + timeout
+            shell=True,  # nosec B602 - the workspace's own shell, isolated by its runtime
             cwd=cwd,
             capture_output=True,
             text=True,

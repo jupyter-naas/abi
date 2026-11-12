@@ -768,6 +768,11 @@ class ABIModule(BaseModule):
         # leftover named graph so a reload does not keep stale catalog triples.
         run_nexus_platform_pipeline: bool = True
 
+        # The OpenCode Coding agent (agents/CodingAgent.py) is a module agent
+        # only when this is set. It runs in the caller's own coding sandbox,
+        # never on the API host.
+        opencode_coding_agent: bool = False
+
         # Canonical nexus runtime settings (passed to app.core.config.Settings).
         nexus_config: NexusConfig = Field(default_factory=NexusConfig)
 

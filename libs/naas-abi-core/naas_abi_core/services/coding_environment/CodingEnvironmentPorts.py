@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
@@ -95,6 +96,20 @@ class QuotaExceededError(CodingEnvironmentError):
 
 class AccessDeniedError(CodingEnvironmentError):
     """RBAC / scope denial (401/403)."""
+
+
+class InvalidRequestError(CodingEnvironmentError):
+    """A request field is not acceptable: an environment name, a repository (422)."""
+
+
+# An environment's name: one lowercase segment, as orchestrators name
+# workspaces. Adapters make directories, hostnames and URLs of it.
+_ENVIRONMENT_NAME = re.compile(r"[a-z0-9][a-z0-9-]{0,99}")
+
+
+def environment_name_ok(name: object) -> bool:
+    """Lowercase letters, digits and ``-``, starting with a letter or a digit."""
+    return isinstance(name, str) and bool(_ENVIRONMENT_NAME.fullmatch(name))
 
 
 class ICodingEnvironmentAdapter(ABC):

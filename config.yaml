@@ -273,14 +273,20 @@ services:
       adapter: "local_git"
       config:
         repos_root: "storage/git"
-  coding_environment:
-    coding_environment_adapter:
-      adapter: "local_directory"
-      config:
-        workspaces_root: "storage/workspaces"
-        harness: "opencode"
-        opencode_bin: "opencode"
-        harness_port_start: 18200
-        harness_port_end: 18300
-        opencode_model: "openai/gpt-5.4"
-        opencode_startup_timeout: 30
+  # Coding environments default to the in-memory adapter. The local_directory
+  # adapter runs workspaces on this host as the engine's own OS user, so it is
+  # for single-user development only, turned on explicitly:
+  #
+  # coding_environment:
+  #   coding_environment_adapter:
+  #     adapter: "local_directory"
+  #     config:
+  #       single_user_development: true
+  #       workspaces_root: "storage/workspaces"
+  #       repos_root: "storage/git"
+  #       harness: "opencode"
+  #       opencode_bin: "opencode"
+  #       harness_port_start: 18200
+  #       harness_port_end: 18300
+  #       opencode_model: "openai/gpt-5.4"
+  #       opencode_startup_timeout: 30

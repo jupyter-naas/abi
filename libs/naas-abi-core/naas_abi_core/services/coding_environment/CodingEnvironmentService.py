@@ -14,6 +14,7 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
     PHASE_STOPPED,
     AccessDeniedError,
     ICodingEnvironmentAdapter,
+    InvalidRequestError,
     ProvisionFailedError,
     ProvisionTimeoutError,
     WorkspaceAccess,
@@ -21,6 +22,7 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
     WorkspaceNotFoundError,
     WorkspaceStatus,
     WorkspaceTemplate,
+    environment_name_ok,
 )
 from naas_abi_core.services.coding_environment.iam_catalog import CATALOG
 from naas_abi_core.services.coding_environment.ontologies.modules.CodingEnvironmentEventOntology import (
@@ -181,6 +183,11 @@ class CodingEnvironmentService(ServiceBase):
     ) -> WorkspaceStatus:
         """Provision an environment for the call's principal, placed in the
         container of the call. ``user_id`` is ignored once the service checks."""
+        if not environment_name_ok(name):
+            raise InvalidRequestError(
+                "An environment's name is lowercase letters, digits and '-', "
+                "starting with a letter or a digit"
+            )
         owner = user_id or ""
         if self._guard.enforcing:
             principal = self._principal()

@@ -49,6 +49,7 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
     AccessDeniedError,
     AgentNeverConnectedError,
     ICodingEnvironmentAdapter,
+    InvalidRequestError,
     ProvisionFailedError,
     ProvisionTimeoutError,
     QuotaExceededError,
@@ -366,6 +367,16 @@ class CodingEnvironmentPrimaryAdapterNATS(ServicePrimary):
                 request,
                 response_cls,
                 "QUOTA_EXCEEDED",
+                str(exc),
+                retryable=False,
+                status=exc.status,
+            )
+            return
+        except InvalidRequestError as exc:
+            await self._respond_error(
+                request,
+                response_cls,
+                "INVALID_REQUEST",
                 str(exc),
                 retryable=False,
                 status=exc.status,

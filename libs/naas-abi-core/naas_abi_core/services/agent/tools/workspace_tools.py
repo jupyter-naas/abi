@@ -155,7 +155,8 @@ def workspace_tools() -> list[Tool | BaseTool]:
 
         Use this to run anything in the workspace: tests, build/lint, git,
         package installs, scripts, etc. ``cwd`` is relative to the project root
-        (~/project). Commands run in an isolated per-user container.
+        (~/project). Commands run in the workspace's own runtime, as its user:
+        ``cwd`` sets where a command starts, not what it may reach.
         """
         return _call(
             "run_terminal", {"command": command, "timeout_s": timeout_s, "cwd": cwd}

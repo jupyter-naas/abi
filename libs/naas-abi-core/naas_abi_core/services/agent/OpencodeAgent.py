@@ -7,7 +7,7 @@ import contextvars
 import json
 import os
 import random
-import shlex
+import shutil
 import socket
 import subprocess
 import time
@@ -26,6 +26,7 @@ from langchain_core.tools import BaseTool, StructuredTool
 from naas_abi_core.services.agent.OpencodeSessionService import OpencodeSessionService
 from naas_abi_core.utils.Expose import Expose
 from naas_abi_core.utils.Logger import logger
+from naas_abi_core.utils.process_environment import allowed_environment
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
@@ -83,6 +84,16 @@ class OpencodeToolInput(BaseModel):
     )
 
 
+def resolve_opencode_bin(opencode_bin: str) -> str:
+    """The OpenCode executable: on ``PATH``, else its default install location."""
+    if shutil.which(opencode_bin):
+        return opencode_bin
+    home_bin = Path.home() / ".opencode" / "bin" / "opencode"
+    if home_bin.is_file():
+        return str(home_bin)
+    return opencode_bin
+
+
 class OpencodeAgent(Expose):
     _auth_bootstrap_done: bool = False
     _auth_bootstrap_lock: Lock = Lock()
@@ -106,7 +117,7 @@ class OpencodeAgent(Expose):
         self._on_tool_usage = lambda _: None
         self._on_tool_response = lambda _: None
         self._on_ai_message = lambda _message, _agent_name: None
-        self._approved_permissions: set[str] = set()
+        self._answered_permissions: set[str] = set()
         self._seen_tool_calls: set[str] = set()
 
         atexit.register(self.stop)
@@ -168,14 +179,18 @@ class OpencodeAgent(Expose):
 
         os.makedirs(self.conf.workdir, exist_ok=True)
 
-        launch_command = (
-            f"source ~/.bashrc >/dev/null 2>&1; "
-            f"{shlex.quote(self.conf.opencode_bin)} serve --port {self.conf.port}"
-        )
-
+        # The server gets an allow-listed environment, never the process's own
+        # (its keys and service credentials); OpenCode reads its provider
+        # credentials from its own auth file.
         self._proc = subprocess.Popen(
-            ["bash", "-lc", launch_command],
+            [
+                resolve_opencode_bin(self.conf.opencode_bin),
+                "serve",
+                "--port",
+                str(self.conf.port),
+            ],
             cwd=self.conf.workdir,
+            env=allowed_environment(),
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             text=True,
@@ -194,39 +209,23 @@ class OpencodeAgent(Expose):
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"Failed to initialize opencode auth file: {e}")
 
-    @classmethod
-    def _ensure_opencode_auth_file(cls) -> None:
+    @staticmethod
+    def _opencode_configuration() -> Any | None:
         from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
             EngineConfiguration,
         )
 
         configuration = EngineConfiguration.load_configuration()
-        opencode_configuration = getattr(configuration, "opencode", None)
+        return getattr(configuration, "opencode", None)
+
+    @classmethod
+    def opencode_auth_data(cls) -> dict[str, Any]:
+        """The provider credentials configured for OpenCode (``opencode.providers``),
+        as OpenCode's ``auth.json`` holds them."""
+        opencode_configuration = cls._opencode_configuration()
         if opencode_configuration is None:
-            return
-
+            return {}
         providers = getattr(opencode_configuration, "providers", []) or []
-        if len(providers) == 0:
-            return
-
-        auth_file_path = Path(
-            os.path.expanduser(
-                str(
-                    getattr(
-                        opencode_configuration,
-                        "auth_file_path",
-                        "~/.local/share/opencode/auth.json",
-                    )
-                )
-            )
-        )
-        auth_file_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Only bootstrap the file if it does not already exist.
-        # We should not mutate existing local credentials.
-        if auth_file_path.exists():
-            return
-
         auth_data: dict[str, Any] = {}
         for provider in providers:
             provider_id = str(getattr(provider, "id", "")).strip()
@@ -247,16 +246,48 @@ class OpencodeAgent(Expose):
                 }
 
             auth_data[provider_id] = record
+        return auth_data
 
+    @classmethod
+    def write_opencode_auth_file(cls, auth_file_path: Path) -> bool:
+        """Write the configured provider credentials to ``auth_file_path``
+        (mode 0600), for an OpenCode server that runs with a home of its own.
+        False when none is configured."""
+        auth_data = cls.opencode_auth_data()
         if len(auth_data) == 0:
+            return False
+        auth_file_path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(auth_file_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as file:
+            file.write(json.dumps(auth_data, indent=2, sort_keys=True))
+        os.chmod(auth_file_path, 0o600)
+        return True
+
+    @classmethod
+    def _ensure_opencode_auth_file(cls) -> None:
+        opencode_configuration = cls._opencode_configuration()
+        if opencode_configuration is None:
             return
 
-        auth_file_path.write_text(
-            json.dumps(auth_data, indent=2, sort_keys=True),
-            encoding="utf-8",
+        auth_file_path = Path(
+            os.path.expanduser(
+                str(
+                    getattr(
+                        opencode_configuration,
+                        "auth_file_path",
+                        "~/.local/share/opencode/auth.json",
+                    )
+                )
+            )
         )
-        os.chmod(auth_file_path, 0o600)
-        logger.debug(f"Initialized opencode auth file at {auth_file_path}")
+
+        # Only bootstrap the file if it does not already exist.
+        # We should not mutate existing local credentials.
+        if auth_file_path.exists():
+            return
+
+        if cls.write_opencode_auth_file(auth_file_path):
+            logger.debug(f"Initialized opencode auth file at {auth_file_path}")
 
     @staticmethod
     def _model_payload(model: str | None) -> dict[str, str] | None:
@@ -448,13 +479,15 @@ class OpencodeAgent(Expose):
         properties = event.get("properties") or {}
 
         for permission_id in self._collect_permission_ids(event):
-            if permission_id in self._approved_permissions:
+            if permission_id in self._answered_permissions:
                 continue
-            if await self._auto_approve_permission(client, session_id, permission_id):
-                self._approved_permissions.add(permission_id)
+            # No permission is granted on the user's behalf: what OpenCode
+            # asks to do beyond its own rules is refused, and said so.
+            if await self._refuse_permission(client, session_id, permission_id):
+                self._answered_permissions.add(permission_id)
                 self._notify_tool_response(
                     AIMessage(
-                        content=f"Auto-approved opencode permission `{permission_id}`"
+                        content=f"Refused opencode permission request `{permission_id}`"
                     )
                 )
 
@@ -513,24 +546,20 @@ class OpencodeAgent(Expose):
             if isinstance(output, str) and output:
                 self._notify_tool_response(AIMessage(content=output))
 
-    async def _auto_approve_permission(
+    async def _refuse_permission(
         self,
         client: httpx.AsyncClient,
         session_id: str,
         permission_id: str,
     ) -> bool:
-        payloads = [{"response": "always"}, {"response": "once"}]
-        for payload in payloads:
-            try:
-                response = await client.post(
-                    f"{self._base_url}/session/{session_id}/permissions/{permission_id}",
-                    json=payload,
-                )
-                if response.status_code < 300:
-                    return True
-            except Exception:  # noqa: BLE001,S112
-                continue
-        return False
+        try:
+            response = await client.post(
+                f"{self._base_url}/session/{session_id}/permissions/{permission_id}",
+                json={"response": "reject"},
+            )
+        except Exception:  # noqa: BLE001
+            return False
+        return response.status_code < 300
 
     @staticmethod
     def _collect_permission_ids(event: dict[str, Any]) -> set[str]:

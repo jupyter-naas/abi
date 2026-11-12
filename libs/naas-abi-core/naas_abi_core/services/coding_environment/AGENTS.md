@@ -78,6 +78,23 @@ reaches it only through its owner, as `environment/${principal.id}/*`.
 ## Adapters
 
 CoderAdapter, CodeServerComposeAdapter, LocalDirectoryAdapter, InMemoryAdapter, plus `CodingEnvironmentSecondaryAdapterNATSClient`.
+
+- **Names.** `provision` takes an environment name of lowercase letters, digits
+  and `-` (`environment_name_ok`), whoever calls; anything else is
+  `InvalidRequestError` (422).
+- **`local_directory` is single-user development only.** It runs each workspace
+  on the engine host, as the engine's own OS user: no sandbox. It must be turned
+  on with `single_user_development: true` (the engine configuration and the
+  constructor refuse it otherwise), ABI's `config.yaml` does not select it, and
+  it serves one user (another user's `provision` is `AccessDeniedError`). Its
+  checkouts stay under `workspaces_root/<user>/<name>`, an existing directory is
+  never replaced, and it clones only the platform's forge: an `<owner>/<name>` of
+  the local git root (`repos_root`) or of `forge_url`. The sidecar and the
+  OpenCode harness start with an allow-listed environment
+  (`naas_abi_core.utils.process_environment`) and a home of their own under
+  `workspaces_root/<user>/.home/<name>`, never the engine's; the harness gets
+  its own provider credentials file there (`opencode.providers`).
+  Tests: `adapters/secondary/LocalDirectoryAdapter_test.py`.
 Unsupported methods must explicitly raise `NotImplementedError`.
 
 ## Factory

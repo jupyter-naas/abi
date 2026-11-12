@@ -737,3 +737,23 @@ def test_the_code_routes_keep_branches_and_refs_inside_the_repository(
     ]
     assert [r.status_code for r in responses] == [422] * len(responses)
     assert calls == []
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"repo_url": "/srv/other-user/checkout"},
+        {"repo_url": "http://169.254.169.254/latest"},
+        {"sidecar_secret": "chosen"},
+        {"branch": "main"},
+    ],
+)
+def test_provisioning_keeps_the_repository_to_one_chosen_by_id(
+    client: Client, params: dict
+) -> None:
+    resp = client.post(
+        "",
+        json={"workspace_id": WS, "name": "dev", "template_id": "tmpl-default", "params": params},
+    )
+    assert resp.status_code == 422, resp.text
+    assert client.environments.adapter.list_all_environments() == []
