@@ -238,8 +238,12 @@ def test_local_directory_harness_keeps_its_own_environment_and_credentials(
     fake = tmp_path / "opencode"
     fake.write_text(
         "#!/usr/bin/env python3\n"
-        "import json, os, sys\n"
-        f"json.dump({{'env': dict(os.environ), 'cwd': os.getcwd()}}, open({str(record)!r}, 'w'))\n"
+        "import json, os, stat\n"
+        "auth = os.path.join(os.environ['XDG_DATA_HOME'], 'opencode', 'auth.json')\n"
+        "seen = {'env': dict(os.environ), 'cwd': os.getcwd(),\n"
+        "        'auth': json.load(open(auth)),\n"
+        "        'auth_mode': stat.S_IMODE(os.stat(auth).st_mode)}\n"
+        f"json.dump(seen, open({str(record)!r}, 'w'))\n"
     )
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
     monkeypatch.setenv("ENGINE_ONLY_SECRET", "kept-by-the-engine")
@@ -262,6 +266,55 @@ def test_local_directory_harness_keeps_its_own_environment_and_credentials(
     home = Path(seen["env"]["HOME"])
     assert home != Path.home()
     assert home.is_relative_to(tmp_path / "workspaces")
-    auth = Path(seen["env"]["XDG_DATA_HOME"]) / "opencode" / "auth.json"
-    assert json.loads(auth.read_text()) == {"openai": {"type": "api", "key": "harness-key"}}
-    assert stat.S_IMODE(auth.stat().st_mode) == 0o600
+    assert seen["auth"] == {"openai": {"type": "api", "key": "harness-key"}}
+    assert seen["auth_mode"] == 0o600
+    # The provision failed: its home, with the credentials, is gone with it.
+    assert not home.exists()
+    assert not (tmp_path / "workspaces" / "user-1" / "dev").exists()
+
+
+@pytest.mark.parametrize("failing", ["_allocate_sidecar_port", "_start_sidecar", "_persist"])
+def test_local_directory_failed_provision_keeps_the_name_free(
+    workspace_adapter: LocalDirectoryAdapter, tmp_path, monkeypatch, failing: str
+) -> None:
+    """Whatever step fails, the provision leaves no checkout and no home
+    behind: the same name provisions again."""
+
+    def fail(*_args, **_kwargs):
+        raise OSError("no resource")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(workspace_adapter, failing, fail)
+        with pytest.raises(OSError):
+            _provision(workspace_adapter)
+    user_root = tmp_path / "workspaces" / "user-1"
+    assert not (user_root / "dev").exists()
+    assert not (user_root / ".home" / "dev").exists()
+    assert workspace_adapter.list_all_environments() == []
+
+    status = _provision(workspace_adapter)
+    assert status.name == "dev"
+
+
+def test_local_directory_harness_keeps_its_missing_credentials_visible(
+    tmp_path, monkeypatch
+) -> None:
+    from naas_abi_core.services.agent import OpencodeAgent as opencode_module
+
+    warned: list[str] = []
+    monkeypatch.setattr(
+        opencode_module.OpencodeAgent, "opencode_auth_data", classmethod(lambda cls: {})
+    )
+    monkeypatch.setattr(
+        opencode_module, "warn_no_opencode_credentials", lambda: warned.append("x")
+    )
+    adapter = LocalDirectoryAdapter(
+        workspaces_root=str(tmp_path / "workspaces"),
+        single_user_development=True,
+        harness="opencode",
+        opencode_bin="true",
+        opencode_startup_timeout=1,
+    )
+    with pytest.raises(ProvisionFailedError):
+        _provision(adapter)
+    assert warned == ["x"]

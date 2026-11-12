@@ -95,6 +95,20 @@ CoderAdapter, CodeServerComposeAdapter, LocalDirectoryAdapter, InMemoryAdapter, 
   `workspaces_root/<user>/.home/<name>`, never the engine's; the harness gets
   its own provider credentials file there (`opencode.providers`).
   Tests: `adapters/secondary/LocalDirectoryAdapter_test.py`.
+- **A failed provision leaves nothing.** Once `provision` has made the checkout,
+  any failure (port, clone, sidecar, harness, the record) stops what it started
+  and removes the checkout and the home, with the harness credentials in it: the
+  name provisions again.
+- **The harness's provider credentials come from `opencode.providers` only.**
+  The engine's environment (its provider keys included) does not reach the
+  harness. With no provider configured, the harness still starts and passes its
+  health check, but every prompt fails on provider authentication: the adapter
+  and `OpencodeAgent` log a warning when they start it without credentials.
+- **Network settings pass.** The allow-list keeps proxies (`HTTP(S)_PROXY`,
+  `ALL_PROXY`, `NO_PROXY`) and certificate authorities (`SSL_CERT_FILE`,
+  `SSL_CERT_DIR`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS`).
+  Proxy URLs pass without their `user:password@`: a proxy that needs
+  credentials is configured for the runtime itself, never with the engine's.
 Unsupported methods must explicitly raise `NotImplementedError`.
 
 ## Factory

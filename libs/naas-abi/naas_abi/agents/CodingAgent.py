@@ -1,3 +1,4 @@
+import asyncio
 from typing import ClassVar
 
 from naas_abi_core.services.agent.Agent import AgentSharedState
@@ -75,3 +76,8 @@ Keep changes minimal and focused.
             raise OpencodeStartupError(
                 "The coding sandbox's OpenCode runtime is not ready yet."
             )
+
+    async def _astart(self) -> None:
+        # The health check is a blocking request: off the event loop, with the
+        # conversation's context (its bound sandbox).
+        await asyncio.to_thread(self.start)

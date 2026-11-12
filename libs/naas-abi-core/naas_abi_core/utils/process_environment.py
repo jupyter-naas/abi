@@ -1,9 +1,12 @@
 """The environment of a process the engine starts for someone else.
 
 A workspace runtime or a coding harness gets an allow-list of the engine's
-variables (where to find programs, the locale, the terminal), never the
-engine's whole environment: its keys, database URLs and service credentials
-stay with the engine.
+variables (where to find programs, the locale, the terminal, the network's
+proxies and certificate authorities), never the engine's whole environment:
+its keys, database URLs and service credentials stay with the engine.
+
+Proxy URLs pass without their user information: a proxy that needs
+credentials gets them for that process through ``extra``, never the engine's.
 """
 
 from __future__ import annotations
@@ -19,7 +22,36 @@ PASSED_VARIABLES = (
     "LC_CTYPE",
     "TERM",
     "TZ",
+    # Certificate authorities (a private CA): paths, no secret.
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "REQUESTS_CA_BUNDLE",
+    "CURL_CA_BUNDLE",
+    "NODE_EXTRA_CA_CERTS",
+    "NO_PROXY",
+    "no_proxy",
 )
+
+# Proxies: passed without their user information.
+PROXY_VARIABLES = (
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+)
+
+
+def without_userinfo(url: str) -> str:
+    """``url`` without a ``user:password@`` before its host."""
+    scheme, sep, rest = url.partition("://")
+    if not sep:
+        scheme, rest = "", url
+    authority, slash, path = rest.partition("/")
+    if "@" in authority:
+        authority = authority.rsplit("@", 1)[1]
+    return f"{scheme}{sep}{authority}{slash}{path}"
 
 
 def allowed_environment(
@@ -32,6 +64,9 @@ def allowed_environment(
     its own; without, it keeps the engine's ``HOME``.
     """
     env = {name: os.environ[name] for name in PASSED_VARIABLES if name in os.environ}
+    for name in PROXY_VARIABLES:
+        if os.environ.get(name):
+            env[name] = without_userinfo(os.environ[name])
     env.setdefault("PATH", os.defpath)
     if home is not None:
         env["HOME"] = home

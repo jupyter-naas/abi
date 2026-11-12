@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import stat
+import threading
 from pathlib import Path
 
 import pytest
@@ -47,3 +49,25 @@ def test_the_coding_agent_talks_to_the_bound_sandbox() -> None:
         assert agent._base_url == "http://sandbox.internal:4096"
     finally:
         coding_harness_base.reset(token)
+
+
+def test_the_coding_agent_keeps_its_health_check_off_the_event_loop(monkeypatch) -> None:
+    seen: list[tuple[int, str | None]] = []
+
+    def start(self) -> None:
+        seen.append((threading.get_ident(), coding_harness_base.get()))
+
+    monkeypatch.setattr(CodingAgent, "start", start)
+    agent = CodingAgent.New()
+
+    async def run() -> int:
+        await agent._astart()
+        return threading.get_ident()
+
+    token = coding_harness_base.set("http://sandbox.internal:4096")
+    try:
+        loop_thread = asyncio.run(run())
+    finally:
+        coding_harness_base.reset(token)
+    assert seen and seen[0][0] != loop_thread
+    assert seen[0][1] == "http://sandbox.internal:4096"

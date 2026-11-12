@@ -188,7 +188,7 @@ class LocalDirectoryAdapter(ICodingEnvironmentAdapter):
     def _home(self, checkout: Path) -> Path:
         """The workspace runtime's own home, beside its checkout (never the
         engine's): ``workspaces_root/{user}/.home/{name}``."""
-        home = checkout.parent / ".home" / checkout.name
+        home = self._home_path(checkout)
         home.mkdir(parents=True, exist_ok=True)
         return home
 
@@ -232,15 +232,19 @@ class LocalDirectoryAdapter(ICodingEnvironmentAdapter):
         return resolve_opencode_bin(self._opencode_bin)
 
     def _start_opencode(self, checkout: Path, port: int) -> subprocess.Popen[str]:
-        from naas_abi_core.services.agent.OpencodeAgent import OpencodeAgent
+        from naas_abi_core.services.agent.OpencodeAgent import (
+            OpencodeAgent,
+            warn_no_opencode_credentials,
+        )
 
         home = self._home(checkout)
         env = allowed_environment(home=str(home))
         # Its own credentials: the configured OpenCode providers, in its own
         # data directory, never the engine's files or environment.
-        OpencodeAgent.write_opencode_auth_file(
+        if not OpencodeAgent.write_opencode_auth_file(
             Path(env["XDG_DATA_HOME"]) / "opencode" / "auth.json"
-        )
+        ):
+            warn_no_opencode_credentials()
         return subprocess.Popen(
             [self._resolve_opencode_bin(), "serve", "--port", str(port)],
             cwd=str(checkout),
@@ -358,7 +362,56 @@ class LocalDirectoryAdapter(ICodingEnvironmentAdapter):
                 f"workspace directory '{name}' already exists for user {user_id}"
             )
         checkout.parent.mkdir(parents=True, exist_ok=True)
+        # A home with no checkout belongs to no workspace: never handed on.
+        self._remove_home(checkout)
 
+        # From here the checkout and the home are this provision's own: a
+        # failure, whatever it is, removes both (and stops what it started),
+        # so the name stays free and no credentials stay on disk.
+        record: dict = {}
+        try:
+            self._fill_checkout(checkout, branch=branch, repo_url=repo_url)
+            port = self._allocate_sidecar_port()
+            record["_proc"] = self._start_sidecar(checkout, port, sidecar_secret)
+            sidecar_base = f"http://127.0.0.1:{port}"
+            if not self._wait_for_sidecar(sidecar_base, sidecar_secret):
+                raise ProvisionFailedError("sidecar did not become healthy")
+
+            workspace_id = uuid.uuid4().hex
+            record.update(
+                {
+                    "id": workspace_id,
+                    "name": name,
+                    "user_id": user_id,
+                    "created_at": datetime.now(UTC).isoformat(),
+                    "checkout": str(checkout),
+                    "port": port,
+                    "sidecar_base": sidecar_base,
+                    "sidecar_secret": sidecar_secret,
+                    "branch": branch,
+                    "repo_url": repo_url,
+                    "harness": self._harness,
+                    "phase": PHASE_RUNNING,
+                    "agent_ready": True,
+                    "harness_ready": False,
+                }
+            )
+            self._workspaces[workspace_id] = record
+            if self._harness == "opencode":
+                if not self._ensure_harness(record):
+                    raise ProvisionFailedError(
+                        "OpenCode harness did not become healthy "
+                        f"(is `{self._resolve_opencode_bin()}` installed?)"
+                    )
+                record["agent_ready"] = True
+            self._persist(record)
+        except BaseException:
+            self._discard(record, checkout)
+            raise
+        return self._status(workspace_id)
+
+    def _fill_checkout(self, checkout: Path, *, branch: str, repo_url: str) -> None:
+        """Clone the repository into the new checkout, or start an empty one."""
         if repo_url:
             clone = subprocess.run(
                 [*_SAFE_GIT, "clone", "--branch", branch, "--", repo_url, str(checkout)],
@@ -367,57 +420,35 @@ class LocalDirectoryAdapter(ICodingEnvironmentAdapter):
                 check=False,
             )
             if clone.returncode != 0:
-                shutil.rmtree(checkout, ignore_errors=True)
                 # Not git's own words: they may carry the clone URL's credentials.
                 raise ProvisionFailedError(
                     f"git clone of branch {branch} failed (exit {clone.returncode})"
                 )
+            return
+        checkout.mkdir()
+        subprocess.run([*_SAFE_GIT, "init", "-b", branch], cwd=checkout, check=True)
+
+    def _discard(self, record: dict, checkout: Path) -> None:
+        """Undo a provision that failed: its processes, record, checkout and
+        home (with the harness credentials in it)."""
+        self._stop_sidecar(record)
+        self._stop_harness(record)
+        workspace_id = record.get("id")
+        if workspace_id:
+            self._workspaces.pop(workspace_id, None)
+        shutil.rmtree(checkout, ignore_errors=True)
+        self._remove_home(checkout)
+
+    @staticmethod
+    def _home_path(checkout: Path) -> Path:
+        return checkout.parent / ".home" / checkout.name
+
+    def _remove_home(self, checkout: Path) -> None:
+        home = self._home_path(checkout)
+        if home.is_symlink():
+            home.unlink()
         else:
-            checkout.mkdir()
-            subprocess.run([*_SAFE_GIT, "init", "-b", branch], cwd=checkout, check=True)
-
-        port = self._allocate_sidecar_port()
-        proc = self._start_sidecar(checkout, port, sidecar_secret)
-        sidecar_base = f"http://127.0.0.1:{port}"
-        ready = self._wait_for_sidecar(sidecar_base, sidecar_secret)
-        if not ready:
-            proc.kill()
-            shutil.rmtree(checkout, ignore_errors=True)
-            raise ProvisionFailedError("sidecar did not become healthy")
-
-        workspace_id = uuid.uuid4().hex
-        record = {
-            "id": workspace_id,
-            "name": name,
-            "user_id": user_id,
-            "created_at": datetime.now(UTC).isoformat(),
-            "checkout": str(checkout),
-            "port": port,
-            "sidecar_base": sidecar_base,
-            "sidecar_secret": sidecar_secret,
-            "branch": branch,
-            "repo_url": repo_url,
-            "harness": self._harness,
-            "phase": PHASE_RUNNING,
-            "agent_ready": True,
-            "harness_ready": False,
-        }
-        self._workspaces[workspace_id] = record
-        record["_proc"] = proc
-        if self._harness == "opencode":
-            harness_ready = self._ensure_harness(record)
-            if not harness_ready:
-                self._stop_sidecar(record)
-                self._stop_harness(record)
-                shutil.rmtree(checkout, ignore_errors=True)
-                self._workspaces.pop(workspace_id, None)
-                raise ProvisionFailedError(
-                    "OpenCode harness did not become healthy "
-                    f"(is `{self._resolve_opencode_bin()}` installed?)"
-                )
-            record["agent_ready"] = True
-        self._persist(record)
-        return self._status(workspace_id)
+            shutil.rmtree(home, ignore_errors=True)
 
     def _require_single_user(self, user_id: str) -> None:
         """One user's workspaces only: the runtime is the engine's own OS user,
@@ -564,7 +595,7 @@ class LocalDirectoryAdapter(ICodingEnvironmentAdapter):
         self._stop_harness(record)
         checkout = Path(record["checkout"])
         shutil.rmtree(checkout, ignore_errors=True)
-        shutil.rmtree(checkout.parent / ".home" / checkout.name, ignore_errors=True)
+        self._remove_home(checkout)
         self._workspaces.pop(workspace_id, None)
 
     def get_access(

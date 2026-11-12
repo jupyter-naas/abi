@@ -263,3 +263,50 @@ def test_opencode_permission_requests_keep_to_the_users_choice():
         ("http://127.0.0.1:4096/session/ses_1/permissions/per_123", {"response": "reject"})
     ]
     assert all(payload["response"] not in ("always", "once") for _, payload in sent)
+
+
+def test_opencode_sessions_keep_to_their_server(monkeypatch):
+    """A conversation that moves to another OpenCode server gets a session
+    there, primed with the system prompt, never the old server's id."""
+    from naas_abi_core.services.agent import OpencodeAgent as module
+
+    posts: list[tuple[str, bool]] = []
+
+    class _Client(_FakeAsyncClient):
+        async def post(self, url: str, json=None):
+            posts.append((url, bool(json and json.get("noReply"))))
+            return await super().post(url, json=json)
+
+    monkeypatch.setattr(module.httpx, "AsyncClient", _Client)
+    monkeypatch.setattr(OpencodeAgent, "start", lambda self: None)
+    agent = OpencodeAgent(
+        configuration=OpencodeAgentConfiguration(
+            workdir=".",
+            port=4096,
+            name="coder",
+            description="coder",
+            system_prompt="You are a coder",
+        )
+    )
+    assert agent.invoke("one", thread_id="thread-1") == "done"
+    agent.conf.port = 4097
+    assert agent.invoke("two", thread_id="thread-1") == "done"
+
+    on_second = [(url, primed) for url, primed in posts if ":4097/" in url]
+    assert ("http://127.0.0.1:4097/session", False) in on_second
+    assert any(primed for _, primed in on_second)
+
+
+def test_opencode_keeps_missing_provider_credentials_visible(monkeypatch, tmp_path):
+    from naas_abi_core.services.agent import OpencodeAgent as module
+
+    class _Opencode:
+        auth_file_path = str(tmp_path / "auth.json")
+        providers: list = []
+
+    warned: list[str] = []
+    monkeypatch.setattr(OpencodeAgent, "_opencode_configuration", staticmethod(_Opencode))
+    monkeypatch.setattr(module, "warn_no_opencode_credentials", lambda: warned.append("x"))
+    OpencodeAgent._ensure_opencode_auth_file()
+    assert warned == ["x"]
+    assert not (tmp_path / "auth.json").exists()

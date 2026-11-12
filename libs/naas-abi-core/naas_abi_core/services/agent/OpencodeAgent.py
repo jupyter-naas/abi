@@ -94,6 +94,17 @@ def resolve_opencode_bin(opencode_bin: str) -> str:
     return opencode_bin
 
 
+NO_PROVIDER_CREDENTIALS = (
+    "No OpenCode provider credentials are configured (opencode.providers): "
+    "OpenCode starts without the engine's environment, so its prompts will "
+    "fail on provider authentication."
+)
+
+
+def warn_no_opencode_credentials() -> None:
+    logger.warning(NO_PROVIDER_CREDENTIALS)
+
+
 class OpencodeAgent(Expose):
     _auth_bootstrap_done: bool = False
     _auth_bootstrap_lock: Lock = Lock()
@@ -112,8 +123,10 @@ class OpencodeAgent(Expose):
         self.state = agent_shared_state
         self.session_service = session_service
         self._proc: subprocess.Popen[str] | None = None
-        self._primed_sessions: set[str] = set()
-        self._thread_to_session: dict[str, str] = {}
+        # Keyed by (server, id): a conversation's sessions live on one OpenCode
+        # server, and a conversation may move to another.
+        self._primed_sessions: set[tuple[str, str]] = set()
+        self._thread_to_session: dict[tuple[str, str], str] = {}
         self._on_tool_usage = lambda _: None
         self._on_tool_response = lambda _: None
         self._on_ai_message = lambda _message, _agent_name: None
@@ -266,9 +279,6 @@ class OpencodeAgent(Expose):
     @classmethod
     def _ensure_opencode_auth_file(cls) -> None:
         opencode_configuration = cls._opencode_configuration()
-        if opencode_configuration is None:
-            return
-
         auth_file_path = Path(
             os.path.expanduser(
                 str(
@@ -288,6 +298,8 @@ class OpencodeAgent(Expose):
 
         if cls.write_opencode_auth_file(auth_file_path):
             logger.debug(f"Initialized opencode auth file at {auth_file_path}")
+        else:
+            warn_no_opencode_credentials()
 
     @staticmethod
     def _model_payload(model: str | None) -> dict[str, str] | None:
@@ -398,8 +410,13 @@ class OpencodeAgent(Expose):
     def invoke(self, prompt: str, thread_id: str | None = None) -> str:
         return _run_coroutine_sync(self.ainvoke(message=prompt, thread_id=thread_id))
 
-    async def ainvoke(self, message: str, thread_id: str | None = None) -> str:
+    async def _astart(self) -> None:
+        """``start`` from a coroutine; a subclass whose ``start`` blocks runs it
+        off the event loop."""
         self.start()
+
+    async def ainvoke(self, message: str, thread_id: str | None = None) -> str:
+        await self._astart()
 
         try:
             async with httpx.AsyncClient(timeout=self._http_timeout()) as client:
@@ -585,7 +602,7 @@ class OpencodeAgent(Expose):
         message: str,
         thread_id: str | None = None,
     ) -> AsyncIterator[str]:
-        self.start()
+        await self._astart()
 
         try:
             async with httpx.AsyncClient(timeout=self._http_timeout()) as client:
@@ -667,18 +684,19 @@ class OpencodeAgent(Expose):
         client: httpx.AsyncClient,
         thread_id: str | None,
     ) -> str:
+        base_url = self._base_url
         if thread_id:
-            cached = self._thread_to_session.get(thread_id)
+            cached = self._thread_to_session.get((base_url, thread_id))
             if cached:
                 return cached
 
-            response = await client.get(f"{self._base_url}/session/{thread_id}")
+            response = await client.get(f"{base_url}/session/{thread_id}")
             if response.status_code == 200:
-                self._thread_to_session[thread_id] = thread_id
+                self._thread_to_session[(base_url, thread_id)] = thread_id
                 return thread_id
 
         title = f"{self.conf.name}-{datetime.now(UTC).isoformat()}"
-        response = await client.post(f"{self._base_url}/session", json={"title": title})
+        response = await client.post(f"{base_url}/session", json={"title": title})
         self._raise_for_status(response)
 
         payload = response.json()
@@ -691,7 +709,7 @@ class OpencodeAgent(Expose):
             raise OpencodeRequestError(response.status_code, response.text)
 
         if thread_id:
-            self._thread_to_session[thread_id] = session_id
+            self._thread_to_session[(base_url, thread_id)] = session_id
 
         return str(session_id)
 
@@ -700,11 +718,12 @@ class OpencodeAgent(Expose):
     ) -> None:
         if not self.conf.system_prompt:
             return
-        if session_id in self._primed_sessions:
+        primed = (self._base_url, session_id)
+        if primed in self._primed_sessions:
             return
 
         await self._prompt(client, session_id, self.conf.system_prompt, no_reply=True)
-        self._primed_sessions.add(session_id)
+        self._primed_sessions.add(primed)
 
     async def _prompt(
         self,
