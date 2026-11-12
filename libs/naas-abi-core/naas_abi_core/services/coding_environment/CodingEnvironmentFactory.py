@@ -58,6 +58,7 @@ class CodingEnvironmentFactory:
         workspaces_root: str,
         sidecar_port_start: int = 18000,
         sidecar_port_end: int = 18100,
+        single_user_development: bool = False,
     ) -> CodingEnvironmentService:
         from naas_abi_core.services.coding_environment.adapters.secondary.LocalDirectoryAdapter import (
             LocalDirectoryAdapter,
@@ -68,5 +69,6 @@ class CodingEnvironmentFactory:
                 workspaces_root=workspaces_root,
                 sidecar_port_start=sidecar_port_start,
                 sidecar_port_end=sidecar_port_end,
+                single_user_development=single_user_development,
             )
         )
