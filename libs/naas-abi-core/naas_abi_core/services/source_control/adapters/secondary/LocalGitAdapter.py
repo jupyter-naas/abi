@@ -265,8 +265,10 @@ class LocalGitAdapter(ISourceControlAdapter):
         if tree_path:
             tree_path = self._rel(tree_path)
         spec = f"{tree_path}/" if tree_path else "."
+        # No ``--``: after ``--end-of-options`` ls-tree reads every argument
+        # past the tree as a path, ``--`` included.
         output = self._run(
-            "ls-tree", "-l", "--end-of-options", ref_name, "--", spec, cwd=repo_path
+            "ls-tree", "-l", "--end-of-options", ref_name, spec, cwd=repo_path
         )
         entries: list[ContentEntry] = []
         for line in output.splitlines():

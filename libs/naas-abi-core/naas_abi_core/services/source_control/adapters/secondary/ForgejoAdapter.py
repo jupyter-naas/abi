@@ -599,6 +599,8 @@ class ForgejoAdapter(ISourceControlAdapter):
         at_branch = f"?ref={quote(branch, safe='')}"
         for item in files:
             clean_path = item.path.lstrip("/")
+            if not clean_path:
+                continue  # an empty path is no write
             file_url = self._contents(repo_id, clean_path)
             if item.delete:
                 # Forgejo needs the blob sha to delete; a missing file is a no-op.
@@ -917,7 +919,7 @@ class ForgejoAdapter(ISourceControlAdapter):
         )
         token = self._request(
             "POST",
-            f"/users/{user_id}/tokens",
+            f"/users/{_seg(user_id)}/tokens",
             json={
                 "name": f"abi-{user_id}-{secrets.token_hex(4)}",
                 "scopes": ["write:repository"],

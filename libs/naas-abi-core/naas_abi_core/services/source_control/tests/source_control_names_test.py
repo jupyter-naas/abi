@@ -183,6 +183,9 @@ def test_the_service_keeps_usernames_to_one_segment(
         service.add_collaborator(repo_id="atk/mine", username=username)
     with pytest.raises(ValidationError):
         service.ensure_user(email="a@example.com", username=username)
+    if username:  # no user at all is the owner's to fill, behind a facade
+        with pytest.raises(ValidationError):
+            service.mint_git_token(user_id=username)
 
 
 def test_the_service_keeps_ordinary_names_working(service: SourceControlService) -> None:
@@ -216,10 +219,12 @@ class _RecordingSession:
 
     def __init__(self) -> None:
         self.sent: list[tuple[str, str]] = []
+        self.bodies: list = []
 
     def request(self, method, url, headers=None, json=None, timeout=None):
         prepared = requests.Request(method, url).prepare()
         self.sent.append((method, prepared.path_url))
+        self.bodies.append(json)
         return _Response()
 
 
@@ -306,6 +311,34 @@ def test_forgejo_encodes_usernames() -> None:
     adapter, session = _forgejo()
     adapter.add_collaborator(repo_id="atk/mine", username="a/../b")
     assert session.sent == [("PUT", f"{REPO_PREFIX}/collaborators/a%2F..%2Fb")]
+
+    adapter, session = _forgejo()
+    adapter.mint_git_token(user_id="a/../b")
+    assert ("POST", "/api/v1/users/a%2F..%2Fb/tokens") in session.sent
+    for _, sent in session.sent:
+        route = sent.split("?", 1)[0]
+        assert "/a%2F..%2Fb" in route or route == "/api/v1/admin/users"
+    with pytest.raises(ValidationError):
+        adapter.mint_git_token(user_id="")
+
+
+def test_forgejo_batch_writes_keep_empty_paths_out() -> None:
+    adapter, session = _forgejo()
+    adapter.upsert_files(
+        repo_id="atk/mine",
+        files=[FileWrite("", b"x"), FileWrite("/", b"x"), FileWrite("a.md", b"y")],
+        message="m",
+        branch="main",
+    )
+    batch = [
+        body
+        for (method, sent), body in zip(session.sent, session.bodies, strict=True)
+        if method == "POST" and sent == f"{REPO_PREFIX}/contents"
+    ]
+    assert [op["path"] for op in batch[0]["files"]] == ["a.md"]
+    assert all(
+        sent.split("?", 1)[0] != f"{REPO_PREFIX}/contents/" for _, sent in session.sent
+    )
 
 
 # -- the local git adapter ------------------------------------------------------
@@ -433,3 +466,17 @@ def test_local_git_reads_keep_inside_the_repository(
             adapter.list_contents(repo_id="atk/mine", path=path)
     readme = adapter.get_file(repo_id="atk/mine", path="/README.md")
     assert (readme.text or "").startswith("# mine")
+
+
+def test_local_git_listing_keeps_to_the_directory_asked_for(
+    local: tuple[LocalGitAdapter, Path],
+) -> None:
+    adapter, _ = local
+    adapter.upsert_files(
+        repo_id="atk/mine",
+        files=[FileWrite("--", b"x"), FileWrite("d/x", b"y")],
+        message="m",
+        branch="main",
+    )
+    listed = adapter.list_contents(repo_id="atk/mine", path="d")
+    assert [entry.path for entry in listed] == ["d/x"]

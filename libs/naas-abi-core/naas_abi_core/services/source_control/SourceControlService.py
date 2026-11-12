@@ -218,6 +218,10 @@ class SourceControlService(ServiceBase):
         """A git token for the call's principal's forge user (``ensure_user``
         first). ``user_id`` is ignored: never take the user from a request."""
         if not self._guard.enforcing:
+            # A facade: the owner it calls binds the call's principal, so a
+            # missing user is its to fill; a given one is checked here.
+            if user_id:
+                _check_username(user_id)
             return self._adapter.mint_git_token(user_id=user_id or "")
         principal = self._principal()
         self._guard.require("MintGitToken", "forge_user", principal)
@@ -226,6 +230,7 @@ class SourceControlService(ServiceBase):
             raise ValidationError(
                 "The caller has no forge user yet: call ensure_user first"
             )
+        _check_username(username)
         return self._adapter.mint_git_token(user_id=username, external_id=principal)
 
     # -- repositories ----------------------------------------------------------------
