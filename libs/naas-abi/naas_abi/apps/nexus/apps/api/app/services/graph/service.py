@@ -3,9 +3,11 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import hashlib
+import os
 import re
 import shutil
 import threading
+import time
 import unicodedata
 import uuid
 from collections.abc import Callable, Iterable
@@ -70,10 +72,15 @@ from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
 from naas_abi_core.services.triple_store.adapters.triple_store_stream_codec import nt_line
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
+from naas_abi_core.utils import rdf_upload
 from rdflib import OWL, RDF, RDFS, XSD, Graph, Literal, Namespace, URIRef
 from rdflib.query import ResultRow
 
 _cache = CacheFactory.CacheFS_find_storage(subpath="nexus/graph")
+
+# Uploads (``/analyze``, ``/import``): size cap at the route, time cap here.
+GRAPH_UPLOAD_MAX_BYTES = 20 * 1024 * 1024
+GRAPH_UPLOAD_PARSE_SECONDS = 60.0
 
 GRAPH_BASE_URI = URIRef(
     ABIModule.get_instance().configuration.nexus_config.ontology_base_uri + "graph/"
@@ -100,30 +107,116 @@ _TYPE_PRIORITY: dict[str, int] = {
 }
 
 
-def _scope_cache_key(triple_store: Any, key: str) -> str:
+def _scope_cache_prefix(triple_store: Any) -> str:
+    """``{scope}_{wipe}_{scope_gen}_{graphs_gen}_``, the prefix of a scope's keys.
+
+    ``graphs_gen`` digests the generations of the graphs the scope reads, so a
+    write to a graph moves the keys of the scopes that read it, and no others.
+    Loops over many keys compute it once.
+    """
     namespace = getattr(triple_store, "cache_namespace", "internal")
+    graphs = _graphs_generation(_readable_graphs(triple_store))
     return (
-        f"{namespace}_{_GRAPH_CACHE_GENERATION}_{_GRAPH_SCOPE_GENERATIONS.get(namespace, 0)}_{key}"
+        f"{namespace}_{_GRAPH_CACHE_GENERATION}_{_GRAPH_SCOPE_GENERATIONS.get(namespace, 0)}"
+        f"_{graphs}_"
     )
 
 
+def _scope_cache_key(triple_store: Any, key: str) -> str:
+    """``key`` within its scope: :func:`_scope_cache_prefix` + ``key``."""
+    return _scope_cache_prefix(triple_store) + key
+
+
+# Advanced by a full wipe only (clear_graph_service_caches).
 _GRAPH_CACHE_GENERATION = 0
+# Advanced by a workspace's own cache reset (GraphService.clear_cache).
 _GRAPH_SCOPE_GENERATIONS: dict[str, int] = {}
+# One generation per graph, advanced by every write to that graph.
+_GRAPH_GENERATIONS: dict[str, int] = {}
+_GRAPH_GENERATIONS_LOCK = threading.Lock()
+
+
+def _readable_graphs(triple_store: Any) -> Any:
+    """The graphs a scoped store reads; None for an unscoped store (every graph)."""
+    return getattr(getattr(triple_store, "scope", None), "readable", None)
+
+
+def _graphs_generation(readable: Any) -> str:
+    with _GRAPH_GENERATIONS_LOCK:
+        written = list(_GRAPH_GENERATIONS.items())
+    if readable is not None:
+        written = [(graph, generation) for graph, generation in written if graph in readable]
+    if not written:
+        return "0"
+    return hashlib.sha256(repr(sorted(written)).encode()).hexdigest()[:16]
+
+
+def _analyze_upload(content: bytes, fmt: str) -> GraphAnalysisData:
+    """Parse an upload (``rdf_upload``, in a child process) and count it by OWL category."""
+    g = rdf_upload.parse_upload(content, fmt, timeout=GRAPH_UPLOAD_PARSE_SECONDS)
+
+    # First pass: determine each subject's primary OWL category from rdf:type triples
+    subject_category: dict[str, str] = {}
+    for s, p, o in g:
+        if p == RDF.type:
+            s_str = str(s)
+            new_cat = _OWL_TYPE_MAP.get(str(o), "unknown")
+            current = subject_category.get(s_str, "unknown")
+            if _TYPE_PRIORITY.get(new_cat, 0) > _TYPE_PRIORITY.get(current, 0):
+                subject_category[s_str] = new_cat
+
+    # Second pass: accumulate triples and collect unique subject sets per category
+    _cats = (
+        "named_individual",
+        "class",
+        "object_property",
+        "datatype_property",
+        "restriction",
+        "unknown",
+    )
+    triple_counts: dict[str, int] = dict.fromkeys(_cats, 0)
+    subject_sets: dict[str, set[str]] = {c: set() for c in _cats}
+
+    for s, _p, _o in g:
+        cat = subject_category.get(str(s), "unknown")
+        triple_counts[cat] += 1
+        subject_sets[cat].add(str(s))
+
+    return GraphAnalysisData(
+        total_triples=len(g),
+        total_subjects=sum(len(v) for v in subject_sets.values()),
+        named_individuals_subjects=len(subject_sets["named_individual"]),
+        named_individuals_triples=triple_counts["named_individual"],
+        classes_subjects=len(subject_sets["class"]),
+        classes_triples=triple_counts["class"],
+        object_properties_subjects=len(subject_sets["object_property"]),
+        object_properties_triples=triple_counts["object_property"],
+        datatype_properties_subjects=len(subject_sets["datatype_property"]),
+        datatype_properties_triples=triple_counts["datatype_property"],
+        restrictions_subjects=len(subject_sets["restriction"]),
+        restrictions_triples=triple_counts["restriction"],
+        unknown_subjects=len(subject_sets["unknown"]),
+        unknown_triples=triple_counts["unknown"],
+    )
+
+
+def _individuals_of_upload(content: bytes, fmt: str) -> Graph:
+    """The triples of an upload whose subject is an ``owl:NamedIndividual``."""
+    g = rdf_upload.parse_upload(content, fmt, timeout=GRAPH_UPLOAD_PARSE_SECONDS)
+    individual_subjects: set[URIRef] = set()
+    for s, p, o in g:
+        if p == RDF.type and o == OWL.NamedIndividual and isinstance(s, URIRef):
+            individual_subjects.add(s)
+
+    individual_graph = Graph()
+    for s, p, o in g:
+        if isinstance(s, URIRef) and s in individual_subjects:
+            individual_graph.add((s, p, o))
+    return individual_graph
 
 
 def _detect_rdf_format(filename: str) -> str:
-    fname = filename.lower()
-    if fname.endswith(".ttl"):
-        return "turtle"
-    if fname.endswith(".owl") or fname.endswith(".rdf"):
-        return "xml"
-    if fname.endswith(".nt"):
-        return "nt"
-    if fname.endswith(".n3"):
-        return "n3"
-    if fname.endswith(".jsonld") or fname.endswith(".json"):
-        return "json-ld"
-    return "turtle"
+    return rdf_upload.format_for_filename(filename)
 
 
 _BFO_BUCKET_ROOTS_VALUES = " ".join(
@@ -445,12 +538,11 @@ def _batch_ontology_labels(triple_store: TripleStoreService, uris: Iterable[str]
     """
     labels: dict[str, str] = {}
     missing: list[str] = []
+    prefix = _scope_cache_prefix(triple_store)
     for uri in dict.fromkeys(uris):  # de-dupe, preserve order
         if not uri:
             continue
-        hit, value = _cache_lookup(
-            _scope_cache_key(triple_store, f"ontology_label_{uri}"), _ONTOLOGY_LABEL_TTL
-        )
+        hit, value = _cache_lookup(f"{prefix}ontology_label_{uri}", _ONTOLOGY_LABEL_TTL)
         if hit and isinstance(value, str):
             labels[uri] = value
         else:
@@ -485,7 +577,7 @@ def _batch_ontology_labels(triple_store: TripleStoreService, uris: Iterable[str]
             label = labels.get(uri) or _uri_fragment(uri)
             labels[uri] = label
             try:
-                _cache.set_json(_scope_cache_key(triple_store, f"ontology_label_{uri}"), label)
+                _cache.set_json(f"{prefix}ontology_label_{uri}", label)
             except Exception:
                 pass
 
@@ -502,12 +594,11 @@ def _batch_bfo_parents(
     """
     parents: dict[str, str] = {}
     missing: list[str] = []
+    prefix = _scope_cache_prefix(triple_store)
     for class_uri in dict.fromkeys(class_uris):
         if not class_uri:
             continue
-        hit, cached = _cache_lookup(
-            _scope_cache_key(triple_store, f"bfo_parent_{class_uri}"), _BFO_PARENT_TTL
-        )
+        hit, cached = _cache_lookup(f"{prefix}bfo_parent_{class_uri}", _BFO_PARENT_TTL)
         if not hit:
             missing.append(class_uri)
             continue
@@ -546,9 +637,7 @@ def _batch_bfo_parents(
             parent = parents.get(class_uri, "")
             parents[class_uri] = parent
             try:
-                _cache.set_json(
-                    _scope_cache_key(triple_store, f"bfo_parent_{class_uri}"), parent or None
-                )
+                _cache.set_json(f"{prefix}bfo_parent_{class_uri}", parent or None)
             except Exception:
                 pass
 
@@ -556,15 +645,79 @@ def _batch_bfo_parents(
 
 
 def _invalidate_graph_cache(graph_uri: str) -> None:
-    """Bump the shared generation so every scoped cache key misses.
+    """Advance ``graph_uri``'s generation: the keys of every scope reading it miss.
 
-    Keys are namespaced as ``{scope}_{global}_{scope_gen}_{logical}``. A graph may
-    be readable in many workspaces, so writes advance the global generation rather
-    than deleting stale unscoped keys that are no longer written.
+    A graph may be readable in many workspaces; each of their keys digests the
+    generations of the graphs it reads (``_scope_cache_key``). Scopes that do
+    not read the graph keep their entries. Keys left behind are removed by the
+    periodic prune, which bounds the cache directory.
     """
-    global _GRAPH_CACHE_GENERATION
-    _ = graph_uri
-    _GRAPH_CACHE_GENERATION += 1
+    graph = str(graph_uri)
+    with _GRAPH_GENERATIONS_LOCK:
+        _GRAPH_GENERATIONS[graph] = _GRAPH_GENERATIONS.get(graph, 0) + 1
+    _schedule_cache_prune()
+
+
+# The derived-cache directory is bounded: entries older than this, then the
+# oldest beyond the count, are removed, at most once per interval.
+_CACHE_MAX_ENTRIES = 20_000
+_CACHE_MAX_AGE = timedelta(days=7)
+_CACHE_PRUNE_INTERVAL_SECONDS = 600.0
+_CACHE_PRUNE_LOCK = threading.Lock()
+_cache_pruned_at: float | None = None
+
+
+def _prune_cache_dir(
+    cache_dir: str,
+    *,
+    max_entries: int = _CACHE_MAX_ENTRIES,
+    max_age: timedelta = _CACHE_MAX_AGE,
+    now: float | None = None,
+) -> int:
+    """Remove the entries of ``cache_dir`` past ``max_age``, then the oldest
+    beyond ``max_entries``. Returns how many were removed."""
+    entries: list[tuple[float, str]] = []
+    try:
+        with os.scandir(cache_dir) as scan:
+            for entry in scan:
+                try:
+                    if entry.is_file():
+                        entries.append((entry.stat().st_mtime, entry.path))
+                except OSError:
+                    continue
+    except OSError:
+        return 0
+    current = time.time() if now is None else now
+    oldest_kept = current - max_age.total_seconds()
+    expired = [path for mtime, path in entries if mtime < oldest_kept]
+    kept = sorted((mtime, path) for mtime, path in entries if mtime >= oldest_kept)
+    excess = [path for _, path in kept[: max(0, len(kept) - max_entries)]]
+    removed = 0
+    for path in expired + excess:
+        try:
+            os.unlink(path)
+            removed += 1
+        except OSError:
+            continue
+    return removed
+
+
+def _schedule_cache_prune() -> None:
+    """Prune the cache directories off the request path, once per interval."""
+    global _cache_pruned_at
+    now = time.monotonic()
+    with _CACHE_PRUNE_LOCK:
+        if _cache_pruned_at is not None and now - _cache_pruned_at < _CACHE_PRUNE_INTERVAL_SECONDS:
+            return
+        _cache_pruned_at = now
+    for _, adapter in _cache._adapters:
+        cache_dir = getattr(adapter, "cache_dir", None)
+        if not cache_dir:
+            continue
+        try:
+            _REBUILD_EXECUTOR.submit(_prune_cache_dir, cache_dir)
+        except RuntimeError:  # executor shutting down
+            return
 
 
 def clear_graph_service_caches() -> None:
@@ -1952,8 +2105,8 @@ class GraphService:
         return result
 
     def _explorer_snapshot_keys(self, graph_uris: list[str]) -> dict[str, str]:
-        scoped = self._get_triple_store()
-        return {uri: _scope_cache_key(scoped, f"explorer_snapshot_v3_{uri}") for uri in graph_uris}
+        prefix = _scope_cache_prefix(self._get_triple_store())
+        return {uri: f"{prefix}explorer_snapshot_v3_{uri}" for uri in graph_uris}
 
     @workspace_graph_operation()
     async def explorer_overview(self, workspace_id: str, graph_uris: list[str]) -> dict[str, Any]:
@@ -2753,53 +2906,10 @@ class GraphService:
         Each subject is assigned to exactly one category based on its highest-priority
         rdf:type (NamedIndividual > Class > Object/DatatypeProperty > Restriction > Unknown).
         The sum of all per-category triple counts equals total_triples; likewise for subjects.
+        Parsing runs in a child process with a time limit, off the event loop, and
+        loads no remote document.
         """
-        g = Graph()
-        g.parse(data=content, format=fmt)
-
-        # First pass: determine each subject's primary OWL category from rdf:type triples
-        subject_category: dict[str, str] = {}
-        for s, p, o in g:
-            if p == RDF.type:
-                s_str = str(s)
-                new_cat = _OWL_TYPE_MAP.get(str(o), "unknown")
-                current = subject_category.get(s_str, "unknown")
-                if _TYPE_PRIORITY.get(new_cat, 0) > _TYPE_PRIORITY.get(current, 0):
-                    subject_category[s_str] = new_cat
-
-        # Second pass: accumulate triples and collect unique subject sets per category
-        _cats = (
-            "named_individual",
-            "class",
-            "object_property",
-            "datatype_property",
-            "restriction",
-            "unknown",
-        )
-        triple_counts: dict[str, int] = dict.fromkeys(_cats, 0)
-        subject_sets: dict[str, set[str]] = {c: set() for c in _cats}
-
-        for s, _p, _o in g:
-            cat = subject_category.get(str(s), "unknown")
-            triple_counts[cat] += 1
-            subject_sets[cat].add(str(s))
-
-        return GraphAnalysisData(
-            total_triples=len(g),
-            total_subjects=sum(len(v) for v in subject_sets.values()),
-            named_individuals_subjects=len(subject_sets["named_individual"]),
-            named_individuals_triples=triple_counts["named_individual"],
-            classes_subjects=len(subject_sets["class"]),
-            classes_triples=triple_counts["class"],
-            object_properties_subjects=len(subject_sets["object_property"]),
-            object_properties_triples=triple_counts["object_property"],
-            datatype_properties_subjects=len(subject_sets["datatype_property"]),
-            datatype_properties_triples=triple_counts["datatype_property"],
-            restrictions_subjects=len(subject_sets["restriction"]),
-            restrictions_triples=triple_counts["restriction"],
-            unknown_subjects=len(subject_sets["unknown"]),
-            unknown_triples=triple_counts["unknown"],
-        )
+        return await asyncio.to_thread(_analyze_upload, content, fmt)
 
     @workspace_graph_operation(write=True)
     async def import_individuals_to_graph(
@@ -2811,23 +2921,12 @@ class GraphService:
     ) -> int:
         """Parse *content* and insert all OWL NamedIndividual triples into *graph_uri*.
 
-        Returns the number of triples inserted.
+        Returns the number of triples inserted. Parsing runs as in
+        ``analyze_graph_file``.
         """
-        g = Graph()
-        g.parse(data=content, format=fmt)
-
-        individual_subjects: set[URIRef] = set()
-        for s, p, o in g:
-            if p == RDF.type and o == OWL.NamedIndividual and isinstance(s, URIRef):
-                individual_subjects.add(s)
-
-        individual_graph = Graph()
-        for s, p, o in g:
-            if isinstance(s, URIRef) and s in individual_subjects:
-                individual_graph.add((s, p, o))
-
+        individual_graph = await asyncio.to_thread(_individuals_of_upload, content, fmt)
         store = self._get_triple_store()
-        store.insert(individual_graph, graph_name=URIRef(graph_uri))
+        await asyncio.to_thread(store.insert, individual_graph, graph_name=URIRef(graph_uri))
         _invalidate_graph_cache(graph_uri)
         return len(individual_graph)
 

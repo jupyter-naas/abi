@@ -81,6 +81,14 @@ rule of its own.
 - Dropping or clearing a graph shared for writing is the owning workspace's alone.
 - Strings that reach SPARQL are escaped (`query/sparql_safe.py`): Nexus reads every
   graph as itself when it consults its application graph.
+- **Uploads are data.** `/analyze` and `/import` read at most `GRAPH_UPLOAD_MAX_BYTES`
+  (413 past it) and parse with `naas_abi_core.utils.rdf_upload`: a child process
+  with no network and a time limit, off the event loop. JSON-LD may only use
+  embedded contexts. Errors are fixed messages; details stay in the log.
+- **Caches follow the graphs a scope reads.** A cache key digests the generations
+  of the graphs its scope reads (`_scope_cache_key`); a write advances its graph's
+  generation (`_invalidate_graph_cache`), so only scopes reading that graph miss.
+  The cache directory is pruned by age and count (`_prune_cache_dir`).
 
 ## Tests
 

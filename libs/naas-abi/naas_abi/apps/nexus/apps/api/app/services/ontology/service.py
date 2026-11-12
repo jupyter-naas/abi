@@ -15,6 +15,8 @@ from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
     filter_ontology_catalog,
     ontology_matches_seed,
 )
+from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import GraphQuerySpecError
+from naas_abi.apps.nexus.apps.api.app.services.graph.query.sparql_safe import sparql_iri
 from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology__schema import (
     OntologyExportData,
     OntologyFileItemData,
@@ -26,6 +28,7 @@ from naas_abi.apps.nexus.apps.api.app.services.ontology.ontology__schema import 
     OntologyOverviewStatsData,
     OntologyParseError,
     OntologyPathNotFoundError,
+    OntologyQueryError,
     OntologyServiceUnavailableError,
     OntologyTypeCountsData,
     ReferenceClassData,
@@ -49,8 +52,9 @@ from naas_abi_core import logger
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import DataType
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
+from naas_abi_core.utils import rdf_upload
 from rdflib import Graph, Literal
-from rdflib.namespace import DC, DCTERMS, OWL, RDF, RDFS
+from rdflib.namespace import DC, DCTERMS, OWL, RDF, RDFS, SKOS
 from rdflib.query import ResultRow
 from rdflib.term import URIRef
 
@@ -593,47 +597,109 @@ def _compute_ontology_stats_for_graph(graph: Graph) -> tuple[int, int, int, int,
     )
 
 
-def _parse_ttl(content: str, file_path: str) -> ReferenceOntologyData:
-    """Parse TTL/Turtle format ontology content."""
-    classes: list[ReferenceClassData] = []
-    properties: list[ReferencePropertyData] = []
+ONTOLOGY_IMPORT_PARSE_SECONDS = 60.0
 
-    class_pattern = r"<([^>]+)>\s+a\s+owl:Class\s*;([^.]+)\."
-    for match in re.finditer(class_pattern, content, re.DOTALL):
-        iri = match.group(1)
-        body = match.group(2)
-        label_match = re.search(r'rdfs:label\s+"([^"]+)"', body)
-        label = label_match.group(1) if label_match else iri.split("/")[-1]
-        def_match = re.search(r'skos:definition\s+"([^"]+)"', body)
-        definition = def_match.group(1) if def_match else None
-        example_match = re.search(r'skos:example\s+"([^"]+)"', body)
-        examples = example_match.group(1) if example_match else None
-        classes.append(
-            ReferenceClassData(iri=iri, label=label, definition=definition, examples=examples)
+
+def _first_text(graph: Graph, subject: URIRef, predicate: URIRef) -> str | None:
+    for value in graph.objects(subject, predicate):
+        if isinstance(value, Literal) and str(value):
+            return str(value)
+    return None
+
+
+def _reference_ontology_from_graph(graph: Graph, file_path: str) -> ReferenceOntologyData:
+    """The classes and object properties of a parsed reference ontology."""
+    classes = [
+        ReferenceClassData(
+            iri=str(iri),
+            label=_first_text(graph, iri, RDFS.label) or str(iri).split("/")[-1],
+            definition=_first_text(graph, iri, SKOS.definition),
+            examples=_first_text(graph, iri, SKOS.example),
         )
-
-    prop_pattern = r"<([^>]+)>\s+rdf:type\s+owl:ObjectProperty\s*;?([^.]*)\."
-    for match in re.finditer(prop_pattern, content, re.DOTALL):
-        iri = match.group(1)
-        body = match.group(2)
-        label_match = re.search(r'rdfs:label\s+"([^"]+)"', body)
-        label = label_match.group(1) if label_match else iri.split("/")[-1]
-        def_match = re.search(r'skos:definition\s+"([^"]+)"', body)
-        definition = def_match.group(1) if def_match else None
-        properties.append(ReferencePropertyData(iri=iri, label=label, definition=definition))
-
-    name_match = re.search(r'dc:title\s+"([^"]+)"', content)
-    name = name_match.group(1) if name_match else os.path.basename(file_path).replace(".ttl", "")
-
+        for iri in sorted({s for s in graph.subjects(RDF.type, OWL.Class) if isinstance(s, URIRef)})
+    ]
+    properties = [
+        ReferencePropertyData(
+            iri=str(iri),
+            label=_first_text(graph, iri, RDFS.label) or str(iri).split("/")[-1],
+            definition=_first_text(graph, iri, SKOS.definition),
+        )
+        for iri in sorted(
+            {s for s in graph.subjects(RDF.type, OWL.ObjectProperty) if isinstance(s, URIRef)}
+        )
+    ]
     return ReferenceOntologyData(
         id=f"ref-{int(datetime.now().timestamp() * 1000)}",
-        name=name,
+        name=_ontology_title(graph) or os.path.splitext(os.path.basename(file_path))[0],
         file_path=file_path,
-        format="ttl",
+        format=_format_label(file_path),
         classes=classes,
         properties=properties,
         imported_at=datetime.now(),
     )
+
+
+def _ontology_title(graph: Graph) -> str | None:
+    """The ontology's title: its ``owl:Ontology`` subject's first, else any one.
+
+    Titles are compared in a fixed order, so the name does not depend on the
+    order rdflib returns triples in.
+    """
+
+    def titles(subject: URIRef | None) -> list[str]:
+        return sorted(
+            str(title)
+            for predicate in (DC.title, DCTERMS.title)
+            for title in graph.objects(subject, predicate)
+            if isinstance(title, Literal) and str(title)
+        )
+
+    for ontology in sorted(graph.subjects(RDF.type, OWL.Ontology), key=str):
+        found = titles(ontology)
+        if found:
+            return found[0]
+    found = titles(None)
+    return found[0] if found else None
+
+
+_FORMAT_LABELS = {"turtle": "ttl", "xml": "rdf", "nt": "nt", "n3": "n3", "json-ld": "jsonld"}
+
+
+def _format_label(file_path: str) -> str:
+    extension = os.path.splitext(file_path)[1].lstrip(".").lower()
+    if extension in {"ttl", "owl", "rdf", "nt", "n3", "jsonld"}:
+        return extension
+    return _FORMAT_LABELS[rdf_upload.format_for_filename(file_path)]
+
+
+def _parse_ontology(content: str, file_path: str) -> ReferenceOntologyData:
+    """Parse an ontology with rdflib, in a child process with a time limit.
+
+    The format comes from the file name, as for graph uploads; an ``.owl``
+    file, which is often written in Turtle, is read as Turtle when it does not
+    parse as RDF/XML.
+    """
+    data = content.encode("utf-8")
+    formats = [rdf_upload.format_for_filename(file_path)]
+    if file_path.lower().endswith(".owl"):
+        formats.append("turtle")
+    for fmt in dict.fromkeys(formats):
+        try:
+            graph = rdf_upload.parse_upload(data, fmt, timeout=ONTOLOGY_IMPORT_PARSE_SECONDS)
+        except rdf_upload.RdfUploadError as exc:
+            if str(exc) != rdf_upload.NOT_PARSED or fmt == formats[-1]:
+                raise
+            continue
+        return _reference_ontology_from_graph(graph, file_path)
+    raise rdf_upload.RdfUploadError(rdf_upload.NOT_PARSED)
+
+
+def _class_iri_values(class_iris: list[str]) -> str:
+    """``class_iris`` as a SPARQL VALUES list of IRIs, each one validated."""
+    try:
+        return " ".join(sparql_iri(iri) for iri in class_iris)
+    except GraphQuerySpecError as exc:
+        raise OntologyQueryError("class_iris must hold IRIs") from exc
 
 
 # ── Cached triple-store helpers (module-level to keep cache decorator) ────────
@@ -1716,6 +1782,7 @@ class OntologyService:
         """
         if not class_iris:
             return OntologyOverviewGraphData(nodes=[], edges=[])
+        iris_values = _class_iri_values(class_iris)
 
         ontologies = await self.list_ontology_files(catalog_refs=catalog_refs)
         self._resolve_ontology_paths(ontology_path, ontologies)
@@ -1747,7 +1814,6 @@ class OntologyService:
         new_nodes: dict[str, OntologyOverviewGraphNodeData] = {}
         new_edges: dict[str, OntologyOverviewGraphEdgeData] = {}
 
-        iris_values = " ".join(f"<{iri}>" for iri in class_iris)
         query = f"""
             PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
             SELECT DISTINCT ?subClass ?superClass WHERE {{
@@ -1838,6 +1904,7 @@ class OntologyService:
         """
         if not class_iris:
             return OntologyOverviewGraphData(nodes=[], edges=[])
+        iris_values = _class_iri_values(class_iris)
 
         ontologies = await self.list_ontology_files(catalog_refs=catalog_refs)
         self._resolve_ontology_paths(ontology_path, ontologies)
@@ -1849,7 +1916,6 @@ class OntologyService:
         )
 
         # 1. Collect every (sub, super) edge in the upward closure with one SPARQL query.
-        iris_values = " ".join(f"<{iri}>" for iri in class_iris)
         closure_query = f"""
             PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
             SELECT DISTINCT ?subClass ?superClass WHERE {{
@@ -2026,7 +2092,7 @@ class OntologyService:
 
     async def import_ontology(self, content: str, filename: str) -> ReferenceOntologyData:
         try:
-            return _parse_ttl(content, filename)
+            return await asyncio.to_thread(_parse_ontology, content, filename)
         except Exception as exc:
             raise OntologyParseError("Failed to parse ontology file") from exc
 

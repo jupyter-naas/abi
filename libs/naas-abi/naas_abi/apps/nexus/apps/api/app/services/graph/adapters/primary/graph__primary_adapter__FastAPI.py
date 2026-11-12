@@ -97,15 +97,18 @@ from naas_abi.apps.nexus.apps.api.app.services.graph.query.service import (
     GraphQueryService,
 )
 from naas_abi.apps.nexus.apps.api.app.services.graph.service import (
+    GRAPH_UPLOAD_MAX_BYTES,
     GraphService,
     _detect_rdf_format,
     _scope_cache_key,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
+from naas_abi_core import logger
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
 from naas_abi_core.services.cache.CachePort import CacheExpiredError, CacheNotFoundError
 from naas_abi_core.services.cache.CacheService import CacheService
+from naas_abi_core.utils.rdf_upload import RdfUploadError
 from pydantic import BaseModel, Field
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
@@ -984,6 +987,17 @@ async def export_graph(
     )
 
 
+async def _read_upload(file: UploadFile) -> bytes:
+    """The upload's bytes, refused past ``GRAPH_UPLOAD_MAX_BYTES``."""
+    content = await file.read(GRAPH_UPLOAD_MAX_BYTES + 1)
+    if len(content) > GRAPH_UPLOAD_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"The file is larger than {GRAPH_UPLOAD_MAX_BYTES // (1024 * 1024)} MB",
+        )
+    return content
+
+
 @router.post("/analyze", dependencies=FEATURE_ONLY)
 async def analyze_graph_file(
     workspace_id: str = Form(..., description="Workspace ID"),
@@ -996,16 +1010,19 @@ async def analyze_graph_file(
     No data is persisted. The file is analysed in-memory only.
     """
     graph_service = await graph_section_service(graph_service, current_user.id, workspace_id)
-    content = await file.read()
+    content = await _read_upload(file)
     fmt = _detect_rdf_format(file.filename or "")
     try:
         analysis = await graph_service.analyze_graph_file(content=content, fmt=fmt)
+    except RdfUploadError as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to parse file: {exc}") from exc
     except GraphQuerySpecError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except GraphAccessError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Failed to parse file: {exc}") from exc
+        logger.warning("Graph upload analysis failed: %s", exc)
+        raise HTTPException(status_code=400, detail="Failed to parse file") from exc
     return GraphAnalysis(
         total_triples=analysis.total_triples,
         total_subjects=analysis.total_subjects,
@@ -1038,7 +1055,7 @@ async def import_graph_file(
     Returns ``{"status": "imported", "count": N}`` where N is the number of triples inserted.
     """
     graph_service = await graph_section_service(graph_service, current_user.id, workspace_id)
-    content = await file.read()
+    content = await _read_upload(file)
     fmt = _detect_rdf_format(file.filename or "")
     try:
         count = await graph_service.import_individuals_to_graph(
@@ -1053,8 +1070,11 @@ async def import_graph_file(
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except GraphServiceUnavailableError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-    except Exception as exc:
+    except RdfUploadError as exc:
         raise HTTPException(status_code=400, detail=f"Failed to import file: {exc}") from exc
+    except Exception as exc:
+        logger.warning("Graph upload import failed: %s", exc)
+        raise HTTPException(status_code=400, detail="Failed to import file") from exc
     return {"status": "imported", "count": count}
 
 
