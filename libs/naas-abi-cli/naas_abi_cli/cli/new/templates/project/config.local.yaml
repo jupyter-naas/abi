@@ -38,7 +38,7 @@ nats:
     lease_seconds: 180
   # The broker's HTTP monitoring port, read by the Nexus System app. No auth:
   # reachable on the Compose network and on 127.0.0.1 only.
-  monitoring_url: "http://nats:8222"
+  monitoring_url: "http://nats-monitor:8222"
 
 # The built-in identity provider (naas-abi-idp): users sign in with a code
 # emailed to them. It runs as a module over NATS (the `idp` service of docker-compose.yml); Nexus serves it at
@@ -227,18 +227,19 @@ services:
     triple_store_adapter:
       adapter: "apache_jena_tdb2"
       config:
-        jena_tdb2_url: "http://admin:{{ secret.FUSEKI_ADMIN_PASSWORD }}@fuseki:3030/ds"
+        jena_tdb2_url: "http://abi:{{ secret.FUSEKI_ENGINE_PASSWORD }}@fuseki:3030/ds"
         key_value_service:
           kv_adapter:
             adapter: "redis"
             config:
-              redis_url: "redis://redis:6379"
+              redis_url: "redis://:{{ secret.REDIS_PASSWORD }}@redis:6379"
   vector_store:
     vector_store_adapter:
       adapter: "qdrant"
       config:
         host: "qdrant"
         port: 6333
+        api_key: "{{ secret.QDRANT_API_KEY }}"
 {% endraw %}{% if not nats %}{% raw %}
   bus:
     bus_adapter:
@@ -250,7 +251,7 @@ services:
     kv_adapter:
       adapter: "redis"
       config:
-        redis_url: "redis://redis:6379"
+        redis_url: "redis://:{{ secret.REDIS_PASSWORD }}@redis:6379"
   email:
     email_adapter:
       adapter: "filesystem"

@@ -160,6 +160,40 @@ def ensure_nats_passwords(env_path: Path) -> dict[str, str]:
     return passwords
 
 
+# The credentials of the stack's data services, which refuse to start without
+# them: Fuseki's admin and the engine's own Fuseki user (`abi`), Redis's
+# password and Qdrant's API key. Hex, so a value goes into a URL
+# (``redis://:<password>@redis``) and Fuseki's shiro.ini as is.
+DATA_SERVICE_SECRETS = (
+    "FUSEKI_ADMIN_PASSWORD",
+    "FUSEKI_ENGINE_PASSWORD",
+    "REDIS_PASSWORD",
+    "QDRANT_API_KEY",
+)
+_MIN_DATA_SERVICE_SECRET = 16
+
+
+def generate_data_service_secret() -> str:
+    return secrets.token_hex(24)
+
+
+def ensure_data_service_secrets(env_path: Path) -> dict[str, str]:
+    """Return the data services' credentials from ``.env``, generating any that
+    is missing or shorter than 16 characters."""
+    lines = _read(env_path)
+    original = list(lines)
+    values: dict[str, str] = {}
+    for key in DATA_SERVICE_SECRETS:
+        value = _value(lines, key) or ""
+        if len(value) < _MIN_DATA_SERVICE_SECRET or _is_shipped_default(value):
+            value = generate_data_service_secret()
+            lines = _set(lines, key, value)
+        values[key] = value
+    if lines != original:
+        _write(env_path, lines)
+    return values
+
+
 RABBITMQ_USER = "RABBITMQ_USER"
 RABBITMQ_PASSWORD = "RABBITMQ_PASSWORD"
 

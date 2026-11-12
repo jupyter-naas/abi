@@ -862,7 +862,6 @@ local-up: check-docker
 	@echo "🌟 Local environment ready!"
 	@echo "✓ Services available at:"
 	@echo "  - Fuseki (Knowledge Graph): http://localhost:3030"
-	@echo "  - YasGUI (SPARQL Editor): http://localhost:3000"
 	@echo "  - PostgreSQL (Agent Memory): localhost:5432"
 	@echo "  - NATS (monitoring): http://localhost:8222"
 	@echo "  - Docker Models (Airgapped AI): ai/gemma3 ready via 'docker model run'"

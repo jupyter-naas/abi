@@ -43,8 +43,9 @@ their own service keys, and the engine gives each connection the subjects its
 approved policy allows. The Docker stack starts the
 `nats` service, keeps RabbitMQ behind the `rabbitmq` profile and runs no
 Dagster: one engine hosts discovery, and module jobs replace Dagster's
-schedules. Check the broker with `curl -s localhost:8222/healthz` and
-`curl -s localhost:8222/connz`.
+schedules. The broker's monitoring port answers on the stack's `nats-monitor`
+network only: `docker compose exec nats wget -qO- http://nats-monitor:8222/healthz`
+(or `/connz`).
 
 NATS mode installs `naas-abi-proto` and `naas-abi-sdk` from the `.abi`
 submodule, at the framework's revision, so it refuses `--without-abi-submodule`.

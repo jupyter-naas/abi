@@ -67,12 +67,13 @@ broker or the modules.
 
 ### Check that it works
 
-With `abi start` the broker's monitoring port is `localhost:8222`. With
-`abi dev up` it is printed at start (`NATS mode (... monitoring http://...)`).
+With `abi dev up` the broker's monitoring port is printed at start
+(`NATS mode (... monitoring http://...)`). With `abi start` it answers on the
+stack's `nats-monitor` network only, from inside the `nats` container:
 
 ```bash
-curl -s localhost:8222/healthz     # {"status":"ok"}
-curl -s localhost:8222/connz | python3 -m json.tool | grep '"name"'
+docker compose exec nats wget -qO- http://nats-monitor:8222/healthz   # {"status":"ok"}
+docker compose exec nats wget -qO- http://nats-monitor:8222/connz | python3 -m json.tool | grep '"name"'
                                    # the engine's connections, then each module's
 ```
 

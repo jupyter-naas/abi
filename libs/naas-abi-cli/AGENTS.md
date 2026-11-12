@@ -230,3 +230,40 @@ ABI_SMOKE_DIR=~/abi-smoke ABI_SMOKE_KEEP=1 scripts/cli_smoke.sh nats   # keep it
   `click.ClickException` with what to do, never a traceback.
 - Generated projects need Python 3.12+. A NATS project resolves the framework from
   its `.abi` submodule (`use_local_abi_sources`) until proto and the SDK are on PyPI.
+
+## Decision: what the Compose stacks publish, and their data services' credentials
+
+Decision:
+
+- Only the edge faces the network: Caddy's 80 and 443 in `abi deploy local` and the
+  repository's `docker-compose.yml`, Traefik in `abi deploy dokploy`, which publishes no
+  port. Every other published port is bound to `127.0.0.1`, for tools on the same
+  machine (`abi user` on `localhost:9879`, `psql`, the Fuseki backup script). Workspaces
+  reach coderd as `http://coder:7080` on the stack network.
+- Fuseki, Redis and Qdrant take a credential and refuse to start without one:
+  `FUSEKI_ADMIN_PASSWORD` and `FUSEKI_ENGINE_PASSWORD`, `REDIS_PASSWORD`,
+  `QDRANT_API_KEY`, generated into `.env` (`ensure_data_service_secrets`) by
+  `abi deploy local`, `abi stack start` and `abi deploy dokploy`. The engine's config
+  carries them: `http://abi:...@fuseki:3030/ds`, `redis://:...@redis:6379`, the Qdrant
+  adapter's `api_key`.
+- Fuseki's start script writes its access rules (`shiro.ini`) and its dataset on every
+  start, over what the image wrote: nothing but `/$/ping` is anonymous, the admin API
+  and web UI need the `admin` role, the dataset the `engine` role, which the `abi` user
+  holds. The dataset has `query`, `sparql` and `update`, no graph store endpoints, and
+  SPARQL `SERVICE` is off.
+- The broker's monitoring port has no login: nats.conf binds it to the `nats-monitor`
+  alias, on an internal network that only `nats` and `abi` join
+  (`nats.monitoring_url: http://nats-monitor:8222`). It is not published.
+- No service in the stacks proxies requests to a URL its caller names, and no web
+  console reads a data service without the service's own credential (Redis Commander
+  and graph-explorer are gone).
+
+Consequences:
+
+- A project made before this keeps its `docker-compose.yml` until
+  `abi deploy local --regenerate`. That run adds the credentials to `.env` and rewrites,
+  in `config.local.yaml`, the Redis URLs, the Qdrant block and the monitoring URL the
+  older templates wrote (`upgrade_data_service_config`); `abi deploy dokploy` applies the
+  same rewrite to `config.dokploy.yaml`. A config whose lines differ is left as it is.
+- Tests: `deploy/stack_access_test.py` renders every Compose file and runs the Fuseki,
+  Redis and Qdrant start scripts.

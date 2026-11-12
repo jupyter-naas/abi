@@ -55,13 +55,6 @@ SERVICE_CATALOG: dict[str, ServiceDefinition] = {
         description="RDF triple store.",
         urls=("http://127.0.0.1:3030/$/ping",),
     ),
-    "yasgui": ServiceDefinition(
-        key="yasgui",
-        display_name="YasGUI",
-        category="Databases",
-        description="SPARQL query UI.",
-        urls=("http://127.0.0.1:3000",),
-    ),
     "dagster": ServiceDefinition(
         key="dagster",
         display_name="Dagster",
@@ -89,7 +82,6 @@ SERVICE_CATALOG: dict[str, ServiceDefinition] = {
         display_name="NATS",
         category="Messaging",
         description="Broker for kernel services, bus, module jobs and discovery.",
-        urls=("http://127.0.0.1:8222/healthz",),
         tcp_targets=(("127.0.0.1", 4222),),
     ),
     "rabbitmq": ServiceDefinition(
@@ -106,13 +98,6 @@ SERVICE_CATALOG: dict[str, ServiceDefinition] = {
         category="Messaging",
         description="In-memory cache and broker.",
         tcp_targets=(("127.0.0.1", 6379),),
-    ),
-    "redis-commander": ServiceDefinition(
-        key="redis-commander",
-        display_name="Redis Commander",
-        category="Messaging",
-        description="Redis management UI.",
-        urls=("http://127.0.0.1:8082",),
     ),
     "service-portal": ServiceDefinition(
         key="service-portal",

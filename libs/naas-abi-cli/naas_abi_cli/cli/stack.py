@@ -11,6 +11,7 @@ from rich.console import Console
 from rich.table import Table
 
 from .admin_credentials import (
+    ensure_data_service_secrets,
     ensure_nats_callout_seed,
     ensure_nats_passwords,
     ensure_rabbitmq_credentials,
@@ -121,13 +122,15 @@ def _show_error_logs(error_services: list[str]) -> None:
 
 
 def _ensure_stack_secrets(project: Path) -> None:
-    """Generate the broker's passwords and the auth callout's seed into
-    ``.env`` before Compose reads it, when the project runs on NATS: the `nats`
-    service refuses to start without its passwords, and the engine cannot
-    render its `nats:` block without them. Kept when already set."""
+    """Generate the stack's credentials into ``.env`` before Compose reads it:
+    Fuseki's, Redis's and Qdrant's, which refuse to start without them, and,
+    when the project runs on NATS, the broker's passwords and the auth
+    callout's seed (the engine cannot render its `nats:` block without them).
+    Kept when already set."""
+    env_path = project / ".env"
+    ensure_data_service_secrets(env_path)
     if not project_uses_nats(str(project)):
         return
-    env_path = project / ".env"
     ensure_nats_passwords(env_path)
     ensure_nats_callout_seed(env_path)
 

@@ -162,6 +162,10 @@ services:
         aliases:
           - ${ABI_STACK_NAME}-abi
       dokploy-network: {}
+{% if NATS %}
+      # The broker's monitoring port (nats.monitoring_url): the engine only.
+      nats-monitor: {}
+{% endif %}
 
   mcp-server:
     build:
@@ -214,39 +218,72 @@ services:
     # Keep mem_limit above JVM_ARGS -Xmx: TDB2 memory-maps its files off-heap.
     mem_limit: 4g
     environment:
-      - ADMIN_PASSWORD=${FUSEKI_ADMIN_PASSWORD}
+      - ADMIN_PASSWORD=${FUSEKI_ADMIN_PASSWORD:-}
+      # The engine's own user (`abi`): the dataset's endpoints only, not the
+      # admin API. Optional: without it the engine uses `admin`.
+      - ENGINE_PASSWORD=${FUSEKI_ENGINE_PASSWORD:-}
       - JVM_ARGS=-Xmx2g
-    command: >-
-      bash -c '
-      mkdir -p /fuseki/configuration /fuseki/databases/ds &&
-      printf "@prefix :        <#> .
-      @prefix fuseki:  <http://jena.apache.org/fuseki#> .
-      @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
-      @prefix ja:      <http://jena.hpl.hp.com/2005/11/Assembler#> .
-      @prefix tdb2:    <http://jena.apache.org/2016/tdb#> .
+    # The image's entrypoint keeps the first shiro.ini it wrote, which lets
+    # anyone read the dataset. This command writes the access rules and the
+    # dataset on every start, then runs the server.
+    entrypoint: ["/sbin/tini", "--"]
+    command:
+      - bash
+      - -c
+      - |
+        set -e
+        [ -n "$$ADMIN_PASSWORD" ] || { echo "FUSEKI_ADMIN_PASSWORD is empty: run abi deploy" >&2; exit 1; }
+        mkdir -p /fuseki/configuration /fuseki/databases/ds
+        # Every request needs a password, except the ping: the admin API and
+        # the web UI the `admin` role, the dataset the `engine` role.
+        umask 077
+        {
+          printf '[main]\n'
+          printf 'plainMatcher = org.apache.shiro.authc.credential.SimpleCredentialsMatcher\n'
+          printf 'iniRealm.credentialsMatcher = $$plainMatcher\n'
+          printf '[users]\n'
+          printf 'admin = %s, admin, engine\n' "$$ADMIN_PASSWORD"
+          if [ -n "$$ENGINE_PASSWORD" ]; then printf 'abi = %s, engine\n' "$$ENGINE_PASSWORD"; fi
+          printf '[roles]\nadmin = *\nengine = *\n'
+          printf '[urls]\n'
+          printf '/$$/ping = anon\n'
+          printf '/$$/** = authcBasic, roles[admin]\n'
+          printf '/ds/** = authcBasic, roles[engine]\n'
+          printf '/** = authcBasic, roles[admin]\n'
+        } > /fuseki/shiro.ini
+        # SPARQL query and update only (no graph store endpoints), and no
+        # SERVICE: the store never calls another server.
+        cat > /fuseki/configuration/ds.ttl <<'TTL'
+        @prefix :        <#> .
+        @prefix fuseki:  <http://jena.apache.org/fuseki#> .
+        @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+        @prefix ja:      <http://jena.hpl.hp.com/2005/11/Assembler#> .
+        @prefix tdb2:    <http://jena.apache.org/2016/tdb#> .
 
-      :service rdf:type fuseki:Service ;
-          fuseki:name \"ds\" ;
-          fuseki:endpoint [ fuseki:operation fuseki:query ;
-                            fuseki:name \"sparql\" ;
-                            ja:context [ ja:cxtName \"tdb:unionDefaultGraph\" ;
-                                         ja:cxtValue true ] ] ;
-          fuseki:endpoint [ fuseki:operation fuseki:query ;
-                            fuseki:name \"query\" ;
-                            ja:context [ ja:cxtName \"tdb:unionDefaultGraph\" ;
-                                         ja:cxtValue true ] ] ;
-          fuseki:endpoint [ fuseki:operation fuseki:update ;
-                            fuseki:name \"update\" ] ;
-          fuseki:endpoint [ fuseki:operation fuseki:gsp-r ;
-                            fuseki:name \"get\" ] ;
-          fuseki:endpoint [ fuseki:operation fuseki:gsp-rw ;
-                            fuseki:name \"data\" ] ;
-          fuseki:dataset :dataset .
+        :service rdf:type fuseki:Service ;
+            fuseki:name "ds" ;
+            fuseki:endpoint [ fuseki:operation fuseki:query ;
+                              fuseki:name "sparql" ;
+                              ja:context [ ja:cxtName "tdb:unionDefaultGraph" ;
+                                           ja:cxtValue true ] ;
+                              ja:context [ ja:cxtName "arq:httpServiceAllowed" ;
+                                           ja:cxtValue false ] ] ;
+            fuseki:endpoint [ fuseki:operation fuseki:query ;
+                              fuseki:name "query" ;
+                              ja:context [ ja:cxtName "tdb:unionDefaultGraph" ;
+                                           ja:cxtValue true ] ;
+                              ja:context [ ja:cxtName "arq:httpServiceAllowed" ;
+                                           ja:cxtValue false ] ] ;
+            fuseki:endpoint [ fuseki:operation fuseki:update ;
+                              fuseki:name "update" ] ;
+            fuseki:dataset :dataset .
 
-      :dataset rdf:type tdb2:DatasetTDB2 ;
-          tdb2:location \"/fuseki/databases/ds\" .
-      " > /fuseki/configuration/ds.ttl &&
-      /jena-fuseki/fuseki-server'
+        :dataset rdf:type tdb2:DatasetTDB2 ;
+            ja:context [ ja:cxtName "arq:httpServiceAllowed" ;
+                         ja:cxtValue false ] ;
+            tdb2:location "/fuseki/databases/ds" .
+        TTL
+        exec /jena-fuseki/fuseki-server
     healthcheck:
       # Probe the dataset, not the web root (see the local compose for details).
       test: ["CMD-SHELL", "curl -fsS -u admin:$$ADMIN_PASSWORD 'http://localhost:3030/ds/query?query=ASK%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D' >/dev/null || exit 1"]
@@ -374,18 +411,23 @@ services:
       - NATS_ENGINE_PASSWORD=${NATS_ENGINE_PASSWORD:?run abi deploy dokploy}
       - NATS_AUTH_PASSWORD=${NATS_AUTH_PASSWORD:?run abi deploy dokploy}
       - NATS_AUTH_CALLOUT_ISSUER=${NATS_AUTH_CALLOUT_ISSUER:?run abi deploy dokploy}
-    command: ["nats-server", "-c", "/etc/nats/nats.conf", "-js", "-sd", "/data", "-m", "8222"]
+    # The monitoring port (8222, no login) listens on the nats-monitor network
+    # only (nats.conf), which the engine joins and nothing else.
+    command: ["nats-server", "-c", "/etc/nats/nats.conf", "-js", "-sd", "/data"]
     volumes:
       - nats_data:/data
       - ./.deploy/docker/nats/nats.conf:/etc/nats/nats.conf:ro
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
+      test: ["CMD", "wget", "-qO-", "http://nats-monitor:8222/healthz"]
       interval: 10s
       timeout: 5s
       start_period: 15s
       retries: 10
     networks:
-      - abi-network
+      abi-network: {}
+      # nats.conf binds the monitoring port to this alias.
+      nats-monitor:
+        aliases: [nats-monitor]
 
   # -----------------------------------------------------------------------------
   # idp - the built-in identity provider (naas-abi-idp)
@@ -456,11 +498,21 @@ services:
     image: redis:7-alpine
     pull_policy: always
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      # redis-cli of the healthcheck reads it.
+      - REDISCLI_AUTH=${REDIS_PASSWORD:-}
+    # No password, no server: the image's default lets in every client.
+    command:
+      - sh
+      - -c
+      - |
+        [ -n "$$REDIS_PASSWORD" ] || { echo "REDIS_PASSWORD is empty: run abi deploy" >&2; exit 1; }
+        exec docker-entrypoint.sh redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -476,6 +528,14 @@ services:
     environment:
       - QDRANT__SERVICE__HTTP_PORT=6333
       - QDRANT__SERVICE__GRPC_PORT=6334
+      # Every request carries this key (the engine's `api_key`).
+      - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY:-}
+    command:
+      - bash
+      - -c
+      - |
+        [ -n "$$QDRANT__SERVICE__API_KEY" ] || { echo "QDRANT_API_KEY is empty: run abi deploy" >&2; exit 1; }
+        exec ./entrypoint.sh
     healthcheck:
       test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/6333'"]
       interval: 10s
@@ -693,3 +753,10 @@ networks:
     driver: bridge
   dokploy-network:
     external: true
+{% if NATS %}
+  # The NATS monitoring port, shared by the broker and the engine only: it
+  # lists every connection and subscription, and has no login.
+  nats-monitor:
+    driver: bridge
+    internal: true
+{% endif %}

@@ -38,9 +38,11 @@ x-abi-template: &abi_template
     context: .
     dockerfile: ./.deploy/docker/images/Dockerfile
   restart: unless-stopped
+  # Every port but Caddy's is bound to this machine: the API and Nexus reach
+  # the network through Caddy (TLS), the other services stay on abi-network.
   ports:
-    - 9879:9879  # REST API endpoint - http://localhost:9879
-    - 8501:8501  # Streamlit web interface - http://localhost:8501
+    - 127.0.0.1:9879:9879  # REST API endpoint - http://localhost:9879
+    - 127.0.0.1:8501:8501  # Streamlit web interface - http://localhost:8501
   volumes:
     # Development volumes for hot-reload
     - .:/app
@@ -91,6 +93,8 @@ x-abi-template: &abi_template
     retries: 6
   networks:
     - abi-network
+    # The broker's monitoring port (nats.monitoring_url): the engine only.
+    - nats-monitor
 
 services:
   nexus-web:
@@ -99,7 +103,7 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - ${NEXUS_WEB_PORT}:3000
+      - 127.0.0.1:${NEXUS_WEB_PORT}:3000
     volumes:
       - ./libs/naas-abi/naas_abi/apps/nexus/apps/web:/app/apps/web
       # Preserve the image's node_modules under the bind mount above so the
@@ -268,7 +272,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB} # Database for agent conversations and memory
     ports:
-      - ${POSTGRES_PORT}:${POSTGRES_PORT}  # PostgreSQL database - postgresql://abi_user:abi_password@localhost:${POSTGRES_PORT}/abi_memory
+      - 127.0.0.1:${POSTGRES_PORT}:${POSTGRES_PORT}  # PostgreSQL database - postgresql://abi_user:abi_password@localhost:${POSTGRES_PORT}/abi_memory
     volumes:
       - postgres_data:/var/lib/postgresql/data  # Persistent data storage
       - ./.deploy/docker/postgres/initdb:/docker-entrypoint-initdb.d:ro  # Bootstrap additional databases
@@ -297,7 +301,7 @@ services:
     image: stain/jena-fuseki:latest
     restart: unless-stopped
     ports:
-      - 3030:3030
+      - 127.0.0.1:3030:3030
     volumes:
       - fuseki_data:/fuseki
     # Cap Docker memory so the JVM can't balloon and get OOM-killed mid-write —
@@ -306,39 +310,72 @@ services:
     # off-heap, so it needs headroom on top of the Java heap. Tune to host/data.
     mem_limit: 4g
     environment:
-      - ADMIN_PASSWORD=${FUSEKI_ADMIN_PASSWORD}
+      - ADMIN_PASSWORD=${FUSEKI_ADMIN_PASSWORD:-}
+      # The engine's own user (`abi`): the dataset's endpoints only, not the
+      # admin API. Optional: without it the engine uses `admin`.
+      - ENGINE_PASSWORD=${FUSEKI_ENGINE_PASSWORD:-}
       - JVM_ARGS=-Xmx2g
-    command: >-
-      bash -c '
-      mkdir -p /fuseki/configuration /fuseki/databases/ds &&
-      printf "@prefix :        <#> .
-      @prefix fuseki:  <http://jena.apache.org/fuseki#> .
-      @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
-      @prefix ja:      <http://jena.hpl.hp.com/2005/11/Assembler#> .
-      @prefix tdb2:    <http://jena.apache.org/2016/tdb#> .
+    # The image's entrypoint keeps the first shiro.ini it wrote, which lets
+    # anyone read the dataset. This command writes the access rules and the
+    # dataset on every start, then runs the server.
+    entrypoint: ["/sbin/tini", "--"]
+    command:
+      - bash
+      - -c
+      - |
+        set -e
+        [ -n "$$ADMIN_PASSWORD" ] || { echo "FUSEKI_ADMIN_PASSWORD is empty: run abi stack start" >&2; exit 1; }
+        mkdir -p /fuseki/configuration /fuseki/databases/ds
+        # Every request needs a password, except the ping: the admin API and
+        # the web UI the `admin` role, the dataset the `engine` role.
+        umask 077
+        {
+          printf '[main]\n'
+          printf 'plainMatcher = org.apache.shiro.authc.credential.SimpleCredentialsMatcher\n'
+          printf 'iniRealm.credentialsMatcher = $$plainMatcher\n'
+          printf '[users]\n'
+          printf 'admin = %s, admin, engine\n' "$$ADMIN_PASSWORD"
+          if [ -n "$$ENGINE_PASSWORD" ]; then printf 'abi = %s, engine\n' "$$ENGINE_PASSWORD"; fi
+          printf '[roles]\nadmin = *\nengine = *\n'
+          printf '[urls]\n'
+          printf '/$$/ping = anon\n'
+          printf '/$$/** = authcBasic, roles[admin]\n'
+          printf '/ds/** = authcBasic, roles[engine]\n'
+          printf '/** = authcBasic, roles[admin]\n'
+        } > /fuseki/shiro.ini
+        # SPARQL query and update only (no graph store endpoints), and no
+        # SERVICE: the store never calls another server.
+        cat > /fuseki/configuration/ds.ttl <<'TTL'
+        @prefix :        <#> .
+        @prefix fuseki:  <http://jena.apache.org/fuseki#> .
+        @prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+        @prefix ja:      <http://jena.hpl.hp.com/2005/11/Assembler#> .
+        @prefix tdb2:    <http://jena.apache.org/2016/tdb#> .
 
-      :service rdf:type fuseki:Service ;
-          fuseki:name \"ds\" ;
-          fuseki:endpoint [ fuseki:operation fuseki:query ;
-                            fuseki:name \"sparql\" ;
-                            ja:context [ ja:cxtName \"tdb:unionDefaultGraph\" ;
-                                         ja:cxtValue true ] ] ;
-          fuseki:endpoint [ fuseki:operation fuseki:query ;
-                            fuseki:name \"query\" ;
-                            ja:context [ ja:cxtName \"tdb:unionDefaultGraph\" ;
-                                         ja:cxtValue true ] ] ;
-          fuseki:endpoint [ fuseki:operation fuseki:update ;
-                            fuseki:name \"update\" ] ;
-          fuseki:endpoint [ fuseki:operation fuseki:gsp-r ;
-                            fuseki:name \"get\" ] ;
-          fuseki:endpoint [ fuseki:operation fuseki:gsp-rw ;
-                            fuseki:name \"data\" ] ;
-          fuseki:dataset :dataset .
+        :service rdf:type fuseki:Service ;
+            fuseki:name "ds" ;
+            fuseki:endpoint [ fuseki:operation fuseki:query ;
+                              fuseki:name "sparql" ;
+                              ja:context [ ja:cxtName "tdb:unionDefaultGraph" ;
+                                           ja:cxtValue true ] ;
+                              ja:context [ ja:cxtName "arq:httpServiceAllowed" ;
+                                           ja:cxtValue false ] ] ;
+            fuseki:endpoint [ fuseki:operation fuseki:query ;
+                              fuseki:name "query" ;
+                              ja:context [ ja:cxtName "tdb:unionDefaultGraph" ;
+                                           ja:cxtValue true ] ;
+                              ja:context [ ja:cxtName "arq:httpServiceAllowed" ;
+                                           ja:cxtValue false ] ] ;
+            fuseki:endpoint [ fuseki:operation fuseki:update ;
+                              fuseki:name "update" ] ;
+            fuseki:dataset :dataset .
 
-      :dataset rdf:type tdb2:DatasetTDB2 ;
-          tdb2:location \"/fuseki/databases/ds\" .
-      " > /fuseki/configuration/ds.ttl &&
-      /jena-fuseki/fuseki-server'
+        :dataset rdf:type tdb2:DatasetTDB2 ;
+            ja:context [ ja:cxtName "arq:httpServiceAllowed" ;
+                         ja:cxtValue false ] ;
+            tdb2:location "/fuseki/databases/ds" .
+        TTL
+        exec /jena-fuseki/fuseki-server
     healthcheck:
       # Probe the DATASET, not just the web root. `curl /` returns 200 even when
       # the `ds` dataset failed to attach or is corrupt, which lets dependents
@@ -359,25 +396,6 @@ services:
       - abi-network
 
   # -----------------------------------------------------------------------------
-  # YasGUI - SPARQL Query Interface
-  # -----------------------------------------------------------------------------
-  # Web-based SPARQL query editor and visualizer
-  # Allows interactive exploration of the knowledge graph
-  yasgui:
-    image: erikap/yasgui:latest
-    pull_policy: always
-    restart: unless-stopped
-    platform: linux/amd64  # Force x86_64 for compatibility with Apple Silicon
-    ports:
-      - 3000:80  # YasGUI SPARQL editor - http://localhost:3000
-    environment:
-      - DEFAULT_SPARQL_ENDPOINT=http://127.0.0.1:3030/ds/query
-    depends_on:
-      - fuseki
-    networks:
-      - abi-network
-
-  # -----------------------------------------------------------------------------
   # Dagster - Workflow Orchestration & Data Pipeline Management (legacy)
   # -----------------------------------------------------------------------------
   # Legacy, to be removed in the next major: module jobs on NATS replace its
@@ -389,7 +407,7 @@ services:
       dockerfile: ./.deploy/docker/images/Dockerfile
     restart: unless-stopped
     ports:
-      - 3001:3001  # Dagster web UI - http://localhost:3001 (avoiding conflict with YasGUI on 3000)
+      - 127.0.0.1:3001:3001  # Dagster web UI - http://localhost:3001
     volumes:
       # - ./scripts:/app/scripts
       # - ./uv.lock:/app/uv.lock
@@ -442,8 +460,8 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     ports:
-      - ${MINIO_PORT}:${MINIO_PORT}  # S3 API endpoint - http://localhost:${MINIO_PORT}
-      - 9001:9001  # MinIO console - http://localhost:9001
+      - 127.0.0.1:${MINIO_PORT}:${MINIO_PORT}  # S3 API endpoint - http://localhost:${MINIO_PORT}
+      - 127.0.0.1:9001:9001  # MinIO console - http://localhost:9001
     volumes:
       - minio_data:/data
     healthcheck:
@@ -486,8 +504,8 @@ services:
     # or a host migration). Applying this resets the node once.
     hostname: rabbitmq
     ports:
-      - 5672:5672   # AMQP
-      - 15672:15672 # Management UI - http://localhost:15672
+      - 127.0.0.1:5672:5672   # AMQP
+      - 127.0.0.1:15672:15672 # Management UI - http://localhost:15672
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
@@ -506,9 +524,10 @@ services:
   # NATS - Distributed module fabric (JetStream: bus, RPC, jobs, discovery)
   # -----------------------------------------------------------------------------
   # The engine (abi) reaches every kernel service through it, and modules
-  # register here. `-js` enables JetStream; `-m 8222` exposes the monitoring and
-  # health endpoint used below. Check it: curl -s localhost:8222/healthz, then
-  # curl -s localhost:8222/connz lists the engine's and modules' connections.
+  # register here. `-js` enables JetStream. Its monitoring port (8222, no login)
+  # answers on the nats-monitor network only, which the engine (abi) joins and
+  # nothing else:
+  #   docker compose exec nats wget -qO- http://nats-monitor:8222/connz
   nats:
     image: nats:2.14.7-alpine
     pull_policy: always
@@ -528,21 +547,23 @@ services:
         for key in NATS_ENGINE_PASSWORD NATS_AUTH_PASSWORD NATS_AUTH_CALLOUT_ISSUER; do
           [ -n "$$(printenv $$key)" ] || { echo "$$key is empty: run abi stack start" >&2; exit 1; }
         done
-        exec nats-server -c /etc/nats/nats.conf -js -sd /data -m 8222
+        exec nats-server -c /etc/nats/nats.conf -js -sd /data
     ports:
       - 127.0.0.1:4222:4222 # client connections, from this machine only
-      - 127.0.0.1:8222:8222 # HTTP monitoring (no auth)
     volumes:
       - nats_data:/data
       - ./.deploy/docker/nats/nats.conf:/etc/nats/nats.conf:ro # max_payload (no CLI flag)
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
+      test: ["CMD", "wget", "-qO-", "http://nats-monitor:8222/healthz"]
       interval: 10s
       timeout: 5s
       start_period: 15s
       retries: 10
     networks:
-      - abi-network
+      abi-network: {}
+      # nats.conf binds the monitoring port to this alias.
+      nats-monitor:
+        aliases: [nats-monitor]
 
   # -----------------------------------------------------------------------------
   # Redis - In-memory Cache / Message Broker
@@ -551,32 +572,26 @@ services:
     image: redis:7-alpine
     pull_policy: always
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      # redis-cli of the healthcheck reads it.
+      - REDISCLI_AUTH=${REDIS_PASSWORD:-}
+    # No password, no server: the image's default lets in every client.
+    command:
+      - sh
+      - -c
+      - |
+        [ -n "$$REDIS_PASSWORD" ] || { echo "REDIS_PASSWORD is empty: run abi stack start" >&2; exit 1; }
+        exec docker-entrypoint.sh redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
     ports:
-      - 6379:6379
+      - 127.0.0.1:6379:6379
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
       interval: 10s
       timeout: 5s
       retries: 10
-    networks:
-      - abi-network
-
-  # -----------------------------------------------------------------------------
-  # Redis Commander - Web UI for Redis management
-  # -----------------------------------------------------------------------------
-  redis-commander:
-    image: rediscommander/redis-commander:latest
-    pull_policy: always
-    restart: unless-stopped
-    ports:
-      - 8082:8081  # Redis Commander UI - http://localhost:8082
-    environment:
-      - REDIS_HOSTS=local:redis:${REDIS_PORT}
-    depends_on:
-      - redis
     networks:
       - abi-network
 
@@ -588,7 +603,7 @@ services:
     pull_policy: always
     restart: unless-stopped
     ports:
-      - 8080:80  # Service portal - http://localhost:8080
+      - 127.0.0.1:8080:80  # Service portal - http://localhost:8080
     environment:
       - PUBLIC_WEB_HOST=${PUBLIC_WEB_HOST:-localhost}
       - PUBLIC_API_HOST=${PUBLIC_API_HOST:-api.localhost}
@@ -597,17 +612,6 @@ services:
       - NGINX_ENVSUBST_OUTPUT_DIR=/usr/share/nginx/html
     volumes:
       - ./.deploy/docker/service-portal:/usr/share/nginx/templates:ro
-    networks:
-      - abi-network
-
-  # -----------------------------------------------------------------------------
-  # Neptune Graph Explorer
-  # -----------------------------------------------------------------------------
-  graph-explorer:
-    image: public.ecr.aws/neptune/graph-explorer
-    restart: unless-stopped
-    environment:
-      - HOST=graph-explorer.${PUBLIC_WEB_HOST:-localhost}
     networks:
       - abi-network
 
@@ -626,9 +630,9 @@ services:
     restart: unless-stopped
     command: ["serve"]
     ports:
-      - ${HEADSCALE_SERVER_PORT}:8080
-      - ${HEADSCALE_METRICS_PORT}:9090
-      - ${HEADSCALE_GRPC_PORT}:50443
+      - 127.0.0.1:${HEADSCALE_SERVER_PORT}:8080
+      - 127.0.0.1:${HEADSCALE_METRICS_PORT}:9090
+      - 127.0.0.1:${HEADSCALE_GRPC_PORT}:50443
     volumes:
       - ./.deploy/docker/headscale/config.yaml:/etc/headscale/config.yaml:ro
       - ./.deploy/docker/headscale/extra-records.json:/var/lib/headscale/extra-records.json:ro
@@ -654,13 +658,21 @@ services:
     pull_policy: always
     restart: unless-stopped
     ports:
-      - 6333:6333
-      - 6334:6334
+      - 127.0.0.1:6333:6333
+      - 127.0.0.1:6334:6334
     volumes:
       - qdrant_storage:/qdrant/storage
     environment:
       - QDRANT__SERVICE__HTTP_PORT=6333
       - QDRANT__SERVICE__GRPC_PORT=6334
+      # Every request carries this key (the engine's `api_key`).
+      - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY:-}
+    command:
+      - bash
+      - -c
+      - |
+        [ -n "$$QDRANT__SERVICE__API_KEY" ] || { echo "QDRANT_API_KEY is empty: run abi stack start" >&2; exit 1; }
+        exec ./entrypoint.sh
     healthcheck:
       test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/6333'"]
       interval: 10s
@@ -697,3 +709,8 @@ volumes:
 networks:
   abi-network:
     driver: bridge  # Default Docker bridge network for internal communication
+  # The NATS monitoring port, shared by the broker and the engine only: it
+  # lists every connection and subscription, and has no login.
+  nats-monitor:
+    driver: bridge
+    internal: true

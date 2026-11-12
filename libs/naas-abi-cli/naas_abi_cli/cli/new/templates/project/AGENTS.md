@@ -20,7 +20,7 @@ The project runs on NATS (the `nats:` block in each `config*.yaml`). The engine 
 - **A remote module never imports `naas_abi_core`.** Its Dockerfile fails the build if core is installed, and its tests check the import. Use `naas_abi_sdk` (`BaseModule`, `AgentDescriptor`, `@job`, `naas_abi_sdk.agents.IntentAgent`) and reach services through `self.engine.services.<name>`, declared in `ModuleDependencies(services=(...))`.
 - Scheduled work is a `@job(..., triggers=(Every("1h"),))` on the module, not Dagster: the stack runs no Dagster.
 - `src/{{project_name_snake}}/` is the in-engine module holding the default agent.
-- Checks: `curl -s localhost:8222/healthz`, `curl -s localhost:8222/connz` (the broker; with `abi dev up` the monitoring port is printed at start), and a module logs `READY` once registered.
+- Checks: the broker's `/healthz` and `/connz` (with `abi dev up` the monitoring port is printed at start; in the Docker stack, `docker compose exec nats wget -qO- http://nats-monitor:8222/connz`), and a module logs `READY` once registered.
 - SDK reference: [`.abi/libs/naas-abi-sdk/README.md`](.abi/libs/naas-abi-sdk/README.md). Upgrade, NATS architecture and tuning: https://docs.naas.ai/ (`user-guide/upgrade/migrate-to-3`, `developer-guide/architecture/`, `user-guide/build/sdk/`).
 {% endif %}
 ## Where the framework lives (read this!)

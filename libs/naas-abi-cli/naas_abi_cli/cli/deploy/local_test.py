@@ -581,6 +581,7 @@ NATS_USERS = {"engine": "NATS_ENGINE_PASSWORD", "auth": "NATS_AUTH_PASSWORD"}
 # What the broker container needs from .env: both passwords and the callout's
 # trusted key.
 BROKER_ENV = (*NATS_USERS.values(), "NATS_AUTH_CALLOUT_ISSUER")
+MONITORING_LINE = 'http: "nats-monitor:8222"\n'
 
 
 def _nats_service(compose: Path) -> dict:
@@ -623,7 +624,7 @@ def test_the_broker_requires_a_password_and_listens_on_localhost(
         assert (
             _nats_guard(service)
             .rstrip()
-            .endswith("exec nats-server -c /etc/nats/nats.conf -js -sd /data -m 8222")
+            .endswith("exec nats-server -c /etc/nats/nats.conf -js -sd /data")
         )
 
 
@@ -655,6 +656,15 @@ def test_the_generated_broker_admits_only_its_users(tmp_path: Path) -> None:
 
     setup_local_deploy(str(tmp_path), base_domain="localhost")
     env = _env_values(tmp_path / ".env")
+    # The monitoring address is a compose network alias, which this host does
+    # not resolve: the rest of the file runs as generated.
+    conf = tmp_path / "nats.conf"
+    conf.write_text(
+        (tmp_path / ".deploy/docker/nats/nats.conf")
+        .read_text(encoding="utf-8")
+        .replace(MONITORING_LINE, ""),
+        encoding="utf-8",
+    )
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
@@ -662,7 +672,7 @@ def test_the_generated_broker_admits_only_its_users(tmp_path: Path) -> None:
         [
             str(shutil.which("nats-server")),
             "-c",
-            str(tmp_path / ".deploy/docker/nats/nats.conf"),
+            str(conf),
             "-a",
             "127.0.0.1",
             "-p",

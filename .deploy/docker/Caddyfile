@@ -18,25 +18,6 @@
 }
 
 
-graph-explorer.{$PUBLIC_WEB_HOST:localhost} {
-    @allowed remote_ip private_ranges 100.64.0.0/10 fd7a:115c:a1e0::/48 172.64.0.0/13
-    handle @allowed {
-        @root path /
-        redir @root /explorer 308
-
-        reverse_proxy https://graph-explorer:443 {
-            transport http {
-                tls_insecure_skip_verify
-            }
-            header_up X-Forwarded-Proto {scheme}
-        }
-    }
-    handle {
-        respond "Forbidden (remote: {remote_host})" 403
-    }
-}
-
-
 # Coder control plane + per-workspace app subdomains (the browser IDE).
 # Same registrable domain as the web UI so the editor's session cookie is
 # first-party inside the Nexus iframe. Caddy preserves the Host header (Coder

@@ -8,6 +8,8 @@ import click
 import pytest
 import yaml
 
+from naas_abi_cli.cli.admin_credentials import DATA_SERVICE_SECRETS
+
 stack_module = importlib.import_module("naas_abi_cli.cli.stack")
 
 
@@ -85,14 +87,14 @@ def test_start_seeds_the_nats_secrets_before_compose_reads_env(
     assert up[stack_module.STACK_OVERLAY_ENV] == ""
 
 
-def test_start_leaves_env_alone_for_a_project_without_nats(
+def test_start_without_nats_keeps_the_broker_out_of_env(
     project: Path, compose: FakeCompose
 ) -> None:
     (project / "config.local.yaml").write_text("api:\n  title: classic\n")
 
     stack_module._start_stack()
 
-    assert not (project / ".env").exists()
+    assert set(_env(project)) == set(DATA_SERVICE_SECRETS)
 
 
 def test_legacy_start_runs_the_legacy_profile_without_nats(

@@ -290,7 +290,6 @@ const NODES_DEF = [
     links: [
       { label: 'Fuseki Admin',     port: 3030, path: '/' },
       { label: 'SPARQL Endpoint',  port: 3030, path: '/ds/query' },
-      { label: 'YasGUI',           port: 3000, path: '/' },
     ],
   },
   {
@@ -311,7 +310,6 @@ const NODES_DEF = [
     desc: 'In-memory cache and pub/sub message broker for real-time events and session state.',
     status: 'running',
     links: [
-      { label: 'Redis Commander', port: 8082, path: '/' },
       { label: () => `redis://${HOST}:6379`, badge: 'non-HTTP' },
     ],
   },

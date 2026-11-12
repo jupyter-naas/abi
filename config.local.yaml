@@ -53,7 +53,7 @@ nats:
     lease_seconds: 180
   # The broker's HTTP monitoring port, read by the Nexus System app. No auth:
   # reachable on the Compose network and on 127.0.0.1 only.
-  monitoring_url: "http://nats:8222"
+  monitoring_url: "http://nats-monitor:8222"
 
 # 2. MODULES: what the system does
 # Q: Which modules do you want to load at startup?
@@ -274,12 +274,12 @@ services:
     triple_store_adapter:
       adapter: "apache_jena_tdb2"
       config:
-        jena_tdb2_url: "http://admin:{{ secret.FUSEKI_ADMIN_PASSWORD }}@fuseki:3030/ds"
+        jena_tdb2_url: "http://abi:{{ secret.FUSEKI_ENGINE_PASSWORD }}@fuseki:3030/ds"
         key_value_service:
           kv_adapter:
             adapter: "redis"
             config:
-              redis_url: "redis://redis:6379"
+              redis_url: "redis://:{{ secret.REDIS_PASSWORD }}@redis:6379"
 
   # Q: Where are the vectors stored that power semantic search?
   # A: Qdrant holds them. Swap to "python" for in-memory storage (lost on restart).
@@ -289,6 +289,7 @@ services:
       config:
         host: "qdrant"
         port: 6333
+        api_key: "{{ secret.QDRANT_API_KEY }}"
 
   # Q: How do background tasks get queued between services?
   # A: No `bus:` block: with the `nats:` block above, the bus is JetStream on the
@@ -310,7 +311,7 @@ services:
     kv_adapter:
       adapter: "redis"
       config:
-        redis_url: "redis://redis:6379"
+        redis_url: "redis://:{{ secret.REDIS_PASSWORD }}@redis:6379"
 
   # Q: How are emails sent (magic links, notifications)?
   # A: "filesystem" writes them as files to the path below -- no email server needed locally.
