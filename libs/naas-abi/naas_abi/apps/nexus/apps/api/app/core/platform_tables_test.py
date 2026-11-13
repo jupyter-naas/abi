@@ -95,6 +95,7 @@ def test_registry_lists_every_nexus_table_by_section() -> None:
         ("Chat, agents & models", "chat_ingestion_jobs"),
         ("Chat, agents & models", "agent_configs"),
         ("Chat, agents & models", "skills"),
+        ("Chat, agents & models", "skill_workspace_switches"),
         ("Chat, agents & models", "model_catalog"),
         ("Chat, agents & models", "provider_configs"),
         ("Chat, agents & models", "inference_servers"),

@@ -730,6 +730,19 @@ class SkillModel(Base):
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 
 
+class SkillWorkspaceSwitchModel(Base):
+    """An organization skill turned on or off in one workspace of its organization,
+    by that workspace's admins."""
+
+    __tablename__ = "skill_workspace_switches"
+
+    skill_id = Column(String, ForeignKey("skills.id", ondelete="CASCADE"), primary_key=True)
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
+    enabled = Column(Boolean, nullable=False)
+    updated_by = Column(String, nullable=True)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+
 # ============================================
 # App Configurations (per-workspace enable state)
 # ============================================

@@ -1093,6 +1093,11 @@ async def test_build_system_prompt_swallows_auth_errors() -> None:
     assert prompt == AGENT_SYSTEM_PROMPTS["aia"] + _SKILLS_HANDOFF_NOTE
 
 
+async def _every_skill(_user_id: str, _workspace_id: str, skills: list) -> list:
+    """The turn's user may use every listed skill."""
+    return skills
+
+
 @pytest.mark.asyncio
 async def test_build_system_prompt_includes_enabled_skills_catalog() -> None:
     skill = SimpleNamespace(
@@ -1107,7 +1112,9 @@ async def test_build_system_prompt_includes_enabled_skills_catalog() -> None:
     )
     list_visible = AsyncMock(return_value=[skill, disabled_skill])
     skills_service = SimpleNamespace(adapter=SimpleNamespace(list_visible=list_visible))
-    service = ChatService(adapter=SimpleNamespace(), skills_service=skills_service)
+    service = ChatService(
+        adapter=SimpleNamespace(), skills_service=skills_service, skill_access=_every_skill
+    )
     prompt = await service.build_system_prompt(
         agent="aia",
         explicit_system_prompt=None,
@@ -1138,6 +1145,7 @@ async def test_build_abi_injection_preamble_includes_skills_and_user_profile() -
         adapter=SimpleNamespace(),
         skills_service=skills_service,
         auth_adapter=auth_adapter,
+        skill_access=_every_skill,
     )
     preamble = await service.build_abi_injection_preamble(
         prior_messages=[],
@@ -1168,6 +1176,7 @@ async def test_build_abi_injection_preamble_keeps_skills_on_follow_up_turns() ->
         adapter=SimpleNamespace(),
         skills_service=skills_service,
         auth_adapter=auth_adapter,
+        skill_access=_every_skill,
     )
     preamble = await service.build_abi_injection_preamble(
         prior_messages=[SimpleNamespace(role="assistant", content="Hello")],

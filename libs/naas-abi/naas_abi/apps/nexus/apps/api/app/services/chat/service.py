@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, Protocol
@@ -510,10 +511,13 @@ class ChatService:
         adapter: ChatPersistencePort,
         auth_adapter: AuthPersistencePort | None = None,
         skills_service: SkillService | None = None,
+        skill_access: Callable[[str, str, list], Awaitable[list]] | None = None,
     ):
         self.adapter = adapter
         self.auth_adapter = auth_adapter
         self.skills_service = skills_service
+        # Which of the listed skills the turn's user may use (IAM by default).
+        self.skill_access = skill_access or self._usable_skills
 
     async def build_system_prompt(
         self,
@@ -639,12 +643,16 @@ class ChatService:
         if not self.skills_service or not user_id or not workspace_id:
             return block
         try:
-            # The turn was authorized (SendMessage); the catalog is the caller's own view.
+            # The turn was authorized (SendMessage); the catalog is the caller's own
+            # view, narrowed to what they may use here (the skills feature and
+            # ``UseSkill``), and to what the workspace has not turned off.
             skills = await self.skills_service.adapter.list_visible(workspace_id, user_id)
+            enabled = [s for s in skills if s.enabled and getattr(s, "enabled_here", True)]
+            if enabled:
+                enabled = await self.skill_access(user_id, workspace_id, enabled)
         except Exception:
             logger.warning("Failed to load skills catalog for system prompt", exc_info=True)
             return block
-        enabled = [s for s in skills if s.enabled]
         if not enabled:
             return block
         lines = [
@@ -653,6 +661,19 @@ class ChatService:
             for s in enabled
         ]
         return block + _SKILLS_CATALOG_HEADER + "\n".join(lines) + "\n"
+
+    @staticmethod
+    async def _usable_skills(user_id: str, workspace_id: str, skills: list) -> list:
+        """The skills the user may use in the workspace: none without the skills
+        feature there, then those ``UseSkill`` allows."""
+        from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
+
+        if not await AUTHZ.allowed("UseFeature", user=user_id, workspace=workspace_id, id="skills"):
+            return []
+        allowed = await AUTHZ.allowed_ids(
+            "UseSkill", user=user_id, workspace=workspace_id, ids=[s.id for s in skills]
+        )
+        return [s for s in skills if s.id in allowed]
 
     async def build_user_context_addendum(
         self,
