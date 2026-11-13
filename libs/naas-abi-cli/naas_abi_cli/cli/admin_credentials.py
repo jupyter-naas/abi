@@ -46,6 +46,13 @@ def _is_shipped_default(value: str | None) -> bool:
     return (value or "").strip().casefold() in _SHIPPED_DEFAULTS
 
 
+def _is_replaced_api_key(value: str | None) -> bool:
+    """A default, or a value the API refuses to start with (retired)."""
+    from naas_abi_core.apps.api.abi_api_key_auth import is_retired_abi_api_key
+
+    return _is_shipped_default(value) or is_retired_abi_api_key(value)
+
+
 def _read(env_path: Path) -> list[str]:
     return (
         env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
@@ -80,10 +87,11 @@ def _write(env_path: Path, lines: list[str]) -> None:
 
 
 def ensure_api_key(env_path: Path) -> str:
-    """Return ``ABI_API_KEY`` from ``.env``, generating it when missing or a default."""
+    """Return ``ABI_API_KEY`` from ``.env``, generating it when missing, a
+    default or a retired value."""
     lines = _read(env_path)
     key = _value(lines, API_KEY)
-    if key and not _is_shipped_default(key):
+    if key and not _is_replaced_api_key(key):
         return key
     key = secrets.token_urlsafe(32)
     _write(env_path, _set(lines, API_KEY, key))

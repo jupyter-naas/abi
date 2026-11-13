@@ -255,3 +255,75 @@ def test_app_html_access_keeps_the_routed_path_when_the_url_differs(
         assert client.get("/app-html/b/secret.html?token=link-for-a").status_code == 401
         assert client.get("/app-html/a/page.html?token=link-for-a").status_code == 200
     assert set(seen) == {"/app-html/b/secret.html", "/app-html/a/page.html"}
+
+
+@pytest.fixture()
+def retired_key(monkeypatch: pytest.MonkeyPatch) -> str:
+    """A key made retired for the test: only its hash is listed."""
+    import hashlib
+
+    from naas_abi_core.apps.api import abi_api_key_auth
+
+    value = "a-key-that-was-published-once"
+    digest = hashlib.sha256(value.encode()).hexdigest()
+    monkeypatch.setattr(
+        abi_api_key_auth,
+        "RETIRED_ABI_API_KEY_SHA256",
+        abi_api_key_auth.RETIRED_ABI_API_KEY_SHA256 | {digest},
+    )
+    return value
+
+
+def test_retired_api_keys_are_kept_as_hashes_only() -> None:
+    from naas_abi_core.apps.api.abi_api_key_auth import RETIRED_ABI_API_KEY_SHA256
+
+    assert RETIRED_ABI_API_KEY_SHA256
+    for digest in RETIRED_ABI_API_KEY_SHA256:
+        assert len(digest) == 64 and set(digest) <= set("0123456789abcdef")
+
+
+def test_api_key_keeps_retired_values_refused(
+    retired_key: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from naas_abi_core.apps.api.abi_api_key_auth import (
+        RetiredAbiApiKeyError,
+        is_retired_abi_api_key,
+        refuse_retired_abi_api_key,
+    )
+
+    assert is_retired_abi_api_key(retired_key)
+    assert is_retired_abi_api_key(f" {retired_key}\n")
+    assert not is_retired_abi_api_key("a-fresh-random-key")
+    assert not is_retired_abi_api_key(None)
+
+    monkeypatch.setenv("ABI_API_KEY", retired_key)
+    with pytest.raises(RetiredAbiApiKeyError) as raised:
+        refuse_retired_abi_api_key()
+    assert retired_key not in str(raised.value)
+    # Even if something serves anyway, the value opens nothing.
+    assert is_abi_api_token_valid(retired_key) is False
+    client = TestClient(_app_html_app())
+    assert client.get(f"/app-html/a/?token={retired_key}").status_code == 401
+
+    monkeypatch.setenv("ABI_API_KEY", "a-fresh-random-key")
+    refuse_retired_abi_api_key()
+    assert is_abi_api_token_valid("a-fresh-random-key") is True
+
+
+def test_api_keeps_from_starting_with_a_retired_key(
+    retired_key: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The API stops before the engine loads when its key is retired."""
+    from naas_abi_core.apps.api import api as api_module
+    from naas_abi_core.apps.api.abi_api_key_auth import RetiredAbiApiKeyError
+
+    loaded: list[bool] = []
+    monkeypatch.setattr(api_module, "_load_runtime_routes", lambda: loaded.append(True))
+    monkeypatch.setenv("ABI_API_KEY", retired_key)
+    with pytest.raises(RetiredAbiApiKeyError):
+        api_module.get_app()
+    assert loaded == []
+
+    monkeypatch.setenv("ABI_API_KEY", "a-fresh-random-key")
+    assert api_module.get_app() is api_module.app
+    assert loaded == [True]

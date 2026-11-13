@@ -481,8 +481,11 @@ def _load_runtime_routes():
 
 
 def get_app() -> FastAPI:
+    from naas_abi_core.apps.api.abi_api_key_auth import refuse_retired_abi_api_key
     from naas_abi_core.engine.call_context import as_service_account
 
+    # Before the engine loads: a retired key stops the start, it is not served.
+    refuse_retired_abi_api_key()
     try:
         # Still boot: agents resolve their models, modules seed data, and the
         # warmup thread starts here. The engine's own work, for no caller.
