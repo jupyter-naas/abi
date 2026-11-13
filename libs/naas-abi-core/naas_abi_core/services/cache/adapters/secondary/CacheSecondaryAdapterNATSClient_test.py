@@ -24,6 +24,7 @@ from naas_abi_core.services.cache.adapters.secondary.CacheSecondaryAdapterNATSCl
     _raise_for_error,
 )
 from naas_abi_core.services.cache.CachePort import (
+    STORED_TYPES,
     CachedData,
     CacheExpiredError,
     CacheNotFoundError,
@@ -319,7 +320,7 @@ class TestCacheSecondaryAdapterNATSClient:
         with pytest.raises(CacheNotFoundError):
             client.delete("missing-delete")
 
-    @pytest.mark.parametrize("data_type", list(DataType))
+    @pytest.mark.parametrize("data_type", sorted(STORED_TYPES))
     def test_data_type_round_trips_for_every_value(self, client, data_type):
         key = f"dt-{data_type.value}"
         client.set(key, CachedData(key=key, data="payload", data_type=data_type))
@@ -328,6 +329,14 @@ class TestCacheSecondaryAdapterNATSClient:
 
         assert result.data_type == data_type
         assert result.data == "payload"
+
+    def test_a_remote_cache_keeps_its_entries_text_json_or_binary(self, client):
+        legacy = CachedData(key="p", data="gASVAAAA", data_type=DataType.PICKLE)
+
+        with pytest.raises(ValueError):
+            client.set("p", legacy)
+        with pytest.raises(ValueError):
+            client.set_if_absent("p", legacy)
 
 
 @pytest.mark.integration

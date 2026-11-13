@@ -10,7 +10,7 @@ from naas_abi_core import logger
 from naas_abi_core.integration import Integration, IntegrationConfiguration
 from naas_abi_core.integration.integration import IntegrationConnectionError
 from naas_abi_core.services.cache.CacheFactory import CacheFactory
-from naas_abi_core.services.cache.CachePort import DataType
+from naas_abi_core.services.cache.CachePort import CacheNotFoundError, DataType
 from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_marketplace.applications.pubmed.ontologies.PubMed import (
     Journal,
@@ -269,9 +269,9 @@ class PubMedIntegration(Integration):
         Retrieve PubMedPaperSummary objects for a list of PubMed IDs, using a caching mechanism.
 
         This method supports batch retrieval of summaries for multiple PubMed IDs at once.
-        For each ID, it first checks the cache for an existing summary. If a summary is not found
-        in the cache, it fetches the summary from the PubMed API, stores it in the cache, and then
-        returns all summaries in the order of the input ID list.
+        The cache keeps each paper's ESummary document as JSON. IDs without a cached
+        document are fetched from the PubMed API in chunks and cached; every summary is
+        then built from its document, in the order of the input ID list.
 
         Args:
             id_list (List[str]): List of PubMed IDs to retrieve summaries for.
@@ -281,18 +281,20 @@ class PubMedIntegration(Integration):
         """
         if not id_list:
             return []
-        new_ids = [
-            _id for _id in id_list if not cache.exists(f"pubmed_paper_summary_{_id}")
-        ]
+        docs: dict[str, dict] = {}
+        for _id in id_list:
+            try:
+                doc = cache.get(f"pubmed_esummary_{_id}", data_type=DataType.JSON)
+            except CacheNotFoundError:
+                continue
+            if isinstance(doc, dict):
+                docs[_id] = doc
+        new_ids = [_id for _id in id_list if _id not in docs]
 
         # Process new IDs in chunks of 200
         chunk_size = 200
-        all_summaries: list[PubMedPaperSummary] = []
-
         for i in range(0, len(new_ids), chunk_size):
             chunk_ids = new_ids[i : i + chunk_size]
-
-            # Grabbing the new summaries for this chunk.
             summary_data = self._make_request(
                 "/esummary.fcgi",
                 {},
@@ -303,37 +305,15 @@ class PubMedIntegration(Integration):
                     "retmode": "json",
                 },
             )
-
             result = summary_data.get("result", {})
-
-            # Computing new summaries for this chunk.
-            chunk_summaries: list[PubMedPaperSummary] = []
             for pmid in chunk_ids:
                 doc = result.get(pmid)
-                if not doc:
+                if not isinstance(doc, dict) or not doc:
                     continue
+                docs[pmid] = doc
+                cache.set_json(f"pubmed_esummary_{pmid}", doc)
 
-                chunk_summaries.append(self._build_summary(pmid, doc))
-
-            # Caching the new summaries for this chunk.
-            for _id in chunk_ids:
-                try:
-                    summary_index = chunk_ids.index(_id)
-                    if summary_index < len(chunk_summaries):
-                        cache.set_pickle(
-                            f"pubmed_paper_summary_{_id}",
-                            chunk_summaries[summary_index],
-                        )
-                except ValueError:
-                    # ID not found in chunk_summaries, skip caching
-                    continue
-
-            all_summaries.extend(chunk_summaries)
-
-        # Grabbing all summaries to respect the original order.
-        summaries = [cache.get(f"pubmed_paper_summary_{_id}") for _id in id_list]
-
-        return summaries
+        return [self._build_summary(_id, docs[_id]) for _id in id_list if _id in docs]
 
     def _date_to_str(self, d: date) -> str:
         """Convert a date to E-utilities accepted string (YYYY/MM/DD)."""
@@ -369,7 +349,7 @@ class PubMedIntegration(Integration):
         lambda query, mindate, maxdate, sort, page_size, max_records_cap: hashlib.sha1(
             f"pubmed_ids_{query}_{mindate}_{maxdate}_{sort}_{page_size}_{max_records_cap}".encode()
         ).hexdigest(),
-        cache_type=DataType.PICKLE,
+        cache_type=DataType.JSON,
     )
     def _fetch_ids_for_range(
         self,

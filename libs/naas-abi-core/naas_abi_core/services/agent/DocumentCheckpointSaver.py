@@ -54,6 +54,7 @@ from naas_abi_sdk.langgraph_documents import (
     Put,
     Retained,
     RetentionReport,
+    checkpoint_serde,
     created_before,
     kept_checkpoints,
     next_version,
@@ -91,7 +92,8 @@ class DocumentCheckpointSaver(BaseCheckpointSaver):
         serde: SerializerProtocol | None = None,
         legacy_reads: bool = True,
     ) -> None:
-        super().__init__(serde=serde)
+        # Stored values decode as data unless the caller brings its own serde.
+        super().__init__(serde=serde or checkpoint_serde())
         self.schema = CheckpointDocuments(agent_id, self.serde)
         self.documents = documents
         self.agent_id = agent_id

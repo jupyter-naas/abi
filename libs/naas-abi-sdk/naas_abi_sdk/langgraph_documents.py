@@ -42,13 +42,17 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
+import importlib
 import json
+import sys
 import threading
 from collections import OrderedDict
 from collections.abc import Generator, Iterable, Mapping, Sequence
 from datetime import datetime, timedelta, timezone
+from enum import Enum
 from typing import Any, Literal, NamedTuple
 
+import ormsgpack
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
     Checkpoint,
@@ -58,6 +62,7 @@ from langgraph.checkpoint.base import (
     get_checkpoint_metadata,
 )
 from langgraph.checkpoint.serde.base import SerializerProtocol
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 SCHEMA_VERSION = 2
 CHECKPOINTS = "langgraph_checkpoints_v2"
@@ -186,6 +191,179 @@ def _redact(value: Any, depth: int) -> Any:
                 changes[name] = new
         return value.model_copy(update=changes) if changes else value
     return value
+
+
+# --- decoding ---------------------------------------------------------------------------
+
+# Values a checkpoint may rebuild from the standard library (and pydantic's
+# redacted secrets), by exact symbol.
+_STDLIB_VALUES = frozenset(
+    {
+        ("builtins", "set"),
+        ("builtins", "frozenset"),
+        ("collections", "deque"),
+        ("datetime", "date"),
+        ("datetime", "datetime"),
+        ("datetime", "time"),
+        ("datetime", "timedelta"),
+        ("datetime", "timezone"),
+        ("decimal", "Decimal"),
+        ("ipaddress", "IPv4Address"),
+        ("ipaddress", "IPv4Interface"),
+        ("ipaddress", "IPv4Network"),
+        ("ipaddress", "IPv6Address"),
+        ("ipaddress", "IPv6Interface"),
+        ("ipaddress", "IPv6Network"),
+        ("pathlib", "Path"),
+        ("pathlib", "PosixPath"),
+        ("pathlib", "PurePath"),
+        ("pathlib", "PurePosixPath"),
+        ("pathlib", "PureWindowsPath"),
+        ("pathlib", "WindowsPath"),
+        ("pydantic.types", "SecretBytes"),
+        ("pydantic.types", "SecretStr"),
+        ("pydantic.v1.types", "SecretBytes"),
+        ("pydantic.v1.types", "SecretStr"),
+        ("uuid", "UUID"),
+        ("zoneinfo", "ZoneInfo"),
+    }
+)
+# The one method a stored value may name: rebuilding a date or time from text.
+_STDLIB_METHODS = frozenset(
+    {
+        ("datetime", "date", "fromisoformat"),
+        ("datetime", "datetime", "fromisoformat"),
+        ("datetime", "time", "fromisoformat"),
+    }
+)
+# Packages whose value classes (pydantic models, dataclasses, enums, named
+# tuples) a checkpoint may rebuild, once the process has imported them.
+_VALUE_PACKAGES = ("langchain_core", "langgraph", "naas_abi_core", "naas_abi_sdk", "naas_abi")
+
+_EXT_CONSTRUCTOR_SINGLE_ARG = 0
+_EXT_CONSTRUCTOR_POS_ARGS = 1
+_EXT_CONSTRUCTOR_KW_ARGS = 2
+_EXT_METHOD_SINGLE_ARG = 3
+_EXT_PYDANTIC_V1 = 4
+_EXT_PYDANTIC_V2 = 5
+_EXT_NUMPY_ARRAY = 6
+
+
+def _is_value_class(obj: Any) -> bool:
+    if not isinstance(obj, type) or issubclass(obj, BaseException):
+        return False
+    if dataclasses.is_dataclass(obj) or issubclass(obj, Enum):
+        return True
+    if issubclass(obj, tuple) and hasattr(obj, "_fields"):
+        return True
+    return callable(getattr(obj, "model_validate", None)) or callable(
+        getattr(obj, "parse_obj", None)
+    )
+
+
+def _value_class(module: Any, name: Any, packages: tuple[str, ...]) -> Any | None:
+    """The class a stored value names, if a checkpoint may rebuild it.
+
+    Standard library values are named exactly. Other classes must be value
+    classes of an allowed package that this process has already imported:
+    nothing stored ever imports a module or calls a function.
+    """
+    if not isinstance(module, str) or not isinstance(name, str):
+        return None
+    if (module, name) in _STDLIB_VALUES:
+        return getattr(importlib.import_module(module), name)
+    if not any(module == p or module.startswith(p + ".") for p in packages):
+        return None
+    loaded = sys.modules.get(module)
+    obj = getattr(loaded, name, None) if loaded is not None else None
+    return obj if _is_value_class(obj) else None
+
+
+class CheckpointSerializer(JsonPlusSerializer):
+    """LangGraph's serializer, decoding stored values as data.
+
+    Writes exactly as ``JsonPlusSerializer``. Reads rebuild only value classes
+    (``_value_class``): a stored value that names anything else comes back as
+    its fields (a model or dataclass) or as ``None``, and is never imported or
+    called. ``json`` values are plain JSON and pickles are refused.
+    ``packages`` adds packages whose value classes may be rebuilt.
+    """
+
+    def __init__(self, *, packages: Iterable[str] = ()) -> None:
+        self._packages = (*_VALUE_PACKAGES, *packages)
+        super().__init__(__unpack_ext_hook__=self._ext_hook)
+
+    def loads_typed(self, data: tuple[str, bytes]) -> Any:
+        kind, payload = data
+        if kind == "json":
+            return json.loads(payload)
+        if kind not in ("null", "bytes", "bytearray", "msgpack"):
+            raise NotImplementedError(f"Unknown serialization type: {kind}")
+        return super().loads_typed(data)
+
+    def _unpack(self, data: bytes) -> Any:
+        return ormsgpack.unpackb(
+            data, ext_hook=self._ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+        )
+
+    def _ext_hook(self, code: int, data: bytes) -> Any:
+        try:
+            fields = self._unpack(data)
+        except Exception:  # noqa: BLE001 - an unreadable value reads as nothing
+            return None
+        try:
+            return self._rebuild(code, fields)
+        except Exception:  # noqa: BLE001
+            # As LangGraph does: a model it cannot rebuild reads as its fields.
+            if code in (_EXT_PYDANTIC_V1, _EXT_PYDANTIC_V2, _EXT_CONSTRUCTOR_KW_ARGS):
+                return _fields_of(fields)
+            return None
+
+    def _rebuild(self, code: int, fields: Any) -> Any:
+        if code == _EXT_NUMPY_ARRAY:
+            numpy = sys.modules.get("numpy")
+            dtype_str, shape, order, buf = fields
+            dtype = numpy.dtype(dtype_str) if numpy is not None else None
+            if dtype is None or dtype.hasobject:
+                return None
+            return numpy.frombuffer(buf, dtype=dtype).reshape(shape, order=order)
+        if code == _EXT_METHOD_SINGLE_ARG:
+            module, name, arg, method = fields
+            if (module, name, method) not in _STDLIB_METHODS:
+                return None
+            cls = getattr(importlib.import_module(module), name)
+            return getattr(cls, method)(arg)
+        cls = _value_class(fields[0], fields[1], self._packages)
+        if cls is None:
+            if code in (_EXT_PYDANTIC_V1, _EXT_PYDANTIC_V2, _EXT_CONSTRUCTOR_KW_ARGS):
+                return _fields_of(fields)
+            return None
+        if code == _EXT_CONSTRUCTOR_SINGLE_ARG:
+            return cls(fields[2])
+        if code == _EXT_CONSTRUCTOR_POS_ARGS:
+            return cls(*fields[2])
+        if code == _EXT_CONSTRUCTOR_KW_ARGS:
+            return cls(**fields[2])
+        if code == _EXT_PYDANTIC_V2:
+            try:
+                return cls(**fields[2])
+            except Exception:  # noqa: BLE001
+                return cls.model_construct(**fields[2])
+        if code == _EXT_PYDANTIC_V1:
+            try:
+                return cls(**fields[2])
+            except Exception:  # noqa: BLE001
+                return cls.construct(**fields[2])
+        return None
+
+
+def _fields_of(fields: Any) -> Any:
+    return fields[2] if isinstance(fields, (list, tuple)) and len(fields) > 2 else None
+
+
+def checkpoint_serde() -> CheckpointSerializer:
+    """The serializer both document savers use unless given another."""
+    return CheckpointSerializer()
 
 
 class RedactingSerializer:

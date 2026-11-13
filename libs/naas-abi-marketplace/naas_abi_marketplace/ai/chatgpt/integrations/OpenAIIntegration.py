@@ -53,7 +53,7 @@ class OpenAIIntegration(Integration):
         self.__storage_utils = StorageUtils(self.__configuration.object_storage)
 
     @cache(
-        lambda self: "list_models", cache_type=DataType.PICKLE, ttl=timedelta(days=1)
+        lambda self: "list_models", cache_type=DataType.JSON, ttl=timedelta(days=1)
     )
     def list_models(self) -> dict:
         """List available models."""
@@ -65,7 +65,7 @@ class OpenAIIntegration(Integration):
 
     @cache(
         lambda self, model_id: f"retrieve_model_{model_id}",
-        cache_type=DataType.PICKLE,
+        cache_type=DataType.JSON,
         ttl=timedelta(days=1),
     )
     def retrieve_model(self, model_id: str) -> dict:
@@ -86,7 +86,7 @@ class OpenAIIntegration(Integration):
         messages,
         model,
         temperature: f"{prompt}_{system_prompt}_{messages}_{model}_{temperature}",
-        cache_type=DataType.PICKLE,
+        cache_type=DataType.JSON,
         ttl=timedelta(days=1),
     )
     def create_chat_completion(

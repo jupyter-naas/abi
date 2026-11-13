@@ -192,7 +192,7 @@ class TestListEvents:
 
 
 class TestLegacyUnion:
-    def test_history_in_the_pickle_store_stays_visible(self, events):
+    def test_history_in_the_per_event_store_stays_visible(self, events):
         storage = FakeObjectStorageAdapter(legacy=[event("old-1"), event("old-2")])
         adapter = AnalyticsSecondaryAdapterEventLog(events=events, object_storage_adapter=storage)
         adapter.save_event(event("new-1"))

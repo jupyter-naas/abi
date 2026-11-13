@@ -7,7 +7,7 @@ A PubMed (NCBI E-utilities) integration that:
 - Downloads PubMed Central PDFs by PMCID.
 
 Includes caching for:
-- Per-PMID summaries (`pubmed_paper_summary_{pmid}`)
+- Per-PMID ESummary documents, as JSON (`pubmed_esummary_{pmid}`)
 - ESearch ID lists for date windows (decorated cache keyed by SHA1)
 
 All outbound E-utilities calls are rate-limited.
@@ -47,8 +47,8 @@ Download a PubMed Central PDF by PMCID.
 - Rate limiting: `ratelimit.limits` set to **3 calls per 1 second**
 - Caching:
   - Cache storage: `CacheFactory.CacheFS_find_storage(subpath="pubmed")`
-  - Per-PMID summary cache key: `pubmed_paper_summary_{pmid}`
-  - ID list caching for `_fetch_ids_for_range` via `@cache(..., cache_type=DataType.PICKLE)` (SHA1 of inputs)
+  - Per-PMID ESummary cache key: `pubmed_esummary_{pmid}` (JSON; summaries are built from it)
+  - ID list caching for `_fetch_ids_for_range` via `@cache(..., cache_type=DataType.JSON)` (SHA1 of inputs)
 - Ontology models:
   - `PubMedPaperSummary`, `Journal`, `JournalIssue` from `naas_abi_marketplace.applications.pubmed.ontologies.PubMed`
 - PDF download helper:

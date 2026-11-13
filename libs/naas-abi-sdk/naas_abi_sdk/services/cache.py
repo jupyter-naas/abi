@@ -70,9 +70,10 @@ class CacheService:
                 return json.loads(cached.data)
             if cached.data_type == pb.DATA_TYPE_BINARY:
                 return base64.b64decode(cached.data)
-            raise NotImplementedError(
-                "Remote pickle cache deserialization is not supported"
-            )
+            # Entries are text, json or binary: anything else is no entry.
+            if self._selector is None:
+                continue
+            raise CacheNotFoundError("CACHE_NOT_FOUND", key)
         raise CacheNotFoundError("CACHE_NOT_FOUND", key)
 
     async def exists(self, key: str) -> bool:
@@ -124,9 +125,6 @@ class CacheService:
         return await self._set(
             key, base64.b64encode(value).decode(), pb.DATA_TYPE_BINARY, True
         )
-
-    async def set_pickle(self, key: str, value: Any) -> None:
-        raise NotImplementedError("Remote pickle cache serialization is not supported")
 
     def __call__(self, *args, **kwargs):
         raise NotImplementedError(

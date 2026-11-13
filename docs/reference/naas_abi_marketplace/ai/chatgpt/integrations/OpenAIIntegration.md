@@ -66,7 +66,7 @@ Creates a new `OpenAIIntegration` and returns LangChain tools:
   - `ObjectStorageService`, `StorageUtils` (JSON persistence)
 - Cache:
   - Uses `CacheFactory.CacheFS_find_storage(subpath="openai")`
-  - All cached methods use `DataType.PICKLE` and `ttl=timedelta(days=1)`
+  - All cached methods use `DataType.JSON` and `ttl=timedelta(days=1)`
 
 ## Usage
 

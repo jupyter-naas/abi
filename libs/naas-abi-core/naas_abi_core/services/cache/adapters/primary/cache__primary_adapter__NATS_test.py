@@ -376,11 +376,10 @@ _EXPECTED_PB_DATA_TYPE = {
     DataType.TEXT: cache_pb2.DATA_TYPE_TEXT,
     DataType.JSON: cache_pb2.DATA_TYPE_JSON,
     DataType.BINARY: cache_pb2.DATA_TYPE_BINARY,
-    DataType.PICKLE: cache_pb2.DATA_TYPE_PICKLE,
 }
 
 
-@pytest.mark.parametrize("data_type", list(DataType))
+@pytest.mark.parametrize("data_type", sorted(_EXPECTED_PB_DATA_TYPE))
 def test_data_type_round_trips_through_pb_for_every_value(data_type):
     stub = _StubAdapter()
     stub.entries["k"] = CachedData(key="k", data="payload", data_type=data_type)
@@ -395,6 +394,54 @@ def test_data_type_round_trips_through_pb_for_every_value(data_type):
     response.ParseFromString(request.responses[0])
     assert not response.HasField("error")
     assert response.value.data_type == _EXPECTED_PB_DATA_TYPE[data_type]
+
+
+@pytest.mark.parametrize("pb_type", [cache_pb2.DATA_TYPE_PICKLE, 99])
+@pytest.mark.parametrize("endpoint", ["set", "set_if_absent"])
+def test_cache_set_over_nats_keeps_to_text_json_and_binary(endpoint, pb_type):
+    stub = _StubAdapter()
+    adapter = CachePrimaryAdapterNATS(stub, SECRET)
+    request_cls, response_cls, handle = {
+        "set": (cache_pb2.SetRequest, cache_pb2.SetResponse, adapter._handle_set),
+        "set_if_absent": (
+            cache_pb2.SetIfAbsentRequest,
+            cache_pb2.SetIfAbsentResponse,
+            adapter._handle_set_if_absent,
+        ),
+    }[endpoint]
+    request = _FakeRequest(
+        data=request_cls(
+            key="k",
+            value=cache_pb2.CachedData(key="k", data="gASVAAAA", data_type=pb_type),
+        ).SerializeToString(),
+        headers={AUTH_HEADER: _valid_token()},
+        subject=f"abi.svc.cache.v1.{endpoint}",
+    )
+
+    asyncio.run(handle(request))
+
+    response = response_cls()
+    response.ParseFromString(request.responses[0])
+    assert response.error.code == "INVALID_ARGUMENT"
+    assert stub.entries == {}
+
+
+def test_cache_get_over_nats_keeps_a_stored_pickle_unserved():
+    stub = _StubAdapter()
+    stub.entries["k"] = CachedData(
+        key="k", data="gASVAAAA", data_type=DataType.PICKLE
+    )
+    adapter = CachePrimaryAdapterNATS(stub, SECRET)
+    request = _FakeRequest(
+        data=_get_request("k"), headers={AUTH_HEADER: _valid_token()}
+    )
+
+    asyncio.run(adapter._handle_get(request))
+
+    response = cache_pb2.GetResponse()
+    response.ParseFromString(request.responses[0])
+    assert response.error.code == "CACHE_NOT_FOUND"
+    assert not response.HasField("value")
 
 
 def test_owner_emits_mutation_events_once_and_only_when_written():

@@ -232,7 +232,7 @@ You: code a project
 
     @cache(
         lambda self, texts: f"embed_documents_{self._embedding_cache_namespace()}_{texts}",
-        cache_type=DataType.PICKLE,
+        cache_type=DataType.JSON,
     )
     def _embed_documents(self, texts: list[str]) -> list[list[float]]:
         return self._embedding_model.embed_documents(texts)

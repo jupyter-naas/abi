@@ -46,7 +46,6 @@ Multi-tier orchestrator over an ordered list of `(tier_name, ICacheAdapter)`.
   - `set_json_if_absent(key: str, value: Any) -> bool`
   - `set_binary(key: str, value: bytes) -> None`
   - `set_binary_if_absent(key: str, value: bytes) -> bool`
-  - `set_pickle(key: str, value: Any) -> None`
 
 - Engine wiring:
   - `set_services(services: IEngine.Services) -> None`
@@ -64,8 +63,8 @@ Tier-scoped wrapper over a single `ICacheAdapter`. Typically obtained from `Cach
   - Cached value is used only if `cached_data.data_type == cache_type`; otherwise treated as a miss.
 
 - Reads:
-  - `get(key: str, ttl: datetime.timedelta | None = None) -> Any`
-    - Deserializes by stored `DataType` (`TEXT`, `JSON`, `BINARY`, `PICKLE`).
+  - `get(key: str, ttl: datetime.timedelta | None = None, data_type: DataType | None = None) -> Any`
+    - Deserializes by stored `DataType` (`TEXT`, `JSON`, `BINARY`). With `data_type`, an entry of another type is a miss; a legacy `PICKLE` entry is always a miss.
     - If `ttl` provided, uses `CachedData.created_at` (ISO string) to enforce expiration; naive timestamps are treated as UTC.
   - `exists(key: str) -> bool`
   - `list_keys(prefix: str = "", *, limit: int = 100, after: str | None = None) -> CacheKeyPage`
@@ -79,7 +78,7 @@ Tier-scoped wrapper over a single `ICacheAdapter`. Typically obtained from `Cach
   - `set_json_if_absent(key: str, value: Any) -> bool`
   - `set_binary(key: str, value: bytes) -> None` (asserts `bytes`, stored as base64 string)
   - `set_binary_if_absent(key: str, value: bytes) -> bool`
-  - `set_pickle(key: str, value: Any) -> None` (stored as base64(pickle))
+  - `put_entry` / `put_entry_if_absent` refuse any type but `TEXT`, `JSON`, `BINARY` (`ValueError`).
 
 ## Configuration/Dependencies
 - Requires one or more `ICacheAdapter` implementations (from `naas_abi_core.services.cache.CachePort`).
@@ -128,4 +127,4 @@ def user_meta(user_id: str):
 - **No automatic promotion**: `CacheService.get()` returning from cold does not populate hot.
 - Top-level `set_*` writes go to **cold only**; write to hot via `cache.hot.set_*`.
 - Tier failures during `get/exists/list_keys/get_entry` are **logged and treated as fall-through/miss**, which can mask transient outages.
-- Pickle deserialization (`pickle.loads`) is used for `DataType.PICKLE`; do not use with untrusted data.
+- Entries are data: `PICKLE` entries written by older releases are listed and deleted, never decoded, written or served over NATS.

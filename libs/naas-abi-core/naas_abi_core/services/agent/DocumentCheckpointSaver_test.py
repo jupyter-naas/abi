@@ -241,6 +241,41 @@ def test_engine_scope_is_one_shared_namespace_and_agent_id(root):
     DocumentCheckpointSaver.for_engine(root)  # setup is idempotent
 
 
+NAMED_CALLS: list[str] = []
+
+
+def _named_function(value: str) -> str:
+    NAMED_CALLS.append(value)
+    return value
+
+
+def test_engine_memory_keeps_stored_values_as_data(root):
+    import ormsgpack
+    from langgraph.checkpoint.base import empty_checkpoint
+    from langgraph.checkpoint.serde.jsonplus import EXT_CONSTRUCTOR_SINGLE_ARG
+
+    NAMED_CALLS.clear()
+    saver = DocumentCheckpointSaver.for_engine(root)
+    config = {"configurable": {"thread_id": "t-1", "checkpoint_ns": ""}}
+    saver.put(config, empty_checkpoint(), {"source": "input", "step": 0}, {})
+    stored = ormsgpack.packb(
+        ormsgpack.Ext(
+            EXT_CONSTRUCTOR_SINGLE_ARG,
+            ormsgpack.packb([__name__, "_named_function", "metadata"]),
+        )
+    )
+    memory = root.for_namespace(ENGINE_MEMORY_NAMESPACE)
+    for doc in memory.iterate(CHECKPOINTS):
+        data = dict(doc.data)
+        data["metadata"] = {**data["metadata"], "kind": "msgpack", "payload": stored}
+        memory.put(CHECKPOINTS, doc.id, data)
+
+    loaded = saver.get_tuple(config)
+
+    assert loaded is not None
+    assert NAMED_CALLS == []
+
+
 def test_threads_migrated_from_postgres_keep_string_versions(root):
     saver = engine_saver(root)
     assert saver.get_next_version(None, None) == 1

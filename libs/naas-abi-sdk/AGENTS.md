@@ -22,6 +22,8 @@ increments: content-addressed blobs, list elements and chunks, parts above
 I/O. Stored documents depend on it, so change it only with a schema version.
 Keep it core-free and importable on Python 3.10; tests/test_langgraph_documents.py
 pins the ids. Never deserialize in the pure read helpers (the viewer relies on it).
+Values decode through `CheckpointSerializer` (the savers' default): it rebuilds
+value classes only and never imports or calls what a stored value names.
 It also holds retention (`kept_checkpoints`, `RetentionReport`; the savers'
 `prune`/`aprune` do the I/O) and secret redaction (`RedactingSerializer`: a
 `SecretStr`/`SecretBytes` is stored as one holding `REDACTED_SECRET`, never in

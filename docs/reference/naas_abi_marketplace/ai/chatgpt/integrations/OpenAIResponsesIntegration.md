@@ -63,7 +63,7 @@ Returns LangChain `StructuredTool` wrappers around the integration:
 - Tool schemas: `pydantic`, `langchain_core.tools.StructuredTool` (only for `as_tools`)
 - Naas ABI: `Integration`, `IntegrationConfiguration`, `StorageUtils`, `ABIModule`
 - Caching:
-  - `_make_request(...)` is filesystem-cached (pickle) for **1 day** via `CacheFactory.CacheFS_find_storage(subpath="openai_responses")`
+  - `_make_request(...)` is filesystem-cached (JSON) for **1 day** via `CacheFactory.CacheFS_find_storage(subpath="openai_responses")`
   - cache key includes `(method, endpoint, params, json)` stringified
 
 ## Usage

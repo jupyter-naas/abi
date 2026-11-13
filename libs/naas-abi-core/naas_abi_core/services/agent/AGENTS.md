@@ -149,6 +149,13 @@ in order: the engine's agent checkpointer when an engine is loaded, else a share
   across steps keeps its name and resolves it from the secret service when it
   uses it. Documents written before this keep their values until pruned or
   deleted.
+- Stored values decode as data: both savers default to
+  `langgraph_documents.CheckpointSerializer`, which rebuilds only value classes
+  (messages, standard date, number and collection types, and the pydantic models,
+  dataclasses, enums and named tuples of `langchain_core`, `langgraph` and
+  `naas_abi*` modules already imported). A stored value naming anything else
+  reads as its fields or `None`, and is never imported or called. A graph whose
+  state holds its own classes passes `serde=CheckpointSerializer(packages=(...))`.
 - Migration into schema 2: `abi agent migrate-memory` (dry run; `--apply` to
   write; `--thread` to select; `--from postgres` with `$POSTGRES_URL` or
   `--source-url`, or `--from documents-v1`; `--namespace`/`--agent-id` for

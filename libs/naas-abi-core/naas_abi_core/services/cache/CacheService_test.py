@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import base64
 import datetime
 import pickle
 import time
@@ -602,8 +603,7 @@ def test_get_entry_returns_the_stored_entry_and_its_tier_without_deserializing()
             return (_never_called, ())
 
     hot, cold, svc = _hot_cold()
-    cold.set("p", CachedData(key="p", data="", data_type=DataType.TEXT))
-    svc.cold.set_pickle("p", Explodes())
+    cold.set("p", _legacy_pickle("p", Explodes()))
     hot.set("h", _text("h"))
     cold.set("h", CachedData(key="h", data="stale", data_type=DataType.TEXT))
 
@@ -632,13 +632,74 @@ def test_named_tiers():
         svc.tier("lukewarm")
 
 
-def test_pickle_payload_is_valid_base64_of_a_pickle():
-    # Guards the assumption above: set_pickle stores base64 text, decoded only by get().
-    _, _, svc = _hot_cold()
-    svc.cold.set_pickle("n", 42)
-    import base64
+def _legacy_pickle(key: str, value: object) -> CachedData:
+    """An entry as an older release stored it with ``set_pickle``."""
+    return CachedData(
+        key=key,
+        data=base64.b64encode(pickle.dumps(value)).decode(),
+        data_type=DataType.PICKLE,
+    )
 
-    assert pickle.loads(base64.b64decode(svc.get_entry("n").cached.data)) == 42
+
+class _Runs:
+    """Unpickling it records that it ran."""
+
+    ran: list[str] = []
+
+    def __reduce__(self):
+        return (_Runs.ran.append, ("ran",))
+
+
+def test_cache_get_keeps_a_stored_pickle_a_miss():
+    hot, cold, svc = _hot_cold()
+    _Runs.ran.clear()
+    hot.set("p", _legacy_pickle("p", _Runs()))
+    cold.set("p", _legacy_pickle("p", _Runs()))
+
+    with pytest.raises(CacheNotFoundError):
+        svc.get("p")
+    for tier in (svc.hot, svc.cold):
+        with pytest.raises(CacheNotFoundError):
+            tier.get("p")
+    assert _Runs.ran == []
+
+
+def test_cache_decorator_keeps_a_stored_pickle_a_miss_and_recomputes():
+    _, cold, svc = _hot_cold()
+    _Runs.ran.clear()
+    cold.set("models", _legacy_pickle("models", _Runs()))
+
+    @svc(lambda: "models", cache_type=DataType.JSON)
+    def models():
+        return {"models": ["m"]}
+
+    assert models() == {"models": ["m"]}
+    assert _Runs.ran == []
+    assert cold.get("models").data_type == DataType.JSON
+
+
+def test_cache_get_keeps_to_the_type_the_reader_names():
+    _, _, svc = _hot_cold()
+    svc.set_text("k", "[1, 2]")
+
+    assert svc.get("k", data_type=DataType.TEXT) == "[1, 2]"
+    with pytest.raises(CacheNotFoundError):
+        svc.get("k", data_type=DataType.JSON)
+    with pytest.raises(CacheNotFoundError):
+        svc.cold.get("k", data_type=DataType.BINARY)
+
+
+def test_cache_keeps_its_entries_text_json_or_binary():
+    _, _, svc = _hot_cold()
+
+    assert not hasattr(svc, "set_pickle")
+    assert not hasattr(svc.cold, "set_pickle")
+    with pytest.raises(ValueError):
+        svc.cold.put_entry("k", _legacy_pickle("k", 1))
+    with pytest.raises(ValueError):
+        svc.cold.put_entry_if_absent("k", _legacy_pickle("k", 1))
+    with pytest.raises(ValueError):
+        svc(lambda: "k", cache_type=DataType.PICKLE)
 
 
 def test_tiers_sharing_a_name_keep_a_view_each_by_position():

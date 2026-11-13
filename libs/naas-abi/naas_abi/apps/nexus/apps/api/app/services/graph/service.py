@@ -1353,7 +1353,7 @@ def _build_network_from_subject_graph(
 #     lambda triple_store, workspace_id, graph_names, graph_filters: (
 #         f"list_individuals_{str(triple_store)}_{workspace_id}_{str(graph_names)}_{str(graph_filters)}"
 #     ),
-#     DataType.PICKLE,
+#     DataType.JSON,
 #     ttl=timedelta(days=1),
 # )
 def _list_individuals(

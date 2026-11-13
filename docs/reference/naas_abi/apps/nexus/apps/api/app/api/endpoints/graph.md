@@ -58,7 +58,7 @@ FastAPI endpoints for managing and querying named RDF graphs backed by `TripleSt
   - Converts text to a URL-safe slug.
 
 - `list_individuals(...) -> GraphData`
-  - Cached (FS cache, pickle, TTL 1 day).
+  - Cached (FS cache, JSON, TTL 1 day).
   - Inputs:
     - `triple_store`, `workspace_id`, `graph_names`, `graph_filters`, `limit=500`, `depth=2`
   - Extracts nodes (named individuals) and edges (IRI objects excluding `rdf:type`) with deterministic edge IDs (SHA-256 of `s|p|o`).
@@ -81,7 +81,7 @@ FastAPI endpoints for managing and querying named RDF graphs backed by `TripleSt
   - Nexus graph is hard-coded: `NEXUS_GRAPH_URI = "http://ontology.naas.ai/graph/nexus"`
 - **Caching**:
   - Uses `CacheFactory.CacheFS_find_storage(subpath="nexus/graph")`
-  - `list_individuals` cached as `DataType.PICKLE` with TTL = 1 day
+  - `list_individuals` cached as `DataType.JSON` with TTL = 1 day
 
 ## Usage
 

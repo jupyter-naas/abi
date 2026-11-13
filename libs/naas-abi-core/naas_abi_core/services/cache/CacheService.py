@@ -28,7 +28,6 @@ import base64
 import datetime
 import inspect
 import json
-import pickle
 from collections import OrderedDict
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
@@ -44,6 +43,7 @@ from naas_abi_core.services.cache.CachePort import (
     ICacheAdapter,
     ICacheService,
     check_page_limit,
+    check_stored_type,
 )
 from naas_abi_core.services.cache.iam_catalog import CATALOG, KEY, SERVICE_TYPE
 from naas_abi_core.services.cache.ontologies.modules.CacheEventOntology import (
@@ -101,7 +101,6 @@ class SingleTierCacheService:
             DataType.TEXT: self._get_text,
             DataType.JSON: self._get_json,
             DataType.BINARY: self._get_binary,
-            DataType.PICKLE: self._get_pickle,
         }
 
     def _require(self, action: str, key: str) -> None:
@@ -174,6 +173,7 @@ class SingleTierCacheService:
             @cache.hot(lambda x: f"meta:{x}", cache_type=DataType.JSON)
             def fast_lookup(x): ...
         """
+        check_stored_type(cache_type)
         logger.debug(
             "Cache decorator: key_builder=%s auto_cache=%s cache_type=%s ttl=%s",
             key_builder,
@@ -208,9 +208,7 @@ class SingleTierCacheService:
                         del kwargs["force_cache_refresh"]
                         raise ForceRefresh()
                     cached_data = self._get_cached_data(cache_key, ttl)
-                    if cached_data.data_type == cache_type:
-                        return self._deserializers[cache_type](cached_data)
-                    raise CacheNotFoundError("Data type mismatch")
+                    return self._decode(cached_data, cache_type)
                 except PermissionDeniedError as exc:
                     # A caller who may not read the key still gets its result,
                     # computed and not cached.
@@ -246,8 +244,6 @@ class SingleTierCacheService:
             self.set_json(key, value)
         elif cache_type == DataType.BINARY:
             self.set_binary(key, value)
-        elif cache_type == DataType.PICKLE:
-            self.set_pickle(key, value)
         else:
             raise ValueError(f"cache_type must be specified. Got: {cache_type}")
 
@@ -282,17 +278,33 @@ class SingleTierCacheService:
     def _get_binary(data: CachedData) -> bytes:
         return base64.b64decode(data.data)
 
-    @staticmethod
-    def _get_pickle(data: CachedData) -> Any:
-        return pickle.loads(base64.b64decode(data.data))  # nosec B301
+    def _decode(self, cached: CachedData, data_type: DataType | None) -> Any:
+        """The entry's value, read as ``data_type`` when the reader names one.
+
+        An entry of another type, or of a type the cache never decodes (a
+        legacy pickle), is a miss: what was stored stays data.
+        """
+        if data_type is not None and cached.data_type != data_type:
+            raise CacheNotFoundError(f"Cache not found: {cached.key}")
+        decode = self._deserializers.get(cached.data_type)
+        if decode is None:
+            raise CacheNotFoundError(f"Cache not found: {cached.key}")
+        return decode(cached)
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
-    def get(self, key: str, ttl: datetime.timedelta | None = None) -> Any:
+    def get(
+        self,
+        key: str,
+        ttl: datetime.timedelta | None = None,
+        data_type: DataType | None = None,
+    ) -> Any:
+        """The value under ``key``; with ``data_type``, a stored entry of
+        another type is a miss (``CacheNotFoundError``)."""
         cached_data = self._get_cached_data(key, ttl)
-        return self._deserializers[cached_data.data_type](cached_data)
+        return self._decode(cached_data, data_type)
 
     def exists(self, key: str) -> bool:
         try:
@@ -331,6 +343,7 @@ class SingleTierCacheService:
 
     def put_entry(self, key: str, cached: CachedData) -> None:
         """Store an entry as is, already serialized (a remote tier's ``set``)."""
+        check_stored_type(cached.data_type)
         self._require("Set", key)
         self._run_mutation("set", key, lambda: self.adapter.set(key, cached))
         self._emit_cache_set(key, cached)
@@ -342,6 +355,7 @@ class SingleTierCacheService:
         cannot do it atomically raises ``NotImplementedError``, and the caller
         decides (``SingleTierCacheService`` falls back on its side).
         """
+        check_stored_type(cached.data_type)
         self._require("SetIfAbsent", key)
         wrote = self._run_mutation(
             "set_if_absent", key, lambda: self.adapter.set_if_absent(key, cached)
@@ -404,16 +418,6 @@ class SingleTierCacheService:
         if wrote:
             self._emit_cache_set(key, cached)
         return wrote
-
-    def set_pickle(self, key: str, value: Any) -> None:
-        self._require("Set", key)
-        cached = CachedData(
-            key=key,
-            data=base64.b64encode(pickle.dumps(value)).decode(),
-            data_type=DataType.PICKLE,
-        )
-        self._run_mutation("set", key, lambda: self.adapter.set(key, cached))
-        self._emit_cache_set(key, cached)
 
     def _set_if_absent(self, key: str, cached: CachedData) -> bool:
         self._require("SetIfAbsent", key)
@@ -579,8 +583,16 @@ class CacheService(ServiceBase, ICacheService):
     # Read — hot → cold read-through, no automatic promotion
     # ------------------------------------------------------------------
 
-    def get(self, key: str, ttl: datetime.timedelta | None = None) -> Any:
+    def get(
+        self,
+        key: str,
+        ttl: datetime.timedelta | None = None,
+        data_type: DataType | None = None,
+    ) -> Any:
         """Read-through across all tiers (hot first).
+
+        With ``data_type``, an entry of another type is a miss. An entry the
+        cache never decodes (a legacy pickle) is always a miss.
 
         No automatic promotion: a cold-tier hit does **not** write to hot.
         If you want to promote, call ``cache.hot.set_*(…)`` explicitly after
@@ -595,7 +607,7 @@ class CacheService(ServiceBase, ICacheService):
         self.__require("Get", key)
         for tier_name, adapter in self._adapters:
             try:
-                return SingleTierCacheService(adapter).get(key, ttl)
+                return SingleTierCacheService(adapter).get(key, ttl, data_type)
             except (CacheNotFoundError, CacheExpiredError):
                 continue
             except Exception as exc:  # noqa: BLE001
@@ -724,9 +736,6 @@ class CacheService(ServiceBase, ICacheService):
 
     def set_binary_if_absent(self, key: str, value: bytes) -> bool:
         return self.cold.set_binary_if_absent(key, value)
-
-    def set_pickle(self, key: str, value: Any) -> None:
-        self.cold.set_pickle(key, value)
 
     # ------------------------------------------------------------------
     # Engine wiring — forward to any adapter that needs it

@@ -57,7 +57,7 @@ class OpenAIResponsesIntegration(Integration):
         lambda self, method, endpoint, params, json: (
             f"{method}_{endpoint}_{params!s}_{json!s}"
         ),
-        cache_type=DataType.PICKLE,
+        cache_type=DataType.JSON,
         ttl=timedelta(days=1),
     )
     def _make_request(

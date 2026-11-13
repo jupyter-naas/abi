@@ -19,6 +19,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.chat_file_embeddings import 
     embed_texts,
 )
 from naas_abi.apps.nexus.apps.api.app.services.files.drives.utils.drive_roots import my_drive_root
+from naas_abi_core.services.cache.CachePort import CacheNotFoundError, DataType
 from naas_abi_core.services.cache.CacheService import CacheService
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
@@ -136,7 +137,10 @@ class ChatFileIngestionService:
         vectors: list[np.ndarray] = []
 
         if self.cache_service.exists(cache_key):
-            cached = self.cache_service.get(cache_key)
+            try:
+                cached = self.cache_service.get(cache_key, data_type=DataType.JSON)
+            except CacheNotFoundError:
+                cached = None
             cached_chunks = cached.get("chunks") if isinstance(cached, dict) else None
             cached_vectors = cached.get("vectors") if isinstance(cached, dict) else None
             if isinstance(cached_chunks, list) and isinstance(cached_vectors, list):
