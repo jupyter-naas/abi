@@ -47,7 +47,7 @@ def test_a_code_is_emailed_and_opens_once(service, mailer):
     user = service.create_user("alice@example.com")
     assert service.request_code("alice@example.com", "10.0.0.1")
     code = mailer.last_code("alice@example.com")
-    assert len(code) == 6
+    assert len(code) == service.configuration.code_length == 8
     assert mailer.sent[-1].from_email == service.configuration.from_email
     assert service.verify_code("alice@example.com", code, "10.0.0.1").id == user.id
     with pytest.raises(InvalidCode):  # spent
@@ -88,24 +88,23 @@ def test_a_code_expires(service, mailer, clock):
 
 def wrong(service, email, ip=None):
     with pytest.raises(InvalidCode):
-        service.verify_code(email, "000000", ip)
+        service.verify_code(email, "00000000", ip)
 
 
-def test_wrong_guesses_count_against_every_active_code(service, mailer):
-    """Bug (e): asking for a fresh code must not renew the budget of guesses."""
+def test_a_wrong_guess_counts_against_every_live_code_of_its_sign_in(service, mailer):
+    """Asking for a fresh code does not renew the guesses of the older one."""
     service.create_user("alice@example.com")
     config = service.configuration
     service.request_code("alice@example.com", None)
     first = mailer.last_code("alice@example.com")
     for _ in range(config.max_attempts - 1):
         wrong(service, "alice@example.com")
-    service.request_code("alice@example.com", None)  # a second active code
+    service.request_code("alice@example.com", None)  # a second live code
     second = mailer.last_code("alice@example.com")
-    wrong(service, "alice@example.com")  # the last guess of the budget
-    # Both codes are void now, and the address is locked for the window.
-    for code in (first, second):
-        with pytest.raises(RateLimited):
-            service.verify_code("alice@example.com", code, None)
+    wrong(service, "alice@example.com")  # the first code's last guess, the second's first
+    with pytest.raises(InvalidCode):
+        service.verify_code("alice@example.com", first, None)  # void
+    assert service.verify_code("alice@example.com", second, None)
 
 
 def test_the_budget_is_spent_before_a_guess_is_judged(service, mailer):
@@ -114,7 +113,7 @@ def test_the_budget_is_spent_before_a_guess_is_judged(service, mailer):
     code = mailer.last_code("alice@example.com")
     for _ in range(service.configuration.max_attempts):
         wrong(service, "alice@example.com")
-    with pytest.raises(RateLimited):  # even the right code, once the budget is gone
+    with pytest.raises(InvalidCode):  # even the right code, once its guesses are gone
         service.verify_code("alice@example.com", code, None)
 
 
@@ -138,6 +137,172 @@ def test_a_success_clears_the_failures(service, mailer):
     service.request_code("alice@example.com", None)
     for _ in range(service.configuration.max_attempts - 1):
         wrong(service, "alice@example.com")
+
+
+def _guess_for_a_day(service, clock, email, ip="203.0.113.7"):
+    """Every window, ask for every code allowed and make every guess allowed:
+    what one client gets against one address over a day."""
+    config = service.configuration
+    judged = pairs = refused = 0
+    start = clock()
+    while clock() - start < 86400:
+        for _ in range(config.rate_limit_email_sends):
+            try:
+                service.request_code(email, ip)
+            except RateLimited:
+                pass
+        for _ in range(config.max_attempts):
+            live = _live_codes(service, email)
+            try:
+                service.verify_code(email, "00000000", ip)
+            except InvalidCode:
+                judged += 1
+                pairs += live
+            except RateLimited:
+                refused += 1
+        clock.advance(config.rate_limit_window_seconds)
+    return judged, pairs, refused
+
+
+def _live_codes(service, email):
+    from naas_abi_idp.models import CHALLENGES
+    from naas_abi_idp.service import _challenge_id
+
+    doc = service.store.get(CHALLENGES, _challenge_id(email))
+    return 0 if doc is None else sum(1 for c in doc.data["codes"] if c["exp"] > service.clock())
+
+
+def test_sign_in_codes_keep_a_bounded_budget_across_windows(service, mailer, clock):
+    """Failures add up across the short windows: a day of guessing gets
+    ``max_failures`` guesses judged, each against two live codes at most."""
+    service.create_user("victim@example.com")
+    config = service.configuration
+    judged, pairs, refused = _guess_for_a_day(service, clock, "victim@example.com")
+    assert judged == config.max_failures
+    assert pairs <= config.max_failures * config.max_active_codes
+    assert refused > 0
+    assert pairs / 10**config.code_length < 1e-6
+    # The victim got the daily cap of mails, not one per request.
+    sent = [m for m in mailer.sent if m.to == "victim@example.com"]
+    assert len(sent) <= config.rate_limit_email_sends_per_window
+
+
+def test_an_unknown_address_keeps_the_same_answers_across_windows(service, clock):
+    service.create_user("victim@example.com")
+    known = _guess_for_a_day(service, clock, "victim@example.com", "198.51.100.1")
+    unknown = _guess_for_a_day(service, clock, "nobody@example.com", "198.51.100.2")
+    assert (known[0], known[2]) == (unknown[0], unknown[2])
+
+
+def test_one_client_keeps_to_its_own_daily_budget(service, mailer, clock):
+    service.create_user("alice@example.com")
+    config = service.configuration
+    for i in range(config.max_failures):
+        if i and i % config.max_attempts == 0:
+            clock.advance(config.rate_limit_window_seconds + 1)
+        wrong(service, "alice@example.com")
+    clock.advance(config.rate_limit_window_seconds + 1)
+    service.request_code("alice@example.com", None)
+    code = mailer.last_code("alice@example.com")
+    with pytest.raises(RateLimited):  # this client, even with the right code
+        service.verify_code("alice@example.com", code, None)
+    assert service.purge_expired() >= 0  # the day's counter outlives the short window
+    with pytest.raises(RateLimited):
+        service.verify_code("alice@example.com", code, None)
+    clock.advance(config.failure_window_seconds)
+    service.request_code("alice@example.com", None)
+    assert service.verify_code("alice@example.com", mailer.last_code("alice@example.com"), None)
+
+
+def test_an_address_keeps_signing_in_after_others_fail(service, mailer, clock):
+    """Strangers' failed guesses, from one client or many and past every
+    budget, never stop the address's owner: their own code, mailed to their own
+    sign-in, opens the account."""
+    service.create_user("owner@example.com")
+    config = service.configuration
+    service.request_code("owner@example.com", "198.51.100.7", requester="owner-login")
+    owner_code = mailer.last_code("owner@example.com")
+    for n in range(config.max_failures_per_address // config.max_failures + 3):
+        ip, login = f"203.0.113.{n}", f"stranger-login-{n}"
+        try:
+            service.request_code("owner@example.com", ip, requester=login)
+        except RateLimited:
+            pass  # the address's mails of the window: a short wait, not a lock
+        for _ in range(config.max_failures + 2):
+            try:
+                service.verify_code("owner@example.com", "00000000", ip, requester=login)
+            except (InvalidCode, RateLimited):
+                pass
+            # A stranger who somehow had the owner's code still could not use it.
+            with pytest.raises((InvalidCode, RateLimited)):
+                service.verify_code("owner@example.com", owner_code, ip, requester=login)
+    user = service.verify_code(
+        "owner@example.com", owner_code, "198.51.100.7", requester="owner-login"
+    )
+    assert user.email == "owner@example.com"
+    # And a fresh code for a new sign-in works the same way, at most one short
+    # window later.
+    clock.advance(config.rate_limit_window_seconds + 1)
+    service.request_code("owner@example.com", "198.51.100.7", requester="owner-2")
+    assert service.verify_code(
+        "owner@example.com",
+        mailer.last_code("owner@example.com"),
+        "198.51.100.7",
+        requester="owner-2",
+    )
+
+
+def test_past_the_address_total_each_code_keeps_one_guess(service, mailer):
+    service.create_user("alice@example.com")
+    config = service.configuration
+    for n in range(config.max_failures_per_address // config.max_failures):
+        for _ in range(config.max_failures):
+            wrong(service, "alice@example.com", f"192.0.2.{n}")
+    service.request_code("alice@example.com", "198.51.100.1", requester="login")
+    code = mailer.last_code("alice@example.com")
+    with pytest.raises(InvalidCode):
+        service.verify_code("alice@example.com", "00000000", "198.51.100.1", requester="login")
+    with pytest.raises(InvalidCode):  # its one guess is spent
+        service.verify_code("alice@example.com", code, "198.51.100.1", requester="login")
+    service.request_code("alice@example.com", "198.51.100.1", requester="login")
+    assert service.verify_code(
+        "alice@example.com", mailer.last_code("alice@example.com"), "198.51.100.1", requester="login"
+    )
+
+
+def test_a_sign_in_keeps_clearing_the_long_budget(service, mailer, clock):
+    service.create_user("alice@example.com")
+    config = service.configuration
+    for _ in range(3):
+        for _ in range(config.max_attempts - 1):
+            wrong(service, "alice@example.com")
+        service.request_code("alice@example.com", None)
+        assert service.verify_code(
+            "alice@example.com", mailer.last_code("alice@example.com"), None
+        )
+        clock.advance(config.rate_limit_window_seconds + 1)
+
+
+def test_a_new_code_keeps_only_two_live_per_sign_in(service, mailer):
+    service.create_user("alice@example.com")
+    assert service.configuration.max_active_codes == 2
+    for _ in range(4):
+        service.request_code("alice@example.com", None)
+    assert _live_codes(service, "alice@example.com") == 2
+
+
+def test_a_lock_keeps_a_warning_without_the_address(service, clock, caplog):
+    import logging
+
+    config = service.configuration
+    with caplog.at_level(logging.WARNING, logger="naas_abi_idp.service"):
+        for i in range(config.max_failures):
+            if i and i % config.max_attempts == 0:
+                clock.advance(config.rate_limit_window_seconds + 1)
+            wrong(service, "alice@example.com")
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1
+    assert "alice" not in warnings[0].getMessage()
 
 
 def test_codes_per_address_are_limited(service):
@@ -462,3 +627,23 @@ def test_a_code_mailed_before_the_delete_opens_nothing_after_it(service, mailer)
     assert again.id != user.id
     with pytest.raises(InvalidCode):
         service.verify_code("alice@example.com", stale, None)
+
+
+def test_password_guesses_keep_an_address_wide_bound(service, clock):
+    """Passwords have no code to void: guesses from every client together stay
+    within the address's short window, whatever the number of clients."""
+    service.configuration.password_login_enabled = True
+    service.create_user("alice@example.com", password="a long and right password")
+    config = service.configuration
+    judged = refused = 0
+    for n in range(50):
+        try:
+            service.verify_password("alice@example.com", "wrong", f"203.0.113.{n}")
+        except InvalidCode:
+            judged += 1
+        except RateLimited:
+            refused += 1
+    assert judged == config.max_attempts
+    assert refused == 50 - config.max_attempts
+    clock.advance(config.rate_limit_window_seconds + 1)
+    assert service.verify_password("alice@example.com", "a long and right password", "198.51.100.7")

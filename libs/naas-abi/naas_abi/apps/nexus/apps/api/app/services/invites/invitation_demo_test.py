@@ -87,7 +87,7 @@ API = "https://testserver"
 WEB = "https://web.test"
 CALLBACK = f"{API}/api/auth/oidc/callback"
 ORG, WS = "org-1", "ws-1"
-SIX_DIGITS = re.compile(r"(?<![\d@.])(\d{6})(?!\d)")
+CODE_DIGITS = re.compile(r"(?<![\d@.])(\d{8})(?!\d)")
 
 
 class LocalEmail:
@@ -121,7 +121,7 @@ class LocalEmail:
 
     def last_code(self, to: str, length: int = 6) -> str:
         for subject, text in reversed(self.kept(to)):
-            code = SIX_DIGITS.search(text) or SIX_DIGITS.search(subject)
+            code = CODE_DIGITS.search(text) or CODE_DIGITS.search(subject)
             if code:
                 return code.group(1)
         raise LookupError(f"no sign-in code was mailed to {to}")
@@ -327,7 +327,7 @@ async def test_the_rfc_demo_invite_bob_and_he_signs_in_a_member_of_w(nexus, idp,
     # Bob was told, and the invitation holds no code: the IdP mails that on sign-in.
     ((subject, text),) = mail.kept("bob@example.com")
     assert "Research" in subject and "Alice" in text
-    assert f"{WEB}/auth/login?" in text and not SIX_DIGITS.search(text)
+    assert f"{WEB}/auth/login?" in text and not CODE_DIGITS.search(text)
     listed = (await alice.get(f"/api/invitations/workspaces/{WS}")).json()["invitations"]
     assert [i["email"] for i in listed] == ["bob@example.com"]
 

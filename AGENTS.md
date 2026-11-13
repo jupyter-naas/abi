@@ -240,7 +240,7 @@ def unsupported_method(self, arg: str) -> None:
 
 After `abi stack start`, the web UI is at `http://localhost:3042`.
 
-Nexus has no login of its own and no password: people sign in at an identity provider (`identity.providers`; the built-in one, `libs/naas-abi-idp`, is the default of `abi dev up`, `abi deploy local` and `abi new project`). The only seeded account is `admin@example.com` (`users:` in the configuration): the API makes it exist at the built-in provider when it starts, and its first sign-in links it to the account, which keeps the roles configured there. Enter the address on the login page; the provider emails a 6-digit code. In `abi dev` the mail is a file in `storage/email`, and the code is one command away:
+Nexus has no login of its own and no password: people sign in at an identity provider (`identity.providers`; the built-in one, `libs/naas-abi-idp`, is the default of `abi dev up`, `abi deploy local` and `abi new project`). The only seeded account is `admin@example.com` (`users:` in the configuration): the API makes it exist at the built-in provider when it starts, and its first sign-in links it to the account, which keeps the roles configured there. Enter the address on the login page; the provider emails a 8-digit code. In `abi dev` the mail is a file in `storage/email`, and the code is one command away:
 
 ```bash
 abi dev code            # the newest sign-in code mailed to admin@example.com

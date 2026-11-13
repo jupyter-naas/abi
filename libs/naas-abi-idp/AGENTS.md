@@ -65,16 +65,26 @@ A sign-in challenge, a refresh token, a counter: one document each, changed with
 
 ### Sign-in codes
 
-- 6 digits (`code_length`), emailed, valid 15 minutes, at most 5 active per
-  address; stored as an HMAC under `idp/code-key`, so a copy of the documents
-  alone yields nothing.
-- **Attempts are counted across every active code** (a vulnerability found in review): one
-  budget per address (`max_attempts`, 5), spent *before* a guess is judged and
-  given back on success, so parallel guesses cannot all slip through and
-  asking for a fresh code does not renew it. The budget spent voids every code
-  and locks the address for `rate_limit_window_seconds` (300). The counter is
-  per address whether or not it is registered: the answer never says.
-- Limits: sends per address (5 / window); per client IP, failures against a tight
+- 8 digits (`code_length`), emailed, valid 15 minutes; stored as an HMAC under
+  `idp/code-key`, so a copy of the documents alone yields nothing.
+- **A code belongs to the sign-in that asked for it** (the pending login's
+  cookie, in the web flow): only that sign-in's guesses reach it, so nobody
+  else's failures void it or lock its owner out. At most 2 are live per
+  sign-in (`max_active_codes`: a new code replaces the oldest).
+- **Each code takes `max_attempts` (5) wrong guesses**, counted *before* a
+  guess is judged (parallel guesses spend one budget), across every live code
+  of the sign-in; the guess that spends them voids the code.
+- **Failures add up across windows, per client**: one client's wrong guesses
+  for an address (`max_failures`, 10 in `failure_window_seconds`, a day) end in
+  a refusal for that client only, logged as a warning with a tag of the
+  address (not the address). Every client's together (`max_failures_per_address`,
+  100 a day) slow the address down instead: each code then takes one guess.
+  Only a sign-in clears them. The counters are kept per address whether or not
+  it is registered: the answer never says.
+- Code mails per address: 5 per window from one client, 30 from every client
+  together (`rate_limit_email_sends`, `rate_limit_email_sends_per_address`),
+  and 20 a day from one client (`rate_limit_email_sends_per_window`).
+- Limits per client IP: failures against a tight
   budget (wrong guesses, requests for unregistered addresses: 20 / window) and
   code requests against a loose one (`rate_limit_ip_sends`, 100 / window), so a
   peer many users share is not locked out by their ordinary sign-ins. The IP
@@ -87,8 +97,10 @@ A sign-in challenge, a refresh token, a counter: one document each, changed with
   refresh tokens, as disabling does.
 - Self-registration with just an email: `signup_enabled` (off; `abi dev up`
   turns it on). Otherwise a user exists because the admin API created them.
-- Password sign-in is optional (`password_login_enabled`, off): scrypt hashes,
-  the same limits.
+- Password sign-in is optional (`password_login_enabled`, off): scrypt hashes.
+  A password has no code to void, so its guesses are also bounded for the
+  address as a whole: `max_attempts` (5) per `rate_limit_window_seconds` from
+  every client together, besides the per-client budgets.
 
 ### OIDC
 

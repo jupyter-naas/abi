@@ -102,13 +102,28 @@ class IdPConfiguration(ModuleConfiguration):
     from_name: str | None = None
 
     # Sign-in codes.
-    code_length: int = 6
+    code_length: int = 8
     code_ttl_seconds: int = 900
-    max_attempts: int = 5  # wrong guesses per address, across every active code
-    max_active_codes: int = 5
+    # Wrong guesses a code takes before it is void. A code belongs to the
+    # sign-in that asked for it: guesses from elsewhere never reach it.
+    max_attempts: int = 5
+    # Live codes per sign-in; a new one replaces the oldest.
+    max_active_codes: int = 2
+    # Wrong guesses one client makes for one address over
+    # ``failure_window_seconds``; past it that client is refused for that
+    # address until its oldest failure leaves the window. Others are not.
+    max_failures: int = 10
+    # Wrong guesses for one address from every client together over the same
+    # window; past it each code takes one guess. Nobody is refused.
+    max_failures_per_address: int = 100
+    failure_window_seconds: int = 86400
     # Failures per address and per client IP, and the window they count in.
     rate_limit_window_seconds: int = 300
+    # Code mails per window: one client's for an address, and every client's.
     rate_limit_email_sends: int = 5
+    rate_limit_email_sends_per_address: int = 30
+    # Code mails one client asks for one address over ``failure_window_seconds``.
+    rate_limit_email_sends_per_window: int = 20
     rate_limit_ip_attempts: int = 20
     # Code requests per client IP: loose, since a proxy's address is every
     # user's when it is not trusted to forward the real one.
@@ -160,6 +175,21 @@ class IdPConfiguration(ModuleConfiguration):
             raise ValueError("code_length is 4 to 10")
         if self.max_attempts < 1 or self.max_active_codes < 1:
             raise ValueError("max_attempts and max_active_codes are at least 1")
+        if (
+            self.max_failures < 1
+            or self.max_failures_per_address < 1
+            or self.rate_limit_email_sends_per_window < 1
+            or self.rate_limit_email_sends_per_address < 1
+        ):
+            raise ValueError(
+                "max_failures, max_failures_per_address, "
+                "rate_limit_email_sends_per_window and "
+                "rate_limit_email_sends_per_address are at least 1"
+            )
+        if self.failure_window_seconds < self.rate_limit_window_seconds:
+            raise ValueError(
+                "failure_window_seconds is at least rate_limit_window_seconds"
+            )
 
     def branding_for(self, email: str | None) -> Branding:
         domain = email.rsplit("@", 1)[-1].lower() if email and "@" in email else ""

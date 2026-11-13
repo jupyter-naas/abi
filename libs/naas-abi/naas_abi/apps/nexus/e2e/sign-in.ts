@@ -5,7 +5,7 @@ import { expect, type Page } from '@playwright/test';
 /**
  * Sign-in for the e2e specs: Nexus has no password. The login page routes an email to
  * the built-in identity provider (pages under the API origin at `/idp/`), which mails a
- * 6-digit code; after the code the browser returns to Nexus with its session cookie.
+ * 8-digit code; after the code the browser returns to Nexus with its session cookie.
  *
  * In `abi dev up` the email adapter keeps every mail as a `<epoch ms>-<id>.eml` file, so
  * the code is read from the mail directory:

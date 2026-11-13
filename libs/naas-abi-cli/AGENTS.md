@@ -112,7 +112,7 @@ Nexus signs people in at an identity provider, so a fresh project has no passwor
 `abi dev up` prints how to sign in as `admin@example.com` (`ADMIN_EMAIL`, the account
 `users:` of the Nexus configuration seeds: the API makes it exist at the built-in
 provider when it starts, and its first sign-in links it). In dev the email adapter writes
-messages to `storage/email`, so the 6-digit code is one command away:
+messages to `storage/email`, so the 8-digit code is one command away:
 
 ```bash
 abi dev code                          # the newest code mailed to admin@example.com

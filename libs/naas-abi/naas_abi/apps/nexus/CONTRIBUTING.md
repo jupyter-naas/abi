@@ -50,7 +50,7 @@ make up
 
 Visit http://localhost:3000 and login with:
 - Email: `admin@example.com`
-- Code: the 6-digit sign-in code the identity provider emails to that address (there is no password; in `abi dev`, `abi dev code` prints it)
+- Code: the 8-digit sign-in code the identity provider emails to that address (there is no password; in `abi dev`, `abi dev code` prints it)
 
 ## Development Setup
 

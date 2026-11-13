@@ -3,7 +3,7 @@
 Passwords and client secrets use scrypt from the standard library (no extra
 dependency). Opaque tokens (refresh tokens, authorization codes, session
 cookies) are 256-bit random values, so a plain SHA-256 is enough. Sign-in codes
-are six digits, which no hash protects from guessing: they are an HMAC under a
+are a few digits (eight by default), which no hash protects from guessing: they are an HMAC under a
 key held in the secret service, so a copy of the documents alone gives nothing.
 """
 

@@ -49,6 +49,7 @@ from naas_abi_idp.ports import (
     Mail,
     Mailer,
     NotFound,
+    RateLimited,
     SecretStore,
 )
 from naas_abi_idp.secrets_hash import (
@@ -68,6 +69,8 @@ GROUP_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._:-]{0,63}$")
 # password sign-in takes does not tell whether the address is registered.
 _DUMMY_HASH = hash_secret(secrets.token_urlsafe(16))
 _ATTEMPTS = 8
+# Live codes kept per address, every sign-in together.
+_MAX_LIVE_CODES = 32
 
 
 def normalize_email(value: str) -> str:
@@ -420,7 +423,9 @@ class IdPService:
     # Sign-in codes (and passwords)
     # =========================================================================
 
-    def request_code(self, email: str, client_ip: str | None) -> bool:
+    def request_code(
+        self, email: str, client_ip: str | None, requester: str | None = None
+    ) -> bool:
         """Email a sign-in code to a registered address (or register it, when
         sign-up is on). Whether anything was sent is for the caller to log, never
         to show.
@@ -435,10 +440,22 @@ class IdPService:
         against a tight budget and every request against a loose one, so one peer
         that many people share (a proxy not listed in ``FORWARDED_ALLOW_IPS``)
         is not locked out by their ordinary sign-ins.
+
+        The code belongs to ``requester`` (the pending sign-in that asked for it,
+        in the web flow): only that sign-in's guesses reach it.
         """
         email = normalize_email(email)
         config = self.configuration
-        self.limits.consume(f"send:{email}", config.rate_limit_email_sends)
+        client = _client(client_ip)
+        # Mails per window: one client's for the address, and every client's
+        # together (a ceiling one client cannot reach alone).
+        self.limits.consume(f"send:{email}:{client}", config.rate_limit_email_sends)
+        self.limits.consume(f"send:{email}", config.rate_limit_email_sends_per_address)
+        self.limits.consume(
+            f"send-long:{email}:{client}",
+            config.rate_limit_email_sends_per_window,
+            config.failure_window_seconds,
+        )
         if client_ip:
             self.limits.consume(f"ip-send:{client_ip}", config.rate_limit_ip_sends)
         user = self.find_user(email)
@@ -464,7 +481,7 @@ class IdPService:
             # The store traffic of a real send: one read and one write.
             self.limits.consume(f"decoy:{email}", 10**9)
             return False
-        self._add_code(email, digest)
+        self._add_code(email, digest, _requester(requester))
         self._deliver(mail, email, digest)
         return True
 
@@ -498,34 +515,38 @@ class IdPService:
         """Wait for the mail still leaving (tests, and a clean stop)."""
         wait(list(self._mail_pending), timeout=timeout)
 
-    def verify_code(self, email: str, code: str, client_ip: str | None) -> User:
-        """The user a sign-in code opens. A wrong guess counts against the
-        address (all its active codes at once), and the guess is counted before
-        it is judged, so parallel guesses spend one budget."""
+    def verify_code(
+        self, email: str, code: str, client_ip: str | None, requester: str | None = None
+    ) -> User:
+        """The user a sign-in code opens. A guess reaches only the codes mailed
+        for ``requester`` (the sign-in that asked for them), and each code takes
+        ``max_attempts`` guesses before it is void, counted before the guess is
+        judged, so parallel guesses spend one budget. The client's own daily
+        budget for the address bounds it further; failures from other clients
+        never refuse this one."""
         config = self.configuration
         try:
             email = normalize_email(email)
         except InvalidArgument:
             raise InvalidCode() from None
         digits = "".join(ch for ch in (code or "") if ch.isdigit())
-        left = self.limits.consume(f"verify:{email}", config.max_attempts)
-        if client_ip:
-            self.limits.consume(f"verify-ip:{client_ip}", config.rate_limit_ip_attempts)
+        client = _client(client_ip)
+        tries = self._count_attempt(email, client, client_ip)
         user = self.find_user(email)
         matched = (
             len(digits) == config.code_length
             and user is not None
             and not user.disabled
-            and self._take_code(email, code_digest(self.keys.code_key(), email, digits))
+            and self._judge_code(
+                email,
+                _requester(requester),
+                code_digest(self.keys.code_key(), email, digits),
+                tries,
+            )
         )
         if not matched or user is None:
-            if left == 0:
-                # The budget is spent: no code sent so far opens anything now.
-                self.store.delete(CHALLENGES, _challenge_id(email))
             raise InvalidCode()
-        self.limits.reset(f"verify:{email}")
-        if client_ip:
-            self.limits.refund(f"verify-ip:{client_ip}")
+        self._signed_in(email, client, client_ip)
         self._touch(user)
         return user
 
@@ -537,32 +558,80 @@ class IdPService:
             email = normalize_email(email)
         except InvalidArgument:
             raise InvalidCode() from None
+        client = _client(client_ip)
+        # A password has no code to void: guesses at it are bounded for the
+        # address as a whole (every client together), in each short window, as
+        # well as per client.
         self.limits.consume(f"verify:{email}", config.max_attempts)
-        if client_ip:
-            self.limits.consume(f"verify-ip:{client_ip}", config.rate_limit_ip_attempts)
+        self.limits.consume(f"verify:{email}:{client}", config.max_attempts)
+        self._count_attempt(email, client, client_ip)
         user = self.find_user(email)
         stored = user.password_hash if user and user.password_hash else _DUMMY_HASH
         ok = verify_secret(password or "", stored)
         if not ok or user is None or user.disabled or user.password_hash is None:
             raise InvalidCode()
         self.limits.reset(f"verify:{email}")
-        if client_ip:
-            self.limits.refund(f"verify-ip:{client_ip}")
+        self.limits.reset(f"verify:{email}:{client}")
+        self._signed_in(email, client, client_ip)
         self._touch(user)
         return user
 
-    def _add_code(self, email: str, digest: str) -> None:
+    def _count_attempt(self, email: str, client: str, client_ip: str | None) -> int:
+        """Count a sign-in attempt before it is judged: against this client's
+        daily budget for the address (``RateLimited`` past it, for this client
+        only), the address's daily total and the client's own budget. Returns
+        how many guesses a code takes now: ``max_attempts``, or one once the
+        address's total is spent. The same for every address, registered or
+        not."""
+        config = self.configuration
+        window = config.failure_window_seconds
+        left = self.limits.consume(f"failures:{email}:{client}", config.max_failures, window)
+        if left == 0:
+            log.warning(
+                "Sign-in refused for address %s from one client: %d attempts "
+                "without a sign-in within %d s",
+                _address_tag(email),
+                config.max_failures,
+                window,
+            )
+        tries = config.max_attempts
+        try:
+            if self.limits.consume(
+                f"failures:{email}", config.max_failures_per_address, window
+            ) == 0:
+                log.warning(
+                    "Sign-in slowed for address %s: %d attempts without a sign-in "
+                    "within %d s; each code now takes one guess",
+                    _address_tag(email),
+                    config.max_failures_per_address,
+                    window,
+                )
+        except RateLimited:
+            tries = 1
+        if client_ip:
+            self.limits.consume(f"verify-ip:{client_ip}", config.rate_limit_ip_attempts)
+        return tries
+
+    def _signed_in(self, email: str, client: str, client_ip: str | None) -> None:
+        """A sign-in clears the address's budgets and gives the client its try back."""
+        self.limits.reset(f"failures:{email}:{client}")
+        self.limits.reset(f"failures:{email}")
+        self.limits.reset(f"send-long:{email}:{client}")
+        if client_ip:
+            self.limits.refund(f"verify-ip:{client_ip}")
+
+    def _add_code(self, email: str, digest: str, by: str) -> None:
         id, now = _challenge_id(email), self.clock()
         config = self.configuration
         for _ in range(_ATTEMPTS):
             doc = self.store.get(CHALLENGES, id)
-            codes = [c for c in (doc.data["codes"] if doc else []) if c["exp"] > now]
-            codes = (
-                codes[-(config.max_active_codes - 1) :]
-                if config.max_active_codes > 1
-                else []
-            )
-            codes.append({"h": digest, "exp": now + config.code_ttl_seconds})
+            live = [c for c in (doc.data["codes"] if doc else []) if c["exp"] > now]
+            mine = [c for c in live if c.get("by", "") == by]
+            others = [c for c in live if c.get("by", "") != by]
+            mine = mine[-(config.max_active_codes - 1) :] if config.max_active_codes > 1 else []
+            mine.append({"h": digest, "exp": now + config.code_ttl_seconds, "by": by, "tries": 0})
+            # The address's sends per window bound how many are live at once.
+            codes = (others + mine)[-_MAX_LIVE_CODES:]
             data = {"email": email, "codes": codes}
             written = (
                 self.store.replace(doc, CHALLENGES, data)
@@ -583,18 +652,34 @@ class IdPService:
             if self.store.replace(doc, CHALLENGES, {**doc.data, "codes": codes}):
                 return
 
-    def _take_code(self, email: str, digest: str) -> bool:
-        """Spend the active code that matches: the whole challenge goes, so a
-        code opens once and every older one with it."""
-        id, now = _challenge_id(email), self.clock()
-        doc = self.store.get(CHALLENGES, id)
-        if doc is None:
-            return False
-        matched = False
-        for entry in doc.data["codes"]:  # no early exit: the time says nothing
-            if equal(entry["h"], digest) and entry["exp"] > now:
-                matched = True
-        return matched and self.store.delete(CHALLENGES, id, version=doc.version)
+    def _judge_code(self, email: str, by: str, digest: str, tries: int) -> bool:
+        """Spend one guess on each live code of ``by``, then judge it. A code
+        takes ``tries`` guesses; the one that spends them voids it. A match
+        spends the whole challenge, so a code opens once and every other with it."""
+        id = _challenge_id(email)
+        for _ in range(_ATTEMPTS):
+            now = self.clock()
+            doc = self.store.get(CHALLENGES, id)
+            if doc is None:
+                return False
+            live = [dict(c) for c in doc.data["codes"] if c["exp"] > now]
+            matched = False
+            for entry in live:  # no early exit: the time says nothing
+                if entry.get("by", "") != by:
+                    continue
+                entry["tries"] = entry.get("tries", 0) + 1
+                if entry["tries"] <= tries and equal(entry["h"], digest):
+                    matched = True
+            if matched:
+                if self.store.delete(CHALLENGES, id, version=doc.version):
+                    return True
+                continue
+            keep = [
+                c for c in live if c.get("by", "") != by or c["tries"] < tries
+            ]
+            if self.store.replace(doc, CHALLENGES, {**doc.data, "codes": keep}) is not None:
+                return False
+        return False
 
     def _touch(self, user: User) -> None:
         try:
@@ -851,6 +936,24 @@ class IdPService:
                 if after is None:
                     break
         return removed
+
+
+def _address_tag(email: str) -> str:
+    """A short, stable tag of an address for the logs: not the address."""
+    import hashlib
+
+    return hashlib.sha256(email.encode()).hexdigest()[:12]
+
+
+def _client(client_ip: str | None) -> str:
+    return client_ip or "-"
+
+
+def _requester(requester: str | None) -> str:
+    """A short tag of the pending sign-in a code belongs to (not the token)."""
+    import hashlib
+
+    return hashlib.sha256((requester or "-").encode()).hexdigest()[:24]
 
 
 def _challenge_id(email: str) -> str:

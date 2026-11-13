@@ -14,7 +14,7 @@ Complete API reference for the NEXUS platform.
 
 NEXUS has no login of its own: no password, magic link, one-time code or refresh token, and it signs no token.
 People sign in at an identity provider (the built-in one by default). The login page takes an email, the
-provider emails a 6-digit code, and the browser comes back with an httpOnly session cookie. The web app holds
+provider emails a 8-digit code, and the browser comes back with an httpOnly session cookie. The web app holds
 that cookie and no bearer token.
 
 ### Signing in (browser)

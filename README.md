@@ -202,7 +202,7 @@ nexus-web  http://127.0.0.1:12000  ● ready
 Sign in: admin@example.com, with the emailed code (`abi dev code`)
 ```
 
-There is no admin password: the built-in identity provider emails a 6-digit code to the address, and in `abi dev` the mail is a file in `storage/email`.
+There is no admin password: the built-in identity provider emails a 8-digit code to the address, and in `abi dev` the mail is a file in `storage/email`.
 
 ### Hotkeys
 

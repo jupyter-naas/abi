@@ -12,7 +12,7 @@ make up         # Start servers
 
 Visit http://localhost:3000
 
-**Login:** admin@example.com, then the 6-digit code the identity provider emails (no password; in `abi dev`, `abi dev code` prints it)
+**Login:** admin@example.com, then the 8-digit code the identity provider emails (no password; in `abi dev`, `abi dev code` prints it)
 
 ## What Is This?
 
