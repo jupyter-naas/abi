@@ -529,7 +529,7 @@ api-local: deps
 
 # MCP (Model Context Protocol) server for Claude Desktop integration
 mcp: deps
-	@echo "🚀 Starting MCP Server (STDIO mode for Claude Desktop)..."
+	@echo "🚀 Starting MCP Server (STDIO mode; set NEXUS_ACCESS_TOKEN to your personal API key)..."
 	uv run mcp-server
 
 # MCP server in HTTP mode for web-based integration
@@ -539,8 +539,8 @@ mcp-http: deps
 
 # Run MCP server validation tests
 mcp-test: deps
-	@echo "🔍 Running MCP Server validation tests..."
-	uv run python libs/naas-abi-core/naas_abi_core/apps/mcp/mcp_server_test.py
+	@echo "🔍 Running MCP Server tests..."
+	uv run pytest libs/naas-abi-core/naas_abi_core/apps/mcp/mcp_server_test.py
 
 # Interactive SPARQL terminal for querying the knowledge graph
 sparql-terminal: deps

@@ -162,6 +162,8 @@ services:
       context: .
       dockerfile: ./.deploy/docker/images/Dockerfile
     restart: unless-stopped
+    # Not started by default: `docker compose --profile mcp up -d mcp-server`.
+    profiles: ["mcp"]
     depends_on:
       abi:
         condition: service_healthy
@@ -174,12 +176,15 @@ services:
       - venv_cache:/app/.venv
     environment:
       - ABI_API_BASE=http://abi:9879
-      - ABI_API_KEY=abi
       - MCP_TRANSPORT=http
       - MCP_HOST=0.0.0.0
+      # The Host and Origin it answers (loopback, the published port).
+      - MCP_ALLOWED_HOSTS=127.0.0.1:*,localhost:*
+      - MCP_ALLOWED_ORIGINS=http://127.0.0.1:*,http://localhost:*
+      - MCP_PUBLIC_URL=http://127.0.0.1:8000
     ports:
-      # The MCP server checks no credential and calls agents with ABI_API_KEY:
-      # from this machine only.
+      # Each request carries its caller's personal API key, which Nexus
+      # checks; the server holds no credential of its own.
       - 127.0.0.1:8000:8000
     networks:
       - abi-network

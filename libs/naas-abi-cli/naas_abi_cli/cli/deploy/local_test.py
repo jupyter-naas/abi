@@ -728,3 +728,19 @@ def test_a_root_owned_env_stops_the_deploy_before_it_writes(tmp_path: Path) -> N
         setup_local_deploy(str(tmp_path), base_domain="localhost", nats=False)
 
     assert not (tmp_path / "docker-compose.yml").exists()
+
+
+def _assert_mcp_server_is_opt_in_and_keyless(service: dict) -> None:
+    """Started only with the ``mcp`` profile; each caller brings their own key."""
+    assert service["profiles"] == ["mcp"]
+    names = [str(item).split("=", 1)[0] for item in service["environment"]]
+    assert "ABI_API_KEY" not in names
+    assert "MCP_HOST" in names
+
+
+def test_the_mcp_server_keeps_off_by_default_and_holds_no_key(tmp_path: Path) -> None:
+    setup_local_deploy(str(tmp_path), base_domain="localhost", nats=True)
+    service = _services(tmp_path / "docker-compose.yml")["mcp-server"]
+
+    _assert_mcp_server_is_opt_in_and_keyless(service)
+    assert "MCP_ALLOWED_HOSTS=127.0.0.1:*,localhost:*" in service["environment"]

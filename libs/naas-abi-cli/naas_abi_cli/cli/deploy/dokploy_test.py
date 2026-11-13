@@ -938,3 +938,20 @@ def test_a_fresh_project_boots_with_an_empty_secrets_volume(
         "OPENROUTER_API_KEY=saved\n"
         == (volume / ".env").read_text(encoding="utf-8").split("\n", 1)[0] + "\n"
     )
+
+
+def _assert_mcp_server_is_opt_in_and_keyless(service: dict) -> None:
+    """Started only with the ``mcp`` profile; each caller brings their own key."""
+    assert service["profiles"] == ["mcp"]
+    names = [str(item).split("=", 1)[0] for item in service["environment"]]
+    assert "ABI_API_KEY" not in names
+    assert "MCP_HOST" in names
+
+
+@pytest.mark.parametrize("nats, coding", MODES)
+def test_the_mcp_server_keeps_off_by_default_and_holds_no_key(
+    tmp_path: Path, nats: bool, coding: bool
+) -> None:
+    compose = _deploy(_project(tmp_path, nats=nats), include_coding=coding)
+
+    _assert_mcp_server_is_opt_in_and_keyless(compose["services"]["mcp-server"])

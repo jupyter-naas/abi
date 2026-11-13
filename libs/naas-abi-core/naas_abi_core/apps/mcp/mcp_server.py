@@ -1,76 +1,186 @@
 """
 ABI MCP Server - Lightweight HTTP-based Implementation
-Exposes ABI agents as MCP tools with fast startup (no heavy imports)
+
+Exposes the agents a person may use as MCP tools. The server holds no
+credential of its own: every call goes to Nexus's OpenAI-compatible gateway
+(``/api/v1/models``, ``/api/v1/chat/completions``, the agent is the model) with
+the caller's own personal API key (``abi_pk_...``), and Nexus decides which
+agents that person may use.
+
+- ``stdio`` (the default; a desktop client starts the process): the key is
+  ``NEXUS_ACCESS_TOKEN`` in the environment of the person who runs it.
+- ``sse`` / ``http``: every request carries ``Authorization: Bearer <key>``.
+  A request without one, or with one Nexus refuses, gets 401. Host and Origin
+  are checked whatever the bind address: ``MCP_ALLOWED_HOSTS`` and
+  ``MCP_ALLOWED_ORIGINS`` (comma-separated, ``host:*`` for any port), loopback
+  by default.
 """
 
 import asyncio
+import hashlib
 import os
 import re
 import sys
-from typing import Any
+import time
 
 import httpx
 from dotenv import load_dotenv
-from mcp.server.fastmcp import FastMCP
+from mcp.server.auth.provider import AccessToken
+from mcp.server.auth.settings import AuthSettings
+from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 # Load environment variables from .env file if present
 load_dotenv()
 
-# Initialize FastMCP server. MCP_HOST: the address the HTTP transports listen
-# on (0.0.0.0 in a container, where the port is published).
-mcp = FastMCP("abi", host=os.environ.get("MCP_HOST", "127.0.0.1"))
+# The ABI API that serves Nexus (``/api``): the gateway every call goes through.
+ABI_API_BASE = os.environ.get("ABI_API_BASE", "http://localhost:9879").rstrip("/")
+GATEWAY = f"{ABI_API_BASE}/api/v1"
 
-# Constants - Default to localhost for development, can be overridden by env var
-ABI_API_BASE = os.environ.get("ABI_API_BASE", "http://localhost:9879")
+# MCP_HOST: the address the HTTP transports listen on (0.0.0.0 in a container,
+# where the port is published); MCP_PORT: their port.
+MCP_HOST = os.environ.get("MCP_HOST", "127.0.0.1")
+MCP_PORT = int(os.environ.get("MCP_PORT", "8000"))
 
-
-def get_api_key() -> str:
-    """Get the API key from environment variables"""
-    api_key = os.environ.get("ABI_API_KEY")
-    if not api_key:
-        print("❌ ABI_API_KEY not found in environment")
-        print("📝 Please add it to your .env file:")
-        print("   ABI_API_KEY=your_key_here")
-        sys.exit(1)
-    return api_key
+_LOOPBACK_HOSTS = ["127.0.0.1:*", "localhost:*", "[::1]:*"]
+_LOOPBACK_ORIGINS = ["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"]
+# How long a key Nexus accepted is taken as valid without asking again.
+_TOKEN_CACHE_SECONDS = 60.0
 
 
-async def fetch_openapi_spec() -> dict[str, Any]:
-    """Fetch the OpenAPI specification to discover available agents"""
+def _listed(name: str, default: list[str]) -> list[str]:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def transport_security() -> TransportSecuritySettings:
+    """Host and Origin checks, on whatever address the server listens."""
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=_listed("MCP_ALLOWED_HOSTS", _LOOPBACK_HOSTS),
+        allowed_origins=_listed("MCP_ALLOWED_ORIGINS", _LOOPBACK_ORIGINS),
+    )
+
+
+class NexusKeyVerifier:
+    """A bearer is valid when Nexus accepts it: its gateway lists the agents
+    of the key's owner. Answers are kept for a minute, by the key's hash."""
+
+    def __init__(self) -> None:
+        self._accepted: dict[str, float] = {}
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        if not token:
+            return None
+        digest = hashlib.sha256(token.encode()).hexdigest()
+        now = time.monotonic()
+        if self._accepted.get(digest, 0.0) > now:
+            return AccessToken(token=token, client_id="nexus", scopes=[])
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(
+                    f"{GATEWAY}/models", headers=_headers(token)
+                )
+        except httpx.HTTPError:
+            return None
+        if response.status_code != 200:
+            self._accepted.pop(digest, None)
+            return None
+        # Forget what expired, so the map holds only the last minute's keys.
+        self._accepted = {k: t for k, t in self._accepted.items() if t > now}
+        self._accepted[digest] = now + _TOKEN_CACHE_SECONDS
+        return AccessToken(token=token, client_id="nexus", scopes=[])
+
+
+# Initialize FastMCP server. The HTTP transports require a bearer that Nexus
+# accepts; stdio has no requests and uses NEXUS_ACCESS_TOKEN.
+mcp = FastMCP(
+    "abi",
+    host=MCP_HOST,
+    port=MCP_PORT,
+    token_verifier=NexusKeyVerifier(),
+    auth=AuthSettings(
+        issuer_url=os.environ.get("MCP_AUTH_ISSUER_URL", ABI_API_BASE),  # type: ignore[arg-type]
+        resource_server_url=os.environ.get(  # type: ignore[arg-type]
+            "MCP_PUBLIC_URL", f"http://127.0.0.1:{MCP_PORT}"
+        ),
+    ),
+    transport_security=transport_security(),
+)
+
+
+def _headers(token: str) -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "User-Agent": "ABI-MCP/1.0",
+    }
+
+
+def caller_token(ctx: Context | None) -> str | None:
+    """The key of the person calling: the bearer of the HTTP request that
+    carried the call, else (stdio) NEXUS_ACCESS_TOKEN."""
+    request = None
+    if ctx is not None:
+        try:
+            request = ctx.request_context.request
+        except (AttributeError, ValueError, LookupError):
+            request = None
+    if request is not None:
+        authorization = getattr(request, "headers", {}).get("authorization") or ""
+        scheme, _, token = authorization.partition(" ")
+        if scheme.lower() == "bearer" and token.strip():
+            return token.strip()
+        return None
+    return os.environ.get("NEXUS_ACCESS_TOKEN") or None
+
+
+async def list_agent_ids(token: str) -> list[str]:
+    """The agents the key's owner may use."""
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(f"{GATEWAY}/models", headers=_headers(token))
+        response.raise_for_status()
+        return [
+            str(item.get("id"))
+            for item in response.json().get("data", [])
+            if isinstance(item, dict) and item.get("id")
+        ]
+
+
+async def call_abi_agent_http(agent_name: str, prompt: str, token: str | None) -> str:
+    """Ask ``agent_name`` through the Nexus gateway, as the key's owner."""
+    if not token:
+        return "🔒 No credential: send your personal API key (abi_pk_...) as a bearer token."
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(f"{ABI_API_BASE}/openapi.json")
-            response.raise_for_status()
-            return response.json()
-    except Exception as e:  # noqa: BLE001
-        print(f"❌ Failed to fetch OpenAPI spec: {e}")
-        return {}
-
-
-def extract_agents_from_openapi(openapi_spec: dict[str, Any]) -> list[dict[str, str]]:
-    """Extract agent information from OpenAPI specification"""
-    agents = []
-    paths = openapi_spec.get("paths", {})
-
-    for path, methods in paths.items():
-        # Look for agent completion endpoints
-        if "/agents/" in path and path.endswith("/completion"):
-            # Extract agent name from path like /agents/{agent_name}/completion
-            agent_name = path.split("/agents/")[1].split("/completion")[0]
-
-            # Get description from POST method
-            post_method = methods.get("post", {})
-            description = post_method.get("summary", f"{agent_name} agent completion")
-
-            agents.append(
-                {
-                    "name": agent_name,
-                    "description": description,
-                    "function_name": agent_name_to_function_name(agent_name),
-                }
+        data = {
+            "model": agent_name,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+        }
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                f"{GATEWAY}/chat/completions", json=data, headers=_headers(token)
             )
+            response.raise_for_status()
+            choices = response.json().get("choices") or [{}]
+            return str((choices[0].get("message") or {}).get("content") or "")
 
-    return agents
+    except httpx.ConnectError:
+        return (
+            f"❌ ABI API server not running at {ABI_API_BASE}. Please start it first."
+        )
+    except httpx.TimeoutException:
+        return f"⏱️ Timeout calling {agent_name} agent. The agent might be processing a complex request."
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 401:
+            return "🔒 Authentication failed. Check your personal API key."
+        if e.response.status_code in (403, 404):
+            return f"❓ Agent '{agent_name}' is not one you may use."
+        return f"❌ HTTP {e.response.status_code} error calling {agent_name} agent."
+    except Exception as e:  # noqa: BLE001
+        return f"❌ Error calling {agent_name} agent: {e!s}"
 
 
 def agent_name_to_function_name(agent_name: str) -> str:
@@ -87,157 +197,106 @@ def agent_name_to_function_name(agent_name: str) -> str:
     return function_name or "unknown_agent"
 
 
-async def call_abi_agent_http(agent_name: str, prompt: str, thread_id: int = 1) -> str:
-    """Call ABI agents via HTTP to avoid heavy module imports"""
-    try:
-        headers = {
-            "Authorization": f"Bearer {get_api_key()}",
-            "Content-Type": "application/json",
-            "User-Agent": "ABI-MCP/1.0",
-        }
-
-        data = {"prompt": prompt, "thread_id": thread_id}
-
-        url = f"{ABI_API_BASE}/agents/{agent_name}/completion"
-
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(url, json=data, headers=headers)
-            response.raise_for_status()
-            return response.text.strip('"')  # Remove JSON quotes
-
-    except httpx.ConnectError:
-        return f"❌ ABI API server not running at {ABI_API_BASE}. Please start it first with: uv run api"
-    except httpx.TimeoutException:
-        return f"⏱️ Timeout calling {agent_name} agent. The agent might be processing a complex request."
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 401:
-            return (
-                "🔒 Authentication failed. Check your ABI_API_KEY environment variable."
-            )
-        elif e.response.status_code == 404:
-            return f"❓ Agent '{agent_name}' not found. Please check available agents via OpenAPI spec."
-        else:
-            return f"❌ HTTP {e.response.status_code} error calling {agent_name} agent: {e.response.text}"
-    except Exception as e:  # noqa: BLE001
-        return f"❌ Error calling {agent_name} agent: {e!s}"
-
-
 def create_agent_function(agent_name: str, description: str):
-    """Create a dynamic agent function"""
+    """Create a tool that asks one agent, as the caller."""
 
-    async def agent_function(prompt: str, thread_id: int = 1) -> str:
-        return await call_abi_agent_http(agent_name, prompt, thread_id)
+    async def agent_function(prompt: str, ctx: Context) -> str:
+        return await call_abi_agent_http(agent_name, prompt, caller_token(ctx))
 
     # Set function metadata
     agent_function.__name__ = agent_name_to_function_name(agent_name)
     agent_function.__doc__ = f"""{description}
-    
+
     Args:
         prompt: Your question or request for the {agent_name} agent
-        thread_id: Thread ID for conversation context (default: 1)
     """
 
     return agent_function
 
 
-async def wait_for_api():
-    """Wait for the API to be available before starting"""
-    max_retries = 30  # Wait up to 5 minutes (30 * 10 seconds)
-    retry_delay = 10  # seconds
-
-    for attempt in range(max_retries):
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.get(f"{ABI_API_BASE}")
-                if response.status_code == 200:
-                    print("✅ API is ready!")
-                    return True
-        except Exception:  # noqa: BLE001,S110
-            pass
-
-        if attempt < max_retries - 1:
-            print(
-                f"⏳ Waiting for API to be ready... (attempt {attempt + 1}/{max_retries})"
-            )
-            await asyncio.sleep(retry_delay)
-
-    print("❌ API did not become ready in time")
-    return False
+@mcp.tool()
+async def list_agents(ctx: Context) -> list[str]:
+    """List the agents you may use (the names ask_agent takes)."""
+    token = caller_token(ctx)
+    if not token:
+        return []
+    return await list_agent_ids(token)
 
 
-async def register_agents_dynamically():
-    """Discover and register agents from OpenAPI specification"""
-    print("🔍 Discovering agents from OpenAPI specification...")
+@mcp.tool()
+async def ask_agent(agent: str, prompt: str, ctx: Context) -> str:
+    """Ask one of your agents (see list_agents) a question.
 
-    # Wait for API to be ready if not running locally
-    if not ABI_API_BASE.startswith("http://localhost"):
-        api_ready = await wait_for_api()
-        if not api_ready:
-            print("⚠️ API not ready, using fallback configuration")
-            return
+    Args:
+        agent: The agent's name, as list_agents gives it
+        prompt: Your question or request
+    """
+    return await call_abi_agent_http(agent, prompt, caller_token(ctx))
 
-    openapi_spec = await fetch_openapi_spec()
-    if not openapi_spec:
-        print("⚠️ Failed to fetch OpenAPI spec, falling back to basic agents")
+
+async def register_agents_dynamically() -> None:
+    """stdio: one tool per agent the key's owner may use."""
+    token = os.environ.get("NEXUS_ACCESS_TOKEN")
+    if not token:
         return
-
-    agents = extract_agents_from_openapi(openapi_spec)
-
-    if not agents:
-        print("⚠️ No agents found in OpenAPI spec")
+    print("🔍 Discovering your agents...", file=sys.stderr)
+    try:
+        agents = await list_agent_ids(token)
+    except httpx.HTTPError as e:
+        print(f"⚠️ Could not list your agents: {e}", file=sys.stderr)
         return
-
-    print(f"📡 Found {len(agents)} agents:")
-
-    for agent_info in agents:
-        agent_name = agent_info["name"]
-        description = agent_info["description"]
-        function_name = agent_info["function_name"]
-
-        print(f"  • {agent_name} -> {function_name}()")
-
-        # Create and register the agent function
-        agent_function = create_agent_function(agent_name, description)
-        mcp.tool()(agent_function)
-
-    print("✅ All agents registered successfully!")
+    for agent_name in agents:
+        mcp.tool()(create_agent_function(agent_name, f"Ask the {agent_name} agent."))
+    print(f"✅ {len(agents)} agents registered", file=sys.stderr)
 
 
-async def setup():
-    """Setup function to initialize the server"""
-    # Quick startup - no heavy imports!
-    print("🚀 Starting lightweight ABI MCP Server...")
-    print(f"📡 Will connect to ABI API at: {ABI_API_BASE}")
+_LOOPBACK_BINDS = ("127.0.0.1", "localhost", "::1")
 
-    # Validate API key exists
-    get_api_key()
-    print("🔑 API key loaded successfully")
 
-    # Dynamically discover and register agents
-    await register_agents_dynamically()
+def http_transport_problem(
+    host: str = MCP_HOST, public_url: str | None = None
+) -> str | None:
+    """Why an HTTP transport may not start: listening beyond loopback needs
+    MCP_PUBLIC_URL, the address its clients use (published in its 401s)."""
+    public_url = os.environ.get("MCP_PUBLIC_URL") if public_url is None else public_url
+    if host not in _LOOPBACK_BINDS and not public_url:
+        return (
+            f"MCP_HOST={host} listens beyond this machine: set MCP_PUBLIC_URL to the "
+            "address clients use, and MCP_ALLOWED_HOSTS / MCP_ALLOWED_ORIGINS to match."
+        )
+    return None
 
 
 def run():
     """Entry point for the script"""
-    # Run setup first
-    asyncio.run(setup())
-
     # Determine transport type from environment
     transport = os.environ.get("MCP_TRANSPORT", "stdio")
+    print(f"📡 ABI API at {ABI_API_BASE}", file=sys.stderr)
+    problem = http_transport_problem() if transport in ("sse", "http") else None
+    if problem:
+        print(f"❌ {problem}", file=sys.stderr)
+        sys.exit(1)
 
     if transport == "sse":
-        # SSE transport for web deployment
         print(
-            "🌐 Starting MCP server with SSE (Server-Sent Events) transport on port 8000"
+            f"🌐 MCP server, SSE transport, on {MCP_HOST}:{MCP_PORT}", file=sys.stderr
         )
         mcp.run(transport="sse")
     elif transport == "http":
-        # HTTP transport using streamable-http
-        print("🌐 Starting MCP server with streamable HTTP transport")
+        print(
+            f"🌐 MCP server, streamable HTTP transport, on {MCP_HOST}:{MCP_PORT}",
+            file=sys.stderr,
+        )
         mcp.run(transport="streamable-http")
     else:
-        # STDIO transport for local Claude Desktop integration
-        print("📋 Starting MCP server with STDIO transport")
+        if not os.environ.get("NEXUS_ACCESS_TOKEN"):
+            print(
+                "❌ NEXUS_ACCESS_TOKEN not set: your personal API key (abi_pk_...), "
+                "made in Nexus under Account, API keys.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        asyncio.run(register_agents_dynamically())
         mcp.run(transport="stdio")
 
 

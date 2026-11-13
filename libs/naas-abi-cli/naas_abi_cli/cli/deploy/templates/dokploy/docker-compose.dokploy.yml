@@ -168,6 +168,10 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+    # Not started by default: set COMPOSE_PROFILES=mcp to run it, with
+    # MCP_PUBLIC_URL, MCP_ALLOWED_HOSTS and MCP_ALLOWED_ORIGINS naming its
+    # public address (it refuses to start without MCP_PUBLIC_URL).
+    profiles: ["mcp"]
     depends_on:
       abi:
         condition: service_healthy
@@ -175,8 +179,8 @@ services:
       ["uv", "run", "--no-dev", "python", "-m", "naas_abi_core.apps.mcp.mcp_server"]
     environment:
       - ABI_API_BASE=http://${ABI_STACK_NAME}-abi:9879
-      - ABI_API_KEY=${ABI_API_KEY}
       - MCP_TRANSPORT=http
+      - MCP_HOST=0.0.0.0
     networks:
       - abi-network
 

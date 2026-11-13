@@ -304,11 +304,9 @@ jobs:
           NAAS_CREDENTIALS_JWT_TOKEN: ${{ secrets.NAAS_CREDENTIALS_JWT_TOKEN }}
 
       - name: Build and push MCP server container
+        # The MCP server holds no credential: each caller sends their own key.
         env:
           NAAS_CREDENTIALS_JWT_TOKEN: ${{ secrets.NAAS_CREDENTIALS_JWT_TOKEN }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
-          ABI_API_KEY: ${{ secrets.ABI_API_KEY }}
         run: |
           docker pull ghcr.io/${{ github.repository }}/abi:latest
           docker tag ghcr.io/${{ github.repository }}/abi:latest abi:latest
@@ -329,11 +327,12 @@ jobs:
           docker push $URI:$TIMESTAMP
           
           ENV_CONFIG="{\
-            \"OPENAI_API_KEY\":\"$OPENAI_API_KEY\",\
-            \"NAAS_API_KEY\":\"$NAAS_CREDENTIALS_JWT_TOKEN\",\
-            \"GITHUB_ACCESS_TOKEN\":\"$ACCESS_TOKEN\",\
-            \"ABI_API_KEY\":\"$ABI_API_KEY\",\
             \"ABI_API_BASE\":\"https://${{ github.event.repository.name }}-api.default.space.naas.ai\",\
+            \"MCP_ALLOWED_HOSTS\":\"${{ env.REGISTRY_NAME }}.default.space.naas.ai\",\
+            \"MCP_ALLOWED_ORIGINS\":\"https://${{ env.REGISTRY_NAME }}.default.space.naas.ai\",\
+            \"MCP_PUBLIC_URL\":\"https://${{ env.REGISTRY_NAME }}.default.space.naas.ai\",\
+            \"MCP_HOST\":\"0.0.0.0\",\
+            \"MCP_PORT\":\"3000\",\
             \"MCP_TRANSPORT\":\"http\"\
           }"
 
