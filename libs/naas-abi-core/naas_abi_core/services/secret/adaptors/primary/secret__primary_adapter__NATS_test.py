@@ -210,6 +210,22 @@ def test_secret_authentication_error_maps_to_call_error():
     assert response.error.retryable is False
 
 
+def test_secret_backend_errors_keep_their_text_out_of_replies():
+    class _Refusing(_StubAdapter):
+        def get(self, key, default=None):
+            raise SecretAuthenticationError("refused credential backend-key-under-test")
+
+    adapter = SecretPrimaryAdapterNATS(_Refusing(), SECRET)
+    request = _FakeRequest(_get_request(), headers={AUTH_HEADER: _valid_token()})
+
+    asyncio.run(adapter._handle_get(request))
+
+    response = secret_pb2.GetResponse()
+    response.ParseFromString(request.responses[0])
+    assert response.error.code == "SECRET_AUTH_FAILED"
+    assert "backend-key-under-test" not in response.error.message
+
+
 def test_unexpected_exception_maps_to_internal_and_does_not_leak_message():
     class _BrokenAdapter(_StubAdapter):
         def get(self, key, default=None):

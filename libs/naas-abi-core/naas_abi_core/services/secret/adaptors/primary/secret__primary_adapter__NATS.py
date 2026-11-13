@@ -210,9 +210,19 @@ class SecretPrimaryAdapterNATS(ServicePrimary):
             # inline it would stall every other endpoint of every service in the
             # process, plus nats-py's own PING/PONG handling.
             response = await self._dispatch.call(call, parsed_request, caller)
-        except SecretAuthenticationError as exc:
+        except SecretAuthenticationError:
+            # The adapter's own credential failed: a fixed message, so nothing
+            # the adapter put in its error (an endpoint, a key) reaches a caller.
+            logger.error(
+                f"SecretPrimaryAdapterNATS: the secret backend refused its credential "
+                f"handling {request.subject!r}"
+            )
             await self._respond_error(
-                request, response_cls, "SECRET_AUTH_FAILED", str(exc), retryable=False
+                request,
+                response_cls,
+                "SECRET_AUTH_FAILED",
+                "the secret backend refused its credential",
+                retryable=False,
             )
             return
         except InvalidSecretKey as exc:

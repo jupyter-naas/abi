@@ -55,8 +55,8 @@ list() -> Dict[str, str | None]                     # merged view (earlier overr
 | Adapter | Backend / Notes |
 |---|---|
 | `DotenvSecretSecondaryAdaptor(path=".env", read_only=False, environment_first=False)` | Reads / writes `.env` files with thread-safe locking; reads fall back to the process environment. `read_only=True` serves a file another process owns (e.g. a volume mounted `:ro`): `set` / `remove` skip it, so the fan-out still writes to the other adapters, and a `remove` leaves the key served from the file. `environment_first=True` reads the environment before the file, matching how `{{ secret.X }}` is rendered |
-| `NaasSecret(naas_api_key, naas_api_url=None)` | Naas API over HTTPS (Bearer token) |
-| `Base64Secret(secret_adapter, base64_secret_key)` | **Decorator** — wraps another adapter; encodes / decodes a base64 dotenv blob under a single key |
+| `NaasSecret(naas_api_key, naas_api_url=None)` | Naas API over HTTPS (Bearer token); a 401 raises `SecretAuthenticationError` naming the URL, never the key |
+| `Base64Secret(secret_adapter, base64_secret_key)` | **Decorator** — wraps another adapter; keeps every secret in one base64 JSON object under a single key. Values are literal (no interpolation, no line syntax); an older dotenv blob is read without interpolation and rewritten as JSON on the next write |
 
 ## Instantiation
 
@@ -155,6 +155,10 @@ any other service account only the names under its own prefix (`<module id>/...`
 for a module), a user nothing; in `get`, `set`, `remove` and `list`. IAM's
 signing keys, the broker's passwords and the callout seed live in this store, so
 a module granted `secret:*` must never reach them.
+
+A backend's refusal of its own credential (`SecretAuthenticationError`) is answered
+`SECRET_AUTH_FAILED` with a fixed message: what the adapter put in its error never
+reaches a caller.
 
 Clients inherit connection, JWT renewal, deadlines, and error handling from
 `naas_abi_core.engine.nats_rpc.NatsRPCClient`; keep domain conversion and exception

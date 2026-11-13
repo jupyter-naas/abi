@@ -31,7 +31,11 @@ class NaasSecret(ISecretAdapter):
             if response.status_code == 404:
                 logger.debug(f"Secret {key} not found")
             elif response.status_code == 401:
-                error_message = f"Authentication error on '{NAAS_API_URL}' with NAAS_API_KEY '{self.naas_api_key}'"
+                # Names the endpoint, never the credential.
+                error_message = (
+                    f"Naas secret API at '{self.naas_api_url}' refused the "
+                    "configured API key (HTTP 401)"
+                )
                 logger.error(error_message)
                 raise SecretAuthenticationError(error_message)
             else:
