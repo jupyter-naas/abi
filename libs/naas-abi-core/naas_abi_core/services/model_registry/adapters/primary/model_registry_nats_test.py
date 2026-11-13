@@ -353,3 +353,107 @@ def test_a_failed_one_shot_call_marks_its_server_span(spans):
     assert server.status.status_code is StatusCode.ERROR
     assert "MODEL_ERROR" in server.status.description
     assert "sk-private" not in server.status.description
+
+
+class RecordingModel(BaseChatModel):
+    """Records what reaches the provider: invocation kwargs and tool binding."""
+
+    seen: list[dict] = []
+
+    @property
+    def _llm_type(self) -> str:
+        return "recording-test"
+
+    def bind_tools(self, tools, **kwargs):
+        self.seen.append({"bind_tools": kwargs})
+        return self
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        self.seen.append(kwargs)
+        return ChatResult(generations=[ChatGeneration(message=AIMessage("ok"))])
+
+
+def _recording_primary():
+    from naas_abi_core.models.Model import ChatModel
+
+    model = RecordingModel(seen=[])
+    primary = ModelRegistryNATS(Mock(), "test")
+    primary._resolve = lambda ref, action="Resolve": (
+        ref.canonical_id,
+        ChatModel(model_id="cheap-2026", provider="openai", model=model),
+        None,
+    )
+    return primary, model
+
+
+def _chat(primary, options=None, tool_options=None, tools=False):
+    from naas_abi_sdk.model_codec import encode_json
+
+    request = _chat_request()
+    request.options_json = encode_json(options or {})
+    request.tool_options_json = encode_json(tool_options or {})
+    if tools:
+        request.tools_json.append(
+            encode_json({"type": "function", "function": {"name": "add"}})
+        )
+    return asyncio.run(primary._execute("chat", request, "caller"))
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"model": "premium-2026"},
+        {"n": 8},
+        {"base_url": "http://127.0.0.1:9"},
+        {"extra_body": {"model": "premium-2026"}},
+        {"extra_headers": {"X-Other": "1"}},
+        {"extra_query": {"a": "b"}},
+        {"timeout": 9999},
+        {"stop": ["x"]},
+        {"config": {}},
+        {"_private": 1},
+        {"max_tokens": 10**7},
+        {"temperature": "hot"},
+        {"top_p": 2},
+        {"seed": True},
+    ],
+)
+def test_chat_options_keep_to_listed_generation_options(options):
+    primary, model = _recording_primary()
+
+    with pytest.raises(ValueError):
+        _chat(primary, options)
+
+    assert model.seen == []
+
+
+@pytest.mark.parametrize(
+    "tool_options",
+    [{"model": "premium-2026"}, {"n": 8}, {"extra_body": {}}, {"tool_choice": 3}],
+)
+def test_tool_options_keep_to_listed_tool_options(tool_options):
+    primary, model = _recording_primary()
+
+    with pytest.raises(ValueError):
+        _chat(primary, tool_options=tool_options, tools=True)
+
+    assert model.seen == []
+
+
+def test_listed_generation_and_tool_options_reach_the_provider():
+    primary, model = _recording_primary()
+    options = {
+        "temperature": 0.2,
+        "top_p": 0.9,
+        "max_tokens": 256,
+        "seed": 7,
+        "response_format": {"type": "json_object"},
+    }
+    tool_options = {"tool_choice": "add", "parallel_tool_calls": False, "strict": True}
+
+    _chat(primary, options, tool_options, tools=True)
+
+    bound, invoked = model.seen
+    assert bound == {"bind_tools": tool_options}
+    assert {key: invoked[key] for key in options} == options
+    assert "model" not in invoked and "n" not in invoked

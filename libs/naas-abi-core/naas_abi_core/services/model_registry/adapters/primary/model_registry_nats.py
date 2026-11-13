@@ -59,6 +59,72 @@ OPERATIONS = {
 
 _USAGE_KEYS = ("input_tokens", "output_tokens", "total_tokens")
 
+# The most tokens a caller may ask one answer for.
+MAX_TOKENS_LIMIT = 65_536
+
+
+def _number(low: float, high: float):
+    def check(value: Any) -> bool:
+        return (
+            isinstance(value, int | float)
+            and not isinstance(value, bool)
+            and math.isfinite(value)
+            and low <= value <= high
+        )
+
+    return check
+
+
+def _integer(low: int, high: int):
+    def check(value: Any) -> bool:
+        return (
+            isinstance(value, int)
+            and not isinstance(value, bool)
+            and low <= value <= high
+        )
+
+    return check
+
+
+def _one_of(*types: type):
+    def check(value: Any) -> bool:
+        return isinstance(value, types)
+
+    return check
+
+
+# What a caller may set on a chat, each with its check. Anything else (the
+# provider's model, endpoint, headers, extra request bodies, the number of
+# answers, ...) belongs to the registered model and is refused. Tool options are
+# listed apart: they go to ``bind_tools``. ``ls_structured_output_format`` is
+# LangChain's own marker of a structured-output call.
+GENERATION_OPTIONS: dict[str, Any] = {
+    "temperature": _number(0, 2),
+    "top_p": _number(0, 1),
+    "max_tokens": _integer(1, MAX_TOKENS_LIMIT),
+    "seed": _integer(-(2**63), 2**63 - 1),
+    "response_format": _one_of(dict),
+    "ls_structured_output_format": _one_of(dict),
+}
+TOOL_OPTIONS: dict[str, Any] = {
+    "tool_choice": _one_of(str, dict),
+    "parallel_tool_calls": _one_of(bool),
+    "strict": _one_of(bool),
+    "ls_structured_output_format": _one_of(dict),
+}
+
+
+def checked_options(options: dict, allowed: dict[str, Any]) -> dict:
+    """``options`` when every key is listed in ``allowed`` and its value passes
+    that key's check; ``ValueError`` naming the first that does not."""
+    for key, value in options.items():
+        check = allowed.get(key)
+        if check is None:
+            raise ValueError(f"{key!r} is not a generation option")
+        if value is not None and not check(value):
+            raise ValueError(f"Invalid value for the generation option {key!r}")
+    return options
+
 
 SUBJECT_PREFIX = "abi.svc.model_registry.v1"
 
@@ -396,26 +462,10 @@ class ModelRegistryNATS(SessionHost):
         tool_options = decode_json(request.tool_options_json, {})
         if not isinstance(options, dict) or not isinstance(tool_options, dict):
             raise TypeError("Model options must be JSON objects")
-        # Configuration/credentials and executable runtime objects are never caller options.
-        forbidden = {
-            "config",
-            "callbacks",
-            "run_manager",
-            "api_key",
-            "base_url",
-            "client",
-            "http_client",
-            "messages",
-            "input",
-            "stop",
-            "tools",
-        }
-        if (
-            forbidden.intersection(options)
-            or forbidden.intersection(tool_options)
-            or any(k.startswith("_") for k in (*options, *tool_options))
-        ):
-            raise ValueError("Runtime configuration is not a generation option")
+        # Only listed generation options reach the provider: the model, its
+        # endpoint and credentials are the registered model's own.
+        options = checked_options(options, GENERATION_OPTIONS)
+        tool_options = checked_options(tool_options, TOOL_OPTIONS)
         canonical, wrapper, config = await asyncio.to_thread(
             self._resolve, request.ref, action
         )
