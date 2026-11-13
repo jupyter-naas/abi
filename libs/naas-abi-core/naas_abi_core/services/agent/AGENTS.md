@@ -81,6 +81,18 @@ work off to a queue or thread yourself.
 Distinct from the `on_tool_usage` / `on_tool_response` / `on_ai_message`
 *callback registration* methods, which take a callable and are set per-instance.
 
+## Tool calls the agent runs
+
+The agent runs the tool calls the model made: the native `tool_calls` of its
+answer. Some models (`text_tool_call_models`, matched in the chat model's name:
+Qwen, Hermes) write a handoff as text instead (`<tool_call>{...}</tool_call>`,
+`[tool_call: transfer_to_X]{...}[/tool_call]`). For those models only, such
+markup becomes a call when the whole answer is the markup and every call in it
+is a handoff (`transfer_to_*`). Markup inside prose, as a summary of a page or a
+quoted tool result repeats it, stays text. The SDK runtime
+(`naas_abi_sdk.agents._messages`) keeps the same rule; `tests/agent_parity`
+holds both to it.
+
 ## Subdirectories
 
 | Path | Contents |
