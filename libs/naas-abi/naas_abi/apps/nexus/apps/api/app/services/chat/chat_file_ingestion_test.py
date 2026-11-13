@@ -474,3 +474,86 @@ def test_ingest_xlsx_bad_content_raises() -> None:
             embedding_model="hash-v1",
             embedding_dimension=32,
         )
+
+
+# ---------------------------------------------------------------------------
+# Tests: what one file may cost the converter
+# ---------------------------------------------------------------------------
+
+
+def _docx_with_document(xml: bytes) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("word/document.xml", xml)
+    return buf.getvalue()
+
+
+def test_chat_ingestion_keeps_archive_members_bounded(monkeypatch) -> None:
+    monkeypatch.setattr(ChatFileIngestionService, "max_member_bytes", 64 * 1024)
+    body = b"<w:p><w:r><w:t>" + b"a" * (256 * 1024) + b"</w:t></w:r></w:p>"
+    xml = (
+        b'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        b"<w:body>" + body + b"</w:body></w:document>"
+    )
+    content = _docx_with_document(xml)
+    assert len(content) < 16 * 1024  # small upload, large member
+    with pytest.raises(ChatFileIngestionError, match="too large"):
+        ChatFileIngestionService._docx_to_markdown(content)
+
+
+def test_chat_ingestion_keeps_the_archive_total_bounded(monkeypatch) -> None:
+    monkeypatch.setattr(ChatFileIngestionService, "max_archive_bytes", 64 * 1024)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for i in range(1, 10):
+            zf.writestr(f"ppt/slides/slide{i}.xml", b" " * (16 * 1024))
+    with pytest.raises(ChatFileIngestionError, match="expands past"):
+        ChatFileIngestionService._pptx_to_markdown(buf.getvalue())
+
+
+def test_chat_ingestion_keeps_extracted_text_bounded(monkeypatch) -> None:
+    monkeypatch.setattr(ChatFileIngestionService, "max_text_chars", 1000)
+    paragraphs = "".join(f"<w:p><w:r><w:t>{'b' * 100}</w:t></w:r></w:p>" for _ in range(20))
+    xml = (
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        f"<w:body>{paragraphs}</w:body></w:document>"
+    ).encode()
+    with pytest.raises(ChatFileIngestionError, match="too much text"):
+        ChatFileIngestionService._docx_to_markdown(_docx_with_document(xml))
+    service = _make_service()
+    with pytest.raises(ChatFileIngestionError, match="too much text"):
+        service._to_markdown("notes.txt", b"c" * 2000)
+    assert service._to_markdown("notes.txt", b"c" * 10) == "c" * 10
+
+
+def test_chat_ingestion_keeps_the_source_size_bounded(monkeypatch) -> None:
+    monkeypatch.setattr(ChatFileIngestionService, "max_source_bytes", 1024)
+    service = _make_service()
+    with pytest.raises(ChatFileIngestionError, match="too large"):
+        service.upload_and_ingest(
+            workspace_id="ws",
+            user_id="u1",
+            conversation_id="c1",
+            filename="big.txt",
+            content=b"x" * 2048,
+        )
+
+
+def test_chat_ingestion_keeps_a_workbook_within_its_text_limit(monkeypatch) -> None:
+    """Cells count once, as text: a workbook whose text fits is ingested."""
+    openpyxl = pytest.importorskip("openpyxl")
+    monkeypatch.setattr(ChatFileIngestionService, "max_text_chars", 2000)
+
+    def workbook(rows: int) -> bytes:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        for _ in range(rows):
+            ws.append(["x" * 10, "y" * 10])
+        buf = io.BytesIO()
+        wb.save(buf)
+        return buf.getvalue()
+
+    text = ChatFileIngestionService._xlsx_to_markdown(workbook(60))  # 1,200 characters of cells
+    assert text.count("x" * 10) == 60
+    with pytest.raises(ChatFileIngestionError, match="too much text"):
+        ChatFileIngestionService._xlsx_to_markdown(workbook(120))  # 2,400

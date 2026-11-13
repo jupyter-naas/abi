@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import io
+import os
 import shutil
 import stat
-import subprocess
 import tarfile
 import tempfile
 import zipfile
@@ -31,6 +31,10 @@ from naas_abi.apps.nexus.apps.api.app.services.files.files__schema import (
     UnsupportedPreviewError,
     UploadTooLargeError,
 )
+from naas_abi.apps.nexus.apps.api.app.services.files.office_conversion import (
+    ConversionFailed,
+    convert_to_pdf,
+)
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 
@@ -57,9 +61,14 @@ class FilesService:
     folder_marker = ".nexus_folder"
     max_upload_size = 50 * 1024 * 1024
     max_archive_files = 10_000
+    # Every member of an archive counts: files, folders and anything else.
     max_extract_files = 10_000
     max_extract_uncompressed_bytes = 512 * 1024 * 1024
     max_extract_member_bytes = 100 * 1024 * 1024
+    # Past ``max_extract_ratio_floor`` bytes, what an archive holds is at most
+    # ``max_extract_ratio`` times its own size.
+    max_extract_ratio = 100
+    max_extract_ratio_floor = 16 * 1024 * 1024
     archive_chunk_size = 64 * 1024
 
     _EXTRACTABLE_SUFFIXES = (
@@ -421,31 +430,17 @@ class FilesService:
                 "Office preview is unavailable: LibreOffice is not installed on the API service."
             )
 
-        with tempfile.TemporaryDirectory(prefix="nexus-office-preview-") as tmp_dir:
-            input_path = Path(tmp_dir) / PurePosixPath(normalized_path).name
-            output_name = f"{PurePosixPath(normalized_path).stem}.pdf"
-            output_path = Path(tmp_dir) / output_name
-            input_path.write_bytes(content_bytes)
-
-            result = subprocess.run(
-                [
-                    soffice,
-                    "--headless",
-                    "--convert-to",
-                    "pdf",
-                    "--outdir",
-                    str(Path(tmp_dir)),
-                    str(input_path),
-                ],
-                capture_output=True,
-                text=True,
-                timeout=60,
-                check=False,
+        output_name = f"{PurePosixPath(normalized_path).stem}.pdf"
+        try:
+            pdf = convert_to_pdf(
+                soffice,
+                PurePosixPath(normalized_path).name,
+                content_bytes,
+                wrapper=os.environ.get("NEXUS_OFFICE_CONVERTER_WRAPPER", ""),
             )
-            if result.returncode != 0 or not output_path.exists():
-                raise PreviewConversionError("Failed to convert presentation to PDF preview.")
-
-            return PdfPreviewData(content=output_path.read_bytes(), filename=output_name)
+        except ConversionFailed as exc:
+            raise PreviewConversionError("Failed to convert presentation to PDF preview.") from exc
+        return PdfPreviewData(content=pdf, filename=output_name)
 
     def stream_folder_archive(self, path: str) -> tuple[str, Iterator[bytes]]:
         normalized_path = self.normalize_relative_path(path, allow_empty=True)
@@ -519,27 +514,39 @@ class FilesService:
         stem = self._archive_stem(archive_name)
         destination = self._unique_sibling_folder(parent, stem)
 
-        # Validate and materialize members before creating the destination so
-        # invalid archives leave no partial folder behind.
+        # Every member is checked (paths, kinds, counts, declared sizes) before
+        # the destination is created, so an invalid archive leaves no folder
+        # behind. Then members are read and written one at a time: at most one
+        # member's bytes are held at once.
+        budget = _ExtractBudget(self, len(archive_bytes))
         try:
             if fmt == "zip":
-                planned = self._plan_zip_extract(archive_bytes, destination)
+                archive, entries = self._plan_zip_extract(archive_bytes, destination, budget)
             else:
-                planned = self._plan_tar_extract(archive_bytes, destination)
+                archive, entries = self._plan_tar_extract(archive_bytes, destination, budget)
         except (InvalidArchiveError, ExtractTooLargeError, UnsupportedArchiveError):
             raise
         except Exception as exc:
             raise InvalidArchiveError("Failed to read archive") from exc
 
+        written = _ExtractBudget(self, len(archive_bytes))
         self._create_folder_marker(destination)
         try:
-            for kind, target, data in planned:
-                if kind == "dir":
+            with archive:
+                for kind, target, member in entries:
                     self._ensure_parent_folders(target, under=destination)
-                    if not self._is_directory(target):
-                        self._create_folder_marker(target)
-                else:
-                    self._ensure_parent_folders(target, under=destination)
+                    if kind == "dir":
+                        if not self._is_directory(target):
+                            self._create_folder_marker(target)
+                        continue
+                    try:
+                        data = self._read_member(archive, member, target, written)
+                    except (InvalidArchiveError, ExtractTooLargeError):
+                        raise
+                    except Exception as exc:  # the archive, not the storage
+                        raise InvalidArchiveError(
+                            f"Failed to read archive member: {target.rsplit('/', 1)[-1]}"
+                        ) from exc
                     self._write_bytes(target, data)
         except Exception:
             try:
@@ -630,23 +637,31 @@ class FilesService:
             return True
         return False
 
+    @staticmethod
+    def _zip_member_mode(info: zipfile.ZipInfo) -> int:
+        return (info.external_attr >> 16) & 0xFFFF
+
     def _plan_zip_extract(
-        self, archive_bytes: bytes, destination: str
-    ) -> list[tuple[str, str, bytes]]:
+        self, archive_bytes: bytes, destination: str, budget: _ExtractBudget
+    ) -> tuple[zipfile.ZipFile, list[tuple[str, str, zipfile.ZipInfo]]]:
         try:
             zf = zipfile.ZipFile(io.BytesIO(archive_bytes))
         except zipfile.BadZipFile as exc:
             raise InvalidArchiveError("Invalid or corrupted ZIP archive") from exc
 
-        planned: list[tuple[str, str, bytes]] = []
-        file_count = 0
-        total_uncompressed = 0
-        with zf:
+        entries: list[tuple[str, str, zipfile.ZipInfo]] = []
+        try:
             for info in zf.infolist():
                 name = info.filename
+                budget.count_member()
                 if self._zip_member_is_symlink(info):
                     raise InvalidArchiveError(
                         f"Archive contains a symlink which is not allowed: {name}"
+                    )
+                mode = self._zip_member_mode(info)
+                if mode and stat.S_IFMT(mode) not in (0, stat.S_IFREG, stat.S_IFDIR):
+                    raise InvalidArchiveError(
+                        f"Archive contains a special member which is not allowed: {name}"
                     )
 
                 if name.endswith("/") or info.is_dir():
@@ -654,131 +669,89 @@ class FilesService:
                     if dir_rel:
                         dir_full = self._safe_extract_member_path(dir_rel, destination)
                         if dir_full is not None:
-                            planned.append(("dir", dir_full, b""))
+                            entries.append(("dir", dir_full, info))
                     continue
 
                 target = self._safe_extract_member_path(name, destination)
                 if target is None:
                     continue
-
-                file_count += 1
-                if file_count > self.max_extract_files:
-                    raise ExtractTooLargeError(
-                        reason=(f"Archive has too many files (limit {self.max_extract_files})")
-                    )
-
-                size = info.file_size
-                if size > self.max_extract_member_bytes:
-                    raise ExtractTooLargeError(
-                        reason=(
-                            f"Archive member is too large: {name} "
-                            f"(limit {self.max_extract_member_bytes // (1024 * 1024)}MB)"
-                        )
-                    )
-                total_uncompressed += size
-                if total_uncompressed > self.max_extract_uncompressed_bytes:
-                    raise ExtractTooLargeError(
-                        reason=(
-                            "Archive uncompressed size exceeds limit "
-                            f"({self.max_extract_uncompressed_bytes // (1024 * 1024)}MB)"
-                        )
-                    )
-
-                try:
-                    data = zf.read(info)
-                except Exception as exc:
-                    raise InvalidArchiveError(f"Failed to read archive member: {name}") from exc
-
-                if len(data) > self.max_extract_member_bytes:
-                    raise ExtractTooLargeError(
-                        reason=(
-                            f"Archive member is too large: {name} "
-                            f"(limit {self.max_extract_member_bytes // (1024 * 1024)}MB)"
-                        )
-                    )
-                total_uncompressed = total_uncompressed - size + len(data)
-                if total_uncompressed > self.max_extract_uncompressed_bytes:
-                    raise ExtractTooLargeError(
-                        reason=(
-                            "Archive uncompressed size exceeds limit "
-                            f"({self.max_extract_uncompressed_bytes // (1024 * 1024)}MB)"
-                        )
-                    )
-
-                planned.append(("file", target, data))
-
-        return planned
+                budget.add(name, info.file_size)
+                entries.append(("file", target, info))
+        except BaseException:
+            zf.close()
+            raise
+        return zf, entries
 
     def _plan_tar_extract(
-        self, archive_bytes: bytes, destination: str
-    ) -> list[tuple[str, str, bytes]]:
+        self, archive_bytes: bytes, destination: str, budget: _ExtractBudget
+    ) -> tuple[tarfile.TarFile, list[tuple[str, str, tarfile.TarInfo]]]:
         try:
             tf = tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:*")
         except tarfile.TarError as exc:
             raise InvalidArchiveError("Invalid or corrupted tar archive") from exc
 
-        planned: list[tuple[str, str, bytes]] = []
-        file_count = 0
-        total_uncompressed = 0
-        with tf:
-            for member in tf.getmembers():
+        entries: list[tuple[str, str, tarfile.TarInfo]] = []
+        try:
+            # One header at a time (not ``getmembers()``), so the count stops
+            # the read of a table of any size.
+            for member in tf:
                 name = member.name
+                budget.count_member()
                 if member.issym() or member.islnk():
                     raise InvalidArchiveError(
                         f"Archive contains a link which is not allowed: {name}"
                     )
-
                 if member.isdir():
                     dir_full = self._safe_extract_member_path(name, destination)
                     if dir_full is not None:
-                        planned.append(("dir", dir_full, b""))
+                        entries.append(("dir", dir_full, member))
                     continue
-
                 if not member.isfile():
-                    continue
+                    raise InvalidArchiveError(
+                        f"Archive contains a special member which is not allowed: {name}"
+                    )
 
                 target = self._safe_extract_member_path(name, destination)
                 if target is None:
                     continue
+                budget.add(name, member.size)
+                entries.append(("file", target, member))
+        except tarfile.TarError as exc:
+            tf.close()
+            raise InvalidArchiveError("Invalid or corrupted tar archive") from exc
+        except BaseException:
+            tf.close()
+            raise
+        return tf, entries
 
-                file_count += 1
-                if file_count > self.max_extract_files:
-                    raise ExtractTooLargeError(
-                        reason=(f"Archive has too many files (limit {self.max_extract_files})")
-                    )
-
-                size = member.size
-                if size > self.max_extract_member_bytes:
-                    raise ExtractTooLargeError(
-                        reason=(
-                            f"Archive member is too large: {name} "
-                            f"(limit {self.max_extract_member_bytes // (1024 * 1024)}MB)"
-                        )
-                    )
-                total_uncompressed += size
-                if total_uncompressed > self.max_extract_uncompressed_bytes:
-                    raise ExtractTooLargeError(
-                        reason=(
-                            "Archive uncompressed size exceeds limit "
-                            f"({self.max_extract_uncompressed_bytes // (1024 * 1024)}MB)"
-                        )
-                    )
-
-                extracted = tf.extractfile(member)
-                if extracted is None:
-                    continue
-                data = extracted.read()
-                if len(data) > self.max_extract_member_bytes:
-                    raise ExtractTooLargeError(
-                        reason=(
-                            f"Archive member is too large: {name} "
-                            f"(limit {self.max_extract_member_bytes // (1024 * 1024)}MB)"
-                        )
-                    )
-
-                planned.append(("file", target, data))
-
-        return planned
+    def _read_member(
+        self,
+        archive: zipfile.ZipFile | tarfile.TarFile,
+        member: zipfile.ZipInfo | tarfile.TarInfo,
+        name: str,
+        budget: _ExtractBudget,
+    ) -> bytes:
+        """A member's bytes, read in chunks and counted as they come: a size
+        its header understates stops the read."""
+        if isinstance(archive, zipfile.ZipFile):
+            assert isinstance(member, zipfile.ZipInfo)
+            stream = archive.open(member)
+        else:
+            assert isinstance(member, tarfile.TarInfo)
+            stream = archive.extractfile(member)
+            if stream is None:
+                return b""
+        chunks: list[bytes] = []
+        size = 0
+        with stream:
+            while True:
+                chunk = stream.read(self.archive_chunk_size)
+                if not chunk:
+                    break
+                size += len(chunk)
+                budget.add_read(name, size, len(chunk))
+                chunks.append(chunk)
+        return b"".join(chunks)
 
     def _ensure_parent_folders(self, file_path: str, *, under: str) -> None:
         """Create missing ancestor folders between ``under`` and ``file_path``."""
@@ -969,3 +942,51 @@ class FilesService:
                     all_files.append(child)
 
         return all_files, all_dirs
+
+
+class _ExtractBudget:
+    """The limits of one extraction: members, each member's size, the total,
+    and the total against the archive's own size."""
+
+    def __init__(self, service: FilesService, archive_size: int) -> None:
+        self.service = service
+        self.members = 0
+        self.total = 0
+        self.ceiling = min(
+            service.max_extract_uncompressed_bytes,
+            max(service.max_extract_ratio_floor, archive_size * service.max_extract_ratio),
+        )
+
+    def count_member(self) -> None:
+        self.members += 1
+        limit = self.service.max_extract_files
+        if self.members > limit:
+            raise ExtractTooLargeError(reason=f"Archive has too many entries (limit {limit})")
+
+    def _check_member(self, name: str, size: int) -> None:
+        limit = self.service.max_extract_member_bytes
+        if size > limit:
+            raise ExtractTooLargeError(
+                reason=f"Archive member is too large: {name} (limit {limit // (1024 * 1024)}MB)"
+            )
+
+    def _check_total(self) -> None:
+        if self.total > self.ceiling:
+            raise ExtractTooLargeError(
+                reason=(
+                    "Archive uncompressed size exceeds limit "
+                    f"({self.ceiling // (1024 * 1024)}MB for this archive)"
+                )
+            )
+
+    def add(self, name: str, size: int) -> None:
+        """A member's declared size."""
+        self._check_member(name, size)
+        self.total += size
+        self._check_total()
+
+    def add_read(self, name: str, member_so_far: int, chunk: int) -> None:
+        """Bytes read from a member: its running size and the chunk just read."""
+        self._check_member(name, member_so_far)
+        self.total += chunk
+        self._check_total()

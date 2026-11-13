@@ -52,6 +52,16 @@ class ChatFileIngestionResult:
 
 
 class ChatFileIngestionService:
+    # What one file may cost the process that converts it: its own size, each
+    # archive member read (declared and actual), all of them together, the
+    # pages of a PDF and the text extracted.
+    max_source_bytes = 50 * 1024 * 1024
+    max_member_bytes = 16 * 1024 * 1024
+    max_archive_bytes = 64 * 1024 * 1024
+    max_archive_members = 10_000
+    max_pdf_pages = 500
+    max_text_chars = 4_000_000
+
     def __init__(
         self,
         object_storage: ObjectStorageService,
@@ -124,6 +134,10 @@ class ChatFileIngestionService:
         except Exceptions.ObjectNotFound as exc:
             raise ChatFileIngestionError("File not found") from exc
 
+        if len(file_content) > self.max_source_bytes:
+            raise ChatFileIngestionError(
+                f"File is too large to ingest (limit {self.max_source_bytes // (1024 * 1024)}MB)"
+            )
         file_sha = hashlib.sha256(file_content).hexdigest()
         cache_key = build_embedding_cache_key(
             workspace_id, file_sha, embedding_model, embedding_dimension
@@ -326,16 +340,18 @@ class ChatFileIngestionService:
     ) -> str:
         ext = PurePosixPath(source_path).suffix.lower()
         if ext in {".md", ".txt", ".py", ".json", ".yaml", ".yml", ".csv"}:
-            return content.decode("utf-8")
-        if ext == ".docx":
-            return self._docx_to_markdown(content)
-        if ext == ".pptx":
-            return self._pptx_to_markdown(content)
-        if ext == ".xlsx":
-            return self._xlsx_to_markdown(content)
-        if ext == ".pdf":
-            return self._pdf_to_markdown(content, on_progress=on_progress)
-        raise ChatFileIngestionError(f"Unsupported file type: {ext}")
+            text = content.decode("utf-8")
+        elif ext == ".docx":
+            text = self._docx_to_markdown(content)
+        elif ext == ".pptx":
+            text = self._pptx_to_markdown(content)
+        elif ext == ".xlsx":
+            text = self._xlsx_to_markdown(content)
+        elif ext == ".pdf":
+            text = self._pdf_to_markdown(content, on_progress=on_progress)
+        else:
+            raise ChatFileIngestionError(f"Unsupported file type: {ext}")
+        return _within_text_limit(text, self.max_text_chars)
 
     @staticmethod
     def _pdf_to_markdown(
@@ -360,14 +376,23 @@ class ChatFileIngestionService:
             tmp.write(content)
             tmp.flush()
 
+            try:
+                import fitz  # PyMuPDF, a pymupdf4llm dependency
+
+                with fitz.open(tmp.name) as doc:
+                    page_count = len(doc)
+            except Exception as exc:
+                raise ChatFileIngestionError("Invalid PDF content") from exc
+            if page_count > ChatFileIngestionService.max_pdf_pages:
+                raise ChatFileIngestionError(
+                    "PDF has too many pages to ingest "
+                    f"(limit {ChatFileIngestionService.max_pdf_pages})"
+                )
+
             if on_progress is not None:
                 # Try to count pages and process in batches for granular progress.
                 try:
-                    import fitz  # PyMuPDF — always available as a pymupdf4llm dep
-
-                    with fitz.open(tmp.name) as doc:
-                        total_pages = len(doc)
-
+                    total_pages = page_count
                     if total_pages > _PDF_PROGRESS_STEPS:
                         batch_size = max(1, total_pages // _PDF_PROGRESS_STEPS)
                         parts: list[str] = []
@@ -394,13 +419,14 @@ class ChatFileIngestionService:
         ns_map = {"w": namespace}
 
         try:
-            with zipfile.ZipFile(io.BytesIO(content)) as docx_file:
-                xml_content = docx_file.read("word/document.xml")
+            with _open_office_archive(content) as docx_file:
+                xml_content = _read_archive_member(docx_file, "word/document.xml")
         except (KeyError, zipfile.BadZipFile) as exc:
             raise ChatFileIngestionError("Invalid DOCX content: missing word/document.xml") from exc
 
         root = ET.fromstring(xml_content)  # nosec B314 — XML from a trusted DOCX zip, no external entity expansion
         lines: list[str] = []
+        extracted = 0
         for paragraph in root.findall(".//w:body/w:p", ns_map):
             style_elem = paragraph.find("./w:pPr/w:pStyle", ns_map)
             style = style_elem.get(f"{{{namespace}}}val", "") if style_elem is not None else ""
@@ -417,6 +443,8 @@ class ChatFileIngestionService:
             text = re.sub(r"[ \t]+", " ", "".join(text_parts)).strip()
             if not text:
                 continue
+            extracted += len(text)
+            _within_text_limit(extracted, ChatFileIngestionService.max_text_chars)
 
             heading_match = re.match(r"Heading([1-6])$", style)
             if heading_match:
@@ -436,7 +464,7 @@ class ChatFileIngestionService:
         ns_map = {"p": p_ns, "a": a_ns}
 
         try:
-            with zipfile.ZipFile(io.BytesIO(content)) as pptx_file:
+            with _open_office_archive(content) as pptx_file:
                 slide_paths = [
                     name
                     for name in pptx_file.namelist()
@@ -451,8 +479,9 @@ class ChatFileIngestionService:
                 )
 
                 markdown_parts: list[str] = []
+                extracted = 0
                 for slide_index, slide_path in enumerate(slide_paths, start=1):
-                    slide_xml = pptx_file.read(slide_path)
+                    slide_xml = _read_archive_member(pptx_file, slide_path)
                     root = ET.fromstring(slide_xml)  # nosec B314 — XML from a trusted PPTX zip, no external entity expansion
                     lines: list[str] = []
                     for paragraph in root.findall(".//a:p", ns_map):
@@ -464,6 +493,10 @@ class ChatFileIngestionService:
                                 parts.append("\n")
                         text = re.sub(r"[ \t]+", " ", "".join(parts)).strip()
                         if text:
+                            extracted += len(text)
+                            _within_text_limit(
+                                extracted, ChatFileIngestionService.max_text_chars
+                            )
                             lines.append(text)
 
                     if lines:
@@ -481,14 +514,24 @@ class ChatFileIngestionService:
             raise ChatFileIngestionError("XLSX support requires openpyxl") from exc
 
         try:
+            # The members' declared sizes are checked before openpyxl reads any.
+            _open_office_archive(content).close()
             wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+        except ChatFileIngestionError:
+            raise
         except Exception as exc:
             raise ChatFileIngestionError("Invalid XLSX content") from exc
+        extracted = 0
 
         parts: list[str] = []
         for sheet_name in wb.sheetnames:
             ws = wb[sheet_name]
-            rows = list(ws.iter_rows(values_only=True))
+            rows = []
+            for row in ws.iter_rows(values_only=True):
+                # The text of the cells, counted as they are read.
+                extracted += sum(len(str(value)) for value in row if value is not None)
+                _within_text_limit(extracted, ChatFileIngestionService.max_text_chars)
+                rows.append(row)
             # Drop trailing all-None rows
             while rows and all(cell is None for cell in rows[-1]):
                 rows.pop()
@@ -523,3 +566,50 @@ class ChatFileIngestionService:
         if not parts:
             raise ChatFileIngestionError("Empty content extracted from XLSX")
         return "\n\n".join(parts).strip()
+
+
+def _within_text_limit(text_or_length: str | int, limit: int):
+    """The text (or its length) when within ``limit`` characters; else refuse."""
+    length = text_or_length if isinstance(text_or_length, int) else len(text_or_length)
+    if length > limit:
+        raise ChatFileIngestionError(
+            f"File holds too much text to ingest (limit {limit:,} characters)"
+        )
+    return text_or_length
+
+
+def _open_office_archive(content: bytes) -> zipfile.ZipFile:
+    """An office file's zip, once its member table is within the limits: how
+    many members, and what they declare they hold, each and together."""
+    archive = zipfile.ZipFile(io.BytesIO(content))
+    try:
+        infos = archive.infolist()
+        if len(infos) > ChatFileIngestionService.max_archive_members:
+            raise ChatFileIngestionError("Office file has too many parts to ingest")
+        total = sum(info.file_size for info in infos)
+        if total > ChatFileIngestionService.max_archive_bytes:
+            raise ChatFileIngestionError(
+                "Office file expands past the ingestion limit "
+                f"({ChatFileIngestionService.max_archive_bytes // (1024 * 1024)}MB)"
+            )
+    except BaseException:
+        archive.close()
+        raise
+    return archive
+
+
+def _read_archive_member(archive: zipfile.ZipFile, name: str) -> bytes:
+    """One member's bytes, refused past ``max_member_bytes`` whether its header
+    says so or the bytes read do."""
+    limit = ChatFileIngestionService.max_member_bytes
+    info = archive.getinfo(name)
+    too_large = ChatFileIngestionError(
+        f"Office file part is too large to ingest (limit {limit // (1024 * 1024)}MB)"
+    )
+    if info.file_size > limit:
+        raise too_large
+    with archive.open(info) as member:
+        data = member.read(limit + 1)
+    if len(data) > limit:
+        raise too_large
+    return data

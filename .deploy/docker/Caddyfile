@@ -5,6 +5,12 @@
 }
 
 {$PUBLIC_API_HOST:api.localhost} {
+    # The API's own routes read bodies up to 64 MiB (the API refuses past it
+    # too); remote apps (/app-remote/) set their own limits.
+    @api_routes path /api/*
+    request_body @api_routes {
+        max_size 64MiB
+    }
     reverse_proxy abi:9879 {
         header_up X-Forwarded-Proto {scheme}
     }

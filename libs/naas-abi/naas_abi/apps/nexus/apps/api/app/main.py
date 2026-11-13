@@ -906,6 +906,11 @@ def _configure_middleware(app: FastAPI) -> None:
     )
 
     app.add_middleware(ViewGuardMiddleware)
+    # Request bodies of /api/ stay under one limit (413 past it), read before any
+    # route or form parser spools them. Inside CORS, so the web app reads the 413.
+    from naas_abi.apps.nexus.apps.api.app.core.request_body import RequestBodyLimitMiddleware
+
+    app.add_middleware(RequestBodyLimitMiddleware, max_bytes=settings.max_request_body_bytes)
     app.add_middleware(CORSMiddleware, **cors_kwargs)
     app.add_middleware(SecurityHeadersMiddleware)
 

@@ -16,6 +16,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
 )
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
+from naas_abi.apps.nexus.apps.api.app.core.request_body import read_upload
 from naas_abi.apps.nexus.apps.api.app.services.chat import ChatService
 from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__primary_adapter__dependencies import (
     authorize_turn,
@@ -185,7 +186,8 @@ async def upload_file_for_chat(
 
     upload_prefix = ChatFileIngestionService.my_drive_uploads_path(current_user.id)
     filename = (file.filename or "untitled").split("/")[-1].split("\\")[-1]
-    object_storage.put_object(upload_prefix, filename, await file.read())
+    content = await read_upload(file, ChatFileIngestionService.max_source_bytes)
+    object_storage.put_object(upload_prefix, filename, content)
     source_path = f"{upload_prefix}/{filename}"
 
     jobs = ChatIngestionJobService(db)

@@ -624,6 +624,10 @@ class Settings(BaseSettings):
         if not (self.environment == "development" or self.nexus_env == "local"):
             self.enable_ollama_autostart = False
 
+    # The largest request body /api/ reads (413 past it). Upload routes keep
+    # their own, smaller caps; remote apps (/app-remote/) set theirs.
+    max_request_body_bytes: int = 64 * 1024 * 1024
+
     # Security Headers
     enable_security_headers: bool = True
     content_security_policy: str | None = None  # Set in production
