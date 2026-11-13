@@ -2134,8 +2134,11 @@ class MyService(ServiceBase):
   container of the call places it (`call_container` checks it is registered under that
   path; an unknown container is "not found"). Call `.record()` once the create succeeded:
   the placements are written as `engine`, so the caller never needs
-  `iam:PutPlacement`. `place_new` places a resource whose id the backend chose
-  (a sent message); `forget` drops a deleted resource's placements.
+  `iam:PutPlacement`. `place_new(type, parts, action=...)` places a resource whose
+  id the backend chose (a sent message) once the caller may perform the create
+  `action` on it as placed in the call's container; `require_new(action, type)`
+  checks the same before the backend acts. `forget` drops a deleted resource's
+  placements.
 - Wire: a NATS primary maps `PermissionDeniedError` and `ResourceNotFoundError`
   with `authorization_error_code`; its client raises them back with
   `raise_authorization_error`. A service's own not-found keeps its own code.

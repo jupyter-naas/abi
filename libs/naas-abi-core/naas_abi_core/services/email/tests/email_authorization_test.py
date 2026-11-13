@@ -108,3 +108,53 @@ def test_list_sent_returns_only_the_messages_the_caller_may_list(tmp_path):
         assert [m.message_id for m in email.list_sent()] == [second]
     with as_service_account("engine"):
         assert {m.message_id for m in email.list_sent()} == {first, second}
+
+
+def test_a_kept_copy_keeps_to_where_its_sender_may_send(tmp_path):
+    from naas_abi_core.engine.call_context import Principal
+    from naas_abi_core.services.iam.IAMPorts import (
+        PermissionDeniedError,
+        ResourceNotFoundError,
+    )
+
+    iam = contract_iam()
+    iam._register_catalog(NEXUS)
+    h = IAMHarness(iam)
+    ws_a = h.register("ws-a", "org-a")
+    email = wire(EmailService(FilesystemAdapter(directory=str(tmp_path))), iam)
+    sender = "abi:email:sender/noreply%40example.com"
+    # Allowed to send from the address only: nothing in ws-a.
+    module = h.service_account("module-sender")
+    h.grant(module.id, statement("Allow", ["email:Send"], [sender]))
+    # Allowed to send from the address, and messages in ws-a.
+    member = h.service_account("ws-a-sender")
+    h.grant(member.id, statement("Allow", ["email:Send"], [sender, f"{ws_a}/*"]))
+    reader = h.user("alice")
+    h.grant(reader.id, statement("Allow", ["email:ListSent"], [f"{ws_a}/*"]))
+
+    def as_account(record, container):
+        return use_call_context(
+            CallContext(
+                principal=Principal(
+                    id=record.id, kind="service_account", name=record.name
+                ),
+                container=container,
+            )
+        )
+
+    with as_account(module, ws_a), pytest.raises(
+        (PermissionDeniedError, ResourceNotFoundError)
+    ):
+        _send(email, "elsewhere")
+    with as_service_account("engine"):
+        assert [m.subject for m in email.list_sent()] == []  # nothing was sent
+
+    with as_account(module, None):  # no container: kept, placed nowhere
+        unplaced = _send(email, "platform")
+    with as_account(member, ws_a):
+        placed = _send(email, "ws-a")
+
+    assert iam.resolve_placement("email", placed) == ws_a
+    assert iam.placement_of("email", unplaced) is None
+    with h.as_(reader):
+        assert [m.subject for m in email.list_sent()] == ["ws-a"]

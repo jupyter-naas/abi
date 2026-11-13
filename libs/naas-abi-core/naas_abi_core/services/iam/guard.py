@@ -52,6 +52,9 @@ NotFound = Callable[[], BaseException]
 # create it authorized. The caller needs the create action, never iam:PutPlacement.
 PLACEMENT_WRITER = "engine"
 
+# The id a check stands on for a resource whose id the backend has yet to choose.
+NEW_ID = "-"
+
 # Wire codes shared by every kernel service.
 PERMISSION_DENIED = "PERMISSION_DENIED"
 NOT_FOUND = "NOT_FOUND"
@@ -272,10 +275,30 @@ class ServiceGuard:
             iam=iam,
         )
 
-    def place_new(self, type: str, parts: Parts) -> None:
+    def require_new(self, action: str, type: str) -> None:
+        """Before a backend creates a resource under an id it chooses (a sent
+        message): the caller may perform ``action`` on such a resource placed in
+        the container of the call. Nothing is checked, and ``place_new`` places
+        nothing, for the platform or for a container IAM does not know."""
+        iam = self.iam
+        if iam is None:
+            return
+        target = iam.call_container()
+        if target is None or target == UNRESOLVED:
+            return
+        resource_type = self._type(type)
+        iam.require(
+            self.action(action),
+            resource_name(
+                self.service, type, NEW_ID, kind=resource_type.id, container=target
+            ),
+        )
+
+    def place_new(self, type: str, parts: Parts, *, action: str) -> None:
         """Place a resource the backend just created under an id it chose (a sent
-        message), in the container of the call. The create was authorized on
-        what names it (the sender); nothing is recorded for the platform or for a
+        message), in the container of the call, once the caller may perform the
+        create ``action`` on it as placed there (``require_new`` checks the same
+        before the backend acts). Nothing is recorded for the platform or for a
         container IAM does not know."""
         iam = self.iam
         if iam is None:
@@ -284,8 +307,12 @@ class ServiceGuard:
         if target is None or target == UNRESOLVED:
             return
         resource_type = self._type(type)
+        name = resource_name(
+            self.service, type, parts, kind=resource_type.id, container=target
+        )
+        iam.require(self.action(action), name)
         Creation(
-            self.name(type, parts),
+            name,
             self.service,
             encode_id(parts, resource_type.id),
             target,

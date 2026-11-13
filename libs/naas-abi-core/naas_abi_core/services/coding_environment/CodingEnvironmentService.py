@@ -214,7 +214,9 @@ class CodingEnvironmentService(ServiceBase):
         if self._guard.enforcing:
             if status.id not in self._owners:
                 self._owners[status.id] = owner
-                self._guard.place_new("environment", [owner, status.id])
+                self._guard.place_new(
+                    "environment", [owner, status.id], action="Provision"
+                )
         self.__publish_event(
             WorkspaceProvisioned(
                 user=owner,
