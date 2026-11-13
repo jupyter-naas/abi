@@ -38,13 +38,13 @@ def test_shutdown_calls_engine_shutdown_when_the_engine_was_loaded(monkeypatch):
 def test_event_handlers_added_by_modules_still_run_under_the_custom_lifespan(
     monkeypatch,
 ):
-    """Modules attach to this app with ``app.add_event_handler(...)`` -- Nexus
+    """Modules attach to this app's router (``app.router.on_startup``) -- Nexus
     does exactly that in ``naas_abi/apps/nexus/apps/api/app/main.py``
     (``_register_startup_handlers``) to run its migrations and seeds.
 
-    Passing ``lifespan=`` to FastAPI replaces Starlette's ``_DefaultLifespan``,
-    which is the only thing that would otherwise call ``router.startup()`` /
-    ``router.shutdown()``; if our lifespan forgets to drive them, every such
+    Passing ``lifespan=`` to FastAPI replaces its default lifespan,
+    which is the only thing that would otherwise run the router's
+    ``on_startup`` / ``on_shutdown``; if our lifespan forgets to run them, every such
     handler is silently skipped (no warning) and Nexus boots without tables.
     """
     monkeypatch.setattr(api_module.engine, "_engine", None)
@@ -56,8 +56,8 @@ def test_event_handlers_added_by_modules_still_run_under_the_custom_lifespan(
     async def on_shutdown() -> None:
         calls.append("shutdown")
 
-    api_module.app.add_event_handler("startup", on_startup)
-    api_module.app.add_event_handler("shutdown", on_shutdown)
+    api_module.app.router.on_startup.append(on_startup)
+    api_module.app.router.on_shutdown.append(on_shutdown)
     try:
         with TestClient(api_module.app):
             assert calls == ["startup"]
@@ -79,7 +79,7 @@ def test_module_shutdown_handlers_run_before_the_engine_is_torn_down(monkeypatch
     def on_shutdown() -> None:
         order.append("module")
 
-    api_module.app.add_event_handler("shutdown", on_shutdown)
+    api_module.app.router.on_shutdown.append(on_shutdown)
     try:
         with TestClient(api_module.app):
             pass
@@ -121,7 +121,7 @@ def test_a_failed_startup_handler_shuts_the_engine_down(monkeypatch):
     def on_startup() -> None:
         raise RuntimeError("migrations failed")
 
-    api_module.app.add_event_handler("startup", on_startup)
+    api_module.app.router.on_startup.append(on_startup)
     try:
         with pytest.raises(RuntimeError), TestClient(api_module.app):
             pass

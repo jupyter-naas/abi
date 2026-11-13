@@ -65,6 +65,7 @@ from naas_abi_core.apps.api.abi_api_key_auth import (
     APP_HTML_TOKEN_COOKIE,
     extract_abi_api_token,
     is_abi_api_token_valid,
+    routed_path,
 )
 from naas_abi_core.engine.call_context import (
     CallContext,
@@ -609,9 +610,14 @@ async def redirect_remote_app_root(
 ) -> Response:
     """``.../<app>`` -> ``.../<app>/``: relative links in the entry page resolve."""
     await _granted(grant, module_id, app)
-    query = f"?{request.url.query}" if request.url.query else ""
+    # The routed path and the raw query: nothing of ``request.url``, which is
+    # rebuilt from the ``Host`` header.
+    raw_query = request.scope.get("query_string", b"").decode("latin-1")
+    query = f"?{raw_query}" if raw_query else ""
     return RedirectResponse(
-        f"{request.url.path}/{query}", status_code=307, headers=SECURITY_HEADERS
+        f"{routed_path(request)}/{query}",
+        status_code=307,
+        headers=SECURITY_HEADERS,
     )
 
 

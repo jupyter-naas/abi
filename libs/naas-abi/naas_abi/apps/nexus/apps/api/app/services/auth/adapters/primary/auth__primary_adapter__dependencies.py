@@ -25,6 +25,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam import authz as authz_module
 from naas_abi.apps.nexus.apps.api.app.services.iam.runtime import IAMUnavailableError
 from naas_abi.apps.nexus.apps.api.app.services.registry import ServiceRegistry
 from naas_abi.apps.nexus.apps.api.app.services.workspaces import WorkspacePermissionError
+from naas_abi_core.apps.api.abi_api_key_auth import routed_path
 from sqlalchemy.ext.asyncio import AsyncSession
 
 _bearer = HTTPBearer(
@@ -75,7 +76,7 @@ async def request_credential(request: Request, token: str | None) -> Credential 
         return None
     if token:
         found = await bearer_credential(token)
-        if found is not None and found.kind in accepted_kinds(request.url.path):
+        if found is not None and found.kind in accepted_kinds(routed_path(request)):
             return found
         if found is not None:
             state.nexus_credential_refused = found.kind

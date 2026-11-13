@@ -33,6 +33,7 @@ from naas_abi.apps.nexus.apps.api.app.services.ollama import (
     get_ollama_status,
 )
 from naas_abi.apps.nexus.apps.api.app.services.websocket import init_websocket
+from naas_abi_core.apps.api.abi_api_key_auth import routed_path
 from starlette.middleware.base import BaseHTTPMiddleware
 
 
@@ -704,7 +705,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         # Skip security headers for WebSocket upgrade requests
-        if request.url.path.startswith("/ws/") or request.headers.get("upgrade") == "websocket":
+        # The routed path, not ``request.url``: the URL is rebuilt from ``Host``.
+        path = routed_path(request)
+        if path.startswith("/ws/") or request.headers.get("upgrade") == "websocket":
             return await call_next(request)
 
         response: Response = await call_next(request)
@@ -715,11 +718,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # The built-in IdP's login pages are the one active content this origin
         # serves as itself: they are sandboxed by their own policy (no script),
         # which the net would turn into a download.
-        trusted = is_idp_path(request.url.path)
+        trusted = is_idp_path(path)
         if (
             not trusted
-            and not is_embeddable(request.url.path)
-            and request.url.path not in _DOCS_PATHS
+            and not is_embeddable(path)
+            and path not in _DOCS_PATHS
         ):
             harden_active_content(response.headers)
 
@@ -729,7 +732,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
             # Prevent clickjacking — allow /app-html/ and /app-preview/ assets
             # to be embedded in iframes.
-            embeddable = is_embeddable(request.url.path)
+            embeddable = is_embeddable(path)
             if embeddable:
                 ancestors = ["'self'"]
                 frontend = str(getattr(settings, "frontend_url", "") or "").rstrip("/")
@@ -744,7 +747,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 # remote module's app: only Nexus may frame it.
                 presented = (
                     ()
-                    if request.url.path.startswith("/app-remote/")
+                    if path.startswith("/app-remote/")
                     else (request.headers.get("origin"), request.headers.get("referer"))
                 )
                 for header in presented:
@@ -856,8 +859,10 @@ def _register_startup_handlers(app: FastAPI) -> None:
     async def on_shutdown() -> None:
         await _shutdown(app)
 
-    app.add_event_handler("startup", on_startup)
-    app.add_event_handler("shutdown", on_shutdown)
+    # The router holds the hooks (FastAPI dropped them from the app with
+    # Starlette 1.0); the app's lifespan runs them.
+    app.router.on_startup.append(on_startup)
+    app.router.on_shutdown.append(on_shutdown)
 
 
 def _configure_middleware(app: FastAPI) -> None:

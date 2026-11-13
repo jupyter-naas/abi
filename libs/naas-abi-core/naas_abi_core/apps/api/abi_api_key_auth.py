@@ -38,6 +38,14 @@ def clear_app_html_token_validators() -> None:
     _EXTRA_APP_HTML_TOKEN_VALIDATORS.clear()
 
 
+def routed_path(request: Request) -> str:
+    """The path the router dispatches on (``scope["path"]``).
+
+    Access checks decide on this, never on ``request.url``: the URL is rebuilt
+    from the ``Host`` header, which the client chooses."""
+    return str(request.scope.get("path") or "")
+
+
 def extract_abi_api_token(request: Request) -> str | None:
     """Return bearer / ``?token=`` / scoped cookie credential (agent parity)."""
     authorization = request.headers.get("Authorization")
@@ -126,7 +134,7 @@ def _stamp_app_html_token_cookie(
         path="/app-html/",
         httponly=True,
         samesite="lax",
-        secure=request.url.scheme == "https",
+        secure=request.scope.get("scheme") == "https",
     )
 
 
@@ -142,7 +150,7 @@ class AppHtmlAbiKeyMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next) -> Response:
-        path = request.url.path
+        path = routed_path(request)
         if path.startswith("/app-html/") and request.method != "OPTIONS":
             check = await asyncio.to_thread(check_app_html_request, request)
             if not check.authorized:

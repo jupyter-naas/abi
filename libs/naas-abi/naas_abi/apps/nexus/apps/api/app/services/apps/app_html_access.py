@@ -10,7 +10,10 @@ from __future__ import annotations
 
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.services.apps import links
-from naas_abi_core.apps.api.abi_api_key_auth import register_app_html_token_validator
+from naas_abi_core.apps.api.abi_api_key_auth import (
+    register_app_html_token_validator,
+    routed_path,
+)
 from naas_abi_core.engine.nats_auth import APP_AUDIENCE, GRANT_KEY_PREFIX
 from starlette.requests import Request
 
@@ -25,7 +28,7 @@ def validate_app_html_jwt(token: str, request: Request) -> bool:
     link = links.open_link(token, APP_AUDIENCE)
     if link is None or not link.resource.startswith(links.APP_HTML_ROOT):
         return False
-    path = request.url.path
+    path = routed_path(request)
     if not path.startswith(link.resource):
         return False
     if link.resource == links.APP_HTML_ROOT:

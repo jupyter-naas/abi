@@ -14,6 +14,7 @@ from naas_abi_core.apps.api.abi_api_key_auth import (
     is_abi_api_token_valid,
     is_app_html_request_authorized,
     register_app_html_token_validator,
+    routed_path,
 )
 from starlette.requests import Request
 
@@ -204,3 +205,53 @@ def test_a_link_is_checked_once_per_request_and_off_the_event_loop(
     assert calls[0][1] is False  # no running loop in the thread that validated
     assert client.get("/app-html/axi/?token=nope").status_code == 401
     assert len(calls) == 2
+
+
+def _app_html_app() -> FastAPI:
+    app = FastAPI()
+    app.add_middleware(AppHtmlAbiKeyMiddleware)
+
+    @app.get("/app-html/{path:path}")
+    def _html(path: str) -> dict[str, str]:
+        return {"path": path}
+
+    return app
+
+
+def test_app_html_access_keeps_the_routed_path_whatever_the_host(api_key: str) -> None:
+    """The check covers the path the router serves, whatever ``Host`` says."""
+    client = TestClient(_app_html_app(), base_url="http://abi.local")
+    for host in ("abi.local/elsewhere?q=", "abi.local/health#", "abi.local"):
+        response = client.get("/app-html/x/apps/x_proxy/index.html", headers={"host": host})
+        assert response.status_code in {400, 401}, host
+        assert "path" not in response.text
+
+
+def _url_showing(url: object) -> property:
+    def shown(self: Request) -> object:
+        return url
+
+    return property(shown)
+
+
+def test_app_html_access_keeps_the_routed_path_when_the_url_differs(
+    api_key: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A ``request.url`` that names another path changes nothing: the middleware
+    and the validators decide on the path the router serves."""
+    from starlette.datastructures import URL
+
+    seen: list[str] = []
+
+    def _validator(token: str, request: Request) -> bool:
+        seen.append(routed_path(request))
+        return token == "link-for-a" and routed_path(request).startswith("/app-html/a/")
+
+    register_app_html_token_validator(_validator)
+    client = TestClient(_app_html_app())
+    for shown in ("http://abi.local/health", "http://abi.local/app-html/a/x"):
+        monkeypatch.setattr(Request, "url", _url_showing(URL(shown)))
+        assert client.get("/app-html/b/secret.html").status_code == 401
+        assert client.get("/app-html/b/secret.html?token=link-for-a").status_code == 401
+        assert client.get("/app-html/a/page.html?token=link-for-a").status_code == 200
+    assert set(seen) == {"/app-html/b/secret.html", "/app-html/a/page.html"}

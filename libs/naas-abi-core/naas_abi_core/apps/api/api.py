@@ -10,6 +10,7 @@ print(
 
 import asyncio
 import html
+import inspect
 import os
 import subprocess
 from contextlib import asynccontextmanager
@@ -112,18 +113,26 @@ def _abandon_engine() -> None:
         logger.warning(f"api: shutting down the engine of a failed start failed: {exc!r}")
 
 
+async def _run_handlers(handlers: list) -> None:
+    for handler in list(handlers):
+        result = handler()
+        if inspect.isawaitable(result):
+            await result
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
-    # Modules attach to this app with ``app.add_event_handler("startup"|
-    # "shutdown", ...)`` -- Nexus does, to run its migrations and seeds (see
+    # Modules attach start and stop hooks to this app's router
+    # (``app.router.on_startup`` / ``app.router.on_shutdown``) -- Nexus does, to
+    # run its migrations and seeds (see
     # naas_abi/apps/nexus/apps/api/app/main.py::_register_startup_handlers).
-    # Passing ``lifespan=`` to FastAPI replaces Starlette's ``_DefaultLifespan``,
-    # which is the ONLY thing that would otherwise run those handlers (and it
-    # does so silently: no warning is raised for handlers added after
-    # construction). So drive them explicitly here, and tear the engine down
-    # last: it is the dependency the modules' shutdown hooks may still need.
+    # Passing ``lifespan=`` to FastAPI replaces its default lifespan, which is
+    # the ONLY thing that would otherwise run those hooks (and it does so
+    # silently: no warning is raised for hooks added after construction). So
+    # run them explicitly here, and tear the engine down last: it is the
+    # dependency the modules' shutdown hooks may still need.
     try:
-        await app.router.startup()
+        await _run_handlers(app.router.on_startup)
     except BaseException:
         await asyncio.to_thread(_abandon_engine)
         raise
@@ -131,7 +140,7 @@ async def _lifespan(app: FastAPI):
         yield
     finally:
         try:
-            await app.router.shutdown()
+            await _run_handlers(app.router.on_shutdown)
         finally:
             await _shutdown_engine()
 

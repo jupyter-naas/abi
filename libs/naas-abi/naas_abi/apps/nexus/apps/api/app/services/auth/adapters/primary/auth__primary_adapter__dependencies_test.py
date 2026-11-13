@@ -59,3 +59,30 @@ async def test_without_iam_nobody_is_an_admin_but_other_failures_surface(monkeyp
     allowed.side_effect = RuntimeError("the broker is down")
     with pytest.raises(RuntimeError):
         await dependencies.is_platform_admin("u1")
+
+
+@pytest.mark.asyncio
+async def test_a_credential_keeps_to_the_kinds_of_the_routed_path(monkeypatch) -> None:
+    """The kinds a route takes are read from the path the router serves, not
+    from ``request.url``, which is rebuilt from the ``Host`` header."""
+    from naas_abi.apps.nexus.apps.api.app.services.auth.credentials import Credential
+    from starlette.datastructures import URL
+    from starlette.requests import Request
+
+    found = Credential(kind="api-key", user_id="u1")
+    monkeypatch.setattr(dependencies, "bearer_credential", AsyncMock(return_value=found))
+    monkeypatch.setattr(
+        Request, "url", property(lambda self: URL("http://x/api/workspaces"))
+    )
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/auth/me",
+            "headers": [(b"host", b"x/api/workspaces?")],
+            "query_string": b"",
+        }
+    )
+
+    assert await dependencies.request_credential(request, "abi_ak_x") is None
+    assert request.state.nexus_credential_refused == "api-key"

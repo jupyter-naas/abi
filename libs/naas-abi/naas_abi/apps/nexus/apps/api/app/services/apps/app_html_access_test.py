@@ -154,3 +154,28 @@ def test_a_link_to_one_app_opens_no_app_of_a_module_nested_below_it(iam, monkeyp
         user_id="user-1", expires_minutes=10, path_prefix="/app-html/a/b/c/d/"
     )
     assert app_html_access.validate_app_html_jwt(nested, _request("/app-html/a/b/c/d/index.html"))
+
+
+def test_a_link_keeps_to_the_routed_path_whatever_the_host(iam, monkeypatch) -> None:
+    """A link for one app is checked against the path the router serves, not
+    against ``request.url``, which is rebuilt from the ``Host`` header."""
+    from starlette.datastructures import URL
+
+    token, _ = app_html_access.mint_app_html_access_token(
+        user_id="user-1", expires_minutes=10, path_prefix="/app-html/appa/"
+    )
+    other_host = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/app-html/appb/secret.html",
+            "headers": [(b"host", b"x/app-html/appa/x?")],
+            "query_string": b"",
+        }
+    )
+    assert app_html_access.validate_app_html_jwt(token, other_host) is False
+    monkeypatch.setattr(
+        Request, "url", property(lambda self: URL("http://x/app-html/appa/x"))
+    )
+    assert app_html_access.validate_app_html_jwt(token, other_host) is False
+    assert app_html_access.validate_app_html_jwt(token, _request("/app-html/appa/index.html"))
