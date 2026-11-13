@@ -99,6 +99,9 @@ GRAPH_CLASS = URIRef("http://ontology.naas.ai/abi/Graph")
 _SCHEMA_GRAPH = URIRef("http://ontology.naas.ai/graph/schema")
 _SCHEMA_CLASS = URIRef("http://triple-store.internal#Schema")
 _INTERNAL_NAMESPACE = "http://triple-store.internal"
+# Vocabularies a schema content load may not use: the service's bookkeeping, and
+# the agent tool definitions only first-party module files provide.
+_RESERVED_NAMESPACES = (_INTERNAL_NAMESPACE, "http://ontology.naas.ai/intentMapping/")
 _SCHEMA_HASH = URIRef("http://triple-store.internal#hash")
 _SCHEMA_UPDATE_TIME = URIRef("http://triple-store.internal#fileLastUpdateTime")
 _SCHEMA_FILE_PATH = URIRef("http://triple-store.internal#filePath")
@@ -973,8 +976,10 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
         ``source`` already held this very content.
 
         Unlike ``load_schema``, a failure raises: ``Exceptions.InvalidSchemaError``
-        for content that is not Turtle (nothing is written) or that writes the
-        service's own ``internal:`` vocabulary, which the bookkeeping owns.
+        for content that is not Turtle (nothing is written), or that uses the
+        service's own ``internal:`` vocabulary, which the bookkeeping owns, or the
+        ``intentMapping:`` vocabulary of agent tools, which only the engine's own
+        module files define.
 
         The caller needs ``triple_store:LoadSchema`` on ``schema/<source>``.
         """
@@ -1014,14 +1019,13 @@ class TripleStoreService(ServiceBase, ITripleStoreService):
 
     @staticmethod
     def _refuse_internal_vocabulary(graph: Graph) -> None:
-        if any(
-            str(term).startswith(_INTERNAL_NAMESPACE)
-            for triple in graph
-            for term in triple
-        ):
-            raise Exceptions.InvalidSchemaError(
-                f"schema content may not use the {_INTERNAL_NAMESPACE} vocabulary"
-            )
+        for triple in graph:
+            for term in triple:
+                for namespace in _RESERVED_NAMESPACES:
+                    if str(term).startswith(namespace):
+                        raise Exceptions.InvalidSchemaError(
+                            f"schema content may not use the {namespace} vocabulary"
+                        )
 
     @staticmethod
     def _source_base(source: str) -> str:

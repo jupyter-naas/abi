@@ -622,6 +622,26 @@ def test_load_schema_content_refuses_the_services_own_vocabulary():
     assert _schema_entries(service, "module/bar/Forged.ttl") == []
 
 
+def test_schema_content_keeps_templatable_queries_out():
+    adapter = _InMemoryTripleStoreAdapter()
+    service = TripleStoreService(adapter)
+    tool = """@prefix intentMapping: <http://ontology.naas.ai/intentMapping/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<http://example.org/q> a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "lookup" ;
+    intentMapping:sparqlTemplate "SELECT * WHERE { ?s ?p ?o }" .
+"""
+
+    inserts = len(adapter.insert_calls)
+
+    with pytest.raises(Exceptions.InvalidSchemaError):
+        service.load_schema_content("module/bar/Queries.ttl", tool)
+
+    assert _schema_entries(service, "module/bar/Queries.ttl") == []
+    assert len(adapter.insert_calls) == inserts
+
+
 def test_load_schema_content_resolves_relative_iris_independently_of_the_cwd(
     tmp_path, monkeypatch
 ):

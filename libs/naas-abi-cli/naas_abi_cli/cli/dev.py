@@ -41,6 +41,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import shutil
 import signal
 import socket
@@ -418,10 +419,48 @@ def _oxigraph_url(ports: dict[str, int]) -> str:
     return f"http://{PROBE_HOST}:{ports['oxigraph']}"
 
 
+OXIGRAPH_TOKEN_ENV = "OXIGRAPH_TOKEN"
+
+
+def _oxigraph_token_path() -> Path:
+    return _dev_dir() / "oxigraph.token"
+
+
+def _new_oxigraph_token() -> str:
+    """A fresh token for the SPARQL server about to start, kept owner-only in
+    the dev directory so the services started with it (or restarted later)
+    present it."""
+    token = secrets.token_urlsafe(32)
+    path = _oxigraph_token_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.touch(mode=0o600, exist_ok=True)
+    path.chmod(0o600)
+    path.write_text(token, encoding="utf-8")
+    return token
+
+
+def _oxigraph_token() -> str:
+    """The running SPARQL server's token ("" before it ever started)."""
+    try:
+        return _oxigraph_token_path().read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def _point_at_oxigraph(env: dict[str, str], ports: dict[str, int]) -> None:
+    """Point a service's triple-store adapter at this stack's SPARQL server."""
+    env["OXIGRAPH_URL"] = _oxigraph_url(ports)
+    token = _oxigraph_token()
+    if token:
+        env[OXIGRAPH_TOKEN_ENV] = token
+
+
 def _launch_oxigraph(spec: ServiceSpec) -> int:
     store_path = _project_root() / "storage" / "triplestore" / "oxigraph"
     store_path.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
+    # Per run: only the services this stack starts present it.
+    env[OXIGRAPH_TOKEN_ENV] = _new_oxigraph_token()
     cmd = [
         "uv",
         "run",
@@ -816,7 +855,7 @@ def _launch_api(
     env["ABI_PORT"] = str(spec.port)
     env["ABI_HOST"] = env.get("ABI_HOST", BIND_HOST)
     # Point the triple-store adapter at the worktree-local oxigraph server.
-    env["OXIGRAPH_URL"] = _oxigraph_url(ports)
+    _point_at_oxigraph(env, ports)
     # We hand out BROWSER_HOST, but we can't know what the user actually typed
     # (or which host WSL forwarding put them on), and a wrong guess is a silent
     # CORS failure. Allow every spelling that can legitimately reach us.
@@ -889,7 +928,7 @@ def _launch_dagster(
     # the same way the api does. This is our loguru sink, not dagster's own
     # `--log-level` (left at its default so the daemon doesn't drown the pane).
     env["LOG_LEVEL"] = _resolve_log_level(log_level)
-    env["OXIGRAPH_URL"] = _oxigraph_url(ports)
+    _point_at_oxigraph(env, ports)
     _set_public_hosts(env, ports["nexus-web"], ports["api"])
     cmd = [
         "uv",

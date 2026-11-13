@@ -205,16 +205,27 @@ def wait(name: str, deadline: float, check: Callable[[], str]) -> None:
         time.sleep(3)
 
 
+def dev_sparql_token() -> str:
+    """The dev Oxigraph's per-run token: ``abi dev`` keeps it in the project."""
+    try:
+        return Path(".abi/dev/oxigraph.token").read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
 def sparql(endpoint: str, query: str) -> dict[str, Any]:
     """Run ``query`` on a SPARQL endpoint (the dev Oxigraph) and parse its JSON."""
+    headers = {
+        "Content-Type": "application/sparql-query",
+        "Accept": "application/sparql-results+json",
+    }
+    if token := dev_sparql_token():
+        headers["Authorization"] = f"Bearer {token}"
     req = urllib.request.Request(
         f"{endpoint.rstrip('/')}/query",
         data=query.encode(),
         method="POST",
-        headers={
-            "Content-Type": "application/sparql-query",
-            "Accept": "application/sparql-results+json",
-        },
+        headers=headers,
     )
     try:
         with urllib.request.urlopen(req, timeout=60) as response:

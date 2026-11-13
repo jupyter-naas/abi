@@ -86,7 +86,8 @@ implementation, `_apply_schema_content(source, content, update time, entries, fo
 base, validate=None)`: no entry → insert the triples and the metadata; same hash → write nothing (a hash
 comparison, no parse); different hash → apply the diff (triples added and removed) and
 swap the metadata. New content is parsed once there, and `validate` (for
-`load_schema_content`, the refusal of the service's own `internal:` vocabulary) checks
+`load_schema_content`, the refusal of the service's own `internal:` vocabulary and of
+the `intentMapping:` vocabulary of agent tools) checks
 that parse: unchanged content is neither parsed nor checked. `source` is the `filePath` key: a file path for engine modules,
 `module/<module_id>/<path>` for a remote module's ontology.
 
@@ -94,7 +95,9 @@ that parse: unchanged content is neither parsed nor checked. `source` is the `fi
   `load_schema_content` raises: `Exceptions.InvalidSchemaError` for content that is not
   Turtle (checked before any write, so nothing is written) or that uses the service's own
   `http://triple-store.internal` vocabulary (a file could otherwise forge another source's
-  `internal:Schema` entry), and returns whether the graph was written. Both publish
+  `internal:Schema` entry) or the `http://ontology.naas.ai/intentMapping/` vocabulary
+  (templatable agent tools come from the engine's own module files only), and returns
+  whether the graph was written. Both publish
   `SchemaLoaded` or `TripleStoreError`.
 - Relative IRIs resolve against the file's URI for a file, and against
   `http://ontology.naas.ai/<source>` for content, never against the working directory.
@@ -140,11 +143,23 @@ TripleStoreFactory.TripleStoreServiceOxigraphEmbedded(
 Run an embedded Oxigraph store as an HTTP SPARQL endpoint (single-writer file lock):
 
 ```bash
-python -m naas_abi_core.services.triple_store.oxigraph_server \
+OXIGRAPH_TOKEN=<token> python -m naas_abi_core.services.triple_store.oxigraph_server \
     --location <store_path> --bind 127.0.0.1:7878
 ```
 
-Endpoints: `POST /query`, `POST /update`, `GET /store`, `POST /store?default` (bulk insert), `DELETE /store?default` (bulk delete).
+Endpoints: `GET`/`POST /query`, `POST /update`, `GET /store`, `POST /store?default` (bulk insert), `DELETE /store?default` (bulk delete).
+
+Who it answers (`create_app(path, token=..., hosts=...)`):
+- only a `Host` that is loopback or the bound address (421 otherwise), so a page
+  that rebinds a name to loopback is refused;
+- with a token, only `Authorization: Bearer <token>` (401 otherwise; `/health`
+  excepted). `abi dev` starts it with a fresh token per run, keeps it owner-only in
+  `.abi/dev/oxigraph.token`, and hands it to the api and dagster as `OXIGRAPH_TOKEN`,
+  which the `Oxigraph` adapter sends;
+- bodies only with their media type: `application/sparql-query`,
+  `application/sparql-update`, and N-Triples, Turtle or N-Quads on `/store` (415
+  otherwise). A form or `text/plain` body, which a browser sends cross-site without
+  a preflight, is never read.
 
 `/query` and `GET /store` stream their response (chunked) from one dedicated
 thread per request; a syntax error is still a 400, an error after the first
@@ -417,7 +432,7 @@ disk, and authorized with IAM like every operation: `triple_store:LoadSchema` on
 (`schema/module/${module.id}/*`); the engine and the platform admin load any. Content may
 not use the
 `http://triple-store.internal` vocabulary, which would let a module forge another source's
-`internal:Schema`. The SDK sends the files once its instance is `READY` or `DEGRADED`,
+`internal:Schema`, nor the `intentMapping:` vocabulary of templatable agent tools. The SDK sends the files once its instance is `READY` or `DEGRADED`,
 retrying in the background.
 
 **Consequences.**

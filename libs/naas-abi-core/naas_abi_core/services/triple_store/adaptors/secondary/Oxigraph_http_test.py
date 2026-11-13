@@ -15,6 +15,9 @@ from naas_abi_core.services.triple_store.tests.triple_store__secondary_adapter__
 uvicorn = pytest.importorskip("uvicorn")
 pytest.importorskip("pyoxigraph")
 
+# The server runs as `abi dev` runs it: with a per-run token the adapter sends.
+TOKEN = "per-run-test-token"
+
 
 @pytest.fixture(scope="module")
 def endpoint(tmp_path_factory):
@@ -25,7 +28,7 @@ def endpoint(tmp_path_factory):
         port = sock.getsockname()[1]
     server = uvicorn.Server(
         uvicorn.Config(
-            create_app(str(tmp_path_factory.mktemp("oxigraph"))),
+            create_app(str(tmp_path_factory.mktemp("oxigraph")), token=TOKEN),
             host="127.0.0.1",
             port=port,
             log_level="warning",
@@ -46,7 +49,7 @@ def endpoint(tmp_path_factory):
 class TestOxigraphHTTP(GenericTripleStoreSecondaryAdapterTest, ConfinedQueryContract):
     @pytest.fixture
     def adapter(self, endpoint):
-        return Oxigraph(endpoint)
+        return Oxigraph(endpoint, token=TOKEN)
 
     @pytest.fixture
     def supports_named_graphs(self) -> bool:
@@ -68,7 +71,7 @@ class TestOxigraphHTTP(GenericTripleStoreSecondaryAdapterTest, ConfinedQueryCont
 def test_streams_are_read_from_the_http_response_not_from_query(endpoint, monkeypatch):
     from rdflib import Graph, Literal, URIRef
 
-    adapter = Oxigraph(endpoint)
+    adapter = Oxigraph(endpoint, token=TOKEN)
     graph_name = URIRef("http://test.example.org/stream/http")
     g = Graph()
     for n in range(2500):  # more than one N-Triples batch
@@ -106,6 +109,7 @@ def test_the_dev_server_streams_results_instead_of_buffering_them(endpoint):
     with requests.post(
         f"{endpoint}/query",
         headers={
+            "Authorization": f"Bearer {TOKEN}",
             "Content-Type": "application/sparql-query",
             "Accept": "text/tab-separated-values",
         },
@@ -118,7 +122,10 @@ def test_the_dev_server_streams_results_instead_of_buffering_them(endpoint):
 
     bad = requests.post(
         f"{endpoint}/query",
-        headers={"Content-Type": "application/sparql-query"},
+        headers={
+            "Authorization": f"Bearer {TOKEN}",
+            "Content-Type": "application/sparql-query",
+        },
         data=b"SELECT WHERE {",
     )
     assert bad.status_code == 400  # still a status, not a broken stream

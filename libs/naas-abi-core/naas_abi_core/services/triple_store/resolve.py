@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 _ABI_DEV_INSTANCE_REL = Path(".abi") / "dev" / "instance.json"
+_ABI_DEV_OXIGRAPH_TOKEN_REL = Path(".abi") / "dev" / "oxigraph.token"
 
 
 def local_probe_host() -> str:
@@ -68,3 +69,17 @@ def resolve_local_http_url(
     if port is not None:
         return f"http://{local_probe_host()}:{port}"
     return default_url
+
+
+def abi_dev_oxigraph_token(*, start: Path | None = None) -> str | None:
+    """The per-run token of the nearest project's ``abi dev`` SPARQL server, if any."""
+    anchor = (start or Path.cwd()).resolve()
+    for candidate in (anchor, *anchor.parents):
+        if not (candidate / _ABI_DEV_INSTANCE_REL).is_file():
+            continue
+        try:
+            token = (candidate / _ABI_DEV_OXIGRAPH_TOKEN_REL).read_text(encoding="utf-8")
+        except OSError:
+            return None
+        return token.strip() or None
+    return None

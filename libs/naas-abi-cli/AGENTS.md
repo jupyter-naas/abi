@@ -184,7 +184,8 @@ workflow (with job settings), a pipeline, an integration and a second ontology, 
 their scaffolded tests, starts the project with `abi dev up -d` and waits for the API's
 `/docs`, the remote module READY in discovery with the workflow's job, the agents and
 apps in Nexus, the remote ontologies in the engine's schema graph (a SPARQL query on the
-dev Oxigraph), and Nexus web. `scripts/cli_smoke_processes.py` (run with the project's
+dev Oxigraph, with the per-run token `abi dev` keeps in `.abi/dev/oxigraph.token`), and
+Nexus web. `scripts/cli_smoke_processes.py` (run with the project's
 Python, since it needs `naas_abi_sdk`) then calls the workflow and the pipeline over NATS
 with a token for the module's own id, checks an undeclared process is refused, and runs
 the workflow as a job, then `abi dev down`. The `without-nats` variant does the same

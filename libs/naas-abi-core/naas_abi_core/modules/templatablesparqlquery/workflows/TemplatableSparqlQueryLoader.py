@@ -1,9 +1,11 @@
 import asyncio
+from collections.abc import Iterable
 
 from naas_abi_core import logger
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from pydantic import Field, create_model
 from rdflib import RDF, Graph, URIRef
+from rdflib.util import guess_format
 
 from .GenericWorkflow import GenericWorkflow
 
@@ -20,33 +22,49 @@ def asyncio_thread_job(jobs):
     return asyncio.run(async_asyncio_thread_jobs(jobs))
 
 
+def first_party_ontologies(modules: Iterable[object]) -> list[str]:
+    """The ontology files of the modules this engine runs in process."""
+    return [
+        path for module in modules for path in getattr(module, "ontologies", None) or []
+    ]
+
+
 class TemplatableSparqlQueryLoader:
+    """Turns the templatable queries of first-party ontology files into tools.
+
+    Queries are read from ``ontology_files`` (the files of the modules the
+    engine runs, ``first_party_ontologies``), never from the shared schema
+    graph, where other principals may load content. The tools run their
+    queries on ``triple_store_service``.
+    """
+
     triple_store_service: TripleStoreService
 
     def __init__(
         self,
         triple_store_service: TripleStoreService,
-        graph_name: str = "http://ontology.naas.ai/graph/schema",
+        ontology_files: Iterable[str] = (),
     ):
         self.triple_store_service = triple_store_service
-        self.graph_name = graph_name
+        self.graph = Graph()
+        for path in ontology_files:
+            try:
+                self.graph.parse(path, format=guess_format(path) or "turtle")
+            except Exception as exc:  # noqa: BLE001 - one bad file loses its queries only
+                logger.warning(f"Templatable queries: cannot read {path}: {exc}")
 
     def templatable_queries(self):
-        results = self.triple_store_service.query(
+        results = self.graph.query(
             """
             PREFIX intentMapping: <http://ontology.naas.ai/intentMapping/>
             PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
             SELECT ?query ?label ?description ?sparqlTemplate ?hasArgument
             WHERE {
-                GRAPH <"""
-            + self.graph_name
-            + """> {
-                    ?query a intentMapping:TemplatableSparqlQuery ;
-                        intentMapping:intentDescription ?description ;
-                        intentMapping:sparqlTemplate ?sparqlTemplate ;
-                        intentMapping:hasArgument ?hasArgument ;
-                        rdfs:label ?label .
-                }
+                ?query a intentMapping:TemplatableSparqlQuery ;
+                    intentMapping:intentDescription ?description ;
+                    intentMapping:sparqlTemplate ?sparqlTemplate ;
+                    intentMapping:hasArgument ?hasArgument ;
+                    rdfs:label ?label .
             }
         """
         )
@@ -70,21 +88,17 @@ class TemplatableSparqlQueryLoader:
         argument_graph.bind(
             "intentMapping", URIRef("http://ontology.naas.ai/intentMapping/")
         )
-        results = self.triple_store_service.query(
+        results = self.graph.query(
             """
                     PREFIX intentMapping: <http://ontology.naas.ai/intentMapping/>
 
                     SELECT ?argument ?name ?description ?validationPattern ?validationFormat
                     WHERE {
-                        GRAPH <"""
-            + self.graph_name
-            + """> {
-                            ?argument a intentMapping:QueryArgument ;
-                                intentMapping:argumentName ?name ;
-                                intentMapping:argumentDescription ?description ;
-                                intentMapping:validationPattern ?validationPattern ;
-                                intentMapping:validationFormat ?validationFormat .
-                        }
+                        ?argument a intentMapping:QueryArgument ;
+                            intentMapping:argumentName ?name ;
+                            intentMapping:argumentDescription ?description ;
+                            intentMapping:validationPattern ?validationPattern ;
+                            intentMapping:validationFormat ?validationFormat .
                     }
                 """
         )

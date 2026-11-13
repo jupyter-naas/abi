@@ -41,7 +41,10 @@ from contextlib import contextmanager
 import rdflib
 import requests
 from naas_abi_core.services.triple_store.adaptors.secondary.base import sparql_stream
-from naas_abi_core.services.triple_store.resolve import resolve_local_http_url
+from naas_abi_core.services.triple_store.resolve import (
+    abi_dev_oxigraph_token,
+    resolve_local_http_url,
+)
 from naas_abi_core.services.triple_store.TripleStorePorts import (
     Exceptions,
     ITripleStorePort,
@@ -126,7 +129,12 @@ class Oxigraph(ITripleStorePort):
         ...     print(f"Person: {row.person}, Name: {row.name}")
     """
 
-    def __init__(self, oxigraph_url: str = _DEFAULT_OXIGRAPH_URL, timeout: int = 60):
+    def __init__(
+        self,
+        oxigraph_url: str = _DEFAULT_OXIGRAPH_URL,
+        timeout: int = 60,
+        token: str | None = None,
+    ):
         """
         Initialize Oxigraph adapter.
 
@@ -137,16 +145,24 @@ class Oxigraph(ITripleStorePort):
                 lets ``abi dev`` inject a per-worktree URL without rewriting
                 the config file.
             timeout (int): Request timeout in seconds. Defaults to 60
+            token (str, optional): Bearer token sent with every request.
+                Defaults to the ``OXIGRAPH_TOKEN`` env var, which ``abi dev``
+                sets to its SPARQL server's per-run token, then, when the URL
+                resolved to the local ``abi dev`` server, to that server's token.
 
         Raises:
             requests.exceptions.ConnectionError: If Oxigraph is not accessible
         """
+        local_token = None
         if oxigraph_url == _DEFAULT_OXIGRAPH_URL:
             oxigraph_url = resolve_local_http_url(
                 "oxigraph",
                 env_var="OXIGRAPH_URL",
                 default_url=_DEFAULT_OXIGRAPH_URL,
             )
+            if not os.environ.get("OXIGRAPH_URL"):
+                # The local `abi dev` server this resolved to, and its token.
+                local_token = abi_dev_oxigraph_token()
         else:
             oxigraph_url = os.environ.get("OXIGRAPH_URL", oxigraph_url)
         self.oxigraph_url = oxigraph_url.rstrip("/")
@@ -154,6 +170,10 @@ class Oxigraph(ITripleStorePort):
         self.update_endpoint = f"{self.oxigraph_url}/update"
         self.store_endpoint = f"{self.oxigraph_url}/store"
         self.timeout = timeout
+        token = token or os.environ.get("OXIGRAPH_TOKEN") or local_token
+        self._auth: dict[str, str] = (
+            {"Authorization": f"Bearer {token}"} if token else {}
+        )
 
         # Test connection
         self._test_connection()
@@ -171,6 +191,7 @@ class Oxigraph(ITripleStorePort):
             response = requests.get(
                 self.query_endpoint,
                 params={"query": "SELECT * WHERE { ?s ?p ?o } LIMIT 1"},
+                headers=self._auth,
                 timeout=self.timeout,
             )
             response.raise_for_status()
@@ -209,7 +230,7 @@ class Oxigraph(ITripleStorePort):
         serialized = self.__remove_blank_nodes(triples).serialize(format="ntriples")
         response = requests.post(
             f"{self.store_endpoint}?default",
-            headers={"Content-Type": "application/n-triples"},
+            headers={**self._auth, "Content-Type": "application/n-triples"},
             data=serialized.encode("utf-8"),
             timeout=self.timeout,
         )
@@ -228,7 +249,7 @@ class Oxigraph(ITripleStorePort):
         # Use the store endpoint with DELETE method to remove all these triples
         response = requests.delete(
             f"{self.store_endpoint}?default",
-            headers={"Content-Type": "application/n-triples"},
+            headers={**self._auth, "Content-Type": "application/n-triples"},
             data=serialized,
             timeout=self.timeout,
         )
@@ -274,7 +295,7 @@ class Oxigraph(ITripleStorePort):
 
             response = requests.post(
                 self.update_endpoint,
-                headers={"Content-Type": "application/sparql-update"},
+                headers={**self._auth, "Content-Type": "application/sparql-update"},
                 data=insert_query.encode("utf-8"),
                 timeout=self.timeout,
             )
@@ -324,7 +345,7 @@ class Oxigraph(ITripleStorePort):
 
             response = requests.post(
                 self.update_endpoint,
-                headers={"Content-Type": "application/sparql-update"},
+                headers={**self._auth, "Content-Type": "application/sparql-update"},
                 data=delete_query.encode("utf-8"),
                 timeout=self.timeout,
             )
@@ -350,7 +371,7 @@ class Oxigraph(ITripleStorePort):
             requests.exceptions.HTTPError: If the query fails
         """
         response = requests.get(
-            self.store_endpoint, headers={"Accept": "text/turtle"}, timeout=self.timeout
+            self.store_endpoint, headers={**self._auth, "Accept": "text/turtle"}, timeout=self.timeout
         )
 
         response.raise_for_status()
@@ -423,7 +444,7 @@ class Oxigraph(ITripleStorePort):
             # SPARQL Update
             response = requests.post(
                 self.update_endpoint,
-                headers={"Content-Type": "application/sparql-update"},
+                headers={**self._auth, "Content-Type": "application/sparql-update"},
                 data=query.encode("utf-8"),
                 timeout=self.timeout,
             )
@@ -432,6 +453,7 @@ class Oxigraph(ITripleStorePort):
             response = requests.post(
                 self.query_endpoint,
                 headers={
+                    **self._auth,
                     "Content-Type": "application/sparql-query",
                     "Accept": "application/sparql-results+json,application/n-triples",
                 },
@@ -558,6 +580,7 @@ class Oxigraph(ITripleStorePort):
         response = requests.post(
             self.query_endpoint,
             headers={
+                **self._auth,
                 "Content-Type": "application/sparql-query",
                 "Accept": sparql_stream.ACCEPT,
             },

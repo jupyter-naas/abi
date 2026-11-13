@@ -1,3 +1,4 @@
+import os
 import re
 from dataclasses import dataclass
 from enum import Enum
@@ -200,9 +201,13 @@ class AgentRecommendationWorkflow(Workflow):
     def _execute_sparql_query(self, sparql_query: str) -> list[dict[str, Any]]:
         """Execute SPARQL query against Oxigraph."""
         try:
+            headers = {"Content-Type": "application/sparql-query"}
+            # The `abi dev` SPARQL server's per-run token, when it has one.
+            if token := os.environ.get("OXIGRAPH_TOKEN"):
+                headers["Authorization"] = f"Bearer {token}"
             response = requests.post(
                 f"{self.__configuration.oxigraph_url}/query",
-                headers={"Content-Type": "application/sparql-query"},
+                headers=headers,
                 data=sparql_query,
             )
             response.raise_for_status()

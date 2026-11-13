@@ -5,6 +5,7 @@ from naas_abi_core.module.Module import (
 )
 from naas_abi_core.modules.templatablesparqlquery.workflows.TemplatableSparqlQueryLoader import (
     TemplatableSparqlQueryLoader,
+    first_party_ontologies,
 )
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 
@@ -21,8 +22,10 @@ class ABIModule(BaseModule):
         pass
 
     def on_initialized(self):
+        # Only the engine's own modules' files define templatable queries.
         self.__templatable_sparql_query_loader = TemplatableSparqlQueryLoader(
-            self.engine.services.triple_store
+            self.engine.services.triple_store,
+            first_party_ontologies(self.engine.modules.values()),
         )
         self.__workflows = self.__templatable_sparql_query_loader.load_workflows()
         self.__tools = [

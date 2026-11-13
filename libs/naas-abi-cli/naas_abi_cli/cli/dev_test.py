@@ -221,6 +221,30 @@ def test_oxigraph_binds_the_ipv4_literal(monkeypatch) -> None:
     assert f"127.0.0.1:{PORTS['oxigraph']}" in cmd
 
 
+def test_dev_sparql_server_keeps_one_token_per_run(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
+    monkeypatch.delenv(dev.OXIGRAPH_TOKEN_ENV, raising=False)
+    spawned: dict[str, dict] = {}
+    monkeypatch.setattr(
+        dev,
+        "_spawn",
+        lambda spec, cmd, cwd, env: spawned.update({spec.name: env}) or 1234,
+    )
+
+    dev._launch_oxigraph(_spec("oxigraph", PORTS["oxigraph"]))
+    first = spawned["oxigraph"][dev.OXIGRAPH_TOKEN_ENV]
+    dev._launch_api(_spec("api", PORTS["api"]), PORTS)
+    dev._launch_dagster(_spec("dagster", PORTS["dagster"]), PORTS)
+
+    assert len(first) >= 32
+    assert spawned["api"][dev.OXIGRAPH_TOKEN_ENV] == first
+    assert spawned["dagster"][dev.OXIGRAPH_TOKEN_ENV] == first
+    token_file = dev._oxigraph_token_path()
+    assert token_file.stat().st_mode & 0o777 == 0o600
+    dev._launch_oxigraph(_spec("oxigraph", PORTS["oxigraph"]))
+    assert spawned["oxigraph"][dev.OXIGRAPH_TOKEN_ENV] != first  # a new run
+
+
 def test_oxigraph_url_is_not_browser_facing() -> None:
     assert dev._oxigraph_url(PORTS) == f"http://127.0.0.1:{PORTS['oxigraph']}"
 
