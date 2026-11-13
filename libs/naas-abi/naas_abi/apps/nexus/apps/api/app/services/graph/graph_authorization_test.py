@@ -17,7 +17,10 @@ from unittest.mock import patch
 import pytest
 from naas_abi import ABIModule
 from naas_abi.apps.nexus.apps.api.app.services.graph.access import GraphAccessError
-from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary import graph_iam
+from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary import (
+    graph_grants,
+    graph_iam,
+)
 from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.graph_grants import (
     GRANTS,
     policy_name,
@@ -590,3 +593,36 @@ async def test_a_role_label_cannot_probe_other_tenants_graphs(world, team) -> No
         assert again._uri == present._uri
         # A line break in a label is part of it, not a syntax error.
         assert _get_or_create_knowledge_graph_role(store, "sales\nlead").label == "sales\nlead"
+
+
+@pytest.mark.asyncio
+async def test_the_shared_grant_keeps_to_its_own_policy_whatever_another_policy_is_named(
+    world, team
+) -> None:
+    shared = await world.create("member", "ws-1")
+    world.put(shared.uri)
+    await world.share("ws-2", WorkspaceGraphPolicyConfig(read=[shared.uri]))
+    assert world.select("viewer2", shared.uri)
+    # An administrator of another organization names a policy of theirs after it.
+    other = team.org("org-2")
+    team.workspace("org-2", "ws-9")
+    team.grant("other-admin", "admin", other)
+    statements = [
+        {
+            "effect": "Allow",
+            "actions": ["triple_store:Query"],
+            "resources": ["${scope}/triple_store:graph/*"],
+        }
+    ]
+    with use_call_context(team.context("other-admin")):
+        team.iam.create_policy(
+            policy_name("ws-2", "read"),
+            {"version": "2026-10-13", "statements": statements},
+            scope=other,
+        )
+    # Past the name index's lifetime, a removed member still loses the share.
+    real = graph_grants.time.monotonic
+    with patch.object(graph_grants.time, "monotonic", lambda: real() + 3600):
+        await MEMBERSHIPS.revoke("viewer2", workspace_container("org-1", "ws-2"))
+    with pytest.raises(Exceptions.GraphNotFoundError):
+        world.select("viewer2", shared.uri)

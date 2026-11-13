@@ -277,7 +277,9 @@ gaining or losing access (`container_defaults_test.py`: every decision of `polic
 and the names' moves, is the same before and after, and again changes nothing):
 
 - **Kept.** The "<O> access" and "<W> access" the sets' move made (`policy_tree`, found by their description) are
-  kept. Each "<W> access" moves from its organization to the workspace with what is below it that its organization
+  kept. A description only names a candidate: an "<O> access" is the platform's, and a "<W> access" is owned by the
+  workspace's own organization (the platform for one in none, or the workspace once moved); of two, the older is
+  kept. The IAM admin routes refuse a description ending as the move's do (`policy_tree.MADE`). Each "<W> access" moves from its organization to the workspace with what is below it that its organization
   owned ("<W> modules (admins and owners)", the splits of customer policies), through core's `move_policies`; a tree
   that cannot move (an attachment beyond the workspace) stays its organization's and is named in the report.
 - **Not attached.** Neither the kept "<O> access" nor "<W> access" is attached to the admins group: it holds the

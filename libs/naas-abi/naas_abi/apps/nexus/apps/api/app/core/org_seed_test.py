@@ -477,6 +477,7 @@ def test_reseed_keeps_the_workspace_owner_and_organization_set_in_the_app(
         id="ws-1",
         owner_id="user-2",
         organization_id="org-2",
+        seeded=True,
         background_image_url=None,
         workspace_group=None,
         updated_at=None,
@@ -499,13 +500,14 @@ def test_reseed_keeps_the_workspace_owner_and_organization_set_in_the_app(
     assert ensured == [("workspace", "ws-1", "user-2", "owner")]
 
 
-def test_reseed_fills_a_missing_workspace_owner_and_organization(
+def test_reseed_fills_a_missing_workspace_owner_and_never_its_organization(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     workspace = SimpleNamespace(
         id="ws-1",
         owner_id=None,
         organization_id=None,
+        seeded=True,
         background_image_url=None,
         workspace_group=None,
         updated_at=None,
@@ -523,7 +525,7 @@ def test_reseed_fills_a_missing_workspace_owner_and_organization(
         )
     )
 
-    assert (workspace.owner_id, workspace.organization_id) == ("user-1", "org-1")
+    assert (workspace.owner_id, workspace.organization_id) == ("user-1", None)
     assert ensured == [("workspace", "ws-1", "user-1", "owner")]
 
 

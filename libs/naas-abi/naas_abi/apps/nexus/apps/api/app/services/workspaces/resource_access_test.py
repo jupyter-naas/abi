@@ -49,13 +49,23 @@ class ResourceAccessTests(unittest.IsolatedAsyncioTestCase):
                     email="a@example.org",
                 )
             )
-            db.add(OrganizationModel(id="org", name="Organization", slug="org", owner_id="admin"))
+            # What the configuration's seeding made (``seeded``).
             db.add(
-                WorkspaceModel(id="a", name="A", slug="a", owner_id="admin", organization_id="org")
+                OrganizationModel(
+                    id="org", name="Organization", slug="org", owner_id="admin", seeded=True
+                )
             )
-            db.add(
-                WorkspaceModel(id="b", name="B", slug="b", owner_id="admin", organization_id="org")
-            )
+            for workspace_id in ("a", "b"):
+                db.add(
+                    WorkspaceModel(
+                        id=workspace_id,
+                        name=workspace_id.upper(),
+                        slug=workspace_id,
+                        owner_id="admin",
+                        organization_id="org",
+                        seeded=True,
+                    )
+                )
             await db.commit()
         self.seed = SimpleNamespace(
             slug="a",
@@ -71,6 +81,24 @@ class ResourceAccessTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.engine.dispose()
+
+    async def test_the_configured_assignments_keep_to_the_workspace_seeding_made(self):
+        # A person's organization and workspace holding the configured slugs (seeding
+        # refuses them) are given none of the configuration's graphs.
+        async with self.sessions() as db:
+            await db.execute(text("UPDATE workspaces SET slug = 'a-old' WHERE id = 'a'"))
+            await db.execute(text("UPDATE organizations SET slug = 'org-old' WHERE id = 'org'"))
+            db.add(OrganizationModel(id="mine", name="Mine", slug="org", owner_id="admin"))
+            db.add(
+                WorkspaceModel(
+                    id="ws-mine", name="Mine", slug="a", owner_id="admin", organization_id="mine"
+                )
+            )
+            await db.commit()
+            graphs = await repo.load_resource_policy(db, "ws-mine", "graphs")
+            ontologies = await repo.load_resource_policy(db, "ws-mine", "ontologies")
+        self.assertEqual(graphs.data["read"], [])
+        self.assertEqual(ontologies.data["enabled"], [])
 
     async def test_seed_once_and_admin_changes_survive_config_changes_and_new_sessions(
         self,

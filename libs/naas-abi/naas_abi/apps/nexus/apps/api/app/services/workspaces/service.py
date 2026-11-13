@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
+from naas_abi.apps.nexus.apps.api.app.core.configured_slugs import configured_workspace_slugs
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ, Authz
 from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
     CONTAINER_DEFAULTS,
@@ -170,7 +171,10 @@ class WorkspaceService:
         never a request field's say-so). A failure after the row exists in IAM
         removes the row again.
         """
-        if await self.adapter.workspace_slug_exists(slug=workspace.slug):
+        if (
+            workspace.slug in configured_workspace_slugs()
+            or await self.adapter.workspace_slug_exists(slug=workspace.slug)
+        ):
             raise WorkspaceSlugAlreadyExistsError(slug=workspace.slug)
         record = await self.adapter.create_workspace(workspace=workspace)
         try:

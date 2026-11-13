@@ -42,7 +42,7 @@ from naas_abi.apps.nexus.graph_policy_config import (
 from naas_abi_core import logger
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.IAMPorts import IAMNotFoundError
-from naas_abi_core.services.iam.names import anywhere, encode_id, resource_name
+from naas_abi_core.services.iam.names import PLATFORM, anywhere, encode_id, resource_name
 from naas_abi_core.services.iam.policy import POLICY_VERSION, PolicyDocument
 from naas_abi_core.services.triple_store.iam_catalog import CATALOG, GRAPH, SERVICE
 from sqlalchemy import text
@@ -173,11 +173,20 @@ class GraphGrants:
     # -- policies, found by name ---------------------------------------------------
 
     def _scan(self, iam: Any) -> None:
+        """The platform's policies named for a workspace. Nexus makes them at the
+        platform, as ``api``: a policy of that name owned by an organization or a
+        workspace is someone else's, and never stands for the workspace's grants."""
         names: dict[str, str] = {}
         after: str | None = None
         while True:
             page = iam.list_policies(limit=200, after=after)
-            names.update({p.name: str(p.id) for p in page.items if p.name.startswith("workspace.")})
+            names.update(
+                {
+                    p.name: str(p.id)
+                    for p in page.items
+                    if p.name.startswith("workspace.") and _platform_owned(p)
+                }
+            )
             if page.next_after is None:
                 break
             after = page.next_after
@@ -191,7 +200,8 @@ class GraphGrants:
         if known is None:
             return None
         try:
-            if iam.get_policy(known).name == name:
+            found = iam.get_policy(known)
+            if found.name == name and _platform_owned(found):
                 return known
         except IAMNotFoundError:
             pass
@@ -339,6 +349,11 @@ class GraphGrants:
 
 
 _INDEX_SECONDS = 60.0
+
+
+def _platform_owned(policy: Any) -> bool:
+    return str(getattr(policy, "owner_scope", PLATFORM)) == PLATFORM
+
 
 GRANTS = GraphGrants()
 

@@ -469,6 +469,7 @@ class IamAdminService:
     ) -> dict[str, Any]:
         """A policy owned by ``scope`` (the platform when None), a sub-policy of
         ``parent`` when given: IAM refuses a parent the caller does not hold."""
+        _refuse_reserved(name, description)
 
         def create(session: IIAMService) -> dict[str, Any]:
             document = self._parse(source)
@@ -497,6 +498,7 @@ class IamAdminService:
         """``parent``: None keeps it, ``""`` removes it, an id sets it."""
 
         def update(session: IIAMService) -> dict[str, Any]:
+            _refuse_reserved_change(session, policy_id, name, description)
             document = self._parse(source) if source else None
             return views.policy_view(
                 session.update_policy(
@@ -1019,6 +1021,37 @@ async def _false() -> bool:
 
 async def _none_of(actions: tuple[str, ...]) -> dict[str, bool]:
     return dict.fromkeys(actions, False)
+
+
+# Names and descriptions Nexus gives the policies it makes itself: a workspace's graph
+# assignments (``graph_grants``) and what the sets' move made (``policy_tree.MADE``).
+RESERVED_POLICY_PREFIX = "workspace."
+
+
+def _refuse_reserved(name: str | None, description: str | None) -> None:
+    """Nexus finds the policies it made by these: nobody else writes them."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.policy_tree import MADE
+
+    if name is not None and name.strip().lower().startswith(RESERVED_POLICY_PREFIX):
+        raise ValueError(f"Policy names starting with {RESERVED_POLICY_PREFIX!r} are Nexus's own")
+    if description is not None and description.rstrip().endswith(MADE.strip()):
+        raise ValueError("That description is the one Nexus gives the policies it made")
+
+
+def _refuse_reserved_change(
+    session: Any, policy_id: str, name: str | None, description: str | None
+) -> None:
+    """``_refuse_reserved`` for an update: a reserved name or description the policy
+    already has may be sent back unchanged (the editor sends both with every save);
+    changing to one is refused."""
+    try:
+        current = session.get_policy(policy_id)
+    except Exception:  # noqa: BLE001 - unread: every reserved value is refused
+        current = None
+    if current is not None:
+        name = None if name == current.name else name
+        description = None if description == current.description else description
+    _refuse_reserved(name, description)
 
 
 def _actor_id(user: Any) -> str:

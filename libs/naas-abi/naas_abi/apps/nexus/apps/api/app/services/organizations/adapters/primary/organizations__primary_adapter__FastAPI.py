@@ -186,8 +186,10 @@ class OrganizationCreate(BaseModel):
 
 
 class OrganizationUpdate(BaseModel):
-    name: str | None = None
-    slug: str | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    slug: str | None = Field(
+        default=None, min_length=1, max_length=100, pattern=r"^[a-z0-9][a-z0-9\-]*[a-z0-9]$"
+    )
     logo_url: str | None = None
     logo_rectangle_url: str | None = None
     logo_emoji: str | None = None
@@ -509,14 +511,17 @@ async def update_organization(
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
 ) -> Organization:
-    row = await service.update_organization(
-        org_id=org_id,
-        updates=OrganizationUpdateInput(
-            **updates.model_dump(exclude_unset=True),
-            updated_at=datetime.now(UTC).replace(tzinfo=None),
-            set_fields=set(updates.model_dump(exclude_unset=True).keys()) | {"updated_at"},
-        ),
-    )
+    try:
+        row = await service.update_organization(
+            org_id=org_id,
+            updates=OrganizationUpdateInput(
+                **updates.model_dump(exclude_unset=True),
+                updated_at=datetime.now(UTC).replace(tzinfo=None),
+                set_fields=set(updates.model_dump(exclude_unset=True).keys()) | {"updated_at"},
+            ),
+        )
+    except OrganizationSlugAlreadyExistsError as exc:
+        raise HTTPException(status_code=400, detail="Slug already exists") from exc
     if row is None:
         raise HTTPException(status_code=404, detail="Organization not found")
     return _to_schema(row)

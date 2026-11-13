@@ -7,6 +7,13 @@ This provisions:
 - workspaces (upsert by slug) and their owner membership
 - workspace app enable rows from ``WorkspaceSeedConfig.apps``
 
+Seeding updates only the rows it made (``seeded``). A configured slug that a
+person's organization or workspace holds is refused and logged, never taken
+over, and configured slugs are reserved at create and rename
+(``core.configured_slugs``). A row older than the flag is recognised once, where
+seeding left it: an organization the configured owner owns, a workspace inside
+its configured organization.
+
 People are managed in the platform (Org > Users, workspace Members, Admin >
 Users). Config ``members`` lists are deprecated and ignored: existing rows are
 kept, and ``core.users_import`` replays a snapshot without overwriting roles.
@@ -253,12 +260,24 @@ async def _upsert_workspace(
     workspace = result.scalar_one_or_none()
     now = datetime.now(UTC).replace(tzinfo=None)
 
+    if workspace is not None and not _workspace_is_managed(workspace, organization):
+        logger.error(
+            "Configured workspace slug=%s is held by workspace %s, which the configuration "
+            "did not make (organization %s): left as it is, and not configured. Rename the "
+            "workspace in the configuration, or remove that workspace.",
+            workspace_cfg.slug,
+            workspace.id,
+            workspace.organization_id or "none",
+        )
+        return
+
     if workspace is None:
         workspace = WorkspaceModel(
             id=f"ws-{uuid4().hex[:12]}",
             slug=workspace_cfg.slug,
             owner_id=owner.id,
             organization_id=organization.id,
+            seeded=True,
             created_at=now,
             updated_at=now,
             workspace_group=workspace_cfg.group,
@@ -273,12 +292,12 @@ async def _upsert_workspace(
             organization.slug,
         )
     else:
-        # Bootstrap only, like the branding below: an owner or organization
-        # changed in the app is kept, the config only fills a missing one.
+        # Bootstrap only, like the branding below: an owner changed in the app is
+        # kept, the config only fills a missing one. The organization is never set
+        # here: the workspace stays where it is.
+        workspace.seeded = True
         if not workspace.owner_id:
             workspace.owner_id = owner.id
-        if not workspace.organization_id:
-            workspace.organization_id = organization.id
         _apply_workspace_seed_fields(workspace, workspace_cfg)
         if workspace_cfg.group and not getattr(workspace, "workspace_group", None):
             workspace.workspace_group = workspace_cfg.group
@@ -295,6 +314,26 @@ async def _upsert_workspace(
     _warn_ignored_members("workspace", workspace_cfg.slug, len(workspace_cfg.members))
 
     await _seed_workspace_apps(session, workspace.id, workspace_cfg.apps)
+
+
+def _workspace_is_managed(workspace: WorkspaceModel, organization: OrganizationModel) -> bool:
+    """Whether seeding may update ``workspace`` as the configured one of
+    ``organization``: one it made (wherever an administrator moved it since), or one
+    older than the flag that is in that organization, where seeding put it."""
+    flag = getattr(workspace, "seeded", None)
+    if flag is True:
+        return True
+    return flag is None and workspace.organization_id == organization.id
+
+
+def _organization_is_managed(organization: OrganizationModel, owner: UserModel | None) -> bool:
+    """Whether seeding may update ``organization``: one it made, or one older than
+    the flag that the configured owner owns (seeding wrote that owner at every
+    start). A person's organization of the same slug is neither."""
+    flag = getattr(organization, "seeded", None)
+    if flag is True:
+        return True
+    return flag is None and owner is not None and organization.owner_id == owner.id
 
 
 async def _seed_workspace_apps(
@@ -352,6 +391,17 @@ async def _upsert_organization(
     organization = result.scalar_one_or_none()
     now = datetime.now(UTC).replace(tzinfo=None)
 
+    if organization is not None and not _organization_is_managed(organization, owner):
+        logger.error(
+            "Configured organization slug=%s is held by organization %s, which the "
+            "configuration did not make: left as it is, and none of its configured "
+            "workspaces is seeded. Rename the organization in the configuration, or "
+            "remove that organization.",
+            org_cfg.slug,
+            organization.id,
+        )
+        return
+
     if organization is None:
         if owner is None:
             logger.warning(
@@ -363,6 +413,7 @@ async def _upsert_organization(
             id=f"org-{uuid4().hex[:12]}",
             slug=org_cfg.slug,
             owner_id=owner.id,
+            seeded=True,
             created_at=now,
             updated_at=now,
             **{field: getattr(org_cfg, field) for field in _ORG_BRANDING_FIELDS},
@@ -370,6 +421,7 @@ async def _upsert_organization(
         session.add(organization)
         logger.info("Created organization slug=%s", org_cfg.slug)
     else:
+        organization.seeded = True
         if owner is not None:
             organization.owner_id = owner.id
         for field in _ORG_BRANDING_FIELDS:
@@ -421,15 +473,47 @@ async def _apply_declared_roles(
     roles: list[tuple[str, str, str]],
 ) -> None:
     """The configuration's scopes and roles, as the system: the configuration is
-    declarative, so the role it names is the role held."""
+    declarative, so the role it names is the role held. One scope that fails (IAM
+    refuses to register it, or a role there) is logged and skipped: the others
+    are still applied."""
     from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+    from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
+        org_container,
+        workspace_container,
+    )
 
+    failed: set[str] = set()
     for org_id, workspace_id in dict.fromkeys(scopes):
-        if workspace_id is None and org_id is not None:
-            await MEMBERSHIPS.register_org(org_id)
-        elif workspace_id is not None:
-            await MEMBERSHIPS.register_workspace(org_id, workspace_id)
-    granted, kept = await MEMBERSHIPS.seed(list(dict.fromkeys(roles)), replace=True)
+        try:
+            if workspace_id is None and org_id is not None:
+                await MEMBERSHIPS.register_org(org_id)
+            elif workspace_id is not None:
+                await MEMBERSHIPS.register_workspace(org_id, workspace_id)
+        except Exception:
+            logger.exception(
+                "Configured scope org=%s workspace=%s not registered in IAM: its roles "
+                "are not applied",
+                org_id,
+                workspace_id,
+            )
+            if workspace_id is not None:
+                failed.add(workspace_container(org_id, workspace_id))
+            elif org_id is not None:
+                failed.add(org_container(org_id))
+    by_scope: dict[str, list[tuple[str, str, str]]] = {}
+    for entry in dict.fromkeys(roles):
+        by_scope.setdefault(entry[2], []).append(entry)
+    granted = kept = 0
+    for scope, entries in by_scope.items():
+        if scope in failed:
+            continue
+        try:
+            changed, held = await MEMBERSHIPS.seed(entries, replace=True)
+        except Exception:
+            logger.exception("Configured roles at %s not applied in IAM", scope)
+            continue
+        granted += changed
+        kept += held
     logger.info("Configured memberships in IAM: %d changed, %d already held", granted, kept)
 
 

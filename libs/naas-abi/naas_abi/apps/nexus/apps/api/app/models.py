@@ -79,6 +79,9 @@ class OrganizationModel(Base):
         Boolean, nullable=False, default=False
     )  # Vertical bar between primary and secondary logo
     default_theme = Column(String, nullable=True, default=None)  # "light", "dark", or null (system)
+    # Made by the configuration's seeding (core/org_seed.py): the only rows it updates.
+    # False for what people create; NULL for a row older than the flag.
+    seeded = Column(Boolean, nullable=True, default=False)
 
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
@@ -291,6 +294,9 @@ class WorkspaceModel(Base):
 
     # Default git repo (owner/name) cloned for new coding workspaces here.
     coding_default_repo_id = Column(String, nullable=True)
+    # Made by the configuration's seeding (core/org_seed.py): the only rows it updates,
+    # and the only ones its graph assignments reach. NULL for a row older than the flag.
+    seeded = Column(Boolean, nullable=True, default=False)
 
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)

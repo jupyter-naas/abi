@@ -39,7 +39,10 @@ rule of its own.
 - **Sharing is a statement for the receiving workspace.** A policy attached at a
   scope may only allow `${scope}/` resources, so a grant onto another workspace's
   graph cannot be a scoped attachment. For each workspace `GRANTS` keeps two
-  policies, `workspace.<ws>.graphs.read` and `workspace.<ws>.graphs.write`:
+  policies, `workspace.<ws>.graphs.read` and `workspace.<ws>.graphs.write`,
+  made at the platform as `api` and found by name among the platform's policies
+  only (a policy of that name an organization or workspace owns is not them; the
+  IAM admin routes refuse names starting with `workspace.`):
   - `read` Allows the list and read actions on the graphs the workspace reads or
     writes (`SharedGraphsRead`), and Denies what the workspace closes: creating
     graphs when `allow_create` or `include_owned` is off (`NoNewGraphs`), and its

@@ -1487,3 +1487,90 @@ def test_a_sub_policy_is_offered_where_iam_lets_it_be_attached(world, ws2):
         scope=ws2,
     )
     assert refused.status_code == 403 and "unscoped" in refused.json()["detail"]
+
+
+def test_policy_writes_keep_the_names_and_descriptions_nexus_finds_its_own_by(world) -> None:
+    """A workspace's graph grants (``workspace.…``) and what the sets' move made
+    (``policy_tree.MADE``) are Nexus's: no administrator writes those marks."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.policy_tree import MADE
+
+    org = org_container("org-1")
+    document = {
+        "version": "2026-10-13",
+        "statements": [
+            {"effect": "Allow", "actions": ["nexus:GetWorkspace"], "resources": ["${scope}/*"]}
+        ],
+    }
+    moved = "What workspace ws-2 uses, within its organization's: x." + MADE
+    for user in ("admin", "root"):
+        named = post(
+            world,
+            "/policies",
+            user,
+            name="workspace.ws-2.graphs.read",
+            document=document,
+            scope=org,
+        )
+        described = post(
+            world,
+            "/policies",
+            user,
+            name="WS2 access",
+            document=document,
+            scope=org,
+            description=moved,
+        )
+        assert (named.status_code, described.status_code) == (422, 422)
+    made = post(
+        world,
+        "/policies",
+        "admin",
+        name="WS2 access",
+        document=document,
+        scope=org,
+        description="Ours",
+    )
+    assert made.status_code == 201, made.text
+    for change in ({"name": "Workspace.ws-2.graphs.write"}, {"description": moved}):
+        renamed = world.client.put(
+            f"/api/iam/admin/policies/{made.json()['id']}",
+            json={"expected_revision": made.json()["revision"], **change},
+            headers=as_("admin"),
+        )
+        assert renamed.status_code == 422
+
+
+def test_an_edit_keeps_the_name_and_description_nexus_gave_a_policy(world) -> None:
+    """A policy Nexus made keeps its marks through an edit of its statements (the
+    editor sends the name and description back with every save); changing a
+    description to Nexus's mark is still refused."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.policy_tree import MADE
+
+    org = org_container("org-1")
+    document = {
+        "version": "2026-10-13",
+        "statements": [
+            {"effect": "Allow", "actions": ["nexus:GetWorkspace"], "resources": ["${scope}/*"]}
+        ],
+    }
+    moved = "What workspace ws-1 uses, within its organization's: x." + MADE
+    with as_service_account("api"):
+        made = world.nexus.iam.create_policy("WS1 access", document, description=moved, scope=org)
+    edited = world.client.put(
+        f"/api/iam/admin/policies/{made.id}",
+        json={
+            "expected_revision": made.revision,
+            "name": made.name,
+            "description": moved,
+            "document": {**document, "statements": [{**document["statements"][0], "sid": "Read"}]},
+        },
+        headers=as_("admin"),
+    )
+    assert edited.status_code == 200, edited.text
+    plain = post(world, "/policies", "admin", name="Plain", document=document, scope=org)
+    marked = world.client.put(
+        f"/api/iam/admin/policies/{plain.json()['id']}",
+        json={"expected_revision": plain.json()["revision"], "description": moved},
+        headers=as_("admin"),
+    )
+    assert marked.status_code == 422

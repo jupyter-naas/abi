@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
+from naas_abi.apps.nexus.apps.api.app.core.configured_slugs import configured_organization_slugs
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ, Authz
 from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
     CONTAINER_DEFAULTS,
@@ -262,7 +263,9 @@ class OrganizationService:
     ) -> OrganizationRecord:
         """``org_id``: decided by the caller that checked the create on the new
         organization's own name (``new_org_id``); made here when None."""
-        if await self.adapter.organization_slug_exists(slug=slug):
+        if slug in configured_organization_slugs() or await self.adapter.organization_slug_exists(
+            slug=slug
+        ):
             raise OrganizationSlugAlreadyExistsError(slug=slug)
 
         org_id = org_id or new_org_id()
@@ -350,6 +353,20 @@ class OrganizationService:
         org_id: str,
         updates: OrganizationUpdateInput,
     ) -> OrganizationRecord | None:
+        """A new slug is refused when another organization holds it or the
+        configuration names it (``OrganizationSlugAlreadyExistsError``)."""
+        if "slug" in (updates.set_fields or ()) or updates.slug is not None:
+            current = await self.adapter.get_organization_by_id(org_id=org_id)
+            if current is None:
+                return None
+            slug = updates.slug
+            if not slug:
+                raise OrganizationSlugAlreadyExistsError(slug="")
+            if slug != current.slug and (
+                slug in configured_organization_slugs()
+                or await self.adapter.organization_slug_exists(slug=slug)
+            ):
+                raise OrganizationSlugAlreadyExistsError(slug=slug)
         return await self.adapter.update_organization(org_id=org_id, updates=updates)
 
     async def list_workspaces(self, org_id: str, user_id: str) -> list[OrganizationWorkspaceRecord]:

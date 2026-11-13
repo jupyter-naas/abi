@@ -104,7 +104,12 @@ async def load_resource_policy(
         return ResourcePolicy(json.loads(row.policy), row.revision, row.updated_by)
     identity = (
         await db.execute(
-            select(WorkspaceModel.slug, OrganizationModel.slug)
+            select(
+                WorkspaceModel.slug,
+                OrganizationModel.slug,
+                WorkspaceModel.seeded,
+                OrganizationModel.seeded,
+            )
             .outerjoin(
                 OrganizationModel,
                 WorkspaceModel.organization_id == OrganizationModel.id,
@@ -114,10 +119,13 @@ async def load_resource_policy(
     ).one_or_none()
     if identity is None:
         raise LookupError("Workspace not found")
+    # The configuration's assignments are for the workspace seeding made in the
+    # organization seeding made, never for another row that holds those slugs.
+    configured = identity[2] is True and identity[3] is True
     matches = [
         ws
         for org in (getattr(live_settings(), "organizations", None) or [])
-        if org.slug == identity[1]
+        if configured and org.slug == identity[1]
         for ws in (getattr(org, "workspaces", None) or [])
         if ws.slug == identity[0]
     ]
