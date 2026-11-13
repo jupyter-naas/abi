@@ -76,6 +76,14 @@ class BaseModule(JobsMixin, Generic[TConfig]):
     logo_url: str = ""
     slug: str = ""
     tags: list[str] = []
+    # Paths below which what ``api(app)`` mounts is served without the
+    # engine's credential check (ABI_API_KEY, or a credential Nexus vouches
+    # for): public files, or routes that check their caller themselves (a
+    # Nexus user dependency). Everything else a module mounts is checked.
+    unguarded_api_paths: tuple[str, ...] = ()
+    # True when every route ``api(app)`` mounts checks its caller itself (the
+    # Nexus API: its sessions, keys and public pages are its own decision).
+    api_checks_its_callers: bool = False
 
     _engine: EngineProxy
     _configuration: TConfig

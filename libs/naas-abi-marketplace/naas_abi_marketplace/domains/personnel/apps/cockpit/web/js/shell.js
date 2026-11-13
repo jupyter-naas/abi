@@ -253,7 +253,6 @@ function renderLoadError(error, { fallbackPrefix = "Failed to load data" } = {})
   const rows = [
     ["Dataset", error.dataset],
     ["Expected in storage", error.expectedStorageKey],
-    ["Local file", error.expectedLocalPath],
   ]
     .filter(([, value]) => value)
     .map(

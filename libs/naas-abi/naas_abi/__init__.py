@@ -566,6 +566,10 @@ def nexus_settings_kwargs(nexus_config: NexusConfig) -> dict[str, Any]:
 
 
 class ABIModule(BaseModule):
+    # ``api(app)`` mounts the Nexus API, which checks every caller itself
+    # (sessions, personal keys, its public sign-in and branding pages).
+    api_checks_its_callers = True
+
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[
             "naas_abi_core.modules.templatablesparqlquery",

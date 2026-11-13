@@ -381,7 +381,7 @@ From `web/`:
    ```bash
    npx next dev -p 3412 &            # wait for "Ready"
    curl -s -c /tmp/c.txt -X POST localhost:3412/api/auth/password \
-     -H 'Content-Type: application/json' -d '{"password":"demo"}'   # ROOT_PASSWORD=demo
+     -H 'Content-Type: application/json' -d "{\"password\":\"$ROOT_PASSWORD\"}"   # from web/.env
    curl -s -b /tmp/c.txt "localhost:3412/demo/<page-id>?scenario=2026" \
      -o /tmp/p.html -w '%{http_code}\n'
    grep -c NaN /tmp/p.html          # expect 0

@@ -10,7 +10,10 @@ import socket
 import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from naas_abi_marketplace.domains.personnel.apps.cockpit.api.routes import router
+from naas_abi_marketplace.domains.personnel.apps.cockpit.api.routes import (
+    ACCESS,
+    router,
+)
 from naas_abi_marketplace.domains.personnel.apps.cockpit.config_loader import (
     public_config,
     public_page_urls,
@@ -67,6 +70,8 @@ def create_app() -> FastAPI:
         )
     app = FastAPI(title=public_config()["brand"]["name"])
     app.include_router(router, prefix="/api/personnel-cockpit")
+    # One developer on 127.0.0.1 (main below): no Nexus session to present.
+    app.dependency_overrides[ACCESS] = lambda: "local-development"
     # The graph page is the people module's; serve it where the registry loads it.
     from naas_abi_marketplace.domains.intelligence.modules.people.apps.people.scripts.graph_view import (
         GRAPH_PAGE_DIR,

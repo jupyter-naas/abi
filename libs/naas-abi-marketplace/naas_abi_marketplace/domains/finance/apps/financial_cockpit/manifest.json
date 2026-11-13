@@ -4,7 +4,6 @@
   "category": "alpha",
   "avatar_url": "https://assets.naas.ai/marketplace/financial-cockpit/logo.png",
   "demo_login": "demo@financial-cockpit.local",
-  "demo_password": "demo",
   "version": "0.1.0",
   "author": "naas.ai",
   "license": "MIT",

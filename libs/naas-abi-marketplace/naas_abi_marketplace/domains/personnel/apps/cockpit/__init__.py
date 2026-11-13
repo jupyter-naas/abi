@@ -26,6 +26,9 @@ class ABIModule(BaseModule):
 
     dependencies: ModuleDependencies = ModuleDependencies(modules=[], services=[])
 
+    # The cockpit router checks its caller: a member of the workspace.
+    unguarded_api_paths = ("/api/personnel-cockpit",)
+
     class Configuration(ModuleConfiguration):
         """
         module: naas_abi_marketplace.domains.personnel.apps.cockpit

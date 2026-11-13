@@ -32,7 +32,6 @@ class ABIModule(BaseModule):
         enabled: true
         config:
             demo_login: "demo@financial-cockpit.local"
-            demo_password: "demo"
             r2_account_id: "{{ secret.R2_ACCOUNT_ID }}"
             r2_access_key_id: "{{ secret.R2_ACCESS_KEY_ID }}"
             r2_secret_access_key: "{{ secret.R2_SECRET_ACCESS_KEY }}"
@@ -40,7 +39,9 @@ class ABIModule(BaseModule):
         """
 
         demo_login: str = "demo@financial-cockpit.local"
-        demo_password: str = "demo"
+        # No password is shown in Nexus: the cockpit's root password is
+        # generated per deployment (``npm run kickstart``).
+        demo_password: str = ""
         r2_account_id: str = ""
         r2_access_key_id: str = ""
         r2_secret_access_key: str = ""

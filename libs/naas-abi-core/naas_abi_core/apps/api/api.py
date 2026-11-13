@@ -446,8 +446,11 @@ def _load_runtime_routes():
                 name=f"module-{module_url_path.replace('/', '-')}-public",
             )
 
-    for module in runtime_engine.modules.values():
-        module.api(app)
+    # What each module mounts answers only a request with a credential the
+    # engine accepts, unless the module lists the path in unguarded_api_paths.
+    from naas_abi_core.apps.api.module_routes import mount_module_apis
+
+    mount_module_apis(app, runtime_engine.modules.values())
 
     # Protect /app-html/ with ABI_API_KEY (same channels as /agents). Added last
     # so it runs outermost — before per-app object-storage middlewares.

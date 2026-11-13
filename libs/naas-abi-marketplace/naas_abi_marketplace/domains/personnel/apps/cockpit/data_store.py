@@ -124,14 +124,18 @@ class MissingDatasetError(FileNotFoundError):
         )
 
     def as_detail(self) -> dict[str, str]:
-        """Payload shape the cockpit API returns as the 404 ``detail``."""
+        """Payload shape the cockpit API returns as the 404 ``detail``: where the
+        dataset is expected in storage, never a path on the server."""
         return {
             "error": "missing_dataset",
             "dataset": self.relative_path,
             "expected_storage_key": self.storage_key,
-            "expected_local_path": self.local_path,
             "command": self.command,
-            "message": str(self),
+            "message": (
+                f"Dataset not published: {self.relative_path}\n"
+                f"Expected in storage: {self.storage_key}\n"
+                f"Run: {self.command}"
+            ),
         }
 
 

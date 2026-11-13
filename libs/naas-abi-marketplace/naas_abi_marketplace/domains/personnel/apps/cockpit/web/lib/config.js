@@ -1,10 +1,12 @@
+import { cockpitFetch } from "./nexus.js";
+
 const CONFIG_ENDPOINT = "/api/personnel-cockpit/config";
 
 let cachedConfig = null;
 
 export async function loadAppConfig() {
   if (cachedConfig) return cachedConfig;
-  const response = await fetch(CONFIG_ENDPOINT);
+  const response = await cockpitFetch(CONFIG_ENDPOINT);
   if (!response.ok) throw new Error(`config → ${response.status}`);
   cachedConfig = await response.json();
   return cachedConfig;

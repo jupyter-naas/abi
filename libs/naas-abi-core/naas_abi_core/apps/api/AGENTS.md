@@ -26,6 +26,8 @@ Empty stubs do not appear in OpenAPI. A LangChain-only `BaseTool` stays agent-in
 
 `/workflows`, `/pipelines`, and `/tools` routers are included only when they have routes, so OpenAPI does not advertise dead tags.
 
+5. **Module routes**: each module's `api(app)` hook, through `module_routes.mount_module_apis`. Every route and mount a module adds there answers only a request with a credential the engine accepts (`ABI_API_KEY`, or one a registered validator vouches for: the `/app-html/` check), else 401. A module opts out explicitly (`BaseModule`): `api_checks_its_callers = True` when every route it mounts checks its caller itself (`naas_abi`, which mounts the Nexus API), or `unguarded_api_paths` for public files (logos, portraits) and routers with their own caller check (People, Personnel Cockpit). The guard finds the route a request reaches as the router does (same routes, same order, same scope; never the URL rebuilt from `Host`), and runs innermost, inside CORS. `/app-html/` keeps its own middleware.
+
 Discovery happens in `BaseModule.on_load` (class walk). Instantiation happens in `on_initialized` (services are up). See [module/AGENTS.md](../../module/AGENTS.md).
 
 ## Default `run()` POST

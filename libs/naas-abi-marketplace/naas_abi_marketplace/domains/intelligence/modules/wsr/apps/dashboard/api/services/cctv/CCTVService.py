@@ -7,6 +7,7 @@ cameras if dynamic sources fail. Also owns the HLS/JPEG snapshot proxy.
 
 import asyncio
 import logging
+from urllib.parse import urljoin, urlsplit
 
 from core.cache import TTLCache
 from core.http_client import get_client
@@ -17,6 +18,21 @@ from services.cctv.CCTVPort import ICCTVAdapter, ICCTVService
 log = logging.getLogger(__name__)
 
 _snap_cache: TTLCache[tuple[bytes, str]] = TTLCache(ttl_seconds=4, max_size=500)
+_camera_cache: TTLCache[dict[str, CCTVCamera]] = TTLCache(ttl_seconds=300, max_size=1)
+
+# What a snapshot may be served as; anything else goes out as bytes the browser
+# does not interpret.
+_MEDIA_PREFIXES = ("image/", "video/")
+_PLAIN = "application/octet-stream"
+
+
+class UnknownCamera(LookupError):
+    """No camera of the service's own list has this id (or this kind of source)."""
+
+
+def _media_type(content_type: str) -> str:
+    value = content_type.split(";", 1)[0].strip().lower()
+    return value if value.startswith(_MEDIA_PREFIXES) else _PLAIN
 
 
 class CCTVService(ICCTVService):
@@ -35,13 +51,30 @@ class CCTVService(ICCTVService):
             log.warning("[cctv] dynamic fetch failed, serving static fallback: %s", exc)
             return await self._static.fetch()
 
-    async def proxy_snapshot(self, url: str) -> tuple[bytes, str]:
-        return await _snap_cache.get_or_fetch(url, lambda: self._fetch_snapshot(url))
+    async def _cameras_by_id(self) -> dict[str, CCTVCamera]:
+        async def load() -> dict[str, CCTVCamera]:
+            return {camera.id: camera for camera in await self.get_cameras()}
+
+        return await _camera_cache.get_or_fetch("cameras", load)
+
+    async def proxy_snapshot(self, camera_id: str, kind: str) -> tuple[bytes, str]:
+        """Fetch a camera's own image or stream URL, as its source lists it:
+        never a URL a caller names."""
+        camera = (await self._cameras_by_id()).get(camera_id)
+        url = None
+        if camera is not None:
+            url = camera.image_url if kind == "image" else camera.video_url
+        if not url or urlsplit(url).scheme not in ("http", "https"):
+            raise UnknownCamera(camera_id)
+        source: str = url
+        return await _snap_cache.get_or_fetch(
+            f"{kind}:{camera_id}", lambda: self._fetch_snapshot(source)
+        )
 
     async def _fetch_snapshot(self, url: str) -> tuple[bytes, str]:
         fetch_url = url
 
-        if url.endswith(".m3u8"):
+        if urlsplit(url).path.endswith(".m3u8"):
             client = get_client()
             m3u8_resp = await client.get(url, timeout=5)
             if not m3u8_resp.is_success:
@@ -53,11 +86,12 @@ class CCTVService(ICCTVService):
             ]
             if not lines:
                 raise ValueError("empty HLS playlist")
-            segment = lines[-1]
-            base = url[: url.rfind("/") + 1]
-            fetch_url = segment if segment.startswith("http") else base + segment
+            # The segment stays on the playlist's own origin.
+            fetch_url = urljoin(url, lines[-1])
+            if urlsplit(fetch_url)[:2] != urlsplit(url)[:2]:
+                raise ValueError("HLS segment outside the playlist's origin")
 
         client = get_client()
         resp = await client.get(fetch_url, timeout=6)
         resp.raise_for_status()
-        return resp.content, resp.headers.get("content-type", "application/octet-stream")
+        return resp.content, _media_type(resp.headers.get("content-type", ""))

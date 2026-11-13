@@ -32,6 +32,9 @@ class ABIModule(BaseModule):
         services=[DatasetService],
     )
 
+    # The People router checks its caller: the Nexus user, in their workspace.
+    unguarded_api_paths = ("/api/people",)
+
     class Configuration(ModuleConfiguration):
         """
         module: naas_abi_marketplace.domains.intelligence.modules.people.apps.people

@@ -2,15 +2,19 @@ import { SignJWT, jwtVerify } from 'jose';
 
 import type { PageId, SessionPayload } from '@/lib/types';
 import { normalizePageId } from '@/lib/types';
+import { MIN_SESSION_SECRET_LENGTH, configuredSecret } from '@/lib/auth/templateSecrets';
 
 export const SESSION_COOKIE = 'asgard_session';
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 const MAGIC_LINK_MAX_AGE = 60 * 15; // 15 minutes
 
 function getSecret(): Uint8Array {
-  const secret = process.env.SESSION_SECRET;
+  // In production the template's value (or a short one) is no secret.
+  const secret = configuredSecret(process.env.SESSION_SECRET, {
+    minLength: MIN_SESSION_SECRET_LENGTH,
+  });
   if (!secret) {
-    throw new Error('SESSION_SECRET is not configured');
+    throw new Error('SESSION_SECRET is not configured (run `npm run kickstart`)');
   }
   return new TextEncoder().encode(secret);
 }

@@ -32,6 +32,9 @@ class ABIModule(BaseModule):
         ],
     )
 
+    # Logos are images pages embed: served to anyone.
+    unguarded_api_paths = ("/api/organizations/logos",)
+
     class Configuration(ModuleConfiguration):
         """
         module: naas_abi_marketplace.domains.intelligence.modules.organizations

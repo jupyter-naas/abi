@@ -10,8 +10,13 @@ graph defaults. Do not duplicate those values in HTML or JavaScript.
 
 Page components remain registered in `web/lib/registry.js`; configuration can
 reorder, rename, disable, or change the URL of a registered page, but cannot
-create a component. The static app has no authenticated session yet, so only
-the `public` permission is granted. Dataset routes enforce that permission.
+create a component. Page access is the `public` permission only; dataset
+routes enforce it. Every `/api/personnel-cockpit` route (config included)
+needs, in Nexus, the signed-in user and their membership of the workspace the
+cockpit is opened in (`?workspace_id=`, `api/access.py`); without Nexus, the
+engine's API key. The browser sends both through `web/lib/nexus.js`
+(`cockpitFetch`). The local dev server (127.0.0.1) overrides that check.
+Missing-dataset errors name the storage key, never a path on the server.
 
 Configuration ownership:
 

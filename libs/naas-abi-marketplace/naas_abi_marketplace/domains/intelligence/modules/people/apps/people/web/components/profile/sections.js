@@ -6,7 +6,7 @@
  * renderer, and a renderer lives here.
  */
 
-import { escapeHtml, highlight, orgAvatarHtml, periodText } from "../../lib/dom.js";
+import { escapeHtml, highlight, orgAvatarHtml, periodText, safeHref } from "../../lib/dom.js";
 
 const H = (value, tokens) => highlight(value ?? "", tokens);
 
@@ -140,8 +140,9 @@ function certificationsSection(items, tokens) {
       ]
         .filter(Boolean)
         .join(" · ");
-      const link = item.credential_url
-        ? `<p class="entry-text"><a href="${escapeHtml(item.credential_url)}" rel="noopener noreferrer" target="_blank">Show credential</a></p>`
+      const credential = safeHref(item.credential_url);
+      const link = credential
+        ? `<p class="entry-text"><a href="${escapeHtml(credential)}" rel="noopener noreferrer" target="_blank">Show credential</a></p>`
         : "";
       return entry({ title: item.name, meta, extra: link }, tokens);
     })
@@ -182,10 +183,13 @@ function interestsSection(items, tokens) {
 function sourcesSection(items) {
   return `<ul class="sources">${items
     .map(
-      (item) =>
-        `<li><a href="${escapeHtml(item.url)}" rel="noopener noreferrer" target="_blank">${escapeHtml(
-          item.label || item.url,
-        )}</a></li>`,
+      (item) => {
+        const label = escapeHtml(item.label || item.url);
+        const url = safeHref(item.url);
+        return url
+          ? `<li><a href="${escapeHtml(url)}" rel="noopener noreferrer" target="_blank">${label}</a></li>`
+          : `<li>${label}</li>`;
+      },
     )
     .join("")}</ul>`;
 }
