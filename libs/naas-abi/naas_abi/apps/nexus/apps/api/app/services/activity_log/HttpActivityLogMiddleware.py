@@ -1,10 +1,18 @@
 """Pure-ASGI HTTP activity-log middleware (Sentry-style).
 
 Wraps the downstream ASGI app to:
-- accumulate request body chunks as they stream in (capped + redacted),
+- accumulate request body chunks as they stream in (capped),
 - observe the response status,
 - record one ``http.request`` ActivityEvent per request,
 without disrupting the downstream handler.
+
+A request body is recorded only for a route that opts in: its JSON body model names
+the fields the log keeps (``activity_log_fields``, a class attribute). Those fields
+are kept, any key that names a credential redacted within them; every other body is
+recorded as its size. Plain-text and form bodies are never recorded, nor any body of
+the routes that carry credentials (``DEFAULT_SKIP_BODY_PATH_PREFIXES``). Query
+parameters are kept, redacted the same way. ``redact_recorded`` applies the same rules
+to an event recorded before them, as it is read back.
 
 Lives in Nexus rather than naas-abi-core because it knows what an HTTP
 request is (ASGI); core knows nothing about it.
@@ -23,7 +31,6 @@ viewed as the attribute ``view_as``. Nothing is recorded as the person's activit
 from __future__ import annotations
 
 import asyncio
-import base64
 import json
 import time
 from collections.abc import Iterable
@@ -47,45 +54,52 @@ from naas_abi_core.services.activity_log.ActivityLogService import (
 from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-# Sentry-style denylist. Keys are matched case-insensitively against any
-# JSON object key, form key, or query parameter name.
-SENSITIVE_KEYS: frozenset[str] = frozenset(
-    {
-        "password",
-        "passwd",
-        "secret",
-        "api_key",
-        "apikey",
-        "token",
-        "access_token",
-        "refresh_token",
-        "auth",
-        "authorization",
-        "credentials",
-        "private_key",
-        "csrf",
-        "session",
-    }
+# A JSON key or query parameter whose name contains one of these (case-insensitive)
+# may hold a credential: its value is never recorded.
+SENSITIVE_KEY_PARTS: tuple[str, ...] = (
+    "password",
+    "passwd",
+    "secret",
+    "key",
+    "token",
+    "auth",
+    "credential",
+    "session",
+    "csrf",
+    "cookie",
+    "code",
+    "otp",
+    "env",
+    "signature",
 )
 
 REDACTED = "[REDACTED]"
+# The class attribute of a route's body model naming the fields the log keeps.
+RECORDED_FIELDS = "activity_log_fields"
 
 DEFAULT_MAX_BODY_BYTES = 64 * 1024  # 64 KB
-# The System app's data endpoints carry raw service values (secrets, objects).
+# Routes whose bodies carry credentials or raw service values: never recorded, even
+# by a route that opts in.
 DEFAULT_SKIP_BODY_PATH_PREFIXES: tuple[str, ...] = (
     "/api/auth/",
     "/api/admin/system/resources/",
+    "/api/secrets",
+    "/api/iam/token",
+    "/idp/",
 )
 # Liveness probes (container healthcheck, proxy) hit these every few seconds;
 # recording them would fill the anonymous log with noise.
 DEFAULT_SKIP_RECORD_PATHS: frozenset[str] = frozenset({"/", "/health"})
 
 
+def is_sensitive(name: str) -> bool:
+    lowered = str(name).lower()
+    return any(part in lowered for part in SENSITIVE_KEY_PARTS)
+
+
 def _redact(value: Any) -> Any:
     if isinstance(value, dict):
-        return {
-            k: (REDACTED if k.lower() in SENSITIVE_KEYS else _redact(v)) for k, v in value.items()
-        }
+        return {k: (REDACTED if is_sensitive(k) else _redact(v)) for k, v in value.items()}
     if isinstance(value, list):
         return [_redact(v) for v in value]
     return value
@@ -94,38 +108,79 @@ def _redact(value: Any) -> Any:
 def _redact_pairs(pairs: Iterable[tuple[str, str]]) -> dict[str, str]:
     out: dict[str, str] = {}
     for k, v in pairs:
-        out[k] = REDACTED if k.lower() in SENSITIVE_KEYS else v
+        out[k] = REDACTED if is_sensitive(k) else v
     return out
 
 
-def _decode_body(raw: bytes, content_type: str) -> Any:
-    """Best-effort body normalization with redaction.
-
-    Returns one of:
-    - a dict (JSON, redacted),
-    - a dict of form fields (urlencoded, redacted),
-    - a str (plain text),
-    - a dict {"_b64": <base64>} for binary that didn't decode.
-    """
+def _is_json(content_type: str) -> bool:
     ct = content_type.split(";", 1)[0].strip().lower()
+    return ct == "application/json" or ct.endswith("+json")
 
-    if ct == "application/json" or ct.endswith("+json"):
-        try:
-            return _redact(json.loads(raw.decode("utf-8")))
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            pass
 
-    if ct == "application/x-www-form-urlencoded":
-        try:
-            decoded = raw.decode("utf-8")
-            return _redact_pairs(parse_qsl(decoded, keep_blank_values=True))
-        except UnicodeDecodeError:
-            pass
+def recorded_fields(route: Any) -> frozenset[str] | None:
+    """The body fields ``route`` lets the log keep: its JSON body model's
+    ``activity_log_fields``. None when it keeps none (no such model, or no list)."""
+    dependant = getattr(route, "dependant", None)
+    params = list(getattr(dependant, "body_params", None) or [])
+    if len(params) != 1:
+        return None
+    model = getattr(params[0], "type_", None)
+    fields = getattr(model, RECORDED_FIELDS, None) if isinstance(model, type) else None
+    if not fields:
+        return None
+    return frozenset(str(f) for f in fields)
 
+
+def _kept_body(raw: bytes, fields: frozenset[str]) -> dict[str, Any] | None:
+    """The fields of a JSON object body that the route keeps, redacted within."""
     try:
-        return raw.decode("utf-8")
-    except UnicodeDecodeError:
-        return {"_b64": base64.b64encode(raw).decode("ascii")}
+        decoded = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(decoded, dict):
+        return None
+    return {k: _redact(v) for k, v in decoded.items() if k in fields and not is_sensitive(k)}
+
+
+def skipped_body(reason: str, size: int | None) -> str:
+    return f"[{reason.upper()}" + (f":{size}" if size is not None else "") + "]"
+
+
+def _is_skip_marker(value: Any) -> bool:
+    return isinstance(value, str) and value.startswith("[") and value.endswith("]")
+
+
+def redact_recorded(
+    attributes: dict[str, Any] | None,
+    skip_body_path_prefixes: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    """An ``http.request`` event's attributes as these rules would have recorded
+    them: for one recorded before them, read back. A body shows only when the event
+    says which fields its route kept (``request_body_kept``), and only those fields,
+    every key that names a credential redacted; any other body (an older event's, a
+    credential route's, text or a form) shows as its size. Query parameters are
+    redacted the same way."""
+    attrs = dict(attributes or {})
+    prefixes = skip_body_path_prefixes or DEFAULT_SKIP_BODY_PATH_PREFIXES
+    path = str(attrs.get("path") or "")
+    body = attrs.get("request_body")
+    if "request_body" in attrs and not _is_skip_marker(body):
+        size = attrs.get("request_body_size")
+        size = size if isinstance(size, int) else None
+        kept = attrs.get("request_body_kept")
+        if any(path.startswith(p) for p in prefixes):
+            attrs["request_body"] = skipped_body("path_skipped", size)
+        elif isinstance(body, dict) and isinstance(kept, list):
+            fields = {str(f) for f in kept}
+            attrs["request_body"] = {
+                k: _redact(v) for k, v in body.items() if k in fields and not is_sensitive(k)
+            }
+        else:
+            attrs["request_body"] = skipped_body("not_recorded", size)
+    query = attrs.get("query_params")
+    if isinstance(query, dict):
+        attrs["query_params"] = _redact_pairs(query.items())
+    return attrs
 
 
 # The account an anonymous request is recorded under: Nexus's own.
@@ -164,10 +219,12 @@ class HttpActivityLogMiddleware:
         content_type = headers.get("content-type", "")
         content_length_header = headers.get("content-length")
 
+        # Kept only for a JSON body: whether its route keeps any of it is known
+        # once routing has run (``scope["route"]``).
         should_capture_body = (
             self.capture_request_body
             and not any(path.startswith(p) for p in self.skip_body_path_prefixes)
-            and not content_type.lower().startswith("multipart/form-data")
+            and _is_json(content_type)
         )
 
         body_buf = bytearray()
@@ -180,6 +237,8 @@ class HttpActivityLogMiddleware:
             body_skipped_reason = "multipart"
         elif any(path.startswith(p) for p in self.skip_body_path_prefixes):
             body_skipped_reason = "path_skipped"
+        elif not _is_json(content_type):
+            body_skipped_reason = "not_recorded"
 
         async def receive_wrapper() -> Message:
             nonlocal body_total, body_truncated
@@ -333,16 +392,17 @@ class HttpActivityLogMiddleware:
                 size_hint = int(content_length_header) if content_length_header else None
             except ValueError:
                 size_hint = None
-            attrs["request_body"] = (
-                f"[{body_skipped_reason.upper()}"
-                + (f":{size_hint}" if size_hint is not None else "")
-                + "]"
-            )
+            if body_skipped_reason != "not_recorded" or size_hint:
+                attrs["request_body"] = skipped_body(body_skipped_reason, size_hint)
         elif body_total > 0:
-            decoded = _decode_body(body_buf, content_type)
-            attrs["request_body"] = decoded
-            attrs["request_body_size"] = body_total
-            if body_truncated:
-                attrs["request_body_truncated"] = True
+            fields = recorded_fields(scope.get("route"))
+            kept = _kept_body(body_buf, fields) if fields and not body_truncated else None
+            if kept is None:
+                attrs["request_body"] = skipped_body("not_recorded", body_total)
+            else:
+                attrs["request_body"] = kept
+                attrs["request_body_size"] = body_total
+                # What the route let the log keep: read back by ``redact_recorded``.
+                attrs["request_body_kept"] = sorted(fields or ())
 
         return attrs

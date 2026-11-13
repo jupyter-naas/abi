@@ -242,3 +242,55 @@ def test_an_actor_is_classified_by_its_id(actor, kind):
     )
 
     assert actor_kind(actor) == kind
+
+
+def test_a_request_recorded_before_reads_back_without_its_credentials(tmp_path):
+    log = ActivityLogService(ActivityLogSqliteAdapter(str(tmp_path / "older")))
+    try:
+        log.record(
+            ActivityEvent(
+                actor_id="api",
+                event_type="http.request",
+                attributes={
+                    "method": "POST",
+                    "path": "/api/secrets",
+                    "request_body": {"key": "OPENAI_API_KEY", "value": "sk-kept-before"},
+                    "request_body_size": 52,
+                    "query_params": {"access_token": "t-kept-before"},
+                },
+            )
+        )
+        resources = ActivityLogResources(log)
+        detail = asyncio.run(resources.read("api/1"))
+        downloaded = asyncio.run(resources.download("api/1", max_bytes=1 << 20))
+        page = asyncio.run(resources.list("api"))
+    finally:
+        log.shutdown()
+    shown = json.dumps(detail.view) + downloaded.decode() + repr(page.entries)
+    assert "sk-kept-before" not in shown and "t-kept-before" not in shown
+    assert detail.view["value"]["attributes"]["request_body"] == "[PATH_SKIPPED:52]"
+
+
+def test_an_older_body_reads_back_as_its_size(tmp_path):
+    log = ActivityLogService(ActivityLogSqliteAdapter(str(tmp_path / "older")))
+    try:
+        for body in ({"email": "a@b.c", "code": "123456"}, {"value": "sk-kept-before"}):
+            log.record(
+                ActivityEvent(
+                    actor_id="api",
+                    event_type="http.request",
+                    attributes={
+                        "method": "POST",
+                        "path": "/api/elsewhere",
+                        "request_body": body,
+                        "request_body_size": 40,
+                    },
+                )
+            )
+        resources = ActivityLogResources(log)
+        shown = [json.dumps(asyncio.run(resources.read(f"api/{seq}")).view) for seq in (1, 2)]
+    finally:
+        log.shutdown()
+    for view in shown:
+        assert "123456" not in view and "sk-kept-before" not in view
+        assert "[NOT_RECORDED:40]" in view
