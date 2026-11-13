@@ -64,6 +64,7 @@ class OverflowHost(TransferHost):
         chunk_bytes: int = overflow.CHUNK_BYTES,
         idle_seconds: float = 60.0,
         max_sessions: int = 64,
+        max_caller_sessions: int | None = None,
     ) -> None:
         # An upload or a parked reply belongs to the caller (its identity binds
         # the session); a module host reading or parking one for its caller
@@ -77,9 +78,12 @@ class OverflowHost(TransferHost):
             verifier,
             _echo,
             operations=(overflow.UPLOAD_OPERATION,),
+            # The upload is the request itself: its RPC authorizes it.
+            uploads=(overflow.UPLOAD_OPERATION,),
             chunk_bytes=chunk_bytes,
             idle_seconds=idle_seconds,
             max_sessions=max_sessions,
+            max_caller_sessions=max_caller_sessions,
             max_upload_bytes=max_value_bytes,
             max_buffered_upload_bytes=max_buffered_upload_bytes,
         )
@@ -109,13 +113,8 @@ class OverflowHost(TransferHost):
             )
         if self.parked_bytes + len(data) > self.max_parked_bytes:
             raise TransferError("RESOURCE_EXHAUSTED", "Overflow reply budget exhausted")
-        if (
-            len(self.sessions) >= self.max_sessions
-            or len(self.retiring) >= self.max_sessions
-        ):
-            raise TransferError(
-                "RESOURCE_EXHAUSTED", "Transfer session capacity reached"
-            )
+        # A parked reply counts against the caller it is parked for.
+        self._admit(context)
         key = f"{self.owner}:{uuid4().hex}"
         trace = serve_transfer(
             self.prefix, "reply", dict(headers), attributes={"abi.caller": caller}

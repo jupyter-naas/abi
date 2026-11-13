@@ -23,7 +23,9 @@ def test_sequences_caller_capacity_and_upload_budgets():
             "secret",
             empty_handler,
             operations=("put",),
+            uploads=("put",),
             max_sessions=2,
+            max_caller_sessions=2,
             max_upload_bytes=5,
             max_buffered_upload_bytes=6,
         )
@@ -121,6 +123,7 @@ def test_stuck_backend_does_not_block_expiry_or_stop_and_keeps_file_open():
             "secret",
             handler,
             operations=("put",),
+            uploads=("put",),
             idle_seconds=0.03,
             close_timeout_seconds=0.01,
         )
@@ -317,7 +320,7 @@ def test_a_failing_handler_fails_the_session_span_not_the_reply(spans, monkeypat
         yield b""
 
     async def scenario():
-        host = TransferHost(PREFIX, SECRET, broken, operations=("put",))
+        host = TransferHost(PREFIX, SECRET, broken, operations=("put",), uploads=("put",))
         result = await _Caller(host, _headers()).run("put", upload=b"data")
         await host.stop()
         return result
@@ -453,7 +456,7 @@ def test_a_failed_chunk_from_the_sessions_caller_fails_its_span(spans):
         yield b"never"
 
     async def scenario():
-        host = TransferHost(PREFIX, SECRET, handler, operations=("put",))
+        host = TransferHost(PREFIX, SECRET, handler, operations=("put",), uploads=("put",))
         owner, stranger = _Caller(host, _headers()), _Caller(host, _headers("other"))
         opened = await owner("open", pb.OpenRequest(operation="put"))
         denied = await stranger("write", pb.WriteRequest(id=opened.id, data=b"x"))
@@ -471,3 +474,154 @@ def test_a_failed_chunk_from_the_sessions_caller_fails_its_span(spans):
     assert server.attributes["abi.error_code"] == "CONFLICT"
     (event,) = server.events
     assert event.attributes["exception.type"].endswith("TransferError")
+
+
+def test_transfer_write_on_a_read_only_stream_is_refused():
+    async def scenario():
+        host = TransferHost(
+            "test", "secret", empty_handler, operations=("get", "put"), uploads=("put",)
+        )
+        read = await host._execute("open", pb.OpenRequest(operation="get"), "a")
+        with pytest.raises(TransferError, match="no upload"):
+            await host._execute("write", pb.WriteRequest(id=read.id, data=b"x"), "a")
+        assert host.sessions[read.id].source is None  # nothing spooled
+        assert host.buffered_upload_bytes == 0
+        put = await host._execute("open", pb.OpenRequest(operation="put"), "a")
+        await host._execute("write", pb.WriteRequest(id=put.id, data=b"x"), "a")
+        await host.stop()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    "budgets",
+    [
+        {"max_upload_bytes": None},
+        {"max_buffered_upload_bytes": None},
+        {"max_upload_bytes": 0},
+    ],
+)
+def test_a_transfer_host_keeps_finite_upload_budgets(budgets):
+    with pytest.raises(ValueError):
+        TransferHost("test", "secret", empty_handler, operations=("put",), **budgets)
+    with pytest.raises(ValueError):  # an upload must be one of the operations
+        TransferHost("test", "secret", empty_handler, operations=("get",), uploads=("put",))
+
+
+def test_transfer_open_is_authorized_before_any_upload():
+    from naas_abi_core.engine.call_context import (
+        CallContext,
+        current_call_context,
+        service_account,
+    )
+    from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
+
+    checked: list[tuple[str, bytes, str]] = []
+
+    def authorize(operation, metadata):
+        caller = current_call_context().principal.id
+        checked.append((operation, metadata, caller))
+        if metadata != b"allowed":
+            raise PermissionDeniedError("store:Put", "store:object/x")
+
+    module = CallContext(principal=service_account("module/p/m"))
+
+    async def scenario():
+        host = TransferHost(
+            "test",
+            "secret",
+            empty_handler,
+            operations=("get", "put"),
+            uploads=("put",),
+            authorize=authorize,
+        )
+        with pytest.raises(PermissionDeniedError):
+            await host._execute(
+                "open",
+                pb.OpenRequest(operation="put", metadata=b"denied"),
+                "module/p/m",
+                None,
+                module,
+            )
+        assert host.sessions == {}
+        await host._execute(
+            "open",
+            pb.OpenRequest(operation="put", metadata=b"allowed"),
+            "module/p/m",
+            None,
+            module,
+        )
+        # A read-only operation spools nothing: its domain call checks at start.
+        await host._execute("open", pb.OpenRequest(operation="get"), "module/p/m")
+        await host.stop()
+
+    asyncio.run(scenario())
+    assert [(op, meta) for op, meta, _ in checked] == [
+        ("put", b"denied"),
+        ("put", b"allowed"),
+    ]
+    assert {caller for _, _, caller in checked} == {"module/p/m"}
+
+
+def test_one_caller_cannot_take_every_transfer_session():
+    from naas_abi_core.engine.call_context import CallContext, service_account, user
+
+    ada = CallContext(principal=service_account("api"), on_behalf_of=user("usr-ada"))
+    bob = CallContext(principal=service_account("api"), on_behalf_of=user("usr-bob"))
+
+    async def scenario():
+        host = TransferHost(
+            "test",
+            "secret",
+            empty_handler,
+            operations=("put",),
+            uploads=("put",),
+            max_sessions=8,
+            max_upload_bytes=10,
+            max_buffered_upload_bytes=40,
+        )
+        busy = [
+            await host._execute("open", pb.OpenRequest(operation="put"), "busy")
+            for _ in range(2)
+        ]
+        with pytest.raises(TransferError, match="share"):
+            await host._execute("open", pb.OpenRequest(operation="put"), "busy")
+        # Others still get sessions, a user acting through api included.
+        for context in (ada, bob):
+            await host._execute(
+                "open", pb.OpenRequest(operation="put"), "api", None, context
+            )
+        await host._execute("open", pb.OpenRequest(operation="put"), "other")
+        # And the caller's share of the spooled bytes: one whole upload.
+        await host._execute(
+            "write", pb.WriteRequest(id=busy[0].id, data=b"x" * 10), "busy"
+        )
+        with pytest.raises(TransferError, match="this caller"):
+            await host._execute(
+                "write", pb.WriteRequest(id=busy[1].id, data=b"x"), "busy"
+            )
+        await host.stop()
+
+    asyncio.run(scenario())
+
+
+def test_a_refused_transfer_request_does_not_keep_its_session_alive():
+    async def scenario():
+        host = TransferHost(
+            "test", "secret", empty_handler, operations=("put",), uploads=("put",)
+        )
+        opened = await host._execute("open", pb.OpenRequest(operation="put"), "a")
+        session = host.sessions[opened.id]
+        session.touched = 1.0
+        with pytest.raises(TransferError, match="sequence"):
+            await host._execute(
+                "write", pb.WriteRequest(id=opened.id, sequence=7, data=b"x"), "a"
+            )
+        with pytest.raises(TransferError, match="read state"):
+            await host._execute("read", pb.ReadRequest(id=opened.id, sequence=3), "a")
+        assert session.touched == 1.0
+        await host._execute("write", pb.WriteRequest(id=opened.id, data=b"x"), "a")
+        assert session.touched > 1.0
+        await host.stop()
+
+    asyncio.run(scenario())

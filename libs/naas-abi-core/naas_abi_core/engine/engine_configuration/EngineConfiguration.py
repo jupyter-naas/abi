@@ -299,10 +299,15 @@ class DiscoveryConfiguration(BaseModel):
 
 
 class NATSStreamingConfiguration(BaseModel):
+    """A streaming host's transfers. Uploads spool to the engine's temporary
+    directory: ``max_upload_bytes`` per session, ``max_buffered_upload_bytes``
+    for all of them at once (a caller gets a quarter, at least one upload)."""
+
     chunk_bytes: int = Field(default=64 * 1024, ge=1024, le=4 * 1024 * 1024)
     idle_seconds: float = Field(default=60, gt=0, allow_inf_nan=False)
     max_sessions: int = Field(default=32, ge=1, le=1024)
-    max_upload_bytes: int | None = Field(default=None, gt=0)
+    max_upload_bytes: int = Field(default=1024 * 1024 * 1024, gt=0)
+    max_buffered_upload_bytes: int = Field(default=4 * 1024 * 1024 * 1024, gt=0)
 
 
 class NATSModelStreamingConfiguration(NATSStreamingConfiguration):

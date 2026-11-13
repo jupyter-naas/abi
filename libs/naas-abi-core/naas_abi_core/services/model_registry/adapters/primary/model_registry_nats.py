@@ -159,6 +159,9 @@ class ModelRegistryNATS(SessionHost):
             verifier,
             self._transfer_frames,
             operations=("chat", "stream", "embed"),
+            # The request is the upload; the registry authorizes it at start,
+            # within the finite budgets above.
+            uploads=("chat", "stream", "embed"),
             total_seconds=deadline,
             error_mapper=self._transfer_error,
             owner=self.owner,

@@ -218,6 +218,11 @@ class DatasetService(ServiceBase, IDatasetPort):
             **_deadline(timeout_seconds),
         )
 
+    def authorize_write_stream(self, name: str, *, namespace: str = "default") -> None:
+        """Raise unless the caller may ``write_stream`` into ``name``: what a
+        transfer host checks before it spools the rows."""
+        self.__dataset("WriteStream", name, self._namespace(namespace))
+
     def write_stream(
         self,
         name: str,

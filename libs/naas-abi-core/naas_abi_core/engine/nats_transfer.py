@@ -1,7 +1,12 @@
 """Bounded NATS packet transport for domain-owned streaming operations.
 
-Inputs spool to temporary disk. Only an explicit start calls the domain handler;
-closing an incomplete upload cannot modify its destination. No durable replay.
+Inputs spool to temporary disk, within budgets: per session
+(``max_upload_bytes``), per host (``max_buffered_upload_bytes``) and per caller
+(a quarter of each, at least one upload). Only the operations a host declares
+in ``uploads`` take one; an ``authorize`` hook checks, at ``open``, that the
+caller may run such an operation on the metadata's resource before any byte is
+spooled. Only an explicit start calls the domain handler; closing an incomplete
+upload cannot modify its destination. No durable replay.
 Each session is one SERVER span continuing the caller's trace from ``open``; the
 handler runs inside it, and its real failure is recorded there, never replied.
 
@@ -52,6 +57,12 @@ from nats.errors import Error as NATSError
 # How long stop() waits for the broker to confirm its unsubscribes (twice at
 # most: one wait to write them, one for the broker's answer).
 STOP_FLUSH_SECONDS = 1
+
+# Default upload budgets of a host: per session, and spooled at once per host.
+DEFAULT_MAX_UPLOAD_BYTES = 64 * 1024 * 1024
+DEFAULT_MAX_BUFFERED_UPLOAD_BYTES = 256 * 1024 * 1024
+# A caller's share of a host's sessions and spooled bytes.
+CALLER_SHARE = 4
 
 OPERATIONS = {
     "open": (pb.OpenRequest, pb.OpenResponse),
@@ -188,18 +199,35 @@ class TransferHost(SessionHost):
         handler,
         *,
         operations,
+        uploads=(),
+        authorize=None,
         chunk_bytes=64 * 1024,
         idle_seconds=60.0,
         max_sessions=32,
-        max_upload_bytes=None,
+        max_upload_bytes=DEFAULT_MAX_UPLOAD_BYTES,
         total_seconds=None,
-        max_buffered_upload_bytes=None,
+        max_buffered_upload_bytes=DEFAULT_MAX_BUFFERED_UPLOAD_BYTES,
+        max_caller_sessions=None,
         close_timeout_seconds=1.0,
         error_mapper=None,
         owner=None,
     ):
         """``owner``: the id in this host's session subjects; by default the
-        engine's (``nats_sessions.owned_by``), else a new one."""
+        engine's (``nats_sessions.owned_by``), else a new one.
+
+        ``uploads``: the operations that read an upload; ``write`` is refused on
+        any other. ``authorize(operation, metadata)``: run as the caller at the
+        ``open`` of an upload operation, it raises to refuse it (the domain's own
+        check, on the metadata's resource). Upload budgets are finite.
+        ``max_caller_sessions``: one caller's (actor and user) share of the
+        sessions, a quarter of them by default."""
+        if max_upload_bytes is None or max_buffered_upload_bytes is None:
+            raise ValueError("Transfer upload budgets must be finite")
+        uploads = set(uploads)
+        if not uploads <= set(operations):
+            raise ValueError("An upload operation must be one of the operations")
+        if max_caller_sessions is None:
+            max_caller_sessions = max(1, max_sessions // CALLER_SHARE)
         if not math.isfinite(idle_seconds) or idle_seconds <= 0:
             raise ValueError("Transfer idle timeout must be positive and finite")
         if total_seconds is not None and (
@@ -209,8 +237,9 @@ class TransferHost(SessionHost):
         if (
             chunk_bytes < 1024
             or max_sessions < 1
-            or (max_upload_bytes is not None and max_upload_bytes < 1)
-            or (max_buffered_upload_bytes is not None and max_buffered_upload_bytes < 1)
+            or max_upload_bytes < 1
+            or max_buffered_upload_bytes < 1
+            or not 1 <= max_caller_sessions <= max_sessions
         ):
             raise ValueError("Invalid transfer capacity")
         if close_timeout_seconds <= 0 or not math.isfinite(close_timeout_seconds):
@@ -222,6 +251,12 @@ class TransferHost(SessionHost):
         self.prefix, self.verifier, self.handler = prefix, verifier, handler
         self.owner = session_owner(owner)
         self.operations, self.chunk_bytes = set(operations), chunk_bytes
+        self.uploads, self.authorize = uploads, authorize
+        self.max_caller_sessions = max_caller_sessions
+        # A caller's share of the spooled bytes: at least one whole upload.
+        self.max_caller_buffered_bytes = max(
+            max_upload_bytes, max_buffered_upload_bytes // CALLER_SHARE
+        )
         self.idle_seconds, self.max_sessions = idle_seconds, max_sessions
         self.max_upload_bytes, self.total_seconds = max_upload_bytes, total_seconds
         self.error_mapper = error_mapper
@@ -468,13 +503,13 @@ class TransferHost(SessionHost):
                 or len(request.metadata) > 16 * 1024
             ):
                 raise ValueError("Unsupported operation or oversized metadata")
-            if (
-                len(self.sessions) >= self.max_sessions
-                or len(self.retiring) >= self.max_sessions
-            ):
-                raise TransferError(
-                    "RESOURCE_EXHAUSTED", "Transfer session capacity reached"
+            opener = for_request(context, request)
+            if request.operation in self.uploads and self.authorize is not None:
+                # Before any byte is spooled: may the caller run it at all?
+                await asyncio.to_thread(
+                    self._authorized, opener, request.operation, request.metadata
                 )
+            self._admit(opener)
             size = min(request.chunk_bytes or self.chunk_bytes, self.chunk_bytes)
             if size < 1024:
                 raise ValueError("Chunk size is too small")
@@ -493,7 +528,7 @@ class TransferHost(SessionHost):
                 size,
                 touched=now,
                 trace=trace,
-                context=for_request(context, request),
+                context=opener,
             )
             return pb.OpenResponse(id=key, chunk_bytes=size)
         session = self.sessions.get(request.id)
@@ -507,37 +542,75 @@ class TransferHost(SessionHost):
             raise TransferError(
                 "PERMISSION_DENIED", "Transfer belongs to another caller"
             )
-        session.touched = now
-        session.trace.messages += 1
         if operation == "close":
+            session.trace.messages += 1
             await self._close(request.id)
             return pb.CloseResponse()
+        # Only a request that passes its checks keeps the session alive.
+        previous, session.touched = session.touched, now
+        try:
+            return await self._continue(operation, request, session)
+        except BaseException:
+            session.touched = previous
+            raise
+
+    def _authorized(self, context, operation, metadata):
+        with use_call_context(context):
+            self.authorize(operation, metadata)
+
+    def _of_caller(self, context):
+        return [s for s in self.sessions.values() if same_caller(s.context, context)]
+
+    def _admit(self, context):
+        """Room for one more session: on the host, and in the caller's share."""
+        if (
+            len(self.sessions) >= self.max_sessions
+            or len(self.retiring) >= self.max_sessions
+        ):
+            raise TransferError(
+                "RESOURCE_EXHAUSTED", "Transfer session capacity reached"
+            )
+        if len(self._of_caller(context)) >= self.max_caller_sessions:
+            raise TransferError(
+                "RESOURCE_EXHAUSTED", "Transfer session share of this caller reached"
+            )
+
+    async def _continue(self, operation, request, session):
+        session.trace.messages += 1
         if session.lock.locked():
             raise TransferError(
                 "CONFLICT", "Concurrent transfer operations are not allowed"
             )
         async with session.lock:
             if operation == "write":
+                if session.operation not in self.uploads:
+                    raise TransferError(
+                        "INVALID_ARGUMENT", "This operation takes no upload"
+                    )
                 if session.task or request.sequence != session.upload_sequence:
                     raise TransferError("CONFLICT", "Invalid upload state or sequence")
                 if len(request.data) > session.chunk_bytes:
                     raise TransferError(
                         "PAYLOAD_TOO_LARGE", "Upload chunk exceeds negotiated size"
                     )
-                if (
-                    self.max_upload_bytes is not None
-                    and session.uploaded + len(request.data) > self.max_upload_bytes
-                ):
+                if session.uploaded + len(request.data) > self.max_upload_bytes:
                     raise TransferError(
                         "PAYLOAD_TOO_LARGE", "Configured total upload limit exceeded"
                     )
                 if (
-                    self.max_buffered_upload_bytes is not None
-                    and self.buffered_upload_bytes + len(request.data)
+                    self.buffered_upload_bytes + len(request.data)
                     > self.max_buffered_upload_bytes
                 ):
                     raise TransferError(
                         "RESOURCE_EXHAUSTED", "Total upload budget exhausted"
+                    )
+                if (
+                    sum(s.uploaded for s in self._of_caller(session.context))
+                    + len(request.data)
+                    > self.max_caller_buffered_bytes
+                ):
+                    raise TransferError(
+                        "RESOURCE_EXHAUSTED", "Upload budget of this caller exhausted"
                     )
                 if session.source is None:
                     session.source = tempfile.TemporaryFile()

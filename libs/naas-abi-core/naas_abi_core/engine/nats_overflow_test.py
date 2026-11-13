@@ -74,7 +74,11 @@ def test_a_parked_reply_is_read_by_its_caller_only_then_released():
 def test_parking_respects_the_value_cap_the_memory_budget_and_capacity():
     async def scenario():
         host = OverflowHost(
-            SECRET, max_value_bytes=10, max_parked_bytes=15, max_sessions=2
+            SECRET,
+            max_value_bytes=10,
+            max_parked_bytes=15,
+            max_sessions=2,
+            max_caller_sessions=2,
         )
 
         with pytest.raises(TransferError) as too_large:

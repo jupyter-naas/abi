@@ -104,6 +104,14 @@ class CallContext:
   actor acting for that user (the same actor for another user is refused); model registry
   chat streams follow the rule (`same_caller`). Overflow chunks carry their call's token,
   user, trace and container; a client stream captures its user once, when it opens.
+- **Transfer budgets** (`TransferHost`): a host declares the operations that read an
+  upload (`uploads`); `write` on any other session is refused before a byte is spooled.
+  Upload budgets are finite (`max_upload_bytes` per session, `max_buffered_upload_bytes`
+  per host; `None` is refused), and a caller (actor and user) gets a quarter of a host's
+  sessions and spooled bytes (`max_caller_sessions`; parked overflow replies count for the
+  caller they are parked for). An upload operation with an `authorize(operation, metadata)`
+  hook (object PUT, dataset write) is checked as the caller at `open`. A refused request
+  does not refresh its session's idle clock.
   `nats_runtime.run_coro` schedules through `run_coroutine_threadsafe`, which copies the
   calling thread's context, so a sync caller keeps its identity.
 - **Never from request-body fields.** `CallContext.principal_id` and `tenant_id` in the

@@ -138,6 +138,8 @@ class ObjectStoragePrimaryAdapterNATS(ServiceWithTransfers):
             verifier,
             self._transfer_frames,
             operations=("get", "put"),
+            uploads=("put",),
+            authorize=self._authorize_transfer,
             error_mapper=self._transfer_error,
             **(transfer_options or {}),
         )
@@ -201,6 +203,14 @@ class ObjectStoragePrimaryAdapterNATS(ServiceWithTransfers):
         if isinstance(exc, Exceptions.ObjectAlreadyExists):
             return "OBJECT_ALREADY_EXISTS", "Object already exists"
         return None
+
+    def _authorize_transfer(self, operation: str, metadata: bytes) -> None:
+        """At ``open``: the caller may stream this object in."""
+        request = object_storage_pb2.GetObjectRequest.FromString(metadata)
+        # A bare adapter (tests) checks nothing, here as on every call.
+        check = getattr(self._adapter, "authorize_put_stream", None)
+        if check is not None:
+            check(request.prefix, request.key)
 
     async def _transfer_frames(self, operation, metadata, source):
         request = object_storage_pb2.GetObjectRequest.FromString(metadata)

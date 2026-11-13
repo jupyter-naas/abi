@@ -907,7 +907,8 @@ nats:
     chunk_bytes: 65536
     idle_seconds: 60
     max_sessions: 32
-    max_upload_bytes: null
+    max_upload_bytes: 1073741824  # 1 GiB per object upload
+    max_buffered_upload_bytes: 4294967296  # 4 GiB spooled at once
   models:
     generation_timeout_seconds: null
     streaming:
@@ -919,9 +920,12 @@ nats:
 ```
 
 Chunk size is reduced for the broker's advertised packet limit. Uploads spool to
-temporary disk and execute only after upload completion. Set `max_upload_bytes`
-for object uploads if a deployment cap is needed. Model upload budgets are finite
-and configurable, enforced before accepting each chunk. They bound serialized
+temporary disk and execute only after upload completion. Every upload budget is
+finite and configurable (`max_upload_bytes` per session, `max_buffered_upload_bytes`
+for a host), enforced before accepting each chunk; one caller (actor and user)
+gets a quarter of a host's sessions and spooled bytes. Only the operations that
+read an upload take one (object PUT, dataset writes, model requests), and an
+object PUT or a dataset write is authorized at `open`, before any byte is spooled. They bound serialized
 input, not total generation duration or output length. Decoded protobuf and
 provider objects require additional memory. Each domain limits active sessions and
 buffers two output packets per session. Model providers and callers still hold

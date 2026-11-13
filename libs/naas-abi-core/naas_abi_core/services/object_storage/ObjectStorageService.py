@@ -187,6 +187,11 @@ class ObjectStorageService(ServiceBase, IObjectStorageDomain):
         self.adapter.put_object(prefix, key, content)
         self.__publish_event(ObjectPut(prefix=prefix, key=key, size_bytes=len(content)))
 
+    def authorize_put_stream(self, prefix: str, key: str) -> None:
+        """Raise unless the caller may ``put_object_stream`` this object: what a
+        transfer host checks before it spools the bytes."""
+        self.__require("PutObjectStream", self.__remove_storage_prefix(prefix), key)
+
     def put_object_stream(self, prefix: str, key: str, stream: BinaryIO) -> None:
         prefix = self.__remove_storage_prefix(prefix)
         self.__require("PutObjectStream", prefix, key)
