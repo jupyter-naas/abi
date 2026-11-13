@@ -310,6 +310,19 @@ class OrganizationPermissionPort(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def get_domain_by_name(self, domain: str) -> OrganizationDomainRecord | None:
+        """The claim of ``domain``, whichever organization holds it."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def claim_unverified_domain(
+        self, domain_id: str, org_id: str, verification_token: str, created_at: datetime
+    ) -> OrganizationDomainRecord | None:
+        """Give an unverified claim to ``org_id``, with its token and no route;
+        None when the claim was verified meanwhile."""
+        raise NotImplementedError
+
+    @abstractmethod
     async def create_organization_domain(
         self, domain: OrganizationDomainCreateInput
     ) -> OrganizationDomainRecord:

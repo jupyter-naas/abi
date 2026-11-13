@@ -62,6 +62,7 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
     OrganizationService,
 )
 from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
+    check_invitation_mail_quota,
     check_rate_limit,
     get_rate_limit_identifier,
 )
@@ -735,6 +736,9 @@ async def invite_workspace_member(
     existing_user = await invites.persistence.user_id_by_email(email)
     if existing_user is None:
         workspace = await service.get_workspace(workspace_id)
+        await check_invitation_mail_quota(
+            workspace.organization_id if workspace else None, workspace_id
+        )
         organization = (
             await get_organization_service(db).get_organization(workspace.organization_id)
             if workspace is not None and workspace.organization_id

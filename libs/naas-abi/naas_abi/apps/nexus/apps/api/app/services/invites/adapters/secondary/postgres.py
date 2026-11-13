@@ -213,12 +213,15 @@ class InvitationSecondaryAdapterPostgres(InvitationPersistencePort):
             return None
         return (
             await self.db.execute(
-                select(OrganizationDomainModel.provider).where(
+                select(OrganizationDomainModel.provider)
+                .where(
                     OrganizationDomainModel.organization_id == organization_id,
                     func.lower(OrganizationDomainModel.domain) == domain.lower(),
                     OrganizationDomainModel.is_verified.is_(True),
                     OrganizationDomainModel.provider.is_not(None),
                 )
+                .order_by(OrganizationDomainModel.verified_at, OrganizationDomainModel.id)
+                .limit(1)
             )
         ).scalar_one_or_none()
 

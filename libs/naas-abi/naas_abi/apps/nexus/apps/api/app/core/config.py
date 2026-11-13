@@ -621,6 +621,8 @@ class Settings(BaseSettings):
     rate_limit_attempts: int = 5  # Max attempts per account (or inviting user) per window
     rate_limit_ip_attempts: int = 20  # Max attempts per client IP per window
     rate_limit_window_seconds: int = 300  # 5-minute window
+    # Invitation emails one organization (or a workspace in none) may send a day.
+    invitation_mails_per_day: int = 200
 
     # Sign-in through the engine's identity providers (``identity.providers``).
     # The session is an httpOnly, Secure cookie the API holds; "none" is for a

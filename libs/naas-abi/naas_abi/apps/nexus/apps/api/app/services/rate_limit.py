@@ -1,6 +1,7 @@
 """
-Rate limiting: the token exchange, and the invitation routes (per inviting user and
-per address), against abuse.
+Rate limiting: the token exchange, and the invitation routes (per inviting user, per
+address, per invitation and, for the mail they send, per organization a day),
+against abuse.
 """
 
 from datetime import datetime, timedelta
@@ -13,14 +14,16 @@ from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from sqlalchemy import text
 
 
-async def ensure_under_limit(identifier: str, endpoint: str, limit: int) -> None:
-    """Raise 429 when ``identifier`` already has ``limit`` recorded attempts in the window."""
+async def ensure_under_limit(
+    identifier: str, endpoint: str, limit: int, window_seconds: int | None = None
+) -> None:
+    """Raise 429 when ``identifier`` already has ``limit`` recorded attempts in the
+    window (``rate_limit_window_seconds`` unless given)."""
     if not settings.rate_limit_enabled:
         return
 
-    window_start = datetime.now(UTC).replace(tzinfo=None) - timedelta(
-        seconds=settings.rate_limit_window_seconds
-    )
+    window = settings.rate_limit_window_seconds if window_seconds is None else window_seconds
+    window_start = datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=window)
     async with async_engine.begin() as conn:
         result = await conn.execute(
             text("""
@@ -37,8 +40,8 @@ async def ensure_under_limit(identifier: str, endpoint: str, limit: int) -> None
     if count >= limit:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Too many attempts. Please try again in {settings.rate_limit_window_seconds // 60} minutes.",
-            headers={"Retry-After": str(settings.rate_limit_window_seconds)},
+            detail=f"Too many attempts. Please try again in {max(window // 60, 1)} minutes.",
+            headers={"Retry-After": str(window)},
         )
 
 
@@ -62,16 +65,37 @@ async def record_attempt(identifier: str, endpoint: str) -> None:
         )
 
 
-async def check_rate_limit(identifier: str, endpoint: str, limit: int | None = None) -> None:
+async def check_rate_limit(
+    identifier: str,
+    endpoint: str,
+    limit: int | None = None,
+    window_seconds: int | None = None,
+) -> None:
     """Refuse once ``identifier`` hit ``limit`` attempts, then count this one.
 
     Counts every call. For sign-in attempts that should only count failures,
     use ``ensure_under_limit`` then ``record_attempt`` on failure.
     """
     await ensure_under_limit(
-        identifier, endpoint, settings.rate_limit_attempts if limit is None else limit
+        identifier,
+        endpoint,
+        settings.rate_limit_attempts if limit is None else limit,
+        window_seconds,
     )
     await record_attempt(identifier, endpoint)
+
+
+INVITATION_MAIL = "/api/invitations/mail"
+_DAY_SECONDS = 24 * 60 * 60
+
+
+async def check_invitation_mail_quota(
+    organization_id: str | None, workspace_id: str | None
+) -> None:
+    """Count one invitation email against the day's quota of the organization (or of
+    the workspace, for one in none): ``invitation_mails_per_day``."""
+    scope = f"org:{organization_id}" if organization_id else f"ws:{workspace_id or '-'}"
+    await check_rate_limit(scope, INVITATION_MAIL, settings.invitation_mails_per_day, _DAY_SECONDS)
 
 
 async def cleanup_old_rate_limit_events() -> None:

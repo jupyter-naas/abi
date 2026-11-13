@@ -7,6 +7,7 @@ in IAM for the address the provider verifies.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from html import escape
 
 from naas_abi.apps.nexus.apps.api.app.services.invites.port import InvitationMail
@@ -32,12 +33,33 @@ def _where(mail: InvitationMail) -> str:
     return " and ".join(parts) or "a member"
 
 
+# What an organization's people chose (their names, the organization's and the
+# workspace's) is quoted and cut to this length; the subject carries none of it.
+_TENANT_TEXT = 80
+
+
+def _quoted(value: str | None) -> str | None:
+    text = " ".join(str(value or "").split())
+    if not text:
+        return None
+    if len(text) > _TENANT_TEXT:
+        text = text[: _TENANT_TEXT - 1] + "…"
+    return f"“{text}”"
+
+
 def render_invitation(mail: InvitationMail, *, app_name: str) -> tuple[str, str, str]:
-    """``(subject, text, html)``."""
+    """``(subject, text, html)``. The subject names the platform only (the
+    deployment's ``app_name``): what an organization's people wrote appears in the
+    body, quoted, never as the sender's own words."""
+    mail = replace(
+        mail,
+        inviter_name=_quoted(mail.inviter_name),
+        organization_name=_quoted(mail.organization_name),
+        workspace_name=_quoted(mail.workspace_name),
+    )
     who = mail.inviter_name or "An administrator"
     where = _where(mail)
-    target = mail.workspace_name or mail.organization_name or app_name
-    subject = f"You are invited to {target} on {app_name}"
+    subject = f"You are invited to {app_name}"
     if mail.managed_in_provider:
         how = (
             f"Sign in with your {mail.provider.display_name} account using this "

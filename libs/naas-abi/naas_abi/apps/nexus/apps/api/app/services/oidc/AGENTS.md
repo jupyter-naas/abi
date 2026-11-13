@@ -36,8 +36,11 @@ This file covers `services/oidc/` (the sign-in and the session) and `services/au
 ## Sign-in
 
 - `GET /api/auth/oidc/login?provider=&email=&next=` starts it. `route(email)` answers
-  the provider of the email's verified organization domain (`organization_domains.provider`),
-  else the engine's default provider; with neither `provider` nor `email` the default
+  the provider of the email's verified organization domain (`organization_domains.provider`;
+  verified only with its DNS TXT proof `_nexus-verify.<domain>` or by a platform admin, and
+  never a public mail domain, which routes nothing whatever an older row says; rows that
+  differ only in case are one domain: `services/organizations/domain_proof.py`), else the
+  engine's default provider; with neither `provider` nor `email` the default
   provider is used. The default provider never captures an email by itself (it would shut
   out every account it does not hold): it is a "Continue with ..." button and the target
   of a bare `/login`.

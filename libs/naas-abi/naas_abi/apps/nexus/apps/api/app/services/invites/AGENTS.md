@@ -60,7 +60,10 @@ IdP group bindings are the same idea for a whole group of a provider: the member
   `provisioning: none`, which the UI explains.
 - `GET /api/invitations/organizations/{id}`, `/workspaces/{id}` (pending), `POST
   /api/invitations/{id}/resend`, `DELETE /api/invitations/{id}` (also withdraws the pending
-  grants).
+  grants). A resend counts against the invite routes' limits (per inviting user, per address),
+  once a window per invitation, and, like every invitation mail, against the organization's
+  `invitation_mails_per_day` (`rate_limit.check_invitation_mail_quota`). The mail's subject names
+  the platform only; names its people chose are quoted in the body.
 - `GET|PUT|DELETE /api/idp-groups/organizations/{id}` and `/workspaces/{id}`: the bound
   groups, `{provider, group, role}`.
 
@@ -74,9 +77,9 @@ IdP group bindings are the same idea for a whole group of a provider: the member
   reads and withdrawals are Nexus's own (`as_service_account("api")`, no user). The owner rule is also kept here
   (`may_grant_owner`). The claimed attachments are the memberships: Nexus keeps no membership row.
 - **Making the person at the provider needs the right to.** The provider's admin API is called as `api` on behalf of
-  the inviting user, so IAM checks `identity:ProvisionUser` for them (not an organization role's); without it, or
-  for an address that is not on a domain the organization verified and routed to that provider, the invitation is
-  pending grants only (`provisioning_skipped`). Never call `provision` for nobody on a user's say-so.
+  the inviting user, so IAM checks `identity:ProvisionUser` for them (not an organization role's), whatever domain
+  the address is of; without it, the invitation is pending grants only (`provisioning_skipped`). Never call
+  `provision` for nobody on a user's say-so.
 - **Authorize an invitation at the scope of its roles.** One with an `org_role` is the organization
   administrators' (`require_invitation_admin`), and a workspace-only invite never rewrites it
   (`OrgInvitationExistsError`).
@@ -137,8 +140,7 @@ IdP group bindings are the same idea for a whole group of a provider: the member
   `InviteWorkspaceMember`); then the grants are written as `api` on behalf of the inviting person, whom IAM checks
   for the attachment and for holding what it grants (the owner rule is kept here too), and the provisioning call is made as `api` on behalf of the inviting user, which asks `identity:ProvisionUser`.
   Platform members and organization admins do not hold it by default; an operator grants it (or is a platform
-  admin). The one exception is an address on a domain the organization verified (`organization_domains`, its own,
-  routed to that provider): provisioned as Nexus's own call.
+  admin).
 - Withdrawing an invitation withdraws its pending grants, but not a membership already made. An invitee who
   already has a Nexus account is added directly; a person whose verified email another Nexus account holds is still
   refused at sign-in (accounts are never linked across providers: `services/oidc/AGENTS.md`).

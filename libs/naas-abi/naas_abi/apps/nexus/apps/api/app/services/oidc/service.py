@@ -42,6 +42,9 @@ from naas_abi.apps.nexus.apps.api.app.services.oidc.port import (
     UserConflictError,
     UserSuspendedError,
 )
+from naas_abi.apps.nexus.apps.api.app.services.organizations.domain_proof import (
+    is_public_mail_domain,
+)
 from naas_abi_core import logger
 from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
 from naas_abi_core.services.identity.IdentityPorts import (
@@ -186,7 +189,12 @@ class OidcSignInService:
         if not email or "@" not in email:
             return None
         domain = email.rsplit("@", 1)[1].strip().lower()
-        mapped = await self.adapter.provider_for_domain(domain) if domain else None
+        # A public mail domain is no organization's, whatever an older claim says.
+        mapped = (
+            await self.adapter.provider_for_domain(domain)
+            if domain and not is_public_mail_domain(domain)
+            else None
+        )
         if mapped is not None:
             return mapped
         _, default = await self.identity.providers()
