@@ -78,16 +78,22 @@ class Creation:
     iam: IIAMService | None
 
     def record(self) -> None:
-        """Record the placement, once the create succeeded."""
+        """Record the placement, once the create succeeded, as a compare-and-set:
+        when another create placed the name in another container first, nothing
+        is recorded and ``PermissionDeniedError`` is raised."""
         if self.iam is None or not (self.record_exact or self.record_prefix):
             return
+        keys = ([self.canonical_id] if self.record_exact else []) + (
+            [f"{self.canonical_id}/*"] if self.record_prefix else []
+        )
         with as_service_account(PLACEMENT_WRITER):
-            if self.record_exact:
-                self.iam.put_placement(self.service, self.canonical_id, self.container)
-            if self.record_prefix:
-                self.iam.put_placement(
-                    self.service, f"{self.canonical_id}/*", self.container
-                )
+            for key in keys:
+                held = self.iam.claim_placement(self.service, key, self.container)
+                if held.container != self.container:
+                    raise PermissionDeniedError(
+                        resource=self.name,
+                        message=f"{self.name} was placed in another container first",
+                    )
 
 
 class ServiceGuard:

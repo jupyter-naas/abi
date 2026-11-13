@@ -764,6 +764,19 @@ class IAMService(IIAMService, PolicySource):
         self._changed()
         return placement
 
+    def claim_placement(
+        self, service: str, id_key: str, container: str = PLATFORM_SCOPE
+    ) -> Placement:
+        """Place ``id_key`` in ``container`` unless it is placed already, in one
+        store write; the placement that holds it afterwards."""
+        placement = Placement(service, id_key, container)
+        _check_placement(placement)
+        self.require("iam:PutPlacement", placement_resource(service, id_key))
+        held = self.store.claim_placement(placement)
+        if held == placement:
+            self._changed()
+        return held
+
     def delete_placement(self, service: str, id_key: str) -> bool:
         self.require("iam:DeletePlacement", placement_resource(service, id_key))
         deleted = self.store.delete_placement(service, id_key)

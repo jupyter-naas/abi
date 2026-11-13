@@ -163,6 +163,29 @@ def test_a_new_name_is_placed_in_the_container_of_the_call(h, iam, guard):
     assert iam.placement_of("store", "other") is None
 
 
+def test_a_create_keeps_the_first_placement_of_a_new_name(h, iam, guard):
+    """Two creates of one new name from two workspaces, both authorized before
+    either records: the first to commit places it, the second is refused."""
+    alice = h.user("alice")
+    h.register("ws-1")
+    h.register("ws-2")
+    h.grant(alice.id, statement("Allow", ["store:*"], ["*"]))
+    with h.as_(alice), _in(WS1):
+        first = guard.create("Create", "item", ["ns", "a"], prefix=("namespace", ["ns"]))
+    with h.as_(alice), _in(WS2):
+        second = guard.create("Create", "item", ["ns", "b"], prefix=("namespace", ["ns"]))
+
+    first()
+    with pytest.raises(PermissionDeniedError):
+        second()
+
+    assert iam.resolve_placement("store", "ns") == WS1
+    assert iam.resolve_placement("store", "ns/b") == WS1
+    # The same container committing again keeps it, as before.
+    with h.as_(alice), _in(WS1):
+        guard.create("Create", "item", ["ns", "c"], prefix=("namespace", ["ns"]))()
+
+
 def test_a_placed_prefix_refuses_another_container(h, iam, guard):
     alice = h.user("alice")
     h.register("ws-1")

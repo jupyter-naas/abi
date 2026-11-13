@@ -342,3 +342,49 @@ def test_the_engine_maintains_the_catalog_with_unchecked_sql(tmp_path):
     with internal_call():
         described = owner.query("DESCRIBE orders", namespace="sales")
     assert "id" in {str(row.get("column_name")) for row in described.rows}
+
+
+def test_a_new_dataset_namespace_keeps_the_workspace_that_placed_it_first(tmp_path):
+    from dataclasses import replace
+
+    from naas_abi_core.engine.call_context import current_call_context, use_call_context
+    from naas_abi_core.services.dataset.DatasetPort import DatasetNotFoundError
+    from naas_abi_core.services.iam.enforcement import internal_call
+    from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
+    from naas_abi_core.services.iam.tests.iam_harness import (
+        NEXUS,
+        IAMHarness,
+        statement,
+    )
+
+    contract = TestDatasetAuthorization()
+    owner, iam = contract._owner(tmp_path)
+    with internal_call():
+        iam.register_catalog(NEXUS)
+    h = IAMHarness(iam)
+    ws1, ws2 = h.register("ws-1"), h.register("ws-2")
+    alice = h.user("alice")
+    h.grant(alice.id, statement("Allow", ["dataset:*"], ["*"]))
+    adapter = owner.adapter
+    create = adapter.create
+
+    def created_while_another_workspace_commits(spec):
+        info = create(spec)
+        with internal_call():
+            iam.claim_placement("dataset", spec.namespace, ws1)
+            iam.claim_placement("dataset", f"{spec.namespace}/*", ws1)
+        return info
+
+    adapter.create = created_while_another_workspace_commits
+    try:
+        with h.as_(alice), use_call_context(
+            replace(current_call_context(), container=ws2)
+        ), pytest.raises(PermissionDeniedError):
+            owner.create(_spec("reports", "mine"))
+    finally:
+        adapter.create = create
+
+    assert iam.resolve_placement("dataset", "reports") == ws1
+    # The table the refused create made is gone: nothing of ws-2 sits in ws-1's namespace.
+    with pytest.raises(DatasetNotFoundError):
+        adapter.describe("mine", namespace="reports")

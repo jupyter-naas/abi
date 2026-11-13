@@ -22,6 +22,7 @@ from ..IVectorStorePort import (
     SearchResult,
     VectorDocument,
     VectorPage,
+    check_collection_name,
 )
 
 logger = logging.getLogger(__name__)
@@ -90,6 +91,7 @@ class QdrantAdapter(IVectorStorePort):
         distance_metric: str = "cosine",
         **kwargs,
     ) -> None:
+        check_collection_name(collection_name)  # also a URL path segment
         if not self.client:
             raise RuntimeError("Adapter not initialized")
 
@@ -103,6 +105,7 @@ class QdrantAdapter(IVectorStorePort):
         logger.info(f"Created collection: {collection_name}")
 
     def delete_collection(self, collection_name: str) -> None:
+        check_collection_name(collection_name)  # also a URL path segment
         if not self.client:
             raise RuntimeError("Adapter not initialized")
 
@@ -119,6 +122,7 @@ class QdrantAdapter(IVectorStorePort):
     def store_vectors(
         self, collection_name: str, documents: list[VectorDocument]
     ) -> None:
+        check_collection_name(collection_name)  # also a URL path segment
         if not self.client:
             raise RuntimeError("Adapter not initialized")
 
@@ -155,6 +159,7 @@ class QdrantAdapter(IVectorStorePort):
         include_vectors: bool = False,
         include_metadata: bool = True,
     ) -> list[SearchResult]:
+        check_collection_name(collection_name)  # also a URL path segment
         if not self.client:
             raise RuntimeError("Adapter not initialized")
 
@@ -199,6 +204,7 @@ class QdrantAdapter(IVectorStorePort):
     def get_vector(
         self, collection_name: str, vector_id: str, include_vector: bool = True
     ) -> VectorDocument | None:
+        check_collection_name(collection_name)  # also a URL path segment
         if not self.client:
             raise RuntimeError("Adapter not initialized")
 
@@ -231,6 +237,7 @@ class QdrantAdapter(IVectorStorePort):
         metadata: dict[str, Any] | None = None,
         payload: dict[str, Any] | None = None,
     ) -> None:
+        check_collection_name(collection_name)  # also a URL path segment
         if not self.client:
             raise RuntimeError("Adapter not initialized")
 
@@ -252,6 +259,7 @@ class QdrantAdapter(IVectorStorePort):
             )
 
     def delete_vectors(self, collection_name: str, vector_ids: list) -> None:
+        check_collection_name(collection_name)  # also a URL path segment
         if not self.client:
             raise RuntimeError("Adapter not initialized")
 
@@ -265,6 +273,7 @@ class QdrantAdapter(IVectorStorePort):
         logger.debug(f"Deleted {len(vector_ids)} vectors from {collection_name}")
 
     def count_vectors(self, collection_name: str) -> int:
+        check_collection_name(collection_name)  # also a URL path segment
         if not self.client:
             raise RuntimeError("Adapter not initialized")
 
@@ -279,6 +288,7 @@ class QdrantAdapter(IVectorStorePort):
         include_vectors: bool = False,
     ) -> VectorPage:
         """Documents in point-id order (Qdrant scroll); the cursor is a point id."""
+        check_collection_name(collection_name)  # also a URL path segment
         if not self.client:
             raise RuntimeError("Adapter not initialized")
         if limit <= 0:
@@ -315,6 +325,7 @@ class QdrantAdapter(IVectorStorePort):
         )
 
     def get_collection_info(self, collection_name: str) -> CollectionInfo:
+        check_collection_name(collection_name)  # also a URL path segment
         if not self.client:
             raise RuntimeError("Adapter not initialized")
 

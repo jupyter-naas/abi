@@ -15,7 +15,8 @@ that needs more names it in a manifest of its own, where the admin sees it.
   (``dataset:QueryUnchecked`` is denied);
 * ``cache`` and ``keyvalue``: the keys named ``<module id>/...``;
 * ``object_storage``: the objects under the prefix ``<module id>/``;
-* ``vector_store``: the collections named ``<module id>/...``;
+* ``vector_store``: the collections named ``<module id>~...`` (a collection
+  name is one identifier: ``~`` is the separator no module id holds);
 * ``triple_store``: every action on its own graphs (``module_graph``: IRIs
   under ``http://ontology.naas.ai/graph/module/<module id>/``) and its own
   views (``<module id>/...``), reading the schema graph, and its own
@@ -105,8 +106,8 @@ _OWN_NAMESPACES = {
     "keyvalue": ("abi:keyvalue:key/${module.id}%2F*",),
     "object_storage": ("abi:object_storage:object/${module.id}/*",),
     "vector_store": (
-        "abi:vector_store:collection/${module.id}%2F*",
-        "abi:vector_store:vector/${module.id}%2F*",
+        "abi:vector_store:collection/${module.id}~*",
+        "abi:vector_store:vector/${module.id}~*",
     ),
     # Its own graphs and views; the schemas it loads are its own (``OwnOntologies``).
     "triple_store": (

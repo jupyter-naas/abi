@@ -255,7 +255,11 @@ class ResourceGuard:
         """Authorize a create on the name as placed; returns ``commit()``.
 
         Call ``commit()`` once the backend has created the resource: it records
-        the placement the create decided, if any. ``prefix`` is the top-level id
+        the placement the create decided, if any, as a compare-and-set. When
+        another create placed the name in another container first, ``commit()``
+        records nothing and raises ``PermissionDeniedError``: the name stays
+        where it was placed, and the caller undoes what it created if it can.
+        ``prefix`` is the top-level id
         prefix the resource sits under (a document or dataset namespace), placed
         with it when nothing places it yet. ``exists`` and ``prefix_exists``
         tell an existing resource, on which the container of the call is
@@ -326,7 +330,17 @@ class ResourceGuard:
 
         def commit() -> None:
             if unit.id_prefix or container != PLATFORM:
-                self._place(unit, unit_id, container, exact_only=not unit.id_prefix)
+                self._claim(
+                    unit,
+                    unit_id,
+                    container,
+                    exact_only=not unit.id_prefix,
+                    denied=lambda: PermissionDeniedError(
+                        qualified,
+                        name,
+                        message=f"{name} was placed in another container first",
+                    ),
+                )
 
         return commit
 
@@ -356,6 +370,25 @@ class ResourceGuard:
         with internal_call():
             for key in keys:
                 iam.put_placement(self.service, key, container)
+
+    def _claim(
+        self,
+        unit: ResourceType,
+        unit_id: str,
+        container: str,
+        *,
+        exact_only: bool,
+        denied: Callable[[], BaseException],
+    ) -> None:
+        """Place a new name unless another create placed it first (then raise)."""
+        iam = self.iam
+        assert iam is not None
+        keys = [unit_id] + ([] if exact_only else [f"{unit_id}/*"])
+        with internal_call():
+            for key in keys:
+                held = iam.claim_placement(self.service, key, container)
+                if held.container != container:
+                    raise denied()
 
 
 def scan_allowed(

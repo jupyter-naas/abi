@@ -531,6 +531,15 @@ class IAMStoreMemory(IAMStore):
             self._write()
             self._placements[(placement.service, placement.id_key)] = placement
 
+    def claim_placement(self, placement: Placement) -> Placement:
+        with self._lock:
+            held = self._placements.get((placement.service, placement.id_key))
+            if held is not None:
+                return held
+            self._write()
+            self._placements[(placement.service, placement.id_key)] = placement
+            return placement
+
     def delete_placement(self, service: str, id_key: str) -> bool:
         with self._lock:
             if (service, id_key) not in self._placements:

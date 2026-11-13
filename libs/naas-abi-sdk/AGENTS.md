@@ -309,7 +309,7 @@ A module asks for what it needs as a policy document (the language of core's
    module's own namespace on the platform and never reaches a container: `document` is
    the module's own namespace (`${module.id}`); `secret` the names `<module id>/...`;
    `cache` and `keyvalue` the keys `<module id>/...`; `object_storage` the prefix
-   `<module id>/`; `vector_store` the collections `<module id>/...`; `dataset` its own
+   `<module id>/`; `vector_store` the collections `<module id>~...`; `dataset` its own
    namespace (`${module.dataset_namespace}`, which `default` names for a module), with
    `dataset:QueryUnchecked` denied; `triple_store` its own graphs (`module_graph(id,
    name)`) and views (`<module id>/...`), reading the schema graph, and `LoadSchema` on

@@ -731,6 +731,11 @@ class IAMStore(ABC):
         """Create or replace the placement of ``(service, id_key)``."""
 
     @abstractmethod
+    def claim_placement(self, placement: Placement) -> Placement:
+        """Record ``placement`` unless ``(service, id_key)`` is already placed,
+        atomically; the placement that holds the key afterwards."""
+
+    @abstractmethod
     def delete_placement(self, service: str, id_key: str) -> bool: ...
 
     @abstractmethod
@@ -1448,6 +1453,21 @@ class IIAMService(ABC):
     def put_placement(
         self, service: str, id_key: str, container: str = PLATFORM_SCOPE
     ) -> Placement: ...
+
+    def claim_placement(
+        self, service: str, id_key: str, container: str = PLATFORM_SCOPE
+    ) -> Placement:
+        """Place ``id_key`` in ``container`` unless it is placed already: the
+        placement that holds it afterwards, the existing one when another
+        create placed it first (compare-and-set). ``IAMService`` does it in one
+        store write; this default, for clients without that operation, reads
+        then writes."""
+        held = next(
+            (p for p in self.list_placements(service) if p.id_key == id_key), None
+        )
+        if held is not None:
+            return held
+        return self.put_placement(service, id_key, container)
 
     @abstractmethod
     def delete_placement(self, service: str, id_key: str) -> bool: ...

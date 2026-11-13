@@ -96,8 +96,8 @@ def test_default_manifest_keeps_every_grant_in_the_modules_own_namespace():
         "UseCache": ["abi:cache:key/${module.id}%2F*"],
         "UseObjectStorage": ["abi:object_storage:object/${module.id}/*"],
         "UseVectorStore": [
-            "abi:vector_store:collection/${module.id}%2F*",
-            "abi:vector_store:vector/${module.id}%2F*",
+            "abi:vector_store:collection/${module.id}~*",
+            "abi:vector_store:vector/${module.id}~*",
         ],
     }
     statements = _by_sid(manifest)

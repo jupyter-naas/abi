@@ -1,3 +1,4 @@
+import re
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -7,6 +8,28 @@ from typing import Any
 import numpy as np
 
 STREAM_PAGE = 500  # documents per list_vectors call when streaming by default
+
+# A collection name is one identifier, never a path: letters, digits, ``_``,
+# ``.``, ``-`` and ``~`` (``<module id>~<name>`` is how a module's default grant
+# names its own), starting with a letter, digit or ``_``. Backends put it in URL
+# paths and file names, so it is checked before authorization and again by them.
+COLLECTION_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.~-]{0,254}")
+
+
+class InvalidCollectionNameError(ValueError):
+    """A collection name outside ``COLLECTION_NAME`` (wire code ``INVALID_ARGUMENT``)."""
+
+
+def check_collection_name(collection_name: object) -> str:
+    """``collection_name`` if it is a valid collection name, else ``InvalidCollectionNameError``."""
+    if not isinstance(collection_name, str) or not COLLECTION_NAME.fullmatch(
+        collection_name
+    ):
+        raise InvalidCollectionNameError(
+            f"Invalid collection name {collection_name!r}: letters, digits, "
+            "'_', '.', '-' and '~' only, starting with a letter, digit or '_'"
+        )
+    return collection_name
 
 
 class CollectionNotFoundError(LookupError):

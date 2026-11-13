@@ -558,7 +558,13 @@ workspace id", `nats_identity`), so it is never placed wider than before; a call
      path) makes the create not found, whoever asks: it is placed nowhere. With none
      the name is platform-level. On success `Creation.record()` writes the
      placement: exact for a top-level resource (none when platform-level), exact plus
-     `<id>/*` for an id prefix, platform included.
+     `<id>/*` for an id prefix, platform included. It writes as a compare-and-set
+     (`claim_placement`, one store write under the store's lock): when a concurrent
+     create of the same new name placed it in another container first, nothing is
+     written and the create is refused (`PermissionDeniedError`), so a name never moves
+     to the last of two racing creates. A service undoes its backend create where that
+     create was exclusive (a dataset's table); an idempotent ensure (a collection, a
+     document namespace) created nothing the first create does not own.
    - **Implicit id prefixes**: a create whose name sits under an id prefix that does not
      exist yet (the first `dataset:Create` in a new namespace) first places that prefix by
      the rule above, then creates the child inside it.
@@ -2215,7 +2221,8 @@ facade whose server checks). Then:
   after filtering; `guard.require_visible` checks a container before listing it.
 - `guard.create(action, type, parts, container=..., exists=...,
   container_exists=...)` applies the create rule of "Placements" and returns `commit()`,
-  which records the placement once the backend created the resource;
+  which records the placement once the backend created the resource, compare-and-set:
+  it raises `PermissionDeniedError` when another create placed the name first;
   `guard.forget` drops it on drop.
 - A service's own storage in another service (the cache's entries, the activity
   log's and the agent memory's namespaces) is used through `own_storage(...)`,

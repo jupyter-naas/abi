@@ -31,6 +31,7 @@ from naas_abi_core.services.dataset.ontologies.classes.ontology_naas_ai.abi.data
 )
 from naas_abi_core.services.dataset.sql_references import referenced_datasets
 from naas_abi_core.services.iam.enforcement import ResourceGuard
+from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
 from naas_abi_core.services.iam.listing import ResourceLister, named_lister
 from naas_abi_core.services.iam.modules import dataset_namespace, parse_account
 from naas_abi_core.services.ServiceBase import ServiceBase
@@ -152,7 +153,13 @@ class DatasetService(ServiceBase, IDatasetPort):
             not_found=lambda: DatasetNotFoundError(spec.name, spec.namespace),
         )
         info = self.__adapter.create(spec)
-        commit()
+        try:
+            commit()
+        except PermissionDeniedError:
+            # Another create placed the new namespace in another container
+            # first: the table this call created (a create is exclusive) goes.
+            self.__adapter.drop(spec.name, namespace=spec.namespace)
+            raise
         return info
 
     def __exists(self, name: str, namespace: str) -> bool:

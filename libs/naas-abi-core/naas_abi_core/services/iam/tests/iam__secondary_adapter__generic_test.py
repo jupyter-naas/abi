@@ -566,6 +566,36 @@ class IAMStoreContract(ABC):
         assert store.delete_placement("document", "nexus-ws-1/*") is True
         assert store.delete_placement("document", "nexus-ws-1/*") is False
 
+    def test_a_claimed_placement_keeps_its_first_container(self, store: IAMStore):
+        claimed = store.claim_placement(Placement("vector_store", "docs", WS))
+        before = store.revision()
+
+        held = store.claim_placement(Placement("vector_store", "docs", WS_2))
+
+        assert claimed == held == Placement("vector_store", "docs", WS)
+        assert store.revision() == before  # a refused claim writes nothing
+        assert store.list_placements("vector_store") == [claimed]
+
+    def test_concurrent_claims_keep_one_placement(self, store: IAMStore):
+        import threading
+
+        containers = [WS, WS_2, ORG, PLATFORM] * 4
+        held: list[Placement] = []
+        start = threading.Barrier(len(containers))
+
+        def claim(container: str) -> None:
+            start.wait()
+            held.append(store.claim_placement(Placement("dataset", "ns", container)))
+
+        threads = [threading.Thread(target=claim, args=(c,)) for c in containers]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        assert len({placement.container for placement in held}) == 1
+        assert store.list_placements("dataset") == [held[0]]
+
     def test_containers(self, store: IAMStore):
         org = ContainerRecord("nexus", "organization", "org-1")
         ws = ContainerRecord("nexus", "workspace", "ws-1", ORG)

@@ -102,6 +102,16 @@ VectorStoreFactory.get_service() -> VectorStoreService    # singleton
 VectorStoreFactory.reset()                                # clear singleton
 ```
 
+## Collection names
+
+A collection name is one identifier, never a path: `COLLECTION_NAME` in
+`IVectorStorePort.py` (letters, digits, `_`, `.`, `-`, `~`, starting with a letter,
+digit or `_`, at most 255 characters). `VectorStoreService` checks it
+(`check_collection_name`, `InvalidCollectionNameError`, `INVALID_ARGUMENT` over NATS)
+before IAM and before any adapter, and the Qdrant adapters check it again, since
+qdrant-client formats the name into URL paths unencoded. A module's default grant
+names its own collections `<module id>~<name>`: `~` is the separator no module id holds.
+
 ## Authorization
 
 Every operation is checked in the domain service against IAM

@@ -1431,6 +1431,29 @@ class IAMStoreSQL(IAMStore):
                 )
             )
 
+    def claim_placement(self, placement: Placement) -> Placement:
+        key = (placements.c.service == placement.service) & (
+            placements.c.id_key == placement.id_key
+        )
+        # Under the state row's lock, as every change: two claims of one key
+        # are serialized, and the second finds the first.
+        with self._write() as conn:
+            conn.execute(select(state.c.id).with_for_update())
+            row = conn.execute(select(placements).where(key)).first()
+            if row is not None:
+                return Placement(row.service, row.id_key, _placed_in(row))
+            conn.execute(
+                insert(placements).values(
+                    service=placement.service,
+                    id_key=placement.id_key,
+                    org="-",
+                    workspace="-",
+                    container=placement.container,
+                )
+            )
+            conn.execute(update(state).values(revision=state.c.revision + 1))
+        return placement
+
     def delete_placement(self, service: str, id_key: str) -> bool:
         return self._delete(
             delete(placements).where(
