@@ -464,8 +464,11 @@ chain from an old-grammar world (`testing.LegacyNexusIam`) through their move an
   stranger to it, or a View-as session of another workspace, is refused); it never scopes what is read. List,
   query, describe and preview agree on a namespace: `GET /datasets/` keeps what `ListDatasets` allows on
   `dataset/<ns>/<name>` and on `dataset/<ns>` (two batched `filter` calls, whatever the number of datasets);
-  `QueryDataset` is checked on `dataset/<ns>`; describe and preview are guarded on `dataset/<ns>/<name>` and
-  also require their action on `dataset/<ns>`. A Deny on `dataset/<ns>` therefore hides the namespace from all four.
+  `QueryDataset` is checked on `dataset/<ns>` and on every dataset, and its namespace, that the SQL reads
+  (`<other_ns>.<name>` included: `services/datasets/access.py`); describe and preview are guarded on
+  `dataset/<ns>/<name>` and also require their action on `dataset/<ns>`. A Deny on `dataset/<ns>` therefore hides
+  the namespace from all four. The Datasets agent's tools and the Sheets agent's dataset import make the same checks
+  in the turn's workspace, and every query runs in the caller's call context, so the kernel decides it too.
 - **Kernel resources need placements.** Nexus places what it creates and registers `placement_source`s for
   what exists, applied at every boot and when a workspace is created (`on_workspace_created`). Two
   platform-level exceptions are deployment grants (`iam.set_platform_grants`, stored in the platform policies so any process's regeneration keeps them): the shared repository that

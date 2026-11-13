@@ -52,6 +52,39 @@ def _persist_model(
     )
 
 
+def _may_query_dataset(namespace: str, dataset_name: str) -> dict[str, str] | None:
+    """What ``POST /api/datasets/<namespace>/query`` checks for the turn's user, in
+    the turn's workspace: dataset names, the ``datasets`` feature and
+    ``QueryDataset`` on the dataset and its namespace. None when it passes."""
+    import re
+
+    from naas_abi_core.services.dataset.DatasetPort import IDENTIFIER_PATTERN
+
+    from naas_abi.agents.feature.runtime import run, tool_context
+    from naas_abi.apps.nexus.apps.api.app.services.datasets import access
+    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AuthzDenied
+
+    for value in (namespace, dataset_name):
+        if not re.fullmatch(IDENTIFIER_PATTERN, str(value or "")):
+            return {"error": f"{value!r} is not a dataset or namespace name."}
+    ctx = tool_context()
+    if isinstance(ctx, dict):
+        return ctx
+    user_id, workspace_id = ctx
+    try:
+        run(
+            access.require_datasets(
+                "QueryDataset",
+                [(namespace, dataset_name)],
+                user=user_id,
+                workspace_id=workspace_id,
+            )
+        )
+    except AuthzDenied:
+        return {"error": "You do not have access to this dataset in this workspace."}
+    return None
+
+
 def sheets_tools() -> list[BaseTool]:
     @tool
     def create_sheets_project(title: str, template_id: str = "") -> dict[str, Any]:
@@ -242,6 +275,9 @@ def sheets_tools() -> list[BaseTool]:
         """Live connector: pull rows from a Nexus dataset into the open workbook."""
         if not agent_user_id.get():
             return {"error": "No authenticated user on this agent session."}
+        refused = _may_query_dataset(namespace, dataset_name)
+        if refused is not None:
+            return refused
         resolved = store.resolve_slug(slug)
         if isinstance(resolved, dict):
             return resolved
