@@ -36,8 +36,8 @@ from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
 from naas_abi.apps.nexus.graph_policy_config import (
-    NEXUS_GRAPH,
     WorkspaceGraphPolicyConfig,
+    without_system_graphs,
 )
 from naas_abi_core import logger
 from naas_abi_core.engine.call_context import as_service_account
@@ -110,7 +110,9 @@ def assignment_of(
     shared = set(config.read) | set(config.write)
     if config.read_all:
         shared |= set(catalog)
-    shared.discard(NEXUS_GRAPH)  # the application catalog is never shared
+    # Nexus's own graphs (the application catalog, the identity graph) are never shared.
+    shared = without_system_graphs(shared)
+    written = without_system_graphs(set(config.write))
     reading: list[dict[str, Any]] = []
     if shared:
         reading.append(
@@ -142,13 +144,13 @@ def assignment_of(
                 }
             )
     writing: list[dict[str, Any]] = []
-    if config.write:
+    if written:
         writing.append(
             {
                 "sid": "SharedGraphsWrite",
                 "effect": "Allow",
                 "actions": WRITE_ACTIONS,
-                "resources": [p for iri in sorted(config.write) for p in _anywhere(iri)],
+                "resources": [p for iri in sorted(written) for p in _anywhere(iri)],
             }
         )
 

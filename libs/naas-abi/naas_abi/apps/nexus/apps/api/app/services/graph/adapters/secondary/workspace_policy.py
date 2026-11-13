@@ -25,6 +25,7 @@ from naas_abi.apps.nexus.graph_policy_config import (
     NEXUS_GRAPH,
     SCHEMA_GRAPH,
     WorkspaceGraphPolicyConfig,
+    without_system_graphs,
 )
 from naas_abi.ontologies.modules.NexusPlatformOntology import KnowledgeGraph
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -52,7 +53,8 @@ def config_for_workspace(
 
 
 def catalog_graphs(store: Any) -> set[str]:
-    """Include stored graphs and registered empty graphs; exclude application metadata.
+    """Include stored graphs and registered empty graphs; exclude Nexus's own graphs
+    (the application catalog, the identity graph: ``is_nexus_system_graph``).
 
     Read as Nexus: it is the whole catalog, whoever asks for it."""
     catalog = NexusCatalogStore(store)
@@ -62,7 +64,7 @@ def catalog_graphs(store: Any) -> set[str]:
         f"?g a <{KnowledgeGraph._class_uri}> . FILTER(isIRI(?g)) }} }}"
     ):
         graphs.add(str(row.g))
-    return graphs - {NEXUS_GRAPH}
+    return without_system_graphs(graphs)
 
 
 def build_scope(
@@ -78,10 +80,10 @@ def build_scope(
     lets the user read, and to write."""
     owned = owned if config.include_owned else set()
     offered = (catalog if config.read_all else set()) | set(config.read) | set(config.write) | owned
-    offered -= {NEXUS_GRAPH}
+    offered = without_system_graphs(offered)
     readable = graph_iam.allowed("Query", offered, user=user)
     # The schema graph is read-only whatever IAM would say; sharing never writes it.
-    writing = ((set(config.write) | owned) - {NEXUS_GRAPH, SCHEMA_GRAPH}) & readable
+    writing = without_system_graphs((set(config.write) | owned) - {SCHEMA_GRAPH}) & readable
     writable = graph_iam.allowed("Insert", writing, user=user)
     can_create = container is not None and graph_iam.may_create(container, user=user)
     return GraphAccessScope(workspace_id, frozenset(readable), frozenset(writable), can_create)

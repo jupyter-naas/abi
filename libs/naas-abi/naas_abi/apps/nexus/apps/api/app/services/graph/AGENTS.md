@@ -78,9 +78,13 @@ rule of its own.
 - `api` needs the `iam:*Policy` actions (create, update, delete, get, list) and
   attach/detach, which the enumerated `builtin.api` statements hold.
 - `read_all` shares the graphs that exist when the assignment is applied (a graph
-  created later joins at the next sync), and only those of the workspace's own
-  organization and the platform's (`graph_iam.within`): never another organization's,
-  nor another personal workspace's (one in no organization, at the platform).
+  created later joins at the next sync), and only those placed in the workspace's own
+  organization, plus the schema graph (`graph_iam.within`): never another
+  organization's, nor another personal workspace's (one in no organization, at the
+  platform). A platform graph (placed nowhere) is shared by naming it in `read`.
+- Nexus's own graphs (`graph/nexus`, `graph/nexus-identity`, any `graph/nexus-<name>`:
+  `graph_policy_config.is_nexus_system_graph`) are in no workspace's catalog, view or
+  assignment, even named.
 - Dropping or clearing a graph shared for writing is the owning workspace's alone.
 - Strings that reach SPARQL are escaped (`query/sparql_safe.py`): Nexus reads every
   graph as itself when it consults its application graph.
