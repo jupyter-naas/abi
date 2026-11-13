@@ -4,6 +4,7 @@ from naas_abi_core.services.agent.IntentAgent import (
     AgentConfiguration,
     AgentSharedState,
     IntentAgent,
+    IntentType,
 )
 
 
@@ -69,13 +70,12 @@ You have access to GitHub tools for GitHub operations.
             as_tools as GitHubGraphqlIntegration_tools,
         )
         from naas_abi_marketplace.applications.github.integrations.GitHubIntegration import (
+            READ_TOOLS,
             GitHubIntegrationConfiguration,
         )
         from naas_abi_marketplace.applications.github.integrations.GitHubIntegration import (
             as_tools as GitHubIntegration_tools,
         )
-
-
 
         abi_module = ABIModule.get_instance()
 
@@ -85,13 +85,22 @@ You have access to GitHub tools for GitHub operations.
         embedding_model = registry.get_default_embedding_model().model
 
         module = ABIModule.get_instance()
-        github_access_token = module.configuration.github_access_token
+        configuration = module.configuration
+        github_access_token = configuration.github_access_token
+        # Every caller acts with the module's one token: the agent reads, and
+        # writes only through the tools the configuration names.
+        allowed = READ_TOOLS | set(getattr(configuration, "agent_write_tools", None) or [])
+        repositories = list(getattr(configuration, "repositories", None) or []) or None
 
         tools: list = []
         github_integration_config = GitHubIntegrationConfiguration(
-            access_token=github_access_token
+            access_token=github_access_token, repositories=repositories
         )
-        tools += GitHubIntegration_tools(github_integration_config)
+        tools += [
+            tool
+            for tool in GitHubIntegration_tools(github_integration_config)
+            if tool.name in allowed
+        ]
         github_graphql_integration_config = GitHubGraphqlIntegrationConfiguration(
             access_token=github_access_token
         )
@@ -113,7 +122,13 @@ You have access to GitHub tools for GitHub operations.
             embedding_model=embedding_model,
             tools=tools,
             agents=[],
-            intents=INTENTS,
+            # Tool intents only for the tools this agent carries.
+            intents=[
+                intent
+                for intent in INTENTS
+                if intent.intent_type != IntentType.TOOL
+                or intent.intent_target in {tool.name for tool in tools}
+            ],
             state=agent_shared_state,
             configuration=agent_configuration,
             memory=None,

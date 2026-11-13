@@ -1,5 +1,5 @@
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import requests
 from naas_abi_core.integration.integration import (
@@ -16,10 +16,13 @@ class SendGridIntegrationConfiguration(IntegrationConfiguration):
     Attributes:
         api_key (str): SendGrid API key
         base_url (str): Base URL for SendGrid API. Defaults to "https://api.sendgrid.com/v3"
+        allowed_senders (list[str]): The only addresses mail may be sent from.
+            Empty (the default): ``send_email`` sends nothing.
     """
 
     api_key: str
     base_url: str = "https://api.sendgrid.com/v3"
+    allowed_senders: list[str] = field(default_factory=list)
 
 
 class SendGridIntegration(Integration):
@@ -163,6 +166,14 @@ class SendGridIntegration(Integration):
         Returns:
             Dict: API response
         """
+        allowed = {
+            address.strip().lower() for address in self.__configuration.allowed_senders
+        }
+        if from_email.strip().lower() not in allowed:
+            raise ValueError(
+                "SendGrid sends only from the configured senders "
+                f"({', '.join(sorted(allowed)) or 'none configured'})"
+            )
         content: list[dict[str, str]] = [{"type": "text/html", "value": html_content}]
         if plain_text_content:
             content.insert(0, {"type": "text/plain", "value": plain_text_content})
@@ -206,7 +217,9 @@ def as_tools(configuration: SendGridIntegrationConfiguration):
         pass
 
     class SendEmailSchema(BaseModel):
-        from_email: str = Field(..., description="Sender email address")
+        from_email: str = Field(
+            ..., description="Sender email address: one of the configured senders"
+        )
         to_emails: list[str] = Field(
             ..., description="List of recipient email addresses"
         )

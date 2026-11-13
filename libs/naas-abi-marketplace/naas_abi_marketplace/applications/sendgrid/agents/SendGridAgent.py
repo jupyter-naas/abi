@@ -69,7 +69,12 @@ You currently do not have access to SendGrid tools. You can only provide general
         api_key = module.configuration.sendgrid_api_key
 
         tools: list = []
-        integration_config = SendGridIntegrationConfiguration(api_key=api_key)
+        integration_config = SendGridIntegrationConfiguration(
+            api_key=api_key,
+            allowed_senders=list(
+                getattr(module.configuration, "sendgrid_allowed_senders", None) or []
+            ),
+        )
         tools += as_tools(integration_config)
 
         intents: list = [

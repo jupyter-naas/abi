@@ -144,8 +144,14 @@ modules:
   #     tfl_app_key: "{{ secret.TFL_APP_KEY }}"
   #     openwebcamdb_api_key: "{{ secret.OPENWEBCAMDB_API_KEY }}"
 
+  # The Git agents act on this process's own checkout with its credentials:
+  # set single_user_development on a developer's machine only (`make commit`,
+  # `make pr` and `make pull-request-description` set it through
+  # ABI_GIT_SINGLE_USER_DEVELOPMENT=1).
   - module: naas_abi_marketplace.applications.git
     enabled: true
+    # config:
+    #   single_user_development: true
   
   - module: naas_abi_marketplace.applications.github
     enabled: true

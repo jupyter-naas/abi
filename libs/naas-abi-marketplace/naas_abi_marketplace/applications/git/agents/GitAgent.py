@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
 from langchain_core.tools import tool
 from naas_abi_core.services.agent.Agent import (
     Agent,
@@ -7,8 +9,25 @@ from naas_abi_core.services.agent.Agent import (
     AgentSharedState,
 )
 
+OFF_PROMPT = """
+You are the Git automation agent of a developer's checkout. You have no tools in
+this deployment: git, make and gh act on the engine's own working directory, so
+they are available only when the git module sets `single_user_development` on a
+single developer's machine. Say so if you are asked to act on a repository.
+"""
+
 
 class GitAgent(Agent):
+    """Git, make and gh on the engine's working directory.
+
+    A module agent, with its tools, only when the git module's configuration
+    sets ``single_user_development``: the working directory and the
+    credentials are the engine's own, so it serves a developer's checkout and
+    never a shared deployment.
+    """
+
+    enabled_by: ClassVar[str] = "single_user_development"
+
     name: str = "Git Agent"
     description: str = "An agent to manage Git repositories"
     system_prompt: str = """
@@ -78,8 +97,10 @@ Constraints:
         agent_configuration: AgentConfiguration | None = None,
     ) -> GitAgent:
 
-        from naas_abi_marketplace.applications.git import ABIModule
-
+        from naas_abi_marketplace.applications.git import (
+            ABIModule,
+            acts_on_this_checkout,
+        )
 
         abi_module = ABIModule.get_instance()
 
@@ -468,8 +489,11 @@ Constraints:
                 ]
             )
 
+        local = acts_on_this_checkout()
         if agent_configuration is None:
-            agent_configuration = AgentConfiguration(system_prompt=cls.system_prompt)
+            agent_configuration = AgentConfiguration(
+                system_prompt=cls.system_prompt if local else OFF_PROMPT
+            )
         if agent_shared_state is None:
             agent_shared_state = AgentSharedState(thread_id="0")
 
@@ -493,7 +517,9 @@ Constraints:
                 gh_pr_find_for_branch,
                 gh_pr_edit,
                 gh_pr_view,
-            ],
+            ]
+            if local
+            else [],
             agents=[],
             state=agent_shared_state,
             configuration=agent_configuration,

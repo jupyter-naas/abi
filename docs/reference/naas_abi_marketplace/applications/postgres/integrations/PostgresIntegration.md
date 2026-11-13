@@ -18,6 +18,10 @@ Dataclass configuration for connecting to PostgreSQL (extends `IntegrationConfig
   - `user: str`
   - `password: str`
   - `sslmode: str = "require"` (e.g., `disable`, `require`, `verify-ca`, `verify-full`)
+  - `read_only: bool = True`: each `execute_query` runs one statement (`single_statement`) in a read-only transaction and is rolled back, never committed. The boundary is still the database role: give the integration a role of its own that may only read.
+
+### `single_statement(query: str) -> bool`
+Whether `query` holds one SQL statement: no `;` outside string literals (including `E'...'` and dollar quotes; a `$` inside an identifier opens none), quoted identifiers and comments (a `--` comment ends at `\n` or `\r`), but an optional final one.
 
 ### `PostgresIntegration`
 Integration client (extends `Integration`).
@@ -28,7 +32,8 @@ Integration client (extends `Integration`).
 - `execute_query(query: str, params: tuple | dict | None = None, fetch: bool = True) -> list[dict] | int`
   - Executes a SQL statement using a `RealDictCursor`.
   - If `fetch=True`, returns `list[dict]` rows.
-  - If `fetch=False`, commits and returns `cur.rowcount`.
+  - If `fetch=False`, returns `cur.rowcount`, after a commit when `read_only` is false.
+  - With `read_only` (the default): refuses (`ReadOnlyQueryRefused`, a `ValueError`) a query that is not one statement, or that is a transaction or session command (`BEGIN`, `COMMIT`, `ROLLBACK`, `SET`, `RESET`, ...: `read_only_statement`). The check runs on the template and again on the text with its parameters bound (`cursor.mogrify`), and exactly that text is sent. It connects with `default_transaction_read_only=on`, opens the transaction read-only (`set_session(readonly=True)`, `standard_conforming_strings` on), and rolls back.
 
 - `list_tables() -> list[str]`
   - Returns table names in the `public` schema from `information_schema.tables`.
@@ -93,5 +98,6 @@ tools = as_tools(cfg)  # list of StructuredTool
 ```
 
 ## Caveats
-- `get_table_schema(table_name)` interpolates `table_name` directly into the SQL string (no parameterization). Only pass trusted table names.
-- `execute_query(..., fetch=False)` commits; `fetch=True` does not explicitly commit (suitable for `SELECT`-style queries).
+- `get_table_schema(table_name)` passes `table_name` as a query parameter.
+- `execute_query` commits only when `read_only` is false.
+- The module's documented configuration names secrets of its own (`POSTGRES_INTEGRATION_*`), never the platform database's.

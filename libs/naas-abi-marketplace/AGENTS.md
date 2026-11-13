@@ -211,6 +211,44 @@ ABIModule.get_instance().require_action("ExportReport", "report", ["q3"])
 The resource is placed in the workspace of the call (`abi:<org>:<ws>:<service>:report/q3`):
 a user needs `<service>:ExportReport` on `${scope}/<service>:report/*` there.
 
+## Decision: agents act only within what they are given
+
+An agent's tools run in the engine for whoever may use the agent. Two things are not
+theirs to lend: the engine host, and a credential the module configures once for the
+deployment.
+
+Decision:
+
+- **No agent runs code or commands on the engine host.** Code runs in the caller's
+  coding workspace, through the default workspace tools (`write_file`, `run_terminal`),
+  which act only on the workspace bound to the request (Bodo). An agent whose tools
+  act on the engine's own working directory (the git module's `GitAgent` and
+  `PullRequestDescriptionAgent`) names a module flag in `enabled_by`
+  (`single_user_development`): it is a module agent, and carries those tools, only
+  when the module's configuration sets it, on a developer's machine. `__demo__`
+  workflows are references no module agent carries.
+- **An integration agent on a deployment credential reads; it writes only through the
+  tools its configuration names, and only where it is configured to.** GitHub: the
+  read tools (`READ_TOOLS`) plus `agent_write_tools`, every request inside
+  `repositories` when set, path segments checked; Support: every call pinned to
+  `default_repository`; SendGrid: `sendgrid_allowed_senders` only; Postgres: one
+  statement in a read-only transaction unless `postgres_read_only: false`, with secret
+  names of its own.
+- **No agent tool deletes what it cannot restore or reveals a secret value**:
+  repository deletes, Actions secret writes, Naas secret values, storage
+  credentials, workspace deletes and membership changes are integration methods only.
+- **What an agent saves goes to the caller's own storage** (`users/<user>/...`,
+  written as the caller), never into the installed package, whose files a module
+  loads at boot.
+
+Consequences:
+
+- A new agent tool that writes outside the caller's workspace, or with a shared
+  credential, is opt-in through the module's configuration.
+- Per-user credentials (OAuth on behalf of the user) are the way to give an
+  integration agent more than this; until a module has them, its write tools stay off
+  by default.
+
 ## Discovery cheat sheet
 
 | I want to … | Look here |

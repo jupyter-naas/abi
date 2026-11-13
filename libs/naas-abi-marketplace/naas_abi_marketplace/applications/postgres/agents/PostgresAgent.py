@@ -74,6 +74,8 @@ You operate within a secure environment with authenticated access to PostgreSQL 
             database=module.configuration.postgres_dbname,
             user=module.configuration.postgres_user,
             password=module.configuration.postgres_password,
+            read_only=getattr(module.configuration, "postgres_read_only", True)
+            is not False,
         )
         tools: list = as_tools(integration_config)
 

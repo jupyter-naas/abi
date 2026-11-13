@@ -1,15 +1,18 @@
 from pathlib import Path
 
 from langchain_core.tools import tool
+from naas_abi_core.engine.call_context import current_call_context
 from naas_abi_core.models.Model import CanonicalModelId
 from naas_abi_core.services.agent.Agent import (
     Agent,
     AgentConfiguration,
     AgentSharedState,
 )
+from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
 from rdflib import Graph
 
 NAME = "7_Buckets"
+# The module's shipped ontologies (read only: the module loads them at boot).
 _ONTOLOGIES_DIR = Path(__file__).resolve().parent.parent / "ontologies"
 TEMPLATE_ONTOLOGY = _ONTOLOGIES_DIR / "BFO7BucketsProcessOntology.ttl"
 AVATAR_URL = (
@@ -44,7 +47,7 @@ For example: "An act of selling; the life of an organism; a process of sleeping;
 </tasks>
 
 <tools>
-- ontology_save: Validates a Turtle ontology with rdflib and saves it into the ontologies folder.
+- ontology_save: Validates a Turtle ontology with rdflib and saves it into the user's own storage.
   - Input: filename (str), turtle (str), overwrite (bool, default False)
   - Output: Success message with file path and triple count, or error message if file exists and overwrite is False
 </tools>
@@ -403,23 +406,40 @@ def create_agent(
     def save_ontology(
         filename: str, turtle: str, overwrite: bool = False, encoding: str = "utf-8"
     ) -> str:
-        """Validate a Turtle ontology with rdflib and save it into the ontologies folder."""
+        """Validate a Turtle ontology with rdflib and save it into the user's own storage."""
         safe_name = _safe_ontology_filename(filename)
-        _ONTOLOGIES_DIR.mkdir(parents=True, exist_ok=True)
-        filepath = _ONTOLOGIES_DIR / safe_name
-        if filepath.exists() and not overwrite:
-            return (
-                f"File already exists: {safe_name}. Set overwrite=true to replace it."
-            )
         if not turtle or not turtle.strip():
             raise ValueError("turtle content is required")
+        # The user the call is for: a service account alone has no storage here.
+        user = current_call_context().user
+        user_id = user.id if user is not None else None
+        if not user_id:
+            return "Saving an ontology needs a signed-in user: it goes to their own storage."
 
         g = Graph()
-        # Parse Turtle by parsing it
         g.parse(data=turtle, format="turtle", encoding=encoding)
-        # Save Turtle by serializing it
-        filepath.write_text(g.serialize(format="turtle"), encoding=encoding)
-        return f"Saved {safe_name} (triples={len(g)}) to {filepath}"
+
+        # The caller's own storage, written as the caller: never the module's
+        # shipped ontologies/ folder, which the module loads at boot.
+        storage = abi_module.engine.services.object_storage
+        datastore_path = getattr(
+            getattr(abi_module, "configuration", None),
+            "datastore_path",
+            "ontology-engineer",
+        )
+        prefix = f"users/{user_id}/{datastore_path}/ontologies"
+        if not overwrite:
+            try:
+                storage.get_object_metadata(prefix, safe_name)
+                return (
+                    f"File already exists: {safe_name}. Set overwrite=true to replace it."
+                )
+            except Exceptions.ObjectNotFound:
+                pass
+        storage.put_object(
+            prefix, safe_name, g.serialize(format="turtle").encode(encoding)
+        )
+        return f"Saved {safe_name} (triples={len(g)}) to {prefix}/{safe_name}"
 
     tools += [save_ontology]
 

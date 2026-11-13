@@ -3,6 +3,7 @@
 ## What it is
 - `GitAgent` is an `Agent` configured to automate common Git/GitHub (via `gh`) workflows.
 - It bundles a set of LangChain tools that run local `git` and `gh` CLI commands and can generate a PR description by invoking `PullRequestDescriptionAgent`.
+- The tools act on the engine process's own working directory with its credentials, so the agent serves a single developer's checkout: it is a module agent, and carries these tools, only when the git module's configuration sets `single_user_development: true` (`enabled_by = "single_user_development"`). Otherwise `New()` returns an agent without them.
 
 ## Public API
 ### Class: `GitAgent(Agent)`
@@ -16,7 +17,7 @@
 - `@classmethod New(agent_shared_state: AgentSharedState | None = None, agent_configuration: AgentConfiguration | None = None) -> GitAgent`
   - Creates and returns a configured `GitAgent`.
   - Retrieves the default chat model from `ABIModule.get_instance().engine.services.model_registry`.
-  - Registers a set of tools (below) on the agent.
+  - Registers a set of tools (below) on the agent when `single_user_development` is set; none otherwise, with a prompt that says so.
   - Defaults:
     - `agent_configuration`: `AgentConfiguration(system_prompt=GitAgent.system_prompt)`
     - `agent_shared_state`: `AgentSharedState(thread_id="0")`
@@ -81,7 +82,7 @@ print(agent.invoke("Show me the current branch and git status."))
 ```
 
 ## Caveats
-- Tools execute real commands on the local machine (`subprocess`); they can modify the repository (commit/push/restore).
+- Tools execute real commands on the local machine (`subprocess`); they can modify the repository (commit/push/restore). Keep `single_user_development` off in any shared deployment. `make commit`, `make push`, `make pr` and `make pull-request-description` set it through `ABI_GIT_SINGLE_USER_DEVELOPMENT=1`, for their own process only.
 - `git_restore` uses `git checkout -- <paths>` (discarding working-tree changes for the given paths).
 - `git_commit` and `git_push` may run `git pull origin <branch>` first when the remote branch exists; failures raise `RuntimeError` instructing to resolve conflicts.
 - `git_add` intentionally **skips untracked files** and paths with no changes; it stages only tracked modifications among the provided paths.

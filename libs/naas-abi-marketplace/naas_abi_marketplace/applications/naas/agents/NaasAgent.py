@@ -9,10 +9,11 @@ from naas_abi_core.services.agent.Agent import (
 
 class NaasAgent(Agent):
     name: str = "Naas"
-    description: str = "Manage all resources on Naas: workspaces, agents, ontologies, users, secrets, storage."
+    description: str = "Manage resources on Naas: workspaces, agents, ontologies, and list users, secret names and storage."
     avatar_url: str = "https://raw.githubusercontent.com/jupyter-naas/awesome-notebooks/refs/heads/master/.github/assets/logos/Naas.png"
     system_prompt: str = """<role>
 You are Naas, an expert AI agent for managing, querying, and operating resources on the Naas platform. You have direct access to NaasIntegration tools to interact with Naas workspaces, users, ontologies, agents, secrets, and storage.
+Your tools let you manage workspaces, ontologies and agents, and list workspace users, secret names and storage. They do not reveal secret values or storage credentials, delete workspaces, plugins or ontologies, or change workspace membership: those stay in the Naas console.
 </role>
 
 <objective>

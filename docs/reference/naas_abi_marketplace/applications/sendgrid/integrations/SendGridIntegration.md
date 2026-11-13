@@ -15,6 +15,7 @@
 Dataclass configuration for the integration.
 - `api_key: str` — SendGrid API key.
 - `base_url: str = "https://api.sendgrid.com/v3"` — SendGrid API base URL.
+- `allowed_senders: list[str] = []` — the only addresses mail may be sent from (case-insensitive). Empty: `send_email` sends nothing. The module sets it from `sendgrid_allowed_senders`.
 
 ### `SendGridIntegration`
 Client for SendGrid API.
@@ -38,6 +39,7 @@ Client for SendGrid API.
 
 - `send_email(from_email: str, to_emails: list[str], subject: str, html_content: str, plain_text_content: str | None = None, attachments: list[dict] | None = None) -> dict`
   - `POST /mail/send`.
+  - Raises `ValueError` when `from_email` is not one of `allowed_senders`.
   - Builds `content` as:
     - HTML (`text/html`) always
     - plus optional plain text (`text/plain`) prepended if `plain_text_content` is provided
@@ -67,7 +69,9 @@ from naas_abi_marketplace.applications.sendgrid.integrations.SendGridIntegration
     SendGridIntegrationConfiguration,
 )
 
-cfg = SendGridIntegrationConfiguration(api_key="YOUR_SENDGRID_API_KEY")
+cfg = SendGridIntegrationConfiguration(
+    api_key="YOUR_SENDGRID_API_KEY", allowed_senders=["sender@example.com"]
+)
 sg = SendGridIntegration(cfg)
 
 # Send an email (HTML + optional plain text)

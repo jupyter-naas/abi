@@ -15,6 +15,7 @@ def integration() -> SendGridIntegration:
 
     configuration = SendGridIntegrationConfiguration(
         api_key=sendgrid_api_key,
+        allowed_senders=["notifications@naas.ai"],
     )
     return SendGridIntegration(configuration)
 

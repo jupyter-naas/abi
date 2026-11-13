@@ -476,7 +476,9 @@ chat-zoho-agent: deps
 # whether this project's broker is down or another project's holds its port
 # (nats: 'Authorization Violation').
 NO_NATS_OVERLAY := .abi/no-nats.overlay.yaml
-git_agent_env = ABI_CONFIG_OVERLAY=$(CURDIR)/$(NO_NATS_OVERLAY) LOG_LEVEL=$(log_level)
+# The Git agents act on this checkout: the git module's single_user_development,
+# set for these targets only.
+git_agent_env = ABI_CONFIG_OVERLAY=$(CURDIR)/$(NO_NATS_OVERLAY) ABI_GIT_SINGLE_USER_DEVELOPMENT=1 LOG_LEVEL=$(log_level)
 
 $(NO_NATS_OVERLAY):
 	@ mkdir -p $(@D) && printf 'nats: null\n' > $@

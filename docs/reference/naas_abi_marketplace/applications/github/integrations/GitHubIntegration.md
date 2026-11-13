@@ -8,8 +8,12 @@
 ## Public API
 
 ### Configuration
-- `@dataclass GitHubIntegrationConfiguration(access_token: str, base_url: str = "https://api.github.com")`
+- `@dataclass GitHubIntegrationConfiguration(access_token: str, base_url: str = "https://api.github.com", repositories: list[str] | None = None)`
   - Stores the GitHub personal access token and API base URL.
+  - `repositories`: when set, requests reach only these repositories (`owner/repo`, case-insensitive); every other endpoint (users, organizations, other repositories) raises `ValueError`.
+- `checked_endpoint(endpoint: str, repositories: list[str] | None = None) -> str`
+  - What every request goes through: the endpoint is a path (query values go in `params`), each of its segments a plain name (`[A-Za-z0-9._-]+`, never `.` or `..`; so no `?` or `#` from a value), and, with `repositories`, it must lie under one of them. `ValueError` otherwise.
+- `READ_TOOLS: frozenset[str]`: the names of the tools that only read; `GitHubAgent` carries these plus the write tools its module names.
 
 ### Client
 - `class GitHubIntegration(configuration: GitHubIntegrationConfiguration)`
@@ -120,6 +124,7 @@
 ### Tool factory
 - `as_tools(configuration: GitHubIntegrationConfiguration) -> list`
   - Returns a list of LangChain `StructuredTool` wrapping various methods on a `GitHubIntegration` instance.
+  - No tool deletes a repository or writes or deletes an Actions secret: `delete_repository`, `create_or_update_repository_secret` and `delete_repository_secret` stay methods for code that calls them directly.
   - Defines Pydantic `BaseModel` schemas for tool arguments.
 
 ## Configuration/Dependencies
@@ -152,7 +157,5 @@ print(len(issues))
 ## Caveats
 - `_make_request()` only catches `IntegrationConnectionError`; exceptions raised by `requests` (e.g., `requests.exceptions.HTTPError`) are not caught there.
 - `list_organization_repositories(return_list=True)` returns a list of Python `set` objects (`{repo["name"], repo["full_name"]}`), not dictionaries.
-- `list_issues()` and `list_issue_comments()` manually build a query string into the endpoint instead of using the `params=` argument.
 - In `as_tools()`:
   - `github_update_organization_repository` passes a single `data` dict positionally into `update_organization_repository(...)`, but that method expects many keyword fields; this call signature does not match.
-  - `github_delete_organization_repository` calls `integration.delete_repository(org, repo_name)`, but `delete_repository()` accepts only `repo_name` (plus optional `accept`).

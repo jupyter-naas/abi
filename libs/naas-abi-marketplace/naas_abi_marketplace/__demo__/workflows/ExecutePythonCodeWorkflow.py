@@ -1,5 +1,15 @@
+"""Run a Python snippet in a child interpreter: a development reference.
+
+This is not a sandbox. The child runs on the host, as the host's user, with its
+filesystem and network. It gets none of the parent's environment (secrets live
+there), a temporary working directory of its own and isolated mode (``-I``), but
+nothing more. No module agent carries this workflow: served agents run code in
+the caller's coding workspace.
+"""
+
 import os
 import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass
 from enum import Enum
@@ -12,6 +22,9 @@ from naas_abi_core.workflow import Workflow, WorkflowConfiguration
 from naas_abi_core.workflow.workflow import WorkflowParameters
 from pydantic import Field
 
+# The only variables the child sees: enough to find an interpreter and decode text.
+_CHILD_ENV_KEYS = ("PATH", "LANG", "LC_ALL", "TZ")
+
 
 @dataclass
 class ExecutePythonCodeWorkflowConfiguration(WorkflowConfiguration):
@@ -19,11 +32,9 @@ class ExecutePythonCodeWorkflowConfiguration(WorkflowConfiguration):
 
     Attributes:
         timeout (int): Timeout in seconds for code execution
-        allow_imports (bool): Whether to allow import statements
     """
 
     timeout: int = 10
-    allow_imports: bool = True
 
 
 class ExecutePythonCodeWorkflowParameters(WorkflowParameters):
@@ -37,7 +48,7 @@ class ExecutePythonCodeWorkflowParameters(WorkflowParameters):
 
 
 class ExecutePythonCodeWorkflow(Workflow):
-    """Workflow for executing Python code safely."""
+    """Runs a Python snippet in a child interpreter (see the module docstring)."""
 
     __configuration: ExecutePythonCodeWorkflowConfiguration
 
@@ -52,7 +63,7 @@ class ExecutePythonCodeWorkflow(Workflow):
         self, parameters: ExecutePythonCodeWorkflowParameters
     ) -> Any:
         """
-        Execute Python code safely.
+        Execute Python code in a child interpreter without the parent's environment.
 
         Args:
             parameters: Parameters containing the code to execute.
@@ -61,42 +72,31 @@ class ExecutePythonCodeWorkflow(Workflow):
             str: Output from code execution or error message.
         """
         try:
-            # Validate code if needed
-            if not self.__configuration.allow_imports:
-                if "import " in parameters.code or "from " in parameters.code:
-                    return (
-                        "Error: Import statements are not allowed in this configuration"
-                    )
-
-            # Create a temporary file to store the code
-            with tempfile.NamedTemporaryFile(suffix=".py", delete=False) as temp_file:
-                temp_file.write(parameters.code.encode())
-                temp_file_path = temp_file.name
-
-            try:
+            with tempfile.TemporaryDirectory(prefix="python-code-") as workdir:
+                script = os.path.join(workdir, "snippet.py")
+                with open(script, "w", encoding="utf-8") as handle:
+                    handle.write(parameters.code)
+                env = {k: os.environ[k] for k in _CHILD_ENV_KEYS if k in os.environ}
+                env["HOME"] = workdir
                 # Run the code in a separate process and capture output
                 result = subprocess.run(
-                    ["python", temp_file_path],
+                    [sys.executable, "-I", script],
                     capture_output=True,
                     text=True,
                     timeout=self.__configuration.timeout,
+                    cwd=workdir,
+                    env=env,
+                    check=False,
                 )
 
-                # Return stdout or stderr if there was an error
-                if result.returncode == 0:
-                    output = result.stdout.strip()
-                    logger.info(f"Python code executed successfully. Output: {output}")
-                    return (
-                        output if output else "Code executed successfully (no output)"
-                    )
-                else:
-                    error_msg = f"Error: {result.stderr.strip()}"
-                    logger.error(f"Python code execution failed: {error_msg}")
-                    return error_msg
-            finally:
-                # Clean up the temporary file
-                if os.path.exists(temp_file_path):
-                    os.remove(temp_file_path)
+            # Return stdout or stderr if there was an error
+            if result.returncode == 0:
+                output = result.stdout.strip()
+                logger.info(f"Python code executed successfully. Output: {output}")
+                return output if output else "Code executed successfully (no output)"
+            error_msg = f"Error: {result.stderr.strip()}"
+            logger.error(f"Python code execution failed: {error_msg}")
+            return error_msg
         except subprocess.TimeoutExpired:
             error_msg = f"Error: Code execution timed out after {self.__configuration.timeout} seconds"
             logger.error(error_msg)

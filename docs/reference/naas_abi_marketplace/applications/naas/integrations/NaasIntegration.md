@@ -98,7 +98,11 @@ Main client (extends `naas_abi_core.integration.integration.Integration`).
 
 ### `as_tools(configuration: NaasIntegrationConfiguration) -> list`
 Returns a list of LangChain `StructuredTool` wrappers for many integration methods:
-- workspaces, plugins, ontologies, workspace users, secrets, storage, credentials.
+- workspaces, plugins and ontologies (create, read, update), workspace users (read), secret names, storage (list, create).
+
+Every request's endpoint goes through `checked_endpoint`: each path segment is a plain id or name (`[A-Za-z0-9_.:@+-]+`, never `.` or `..`), so no value reaches another endpoint; the tool schemas also pattern-check ontology ids (UUID or empty) and storage names.
+
+Whoever uses an agent built from these acts with the configured key, so no tool reveals a secret value (`get_secret`, `list_secrets`) or storage credentials, writes a secret, deletes a workspace, plugin or ontology, or invites, updates or removes a workspace user. Those stay methods of `NaasIntegration` for code that calls them directly.
 
 ## Configuration/Dependencies
 - HTTP: `requests`

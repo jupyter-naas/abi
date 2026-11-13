@@ -19,7 +19,6 @@ _SUPPORT_GITHUB_REST_TOOL_NAMES: frozenset[str] = frozenset(
         "github_list_issues",
         "github_list_issue_comments",
         "github_list_repository_contributors",
-        "github_list_organization_repositories",
     }
 )
 _SUPPORT_GITHUB_GRAPHQL_TOOL_NAMES: frozenset[str] = frozenset(
@@ -50,7 +49,7 @@ When asked, report on open issues: list them, fetch a specific issue, or read is
 
 <context>
 You receive messages from end users and support staff.
-Default repository for new issues: [GITHUB_REPOSITORY].
+Repository for issues: [GITHUB_REPOSITORY]. Every GitHub tool is limited to it.
 GitHub project id (for your awareness, if the user references project scope): [GITHUB_PROJECT_ID].
 </context>
 
@@ -64,9 +63,9 @@ Create issue (feature request, bug report, or documentation):
 - After creation, confirm issue number and URL. Use github_create_issue_comment only when the user asks to add information to an existing issue.
 
 List and inspect issues:
-- Use github_list_issues for open (or filtered) issues in the default or user-named repo.
+- Use github_list_issues for open (or filtered) issues in [GITHUB_REPOSITORY], the only repository you reach.
 - Use github_get_issue and github_list_issue_comments for a specific issue when the user needs details or thread context.
-- Use github_list_repository_contributors to verify assignee usernames when the user requests assignment. Use github_list_organization_repositories when the user names an org and you need to confirm an allowed repository name.
+- Use github_list_repository_contributors to verify assignee usernames when the user requests assignment.
 
 Project management:
 - Use githubgraphql_get_project_node_id to get the project node id.
@@ -146,7 +145,9 @@ Project management:
     intents: list[Intent] = get_intents(INTENTS_FILE)
 
     @staticmethod
-    def get_tools(github_access_token: str) -> list:
+    def get_tools(github_access_token: str, repository: str | None = None) -> list:
+        """The agent's tools, every GitHub call pinned to ``repository`` when given
+        (``New`` passes the module's ``default_repository``)."""
         from naas_abi_marketplace.applications.github.integrations.GitHubGraphqlIntegration import (
             GitHubGraphqlIntegrationConfiguration,
         )
@@ -170,6 +171,7 @@ Project management:
 
         github_integration_config = GitHubIntegrationConfiguration(
             access_token=github_access_token,
+            repositories=[repository] if repository else None,
         )
         github_graphql_integration_config = GitHubGraphqlIntegrationConfiguration(
             access_token=github_access_token
@@ -240,7 +242,7 @@ Project management:
         default_repository = module.configuration.default_repository
         github_access_token = secret.get("GITHUB_ACCESS_TOKEN")
 
-        tools = cls.get_tools(github_access_token)
+        tools = cls.get_tools(github_access_token, default_repository)
         system_prompt = cls.build_system_prompt(
             default_repository, github_project_id, tools
         )

@@ -234,7 +234,9 @@ class BaseModule(JobsMixin, Generic[TConfig]):
 
         self.__iam_catalog = declared_catalog(self.module_root_path, self.module_key)
 
-        self.__agents = ModuleAgentLoader.load_agents(self.__class__)
+        self.__agents = ModuleAgentLoader.load_agents(
+            self.__class__, self._configuration
+        )
         self.__orchestrations = ModuleOrchestrationLoader.load_orchestrations(
             self.__class__
         )

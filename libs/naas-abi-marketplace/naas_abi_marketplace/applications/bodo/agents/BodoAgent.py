@@ -8,12 +8,17 @@ from naas_abi_core.services.agent.Agent import (
 
 
 class BodoAgent(Agent):
+    """Bodo DataFrames analysis, run in the caller's own coding workspace.
+
+    The agent carries no code runner of its own: never the engine host.
+    """
+
     name: str = "BodoAgent"
     description: str = "An agent that can analyze large data with Bodo DataFrames"
     avatar_url: str = "https://raw.githubusercontent.com/jupyter-naas/awesome-notebooks/refs/heads/master/.github/assets/logos/Naas.png"
     system_prompt: str = """
 You are BodoAgent, a data analysis assistant that uses Bodo DataFrames to efficiently explore and analyze datasets.
-You can execute Python code through the ExecutePythonWorkflow tool to perform your analyses.
+You run Python only in the user's own coding workspace: write the script with `write_file`, then run it with `run_terminal` (for example `python analysis.py`). Those tools exist only when a coding workspace is connected to the conversation; without one, say that the analysis needs a coding workspace (open one in Code) and do not pretend to run anything.
 
 When a user asks a question involving data (e.g., describing a dataset, computing aggregates, or exploring patterns), you should:
 
@@ -21,7 +26,7 @@ When a user asks a question involving data (e.g., describing a dataset, computin
 
  * Always import bodo.pandas as pd at the top of the script (never use regular pandas).
 
- * Read data using pandas-style APIs (for example: `pd.read_parquet("/path/to/file"))`.
+ * Read data from files in the workspace using pandas-style APIs (for example: `pd.read_parquet("data/file.parquet")`).
 
  * Perform any operations or computations using standard pandas syntax (groupby, describe, value_counts, etc.).
 
@@ -29,14 +34,14 @@ When a user asks a question involving data (e.g., describing a dataset, computin
 
  * Avoid unsafe or network operations; only read data and compute results.
 
- * After running the workflow, summarize the findings in plain English.
+ * After running the script, summarize the findings in plain English.
 
 Your responses should be short, factual, and focused on analytical insights rather than speculation.
 """
     suggestions: list = [
         {
             "label": "Summarize CSV",
-            "value": "Summarize this CSV file: /path/to/file.csv",
+            "value": "Summarize this CSV file of my workspace: data/file.csv",
         }
     ]
 
@@ -46,12 +51,7 @@ Your responses should be short, factual, and focused on analytical insights rath
         agent_shared_state: AgentSharedState | None = None,
         agent_configuration: AgentConfiguration | None = None,
     ) -> BodoAgent:
-        from naas_abi_marketplace.__demo__.workflows.ExecutePythonCodeWorkflow import (
-            ExecutePythonCodeWorkflow,
-            ExecutePythonCodeWorkflowConfiguration,
-        )
         from naas_abi_marketplace.applications.bodo import ABIModule
-
 
         abi_module = ABIModule.get_instance()
 
@@ -59,9 +59,10 @@ Your responses should be short, factual, and focused on analytical insights rath
         assert registry is not None, "ModelRegistryService not initialized"
         chat_model = registry.get_default_chat_model()
 
+        # No tool of its own runs code: scripts run in the caller's coding
+        # workspace, through the default workspace tools (write_file,
+        # run_terminal), which act only on the workspace bound to the request.
         tools: list = []
-        config = ExecutePythonCodeWorkflowConfiguration(timeout=600, allow_imports=True)
-        tools += ExecutePythonCodeWorkflow(config).as_tools()
 
         if agent_configuration is None:
             agent_configuration = AgentConfiguration(system_prompt=cls.system_prompt)
