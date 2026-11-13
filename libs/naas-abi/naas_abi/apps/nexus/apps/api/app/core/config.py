@@ -539,6 +539,24 @@ class Settings(BaseSettings):
     # Env: GRAPH_QUERY_CACHE_TTL_SECONDS. 0 disables caching (always live).
     graph_query_cache_ttl_seconds: int = 300
 
+    # The engine's dataset namespaces every workspace's viewers and members read (the
+    # platform's modules' shared data). None by default: a namespace is shared only
+    # by naming it here, so the engine's own (the event archive, what a kernel job
+    # writes) are never. Names only, no patterns.
+    shared_dataset_namespaces: list[str] = Field(default_factory=list)
+
+    @field_validator("shared_dataset_namespaces")
+    @classmethod
+    def _dataset_namespaces_are_names(cls, value: list[str]) -> list[str]:
+        import re
+
+        from naas_abi_core.services.dataset.DatasetPort import IDENTIFIER_PATTERN
+
+        for name in value:
+            if not re.match(IDENTIFIER_PATTERN, name):
+                raise ValueError(f"shared_dataset_namespaces: {name!r} is not a namespace name")
+        return list(dict.fromkeys(value))
+
     # Coding workspaces (Coder editor + Forgejo monorepo auto-clone). clone
     # host/scheme are what a *workspace container* uses to reach Forgejo (not the
     # admin API URL); docker_network is the network the workspace must join to

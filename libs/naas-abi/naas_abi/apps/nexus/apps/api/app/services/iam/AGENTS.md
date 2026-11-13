@@ -469,8 +469,9 @@ chain from an old-grammar world (`testing.LegacyNexusIam`) through their move an
 - **Kernel resources need placements.** Nexus places what it creates and registers `placement_source`s for
   what exists, applied at every boot and when a workspace is created (`on_workspace_created`). Two
   platform-level exceptions are deployment grants (`iam.set_platform_grants`, stored in the platform policies so any process's regeneration keeps them): the shared repository that
-  slides, documents, sheets and code use (viewers read, members write) and the kernel's datasets (read for
-  every role). Nexus's own `dataset` type is `PLATFORM_ACCESS` of its catalog, not a grant. The shared repository separates workspaces by Nexus's branch naming only; a per-workspace
+  slides, documents, sheets and code use (viewers read, members write) and the kernel dataset namespaces the
+  deployment shares (`shared_dataset_namespaces`, read for every role; none by default, names only, so the
+  engine's own namespaces such as the event archive are never reached by a workspace role). Nexus's own `dataset` type is `PLATFORM_ACCESS` of its catalog, not a grant. The shared repository separates workspaces by Nexus's branch naming only; a per-workspace
   repository is the way to make IAM enforce it.
 - **Roles are for users, and only users Nexus knows become IAM users.** An id from a request path never
   creates an IAM principal; a `usr_` id must name a user record, never a service account or a group. A
