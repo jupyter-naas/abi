@@ -98,6 +98,23 @@ def test_a_generated_nats_stack_runs_the_idp_in_its_own_container(
     assert "IDP_SERVICE_KEY" not in env  # an operator creates it (a module's key)
 
 
+def test_deploy_local_moves_the_engine_keys_out_of_env(tmp_path: Path) -> None:
+    # An engine before the sidecar wrote IAM's keys into .env, and docker
+    # compose refused it ("unexpected character "/" in variable name").
+    from dotenv import dotenv_values, set_key
+
+    env = tmp_path / ".env"
+    env.write_text("MY_OWN_KEY=kept\n")
+    pem = "-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n"
+    set_key(str(env), "iam/signing-keys/k1", pem)
+
+    setup_local_deploy(str(tmp_path), base_domain="localhost", nats=True)
+
+    assert not any("/" in key for key in dotenv_values(env))
+    assert dotenv_values(env)["MY_OWN_KEY"] == "kept"
+    assert dotenv_values(tmp_path / ".env.sidecar") == {"iam/signing-keys/k1": pem}
+
+
 def test_a_classic_stack_has_no_idp(tmp_path: Path) -> None:
     setup_local_deploy(str(tmp_path), base_domain="localhost", nats=False)
     assert "idp" not in _services(tmp_path / "docker-compose.yml")

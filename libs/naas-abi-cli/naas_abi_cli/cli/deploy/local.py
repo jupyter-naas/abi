@@ -580,6 +580,13 @@ def setup_local_deploy(
     """
     project_path = os.path.abspath(os.path.expanduser(project_path))
     _require_writable_env(os.path.join(project_path, ".env"))
+    # An engine before the sidecar wrote its own keys (iam/..., idp/...) into
+    # .env, and docker compose refuses the file since: move them out first.
+    from naas_abi_core.services.secret.adaptors.secondary.dotenv_secret_secondaryadaptor import (
+        move_keys_to_sidecar,
+    )
+
+    move_keys_to_sidecar(os.path.join(project_path, ".env"))
     if nats is None:
         detected = project_uses_nats(project_path)
         nats = True if detected is None else detected

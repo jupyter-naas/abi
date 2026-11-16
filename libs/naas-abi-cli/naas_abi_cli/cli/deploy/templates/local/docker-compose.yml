@@ -55,6 +55,10 @@ x-abi-template: &abi_template
     # - ./libs:/app/libs        # Libraries
     # - ./README.md:/app/README.md
     # - ./.env:/app/.env
+    #   Not instead of `.:/app`: the engine rewrites .env, and keeps its own
+    #   keys in .env.sidecar beside it, by renaming a new file over the old
+    #   one, which a single-file mount refuses ("Resource busy"). A sidecar
+    #   made only in the container would also be lost on recreate.
     # Cached volumes for performance
     - venv_cache:/app/.venv       # Python virtual environment cache
     - huggingface_cache:/root/.cache/huggingface  # Docling / HF model weights
