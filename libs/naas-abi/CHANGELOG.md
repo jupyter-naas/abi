@@ -24,6 +24,23 @@
 
 <!-- version list -->
 
+## v4.0.0 (2026-11-16)
+
+### Refactoring
+
+- **marketplace**: Remove the 27 placeholder application agents
+  ([`18f7c65`](https://github.com/jupyter-naas/abi/commit/18f7c6540775c0212607a758ba4d99547de0d20c))
+
+- **marketplace**: Remove the in-engine applications that run as remote modules
+  ([`575677b`](https://github.com/jupyter-naas/abi/commit/575677b498ac191b68fbd5b4538046ebbd2bbe17))
+
+### Breaking Changes
+
+- **marketplace**: A configuration that loads one of the removed modules fails at load. Remove the
+  entry and run the remote module instead; credentials become engine secrets. See
+  naas_abi_marketplace/applications/AGENTS.md.
+
+
 ## v3.9.0 (2026-11-16)
 
 ### Bug Fixes
