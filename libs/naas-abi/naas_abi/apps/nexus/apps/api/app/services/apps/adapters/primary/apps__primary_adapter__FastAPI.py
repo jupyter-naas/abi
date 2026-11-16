@@ -333,6 +333,17 @@ def _scan_apps_html_assets() -> dict[str, tuple[str, str]]:
     return html_map
 
 
+def _remote_avatar_url(avatar_url: str) -> str | None:
+    """A remote app's tile image: an https URL as is, a ``/modules/<mod>/...``
+    asset on the public API host, as an in-engine manifest's avatar is."""
+    if avatar_url.startswith("https://"):
+        return avatar_url
+    if avatar_url.startswith("/modules/"):
+        owner = avatar_url.split("/")[2]
+        return _resolve_avatar_url(avatar_url, owner)
+    return None
+
+
 def _remote_app_info(app: Any) -> AppInfo:
     """An app of a READY remote module: served, so installed."""
     return AppInfo(
@@ -344,6 +355,7 @@ def _remote_app_info(app: Any) -> AppInfo:
         name=app.title or _fallback_name(app.name),
         description=app.description,
         url=app.url,
+        avatar_url=_remote_avatar_url(getattr(app, "avatar_url", "")),
         icon_emoji=app.icon_emoji or None,
         # Listed only while its module is READY in discovery: installed, like a
         # loaded module's app. The app pages show installed apps only.

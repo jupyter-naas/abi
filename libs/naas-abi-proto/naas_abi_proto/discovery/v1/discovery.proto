@@ -2,11 +2,25 @@ syntax = "proto3";
 package abi.discovery.v1;
 import "naas_abi_proto/common/v1/common.proto";
 
+// A starter prompt Nexus shows under an agent (a chip): the label is shown,
+// the value is sent as the user's message.
+message AgentSuggestion {
+  string label = 1;
+  string value = 2;
+  string description = 3;
+}
 message AgentDescriptor {
   string name = 1;
   string description = 2;
   uint32 contract_major = 3;
   repeated string capabilities = 4;
+  // Presentation only; the name stays the key (`<module_id>/<name>`).
+  // Shown instead of the name when set (spaces and punctuation allowed).
+  string display_name = 5;
+  // A reference, never image bytes: an https:// URL, or a /modules/<path>
+  // asset served by an engine module (Nexus prefixes its public API host).
+  string avatar_url = 6;
+  repeated AgentSuggestion suggestions = 7;
 }
 // One way a job is started: kind "cron" (6-field cron, optional IANA time
 // zone), "every" (Go duration such as "1h") or "event" (NATS event subject).
@@ -60,6 +74,9 @@ message AppDescriptor {
   uint32 contract_major = 7;
   // Largest request body Nexus forwards; zero: Nexus's default (1 GiB).
   uint64 max_upload_bytes = 8;
+  // The tile image, as an agent's avatar_url: a reference, never image bytes
+  // (an https:// URL or a /modules/<path> asset). Empty: icon_emoji.
+  string avatar_url = 9;
 }
 message ModuleDescriptor {
   string module_id = 1;
