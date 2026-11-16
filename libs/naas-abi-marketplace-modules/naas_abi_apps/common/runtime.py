@@ -114,6 +114,14 @@ def configuration_from(
     return configuration_class(**values)
 
 
+def quiet_http_logs() -> None:
+    """httpx and httpcore log each request's full URL at INFO and DEBUG, and
+    some APIs take their key as a query parameter: keep them at WARNING, at
+    any ``LOG_LEVEL``."""
+    for name in ("httpx", "httpcore"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+
 def service_key(env: Mapping[str, str], module_id: str) -> str:
     """The module's service key: it holds a key, never a signing secret, so
     without one it does not start."""
@@ -131,9 +139,10 @@ def main(
 ) -> int:
     """``python -m naas_abi_apps.<app>``: run the module until it is stopped."""
     logging.basicConfig(
-        level=env.get("LOG_LEVEL", "INFO"),
+        level=env.get("LOG_LEVEL", "INFO").strip().upper() or "INFO",
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    quiet_http_logs()
     key = service_key(env, module_class.module_id)
     asyncio.run(
         run_until_signalled(
