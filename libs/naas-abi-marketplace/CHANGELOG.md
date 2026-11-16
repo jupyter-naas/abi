@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v3.66.0 (2026-11-16)
+
+### Bug Fixes
+
+- **anthropic**: Type the dummy engine passed to EngineProxy in on_load_test
+  ([`423eaec`](https://github.com/jupyter-naas/abi/commit/423eaec3fc0ca2b040ed992789c254cecaca0b3b))
+
+### Features
+
+- **anthropic**: Add the Claude 5.5 generation models (Opus 5.5, Sonnet 5.5, Haiku 5.5, Fable 5.1)
+  ([`9c4b22d`](https://github.com/jupyter-naas/abi/commit/9c4b22da0f55866add94eb764b73b7588310679e))
+
+### Testing
+
+- **x_proxy**: The first-request migration test registers containers, as main's IAM names them
+  ([`8fd86cf`](https://github.com/jupyter-naas/abi/commit/8fd86cf9068b7f00a82ef65dd4d2547f9090e97f))
+
+
 ## v3.65.0 (2026-11-07)
 
 ### Bug Fixes
