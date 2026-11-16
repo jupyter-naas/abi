@@ -24,6 +24,17 @@
 
 <!-- version list -->
 
+## v3.4.0 (2026-11-16)
+
+### Features
+
+- **discovery**: Remote agents carry display name, avatar and suggestions
+  ([`d878002`](https://github.com/jupyter-naas/abi/commit/d87800209b387589148ef547ed101c9842d54090))
+
+- **discovery**: Remote apps carry their tile image (avatar_url)
+  ([`fe0947c`](https://github.com/jupyter-naas/abi/commit/fe0947c14e46ea9ab88dd5582f0823d7267f47c8))
+
+
 ## v3.3.3 (2026-11-11)
 
 
