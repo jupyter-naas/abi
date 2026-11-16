@@ -24,6 +24,22 @@
 
 <!-- version list -->
 
+## v3.9.0 (2026-11-16)
+
+### Bug Fixes
+
+- **nexus/home**: Never show a section column on Home
+  ([`39c919a`](https://github.com/jupyter-naas/abi/commit/39c919a48621ff63df5355e1193f64b60def3c36))
+
+### Features
+
+- **discovery**: Remote agents carry display name, avatar and suggestions
+  ([`d878002`](https://github.com/jupyter-naas/abi/commit/d87800209b387589148ef547ed101c9842d54090))
+
+- **discovery**: Remote apps carry their tile image (avatar_url)
+  ([`fe0947c`](https://github.com/jupyter-naas/abi/commit/fe0947c14e46ea9ab88dd5582f0823d7267f47c8))
+
+
 ## v3.8.0 (2026-11-11)
 
 
