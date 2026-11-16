@@ -2,6 +2,76 @@
 
 <!-- version list -->
 
+## v4.0.0 (2026-11-16)
+
+### Bug Fixes
+
+- **marketplace**: Correct copy-pasted application dependencies
+  ([`6d3354a`](https://github.com/jupyter-naas/abi/commit/6d3354a283f9300ac90f0b2f967b44e8f104771a))
+
+- **marketplace**: Remote modules read their secrets under their module id
+  ([`c9bb752`](https://github.com/jupyter-naas/abi/commit/c9bb7525fab81bb7e094060d3f485d924e66d6d0))
+
+### Chores
+
+- **marketplace**: Refresh uv.lock after the application extras cleanup
+  ([`799693e`](https://github.com/jupyter-naas/abi/commit/799693e707f07aa8dca0e88b222840f7db9b0fd6))
+
+### Documentation
+
+- **marketplace**: Drop the removed application modules from the README and reference
+  ([`e94a91d`](https://github.com/jupyter-naas/abi/commit/e94a91d77c1e0e3641d2ee93ac48dbbd2c4630c3))
+
+- **marketplace**: Keep git in-engine, leave openrouter to ai.openrouter
+  ([`b27fc8e`](https://github.com/jupyter-naas/abi/commit/b27fc8e0efec7ab9a28362306b7e3ed91812c145))
+
+### Features
+
+- **marketplace**: Port arxiv to a remote module
+  ([`4dfdce1`](https://github.com/jupyter-naas/abi/commit/4dfdce1938fca719f6a2a7f1b94dcf0612f977ab))
+
+- **marketplace**: Port github to a remote module
+  ([`376cf5e`](https://github.com/jupyter-naas/abi/commit/376cf5eac171ded06cd9bee809042ded75407878))
+
+- **marketplace**: Port google_search to a remote module
+  ([`962f741`](https://github.com/jupyter-naas/abi/commit/962f741046db2367d4bca76b4671941b8d761550))
+
+- **marketplace**: Port linkedin to a remote module; connections import moves to people
+  ([`52fa1e4`](https://github.com/jupyter-naas/abi/commit/52fa1e4b1f6dba256a5f9b5adc85adc1c15bf042))
+
+- **marketplace**: Port powerpoint to a remote module, with a bundled template
+  ([`b00f529`](https://github.com/jupyter-naas/abi/commit/b00f52939f0fbea5a1e04ee3e4030a8c5d55d27b))
+
+- **marketplace**: Port pubmed to a remote module
+  ([`6108ada`](https://github.com/jupyter-naas/abi/commit/6108ada82a98fe3713a5e2cc37d8d5c95ed6fb1f))
+
+- **marketplace**: Port sanax to a remote module
+  ([`d87f5c1`](https://github.com/jupyter-naas/abi/commit/d87f5c186d7088658368ca5136cced5acab2c812))
+
+- **marketplace**: Port the naas agent and integration to a remote module
+  ([`9d13d20`](https://github.com/jupyter-naas/abi/commit/9d13d207f77430640aaa0a974ae17181dfe98972))
+
+- **marketplace**: Port yahoofinance, postgres, sec_gov and nebari to remote modules
+  ([`477ce6e`](https://github.com/jupyter-naas/abi/commit/477ce6ef3aa7cf2172a39707dfe8ffbb41b51762))
+
+- **marketplace**: Remote application modules package with Pennylane pilot
+  ([`1f6b35e`](https://github.com/jupyter-naas/abi/commit/1f6b35e3a795803e5d805fd6e87e4d845a281d93))
+
+### Refactoring
+
+- **marketplace**: Remove the 27 placeholder application agents
+  ([`18f7c65`](https://github.com/jupyter-naas/abi/commit/18f7c6540775c0212607a758ba4d99547de0d20c))
+
+- **marketplace**: Remove the in-engine applications that run as remote modules
+  ([`575677b`](https://github.com/jupyter-naas/abi/commit/575677b498ac191b68fbd5b4538046ebbd2bbe17))
+
+### Breaking Changes
+
+- **marketplace**: A configuration that loads one of the removed modules fails at load. Remove the
+  entry and run the remote module instead; credentials become engine secrets. See
+  naas_abi_marketplace/applications/AGENTS.md.
+
+
 ## v3.66.0 (2026-11-16)
 
 ### Bug Fixes
