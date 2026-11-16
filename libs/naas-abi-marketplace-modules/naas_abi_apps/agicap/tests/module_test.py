@@ -8,7 +8,12 @@ from naas_abi_apps.agicap import MODULE_ID, ABIModule
 from naas_abi_apps.agicap.__main__ import ENV_PREFIX
 from naas_abi_apps.agicap.agents.AgicapAgent import INTENTS, NAME
 from naas_abi_apps.common.runtime import configuration_from
-from naas_abi_apps.common.testing import bound_tool_names, fake_engine, no_core_import
+from naas_abi_apps.common.testing import (
+    bound_tool_names,
+    fake_engine,
+    module_secrets,
+    no_core_import,
+)
 
 
 def test_the_module_declares_its_agent_and_services() -> None:
@@ -30,7 +35,11 @@ def test_the_configuration_names_the_secrets() -> None:
 
 
 def test_on_initialized_binds_tools_and_intents_from_the_secrets() -> None:
-    engine = fake_engine({"AGICAP_API_TOKEN": "t", "AGICAP_BEARER_TOKEN": "b"})
+    engine = fake_engine(
+        module_secrets(
+            "applications.agicap", {"AGICAP_API_TOKEN": "t", "AGICAP_BEARER_TOKEN": "b"}
+        )
+    )
     module = ABIModule(engine, ABIModule.Configuration())
 
     asyncio.run(module.on_initialized())

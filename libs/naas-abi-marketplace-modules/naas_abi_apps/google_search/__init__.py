@@ -84,7 +84,9 @@ class ABIModule(BaseModule[GoogleSearchConfiguration]):
         )
 
     async def on_initialized(self) -> None:
-        credentials = await read_secrets(self.engine, self.configuration.secret_names())
+        credentials = await read_secrets(
+            self.engine, self.configuration.secret_names(), module_id=MODULE_ID
+        )
         integration = None
         extra_tools: list = []
         await self.build_processes()

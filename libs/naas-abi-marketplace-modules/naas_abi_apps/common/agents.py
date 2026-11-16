@@ -3,10 +3,14 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from naas_abi_sdk.agents import Agent, AgentConfiguration, IntentAgent
 from naas_abi_sdk.agents.hosting import agent_memory_id, document_memory
+from naas_abi_sdk.services.errors import PermissionDenied
+
+logger = logging.getLogger(__name__)
 
 
 def tools_prompt(system_prompt: str, tools: list[Any], marker: str = "[TOOLS]") -> str:
@@ -63,15 +67,36 @@ async def build_agent(
     )
 
 
-async def read_secrets(engine: Any, names: dict[str, str]) -> dict[str, str]:
-    """``{field: secret name}`` -> ``{field: value}``; a missing secret is ``""``.
-    ``engine`` must declare ``secret``."""
+def secret_key(module_id: str, name: str) -> str:
+    """The engine secret a module reads for ``name``: ``<module id>/<name>``.
+
+    The engine lets a module account (``module/<project>/<module id>``) read
+    only the secrets under its own prefix; any other name is refused. A name
+    that already carries the prefix is kept."""
+    prefix = f"{module_id}/"
+    return name if name.startswith(prefix) else f"{prefix}{name}"
+
+
+async def read_secrets(
+    engine: Any, names: dict[str, str], *, module_id: str
+) -> dict[str, str]:
+    """``{field: secret name}`` -> ``{field: value}``, each read as
+    ``<module id>/<name>`` (``secret_key``). A missing secret is ``""``, and so
+    is one the engine refuses (logged): the module then starts without the
+    tools that need it, instead of failing at every restart. ``engine`` must
+    declare ``secret``."""
     secrets = engine.services.secret
     values = {}
     for field, secret_name in names.items():
-        values[field] = (
-            (await secrets.get(secret_name, None) or "") if secret_name else ""
-        )
+        if not secret_name:
+            values[field] = ""
+            continue
+        key = secret_key(module_id, secret_name)
+        try:
+            values[field] = await secrets.get(key, None) or ""
+        except PermissionDenied as exc:
+            logger.warning("%s: secret %s refused: %s", module_id, key, exc)
+            values[field] = ""
     return values
 
 

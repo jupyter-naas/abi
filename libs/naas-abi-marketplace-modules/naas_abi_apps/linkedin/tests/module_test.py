@@ -12,6 +12,7 @@ from naas_abi_apps.common.testing import (
     FakeTripleStore,
     FakeVectorStore,
     fake_engine,
+    module_secrets,
     no_core_import,
 )
 from naas_abi_apps.linkedin import EMBEDDINGS_WORKFLOW, MODULE_ID, ABIModule
@@ -34,7 +35,7 @@ SECRETS = {
 
 
 def engine_with(secrets: dict[str, str]):
-    engine = fake_engine(secrets)
+    engine = fake_engine(module_secrets("applications.linkedin", secrets))
     engine.services.triple_store = FakeTripleStore()
     engine.services.vector_store = FakeVectorStore()
     engine.services.cache = FakeCache()

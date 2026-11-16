@@ -93,6 +93,7 @@ class ABIModule(BaseModule[PowerPointConfiguration]):
                 "workspace_id": c.workspace_id_secret,
                 "storage_name": c.storage_name_secret,
             },
+            module_id=MODULE_ID,
         )
         if not all(secrets.values()):
             logger.warning(

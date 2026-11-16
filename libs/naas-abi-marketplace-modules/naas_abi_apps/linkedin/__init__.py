@@ -170,6 +170,7 @@ class ABIModule(BaseModule[LinkedInConfiguration]):
                 "google_api_key": c.google_api_key_secret,
                 "google_search_engine_id": c.google_search_engine_id_secret,
             },
+            module_id=MODULE_ID,
         )
         registry = services.model_registry
         embeddings = (

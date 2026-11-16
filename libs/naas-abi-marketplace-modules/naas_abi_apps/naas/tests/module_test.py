@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import asyncio
 
-from naas_abi_apps.common.testing import bound_tool_names, fake_engine, no_core_import
+from naas_abi_apps.common.testing import (
+    bound_tool_names,
+    fake_engine,
+    module_secrets,
+    no_core_import,
+)
 from naas_abi_apps.naas import MODULE_ID, ABIModule
 from naas_abi_apps.naas.agents.NaasAgent import NAME
 
@@ -18,7 +23,7 @@ def test_the_module_declares_its_agent_and_ontology() -> None:
 
 
 def test_tools_need_the_api_key() -> None:
-    with_key = fake_engine({"NAAS_API_KEY": "k"})
+    with_key = fake_engine(module_secrets("applications.naas", {"NAAS_API_KEY": "k"}))
     without = fake_engine()
 
     asyncio.run(ABIModule(with_key, ABIModule.Configuration()).on_initialized())

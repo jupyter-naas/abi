@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import asyncio
 
-from naas_abi_apps.common.testing import bound_tool_names, fake_engine, no_core_import
+from naas_abi_apps.common.testing import (
+    bound_tool_names,
+    fake_engine,
+    module_secrets,
+    no_core_import,
+)
 from naas_abi_apps.github import MODULE_ID, ABIModule
 from naas_abi_apps.github.agents.GitHubAgent import NAME
 from naas_abi_apps.github.agents.GitHubAgentIntents import INTENTS
@@ -25,7 +30,9 @@ def test_the_module_declares_its_agent_services_and_ontology() -> None:
 
 
 def test_with_the_token_every_intent_has_its_tool() -> None:
-    engine = fake_engine({"GITHUB_ACCESS_TOKEN": "t"})
+    engine = fake_engine(
+        module_secrets("applications.github", {"GITHUB_ACCESS_TOKEN": "t"})
+    )
     module = ABIModule(engine, ABIModule.Configuration())
 
     asyncio.run(module.on_initialized())

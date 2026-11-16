@@ -25,8 +25,10 @@ jupyter-naas/abi#1423.
   `schema_tool(fn, Schema)` coroutines (arguments validated, defaults filled).
 - User input in SPARQL goes through `sparql_string`, never an f-string.
 - Configuration: a `ModuleConfiguration` dataclass of plain settings, set from
-  `<APP>_<FIELD>` variables. **Credentials are engine secrets**, read in
-  `on_initialized` with `await self.engine.services.secret.get(name)`; the
+  `<APP>_<FIELD>` variables. **Credentials are engine secrets** under the
+  module's id (`applications.<app>/<NAME>`: the engine refuses a module any
+  other name), read in `on_initialized` with
+  `common.agents.read_secrets(engine, names, module_id=MODULE_ID)`; the
   configuration holds the secret's *name* (`api_key_secret`).
 - Declare every engine service used in `ModuleDependencies(services=...)`.
 - Agents: `naas_abi_sdk.agents.Agent` / `IntentAgent`, models from

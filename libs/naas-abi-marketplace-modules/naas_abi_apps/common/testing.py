@@ -59,10 +59,20 @@ class FakeDocuments:
 
 
 class FakeSecrets:
+    """As the engine for a module account: a name outside a module prefix
+    (``<module id>/NAME``) is refused, so a module reading a bare name fails
+    here as it would against the engine."""
+
     def __init__(self, values: dict[str, str]) -> None:
         self.values = dict(values)
 
     async def get(self, key: str, default: Any = None) -> Any:
+        from naas_abi_sdk.services.errors import PermissionDenied
+
+        if "/" not in key:
+            raise PermissionDenied(
+                "PERMISSION_DENIED", "this secret is not the caller's"
+            )
         return self.values.get(key, default)
 
 
@@ -75,6 +85,11 @@ class MemoryStorage:
 
     async def get_object(self, prefix: str, key: str) -> bytes:
         return self.objects[(prefix, key)]
+
+
+def module_secrets(module_id: str, values: dict[str, str]) -> dict[str, str]:
+    """``values`` as the engine stores a module's secrets: ``<module id>/NAME``."""
+    return {f"{module_id}/{name}": value for name, value in values.items()}
 
 
 def fake_engine(secrets: dict[str, str] | None = None, reply: str = "ok") -> Any:

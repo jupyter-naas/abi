@@ -59,7 +59,9 @@ class ABIModule(BaseModule[AgicapConfiguration]):
     agents = (AgentDescriptor(NAME, DESCRIPTION, capabilities=AGENT_INVOKE),)
 
     async def on_initialized(self) -> None:
-        credentials = await read_secrets(self.engine, self.configuration.secret_names())
+        credentials = await read_secrets(
+            self.engine, self.configuration.secret_names(), module_id=MODULE_ID
+        )
         if not any(credentials.values()):
             logger.warning(
                 "%s: no AGICAP_* secret set; the agent runs without tools", MODULE_ID

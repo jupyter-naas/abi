@@ -8,6 +8,7 @@ from naas_abi_apps.common.testing import (
     FakeTripleStore,
     bound_tool_names,
     fake_engine,
+    module_secrets,
     no_core_import,
 )
 from naas_abi_apps.powerpoint import MODULE_ID, PIPELINE, WORKFLOW, ABIModule
@@ -27,7 +28,10 @@ def test_the_module_declares_its_agent_processes_and_ontologies() -> None:
 
 def test_on_initialized_binds_the_processes_and_the_tools() -> None:
     engine = fake_engine(
-        {"NAAS_API_KEY": "k", "WORKSPACE_ID": "ws", "STORAGE_NAME": "st"}
+        module_secrets(
+            "applications.powerpoint",
+            {"NAAS_API_KEY": "k", "WORKSPACE_ID": "ws", "STORAGE_NAME": "st"},
+        )
     )
     engine.services.triple_store = FakeTripleStore()
     module = ABIModule(engine, ABIModule.Configuration())

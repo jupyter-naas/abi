@@ -21,4 +21,6 @@ async def credentials(module: Any) -> dict[str, str]:
     """The search API key and engine id, from the module's secrets."""
     from naas_abi_apps.common.agents import read_secrets
 
-    return await read_secrets(module.engine, module.configuration.secret_names())
+    return await read_secrets(
+        module.engine, module.configuration.secret_names(), module_id=module.module_id
+    )

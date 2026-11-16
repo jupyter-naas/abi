@@ -6,7 +6,12 @@ import asyncio
 
 from naas_abi_apps.algolia import MODULE_ID, ABIModule
 from naas_abi_apps.algolia.agents.AlgoliaAgent import NAME
-from naas_abi_apps.common.testing import bound_tool_names, fake_engine, no_core_import
+from naas_abi_apps.common.testing import (
+    bound_tool_names,
+    fake_engine,
+    module_secrets,
+    no_core_import,
+)
 
 
 def test_the_module_declares_its_agent_and_services() -> None:
@@ -20,7 +25,12 @@ def test_the_module_declares_its_agent_and_services() -> None:
 
 
 def test_on_initialized_binds_the_tools_from_the_secrets() -> None:
-    engine = fake_engine({"ALGOLIA_API_KEY": "x", "ALGOLIA_APPLICATION_ID": "x"})
+    engine = fake_engine(
+        module_secrets(
+            "applications.algolia",
+            {"ALGOLIA_API_KEY": "x", "ALGOLIA_APPLICATION_ID": "x"},
+        )
+    )
     module = ABIModule(engine, ABIModule.Configuration())
 
     asyncio.run(module.on_initialized())

@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+from naas_abi_apps.common.agents import read_secrets, secret_key
 from naas_abi_apps.common.runtime import serve_until_stopped
 from naas_abi_apps.pennylane.agents.PennylaneAgent import (
     DESCRIPTION,
@@ -54,14 +55,15 @@ class ABIModule(BaseModule[PennylaneConfiguration]):
     agents = (AgentDescriptor(NAME, DESCRIPTION, capabilities=AGENT_INVOKE),)
 
     async def on_initialized(self) -> None:
-        api_key = await self.engine.services.secret.get(
-            self.configuration.api_key_secret, None
-        )
+        name = self.configuration.api_key_secret
+        api_key = (
+            await read_secrets(self.engine, {"api_key": name}, module_id=MODULE_ID)
+        )["api_key"]
         if not api_key:
             logger.warning(
                 "%s: secret %s is not set; the agent runs without Pennylane tools",
                 MODULE_ID,
-                self.configuration.api_key_secret,
+                secret_key(MODULE_ID, name),
             )
         agent = await create_agent(
             self.engine,

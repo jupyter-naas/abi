@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import asyncio
 
-from naas_abi_apps.common.testing import bound_tool_names, fake_engine, no_core_import
+from naas_abi_apps.common.testing import (
+    bound_tool_names,
+    fake_engine,
+    module_secrets,
+    no_core_import,
+)
 from naas_abi_apps.sendgrid import MODULE_ID, ABIModule
 from naas_abi_apps.sendgrid.agents.SendGridAgent import NAME
 
@@ -20,7 +25,9 @@ def test_the_module_declares_its_agent_and_services() -> None:
 
 
 def test_on_initialized_binds_the_tools_from_the_secrets() -> None:
-    engine = fake_engine({"SENDGRID_API_KEY": "x"})
+    engine = fake_engine(
+        module_secrets("applications.sendgrid", {"SENDGRID_API_KEY": "x"})
+    )
     module = ABIModule(engine, ABIModule.Configuration())
 
     asyncio.run(module.on_initialized())

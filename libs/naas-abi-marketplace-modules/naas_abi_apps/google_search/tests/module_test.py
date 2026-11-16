@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import asyncio
 
-from naas_abi_apps.common.testing import bound_tool_names, fake_engine, no_core_import
+from naas_abi_apps.common.testing import (
+    bound_tool_names,
+    fake_engine,
+    module_secrets,
+    no_core_import,
+)
 from naas_abi_apps.google_search import MODULE_ID, ABIModule
 from naas_abi_apps.google_search.agents.GoogleSearchAgent import INTENTS, NAME
 
@@ -24,7 +29,7 @@ def test_the_module_declares_its_agent_workflows_and_ontology() -> None:
 
 
 def test_with_the_secrets_every_intent_has_its_tool() -> None:
-    engine = fake_engine(SECRETS)
+    engine = fake_engine(module_secrets("applications.google_search", SECRETS))
     module = ABIModule(engine, ABIModule.Configuration())
 
     asyncio.run(module.on_initialized())

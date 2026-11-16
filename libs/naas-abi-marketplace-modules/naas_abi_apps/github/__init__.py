@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+from naas_abi_apps.common.agents import read_secrets, secret_key
 from naas_abi_apps.common.runtime import serve_until_stopped
 from naas_abi_apps.github.agents.GitHubAgent import DESCRIPTION, NAME, create_agent
 from naas_abi_sdk import (
@@ -46,14 +47,15 @@ class ABIModule(BaseModule[GitHubConfiguration]):
     agents = (AgentDescriptor(NAME, DESCRIPTION, capabilities=AGENT_INVOKE),)
 
     async def on_initialized(self) -> None:
-        token = await self.engine.services.secret.get(
-            self.configuration.access_token_secret, None
-        )
+        name = self.configuration.access_token_secret
+        token = (await read_secrets(self.engine, {"token": name}, module_id=MODULE_ID))[
+            "token"
+        ]
         if not token:
             logger.warning(
                 "%s: secret %s not set; no GitHub tools",
                 MODULE_ID,
-                self.configuration.access_token_secret,
+                secret_key(MODULE_ID, name),
             )
         agent = await create_agent(
             self.engine,

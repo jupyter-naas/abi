@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from naas_abi_apps.common.agents import read_secrets
+from naas_abi_apps.common.agents import read_secrets, secret_key
 from naas_abi_apps.common.runtime import serve_until_stopped
 from naas_abi_apps.naas.agents.NaasAgent import (
     DESCRIPTION,
@@ -64,12 +64,14 @@ class ABIModule(BaseModule[NaasConfiguration]):
     agents = (AgentDescriptor(NAME, DESCRIPTION, capabilities=AGENT_INVOKE),)
 
     async def on_initialized(self) -> None:
-        secrets = await read_secrets(self.engine, self.configuration.secret_names())
+        secrets = await read_secrets(
+            self.engine, self.configuration.secret_names(), module_id=MODULE_ID
+        )
         if not secrets["api_key"]:
             logger.warning(
                 "%s: secret %s not set; no Naas tools",
                 MODULE_ID,
-                self.configuration.api_key_secret,
+                secret_key(MODULE_ID, self.configuration.api_key_secret),
             )
         agent = await create_agent(
             self.engine,

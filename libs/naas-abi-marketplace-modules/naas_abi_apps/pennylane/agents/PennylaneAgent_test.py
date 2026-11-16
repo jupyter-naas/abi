@@ -6,14 +6,16 @@ import asyncio
 
 from langgraph.checkpoint.memory import InMemorySaver
 from naas_abi_apps.common import agents as common_agents
-from naas_abi_apps.common.testing import bound_tool_names, fake_engine
+from naas_abi_apps.common.testing import bound_tool_names, fake_engine, module_secrets
 from naas_abi_apps.pennylane import ABIModule
 from naas_abi_apps.pennylane.agents.PennylaneAgent import NAME, create_agent
 from naas_abi_sdk.agent_host import InvocationContext
 
 
 def test_on_initialized_exposes_the_agent_with_tools_from_the_secret() -> None:
-    engine = fake_engine({"PENNYLANE_API_KEY": "token"})
+    engine = fake_engine(
+        module_secrets("applications.pennylane", {"PENNYLANE_API_KEY": "token"})
+    )
     module = ABIModule(engine, ABIModule.Configuration())
 
     asyncio.run(module.on_initialized())

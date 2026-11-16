@@ -36,7 +36,9 @@ removed (jupyter-naas/abi#1423); `applications.openrouter` was replaced by
 (e.g. `naas_abi_marketplace.applications.pennylane`) removes that entry and
 runs the remote module instead (`dev.modules`, or a container built from
 `libs/naas-abi-marketplace-modules/Dockerfile`; see its README). Credentials
-move from the module's `config:` to engine secrets of the same name.
+move from the module's `config:` to engine secrets named
+`<module id>/<NAME>` (e.g. `applications.pennylane/PENNYLANE_API_KEY`): the
+engine lets a module read only the secrets under its own id.
 
 ## Module shape (recap)
 

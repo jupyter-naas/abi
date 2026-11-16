@@ -45,7 +45,10 @@ and waits for `abi iam module approve module/<project>/applications.pennylane`;
 `abi dev up` creates the key and approves by itself.
 
 It is up when it logs `READY`; its agent then appears in Nexus. Credentials are
-engine secrets (e.g. `PENNYLANE_API_KEY`), read through the `secret` service.
+engine secrets under the module's id: `applications.pennylane/PENNYLANE_API_KEY`,
+read through the `secret` service. The engine lets a module account read only
+the secrets under its own `<module id>/` prefix; a missing secret is logged at
+start with its full name, and the agent runs without the tools that need it.
 Other settings come from `<APP>_<FIELD>` variables (`PENNYLANE_CHAT_MODEL`,
 `PENNYLANE_DATASTORE_PATH`, ...).
 

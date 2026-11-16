@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from naas_abi_apps.common.agents import read_secrets
+from naas_abi_apps.common.agents import read_secrets, secret_key
 from naas_abi_apps.common.runtime import serve_until_stopped
 from naas_abi_apps.exchangeratesapi.agents.ExchangeRatesAPIAgent import (
     DESCRIPTION,
@@ -54,10 +54,12 @@ class ABIModule(BaseModule[ExchangeratesapiConfiguration]):
     agents = (AgentDescriptor(NAME, DESCRIPTION, capabilities=AGENT_INVOKE),)
 
     async def on_initialized(self) -> None:
-        credentials = await read_secrets(self.engine, self.configuration.secret_names())
+        credentials = await read_secrets(
+            self.engine, self.configuration.secret_names(), module_id=MODULE_ID
+        )
         if not all(credentials.values()):
             missing = [
-                s
+                secret_key(MODULE_ID, s)
                 for f, s in self.configuration.secret_names().items()
                 if not credentials[f]
             ]
