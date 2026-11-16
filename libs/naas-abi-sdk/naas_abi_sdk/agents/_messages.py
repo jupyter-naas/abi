@@ -123,6 +123,41 @@ def _copy_tool_message(message: ToolMessage, content: Any) -> ToolMessage:
     return ToolMessage(**kwargs)
 
 
+_THINKING_BLOCK_TYPES = ("thinking", "redacted_thinking")
+
+
+def _has_thinking_blocks(messages: list[AnyMessage]) -> bool:
+    for message in messages:
+        if not isinstance(message, AIMessage) or not isinstance(message.content, list):
+            continue
+        for block in message.content:
+            if isinstance(block, dict) and block.get("type") in _THINKING_BLOCK_TYPES:
+                return True
+    return False
+
+
+def _cap_tool_messages(messages: list[AnyMessage]) -> list[AnyMessage]:
+    """Cap each ToolMessage on its own content only, so its view never changes."""
+    changed = False
+    out: list[AnyMessage] = []
+    for message in messages:
+        if (
+            isinstance(message, ToolMessage)
+            and not _tool_message_name(message).startswith("transfer_to_")
+            and _tool_content_chars(message.content) > _MAX_TOOL_RESULT_CHARS
+        ):
+            out.append(
+                _copy_tool_message(
+                    message,
+                    _truncate_tool_content(message.content, _MAX_TOOL_RESULT_CHARS),
+                )
+            )
+            changed = True
+            continue
+        out.append(message)
+    return out if changed else messages
+
+
 def compact_old_tool_messages(messages: list[AnyMessage]) -> list[AnyMessage]:
     """Stub prior-turn ToolMessages; keep last list + last write; cap current-turn size.
 
@@ -130,9 +165,18 @@ def compact_old_tool_messages(messages: list[AnyMessage]) -> list[AnyMessage]:
     and last ``write_*`` / ``replace_in_*`` stay so the model still sees the
     current outline and the last successful write. Those two, and any current-
     turn result, are truncated if they exceed ``_MAX_TOOL_RESULT_CHARS``.
+
+    Preserved thinking: once the history carries thinking blocks (Claude Opus
+    5.5, Sonnet 5.5, Haiku 5.5, Fable 5.1), a block is valid only if every
+    message before it is byte-identical to when it was produced; an edited
+    prefix is a 400 on enforced accounts. Stubbing prior-turn results would
+    rewrite that prefix on every new user turn, so in that case each result is
+    only capped on its own content, which yields the same view on every request.
     """
     if not messages:
         return messages
+    if _has_thinking_blocks(messages):
+        return _cap_tool_messages(messages)
 
     last_human = -1
     last_list = -1

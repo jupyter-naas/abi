@@ -4,6 +4,54 @@
 
 The Claude module provides integration with Anthropic's Claude AI assistant, representing one of the most advanced conversational AI systems available today. Claude stands out for its exceptional reasoning capabilities, ethical considerations, and nuanced understanding of complex problems.
 
+## Models
+
+Each file under `models/` registers one canonical id with the model registry
+(`model_registry.get_chat_model(CanonicalModelId.X)`). Prices are USD per million tokens.
+
+| File | Canonical id | `MODEL_ID` | Context | Max output | In / out ($/MTok) | Thinking | Effort sent |
+|---|---|---|---|---|---|---|---|
+| `claude_fable_5_1.py` | `claude-fable-5-1` | `claude-fable-5-1` | 1M | 128K | 10 / 50 (cache read 0.25) | always on (adaptive) | `high` |
+| `claude_opus_5_5.py` | `claude-opus-5-5` | `claude-opus-5-5` | 1M | 128K | 4 / 20 (cache read 0.20) | always on (adaptive) | `high` (API default `medium`) |
+| `claude_sonnet_5_5.py` | `claude-sonnet-5-5` | `claude-sonnet-5-5` | 1M | 128K | 2 / 10 (cache read 0.20) | adaptive | `high` |
+| `claude_haiku_5_5.py` | `claude-haiku-5-5` | `claude-haiku-5-5` | 1M | 128K | 0.10 / 0.50 (≤100K prompt; 0.50 / 2.50 beyond) | adaptive | `medium` |
+| `claude_fable_5.py` | `claude-fable-5` | `claude-fable-5` | 1M | 128K | 10 / 50 | always on | API default |
+| `claude_opus_4_8.py` | `claude-opus-4.8` | `claude-opus-4-8` | 1M | 128K | 5 / 25 | off unless requested | API default |
+| `claude_sonnet_5.py` | `claude-sonnet-5` | `claude-sonnet-5` | 1M | 128K | 3 / 15 (catalog value) | adaptive | API default |
+| `claude_haiku_4_5.py` | `claude-haiku-4.5` | `claude-haiku-4-5-20251001` | 200K | 64K | 1 / 5 | off | — |
+| `claude_sonnet_4_5.py` | `claude-sonnet-4.5` | `claude-sonnet-4-5-20250929` | — | — | — | — | — |
+| `claude_sonnet_4.py` | `claude-sonnet-4` | `claude-sonnet-4-20250514` | — | — | — | — | — |
+
+Any other Anthropic model id resolves through the generic `anthropic_chat_factory`
+(`get_chat_model("<id>", provider=ModelProvider.ANTHROPIC)`), with no catalog data.
+
+### API constraints for the Claude 5.5 generation (Opus 5.5, Sonnet 5.5, Haiku 5.5, Fable 5.1)
+
+- No `temperature` / `top_p` / `top_k` (400). The generic factory sends none either,
+  because every model rejects them from API version `2026-10-21`.
+- No `thinking: {"type": "disabled"}` and no `budget_tokens` (400). Depth is set with
+  `output_config.effort` (`low` to `max`), passed through `ChatAnthropic(model_kwargs=...)`.
+  To turn thinking off on Sonnet 5.5, use `{"type": "between_tools"}` at effort `high` or below.
+- No forced tool choice: `tool_choice="any"` or a tool name is a 400 on Opus 5.5, Sonnet 5.5
+  and Fable 5.1. `with_structured_output()` in `langchain-anthropic` 0.3.x forces the tool,
+  so do not use it with these models; bind the tool with `tool_choice="auto"` and steer from
+  the prompt instead. ABI's agents bind tools without `tool_choice`, which is `auto`.
+- `max_tokens` is set explicitly (16000) so thinking cannot use up langchain's 1024 default.
+  Values above ~21K need streaming in the Anthropic SDK.
+- Preserved thinking: thinking blocks are passed back unchanged, and any edit to an earlier
+  message invalidates the later blocks (a 400 for accounts created on or after 2026-08-31).
+  `Agent.compact_old_tool_messages` therefore only caps tool results (never stubs earlier
+  turns) once the history carries thinking blocks.
+- No assistant prefill (400).
+- `stop_reason: "refusal"` with no text is turned into a visible message by the agent
+  instead of an empty answer.
+
+### Canonical id naming
+
+Older canonical ids use dots (`claude-opus-4.8`); the Claude 5.5 generation uses the API id
+as is (`claude-opus-5-5`). Existing ids stay as declared. New ids follow the second form:
+the canonical id equals Anthropic's model id, with no date suffix.
+
 ## Provider: Anthropic
 
 **Founded**: 2021  
