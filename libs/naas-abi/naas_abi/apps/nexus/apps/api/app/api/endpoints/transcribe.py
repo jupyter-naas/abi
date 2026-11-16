@@ -10,6 +10,10 @@ from fastapi.responses import JSONResponse
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
 )
+from naas_abi.apps.nexus.apps.api.app.services.direct_model_providers import (
+    direct_model_providers_enabled,
+    refusal_message,
+)
 from naas_abi.apps.nexus.apps.api.app.services.iam.any_workspace import (
     allowed_in_any_workspace,
 )
@@ -72,6 +76,10 @@ async def transcribe_audio(
     audio: UploadFile = File(...),
     conversation_id: str | None = Form(default=None, alias="conversation_id"),
 ) -> JSONResponse:
+    # OpenAI and OpenRouter are called directly, outside the model registry.
+    if not direct_model_providers_enabled():
+        return JSONResponse({"error": refusal_message("Transcription")}, status_code=503)
+
     if not audio.filename:
         filename = "recording.webm"
     else:

@@ -90,3 +90,18 @@ def test_dictation_needs_the_chat_feature(monkeypatch: pytest.MonkeyPatch) -> No
         response = _post(_signed_in_client("member"))
 
     assert response.status_code == 403
+
+
+def test_dictation_is_refused_when_direct_model_providers_are_off(
+    team: NexusIam, direct_model_providers_off: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Transcription calls OpenAI or OpenRouter directly, outside the model
+    registry: an isolated deployment refuses it before any key is read."""
+    monkeypatch.setattr(transcribe, "resolve_transcription_backend", lambda: pytest.fail("reached"))
+
+    response = _post(_signed_in_client("member"))
+
+    assert response.status_code == 503
+    assert response.json()["error"].startswith(
+        "Transcription calls a model provider directly, outside the model registry"
+    )

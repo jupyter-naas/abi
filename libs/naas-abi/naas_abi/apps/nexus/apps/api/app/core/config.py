@@ -632,6 +632,15 @@ class Settings(BaseSettings):
     abi_api_url: str = "http://localhost:8001"
     abi_api_key: str | None = None
 
+    # Model calls Nexus makes itself, outside the engine's model registry: chat
+    # providers that are not agents (OpenAI, Anthropic, xAI, Mistral, Google,
+    # OpenRouter, Perplexity, Cloudflare, Ollama, a custom endpoint), speech,
+    # transcription, and the OpenAI fallback of chat file embeddings whose model
+    # is not registered. Off, each refuses with an error instead of calling out:
+    # for isolated deployments whose models are all served through the registry
+    # (services/direct_model_providers.py). Env: DIRECT_MODEL_PROVIDERS_ENABLED.
+    direct_model_providers_enabled: bool = True
+
     # OpenAI (for embeddings/fallback)
     openai_api_key: str | None = None
 

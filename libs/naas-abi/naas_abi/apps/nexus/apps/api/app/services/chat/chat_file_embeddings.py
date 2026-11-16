@@ -1,9 +1,17 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from collections.abc import Callable, Sequence
 
 import numpy as np
+from naas_abi.apps.nexus.apps.api.app.services.direct_model_providers import (
+    SETTING,
+    DirectModelProviderDisabledError,
+    direct_model_providers_enabled,
+)
+
+logger = logging.getLogger(__name__)
 
 # Default production embedding model. Using "text-embedding-3-small" for
 # semantic search; keep "hash-v1" only for unit tests / offline environments.
@@ -109,19 +117,32 @@ def _build_openai_embedder(embedding_model: str, embedding_dimension: int):
        directly, pulling ``OPENAI_API_KEY`` from the engine's **secret
        service** (not ``os.environ``) so the api key still flows from the
        configured ``services.secret`` adapter. The custom ``dimensions``
-       kwarg is preserved because text-embedding-3-* supports it.
+       kwarg is preserved because text-embedding-3-* supports it. This call
+       bypasses the registry: it is logged as a warning, and refused
+       (``DirectModelProviderDisabledError``, naming the model to register)
+       when the deployment turned ``direct_model_providers_enabled`` off.
 
     Raises ``RuntimeError`` if neither resolution succeeds.
     """
     from naas_abi_core.engine.context import get_default_model_registry
 
     registry = get_default_model_registry()
+    registry_error: Exception | None = None
     if registry is not None:
         try:
             return registry.get_embedding_model(embedding_model).model
-        except Exception:
+        except Exception as exc:
             # Not registered — fall through to off-catalog OpenAI construction.
-            pass
+            registry_error = exc
+
+    if not direct_model_providers_enabled():
+        where = "in the model registry" if registry is not None else "(the engine has no registry)"
+        raise DirectModelProviderDisabledError(
+            f"The embedding model {embedding_model!r} is not registered {where}, and "
+            f"direct model providers are turned off on this deployment ({SETTING}: "
+            f"false), so chat file embeddings do not fall back to OpenAI. Register "
+            f"{embedding_model!r} as an embedding model in a provider module."
+        ) from registry_error
 
     from naas_abi import ABIModule  # avoid a top-level cycle
     from naas_abi_core.engine.call_context import as_service_account
@@ -138,6 +159,14 @@ def _build_openai_embedder(embedding_model: str, embedding_dimension: int):
             f"engine's secret service. Either register the embedding model in "
             f"a provider module or add OPENAI_API_KEY to your secret store."
         )
+
+    logger.warning(
+        "Chat file embeddings: %r is not registered in the model registry, so Nexus "
+        "calls OpenAI directly with OPENAI_API_KEY, bypassing the model registry. "
+        "Register the model in a provider module, or set %s: false to refuse this.",
+        embedding_model,
+        SETTING,
+    )
 
     from langchain_openai import OpenAIEmbeddings
     from pydantic import SecretStr

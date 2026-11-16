@@ -512,6 +512,11 @@ class NexusConfig(BaseModel):
 
     abi_api_url: str = "http://localhost:9879"
     abi_api_key: str | None = None
+    # False: Nexus never calls a model provider outside the model registry
+    # (direct chat providers, speech, transcription, the OpenAI fallback of chat
+    # file embeddings), for isolated deployments. DIRECT_MODEL_PROVIDERS_ENABLED
+    # sets it when this yaml does not.
+    direct_model_providers_enabled: bool = True
     openai_api_key: str | None = None
     anthropic_api_key: str | None = None
     cloudflare_api_token: str | None = None
@@ -543,6 +548,8 @@ class NexusConfig(BaseModel):
 # ``api_url`` and ``frontend_url`` too: ``abi dev up`` binds each worktree's own
 # ports and tells the API through ``API_URL`` / ``FRONTEND_URL``, which the
 # sign-in redirect URI (``<api_url>/api/auth/oidc/callback``) must follow.
+# ``direct_model_providers_enabled`` too: a deployment may turn direct model
+# providers off from its environment (``DIRECT_MODEL_PROVIDERS_ENABLED=false``).
 _ENV_OVERRIDABLE_NEXUS_FIELDS = (
     "secret_key",
     "secrets_encryption_key",
@@ -550,6 +557,7 @@ _ENV_OVERRIDABLE_NEXUS_FIELDS = (
     "nexus_env",
     "api_url",
     "frontend_url",
+    "direct_model_providers_enabled",
 )
 
 
