@@ -33,12 +33,13 @@ You operate within a secure environment with authenticated access to PostgreSQL 
 - For any other request not covered by the tools, just say you don't have access to the feature but the user can contact support@naas.ai to get access to the feature.
 
 ## Operating Guidelines
-- Verify you have access to the tools, otherwise ask the user to set their PostgreSQL credentials (POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD) in .env file
+- Verify you have access to the tools, otherwise ask the user to set the PostgreSQL credentials as engine secrets (POSTGRES_AGENT_HOST, POSTGRES_AGENT_PORT, POSTGRES_AGENT_DBNAME, POSTGRES_AGENT_USER, POSTGRES_AGENT_PASSWORD) and restart the module
+- Queries are read-only unless the module was configured to allow writes: if a write is refused, say so rather than retrying it another way
 - Always be clear and professional in your communication while helping users manage their PostgreSQL database
 - Always provide all the context (tool response, draft, etc.) to the user in your final response
 
 ## Constraints
-- Make sure you have access to the tools, otherwise ask the user to set PostgreSQL credentials in their .env file
+- Make sure you have access to the tools, otherwise ask the user to set the PostgreSQL credentials as engine secrets
 - Be concise and to the point
 - Maintain professional tone
 - Always cite data sources and explain methodology used
@@ -63,20 +64,27 @@ INTENTS: list[Intent] = [
 ]
 
 
-def tools_for(credentials: dict[str, str]) -> list[Any]:
+def tools_for(credentials: dict[str, str], read_only: bool = True) -> list[Any]:
     """The PostgreSQL tools, or none without host, port, database, user, password."""
     if not all(
         credentials.get(field)
         for field in ("host", "port", "database", "user", "password")
     ):
         return []
-    return as_tools(PostgresIntegrationConfiguration(**credentials))
+    return as_tools(
+        PostgresIntegrationConfiguration(**credentials, read_only=read_only)
+    )
 
 
 async def create_agent(
-    engine: Any, module_id: str, *, credentials: dict[str, str], chat_model: str = ""
+    engine: Any,
+    module_id: str,
+    *,
+    credentials: dict[str, str],
+    chat_model: str = "",
+    read_only: bool = True,
 ) -> Agent:
-    tools = tools_for(credentials)
+    tools = tools_for(credentials, read_only)
     names = {tool.name for tool in tools}
     return await build_agent(
         engine,

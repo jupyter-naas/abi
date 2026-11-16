@@ -291,7 +291,10 @@ class NaasIntegration(Integration):
         if plugins is None:
             plugins = []
         if not plugins and workspace_id is not None:
-            plugins = await self.list_plugins(workspace_id).get("workspace_plugins", [])
+            listed = await self.list_plugins(workspace_id)
+            plugins = (
+                listed.get("workspace_plugins", []) if isinstance(listed, dict) else []
+            )
         for i, a in enumerate(plugins):
             plugin_id = a.get("id")
             payload = a.get("payload")
@@ -548,7 +551,8 @@ class NaasIntegration(Integration):
     async def list_secrets(self) -> list[dict]:
         """List all secrets in a workspace."""
         payload = {"page_size": 100, "page_number": 0}
-        return await self._make_request("GET", "/secret/", payload).get("secrets", [])
+        response = await self._make_request("GET", "/secret/", payload)
+        return response.get("secrets", []) if isinstance(response, dict) else []
 
     async def list_secrets_names(self) -> list[str]:
         secrets = await self.list_secrets()

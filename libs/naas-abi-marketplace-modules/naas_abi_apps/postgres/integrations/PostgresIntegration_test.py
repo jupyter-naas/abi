@@ -25,10 +25,13 @@ class FakeCursor:
     async def __aexit__(self, *exc: object) -> None:
         return None
 
-    async def execute(self, query: str, params: Any = None) -> None:
+    async def execute(
+        self, query: str, params: Any = None, *, prepare: bool | None = None
+    ) -> None:
         if "boom" in query:
             raise RuntimeError("syntax error")
         self.connection.executed.append((query, params))
+        self.connection.prepared.append(prepare)
         self.rowcount = 3
 
     async def fetchall(self) -> list[dict[str, Any]]:
@@ -39,6 +42,8 @@ class FakeConnection:
     def __init__(self, rows: list[dict[str, Any]]) -> None:
         self.rows = rows
         self.executed: list[tuple[str, Any]] = []
+        self.prepared: list[bool | None] = []
+        self.read_only = False
         self.committed = False
         self.closed = False
 
@@ -48,6 +53,9 @@ class FakeConnection:
     async def __aexit__(self, *exc: object) -> None:
         self.closed = True
 
+    async def set_read_only(self, value: bool) -> None:
+        self.read_only = value
+
     def cursor(self) -> FakeCursor:
         return FakeCursor(self)
 
@@ -55,7 +63,9 @@ class FakeConnection:
         self.committed = True
 
 
-def integration_with(rows: list[dict[str, Any]]) -> tuple[PostgresIntegration, list]:
+def integration_with(
+    rows: list[dict[str, Any]], read_only: bool = True
+) -> tuple[PostgresIntegration, list]:
     opened: list[tuple[dict[str, Any], FakeConnection]] = []
 
     async def connect(**kwargs: Any) -> FakeConnection:
@@ -64,7 +74,13 @@ def integration_with(rows: list[dict[str, Any]]) -> tuple[PostgresIntegration, l
         return connection
 
     configuration = PostgresIntegrationConfiguration(
-        host="db", port="5433", database="d", user="u", password="p", connect=connect
+        host="db",
+        port="5433",
+        database="d",
+        user="u",
+        password="p",
+        read_only=read_only,
+        connect=connect,
     )
     return PostgresIntegration(configuration), opened
 
@@ -82,14 +98,34 @@ def test_fetch_returns_rows_and_closes_the_connection() -> None:
     assert connection.closed and not connection.committed
 
 
-def test_writes_commit_and_return_the_row_count() -> None:
+def test_queries_are_one_read_only_statement_by_default() -> None:
+    integration, opened = integration_with([{"id": 1}])
+
+    asyncio.run(integration.execute_query("SELECT 1"))
+
+    connection = opened[0][1]
+    # Read-only transaction, and a prepared statement: Postgres refuses two
+    # commands in one, so "SET TRANSACTION READ WRITE; DELETE ..." fails.
+    assert connection.read_only and connection.prepared == [True]
+
+
+def test_read_only_refuses_writes_without_connecting() -> None:
     integration, opened = integration_with([])
+
+    with pytest.raises(IntegrationConnectionError, match="read-only"):
+        asyncio.run(integration.execute_query("DELETE FROM t", fetch=False))
+    assert opened == []
+
+
+def test_writes_commit_and_return_the_row_count() -> None:
+    integration, opened = integration_with([], read_only=False)
 
     assert (
         asyncio.run(integration.execute_query("UPDATE t SET a = %s", [1], fetch=False))
         == 3
     )
     assert opened[0][1].committed
+    assert not opened[0][1].read_only and opened[0][1].prepared == [None]
 
 
 def test_table_schema_binds_the_name() -> None:

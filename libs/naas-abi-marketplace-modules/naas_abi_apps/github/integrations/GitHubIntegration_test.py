@@ -169,3 +169,50 @@ def test_graphql_returns_errors_and_builds_variables() -> None:
         "githubgraphql_get_project_details",
         "githubgraphql_list_priorities",
     }
+
+
+def test_update_organization_repository_sends_the_fields_to_the_repo() -> None:
+    seen: list[tuple[str, str, dict]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, request.url.path, json.loads(request.content)))
+        return httpx.Response(200, json={"full_name": "acme/site"})
+
+    integration = rest(handler)
+    tools = {t.name: t for t in as_tools(integration._GitHubIntegration__configuration)}
+    update = tools["github_update_organization_repository"]
+
+    for repo_name in ("site", "acme/site"):
+        asyncio.run(
+            update.ainvoke(
+                {"org": "acme", "repo_name": repo_name, "data": {"description": "x"}}
+            )
+        )
+    assert seen == [
+        ("PATCH", "/repos/acme/site", {"description": "x"}),
+        ("PATCH", "/repos/acme/site", {"description": "x"}),
+    ]
+    with pytest.raises(ValueError, match="Unknown repository fields"):
+        asyncio.run(
+            update.ainvoke({"org": "acme", "repo_name": "site", "data": {"owner": "x"}})
+        )
+
+
+def test_delete_organization_repository_deletes_that_repo_only() -> None:
+    seen: list[tuple[str, str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, request.url.path, request.headers["Accept"]))
+        return httpx.Response(204)
+
+    integration = rest(handler)
+    delete = {
+        t.name: t for t in as_tools(integration._GitHubIntegration__configuration)
+    }["github_delete_organization_repository"]
+
+    asyncio.run(delete.ainvoke({"org": "acme", "repo_name": "site"}))
+    assert seen == [("DELETE", "/repos/acme/site", "application/vnd.github+json")]
+    for repo_name in ("other/site", "../site", "acme/site/x", ".."):
+        with pytest.raises(ValueError):
+            asyncio.run(delete.ainvoke({"org": "acme", "repo_name": repo_name}))
+    assert len(seen) == 1

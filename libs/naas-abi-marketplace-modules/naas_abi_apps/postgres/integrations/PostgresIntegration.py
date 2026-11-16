@@ -4,6 +4,13 @@ Port of ``naas_abi_marketplace.applications.postgres.integrations``: same
 tool names. ``get_table_schema`` binds the table name as a parameter (the
 in-engine version formatted it into the SQL). ``execute_pandas_query`` is not
 ported: the agent never used it, and pandas is not a dependency here.
+
+Read-only by default (``read_only``): the SQL comes from a model, which a
+prompt can steer. Each call then runs one statement (a prepared statement
+cannot hold two, so ``SET TRANSACTION READ WRITE; DELETE ...`` is refused) in
+a read-only transaction, and ``fetch=False`` is refused. Give the module a
+database role with only the rights it needs as well: read-only here is a
+guard, not a permission system.
 """
 
 from __future__ import annotations
@@ -28,7 +35,8 @@ async def _connect(**kwargs: Any) -> Any:
 
 @dataclass
 class PostgresIntegrationConfiguration(IntegrationConfiguration):
-    """connect: opens an async connection (tests pass a fake)."""
+    """connect: opens an async connection (tests pass a fake). read_only:
+    one statement per call, in a read-only transaction (see the module doc)."""
 
     host: str
     port: int | str
@@ -36,6 +44,7 @@ class PostgresIntegrationConfiguration(IntegrationConfiguration):
     user: str
     password: str
     sslmode: str = "require"
+    read_only: bool = True
     connect: Callable[..., Any] = field(default=_connect, repr=False)
 
 
@@ -68,15 +77,29 @@ class PostgresIntegration(Integration):
         params: list[Any] | tuple[Any, ...] | dict[str, Any] | None = None,
         fetch: bool = True,
     ) -> list[dict[str, Any]] | int:
-        """Run ``query``; the rows when ``fetch``, else commit and the affected row count."""
+        """Run ``query``; the rows when ``fetch``, else commit and the affected
+        row count. Read-only (the default): one statement, read-only, fetched."""
+        read_only = self.configuration.read_only
+        if read_only and not fetch:
+            raise IntegrationConnectionError(
+                "PostgreSQL is read-only for this module: set its read_only "
+                "configuration to false to allow writes"
+            )
         connection = await self._connection()
         try:
-            async with connection, connection.cursor() as cursor:
-                await cursor.execute(query, params)
-                if fetch:
-                    return [dict(row) for row in await cursor.fetchall()]
-                await connection.commit()
-                return cursor.rowcount
+            async with connection:
+                if read_only:
+                    # Before the first statement: psycopg then opens each
+                    # transaction with BEGIN READ ONLY.
+                    await connection.set_read_only(True)
+                async with connection.cursor() as cursor:
+                    await cursor.execute(
+                        query, params, prepare=True if read_only else None
+                    )
+                    if fetch:
+                        return [dict(row) for row in await cursor.fetchall()]
+                    await connection.commit()
+                    return cursor.rowcount
         except IntegrationConnectionError:
             raise
         except Exception as exc:
@@ -118,7 +141,8 @@ def as_tools(configuration: PostgresIntegrationConfiguration) -> list[Any]:
         )
         fetch: bool = Field(
             True,
-            description="Whether to fetch results (false: commit and return the row count)",
+            description="Whether to fetch results (false: commit and return the "
+            "row count; refused when the module is read-only, the default)",
         )
 
     class ListTablesSchema(BaseModel):

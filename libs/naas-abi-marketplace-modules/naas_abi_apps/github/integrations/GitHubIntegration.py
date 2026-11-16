@@ -6,6 +6,8 @@ methods and tool names, each method awaited. HTTP errors raise
 through while its ``except`` waited for another type).
 """
 
+import inspect
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -915,6 +917,32 @@ class GitHubIntegration(Integration):
         return response
 
 
+#: The keyword fields ``update_organization_repository`` accepts.
+UPDATABLE_REPOSITORY_FIELDS = frozenset(
+    inspect.signature(GitHubIntegration.update_organization_repository).parameters
+) - {"self", "org", "repo_name", "accept"}
+
+_NAME = r"[A-Za-z0-9_.-]+"
+
+
+def organization_repository(org: str, repo_name: str) -> str:
+    """``org/repo`` for a repository of ``org``, from ``repo`` or ``org/repo``.
+    The name goes into the request path, so anything else is refused."""
+    org, repo_name = org.strip(), repo_name.strip()
+    owner, _, name = repo_name.rpartition("/")
+    owner = owner or org
+    if (
+        not re.fullmatch(_NAME, owner)
+        or not re.fullmatch(_NAME, name)
+        or name in (".", "..")
+        or owner in (".", "..")
+    ):
+        raise ValueError(f"Not a repository of {org!r}: {repo_name!r}")
+    if owner.lower() != org.lower():
+        raise ValueError(f"Repository {repo_name!r} is not in organization {org!r}")
+    return f"{owner}/{name}"
+
+
 def as_tools(configuration: GitHubIntegrationConfiguration):
     from langchain_core.tools import StructuredTool
 
@@ -951,14 +979,38 @@ def as_tools(configuration: GitHubIntegrationConfiguration):
     class UpdateOrganizationRepositorySchema(BaseModel):
         org: str = Field(..., description="GitHub organization name")
         repo_name: str = Field(
-            ..., description="Full repository name in format 'owner/repo'"
+            ...,
+            description="Repository name in the organization ('repo', or 'org/repo')",
         )
-        data: dict = Field(..., description="Data to update the repository with")
+        data: dict = Field(
+            ...,
+            description="Fields to change, e.g. {'description': '...', "
+            "'private': true, 'name': 'new-name'}. Allowed: "
+            + ", ".join(sorted(UPDATABLE_REPOSITORY_FIELDS)),
+        )
 
     class DeleteOrganizationRepositorySchema(BaseModel):
         org: str = Field(..., description="GitHub organization name")
         repo_name: str = Field(
-            ..., description="Full repository name in format 'owner/repo'"
+            ...,
+            description="Repository name in the organization ('repo', or 'org/repo')",
+        )
+
+    async def update_organization_repository(
+        org: str, repo_name: str, data: dict
+    ) -> Any:
+        unknown = sorted(set(data) - UPDATABLE_REPOSITORY_FIELDS)
+        if unknown:
+            raise ValueError(
+                f"Unknown repository fields {unknown}; allowed: "
+                + ", ".join(sorted(UPDATABLE_REPOSITORY_FIELDS))
+            )
+        owner, name = organization_repository(org, repo_name).split("/")
+        return await integration.update_organization_repository(owner, name, **data)
+
+    async def delete_organization_repository(org: str, repo_name: str) -> Any:
+        return await integration.delete_repository(
+            organization_repository(org, repo_name)
         )
 
     class ListRepositoryActivitiesSchema(BaseModel):
@@ -1182,9 +1234,7 @@ def as_tools(configuration: GitHubIntegrationConfiguration):
             name="github_update_organization_repository",
             description="Update a repository for an organization",
             coroutine=_tool(
-                lambda org, repo_name, data: integration.update_organization_repository(
-                    org, repo_name, data
-                ),
+                update_organization_repository,
                 UpdateOrganizationRepositorySchema,
             ),
             args_schema=UpdateOrganizationRepositorySchema,
@@ -1193,7 +1243,7 @@ def as_tools(configuration: GitHubIntegrationConfiguration):
             name="github_delete_organization_repository",
             description="Delete a repository for an organization",
             coroutine=_tool(
-                lambda org, repo_name: integration.delete_repository(org, repo_name),
+                delete_organization_repository,
                 DeleteOrganizationRepositorySchema,
             ),
             args_schema=DeleteOrganizationRepositorySchema,

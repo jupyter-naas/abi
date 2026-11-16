@@ -22,11 +22,11 @@ def test_the_module_declares_its_agent_and_services() -> None:
 def test_on_initialized_binds_the_tools_from_the_secrets() -> None:
     engine = fake_engine(
         {
-            "POSTGRES_HOST": "x",
-            "POSTGRES_PORT": "x",
-            "POSTGRES_DBNAME": "x",
-            "POSTGRES_USER": "x",
-            "POSTGRES_PASSWORD": "x",
+            "POSTGRES_AGENT_HOST": "x",
+            "POSTGRES_AGENT_PORT": "x",
+            "POSTGRES_AGENT_DBNAME": "x",
+            "POSTGRES_AGENT_USER": "x",
+            "POSTGRES_AGENT_PASSWORD": "x",
         }
     )
     module = ABIModule(engine, ABIModule.Configuration())

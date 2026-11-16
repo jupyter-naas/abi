@@ -43,10 +43,24 @@ def create_hash_from_string(input_string: str) -> str:
     return hashlib.sha256(input_string.encode()).hexdigest()
 
 
+def bundled_template_path(storage_path: str) -> Path:
+    """The file a ``bundled:<name>`` path names: one of the ``.pptx`` files
+    shipped in ``templates/``, by bare file name. The path is model input, so
+    anything else (a directory part, ``..``, an absolute path) is refused."""
+    name = storage_path[len(BUNDLED_PREFIX) :]
+    shipped = {path.name: path for path in TEMPLATES_DIR.glob("*.pptx")}
+    if name not in shipped:
+        raise ValueError(
+            f"Unknown bundled template {name!r}; bundled templates: "
+            + ", ".join(f"{BUNDLED_PREFIX}{n}" for n in sorted(shipped))
+        )
+    return shipped[name]
+
+
 async def read_presentation_bytes(storage: Any, storage_path: str) -> bytes:
     """A bundled template, or an object of the engine's object storage."""
     if storage_path.startswith(BUNDLED_PREFIX):
-        return (TEMPLATES_DIR / storage_path[len(BUNDLED_PREFIX) :]).read_bytes()
+        return bundled_template_path(storage_path).read_bytes()
     return await storage.get_object(
         os.path.dirname(storage_path), os.path.basename(storage_path)
     )

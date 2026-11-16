@@ -3,12 +3,16 @@
 Runs in its own process (``python -m naas_abi_apps.postgres``) and reaches the
 engine only through NATS. Replaces the in-engine
 ``naas_abi_marketplace.applications.postgres``. Credentials are engine secrets
-(``POSTGRES_HOST``, ``POSTGRES_PORT``, ``POSTGRES_DBNAME``, ``POSTGRES_USER``, ``POSTGRES_PASSWORD``), read once at start: restart
-the module after setting them.
+(``POSTGRES_AGENT_HOST``, ``POSTGRES_AGENT_PORT``, ``POSTGRES_AGENT_DBNAME``,
+``POSTGRES_AGENT_USER``, ``POSTGRES_AGENT_PASSWORD``), read once at start:
+restart the module after setting them. ``POSTGRES_*_SECRET`` names others.
 
-The default secret names are the in-engine module's, which are also the
-engine's own database variables in many projects: point ``POSTGRES_*_SECRET``
-at other secrets to query another database.
+The in-engine module read ``POSTGRES_HOST`` and the like, which are the
+engine's own database variables in many projects: by default its agent could
+read, and write, the engine's database. The defaults are now names of their
+own, and queries are read-only unless ``POSTGRES_READ_ONLY=false``
+(``PostgresIntegration``). Give the module a role with only the rights it
+needs as well.
 """
 
 from __future__ import annotations
@@ -35,13 +39,15 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PostgresConfiguration(ModuleConfiguration):
     # Names of the engine secrets holding the credentials.
-    host_secret: str = "POSTGRES_HOST"
-    port_secret: str = "POSTGRES_PORT"
-    database_secret: str = "POSTGRES_DBNAME"
-    user_secret: str = "POSTGRES_USER"
-    password_secret: str = "POSTGRES_PASSWORD"
+    host_secret: str = "POSTGRES_AGENT_HOST"
+    port_secret: str = "POSTGRES_AGENT_PORT"
+    database_secret: str = "POSTGRES_AGENT_DBNAME"
+    user_secret: str = "POSTGRES_AGENT_USER"
+    password_secret: str = "POSTGRES_AGENT_PASSWORD"
     # Canonical id of a chat model the engine registers; empty: its default.
     chat_model: str = ""
+    # One read-only statement per query; false lets the agent write.
+    read_only: bool = True
 
     def secret_names(self) -> dict[str, str]:
         """Integration field -> engine secret name."""
@@ -77,6 +83,7 @@ class ABIModule(BaseModule[PostgresConfiguration]):
             MODULE_ID,
             credentials=credentials,
             chat_model=self.configuration.chat_model,
+            read_only=self.configuration.read_only,
         )
         self.expose_agent(NAME, agent.as_handler())
 

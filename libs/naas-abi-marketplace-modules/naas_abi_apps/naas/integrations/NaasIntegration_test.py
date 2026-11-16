@@ -105,3 +105,42 @@ def test_upload_asset_writes_to_storage_and_reuses_an_existing_asset(
 def test_tools() -> None:
     tools = as_tools(NaasIntegrationConfiguration(api_key="k"))
     assert len(tools) == 32 and all(t.coroutine is not None for t in tools)
+
+
+def test_list_secrets_awaits_the_response_before_reading_it() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/secret/"
+        return httpx.Response(200, json={"secrets": [{"name": "A"}, {"name": "B"}]})
+
+    integration = NaasIntegration(
+        NaasIntegrationConfiguration(
+            api_key="k", transport=httpx.MockTransport(handler)
+        )
+    )
+
+    assert asyncio.run(integration.list_secrets_names()) == ["A", "B"]
+
+
+def test_search_plugin_lists_the_workspace_plugins_when_none_given() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/workspace/ws-1/plugin"
+        return httpx.Response(
+            200,
+            json={
+                "workspace_plugins": [
+                    {"id": "p1", "payload": json.dumps({"slug": "other"})},
+                    {"id": "p2", "payload": json.dumps({"slug": "mine"})},
+                ]
+            },
+        )
+
+    integration = NaasIntegration(
+        NaasIntegrationConfiguration(
+            api_key="k", transport=httpx.MockTransport(handler)
+        )
+    )
+
+    assert (
+        asyncio.run(integration.search_plugin("slug", "mine", workspace_id="ws-1"))
+        == "p2"
+    )

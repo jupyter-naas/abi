@@ -142,3 +142,49 @@ def test_organization_workflow_reads_the_page_metadata() -> None:
         "google_search/linkedin_company_pages/naas-ai",
         "naas-ai.json",
     ) in storage.objects
+
+
+def test_a_later_page_failing_keeps_the_results_so_far() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        start = int(request.url.params["start"])
+        if start > 1:
+            return httpx.Response(400, json={"error": "bad start"})
+        return httpx.Response(
+            200, json={"items": [{"link": f"https://x/{i}"} for i in range(10)]}
+        )
+
+    integration = GoogleProgrammableSearchEngineIntegration(configuration(handler))
+
+    assert len(asyncio.run(integration.query("q", 30))) == 10
+
+
+def test_a_first_page_failure_raises_without_the_key() -> None:
+    import pytest
+    from naas_abi_sdk.integration import IntegrationConnectionError
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(403, json={"error": "denied"})
+
+    integration = GoogleProgrammableSearchEngineIntegration(configuration(handler))
+
+    with pytest.raises(IntegrationConnectionError) as raised:
+        asyncio.run(integration.query("q"))
+    assert "key=" not in str(raised.value) and "403" in str(raised.value)
+
+
+def test_results_stop_at_the_api_limit_of_100() -> None:
+    starts: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        start, num = int(request.url.params["start"]), int(request.url.params["num"])
+        starts.append(start)
+        assert start + num - 1 <= 100
+        return httpx.Response(
+            200,
+            json={"items": [{"link": f"https://x/{start + i}"} for i in range(num)]},
+        )
+
+    integration = GoogleProgrammableSearchEngineIntegration(configuration(handler))
+
+    assert len(asyncio.run(integration.query("q", 150))) == 100
+    assert starts[-1] == 91

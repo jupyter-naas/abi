@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import io
 
+import pytest
 from naas_abi_apps.common.sparql_templates import module_queries, query_tools
 from naas_abi_apps.common.testing import FakeTripleStore, MemoryStorage
 from naas_abi_apps.powerpoint.pipelines.AddPowerPointPresentationPipeline import (
@@ -161,3 +162,35 @@ def test_a_template_from_object_storage_is_used_when_given() -> None:
     )
 
     assert result["storage_path"] == "powerpoint/presentations/Brand.pptx"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "bundled:../__init__.py",
+        "bundled:../../common/__init__.py",
+        "bundled:/etc/passwd",
+        "bundled:templates/TemplateMinimal.pptx",
+        "bundled:missing.pptx",
+    ],
+)
+def test_a_bundled_path_names_only_a_shipped_template(path: str) -> None:
+    from naas_abi_apps.powerpoint.pipelines.AddPowerPointPresentationPipeline import (
+        bundled_template_path,
+    )
+
+    with pytest.raises(ValueError, match="Unknown bundled template"):
+        bundled_template_path(path)
+
+
+def test_the_default_bundled_template_resolves() -> None:
+    from naas_abi_apps.powerpoint.pipelines.AddPowerPointPresentationPipeline import (
+        BUNDLED_TEMPLATE,
+        TEMPLATES_DIR,
+        bundled_template_path,
+    )
+
+    assert (
+        bundled_template_path(BUNDLED_TEMPLATE)
+        == TEMPLATES_DIR / "TemplateMinimal.pptx"
+    )

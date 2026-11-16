@@ -3,19 +3,24 @@
 
 Port of ``naas_abi_marketplace.applications.google_search.integrations``:
 same tool names. ``query`` now returns every page it fetched (the in-engine
-loop kept only the last page). Results are archived to object storage.
+loop kept only the last page); a page that fails after the first ends the
+search with the results so far, as the in-engine loop stopped. Results are
+archived to object storage.
 """
 
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from dataclasses import dataclass
 from typing import Any
 
 from naas_abi_apps.common.http import HttpConfiguration, request
 from naas_abi_apps.common.storage import ObjectStorage, archive_json
-from naas_abi_sdk.integration import Integration
+from naas_abi_sdk.integration import Integration, IntegrationConnectionError
+
+logger = logging.getLogger(__name__)
 
 SERVICE = "Google Search"
 BROWSER_AGENT = (
@@ -23,6 +28,7 @@ BROWSER_AGENT = (
     "(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
 )
 PAGE_SIZE = 10  # the API's maximum per request
+MAX_RESULTS = 100  # the API serves no result past the 100th
 
 
 def clean(value: str) -> str:
@@ -59,24 +65,35 @@ class GoogleProgrammableSearchEngineIntegration(Integration):
         self.configuration = configuration
 
     async def query(self, query: str, num_results: int = 5) -> list[dict[str, Any]]:
-        """Up to ``num_results`` results (title, link, snippet, pagemap), paging by 10."""
+        """Up to ``num_results`` results (title, link, snippet, pagemap), paging
+        by 10, at most 100 (the API's limit). A failure on the first page
+        raises; on a later one, the results so far are returned."""
+        num_results = max(0, min(num_results, MAX_RESULTS))
         items: list[dict[str, Any]] = []
         start = 1
         while len(items) < num_results:
             count = min(PAGE_SIZE, num_results - len(items))
-            response = await request(
-                self.configuration,
-                "GET",
-                self.configuration.base_url,
-                service=SERVICE,
-                params={
-                    "key": self.configuration.api_key,
-                    "cx": self.configuration.search_engine_id,
-                    "q": query,
-                    "num": count,
-                    "start": start,
-                },
-            )
+            try:
+                response = await request(
+                    self.configuration,
+                    "GET",
+                    self.configuration.base_url,
+                    service=SERVICE,
+                    params={
+                        "key": self.configuration.api_key,
+                        "cx": self.configuration.search_engine_id,
+                        "q": query,
+                        "num": count,
+                        "start": start,
+                    },
+                )
+            except IntegrationConnectionError as exc:
+                if not items:
+                    raise
+                logger.warning(
+                    "Google Search: stopped after %d results: %s", len(items), exc
+                )
+                break
             page = response.json().get("items", [])
             items.extend(page)
             start += len(page)
@@ -122,7 +139,9 @@ def as_tools(
 
     class SearchSchema(BaseModel):
         query: str = Field(..., description="Search query")
-        num_results: int = Field(5, description="Number of results to return")
+        num_results: int = Field(
+            5, description="Number of results to return (at most 100)"
+        )
 
     class ExtractContentSchema(BaseModel):
         url: str = Field(..., description="URL to extract content from")
