@@ -24,6 +24,14 @@
 
 <!-- version list -->
 
+## v3.5.0 (2026-11-16)
+
+### Features
+
+- **anthropic**: Add the Claude 5.5 generation models (Opus 5.5, Sonnet 5.5, Haiku 5.5, Fable 5.1)
+  ([`9c4b22d`](https://github.com/jupyter-naas/abi/commit/9c4b22da0f55866add94eb764b73b7588310679e))
+
+
 ## v3.4.0 (2026-11-16)
 
 ### Features
