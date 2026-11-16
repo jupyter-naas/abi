@@ -24,6 +24,14 @@
 
 <!-- version list -->
 
+## v3.5.1 (2026-11-16)
+
+### Bug Fixes
+
+- **core**: Render templatable SPARQL query arguments so they cannot change the query
+  ([`163b631`](https://github.com/jupyter-naas/abi/commit/163b631f0e6a01e5c54d159326df07308cd4b694))
+
+
 ## v3.5.0 (2026-11-16)
 
 ### Features
