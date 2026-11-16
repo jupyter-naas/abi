@@ -15,6 +15,7 @@ Each subdirectory is a marketplace module wrapping an LLM provider. Every module
 
 | Module | Models | Top agent | Notes |
 |---|---:|---|---|
+| [`azure/`](azure/) | from config | none | Azure AI Foundry (Azure OpenAI) chat and embedding deployments; Entra ID token by default (managed identity, `az login`), API key optional |
 | [`bedrock/`](bedrock/) | 8 | `BedrockAgent` | AWS Bedrock — multi-vendor access (Anthropic, Meta, Mistral, Amazon) via AWS |
 | [`chatgpt/`](chatgpt/) | 12 | `ChatGPTAgent` | OpenAI: GPT-4o, GPT-4.1 family, o3 reasoning models |
 | [`claude/`](claude/) | 7 | `ClaudeAgent` | Anthropic: Claude 4 Opus/Sonnet (+ Thinking), Haiku 4.5, Sonnet 3.7 |
@@ -28,6 +29,25 @@ Each subdirectory is a marketplace module wrapping an LLM provider. Every module
 | [`qwen/`](qwen/) | 1 | `QwenAgent` | Multilingual, efficient |
 
 Total: **11 providers, 42 models**.
+
+## Decision: models declared in the configuration (`azure/`)
+
+An Azure AI Foundry resource serves deployments whose names the operator
+chooses, so `azure/` has no `models/` files: `ABIModule.on_load` registers each
+entry of `chat_deployments` / `embedding_deployments` with
+`registry.register(canonical_id, ChatModel | EmbeddingModel)`, provider
+`azure`, plus `azure` provider factories for other deployments of the
+configured endpoint. Clients authenticate with
+`azure_ad_token_provider=get_bearer_token_provider(DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default")`
+unless `azure_api_key` is set, so a resource with key access disabled works
+with a managed identity holding only "Cognitive Services OpenAI User".
+
+Consequences:
+
+- No API key is required; `azure-identity` comes with the `ai-azure` extra.
+- One credential per module load, shared by every deployment (one token cache).
+- Building clients is offline: the first token is fetched on the first call.
+- `canonical_id` is unique across chat and embedding deployments.
 
 ## Module shape (recap)
 

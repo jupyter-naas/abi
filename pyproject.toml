@@ -17,6 +17,7 @@ dependencies = [
     # --without-nats`): the legacy extras are not in [all].
     "naas-abi-core[all,dagster,rabbitmq]",
     "naas-abi-idp",
+    "naas-abi-marketplace[ai-azure]",
     "naas-abi-marketplace[ai-chatgpt]",
     "naas-abi-marketplace[ai-claude]",
     "naas-abi-marketplace[ai-deepseek]",
