@@ -9,7 +9,6 @@ from pydantic import BaseModel
 
 T = TypeVar("T", bound=BaseModel)
 
-
 class GenericWorkflow(Generic[T]):
     def __init__(
         self,

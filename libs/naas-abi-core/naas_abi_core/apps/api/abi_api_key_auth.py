@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import hmac
 import logging
 import os
@@ -38,6 +39,14 @@ def clear_app_html_token_validators() -> None:
     _EXTRA_APP_HTML_TOKEN_VALIDATORS.clear()
 
 
+def routed_path(request: Request) -> str:
+    """The path the router dispatches on (``scope["path"]``).
+
+    Access checks decide on this, never on ``request.url``: the URL is rebuilt
+    from the ``Host`` header, which the client chooses."""
+    return str(request.scope.get("path") or "")
+
+
 def extract_abi_api_token(request: Request) -> str | None:
     """Return bearer / ``?token=`` / scoped cookie credential (agent parity)."""
     authorization = request.headers.get("Authorization")
@@ -56,8 +65,44 @@ def extract_abi_api_token(request: Request) -> str | None:
     return None
 
 
+# SHA-256 of values that are retired as ``ABI_API_KEY``: they were published,
+# so no deployment may use them. Kept as hashes: the values are not in source.
+RETIRED_ABI_API_KEY_SHA256 = frozenset(
+    {
+        "bc51a115e98eb5b83037f309dc191fb933679a10c5d9017534f9f443d6fad8f6",
+    }
+)
+
+
+class RetiredAbiApiKeyError(RuntimeError):
+    """``ABI_API_KEY`` holds a retired value: the API does not start with it."""
+
+
+def is_retired_abi_api_key(value: str | None) -> bool:
+    """Whether ``value`` is a retired API key, compared by hash."""
+    if not value:
+        return False
+    digest = hashlib.sha256(value.strip().encode()).hexdigest()
+    return any(hmac.compare_digest(digest, known) for known in RETIRED_ABI_API_KEY_SHA256)
+
+
+def refuse_retired_abi_api_key() -> None:
+    """Raise when the configured ``ABI_API_KEY`` is a retired value. Called
+    before the API starts: set a new key (``abi`` generates one) and restart."""
+    if is_retired_abi_api_key(os.environ.get("ABI_API_KEY")):
+        raise RetiredAbiApiKeyError(
+            "ABI_API_KEY holds a retired value that was published: set a new, "
+            "random key (for example `python -c 'import secrets; "
+            "print(secrets.token_urlsafe(32))'`) and restart"
+        )
+
+
 def expected_abi_api_key() -> str | None:
-    return os.environ.get("ABI_API_KEY")
+    """The configured ``ABI_API_KEY``; never a retired value."""
+    value = os.environ.get("ABI_API_KEY")
+    if not value or is_retired_abi_api_key(value):
+        return None
+    return value
 
 
 def is_abi_api_token_valid(token: str | None) -> bool:
@@ -126,7 +171,7 @@ def _stamp_app_html_token_cookie(
         path="/app-html/",
         httponly=True,
         samesite="lax",
-        secure=request.url.scheme == "https",
+        secure=request.scope.get("scheme") == "https",
     )
 
 
@@ -142,7 +187,7 @@ class AppHtmlAbiKeyMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next) -> Response:
-        path = request.url.path
+        path = routed_path(request)
         if path.startswith("/app-html/") and request.method != "OPTIONS":
             check = await asyncio.to_thread(check_app_html_request, request)
             if not check.authorized:

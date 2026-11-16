@@ -21,7 +21,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -41,7 +41,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
 from naas_abi_core import logger
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam import roles
-from naas_abi_core.services.iam.names import PLATFORM, resource_name
+from naas_abi_core.services.iam.names import resource_name
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
@@ -64,13 +64,20 @@ async def nexus_user_exists(user_id: str) -> bool:
         return await AuthSecondaryAdapterPostgres(db=db).get_user_by_id(user_id) is not None
 
 
-def shared_repo_grants(repo_id: str) -> list[roles.PlatformGrant]:
+def shared_repo_grants(
+    repo_id: str, dataset_namespaces: Sequence[str] = ()
+) -> list[roles.PlatformGrant]:
     """The one repository slides, documents, sheets and the code section share
     (``coding_repo_id``) is a platform container, so no workspace role reaches it.
     Every workspace member reaches it by level (viewers read, members write): the
     routes still keep a project to its workspace by its branch name, and a
-    workspace's own repositories are placed in it."""
-    return [
+    workspace's own repositories are placed in it.
+
+    ``dataset_namespaces``: the engine's dataset namespaces the deployment shares
+    (``shared_dataset_namespaces``), read by every workspace's viewers and members.
+    Only those: the engine's own namespaces and every other one stay out of reach of
+    workspace roles."""
+    grants = [
         roles.PlatformGrant(
             "source_control",
             (
@@ -79,21 +86,32 @@ def shared_repo_grants(repo_id: str) -> list[roles.PlatformGrant]:
                 resource_name("source_control", "proposal", [repo_id], kind="path") + "/*",
             ),
         ),
-        # The datasets of the platform's modules are read by every workspace's
-        # members, as they were before roles: nothing links a namespace to one
-        # workspace, and Nexus only reads them.
-        roles.PlatformGrant(
-            "dataset",
-            (f"{PLATFORM}dataset:namespace/*", f"{PLATFORM}dataset:dataset/*"),
-            member_writes=False,
-        ),
     ]
+    names = [n for n in dict.fromkeys(dataset_namespaces) if n]
+    if names:
+        # Read by every workspace's members: nothing links such a namespace to one
+        # workspace, and Nexus only reads them.
+        grants.append(
+            roles.PlatformGrant(
+                "dataset",
+                tuple(
+                    resource
+                    for name in names
+                    for resource in (
+                        resource_name("dataset", "namespace", name),
+                        resource_name("dataset", "dataset", [name], kind="path") + "/*",
+                    )
+                ),
+                member_writes=False,
+            )
+        )
+    return grants
 
 
 async def register_catalog() -> None:
     """Register the ``nexus`` catalog and the shared repository's platform
     grants, as the engine."""
-    grants = shared_repo_grants(settings.coding_repo_id)
+    grants = shared_repo_grants(settings.coding_repo_id, settings.shared_dataset_namespaces)
 
     def work() -> None:
         iam = runtime.iam()

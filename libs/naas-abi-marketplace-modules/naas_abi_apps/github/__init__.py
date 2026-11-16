@@ -6,6 +6,10 @@ engine only through NATS. Replaces the in-engine
 in-engine ``support`` module, see jupyter-naas/abi#1423). The token is the
 ``GITHUB_ACCESS_TOKEN`` engine secret, read at start. ``ontologies/`` goes to
 the engine's schema graph.
+
+Everyone who may use the agent acts with that one token, so the agent reads,
+and writes only through the tools ``GITHUB_AGENT_WRITE_TOOLS`` names, within
+``GITHUB_REPOSITORIES`` when set.
 """
 
 from __future__ import annotations
@@ -35,6 +39,22 @@ class GitHubConfiguration(ModuleConfiguration):
     access_token_secret: str = "GITHUB_ACCESS_TOKEN"
     # Canonical id of a chat model the engine registers; empty: its default.
     chat_model: str = ""
+    # Everyone who may use the GitHub agent acts with this module's token. The
+    # agent carries the read tools (READ_TOOLS) and, besides, only the write
+    # tools named here (comma-separated, e.g. "github_create_issue").
+    agent_write_tools: str = ""
+    # When set, the agent reaches only these repositories (comma-separated
+    # "owner/repo").
+    repositories: str = ""
+
+    def write_tools(self) -> set[str]:
+        return {
+            name.strip() for name in self.agent_write_tools.split(",") if name.strip()
+        }
+
+    def repository_list(self) -> list[str] | None:
+        names = [name.strip() for name in self.repositories.split(",") if name.strip()]
+        return names or None
 
 
 class ABIModule(BaseModule[GitHubConfiguration]):
@@ -62,6 +82,8 @@ class ABIModule(BaseModule[GitHubConfiguration]):
             MODULE_ID,
             access_token=token,
             chat_model=self.configuration.chat_model,
+            write_tools=self.configuration.write_tools(),
+            repositories=self.configuration.repository_list(),
         )
         self.expose_agent(NAME, agent.as_handler())
 

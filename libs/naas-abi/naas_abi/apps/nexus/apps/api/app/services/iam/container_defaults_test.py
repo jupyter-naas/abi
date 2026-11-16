@@ -758,3 +758,35 @@ async def test_a_recorded_workspace_access_with_no_parent_is_put_under_its_organ
         )
     async with nexus_db() as db:
         assert (await container_defaults.migrate(db)).reparented == []
+
+
+def test_a_workspace_adopts_only_an_access_policy_its_own_organization_owns(world):
+    """What the sets' move made is found by its description, which anyone writing a
+    policy chooses: another organization's policy that names the workspace is never
+    its access, and stays where it is; the workspace gets one of its own."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import policy_tree
+
+    one = world.org("org-1")
+    world.org("org-2")
+    world.workspace("org-1", "ws-1")
+    ws2 = world.workspace("org-2", "ws-2")
+    describe = "What workspace ws-2 uses, within its organization's: x." + policy_tree.MADE
+    document = {
+        "version": "2026-10-13",
+        "statements": [
+            {"effect": "Allow", "actions": ["nexus:GetWorkspace"], "resources": ["${scope}/*"]}
+        ],
+    }
+    with as_service_account("api"):
+        other = world.iam.create_policy("WS2 access", document, description=describe, scope=one)
+        records, report = container_defaults.plan_and_apply(
+            world.iam,
+            {"org-1": "Org One", "org-2": "Org Two"},
+            {"ws-1": ("org-1", "WS1"), "ws-2": ("org-2", "WS2")},
+            {},
+        )
+        kept = world.iam.get_policy(other.id)
+    ws2_record = next(r for r in records if r.container == ws2)
+    assert ws2_record.access_policy_id != other.id
+    assert kept.owner_scope == one
+    assert ws2 in report.made and ws2 not in report.adopted

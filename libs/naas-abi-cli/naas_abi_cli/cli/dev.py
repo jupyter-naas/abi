@@ -41,6 +41,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import shutil
 import signal
 import socket
@@ -64,7 +65,10 @@ from rich.table import Table
 from rich.text import Text
 
 from naas_abi_cli.cli.admin_credentials import (
+    ADMIN_ADDRESS_ENV,
     ADMIN_EMAIL,
+    configured_superadmins,
+    ensure_admin_email,
     ensure_api_key,
     ensure_idp_client_secret,
     ensure_nats_callout_seed,
@@ -87,6 +91,7 @@ from naas_abi_cli.cli.dev_modules import (
     wants_builtin_idp,
     with_builtin_idp,
 )
+from naas_abi_cli.cli.private_dir import private_directory
 
 DEV_DIR_NAME = ".abi/dev"
 INSTANCE_FILENAME = "instance.json"
@@ -364,15 +369,24 @@ def _pid_alive(pid: int) -> bool:
 
 
 def _ensure_storage_layout() -> None:
-    (_project_root() / "storage").mkdir(parents=True, exist_ok=True)
-    (_dev_dir() / "logs").mkdir(parents=True, exist_ok=True)
+    # storage/ holds the dev stack's data and sign-in mails, .abi/dev/ its keys
+    # and logs: their owner's only.
+    private_directory(_project_root() / "storage")
+    private_directory(_dev_dir())
+    private_directory(_dev_dir() / "logs")
 
 
 def _spawn(spec: ServiceSpec, cmd: list[str], cwd: Path, env: dict[str, str]) -> int:
     log_file = _log_path(spec)
     log_file.parent.mkdir(parents=True, exist_ok=True)
-    # Truncate per session so each `dev up` shows a fresh log.
-    log_fh = open(log_file, "wb", buffering=0)
+    # Truncate per session so each `dev up` shows a fresh log. Owner-only: a
+    # service may log what it was handed.
+    log_fh = os.fdopen(
+        os.open(log_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600),
+        "wb",
+        buffering=0,
+    )
+    os.chmod(log_file, 0o600)
     process = subprocess.Popen(
         cmd,
         cwd=str(cwd),
@@ -418,10 +432,62 @@ def _oxigraph_url(ports: dict[str, int]) -> str:
     return f"http://{PROBE_HOST}:{ports['oxigraph']}"
 
 
+OXIGRAPH_TOKEN_ENV = "OXIGRAPH_TOKEN"
+# The stack services that read the token when they start.
+OXIGRAPH_CLIENTS = ("api", "dagster")
+
+
+def _oxigraph_token_path() -> Path:
+    return _dev_dir() / "oxigraph.token"
+
+
+def _new_oxigraph_token() -> str:
+    """A fresh token for the SPARQL server about to start, kept owner-only in
+    the dev directory, where the services started after it read it."""
+    token = secrets.token_urlsafe(32)
+    path = _oxigraph_token_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.touch(mode=0o600, exist_ok=True)
+    path.chmod(0o600)
+    path.write_text(token, encoding="utf-8")
+    return token
+
+
+def _oxigraph_token() -> str:
+    """The running SPARQL server's token ("" before it ever started)."""
+    try:
+        return _oxigraph_token_path().read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def _oxigraph_launch_token() -> str:
+    """The token of the SPARQL server about to start: the current one while a
+    service that read it at its start (api, dagster) still runs, so restarting
+    the server alone keeps them working; a fresh one otherwise."""
+    current = _oxigraph_token()
+    if current:
+        for name in OXIGRAPH_CLIENTS:
+            pid = _read_pid(_service_spec(name, 0))
+            if pid is not None and _pid_alive(pid):
+                return current
+    return _new_oxigraph_token()
+
+
+def _point_at_oxigraph(env: dict[str, str], ports: dict[str, int]) -> None:
+    """Point a service's triple-store adapter at this stack's SPARQL server."""
+    env["OXIGRAPH_URL"] = _oxigraph_url(ports)
+    token = _oxigraph_token()
+    if token:
+        env[OXIGRAPH_TOKEN_ENV] = token
+
+
 def _launch_oxigraph(spec: ServiceSpec) -> int:
     store_path = _project_root() / "storage" / "triplestore" / "oxigraph"
     store_path.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
+    # Per run: only the services this stack starts present it.
+    env[OXIGRAPH_TOKEN_ENV] = _oxigraph_launch_token()
     cmd = [
         "uv",
         "run",
@@ -816,7 +882,7 @@ def _launch_api(
     env["ABI_PORT"] = str(spec.port)
     env["ABI_HOST"] = env.get("ABI_HOST", BIND_HOST)
     # Point the triple-store adapter at the worktree-local oxigraph server.
-    env["OXIGRAPH_URL"] = _oxigraph_url(ports)
+    _point_at_oxigraph(env, ports)
     # We hand out BROWSER_HOST, but we can't know what the user actually typed
     # (or which host WSL forwarding put them on), and a wrong guess is a silent
     # CORS failure. Allow every spelling that can legitimately reach us.
@@ -889,7 +955,7 @@ def _launch_dagster(
     # the same way the api does. This is our loguru sink, not dagster's own
     # `--log-level` (left at its default so the daemon doesn't drown the pane).
     env["LOG_LEVEL"] = _resolve_log_level(log_level)
-    env["OXIGRAPH_URL"] = _oxigraph_url(ports)
+    _point_at_oxigraph(env, ports)
     _set_public_hosts(env, ports["nexus-web"], ports["api"])
     cmd = [
         "uv",
@@ -955,10 +1021,10 @@ def _launch_nexus_web(spec: ServiceSpec, ports: dict[str, int]) -> int:
     env["NEXT_PUBLIC_NEXUS_ENV"] = env.get("NEXT_PUBLIC_NEXUS_ENV", "local")
     env["NODE_ENV"] = env.get("NODE_ENV", "development")
 
-    if runner.endswith("pnpm"):
-        cmd = [runner, "exec", "next", "dev", "--port", str(spec.port)]
-    else:
-        cmd = [runner, "next", "dev", "--port", str(spec.port)]
+    # next dev listens on every interface unless told otherwise: BIND_HOST,
+    # like every other `abi dev` service.
+    args = ["next", "dev", "--hostname", BIND_HOST, "--port", str(spec.port)]
+    cmd = [runner, "exec", *args] if runner.endswith("pnpm") else [runner, *args]
     return _spawn(spec, cmd, web_dir, env)
 
 
@@ -1567,6 +1633,22 @@ class _KeyboardReader:
 RECENT_DUMP_LINES = 30
 
 
+def _admin_address() -> str:
+    """The platform administrator of the project's config.yaml (the first
+    superadmin), read from .env when the config names it as a secret."""
+    config = _project_root() / "config.yaml"
+    admins = configured_superadmins(config.read_text()) if config.exists() else []
+    for email in admins:
+        if email.startswith("secret:"):
+            env = _project_root() / ".env"
+            for line in env.read_text().splitlines() if env.exists() else []:
+                if line.startswith(email[len("secret:") :] + "="):
+                    return line.split("=", 1)[1].strip()
+            continue
+        return email
+    return ADMIN_EMAIL
+
+
 def _sign_in_hint(ports: dict[str, int]) -> list[str]:
     """How to sign in to a fresh stack: Nexus has no password. The built-in
     identity provider mails a code to the address, and in dev the mail is a file."""
@@ -1574,7 +1656,7 @@ def _sign_in_hint(ports: dict[str, int]) -> list[str]:
     where = f"http://{BROWSER_HOST}:{web}" if web else _api_origin(ports)
     return [
         (
-            f"Sign in: {where} as {ADMIN_EMAIL}. The identity provider mails a sign-in "
+            f"Sign in: {where} as {_admin_address()}. The identity provider mails a sign-in "
             "code to that address; in dev the mail is a file in storage/email."
         ),
         "Print the code: `abi dev code`",
@@ -2163,6 +2245,11 @@ def dev_up(
     config_overlay: Path | None = None
     _ensure_default_api_key_env()
     _ensure_project_nats_env()
+    # A config that reads its platform administrator from .env (the ABI
+    # repository's own): asked for once, kept there.
+    config = _project_root() / "config.yaml"
+    if config.exists() and f"secret.{ADMIN_ADDRESS_ENV}" in config.read_text():
+        ensure_admin_email(_project_root() / ".env")
     # The built-in IdP, the default identity provider in NATS mode: its client
     # secret is generated into .env (the engine's config reads it from there),
     # and a project that names no provider gets it through the overlay.
@@ -2295,13 +2382,16 @@ def dev_up(
 @dev.command("code")
 @click.option(
     "--email",
-    default=ADMIN_EMAIL,
-    show_default=True,
-    help="The address the code was mailed to; empty for anyone's.",
+    default=None,
+    help="The address the code was mailed to (default: the config's platform "
+    "administrator); empty for anyone's.",
 )
-def dev_code(email: str) -> None:
+def dev_code(email: str | None) -> None:
     """Print the newest sign-in code the identity provider mailed (dev mail is a file)."""
     from naas_abi_cli.cli.dev_mail import latest_sign_in_code
+
+    if email is None:
+        email = _admin_address()
 
     directory = _project_root() / "storage" / "email"
     found = latest_sign_in_code(directory, email or None)

@@ -1,13 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
 import { resolveGoogleMapsApiKey } from '../../_google';
 import { MAPS_USER_AGENT, mapsJson } from '../../_lib';
 import { parsePlacePhotoRef, placePhotoUpstreamUrl } from './photo';
+import { mapsRoute } from '../../_guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function GET(req: NextRequest) {
+async function handle(req: Request) {
   const resolved = resolveGoogleMapsApiKey();
   if (!resolved) {
     return mapsJson({ error: 'Places key unset' }, { status: 503 });
@@ -42,3 +43,5 @@ export async function GET(req: NextRequest) {
     );
   }
 }
+
+export const GET = mapsRoute('place/photo', handle, { perMinute: 120, cacheSeconds: 86400 });

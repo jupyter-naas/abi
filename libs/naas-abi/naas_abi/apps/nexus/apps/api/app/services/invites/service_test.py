@@ -636,20 +636,17 @@ async def test_a_user_without_the_right_creates_no_account_at_the_provider():
 
 
 @pytest.mark.asyncio
-async def test_an_address_on_a_domain_the_organization_verified_is_provisioned():
+async def test_invitation_provisioning_keeps_to_the_inviters_right():
+    """Whatever domain the address is of, verified and routed to the provider or
+    not, the account is made on behalf of the inviter, who needs the right."""
     h = Harness()
     h.store.domains["corp.example"] = "builtin"
-    outcome = await h.invite(invited_by="usr-mallory", email="bob@corp.example")
-    assert h.directory.provisioned == [("builtin", "bob@corp.example", None)]
-    assert h.directory.provisioned_by == [None]  # Nexus's own call: the domain is proven
-    assert outcome.user_created and not outcome.provisioning_skipped
-    # A domain routed to another provider proves nothing for this one.
-    h2 = Harness(BUILTIN, OKTA)
-    h2.store.domains["corp.example"] = "okta"
-    refused = await h2.invite(
-        invited_by="usr-mallory", email="eve@corp.example", provider="builtin"
-    )
-    assert h2.directory.provisioned == [] and refused.provisioning_skipped
+    refused = await h.invite(invited_by="usr-bob", email="bob@corp.example")
+    assert h.directory.provisioned == [] and refused.provisioning_skipped
+    assert not refused.user_created
+    h.directory.may.add("usr-ops")
+    made = await h.invite(invited_by="usr-ops", email="carol@corp.example")
+    assert h.directory.provisioned_by == ["usr-ops"] and made.user_created
 
 
 @pytest.mark.asyncio
@@ -819,3 +816,14 @@ async def test_renewing_keeps_a_carried_policy_at_its_own_scope():
         v[2] == "pol_org_features" and v[3] == "abi:nexus:organization/org-1"
         for v in h.grants.live.values()
     )
+
+
+@pytest.mark.asyncio
+async def test_a_public_mail_domain_routes_no_invitation():
+    """An organization's older claim of a public mail domain chooses nothing: the
+    default provider is used, as for any address no organization holds."""
+    h = Harness(BUILTIN, OKTA, default="builtin")
+    h.store.domains["gmail.com"] = "okta"
+    h.store.domains["corp.example"] = "okta"
+    assert (await h.service.choose("pat@gmail.com", None, "org-1")).name == "builtin"
+    assert (await h.service.choose("pat@Corp.Example", None, "org-1")).name == "okta"

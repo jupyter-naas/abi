@@ -40,9 +40,8 @@
     - `type: str`
     - `enabled: bool`
     - `model: str`
-    - `endpoint: str | None = None`
-    - `api_key: str | None = None`
-    - `account_id: str | None = None`
+    - `llm_model: str | None = None`
+  - It carries no endpoint, key or account: the service resolves those from the workspace's configuration.
 - `CompleteChatInput`
   - Input payload for a chat completion request.
   - Fields:
@@ -88,9 +87,6 @@ provider = ChatProviderConfigInput(
     type="openai",
     enabled=True,
     model="gpt-4.1-mini",
-    endpoint=None,
-    api_key=None,
-    account_id=None,
 )
 
 inp = CompleteChatInput(

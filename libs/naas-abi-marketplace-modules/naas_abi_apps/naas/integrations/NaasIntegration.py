@@ -2,13 +2,17 @@
 assets), async, on ``naas_abi_sdk`` only.
 
 Port of ``naas_abi_marketplace.applications.naas.integrations``: same methods
-and tool names. ``upload_asset`` writes to the workspace storage with
+and tool names, less the tools that reveal a secret value or storage
+credentials, delete a workspace, plugin or ontology, or change workspace
+membership (``as_tools``). Every endpoint is checked one path segment at a
+time (``checked_endpoint``). ``upload_asset`` writes to the workspace storage with
 ``NaasStorage`` (core's Naas object storage adapter in-engine).
 """
 
 import json
 import logging
 import os
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -38,6 +42,25 @@ class NaasIntegrationConfiguration(HttpConfiguration):
     workspace_id: str | None = None
     storage_name: str | None = None
     base_url: str = "https://api.naas.ai"
+
+
+# One path segment of an endpoint: an id or a name. "." and ".." are refused,
+# so no value walks to another endpoint; "?", "#", "%" and "/" never fit.
+_SEGMENT = re.compile(r"^[A-Za-z0-9_.:@+-]+$")
+
+
+def checked_endpoint(endpoint: str) -> str:
+    """``endpoint`` when each segment of its path is a plain id or name (a
+    final ``/`` aside); ``ValueError`` otherwise."""
+    segments = endpoint.split("/")
+    if segments[0] != "" or len(segments) < 2:
+        raise ValueError(f"Naas endpoint must start with '/': {endpoint!r}")
+    if segments[-1] == "" and len(segments) > 2:
+        segments = segments[:-1]
+    for segment in segments[1:]:
+        if segment in (".", "..") or not _SEGMENT.fullmatch(segment):
+            raise ValueError(f"Invalid name in Naas endpoint: {segment!r}")
+    return endpoint
 
 
 class NaasIntegration(Integration):
@@ -72,7 +95,8 @@ class NaasIntegration(Integration):
         data: dict | None = None,
         params: dict | None = None,
     ) -> dict:
-        """Make HTTP request to Naas API."""
+        """Make HTTP request to Naas API (``endpoint`` checked first)."""
+        endpoint = checked_endpoint(endpoint)
         response = await request(
             self.__configuration,
             method,
@@ -876,11 +900,19 @@ class NaasIntegration(Integration):
 
 
 def as_tools(configuration: NaasIntegrationConfiguration):
+    """Agent tools over the configured account's key.
+
+    Whoever uses an agent built from these acts with that one key, so they
+    read and change workspace content only: no tool reveals a secret value or
+    storage credentials, deletes a workspace, a plugin or an ontology, or
+    changes who belongs to a workspace. Those stay integration methods.
+    """
     from langchain_core.tools import StructuredTool
 
     integration = NaasIntegration(configuration)
 
     REGEX = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    STORAGE_NAME = r"^[A-Za-z0-9][A-Za-z0-9_.-]*$"
 
     class CreateWorkspaceSchema(BaseModel):
         name: str = Field(..., description="Name of the workspace")
@@ -928,11 +960,6 @@ def as_tools(configuration: NaasIntegrationConfiguration):
             None, description="Secondary text color hex code"
         )
 
-    class DeleteWorkspaceSchema(BaseModel):
-        workspace_id: str = Field(
-            ..., description="ID of the workspace to delete", pattern=REGEX
-        )
-
     class CreatePluginSchema(BaseModel):
         workspace_id: str = Field(
             ..., description="Workspace ID to create a plugin in", pattern=REGEX
@@ -963,14 +990,6 @@ def as_tools(configuration: NaasIntegrationConfiguration):
         )
         data: dict = Field(..., description="Updated plugin configuration data")
 
-    class DeletePluginSchema(BaseModel):
-        workspace_id: str = Field(
-            ..., description="Workspace ID to delete a plugin from", pattern=REGEX
-        )
-        plugin_id: str = Field(
-            ..., description="ID of the plugin to delete", pattern=REGEX
-        )
-
     class CreateOntologySchema(BaseModel):
         workspace_id: str = Field(
             ..., description="Workspace ID to create an ontology in", pattern=REGEX
@@ -994,6 +1013,7 @@ def as_tools(configuration: NaasIntegrationConfiguration):
         ontology_id: str | None = Field(
             "",
             description="Ontology ID to get a specific ontology. If not provided, lists all ontologies",
+            pattern=r"^$|" + REGEX[1:],
         )
 
     class GetOntologiesSchema(BaseModel):
@@ -1021,82 +1041,33 @@ def as_tools(configuration: NaasIntegrationConfiguration):
             False, description="Whether the ontology is public"
         )
 
-    class DeleteOntologySchema(BaseModel):
-        workspace_id: str = Field(
-            ..., description="Workspace ID to delete an ontology from", pattern=REGEX
-        )
-        ontology_id: str = Field(
-            ..., description="ID of the ontology to delete", pattern=REGEX
-        )
-
     class GetWorkspaceUsersSchema(BaseModel):
         workspace_id: str = Field(
             ..., description="ID of the workspace to list users from", pattern=REGEX
         )
 
-    class InviteWorkspaceUserSchema(BaseModel):
-        workspace_id: str = Field(..., description="ID of the workspace", pattern=REGEX)
-        email: str = Field(..., description="Email of the user to invite")
-        role: str = Field(
-            "member",
-            description="Role to assign to the user - one of: 'member', 'admin', 'owner'",
-        )
-        user_id: str | None = Field("", description="User ID if known", pattern=REGEX)
-
     class GetWorkspaceUserSchema(BaseModel):
         workspace_id: str = Field(..., description="ID of the workspace", pattern=REGEX)
         user_id: str = Field(..., description="ID of the user", pattern=REGEX)
 
-    class UpdateWorkspaceUserSchema(BaseModel):
-        workspace_id: str = Field(..., description="ID of the workspace", pattern=REGEX)
-        user_id: str = Field(..., description="ID of the user", pattern=REGEX)
-        role: str | None = Field(None, description="New role for the user")
-        status: str | None = Field(None, description="New status for the user")
-
-    class DeleteWorkspaceUserSchema(BaseModel):
-        workspace_id: str = Field(..., description="ID of the workspace", pattern=REGEX)
-        user_id: str = Field(..., description="ID of the user to remove", pattern=REGEX)
-
     class ListSecretsSchema(BaseModel):
         pass
-
-    class CreateSecretSchema(BaseModel):
-        name: str = Field(..., description="Name of the secret")
-        value: str = Field(..., description="Value of the secret")
-
-    class GetSecretSchema(BaseModel):
-        secret_id: str = Field(..., description="ID of the secret")
-
-    class UpdateSecretSchema(BaseModel):
-        secret_id: str = Field(..., description="ID of the secret")
-        value: str = Field(..., description="New value for the secret")
-
-    class DeleteSecretSchema(BaseModel):
-        secret_id: str = Field(..., description="ID of the secret to delete")
 
     class ListWorkspaceStorageSchema(BaseModel):
         workspace_id: str = Field(..., description="ID of the workspace", pattern=REGEX)
 
     class ListWorkspaceStorageObjectsSchema(BaseModel):
         workspace_id: str = Field(..., description="ID of the workspace", pattern=REGEX)
-        storage_name: str = Field(..., description="Name of the storage")
+        storage_name: str = Field(
+            ..., description="Name of the storage", pattern=STORAGE_NAME
+        )
         prefix: str = Field(..., description="Prefix to list objects under")
 
     class CreateWorkspaceStorageSchema(BaseModel):
         workspace_id: str = Field(..., description="ID of the workspace", pattern=REGEX)
-        storage_name: str = Field(..., description="Name of the storage")
-
-    class CreateWorkspaceStorageCredentialsSchema(BaseModel):
-        workspace_id: str = Field(..., description="ID of the workspace", pattern=REGEX)
-        storage_name: str = Field(..., description="Name of the storage")
-
-    class GetStorageCredentialsSchema(BaseModel):
-        workspace_id: str | None = Field(
-            None,
-            description="Optional ID of the workspace. If not provided, uses personal workspace",
-            pattern=REGEX,
+        storage_name: str = Field(
+            ..., description="Name of the storage", pattern=STORAGE_NAME
         )
-        storage_name: str = Field(..., description="Name of the storage")
 
     return [
         StructuredTool(
@@ -1141,15 +1112,6 @@ def as_tools(configuration: NaasIntegrationConfiguration):
             args_schema=UpdateWorkspaceSchema,
         ),
         StructuredTool(
-            name="delete_workspace",
-            description="Delete an existing workspace from naas.ai platform",
-            coroutine=_tool(
-                lambda workspace_id: integration.delete_workspace(workspace_id),
-                DeleteWorkspaceSchema,
-            ),
-            args_schema=DeleteWorkspaceSchema,
-        ),
-        StructuredTool(
             name="create_plugin",
             description="Create a new plugin/assistant/agent in a given workspace",
             coroutine=_tool(
@@ -1190,17 +1152,6 @@ def as_tools(configuration: NaasIntegrationConfiguration):
                 UpdatePluginSchema,
             ),
             args_schema=UpdatePluginSchema,
-        ),
-        StructuredTool(
-            name="delete_plugin",
-            description="Delete an existing plugin/assistant/agent from workspace.",
-            coroutine=_tool(
-                lambda workspace_id, plugin_id: integration.delete_plugin(
-                    workspace_id, plugin_id
-                ),
-                DeletePluginSchema,
-            ),
-            args_schema=DeletePluginSchema,
         ),
         StructuredTool(
             name="create_ontology",
@@ -1262,17 +1213,6 @@ def as_tools(configuration: NaasIntegrationConfiguration):
             args_schema=UpdateOntologySchema,
         ),
         StructuredTool(
-            name="delete_ontology",
-            description="Delete an existing ontology in a given workspace.",
-            coroutine=_tool(
-                lambda workspace_id, ontology_id: integration.delete_ontology(
-                    workspace_id, ontology_id
-                ),
-                DeleteOntologySchema,
-            ),
-            args_schema=DeleteOntologySchema,
-        ),
-        StructuredTool(
             name="list_workspace_users",
             description="List all users in a workspace.",
             coroutine=_tool(
@@ -1280,15 +1220,6 @@ def as_tools(configuration: NaasIntegrationConfiguration):
                 GetWorkspaceUsersSchema,
             ),
             args_schema=GetWorkspaceUsersSchema,
-        ),
-        StructuredTool(
-            name="invite_workspace_user",
-            description="Invite a user to a workspace.",
-            coroutine=_tool(
-                lambda **kwargs: integration.invite_workspace_user(**kwargs),
-                InviteWorkspaceUserSchema,
-            ),
-            args_schema=InviteWorkspaceUserSchema,
         ),
         StructuredTool(
             name="get_workspace_user",
@@ -1302,73 +1233,12 @@ def as_tools(configuration: NaasIntegrationConfiguration):
             args_schema=GetWorkspaceUserSchema,
         ),
         StructuredTool(
-            name="update_workspace_user",
-            description="Update a user's role or status in a workspace.",
-            coroutine=_tool(
-                lambda **kwargs: integration.update_workspace_user(**kwargs),
-                UpdateWorkspaceUserSchema,
-            ),
-            args_schema=UpdateWorkspaceUserSchema,
-        ),
-        StructuredTool(
-            name="delete_workspace_user",
-            description="Remove a user from a workspace.",
-            coroutine=_tool(
-                lambda workspace_id, user_id: integration.delete_workspace_user(
-                    workspace_id, user_id
-                ),
-                DeleteWorkspaceUserSchema,
-            ),
-            args_schema=DeleteWorkspaceUserSchema,
-        ),
-        StructuredTool(
-            name="list_secrets",
-            description="List all secrets in a workspace.",
-            coroutine=_tool(lambda: integration.list_secrets(), ListSecretsSchema),
-            args_schema=ListSecretsSchema,
-        ),
-        StructuredTool(
             name="list_secrets_names",
             description="List all secrets names.",
             coroutine=_tool(
                 lambda: integration.list_secrets_names(), ListSecretsSchema
             ),
             args_schema=ListSecretsSchema,
-        ),
-        StructuredTool(
-            name="create_secret",
-            description="Create a new secret.",
-            coroutine=_tool(
-                lambda name, value: integration.create_secret(name, value),
-                CreateSecretSchema,
-            ),
-            args_schema=CreateSecretSchema,
-        ),
-        StructuredTool(
-            name="get_secret",
-            description="Get a specific secret.",
-            coroutine=_tool(
-                lambda secret_id: integration.get_secret(secret_id), GetSecretSchema
-            ),
-            args_schema=GetSecretSchema,
-        ),
-        StructuredTool(
-            name="update_secret",
-            description="Update an existing secret.",
-            coroutine=_tool(
-                lambda secret_id, value: integration.update_secret(secret_id, value),
-                UpdateSecretSchema,
-            ),
-            args_schema=UpdateSecretSchema,
-        ),
-        StructuredTool(
-            name="delete_secret",
-            description="Delete a secret.",
-            coroutine=_tool(
-                lambda secret_id: integration.delete_secret(secret_id),
-                DeleteSecretSchema,
-            ),
-            args_schema=DeleteSecretSchema,
         ),
         StructuredTool(
             name="list_workspace_storage",
@@ -1402,27 +1272,5 @@ def as_tools(configuration: NaasIntegrationConfiguration):
                 CreateWorkspaceStorageSchema,
             ),
             args_schema=CreateWorkspaceStorageSchema,
-        ),
-        StructuredTool(
-            name="create_workspace_storage_credentials",
-            description="Create credentials for workspace storage",
-            coroutine=_tool(
-                lambda workspace_id, storage_name: (
-                    integration.create_workspace_storage_credentials(
-                        workspace_id, storage_name
-                    )
-                ),
-                CreateWorkspaceStorageCredentialsSchema,
-            ),
-            args_schema=CreateWorkspaceStorageCredentialsSchema,
-        ),
-        StructuredTool(
-            name="get_storage_credentials",
-            description="Get or create storage credentials",
-            coroutine=_tool(
-                lambda **kwargs: integration.get_storage_credentials(**kwargs),
-                GetStorageCredentialsSchema,
-            ),
-            args_schema=GetStorageCredentialsSchema,
         ),
     ]

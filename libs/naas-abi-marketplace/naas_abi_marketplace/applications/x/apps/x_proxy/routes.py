@@ -39,6 +39,7 @@ from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import Response
+from naas_abi_core.apps.api.abi_api_key_auth import routed_path
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
@@ -491,7 +492,8 @@ class XCountAppMiddleware(BaseHTTPMiddleware):
         if request.method != "GET":
             return await call_next(request)
 
-        matched = _html_rel(request.url.path)
+        # The routed path: ``request.url`` is rebuilt from the ``Host`` header.
+        matched = _html_rel(routed_path(request))
         if matched is None:
             return await call_next(request)
         app_prefix, rel = matched

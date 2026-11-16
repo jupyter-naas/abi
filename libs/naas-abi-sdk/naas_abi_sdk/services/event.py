@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
-import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -36,6 +36,42 @@ def _type(value):
     return str(getattr(value, "_class_uri", value)) if value is not None else None
 
 
+def live_event_class(data: bytes) -> str | None:
+    """The class IRI a live event declares (``_class_uri``), or None."""
+    try:
+        value = json.loads(data)
+    except (TypeError, ValueError):
+        return None
+    found = value.get("_class_uri") if isinstance(value, dict) else None
+    return found if isinstance(found, str) else None
+
+
+class LiveEvents:
+    """The live events of one type: a message of any other class is dropped,
+    whoever put it on the type's topic."""
+
+    def __init__(self, subscription: Any, event_type: str) -> None:
+        self._subscription, self.event_type = subscription, event_type
+
+    async def next_msg(self, timeout: float = 1.0) -> Any:
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+        while True:
+            remaining = max(deadline - loop.time(), 0.001)
+            msg = await self._subscription.next_msg(timeout=remaining)
+            if live_event_class(msg.data) == self.event_type:
+                return msg
+
+    @property
+    async def messages(self) -> Any:
+        async for msg in self._subscription.messages:
+            if live_event_class(msg.data) == self.event_type:
+                yield msg
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._subscription, name)
+
+
 class EventService(ServiceProxy):
     domain = "event"
 
@@ -54,24 +90,15 @@ class EventService(ServiceProxy):
                 "created_at": event.timestamp,
             }
         ).encode()
-        stored = await self._request(
+        # The event service broadcasts the live copy once it is appended: a
+        # module never publishes on the live topics itself.
+        return await self._request(
             "append",
             event_id=event.id,
             event_type=event.event_type,
             timestamp=event.timestamp,
             payload=payload,
         )
-        try:
-            await self._bus.publish(
-                "evt." + hashlib.sha256(event.event_type.encode()).hexdigest()[:32],
-                event.id,
-                payload,
-            )
-        except Exception:
-            logging.getLogger(__name__).warning(
-                "Live event broadcast failed after durable append", exc_info=True
-            )
-        return stored
 
     def _restore(self, rows, event_class):
         data = [json.loads(row.payload) for row in rows]
@@ -187,6 +214,10 @@ class EventService(ServiceProxy):
             raise NotImplementedError(
                 "Consume the returned async subscription; callback/filter adapters are not implemented"
             )
-        return await self._bus.subscribe(
-            "evt." + hashlib.sha256(_type(event_class).encode()).hexdigest()[:32], "#"
+        event_type = _type(event_class)
+        return LiveEvents(
+            await self._bus.subscribe(
+                "evt." + hashlib.sha256(event_type.encode()).hexdigest()[:32], "#"
+            ),
+            event_type,
         )

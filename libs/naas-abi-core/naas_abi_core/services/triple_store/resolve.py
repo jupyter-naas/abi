@@ -6,8 +6,10 @@ import json
 import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 _ABI_DEV_INSTANCE_REL = Path(".abi") / "dev" / "instance.json"
+_ABI_DEV_OXIGRAPH_TOKEN_REL = Path(".abi") / "dev" / "oxigraph.token"
 
 
 def local_probe_host() -> str:
@@ -68,3 +70,30 @@ def resolve_local_http_url(
     if port is not None:
         return f"http://{local_probe_host()}:{port}"
     return default_url
+
+
+def abi_dev_oxigraph_token(*, start: Path | None = None) -> str | None:
+    """The per-run token of the nearest project's ``abi dev`` SPARQL server, if any."""
+    anchor = (start or Path.cwd()).resolve()
+    for candidate in (anchor, *anchor.parents):
+        if not (candidate / _ABI_DEV_INSTANCE_REL).is_file():
+            continue
+        try:
+            token = (candidate / _ABI_DEV_OXIGRAPH_TOKEN_REL).read_text(encoding="utf-8")
+        except OSError:
+            return None
+        return token.strip() or None
+    return None
+
+
+def abi_dev_oxigraph_token_for(url: str, *, start: Path | None = None) -> str | None:
+    """The nearest project's ``abi dev`` SPARQL server token, when ``url`` is that
+    server (loopback, at its port): never sent anywhere else."""
+    port = abi_dev_service_port("oxigraph", start=start)
+    if port is None:
+        return None
+    parts = urlsplit(url)
+    loopback = {"127.0.0.1", "localhost", "::1", local_probe_host()}
+    if parts.hostname not in loopback or parts.port != port:
+        return None
+    return abi_dev_oxigraph_token(start=start)

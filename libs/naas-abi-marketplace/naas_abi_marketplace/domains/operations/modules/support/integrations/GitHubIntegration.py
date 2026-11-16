@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -22,6 +23,59 @@ class GitHubIntegrationConfiguration(IntegrationConfiguration):
 
     access_token: str
     base_url: str = "https://api.github.com"
+    # When set, requests reach only these repositories ("owner/repo"); every
+    # other endpoint (users, organizations, other repositories) is refused.
+    repositories: list[str] | None = None
+
+
+# One path segment of an endpoint: a GitHub name, a number or a secret name.
+# "." and ".." are refused, so no segment walks to another endpoint.
+_SEGMENT = re.compile(r"^[A-Za-z0-9._-]+$")
+
+# The tools that only read. GitHubAgent carries these, plus the write tools its
+# module configuration names.
+READ_TOOLS: frozenset[str] = frozenset(
+    {
+        "github_get_user_details",
+        "github_get_repository_details",
+        "github_list_organization_repositories",
+        "github_list_repository_activities",
+        "github_get_repository_contributors",
+        "github_get_issue",
+        "github_list_issues",
+        "github_list_issue_comments",
+        "github_get_issue_comment",
+        "github_list_assignees",
+        "github_check_assignee_permission",
+        "github_list_repository_secrets",
+        "github_get_repository_secret",
+        "github_list_repository_contributors",
+    }
+)
+
+
+def checked_endpoint(endpoint: str, repositories: list[str] | None = None) -> str:
+    """``endpoint`` (a path: query values go in ``params``) when each of its
+    segments is a plain name and, with ``repositories``, it lies under one of
+    them; ``ValueError`` otherwise. "?" and "#" fit no segment."""
+    segments = endpoint.split("/")
+    if segments[0] != "" or len(segments) < 2:
+        raise ValueError(f"GitHub endpoint must start with '/': {endpoint!r}")
+    for segment in segments[1:]:
+        if segment in (".", "..") or not _SEGMENT.fullmatch(segment):
+            raise ValueError(f"Invalid name in GitHub endpoint: {segment!r}")
+    if repositories is not None:
+        allowed = {name.strip().lower() for name in repositories}
+        if not (
+            len(segments) >= 4
+            and segments[1] == "repos"
+            and f"{segments[2]}/{segments[3]}".lower() in allowed
+        ):
+            raise ValueError(
+                "This GitHub integration is limited to the repositories "
+                f"{sorted(allowed)}"
+            )
+    return endpoint
 
 
 class GitHubIntegration(Integration):
@@ -50,6 +104,7 @@ class GitHubIntegration(Integration):
         headers: dict | None = None,
     ) -> Any:
         """Make HTTP request to Github API."""
+        endpoint = checked_endpoint(endpoint, self.__configuration.repositories)
         url = f"{self.__configuration.base_url}{endpoint}"
         request_headers = self.headers.copy()
         if headers:
@@ -394,9 +449,8 @@ class GitHubIntegration(Integration):
             if since:
                 params["since"] = since
 
-            query_string = "&".join(f"{k}={v}" for k, v in params.items())
             response = self._make_request(
-                "GET", f"/repos/{repo_name}/issues?{query_string}"
+                "GET", f"/repos/{repo_name}/issues", params=params
             )
 
             if not isinstance(response, list):
@@ -448,9 +502,8 @@ class GitHubIntegration(Integration):
         if since:
             params["since"] = since
 
-        query_string = "&".join(f"{k}={v}" for k, v in params.items())
         return self._make_request(
-            "GET", f"/repos/{repo_name}/issues/comments?{query_string}"
+            "GET", f"/repos/{repo_name}/issues/comments", params=params
         )
 
     def get_issue_comment(
@@ -948,12 +1001,6 @@ def as_tools(configuration: GitHubIntegrationConfiguration):
         )
         data: dict = Field(..., description="Data to update the repository with")
 
-    class DeleteOrganizationRepositorySchema(BaseModel):
-        org: str = Field(..., description="GitHub organization name")
-        repo_name: str = Field(
-            ..., description="Full repository name in format 'owner/repo'"
-        )
-
     class ListRepositoryActivitiesSchema(BaseModel):
         repo_name: str = Field(
             ..., description="Full repository name in format 'owner/repo'"
@@ -1099,19 +1146,6 @@ def as_tools(configuration: GitHubIntegrationConfiguration):
         )
         secret_name: str = Field(..., description="Name of the secret")
 
-    class CreateOrUpdateRepositorySecretSchema(BaseModel):
-        repo_name: str = Field(
-            ..., description="Full repository name in format 'owner/repo'"
-        )
-        secret_name: str = Field(..., description="Name of the secret")
-        value: str = Field(..., description="Value for the secret")
-
-    class DeleteRepositorySecretSchema(BaseModel):
-        repo_name: str = Field(
-            ..., description="Full repository name in format 'owner/repo'"
-        )
-        secret_name: str = Field(..., description="Name of the secret to delete")
-
     class ListRepositoryContributorsSchema(BaseModel):
         repo_name: str = Field(
             ..., description="Full repository name in format 'owner/repo'"
@@ -1164,12 +1198,6 @@ def as_tools(configuration: GitHubIntegrationConfiguration):
             repo_name,
             data: integration.update_organization_repository(org, repo_name, data),
             args_schema=UpdateOrganizationRepositorySchema,
-        ),
-        StructuredTool(
-            name="github_delete_organization_repository",
-            description="Delete a repository for an organization",
-            func=lambda org, repo_name: integration.delete_repository(org, repo_name),
-            args_schema=DeleteOrganizationRepositorySchema,
         ),
         StructuredTool(
             name="github_list_repository_activities",
@@ -1320,24 +1348,6 @@ def as_tools(configuration: GitHubIntegrationConfiguration):
                 repo_name, secret_name
             ),
             args_schema=GetRepositorySecretSchema,
-        ),
-        StructuredTool(
-            name="github_create_or_update_repository_secret",
-            description="Create or update a secret in a GitHub repository",
-            func=lambda repo_name,
-            secret_name,
-            value: integration.create_or_update_repository_secret(
-                repo_name, secret_name, value
-            ),
-            args_schema=CreateOrUpdateRepositorySecretSchema,
-        ),
-        StructuredTool(
-            name="github_delete_repository_secret",
-            description="Delete a secret from a GitHub repository",
-            func=lambda repo_name, secret_name: integration.delete_repository_secret(
-                repo_name, secret_name
-            ),
-            args_schema=DeleteRepositorySecretSchema,
         ),
         StructuredTool(
             name="github_list_repository_contributors",

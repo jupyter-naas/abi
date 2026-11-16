@@ -68,17 +68,13 @@ async def test_invite_member_raises_when_member_exists(team) -> None:
 
 
 @pytest.mark.asyncio
-async def test_add_domain_raises_when_domain_exists() -> None:
-    adapter = SimpleNamespace(domain_exists=AsyncMock(return_value=True))
+async def test_add_domain_raises_when_another_organization_verified_it() -> None:
+    verified = SimpleNamespace(id="d-1", organization_id="org-2", is_verified=True)
+    adapter = SimpleNamespace(get_domain_by_name=AsyncMock(return_value=verified))
     service = OrganizationService(adapter=adapter)
 
     with pytest.raises(OrganizationDomainAlreadyExistsError):
-        await service.add_domain(
-            org_id="org-1",
-            domain="example.com",
-            now=datetime.utcnow(),
-            verification_token="token",
-        )
+        await service.add_domain(org_id="org-1", domain="example.com", now=datetime.utcnow())
 
 
 @pytest.mark.asyncio

@@ -27,6 +27,10 @@ PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     ("GET", "/api/auth/oidc/callback"): "the identity provider's redirect back",
     ("GET", "/api/auth/oidc/session"): "the session cookie's user, checked by the route",
     ("POST", "/api/auth/oidc/logout"): "ends the session cookie's session, CSRF-checked",
+    ("POST", "/api/auth/oidc/web-pass"): (
+        "a pass for the web app's server routes, for the session cookie's user, CSRF-checked"
+    ),
+    ("GET", "/api/auth/oidc/web-pass"): "whose web pass this is: the pass is the credential",
     ("GET", "/api/auth/avatar/user/{user_id}"): "account pictures (personal drive) in <img> tags",
     ("GET", "/api/auth/avatar/user/{user_id}/org"): "organization member pictures (personal drive)",
     ("GET", "/api/auth/avatar/user/{user_id}/org/{org_id}"): "per-org member pictures",

@@ -104,6 +104,14 @@ class CallContext:
   actor acting for that user (the same actor for another user is refused); model registry
   chat streams follow the rule (`same_caller`). Overflow chunks carry their call's token,
   user, trace and container; a client stream captures its user once, when it opens.
+- **Transfer budgets** (`TransferHost`): a host declares the operations that read an
+  upload (`uploads`); `write` on any other session is refused before a byte is spooled.
+  Upload budgets are finite (`max_upload_bytes` per session, `max_buffered_upload_bytes`
+  per host; `None` is refused), and a caller (actor and user) gets a quarter of a host's
+  sessions and spooled bytes (`max_caller_sessions`). A parked overflow reply counts, in
+  sessions and in bytes (`max_caller_parked_bytes`), for the caller it is parked for. An upload operation with an `authorize(operation, metadata)`
+  hook (object PUT, dataset write) is checked as the caller at `open`. A refused request
+  does not refresh its session's idle clock.
   `nats_runtime.run_coro` schedules through `run_coroutine_threadsafe`, which copies the
   calling thread's context, so a sync caller keeps its identity.
 - **Never from request-body fields.** `CallContext.principal_id` and `tenant_id` in the
@@ -200,9 +208,11 @@ login, and `auth`, the callout responder's. There is no shared `abi` or `module`
   the broker only narrows further. IAM changes reach other engines on `abi.iam.v1.changed`
   (`abi iam` publishes it after each write); a connected module keeps its broker permissions
   until it reconnects, and the SDK reconnects once its manifest is approved.
-- **Inboxes.** A client's inbox prefix is `_INBOX.<key id>` (a subject token), so it reads no
-  other's replies. Modules may also publish to `_INBOX.>` (app request bodies and run updates
-  go to inboxes the module is handed).
+- **Inboxes.** A module client's inbox prefix is `_INBOX.<key id>.m`, so it reads no
+  other's replies. A module publishes to the reply subjects of the requests it answers and to
+  the stream inboxes it is handed (`naas_abi_sdk.messages.stream_inbox`: app request bodies,
+  run updates; each ends with a secret), never to another connection's own inboxes
+  (`services/iam/broker.py`, `REPLY_INBOXES`, `STREAM_INBOXES`).
 - **Broker control** (`nats_broker_control.py`, `abi.broker.v1.<operation>`,
   `naas_abi_sdk.broker_control`). Behind the callout a module creates no stream or consumer
   (their subjects travel in the request body, which the broker never reads), gets no stream
@@ -233,7 +243,10 @@ login, and `auth`, the callout responder's. There is no shared `abi` or `module`
   process (its calls over NATS carry the engine's delegation for the user, so there they are
   bounded by the engine and the user). A
   module's own trigger, a schedule or an event runs as the module alone: a module never hands a user
-  to another, as with agents. A schedule's input is the schedule's body, validated (a JSON object of
+  to another, as with agents. An engine module's job is triggered by the engine, or by `api` (for
+  a user or for none): another caller's trigger (a module's) is refused (`job_authorizer`), since
+  the run would act with the job account's rights rather than the caller's. The kernel's own
+  maintenance jobs (owners `naas_abi_core.*`) run as the engine. A schedule's input is the schedule's body, validated (a JSON object of
   4 KiB at most) and sealed by the engine.
 - **Sealed triggers.** Every trigger, schedule and cancel the engine writes carries a seal
   (`Abi-Job-Seal`, an HMAC over where it is delivered, its kind, its body, its claim-check headers

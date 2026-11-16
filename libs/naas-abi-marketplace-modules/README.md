@@ -52,6 +52,23 @@ start with its full name, and the agent runs without the tools that need it.
 Other settings come from `<APP>_<FIELD>` variables (`PENNYLANE_CHAT_MODEL`,
 `PENNYLANE_DATASTORE_PATH`, ...).
 
+An agent on a credential the module holds for the whole deployment acts with
+it for everyone who may use the agent, so it reads, and writes only where its
+settings say:
+
+| Module | Setting | Default |
+| --- | --- | --- |
+| GitHub | `GITHUB_AGENT_WRITE_TOOLS`: write tools the agent carries besides the read tools (comma-separated tool names) | none |
+| GitHub | `GITHUB_REPOSITORIES`: the only repositories it reaches (comma-separated `owner/repo`) | any |
+| SendGrid | `SENDGRID_ALLOWED_SENDERS`: the only addresses it sends from (comma-separated) | none: nothing is sent |
+| PostgreSQL | `POSTGRES_READ_ONLY`: one statement that leaves the transaction and session alone, read-only, never committed | `true` |
+
+No agent tool deletes a GitHub repository, writes an Actions secret, reveals a
+Naas secret value or storage credentials, deletes a Naas workspace, plugin or
+ontology, or changes workspace membership: those stay integration methods.
+Google Search reads only pages on public addresses (every redirect checked,
+5 MB and 30 s caps) and keeps no copy of them.
+
 In a project, add it to `dev.modules` (for `abi dev up`):
 
 ```yaml

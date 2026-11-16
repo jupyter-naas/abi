@@ -79,6 +79,9 @@ class OrganizationModel(Base):
         Boolean, nullable=False, default=False
     )  # Vertical bar between primary and secondary logo
     default_theme = Column(String, nullable=True, default=None)  # "light", "dark", or null (system)
+    # Made by the configuration's seeding (core/org_seed.py): the only rows it updates.
+    # False for what people create; NULL for a row older than the flag.
+    seeded = Column(Boolean, nullable=True, default=False)
 
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
@@ -291,6 +294,9 @@ class WorkspaceModel(Base):
 
     # Default git repo (owner/name) cloned for new coding workspaces here.
     coding_default_repo_id = Column(String, nullable=True)
+    # Made by the configuration's seeding (core/org_seed.py): the only rows it updates,
+    # and the only ones its graph assignments reach. NULL for a row older than the flag.
+    seeded = Column(Boolean, nullable=True, default=False)
 
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
@@ -721,6 +727,19 @@ class SkillModel(Base):
     enabled = Column(Boolean, nullable=False, default=True)
     last_used_at = Column(DateTime(timezone=False), nullable=True)  # Drives "latest used" ordering
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+
+class SkillWorkspaceSwitchModel(Base):
+    """An organization skill turned on or off in one workspace of its organization,
+    by that workspace's admins."""
+
+    __tablename__ = "skill_workspace_switches"
+
+    skill_id = Column(String, ForeignKey("skills.id", ondelete="CASCADE"), primary_key=True)
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
+    enabled = Column(Boolean, nullable=False)
+    updated_by = Column(String, nullable=True)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 
 

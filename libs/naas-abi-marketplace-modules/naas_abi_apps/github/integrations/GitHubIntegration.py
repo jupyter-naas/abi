@@ -4,6 +4,11 @@ Port of ``naas_abi_marketplace.applications.github.integrations``: same
 methods and tool names, each method awaited. HTTP errors raise
 ``IntegrationConnectionError`` (the in-engine client let ``requests`` errors
 through while its ``except`` waited for another type).
+
+Every endpoint is checked one path segment at a time before it is sent
+(``checked_endpoint``), and a configuration may keep requests to
+``repositories``. Deleting a repository and writing or deleting an Actions
+secret are methods only: no tool of ``as_tools`` does either.
 """
 
 import inspect
@@ -28,6 +33,59 @@ class GitHubIntegrationConfiguration(HttpConfiguration):
 
     access_token: str
     base_url: str = "https://api.github.com"
+    # When set, requests reach only these repositories ("owner/repo"); every
+    # other endpoint (users, organizations, other repositories) is refused.
+    repositories: list[str] | None = None
+
+
+# One path segment of an endpoint: a GitHub name, a number or a secret name.
+# "." and ".." are refused, so no segment walks to another endpoint.
+_SEGMENT = re.compile(r"^[A-Za-z0-9._-]+$")
+
+# The tools that only read. GitHubAgent carries these, plus the write tools its
+# module configuration names.
+READ_TOOLS: frozenset[str] = frozenset(
+    {
+        "github_get_user_details",
+        "github_get_repository_details",
+        "github_list_organization_repositories",
+        "github_list_repository_activities",
+        "github_get_repository_contributors",
+        "github_get_issue",
+        "github_list_issues",
+        "github_list_issue_comments",
+        "github_get_issue_comment",
+        "github_list_assignees",
+        "github_check_assignee_permission",
+        "github_list_repository_secrets",
+        "github_get_repository_secret",
+        "github_list_repository_contributors",
+    }
+)
+
+
+def checked_endpoint(endpoint: str, repositories: list[str] | None = None) -> str:
+    """``endpoint`` (a path: query values go in ``params``) when each of its
+    segments is a plain name and, with ``repositories``, it lies under one of
+    them; ``ValueError`` otherwise. "?" and "#" fit no segment."""
+    segments = endpoint.split("/")
+    if segments[0] != "" or len(segments) < 2:
+        raise ValueError(f"GitHub endpoint must start with '/': {endpoint!r}")
+    for segment in segments[1:]:
+        if segment in (".", "..") or not _SEGMENT.fullmatch(segment):
+            raise ValueError(f"Invalid name in GitHub endpoint: {segment!r}")
+    if repositories is not None:
+        allowed = {name.strip().lower() for name in repositories}
+        if not (
+            len(segments) >= 4
+            and segments[1] == "repos"
+            and f"{segments[2]}/{segments[3]}".lower() in allowed
+        ):
+            raise ValueError(
+                "This GitHub integration is limited to the repositories "
+                f"{sorted(allowed)}"
+            )
+    return endpoint
 
 
 class GitHubIntegration(Integration):
@@ -56,7 +114,9 @@ class GitHubIntegration(Integration):
         params: dict | None = None,
         headers: dict | None = None,
     ) -> Any:
-        """One request to the GitHub API; JSON body, or ``[]`` when empty."""
+        """One request to the GitHub API; JSON body, or ``[]`` when empty.
+        ``endpoint`` is checked (``checked_endpoint``) before anything is sent."""
+        endpoint = checked_endpoint(endpoint, self.__configuration.repositories)
         response = await request(
             self.__configuration,
             method,
@@ -455,9 +515,8 @@ class GitHubIntegration(Integration):
         if since:
             params["since"] = since
 
-        query_string = "&".join(f"{k}={v}" for k, v in params.items())
         return await self._make_request(
-            "GET", f"/repos/{repo_name}/issues/comments?{query_string}"
+            "GET", f"/repos/{repo_name}/issues/comments", params=params
         )
 
     async def get_issue_comment(
@@ -989,13 +1048,6 @@ def as_tools(configuration: GitHubIntegrationConfiguration):
             + ", ".join(sorted(UPDATABLE_REPOSITORY_FIELDS)),
         )
 
-    class DeleteOrganizationRepositorySchema(BaseModel):
-        org: str = Field(..., description="GitHub organization name")
-        repo_name: str = Field(
-            ...,
-            description="Repository name in the organization ('repo', or 'org/repo')",
-        )
-
     async def update_organization_repository(
         org: str, repo_name: str, data: dict
     ) -> Any:
@@ -1007,11 +1059,6 @@ def as_tools(configuration: GitHubIntegrationConfiguration):
             )
         owner, name = organization_repository(org, repo_name).split("/")
         return await integration.update_organization_repository(owner, name, **data)
-
-    async def delete_organization_repository(org: str, repo_name: str) -> Any:
-        return await integration.delete_repository(
-            organization_repository(org, repo_name)
-        )
 
     class ListRepositoryActivitiesSchema(BaseModel):
         repo_name: str = Field(
@@ -1158,19 +1205,6 @@ def as_tools(configuration: GitHubIntegrationConfiguration):
         )
         secret_name: str = Field(..., description="Name of the secret")
 
-    class CreateOrUpdateRepositorySecretSchema(BaseModel):
-        repo_name: str = Field(
-            ..., description="Full repository name in format 'owner/repo'"
-        )
-        secret_name: str = Field(..., description="Name of the secret")
-        value: str = Field(..., description="Value for the secret")
-
-    class DeleteRepositorySecretSchema(BaseModel):
-        repo_name: str = Field(
-            ..., description="Full repository name in format 'owner/repo'"
-        )
-        secret_name: str = Field(..., description="Name of the secret to delete")
-
     class ListRepositoryContributorsSchema(BaseModel):
         repo_name: str = Field(
             ..., description="Full repository name in format 'owner/repo'"
@@ -1238,15 +1272,6 @@ def as_tools(configuration: GitHubIntegrationConfiguration):
                 UpdateOrganizationRepositorySchema,
             ),
             args_schema=UpdateOrganizationRepositorySchema,
-        ),
-        StructuredTool(
-            name="github_delete_organization_repository",
-            description="Delete a repository for an organization",
-            coroutine=_tool(
-                delete_organization_repository,
-                DeleteOrganizationRepositorySchema,
-            ),
-            args_schema=DeleteOrganizationRepositorySchema,
         ),
         StructuredTool(
             name="github_list_repository_activities",
@@ -1434,30 +1459,6 @@ def as_tools(configuration: GitHubIntegrationConfiguration):
                 GetRepositorySecretSchema,
             ),
             args_schema=GetRepositorySecretSchema,
-        ),
-        StructuredTool(
-            name="github_create_or_update_repository_secret",
-            description="Create or update a secret in a GitHub repository",
-            coroutine=_tool(
-                lambda repo_name, secret_name, value: (
-                    integration.create_or_update_repository_secret(
-                        repo_name, secret_name, value
-                    )
-                ),
-                CreateOrUpdateRepositorySecretSchema,
-            ),
-            args_schema=CreateOrUpdateRepositorySecretSchema,
-        ),
-        StructuredTool(
-            name="github_delete_repository_secret",
-            description="Delete a secret from a GitHub repository",
-            coroutine=_tool(
-                lambda repo_name, secret_name: integration.delete_repository_secret(
-                    repo_name, secret_name
-                ),
-                DeleteRepositorySecretSchema,
-            ),
-            args_schema=DeleteRepositorySecretSchema,
         ),
         StructuredTool(
             name="github_list_repository_contributors",

@@ -135,7 +135,7 @@ ALTER TABLE users ADD COLUMN timezone VARCHAR(50);
 ## Authentication Flow
 
 1. User enters their email on the login page → `POST /api/auth/oidc/route` picks the provider
-2. Browser goes to the provider (`GET /api/auth/oidc/login`), which emails a 6-digit code (in `abi dev`: `abi dev code`)
+2. Browser goes to the provider (`GET /api/auth/oidc/login`), which emails a 8-digit code (in `abi dev`: `abi dev code`)
 3. Provider redirects back → `GET /api/auth/oidc/callback` sets the httpOnly session cookie
 4. The web app sends the cookie (and `X-CSRF-Token` on writes); it holds no token
 5. Scripts send a personal API key (`abi_pk_...`) as `Authorization: Bearer`

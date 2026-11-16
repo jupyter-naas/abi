@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
+from functools import cache
 from typing import Any
 
 STRING, IRI, BARE = "string", "iri", "bare"
@@ -116,15 +117,21 @@ def safe_values(
     return rendered
 
 
+@cache
+def _environment() -> Any:
+    from jinja2.sandbox import ImmutableSandboxedEnvironment
+
+    return ImmutableSandboxedEnvironment(autoescape=False)
+
+
 class SPARQLTemplate:
     """A Jinja SPARQL template whose arguments cannot change the query."""
 
     def __init__(self, template: str):
-        from jinja2 import Template
-
         self.source = template
         self.contexts = placeholder_contexts(template)
-        self._template = Template(template)
+        # Sandboxed: a template reaches its arguments, never Python objects.
+        self._template = _environment().from_string(template)
 
     def render(self, **values: Any) -> str:
         """The query; ``ValueError`` when a value cannot stand where it goes."""

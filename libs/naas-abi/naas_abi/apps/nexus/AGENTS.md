@@ -173,6 +173,20 @@ Next.js 14 App Router under `apps/web/`. State is Zustand (`src/stores/*.ts`, on
 
 Cloudflare Pages deploy: `pnpm build:cf` then `wrangler pages deploy` (see `apps/web/package.json`, `wrangler.toml`). Standard `pnpm dev` runs Next.js on port 3000.
 
+### Server routes that fetch for a page
+
+`/api/image-data`, `/api/link-preview` and `/api/maps/*` run on the web host, which never sees the API's
+session cookie. They answer only a browser that holds a **web pass** (`lib/web-pass.ts`: the auth store asks
+the API for one once the session is known, renews it while the app is open and drops it when the session ends; see
+`api/app/services/oidc/AGENTS.md`, "The web pass"). The readable cookie `nexus-web-pass-until` says when
+the pass ends; the workspace layout renders its pages once a pass is in hand (`useWebPassReady`, five
+seconds at most), so their first requests to these routes carry it. A URL a page gives them is fetched with
+`lib/public-fetch.ts`: `https` on the default port, every address of every hop on the public internet (no
+loopback, private, link-local or Docker network address), the connection made to the address that was
+checked, three redirects, a size and a time cap. `/api/image-data` serves remote answers only as raster
+images, and every image with `nosniff` and a sandboxing CSP. A logo the API serves is read from the API
+with the session (`lib/logo-data-uri.ts`), never through these routes.
+
 ### View as (the web side)
 
 An administrator sees Nexus as another person, read-only, in one workspace (server: `apps/api/app/services/view_as/AGENTS.md`). The web starts and stops the view, shows who is viewed, and keeps nothing of it. It decides nothing: IAM and the server do.
@@ -472,7 +486,7 @@ Graph-layer evidence panels start closed, open from the Locations toolbar button
 
 Basemap tiles use `https://tile.openstreetmap.org/{z}/{x}/{y}.png` directly in both themes, with visible OpenStreetMap attribution and normal browser caching/referrer behavior. No API key or tile proxy is required. Standard tile layers carry `maps-basemap`; dark-mode CSS recolors only their tile images and updates map chrome immediately when the workspace theme changes. Never apply the filter to the entire map or to thematic/WMS overlays, markers, or attribution. Do not restore unauthenticated CARTO raster URLs: they return an API-key watermark. Follow [OSM tile policy](https://operations.osmfoundation.org/policies/tiles/); do not prefetch or bulk-download tiles.
 
-Shared Leaflet bootstrap: `maps/lib/leaflet-map.ts` + `maps-feed-canvas.tsx`. CORS / User-Agent proxies live only under `/api/maps/*` (Maps-owned). FIRMS VIIRS WMS is proxied at `/api/maps/firms` only when `FIRMS_MAP_KEY` (or `NEXT_PUBLIC_FIRMS_MAP_KEY`) is set; without a key the Wildfires canvas is EONET-only (never ship a keyless/placeholder FIRMS WMS URL). OpenWeather temp tiles are not used (keys required). AIS is a process-local AISStream WebSocket on the Node Maps runtime (`next start` / Docker nexus-web); Cloudflare Pages isolates cannot hold the stream and must report that. Live flights and AIS pass map bounds on pan/zoom. Toolbar meta shows source, coverage, and observation age. `fetchPins` may return either a pin array or a `MapsFeedResult`.
+Shared Leaflet bootstrap: `maps/lib/leaflet-map.ts` + `maps-feed-canvas.tsx`. CORS / User-Agent proxies live only under `/api/maps/*` (Maps-owned). Each proxy is exported through `mapsRoute` (`api/maps/_guard.ts`): it answers signed-in users only (their web pass, `lib/web-pass-server.ts`; the middleware stops a request without one), at most `perMinute` requests a minute per user, and a proxy that spends a deployment key (Google Places and Street View, FIRMS, OpenAQ) keeps its upstream answers on the server for `cacheSeconds` (64 MB per process at most, expired answers dropped first); answers are `private`. `custom/` keeps its own Bearer check. FIRMS VIIRS WMS is proxied at `/api/maps/firms` only when `FIRMS_MAP_KEY` (or `NEXT_PUBLIC_FIRMS_MAP_KEY`) is set; without a key the Wildfires canvas is EONET-only (never ship a keyless/placeholder FIRMS WMS URL). OpenWeather temp tiles are not used (keys required). AIS is a process-local AISStream WebSocket on the Node Maps runtime (`next start` / Docker nexus-web); Cloudflare Pages isolates cannot hold the stream and must report that. Live flights and AIS pass map bounds on pan/zoom. Toolbar meta shows source, coverage, and observation age. `fetchPins` may return either a pin array or a `MapsFeedResult`.
 
 Map initialization must receive the effect's abort signal and check it after lazy imports, before constructing Leaflet. Feed refreshes share the same setup promise; teardown owns only that effect's map and markers. Keep Strict Mode enabled. `maps/components/maps-feed-canvas.test.ts` mounts the real component and Leaflet in jsdom to cover remounts, marker selection, country filtering and stale requests after dataset changes. Run `pnpm test maps-feed-canvas.test.ts leaflet-map.test.ts maps-feed.test.ts maps-view.test.ts maps-pin-media.test.ts datasets.test.ts src/app/api/maps/ais/store.test.ts src/app/api/maps/flights/route.test.ts src/app/api/maps/streetview/route.test.ts`, then `pnpm typecheck`. Vitest and jsdom are locked local development dependencies.
 
@@ -622,6 +636,10 @@ src/app/workspace/[workspaceId]/chat/
 | Route parsing | Module (`lib/chat-route.ts`) | Imported by shell layout, sidebar, and `chat-interface.tsx` |
 
 Route parsing lives in `lib/chat-route.ts` and is imported by `workspace-layout.tsx`, `chat-section.tsx`, `mobile-top-bar.tsx`, and `chat-interface.tsx`.
+
+### Cited links
+
+An answer's sources are every `http(s)` URL of its text, its tool outputs and its sources, so text an agent read chooses them. `components/chat/citation-frames.ts` decides how they are framed: a page of this app or of the API is never framed (it opens in a new tab), the hidden embeddability probe is `sandbox=""` (no script, an origin of its own), and the preview panel's sandbox never holds `allow-same-origin`. Tests: `citation-frames.test.ts`.
 
 ### Semantic CSS
 

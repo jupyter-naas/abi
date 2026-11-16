@@ -413,12 +413,17 @@ def test_unexpected_exception_maps_to_internal_and_does_not_leak_message():
 # ---------------------------------------------------------------------------
 
 
-def test_every_endpoint_goes_through_the_event_service_and_never_broadcasts():
-    """A remote EventService publishes and broadcasts on its side; here the
-    engine's EventService only stores, so each event goes out once."""
+def test_every_endpoint_goes_through_the_event_service_and_an_append_broadcasts_once():
+    """The engine's EventService broadcasts what a remote caller appends: a
+    module never publishes live events itself, and a remote EventService
+    (``EventSecondaryAdapterNATSClient``) leaves it to the owner, so each event
+    goes out once."""
     from unittest.mock import MagicMock
 
-    from naas_abi_core.services.event.EventService import EventService
+    from naas_abi_core.services.event.EventService import (
+        EventService,
+        class_iri_to_topic,
+    )
 
     bus = MagicMock()
     stub = _StubAdapter()
@@ -481,7 +486,9 @@ def test_every_endpoint_goes_through_the_event_service_and_never_broadcasts():
         "event_types",
     ]
     assert stub.max_seq() == 1
-    bus.publish.assert_not_called()
+    bus.publish.assert_called_once_with(
+        topic=class_iri_to_topic("t"), routing_key="e1", payload=b"x"
+    )
 
 
 def test_stop_without_start_is_a_noop():

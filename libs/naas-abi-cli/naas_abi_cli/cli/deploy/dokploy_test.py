@@ -733,17 +733,17 @@ def test_two_stacks_on_one_server_never_call_each_other(tmp_path: Path) -> None:
     assert "NEXUS_INTERNAL_API_URL=http://one-abi:9879" in nexus
 
 
-def test_workspaces_and_ci_jobs_join_the_fixed_name_network(tmp_path: Path) -> None:
+def test_workspaces_and_ci_jobs_join_their_fixed_name_networks(tmp_path: Path) -> None:
     compose = _deploy(_project(tmp_path, nats=True), include_coding=True)
-    network = "${ABI_STACK_NAME}-abi-network"
 
-    assert compose["networks"]["abi-network"]["name"] == (
-        "${ABI_STACK_NAME:?set ABI_STACK_NAME}-abi-network"
-    )
+    for key in ("abi-network", "coding", "ci"):
+        assert compose["networks"][key]["name"] == (
+            "${ABI_STACK_NAME:?set ABI_STACK_NAME}-" + key
+        )
     abi_env = compose["services"]["abi"]["environment"]
-    assert f"CODING_WORKSPACE_DOCKER_NETWORK={network}" in abi_env
+    assert "CODING_WORKSPACE_DOCKER_NETWORK=${ABI_STACK_NAME}-coding" in abi_env
     runner = yaml.safe_load(compose["configs"]["act_runner_config"]["content"])
-    assert runner["container"]["network"] == network
+    assert runner["container"]["network"] == "${ABI_STACK_NAME}-ci"
     coder = compose["services"]["coder"]
     assert (
         coder["environment"]["CODER_ACCESS_URL"] == "https://coder.${PUBLIC_WEB_HOST}"
@@ -938,3 +938,39 @@ def test_a_fresh_project_boots_with_an_empty_secrets_volume(
         "OPENROUTER_API_KEY=saved\n"
         == (volume / ".env").read_text(encoding="utf-8").split("\n", 1)[0] + "\n"
     )
+
+
+def test_dokploy_keeps_its_env_file_and_backup_private(tmp_path: Path) -> None:
+    import os
+    import stat
+
+    project = _project(tmp_path, nats=True)
+    previous = os.umask(0o022)
+    try:
+        _deploy(project)
+        setup_dokploy_deploy(
+            str(project), domain="example.com", nats=True, regenerate=True
+        )
+    finally:
+        os.umask(previous)
+    assert stat.S_IMODE((project / ".env.dokploy").stat().st_mode) == 0o600
+    (backup,) = (project / ".abi-backups" / "deploy-dokploy").glob("*/.env.dokploy")
+    assert stat.S_IMODE(backup.stat().st_mode) == 0o600
+    assert stat.S_IMODE(backup.parent.stat().st_mode) == 0o700
+
+
+def _assert_mcp_server_is_opt_in_and_keyless(service: dict) -> None:
+    """Started only with the ``mcp`` profile; each caller brings their own key."""
+    assert service["profiles"] == ["mcp"]
+    names = [str(item).split("=", 1)[0] for item in service["environment"]]
+    assert "ABI_API_KEY" not in names
+    assert "MCP_HOST" in names
+
+
+@pytest.mark.parametrize("nats, coding", MODES)
+def test_the_mcp_server_keeps_off_by_default_and_holds_no_key(
+    tmp_path: Path, nats: bool, coding: bool
+) -> None:
+    compose = _deploy(_project(tmp_path, nats=nats), include_coding=coding)
+
+    _assert_mcp_server_is_opt_in_and_keyless(compose["services"]["mcp-server"])

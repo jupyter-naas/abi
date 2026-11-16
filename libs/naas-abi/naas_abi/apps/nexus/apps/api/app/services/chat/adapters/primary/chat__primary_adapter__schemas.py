@@ -7,7 +7,7 @@ from typing import Any, Literal
 from naas_abi.apps.nexus.apps.api.app.services.providers.model_catalog import (
     list_catalog_providers,
 )
-from pydantic import BaseModel, Field, PrivateAttr
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 
 def _valid_provider_types() -> list[str]:
@@ -76,7 +76,34 @@ class ConversationCreate(BaseModel):
     agent: str = Field(default="aia", min_length=1, max_length=50)
 
 
+class ProviderSelectionRequest(BaseModel):
+    """What a chat request may say about its provider: which type and model.
+
+    Endpoints, keys and account ids are never taken from a request: the server
+    resolves them from the workspace's configuration (``resolve_provider``).
+    A client that still sends them has them ignored.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: str = Field(default="", max_length=200)
+    name: str = Field(default="", max_length=200)
+    type: str
+    enabled: bool = True
+    model: str = Field(default="", max_length=200)
+    llm_model: str | None = Field(default=None, max_length=200)
+
+    def model_post_init(self, __context: Any) -> None:
+        if self.type not in VALID_PROVIDER_TYPES:
+            raise ValueError(
+                f"Invalid provider type '{self.type}'. "
+                f"Must be one of: {', '.join(sorted(VALID_PROVIDER_TYPES))}"
+            )
+
+
 class ProviderConfigRequest(BaseModel):
+    """A provider as the server resolved it, endpoint and key included."""
+
     id: str
     name: str
     type: str
@@ -120,7 +147,7 @@ class ChatRequest(BaseModel):
     images: list[str] | None = Field(None, max_length=10)
     messages: list[MessageRequest] = Field(default_factory=list, max_length=200)
     agent: str = Field(default="aia", min_length=1, max_length=50)
-    provider: ProviderConfigRequest | None = None
+    provider: ProviderSelectionRequest | None = None
     llm_model: str | None = Field(None, max_length=200)
     context: dict[str, Any] | None = None
     system_prompt: str | None = Field(None, max_length=50_000)

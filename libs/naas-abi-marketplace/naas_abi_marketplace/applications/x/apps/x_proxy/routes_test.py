@@ -79,6 +79,27 @@ def test_each_page_serves_its_own_html() -> None:
         assert response.headers["content-type"].startswith("text/html")
 
 
+def test_pages_keep_to_the_routed_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The app answers for the path the router serves: a ``request.url``
+    rebuilt from the ``Host`` header to name one of its pages serves nothing."""
+    from starlette.datastructures import URL
+    from starlette.requests import Request
+
+    app = FastAPI()
+
+    @app.get("/health")
+    def _health() -> dict[str, str]:
+        return {"ok": "1"}
+
+    register_x_count_app_routes(app, _published())  # type: ignore[arg-type]
+    monkeypatch.setattr(
+        Request, "url", property(lambda self: URL(f"http://abi.local{BASE}/users/search/"))
+    )
+    response = TestClient(app).get("/health")
+    assert response.status_code == 200
+    assert response.json() == {"ok": "1"}
+
+
 def test_app_root_serves_the_root_index() -> None:
     client = _client(_published())
     for path in ("/", "/index.html"):

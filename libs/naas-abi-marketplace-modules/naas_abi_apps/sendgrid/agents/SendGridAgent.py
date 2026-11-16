@@ -38,17 +38,29 @@ Help users manage SendGrid contacts, lists and unsubscribe groups, and send emai
 """
 
 
-def tools_for(credentials: dict[str, str]) -> list[Any]:
-    """The SendGrid tools, or none without api_key."""
+def tools_for(
+    credentials: dict[str, str], allowed_senders: list[str] | None = None
+) -> list[Any]:
+    """The SendGrid tools, or none without api_key. Mail is sent only from
+    ``allowed_senders`` (none by default)."""
     if not all(credentials.get(field) for field in ("api_key",)):
         return []
-    return as_tools(SendGridIntegrationConfiguration(**credentials))
+    return as_tools(
+        SendGridIntegrationConfiguration(
+            **credentials, allowed_senders=list(allowed_senders or [])
+        )
+    )
 
 
 async def create_agent(
-    engine: Any, module_id: str, *, credentials: dict[str, str], chat_model: str = ""
+    engine: Any,
+    module_id: str,
+    *,
+    credentials: dict[str, str],
+    chat_model: str = "",
+    allowed_senders: list[str] | None = None,
 ) -> Agent:
-    tools = tools_for(credentials)
+    tools = tools_for(credentials, allowed_senders)
     return await build_agent(
         engine,
         module_id,

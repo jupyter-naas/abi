@@ -31,6 +31,7 @@ from .IVectorStorePort import (
     SearchResult,
     VectorDocument,
     VectorPage,
+    check_collection_name,
 )
 
 # Bound one call: a page travels as one NATS reply in NATS mode.
@@ -128,6 +129,7 @@ class VectorStoreService(ServiceBase):
         recreate: bool = False,
         **kwargs,
     ) -> None:
+        check_collection_name(collection_name)
         self._ensure_initialized()
         commit = self.__create(collection_name)
         existing_collections = self.adapter.list_collections()
@@ -168,6 +170,7 @@ class VectorStoreService(ServiceBase):
     ) -> None:
         """Create a collection without checking for it first (the port's
         ``create_collection``); ``ensure_collection`` is the idempotent one."""
+        check_collection_name(collection_name)
         self._ensure_initialized()
         commit = self.__create(collection_name)
         try:
@@ -192,6 +195,7 @@ class VectorStoreService(ServiceBase):
         metadata: list[dict[str, Any]] | None = None,
         payloads: list[dict[str, Any]] | None = None,
     ) -> None:
+        check_collection_name(collection_name)
         self._ensure_initialized()
 
         if not ids or not vectors:
@@ -221,6 +225,7 @@ class VectorStoreService(ServiceBase):
         self, collection_name: str, documents: list[VectorDocument]
     ) -> None:
         """Store documents as given (the port's ``store_vectors``)."""
+        check_collection_name(collection_name)
         self._ensure_initialized()
         self.__vectors(
             "StoreVectors", collection_name, [document.id for document in documents]
@@ -257,6 +262,7 @@ class VectorStoreService(ServiceBase):
         include_vectors: bool = False,
         include_metadata: bool = True,
     ) -> list[SearchResult]:
+        check_collection_name(collection_name)
         if k <= 0:
             raise ValueError("k must be a positive integer")
 
@@ -288,6 +294,7 @@ class VectorStoreService(ServiceBase):
 
         Checked once, on the collection: hits are not filtered.
         """
+        check_collection_name(collection_name)
         self._ensure_initialized()
         self.__collection("Search", collection_name)
         return self.adapter.search(
@@ -303,6 +310,7 @@ class VectorStoreService(ServiceBase):
         self, collection_name: str, document_id: str, include_vector: bool = True
     ) -> VectorDocument | None:
         """The document, or None when missing or invisible to the caller."""
+        check_collection_name(collection_name)
         self._ensure_initialized()
         try:
             self.__vectors("GetVector", collection_name, [document_id])
@@ -318,6 +326,7 @@ class VectorStoreService(ServiceBase):
         metadata: dict[str, Any] | None = None,
         payload: dict[str, Any] | None = None,
     ) -> None:
+        check_collection_name(collection_name)
         if vector is None and metadata is None and payload is None:
             raise ValueError(
                 "At least one of vector, metadata, or payload must be provided"
@@ -333,6 +342,7 @@ class VectorStoreService(ServiceBase):
         payload: dict[str, Any] | None = None,
     ) -> None:
         """The port's ``update_vector``, as given; ``update_document`` validates first."""
+        check_collection_name(collection_name)
         self._ensure_initialized()
         self.__vectors("UpdateVector", collection_name, [document_id])
         try:
@@ -358,12 +368,14 @@ class VectorStoreService(ServiceBase):
         )
 
     def delete_documents(self, collection_name: str, document_ids: list[str]) -> None:
+        check_collection_name(collection_name)
         if not document_ids:
             raise ValueError("Document IDs cannot be empty")
         self.delete_vectors(collection_name, document_ids)
 
     def delete_vectors(self, collection_name: str, document_ids: list[str]) -> None:
         """The port's ``delete_vectors``, as given; ``delete_documents`` validates first."""
+        check_collection_name(collection_name)
         self._ensure_initialized()
         self.__vectors("DeleteVectors", collection_name, list(document_ids))
         try:
@@ -389,6 +401,7 @@ class VectorStoreService(ServiceBase):
         )
 
     def get_collection_size(self, collection_name: str) -> int:
+        check_collection_name(collection_name)
         self._ensure_initialized()
         self.__collection("CountVectors", collection_name)
         return self.adapter.count_vectors(collection_name)
@@ -427,6 +440,7 @@ class VectorStoreService(ServiceBase):
         include_vectors: bool = False,
     ) -> VectorPage:
         """Page through a collection in a stable order; pass ``next_cursor`` back."""
+        check_collection_name(collection_name)
         if not 0 < limit <= MAX_PAGE_SIZE:
             raise ValueError(f"limit must be between 1 and {MAX_PAGE_SIZE}")
         return self.list_vectors(
@@ -447,6 +461,7 @@ class VectorStoreService(ServiceBase):
         documents it may list, so it can be shorter than ``limit`` while
         ``next_cursor`` continues.
         """
+        check_collection_name(collection_name)
         self._ensure_initialized()
         self.__visible(collection_name)
         everything = self._guard.allows_every("ListVectors", VECTOR)
@@ -475,6 +490,7 @@ class VectorStoreService(ServiceBase):
 
         Only the documents the caller may list, in a collection it can see.
         """
+        check_collection_name(collection_name)
         self._ensure_initialized()
         self.__visible(collection_name)
         everything = self._guard.allows_every("ListVectorsStream", VECTOR)
@@ -503,11 +519,13 @@ class VectorStoreService(ServiceBase):
         yield from self.__listable("ListVectorsStream", collection_name, batch)
 
     def get_collection_info(self, collection_name: str) -> CollectionInfo:
+        check_collection_name(collection_name)
         self._ensure_initialized()
         self.__collection("GetCollectionInfo", collection_name)
         return self.adapter.get_collection_info(collection_name)
 
     def delete_collection(self, collection_name: str) -> None:
+        check_collection_name(collection_name)
         self._ensure_initialized()
         self.__collection("DeleteCollection", collection_name)
         try:

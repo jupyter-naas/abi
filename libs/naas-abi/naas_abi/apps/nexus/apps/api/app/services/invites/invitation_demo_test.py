@@ -87,7 +87,7 @@ API = "https://testserver"
 WEB = "https://web.test"
 CALLBACK = f"{API}/api/auth/oidc/callback"
 ORG, WS = "org-1", "ws-1"
-SIX_DIGITS = re.compile(r"(?<![\d@.])(\d{6})(?!\d)")
+CODE_DIGITS = re.compile(r"(?<![\d@.])(\d{8})(?!\d)")
 
 
 class LocalEmail:
@@ -121,7 +121,7 @@ class LocalEmail:
 
     def last_code(self, to: str, length: int = 6) -> str:
         for subject, text in reversed(self.kept(to)):
-            code = SIX_DIGITS.search(text) or SIX_DIGITS.search(subject)
+            code = CODE_DIGITS.search(text) or CODE_DIGITS.search(subject)
             if code:
                 return code.group(1)
         raise LookupError(f"no sign-in code was mailed to {to}")
@@ -326,8 +326,9 @@ async def test_the_rfc_demo_invite_bob_and_he_signs_in_a_member_of_w(nexus, idp,
     }
     # Bob was told, and the invitation holds no code: the IdP mails that on sign-in.
     ((subject, text),) = mail.kept("bob@example.com")
-    assert "Research" in subject and "Alice" in text
-    assert f"{WEB}/auth/login?" in text and not SIX_DIGITS.search(text)
+    # The subject names the platform; the workspace and the inviter are in the body.
+    assert "Research" not in subject and "Research" in text and "Alice" in text
+    assert f"{WEB}/auth/login?" in text and not CODE_DIGITS.search(text)
     listed = (await alice.get(f"/api/invitations/workspaces/{WS}")).json()["invitations"]
     assert [i["email"] for i in listed] == ["bob@example.com"]
 
@@ -720,7 +721,7 @@ async def test_an_organization_anyone_made_creates_no_accounts_in_the_providers_
 
 
 @pytest.mark.asyncio
-async def test_an_address_on_the_organizations_verified_domain_is_provisioned(nexus, idp, alice):
+async def test_a_verified_domain_keeps_provisioning_to_the_inviters_own_right(nexus, idp, alice):
     from naas_abi.apps.nexus.apps.api.app.models import OrganizationDomainModel
 
     _, _, sessions = nexus
@@ -746,10 +747,12 @@ async def test_an_address_on_the_organizations_verified_domain_is_provisioned(ne
             )
         )
         await db.commit()
+    # Carol holds no right at the provider: her organization's verified domain
+    # gives her none, and the grant waits for whoever signs in with the address.
     mine = await _invite(carol, org_id, "bob@corp.example")
     assert mine.status_code == 200, mine.text
-    assert mine.json()["user_created"] is True and mine.json()["provisioning_skipped"] is False
-    assert idp.service.find_user("bob@corp.example") is not None
+    assert mine.json()["user_created"] is False and mine.json()["provisioning_skipped"] is True
+    assert idp.service.find_user("bob@corp.example") is None
     theirs = await _invite(carol, org_id, "eve@other.example")
     assert theirs.json()["provisioning_skipped"] is True
     assert idp.service.find_user("eve@other.example") is None

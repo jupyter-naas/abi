@@ -22,6 +22,10 @@ increments: content-addressed blobs, list elements and chunks, parts above
 I/O. Stored documents depend on it, so change it only with a schema version.
 Keep it core-free and importable on Python 3.10; tests/test_langgraph_documents.py
 pins the ids. Never deserialize in the pure read helpers (the viewer relies on it).
+Values decode through `CheckpointSerializer` (the savers' default): it rebuilds
+value classes only (models, dataclasses, enums and named tuples of langchain_core,
+langgraph and naas_abi* modules already imported, `langgraph.types.Send`, and standard
+types by exact symbol) and never imports or calls what a stored value names.
 It also holds retention (`kept_checkpoints`, `RetentionReport`; the savers'
 `prune`/`aprune` do the I/O) and secret redaction (`RedactingSerializer`: a
 `SecretStr`/`SecretBytes` is stored as one holding `REDACTED_SECRET`, never in
@@ -127,7 +131,8 @@ events. `_messages.py` and `intents.py` are copied from naas_abi_core on purpose
 change them together. tests/agent_parity at the repository root runs every
 scenario against both runtimes: extend it before changing either agent. Host an
 agent with `expose_agent(name, agent.as_handler())` and checkpoint it with
-`document_memory(engine.services.document, agent_memory_id(module_id, name))`.
+`document_memory(engine.services.document, agent_memory_id(module_id, name))`; pass
+`packages=("<your package>",)` when the graph state holds the module's own value classes.
 v1 has no local sub-agents; remote agents (AgentProxy) are passed as tools.
 
 Ontologies (`ontologies.py`): a module sends the `.ttl` files of `ontologies/` (next to
@@ -183,7 +188,13 @@ others after 7 days, 1,000 per job) and fail runs lost with a crashed host
 RUNNING/RETRYING with attempts left whose trigger left the stream).
 `OnEvent(filter=...)` drops events before a
 trigger is published; `event_filter.py` mirrors core's `EventFilter.matches`,
-change them together.
+change them together. A module's host subscribes to the live subject of an
+`OnEvent(event_type=...)` only when its manifest reads that type in every container
+(`event:Query` on `abi:*/event:event_type/<encoded type>`): a live subject carries
+every container's events of its type, so the default manifest grants none. Only the
+engine publishes live events (`services.event.EventService.publish` appends, and the
+event service broadcasts); `subscribe` returns `LiveEvents`, which drops a message
+declaring another class.
 
 Who a run runs as: every attempt of a manual trigger is authorized
 (`discovery_job_authorizer`, `discovery:TriggerJob`), and the authorizer returns the
@@ -260,7 +271,7 @@ seal is checked by asking the engine, `broker_control.py`).
   a key or a `ServiceKey` as its `token`, and `run_module(token=...)` passes it on.
   A process of the engine passes bare tokens (a string or a callable) instead.
 - **The key does two things.** It logs in to the broker (user `sa`, the key as
-  password, inbox prefix `_INBOX.<key id>`, which only this key's connections can
+  password, inbox prefix `_INBOX.<key id>.m`, which only this key's connections can
   read), and the broker's auth callout gives the connection the subjects its
   approved policy allows. It is also exchanged at `abi.iam.v1.token` for an access
   token of the audience `abi:nats` (ten minutes at most, exchanged again at half its
@@ -297,21 +308,30 @@ A module asks for what it needs as a policy document (the language of core's
 
 1. `BaseModule.permissions` (a dict), else
 2. `permissions.yaml` beside the module's code (JSON also reads without PyYAML), else
-3. a default derived from `ModuleDependencies` (`default_manifest`): `document` is the
-   module's own namespace (`${module.id}`); `secret` the names `<module id>/...`;
-   `dataset` the namespace `default` and the catalog, with `dataset:QueryUnchecked`
-   denied; `email` sending only (the platform keeps a copy of what is sent, sign-in
+3. a default derived from `ModuleDependencies` (`default_manifest`), which stays in the
+   module's own namespace on the platform and never reaches a container: `document` is
+   the module's own namespace (`${module.id}`); `secret` the names `<module id>/...`;
+   `cache` and `keyvalue` the keys `<module id>/...`; `object_storage` the prefix
+   `<module id>/`; `vector_store` the collections `<module id>~...`; `dataset` its own
+   namespace (`${module.dataset_namespace}`, which `default` names for a module), with
+   `dataset:QueryUnchecked` denied; `triple_store` its own graphs (`module_graph(id,
+   name)`) and views (`<module id>/...`), reading the schema graph, and `LoadSchema` on
+   its own ontologies; `email` sending only (the platform keeps a copy of what is sent, sign-in
    codes included, so reading it is named in a manifest); `source_control` all but
-   `AddCollaborator`; any other declared service every action of it; the dependency
+   `AddCollaborator`; any other declared service (`event` among them) every action of
+   it on what the platform holds; the dependency
    modules' agents, models and apps (never the identity provider's `admin` app) and
    the runs the module starts, for it and for the user it acts for; its own jobs, each
    by name. `bus` has no default: a module using it declares `bus:*` on
-   `abi:bus:topic/<topic>`. Default grants contain no admin action. A grant meant for
-   every container names both forms of core's `names.anywhere` (`abi:<service>:*` and
-   `abi:*/<service>:*`, the platform and any container); a platform resource is
-   `abi:<service>:<type>/<id>`.
+   `abi:bus:topic/<topic>`. Default grants contain no admin action. A module that needs
+   another container's data names it in a manifest of its own, where the admin sees it
+   (core's `names.anywhere`: `abi:<service>:*` and `abi:*/<service>:*`, the platform and
+   any container); a platform resource is `abi:<service>:<type>/<id>`.
 
-`${module.id}` and `${module.project}` are bound when the manifest is approved.
+`${module.id}`, `${module.project}` and `${module.dataset_namespace}` are bound when the
+manifest is approved. A module id is one module of the platform: an id another
+project's module holds, an engine module's or one the core reserves (`default`,
+`naas_abi_core.*`) is refused at submission.
 
 At start, `run_module` calls `_await_approval` before anything else (an unapproved
 module can call nothing but IAM):

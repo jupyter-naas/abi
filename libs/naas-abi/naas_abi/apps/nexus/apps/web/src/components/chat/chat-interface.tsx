@@ -81,6 +81,7 @@ import { autoTitleOpenDeckIfNeeded } from '@/lib/slides-project-actions';
 import { slidesOpenDeckBranch, slidesOpenDeckPath } from '@/lib/slides-pane-conversation';
 import { sheetsOpenWorkbookBranch, sheetsOpenWorkbookPath } from '@/lib/sheets-pane-conversation';
 import { ContextUsageMeter } from './context-usage-meter';
+import { appOrigins, createProbeFrame, isAppOrigin, PREVIEW_FRAME_SANDBOX } from './citation-frames';
 import { getApiUrl, getOllamaUrl } from '@/lib/config';
 import { getLogoUrl } from '@/lib/logo-url';
 import { activeSuggestions, type ChatSuggestion } from '@/lib/suggestion-row';
@@ -271,6 +272,8 @@ const urlValidityCache = new Map<string, boolean>();
  *  panel and opens the URL in a new browser tab instead.
  */
 function PreviewPanel({ url, onClose, width }: { url: string; onClose: () => void; width: number }) {
+  // A page of this app or of the API is never framed: the panel links to it instead.
+  const framable = typeof window !== 'undefined' && !isAppOrigin(url, appOrigins(getApiBase()));
   const [reloadKey, setReloadKey] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -336,20 +339,28 @@ function PreviewPanel({ url, onClose, width }: { url: string; onClose: () => voi
 
       {/* Body */}
       <div className="relative flex-1">
-        {isLoading && (
+        {isLoading && framable && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-background">
             <Loader2 size={20} className="animate-spin text-muted-foreground" />
           </div>
         )}
-        <iframe
+        {!framable && (
+          <div className="flex h-full items-center justify-center p-4 text-xs text-muted-foreground">
+            <a href={url} target="_blank" rel="noopener noreferrer" className="underline">
+              Open in a new tab
+            </a>
+          </div>
+        )}
+        {framable && <iframe
           key={reloadKey}
           ref={iframeRef}
           src={url}
           title={domain}
           className="h-full w-full border-none"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+          sandbox={PREVIEW_FRAME_SANDBOX}
+          referrerPolicy="no-referrer"
           onLoad={handleLoad}
-        />
+        />}
       </div>
     </div>
   );
@@ -4053,15 +4064,16 @@ const MessageBubble = React.memo(function MessageBubble({
     const addedIframes: HTMLIFrameElement[] = [];
     const timers: ReturnType<typeof setTimeout>[] = [];
 
+    const ownOrigins = appOrigins(getApiBase());
     contentUrls.forEach(url => {
-      if (isLoginRequiredDomain(url) || isLikelyFileUrl(url) || url.startsWith(getApiBase())) {
+      // A page of this app or of the API is never framed, not even hidden.
+      if (isLoginRequiredDomain(url) || isLikelyFileUrl(url) || isAppOrigin(url, ownOrigins)) {
         setUrlEmbeddability(prev => ({ ...prev, [url]: false }));
         return;
       }
 
-      const iframe = document.createElement('iframe');
-      iframe.style.cssText =
-        'position:fixed;left:-9999px;width:0;height:0;opacity:0;pointer-events:none;border:none;';
+      // Fully sandboxed: no script, and an origin of its own.
+      const iframe = createProbeFrame(url);
       addedIframes.push(iframe);
 
       const resolve = (embeddable: boolean) => {
@@ -4084,7 +4096,6 @@ const MessageBubble = React.memo(function MessageBubble({
       };
       iframe.onerror = () => { clearTimeout(t); resolve(false); };
 
-      iframe.src = url;
       document.body.appendChild(iframe);
     });
 

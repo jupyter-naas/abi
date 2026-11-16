@@ -539,6 +539,24 @@ class Settings(BaseSettings):
     # Env: GRAPH_QUERY_CACHE_TTL_SECONDS. 0 disables caching (always live).
     graph_query_cache_ttl_seconds: int = 300
 
+    # The engine's dataset namespaces every workspace's viewers and members read (the
+    # platform's modules' shared data). None by default: a namespace is shared only
+    # by naming it here, so the engine's own (the event archive, what a kernel job
+    # writes) are never. Names only, no patterns.
+    shared_dataset_namespaces: list[str] = Field(default_factory=list)
+
+    @field_validator("shared_dataset_namespaces")
+    @classmethod
+    def _dataset_namespaces_are_names(cls, value: list[str]) -> list[str]:
+        import re
+
+        from naas_abi_core.services.dataset.DatasetPort import IDENTIFIER_PATTERN
+
+        for name in value:
+            if not re.match(IDENTIFIER_PATTERN, name):
+                raise ValueError(f"shared_dataset_namespaces: {name!r} is not a namespace name")
+        return list(dict.fromkeys(value))
+
     # Coding workspaces (Coder editor + Forgejo monorepo auto-clone). clone
     # host/scheme are what a *workspace container* uses to reach Forgejo (not the
     # admin API URL); docker_network is the network the workspace must join to
@@ -603,6 +621,8 @@ class Settings(BaseSettings):
     rate_limit_attempts: int = 5  # Max attempts per account (or inviting user) per window
     rate_limit_ip_attempts: int = 20  # Max attempts per client IP per window
     rate_limit_window_seconds: int = 300  # 5-minute window
+    # Invitation emails one organization (or a workspace in none) may send a day.
+    invitation_mails_per_day: int = 200
 
     # Sign-in through the engine's identity providers (``identity.providers``).
     # The session is an httpOnly, Secure cookie the API holds; "none" is for a
@@ -624,6 +644,10 @@ class Settings(BaseSettings):
         if not (self.environment == "development" or self.nexus_env == "local"):
             self.enable_ollama_autostart = False
 
+    # The largest request body /api/ reads (413 past it). Upload routes keep
+    # their own, smaller caps; remote apps (/app-remote/) set theirs.
+    max_request_body_bytes: int = 64 * 1024 * 1024
+
     # Security Headers
     enable_security_headers: bool = True
     content_security_policy: str | None = None  # Set in production
@@ -631,6 +655,12 @@ class Settings(BaseSettings):
     # ABI Engine
     abi_api_url: str = "http://localhost:8001"
     abi_api_key: str | None = None
+
+    # Origins (``host:port`` or a URL) of model servers on the deployment's own
+    # network: a workspace's ABI server, a model gateway. Chat providers reach
+    # public addresses only, plus these origins and, for Ollama calls, the
+    # platform Ollama's origin.
+    provider_allowed_origins: list[str] = Field(default_factory=list)
 
     # OpenAI (for embeddings/fallback)
     openai_api_key: str | None = None

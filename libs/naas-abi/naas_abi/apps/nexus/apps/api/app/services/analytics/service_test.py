@@ -93,7 +93,7 @@ class FakeStorage(AnalyticsStoragePort):
 
     def save_event(self, event: dict[str, Any]) -> str:
         self.events.append(event)
-        return f"events/{event['event_id']}.pkl"
+        return f"events/{event['event_id']}.json"
 
     def list_events(self) -> list[dict[str, Any]]:
         return [dict(e) for e in self.events]
@@ -396,7 +396,7 @@ class TestIngest:
         storage = FakeStorage()
         service = AnalyticsService(storage=storage)
         stored_at = service.ingest_event(AnalyticsEvent(**FIXTURE[0]))
-        assert stored_at.endswith("e1.pkl")
+        assert stored_at.endswith("e1.json")
         assert len(storage.events) == 1
 
     def test_registers_the_user_and_workspace_directories(self):

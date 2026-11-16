@@ -15,6 +15,10 @@ class OntologyServiceUnavailableError(Exception):
     """Raised when the underlying triple store / ABIModule cannot be resolved."""
 
 
+class OntologyQueryError(ValueError):
+    """A request value cannot be placed in an ontology query (not an IRI)."""
+
+
 class OntologyParseError(Exception):
     """Raised when an ontology file cannot be parsed."""
 

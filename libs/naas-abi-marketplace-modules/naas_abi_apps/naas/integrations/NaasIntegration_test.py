@@ -104,7 +104,7 @@ def test_upload_asset_writes_to_storage_and_reuses_an_existing_asset(
 
 def test_tools() -> None:
     tools = as_tools(NaasIntegrationConfiguration(api_key="k"))
-    assert len(tools) == 32 and all(t.coroutine is not None for t in tools)
+    assert len(tools) == 19 and all(t.coroutine is not None for t in tools)
 
 
 def test_list_secrets_awaits_the_response_before_reading_it() -> None:

@@ -1,3 +1,5 @@
+import { cockpitFetch } from "./nexus.js";
+
 const API = "/api/personnel-cockpit";
 
 /**
@@ -16,7 +18,6 @@ async function datasetError(res, rel) {
     const error = new Error(detail.message || `${rel} → ${res.status}`);
     error.dataset = detail.dataset || rel;
     error.expectedStorageKey = detail.expected_storage_key || null;
-    error.expectedLocalPath = detail.expected_local_path || null;
     error.command = detail.command || null;
     error.status = res.status;
     return error;
@@ -31,13 +32,13 @@ async function datasetError(res, rel) {
 /** @param {string} entityId */
 export function createApi(entityId) {
   async function loadJson(rel) {
-    const res = await fetch(`${API}/entities/${entityId}/${rel}`);
+    const res = await cockpitFetch(`${API}/entities/${entityId}/${rel}`);
     if (!res.ok) throw await datasetError(res, rel);
     return res.json();
   }
 
   async function loadGlobal(name) {
-    const res = await fetch(`${API}/globals/${name}`);
+    const res = await cockpitFetch(`${API}/globals/${name}`);
     if (!res.ok) throw await datasetError(res, `globals/${name}`);
     return res.json();
   }

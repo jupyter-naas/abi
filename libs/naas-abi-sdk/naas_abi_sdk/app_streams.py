@@ -23,7 +23,7 @@ from nats.errors import NoRespondersError
 from nats.errors import TimeoutError as NATSTimeoutError
 
 from naas_abi_sdk.broker_flush import flush_to_broker
-from naas_abi_sdk.messages import reply, reply_allowed
+from naas_abi_sdk.messages import reply, reply_allowed, stream_inbox
 from naas_abi_sdk.transport import RPCError
 
 logger = logging.getLogger(__name__)
@@ -85,7 +85,8 @@ class BodySource:
 
     def __init__(self, nc: Any, *, idle_seconds: float = IDLE_SECONDS) -> None:
         self.nc = nc
-        self.inbox = nc.new_inbox()
+        # A stream inbox: no one but the body's reader can name it.
+        self.inbox = stream_inbox(nc)
         self.idle_seconds = idle_seconds
         self.queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=1)
         self.gone = asyncio.Event()

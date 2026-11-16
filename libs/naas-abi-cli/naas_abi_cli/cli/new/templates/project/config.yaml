@@ -81,7 +81,7 @@ modules:
         # prints it). The admin below is made there when the API starts, and keeps
         # the roles configured here.
         users:
-          - email: "admin@example.com"
+          - email: "{% endraw %}{{ admin_email }}{% raw %}"
             name: "Dev Admin"
             # Platform-wide admin (admin console, live event stream). Kept in
             # config so it is reconciled on every boot — flip to false to demote.
@@ -89,11 +89,11 @@ modules:
         organizations:
           - name: "Dev"
             slug: "dev"
-            owner_email: "admin@example.com"
+            owner_email: "{% endraw %}{{ admin_email }}{% raw %}"
             workspaces:
               - name: "Default"
                 slug: "default"
-                owner_email: "admin@example.com"
+                owner_email: "{% endraw %}{{ admin_email }}{% raw %}"
 
   # OpenRouter — the only AI provider enabled by default. One gateway key
   # serves both the default chat model (Gemma 4 26B-A4B) and the default

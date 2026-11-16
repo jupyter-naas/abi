@@ -20,8 +20,9 @@ ACTIONS = (
     action("QueryDataset", "read", "dataset", feature="datasets"),
 )
 
-# Every workspace viewer and member reads the datasets of the platform (nothing links
-# a namespace to a workspace, and Nexus only reads them).
+# Every workspace viewer and member may ask for the platform's datasets (nothing links
+# a namespace to a workspace, and Nexus only reads them); the kernel answers with the
+# namespaces the deployment shares (``shared_dataset_namespaces``) and no other.
 PLATFORM_ACCESS = (
     PlatformAccess(
         ("dataset/*",),

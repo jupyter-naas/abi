@@ -10,7 +10,7 @@ returns the job id, and ``wait=True`` polls as before.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from naas_abi_apps.common.http import HttpConfiguration, request
@@ -26,6 +26,9 @@ class SendGridIntegrationConfiguration(HttpConfiguration):
     # Seconds between two import job polls, and how many polls at most.
     poll_interval: float = 15.0
     max_polls: int = 20
+    # The only addresses mail may be sent from. Empty (the default):
+    # ``send_email`` sends nothing.
+    allowed_senders: list[str] = field(default_factory=list)
 
 
 class SendGridIntegration(Integration):
@@ -102,8 +105,17 @@ class SendGridIntegration(Integration):
         plain_text_content: str | None = None,
         attachments: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        """Send an email. attachments: SendGrid objects (base64 ``content``,
+        """Send an email from one of ``allowed_senders`` (``ValueError``
+        otherwise). attachments: SendGrid objects (base64 ``content``,
         ``filename``, ``type``, optional ``disposition``)."""
+        allowed = {
+            address.strip().lower() for address in self.configuration.allowed_senders
+        }
+        if from_email.strip().lower() not in allowed:
+            raise ValueError(
+                "SendGrid sends only from the configured senders "
+                f"({', '.join(sorted(allowed)) or 'none configured'})"
+            )
         content = [{"type": "text/html", "value": html_content}]
         if plain_text_content:
             content.insert(0, {"type": "text/plain", "value": plain_text_content})
@@ -141,7 +153,9 @@ def as_tools(configuration: SendGridIntegrationConfiguration) -> list[Any]:
         pass
 
     class SendEmailSchema(BaseModel):
-        from_email: str = Field(..., description="Sender email address")
+        from_email: str = Field(
+            ..., description="Sender email address: one of the configured senders"
+        )
         to_emails: list[str] = Field(
             ..., description="List of recipient email addresses"
         )

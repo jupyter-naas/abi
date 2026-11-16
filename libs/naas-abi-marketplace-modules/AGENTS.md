@@ -8,6 +8,13 @@ jupyter-naas/abi#1423.
 - **SDK only.** Never import `naas_abi_core`, `naas_abi` or
   `naas_abi_marketplace`. Each module's `tests/module_test.py` checks it in a
   fresh interpreter, and the Dockerfile fails if one is installed.
+- **The image installs from the lock.** `requirements/<app>.txt` is the
+  app's extra exported from `uv.lock` with hashes, and the Dockerfile installs
+  only those (`--require-hashes`), then the local proto, SDK and this package
+  with `--no-deps`. After changing an extra or the lock, regenerate them (from
+  this folder, for each extra):
+  `uv export --frozen --no-dev --no-emit-project --no-emit-package naas-abi-proto --no-emit-package naas-abi-sdk --extra <extra> --format requirements-txt -o requirements/<app>.txt`.
+  `common/image_test.py` fails while one is out of step.
 - One application = one subpackage `naas_abi_apps/<app>/` = one remote module =
   one process (`python -m naas_abi_apps.<app>`). `naas_abi_apps` is a namespace
   package: no `__init__.py` at its root.
@@ -48,6 +55,18 @@ jupyter-naas/abi#1423.
 - A tool intent whose tool is absent (no credentials) is dropped. RAW intents
   that say "I have no access to tools" are not ported when the agent has tools.
 - Tests are offline (`httpx.MockTransport`, fakes for engine services).
+- A tool that fetches a URL the model or a user gives fetches it with
+  `common.public_fetch.fetch_public` (public addresses only, every redirect
+  checked, size and time capped), never with `common.http.request`, which is
+  for the application's own API host.
+- An agent on a credential the module holds for the whole deployment reads,
+  and writes only through what its configuration names (GitHub
+  `agent_write_tools` / `repositories`, SendGrid `allowed_senders`, PostgreSQL
+  `read_only`). A tool that deletes what cannot be restored or reveals a
+  secret value stays an integration method, not an agent tool.
+- Request paths built from tool arguments are checked one segment at a time
+  (`checked_endpoint` in the GitHub and Naas integrations); query values go
+  in `params`.
 
 ## Port checklist (per application)
 

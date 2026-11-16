@@ -1,4 +1,5 @@
 import { mapsPinResponse, mapsUpstreamGet } from '../_lib';
+import { mapsRoute } from '../_guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -7,7 +8,7 @@ export const dynamic = 'force-dynamic';
  * NWS active weather alerts (US). Requires User-Agent; proxied to avoid CORS.
  * Upstream: https://api.weather.gov/alerts/active?status=actual
  */
-export async function GET() {
+async function handle() {
   try {
     const res = await mapsUpstreamGet(
       'https://api.weather.gov/alerts/active?status=actual',
@@ -97,3 +98,5 @@ function flattenCoords(coords: unknown): Array<[number, number]> {
   walk(coords);
   return out;
 }
+
+export const GET = mapsRoute('nws', handle, { perMinute: 120 });

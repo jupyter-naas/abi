@@ -1,10 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
 import { mapsJson, MAPS_USER_AGENT } from '../_lib';
 import {
   getFirmsWmsUrl,
   resolveFirmsMapKey,
 } from '@/app/workspace/[workspaceId]/maps/lib/firms';
+import { mapsRoute } from '../_guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,7 +19,7 @@ export const dynamic = 'force-dynamic';
  * - GET ?status=1 → { enabled, source } (no secret)
  * - GET with WMS REQUEST=GetMap → tile proxy when FIRMS_MAP_KEY is set
  */
-export async function GET(req: NextRequest) {
+async function handle(req: Request) {
   const key = resolveFirmsMapKey(
     process.env.FIRMS_MAP_KEY ?? process.env.NEXT_PUBLIC_FIRMS_MAP_KEY,
   );
@@ -87,3 +88,5 @@ export async function GET(req: NextRequest) {
     );
   }
 }
+
+export const GET = mapsRoute('firms', handle, { perMinute: 600, cacheSeconds: 120 });

@@ -186,11 +186,13 @@ def query_tools(
     names: Iterable[str] | None = None,
 ) -> list[Any]:
     """One LangChain tool per query (``names``: only those)."""
-    from jinja2 import Template
+    from jinja2.sandbox import ImmutableSandboxedEnvironment
     from langchain_core.tools import StructuredTool
     from pydantic import Field, create_model
 
     wanted = set(names) if names is not None else None
+    # Sandboxed: a template reaches its arguments, never Python objects.
+    environment = ImmutableSandboxedEnvironment(autoescape=False)
     tools = []
     for query in queries:
         if wanted is not None and query.name not in wanted:
@@ -210,11 +212,11 @@ def query_tools(
                 for a in query.arguments
             },
         )
-        template = Template(query.template)
+        template = environment.from_string(query.template)
         contexts = placeholder_contexts(query.template)
 
         def make(
-            template: Template = template,
+            template: Any = template,
             model: type = model,
             contexts: dict[str, set[str]] = contexts,
         ) -> Any:

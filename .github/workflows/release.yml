@@ -13,187 +13,141 @@ on:
         type: string
 
 permissions:
-  contents: write
-  id-token: write
+  contents: read
 
 
 jobs:
 
+  # Versions, builds and tags each package that has changes, and makes its
+  # GitHub release. It holds the release PAT, in one step, and cannot publish to
+  # PyPI: the publish job below does, with the files this job built.
   release:
     runs-on: ubuntu-latest
     if: github.repository == 'jupyter-naas/abi' && github.event_name == 'push'
     concurrency:
       group: ${{ github.workflow }}-release-${{ github.ref_name }}
       cancel-in-progress: false
-
-    environment:
-      name: pypi
-
-    env:
-      # Released in dependency order: naas-abi-core's nats/otel extras need
-      # naas-abi-proto and naas-abi-sdk, naas-abi-idp (the built-in identity
-      # provider) needs both, and naas-abi needs naas-abi-core[nats].
-      naas_abi_proto_dir: libs/naas-abi-proto
-      naas_abi_sdk_dir: libs/naas-abi-sdk
-      naas_abi_idp_dir: libs/naas-abi-idp
-      naas_abi_core_dir: libs/naas-abi-core
-      naas_abi_marketplace_dir: libs/naas-abi-marketplace
-      naas_abi_dir: libs/naas-abi
-      naas_abi_cli_dir: libs/naas-abi-cli
-      GH_TOKEN: ${{ secrets.M_ACCESS_TOKEN }}
+    permissions:
+      contents: write
+    outputs:
+      # The released packages, space-separated.
+      released: ${{ steps.release.outputs.released }}
 
     steps:
 
       - name: Setup | Checkout Repository on Release Branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with:
           ref: ${{ github.ref_name }}
-          token: ${{ secrets.M_ACCESS_TOKEN }}
           fetch-depth: 0
+          # No token in .git/config: semantic-release pushes with GH_TOKEN, in
+          # its own step.
+          persist-credentials: false
 
       - name: Setup | Force release branch to be at workflow sha
         run: |
           git reset --hard ${{ github.sha }}
 
       - name: Setup | Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
         with:
           python-version: "3.12"
 
-      - name: Setup | python-semantic-release
+      - name: Setup | Release tooling
+        # semantic-release, GitPython and uv at the versions and hashes of
+        # .github/requirements/release.txt.
+        run: python -m pip install --require-hashes -r .github/requirements/release.txt
+
+      # Released in dependency order: naas-abi-core's nats/otel extras need
+      # naas-abi-proto and naas-abi-sdk, naas-abi-idp (the built-in identity
+      # provider) needs both, and naas-abi needs naas-abi-core[nats].
+      - name: Release | Version, build and GitHub release of each package
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.M_ACCESS_TOKEN }}
         run: |
-          python -m pip install --upgrade pip
-          # The PSR Docker action rebuilds from PyPI on each run. GitPython 3.1.60
-          # (2026-08-25) removed Actor.name_email_regex, which PSR 10.5.2 still
-          # uses while loading commit_author. Pin GitPython until PSR is updated.
-          python -m pip install "python-semantic-release==10.5.2" "GitPython>=3.1.43,<3.1.60"
+          set -euo pipefail
+          released=""
+          for name in naas-abi-proto naas-abi-sdk naas-abi-idp naas-abi-core naas-abi-marketplace naas-abi naas-abi-cli; do
+            outputs="$(mktemp)"
+            (cd "libs/$name" && GITHUB_OUTPUT="$outputs" semantic-release -v version)
+            if grep -qx 'released=true' "$outputs"; then
+              tag="$(sed -n 's/^tag=//p' "$outputs")"
+              (cd "libs/$name" && semantic-release publish --tag "$tag")
+              released="$released $name"
+            fi
+          done
+          echo "released=${released# }" >> "$GITHUB_OUTPUT"
 
-      # ------------------------------------------------------------------- #
-      # Note the use of different IDs to distinguish which submodule was    #
-      # identified to be released. The subsequent actions then reference    #
-      # their specific release ID to determine if a release occurred.       #
-      # ------------------------------------------------------------------- #
+      - name: Release | Keep the built files for the publish job
+        if: steps.release.outputs.released != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: dist
+          path: libs/*/dist/
+          if-no-files-found: error
+          retention-days: 7
 
-      - name: Release naas-abi-proto
-        id: release-naas-abi-proto
-        working-directory: ${{ env.naas_abi_proto_dir }}
-        run: semantic-release -v version
+  # Uploads what the release job built to PyPI, as the trusted publisher
+  # (workflow release.yml, environment pypi). Its only grant is the OIDC token.
+  publish:
+    runs-on: ubuntu-latest
+    needs: release
+    if: needs.release.outputs.released != ''
+    environment:
+      name: pypi
+    permissions:
+      id-token: write
 
-      - name: Release naas-abi-sdk
-        id: release-naas-abi-sdk
-        working-directory: ${{ env.naas_abi_sdk_dir }}
-        run: semantic-release -v version
+    steps:
 
-      - name: Release naas-abi-idp
-        id: release-naas-abi-idp
-        working-directory: ${{ env.naas_abi_idp_dir }}
-        run: semantic-release -v version
-
-      - name: Release naas-abi-core
-        id: release-naas-abi-core
-        working-directory: ${{ env.naas_abi_core_dir }}
-        run: semantic-release -v version
-
-      - name: Release naas-abi-marketplace
-        id: release-naas-abi-marketplace
-        working-directory: ${{ env.naas_abi_marketplace_dir }}
-        run: semantic-release -v version
-
-      - name: Release naas-abi
-        id: release-naas-abi
-        working-directory: ${{ env.naas_abi_dir }}
-        run: semantic-release -v version
-
-      - name: Release naas-abi-cli
-        id: release-naas-abi-cli
-        working-directory: ${{ env.naas_abi_cli_dir }}
-        run: semantic-release -v version
-
-      - name: Publish | Upload naas-abi-proto to GitHub Release Assets
-        if: steps.release-naas-abi-proto.outputs.released == 'true'
-        working-directory: ${{ env.naas_abi_proto_dir }}
-        run: semantic-release publish --tag "${{ steps.release-naas-abi-proto.outputs.tag }}"
-
-      - name: Publish | Upload naas-abi-sdk to GitHub Release Assets
-        if: steps.release-naas-abi-sdk.outputs.released == 'true'
-        working-directory: ${{ env.naas_abi_sdk_dir }}
-        run: semantic-release publish --tag "${{ steps.release-naas-abi-sdk.outputs.tag }}"
-
-      - name: Publish | Upload naas-abi-idp to GitHub Release Assets
-        if: steps.release-naas-abi-idp.outputs.released == 'true'
-        working-directory: ${{ env.naas_abi_idp_dir }}
-        run: semantic-release publish --tag "${{ steps.release-naas-abi-idp.outputs.tag }}"
-
-      - name: Publish | Upload naas-abi-core to GitHub Release Assets
-        if: steps.release-naas-abi-core.outputs.released == 'true'
-        working-directory: ${{ env.naas_abi_core_dir }}
-        run: semantic-release publish --tag "${{ steps.release-naas-abi-core.outputs.tag }}"
-
-      - name: Publish | Upload naas-abi-marketplace to GitHub Release Assets
-        if: steps.release-naas-abi-marketplace.outputs.released == 'true'
-        working-directory: ${{ env.naas_abi_marketplace_dir }}
-        run: semantic-release publish --tag "${{ steps.release-naas-abi-marketplace.outputs.tag }}"
-
-      - name: Publish | Upload naas-abi to GitHub Release Assets
-        if: steps.release-naas-abi.outputs.released == 'true'
-        working-directory: ${{ env.naas_abi_dir }}
-        run: semantic-release publish --tag "${{ steps.release-naas-abi.outputs.tag }}"
-
-      - name: Publish | Upload naas-abi-cli to GitHub Release Assets
-        if: steps.release-naas-abi-cli.outputs.released == 'true'
-        working-directory: ${{ env.naas_abi_cli_dir }}
-        run: semantic-release publish --tag "${{ steps.release-naas-abi-cli.outputs.tag }}"
-
-      # ------------------------------------------------------------------- #
-      # Python Semantic Release is not responsible for publishing your      #
-      # python artifacts to PyPI. Use the official PyPA publish action      #
-      # instead. The following steps are an example but is not guaranteed   #
-      # to work as the action is not maintained by the                      #
-      # python-semantic-release team.                                       #
-      # ------------------------------------------------------------------- #
+      - name: Download | The release job's built files
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with:
+          name: dist
+          path: libs
 
       - name: Publish | Upload naas-abi-proto to PyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
-        if: steps.release-naas-abi-proto.outputs.released == 'true'
+        if: contains(format(' {0} ', needs.release.outputs.released), ' naas-abi-proto ')
         with:
-          packages-dir: ${{ format('{0}/dist', env.naas_abi_proto_dir) }}
+          packages-dir: libs/naas-abi-proto/dist
 
       - name: Publish | Upload naas-abi-sdk to PyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
-        if: steps.release-naas-abi-sdk.outputs.released == 'true'
+        if: contains(format(' {0} ', needs.release.outputs.released), ' naas-abi-sdk ')
         with:
-          packages-dir: ${{ format('{0}/dist', env.naas_abi_sdk_dir) }}
+          packages-dir: libs/naas-abi-sdk/dist
 
       - name: Publish | Upload naas-abi-idp to PyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
-        if: steps.release-naas-abi-idp.outputs.released == 'true'
+        if: contains(format(' {0} ', needs.release.outputs.released), ' naas-abi-idp ')
         with:
-          packages-dir: ${{ format('{0}/dist', env.naas_abi_idp_dir) }}
+          packages-dir: libs/naas-abi-idp/dist
 
       - name: Publish | Upload naas-abi-core to PyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
-        if: steps.release-naas-abi-core.outputs.released == 'true'
+        if: contains(format(' {0} ', needs.release.outputs.released), ' naas-abi-core ')
         with:
-          packages-dir: ${{ format('{0}/dist', env.naas_abi_core_dir) }}
+          packages-dir: libs/naas-abi-core/dist
 
       - name: Publish | Upload naas-abi-marketplace to PyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
-        if: steps.release-naas-abi-marketplace.outputs.released == 'true'
+        if: contains(format(' {0} ', needs.release.outputs.released), ' naas-abi-marketplace ')
         with:
-          packages-dir: ${{ format('{0}/dist', env.naas_abi_marketplace_dir) }}
-
+          packages-dir: libs/naas-abi-marketplace/dist
 
       - name: Publish | Upload naas-abi to PyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
-        if: steps.release-naas-abi.outputs.released == 'true'
+        if: contains(format(' {0} ', needs.release.outputs.released), ' naas-abi ')
         with:
-          packages-dir: ${{ format('{0}/dist', env.naas_abi_dir) }}
+          packages-dir: libs/naas-abi/dist
 
       - name: Publish | Upload naas-abi-cli to PyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
-        if: steps.release-naas-abi-cli.outputs.released == 'true'
+        if: contains(format(' {0} ', needs.release.outputs.released), ' naas-abi-cli ')
         with:
-          packages-dir: ${{ format('{0}/dist', env.naas_abi_cli_dir) }}
+          packages-dir: libs/naas-abi-cli/dist
 
   # A release whose upload failed (a missing or wrong trusted publisher) is not
   # released again: its tag exists, so semantic-release has nothing to do. Run this

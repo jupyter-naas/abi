@@ -31,7 +31,7 @@ def test_send_email_puts_plain_text_first() -> None:
         return httpx.Response(202)
 
     result = asyncio.run(
-        integration_for(handler).send_email(
+        integration_for(handler, allowed_senders=["a@x.io"]).send_email(
             "a@x.io", ["b@y.io"], "Hi", "<p>Hi</p>", "Hi"
         )
     )
