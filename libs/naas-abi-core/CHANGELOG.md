@@ -24,6 +24,20 @@
 
 <!-- version list -->
 
+## v3.5.2 (2026-11-16)
+
+### Bug Fixes
+
+- **core**: The .env repair keeps the file's owner
+  ([`8c789df`](https://github.com/jupyter-naas/abi/commit/8c789df2b52124bc9696863a594a8111fdb73d62))
+
+- **core, cli**: Keep the engine's own secrets out of the compose .env
+  ([`a62d8f7`](https://github.com/jupyter-naas/abi/commit/a62d8f7dea8189c67640650d86ec599b50b2d4bf))
+
+- **core, cli**: Repair .env only where the adapter's config is known
+  ([`467b301`](https://github.com/jupyter-naas/abi/commit/467b3014f4224d8dd0e024723930e4ef1057a221))
+
+
 ## v3.5.1 (2026-11-16)
 
 ### Bug Fixes
