@@ -19,7 +19,6 @@ from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreSe
 class ABIModule(BaseModule):
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[
-            "naas_abi_marketplace.applications.sec_gov#soft",
             "naas_abi_core.modules.templatablesparqlquery",
         ],
         services=[
@@ -92,7 +91,9 @@ class ABIModule(BaseModule):
 
         # if not self.configuration.sync_sec_org_graph_on_startup:
         #     return
-        # from naas_abi_marketplace.applications.sec_gov import ABIModule as SecGovModule
+        # (applications.sec_gov is a remote module now, #1423: start its durable
+        # workflow.get_company_submissions_workflow / download_company_tickers
+        # rather than reading its configuration.)
         # from naas_abi_marketplace.domains.intelligence.modules.organizations.pipelines.SecGovCompanyTickersPipeline import (
         #     SecGovCompanyTickersPipeline,
         #     SecGovCompanyTickersPipelineConfiguration,

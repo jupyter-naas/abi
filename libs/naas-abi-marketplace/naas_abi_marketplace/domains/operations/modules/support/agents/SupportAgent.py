@@ -147,16 +147,16 @@ Project management:
 
     @staticmethod
     def get_tools(github_access_token: str) -> list:
-        from naas_abi_marketplace.applications.github.integrations.GitHubGraphqlIntegration import (
+        from naas_abi_marketplace.domains.operations.modules.support.integrations.GitHubGraphqlIntegration import (
             GitHubGraphqlIntegrationConfiguration,
         )
-        from naas_abi_marketplace.applications.github.integrations.GitHubGraphqlIntegration import (
+        from naas_abi_marketplace.domains.operations.modules.support.integrations.GitHubGraphqlIntegration import (
             as_tools as GitHubGraphqlIntegration_tools,
         )
-        from naas_abi_marketplace.applications.github.integrations.GitHubIntegration import (
+        from naas_abi_marketplace.domains.operations.modules.support.integrations.GitHubIntegration import (
             GitHubIntegrationConfiguration,
         )
-        from naas_abi_marketplace.applications.github.integrations.GitHubIntegration import (
+        from naas_abi_marketplace.domains.operations.modules.support.integrations.GitHubIntegration import (
             as_tools as GitHubIntegration_tools,
         )
         from naas_abi_marketplace.domains.operations.modules.support.workflows.FeatureRequestWorkflow import (

@@ -147,16 +147,8 @@ modules:
   - module: naas_abi_marketplace.applications.git
     enabled: true
   
-  - module: naas_abi_marketplace.applications.github
-    enabled: true
-    config:
-      github_access_token: "{{ secret.GITHUB_ACCESS_TOKEN }}"
-
-  - module: naas_abi_marketplace.applications.sec_gov
-    enabled: true
-    config:
-      datastore_path: "sec_gov"
-      user_agent: "NAAS-ABI-Marketplace/1.0 (abi@naas.ai)"
+  # GitHub and SEC EDGAR run as remote modules (applications.github,
+  # applications.sec_gov): see libs/naas-abi-marketplace-modules/README.md.
 
   # X (Twitter) integration — requires X_BEARER_TOKEN in .env
   # - module: naas_abi_marketplace.applications.x

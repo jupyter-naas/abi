@@ -4,7 +4,7 @@
 
 ## What this package is
 
-`naas-abi-marketplace` is a registry of **pluggable modules** that extend the core `naas-abi-core` framework with concrete LLMs, third-party integrations, and domain expertise. Every module is independently installable as an optional extra (e.g. `pip install naas-abi-marketplace[applications-github]`) and discovered at runtime by core's module loader.
+`naas-abi-marketplace` is a registry of **pluggable modules** that extend the core `naas-abi-core` framework with concrete LLMs, third-party integrations, and domain expertise. Every module is independently installable as an optional extra (e.g. `pip install naas-abi-marketplace[ai-anthropic]`) and discovered at runtime by core's module loader.
 
 A module is anything that subclasses `BaseModule` (from `naas_abi_core.module.Module`) and exposes:
 
@@ -19,7 +19,7 @@ If you're adding to the marketplace, you're almost always adding **one more modu
 ```
 naas_abi_marketplace/
 ├── ai/                # AI provider modules (Claude, ChatGPT, Gemini, …)
-├── applications/      # Third-party app integrations (GitHub, Postgres, LinkedIn, …)
+├── applications/      # In-engine app integrations (git, bodo, naas, x); the others are remote modules
 ├── domains/           # Organizational capability, in 9 subsystems of the staff system (S1–S9)
 └── __demo__/          # Reference implementations + sample apps
 ```
@@ -51,7 +51,7 @@ Not every subdirectory is required — pick the ones that fit. **All files keep 
 Each category has its own quick index — read these for a full per-module list:
 
 - [`ai/AGENTS.md`](naas_abi_marketplace/ai/AGENTS.md) — LLM providers (11 modules, 42 models)
-- [`applications/AGENTS.md`](naas_abi_marketplace/applications/AGENTS.md) — third-party integrations (47 modules)
+- [`applications/AGENTS.md`](naas_abi_marketplace/applications/AGENTS.md) — the in-engine application modules (4); the others are remote modules in `libs/naas-abi-marketplace-modules`
 - [`domains/AGENTS.md`](naas_abi_marketplace/domains/AGENTS.md) — organizational capability, 9 subsystems of the staff system (25 modules).
   See also [`domains/README.md`](naas_abi_marketplace/domains/README.md) for the framework and
   [`domains/AGENT.md`](naas_abi_marketplace/domains/AGENT.md) for how to file a new module.
@@ -71,7 +71,7 @@ Each contains:
 
 ### `applications/` — third-party integrations
 
-47 apps including: `airtable`, `aws`, `git`, `github`, `gmail`, `google_*`, `hubspot`, `linkedin`, `notion`, `postgres`, `salesforce`, `sendgrid`, `slack`, … Full grouped index in [`applications/AGENTS.md`](naas_abi_marketplace/applications/AGENTS.md).
+`git`, `bodo`, `naas` (ontology YAML publishing) and `x` run in-engine. Every other application is a remote module in [`libs/naas-abi-marketplace-modules`](../naas-abi-marketplace-modules/README.md) (jupyter-naas/abi#1423). Index in [`applications/AGENTS.md`](naas_abi_marketplace/applications/AGENTS.md).
 
 Each contains:
 
@@ -157,10 +157,8 @@ modules:
     config:
       anthropic_api_key: "{{ secret.ANTHROPIC_API_KEY }}"
 
-  - module: naas_abi_marketplace.applications.github
+  - module: naas_abi_marketplace.applications.git
     enabled: true
-    config:
-      github_access_token: "{{ secret.GITHUB_ACCESS_TOKEN }}"
 
   - module: naas_abi_marketplace.domains.operations
     enabled: true
@@ -233,11 +231,11 @@ uv run pytest libs/naas-abi-marketplace
 
 # One module
 uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/ai/anthropic
-uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/applications/github
+uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/applications/x
 uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/domains/signals/agents/software-engineer
 
 # A single agent test
-uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/applications/github/agents/GitHubAgent_test.py -v
+uv run pytest libs/naas-abi-marketplace/naas_abi_marketplace/applications/git/agents/GitAgent_test.py -v
 ```
 
 ## Adding a new module (checklist)

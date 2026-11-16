@@ -1,3 +1,11 @@
+"""Git: stays an in-engine module (jupyter-naas/abi#1423).
+
+Its agents run ``git``, ``make`` and ``gh`` in the working directory of the
+process that loads them: ``abi chat naas_abi_marketplace.applications.git
+GitAgent`` in a project (``make commit``, ``make pr``). A remote module runs in
+another process, often a container, so it is not ported.
+"""
+
 from naas_abi_core.module.Module import (
     BaseModule,
     ModuleConfiguration,
