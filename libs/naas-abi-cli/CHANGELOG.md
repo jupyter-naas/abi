@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.3.2 (2026-11-16)
+
+### Bug Fixes
+
+- **cli**: Abi deploy local builds Fuseki 5.6.0 instead of pulling 5.1.0
+  ([`b8956be`](https://github.com/jupyter-naas/abi/commit/b8956be1d79a64e886e4174966c67de22acdc085))
+
+
 ## v3.3.1 (2026-11-10)
 
 ### Bug Fixes
