@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v3.3.3 (2026-11-16)
+
+### Bug Fixes
+
+- **core, cli**: Keep the engine's own secrets out of the compose .env
+  ([`a62d8f7`](https://github.com/jupyter-naas/abi/commit/a62d8f7dea8189c67640650d86ec599b50b2d4bf))
+
+- **core, cli**: Repair .env only where the adapter's config is known
+  ([`467b301`](https://github.com/jupyter-naas/abi/commit/467b3014f4224d8dd0e024723930e4ef1057a221))
+
+
 ## v3.3.2 (2026-11-16)
 
 ### Bug Fixes

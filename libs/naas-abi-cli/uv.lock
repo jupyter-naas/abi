@@ -2203,7 +2203,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi"
-version = "3.9.0"
+version = "4.0.0"
 source = { editable = "../naas-abi" }
 dependencies = [
     { name = "aiosqlite" },
@@ -2291,7 +2291,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-cli"
-version = "3.3.2"
+version = "3.3.3"
 source = { editable = "." }
 dependencies = [
     { name = "naas-abi" },
@@ -2324,7 +2324,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-core"
-version = "3.5.1"
+version = "3.5.2"
 source = { editable = "../naas-abi-core" }
 dependencies = [
     { name = "click" },
@@ -2448,7 +2448,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-marketplace"
-version = "3.66.0"
+version = "4.0.0"
 source = { editable = "../naas-abi-marketplace" }
 dependencies = [
     { name = "ijson" },
@@ -2463,15 +2463,10 @@ ai-chatgpt = [
 
 [package.metadata]
 requires-dist = [
-    { name = "algoliasearch", marker = "extra == 'applications-algolia'", specifier = ">=4.35.0" },
-    { name = "arxiv", marker = "extra == 'applications-arxiv'", specifier = ">=2.1.3,<3" },
-    { name = "beautifulsoup4", marker = "extra == 'applications-googlesearch'", specifier = ">=4.12.0" },
-    { name = "boto3", marker = "extra == 'applications-bodo'", specifier = ">=1.38.19,<2" },
+    { name = "beautifulsoup4", marker = "extra == 'domains-document'", specifier = ">=4.12.0" },
+    { name = "bodo", marker = "extra == 'applications-bodo'", specifier = ">=2026.11" },
     { name = "docling", marker = "extra == 'domains-document'", specifier = ">=2.0.0" },
-    { name = "flask", marker = "extra == 'applications-twilio'", specifier = ">=3.1.2" },
     { name = "fuzzywuzzy-stubs", marker = "extra == 'domains-ontology-engineer'", specifier = "==0.0.1" },
-    { name = "google-api-python-client", marker = "extra == 'applications-gmail'", specifier = ">=2.188.0" },
-    { name = "google-api-python-client-stubs", marker = "extra == 'applications-gmail'", specifier = ">=1.31.0" },
     { name = "ijson", specifier = ">=3.2.0" },
     { name = "langchain-anthropic", marker = "extra == 'ai-claude'", specifier = ">=0.3.17" },
     { name = "langchain-aws", marker = "extra == 'ai-bedrock'", specifier = ">=0.2.10" },
@@ -2485,28 +2480,16 @@ requires-dist = [
     { name = "langchain-perplexity", marker = "extra == 'ai-perplexity'", specifier = ">=0.1.2" },
     { name = "langchain-xai", marker = "extra == 'ai-grok'", specifier = ">=0.2.5" },
     { name = "naas-abi-core", editable = "../naas-abi-core" },
-    { name = "pandas", marker = "extra == 'applications-linkedin'", specifier = ">=2.3.3" },
     { name = "pdfplumber", marker = "extra == 'ai-chatgpt'", specifier = ">=0.11.8" },
-    { name = "polars", marker = "extra == 'applications-x'", specifier = ">=1.0.0" },
-    { name = "psycopg2-binary", marker = "extra == 'applications-postgres'", specifier = ">=2.9.10,<3" },
     { name = "pymupdf", marker = "extra == 'domains-document'", specifier = ">=1.27.2.2" },
     { name = "pymupdf4llm", marker = "extra == 'domains-document'", specifier = ">=1.27.2.2" },
-    { name = "pynacl", marker = "extra == 'applications-github'", specifier = ">=1.5.0,<2" },
-    { name = "python-pptx", marker = "extra == 'applications-powerpoint'", specifier = ">=1.0.2,<2" },
+    { name = "pynacl", marker = "extra == 'domains-support'", specifier = ">=1.5.0,<2" },
     { name = "pyyaml", specifier = ">=6.0.3" },
-    { name = "ratelimit", marker = "extra == 'applications-pubmed'", specifier = ">=2.2.1" },
-    { name = "ratelimit-types", marker = "extra == 'applications-pubmed'", specifier = "==0.0.3" },
     { name = "thefuzz", marker = "extra == 'domains-ontology-engineer'", specifier = "==0.22.1" },
     { name = "torch", marker = "extra == 'domains-document'", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torchvision", marker = "extra == 'domains-document'", index = "https://download.pytorch.org/whl/cpu" },
-    { name = "twilio", marker = "extra == 'applications-twilio'", specifier = ">=9.10.0" },
-    { name = "twilio-stubs", marker = "extra == 'applications-twilio'", specifier = ">=0.2.0" },
-    { name = "types-flask", marker = "extra == 'applications-twilio'", specifier = ">=1.1.6" },
-    { name = "types-psycopg2", marker = "extra == 'applications-postgres'", specifier = ">=2.9.21.20251012" },
-    { name = "yahooquery", marker = "extra == 'applications-yahoofinance'", specifier = "==2.4.1" },
-    { name = "yfinance", marker = "extra == 'applications-yahoofinance'", specifier = "==0.2.66" },
 ]
-provides-extras = ["ai-bedrock", "ai-chatgpt", "ai-claude", "ai-deepseek", "ai-gemini", "ai-gemma", "ai-grok", "ai-llama", "ai-mistral", "ai-ollama", "ai-openrouter", "ai-perplexity", "ai-qwen", "applications-agicap", "applications-airtable", "applications-algolia", "applications-arxiv", "applications-bodo", "applications-datagouv", "applications-exchangeratesapi", "applications-git", "applications-github", "applications-gmail", "applications-google-calendar", "applications-google-drive", "applications-google-sheets", "applications-googlesearch", "applications-hubspot", "applications-linkedin", "applications-naas", "applications-nebari", "applications-newsapi", "applications-notion", "applications-openrouter", "applications-openweathermap", "applications-pennylane", "applications-postgres", "applications-powerpoint", "applications-pubmed", "applications-sanax", "applications-sendgrid", "applications-sharepoint", "applications-spotify", "applications-twilio", "applications-worldbank", "applications-x", "applications-yahoofinance", "domains-ontology-engineer", "domains-document"]
+provides-extras = ["ai-bedrock", "ai-chatgpt", "ai-claude", "ai-deepseek", "ai-gemini", "ai-gemma", "ai-grok", "ai-llama", "ai-mistral", "ai-ollama", "ai-openrouter", "ai-perplexity", "ai-qwen", "applications-bodo", "applications-git", "applications-naas", "applications-x", "domains-support", "domains-ontology-engineer", "domains-document"]
 
 [package.metadata.requires-dev]
 dev = [
