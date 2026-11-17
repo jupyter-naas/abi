@@ -22,7 +22,7 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     UserModel,
     WorkspaceModel,
 )
-from naas_abi.apps.nexus.apps.api.app.services.iam import authz
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz, container_names
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
@@ -82,11 +82,28 @@ def people(nexus_db, nexus_iam: NexusIam, monkeypatch: pytest.MonkeyPatch):
         async with nexus_db() as db:
             for uid in ("pat", "ops"):
                 db.add(UserModel(id=uid, email=f"{uid}@acme.example", name=uid.title()))
+            # An install whose names are container paths: the seeds name roles in
+            # that grammar (``container_names_v1`` recorded, the table Nexus's SQL
+            # migrations make, ``0059_iam_role_data.sql``).
+            await db.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS iam_migrations (name VARCHAR(128) "
+                    "PRIMARY KEY, applied_at TIMESTAMP NOT NULL, report TEXT)"
+                )
+            )
+            await db.execute(
+                text(
+                    "INSERT INTO iam_migrations (name, applied_at, report) "
+                    "VALUES (:n, CURRENT_TIMESTAMP, '{}')"
+                ),
+                {"n": container_names.MIGRATION_NAME},
+            )
             await db.commit()
 
     for uid in ("pat", "ops"):
         nexus_iam.user(uid)
     monkeypatch.setattr(nexus_config.settings, "organizations", [])
+    monkeypatch.setattr(org_seed, "async_engine", nexus_db.kw["bind"])
     return add
 
 

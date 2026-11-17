@@ -382,6 +382,16 @@ register them as containers and rewrite every stored name in one transaction (`i
   organizations, workspaces or services of today is named in the report's notes.
 - Placements, keys' narrowing, manifests, invitations and bindings likewise. What is already a path is kept,
   so the move may run again; a statement whose rewrite names nothing is kept as written (it named nothing).
+  An attachment or a pending grant held in both grammars (the new one written while the move waited) is merged
+  into the twin made first, which keeps its id, date and author (`attachments_merged`, `pending_grants_merged`
+  in the report): the store's unique keys never stop the move. Each invitation that listed a dropped grant lists
+  the one kept (`remap_invitation_grants`, in the commit that records the move, `invitations_remapped`), so
+  revoking either invitation keeps the other's grant.
+- While the move waits (a move before it stopped), the configuration's seeds, which run after the moves at
+  every start, attach the roles they declare in the old grammar (`org_seed._apply_declared_roles`, under the
+  moves' lock, read again under it, an owner's or admin's org-wide mirror too, `mirror_old_org_wide`); the move
+  rewrites them. Once it is recorded they take no lock. A declaration naming no organization or workspace is
+  logged and skipped.
 - Until it is recorded, module scopes and features are refused (`authz.upgrading`); IAM itself narrows, never
   widens (old names match nothing new). Start-up order (`main._prepare_iam`): the catalog, the moves that write
   the old grammar (feature overrides, role features, sets), this move, then `migrate_role_data` and
