@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation';
 import { createContext, useContext, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { getApiUrl } from '@/lib/config';
+import { applyTenantShellBranding } from '@/lib/tenant-shell';
 
 interface TenantConfig {
   apps: {
@@ -182,6 +183,10 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         // Tenant endpoint unavailable — keep defaults
       });
   }, []);
+
+  useEffect(() => {
+    applyTenantShellBranding(document.documentElement, tenant.login_border_radius);
+  }, [tenant.login_border_radius]);
 
   const applyTitleAndFavicon = () => {
     const title = getPageTitle(pathname, tenant.tab_title, detail);
