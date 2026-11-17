@@ -16,6 +16,7 @@ import {
 import { SettingsLoading } from '@/components/settings/settings-ui';
 import {
   holds,
+  laysOutOwnPanes,
   parsePlatformSettingsRoute,
   PLATFORM_SETTINGS_INDEX,
   READ_SYSTEM,
@@ -108,8 +109,9 @@ export default function PlatformSettingsLayout({ children }: { children: React.R
 
   const { isDetail, item, table, rowId } = parsePlatformSettingsRoute(pathname);
   const isTables = item?.id === 'tables';
-  // System and Roles & permissions lay out their own panes, edge to edge.
-  const isFramed = !!item && !isTables;
+  // System, Activity, Resources, Data and Roles & permissions lay out their own panes,
+  // edge to edge; Organizations and Users keep the organization pages' margins.
+  const isFramed = !!item && laysOutOwnPanes(item);
   // A table page fills the height: the table scrolls, not the page (headers stay visible).
   const fillsHeight = isTables && !!table && !rowId;
   const showMobileList = isMobile && !isDetail;
