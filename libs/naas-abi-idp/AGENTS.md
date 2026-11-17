@@ -43,7 +43,7 @@ IdPs, MFA policies.
 | `limits.py` | `RateLimiter`: counters in documents, one compare-and-set per attempt |
 | `keys.py` | `KeyRing`: ES256 keys, rotation, JWKS, the code HMAC key |
 | `oidc.py` | The authlib server: grants, token and ID-token generation, revocation |
-| `web.py` | The public ASGI app (`idp` app): discovery, JWKS, `/authorize`, login pages, `/token`, `/revoke`, `/userinfo`, `/logout` |
+| `web.py` | The public ASGI app (`idp` app): discovery, JWKS, `/authorize` (a valid `login_hint` is mailed a code at once, then 303 to `GET /login/code`), login pages, `/token`, `/revoke`, `/userinfo`, `/logout` |
 | `admin.py` | The admin ASGI app (`admin` app): JSON API for the provisioning port |
 | `pages.py` | The login pages and the sign-in mail, with branding |
 | `adapters/sdk.py` | The ports over the SDK's `document`, `secret` and `email` services |
@@ -104,7 +104,23 @@ A sign-in challenge, a refresh token, a counter: one document each, changed with
 - Discovery (`/.well-known/openid-configuration`), JWKS (`/jwks.json`, the
   active key and the retired ones kept 24 h). **No introspection.**
 - The provider's own session (`abi_idp_session`, 8 h) signs a user in again
-  without a code; `prompt=login` and `max_age` force it.
+  without a code; `prompt=login` and `max_age` force it. So does a `login_hint`
+  that is not the session user's address: the browser is never signed in as
+  someone else than the application asked for (a hint equal to it signs in at
+  once, with no code), and the new session's cookie replaces the old one.
+- **`login_hint`: the address is typed once.** Nexus passes the address of its
+  login form as `login_hint`. When it is an address (`normalize_email`), no
+  session is usable and `prompt` is not `none`, `/authorize` validates the
+  request as always (client, exact `redirect_uri`, PKCE), saves it, sets
+  `abi_idp_login`, mails the code (`request_code`, the same limits and errors
+  as `POST /login/email`: past a limit, the 429 "Too many attempts" page), and
+  answers **303** to `{issuer}/login/code`. `GET /login/code` shows the code
+  page for the hinted address and never sends a code, so a reload sends
+  nothing. `GET /login` ("Use another address, or send a new code") and
+  `GET /login/password` pre-fill the hint, editable. No hint, an invalid one or
+  `prompt=none`: the empty email page, no code sent. A registered, unregistered
+  or disabled address gets the same 303 and the same page, and the address is
+  never logged. The pages stay script-free: the code is sent on the server.
 
 ### The two apps
 

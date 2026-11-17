@@ -66,7 +66,7 @@ ROUTES: dict[str, frozenset[str]] = {
     "/authorize": frozenset({"GET"}),
     "/login": frozenset({"GET"}),
     "/login/email": frozenset({"POST"}),
-    "/login/code": frozenset({"POST"}),
+    "/login/code": frozenset({"GET", "POST"}),
     "/login/password": frozenset({"GET", "POST"}),
     "/token": frozenset({"POST"}),
     "/revoke": frozenset({"POST"}),

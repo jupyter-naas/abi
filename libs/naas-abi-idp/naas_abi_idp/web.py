@@ -5,7 +5,10 @@ dedicated route that carries no other credential than this module's own cookies:
 
 * ``/.well-known/openid-configuration`` and ``/jwks.json``: discovery and keys;
 * ``/authorize``: starts a sign-in, or finishes it at once when the browser holds
-  the provider's own session; the login pages are ``/login/...``;
+  the provider's own session; the login pages are ``/login/...``. A valid
+  ``login_hint`` (the address the relying party already asked for) is mailed a
+  code at once, and the browser is sent (303) to ``GET /login/code``, so the
+  address is typed once and a reload sends no other code;
 * ``/token``, ``/revoke``, ``/userinfo``, ``/logout``.
 
 Every response says ``no-store``, sets a strict Content-Security-Policy, and no
@@ -40,7 +43,7 @@ from naas_abi_idp.oidc import (
     allow_local_issuer,
 )
 from naas_abi_idp.ports import IdPError, InvalidCode, RateLimited
-from naas_abi_idp.service import IdPService
+from naas_abi_idp.service import IdPService, normalize_email
 
 log = logging.getLogger(__name__)
 
@@ -73,7 +76,7 @@ class IdPWeb:
             Route("/authorize", self.authorize, methods=["GET"]),
             Route("/login", self.login_page, methods=["GET"]),
             Route("/login/email", self.login_email, methods=["POST"]),
-            Route("/login/code", self.login_code, methods=["POST"]),
+            Route("/login/code", self.login_code, methods=["GET", "POST"]),
             Route("/login/password", self.login_password, methods=["GET", "POST"]),
             Route("/token", self.token, methods=["POST"]),
             Route("/revoke", self.revoke, methods=["POST"]),
@@ -137,11 +140,16 @@ class IdPWeb:
             )
         session = self.service.get_session(ctx.cookies.get(SESSION_COOKIE))
         prompt = params.get("prompt", "").split()
+        hint = _login_hint(params)
         if session is not None:
             max_age = params.get("max_age", "")
             now = self.service.clock()
             too_old = max_age.isdigit() and now - session[0].auth_time > int(max_age)
-            if "login" in prompt or too_old:
+            # The application asks for another address than the session's: never
+            # sign the browser in as someone else, as prompt=login.
+            email = (session[1].email or "").strip().lower()
+            other = hint is not None and bool(email) and email != hint
+            if "login" in prompt or too_old or other:
                 session = None
         oauth = self.server.create_oauth2_request(
             HttpRequest("GET", f"{self.config.issuer}/authorize", query=params)
@@ -153,16 +161,23 @@ class IdPWeb:
             return self._oauth_error(oauth, error)
         if session is None:
             rid, csrf = self.service.save_auth_request(params)
-            response = self._page(
-                200,
-                pages.email_page(
-                    self.config.branding,
-                    action=f"{self.config.issuer}/login/email",
-                    csrf=csrf,
-                    password_action=self._password_url(),
-                ),
-                form_origins=self._form_origins(params),
-            )
+            if hint is not None and "none" not in prompt:
+                # The address is known: mail the code now, then show the code
+                # page by a redirect, so a reload of it sends nothing.
+                limited = self._send_code(hint, ctx.client_ip, params)
+                response = (
+                    limited
+                    if limited is not None
+                    else Response(
+                        status_code=303,
+                        headers={
+                            **self._headers(),
+                            "Location": f"{self.config.issuer}/login/code",
+                        },
+                    )
+                )
+            else:
+                response = self._email_page(params, csrf)
             self._set_cookie(
                 response, LOGIN_COOKIE, rid, self.config.authorization_request_seconds
             )
@@ -184,16 +199,42 @@ class IdPWeb:
         if pending is None:
             return self._expired()
         params, csrf = pending
+        return self._email_page(params, csrf, email=_login_hint(params) or "")
+
+    def _email_page(
+        self, params: Mapping[str, str], csrf: str, *, email: str = ""
+    ) -> Response:
         return self._page(
             200,
             pages.email_page(
                 self.config.branding,
                 action=f"{self.config.issuer}/login/email",
                 csrf=csrf,
+                email=email,
                 password_action=self._password_url(),
             ),
             form_origins=self._form_origins(params),
         )
+
+    def _send_code(
+        self, email: str, client_ip: str | None, params: Mapping[str, str]
+    ) -> Response | None:
+        """Mail a sign-in code to ``email``: the "Too many attempts" page when a
+        limit is reached, else None, whether or not anything was sent (the page
+        that follows says the same for every address). The address is never logged."""
+        try:
+            self.service.request_code(email, client_ip)
+        except RateLimited as limited:
+            return self._limited(
+                limited, self.config.branding_for(email), self._form_origins(params)
+            )
+        except IdPError:
+            # An address that is not one, or one that cannot be mailed: the page
+            # says what it says for every address.
+            log.info("Sign-in code not sent (invalid address)")
+        except Exception:
+            log.exception("Could not send a sign-in code")
+        return None
 
     async def login_email(self, request: Request) -> Response:
         ctx = await _Context.read(request, self)
@@ -205,29 +246,32 @@ class IdPWeb:
             return pending
         params, csrf = pending
         email = ctx.form.get("email", "")
-        branding = self.config.branding_for(email)
-        origins = self._form_origins(params)
-        try:
-            self.service.request_code(email, ctx.client_ip)
-        except RateLimited as limited:
-            return self._limited(limited, branding, origins)
-        except IdPError:
-            # An address that is not one, or one that cannot be mailed: the page
-            # says what it says for every address.
-            log.info("Sign-in code not sent (invalid address)")
-        except Exception:
-            log.exception("Could not send a sign-in code")
+        limited = self._send_code(email, ctx.client_ip, params)
+        if limited is not None:
+            return limited
+        return self._code_page(params, csrf, email)
+
+    def _code_page(
+        self,
+        params: Mapping[str, str],
+        csrf: str,
+        email: str,
+        *,
+        error: str | None = None,
+        status: int = 200,
+    ) -> Response:
         return self._page(
-            200,
+            status,
             pages.code_page(
-                branding,
+                self.config.branding_for(email),
                 action=f"{self.config.issuer}/login/code",
                 again_action=f"{self.config.issuer}/login",
                 csrf=csrf,
-                email=ctx.form.get("email", "").strip().lower()[:254],
+                email=email.strip().lower()[:254],
+                error=error,
                 code_length=self.config.code_length,
             ),
-            form_origins=origins,
+            form_origins=self._form_origins(params),
         )
 
     async def login_code(self, request: Request) -> Response:
@@ -235,34 +279,42 @@ class IdPWeb:
         return await run_in_threadpool(self._login_code, ctx)
 
     def _login_code(self, ctx: _Context) -> Response:
+        if ctx.method == "GET":
+            return self._hinted_code_page(ctx)
         pending = self._pending(ctx)
         if isinstance(pending, Response):
             return pending
         params, csrf = pending
         email = ctx.form.get("email", "")
-        branding = self.config.branding_for(email)
-        origins = self._form_origins(params)
         try:
             user = self.service.verify_code(
                 email, ctx.form.get("code", ""), ctx.client_ip
             )
         except RateLimited as limited:
-            return self._limited(limited, branding, origins)
+            return self._limited(
+                limited, self.config.branding_for(email), self._form_origins(params)
+            )
         except InvalidCode:
-            return self._page(
-                400,
-                pages.code_page(
-                    branding,
-                    action=f"{self.config.issuer}/login/code",
-                    again_action=f"{self.config.issuer}/login",
-                    csrf=csrf,
-                    email=email.strip().lower()[:254],
-                    error="That code is not valid, or it has expired.",
-                    code_length=self.config.code_length,
-                ),
-                form_origins=origins,
+            return self._code_page(
+                params,
+                csrf,
+                email,
+                error="That code is not valid, or it has expired.",
+                status=400,
             )
         return self._complete(ctx, params, user, ["otp"])
+
+    def _hinted_code_page(self, ctx: _Context) -> Response:
+        """Where ``/authorize`` sends the browser once it mailed the hinted
+        address a code: the code page for that address. It sends nothing itself."""
+        pending = self.service.get_auth_request(ctx.cookies.get(LOGIN_COOKIE))
+        if pending is None:
+            return self._expired()
+        params, csrf = pending
+        hint = _login_hint(params)
+        if hint is None:
+            return self._email_page(params, csrf)
+        return self._code_page(params, csrf, hint)
 
     async def login_password(self, request: Request) -> Response:
         ctx = await _Context.read(request, self)
@@ -280,7 +332,10 @@ class IdPWeb:
         if isinstance(pending, Response):
             return pending
         params, csrf = pending
-        email = ctx.form.get("email", "")
+        if ctx.method == "GET":
+            email = _login_hint(params) or ""
+        else:
+            email = ctx.form.get("email", "")
         branding = self.config.branding_for(email)
         origins = self._form_origins(params)
 
@@ -634,6 +689,15 @@ class _Context:
         if len(ctx.form) != len(items):
             ctx.form_error = "A parameter was repeated."
         return ctx
+
+
+def _login_hint(params: Mapping[str, str]) -> str | None:
+    """The address the relying party asked to sign in, normalized; None when
+    there is none or it is not an address."""
+    try:
+        return normalize_email(params.get("login_hint", ""))
+    except IdPError:
+        return None
 
 
 def _origin(uri: str) -> str | None:

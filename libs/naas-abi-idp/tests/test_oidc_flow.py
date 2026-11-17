@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 
 import pytest
 from support import (
@@ -10,6 +11,7 @@ from support import (
     browser,
     callback_query,
     csrf_of,
+    follow,
     sign_in,
     start,
     token,
@@ -544,3 +546,213 @@ def test_the_branding_of_a_domain_shows_once_the_address_is_known(service, maile
     )
     assert "#ff0000" in out.text and "https://acme.test/logo.png" in out.text
     assert "Acme" in mailer.sent[-1].subject
+
+
+# -- the address the application already asked for (login_hint) ------------------
+
+CODE_PAGE = "http://localhost:9879/idp/login/code"
+
+
+def hinted(email, **overrides):
+    pkce = Pkce()
+    return pkce, authorize_params(pkce, login_hint=email, **overrides)
+
+
+def sent_to(mailer, email):
+    return [m for m in mailer.sent if m.to == email]
+
+
+def test_a_hint_is_mailed_a_code_at_once_and_signs_in(client, service, mailer, alice):
+    pkce, params = hinted("Alice@Example.com ")
+    started = start(client, params)
+    assert started.status_code == 303
+    assert started.headers["location"] == CODE_PAGE
+    assert "abi_idp_login" in client.cookies
+    assert len(sent_to(mailer, "alice@example.com")) == 1
+    page = follow(client, started)
+    assert page.status_code == 200
+    assert "Check your email" in page.text and "alice@example.com" in page.text
+    assert 'name="email" value="alice@example.com"' in page.text
+    code = mailer.last_code("alice@example.com")
+    done = client.post(
+        f"{ROOT}/login/code",
+        data={"csrf": csrf_of(page.text), "email": "alice@example.com", "code": code},
+    )
+    query = callback_query(done)
+    body = exchange(client, pkce, query).json()
+    assert verify_jwt(service, body["id_token"], audience="abi")["sub"] == alice.id
+
+
+def test_reloading_the_code_page_sends_no_other_code(client, mailer, alice):
+    started = start(client, hinted("alice@example.com")[1])
+    first = follow(client, started)
+    again = follow(client, started)
+    assert first.status_code == again.status_code == 200
+    assert csrf_of(first.text) == csrf_of(again.text)
+    assert len(mailer.sent) == 1
+
+
+def test_the_code_page_needs_a_pending_sign_in_and_a_hint(service, mailer, alice):
+    nobody = browser(service)
+    expired = nobody.get(f"{ROOT}/login/code")
+    assert expired.status_code == 400 and "Sign-in expired" in expired.text
+    plain = browser(service)
+    start(plain, authorize_params(Pkce()))
+    page = plain.get(f"{ROOT}/login/code")
+    assert page.status_code == 200 and "Email me a code" in page.text
+    assert 'name="email" type="email" value=""' in page.text
+    assert mailer.sent == []
+
+
+def test_another_address_can_be_used_after_a_hint(client, service, mailer, alice):
+    service.create_user("bob@example.com")
+    page = follow(client, start(client, hinted("alice@example.com")[1]))
+    again = client.get(f"{ROOT}/login")
+    assert again.status_code == 200 and "Email me a code" in again.text
+    field = 'name="email" type="email" value="alice@example.com"'
+    assert field in again.text and "readonly" not in again.text
+    assert "disabled" not in again.text
+    sent = client.post(
+        f"{ROOT}/login/email",
+        data={"csrf": csrf_of(page.text), "email": "bob@example.com"},
+    )
+    assert sent.status_code == 200 and "bob@example.com" in sent.text
+    assert [m.to for m in mailer.sent] == ["alice@example.com", "bob@example.com"]
+
+
+def test_the_password_page_is_prefilled_with_the_hint(client, service):
+    service.configuration.password_login_enabled = True
+    start(client, hinted("pat@example.com")[1])
+    page = client.get(f"{ROOT}/login/password")
+    assert page.status_code == 200
+    assert 'name="email" type="email" value="pat@example.com"' in page.text
+
+
+def test_registered_unregistered_and_disabled_hints_look_the_same(
+    service, mailer, alice
+):
+    disabled = service.create_user("dan@example.com")
+    service.set_disabled(disabled.id, True)
+
+    def journey(email):
+        client = browser(service)
+        started = start(client, hinted(email)[1])
+        page = follow(client, started)
+        text = page.text.replace(email, "EMAIL").replace(csrf_of(page.text), "CSRF")
+        return started.status_code, started.headers["location"], page.status_code, text
+
+    known = journey("alice@example.com")
+    assert known == journey("ghost@example.com") == journey("dan@example.com")
+    assert [m.to for m in mailer.sent] == ["alice@example.com"]
+
+
+def test_a_hint_registers_the_address_when_sign_up_is_on(client, service, mailer):
+    service.configuration.signup_enabled = True
+    started = start(client, hinted("new@example.com")[1])
+    assert started.status_code == 303
+    assert service.find_user("new@example.com") is not None
+    assert len(sent_to(mailer, "new@example.com")) == 1
+
+
+@pytest.mark.parametrize(
+    "hint",
+    ["", "not-an-address", "a@b", "x" * 250 + "@example.com", "a b@example.com"],
+)
+def test_no_valid_hint_is_the_email_page_as_before(client, mailer, alice, hint):
+    page = start(client, authorize_params(Pkce(), login_hint=hint))
+    assert page.status_code == 200 and "Email me a code" in page.text
+    assert 'name="email" type="email" value=""' in page.text
+    assert mailer.sent == []
+    again = client.get(f"{ROOT}/login")
+    assert 'name="email" type="email" value=""' in again.text
+
+
+def test_prompt_none_with_a_hint_sends_no_code(client, mailer, alice):
+    response = start(client, hinted("alice@example.com", prompt="none")[1])
+    assert response.status_code == 302
+    assert "error=login_required" in response.headers["location"]
+    assert mailer.sent == []
+
+
+def test_a_hint_over_the_send_limit_is_too_many_attempts(client, service, mailer):
+    service.create_user("alice@example.com")
+    for _ in range(service.configuration.rate_limit_email_sends):
+        assert start(client, hinted("alice@example.com")[1]).status_code == 303
+    limited = start(client, hinted("alice@example.com")[1])
+    assert limited.status_code == 429 and "Too many attempts" in limited.text
+    assert int(limited.headers["retry-after"]) > 0
+    assert "<script" not in limited.text
+    assert len(mailer.sent) == service.configuration.rate_limit_email_sends
+
+
+def test_a_hint_for_another_user_never_signs_in_the_session_user(
+    client, service, mailer, alice
+):
+    signed_in(client, mailer)  # the provider's session is alice's
+    bob = service.create_user("bob@example.com")
+    silent = start(client, hinted("bob@example.com", prompt="none")[1])
+    assert "error=login_required" in silent.headers["location"]
+    assert sent_to(mailer, "bob@example.com") == []
+    pkce, params = hinted("bob@example.com")
+    done = sign_in(client, mailer, "bob@example.com", params)
+    body = exchange(client, pkce, callback_query(done)).json()
+    assert verify_jwt(service, body["id_token"], audience="abi")["sub"] == bob.id
+    assert len(sent_to(mailer, "bob@example.com")) == 1
+    # The session is now bob's: a request without a hint signs bob in.
+    pkce = Pkce()
+    again = callback_query(start(client, authorize_params(pkce)))
+    body = exchange(client, pkce, again).json()
+    assert verify_jwt(service, body["id_token"], audience="abi")["sub"] == bob.id
+
+
+def test_a_hint_for_the_session_user_signs_in_without_a_code(
+    client, service, mailer, alice
+):
+    signed_in(client, mailer)
+    before = len(mailer.sent)
+    response = start(client, hinted("ALICE@example.com")[1])
+    assert response.status_code == 302 and "code=" in response.headers["location"]
+    assert len(mailer.sent) == before
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"client_id": "nope"},
+        {"redirect_uri": "https://evil.example/cb"},
+        {"redirect_uri": REDIRECT + "/../x"},
+        {"code_challenge": None, "code_challenge_method": None},
+        {"code_challenge_method": "plain"},
+    ],
+)
+def test_an_invalid_request_sends_no_code_even_with_a_hint(
+    client, mailer, alice, overrides
+):
+    response = start(client, hinted("alice@example.com", **overrides)[1])
+    assert response.status_code in (302, 400)
+    assert not response.headers.get("location", "").startswith(CODE_PAGE)
+    assert "abi_idp_login" not in client.cookies
+    assert mailer.sent == []
+
+
+def test_the_hinted_pages_are_locked_down_and_log_no_address(
+    client, service, mailer, alice, caplog
+):
+    caplog.set_level(logging.DEBUG)
+    started = start(client, hinted("alice@example.com")[1])
+    assert started.headers["cache-control"] == "no-store"
+    assert "script-src" not in started.headers["content-security-policy"]
+    cookie = started.headers["set-cookie"]
+    assert "HttpOnly" in cookie and "SameSite=lax" in cookie and "Path=/idp" in cookie
+    page = follow(client, started)
+    csp = page.headers["content-security-policy"]
+    assert "default-src 'none'" in csp and "frame-ancestors 'none'" in csp
+    assert "script-src" not in csp and "<script" not in page.text
+    assert "form-action 'self' http://localhost:9879" in csp
+    # A mail that cannot leave: logged, without the address, and the flow goes on.
+    mailer.fail = True
+    other = browser(service)
+    failed = start(other, hinted("alice@example.com")[1])
+    assert failed.status_code == 303
+    assert "Could not send a sign-in code" in caplog.text
+    assert "alice@example.com" not in caplog.text
