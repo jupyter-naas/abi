@@ -3,13 +3,16 @@
  * src/middleware.ts calls it before anything else.
  */
 import {
+  ACTIVITY_VIEWS,
   ROLES_PATH,
   SYSTEM_PATH,
+  legacyDataPath,
   legacySystemTabPath,
   systemViewPath,
 } from '../system/system-tabs';
 import { PLATFORM_ORGANIZATIONS_PATH } from '../organizations/organizations-model';
 import { PLATFORM_USERS_PATH } from '../users/users-model';
+import { SECTION_PATHS } from './service-pages';
 import {
   LEGACY_WORKSPACE_SETTINGS_SLUGS,
   PLATFORM_TABLES_PATH,
@@ -22,7 +25,10 @@ const OLD_MODULES_PATH = '/settings/modules';
 /** The first segments under /settings that Platform Settings serves, from its section paths. */
 export const PLATFORM_SETTINGS_SECTIONS: readonly string[] = [
   PLATFORM_TABLES_PATH,
-  SYSTEM_PATH,
+  SECTION_PATHS.system,
+  SECTION_PATHS.activity,
+  SECTION_PATHS.resources,
+  SECTION_PATHS.data,
   PLATFORM_ORGANIZATIONS_PATH,
   PLATFORM_USERS_PATH,
   ROLES_PATH,
@@ -30,6 +36,8 @@ export const PLATFORM_SETTINGS_SECTIONS: readonly string[] = [
 
 // `/workspace/<id>/admin/...`, also behind an org's `/org/<slug>` prefix.
 const WORKSPACE_ADMIN = /^(?:\/org\/[^/]+)?\/workspace\/[^/]+\/admin\/(system|events)(?:\/.*)?$/;
+// `/settings/system/<view>[/...]`: Data, Live traffic, Traces and Events were System pages.
+const OLD_SYSTEM_PAGE = /^\/settings\/system\/([^/]+)\/?$/;
 // `/settings/users/<row id>`: a row of the users table, before Users was a page of its own.
 const OLD_USERS_ROW = /^\/settings\/users\/(.+)$/;
 // `/settings/<table slug>[/<row id>]`, the table pages before the Nexus tables page.
@@ -40,6 +48,8 @@ const OLD_TABLE_PAGE = /^\/settings\/([A-Za-z0-9_]+)(\/.*)?$/;
  * - `/workspace/<id>/admin/system?tab=<tab>` → that System page (Access: Roles & permissions);
  * - `/workspace/<id>/admin/events` → System's Events page;
  * - `/settings/system/access` → Roles & permissions;
+ * - `/settings/system/data?service=<name>` → that service's page;
+ * - `/settings/system/{traffic,traces,events}` → the same page under `/settings/activity`;
  * - `/settings/modules` (Modules & features, removed) → Roles & permissions;
  * - `/settings/users/<row id>` → `/settings/tables/users/<row id>` (`/settings/users` itself is
  *   the Users page);
@@ -58,6 +68,11 @@ export function platformSettingsRedirect(pathname: string, search = ''): string 
   for (const old of [`${SYSTEM_PATH}/access`, OLD_MODULES_PATH]) {
     if (pathname === old || pathname.startsWith(`${old}/`)) return `${ROLES_PATH}${query}`;
   }
+
+  const systemPage = OLD_SYSTEM_PAGE.exec(pathname)?.[1];
+  if (systemPage === 'data') return legacyDataPath(params);
+  const activity = ACTIVITY_VIEWS.find((view) => view === systemPage);
+  if (activity) return `${systemViewPath(activity)}${query}`;
 
   const usersRow = OLD_USERS_ROW.exec(pathname);
   if (usersRow) return `${PLATFORM_TABLES_PATH}/users/${usersRow[1]}${query}`;

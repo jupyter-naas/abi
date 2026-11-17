@@ -4,10 +4,6 @@ import type { LucideIcon } from 'lucide-react';
 import type { ResourceDetail, ResourceEntry } from '../data-types';
 import type { PreviewContext } from '../viewers/preview';
 
-export type ServiceGroup = 'Storage' | 'Platform' | 'Streams & logs';
-
-export const SERVICE_GROUPS: ServiceGroup[] = ['Storage', 'Platform', 'Streams & logs'];
-
 export interface Noun {
   one: string;
   many: string;
@@ -63,12 +59,12 @@ export interface CreateProps {
   close: () => void;
 }
 
+/** A service's page: its sidebar entry is in lib/service-pages.ts, with the same label and icon. */
 export interface ServiceView {
   name: string;
   label: string;
   description: string;
   icon: LucideIcon;
-  group: ServiceGroup;
   /** Nothing here can be changed (logs, registries): labelled as such in the header. */
   readOnly?: boolean;
   /** What the items are called ("key", "document"...). */

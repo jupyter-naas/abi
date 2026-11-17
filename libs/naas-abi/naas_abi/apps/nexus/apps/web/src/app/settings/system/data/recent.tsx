@@ -36,12 +36,12 @@ export function RecentChanges({
   }, [api]);
   const grouped = entries ? groupHistory(entries) : null;
   return (
-    <Modal title="Recent changes" subtitle="Changes and reveals made from the System app" icon={<History size={18} />} size="lg" onClose={onClose}>
+    <Modal title="Recent changes" subtitle="Changes and reveals made in any service, from Platform Settings" icon={<History size={18} />} size="lg" onClose={onClose}>
       {failure && <Notice tone="danger">{failure.reason}</Notice>}
       {!grouped && !failure && <SkeletonRows rows={5} />}
       {grouped && grouped.length === 0 && (
         <EmptyState icon={History} title="Nothing yet">
-          Every change and reveal made in the Data tab shows up here.
+          Every change and reveal made on a service&apos;s page shows up here.
         </EmptyState>
       )}
       {grouped && grouped.length > 0 && (

@@ -56,7 +56,8 @@ describe('middleware auth redirects', () => {
       '/settings/tables/users',
       '/settings/tables/users/user-1',
       '/settings/system',
-      '/settings/system/events',
+      '/settings/activity/events',
+      '/settings/data/documents',
       '/settings/roles',
     ]) {
       const response = middleware(requestFor(path, { 'nexus-auth-flag': 'true' }));
@@ -98,12 +99,14 @@ describe('middleware auth redirects', () => {
       requestFor('/workspace/ws-1/admin/system?tab=traces&trace=abc', cookies),
     );
     expect(traces.headers.get('location')).toBe(
-      'https://nexus.example.com/settings/system/traces?trace=abc',
+      'https://nexus.example.com/settings/activity/traces?trace=abc',
     );
     const access = middleware(requestFor('/org/acme/workspace/ws-1/admin/system?tab=access', cookies));
     expect(access.headers.get('location')).toBe('https://nexus.example.com/settings/roles');
     const events = middleware(requestFor('/workspace/ws-1/admin/events', cookies));
-    expect(events.headers.get('location')).toBe('https://nexus.example.com/settings/system/events');
+    expect(events.headers.get('location')).toBe('https://nexus.example.com/settings/activity/events');
+    const data = middleware(requestFor('/settings/system/data?service=cache', cookies));
+    expect(data.headers.get('location')).toBe('https://nexus.example.com/settings/data/cache');
   });
 
   it('keeps redirecting legacy workspace settings links', () => {

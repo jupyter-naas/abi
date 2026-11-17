@@ -3,17 +3,32 @@ import {
   Activity,
   Blocks,
   Bot,
+  Boxes,
+  Braces,
   Building2,
-  Database,
+  Cable,
+  Cpu,
   Gauge,
+  GitBranch,
+  HardDrive,
+  Hash,
+  History,
   KeyRound,
+  LockKeyhole,
+  Mail,
+  MessagesSquare,
   Network,
+  Radar,
   Radio,
+  ScrollText,
   Server,
+  Sheet,
   Table2,
+  TerminalSquare,
   Users,
   Waypoints,
   Workflow,
+  Zap,
 } from 'lucide-react';
 import {
   ROLES_PATH,
@@ -25,12 +40,17 @@ import { PLATFORM_ORGANIZATIONS_PATH } from '../organizations/organizations-mode
 import { PLATFORM_USERS_PATH } from '../users/users-model';
 import { PLATFORM_TABLES_PATH } from './tables';
 import { safeDecode } from './page-helpers';
+import { SERVICE_PAGES, servicePagePath, servicePagesIn } from './service-pages';
 
 /**
  * Platform Settings, outside any organization or workspace. Each item names what
  * opening it takes; the shell shows the items the caller holds (asked of IAM with
  * `GET /api/iam/admin/access`) and a 403 page when there are none. The API checks
  * every call itself: this only decides what is shown.
+ *
+ * The groups answer one question each, in the order an administrator asks them:
+ * who has access (Administration), is it running (System), what happened (Activity),
+ * what is connected (Resources), what is stored (Data). Each page has one home.
  */
 
 /** What an item needs: one action, or any platform-level `iam:` action. */
@@ -61,15 +81,56 @@ export const PLATFORM_SETTINGS_INDEX = '/settings';
 const SYSTEM_ICONS: Record<SystemView, LucideIcon> = {
   overview: Gauge,
   services: Server,
-  data: Database,
   jobs: Workflow,
   agents: Bot,
   modules: Blocks,
-  nats: Network,
+  nats: Cable,
   traffic: Radio,
   traces: Waypoints,
   events: Activity,
 };
+
+/** The icon of each service's page: its view's icon (services/), one per page of the sidebar. */
+export const SERVICE_ICONS: Record<string, LucideIcon> = {
+  discovery: Radar,
+  bus: MessagesSquare,
+  event: History,
+  activity_log: ScrollText,
+  model_registry: Cpu,
+  secret: LockKeyhole,
+  email: Mail,
+  source_control: GitBranch,
+  coding_environment: TerminalSquare,
+  triple_store: Network,
+  vector_store: Boxes,
+  document: Braces,
+  dataset: Sheet,
+  object_storage: HardDrive,
+  keyvalue: Hash,
+  cache: Zap,
+};
+
+function systemItem(id: SystemView): PlatformSettingsNavItem {
+  const view = SYSTEM_VIEWS.find((v) => v.id === id) ?? SYSTEM_VIEWS[0];
+  return {
+    id: `system-${view.id}`,
+    label: view.label,
+    href: systemViewPath(view.id),
+    icon: SYSTEM_ICONS[view.id],
+    needs: READ_SYSTEM,
+  };
+}
+
+function serviceItem(service: string): PlatformSettingsNavItem {
+  const page = SERVICE_PAGES.find((p) => p.service === service);
+  return {
+    id: `service-${service}`,
+    label: page?.label ?? service,
+    href: servicePagePath(service),
+    icon: SERVICE_ICONS[service],
+    needs: READ_SYSTEM,
+  };
+}
 
 export const NEXUS_TABLES_ITEM: PlatformSettingsNavItem = {
   id: 'tables',
@@ -103,20 +164,38 @@ export const ROLES_ITEM: PlatformSettingsNavItem = {
   needs: ANY_IAM_ACTION,
 };
 
+// Discovery sits by Modules, Bus by NATS and the Event store by Events: each shows the
+// same things as its neighbour, until the two pages are one.
 export const platformSettingsGroups: PlatformSettingsNavGroup[] = [
-  { label: 'Database', items: [NEXUS_TABLES_ITEM] },
+  { label: 'Administration', items: [ORGANIZATIONS_ITEM, USERS_ITEM, ROLES_ITEM] },
   {
     label: 'System',
-    items: SYSTEM_VIEWS.map((view) => ({
-      id: `system-${view.id}`,
-      label: view.label,
-      href: systemViewPath(view.id),
-      icon: SYSTEM_ICONS[view.id],
-      needs: READ_SYSTEM,
-    })),
+    items: [
+      systemItem('overview'),
+      systemItem('services'),
+      systemItem('modules'),
+      serviceItem('discovery'),
+      systemItem('agents'),
+      systemItem('jobs'),
+      systemItem('nats'),
+      serviceItem('bus'),
+    ],
   },
-  { label: 'Tenancy', items: [ORGANIZATIONS_ITEM, USERS_ITEM] },
-  { label: 'Access', items: [ROLES_ITEM] },
+  {
+    label: 'Activity',
+    items: [
+      systemItem('traffic'),
+      systemItem('traces'),
+      systemItem('events'),
+      serviceItem('event'),
+      serviceItem('activity_log'),
+    ],
+  },
+  { label: 'Resources', items: servicePagesIn('resources').map((page) => serviceItem(page.service)) },
+  {
+    label: 'Data',
+    items: [...servicePagesIn('data').map((page) => serviceItem(page.service)), NEXUS_TABLES_ITEM],
+  },
 ];
 
 export const platformSettingsNav: PlatformSettingsNavItem[] = platformSettingsGroups.flatMap(

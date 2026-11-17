@@ -96,7 +96,6 @@ export const cacheView: ServiceView = {
   label: 'Cache',
   description: 'Results modules cached, across the hot and cold tiers.',
   icon: Zap,
-  group: 'Storage',
   noun: { one: 'entry', many: 'entries' },
   entryIcon: (entry) => TYPES[entry.attributes.data_type ?? '']?.icon ?? Zap,
   badges: (entry) => <PrefixBadge id={entry.id} />,

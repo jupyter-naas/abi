@@ -9,7 +9,7 @@ vi.mock('next/link', async () => {
       createElement('a', { href, ...rest }, children as never),
   };
 });
-vi.mock('../system/system', () => ({ SystemFrame: () => null, SystemRefresh: () => null }));
+vi.mock('../system/system-frame', () => ({ SystemFrame: () => null, SystemRefresh: () => null }));
 
 import { PlatformOrganizations } from './organizations';
 

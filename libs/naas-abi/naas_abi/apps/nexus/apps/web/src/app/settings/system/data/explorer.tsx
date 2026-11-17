@@ -1,16 +1,18 @@
 'use client';
 
 /**
- * The Data tab: every kernel service's data, browsable and editable by platform
- * super admins. Service-specific rendering lives in ``services/``; changes are
- * confirmed by typing the id and audited by the API before they happen.
+ * One kernel service's data, browsable and editable by platform super admins: a
+ * Platform Settings page per service (lib/service-pages.ts). Service-specific
+ * rendering lives in ``services/``; changes are confirmed by typing the id and
+ * audited by the API before they happen.
  */
 import './data.css';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import * as Tooltip from '@radix-ui/react-tooltip';
-import { Database } from 'lucide-react';
+import { servicePagePath } from '../../lib/service-pages';
+import { SystemFrame } from '../system-frame';
 import { createDataApi, type DataApi, type Failure } from './data-api';
 import { childId, decodeLocation, encodeLocation, plural } from './data-model';
 import type { ResourceEntry } from './data-types';
@@ -19,7 +21,6 @@ import { CreateDialog, DeleteDialog, EditorDialog, type EditorRequest } from './
 import { Inspector } from './inspector';
 import { RecentChanges } from './recent';
 import { ShortcutsSheet } from './shortcuts';
-import { ServiceRail } from './rail';
 import { Browser, ServiceHeader, Toolbar } from './browser';
 import { viewFor } from './services/registry';
 import { ToastStack, useToasts } from './toasts';
@@ -60,10 +61,13 @@ function typing(target: EventTarget | null): boolean {
 }
 
 export function DataExplorer({
+  service,
   api: injected,
   nonce = 0,
   save = saveBlob,
 }: {
+  /** The service's name in the data API. */
+  service: string;
   api?: DataApi;
   nonce?: number;
   save?: (blob: Blob, name: string) => void;
@@ -73,7 +77,7 @@ export function DataExplorer({
   const pathname = usePathname();
   const params = useSearchParams();
   const initial = useMemo(() => decodeLocation(new URLSearchParams(params.toString())), []); // eslint-disable-line react-hooks/exhaustive-deps
-  const x = useExplorer(api, initial, nonce);
+  const x = useExplorer(api, service, initial, nonce);
   const { toasts, push, dismiss } = useToasts();
   const searchRef = useRef<HTMLInputElement>(null);
   const [chosenWidth, setWidth] = useState<number | null>(null);
@@ -94,24 +98,27 @@ export function DataExplorer({
     }
   }, []);
 
-  const view = x.service ? viewFor(x.service.name) : null;
+  const view = viewFor(service);
   const depth = x.path.length - 1;
   const level = useMemo(
-    () => (view?.level ? view.level(depth, x.parent, x.entries ?? undefined) : {}),
+    () => (view.level ? view.level(depth, x.parent, x.entries ?? undefined) : {}),
     [view, depth, x.parent, x.entries],
   );
-  const noun = level.noun ?? view?.noun ?? { one: 'entry', many: 'entries' };
-  const createHere = view?.canCreate?.(depth, x.parent) ?? true;
+  const noun = level.noun ?? view.noun;
+  const createHere = view.canCreate?.(depth, x.parent) ?? true;
   const createBlocked = typeof createHere === 'string' ? createHere : null;
   const canCreate = Boolean(x.service?.capabilities.create) && createHere === true;
-  const parentLabel = x.path.length > 1 ? x.path[x.path.length - 1].label : (view?.label ?? '');
+  const parentLabel = x.path.length > 1 ? x.path[x.path.length - 1].label : view.label;
   const itemId = x.detail?.entry.id ?? null;
 
   // Keep the location in the URL so a refresh or a shared link lands in the same place.
   useEffect(() => {
-    const next = encodeLocation({ service: x.service?.name ?? null, path: x.path, item: itemId }, new URLSearchParams(params.toString()));
-    if (next.toString() !== params.toString()) router.replace(`${pathname}?${next.toString()}`, { scroll: false });
-  }, [x.service?.name, x.path, itemId]); // eslint-disable-line react-hooks/exhaustive-deps
+    const next = encodeLocation({ path: x.path, item: itemId }, new URLSearchParams(params.toString()));
+    if (next.toString() !== params.toString()) {
+      const query = next.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    }
+  }, [x.path, itemId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const notify = useCallback(
     (failure: Failure) => push({ tone: 'danger', title: failure.source === 'audit' ? 'Audit log unavailable' : 'Something went wrong', detail: failure.reason }),
@@ -124,7 +131,7 @@ export function DataExplorer({
   };
 
   const startCreate = () => {
-    if (!view || !canCreate) return;
+    if (!canCreate) return;
     if (view.create) setCreating(true);
     else setEditor({ mode: 'create', parent: x.parent, parentLabel, initial: view.editor?.template?.(x.parent) ?? '' });
   };
@@ -150,9 +157,9 @@ export function DataExplorer({
   const upload = async (files: File[]) => {
     let done = 0;
     for (const file of files) {
-      const name = view?.dropName ? view.dropName(file) : file.name;
+      const name = view.dropName ? view.dropName(file) : file.name;
       if (!name) {
-        push({ tone: 'danger', title: `${file.name} was not uploaded`, detail: view?.dropHint });
+        push({ tone: 'danger', title: `${file.name} was not uploaded`, detail: view.dropHint });
         continue;
       }
       const result = await x.write(childId(x.parent, name), file);
@@ -210,77 +217,84 @@ export function DataExplorer({
     return () => window.removeEventListener('keydown', onKey);
   });
 
+  const frame = (body: ReactNode) => (
+    <SystemFrame title={view.label} subtitle={view.description} flush>
+      {body}
+    </SystemFrame>
+  );
+
   if (x.servicesFailure) {
-    return (
+    return frame(
       <div className="data-explorer-state">
         <Notice tone="danger">{x.servicesFailure.reason}</Notice>
-      </div>
+      </div>,
     );
   }
   if (!x.services) {
-    return <div className="data-explorer-state data-muted">Loading services…</div>;
+    return frame(<div className="data-explorer-state data-muted">Loading…</div>);
+  }
+  if (!x.service || !x.service.available) {
+    return frame(
+      <div className="data-explorer">
+        <EmptyState
+          icon={view.icon}
+          title={x.service ? `${view.label} is off in this deployment` : `This deployment has no ${view.label.toLowerCase()} service`}
+        >
+          {x.service?.reason || null}
+        </EmptyState>
+      </div>,
+    );
   }
 
   const showInspector = Boolean(x.detail || x.detailLoading || x.detailFailure);
 
-  return (
+  return frame(
     <Tooltip.Provider>
       <div className="data-explorer">
-        <ServiceRail
-          services={x.services}
-          active={x.service?.name ?? null}
-          onSelect={x.selectService}
-          onRecent={() => setRecent(true)}
-          onShortcuts={() => setShortcuts(true)}
-        />
-        <section className="data-main" data-service={x.service?.name} aria-label={view?.label ?? 'Data'}>
-          {x.service && view ? (
-            <>
-              <ServiceHeader
-                view={view}
-                info={x.service}
-                count={x.entries ? x.loadedCount : null}
-                more={x.hasMore}
-                noun={noun}
-                onCreate={canCreate ? startCreate : undefined}
-                createBlocked={x.service.capabilities.create ? createBlocked : null}
-                onRefresh={x.refresh}
-              />
-              <Toolbar
-                rootLabel={view.label}
-                path={x.path}
-                onCrumb={x.open}
-                onUp={x.up}
-                search={x.search}
-                onSearch={x.setSearch}
-                searchRef={searchRef}
-                placeholder={x.service.capabilities.search ? `Search ${noun.many}` : `Filter ${noun.many}`}
-              />
-              <Browser
-                view={view}
-                level={level}
-                entries={x.entries}
-                failure={x.listFailure}
-                listable={x.listable}
-                parent={x.parent}
-                search={x.search}
-                selected={x.selected}
-                hasMore={x.hasMore}
-                loadingMore={x.loadingMore}
-                canCreate={canCreate}
-                onActivate={activate}
-                onDelete={setDeleting}
-                onLookup={(id) => void x.openItem(id)}
-                onLoadMore={x.loadMore}
-                onCreate={canCreate ? startCreate : undefined}
-                onDrop={view.acceptsDrops ? (files) => void upload(files) : undefined}
-              />
-            </>
-          ) : (
-            <EmptyState icon={Database} title="No service data is reachable from this API" />
-          )}
+        <section className="data-main" data-service={x.service.name} aria-label={view.label}>
+          <ServiceHeader
+            view={view}
+            info={x.service}
+            count={x.entries ? x.loadedCount : null}
+            more={x.hasMore}
+            noun={noun}
+            onCreate={canCreate ? startCreate : undefined}
+            createBlocked={x.service.capabilities.create ? createBlocked : null}
+            onRefresh={x.refresh}
+            onRecent={() => setRecent(true)}
+            onShortcuts={() => setShortcuts(true)}
+          />
+          <Toolbar
+            rootLabel={view.label}
+            path={x.path}
+            onCrumb={x.open}
+            onUp={x.up}
+            search={x.search}
+            onSearch={x.setSearch}
+            searchRef={searchRef}
+            placeholder={x.service.capabilities.search ? `Search ${noun.many}` : `Filter ${noun.many}`}
+          />
+          <Browser
+            view={view}
+            level={level}
+            entries={x.entries}
+            failure={x.listFailure}
+            listable={x.listable}
+            parent={x.parent}
+            search={x.search}
+            selected={x.selected}
+            hasMore={x.hasMore}
+            loadingMore={x.loadingMore}
+            canCreate={canCreate}
+            onActivate={activate}
+            onDelete={setDeleting}
+            onLookup={(id) => void x.openItem(id)}
+            onLoadMore={x.loadMore}
+            onCreate={canCreate ? startCreate : undefined}
+            onDrop={view.acceptsDrops ? (files) => void upload(files) : undefined}
+          />
         </section>
-        {showInspector && view && (
+        {showInspector && (
           <Inspector
             view={view}
             detail={x.detail}
@@ -315,7 +329,7 @@ export function DataExplorer({
             }}
           />
         )}
-        {editor && view && x.service && (
+        {editor && (
           <EditorDialog
             request={editor}
             view={view}
@@ -332,7 +346,7 @@ export function DataExplorer({
             }}
           />
         )}
-        {creating && view && (
+        {creating && (
           <CreateDialog
             view={view}
             parent={x.parent}
@@ -348,7 +362,7 @@ export function DataExplorer({
             }}
           />
         )}
-        {deleting && view && (
+        {deleting && (
           <DeleteDialog
             entry={deleting}
             noun={(view.nounFor?.(deleting, depth) ?? (deleting.kind === 'container' ? { one: 'container', many: 'containers' } : view.noun)).one}
@@ -372,15 +386,16 @@ export function DataExplorer({
           <RecentChanges
             api={api}
             onClose={() => setRecent(false)}
-            onOpen={(service, id) => {
+            onOpen={(other, id) => {
               setRecent(false);
-              x.goTo(service, id);
+              if (other === service) x.goTo(id);
+              else router.push(id ? `${servicePagePath(other)}?item=${encodeURIComponent(id)}` : servicePagePath(other));
             }}
           />
         )}
         {shortcuts && <ShortcutsSheet onClose={() => setShortcuts(false)} />}
         <ToastStack toasts={toasts} dismiss={dismiss} />
       </div>
-    </Tooltip.Provider>
+    </Tooltip.Provider>,
   );
 }

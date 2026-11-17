@@ -2,7 +2,7 @@
 
 import './dataset.css';
 
-import { Database, KeyRound, Layers, Table2 } from 'lucide-react';
+import { Database, KeyRound, Layers, Sheet, Table2 } from 'lucide-react';
 import { formatCount } from '../data-model';
 import type { ResourceDetail, ResourceEntry } from '../data-types';
 import { Badge, CopyButton } from '../data-ui';
@@ -138,8 +138,7 @@ export const datasetView: ServiceView = {
   name: 'dataset',
   label: 'Datasets',
   description: 'Tables in the dataset warehouse, by namespace.',
-  icon: Table2,
-  group: 'Storage',
+  icon: Sheet,
   noun: { one: 'table', many: 'tables' },
   nounFor: (entry) => (entry.kind === 'container' ? { one: 'namespace', many: 'namespaces' } : { one: 'table', many: 'tables' }),
   entryIcon: (entry) => (entry.kind === 'container' ? Database : Table2),

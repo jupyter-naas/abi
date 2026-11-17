@@ -160,7 +160,7 @@ describe('JobsTab', () => {
     expect(panel()?.querySelectorAll('[role="treeitem"]')).toHaveLength(4);
     expect(panel()?.querySelector('.trace-header a')?.getAttribute('href')).toBe(`http://jaeger/trace/${TRACE_ID}`);
     await mounted!.click(button('Open in Traces', panel() ?? document));
-    expect(push).toHaveBeenCalledWith(`/settings/system/traces?trace=${TRACE_ID}`);
+    expect(push).toHaveBeenCalledWith(`/settings/activity/traces?trace=${TRACE_ID}`);
   });
 
   it('runs a job now and follows the run from queued to started', async () => {

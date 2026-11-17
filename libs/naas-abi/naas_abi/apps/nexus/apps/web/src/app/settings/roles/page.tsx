@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { RolesAndPermissions } from '@/components/access/roles-and-permissions';
 import { PLATFORM_ACCESS_SCOPE } from '@/components/access/access-scope';
-import { SystemFrame, SystemRefresh } from '../system/system';
+import { SystemFrame, SystemRefresh } from '../system/system-frame';
 
 const SCOPES = [PLATFORM_ACCESS_SCOPE];
 

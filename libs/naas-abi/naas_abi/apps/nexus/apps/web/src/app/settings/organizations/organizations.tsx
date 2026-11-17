@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { SystemFrame, SystemRefresh } from '../system/system';
+import { SystemFrame, SystemRefresh } from '../system/system-frame';
 import {
   createOrganization,
   deleteOrganization,

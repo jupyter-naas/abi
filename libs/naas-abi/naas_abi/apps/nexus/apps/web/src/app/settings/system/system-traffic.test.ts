@@ -82,7 +82,7 @@ describe('TrafficView trace links', () => {
     });
     const link = mounted.host.querySelector('a[data-trace]');
 
-    expect(link?.getAttribute('href')).toBe('/settings/system/traces?trace=4bf92f3577b34da6a3ce929d0e0e4736');
+    expect(link?.getAttribute('href')).toBe('/settings/activity/traces?trace=4bf92f3577b34da6a3ce929d0e0e4736');
     expect(link?.getAttribute('target')).toBeNull();
     await mounted.click(link);
     expect(onOpenTrace).toHaveBeenCalledWith('4bf92f3577b34da6a3ce929d0e0e4736');

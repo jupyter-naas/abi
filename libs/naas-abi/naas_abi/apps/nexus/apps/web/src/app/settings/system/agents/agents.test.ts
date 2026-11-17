@@ -140,7 +140,7 @@ describe('agents tab', () => {
     expect(panel?.textContent).toContain('[DONE]');
     expect(button('Cancel')).toBeNull();
     await m.click(button('Open trace'));
-    expect(push).toHaveBeenCalledWith(`/settings/system/traces?trace=${'c'.repeat(32)}`);
+    expect(push).toHaveBeenCalledWith(`/settings/activity/traces?trace=${'c'.repeat(32)}`);
 
     await m.click(row('acme.other/r3'));
     await m.flush();
