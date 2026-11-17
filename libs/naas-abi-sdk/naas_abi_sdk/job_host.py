@@ -46,8 +46,10 @@ from naas_abi_sdk.jobs import (
     NonRetryable,
     OnEvent,
     go_duration_seconds,
+    input_key,
     job_subjects,
     run_key,
+    running_inputs_collection,
     runs_collection,
     seal_fields,
     stream_name,
@@ -386,10 +388,10 @@ async def remove_schedules(js: Any, subjects: Any, keep: int) -> None:
         )
 
 
-class OverlapCheckBlind(NonRetryable, RuntimeError):
-    """``skip_if_running`` could not see the run's own record among the active
-    runs, so it cannot tell whether an earlier one is active: the run fails
-    (without a retry, which would not look again) instead of guessing."""
+class InputClaimContended(RuntimeError):
+    """``skip_if_running`` could not settle who holds a run's input after a few
+    attempts (claims changing hands meanwhile): the delivery is retried later,
+    like any other start that could not reach the engine."""
 
 
 class EngineUnavailable(RuntimeError):
@@ -451,6 +453,7 @@ class JobHost:
         self.completion_error_after_seconds = completion_error_after_seconds
         self.control = control
         self.collection = runs_collection(project)
+        self.inputs_collection = running_inputs_collection(project)
         # What workflow runs need: their journal's store, and how to read the runs
         # of other modules (``module_documents(module_id)``; None: over the transport).
         self.workflow_poll_seconds = workflow_poll_seconds
@@ -542,6 +545,13 @@ class JobHost:
         )
         if any(d.kind == "workflow" for d, _ in self.handlers.values()):
             await StepJournal(self.documents, self.project, "").ensure()
+        if any(d.skip_if_running for d, _ in self.handlers.values()):
+            await self.documents.ensure_collection(
+                CollectionSpec(
+                    name=self.inputs_collection,
+                    fields=(FieldSpec(name="job", type="string", indexed=True),),
+                )
+            )
         nc = await self.transport.connect()
         js = nc.jetstream()
         cancel_subject = None
@@ -1263,53 +1273,80 @@ class JobHost:
         await self._notify(descriptor, run_id, "FAILED")
         return "FAILED"
 
-    async def earlier_active_runs(
-        self, descriptor: JobDescriptor, run_id: str, sequence: int, payload: Any
-    ) -> list[str]:
-        """Ids of the runs of ``descriptor`` that started before ``sequence`` with
-        the same ``payload`` and are still ``RUNNING`` or ``RETRYING``, oldest first.
+    async def _holder_active(self, holder: str, claimed_at: str) -> bool:
+        """Whether the run holding an input claim still runs: RUNNING with live
+        heartbeats, RETRYING, or not saved yet but claimed recently (a holder
+        saves its record right after claiming). A holder whose host died stops
+        counting once its heartbeats are ``lost_after_seconds`` old."""
+        if holder in self._running:
+            return True
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(seconds=self.lost_after_seconds)
+        ).isoformat()
+        try:
+            record = (await self.documents.get(self.collection, holder)).data
+        except DocumentNotFound:
+            return (claimed_at or "") > cutoff
+        status = record.get("status")
+        if status == "RETRYING":
+            return True
+        if status != "RUNNING":
+            return False
+        return (record.get("heartbeat_at") or record.get("started_at") or "") > cutoff
 
-        ``OverlapCheckBlind`` when ``run_id``'s own record, saved RUNNING before its
-        handler starts, is not among them: a check that quietly found nothing
-        would let overlapping runs do the same work twice."""
-        page = await self.documents.find(
-            self.collection,
-            where=[
-                ("job", "eq", descriptor.name),
-                ("status", "in", ["RUNNING", "RETRYING"]),
-            ],
-            limit=1000,
-        )
-        if not any(doc.id == run_id for doc in page.items):
-            raise OverlapCheckBlind(
-                f"The active runs of job {descriptor.name!r} do not list run "
-                f"{run_id!r} itself: cannot tell whether an earlier run is active"
-            )
-        earlier = [
-            (int(doc.data.get("sequence") or 0), doc.id)
-            for doc in page.items
-            if doc.id != run_id
-            and int(doc.data.get("sequence") or sequence) < sequence
-            and (doc.data.get("payload") or {}) == (payload or {})
-        ]
-        return [run for _, run in sorted(earlier)]
-
-    def _unless_running(
-        self, descriptor: JobDescriptor, handler: Any, sequence: int
-    ) -> Callable[[JobContext], Awaitable[Any]]:
-        """``handler``, unless an earlier run with the same input is active: then
-        the run is SKIPPED, naming that run (``JobDescriptor.skip_if_running``)."""
-
-        async def run(context: JobContext) -> Any:
-            active = await self.earlier_active_runs(
-                descriptor, context.run_id, sequence, context.payload
-            )
-            if active:
-                context.skip(f"{active[0]} with the same input is still running")
+    async def _claim_input(
+        self, descriptor: JobDescriptor, run_id: str, payload: Any
+    ) -> str | None:
+        """Claim ``payload`` for ``run_id`` (``JobDescriptor.skip_if_running``):
+        None when the run holds it (now, or already: a retry, a redelivery),
+        else the id of the active run that does. A finished or lost holder's
+        claim is taken over. Runs as the module, never as a run's user."""
+        key = input_key(descriptor.name, payload)
+        claim = {"job": descriptor.name, "run_id": run_id, "claimed_at": _now()}
+        for _ in range(4):
+            try:
+                await self.documents.put(
+                    self.inputs_collection, key, claim, if_version=0
+                )
                 return None
-            return await handler(context)
+            except VersionConflict:
+                pass
+            try:
+                held = await self.documents.get(self.inputs_collection, key)
+            except DocumentNotFound:
+                continue  # released meanwhile: claim it again
+            holder = str(held.data.get("run_id") or "")
+            if holder == run_id:
+                return None
+            if await self._holder_active(holder, held.data.get("claimed_at", "")):
+                return holder
+            try:
+                await self.documents.put(
+                    self.inputs_collection, key, claim, if_version=held.version
+                )
+                return None
+            except (VersionConflict, DocumentNotFound):
+                continue  # another run took it over first: look again
+        raise InputClaimContended(f"Run {run_id}: its input claim kept changing hands")
 
-        return run
+    async def _release_input(
+        self, descriptor: JobDescriptor, run_id: str, payload: Any
+    ) -> None:
+        """Drop ``run_id``'s input claim once it finished; best effort (a claim
+        left behind is taken over, its holder being finished)."""
+        key = input_key(descriptor.name, payload)
+        try:
+            held = await self.documents.get(self.inputs_collection, key)
+            if held.data.get("run_id") == run_id:
+                await self.documents.delete(
+                    self.inputs_collection, key, if_version=held.version
+                )
+        except (DocumentNotFound, VersionConflict):
+            return
+        except Exception:  # the run is finished either way
+            logger.warning(
+                "Job run %s: input claim not released", run_id, exc_info=True
+            )
 
     async def _handle_delivery(
         self, descriptor: JobDescriptor, handler: Any, msg: Any
@@ -1395,8 +1432,13 @@ class JobHost:
                     msg, run_id, descriptor, trigger, exc, retried=attempt > 1
                 )
         fired_at = _fired_at(msg)
+        running_with_input: str | None = None
         try:
             payload = await self._payload(msg)
+            if descriptor.skip_if_running:
+                running_with_input = await self._claim_input(
+                    descriptor, run_id, payload
+                )
             await self._save(
                 run_id,
                 {
@@ -1439,8 +1481,12 @@ class JobHost:
         self._running[run_id] = context
         heartbeat = asyncio.create_task(self._heartbeat(msg))
         progress = asyncio.create_task(self._persist_progress(context))
-        if descriptor.skip_if_running and attempt == 1:
-            handler = self._unless_running(descriptor, handler, sequence)
+        if running_with_input is not None:
+            reason = f"{running_with_input} with the same input is still running"
+
+            async def handler(context: JobContext, reason: str = reason) -> None:
+                context.skip(reason)
+
         if run_as is None:
             work = asyncio.create_task(handler(context))
         else:
@@ -1523,6 +1569,8 @@ class JobHost:
             else:
                 await self._save_completion(run_id, fields, heartbeat)
             if status in TERMINAL_STATUSES:
+                if descriptor.skip_if_running and running_with_input is None:
+                    await self._release_input(descriptor, run_id, payload)
                 await self._notify(descriptor, run_id, status)
             # Persist liveness until completion is durable, then stop before redelivery.
             progress.cancel()

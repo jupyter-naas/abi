@@ -2041,19 +2041,47 @@ def test_its_own_schedule_runs_and_a_claimed_schedule_kind_is_manual():
 # --- skip_if_running ---------------------------------------------------------------------
 
 
-def _active(docs, job, sequence, payload, status="RUNNING"):
+def _holder(docs, run_id, payload, *, status="RUNNING", heartbeat_at=None):
+    """``run_id`` holds ``payload``'s claim, with a run record in ``status``."""
+    from naas_abi_sdk.jobs import input_key, running_inputs_collection
+
+    job = run_id.split(":")[0]
+    now = datetime.now(timezone.utc).isoformat()
     asyncio.run(
         docs.put(
             runs_collection(PROJECT),
-            f"{job}:{sequence}",
-            {"job": job, "status": status, "sequence": sequence, "payload": payload},
+            run_id,
+            {
+                "job": job,
+                "status": status,
+                "payload": payload,
+                "heartbeat_at": heartbeat_at or now,
+            },
+        )
+    )
+    asyncio.run(
+        docs.put(
+            running_inputs_collection(PROJECT),
+            input_key(job, payload),
+            {"job": job, "run_id": run_id, "claimed_at": now},
         )
     )
 
 
-def test_skip_if_running_skips_while_an_earlier_run_with_the_same_input_is_active():
+def _claim_holder(docs, job, payload):
+    from naas_abi_sdk.jobs import input_key, running_inputs_collection
+
+    claim = docs.data.get((running_inputs_collection(PROJECT), input_key(job, payload)))
+    return None if claim is None else claim.data["run_id"]
+
+
+POLL = JobDescriptor("poll", skip_if_running=True, max_concurrency=2, max_attempts=3)
+
+
+@pytest.mark.parametrize("status", ["RUNNING", "RETRYING"])
+def test_skip_if_running_skips_while_another_run_holds_the_same_input(status):
     docs = QueryDocuments()
-    _active(docs, "poll", 3, {"filter": "ai"}, status="RETRYING")
+    _holder(docs, "poll:3", {"filter": "ai"}, status=status)
     ran = []
 
     async def handler(ctx):
@@ -2061,40 +2089,160 @@ def test_skip_if_running_skips_while_an_earlier_run_with_the_same_input_is_activ
         return {"fetched": 1}
 
     msg = Msg(sequence=7, payload={"filter": "ai"})
-    _run(_host(docs), JobDescriptor("poll", skip_if_running=True), handler, msg)
+    _run(_host(docs), POLL, handler, msg)
 
     run = docs.run("poll:7")
     assert ran == []
     assert run["status"] == "SKIPPED"
     assert run["skip_reason"] == "poll:3 with the same input is still running"
     assert msg.calls == [("ack",)]
+    # The holder keeps its claim.
+    assert _claim_holder(docs, "poll", {"filter": "ai"}) == "poll:3"
+
+
+def test_skip_if_running_claims_a_free_input_and_releases_it_when_done():
+    docs = QueryDocuments()
+    _holder(docs, "poll:3", {"filter": "other"})
+    seen = []
+
+    async def handler(ctx):
+        seen.append(_claim_holder(docs, "poll", {"filter": "ai"}))
+        return {"fetched": 1}
+
+    _run(_host(docs), POLL, handler, Msg(sequence=7, payload={"filter": "ai"}))
+
+    assert docs.run("poll:7")["status"] == "SUCCEEDED"
+    assert seen == ["poll:7"]  # held while it ran
+    assert _claim_holder(docs, "poll", {"filter": "ai"}) is None
+    assert _claim_holder(docs, "poll", {"filter": "other"}) == "poll:3"
 
 
 @pytest.mark.parametrize(
-    "earlier",
+    "status, heartbeat_age",
     [
-        (3, {"filter": "other"}, "RUNNING"),  # another input runs side by side
-        (9, {"filter": "ai"}, "RUNNING"),  # started later: the oldest goes ahead
-        (3, {"filter": "ai"}, "SUCCEEDED"),  # finished
+        ("SUCCEEDED", timedelta(0)),  # finished without releasing its claim
+        ("FAILED", timedelta(0)),
+        ("RUNNING", timedelta(minutes=10)),  # its host died: heartbeats stopped
     ],
 )
-def test_skip_if_running_runs_when_no_earlier_run_with_its_input_is_active(earlier):
+def test_skip_if_running_takes_over_the_claim_of_a_finished_or_lost_run(
+    status, heartbeat_age
+):
     docs = QueryDocuments()
-    sequence, payload, status = earlier
-    _active(docs, "poll", sequence, payload, status=status)
+    stale = (datetime.now(timezone.utc) - heartbeat_age).isoformat()
+    _holder(docs, "poll:3", {}, status=status, heartbeat_at=stale)
 
     async def handler(ctx):
-        return {"fetched": 1}
+        return {}
 
-    msg = Msg(sequence=7, payload={"filter": "ai"})
-    _run(_host(docs), JobDescriptor("poll", skip_if_running=True), handler, msg)
+    _run(_host(docs), POLL, handler, Msg(sequence=7))
 
     assert docs.run("poll:7")["status"] == "SUCCEEDED"
 
 
-def test_without_skip_if_running_an_earlier_active_run_does_not_matter():
+def test_skip_if_running_the_first_run_to_claim_goes_ahead_whatever_its_sequence():
+    """A lower sequence started late (redelivered, slower host) does not run
+    alongside the higher one that claimed first."""
     docs = QueryDocuments()
-    _active(docs, "poll", 3, {})
+    host = _host(docs)
+    ran = []
+
+    async def main():
+        started, release = asyncio.Event(), asyncio.Event()
+
+        async def handler(ctx):
+            ran.append(ctx.run_id)
+            if ctx.run_id == "poll:8":
+                started.set()
+                await release.wait()
+            return {}
+
+        later = asyncio.create_task(host.handle(POLL, handler, Msg(sequence=8)))
+        await started.wait()
+        await host.handle(POLL, handler, Msg(sequence=7))
+        release.set()
+        await later
+
+    asyncio.run(main())
+    assert ran == ["poll:8"]
+    assert docs.run("poll:7")["status"] == "SKIPPED"
+    assert docs.run("poll:8")["status"] == "SUCCEEDED"
+
+
+def test_skip_if_running_a_retry_holds_its_own_claim():
+    docs = QueryDocuments()
+    _holder(docs, "poll:7", {}, status="RETRYING")
+    docs.data[(runs_collection(PROJECT), "poll:7")].data.update(
+        {"run_id": "poll:7", "attempt": 1, "sequence": 7, "fired_at": ""}
+    )
+
+    async def handler(ctx):
+        return {"attempt": ctx.attempt}
+
+    _run(_host(docs), POLL, handler, Msg(sequence=7, attempt=2))
+
+    run = docs.run("poll:7")
+    assert run["status"] == "SUCCEEDED" and run["result"] == {"attempt": 2}
+
+
+def test_skip_if_running_a_store_error_defers_the_run_without_using_an_attempt():
+    class Hiccup(QueryDocuments):
+        failed = False
+
+        async def put(self, collection, id, data, *, if_version=None):
+            from naas_abi_sdk.jobs import running_inputs_collection
+
+            if collection == running_inputs_collection(PROJECT) and not self.failed:
+                self.failed = True
+                raise RuntimeError("store hiccup")
+            return await super().put(collection, id, data, if_version=if_version)
+
+    docs = Hiccup()
+    ran = []
+
+    async def handler(ctx):
+        ran.append(ctx.attempt)
+        return {}
+
+    msg = Msg(sequence=7)
+    _run(_host(docs), POLL, handler, msg)
+    assert ran == [] and msg.calls[0][0] == "nak"
+    assert (runs_collection(PROJECT), "poll:7") not in docs.data
+
+    _run(_host(docs), POLL, handler, Msg(sequence=7, attempt=2))
+    assert ran == [1]  # the redelivery is the run's first attempt
+
+
+def test_skip_if_running_claims_as_the_module_not_as_the_runs_user():
+    from naas_abi_sdk.call_context import current_call_context
+
+    user = object()
+    seen = []
+
+    class Spy(QueryDocuments):
+        async def put(self, collection, id, data, *, if_version=None):
+            from naas_abi_sdk.jobs import running_inputs_collection
+
+            if collection == running_inputs_collection(PROJECT):
+                seen.append(current_call_context() is user)
+            return await super().put(collection, id, data, if_version=if_version)
+
+    async def authorize(*args):
+        return user
+
+    async def handler(ctx):
+        return {}
+
+    docs = Spy()
+    _run(_host(docs, authorize=authorize), POLL, handler, Msg(sequence=7))
+
+    assert seen == [False]
+    assert docs.run("poll:7")["status"] == "SUCCEEDED"
+
+
+def test_without_skip_if_running_no_input_is_claimed():
+    docs = QueryDocuments()
+    _holder(docs, "poll:3", {})
 
     async def handler(ctx):
         return {}
@@ -2104,56 +2252,15 @@ def test_without_skip_if_running_an_earlier_active_run_does_not_matter():
     assert docs.run("poll:7")["status"] == "SUCCEEDED"
 
 
-def test_skip_if_running_never_skips_a_retry():
-    docs = QueryDocuments()
-    _active(docs, "poll", 3, {})
-    asyncio.run(
-        docs.put(
-            runs_collection(PROJECT),
-            "poll:7",
-            {
-                "job": "poll",
-                "run_id": "poll:7",
-                "status": "RETRYING",
-                "attempt": 1,
-                "sequence": 7,
-                "payload": {},
-                "fired_at": "",
-            },
-        )
+def test_equal_inputs_have_equal_claims_whatever_their_key_order():
+    from naas_abi_sdk.jobs import input_key
+
+    assert input_key("poll", {"a": 1, "b": [2]}) == input_key(
+        "poll", {"b": [2], "a": 1}
     )
-
-    async def handler(ctx):
-        return {"attempt": ctx.attempt}
-
-    msg = Msg(sequence=7, attempt=2)
-    descriptor = JobDescriptor("poll", skip_if_running=True, max_attempts=3)
-    _run(_host(docs), descriptor, handler, msg)
-
-    run = docs.run("poll:7")
-    assert run["status"] == "SUCCEEDED" and run["result"] == {"attempt": 2}
-
-
-def test_skip_if_running_fails_the_run_when_it_cannot_see_its_own_record():
-    class Blind(QueryDocuments):
-        async def find(self, collection, **kwargs):
-            from naas_abi_sdk.services.models import Page
-
-            return Page([], None)
-
-    docs = Blind()
-    ran = []
-
-    async def handler(ctx):
-        ran.append(1)
-
-    descriptor = JobDescriptor("poll", skip_if_running=True, max_attempts=3)
-    _run(_host(docs), descriptor, handler, Msg())
-
-    run = docs.run("poll:7")
-    assert ran == []
-    # Not retried: a retry would not look again.
-    assert run["status"] == "FAILED" and run["error"].startswith("OverlapCheckBlind")
+    assert input_key("poll", {"a": 1}) != input_key("poll", {"a": 2})
+    assert input_key("poll", {}) != input_key("sweep", {})
+    assert input_key("poll", None) == input_key("poll", {})
 
 
 def test_skip_if_running_reaches_the_descriptor_from_every_declaration():

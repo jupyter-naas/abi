@@ -8,23 +8,29 @@ configuration, and ``engine.services.<service>`` whose methods are the SDK's,
 blocking until the call finished on the module's loop::
 
     sync = module.sync                       # built in ABIModule.on_initialized
-    await asyncio.to_thread(body, sync, ...)
+    await sync.call(body, sync, ...)         # on the module's own threads
 
     def body(module, ...):                   # in a worker thread
         module.engine.services.object_storage.put_object("x", "a.json", b"{}")
         module.run(integration.search_recent_tweets(...))   # any coroutine
 
 A blocking call made on the loop itself would wait for itself forever:
-``Blocking`` raises instead.
+``Blocking`` raises instead. The bodies run on threads of their own
+(``SyncModule.call``), not on the loop's default executor: a body waits there
+for the loop, and the loop resolves host names (httpx) on its default
+executor, so many bodies at once would starve the very calls they wait for.
 """
 
 from __future__ import annotations
 
 import asyncio
+import contextvars
+import functools
 import inspect
 import json
 import logging
 from collections.abc import Awaitable, Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any, TypeVar
@@ -34,6 +40,9 @@ from naas_abi_sdk.services.errors import ObjectNotFound, ServiceError
 T = TypeVar("T")
 
 logger = logging.getLogger("naas_abi_apps.x")
+
+# Threads of the synchronous bodies (flows, app requests, agent tools).
+SYNC_THREADS = 32
 
 __all__ = [
     "Blocking",
@@ -112,12 +121,46 @@ class SyncModule:
     ``configuration``, ``engine.services`` (blocking), ``run(coro)``; any other
     attribute is the module's."""
 
-    def __init__(self, module: Any, loop: asyncio.AbstractEventLoop):
+    def __init__(
+        self,
+        module: Any,
+        loop: asyncio.AbstractEventLoop,
+        *,
+        threads: int = SYNC_THREADS,
+    ):
         self._module = module
+        self._loop = loop
         self.run = Blocking(loop)
         self.engine = SimpleNamespace(
             services=_SyncServices(module.engine.services, self.run)
         )
+        self.executor = ThreadPoolExecutor(
+            max_workers=threads, thread_name_prefix="x-sync"
+        )
+
+    async def call(self, fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+        """``fn(*args, **kwargs)`` on the module's own threads, in a copy of the
+        caller's context (as ``asyncio.to_thread``): use it for every
+        synchronous body, never the loop's default executor."""
+        context = contextvars.copy_context()
+        return await self._loop.run_in_executor(
+            self.executor, functools.partial(context.run, fn, *args, **kwargs)
+        )
+
+    def threaded(self, fn: Callable[..., T]) -> Callable[..., Awaitable[T]]:
+        """``fn`` as an async function running on the module's threads: what
+        ``ctx.step`` takes for a synchronous body (given a sync function, the
+        SDK would run it on the loop's default executor)."""
+
+        async def on_threads(*args: Any, **kwargs: Any) -> T:
+            return await self.call(fn, *args, **kwargs)
+
+        on_threads.__name__ = getattr(fn, "__name__", "body")
+        return on_threads
+
+    def close(self) -> None:
+        """Stop taking work; running bodies finish on their threads."""
+        self.executor.shutdown(wait=False, cancel_futures=True)
 
     @property
     def configuration(self) -> Any:

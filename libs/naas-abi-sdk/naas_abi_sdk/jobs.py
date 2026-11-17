@@ -307,13 +307,16 @@ class JobDescriptor:
     strings (``schema_json``): at most 16 KiB each, and the whole descriptor at
     most 64 KiB, because discovery's registry snapshot holds every module.
 
-    ``skip_if_running``: a run whose input equals that of an earlier run of the
-    job still ``RUNNING`` or ``RETRYING`` ends ``SKIPPED`` at once instead of
-    running (a poller's tick that would redo the running one's work). Only the
-    first attempt looks; a retry never skips itself. The run still takes a slot to
-    start and skip, so give the job ``max_concurrency`` of at least two per input
-    that can overlap. It is the hosting process's behaviour, not part of the
-    descriptor discovery publishes."""
+    ``skip_if_running``: one run per input at a time. Before it starts, a run
+    claims its input (a document per job and input); a run whose input another
+    active run holds (``RUNNING``, or ``RETRYING``) ends ``SKIPPED`` at once,
+    naming that run, instead of redoing its work (a poller's next tick). Every
+    attempt checks, and a run always passes its own claim, so a retry never
+    skips itself. A finished holder's claim, or a holder whose heartbeats
+    stopped, is taken over. The run still takes a slot to start and skip, so
+    give the job ``max_concurrency`` of at least two per input that can
+    overlap. It is the hosting process's behaviour, not part of the descriptor
+    discovery publishes."""
 
     name: str
     description: str = ""
@@ -925,6 +928,23 @@ def stream_name(project: str) -> str:
 
 def runs_collection(project: str) -> str:
     return f"job_runs_{_hash(project)[:16]}"
+
+
+def running_inputs_collection(project: str) -> str:
+    """The input claims of ``skip_if_running`` jobs: one document per job and
+    input, naming the run that holds it."""
+    return f"job_inputs_{_hash(project)[:16]}"
+
+
+def input_key(job_name: str, payload: Any) -> str:
+    """The claim id of ``payload`` for ``job_name``: equal inputs, equal ids."""
+    canonical = json.dumps(
+        payload if payload is not None else {},
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+    return f"{job_name}:{_hash(job_name, canonical)[:40]}"
 
 
 @dataclass(frozen=True)

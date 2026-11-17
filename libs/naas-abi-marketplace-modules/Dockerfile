@@ -10,6 +10,7 @@
 # committed, so `next build` runs without the Python prebuild.
 FROM node:22-slim AS x_web
 ARG APP
+ENV NEXT_TELEMETRY_DISABLED=1
 COPY naas_abi_apps/x/x_proxy/web /web
 RUN mkdir -p /out \
     && if [ "$APP" = "x" ]; then \

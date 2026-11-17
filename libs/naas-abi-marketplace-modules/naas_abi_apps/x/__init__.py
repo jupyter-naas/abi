@@ -110,6 +110,11 @@ class ABIModule(BaseModule[XConfiguration]):
     async def run(self) -> None:
         await serve_until_stopped(self)
 
+    async def on_unloaded(self) -> None:
+        sync = self.__dict__.get("sync")
+        if sync is not None:
+            sync.close()
+
     # ----- durable workflows and jobs: bodies in flows/ ---------------------------
 
     @workflow(
