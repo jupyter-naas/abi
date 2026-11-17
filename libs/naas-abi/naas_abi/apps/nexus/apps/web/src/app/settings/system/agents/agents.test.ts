@@ -124,7 +124,7 @@ describe('agents tab', () => {
     await m.click(button('Failed'));
     await m.flush();
 
-    expect(api.runs).toHaveBeenLastCalledWith(expect.objectContaining({ statuses: ['FAILED', 'TIMED_OUT'] }));
+    expect(api.runs).toHaveBeenLastCalledWith(expect.objectContaining({ statuses: ['FAILED', 'TIMED_OUT'] }), expect.any(AbortSignal));
     expect(document.querySelectorAll('[data-run]')).toHaveLength(1);
   });
 
