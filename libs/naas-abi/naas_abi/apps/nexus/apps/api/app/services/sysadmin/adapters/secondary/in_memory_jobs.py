@@ -7,8 +7,12 @@ from typing import Any
 
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.jobs import (
     ACTIVE_STATUSES,
+    LISTED_STATUSES,
+    SKIPPED,
     JobDefinition,
+    JobRecentRuns,
     JobRun,
+    ModuleRuns,
     RunNotFound,
     SchemaIssue,
     WorkflowDetail,
@@ -77,6 +81,18 @@ class InMemoryJobRunStore:
             if run.module_id == module_id and run.run_id == run_id:
                 return run
         raise RunNotFound(module_id, run_id)
+
+    async def module_runs(
+        self, module_id: str, jobs: Sequence[str], *, recent: int = 20
+    ) -> ModuleRuns:
+        by_job = {}
+        for job in jobs:
+            listed = await self.list_runs(
+                [module_id], job=job, statuses=list(LISTED_STATUSES), limit=recent
+            )
+            skipped = await self.list_runs([module_id], job=job, statuses=[SKIPPED], limit=1)
+            by_job[job] = JobRecentRuns(tuple(listed), skipped[0] if skipped else None)
+        return ModuleRuns(by_job, tuple(await self.running(module_id)))
 
 
 class InMemoryJobControl:
