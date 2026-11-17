@@ -7,6 +7,7 @@ what is mocked."""
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
 import pytest
@@ -456,6 +457,87 @@ async def test_the_upgrade_on_the_sqlite_store(nexus_db, tmp_path):
     from naas_abi_core.services.iam.adapters.secondary.IAMStoreSQLite import IAMStoreSQLite
 
     await _check_upgrade(previous._world(IAMStoreSQLite(str(tmp_path / "iam.sqlite"))), nexus_db)
+
+
+@pytest.mark.asyncio
+async def test_a_turned_off_agent_of_a_module_not_loaded_is_denied_once_it_loads(
+    nexus_db, monkeypatch
+):
+    """The move does not wait for a module the engine did not load: it sets the
+    turned-off agent aside, and the first start that loads its class denies it in
+    the workspace's access policy, under the scope the roster names it by."""
+    from naas_abi.apps.nexus.apps.api.app.services.agents.remote.port import split_key
+    from naas_abi.apps.nexus.apps.api.app.services.iam import policy_tree
+    from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
+    from sqlalchemy import text
+
+    unloaded = "acme.people.agents/Xavier"
+    loaded = {"now": False}
+
+    def resolver():
+        def resolve(class_name, provider, *, strict=False):
+            if class_name == unloaded:
+                if not loaded["now"]:
+                    if strict:
+                        raise policy_tree.AgentNotLoaded(class_name)
+                    return None
+                return ModuleScope("agent", "acme.people", "X")
+            module, name = split_key(class_name)
+            return ModuleScope("agent", module, name)
+
+        return resolve
+
+    monkeypatch.setattr(policy_tree, "_agent_resolver", resolver)
+    previous_database = previous._previous_database
+
+    async def with_the_unloaded_agent(db) -> None:
+        await previous_database(db)
+        await db.execute(
+            text(
+                "INSERT INTO agent_configs (id, workspace_id, name, class_name, provider, "
+                "is_default, enabled, created_at, updated_at) VALUES ('xavier', 'ws-b', "
+                "'Xavier', :c, NULL, 0, 0, :at, :at)"
+            ),
+            {"c": unloaded, "at": NOW},
+        )
+        await db.commit()
+
+    monkeypatch.setattr(previous, "_previous_database", with_the_unloaded_agent)
+
+    async def deferred() -> list:
+        async with nexus_db() as db:
+            raw = (
+                await db.execute(
+                    text("SELECT report FROM iam_migrations WHERE name = :n"),
+                    {"n": policy_tree.MIGRATION_NAME},
+                )
+            ).scalar()
+        return json.loads(raw)[policy_tree.DEFERRED_KEY]
+
+    nexus = previous._world()
+    x_in_b = module_scopes.scope_resource(
+        "agent", "acme.people", "X", container=workspace_container("org-1", "ws-b")
+    )
+    with nexus.installed():
+        assert await previous._upgrade(nexus, nexus_db) is not None
+        assert not policy_tree.pending()
+        assert await deferred() == [{"workspace": "ws-b", "class_name": unloaded}]
+        async with nexus_db() as db:
+            await container_defaults.migrate(db)
+        assert _uses(nexus, "dave", x_in_b)
+        # Still not loaded: nothing denied, still set aside.
+        async with nexus_db() as db:
+            assert await policy_tree.deny_deferred_agents(db) == 0
+        assert len(await deferred()) == 1
+        loaded["now"] = True
+        async with nexus_db() as db:
+            assert await policy_tree.deny_deferred_agents(db) == 1
+        nexus.iam.invalidate()
+        assert await deferred() == []
+        assert not _uses(nexus, "dave", x_in_b)
+        # Again: nothing more.
+        async with nexus_db() as db:
+            assert await policy_tree.deny_deferred_agents(db) == 0
 
 
 async def _recorded(db) -> bool:

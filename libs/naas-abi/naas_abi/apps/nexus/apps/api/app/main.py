@@ -400,6 +400,12 @@ async def _prepare_iam() -> None:
                 # Each organization and workspace has its access policy and its
                 # members and admins groups (made once for those that predate them).
                 await container_defaults.migrate(db)
+                # The agents a workspace had turned off, of modules loaded since.
+                try:
+                    await policy_tree.deny_deferred_agents(db)
+                except Exception:  # noqa: BLE001 - they stay set aside for the next start
+                    await db.rollback()
+                    log.exception("The turned-off agents of modules loaded since were not denied")
     except Exception:
         log.exception("Nexus could not set up its authorization in IAM: every request is refused")
 
