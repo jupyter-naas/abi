@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import replace
 
 import pytest
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.adapters.secondary.document_job_runs import (
@@ -85,3 +86,48 @@ def test_backend_errors_make_the_source_unavailable():
     with pytest.raises(SourceUnavailable) as exc:
         asyncio.run(DocumentJobRunStore(broken, PROJECT).list_runs(["acme.jobs"]))
     assert exc.value.source == "runs"
+
+
+def test_module_runs_keeps_the_last_skip_apart_from_recent_runs(root):
+    _seed(root)
+    nightly = fixtures.job_runs()[1]
+    view = root.for_namespace("acme.jobs")
+    for i in range(3):
+        skip = replace(
+            nightly,
+            run_id=f"nightly:skip{i}",
+            status="SKIPPED",
+            started_at=f"2026-10-02T0{7 + i}:00:00+00:00",
+        )
+        view.put(runs_collection(PROJECT), skip.run_id, _as_written(skip))
+    store = DocumentJobRunStore(lambda: root, PROJECT)
+
+    found = asyncio.run(store.module_runs("acme.jobs", ["nightly"], recent=1)).jobs["nightly"]
+
+    assert [r.run_id for r in found.recent] == ["nightly:3"]
+    assert found.last_skipped is not None and found.last_skipped.run_id == "nightly:skip2"
+
+
+def test_module_runs_reads_one_namespace_view_on_the_store_threads(root):
+    import threading
+
+    _seed(root)
+    views: list[str] = []
+    threads: set[str] = set()
+
+    def documents():
+        threads.add(threading.current_thread().name)
+        return root
+
+    store = DocumentJobRunStore(documents, PROJECT)
+    original = root.for_namespace
+
+    def for_namespace(namespace):
+        views.append(namespace)
+        return original(namespace)
+
+    root.for_namespace = for_namespace  # type: ignore[method-assign]
+    asyncio.run(store.module_runs("acme.jobs", ["nightly", "sync"]))
+
+    assert views == ["acme.jobs"]
+    assert all(name.startswith("job-runs") for name in threads)
