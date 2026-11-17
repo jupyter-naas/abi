@@ -55,6 +55,7 @@ agent = PullRequestDescriptionAgent.New()
 ```
 
 ## Caveats
+- Like `GitAgent`, a module agent with its tools only when the git module's configuration sets `single_user_development: true`: `git_diff` reads the engine's own working directory.
 - Requires a git repository with `origin/main` available locally; diff is computed against `origin/main...HEAD`.
 - `store_pull_request_description` returns a string error (not an exception) when `description` is missing/empty; the system prompt instructs retries with full markdown.
 - If `object_storage` is unavailable (module not initialized), storage returns: `"Object storage is not available (module not initialized)."`

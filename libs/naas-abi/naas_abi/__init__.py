@@ -512,6 +512,11 @@ class NexusConfig(BaseModel):
 
     abi_api_url: str = "http://localhost:9879"
     abi_api_key: str | None = None
+    # Origins (``host:port`` or a URL) of model servers on the deployment's own
+    # network: a workspace's ABI server, a model gateway. Chat providers reach
+    # public addresses only, plus these origins and, for Ollama calls, the
+    # platform Ollama's origin.
+    provider_allowed_origins: list[str] = Field(default_factory=list)
     openai_api_key: str | None = None
     anthropic_api_key: str | None = None
     cloudflare_api_token: str | None = None
@@ -566,6 +571,10 @@ def nexus_settings_kwargs(nexus_config: NexusConfig) -> dict[str, Any]:
 
 
 class ABIModule(BaseModule):
+    # ``api(app)`` mounts the Nexus API, which checks every caller itself
+    # (sessions, personal keys, its public sign-in and branding pages).
+    api_checks_its_callers = True
+
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[
             "naas_abi_core.modules.templatablesparqlquery",
@@ -724,6 +733,11 @@ class ABIModule(BaseModule):
         # When False, skip NexusPlatformPipeline on API boot and DROP the
         # leftover named graph so a reload does not keep stale catalog triples.
         run_nexus_platform_pipeline: bool = True
+
+        # The OpenCode Coding agent (agents/CodingAgent.py) is a module agent
+        # only when this is set. It runs in the caller's own coding sandbox,
+        # never on the API host.
+        opencode_coding_agent: bool = False
 
         # Canonical nexus runtime settings (passed to app.core.config.Settings).
         nexus_config: NexusConfig = Field(default_factory=NexusConfig)

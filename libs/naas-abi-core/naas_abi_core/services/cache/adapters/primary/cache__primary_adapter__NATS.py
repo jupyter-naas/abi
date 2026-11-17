@@ -79,7 +79,6 @@ _DATA_TYPE_TO_PB: dict[DataType, cache_pb2.DataType] = {
     DataType.TEXT: cache_pb2.DATA_TYPE_TEXT,
     DataType.JSON: cache_pb2.DATA_TYPE_JSON,
     DataType.BINARY: cache_pb2.DATA_TYPE_BINARY,
-    DataType.PICKLE: cache_pb2.DATA_TYPE_PICKLE,
 }
 _PB_TO_DATA_TYPE: dict[int, DataType] = {
     pb_value: data_type for data_type, pb_value in _DATA_TYPE_TO_PB.items()
@@ -87,19 +86,28 @@ _PB_TO_DATA_TYPE: dict[int, DataType] = {
 
 
 def _cached_data_to_pb(data: CachedData) -> cache_pb2.CachedData:
+    pb_type = _DATA_TYPE_TO_PB.get(data.data_type)
+    if pb_type is None:
+        # An entry the cache never decodes (a legacy pickle) is not served.
+        raise CacheNotFoundError(f"Cache not found: {data.key}")
     return cache_pb2.CachedData(
         key=data.key,
         data=data.data,
-        data_type=_DATA_TYPE_TO_PB[data.data_type],
+        data_type=pb_type,
         created_at=data.created_at,
     )
 
 
 def _pb_to_cached_data(pb: cache_pb2.CachedData) -> CachedData:
+    """The entry a caller sends: text, json or binary, never anything decoded
+    as code (``ValueError``, answered ``INVALID_ARGUMENT``)."""
+    data_type = _PB_TO_DATA_TYPE.get(pb.data_type)
+    if data_type is None:
+        raise ValueError("cache entries are text, json or binary")
     return CachedData(
         key=pb.key,
         data=pb.data,
-        data_type=_PB_TO_DATA_TYPE[pb.data_type],
+        data_type=data_type,
         created_at=pb.created_at,
     )
 

@@ -6,15 +6,16 @@ the frontend fetches by key — so this adapter delegates every JSON operation t
 the object-storage adapter it wraps.
 
 Migration is read-through, not a cutover: ``list_events`` returns the union of
-the event log and the legacy ``events/<sha256>.pkl`` objects, deduplicated by
-payload content. Existing history therefore stays visible with nothing to
-backfill, and the pickle store simply stops growing.
+the event log and the legacy ``events/<sha256>`` objects of the object-storage
+adapter (which converts its older pickles to JSON as it reads them),
+deduplicated by payload content. Existing history therefore stays visible with
+nothing to backfill, and the per-event store simply stops growing.
 
 The log is append-only, so it never holds an email: ``save_event`` keeps the
 user id and drops ``user_email`` from both the column and the stored payload.
 ``list_events`` puts it back from the service's user directory
 (``ref-users.json``, mutable, so an address can be changed or erased there).
-Legacy pickles keep the email they were written with.
+Legacy events keep the email they were written with.
 """
 
 from __future__ import annotations
@@ -34,7 +35,7 @@ from naas_abi.apps.nexus.apps.api.app.services.analytics.port import AnalyticsSt
 from naas_abi.apps.nexus.apps.api.app.services.analytics.service import REF_USERS_FILE
 from naas_abi_core import logger
 
-# The legacy pickles are frozen the moment this adapter is in use: nothing
+# The legacy events are frozen the moment this adapter is in use: nothing
 # writes another one. Reading them once per process turns what was a LIST plus
 # one GET per event on every rebuild into a single cold-start cost.
 _legacy_cache: list[dict[str, Any]] | None = None
@@ -49,14 +50,14 @@ def reset_legacy_cache() -> None:
 
 
 def _content_key(event: dict[str, Any]) -> str:
-    """Identity of an event by content, matching the pickle store's hashing.
+    """Identity of an event by content, as the per-event store dedups by content.
 
     The legacy adapter derived each filename from a hash of the payload, so
     re-ingesting an identical event was a no-op. ``publish`` always appends, so
     the same rule is applied on read instead — which also collapses an event
-    that exists both in the log and as a legacy pickle.
+    that exists both in the log and as a legacy event.
     """
-    # Without the email: the log copy of a legacy pickle no longer carries it.
+    # Without the email: the log copy of a legacy event no longer carries it.
     content = {k: v for k, v in event.items() if k != "user_email"}
     return hashlib.sha256(
         json.dumps(content, sort_keys=True, default=str).encode("utf-8")
@@ -119,7 +120,7 @@ class AnalyticsSecondaryAdapterEventLog(AnalyticsStoragePort):
                 logger.debug(f"[analytics] skip unreadable event payload: {exc}")
                 continue
             if isinstance(payload, dict):
-                # A legacy pickle of the same event carries its email; keep it.
+                # A legacy copy of the same event carries its email; keep it.
                 merged.setdefault(_content_key(payload), payload)
         emails = self._user_emails()
         out: list[dict[str, Any]] = []

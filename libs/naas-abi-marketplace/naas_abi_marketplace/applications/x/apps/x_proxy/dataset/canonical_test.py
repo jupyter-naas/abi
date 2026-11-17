@@ -895,8 +895,8 @@ def test_a_users_request_migrates_the_x_tables_with_iam_enforced(dataset) -> Non
     with internal_call():
         iam.register_catalog(CATALOG)
         iam.register_catalog(NEXUS)
-        # What a deployment holds (Nexus ``shared_repo_grants``): the platform's
-        # datasets are read by every workspace member, and the user is one.
+        # What a deployment that shares the platform's datasets with every workspace
+        # member holds (a platform grant), and the user is one.
         iam.set_platform_grants(
             [
                 roles.PlatformGrant(

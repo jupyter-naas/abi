@@ -5,6 +5,10 @@ engine only through NATS. Replaces the in-engine
 ``naas_abi_marketplace.applications.sendgrid``. Credentials are engine secrets
 (``SENDGRID_API_KEY``), read once at start: restart
 the module after setting them.
+
+Everyone who may use the agent sends with that one account, so mail goes only
+from the addresses ``SENDGRID_ALLOWED_SENDERS`` lists (comma-separated; none by
+default, and then nothing is sent).
 """
 
 from __future__ import annotations
@@ -34,6 +38,12 @@ class SendGridConfiguration(ModuleConfiguration):
     api_key_secret: str = "SENDGRID_API_KEY"
     # Canonical id of a chat model the engine registers; empty: its default.
     chat_model: str = ""
+    # The only addresses the agent sends mail from (comma-separated); none by
+    # default.
+    allowed_senders: str = ""
+
+    def sender_list(self) -> list[str]:
+        return [a.strip() for a in self.allowed_senders.split(",") if a.strip()]
 
     def secret_names(self) -> dict[str, str]:
         """Integration field -> engine secret name."""
@@ -67,6 +77,7 @@ class ABIModule(BaseModule[SendGridConfiguration]):
             MODULE_ID,
             credentials=credentials,
             chat_model=self.configuration.chat_model,
+            allowed_senders=self.configuration.sender_list(),
         )
         self.expose_agent(NAME, agent.as_handler())
 

@@ -24,7 +24,7 @@ def test_a_key_logs_in_as_sa_with_its_own_inbox_prefix():
     assert key.connect_options() == {
         "user": "sa",
         "password": KEY,
-        "inbox_prefix": "_INBOX.abcdefghijklmnop",
+        "inbox_prefix": "_INBOX.abcdefghijklmnop.m",
     }
     assert KEY not in repr(key)
 
@@ -48,12 +48,12 @@ def test_a_transport_given_a_key_logs_in_with_it():
     transport = Transport("nats://127.0.0.1:4222", KEY)
     assert isinstance(transport.credentials, ServiceKey)
     assert transport.options["user"] == "sa"
-    assert transport.options["inbox_prefix"] == "_INBOX.abcdefghijklmnop"
+    assert transport.options["inbox_prefix"] == "_INBOX.abcdefghijklmnop.m"
     # A URL naming its own login keeps it.
     explicit = Transport("nats://engine:pw@127.0.0.1:4222", KEY)
     assert "user" not in explicit.options and "password" not in explicit.options
     # ... but the inbox prefix still confines the reply subscription.
-    assert explicit.options["inbox_prefix"] == "_INBOX.abcdefghijklmnop"
+    assert explicit.options["inbox_prefix"] == "_INBOX.abcdefghijklmnop.m"
 
 
 def _exchanging(*responses):

@@ -34,11 +34,6 @@ INTENTS: list = [
         intent_target="github_update_organization_repository",
     ),
     Intent(
-        intent_value="Delete a repository for an organization",
-        intent_type=IntentType.TOOL,
-        intent_target="github_delete_organization_repository",
-    ),
-    Intent(
         intent_value="Get a list of activities for the specified repository",
         intent_type=IntentType.TOOL,
         intent_target="github_list_repository_activities",
@@ -122,16 +117,6 @@ INTENTS: list = [
         intent_value="Get a secret from a GitHub repository",
         intent_type=IntentType.TOOL,
         intent_target="github_get_repository_secret",
-    ),
-    Intent(
-        intent_value="Create or update a secret in a GitHub repository",
-        intent_type=IntentType.TOOL,
-        intent_target="github_create_or_update_repository_secret",
-    ),
-    Intent(
-        intent_value="Delete a secret from a GitHub repository",
-        intent_type=IntentType.TOOL,
-        intent_target="github_delete_repository_secret",
     ),
     Intent(
         intent_value="List contributors to a GitHub repository",

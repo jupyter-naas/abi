@@ -17,14 +17,15 @@ This module enables:
 
 Triple Store Setup:
 1. Ensure you have a running triple store service configured in your ABI instance
-2. The module uses `services.triple_store_service` to query ontology definitions
+2. The module runs the generated queries on `services.triple_store_service`. It reads the query definitions from the ontology files of the modules the engine runs in process (each module's `ontologies/` folder), never from the triple store: content other principals load into the schema graph never becomes a tool, and `load_schema_content` refuses the `intentMapping:` vocabulary.
+3. Templates render in Jinja2's sandbox, and each string argument is escaped as a SPARQL string literal.
 
 ### TL;DR
 
 To get started with the Templatable SPARQL Query module:
 
 1. Define your SPARQL queries in TTL format using the provided ontology
-2. Load the TTL file into your triple store
+2. Ship the TTL file in an engine module's `ontologies/` folder
 3. The module automatically creates tools from your query definitions
 
 Access tools using:
@@ -53,10 +54,10 @@ The module provides a declarative approach to SPARQL query definition and execut
 ### Workflows
 
 #### Templatable SPARQL Query Workflow
-Dynamically loads query definitions from the triple store and creates executable workflows with proper argument validation and Jinja2 template rendering.
+Dynamically loads query definitions from the engine modules' ontology files and creates executable workflows with proper argument validation and Jinja2 template rendering.
 
 **Capabilities:**
-- Loads query definitions from triple store using SPARQL
+- Loads query definitions from the engine modules' ontology files using SPARQL
 - Creates Pydantic models for argument validation
 - Renders SPARQL templates with user parameters
 - Executes queries against the triple store
@@ -155,8 +156,8 @@ Create or update a TTL file with your query definition using the templatable SPA
 ### Step 2: Define Arguments
 Specify all required arguments with proper validation patterns and descriptions.
 
-### Step 3: Load into Triple Store
-Ensure your TTL file is loaded into the triple store during application initialization.
+### Step 3: Ship it with an engine module
+Ensure your TTL file is in an engine module's `ontologies/` folder.
 
 ### Step 4: Access Generated Tools
 The module automatically creates tools from your definitions:
@@ -187,7 +188,7 @@ tools = get_tools()
 
 The module uses a sophisticated runtime generation process:
 
-1. **Query Discovery**: Scans the triple store for `TemplatableSparqlQuery` instances
+1. **Query Discovery**: Scans the engine modules' ontology files for `TemplatableSparqlQuery` instances
 2. **Argument Resolution**: Retrieves associated `QueryArgument` definitions
 3. **Model Generation**: Creates Pydantic models with validation patterns
 4. **Tool Creation**: Generates LangChain tools for AI agent integration

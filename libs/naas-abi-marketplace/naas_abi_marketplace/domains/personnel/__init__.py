@@ -39,6 +39,10 @@ class ABIModule(BaseModule):
         ],
     )
 
+    # The cockpit router checks its caller (a member of the workspace); the
+    # graph page under it is static code.
+    unguarded_api_paths = ("/api/personnel-cockpit",)
+
     class Configuration(ModuleConfiguration):
         datastore_path: str = "personnel"
         ontology_namespace: str = "http://ontology.naas.ai/personnel/"

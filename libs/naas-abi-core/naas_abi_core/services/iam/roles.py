@@ -714,20 +714,36 @@ def job_account_name(module_id: str) -> str:
 
 def job_policy(registry: CatalogRegistry | None = None) -> Policy:
     """Held by the account of each engine module's jobs (``job/<module_id>``): the
-    kernel services a job works with, read access to secrets (sealed ones stay
-    the engine's), and the module scopes a run for a user checks (the user
-    bounds them)."""
+    kernel services a job works with, on what the platform holds, never on what
+    an organisation or a workspace holds. That holds for a run made for a user
+    too: the account and the user must both allow a call, so such a run reaches
+    the platform's data the user may reach, and none of the user's containers.
+    Never unchecked dataset SQL; the module's own secrets (``<module id>/...``,
+    ``${module.id}`` being the module of the account); and the module scopes a
+    run for a user checks (the user bounds them)."""
     statements = [
         *(
-            _everything_of(f"Job{name}", service)
+            Statement(
+                effect="Allow",
+                actions=(f"{service}:*",),
+                resources=(f"abi:{service}:*",),
+                sid=f"Job{name}",
+            )
             for name, service in _ENGINE_SERVICES
             if service in _JOB_SERVICES
         ),
         Statement(
             effect="Allow",
             actions=("secret:Get", "secret:List"),
+            resources=("abi:secret:secret/${module.id}%2F*",),
+            sid="JobReadsOwnSecrets",
+        ),
+        # Unchecked dataset SQL reads files on the engine host: the engine's own.
+        Statement(
+            effect="Deny",
+            actions=("dataset:QueryUnchecked",),
             resources=("*",),
-            sid="JobReadsSecrets",
+            sid="NoUncheckedSql",
         ),
         *_module_scope_statements(registry, "JobModuleScopes"),
     ]

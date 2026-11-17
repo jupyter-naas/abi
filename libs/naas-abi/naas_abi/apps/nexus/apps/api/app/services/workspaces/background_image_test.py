@@ -11,6 +11,7 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.background_image impor
     background_image_url,
     detect_image_extension,
     ensure_public_http_url,
+    fetch_image_url,
 )
 from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import (  # noqa: E501
     ObjectStorageSecondaryAdapterFS,
@@ -133,33 +134,24 @@ def test_background_image_url_is_versioned_by_file_name() -> None:
 
 
 @pytest.mark.parametrize(
-    "url",
+    ("url", "message"),
     [
-        "ftp://example.com/a.png",
-        "file:///etc/passwd",
-        "http://127.0.0.1/a.png",
-        "http://localhost/a.png",
-        "http://10.0.0.5/a.png",
-        "http://169.254.169.254/latest/meta-data",
-        "http://[::1]/a.png",
-        "http://minio:9000/abi/a.png",
+        ("ftp://example.com/a.png", "Only http"),
+        ("file:///etc/passwd", "Only http"),
+        ("http://[::1/a.png", "Only http"),
+        ("http://127.0.0.1/a.png", "private or local"),
+        ("http://localhost/a.png", "private or local"),
+        ("http://10.0.0.5/a.png", "private or local"),
+        ("http://169.254.169.254/latest/meta-data", "private or local"),
+        ("http://[::1]/a.png", "private or local"),
+        ("http://minio:9000/abi/a.png", "private or local"),
     ],
 )
-def test_ensure_public_http_url_blocks_non_public_targets(url: str) -> None:
-    with pytest.raises(BackgroundImageError):
-        ensure_public_http_url(url)
+def test_wallpaper_fetch_keeps_non_public_targets_out(url: str, message: str) -> None:
+    import asyncio
 
-
-def test_ensure_public_http_url_accepts_public_address(monkeypatch) -> None:
-    import socket
-
-    monkeypatch.setattr(
-        socket,
-        "getaddrinfo",
-        lambda *a, **k: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))],
-    )
-
-    ensure_public_http_url("https://example.com/a.png")
+    with pytest.raises(BackgroundImageError, match=message):
+        asyncio.run(fetch_image_url(url))
 
 
 def test_background_image_url_carries_non_default_framing() -> None:
@@ -184,3 +176,164 @@ def test_remove_archives_the_wallpaper_and_clears_drafts(tmp_path) -> None:
     assert _names(files, _home("tmp")) == []
     assert _names(files, _home("archives")) == [archived]
     assert bg.remove(now=datetime(2026, 10, 14, 11, 0, 0)) is None
+
+
+class _ImageListener:
+    """An image server on 127.0.0.1, standing for a service on the platform's network."""
+
+    def __init__(self) -> None:
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        self.hits: list[str] = []
+        self.redirect_to = ""
+        listener = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                listener.hits.append(self.path)
+                if self.path.startswith("/redirect"):
+                    self.send_response(302)
+                    self.send_header("Location", listener.redirect_to)
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.send_header("Content-Length", str(len(PNG)))
+                self.end_headers()
+                self.wfile.write(PNG)
+
+            def log_message(self, *args: object) -> None:
+                pass
+
+        self._httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.port = self._httpd.server_address[1]
+        threading.Thread(target=self._httpd.serve_forever, args=(0.05,), daemon=True).start()
+
+    def close(self) -> None:
+        self._httpd.shutdown()
+        self._httpd.server_close()
+
+
+@pytest.fixture
+def image_listener():
+    listener = _ImageListener()
+    yield listener
+    listener.close()
+
+
+def _public_then_loopback(monkeypatch, name: str) -> tuple[list[str], list[str]]:
+    """Answer ``name`` with a public address once, then loopback; record connects.
+
+    Connections to the public address are recorded and refused, so the test
+    never leaves the machine.
+    """
+    import socket
+
+    import httpcore
+
+    real = socket.getaddrinfo
+    lookups: list[str] = []
+    connected: list[str] = []
+
+    def resolve(host, port, *args, **kwargs):
+        if host == name:
+            lookups.append(host)
+            ip = "93.184.216.34" if len(lookups) == 1 else "127.0.0.1"
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, port))]
+        return real(host, port, *args, **kwargs)
+
+    real_connect = httpcore.AnyIOBackend.connect_tcp
+
+    async def connect(self, host, port, *args, **kwargs):
+        connected.append(host)
+        if host == "93.184.216.34":
+            raise httpcore.ConnectError("unreachable in tests")
+        return await real_connect(self, host, port, *args, **kwargs)
+
+    monkeypatch.setattr(socket, "getaddrinfo", resolve)
+    monkeypatch.setattr(httpcore.AnyIOBackend, "connect_tcp", connect)
+    return lookups, connected
+
+
+def test_wallpaper_fetch_keeps_the_checked_address(monkeypatch, image_listener) -> None:
+    """The name is looked up once and the connection goes to that address."""
+    import asyncio
+
+    lookups, connected = _public_then_loopback(monkeypatch, "wallpapers.example.com")
+
+    with pytest.raises(BackgroundImageError):
+        asyncio.run(fetch_image_url(f"http://wallpapers.example.com:{image_listener.port}/a.png"))
+
+    assert lookups == ["wallpapers.example.com"]
+    assert connected == ["93.184.216.34"]
+    assert image_listener.hits == []
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "127.1", "localhost", "[::ffff:127.0.0.1]", "minio"])
+def test_wallpaper_fetch_keeps_to_public_addresses(image_listener, host: str) -> None:
+    import asyncio
+
+    with pytest.raises(BackgroundImageError):
+        asyncio.run(fetch_image_url(f"http://{host}:{image_listener.port}/a.png"))
+    assert image_listener.hits == []
+
+
+def test_wallpaper_fetch_keeps_redirects_to_public_addresses(monkeypatch, image_listener) -> None:
+    import asyncio
+    import socket
+
+    import httpcore
+
+    real = socket.getaddrinfo
+    real_connect = httpcore.AnyIOBackend.connect_tcp
+
+    def resolve(host, port, *args, **kwargs):
+        if host == "wallpapers.example.com":
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port))]
+        return real(host, port, *args, **kwargs)
+
+    async def connect(self, host, port, *args, **kwargs):
+        target = "127.0.0.1" if host == "93.184.216.34" else host
+        return await real_connect(self, target, port, *args, **kwargs)
+
+    monkeypatch.setattr(socket, "getaddrinfo", resolve)
+    monkeypatch.setattr(httpcore.AnyIOBackend, "connect_tcp", connect)
+    image_listener.redirect_to = f"http://127.0.0.1:{image_listener.port}/internal.png"
+
+    with pytest.raises(BackgroundImageError):
+        asyncio.run(
+            fetch_image_url(f"http://wallpapers.example.com:{image_listener.port}/redirect")
+        )
+    assert image_listener.hits == ["/redirect"]
+
+    # The same public host serving the image directly is still fetched.
+    assert (
+        asyncio.run(fetch_image_url(f"http://wallpapers.example.com:{image_listener.port}/a.png"))
+        == PNG
+    )
+
+
+@pytest.mark.parametrize(
+    ("url", "message"),
+    [
+        ("ftp://example.com/a.png", "Only http"),
+        ("http://[::1/a.png", "Only http"),
+        ("http://127.0.0.1/a.png", "private or local"),
+        ("http://minio:9000/abi/a.png", "private or local"),
+    ],
+)
+def test_wallpaper_url_check_keeps_non_public_targets_out(url: str, message: str) -> None:
+    with pytest.raises(BackgroundImageError, match=message):
+        ensure_public_http_url(url)
+
+
+def test_wallpaper_url_check_keeps_public_addresses_in(monkeypatch) -> None:
+    import socket
+
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *a, **k: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))],
+    )
+    ensure_public_http_url("https://example.com/a.png")

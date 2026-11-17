@@ -392,7 +392,7 @@ def test_setup_local_deploy_can_include_coding(tmp_path: Path) -> None:
     assert runner_cfg.exists()
     runner_content = runner_cfg.read_text(encoding="utf-8")
     assert "{{" not in runner_content
-    assert "_abi-network" in runner_content
+    assert "_ci" in runner_content
     # one-shot bootstrap wiring: coding-init service + script, abi/act-runner wait
     assert "\n  coding-init:" in compose_content
     assert compose_content.count("condition: service_completed_successfully") >= 2
@@ -404,7 +404,7 @@ def test_setup_local_deploy_can_include_coding(tmp_path: Path) -> None:
     # .env scaffolding
     assert "CODER_ACCESS_URL=" in env_content
     assert "CODING_WORKSPACE_DOCKER_NETWORK=" in env_content
-    assert "_abi-network" in env_content
+    assert "_coding" in env_content
     # admin passwords generated (complexity-safe); runner secret is 40-hex;
     # the two admin *tokens* start blank (minted by coding-init on first up)
     assert re.search(r"^CODER_ADMIN_PASSWORD=Abi1!\S+", env_content, re.MULTILINE)
@@ -594,7 +594,8 @@ def test_setup_local_deploy_makes_no_admin_password(tmp_path: Path) -> None:
     setup_local_deploy(str(tmp_path), base_domain="localhost")
 
     values = _env_values(tmp_path / ".env")
-    assert values["NEXUS_USER_ADMIN_EMAIL"] == "admin@example.com"
+    # No config.local.yaml here to read the administrator from.
+    assert values["NEXUS_USER_ADMIN_EMAIL"] == ""
     # The admin signs in at the identity provider with a mailed code.
     assert not [
         key for key in values if key.startswith("NEXUS_USER_") and "PASSWORD" in key
@@ -619,7 +620,8 @@ def test_regenerating_does_not_bring_a_password_back(tmp_path: Path) -> None:
     )
 
     values = _env_values(tmp_path / ".env")
-    assert values["NEXUS_USER_ADMIN_EMAIL"] == "admin@example.com"
+    # No config.local.yaml here to read the administrator from.
+    assert values["NEXUS_USER_ADMIN_EMAIL"] == ""
     assert "NEXUS_USER_ADMIN_PASSWORD" not in values
     assert "NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD" not in values
 
@@ -628,6 +630,7 @@ NATS_USERS = {"engine": "NATS_ENGINE_PASSWORD", "auth": "NATS_AUTH_PASSWORD"}
 # What the broker container needs from .env: both passwords and the callout's
 # trusted key.
 BROKER_ENV = (*NATS_USERS.values(), "NATS_AUTH_CALLOUT_ISSUER")
+MONITORING_LINE = 'http: "nats-monitor:8222"\n'
 
 
 def _nats_service(compose: Path) -> dict:
@@ -670,7 +673,7 @@ def test_the_broker_requires_a_password_and_listens_on_localhost(
         assert (
             _nats_guard(service)
             .rstrip()
-            .endswith("exec nats-server -c /etc/nats/nats.conf -js -sd /data -m 8222")
+            .endswith("exec nats-server -c /etc/nats/nats.conf -js -sd /data")
         )
 
 
@@ -702,6 +705,15 @@ def test_the_generated_broker_admits_only_its_users(tmp_path: Path) -> None:
 
     setup_local_deploy(str(tmp_path), base_domain="localhost")
     env = _env_values(tmp_path / ".env")
+    # The monitoring address is a compose network alias, which this host does
+    # not resolve: the rest of the file runs as generated.
+    conf = tmp_path / "nats.conf"
+    conf.write_text(
+        (tmp_path / ".deploy/docker/nats/nats.conf")
+        .read_text(encoding="utf-8")
+        .replace(MONITORING_LINE, ""),
+        encoding="utf-8",
+    )
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
@@ -709,7 +721,7 @@ def test_the_generated_broker_admits_only_its_users(tmp_path: Path) -> None:
         [
             str(shutil.which("nats-server")),
             "-c",
-            str(tmp_path / ".deploy/docker/nats/nats.conf"),
+            str(conf),
             "-a",
             "127.0.0.1",
             "-p",
@@ -775,3 +787,19 @@ def test_a_root_owned_env_stops_the_deploy_before_it_writes(tmp_path: Path) -> N
         setup_local_deploy(str(tmp_path), base_domain="localhost", nats=False)
 
     assert not (tmp_path / "docker-compose.yml").exists()
+
+
+def _assert_mcp_server_is_opt_in_and_keyless(service: dict) -> None:
+    """Started only with the ``mcp`` profile; each caller brings their own key."""
+    assert service["profiles"] == ["mcp"]
+    names = [str(item).split("=", 1)[0] for item in service["environment"]]
+    assert "ABI_API_KEY" not in names
+    assert "MCP_HOST" in names
+
+
+def test_the_mcp_server_keeps_off_by_default_and_holds_no_key(tmp_path: Path) -> None:
+    setup_local_deploy(str(tmp_path), base_domain="localhost", nats=True)
+    service = _services(tmp_path / "docker-compose.yml")["mcp-server"]
+
+    _assert_mcp_server_is_opt_in_and_keyless(service)
+    assert "MCP_ALLOWED_HOSTS=127.0.0.1:*,localhost:*" in service["environment"]

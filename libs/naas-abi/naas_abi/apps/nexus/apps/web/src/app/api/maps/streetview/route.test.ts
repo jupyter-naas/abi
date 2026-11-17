@@ -1,5 +1,6 @@
-import { NextRequest } from 'next/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { signedIn, stubPassCheck } from '@/lib/testing/web-pass';
+import { resetMapsGuard } from '../_guard';
 import { resolveGoogleMapsApiKey } from '../_google';
 import { GET } from './route';
 import {
@@ -11,6 +12,7 @@ import {
 } from './streetview';
 
 afterEach(() => {
+  resetMapsGuard();
   vi.unstubAllGlobals();
   delete process.env.GOOGLE_MAPS_API_KEY;
   delete process.env.MAPS_API_KEY;
@@ -70,8 +72,7 @@ describe('streetview query', () => {
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
       'base64',
     );
-    vi.stubGlobal(
-      'fetch',
+    stubPassCheck(
       vi.fn().mockResolvedValue({
         ok: true,
         arrayBuffer: async () =>
@@ -79,7 +80,7 @@ describe('streetview query', () => {
       }),
     );
     const res = await GET(
-      new NextRequest('http://localhost/api/maps/streetview?lat=38.9031704&lng=-77.0598347'),
+      signedIn('http://localhost/api/maps/streetview?lat=38.9031704&lng=-77.0598347'),
     );
     expect(res.status).toBe(200);
     expect(res.headers.get('X-Maps-Preview-Source')).toBe('openstreetmap');

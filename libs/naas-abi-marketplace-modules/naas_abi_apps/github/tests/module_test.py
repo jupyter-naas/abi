@@ -13,6 +13,7 @@ from naas_abi_apps.common.testing import (
 from naas_abi_apps.github import MODULE_ID, ABIModule
 from naas_abi_apps.github.agents.GitHubAgent import NAME
 from naas_abi_apps.github.agents.GitHubAgentIntents import INTENTS
+from naas_abi_apps.github.integrations.GitHubIntegration import READ_TOOLS
 
 
 def test_the_module_declares_its_agent_services_and_ontology() -> None:
@@ -29,7 +30,7 @@ def test_the_module_declares_its_agent_services_and_ontology() -> None:
     }
 
 
-def test_with_the_token_every_intent_has_its_tool() -> None:
+def test_with_the_token_the_agent_carries_its_read_tools() -> None:
     engine = fake_engine(
         module_secrets("applications.github", {"GITHUB_ACCESS_TOKEN": "t"})
     )
@@ -38,6 +39,27 @@ def test_with_the_token_every_intent_has_its_tool() -> None:
     asyncio.run(module.on_initialized())
 
     assert set(module._agent_handlers) == {NAME}
+    bound = bound_tool_names(engine)
+    assert READ_TOOLS <= bound
+    assert not any(
+        name.startswith("github_") and name not in READ_TOOLS for name in bound
+    )
+
+
+def test_with_its_write_tools_named_every_intent_has_its_tool() -> None:
+    engine = fake_engine(
+        module_secrets("applications.github", {"GITHUB_ACCESS_TOKEN": "t"})
+    )
+    writes = {i.intent_target for i in INTENTS} - READ_TOOLS
+    module = ABIModule(
+        engine,
+        ABIModule.Configuration(
+            agent_write_tools=",".join(sorted(writes)), repositories="o/app"
+        ),
+    )
+
+    asyncio.run(module.on_initialized())
+
     assert {i.intent_target for i in INTENTS} <= bound_tool_names(engine)
 
 

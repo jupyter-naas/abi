@@ -14,11 +14,21 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 COPY --from=abi_proto . /build/naas-abi-proto
 COPY --from=abi_sdk . /build/naas-abi-sdk
-COPY pyproject.toml README.md /build/modules/
+COPY pyproject.toml README.md build-requirements.txt /build/modules/
+COPY requirements /build/modules/requirements
 COPY naas_abi_apps /build/modules/naas_abi_apps
-RUN test -n "$APP" \
-    && pip install /build/naas-abi-proto "/build/naas-abi-sdk[agent,otel,workflows,rdf]" \
-       "/build/modules[${APP}]" \
+# Every third-party package comes from this package's uv.lock, with its hashes
+# (requirements/<app>.txt, `uv export` of the app's extra), and the build
+# backend from build-requirements.txt. naas-abi-sdk and naas-abi-proto are the
+# local copies above, installed without dependencies or a build environment of
+# their own, so nothing is resolved at build time.
+RUN test -n "$APP" && test -f "/build/modules/requirements/${APP}.txt" \
+    && pip install --require-hashes --no-deps \
+        -r "/build/modules/requirements/${APP}.txt" \
+        -r /build/modules/build-requirements.txt \
+    && pip install --no-deps --no-build-isolation \
+        /build/naas-abi-proto /build/naas-abi-sdk /build/modules \
+    && pip check \
     && rm -rf /build
 
 # The point of the image: fail the build if core sneaks in, or if the module

@@ -33,7 +33,6 @@ version_toml = ["pyproject.toml:project.version"]
 allow_zero_version = true
 major_on_zero = false
 build_command = """
-    python -m pip install uv>=0.9.13
     uv lock --upgrade-package "$PACKAGE_NAME"
     git add uv.lock
     uv build

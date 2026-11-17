@@ -208,7 +208,9 @@ class IdPWeb:
         branding = self.config.branding_for(email)
         origins = self._form_origins(params)
         try:
-            self.service.request_code(email, ctx.client_ip)
+            self.service.request_code(
+                email, ctx.client_ip, requester=ctx.cookies.get(LOGIN_COOKIE)
+            )
         except RateLimited as limited:
             return self._limited(limited, branding, origins)
         except IdPError:
@@ -244,7 +246,10 @@ class IdPWeb:
         origins = self._form_origins(params)
         try:
             user = self.service.verify_code(
-                email, ctx.form.get("code", ""), ctx.client_ip
+                email,
+                ctx.form.get("code", ""),
+                ctx.client_ip,
+                requester=ctx.cookies.get(LOGIN_COOKIE),
             )
         except RateLimited as limited:
             return self._limited(limited, branding, origins)

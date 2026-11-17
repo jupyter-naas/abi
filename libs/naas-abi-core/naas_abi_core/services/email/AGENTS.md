@@ -82,8 +82,12 @@ placed: the id of a kept copy).
 | `delete_sent` | `email:DeleteSent` (write) | `message/<id>` |
 
 - A kept copy is placed, as the engine, in the container of the call when it
-  is sent (`CallContext.workspace_id`), so the workspace's roles reach the
-  mail their members sent; deleting it forgets the placement.
+  is sent (`CallContext.container`), so the workspace's roles reach the
+  mail their members sent; deleting it forgets the placement. A send in a
+  container needs `email:Send` on a message there too (`<container>/email:message/...`),
+  checked before anything is sent (`guard.require_new`) and again on the kept id
+  (`guard.place_new`): a sender cannot put mail in a workspace it may not send in.
+  A send in no container needs the sender only; its copy is placed nowhere.
 - `list_sent` filters per message: `limit` applies after filtering, so a page of
   the adapter may yield fewer rows and the service pages on until it has
   `limit` or the adapter runs out.

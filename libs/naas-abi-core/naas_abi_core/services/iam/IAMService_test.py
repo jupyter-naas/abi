@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from naas_abi_core.engine.call_context import as_service_account
-from naas_abi_core.services.iam import grants, roles
+from naas_abi_core.services.iam import grants, modules, roles
 from naas_abi_core.services.iam.adapters.secondary.IAMStoreMemory import IAMStoreMemory
 from naas_abi_core.services.iam.catalog import ActionCatalog, ActionSpec, ResourceType
 from naas_abi_core.services.iam.IAMPorts import (
@@ -1257,11 +1257,13 @@ def test_approval_places_the_module_namespaces_on_the_platform(h, iam):
     _submit(h, account)
     h.admin("approve_manifest", account.id)
     keys = {(p.service, p.id_key) for p in iam.store.list_placements()}
+    own = modules.dataset_namespace("acme", "people")
+    assert own.startswith("m_people_")
     assert {
         ("document", "people"),
         ("document", "people/*"),
-        ("dataset", "people"),
-        ("dataset", "people/*"),
+        ("dataset", own),
+        ("dataset", f"{own}/*"),
     } <= keys
 
 
@@ -1371,8 +1373,9 @@ def test_broker_permissions_follow_the_approved_policy(h, iam):
     key = h.admin("create_key", account.id).record
     sa = account.id.removeprefix("sa_")
     before = iam.broker_permissions(account, key)
-    assert before.inbox_prefix == f"_INBOX.{key.key_id}"
-    assert f"_INBOX.{key.key_id}.>" in before.subscribe
+    assert before.inbox_prefix == f"_INBOX.{key.key_id}.m"
+    assert f"_INBOX.{key.key_id}.m.>" in before.subscribe
+    assert f"_INBOX.{key.key_id}.>" not in before.subscribe
     assert "_INBOX.>" not in before.subscribe
     assert f"abi.agent.acme.{sa}.>" in before.subscribe
     assert f"abi.mod.acme.{sa}.>" in before.subscribe
@@ -1796,3 +1799,14 @@ def test_placements_and_containers_are_read_from_the_store_once(h):
         assert h.iam.resolve_placement("triple_store", "g") == WS
         assert h.iam.placement_of("triple_store", "other") is None
     assert reads == {"placements": 1, "containers": 1}
+
+
+def test_create_policy_keeps_its_text_unread_for_who_may_not_write_it(h, iam):
+    """Authorized before the document is read: a caller who may not create a
+    policy there is refused, whatever the text holds."""
+    stranger = h.user("stranger")
+    unreadable = 'version: "2026-10-13"\nstatements: [&a {}, *a]\n'
+    with h.as_(stranger), pytest.raises((PermissionDeniedError, IAMNotFoundError)):
+        iam.create_policy("x", unreadable)
+    with as_service_account("engine"), pytest.raises(ValueError, match="aliases"):
+        iam.create_policy("x", unreadable)

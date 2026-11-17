@@ -57,6 +57,27 @@ def test_a_custom_api_key_is_kept(tmp_path: Path) -> None:
     assert ensure_api_key(env) == "configured-key"
 
 
+def test_api_key_keeps_retired_values_out_of_env(tmp_path: Path, monkeypatch) -> None:
+    """A retired key (the API refuses to start with it) is replaced like a default."""
+    import hashlib
+
+    from naas_abi_core.apps.api import abi_api_key_auth
+
+    retired = "a-key-that-was-published-once"
+    monkeypatch.setattr(
+        abi_api_key_auth,
+        "RETIRED_ABI_API_KEY_SHA256",
+        frozenset({hashlib.sha256(retired.encode()).hexdigest()}),
+    )
+    env = tmp_path / ".env"
+    env.write_text(f"ABI_API_KEY={retired}\n", encoding="utf-8")
+
+    key = ensure_api_key(env)
+
+    assert key != retired and len(key) >= 32
+    assert retired not in env.read_text(encoding="utf-8")
+
+
 def test_the_callout_seed_is_generated_once_with_its_issuer(tmp_path):
     from naas_abi_cli.cli.admin_credentials import (
         ensure_nats_callout_seed,
@@ -147,3 +168,26 @@ def test_rabbitmq_credentials_are_generated_once(tmp_path):
     assert user == "abi" and password != "abi" and len(password) >= 24
     assert ensure_rabbitmq_credentials(env) == (user, password)
     assert _env(env)["RABBITMQ_PASSWORD"] == password
+
+
+@pytest.mark.parametrize(
+    "email, placeholder",
+    [
+        ("admin@example.com", True),
+        ("admin@mail.example.com", True),
+        ("admin@a.b.example.org", True),
+        ("admin@example.net", True),
+        ("dev@abi.test", True),
+        ("dev@host.invalid", True),
+        ("root@localhost", True),
+        ("ops@acme.dev", False),
+        ("ops@notexample.com", False),
+        ("ops@example.com.au", False),
+    ],
+)
+def test_placeholder_address_keeps_reserved_names_and_their_subdomains(
+    email: str, placeholder: bool
+) -> None:
+    from naas_abi_cli.cli.admin_credentials import is_placeholder_address
+
+    assert is_placeholder_address(email) is placeholder

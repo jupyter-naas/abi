@@ -5,16 +5,7 @@ import {
   isMapsFeatureCollection,
 } from '@/app/workspace/[workspaceId]/maps/lib/maps-pin-geojson';
 
-/** Server-side ABI base URL (Docker compose uses NEXUS_INTERNAL_API_URL). */
-export function nexusInternalApiBase(): string {
-  const configured =
-    process.env.NEXUS_INTERNAL_API_URL ??
-    process.env.NEXUS_API_URL ??
-    process.env.NEXT_PUBLIC_API_URL;
-  if (configured?.startsWith('http')) return configured.replace(/\/$/, '');
-  if (configured) return `http://${configured.replace(/\/$/, '')}`;
-  return 'http://localhost:9879';
-}
+export { nexusInternalApiBase } from '@/lib/internal-api';
 
 /** Maps-owned upstream identity (NWS and similar require a contactable UA). */
 export const MAPS_USER_AGENT =

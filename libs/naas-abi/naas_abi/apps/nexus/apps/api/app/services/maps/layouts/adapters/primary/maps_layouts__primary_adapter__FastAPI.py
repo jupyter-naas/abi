@@ -140,9 +140,13 @@ def layout_seeds(request: Request) -> list[MapsLayout]:
 
 
 def _reserved(request: Request) -> set[str]:
-    """Built-in layout ids plus graph layers registered by modules."""
+    """Built-in layout ids, graph layers registered by modules, and every seed id."""
     catalog = getattr(request.app.state, "maps_catalog", None)
-    return set(BUILTIN_LAYOUT_IDS) | set(getattr(catalog, "layers", {}) or {})
+    return (
+        set(BUILTIN_LAYOUT_IDS)
+        | set(getattr(catalog, "layers", {}) or {})
+        | maps_seed_registry(request.app).seed_ids()
+    )
 
 
 def _layout_scope(scope: GraphAccessScope, graphs: list[str] | tuple[str, ...]) -> GraphAccessScope:

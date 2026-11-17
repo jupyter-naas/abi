@@ -628,7 +628,7 @@ def test_a_module_mints_no_reply_permission_by_writing_to_itself(stack):
             async def own(msg):
                 received.append(msg.reply)
 
-            inbox = f"_INBOX.{key.split('_')[2]}.loop"
+            inbox = f"_INBOX.{key.split('_')[2]}.m.loop.1"
             await nc.subscribe(inbox, cb=own)
             await nc.subscribe(f"{TOPIC}.loop", cb=own)
             # Messages it sends itself, through its inbox and through its topic,
@@ -2008,3 +2008,132 @@ def test_a_remote_agent_called_from_nexus_sees_the_end_user_and_their_policy_lim
             await nexus.close()
 
     run(stack, scenario, discovery=True)
+
+
+def test_a_module_keeps_to_reply_and_stream_inboxes(stack):
+    """A module answers what it is asked and pushes to a stream inbox it was
+    handed, but publishes nothing to another connection's own inboxes, which
+    anyone who saw one of its reply subjects predicts."""
+    from naas_abi_sdk.messages import stream_inbox
+
+    iam = stack["iam"]
+    account, key = module(iam, "module/default/people")
+    approve(iam, account, "module/default/people")
+
+    async def scenario(served):
+        engine = await nats.connect(stack["engine"])
+        transport = Transport(stack["url"], key, timeout=2)
+        try:
+            nc = await transport.connect()
+            errors: list[str] = []
+            nc._error_cb = _collect(errors)
+            asked = f"abi.mod.default.{subject_token(account)}.ping"
+
+            async def answer(msg):
+                await nc.publish(msg.reply, b"pong")
+
+            await nc.subscribe(asked, cb=answer)
+            await nc.flush()
+            # It answers a request on its reply subject.
+            reply = await engine.request(asked, b"ping", timeout=2)
+            assert reply.data == b"pong"
+            # A stream inbox it is handed: delivered.
+            stream = stream_inbox(engine)
+            own = engine.new_inbox()  # the engine connection's own inbox
+            got: dict[str, list[bytes]] = {stream: [], own: []}
+
+            def into(name):
+                async def receive(msg):
+                    got[name].append(msg.data)
+
+                return receive
+
+            await engine.subscribe(stream, cb=into(stream))
+            await engine.subscribe(own, cb=into(own))
+            await engine.flush()
+            await nc.publish(stream, b"update")
+            await nc.publish(own, b"stray")
+            await nc.flush()
+            await asyncio.sleep(0.5)
+            assert got[stream] == [b"update"]
+            assert got[own] == []
+            assert any("ermissions" in e for e in errors)
+        finally:
+            await transport.close()
+            await engine.close()
+
+    run(stack, scenario)
+
+
+EVENT_TYPE = "https://example.org/ontology#OwnEvent"
+OTHER_EVENT_TYPE = "https://example.org/ontology#OtherEvent"
+
+
+def test_a_module_reads_the_live_events_of_its_types_and_publishes_none(stack):
+    from urllib.parse import quote
+
+    iam = stack["iam"]
+    account, key = module(iam, "module/default/people")
+    encoded = quote(EVENT_TYPE, safe="")
+    own_type = ["abi:event:event_type/" + encoded, "abi:*/event:event_type/" + encoded]
+    approve(
+        iam,
+        account,
+        "module/default/people",
+        {
+            "version": "2026-10-13",
+            "statements": [
+                {
+                    "effect": "Allow",
+                    "actions": ["event:Append", "event:Query"],
+                    "resources": own_type,
+                }
+            ],
+        },
+    )
+
+    async def scenario(served):
+        engine = await nats.connect(stack["engine"])
+        transport = Transport(stack["url"], key, timeout=2)
+        try:
+            nc = await transport.connect()
+            errors: list[str] = []
+            nc._error_cb = _collect(errors)
+            own = broker.live_event_subject(EVENT_TYPE)
+            other = broker.live_event_subject(OTHER_EVENT_TYPE)
+            heard: list[str] = []
+
+            async def hear(msg):
+                heard.append(msg.subject)
+
+            await nc.subscribe(f"{own}.>", cb=hear)
+            await nc.flush()
+            assert errors == []
+            # Every type's live events: refused.
+            await nc.subscribe("evt.>", cb=hear)
+            await nc.subscribe(f"{other}.>", cb=hear)
+            await nc.flush()
+            await asyncio.sleep(0.1)
+            assert sum("ermissions" in e for e in errors) >= 2
+            await engine.publish(f"{own}.e1", b"{}")
+            await engine.publish(f"{other}.e2", b"{}")
+            await engine.flush()
+            # Nor does it publish on a live subject, its own type's included.
+            engine_heard: list[str] = []
+
+            async def engine_hear(msg):
+                engine_heard.append(msg.subject)
+
+            await engine.subscribe("evt.>", cb=engine_hear)
+            await engine.flush()
+            await nc.publish(f"{own}.e9", b"{}")
+            await nc.publish(f"{other}.e9", b"{}")
+            await nc.flush()
+            await asyncio.sleep(0.5)
+            assert heard == [f"{own}.e1"]
+            assert engine_heard == []
+        finally:
+            await transport.close()
+            await engine.close()
+
+    run(stack, scenario)

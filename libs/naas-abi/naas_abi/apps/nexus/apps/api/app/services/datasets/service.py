@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextvars
 import re
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeout
@@ -99,7 +100,9 @@ class DatasetsService:
     ) -> DatasetQueryResultData:
         dataset = self._require_dataset()
         statement = wrap_limit(sql, limit) if wrap else sql
+        # In the caller's call context: the kernel decides each dataset for them.
         future = _executor.submit(
+            contextvars.copy_context().run,
             dataset.query,
             statement,
             namespace=namespace,

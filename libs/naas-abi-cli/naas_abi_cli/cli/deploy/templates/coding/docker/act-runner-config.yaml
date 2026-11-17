@@ -1,6 +1,6 @@
 # act_runner config for the Forgejo Actions CI runner (rendered by `abi deploy
-# local --coding`). Job containers run on this compose project's network so
-# `checkout` can reach forgejo:3000.
+# local --coding`). Job containers run on the project's `ci` network, where
+# `checkout` reaches forgejo:3000 and nothing else of the stack.
 log:
   level: info
 
@@ -18,8 +18,11 @@ cache:
   enabled: true
 
 container:
-  # Attach job containers to the compose network so they resolve `forgejo`.
-  network: "{{ CODING_WORKSPACE_DOCKER_NETWORK }}"
+  # Attach job containers to the `ci` network so they resolve `forgejo`.
+  network: "{{ CODING_CI_DOCKER_NETWORK }}"
+  # "-": job containers never get the Docker socket (an empty value mounts
+  # the runner's into every job).
+  docker_host: "-"
   privileged: false
   valid_volumes: []
   force_pull: false

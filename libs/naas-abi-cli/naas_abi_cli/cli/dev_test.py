@@ -8,6 +8,7 @@ the literal. These two must not drift back together.
 """
 
 import importlib
+import os
 import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -219,6 +220,59 @@ def test_oxigraph_binds_the_ipv4_literal(monkeypatch) -> None:
 
     cmd = captured["cmd"]
     assert f"127.0.0.1:{PORTS['oxigraph']}" in cmd
+
+
+def test_dev_sparql_server_keeps_one_token_per_run(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
+    monkeypatch.delenv(dev.OXIGRAPH_TOKEN_ENV, raising=False)
+    spawned: dict[str, dict] = {}
+    monkeypatch.setattr(
+        dev,
+        "_spawn",
+        lambda spec, cmd, cwd, env: spawned.update({spec.name: env}) or 1234,
+    )
+
+    dev._launch_oxigraph(_spec("oxigraph", PORTS["oxigraph"]))
+    first = spawned["oxigraph"][dev.OXIGRAPH_TOKEN_ENV]
+    dev._launch_api(_spec("api", PORTS["api"]), PORTS)
+    dev._launch_dagster(_spec("dagster", PORTS["dagster"]), PORTS)
+
+    assert len(first) >= 32
+    assert spawned["api"][dev.OXIGRAPH_TOKEN_ENV] == first
+    assert spawned["dagster"][dev.OXIGRAPH_TOKEN_ENV] == first
+    token_file = dev._oxigraph_token_path()
+    assert token_file.stat().st_mode & 0o777 == 0o600
+    dev._launch_oxigraph(_spec("oxigraph", PORTS["oxigraph"]))
+    assert spawned["oxigraph"][dev.OXIGRAPH_TOKEN_ENV] != first  # a new run
+
+
+def test_dev_sparql_server_keeps_its_token_while_its_clients_run(
+    monkeypatch, tmp_path
+) -> None:
+    import os
+
+    monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
+    monkeypatch.delenv(dev.OXIGRAPH_TOKEN_ENV, raising=False)
+    spawned: dict[str, dict] = {}
+    monkeypatch.setattr(
+        dev,
+        "_spawn",
+        lambda spec, cmd, cwd, env: spawned.update({spec.name: env}) or 1234,
+    )
+    dev._launch_oxigraph(_spec("oxigraph", PORTS["oxigraph"]))
+    first = spawned["oxigraph"][dev.OXIGRAPH_TOKEN_ENV]
+    # The api read it at its start and still runs: restarting the server alone
+    # keeps it, so the api's calls go on being accepted.
+    api_pid = dev._pid_path(_spec("api", PORTS["api"]))
+    api_pid.parent.mkdir(parents=True, exist_ok=True)
+    api_pid.write_text(str(os.getpid()))
+
+    dev._launch_oxigraph(_spec("oxigraph", PORTS["oxigraph"]))
+    assert spawned["oxigraph"][dev.OXIGRAPH_TOKEN_ENV] == first
+
+    api_pid.unlink()  # nothing holds it any more: the next run gets its own
+    dev._launch_oxigraph(_spec("oxigraph", PORTS["oxigraph"]))
+    assert spawned["oxigraph"][dev.OXIGRAPH_TOKEN_ENV] != first
 
 
 def test_oxigraph_url_is_not_browser_facing() -> None:
@@ -1566,3 +1620,39 @@ def test_a_project_without_nats_has_no_built_in_identity_provider(monkeypatch) -
 
     monkeypatch.setattr(dev, "_project_declares_nats", lambda: False)
     assert dev._dev_modules() == {}
+
+
+def test_nexus_web_keeps_to_the_bind_host(monkeypatch, tmp_path) -> None:
+    captured: dict = {}
+    web = tmp_path / "libs/naas-abi/naas_abi/apps/nexus/apps/web"
+    (web / "node_modules").mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        dev, "_spawn", lambda spec, cmd, cwd, env: captured.update(cmd=cmd) or 1234
+    )
+    monkeypatch.setattr(
+        dev.shutil, "which", lambda name: "/usr/bin/pnpm" if name == "pnpm" else None
+    )
+
+    dev._launch_nexus_web(_spec("nexus-web", PORTS["nexus-web"]), PORTS)
+
+    cmd = captured["cmd"]
+    assert cmd[cmd.index("--hostname") + 1] == dev.BIND_HOST == "127.0.0.1"
+
+
+def test_dev_logs_and_storage_keep_owner_only(monkeypatch, tmp_path) -> None:
+    import stat
+
+    monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
+    monkeypatch.setattr(dev, "_dev_dir", lambda: tmp_path / ".abi" / "dev")
+    previous = os.umask(0o022)
+    try:
+        dev._ensure_storage_layout()
+    finally:
+        os.umask(previous)
+    for folder in (
+        tmp_path / "storage",
+        tmp_path / ".abi/dev",
+        tmp_path / ".abi/dev/logs",
+    ):
+        assert stat.S_IMODE(folder.stat().st_mode) == 0o700

@@ -128,3 +128,26 @@ describe('middleware auth redirects', () => {
     }
   });
 });
+
+describe('middleware: routes that fetch for a page', () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+
+  afterEach(() => {
+    process.env.NODE_ENV = originalNodeEnv;
+  });
+
+  it('keeps callers without a web pass out, in every mode', async () => {
+    for (const mode of ['production', 'development']) {
+      process.env.NODE_ENV = mode;
+      for (const path of ['/api/image-data', '/api/link-preview', '/api/maps/place', '/api/maps/firms']) {
+        // The page's own flag is no pass: page script sets it.
+        const response = middleware(requestFor(path, { 'nexus-auth-flag': 'true' }));
+        expect(response.status, `${mode} ${path}`).toBe(401);
+        expect(response.headers.get('cache-control')).toBe('private, no-store');
+      }
+      const withPass = middleware(requestFor('/api/image-data', { 'nexus-web-pass': 'abi_gk_a_b' }));
+      expect(withPass.status).toBe(200);
+      expect(withPass.headers.get('x-middleware-next')).toBe('1');
+    }
+  });
+});

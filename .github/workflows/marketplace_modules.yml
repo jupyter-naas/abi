@@ -14,8 +14,8 @@ jobs:
       matrix:
         python: ['3.11', '3.12']
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6
         with:
           python-version: ${{ matrix.python }}
       - name: Lint
@@ -29,7 +29,7 @@ jobs:
       matrix:
         app: [agicap, algolia, arxiv, exchangeratesapi, github, google_search, linkedin, naas, nebari, pennylane, postgres, powerpoint, pubmed, sanax, sec_gov, sendgrid, yahoofinance]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
       # The build fails if naas_abi_core (or naas_abi, naas_abi_marketplace) is
       # installed, or if the module cannot be imported without it.
       - name: Build the SDK-only image

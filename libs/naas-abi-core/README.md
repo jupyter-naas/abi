@@ -535,15 +535,14 @@ run_agent(agent)
 Model Context Protocol (MCP) server for integration with Claude Desktop and VS Code.
 
 **Features:**
-- Dynamic agent discovery from OpenAPI spec
-- HTTP and stdio transport modes
-- Automatic tool registration
+- The agents you may use, as MCP tools: each call goes through Nexus with your own personal API key (`abi_pk_...`); the server holds no credential
+- HTTP and stdio transport modes; HTTP requests need `Authorization: Bearer <key>` and a Host and Origin the server is configured for (`MCP_ALLOWED_HOSTS`, `MCP_ALLOWED_ORIGINS`, loopback by default)
 
 **Usage:**
 
 ```bash
-# Start MCP server
-python -m naas_abi_core.apps.mcp.mcp_server
+# Start MCP server (stdio), with your own key
+NEXUS_ACCESS_TOKEN=abi_pk_... python -m naas_abi_core.apps.mcp.mcp_server
 
 # Or with HTTP transport
 MCP_TRANSPORT=http python -m naas_abi_core.apps.mcp.mcp_server

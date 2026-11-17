@@ -222,3 +222,145 @@ def test_recreating_a_collection_needs_delete_only_when_it_exists(tmp_path):
             "shared-1",
             "shared-2",
         ]
+
+
+def _with_workspaces(iam):
+    from naas_abi_core.services.iam.enforcement import internal_call
+    from naas_abi_core.services.iam.tests.iam_harness import NEXUS, IAMHarness
+
+    with internal_call():
+        iam.register_catalog(NEXUS)
+    return IAMHarness(iam)
+
+
+def _in_container(container):
+    from dataclasses import replace
+
+    from naas_abi_core.engine.call_context import current_call_context, use_call_context
+
+    return use_call_context(replace(current_call_context(), container=container))
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "own_/../shared",
+        "own_/x",
+        "own_%2F..%2Fshared",
+        "../shared",
+        "..",
+        ".hidden",
+        "",
+        "own_ x",
+        "own_:x",
+        "own_\\..\\shared",
+        "e" * 256,
+    ],
+)
+def test_vector_collection_names_keep_to_one_identifier(tmp_path, name):
+    from naas_abi_core.engine.call_context import use_call_context
+    from naas_abi_core.services.iam.enforcement import internal_call
+    from naas_abi_core.services.iam.tests.data_service_contract import caller
+    from naas_abi_core.services.iam.tests.iam_harness import document, statement
+    from naas_abi_core.services.vector_store.IVectorStorePort import (
+        InvalidCollectionNameError,
+    )
+
+    contract = TestVectorStoreAuthorization()
+    owner, iam = contract._owner(tmp_path)
+    with internal_call():
+        iam.create_service_account("prefixed")
+        policy = iam.create_policy(
+            "own-prefix",
+            document(
+                statement(
+                    "Allow",
+                    ["vector_store:*"],
+                    [
+                        "abi:vector_store:collection/own_*",
+                        "abi:vector_store:vector/own_*",
+                    ],
+                )
+            ),
+        )
+        iam.attach_policy(policy.id, contract._id(iam, "prefixed"))
+
+    with use_call_context(caller("prefixed")):
+        for call in (
+            lambda: owner.search(name, VECTOR, k=5),
+            lambda: owner.get_document(name, "shared-1"),
+            lambda: owner.list_vectors(name),
+            lambda: owner.add_documents(name, ["x"], [VECTOR]),
+            lambda: owner.delete_documents(name, ["shared-1"]),
+            lambda: owner.get_collection_info(name),
+            lambda: owner.delete_collection(name),
+            lambda: owner.ensure_collection(name, 3),
+        ):
+            with pytest.raises(InvalidCollectionNameError):
+                call()
+    with internal_call():
+        assert _ids(owner.list_documents("shared").documents) == [
+            "shared-1",
+            "shared-2",
+        ]
+
+
+def test_a_module_keeps_its_default_vector_grant_to_its_own_collections(tmp_path):
+    from naas_abi_sdk.module import ModuleDependencies
+    from naas_abi_sdk.permissions import default_manifest
+
+    from naas_abi_core.engine.call_context import use_call_context
+    from naas_abi_core.services.iam.enforcement import internal_call
+    from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
+    from naas_abi_core.services.iam.modules import bind
+    from naas_abi_core.services.iam.policy import parse_policy_document
+    from naas_abi_core.services.iam.tests.data_service_contract import caller
+
+    contract = TestVectorStoreAuthorization()
+    owner, iam = contract._owner(tmp_path)
+    with internal_call():
+        iam.create_service_account("module/acme/reports")
+        manifest = parse_policy_document(
+            default_manifest(ModuleDependencies(services=("vector_store",)))
+        )
+        policy = iam.create_policy("acme-reports", bind(manifest, "acme", "reports"))
+        iam.attach_policy(policy.id, contract._id(iam, "module/acme/reports"))
+
+    with use_call_context(caller("module/acme/reports")):
+        owner.ensure_collection("reports~docs", 3)
+        owner.add_documents("reports~docs", ["a"], [VECTOR])
+        assert [r.id for r in owner.search("reports~docs", VECTOR, k=1)] == ["a"]
+        with pytest.raises((PermissionDeniedError, CollectionNotFoundError)):
+            owner.ensure_collection("reportsx~docs", 3)
+        with pytest.raises((PermissionDeniedError, CollectionNotFoundError)):
+            owner.search("shared", VECTOR, k=1)
+
+
+def test_a_new_collection_keeps_the_workspace_that_placed_it_first(tmp_path):
+    from naas_abi_core.services.iam.enforcement import internal_call
+    from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
+    from naas_abi_core.services.iam.tests.iam_harness import statement
+
+    contract = TestVectorStoreAuthorization()
+    owner, iam = contract._owner(tmp_path)
+    h = _with_workspaces(iam)
+    ws1, ws2 = h.register("ws-1"), h.register("ws-2")
+    alice = h.user("alice")
+    h.grant(alice.id, statement("Allow", ["vector_store:*"], ["*"]))
+    create = owner.adapter.create_collection
+
+    def created_while_another_workspace_commits(name, *args, **kwargs):
+        create(name, *args, **kwargs)
+        with internal_call():
+            iam.claim_placement("vector_store", name, ws1)
+
+    owner.adapter.create_collection = created_while_another_workspace_commits
+    with h.as_(alice), _in_container(ws2), pytest.raises(PermissionDeniedError):
+        owner.ensure_collection("documents", 3)
+
+    assert iam.resolve_placement("vector_store", "documents") == ws1
+    owner.adapter.create_collection = create
+    # Ensured again from the second workspace (it exists): it stays the first's.
+    with h.as_(alice), _in_container(ws2):
+        owner.ensure_collection("documents", 3)
+    assert iam.resolve_placement("vector_store", "documents") == ws1

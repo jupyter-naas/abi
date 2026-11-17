@@ -10,7 +10,9 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
 )
+from naas_abi.apps.nexus.apps.api.app.core.bounded_work import BoundedWork
 from naas_abi.apps.nexus.apps.api.app.core.content_disposition import content_disposition
+from naas_abi.apps.nexus.apps.api.app.core.request_body import read_upload
 from naas_abi.apps.nexus.apps.api.app.core.user_content import user_content_headers
 from naas_abi.apps.nexus.apps.api.app.services.files.adapters.primary.files__primary_adapter__dependencies import (  # noqa: E501
     get_files_service,
@@ -68,6 +70,13 @@ _ACTIONS: dict[str, tuple[str, str, str]] = {
     "write": ("PutFile", "PutSystemFile", "PutMyFile"),
     "delete": ("DeleteFile", "DeleteSystemFile", "DeleteMyFile"),
 }
+
+
+# Office previews run a converter process; extraction decompresses and writes
+# every member. Both run off the event loop, a few at a time for the process,
+# and a caller starts a bounded number a minute.
+_OFFICE_PREVIEW = BoundedWork("office previews", concurrent=2, per_user=20)
+_ARCHIVE_EXTRACT = BoundedWork("archive extractions", concurrent=2, per_user=10)
 
 
 def _declares(op: str) -> list:
@@ -539,7 +548,7 @@ async def upload_file(
     scoped_path = await _authorize_path(
         current_user, path, workspace_id, scope, "write", files_service=files_service
     )
-    content = await file.read()
+    content = await read_upload(file, files_service.max_upload_size)
     return _to_file_info_schema(
         files_service.upload_file(
             filename=file.filename or "untitled",
@@ -561,7 +570,9 @@ async def preview_file_as_pdf(
     scoped_path = await _authorize_path(
         current_user, path, workspace_id, scope, "read", files_service=files_service
     )
-    preview = files_service.preview_file_as_pdf(path=scoped_path)
+    preview = await _OFFICE_PREVIEW.run(
+        current_user.id, files_service.preview_file_as_pdf, path=scoped_path
+    )
 
     return Response(
         content=preview.content,
@@ -601,7 +612,10 @@ async def extract_archive(
     scoped_path = await _authorize_path(
         current_user, path, workspace_id, scope, "write", files_service=files_service
     )
-    return _to_file_info_schema(files_service.extract_archive(path=scoped_path))
+    extracted = await _ARCHIVE_EXTRACT.run(
+        current_user.id, files_service.extract_archive, path=scoped_path
+    )
+    return _to_file_info_schema(extracted)
 
 
 @router.get("/raw/{path:path}", dependencies=_declares("read"))

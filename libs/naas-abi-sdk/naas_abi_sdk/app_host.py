@@ -43,7 +43,7 @@ from naas_abi_sdk.app_streams import (
 from naas_abi_sdk.apps import AppDescriptor
 from naas_abi_sdk.broker_flush import flush_to_broker
 from naas_abi_sdk.concurrency import DEFAULT_LIMIT, ConcurrentCalls
-from naas_abi_sdk.messages import reply
+from naas_abi_sdk.messages import is_stream_inbox, reply
 from naas_abi_sdk.transport import RPCError
 
 logger = logging.getLogger(__name__)
@@ -539,8 +539,8 @@ class AppHost:
             return _text(413, "Request body too large")
         if not request.path.startswith("/"):
             raise RPCError("INVALID_ARGUMENT", "App path must start with /")
-        if request.body_follows and not request.body_inbox.startswith("_INBOX."):
-            raise RPCError("INVALID_ARGUMENT", "A body inbox must be an _INBOX subject")
+        if request.body_follows and not is_stream_inbox(request.body_inbox):
+            raise RPCError("INVALID_ARGUMENT", "A body inbox must be a stream inbox")
         method = request.method.upper()
         if method in ("GET", "HEAD") and descriptor.root is not None:
             found = await self._static(descriptor, request)

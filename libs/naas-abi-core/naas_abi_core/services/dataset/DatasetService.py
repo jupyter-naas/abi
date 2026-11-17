@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from typing import Any
 
 from naas_abi_core import logger
+from naas_abi_core.engine.call_context import current_call_context
 from naas_abi_core.services.dataset.DatasetPort import (
     DatasetInfo,
     DatasetNotFoundError,
@@ -30,8 +31,12 @@ from naas_abi_core.services.dataset.ontologies.classes.ontology_naas_ai.abi.data
 )
 from naas_abi_core.services.dataset.sql_references import referenced_datasets
 from naas_abi_core.services.iam.enforcement import ResourceGuard
+from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
 from naas_abi_core.services.iam.listing import ResourceLister, named_lister
+from naas_abi_core.services.iam.modules import dataset_namespace, parse_account
 from naas_abi_core.services.ServiceBase import ServiceBase
+
+DEFAULT_NAMESPACE = "default"
 
 
 def _deadline(timeout_seconds: float | None) -> dict[str, float]:
@@ -50,6 +55,9 @@ class DatasetService(ServiceBase, IDatasetPort):
     ``dataset/<namespace>/<name>``: a dataset the caller may not
     see is ``DatasetNotFoundError``, a query needs ``Query`` on every dataset
     its SQL reads, and ``list`` returns only what the caller may list.
+
+    For a module's account, the namespace ``default`` is the module's own
+    (``modules.dataset_namespace``): modules never share it.
     """
 
     __adapter: IDatasetPort
@@ -58,6 +66,20 @@ class DatasetService(ServiceBase, IDatasetPort):
         super().__init__()
         self.__adapter = adapter
         self._guard = ResourceGuard.of(CATALOG, self)
+
+    @staticmethod
+    def _namespace(namespace: str) -> str:
+        """``namespace`` as the caller means it: a module account's ``default``
+        is its own namespace, never the one other callers share."""
+        if namespace != DEFAULT_NAMESPACE:
+            return namespace
+        principal = current_call_context().principal
+        account = (
+            parse_account(principal.name)
+            if principal.kind == "service_account"
+            else None
+        )
+        return dataset_namespace(*account) if account is not None else namespace
 
     def __dataset(self, action: str, name: str, namespace: str) -> None:
         self._guard.require(
@@ -120,6 +142,7 @@ class DatasetService(ServiceBase, IDatasetPort):
     def create(self, spec: DatasetSpec) -> DatasetInfo:
         """A create: a new namespace is placed in the call's target
         workspace, or on the platform."""
+        spec = spec.model_copy(update={"namespace": self._namespace(spec.namespace)})
         commit = self._guard.create(
             "Create",
             DATASET,
@@ -130,7 +153,13 @@ class DatasetService(ServiceBase, IDatasetPort):
             not_found=lambda: DatasetNotFoundError(spec.name, spec.namespace),
         )
         info = self.__adapter.create(spec)
-        commit()
+        try:
+            commit()
+        except PermissionDeniedError:
+            # Another create placed the new namespace in another container
+            # first: the table this call created (a create is exclusive) goes.
+            self.__adapter.drop(spec.name, namespace=spec.namespace)
+            raise
         return info
 
     def __exists(self, name: str, namespace: str) -> bool:
@@ -141,6 +170,7 @@ class DatasetService(ServiceBase, IDatasetPort):
         return True
 
     def describe(self, name: str, *, namespace: str = "default") -> DatasetInfo:
+        namespace = self._namespace(namespace)
         self.__dataset("Describe", name, namespace)
         return self.__adapter.describe(name, namespace=namespace)
 
@@ -158,6 +188,8 @@ class DatasetService(ServiceBase, IDatasetPort):
 
     def list(self, *, namespace: str | None = None) -> list[DatasetInfo]:
         """The datasets the caller may list; never fails for that."""
+        if namespace is not None:
+            namespace = self._namespace(namespace)
         return self._guard.filter(
             "List",
             DATASET,
@@ -175,6 +207,7 @@ class DatasetService(ServiceBase, IDatasetPort):
         snapshot_id: int | None = None,
         timeout_seconds: float | None = None,
     ) -> DatasetInfo:
+        namespace = self._namespace(namespace)
         self.__dataset("Write", name, namespace)
         return self.__adapter.write(
             name,
@@ -184,6 +217,11 @@ class DatasetService(ServiceBase, IDatasetPort):
             snapshot_id=snapshot_id,
             **_deadline(timeout_seconds),
         )
+
+    def authorize_write_stream(self, name: str, *, namespace: str = "default") -> None:
+        """Raise unless the caller may ``write_stream`` into ``name``: what a
+        transfer host checks before it spools the rows."""
+        self.__dataset("WriteStream", name, self._namespace(namespace))
 
     def write_stream(
         self,
@@ -195,6 +233,7 @@ class DatasetService(ServiceBase, IDatasetPort):
         snapshot_id: int | None = None,
         timeout_seconds: float | None = None,
     ) -> DatasetInfo:
+        namespace = self._namespace(namespace)
         self.__dataset("WriteStream", name, namespace)
         return self.__adapter.write_stream(
             name,
@@ -213,6 +252,7 @@ class DatasetService(ServiceBase, IDatasetPort):
         snapshot_id: int | None = None,
         timeout_seconds: float | None = None,
     ) -> QueryResult:
+        namespace = self._namespace(namespace)
         self.__query("Query", sql, namespace)
         return self.__adapter.query(
             sql,
@@ -229,6 +269,7 @@ class DatasetService(ServiceBase, IDatasetPort):
         namespace: str = "default",
         snapshot_id: int | None = None,
     ) -> Iterator[RowStream]:
+        namespace = self._namespace(namespace)
         self.__query("QueryStream", sql, namespace)
         with self.__adapter.query_stream(
             sql, namespace=namespace, snapshot_id=snapshot_id
@@ -242,6 +283,7 @@ class DatasetService(ServiceBase, IDatasetPort):
         namespace: str = "default",
         timeout_seconds: float | None = None,
     ) -> QueryResult:
+        namespace = self._namespace(namespace)
         self.__dataset("Compact", name, namespace)
         return self.__adapter.compact(
             name, namespace=namespace, **_deadline(timeout_seconds)
@@ -254,12 +296,14 @@ class DatasetService(ServiceBase, IDatasetPort):
         namespace: str = "default",
         timeout_seconds: float | None = None,
     ) -> QueryResult:
+        namespace = self._namespace(namespace)
         self.__dataset("Flush", name, namespace)
         return self.__adapter.flush(
             name, namespace=namespace, **_deadline(timeout_seconds)
         )
 
     def inlined_row_count(self, name: str, *, namespace: str = "default") -> int:
+        namespace = self._namespace(namespace)
         self.__dataset("InlinedRowCount", name, namespace)
         return self.__adapter.inlined_row_count(name, namespace=namespace)
 
@@ -304,6 +348,7 @@ class DatasetService(ServiceBase, IDatasetPort):
 
     def namespace_version(self, namespace: str) -> int | None:
         """None, as for an unknown namespace, when the caller may not see it."""
+        namespace = self._namespace(namespace)
         try:
             self._guard.require(
                 "NamespaceVersion",
@@ -316,5 +361,6 @@ class DatasetService(ServiceBase, IDatasetPort):
         return self.__adapter.namespace_version(namespace)
 
     def drop(self, name: str, *, namespace: str = "default") -> None:
+        namespace = self._namespace(namespace)
         self.__dataset("Drop", name, namespace)
         self.__adapter.drop(name, namespace=namespace)

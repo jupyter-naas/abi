@@ -13,6 +13,7 @@ from naas_abi_apps.github.integrations.GitHubGraphqlIntegration import (
     as_tools as graphql_tools,
 )
 from naas_abi_apps.github.integrations.GitHubIntegration import (
+    READ_TOOLS,
     GitHubIntegrationConfiguration,
 )
 from naas_abi_apps.github.integrations.GitHubIntegration import (
@@ -58,19 +59,41 @@ You have access to GitHub tools for GitHub operations.
 """
 
 
-def tools_for(access_token: str | None) -> list[Any]:
-    """The REST and GraphQL tools, or none without a token."""
+def tools_for(
+    access_token: str | None,
+    write_tools: set[str] | None = None,
+    repositories: list[str] | None = None,
+) -> list[Any]:
+    """The REST read tools, the REST write tools named in ``write_tools``, and
+    the GraphQL tools (which read); none without a token. With
+    ``repositories``, every REST request stays in them."""
     if not access_token:
         return []
-    return rest_tools(
-        GitHubIntegrationConfiguration(access_token=access_token)
-    ) + graphql_tools(GitHubGraphqlIntegrationConfiguration(access_token=access_token))
+    allowed = READ_TOOLS | set(write_tools or ())
+    rest = [
+        tool
+        for tool in rest_tools(
+            GitHubIntegrationConfiguration(
+                access_token=access_token, repositories=repositories
+            )
+        )
+        if tool.name in allowed
+    ]
+    return rest + graphql_tools(
+        GitHubGraphqlIntegrationConfiguration(access_token=access_token)
+    )
 
 
 async def create_agent(
-    engine: Any, module_id: str, *, access_token: str | None, chat_model: str = ""
+    engine: Any,
+    module_id: str,
+    *,
+    access_token: str | None,
+    chat_model: str = "",
+    write_tools: set[str] | None = None,
+    repositories: list[str] | None = None,
 ) -> Agent:
-    tools = tools_for(access_token)
+    tools = tools_for(access_token, write_tools, repositories)
     names = {tool.name for tool in tools}
     return await build_agent(
         engine,

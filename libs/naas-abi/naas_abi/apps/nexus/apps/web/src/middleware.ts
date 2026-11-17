@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 import { isPlatformSettingsPath, platformSettingsRedirect } from './app/settings/lib/redirects';
 import { orgSettingsRedirect } from './app/organizations/[orgId]/settings/lib/redirects';
 import { VIEW_FLAG_COOKIE, parseViewFlag } from './lib/view-flag';
+import { WEB_PASS_COOKIE } from './lib/web-pass';
 
 /**
  * Route protection, legacy redirects, and org-scoped routing.
@@ -16,6 +17,7 @@ import { VIEW_FLAG_COOKIE, parseViewFlag } from './lib/view-flag';
  *   /org/[orgSlug]/workspace/[id]/... -> authed, rewritten to /workspace/[id]/...
  *   /auth/login                       -> public
  *   /workspace/[id]/...               -> authed
+ *   /api/image-data, /api/link-preview, /api/maps/* -> a web pass (lib/web-pass.ts), in every mode
  *
  * Workspace redirect priority:
  *   1. nexus-last-workspace cookie
@@ -56,6 +58,15 @@ const authRoutes = ['/auth/login', '/login'];
 
 const orgWorkspaceRegex = /^\/org\/([^/]+)\/workspace\/([^/]+)(\/.*)?$/;
 const orgAuthRegex = /^\/org\/([^/]+)\/login(\/.*)?$/;
+
+/** The server routes that fetch on a page's behalf: never for an anonymous caller. */
+function needsWebPass(pathname: string): boolean {
+  return (
+    pathname === '/api/image-data' ||
+    pathname === '/api/link-preview' ||
+    (pathname.startsWith('/api/maps/') && !pathname.startsWith('/api/maps/custom/'))
+  );
+}
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -107,6 +118,16 @@ export function middleware(request: NextRequest) {
   }
 
   const hasAuthCookie = request.cookies.has('nexus-auth-flag');
+
+  // The routes that fetch for a page answer signed-in users only. Each checks the
+  // web pass with the API (lib/web-pass-server.ts); a request without one stops here,
+  // in development too.
+  if (needsWebPass(pathname) && !request.cookies.has(WEB_PASS_COOKIE)) {
+    return NextResponse.json(
+      { error: 'Not authenticated' },
+      { status: 401, headers: { 'Cache-Control': 'private, no-store' } },
+    );
+  }
 
   // Custom Maps feeds are deployment-registered and may carry private data:
   // return 401 JSON (not a login redirect) when unauthenticated. Route handlers

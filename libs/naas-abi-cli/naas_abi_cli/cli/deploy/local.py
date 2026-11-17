@@ -16,19 +16,21 @@ from rich.prompt import Prompt
 import naas_abi_cli
 
 from ..admin_credentials import (
+    configured_superadmins,
+    ensure_data_service_secrets,
     ensure_idp_client_secret,
     ensure_nats_callout_seed,
     ensure_nats_passwords,
+    generate_data_service_secret,
+    is_placeholder_address,
 )
-from ..private_dir import keep_out_of_git
+from ..private_dir import keep_out_of_git, private_directory, private_file
 from ..utils.Copier import Copier
 
 LOCAL_ENV_MARKER = "# Added by abi deploy local command execution"
 HEADSCALE_SERVICE_MARKER = "  headscale:"
 BACKUP_DIRECTORY = os.path.join(".abi-backups", "deploy-local")
-MIGRATE_TO_NATS_DOC = (
-    "https://docs.naas.ai/user-guide/upgrade/migrate-to-3"
-)
+MIGRATE_TO_NATS_DOC = "https://docs.naas.ai/user-guide/upgrade/migrate-to-3"
 # The configs a project's mode is read from, the one docker-compose runs first.
 _PROJECT_CONFIGS = ("config.local.yaml", "config.yaml")
 _NATS_BLOCK = re.compile(r"^nats\s*:", re.MULTILINE)
@@ -61,7 +63,6 @@ DEFAULT_ENV_VALUES: dict[str, str] = {
     "NEXUS_WEB_IMAGE": "ghcr.io/jupyter-naas/nexus-web",
     "NEXUS_WEB_TAG": "latest",
     "NEXUS_WEB_PORT": "3042",
-    "NEXUS_USER_ADMIN_EMAIL": "admin@example.com",
     "HEADSCALE_SERVER_URL": "headscale.localhost",
     "HEADSCALE_SERVER_PORT": "8083",
     "HEADSCALE_METRICS_PORT": "9090",
@@ -69,6 +70,10 @@ DEFAULT_ENV_VALUES: dict[str, str] = {
     "HEADSCALE_INTERNAL_DOMAIN": "vpn.localhost",
     "HEADSCALE_ACME_EMAIL": "",
 }
+
+# Where workspaces reach coderd: its service name on the stack network.
+CODER_ACCESS_URL = "http://coder:7080"
+_OLD_CODER_ACCESS_URL = "http://host.docker.internal:7080"
 
 RANDOM_ENV_KEYS: tuple[str, ...] = (
     "POSTGRES_PASSWORD",
@@ -86,11 +91,11 @@ HEADSCALE_DOCKER_COMPOSE_SNIPPET = """
     restart: unless-stopped
     command: ["server"]
     ports:
-      - ${HEADSCALE_SERVER_PORT}:8080
-      - ${HEADSCALE_METRICS_PORT}:9090
-      - ${HEADSCALE_GRPC_PORT}:50443
+      # Clients reach it through Caddy; metrics and gRPC stay in the container.
+      - 127.0.0.1:${HEADSCALE_SERVER_PORT}:8080
     volumes:
       - ./.deploy/docker/headscale/config.yaml:/etc/headscale/config.yaml:ro
+      - ./.deploy/docker/headscale/acl.hujson:/etc/headscale/acl.hujson:ro
       - ./.deploy/docker/headscale/extra-records.json:/var/lib/headscale/extra-records.json:ro
       - headscale_data:/var/lib/headscale
       - headscale_run:/var/run/headscale
@@ -119,6 +124,11 @@ def _copy_headscale_templates(deploy_path: str, values: dict[str, object]) -> No
     headscale_extra_records_path = os.path.join(
         deploy_path, "docker/headscale/extra-records.json"
     )
+    if not os.path.exists(os.path.join(deploy_path, "docker/headscale/acl.hujson")):
+        raise FileNotFoundError(
+            "Missing rendered Headscale ACL policy (docker/headscale/acl.hujson). "
+            "Ensure the naas-abi-cli package includes the local deploy headscale templates."
+        )
     if not os.path.exists(headscale_config_path):
         raise FileNotFoundError(
             f"Missing rendered Headscale config at {headscale_config_path}. "
@@ -227,8 +237,8 @@ def legacy_extras_requirement(project_path: str) -> str | None:
     if not path.is_file():
         return None
     with open(path, "rb") as pyproject:
-        dependencies = tomllib.load(pyproject).get("project", {}).get(
-            "dependencies", []
+        dependencies = (
+            tomllib.load(pyproject).get("project", {}).get("dependencies", [])
         )
     matches = [m for d in dependencies if (m := _CORE_REQUIREMENT.match(d))]
     extras = {
@@ -274,14 +284,15 @@ def compose_project_name(project_path: str) -> str:
     return re.sub(r"[^a-z0-9_-]", "", base) or "abi"
 
 
-def _compose_project_network(project_path: str) -> str:
-    """The docker network the coding workspaces attach to.
+def _compose_project_network(project_path: str, name: str = "coding") -> str:
+    """A network of the project's compose stack, as Docker names it.
 
-    The bridge network is ``<compose project>_abi-network``. Users can override
+    ``coding`` is the one the coding workspaces attach to, ``ci`` the one CI
+    jobs run on: ``<compose project>_<name>``. Users can override
     CODING_WORKSPACE_DOCKER_NETWORK in .env (e.g. when they set
     COMPOSE_PROJECT_NAME).
     """
-    return f"{compose_project_name(project_path)}_abi-network"
+    return f"{compose_project_name(project_path)}_{name}"
 
 
 def _copy_coding_templates(deploy_path: str, values: dict[str, object]) -> None:
@@ -402,6 +413,17 @@ def _ensure_env_var(env_path: str, key: str, value: str) -> None:
         if existing_content and not existing_content.endswith("\n"):
             env_file.write("\n")
         env_file.write(f"{key}={value}\n")
+
+
+def _replace_env_var(env_path: str, key: str, value: str) -> None:
+    with open(env_path, "r", encoding="utf-8") as env_file:
+        lines = env_file.read().splitlines()
+    lines = [
+        f"{key}={value}" if line.strip().startswith(f"{key}=") else line
+        for line in lines
+    ]
+    with open(env_path, "w", encoding="utf-8") as env_file:
+        env_file.write("\n".join(lines) + "\n")
 
 
 def _get_env_var(env_path: str, key: str) -> str | None:
@@ -537,7 +559,11 @@ def _backup_local_deploy_files(
     backup_root = os.path.join(project_path, BACKUP_DIRECTORY)
     backup_timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     backup_path = os.path.join(backup_root, backup_timestamp)
+    # The backup holds a copy of .env: every level its owner's only.
+    private_directory(os.path.dirname(backup_root))
+    private_directory(backup_root)
     os.makedirs(backup_path, exist_ok=False)
+    os.chmod(backup_path, 0o700)
     # The backup holds a copy of .env.
     keep_out_of_git(Path(backup_root).parent)
 
@@ -546,7 +572,8 @@ def _backup_local_deploy_files(
         if os.path.isdir(source_path):
             shutil.copytree(source_path, destination_path)
         else:
-            shutil.copy2(source_path, destination_path)
+            private_file(destination_path)
+            shutil.copyfile(source_path, destination_path)
 
     return backup_path
 
@@ -562,6 +589,135 @@ def _require_writable_env(path: str) -> None:
         )
 
 
+# The lines older projects' config.local.yaml reach the stack's Redis, Qdrant
+# and NATS monitoring with, from before these took credentials or moved to the
+# nats-monitor network. `abi deploy local` rewrites them in place.
+_OLD_REDIS_URL = re.compile(
+    r'^([ \t]*redis_url:[ \t]*)"redis://redis:6379"[ \t]*$', re.MULTILINE
+)
+_QDRANT_WITHOUT_KEY = re.compile(
+    r'^(?P<indent>[ \t]*)host:[ \t]*"qdrant"\n(?P=indent)port:[ \t]*6333[ \t]*\n'
+    r"(?!(?P=indent)api_key:)",
+    re.MULTILINE,
+)
+_OLD_MONITORING_URL = re.compile(
+    r'^([ \t]*monitoring_url:[ \t]*)"http://nats:8222"', re.MULTILINE
+)
+
+
+def _configured_admin(project_path: str) -> str:
+    """The first superadmin of the project's config.local.yaml, else ""."""
+    path = os.path.join(project_path, "config.local.yaml")
+    if not os.path.exists(path):
+        return ""
+    with open(path, "r", encoding="utf-8") as config_file:
+        admins = configured_superadmins(config_file.read())
+    return admins[0] if admins else ""
+
+
+def refuse_placeholder_admins(project_path: str) -> None:
+    """Refuse to deploy a project whose config.local.yaml makes an address that
+    receives no mail its platform administrator: nobody would get its sign-in
+    codes, and every such project would share it."""
+    path = os.path.join(project_path, "config.local.yaml")
+    if not os.path.exists(path):
+        return
+    with open(path, "r", encoding="utf-8") as config_file:
+        admins = configured_superadmins(config_file.read())
+    placeholders = [email for email in admins if is_placeholder_address(email)]
+    if placeholders:
+        edits = "\n".join(
+            f'  - email: "{email}"  ->  - email: "<the administrator\'s address>"\n'
+            f'    owner_email: "{email}"  ->  owner_email: "<the administrator\'s address>"'
+            for email in placeholders
+        )
+        raise click.ClickException(
+            f"config.local.yaml makes {', '.join(placeholders)} a platform "
+            "administrator: that address receives no mail, so nobody would get its "
+            "sign-in codes. In config.local.yaml, under the Nexus module's "
+            "`nexus_config:`, replace it everywhere (`users:` and each "
+            "`owner_email:`):\n"
+            + edits
+            + "\nthen run the command again. `abi dev` keeps accepting it."
+        )
+
+
+def upgrade_data_service_config(text: str) -> str:
+    """``text`` (a config) with the stack's Redis password, Qdrant API key and
+    NATS monitoring address, where it has the lines older projects shipped."""
+    text = _OLD_REDIS_URL.sub(
+        r'\1"redis://:{{ secret.REDIS_PASSWORD }}@redis:6379"', text
+    )
+    text = _QDRANT_WITHOUT_KEY.sub(
+        lambda m: (
+            m.group(0) + m.group("indent") + 'api_key: "{{ secret.QDRANT_API_KEY }}"\n'
+        ),
+        text,
+    )
+    return _OLD_MONITORING_URL.sub(r'\1"http://nats-monitor:8222"', text)
+
+
+def outdated_stack(compose_text: str) -> list[str]:
+    """What a project's docker-compose.yml lacks that this CLI's config and
+    .env rely on: one line per missing piece, empty when it is current."""
+    missing = []
+    if "\n  redis:\n" in compose_text and "REDIS_PASSWORD" not in compose_text:
+        missing.append("Redis runs without REDIS_PASSWORD")
+    if (
+        "\n  qdrant:\n" in compose_text
+        and "QDRANT__SERVICE__API_KEY" not in compose_text
+    ):
+        missing.append("Qdrant runs without QDRANT_API_KEY")
+    if "\n  fuseki:\n" in compose_text and "ENGINE_PASSWORD" not in compose_text:
+        missing.append("Fuseki has no engine user")
+    if "\n  nats:\n" in compose_text and "nats-monitor" not in compose_text:
+        missing.append("the broker has no nats-monitor network")
+    if "\n  coder:\n" in compose_text and "coder-owner" not in compose_text:
+        missing.append("coding workspaces and CI jobs have no networks of their own")
+    if "\n  headscale:\n" in compose_text and "acl.hujson" not in compose_text:
+        missing.append("headscale has no ACL policy mounted")
+    return missing
+
+
+def refuse_outdated_stack(project_path: str) -> None:
+    """Stop before anything is written when the project's docker-compose.yml
+    predates what the configs and .env this command writes rely on: the
+    stack would start against them and fail."""
+    compose = os.path.join(project_path, "docker-compose.yml")
+    if not os.path.exists(compose):
+        return
+    with open(compose, "r", encoding="utf-8") as compose_file:
+        missing = outdated_stack(compose_file.read())
+    if missing:
+        raise click.ClickException(
+            "docker-compose.yml was written by an older `abi deploy local`: "
+            + "; ".join(missing)
+            + ". Run `abi deploy local --regenerate`: it rewrites the stack and "
+            "its config lines, keeps the values of .env, and backs up the "
+            "previous files in .abi-backups/deploy-local/ (reapply your own "
+            "edits from there). Nothing was changed."
+        )
+
+
+def upgrade_project_config(project_path: str) -> None:
+    """Point an older project's config.local.yaml at the stack's credentials."""
+    path = os.path.join(project_path, "config.local.yaml")
+    if not os.path.exists(path):
+        return
+    with open(path, "r", encoding="utf-8") as config_file:
+        text = config_file.read()
+    upgraded = upgrade_data_service_config(text)
+    if upgraded == text:
+        return
+    with open(path, "w", encoding="utf-8") as config_file:
+        config_file.write(upgraded)
+    print(
+        "Updated config.local.yaml: the engine now reaches Redis with "
+        "REDIS_PASSWORD, Qdrant with QDRANT_API_KEY and the broker's monitoring "
+        "port at nats-monitor:8222.\n"
+    )
+
+
 def setup_local_deploy(
     project_path: str,
     include_headscale: bool = False,
@@ -570,8 +726,12 @@ def setup_local_deploy(
     regenerate: bool = False,
     backup: bool = True,
     nats: bool | None = None,
+    admin_email: str | None = None,
 ) -> None:
     """Render the docker-compose stack into ``project_path``.
+
+    ``admin_email`` is the platform administrator (`abi new project` asks
+    for it); by default, the superadmin of the project's config.local.yaml.
 
     ``nats`` picks the stack: True runs the engine on the `nats` service (no
     RabbitMQ, no Dagster), False keeps the classic stack. None (``abi deploy
@@ -580,6 +740,12 @@ def setup_local_deploy(
     """
     project_path = os.path.abspath(os.path.expanduser(project_path))
     _require_writable_env(os.path.join(project_path, ".env"))
+    if not regenerate:
+        refuse_outdated_stack(project_path)
+    # .env holds the stack's secrets: its owner's only, before anything is
+    # written to it.
+    os.makedirs(project_path, exist_ok=True)
+    private_file(os.path.join(project_path, ".env"))
     # An engine before the sidecar wrote its own keys (iam/..., idp/...) into
     # .env, and docker compose refuses the file since: move them out first.
     from naas_abi_core.services.secret.adaptors.secondary.dotenv_secret_secondaryadaptor import (
@@ -625,6 +791,7 @@ def setup_local_deploy(
     )
 
     coding_network = _compose_project_network(project_path)
+    ci_network = _compose_project_network(project_path, "ci")
 
     template_values = {
         **DEFAULT_ENV_VALUES,
@@ -637,10 +804,15 @@ def setup_local_deploy(
         # identity provider's service account is module/<project>/idp).
         "DISCOVERY_PROJECT": _discovery_project(project_path),
         "CODING_WORKSPACE_DOCKER_NETWORK": coding_network,
+        "CODING_CI_DOCKER_NETWORK": ci_network,
+        "NEXUS_USER_ADMIN_EMAIL": admin_email or _configured_admin(project_path),
         "POSTGRES_PASSWORD": str(uuid4()),
         "MINIO_ROOT_PASSWORD": str(uuid4()),
         "RABBITMQ_PASSWORD": str(uuid4()),
         "FUSEKI_ADMIN_PASSWORD": str(uuid4()),
+        "FUSEKI_ENGINE_PASSWORD": generate_data_service_secret(),
+        "REDIS_PASSWORD": generate_data_service_secret(),
+        "QDRANT_API_KEY": generate_data_service_secret(),
         "ABI_API_KEY": str(uuid4()),
     }
 
@@ -716,6 +888,9 @@ def setup_local_deploy(
     for key in RANDOM_ENV_KEYS:
         _ensure_env_var(local_env_target_path, key, str(uuid4()))
 
+    # Fuseki, Redis and Qdrant refuse to start without their credentials.
+    ensure_data_service_secrets(Path(local_env_target_path))
+    upgrade_project_config(project_path)
     # The NATS broker's users (nats.conf), also when the nats profile is off,
     # and the account seed its auth callout signs admitted modules with.
     ensure_nats_passwords(Path(local_env_target_path))
@@ -751,7 +926,7 @@ def setup_local_deploy(
         # between Forgejo and the act-runner. Only the passwords/secret are truly
         # secret — emails/usernames/org are conventional defaults.
         coding_env = {
-            "CODER_ACCESS_URL": "http://host.docker.internal:7080",
+            "CODER_ACCESS_URL": CODER_ACCESS_URL,
             "CODING_WORKSPACE_DOCKER_NETWORK": coding_network,
             "CODING_FORGEJO_ORG": "abi",
             "CODER_ADMIN_EMAIL": "admin@example.com",
@@ -767,5 +942,21 @@ def setup_local_deploy(
             "CODER_ADMIN_TOKEN": "",
             "FORGEJO_ADMIN_TOKEN": "",
         }
+        # Older projects reached coderd through the host's published port,
+        # which is now bound to this machine only.
+        # Workspaces used to join the stack's own network, with its data
+        # services: move them to the `coding` network.
+        if _get_env_var(
+            local_env_target_path, "CODING_WORKSPACE_DOCKER_NETWORK"
+        ) == _compose_project_network(project_path, "abi-network"):
+            _replace_env_var(
+                local_env_target_path, "CODING_WORKSPACE_DOCKER_NETWORK", coding_network
+            )
+        if _get_env_var(local_env_target_path, "CODER_ACCESS_URL") == (
+            _OLD_CODER_ACCESS_URL
+        ):
+            _replace_env_var(
+                local_env_target_path, "CODER_ACCESS_URL", CODER_ACCESS_URL
+            )
         for key, value in coding_env.items():
             _ensure_env_var(local_env_target_path, key, value)

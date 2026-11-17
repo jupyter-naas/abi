@@ -432,7 +432,8 @@ def test_a_wrong_code_is_refused_and_counted(client, mailer, alice, service):
         data={"csrf": csrf, "email": "alice@example.com", "code": "000000"},
     )
     assert response.status_code == 400 and "not valid" in response.text
-    for _ in range(service.configuration.max_attempts):
+    # The client's own daily budget for the address ends in a refusal.
+    for _ in range(service.configuration.max_failures):
         last = client.post(
             f"{ROOT}/login/code",
             data={"csrf": csrf, "email": "alice@example.com", "code": "000001"},

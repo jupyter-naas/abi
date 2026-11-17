@@ -54,6 +54,9 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
     Provisioned,
     ProvisioningRefused,
 )
+from naas_abi.apps.nexus.apps.api.app.services.organizations.domain_proof import (
+    is_public_mail_domain,
+)
 from naas_abi_core import logger
 
 Clock = Callable[[], datetime]
@@ -97,8 +100,13 @@ class InvitationService:
             if found is None:
                 raise NoProviderError(f"{requested!r} is not an identity provider")
             return found
-        domain = email.rsplit("@", 1)[-1]
-        routed = await self.persistence.provider_for_domain(domain, organization_id)
+        domain = email.rsplit("@", 1)[-1].strip().lower()
+        # A public mail domain is no organization's, whatever an older claim says.
+        routed = (
+            None
+            if is_public_mail_domain(domain)
+            else await self.persistence.provider_for_domain(domain, organization_id)
+        )
         for name in (routed, known.default):
             found = known.get(name) if name else None
             if found is not None:
@@ -300,15 +308,14 @@ class InvitationService:
         organization_id: str | None,
         invited_by: str | None,
     ) -> tuple[Provisioned | None, bool]:
-        """``(what the provider made, whether provisioning was withheld)``."""
+        """``(what the provider made, whether provisioning was withheld)``.
+
+        Always on behalf of the inviter, whose own right to make an account at the
+        provider IAM decides, whatever domain the address is of: only the system's
+        own call (no inviter) provisions as Nexus."""
         if choice.managed_in_provider:
             return None, False
-        routed = await self.persistence.provider_for_domain(
-            email.rsplit("@", 1)[-1], organization_id
-        )
-        if routed == choice.name or invited_by is None:
-            # An address the organization proved it controls (or the system's own
-            # call): Nexus's own, for nobody.
+        if invited_by is None:
             return await self.directory.provision(choice, email, name), False
         try:
             return await self.directory.provision(choice, email, name, by=invited_by), False

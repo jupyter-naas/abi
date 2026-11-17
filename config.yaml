@@ -104,26 +104,26 @@ modules:
             cta_url: "https://naas.ai/enterprise"
             enterprise_categories: ["domain"]
         users:
-          - email: "admin@example.com"
+          - email: "{{ secret.NEXUS_USER_ADMIN_EMAIL }}"
             name: "Dev Admin"
             is_superadmin: true
         organizations:
           - name: "Dev"
             slug: "dev"
-            owner_email: "admin@example.com"
+            owner_email: "{{ secret.NEXUS_USER_ADMIN_EMAIL }}"
             workspaces:
               - name: "Default"
                 slug: "default"
-                owner_email: "admin@example.com"
+                owner_email: "{{ secret.NEXUS_USER_ADMIN_EMAIL }}"
               - name: "Alpha"
                 slug: "alpha"
-                owner_email: "admin@example.com"
+                owner_email: "{{ secret.NEXUS_USER_ADMIN_EMAIL }}"
               - name: "Beta"
                 slug: "beta"
-                owner_email: "admin@example.com"
+                owner_email: "{{ secret.NEXUS_USER_ADMIN_EMAIL }}"
               - name: "Gamma"
                 slug: "gamma"
-                owner_email: "admin@example.com"
+                owner_email: "{{ secret.NEXUS_USER_ADMIN_EMAIL }}"
   
   - module: naas_abi_marketplace.ai.chatgpt
     enabled: true
@@ -144,8 +144,14 @@ modules:
   #     tfl_app_key: "{{ secret.TFL_APP_KEY }}"
   #     openwebcamdb_api_key: "{{ secret.OPENWEBCAMDB_API_KEY }}"
 
+  # The Git agents act on this process's own checkout with its credentials:
+  # set single_user_development on a developer's machine only (`make commit`,
+  # `make pr` and `make pull-request-description` set it through
+  # ABI_GIT_SINGLE_USER_DEVELOPMENT=1).
   - module: naas_abi_marketplace.applications.git
     enabled: true
+    # config:
+    #   single_user_development: true
   
   # GitHub and SEC EDGAR run as remote modules (applications.github,
   # applications.sec_gov): see libs/naas-abi-marketplace-modules/README.md.
@@ -265,14 +271,20 @@ services:
       adapter: "local_git"
       config:
         repos_root: "storage/git"
-  coding_environment:
-    coding_environment_adapter:
-      adapter: "local_directory"
-      config:
-        workspaces_root: "storage/workspaces"
-        harness: "opencode"
-        opencode_bin: "opencode"
-        harness_port_start: 18200
-        harness_port_end: 18300
-        opencode_model: "openai/gpt-5.4"
-        opencode_startup_timeout: 30
+  # Coding environments default to the in-memory adapter. The local_directory
+  # adapter runs workspaces on this host as the engine's own OS user, so it is
+  # for single-user development only, turned on explicitly:
+  #
+  # coding_environment:
+  #   coding_environment_adapter:
+  #     adapter: "local_directory"
+  #     config:
+  #       single_user_development: true
+  #       workspaces_root: "storage/workspaces"
+  #       repos_root: "storage/git"
+  #       harness: "opencode"
+  #       opencode_bin: "opencode"
+  #       harness_port_start: 18200
+  #       harness_port_end: 18300
+  #       opencode_model: "openai/gpt-5.4"
+  #       opencode_startup_timeout: 30

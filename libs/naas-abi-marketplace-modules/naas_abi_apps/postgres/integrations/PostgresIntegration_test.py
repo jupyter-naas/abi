@@ -45,6 +45,7 @@ class FakeConnection:
         self.prepared: list[bool | None] = []
         self.read_only = False
         self.committed = False
+        self.rolled_back = False
         self.closed = False
 
     async def __aenter__(self) -> Self:
@@ -61,6 +62,9 @@ class FakeConnection:
 
     async def commit(self) -> None:
         self.committed = True
+
+    async def rollback(self) -> None:
+        self.rolled_back = True
 
 
 def integration_with(

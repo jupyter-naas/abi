@@ -46,6 +46,8 @@ from naas_abi.apps.nexus.apps.api.app.services.coding_environment.adapters.prima
     authorize_environment,
     authorize_repo,
     get_iam,
+    require_path,
+    require_ref,
     source_control_error,
 )
 from naas_abi.apps.nexus.apps.api.app.services.coding_environment.repo_access import (
@@ -65,6 +67,7 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
     AccessDeniedError,
     AgentNeverConnectedError,
     CodingEnvironmentError,
+    InvalidRequestError,
     ProvisionFailedError,
     ProvisionTimeoutError,
     QuotaExceededError,
@@ -102,6 +105,7 @@ _HTTP_STATUS_BY_ERROR: dict[type[CodingEnvironmentError], int] = {
     WorkspaceNameConflictError: 409,
     QuotaExceededError: 429,
     AccessDeniedError: 403,
+    InvalidRequestError: 422,
     ProvisionFailedError: 502,
     ProvisionTimeoutError: 504,
     AgentNeverConnectedError: 504,
@@ -289,6 +293,34 @@ def _prepare_clone(
         f"@{settings.coding_git_clone_host}/{repo_id}.git"
     )
     return repo_url, checkout
+
+
+# The template parameters a client may set, each with the values it takes.
+# Every other parameter (the repository, the network, the tokens, the API base)
+# is the server's: a request that names one is refused.
+CLIENT_TEMPLATE_PARAMS: dict[str, re.Pattern[str]] = {
+    # The port the Preview app proxies to.
+    "dev_port": re.compile(r"[1-9][0-9]{0,4}"),
+}
+
+
+def client_template_params(raw: dict[str, str] | None) -> dict[str, str]:
+    """The client's template parameters, checked against
+    ``CLIENT_TEMPLATE_PARAMS``; 422 for any other name or a value out of range."""
+    params: dict[str, str] = {}
+    for key, value in (raw or {}).items():
+        pattern = CLIENT_TEMPLATE_PARAMS.get(key)
+        if pattern is None:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Template parameter {key!r} is set by the server",
+            )
+        if not pattern.fullmatch(value) or (key == "dev_port" and int(value) > 65535):
+            raise HTTPException(
+                status_code=422, detail=f"Invalid value for template parameter {key!r}"
+            )
+        params[key] = value
+    return params
 
 
 class EnvironmentProvisionRequest(BaseModel):
@@ -580,6 +612,8 @@ async def repo_contents(
     iam: IIAMService | None = Depends(get_iam),
 ) -> list[ContentEntryResponse]:
     """Directory listing at ``path`` on ``ref`` — powers the repo file browser."""
+    require_path(path, root_ok=True)
+    require_ref(ref)
     repo = _default_repo_id(repo_id)
     if not repo or source_control is None:
         return []
@@ -607,6 +641,8 @@ async def repo_file(
     source_control: SourceControlService | None = Depends(_get_source_control_service),
     iam: IIAMService | None = Depends(get_iam),
 ) -> FileContentResponse:
+    require_path(path)
+    require_ref(ref)
     repo = _default_repo_id(repo_id)
     if not repo or source_control is None:
         raise HTTPException(status_code=503, detail="No git backend configured.")
@@ -632,6 +668,7 @@ async def repo_commits(
     source_control: SourceControlService | None = Depends(_get_source_control_service),
     iam: IIAMService | None = Depends(get_iam),
 ) -> list[CommitResponse]:
+    require_ref(ref)
     repo = _default_repo_id(repo_id)
     if not repo or source_control is None:
         return []
@@ -754,6 +791,8 @@ async def create_repo_branch(
     iam: IIAMService | None = Depends(get_iam),
 ) -> BranchResponse:
     await authz.require("WriteCode", user=current_user, workspace=body.workspace_id)
+    require_ref(body.name, "branch")
+    require_ref(body.source_branch, "source branch")
     repo = _default_repo_id(body.repo_id)
     if not repo or source_control is None:
         raise HTTPException(status_code=503, detail="No git backend configured.")
@@ -784,6 +823,7 @@ async def delete_repo_branch(
     iam: IIAMService | None = Depends(get_iam),
 ) -> dict[str, bool]:
     """Delete a branch. ``name`` may contain slashes (url-encoded)."""
+    require_ref(name, "branch")
     repo = _default_repo_id(repo_id)
     if not repo or source_control is None:
         raise HTTPException(status_code=503, detail="No git backend configured.")
@@ -863,7 +903,9 @@ async def provision_environment(
     iam: IIAMService | None = Depends(get_iam),
 ) -> EnvironmentResponse:
     await authz.require("WriteCode", user=current_user, workspace=body.workspace_id)
-    params = dict(body.params or {})
+    require_ref(body.source_branch, "source branch")
+    require_ref(body.branch, "branch")
+    params = client_template_params(body.params)
     checkout_branch = body.branch or body.source_branch
     repo_id = _default_repo_id(body.repo_id)
     if repo_id and source_control is not None:

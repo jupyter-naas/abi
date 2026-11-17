@@ -294,7 +294,9 @@ chat-bodo-agent: deps
 # whether this project's broker is down or another project's holds its port
 # (nats: 'Authorization Violation').
 NO_NATS_OVERLAY := .abi/no-nats.overlay.yaml
-git_agent_env = ABI_CONFIG_OVERLAY=$(CURDIR)/$(NO_NATS_OVERLAY) LOG_LEVEL=$(log_level)
+# The Git agents act on this checkout: the git module's single_user_development,
+# set for these targets only.
+git_agent_env = ABI_CONFIG_OVERLAY=$(CURDIR)/$(NO_NATS_OVERLAY) ABI_GIT_SINGLE_USER_DEVELOPMENT=1 LOG_LEVEL=$(log_level)
 
 $(NO_NATS_OVERLAY):
 	@ mkdir -p $(@D) && printf 'nats: null\n' > $@
@@ -345,7 +347,7 @@ api-local: deps
 
 # MCP (Model Context Protocol) server for Claude Desktop integration
 mcp: deps
-	@echo "🚀 Starting MCP Server (STDIO mode for Claude Desktop)..."
+	@echo "🚀 Starting MCP Server (STDIO mode; set NEXUS_ACCESS_TOKEN to your personal API key)..."
 	uv run mcp-server
 
 # MCP server in HTTP mode for web-based integration
@@ -355,8 +357,8 @@ mcp-http: deps
 
 # Run MCP server validation tests
 mcp-test: deps
-	@echo "🔍 Running MCP Server validation tests..."
-	uv run python libs/naas-abi-core/naas_abi_core/apps/mcp/mcp_server_test.py
+	@echo "🔍 Running MCP Server tests..."
+	uv run pytest libs/naas-abi-core/naas_abi_core/apps/mcp/mcp_server_test.py
 
 # Interactive SPARQL terminal for querying the knowledge graph
 sparql-terminal: deps
@@ -475,6 +477,11 @@ check: deps check-core check-marketplace check-nexus
 # per-file budget (PACKAGE_SIZE_BUDGET_MIB, 10 MiB by default)
 check-package-size:
 	@ scripts/check_package_size.sh
+
+# Fail when uv.lock or the Nexus API's lock holds a package with an advisory
+# that .github/advisories-allowlist.txt does not record
+check-advisories:
+	@ scripts/check_advisories.sh
 
 # Build Nexus web app to catch frontend build errors before commit
 check-nexus: deps
@@ -680,7 +687,6 @@ local-up: check-docker
 	@echo "🌟 Local environment ready!"
 	@echo "✓ Services available at:"
 	@echo "  - Fuseki (Knowledge Graph): http://localhost:3030"
-	@echo "  - YasGUI (SPARQL Editor): http://localhost:3000"
 	@echo "  - PostgreSQL (Agent Memory): localhost:5432"
 	@echo "  - NATS (monitoring): http://localhost:8222"
 	@echo "  - Docker Models (Airgapped AI): ai/gemma3 ready via 'docker model run'"

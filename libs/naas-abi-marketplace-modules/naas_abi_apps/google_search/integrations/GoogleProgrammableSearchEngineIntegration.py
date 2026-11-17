@@ -4,8 +4,8 @@
 Port of ``naas_abi_marketplace.applications.google_search.integrations``:
 same tool names. ``query`` now returns every page it fetched (the in-engine
 loop kept only the last page); a page that fails after the first ends the
-search with the results so far, as the in-engine loop stopped. Results are
-archived to object storage.
+search with the results so far, as the in-engine loop stopped. Search results
+are archived to object storage; extracted page text is returned only.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from naas_abi_apps.common.http import HttpConfiguration, request
+from naas_abi_apps.common.public_fetch import FetchError, fetch_public
 from naas_abi_apps.common.storage import ObjectStorage, archive_json
 from naas_abi_sdk.integration import Integration, IntegrationConnectionError
 
@@ -29,6 +30,8 @@ BROWSER_AGENT = (
 )
 PAGE_SIZE = 10  # the API's maximum per request
 MAX_RESULTS = 100  # the API serves no result past the 100th
+MAX_PAGE_BYTES = 5 * 1024 * 1024
+FETCH_TIMEOUT_SECONDS = 30.0
 
 
 def clean(value: str) -> str:
@@ -109,23 +112,32 @@ class GoogleProgrammableSearchEngineIntegration(Integration):
         return items
 
     async def extract_content(self, url: str) -> str:
-        """Text content of a web page."""
-        response = await request(
-            self.configuration,
-            "GET",
-            url,
-            service=SERVICE,
-            headers={"User-Agent": BROWSER_AGENT},
-        )
-        text = await asyncio.to_thread(page_text, response.text)
-        if self.configuration.storage is not None:
-            name = clean(url)
-            await self.configuration.storage.put_object(
-                f"{self.configuration.datastore_path}/extracted_content/{name}",
-                f"{name}.txt",
-                text.encode("utf-8"),
+        """Text content of a public web page.
+
+        The page is fetched with ``fetch_public`` (public addresses only, every
+        redirect checked, 5 MB and 30 s caps), and its text is returned to the
+        caller only: it is not stored.
+
+        Raises ``IntegrationConnectionError`` when the URL does not lead to a
+        public address, or the page cannot be fetched or answers an error.
+        """
+        try:
+            page = await fetch_public(
+                url,
+                headers={"User-Agent": BROWSER_AGENT},
+                max_bytes=MAX_PAGE_BYTES,
+                timeout=FETCH_TIMEOUT_SECONDS,
+                transport=self.configuration.transport,
             )
-        return text
+        except FetchError as exc:
+            raise IntegrationConnectionError(
+                f"{SERVICE}: page not fetched: {exc}"
+            ) from None
+        if page.status_code >= 400:
+            raise IntegrationConnectionError(
+                f"{SERVICE}: page not fetched: HTTP {page.status_code}"
+            )
+        return await asyncio.to_thread(page_text, page.text)
 
 
 def as_tools(
@@ -161,7 +173,7 @@ def as_tools(
         ),
         StructuredTool(
             name="googlesearch_extract_content_from_url",
-            description="Extract text content from a web page URL using BeautifulSoup",
+            description="Extract text content from a public web page URL using BeautifulSoup",
             coroutine=extract,
             args_schema=ExtractContentSchema,
         ),

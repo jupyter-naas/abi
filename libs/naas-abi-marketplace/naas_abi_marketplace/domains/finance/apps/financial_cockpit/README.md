@@ -15,12 +15,13 @@ datastore (an ABI workflow, an export, a script) is up to you. The bundled
 ```bash
 cd web
 npm install
-npm run kickstart     # creates config/config.yaml + .env (random SESSION_SECRET)
+npm run kickstart     # creates config/config.yaml + .env (random SESSION_SECRET and ROOT_PASSWORD)
 npm run dev           # http://localhost:3000
 ```
 
-Sign in with the root password — `demo` by default, printed by `kickstart` and
-stored as `ROOT_PASSWORD` in `web/.env`.
+Sign in with the root password: a random one, printed by `kickstart` and
+stored as `ROOT_PASSWORD` in `web/.env`. The template ships no password of its
+own, and a production build refuses the template's old values.
 
 From the app root, `make dev` does the install + dev-server step for you.
 
@@ -192,7 +193,10 @@ The template uses a **shared root password**, not e-mail or magic links:
 entering `ROOT_PASSWORD` on `/login` grants a full-access `owner` session
 carried in a JWT cookie signed with `SESSION_SECRET` (both in `web/.env`;
 the app returns 500 if `SESSION_SECRET` is unset, and sign-in is disabled
-entirely if `ROOT_PASSWORD` is unset).
+entirely if `ROOT_PASSWORD` is unset). `.env.example` ships both empty and
+`npm run kickstart` generates them. In production (`NODE_ENV=production`) a
+template value counts as unset, and so does a `SESSION_SECRET` shorter than 32
+characters (`web/lib/auth/templateSecrets.ts`).
 
 The `owner` is the protected top role — defined in `config.yaml`, never
 editable from the app. Everyone else is managed at `/admin/users` and stored in

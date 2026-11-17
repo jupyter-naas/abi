@@ -83,7 +83,7 @@ def workspace_pages(app) -> list[tuple[str, str]]:
             path = re.sub(r"\{" + name + r":[a-z]+\}", DUMMY, path)
         query = {"workspace_id": ALPHA}
         for param in route.dependant.query_params:
-            if param.required and param.name != "workspace_id":
+            if param.field_info.is_required() and param.name != "workspace_id":
                 query[param.name] = DUMMY
         found.append((path, "&".join(f"{k}={v}" for k, v in query.items())))
     return sorted(set(found))

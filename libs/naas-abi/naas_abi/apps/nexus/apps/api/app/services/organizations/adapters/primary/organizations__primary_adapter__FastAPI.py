@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import secrets
 from datetime import datetime
 from pathlib import Path
 
@@ -12,6 +11,9 @@ from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
 from naas_abi.apps.nexus.apps.api.app.core.feature_flags import offered_features
 from naas_abi.apps.nexus.apps.api.app.services.auth import avatar_store, user_drive_profile
+from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
+    is_platform_admin,
+)
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__FastAPI import (  # noqa: E501
     ALLOWED_AVATAR_EXTENSIONS,
     MAX_AVATAR_SIZE,
@@ -34,10 +36,12 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.views import (
     invite_result,
     provider_failure,
 )
+from naas_abi.apps.nexus.apps.api.app.services.organizations import domain_proof
 from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
     OrganizationSecondaryAdapterPostgres,
 )
 from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
+    OrganizationDomainRecord,
     OrganizationMemberRecord,
     OrganizationRecord,
     OrganizationUpdateInput,
@@ -46,6 +50,7 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
 from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
     LastOwnerError,
     OrganizationDomainAlreadyExistsError,
+    OrganizationDomainNotAllowedError,
     OrganizationHasWorkspacesError,
     OrganizationMemberAlreadyExistsError,
     OrganizationService,
@@ -53,6 +58,7 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
     new_org_id,
 )
 from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
+    check_invitation_mail_quota,
     check_rate_limit,
     get_rate_limit_identifier,
 )
@@ -186,8 +192,10 @@ class OrganizationCreate(BaseModel):
 
 
 class OrganizationUpdate(BaseModel):
-    name: str | None = None
-    slug: str | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    slug: str | None = Field(
+        default=None, min_length=1, max_length=100, pattern=r"^[a-z0-9][a-z0-9\-]*[a-z0-9]$"
+    )
     logo_url: str | None = None
     logo_rectangle_url: str | None = None
     logo_emoji: str | None = None
@@ -326,7 +334,10 @@ class OrganizationDomain(BaseModel):
     organization_id: str
     domain: str
     is_verified: bool
+    # Until verified: publish ``verification_token`` as a TXT record at
+    # ``verification_record`` (``_nexus-verify.<domain>``), then verify.
     verification_token: str | None = None
+    verification_record: str | None = None
     created_at: datetime | None = None
     verified_at: datetime | None = None
     # The identity provider logins of this domain go to; None: the default one.
@@ -509,14 +520,17 @@ async def update_organization(
     current_user: User = Depends(get_current_user_required),
     service: OrganizationService = Depends(get_organization_service),
 ) -> Organization:
-    row = await service.update_organization(
-        org_id=org_id,
-        updates=OrganizationUpdateInput(
-            **updates.model_dump(exclude_unset=True),
-            updated_at=datetime.now(UTC).replace(tzinfo=None),
-            set_fields=set(updates.model_dump(exclude_unset=True).keys()) | {"updated_at"},
-        ),
-    )
+    try:
+        row = await service.update_organization(
+            org_id=org_id,
+            updates=OrganizationUpdateInput(
+                **updates.model_dump(exclude_unset=True),
+                updated_at=datetime.now(UTC).replace(tzinfo=None),
+                set_fields=set(updates.model_dump(exclude_unset=True).keys()) | {"updated_at"},
+            ),
+        )
+    except OrganizationSlugAlreadyExistsError as exc:
+        raise HTTPException(status_code=400, detail="Slug already exists") from exc
     if row is None:
         raise HTTPException(status_code=404, detail="Organization not found")
     return _to_schema(row)
@@ -1042,6 +1056,7 @@ async def invite_org_member(
     # directly.
     existing_user = await invites.persistence.user_id_by_email(email)
     if existing_user is None:
+        await check_invitation_mail_quota(org_id, invite.workspace_id)
         org = await service.get_organization(org_id)
         workspace = (
             await workspace_service.get_workspace(invite.workspace_id)
@@ -1392,19 +1407,7 @@ async def list_org_domains(
     service: OrganizationService = Depends(get_organization_service),
 ) -> list[OrganizationDomain]:
     rows = await service.list_domains(org_id=org_id)
-    return [
-        OrganizationDomain(
-            id=row.id,
-            organization_id=row.organization_id,
-            domain=row.domain,
-            is_verified=row.is_verified,
-            verification_token=row.verification_token if not row.is_verified else None,
-            created_at=row.created_at,
-            verified_at=row.verified_at,
-            provider=row.provider,
-        )
-        for row in rows
-    ]
+    return [_domain_view(row) for row in rows]
 
 
 @router.post(
@@ -1425,17 +1428,19 @@ async def add_org_domain(
     service: OrganizationService = Depends(get_organization_service),
 ) -> OrganizationDomain:
 
+    now = datetime.now(UTC).replace(tzinfo=None)
     try:
-        row = await service.add_domain(
-            org_id=org_id,
-            domain=domain_data.domain,
-            now=datetime.now(UTC).replace(tzinfo=None),
-            verification_token=secrets.token_urlsafe(32),
-        )
+        row = await service.add_domain(org_id=org_id, domain=domain_data.domain, now=now)
+    except OrganizationDomainNotAllowedError as exc:
+        raise HTTPException(
+            status_code=400, detail="A public mail domain belongs to no organization"
+        ) from exc
     except OrganizationDomainAlreadyExistsError as exc:
         raise HTTPException(status_code=400, detail="Domain already registered") from exc
-
-    return OrganizationDomain(**row.__dict__)
+    # Its record already published: verified at once.
+    if not row.is_verified and await domain_proof.proven(row.domain, row.verification_token):
+        row = await service.verify_domain(org_id=org_id, domain_id=row.id, verified_at=now) or row
+    return _domain_view(row)
 
 
 @router.post(
@@ -1461,6 +1466,18 @@ async def verify_org_domain(
         raise HTTPException(status_code=404, detail="Domain not found")
     if domain.is_verified:
         raise HTTPException(status_code=400, detail="Domain already verified")
+    # The organization proves it controls the domain (its TXT record); a platform
+    # administrator may vouch for it instead.
+    if not await domain_proof.proven(
+        domain.domain, domain.verification_token
+    ) and not await is_platform_admin(current_user.id):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Publish a TXT record {domain_proof.proof_name(domain.domain)} with the "
+                "value of verification_token, then verify again"
+            ),
+        )
 
     verified = await service.verify_domain(
         org_id=org_id,
@@ -1479,6 +1496,17 @@ async def verify_org_domain(
         created_at=verified.created_at,
         verified_at=verified.verified_at,
         provider=verified.provider,
+    )
+
+
+def _domain_view(row: OrganizationDomainRecord) -> OrganizationDomain:
+    pending = not row.is_verified
+    return OrganizationDomain(
+        **{
+            **row.__dict__,
+            "verification_token": row.verification_token if pending else None,
+            "verification_record": domain_proof.proof_name(row.domain) if pending else None,
+        }
     )
 
 
@@ -1513,12 +1541,7 @@ async def set_org_domain_provider(
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Domain not found")
-    return OrganizationDomain(
-        **{
-            **row.__dict__,
-            "verification_token": row.verification_token if not row.is_verified else None,
-        }
-    )
+    return _domain_view(row)
 
 
 @router.delete(

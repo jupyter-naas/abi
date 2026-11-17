@@ -133,17 +133,17 @@ intentMapping:presentationNameArg a intentMapping:QueryArgument ;
 intentMapping:presentationUriArg a intentMapping:QueryArgument ;
     intentMapping:argumentName "presentation_uri" ;
     intentMapping:argumentDescription "URI of the presentation" ;
-    intentMapping:validationPattern "^http://ontology\\.naas\\.ai/.+/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ;
+    intentMapping:validationPattern "^http://ontology\\.naas\\.ai/[^\\s<>\"{}|^`\\\\]+/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ;
     intentMapping:validationFormat "presentation_uri" .
 
 intentMapping:slideUriArg a intentMapping:QueryArgument ;
     intentMapping:argumentName "slide_uri" ;
     intentMapping:argumentDescription "URI of the slide" ;
-    intentMapping:validationPattern "^http://ontology\\.naas\\.ai/.+/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ;
+    intentMapping:validationPattern "^http://ontology\\.naas\\.ai/[^\\s<>\"{}|^`\\\\]+/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ;
     intentMapping:validationFormat "slide_uri" .
 
 intentMapping:shapeUriArg a intentMapping:QueryArgument ;
     intentMapping:argumentName "shape_uri" ;
     intentMapping:argumentDescription "URI of the shape" ;
-    intentMapping:validationPattern "^http://ontology\\.naas\\.ai/.+/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ;
+    intentMapping:validationPattern "^http://ontology\\.naas\\.ai/[^\\s<>\"{}|^`\\\\]+/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ;
     intentMapping:validationFormat "shape_uri" .

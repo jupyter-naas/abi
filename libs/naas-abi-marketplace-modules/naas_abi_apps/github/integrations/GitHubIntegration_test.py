@@ -19,6 +19,7 @@ from naas_abi_apps.github.integrations.GitHubIntegration import (
     GitHubIntegration,
     GitHubIntegrationConfiguration,
     as_tools,
+    organization_repository,
 )
 from naas_abi_sdk.integration import IntegrationConnectionError
 
@@ -117,7 +118,7 @@ def test_tools_call_the_async_methods() -> None:
         t.name: t for t in as_tools(rest(handler)._GitHubIntegration__configuration)
     }
 
-    assert len(tools) == 27
+    assert len(tools) == 24
     arguments = {
         "repo_name": "o/r",
         "filter": "all",
@@ -198,21 +199,9 @@ def test_update_organization_repository_sends_the_fields_to_the_repo() -> None:
         )
 
 
-def test_delete_organization_repository_deletes_that_repo_only() -> None:
-    seen: list[tuple[str, str, str]] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen.append((request.method, request.url.path, request.headers["Accept"]))
-        return httpx.Response(204)
-
-    integration = rest(handler)
-    delete = {
-        t.name: t for t in as_tools(integration._GitHubIntegration__configuration)
-    }["github_delete_organization_repository"]
-
-    asyncio.run(delete.ainvoke({"org": "acme", "repo_name": "site"}))
-    assert seen == [("DELETE", "/repos/acme/site", "application/vnd.github+json")]
+def test_organization_repository_keeps_to_that_organization() -> None:
+    assert organization_repository("acme", "site") == "acme/site"
+    assert organization_repository("acme", "ACME/site") == "ACME/site"
     for repo_name in ("other/site", "../site", "acme/site/x", ".."):
         with pytest.raises(ValueError):
-            asyncio.run(delete.ainvoke({"org": "acme", "repo_name": repo_name}))
-    assert len(seen) == 1
+            organization_repository("acme", repo_name)

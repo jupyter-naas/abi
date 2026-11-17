@@ -5,7 +5,15 @@ import {
   fetchSearch,
   fetchSearchNetwork,
 } from "../../../lib/api.js";
-import { avatarHtml, escapeHtml, flagHtml, highlight, ICONS, orgLogoHtml } from "../../../lib/dom.js";
+import {
+  avatarHtml,
+  escapeHtml,
+  flagHtml,
+  highlight,
+  ICONS,
+  orgLogoHtml,
+  safeHref,
+} from "../../../lib/dom.js";
 import { profileHref, searchHref } from "../../../lib/routes.js";
 import { apiUrl } from "../../../lib/config.js";
 import { mountGraphView } from "../../../lib/graph-view.js";
@@ -18,6 +26,7 @@ function resultHtml(config, hit, tokens, query, facet = "", display = "", { conn
   const count = connectionsLabel(hit.connections_count);
   // On the Connections tab the count is the way in: "See their 12 connections".
   const connections = count && connectionsCta ? `See their ${count} →` : count;
+  const linkedin = safeHref(hit.linkedin_url);
   return `
     <article class="result">
       <div class="result-body">
@@ -45,15 +54,15 @@ function resultHtml(config, hit, tokens, query, facet = "", display = "", { conn
             : ""
         }
         ${
-          hit.linkedin_url || connections
+          linkedin || connections
             ? `<p class="result-contact">${
-                hit.linkedin_url
-                  ? `<a class="contact-link" href="${escapeHtml(hit.linkedin_url)}"
+                linkedin
+                  ? `<a class="contact-link" href="${escapeHtml(linkedin)}"
                 target="_blank" rel="noopener noreferrer"
                 aria-label="${escapeHtml(`LinkedIn: ${hit.full_name || ""}`)}">${ICONS.linkedin_url}<span>LinkedIn</span></a>`
                   : ""
               }${
-                hit.linkedin_url && connections
+                linkedin && connections
                   ? `<span class="result-contact-separator" aria-hidden="true">·</span>`
                   : ""
               }${

@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
+from naas_abi.apps.nexus.apps.api.app.core.configured_slugs import configured_organization_slugs
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ, Authz
 from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
     CONTAINER_DEFAULTS,
@@ -22,6 +23,10 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
     nexus_resource,
     org_container,
     workspace_container,
+)
+from naas_abi.apps.nexus.apps.api.app.services.organizations.domain_proof import (
+    domain_token,
+    is_public_mail_domain,
 )
 from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
     OrganizationCreateInput,
@@ -183,6 +188,14 @@ class OrganizationDomainAlreadyExistsError(ValueError):
         return "organization_domain_already_exists"
 
 
+@dataclass
+class OrganizationDomainNotAllowedError(ValueError):
+    domain: str
+
+    def __str__(self) -> str:
+        return "organization_domain_not_allowed"
+
+
 class OrganizationService:
     """Organizations and their members.
 
@@ -262,7 +275,9 @@ class OrganizationService:
     ) -> OrganizationRecord:
         """``org_id``: decided by the caller that checked the create on the new
         organization's own name (``new_org_id``); made here when None."""
-        if await self.adapter.organization_slug_exists(slug=slug):
+        if slug in configured_organization_slugs() or await self.adapter.organization_slug_exists(
+            slug=slug
+        ):
             raise OrganizationSlugAlreadyExistsError(slug=slug)
 
         org_id = org_id or new_org_id()
@@ -350,6 +365,20 @@ class OrganizationService:
         org_id: str,
         updates: OrganizationUpdateInput,
     ) -> OrganizationRecord | None:
+        """A new slug is refused when another organization holds it or the
+        configuration names it (``OrganizationSlugAlreadyExistsError``)."""
+        if "slug" in (updates.set_fields or ()) or updates.slug is not None:
+            current = await self.adapter.get_organization_by_id(org_id=org_id)
+            if current is None:
+                return None
+            slug = updates.slug
+            if not slug:
+                raise OrganizationSlugAlreadyExistsError(slug="")
+            if slug != current.slug and (
+                slug in configured_organization_slugs()
+                or await self.adapter.organization_slug_exists(slug=slug)
+            ):
+                raise OrganizationSlugAlreadyExistsError(slug=slug)
         return await self.adapter.update_organization(org_id=org_id, updates=updates)
 
     async def list_workspaces(self, org_id: str, user_id: str) -> list[OrganizationWorkspaceRecord]:
@@ -543,16 +572,31 @@ class OrganizationService:
         org_id: str,
         domain: str,
         now: datetime,
-        verification_token: str,
     ) -> OrganizationDomainRecord:
-        if await self.adapter.domain_exists(domain=domain):
-            raise OrganizationDomainAlreadyExistsError(domain=domain)
+        """Claim ``domain`` for the organization, unverified, with its proof token
+        (``domain_proof.domain_token``). A public mail domain is refused. A domain
+        another organization verified is refused; one it only claimed is not its
+        until proven, so the claim moves here (the proof decides)."""
+        domain = domain.strip().lower()
+        if is_public_mail_domain(domain):
+            raise OrganizationDomainNotAllowedError(domain=domain)
+        token = domain_token(org_id, domain)
+        existing = await self.adapter.get_domain_by_name(domain)
+        if existing is not None:
+            if existing.is_verified:
+                raise OrganizationDomainAlreadyExistsError(domain=domain)
+            if existing.organization_id == org_id:
+                return existing
+            claimed = await self.adapter.claim_unverified_domain(existing.id, org_id, token, now)
+            if claimed is None:
+                raise OrganizationDomainAlreadyExistsError(domain=domain)
+            return claimed
         return await self.adapter.create_organization_domain(
             OrganizationDomainCreateInput(
                 id=str(uuid4()),
                 organization_id=org_id,
                 domain=domain,
-                verification_token=verification_token,
+                verification_token=token,
                 created_at=now,
             )
         )
