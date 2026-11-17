@@ -692,6 +692,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 # FastAPI's own interactive docs (development only) are HTML with scripts.
 _DOCS_PATHS = frozenset({"/docs", "/redoc", "/docs/oauth2-redirect"})
+# The engine's landing page (``naas_abi_core.apps.api``): a fixed template with
+# its configured title and logo escaped in, no user bytes.
+_LANDING_PATH = "/"
 
 
 def _with_own_policy(own: str | None, global_policy: str) -> str:
@@ -723,6 +726,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             not trusted
             and not is_embeddable(path)
             and path not in _DOCS_PATHS
+            and path != _LANDING_PATH
         ):
             harden_active_content(response.headers)
 

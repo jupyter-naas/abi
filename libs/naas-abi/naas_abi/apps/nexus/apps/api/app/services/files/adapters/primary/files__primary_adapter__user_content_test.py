@@ -73,6 +73,10 @@ def client(monkeypatch) -> httpx.AsyncClient:
     async def docs() -> HTMLResponse:
         return HTMLResponse("<script>swagger</script>")
 
+    @app.get("/")
+    async def landing() -> HTMLResponse:
+        return HTMLResponse("<h1>Welcome</h1>")
+
     app.add_middleware(main.SecurityHeadersMiddleware)
     return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://api.test")
 
@@ -120,6 +124,13 @@ async def test_any_api_route_returning_markup_is_a_sandboxed_download(client):
     response = await client.get("/api/export/page")
     assert response.headers["content-disposition"] == "attachment"
     assert response.headers["content-security-policy"].split(";")[0] == "sandbox"
+
+
+@pytest.mark.asyncio
+async def test_the_landing_page_opens_in_the_browser(client):
+    response = await client.get("/")
+    assert "content-disposition" not in response.headers
+    assert "sandbox" not in response.headers.get("content-security-policy", "")
 
 
 @pytest.mark.asyncio
