@@ -24,6 +24,14 @@
 
 <!-- version list -->
 
+## v3.6.1 (2026-11-17)
+
+### Bug Fixes
+
+- **core**: SQLite document adapter reuses its connections
+  ([`1e69294`](https://github.com/jupyter-naas/abi/commit/1e69294dd0dbb7c8a7f54a4a2de85dba155b8e90))
+
+
 ## v3.6.0 (2026-11-17)
 
 ### Chores
