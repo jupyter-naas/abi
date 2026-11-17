@@ -37,8 +37,9 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.service_test import (
     Mailer,
     Store,
 )
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
+from naas_abi.apps.nexus.apps.api.app.services.rate_limit.adapters.secondary.memory import (
+    MemoryRateLimitStore,
+)
 
 ORG_NAME = "Acme Holdings, see https://example.invalid/about for who we are"
 
@@ -49,15 +50,7 @@ async def api(team, nexus_db, monkeypatch):
         db.add(UserModel(id="owner", email="owner@example.com", name="Owner"))
         db.add(OrganizationModel(id="org-1", name=ORG_NAME, slug="org", owner_id="owner"))
         await db.commit()
-    limits = create_async_engine("sqlite+aiosqlite://")
-    async with limits.begin() as conn:
-        await conn.execute(
-            text(
-                "CREATE TABLE rate_limit_events "
-                "(id TEXT PRIMARY KEY, identifier TEXT, endpoint TEXT, created_at TIMESTAMP)"
-            )
-        )
-    monkeypatch.setattr(rate_limit, "async_engine", limits)
+    monkeypatch.setattr(rate_limit, "_store", MemoryRateLimitStore())
     monkeypatch.setattr(rate_limit.settings, "rate_limit_enabled", True)
     mailer = Mailer()
     invites = InvitationService(
@@ -102,7 +95,6 @@ async def api(team, nexus_db, monkeypatch):
         return AsyncClient(transport=ASGITransport(app=app), base_url="http://t")
 
     yield SimpleNamespace(as_=as_, invite=invite, mailer=mailer)
-    await limits.dispose()
 
 
 @pytest.mark.asyncio

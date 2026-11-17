@@ -24,7 +24,10 @@ from collections import defaultdict
 from dataclasses import replace
 
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
-from naas_abi.apps.nexus.apps.api.app.models import CodingEnvironmentModel, WorkspaceModel
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment.factory import (
+    CodingEnvironmentStoreSource,
+    coding_environment_store,
+)
 from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS, UnknownUserError
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import SERVICE as NEXUS
@@ -52,8 +55,6 @@ from naas_abi_core.services.source_control.SourceControlService import (
     SourceControlService,
     repo_key,
 )
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 SERVICE = "source_control"
@@ -197,7 +198,7 @@ def _platform_keys(service: str, keys: list[str]) -> set[str]:
 
 
 @placement_source
-async def workspace_repositories(db: AsyncSession) -> list[Placement]:
+async def workspace_repositories(db: CodingEnvironmentStoreSource) -> list[Placement]:
     """The repositories Nexus recorded for a workspace (its default repository,
     the repository of each of its environments) that nothing places yet.
 
@@ -207,17 +208,13 @@ async def workspace_repositories(db: AsyncSession) -> list[Placement]:
     shared repository belongs to no workspace.
     """
     claims: dict[str, tuple[str, set[str]]] = defaultdict(lambda: ("", set()))
-    defaults = await db.execute(
-        select(WorkspaceModel.id, WorkspaceModel.coding_default_repo_id).where(
-            WorkspaceModel.coding_default_repo_id.is_not(None)
-        )
-    )
-    environments = await db.execute(
-        select(CodingEnvironmentModel.workspace_id, CodingEnvironmentModel.repo_id).where(
-            CodingEnvironmentModel.repo_id.is_not(None)
-        )
-    )
-    rows = [*defaults.all(), *environments.all()]
+    store = coding_environment_store(db)
+    if store is None:
+        return []
+    environments = [
+        (e.workspace_id, e.repo_id) for e in await store.list_all() if e.repo_id is not None
+    ]
+    rows = [*await store.default_repos(), *environments]
     for workspace, repo_id in rows:
         if not repo_id or not _REPO_ID.match(repo_id) or not workspace:
             continue
@@ -244,18 +241,13 @@ async def workspace_repositories(db: AsyncSession) -> list[Placement]:
 
 
 @placement_source
-async def workspace_environments(db: AsyncSession) -> list[Placement]:
+async def workspace_environments(db: CodingEnvironmentStoreSource) -> list[Placement]:
     """The environments Nexus provisioned for a workspace, placed in it (an
     environment is ``environment/<owner principal>/<id>``)."""
-    rows = (
-        await db.execute(
-            select(
-                CodingEnvironmentModel.id,
-                CodingEnvironmentModel.workspace_id,
-                CodingEnvironmentModel.user_id,
-            )
-        )
-    ).all()
+    store = coding_environment_store(db)
+    if store is None:
+        return []
+    rows = [(e.id, e.workspace_id, e.user_id) for e in await store.list_all()]
     owners: dict[str, str] = {}
     found: list[Placement] = []
     for environment_id, workspace, user_id in rows:

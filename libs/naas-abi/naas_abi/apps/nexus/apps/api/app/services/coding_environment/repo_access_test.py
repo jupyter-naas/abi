@@ -5,11 +5,14 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 import pytest
-from naas_abi.apps.nexus.apps.api.app.models import (
-    CodingEnvironmentModel,
-    WorkspaceModel,
-)
 from naas_abi.apps.nexus.apps.api.app.services.coding_environment import repo_access
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment.adapters.secondary.memory import (
+    MemoryCodingEnvironmentStore,
+)
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment.port import (
+    CodingEnvironmentRecord,
+    CodingWorkspace,
+)
 from naas_abi.apps.nexus.apps.api.app.services.coding_environment.testing import (
     code_iam,
     kernel_services,
@@ -29,35 +32,22 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 from naas_abi_core.engine.call_context import as_service_account
 
 
-class _Rows:
-    def __init__(self, rows: list[tuple]) -> None:
-        self._rows = rows
-
-    def all(self) -> list[tuple]:
-        return list(self._rows)
-
-
-class _Db:
-    """The rows the placement sources read: the workspaces' default repository and
-    the coding environments (``(id, workspace, user, repo)``)."""
-
-    def __init__(
-        self,
-        defaults: list[tuple[str, str]] = (),
-        environments: list[tuple[str, str, str, str | None]] = (),
-    ) -> None:
-        self.defaults = list(defaults)
-        self.environments = list(environments)
-
-    async def execute(self, statement: object) -> _Rows:
-        descriptions = statement.column_descriptions  # type: ignore[attr-defined]
-        entity = descriptions[0]["entity"]
-        if entity is WorkspaceModel:
-            return _Rows(self.defaults)
-        assert entity is CodingEnvironmentModel
-        if len(descriptions) == 2:
-            return _Rows([(ws, repo) for _, ws, _, repo in self.environments if repo])
-        return _Rows([(env, ws, user) for env, ws, user, _ in self.environments])
+def _store(
+    defaults: list[tuple[str, str]] = (),
+    environments: list[tuple[str, str, str, str | None]] = (),
+) -> MemoryCodingEnvironmentStore:
+    """The records the placement sources read: the workspaces' default repository
+    (``(workspace, repo)``) and the coding environments (``(id, workspace, user, repo)``)."""
+    return MemoryCodingEnvironmentStore(
+        workspaces=[
+            CodingWorkspace(id=ws, organization_id="org-1", coding_default_repo_id=repo)
+            for ws, repo in defaults
+        ],
+        environments=[
+            CodingEnvironmentRecord(id=env, workspace_id=ws, user_id=user, repo_id=repo)
+            for env, ws, user, repo in environments
+        ],
+    )
 
 
 @pytest.fixture
@@ -82,7 +72,7 @@ async def test_a_repository_a_workspace_recorded_is_placed_in_it(nexus: NexusIam
     _, repos = kernel_services(nexus)
     place_repo(nexus, repos, "abi/lib", None)
     place_repo(nexus, repos, "abi/docs", None)
-    db = _Db(
+    db = _store(
         defaults=[("ws-1", "abi/lib")],
         environments=[("env-1", "ws-2", "member", "abi/docs")],
     )
@@ -100,7 +90,7 @@ async def test_a_repository_claimed_by_two_workspaces_is_left_on_the_platform(
 ) -> None:
     _, repos = kernel_services(nexus)
     place_repo(nexus, repos, "abi/lib", None)
-    db = _Db(defaults=[("ws-1", "abi/lib"), ("ws-2", "ABI/Lib")])
+    db = _store(defaults=[("ws-1", "abi/lib"), ("ws-2", "ABI/Lib")])
     assert await repo_access.workspace_repositories(db) == []
 
 
@@ -108,18 +98,18 @@ async def test_a_repository_claimed_by_two_workspaces_is_left_on_the_platform(
 async def test_a_repository_already_placed_is_never_moved(nexus: NexusIam) -> None:
     _, repos = kernel_services(nexus)
     place_repo(nexus, repos, "abi/theirs", "ws-2")
-    db = _Db(defaults=[("ws-1", "abi/theirs")])
+    db = _store(defaults=[("ws-1", "abi/theirs")])
     assert await repo_access.workspace_repositories(db) == []
     assert _placed(nexus, "source_control", "abi%2Ftheirs") == ("org-1", "ws-2")
 
 
 @pytest.mark.asyncio
 async def test_the_shared_repository_and_odd_ids_belong_to_no_workspace(nexus: NexusIam) -> None:
-    db = _Db(
+    db = _store(
         defaults=[
             ("ws-1", repo_access.settings.coding_repo_id.upper()),
-            ("ws-1", "not a repo"),
-            ("ws-1", "../escape/x"),
+            ("ws-2", "not a repo"),
+            ("ws-3", "../escape/x"),
         ],
         environments=[("env-1", "ws-1", "member", "no-owner")],
     )
@@ -130,7 +120,7 @@ async def test_the_shared_repository_and_odd_ids_belong_to_no_workspace(nexus: N
 async def test_an_environment_is_placed_in_the_workspace_it_was_provisioned_for(
     nexus: NexusIam,
 ) -> None:
-    db = _Db(
+    db = _store(
         environments=[
             ("env-1", "ws-1", "member", None),
             ("env-2", "ws-2", "other", None),
@@ -149,5 +139,5 @@ async def test_an_environment_placed_elsewhere_stays_there(nexus: NexusIam) -> N
         nexus.iam.put_placement(
             "coding_environment", f"{member}/env-1", workspace_container("org-1", "ws-2")
         )
-    db = _Db(environments=[("env-1", "ws-1", "member", None)])
+    db = _store(environments=[("env-1", "ws-1", "member", None)])
     assert await repo_access.workspace_environments(db) == []

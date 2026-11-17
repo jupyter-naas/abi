@@ -28,6 +28,9 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__prima
     get_chat_service,
     get_object_storage_service,
 )
+from naas_abi.apps.nexus.apps.api.app.services.chat.chat_ingestion_job_store import (
+    ingestion_job_store,
+)
 from naas_abi.apps.nexus.apps.api.app.services.chat.port import (
     ChatAgentRecord,
     ChatConversationRecord,
@@ -141,9 +144,6 @@ class FakeJobs:
     created: list[dict[str, Any]] = []
     for_user: dict[str, SimpleNamespace] = {}
 
-    def __init__(self, db) -> None:
-        pass
-
     async def create_job(self, **fields):
         FakeJobs.created.append(fields)
         return SimpleNamespace(
@@ -190,7 +190,6 @@ def world(team: NexusIam, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setattr(module, "bind_registry", bind)
     monkeypatch.setattr(chat_dependencies, "AsyncSessionLocal", Session)
     monkeypatch.setattr(chat_api, "stream_chat_response", stream)
-    monkeypatch.setattr(chat_api, "ChatIngestionJobService", FakeJobs)
     monkeypatch.setattr(chat_api, "publish_chat_ingestion_job", published.append)
 
     app = FastAPI()
@@ -202,6 +201,7 @@ def world(team: NexusIam, monkeypatch: pytest.MonkeyPatch):
     app.dependency_overrides[get_current_user_required] = current_user
     app.dependency_overrides[get_chat_service] = lambda: chat
     app.dependency_overrides[get_db] = lambda: FakeDb()
+    app.dependency_overrides[ingestion_job_store] = lambda: FakeJobs()
     app.dependency_overrides[get_object_storage_service] = lambda: storage
     client = TestClient(app, raise_server_exceptions=True)
     return SimpleNamespace(

@@ -8,13 +8,12 @@ from dataclasses import replace
 from typing import Any
 
 from fastapi import FastAPI
-from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat_file_ingestion import (
     ChatFileIngestionError,
     ChatFileIngestionService,
 )
-from naas_abi.apps.nexus.apps.api.app.services.chat.chat_ingestion_jobs import (
-    ChatIngestionJobService,
+from naas_abi.apps.nexus.apps.api.app.services.chat.chat_ingestion_job_store import (
+    ingestion_job_store,
 )
 from naas_abi.apps.nexus.apps.api.app.services.websocket.service import WebSocketService
 
@@ -80,20 +79,18 @@ async def process_chat_ingestion_job(payload: dict[str, Any]) -> None:
         logger.error("chat ingestion payload missing job_id")
         return
 
-    # The upload endpoint now commits the job row before publishing, but as a
+    jobs = ingestion_job_store()
+    # The store commits the job before the route publishes it, but as a
     # safety net (e.g. DB replication lag) we retry a few times before giving up.
     record = None
     for attempt in range(5):
-        async with AsyncSessionLocal() as db:
-            jobs = ChatIngestionJobService(db)
-            record = await jobs.update_status(
-                job_id,
-                "hashing",
-                progress=10,
-                started=True,
-                increment_attempt=True,
-            )
-            await db.commit()
+        record = await jobs.update_status(
+            job_id,
+            "hashing",
+            progress=10,
+            started=True,
+            increment_attempt=True,
+        )
         if record is not None:
             break
         logger.warning(
@@ -128,22 +125,19 @@ async def process_chat_ingestion_job(payload: dict[str, Any]) -> None:
         workspace_id_for_progress: str | None = None
         conversation_id_for_progress: str | None = None
 
-        async with AsyncSessionLocal() as db:
-            jobs = ChatIngestionJobService(db)
-            mid = await jobs.update_status(job_id, "cache_lookup", progress=25)
-            await db.commit()
-            if mid:
-                workspace_id_for_progress = mid.workspace_id
-                conversation_id_for_progress = mid.conversation_id
-                await _emit_ingestion_event(
-                    mid.workspace_id,
-                    {
-                        "job_id": job_id,
-                        "conversation_id": mid.conversation_id,
-                        "status": "cache_lookup",
-                        "progress": 25,
-                    },
-                )
+        mid = await jobs.update_status(job_id, "cache_lookup", progress=25)
+        if mid:
+            workspace_id_for_progress = mid.workspace_id
+            conversation_id_for_progress = mid.conversation_id
+            await _emit_ingestion_event(
+                mid.workspace_id,
+                {
+                    "job_id": job_id,
+                    "conversation_id": mid.conversation_id,
+                    "status": "cache_lookup",
+                    "progress": 25,
+                },
+            )
 
         # Build a thread-safe progress callback so that the CPU/IO-bound
         # ingest_from_path (running in an executor thread) can push WebSocket
@@ -182,80 +176,71 @@ async def process_chat_ingestion_job(payload: dict[str, Any]) -> None:
             ),
         )
 
-        async with AsyncSessionLocal() as db:
-            jobs = ChatIngestionJobService(db)
-            done = await jobs.update_status(
-                job_id,
-                "ready",
-                progress=100,
-                cache_hit=result.cache_hit,
-                file_sha256=result.file_sha256,
-                collection_name=result.collection_name,
-                chunks_count=result.chunks_count,
-                finished=True,
-            )
-            await db.commit()
+        done = await jobs.update_status(
+            job_id,
+            "ready",
+            progress=100,
+            cache_hit=result.cache_hit,
+            file_sha256=result.file_sha256,
+            collection_name=result.collection_name,
+            chunks_count=result.chunks_count,
+            finished=True,
+        )
 
-            if done:
-                await _emit_ingestion_event(
-                    done.workspace_id,
-                    {
-                        "job_id": job_id,
-                        "conversation_id": done.conversation_id,
-                        "status": "ready",
-                        "progress": 100,
-                        "cache_hit": done.cache_hit,
-                        "chunks_count": done.chunks_count,
-                    },
-                )
+        if done:
+            await _emit_ingestion_event(
+                done.workspace_id,
+                {
+                    "job_id": job_id,
+                    "conversation_id": done.conversation_id,
+                    "status": "ready",
+                    "progress": 100,
+                    "cache_hit": done.cache_hit,
+                    "chunks_count": done.chunks_count,
+                },
+            )
 
     except ChatFileIngestionError as exc:
-        async with AsyncSessionLocal() as db:
-            jobs = ChatIngestionJobService(db)
-            failed = await jobs.update_status(
-                job_id,
-                "failed",
-                progress=100,
-                error_code="INGESTION_ERROR",
-                error_message=str(exc),
-                finished=True,
+        failed = await jobs.update_status(
+            job_id,
+            "failed",
+            progress=100,
+            error_code="INGESTION_ERROR",
+            error_message=str(exc),
+            finished=True,
+        )
+        if failed:
+            await _emit_ingestion_event(
+                failed.workspace_id,
+                {
+                    "job_id": job_id,
+                    "conversation_id": failed.conversation_id,
+                    "status": "failed",
+                    "progress": 100,
+                    "error": str(exc),
+                },
             )
-            await db.commit()
-            if failed:
-                await _emit_ingestion_event(
-                    failed.workspace_id,
-                    {
-                        "job_id": job_id,
-                        "conversation_id": failed.conversation_id,
-                        "status": "failed",
-                        "progress": 100,
-                        "error": str(exc),
-                    },
-                )
     except Exception as exc:
         logger.exception("chat ingestion worker failed for job %s", job_id)
-        async with AsyncSessionLocal() as db:
-            jobs = ChatIngestionJobService(db)
-            failed = await jobs.update_status(
-                job_id,
-                "failed",
-                progress=100,
-                error_code="UNEXPECTED_ERROR",
-                error_message=str(exc),
-                finished=True,
+        failed = await jobs.update_status(
+            job_id,
+            "failed",
+            progress=100,
+            error_code="UNEXPECTED_ERROR",
+            error_message=str(exc),
+            finished=True,
+        )
+        if failed:
+            await _emit_ingestion_event(
+                failed.workspace_id,
+                {
+                    "job_id": job_id,
+                    "conversation_id": failed.conversation_id,
+                    "status": "failed",
+                    "progress": 100,
+                    "error": str(exc),
+                },
             )
-            await db.commit()
-            if failed:
-                await _emit_ingestion_event(
-                    failed.workspace_id,
-                    {
-                        "job_id": job_id,
-                        "conversation_id": failed.conversation_id,
-                        "status": "failed",
-                        "progress": 100,
-                        "error": str(exc),
-                    },
-                )
 
 
 def start_chat_ingestion_consumer(app: FastAPI) -> None:

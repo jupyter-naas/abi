@@ -12,6 +12,7 @@ Coder.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import hashlib
 import html as html_lib
 import json
@@ -39,11 +40,23 @@ from naas_abi.apps.nexus.apps.api.app.core.config import (
     ABI_DOCUMENTS_TEMPLATE_NAMESPACE,
     settings,
 )
-from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal, get_db
-from naas_abi.apps.nexus.apps.api.app.models import CodingEnvironmentModel
 from naas_abi.apps.nexus.apps.api.app.services.coding_environment import agent_credentials
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment.factory import (
+    CodingEnvironmentStoreSource,
+    coding_environment_store,
+    get_coding_environment_store,
+    open_coding_environment_store,
+)
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment.port import (
+    CodingEnvironmentRecord,
+    CodingEnvironmentStorePort,
+)
 from naas_abi.apps.nexus.apps.api.app.services.coding_environment.repo_access import (
     ensure_shared_repo,
+)
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment.runtime_bindings import (
+    bindings_for,
+    sidecar_for,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares
@@ -75,8 +88,6 @@ from naas_abi_core.services.source_control.SourceControlService import (
     SourceControlService,
 )
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 if TYPE_CHECKING:
     # importlib.abc.Traversable is deprecated from 3.12 and the 3.11 home,
@@ -1819,7 +1830,7 @@ async def get_document(
     workspace_id: str,
     request: Request,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort | None = Depends(get_coding_environment_store),
 ) -> DocumentResponse:
     """Load document HTML for Preview/Code.
 
@@ -1846,7 +1857,7 @@ async def get_document(
         raise _source_control_http_error(exc) from exc
 
     sidecar_base, sidecar_secret = await lookup_documents_sidecar(
-        db,
+        store,
         workspace_id=workspace_id,
         user_id=current_user.id,
         slug=slug,
@@ -1939,7 +1950,7 @@ async def put_document(
     body: DocumentUpdateRequest,
     request: Request,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort | None = Depends(get_coding_environment_store),
 ) -> DocumentResponse:
     """Save document: commit Forgejo snapshot and dual-write Coder sidecar when ready."""
     await authz.require(
@@ -1957,7 +1968,7 @@ async def put_document(
     author_email = str(current_user.email)
 
     sidecar_base, sidecar_secret = await lookup_documents_sidecar(
-        db,
+        store,
         workspace_id=body.workspace_id,
         user_id=current_user.id,
         slug=slug,
@@ -2122,7 +2133,7 @@ async def apply_template(
     body: ApplyTemplateRequest,
     request: Request,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort | None = Depends(get_coding_environment_store),
 ) -> DocumentResponse:
     """Rewrite the open document from a seed template (HTML source of truth)."""
     await authz.require(
@@ -2146,7 +2157,7 @@ async def apply_template(
     author_email = str(current_user.email)
 
     sidecar_base, sidecar_secret = await lookup_documents_sidecar(
-        db,
+        store,
         workspace_id=body.workspace_id,
         user_id=current_user.id,
         slug=slug,
@@ -2391,31 +2402,23 @@ def _adapter_runtime_binding(
 
 
 async def lookup_documents_sidecar(
-    db: AsyncSession,
+    db: CodingEnvironmentStoreSource,
     *,
     workspace_id: str,
     user_id: str,
     slug: str,
 ) -> tuple[str | None, str | None]:
     """Return (sidecar_base, sidecar_secret) for an open Documents document, if bound."""
-    if db is None or not workspace_id or not user_id or not slug or not _SLUG_RE.match(slug):
+    store = coding_environment_store(db)
+    if store is None or not workspace_id or not user_id or not slug or not _SLUG_RE.match(slug):
         return None, None
-    labels = _runtime_labels(workspace_id, slug)
-    result = await db.execute(
-        select(CodingEnvironmentModel).where(
-            CodingEnvironmentModel.workspace_id == workspace_id,
-            CodingEnvironmentModel.user_id == user_id,
-            CodingEnvironmentModel.label.in_(labels),
-        )
+    # The namespaced label first, then the legacy one.
+    return await sidecar_for(
+        store,
+        workspace_id=workspace_id,
+        user_id=user_id,
+        labels=_runtime_labels(workspace_id, slug),
     )
-    rows = list(result.scalars().all())
-    # Prefer namespaced label over legacy.
-    preferred = _runtime_label(workspace_id, slug)
-    rows.sort(key=lambda row: 0 if row.label == preferred else 1)
-    for row in rows:
-        if row.sidecar_base and row.sidecar_secret:
-            return str(row.sidecar_base), str(row.sidecar_secret)
-    return None, None
 
 
 async def _ensure_runtime_impl(
@@ -2424,7 +2427,7 @@ async def _ensure_runtime_impl(
     workspace_id: str,
     slug: str,
     current_user: User,
-    db: AsyncSession | None,
+    store: CodingEnvironmentStorePort | None,
 ) -> RuntimeResponse:
     # Ownership gate before provisioning compute.
     sc_gate, repo_gate = _sections_sc(request)
@@ -2497,27 +2500,22 @@ async def _ensure_runtime_impl(
     expected_base = _build_sidecar_base(coder_username=coder_username, name=name)
 
     # Reuse the dedicated env for this documents/<slug> when already bound.
-    if db is not None:
-        labels = _runtime_labels(workspace_id, slug)
-        result = await db.execute(
-            select(CodingEnvironmentModel).where(
-                CodingEnvironmentModel.workspace_id == workspace_id,
-                CodingEnvironmentModel.user_id == current_user.id,
-                CodingEnvironmentModel.label.in_(labels),
-            )
+    if store is not None:
+        rows = await bindings_for(
+            store,
+            workspace_id=workspace_id,
+            user_id=current_user.id,
+            labels=_runtime_labels(workspace_id, slug),
         )
-        rows = list(result.scalars().all())
-        rows.sort(key=lambda row: 0 if row.label == label else 1)
         existing = rows[0] if rows else None
         if existing is not None:
             # Without the original sidecar secret we cannot talk to the running
             # sidecar; fall through to reprovision so Abi gets a fresh binding.
             if not existing.sidecar_secret:
                 try:
-                    await db.delete(existing)
-                    await db.commit()
+                    await store.delete(existing.id)
                 except Exception:
-                    await db.rollback()
+                    pass
                 existing = None
         if existing is not None:
             try:
@@ -2535,15 +2533,23 @@ async def _ensure_runtime_impl(
                 # across restarts, so a stored base can be stale (or a Coder
                 # hostname written before the runtime was known).
                 bound = await run_in_threadpool(_adapter_runtime_binding, coding, existing.id)
+                rebound = existing
                 if bound is not None:
-                    existing.sidecar_base, existing.sidecar_secret = bound
+                    rebound = dataclasses.replace(
+                        existing, sidecar_base=bound[0], sidecar_secret=bound[1]
+                    )
                 elif expected_base and not existing.sidecar_base:
-                    existing.sidecar_base = expected_base
-                if db.dirty:
+                    rebound = dataclasses.replace(existing, sidecar_base=expected_base)
+                if rebound != existing:
+                    existing = rebound
                     try:
-                        await db.commit()
+                        await store.update_sidecar(
+                            existing.id,
+                            sidecar_base=existing.sidecar_base,
+                            sidecar_secret=existing.sidecar_secret,
+                        )
                     except Exception:
-                        await db.rollback()
+                        pass
                 has_creds = bool(existing.sidecar_base and existing.sidecar_secret)
                 sidecar_ready = False
                 detail: str | None = "Sidecar credentials incomplete"
@@ -2762,24 +2768,12 @@ async def _ensure_runtime_impl(
     sidecar_ready = False
     if has_creds:
         sidecar_ready = await run_in_threadpool(_wait_for_sidecar, ws_base, ws_secret)
-    if db is not None:
+    if store is not None:
         try:
-            # Replace any stale row for this label, then upsert on the id.
-            # Re-adopting the same environment keeps status.id, so inserting a
-            # fresh row would collide on the primary key and roll the whole
-            # binding back; merge updates it in place instead.
-            prior = await db.execute(
-                select(CodingEnvironmentModel).where(
-                    CodingEnvironmentModel.workspace_id == workspace_id,
-                    CodingEnvironmentModel.user_id == current_user.id,
-                    CodingEnvironmentModel.label == label,
-                )
-            )
-            for old in prior.scalars().all():
-                if old.id != status.id:
-                    await db.delete(old)
-            await db.merge(
-                CodingEnvironmentModel(
+            # The one binding of this label: a re-adopted environment keeps its
+            # id and is updated in place.
+            await store.bind(
+                CodingEnvironmentRecord(
                     id=status.id,
                     workspace_id=workspace_id,
                     user_id=current_user.id,
@@ -2789,9 +2783,7 @@ async def _ensure_runtime_impl(
                     sidecar_secret=ws_secret,
                 )
             )
-            await db.commit()
         except Exception:
-            await db.rollback()
             logger.exception("Failed to persist sections runtime binding for %s", slug)
 
     detail: str | None
@@ -2829,7 +2821,7 @@ async def _ensure_runtime_serialized(
     workspace_id: str,
     slug: str,
     current_user: User,
-    db: AsyncSession | None,
+    store: CodingEnvironmentStorePort | None,
 ) -> RuntimeResponse:
     async with _runtime_ensure_lock(workspace_id, slug):
         return await _ensure_runtime_impl(
@@ -2837,7 +2829,7 @@ async def _ensure_runtime_serialized(
             workspace_id=workspace_id,
             slug=slug,
             current_user=current_user,
-            db=db,
+            store=store,
         )
 
 
@@ -2850,13 +2842,13 @@ async def _ensure_created_runtime(
     """Warm the Coder sidecar after create. Must not delay the create response."""
     started = time.perf_counter()
     try:
-        async with AsyncSessionLocal() as db:
+        async with open_coding_environment_store() as store:
             runtime = await _ensure_runtime_serialized(
                 request=request,
                 workspace_id=workspace_id,
                 slug=slug,
                 current_user=current_user,
-                db=db,
+                store=store,
             )
             elapsed = time.perf_counter() - started
             if not runtime.ensured:
@@ -2904,7 +2896,7 @@ async def ensure_runtime(
     workspace_id: str,
     request: Request,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort | None = Depends(get_coding_environment_store),
 ) -> RuntimeResponse:
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
@@ -2913,7 +2905,7 @@ async def ensure_runtime(
         workspace_id=workspace_id,
         slug=slug,
         current_user=current_user,
-        db=db,
+        store=store,
     )
 
 
@@ -3180,7 +3172,7 @@ async def _run_section_html_mutation(
     workspace_id: str,
     request: Request,
     current_user: User,
-    db: AsyncSession,
+    store: CodingEnvironmentStorePort,
     mutate,
     message: str,
 ) -> SectionMutationResponse:
@@ -3191,7 +3183,7 @@ async def _run_section_html_mutation(
     author_name = current_user.name or username
     author_email = str(current_user.email)
     sidecar_base, sidecar_secret = await lookup_documents_sidecar(
-        db,
+        store,
         workspace_id=workspace_id,
         user_id=current_user.id,
         slug=slug,
@@ -3273,14 +3265,14 @@ async def list_sections(
     workspace_id: str,
     request: Request,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort | None = Depends(get_coding_environment_store),
 ) -> SectionsListResponse:
     """Outline of ``<section>`` documents. No HTML body."""
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _sections_sc(request)
     sidecar_base, sidecar_secret = await lookup_documents_sidecar(
-        db,
+        store,
         workspace_id=workspace_id,
         user_id=current_user.id,
         slug=slug,
@@ -3326,7 +3318,7 @@ async def insert_section(
     body: SectionInsertRequest,
     request: Request,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort | None = Depends(get_coding_environment_store),
 ) -> SectionMutationResponse:
     """Insert a section after ``after_index`` (-1 appends). Same mutation as the agent tool."""
     from naas_abi.tools.documents_tools import _insert_section_html
@@ -3343,7 +3335,7 @@ async def insert_section(
         workspace_id=body.workspace_id,
         request=request,
         current_user=current_user,
-        db=db,
+        store=store,
         mutate=lambda html: _insert_section_html(
             html,
             after_index=body.after_index,
@@ -3364,7 +3356,7 @@ async def delete_section(
     body: SectionIndexRequest,
     request: Request,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort | None = Depends(get_coding_environment_store),
 ) -> SectionMutationResponse:
     """Delete the section at index. Refuses the last section."""
     from naas_abi.tools.documents_tools import _delete_section_html
@@ -3381,7 +3373,7 @@ async def delete_section(
         workspace_id=body.workspace_id,
         request=request,
         current_user=current_user,
-        db=db,
+        store=store,
         mutate=lambda html: _delete_section_html(html, body.index),
         message=f"refactor(sections): delete section in {slug}",
     )
@@ -3397,7 +3389,7 @@ async def duplicate_section(
     body: SectionIndexRequest,
     request: Request,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort | None = Depends(get_coding_environment_store),
 ) -> SectionMutationResponse:
     """Duplicate the section at index and insert the copy after it."""
     from naas_abi.tools.documents_tools import _duplicate_section_html
@@ -3414,7 +3406,7 @@ async def duplicate_section(
         workspace_id=body.workspace_id,
         request=request,
         current_user=current_user,
-        db=db,
+        store=store,
         mutate=lambda html: _duplicate_section_html(html, body.index),
         message=f"feat(sections): duplicate section in {slug}",
     )
@@ -3430,7 +3422,7 @@ async def reorder_sections(
     body: SectionReorderRequest,
     request: Request,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort | None = Depends(get_coding_environment_store),
 ) -> SectionMutationResponse:
     """Move one section (from_index/to_index) or apply a full ``order`` permutation."""
     from naas_abi.tools.documents_tools import _reorder_sections_html
@@ -3447,7 +3439,7 @@ async def reorder_sections(
         workspace_id=body.workspace_id,
         request=request,
         current_user=current_user,
-        db=db,
+        store=store,
         mutate=lambda html: _reorder_sections_html(
             html,
             from_index=body.from_index,
@@ -3468,7 +3460,7 @@ async def get_document_outline(
     workspace_id: str,
     request: Request,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort | None = Depends(get_coding_environment_store),
 ) -> DocumentOutlineResponse:
     """Heading outline (Pandoc Header walk). Not the leftover section list."""
     from naas_abi.tools.documents_commands import heading_outline
@@ -3477,7 +3469,7 @@ async def get_document_outline(
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _sections_sc(request)
     sidecar_base, sidecar_secret = await lookup_documents_sidecar(
-        db,
+        store,
         workspace_id=workspace_id,
         user_id=current_user.id,
         slug=slug,
@@ -3529,7 +3521,7 @@ async def apply_document_commands_route(
     body: DocumentCommandsRequest,
     request: Request,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort | None = Depends(get_coding_environment_store),
 ) -> DocumentCommandsResponse:
     """Google Docs batchUpdate analog on the HTML store. See COMMANDS.md."""
     from naas_abi.tools.documents_commands import apply_document_commands
@@ -3561,7 +3553,7 @@ async def apply_document_commands_route(
         workspace_id=body.workspace_id,
         request=request,
         current_user=current_user,
-        db=db,
+        store=store,
         mutate=_mutate,
         message=f"feat(document): apply commands in {slug}",
     )

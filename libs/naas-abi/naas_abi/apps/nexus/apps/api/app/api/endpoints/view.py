@@ -8,17 +8,17 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
 )
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.graph import GraphData, GraphEdge, GraphNode
-from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import GraphAccessError
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
+from naas_abi.apps.nexus.apps.api.app.services.view.factory import get_graph_view_store
+from naas_abi.apps.nexus.apps.api.app.services.view.port import GraphViewStorePort
 from naas_abi.apps.nexus.apps.api.app.services.view.service import (
     ViewNotFoundError,
     ViewService,
     ViewServiceUnavailableError,
 )
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
 
@@ -153,7 +153,7 @@ class TriplePreviewRequest(BaseModel):
 
 
 async def _get_scoped_view_service(
-    db: AsyncSession, user_id: str, workspace_id: str
+    views: GraphViewStorePort, user_id: str, workspace_id: str
 ) -> ViewService:
     from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.primary.graph__primary_adapter__dependencies import (
         graph_section_service,
@@ -162,15 +162,15 @@ async def _get_scoped_view_service(
 
     graph = await graph_section_service(ServiceRegistry.instance().graph, user_id, workspace_id)
     return ViewService(
-        db=db,
+        store=views,
         triple_store_getter=graph._get_triple_store,
         catalog_store_getter=graph._get_nexus_store,
         access_scope=graph.access_scope,
     )
 
 
-def _get_view_service(_request: Request, db: AsyncSession) -> ViewService:
-    return ViewService(db=db)
+def _get_view_service(_request: Request, views: GraphViewStorePort) -> ViewService:
+    return ViewService(store=views)
 
 
 @router.get("/filters/options", dependencies=_GRAPH_READ)
@@ -182,9 +182,9 @@ async def list_graph_filter_options(
     predicate_uri: str | None = Query(default=None),
     object_uri: str | None = Query(default=None),
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    views: GraphViewStorePort = Depends(get_graph_view_store),
 ) -> GraphFilterOptionsResponse:
-    service = await _get_scoped_view_service(db, current_user.id, workspace_id)
+    service = await _get_scoped_view_service(views, current_user.id, workspace_id)
     try:
         data = await service.list_graph_filter_options(
             graph_names=graph_names,
@@ -208,9 +208,9 @@ async def preview_graph_filters(
     request: Request,
     payload: TriplePreviewRequest,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    views: GraphViewStorePort = Depends(get_graph_view_store),
 ) -> TriplePreviewResponse:
-    service = await _get_scoped_view_service(db, current_user.id, payload.workspace_id)
+    service = await _get_scoped_view_service(views, current_user.id, payload.workspace_id)
     try:
         data = await service.preview_graph_filters(
             graph_names=payload.graph_names,
@@ -238,10 +238,10 @@ async def list_views(
     path: str | None = Query(default=None, description="Folder path filter ('' = root)"),
     recursive: bool = Query(default=False, description="Include views in subfolders"),
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    views: GraphViewStorePort = Depends(get_graph_view_store),
 ) -> list[GraphViewInfo]:
     _ = user_id
-    service = _get_view_service(request, db)
+    service = _get_view_service(request, views)
     try:
         views = await service.list_views(
             workspace_id=workspace_id, user_id=current_user.id, path=path, recursive=recursive
@@ -256,9 +256,9 @@ async def list_folders(
     request: Request,
     workspace_id: str = Query(..., description="Workspace ID"),
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    views: GraphViewStorePort = Depends(get_graph_view_store),
 ) -> FolderListResponse:
-    service = _get_view_service(request, db)
+    service = _get_view_service(request, views)
     try:
         folders = await service.list_folders(workspace_id=workspace_id, user_id=current_user.id)
     except ViewServiceUnavailableError as exc:
@@ -271,10 +271,10 @@ async def rename_folder(
     request: Request,
     payload: RenameFolderRequest,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    views: GraphViewStorePort = Depends(get_graph_view_store),
 ) -> RenameFolderResponse:
     await authz.require("UpdateView", user=current_user, workspace=payload.workspace_id, id="-")
-    service = _get_view_service(request, db)
+    service = _get_view_service(request, views)
     try:
         res = await service.rename_folder(
             workspace_id=payload.workspace_id,
@@ -296,11 +296,11 @@ async def update_view(
     view_id: str,
     payload: UpdateGraphView,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    views: GraphViewStorePort = Depends(get_graph_view_store),
 ) -> GraphViewInfo:
     """Update a view in place — rename, move folder, replace spec/state, change visibility."""
     await authz.require("UpdateView", user=current_user, workspace=payload.workspace_id, id=view_id)
-    service = _get_view_service(request, db)
+    service = _get_view_service(request, views)
     try:
         view = await service.update_view(
             view_id=view_id,
@@ -328,10 +328,10 @@ async def get_view(
     view_id: str,
     workspace_id: str = Query(..., description="Workspace ID"),
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    views: GraphViewStorePort = Depends(get_graph_view_store),
 ) -> GraphViewInfo:
     _ = current_user
-    service = _get_view_service(request, db)
+    service = _get_view_service(request, views)
     try:
         view = await service.get_view(view_id=view_id, workspace_id=workspace_id)
     except ViewNotFoundError as exc:
@@ -347,10 +347,10 @@ async def create_view(
     request: Request,
     payload: CreateGraphView,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    views: GraphViewStorePort = Depends(get_graph_view_store),
 ) -> dict[str, Any]:
     await authz.require("CreateView", user=current_user, workspace=payload.workspace_id, id="-")
-    service = _get_view_service(request, db)
+    service = _get_view_service(request, views)
     try:
         return await service.create_view(
             workspace_id=payload.workspace_id,
@@ -380,7 +380,7 @@ async def delete_view(
     workspace_id: str | None = Query(default=None),
     payload: DeleteGraphView | None = None,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    views: GraphViewStorePort = Depends(get_graph_view_store),
 ) -> dict[str, Any]:
     effective_workspace_id = workspace_id or (payload.workspace_id if payload else None)
     if not effective_workspace_id:
@@ -388,7 +388,7 @@ async def delete_view(
     await authz.require(
         "DeleteView", user=current_user, workspace=effective_workspace_id, id=view_id
     )
-    service = _get_view_service(request, db)
+    service = _get_view_service(request, views)
     resolved = payload.uri if payload and payload.uri else view_id
     try:
         return await service.delete_view(resolved, workspace_id=effective_workspace_id)
@@ -405,9 +405,9 @@ async def get_view_overview(
     workspace_id: str = Query(..., description="Workspace ID"),
     limit: int = Query(default=500, le=5000),
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    views: GraphViewStorePort = Depends(get_graph_view_store),
 ) -> ViewOverview:
-    service = await _get_scoped_view_service(db, current_user.id, workspace_id)
+    service = await _get_scoped_view_service(views, current_user.id, workspace_id)
     try:
         overview = await service.get_view_overview(
             workspace_id=workspace_id,
@@ -435,9 +435,9 @@ async def get_view_network(
     workspace_id: str = Query(..., description="Workspace ID"),
     limit: int = Query(default=500, le=5000),
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    views: GraphViewStorePort = Depends(get_graph_view_store),
 ) -> GraphData:
-    service = await _get_scoped_view_service(db, current_user.id, workspace_id)
+    service = await _get_scoped_view_service(views, current_user.id, workspace_id)
     try:
         network = await service.get_view_network(
             workspace_id=workspace_id,

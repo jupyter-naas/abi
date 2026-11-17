@@ -1,16 +1,15 @@
+"""Chat file ingestion jobs: the record a job leaves, and the port that keeps them.
+
+A job is created by the upload/ingest routes, then moved through its statuses by
+the ingestion worker. Each write of the port is committed when it returns: the
+worker may read a job as soon as the route has published it.
+"""
+
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
-
-from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
-from naas_abi.apps.nexus.apps.api.app.models import ChatIngestionJobModel
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-
-def _utc_now_naive() -> datetime:
-    return datetime.now(UTC).replace(tzinfo=None)
 
 
 @dataclass
@@ -39,37 +38,8 @@ class ChatIngestionJobRecord:
     finished_at: datetime | None
 
 
-class ChatIngestionJobService:
-    def __init__(self, db: AsyncSession):
-        self.db = db
-
-    @staticmethod
-    def _to_record(model: ChatIngestionJobModel) -> ChatIngestionJobRecord:
-        return ChatIngestionJobRecord(
-            id=model.id,
-            conversation_id=model.conversation_id,
-            workspace_id=model.workspace_id,
-            user_id=model.user_id,
-            source_type=model.source_type,
-            source_path=model.source_path,
-            embedding_model=model.embedding_model,
-            embedding_dimension=model.embedding_dimension,
-            status=model.status,
-            progress=model.progress,
-            cache_hit=model.cache_hit,
-            file_sha256=model.file_sha256,
-            collection_name=model.collection_name,
-            chunks_count=model.chunks_count,
-            error_code=model.error_code,
-            error_message=model.error_message,
-            attempt=model.attempt,
-            max_attempts=model.max_attempts,
-            created_at=model.created_at,
-            updated_at=model.updated_at,
-            started_at=model.started_at,
-            finished_at=model.finished_at,
-        )
-
+class ChatIngestionJobStorePort(ABC):
+    @abstractmethod
     async def create_job(
         self,
         job_id: str,
@@ -82,37 +52,17 @@ class ChatIngestionJobService:
         embedding_dimension: int,
         status: str = "queued",
     ) -> ChatIngestionJobRecord:
-        row = ChatIngestionJobModel(
-            id=job_id,
-            conversation_id=conversation_id,
-            workspace_id=workspace_id,
-            user_id=user_id,
-            source_type=source_type,
-            source_path=source_path,
-            embedding_model=embedding_model,
-            embedding_dimension=embedding_dimension,
-            status=status,
-        )
-        self.db.add(row)
-        await self.db.flush()
-        return self._to_record(row)
+        """Store a new job (``attempt`` 0, ``max_attempts`` 3) and return it."""
 
+    @abstractmethod
     async def get_job_for_user(self, job_id: str, user_id: str) -> ChatIngestionJobRecord | None:
-        result = await self.db.execute(
-            select(ChatIngestionJobModel)
-            .where(ChatIngestionJobModel.id == job_id)
-            .where(ChatIngestionJobModel.user_id == user_id)
-        )
-        row = result.scalar_one_or_none()
-        return self._to_record(row) if row else None
+        """The job, if ``user_id`` started it."""
 
+    @abstractmethod
     async def get_job(self, job_id: str) -> ChatIngestionJobRecord | None:
-        result = await self.db.execute(
-            select(ChatIngestionJobModel).where(ChatIngestionJobModel.id == job_id)
-        )
-        row = result.scalar_one_or_none()
-        return self._to_record(row) if row else None
+        """The job, whoever started it."""
 
+    @abstractmethod
     async def update_status(
         self,
         job_id: str,
@@ -129,36 +79,7 @@ class ChatIngestionJobService:
         finished: bool = False,
         increment_attempt: bool = False,
     ) -> ChatIngestionJobRecord | None:
-        result = await self.db.execute(
-            select(ChatIngestionJobModel).where(ChatIngestionJobModel.id == job_id)
-        )
-        row = result.scalar_one_or_none()
-        if row is None:
-            return None
-
-        now = _utc_now_naive()
-        row.status = status
-        row.updated_at = now
-        if progress is not None:
-            row.progress = progress
-        if cache_hit is not None:
-            row.cache_hit = cache_hit
-        if file_sha256 is not None:
-            row.file_sha256 = file_sha256
-        if collection_name is not None:
-            row.collection_name = collection_name
-        if chunks_count is not None:
-            row.chunks_count = chunks_count
-        if error_code is not None:
-            row.error_code = error_code
-        if error_message is not None:
-            row.error_message = error_message
-        if started and row.started_at is None:
-            row.started_at = now
-        if finished:
-            row.finished_at = now
-        if increment_attempt:
-            row.attempt += 1
-
-        await self.db.flush()
-        return self._to_record(row)
+        """Set ``status`` and ``updated_at``, and every other field given (``None``
+        leaves one as it is). ``started`` sets ``started_at`` once; ``finished``
+        sets ``finished_at``; ``increment_attempt`` adds one to ``attempt``.
+        Returns None for an unknown job."""

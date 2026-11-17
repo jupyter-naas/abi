@@ -42,8 +42,10 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares
 from naas_abi.apps.nexus.apps.api.app.services.registry import (
     ServiceRegistry,
     get_service_registry,
+    standalone_registry,
 )
 from naas_abi.apps.nexus.apps.api.app.services.view_as.active import viewing
+from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import WorkspaceRecord
 from naas_abi.apps.nexus.apps.api.app.utils.public_urls import (
     public_api_host,
     public_modules_url,
@@ -52,7 +54,6 @@ from naas_abi.apps.nexus.apps.api.app.utils.public_urls import (
 )
 from naas_abi_core import logger
 from naas_abi_core.services.agent.Agent import Agent
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
@@ -172,15 +173,14 @@ def get_agent_service(
     return registry.agents
 
 
-async def _workspace_slug(workspace_id: str) -> str | None:
-    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
-    from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
+async def _workspace(workspace_id: str) -> WorkspaceRecord | None:
+    async with standalone_registry() as registry:
+        return await registry.workspaces.get_workspace(workspace_id=workspace_id)
 
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(WorkspaceModel.slug).where(WorkspaceModel.id == workspace_id)
-        )
-        return result.scalar_one_or_none()
+
+async def _workspace_slug(workspace_id: str) -> str | None:
+    workspace = await _workspace(workspace_id)
+    return workspace.slug if workspace is not None else None
 
 
 async def _visible_to_caller(
@@ -224,16 +224,8 @@ async def served_agents(agents: list[AgentRecord]) -> list[AgentRecord]:
 
 
 async def _workspace_catalog_seed(workspace_id: str) -> dict | None:
-    from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
-    from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import parse_catalog_seed
-    from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
-
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(WorkspaceModel.catalog_seed).where(WorkspaceModel.id == workspace_id)
-        )
-        raw = result.scalar_one_or_none()
-    return parse_catalog_seed(raw)
+    workspace = await _workspace(workspace_id)
+    return workspace.catalog_seed if workspace is not None else None
 
 
 def _get_engine_default_agent_class_name() -> str | None:

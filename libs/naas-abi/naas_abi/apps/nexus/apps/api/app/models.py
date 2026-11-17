@@ -317,15 +317,6 @@ class WorkspaceModel(Base):
         "GraphEdgeModel", back_populates="workspace", cascade="all, delete-orphan"
     )
     secrets = relationship("SecretModel", back_populates="workspace", cascade="all, delete-orphan")
-    # No migration creates ``abi_servers`` (``core/platform_tables.py``): deleting a
-    # workspace leaves its rows, if any, to the foreign key's ON DELETE CASCADE
-    # rather than reading a table that is not there.
-    abi_servers = relationship(
-        "ABIServerModel",
-        back_populates="workspace",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-    )
     inference_servers = relationship(
         "InferenceServerModel", back_populates="workspace", cascade="all, delete-orphan"
     )
@@ -358,28 +349,8 @@ class CodingEnvironmentModel(Base):
 
 
 # ============================================
-# ABI Servers (External AI Engines per Workspace)
+# Inference Servers (per Workspace)
 # ============================================
-
-
-class ABIServerModel(Base):
-    __tablename__ = "abi_servers"
-
-    id = Column(String, primary_key=True)
-    workspace_id = Column(
-        String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    name = Column(String, nullable=False)
-    endpoint = Column(Text, nullable=False)
-    api_key = Column(Text, nullable=True)  # Encrypted
-    enabled = Column(Boolean, nullable=False, default=True)
-    created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
-    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
-
-    __table_args__ = (UniqueConstraint("workspace_id", "endpoint", name="uq_workspace_endpoint"),)
-
-    # Relationships
-    workspace = relationship("WorkspaceModel", back_populates="abi_servers")
 
 
 class InferenceServerModel(Base):
