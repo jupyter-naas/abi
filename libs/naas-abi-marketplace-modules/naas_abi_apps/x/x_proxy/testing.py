@@ -10,17 +10,24 @@ every name it reads a dataset of the catalog. What the engine would refuse
 raises the ``ServiceError`` a remote module gets (``INVALID_ARGUMENT``,
 ``DATASET_NOT_FOUND``).
 
-``MemoryObjectStorage`` is the blocking object storage. Import this module from
+``MemoryObjectStorage`` is the blocking object storage, and ``ThreadedSync`` a
+``SyncModule`` whose ``call`` / ``threaded`` run on ``x-sync`` threads as the
+real one (``on_sync_thread`` tells them apart). Import this module from
 tests only: it needs ``duckdb`` (the ``dev`` dependency group).
 """
 
 from __future__ import annotations
 
+import asyncio
+import contextvars
 import json
 import re
-from collections.abc import Iterator
+import threading
+from collections.abc import Callable, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any
 
 import duckdb
@@ -321,3 +328,46 @@ class MemoryObjectStorage:
             base = f"{root}/{head}" if root else head
             found.add(f"{base}/" if sep else base)
         return sorted(found)
+
+
+# --- the module's threads ------------------------------------------------------------
+
+# ``SyncModule.executor``'s thread name prefix: a test tells a body that ran on
+# the module's threads from one on the loop's default executor (``asyncio_<n>``)
+# or on the loop itself.
+SYNC_THREAD_PREFIX = "x-sync"
+_SYNC_POOL = ThreadPoolExecutor(max_workers=16, thread_name_prefix=SYNC_THREAD_PREFIX)
+# Called in the worker thread before each body (``FakeFlowContext`` sets it to
+# record where a step body ran).
+ON_SYNC_THREAD: contextvars.ContextVar[Callable[[], None] | None] = (
+    contextvars.ContextVar("on_sync_thread", default=None)
+)
+
+
+def on_sync_thread() -> bool:
+    """Whether the caller runs on one of the module's ``x-sync`` threads."""
+    return threading.current_thread().name.startswith(f"{SYNC_THREAD_PREFIX}_")
+
+
+class ThreadedSync(SimpleNamespace):
+    """A ``SyncModule`` stand-in: the attributes given (``configuration``,
+    ``engine``, ``run``, ...) and ``call`` / ``threaded``, whose bodies run on
+    ``x-sync`` threads in a copy of the caller's context, as the real ones."""
+
+    async def call(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+        def body() -> Any:
+            hook = ON_SYNC_THREAD.get()
+            if hook is not None:
+                hook()
+            return fn(*args, **kwargs)
+
+        context = contextvars.copy_context()
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(_SYNC_POOL, context.run, body)
+
+    def threaded(self, fn: Callable[..., Any]) -> Callable[..., Any]:
+        async def on_threads(*args: Any, **kwargs: Any) -> Any:
+            return await self.call(fn, *args, **kwargs)
+
+        on_threads.__name__ = getattr(fn, "__name__", "body")
+        return on_threads

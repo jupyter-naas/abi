@@ -4,19 +4,45 @@
 the pydantic models below, unchanged from the in-engine module, so an engine
 ``config.yaml`` ``modules:`` entry of ``naas_abi_marketplace.applications.x``
 copied into ``X_CONFIG_FILE`` loads as it is (``common.runtime``), except for
-``bearer_token``: the token is the engine secret ``applications.x/X_BEARER_TOKEN``.
+``bearer_token``, ignored with a warning: the token is the engine secret
+``applications.x/X_BEARER_TOKEN``. Entry names are letters, digits and
+underscores; ``agent`` is the agent's ledger, not a search filter.
 """
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from naas_abi_apps.x.integrations.XIntegration import DEFAULT_AGENT_MAX_PAGES
 from naas_abi_sdk import ModuleConfiguration
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 logger = logging.getLogger(__name__)
+
+# Entry names key object paths (the filters' spend ledgers
+# ``<datastore>/_budget/<name>.json``, the count slugs): letters, digits and
+# underscores only, so two names never make the same path but by case (which
+# ``_unique`` refuses, as the ledger file name is lower-cased).
+ENTRY_NAME = re.compile(r"^[A-Za-z0-9_]+$")
+
+# The ledger of the agent's tools (``agents.XAgent.AGENT_BUDGET_KEY``): a search
+# filter of that name would share its spend.
+AGENT_LEDGER = "agent"
+
+
+def entry_name(value: str, setting: str) -> str:
+    """``value`` when it is a valid entry name, else a ``ValueError``."""
+    if not isinstance(value, str) or not ENTRY_NAME.fullmatch(value):
+        raise ValueError(
+            f"{setting}: name {value!r} must be letters, digits and underscores "
+            "only (it keys object paths)"
+        )
+    return value
+
 
 # Cadence applied to a search filter that sets neither `interval_seconds` nor
 # `cron`: its trigger fires every minute (the spend guard bounds the spend).
@@ -202,6 +228,17 @@ class XTweetSearchWorkflowConfiguration(BaseModel):
         ge=0,
         description="Max USD this filter may spend per calendar month (null = no limit).",
     )
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def _check_name(cls, value: Any) -> str:
+        name = entry_name(value, "search_recent_tweets_workflow")
+        if name.lower() == AGENT_LEDGER:
+            raise ValueError(
+                f"search_recent_tweets_workflow: name {name!r} is reserved for "
+                "the agent's spend ledger"
+            )
+        return name
 
     @model_validator(mode="after")
     def _resolve_schedule_mode(self) -> XTweetSearchWorkflowConfiguration:
@@ -429,6 +466,11 @@ class XSearchRecentTweetsFilesConfiguration(BaseModel):
         ),
     )
 
+    @field_validator("name", mode="before")
+    @classmethod
+    def _check_name(cls, value: Any) -> str:
+        return entry_name(value, "search_recent_tweets_files")
+
     @model_validator(mode="after")
     def _resolve_schedule_mode(self) -> XSearchRecentTweetsFilesConfiguration:
         """Exactly one trigger per entry: an interval *or* a cron."""
@@ -483,8 +525,25 @@ class XCountFollowConfiguration(BaseModel):
         ),
     )
 
+    @field_validator("name", mode="before")
+    @classmethod
+    def _check_name(cls, value: Any) -> str:
+        return entry_name(value, "count_recent_tweets_workflow")
+
+
+def _json(value: Any, setting: str) -> Any:
+    """``value`` parsed when it is a JSON string (an ``X_<FIELD>`` variable
+    that ``common.runtime`` did not parse), else as it is."""
+    if not isinstance(value, str):
+        return value
+    try:
+        return json.loads(value) if value.strip() else None
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{setting} must be JSON: {exc}") from None
+
 
 def _entries(model: type[BaseModel], values: Any, setting: str) -> list[Any]:
+    values = _json(values, setting)
     if values is None:
         return []
     if not isinstance(values, list):
@@ -493,7 +552,8 @@ def _entries(model: type[BaseModel], values: Any, setting: str) -> list[Any]:
 
 
 def _unique(entries: list[Any], setting: str) -> None:
-    names = [entry.name for entry in entries]
+    """Names unique regardless of case: a ledger file name is lower-cased."""
+    names = [entry.name.lower() for entry in entries]
     duplicates = sorted({name for name in names if names.count(name) > 1})
     if duplicates:
         raise ValueError(f"{setting}: duplicate entry names {duplicates}")
@@ -512,13 +572,19 @@ class XConfiguration(ModuleConfiguration):
     graph_name: str = "http://ontology.naas.ai/graph/x"
     # Canonical id of a chat model the engine registers; empty: its default.
     chat_model: str = ""
-    # Spend caps of the agent's x_search_recent_tweets tool (ledger key
-    # ``agent``), as for a search filter; a cap left None is no cap.
+    # Spend caps of the agent's X API reads (ledger key ``agent``):
+    # x_search_recent_tweets and the paginated user reads (x_get_user_tweets,
+    # _mentions, _liked_tweets, _followers, _following), each tweet or user at
+    # ``agent_cost_per_tweet_usd``; as for a search filter, a cap left None is
+    # no cap.
     agent_cost_per_tweet_usd: float = 0.005
     agent_daily_max_tweets: int | None = None
     agent_daily_max_usd: float | None = None
     agent_monthly_max_tweets: int | None = None
     agent_monthly_max_usd: float | None = None
+    # Pages one call of those tools fetches at most (a call asks for 1 by
+    # default; "every page" is refused). The caps above may lower it further.
+    agent_max_pages: int = DEFAULT_AGENT_MAX_PAGES
     search_recent_tweets_workflow: list[XTweetSearchWorkflowConfiguration] = field(
         default_factory=list
     )
@@ -534,12 +600,22 @@ class XConfiguration(ModuleConfiguration):
         default_factory=list
     )
     app: XAppConfiguration = field(default_factory=XAppConfiguration)
-    # Refused when set: the token is an engine secret (``bearer_token_secret``).
-    bearer_token: str | None = None
+    # Ignored (with a warning): the token is an engine secret
+    # (``bearer_token_secret``). An exported X_BEARER_TOKEN lands here.
+    bearer_token: str | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         # From X_<FIELD> variables these are strings.
         self.agent_cost_per_tweet_usd = float(self.agent_cost_per_tweet_usd)
+        self.agent_max_pages = int(
+            DEFAULT_AGENT_MAX_PAGES
+            if self.agent_max_pages in (None, "")
+            else self.agent_max_pages
+        )
+        if self.agent_max_pages < 1:
+            raise ValueError(
+                f"agent_max_pages must be at least 1, got {self.agent_max_pages}"
+            )
         for name, kind in (
             ("agent_daily_max_tweets", int),
             ("agent_daily_max_usd", float),
@@ -552,11 +628,15 @@ class XConfiguration(ModuleConfiguration):
             else:
                 setattr(self, name, None)
         if self.bearer_token:
-            raise ValueError(
-                "bearer_token is an engine secret for the remote X module: store it "
-                f"as applications.x/{self.bearer_token_secret} and remove "
-                "bearer_token from the configuration"
+            # ``abi dev up`` passes the parent environment: an exported
+            # X_BEARER_TOKEN must not stop the module. The value is never logged.
+            logger.warning(
+                "bearer_token is ignored by the remote X module (an X_BEARER_TOKEN "
+                "variable or a bearer_token setting): the token is the engine "
+                "secret applications.x/%s",
+                self.bearer_token_secret,
             )
+        self.bearer_token = None
         self.search_recent_tweets_workflow = _entries(
             XTweetSearchWorkflowConfiguration,
             self.search_recent_tweets_workflow,
@@ -584,7 +664,9 @@ class XConfiguration(ModuleConfiguration):
         ):
             _unique(getattr(self, setting), setting)
         if not isinstance(self.app, XAppConfiguration):
-            self.app = XAppConfiguration.model_validate(self.app or {})
+            # X_APP arrives as a string: the annotation is the string
+            # "XAppConfiguration", which common.runtime does not parse as JSON.
+            self.app = XAppConfiguration.model_validate(_json(self.app, "app") or {})
         if self.search_recent_tweets_event:
             logger.warning(
                 "search_recent_tweets_event is not used by the remote X module: "

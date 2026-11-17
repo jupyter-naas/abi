@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 import weakref
 from typing import Any
 
@@ -74,32 +75,56 @@ def x_dataset_read_enabled(module) -> bool:
     return _dataset_wired(module)
 
 
-# Datasets already ensured in this process (one ``list`` and the missing
-# ``create``s per dataset service object, not one round trip per request).
+# Dataset service objects whose tables exist (one ``list`` and the missing
+# ``create``s per object and process, not one round trip per request), and
+# those whose matched-id index is settled too (nothing more to check).
+_created: weakref.WeakSet[Any] = weakref.WeakSet()
 _ensured: weakref.WeakSet[Any] = weakref.WeakSet()
 _ensure_lock = threading.Lock()
+# An unsettled index is looked at again at most this often (``time.monotonic``
+# of the last look per dataset service object), not on every dataset call.
+INDEX_RECHECK_SECONDS = 30.0
+_index_checked_at: weakref.WeakKeyDictionary[Any, float] = weakref.WeakKeyDictionary()
 
 
 def ensure_x_datasets(dataset) -> None:
-    """Create the X tables that are missing, once per dataset service and process.
+    """Create the X tables that are missing, once per dataset service and process,
+    then see that the matched-id index is filled (``matched_tweets``).
 
     The tables are created from the specs below. There is no schema migration:
     a remote module may only run single ``SELECT``s, never ``DESCRIBE``,
     ``ALTER`` or ``COMMENT ON`` (engine-only), and its namespace starts empty.
     A spec change is a new table (``*_v2``) rebuilt from the envelopes.
+
+    The index check is done again on later calls (at most every
+    ``INDEX_RECHECK_SECONDS``) until it is settled: a transient error (logged,
+    never raised to the caller, whose tables exist) or a backfill still running
+    or failed does not leave the index empty for the life of the process.
     """
     if dataset in _ensured:
         return
-    with _ensure_lock:
-        if dataset in _ensured:
-            return
-        _ensure_x_datasets(dataset)
-        _ensured.add(dataset)
+    if dataset not in _created:
+        with _ensure_lock:
+            if dataset not in _created:
+                _ensure_x_datasets(dataset)
+                _created.add(dataset)
     from naas_abi_apps.x.x_proxy.dataset.matched_tweets import (
         ensure_matched_tweet_ids_ready,
     )
 
-    ensure_matched_tweet_ids_ready(dataset)
+    now = time.monotonic()
+    with _ensure_lock:
+        last = _index_checked_at.get(dataset)
+        if last is not None and now - last < INDEX_RECHECK_SECONDS:
+            return
+        _index_checked_at[dataset] = now
+    try:
+        settled = ensure_matched_tweet_ids_ready(dataset)
+    except Exception as exc:  # noqa: BLE001 - checked again on the next call
+        logger.warning(f"X dataset: matched-id index check failed ({exc})")
+        return
+    if settled:
+        _ensured.add(dataset)
 
 
 def x_dataset_specs() -> tuple[DatasetSpec, ...]:

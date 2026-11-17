@@ -140,15 +140,15 @@ async def run_reprocess_tweet_envelopes(
     module: Any, ctx: Any, inp: ReprocessTweetEnvelopesInput
 ) -> ReprocessTweetEnvelopesOutput | None:
     """Handler body: ``module`` is the SDK module, ``ctx`` its ``FlowContext``.
-    The plan, the dataset sync and the publish run in worker threads, on
-    ``module.sync``.
+    The plan, the dataset sync and the publish run on the module's threads
+    (``module.sync.threaded``).
 
     As for the search: a mapping run that fails does not stop the dataset sync of
     the envelopes that mapped; the run ends FAILED at the end, saying what worked
     (``FlowIncomplete``). A failed app publish is only logged.
     """
     sync = module.sync
-    plan = await ctx.step("plan", _plan, sync, inp)
+    plan = await ctx.step("plan", sync.threaded(_plan), sync, inp)
     to_map: list[str] = plan["to_map"]
     problems: list[str] = []
 
@@ -178,7 +178,7 @@ async def run_reprocess_tweet_envelopes(
     if to_sync:
         try:
             dataset = await ctx.step(
-                f"dataset[{len(to_sync)}]", _sync_dataset, sync, to_sync
+                f"dataset[{len(to_sync)}]", sync.threaded(_sync_dataset), sync, to_sync
             )
         except WorkflowCancelled:
             raise
@@ -187,7 +187,9 @@ async def run_reprocess_tweet_envelopes(
     app = None
     if inp.app_publish and mapped_paths:
         try:
-            app = await ctx.step(f"publish[{len(mapped_paths)}]", _publish, sync)
+            app = await ctx.step(
+                f"publish[{len(mapped_paths)}]", sync.threaded(_publish), sync
+            )
         except WorkflowCancelled:
             raise
         except Exception as error:  # noqa: BLE001 - never fail the sweep on publish

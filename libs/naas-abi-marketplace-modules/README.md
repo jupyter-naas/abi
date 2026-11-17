@@ -108,8 +108,9 @@ older configuration still lists it: the in-engine modules were removed.
 `applications.x` has more configuration than `X_<FIELD>` variables carry
 comfortably: point `X_CONFIG_FILE` at a YAML (or JSON) file holding the fields,
 for example the `config:` block of the in-engine module's `modules:` entry,
-copied as it is, without `bearer_token`. The bearer token is the engine secret
-`applications.x/X_BEARER_TOKEN`.
+copied as it is. The bearer token is the engine secret
+`applications.x/X_BEARER_TOKEN`: a `bearer_token` setting, or an exported
+`X_BEARER_TOKEN` variable, is ignored with a warning.
 
 ```yaml
 # x.yaml
@@ -132,7 +133,29 @@ count_recent_tweets_workflow:
 
 Each `search_recent_tweets_workflow` entry is one trigger of the
 `search_recent_tweets` workflow; a tick of a filter whose previous run is still
-going is SKIPPED. The Recent Tweets app opens in Nexus as
+going is SKIPPED. Entry names are letters, digits and underscores, unique
+regardless of case; `agent` is not a search filter name (it is the agent's
+ledger). `X_APP` and the list settings take JSON.
+
+The X agent's paid reads (`x_search_recent_tweets`, `x_get_user_tweets`,
+`_mentions`, `_liked_tweets`, `_followers`, `_following`) share one spend
+ledger, keyed `agent`, with its own caps; each tweet or user returned counts
+once, at `agent_cost_per_tweet_usd`:
+
+| Variable | Default | |
+|---|---|---|
+| `X_AGENT_DAILY_MAX_TWEETS` / `X_AGENT_DAILY_MAX_USD` | none | per UTC day |
+| `X_AGENT_MONTHLY_MAX_TWEETS` / `X_AGENT_MONTHLY_MAX_USD` | none | per calendar month |
+| `X_AGENT_COST_PER_TWEET_USD` | `0.005` | converts the USD caps |
+| `X_AGENT_MAX_PAGES` | `5` | pages one tool call fetches at most |
+
+A tool call fetches 1 page unless it asks for more ("every page" is refused),
+at most `X_AGENT_MAX_PAGES`, and no more pages than the tightest cap leaves
+(`ceil(remaining / max_results)`). Its allowance is reserved before X is
+called, so parallel calls cannot spend past a cap together, and the call is
+charged for what X returned, also when it fails part-way.
+
+The Recent Tweets app opens in Nexus as
 `remote/applications.x:x_proxy`. Coming from the in-engine module, run
 `reprocess_tweet_envelopes` once with `force: true` to rebuild the dataset in
 the module's namespace (see `naas_abi_marketplace/applications/AGENTS.md`).

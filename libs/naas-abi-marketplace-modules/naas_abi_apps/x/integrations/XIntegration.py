@@ -44,14 +44,44 @@ from naas_abi_sdk.integration import Integration, IntegrationConnectionError
 
 
 def slugify_query(query: str) -> str:
+    """``query`` as one object-path segment (envelope folders and names,
+    cursors, ledgers): ASCII, lower case, spaces and ``/`` as ``_``, quotes
+    dropped; never empty, ``.`` or ``..`` (those become underscores).
+
+    A ``/`` kept in the slug (``url:"https://openai.com"``) made an empty path
+    segment that the engine refuses, after X had billed the page. Slugs of
+    queries without ``/`` are unchanged, so their envelopes stay where they are.
+    """
     ascii_query = (
         unicodedata.normalize("NFKD", query)
         .encode("ascii", "ignore")
         .decode("ascii")
         .lower()
     )
-    slug = ascii_query.replace(" ", "_").replace("'", "").replace('"', "").lower()
+    slug = (
+        ascii_query.replace(" ", "_")
+        .replace("'", "")
+        .replace('"', "")
+        .replace("/", "_")
+        .lower()
+    )
+    if slug in ("", ".", ".."):
+        slug = "_" * max(len(slug), 1)
     return slug
+
+
+# Called with each page X answered (billed), before it is archived. It runs on
+# the module's loop: it must not block (a spend ledger counts in memory and
+# records from its worker thread).
+OnPage = Callable[[dict], None]
+
+
+def page_resources(page: dict) -> int:
+    """Resources X bills for one answered page: the items of its ``data``."""
+    data = page.get("data") if isinstance(page, dict) else None
+    if isinstance(data, list):
+        return len(data)
+    return 1 if isinstance(data, dict) else 0
 
 
 DEFAULT_BASE_URL = "https://api.twitter.com/2"
@@ -233,14 +263,16 @@ def checked_segment(value: str, what: str) -> str:
 @dataclass(kw_only=True)
 class XIntegrationConfiguration(HttpConfiguration):
     """bearer_token: OAuth 2.0 app-only token for the X v2 API (the engine secret
-    ``applications.x/X_BEARER_TOKEN``). datastore_path: object-storage prefix of
+    ``applications.x/<bearer_token_secret>``). bearer_token_secret: that secret's
+    name, for the error a missing token raises. datastore_path: object-storage prefix of
     the archived responses. storage: the SDK's async ``object_storage`` (``None``:
     nothing archived, and envelopes carry ``file_path: None``). cache: the SDK's
     ``cache`` service for the lookups (``None``: no cache). backoff: seconds
     between the retries of a transient failure. transport (``HttpConfiguration``):
     an httpx transport, for tests."""
 
-    bearer_token: str
+    bearer_token: str = field(repr=False)
+    bearer_token_secret: str = "X_BEARER_TOKEN"
     base_url: str = DEFAULT_BASE_URL
     datastore_path: str = "x"
     storage: ObjectStorage | None = field(default=None, repr=False)
@@ -320,7 +352,8 @@ class XIntegration(Integration):
         """
         if not self.configuration.bearer_token:
             raise IntegrationConnectionError(
-                "X API: no bearer token (engine secret applications.x/X_BEARER_TOKEN)"
+                "X API: no bearer token (engine secret "
+                f"applications.x/{self.configuration.bearer_token_secret})"
             )
         url = f"{self.configuration.base_url}/{endpoint}"
         backoff = tuple(self.configuration.backoff)
@@ -372,8 +405,12 @@ class XIntegration(Integration):
         endpoint: str,
         params: dict | None = None,
         max_pages: int | None = None,
+        on_page: OnPage | None = None,
     ) -> dict:
         """Iterate an X v2 paginated endpoint and merge every page.
+
+        ``on_page`` sees each page as soon as X answered it (it is billed then),
+        before it is archived: a later failure leaves it counted.
 
         Returns ``data`` (every page's items), ``includes`` (merged, deduplicated
         by id), ``errors``, ``meta`` (``newest_id`` of the first page, ``oldest_id``
@@ -393,6 +430,8 @@ class XIntegration(Integration):
         while True:
             logger.info(f"Fetching page {page} of {endpoint} with params {params}")
             response = await self._make_request(endpoint, params=params)
+            if on_page is not None:
+                on_page(response)
             dirname = self._dir("get_all_items")
             filename = (
                 f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%S')}_"
@@ -468,7 +507,10 @@ class XIntegration(Integration):
         path: str,
         max_results: int,
         max_pages: int | None,
+        on_page: OnPage | None = None,
     ) -> dict:
+        """A paginated user read, cached a day: a cache hit calls no
+        ``on_page`` (X bills nothing)."""
         checked_segment(user_id, "user id")
 
         async def fetch() -> dict:
@@ -476,6 +518,7 @@ class XIntegration(Integration):
                 f"users/{user_id}/{path}",
                 params={"max_results": max_results},
                 max_pages=max_pages,
+                on_page=on_page,
             )
             await self._save_json(data, self._dir(method), f"{user_id}.json")
             return data
@@ -531,45 +574,70 @@ class XIntegration(Integration):
     # -------------------------------------------------------------- timelines
 
     async def get_user_tweets(
-        self, user_id: str, max_results: int = 100, max_pages: int | None = 1
+        self,
+        user_id: str,
+        max_results: int = 100,
+        max_pages: int | None = 1,
+        on_page: OnPage | None = None,
     ) -> dict:
         """Get tweets posted by a user. Endpoint: GET /2/users/{id}/tweets"""
         return await self._timeline(
-            "get_user_tweets", user_id, "tweets", max_results, max_pages
+            "get_user_tweets", user_id, "tweets", max_results, max_pages, on_page
         )
 
     async def get_user_mentions(
-        self, user_id: str, max_results: int = 100, max_pages: int | None = 1
+        self,
+        user_id: str,
+        max_results: int = 100,
+        max_pages: int | None = 1,
+        on_page: OnPage | None = None,
     ) -> dict:
         """Get tweets mentioning a user. Endpoint: GET /2/users/{id}/mentions"""
         return await self._timeline(
-            "get_user_mentions", user_id, "mentions", max_results, max_pages
+            "get_user_mentions", user_id, "mentions", max_results, max_pages, on_page
         )
 
     async def get_user_liked_tweets(
-        self, user_id: str, max_results: int = 100, max_pages: int | None = 1
+        self,
+        user_id: str,
+        max_results: int = 100,
+        max_pages: int | None = 1,
+        on_page: OnPage | None = None,
     ) -> dict:
         """Get tweets liked by a user. Endpoint: GET /2/users/{id}/liked_tweets"""
         return await self._timeline(
-            "get_user_liked_tweets", user_id, "liked_tweets", max_results, max_pages
+            "get_user_liked_tweets",
+            user_id,
+            "liked_tweets",
+            max_results,
+            max_pages,
+            on_page,
         )
 
     # ----------------------------------------------------------------- follow
 
     async def get_user_followers(
-        self, user_id: str, max_results: int = 100, max_pages: int | None = 1
+        self,
+        user_id: str,
+        max_results: int = 100,
+        max_pages: int | None = 1,
+        on_page: OnPage | None = None,
     ) -> dict:
         """Get followers of a user. Endpoint: GET /2/users/{id}/followers"""
         return await self._timeline(
-            "get_user_followers", user_id, "followers", max_results, max_pages
+            "get_user_followers", user_id, "followers", max_results, max_pages, on_page
         )
 
     async def get_user_following(
-        self, user_id: str, max_results: int = 100, max_pages: int | None = 1
+        self,
+        user_id: str,
+        max_results: int = 100,
+        max_pages: int | None = 1,
+        on_page: OnPage | None = None,
     ) -> dict:
         """Get accounts followed by a user. Endpoint: GET /2/users/{id}/following"""
         return await self._timeline(
-            "get_user_following", user_id, "following", max_results, max_pages
+            "get_user_following", user_id, "following", max_results, max_pages, on_page
         )
 
     # ----------------------------------------------------------------- tweets
@@ -614,6 +682,7 @@ class XIntegration(Integration):
         place_fields: list[str] | None = None,
         max_pages: int | None = 1,
         persist_envelope: bool = True,
+        on_page: OnPage | None = None,
     ) -> dict:
         """Search tweets from the last 7 days. Endpoint: GET /2/tweets/search/recent
 
@@ -622,7 +691,8 @@ class XIntegration(Integration):
         ``XSearchRecentTweetsWorkflow`` (``search_with_budget``).
 
         ``persist_envelope=False`` when the caller (the search workflow) owns the
-        envelopes. Returns the envelope ``{query, options, results, started_at,
+        envelopes. ``on_page`` sees each page X answered (billed), before
+        anything is saved. Returns the envelope ``{query, options, results, started_at,
         ended_at, file_path}``; ``results`` is the merged X v2 response
         (``meta.has_more`` when ``max_pages`` stopped pagination early).
         """
@@ -655,7 +725,10 @@ class XIntegration(Integration):
 
         started_at = datetime.now(UTC).isoformat()
         tweets = await self._get_all_items(
-            "tweets/search/recent", params=params, max_pages=max_pages
+            "tweets/search/recent",
+            params=params,
+            max_pages=max_pages,
+            on_page=on_page,
         )
         ended_at = datetime.now(UTC).isoformat()
         options = {
@@ -818,6 +891,9 @@ def x_integration_for(module: Any, **overrides: Any) -> XIntegration:
     services = sdk_module.engine.services
     values: dict[str, Any] = {
         "bearer_token": getattr(sdk_module, "bearer_token", None) or "",
+        "bearer_token_secret": getattr(
+            sdk_module.configuration, "bearer_token_secret", "X_BEARER_TOKEN"
+        ),
         "datastore_path": sdk_module.configuration.datastore_path,
         "storage": services.object_storage,
         "cache": _cache_service(services),
@@ -827,18 +903,38 @@ def x_integration_for(module: Any, **overrides: Any) -> XIntegration:
 
 
 SearchRecentTweets = Callable[..., Awaitable[dict]]
+# ``user_read(method, user_id, max_results, max_pages)``: one of the paginated
+# user reads (``get_user_tweets`` ... ``get_user_following``).
+UserRead = Callable[[str, str, int, int], Awaitable[dict]]
+
+# Pages one agent tool call may fetch at most (``XConfiguration.agent_max_pages``).
+DEFAULT_AGENT_MAX_PAGES = 5
+
+USER_READS = (
+    "get_user_tweets",
+    "get_user_mentions",
+    "get_user_liked_tweets",
+    "get_user_followers",
+    "get_user_following",
+)
 
 
 def as_tools(
     configuration: XIntegrationConfiguration,
     *,
     search_recent_tweets: SearchRecentTweets | None = None,
+    user_read: UserRead | None = None,
+    max_pages: int = DEFAULT_AGENT_MAX_PAGES,
 ) -> list[Any]:
     """The X integration as LangChain tools, under their in-engine names.
 
     ``search_recent_tweets``: the coroutine behind ``x_search_recent_tweets``
     (same arguments as ``XIntegration.search_recent_tweets``), so that the agent
     sends its searches through the spend ledger; default: the integration's.
+    ``user_read``: the same for the paginated user reads (``USER_READS``).
+    ``max_pages``: the most pages one call of a paginated tool fetches. The
+    tools take a number of pages (default 1; ``None``, "every page", is
+    refused) and fetch at most ``max_pages`` of them.
     """
     from langchain_core.tools import StructuredTool
     from naas_abi_apps.common.agents import schema_tool
@@ -846,6 +942,25 @@ def as_tools(
 
     integration = XIntegration(configuration)
     search = search_recent_tweets or integration.search_recent_tweets
+    page_cap = max(1, int(max_pages))
+    pages_description = (
+        f"Number of pages to fetch, 1 to {page_cap} (a larger number fetches "
+        f"{page_cap}). Each page bills the tweets or users it returns."
+    )
+
+    def read_with(method: str) -> Callable[..., Awaitable[dict]]:
+        async def read(user_id: str, max_results: int, max_pages: int) -> dict:
+            pages = min(max_pages, page_cap)
+            if user_read is not None:
+                return await user_read(method, user_id, max_results, pages)
+            return await getattr(integration, method)(user_id, max_results, pages)
+
+        read.__name__ = method
+        return read
+
+    async def search_capped(**values: Any) -> dict:
+        values["max_pages"] = min(values["max_pages"], page_cap)
+        return await search(**values)
 
     class GetUserByIdSchema(BaseModel):
         user_id: str = Field(..., description="Numeric X user ID")
@@ -866,9 +981,7 @@ def as_tools(
         max_results: int = Field(
             100, description="Results per page (X v2 cap is 100 for most endpoints)"
         )
-        max_pages: int | None = Field(
-            1, description="Maximum number of pages to fetch (None to exhaust)"
-        )
+        max_pages: int = Field(1, ge=1, description=pages_description)
 
     class GetTweetByIdSchema(BaseModel):
         tweet_id: str = Field(..., description="Numeric tweet ID")
@@ -917,9 +1030,7 @@ def as_tools(
         place_fields: list[str] | None = Field(
             None, description="Place object fields when geo is expanded"
         )
-        max_pages: int | None = Field(
-            1, description="Maximum number of pages to fetch (None to exhaust)"
-        )
+        max_pages: int = Field(1, ge=1, description=pages_description)
 
     class CountRecentTweetsSchema(BaseModel):
         query: str = Field(
@@ -987,31 +1098,31 @@ def as_tools(
         tool(
             "x_get_user_tweets",
             "Get tweets posted by an X user (their timeline).",
-            integration.get_user_tweets,
+            read_with("get_user_tweets"),
             UserTimelineSchema,
         ),
         tool(
             "x_get_user_mentions",
             "Get tweets that mention an X user.",
-            integration.get_user_mentions,
+            read_with("get_user_mentions"),
             UserTimelineSchema,
         ),
         tool(
             "x_get_user_liked_tweets",
             "Get tweets that an X user has liked.",
-            integration.get_user_liked_tweets,
+            read_with("get_user_liked_tweets"),
             UserTimelineSchema,
         ),
         tool(
             "x_get_user_followers",
             "Get the followers of an X user.",
-            integration.get_user_followers,
+            read_with("get_user_followers"),
             UserTimelineSchema,
         ),
         tool(
             "x_get_user_following",
             "Get the accounts an X user is following.",
-            integration.get_user_following,
+            read_with("get_user_following"),
             UserTimelineSchema,
         ),
         tool(
@@ -1029,7 +1140,7 @@ def as_tools(
         tool(
             "x_search_recent_tweets",
             "Search tweets posted in the last 7 days using X v2 search syntax.",
-            search,
+            search_capped,
             SearchRecentTweetsSchema,
         ),
         tool(

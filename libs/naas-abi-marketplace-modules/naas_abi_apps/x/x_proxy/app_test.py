@@ -17,11 +17,17 @@ from naas_abi_apps.x.x_proxy.api.common import DEFAULT_APP_PREFIX
 from naas_abi_apps.x.x_proxy.app import (
     APP_ROOT_PLACEHOLDER,
     LEGACY_APP_PREFIX,
+    LEGACY_BASE_PATH,
     browser_root,
     create_app,
     rewrite_root,
 )
-from naas_abi_apps.x.x_proxy.testing import FakeDataset, MemoryObjectStorage
+from naas_abi_apps.x.x_proxy.testing import (
+    FakeDataset,
+    MemoryObjectStorage,
+    ThreadedSync,
+    on_sync_thread,
+)
 
 ROOT = "/app-remote/abi_gk_1_secret/applications.x/x_proxy"
 
@@ -62,7 +68,7 @@ def _module(storage, dataset=None, *, read_enabled: bool = False):
         )
     )
     services = SimpleNamespace(object_storage=storage, dataset=dataset)
-    sync = SimpleNamespace(
+    sync = ThreadedSync(
         configuration=configuration, engine=SimpleNamespace(services=services)
     )
     return SimpleNamespace(sync=sync, configuration=configuration)
@@ -219,8 +225,10 @@ def test_nothing_published_serves_the_publish_hint() -> None:
         assert f"{ROOT}/favicon.svg".encode() in response.content
 
 
-def test_legacy_prefix_objects_still_serve() -> None:
-    """The pre-rename publish (``x/apps/x``) is read when ``x_proxy`` lacks it."""
+def test_only_the_snapshots_of_the_legacy_prefix_still_serve() -> None:
+    """The pre-rename publish (``x/apps/x``) is read for the JSON snapshots the
+    current prefix lacks; its pages and scripts, built for another base and
+    other routes, never are."""
     client = _client(
         _storage(
             {
@@ -228,13 +236,65 @@ def test_legacy_prefix_objects_still_serve() -> None:
                 f"{LEGACY_APP_PREFIX}/posts/get-posts-counts-recent/index.html": (
                     b"<html>legacy-count</html>"
                 ),
+                f"{LEGACY_APP_PREFIX}/users/search/index.txt": b"legacy payload",
                 f"{LEGACY_APP_PREFIX}/_next/static/chunks/main.js": b"console.log(0)",
+                f"{LEGACY_APP_PREFIX}/globals/scenarios.json": b'{"legacy": 1}',
+                f"{LEGACY_APP_PREFIX}/data/old.json": b'{"legacy": 2}',
             }
         )
     )
-    assert b"legacy-count" in _get(client, "/posts/get-posts-counts-recent/").content
-    assert b"legacy-root" in _get(client, "/").content
-    assert b"console.log(0)" in _get(client, "/_next/static/chunks/main.js").content
+    snapshot = _get(client, "/globals/scenarios.json")
+    assert snapshot.status_code == 200 and snapshot.json() == {"legacy": 1}
+    assert _get(client, "/data/old.json").json() == {"legacy": 2}
+
+    for page in ("/", "/posts/get-posts-counts-recent/"):
+        body = _get(client, page).content
+        assert b"legacy-" not in body, page
+        assert b"has not been published yet" in body, page
+    assert _get(client, "/users/search/index.txt").status_code == 404
+    assert _get(client, "/_next/static/chunks/main.js").status_code == 404
+
+
+# --- paths -----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "rel",
+    [
+        # Encoded: the client would resolve plain dot segments itself; the
+        # server decodes them into ``rel``.
+        "/_next/%2E%2E/%2E%2E/secret.js",
+        "/_next/static/%2E/main.js",
+        "/_next//static/main.js",
+        "//index.html",
+        "/users/%2E%2E/users/search/",
+        "/globals/%2E%2E/globals/scenarios.json",
+    ],
+)
+def test_dot_and_empty_segments_are_a_404_without_a_storage_call(rel) -> None:
+    asked: list[tuple[str, str]] = []
+
+    class Recording(MemoryObjectStorage):
+        def get_object(self, prefix: str, key: str) -> bytes:
+            asked.append((prefix, key))
+            return super().get_object(prefix, key)
+
+    storage = Recording()
+    storage.put_object(f"{DEFAULT_APP_PREFIX}/_next/static", "main.js", b"x")
+    response = _get(_client(storage), rel)
+    assert response.status_code == 404, rel
+    assert asked == []
+
+
+def test_a_path_the_object_storage_refuses_is_a_404() -> None:
+    from naas_abi_sdk.services.errors import ServiceError
+
+    class Refusing(MemoryObjectStorage):
+        def get_object(self, prefix: str, key: str) -> bytes:
+            raise ServiceError("INVALID_ARGUMENT", "invalid object path")
+
+    response = _get(_client(Refusing()), "/_next/static/chunks/main.js")
+    assert response.status_code == 404
 
 
 # --- the base path ---------------------------------------------------------------
@@ -268,6 +328,36 @@ def test_the_build_base_path_becomes_the_request_root_path() -> None:
     chunk = _get(client, "/_next/static/chunks/main.js").content
     assert f'basePath="{ROOT}"'.encode() in chunk
     assert ROOT.replace("/", "\\/").encode() in chunk
+
+
+def test_the_in_engine_export_base_becomes_the_request_root_path() -> None:
+    """An installation upgraded from the in-engine module holds an export built
+    with ``basePath`` ``/app-html/x/apps/x_proxy`` until the module publishes
+    its own: its URLs, plain and JSON-escaped, are rewritten too."""
+    page = (
+        f'<script src="{LEGACY_BASE_PATH}/_next/static/chunks/main.js"></script>'
+        f'<script>self.__next_f.push([1,"{LEGACY_BASE_PATH}/users/search/"])</script>'
+    ).encode()
+    chunk = (
+        f'var basePath="{LEGACY_BASE_PATH}";'
+        'var a="\\/app-html\\/x\\/apps\\/x_proxy\\/x";'
+    ).encode()
+    storage = _published(
+        **{
+            f"{DEFAULT_APP_PREFIX}/index.html": page,
+            f"{DEFAULT_APP_PREFIX}/_next/static/chunks/main.js": chunk,
+        }
+    )
+    client = _client(storage)
+    body = _get(client, "/").content
+    assert b"/app-html/" not in body
+    assert f'src="{ROOT}/_next/static/chunks/main.js"'.encode() in body
+    assert f'"{ROOT}/users/search/"'.encode() in body
+    served = _get(client, "/_next/static/chunks/main.js").content
+    assert b"app-html" not in served
+    assert f'basePath="{ROOT}"'.encode() in served
+    escaped_root = ROOT.replace("/", "\\/")
+    assert f'"{escaped_root}\\/x"'.encode() in served
 
 
 def test_each_session_root_gets_its_own_body_and_etag() -> None:
@@ -450,8 +540,10 @@ def test_post_media_downloads_once_on_first_view(dataset_client, monkeypatch) ->
         return b"jpeg-bytes", "image/jpeg"
 
     monkeypatch.setattr(media_worker, "_stream_download", download)
-    doc = _get(client, "/dataset/posts/4242/media.json").json()
-    assert doc["ready"] is True
+    response = _get(client, "/dataset/posts/4242/media.json")
+    assert response.headers["cache-control"] == "private, max-age=31536000, immutable"
+    doc = response.json()
+    assert doc["ready"] is True and doc["complete"] is True
     assert doc["media_urls"].startswith("dataset/media/3_1/")
     again = _get(client, "/dataset/posts/4242/media.json").json()
     assert again["media_urls"] == doc["media_urls"]
@@ -460,26 +552,73 @@ def test_post_media_downloads_once_on_first_view(dataset_client, monkeypatch) ->
     assert served.content == b"jpeg-bytes"
 
 
-def test_blocking_work_runs_off_the_event_loop(monkeypatch) -> None:
-    """Each request's storage calls run in a worker thread, never on the loop."""
-    import asyncio
+def test_a_failed_media_is_not_cached_and_retried_only_after_the_backoff(
+    dataset_client, monkeypatch
+) -> None:
+    from naas_abi_apps.x.x_proxy.dataset import media_resolve, media_worker
+    from naas_abi_apps.x.x_proxy.dataset.store import (
+        MEDIA_V1,
+        POST_MEDIA_V1,
+        upsert_table,
+    )
 
+    client, dataset = dataset_client
+    row = {
+        "media_key": "3_9",
+        "media_type": "photo",
+        "source_url": "https://pbs.twimg.com/media/b.jpg",
+        "status": "pending",
+        "updated_at": datetime(2026, 6, 1, tzinfo=UTC),
+    }
+    upsert_table(dataset, MEDIA_V1, [row])
+    upsert_table(
+        dataset, POST_MEDIA_V1, [{"tweet_id": "4243", "media_key": "3_9", "ordinal": 0}]
+    )
+    calls: list[str] = []
+    fail = [True]
+
+    def download(url: str, *, max_bytes: int) -> tuple[bytes, str]:
+        calls.append(url)
+        if fail[0]:
+            raise ValueError("HTTP 503")
+        return b"jpeg-bytes", "image/jpeg"
+
+    monkeypatch.setattr(media_worker, "_stream_download", download)
+
+    first = _get(client, "/dataset/posts/4243/media.json")
+    assert first.json()["ready"] is False
+    assert first.headers["cache-control"] == "no-cache"
+    # Viewed again within the backoff: no new download.
+    again = _get(client, "/dataset/posts/4243/media.json")
+    assert again.headers["cache-control"] == "no-cache"
+    assert len(calls) == 1
+
+    # The failure is older than the backoff: the next view downloads again.
+    failed_at = datetime.now(UTC) - media_resolve.MEDIA_RETRY_AFTER
+    upsert_table(
+        dataset, MEDIA_V1, [{**row, "status": "failed", "updated_at": failed_at}]
+    )
+    fail[0] = False
+    later = _get(client, "/dataset/posts/4243/media.json")
+    assert later.json()["ready"] is True and len(calls) == 2
+    assert "immutable" in later.headers["cache-control"]
+
+
+def test_blocking_work_runs_on_the_module_threads(monkeypatch) -> None:
+    """Each request's storage calls run on the module's ``x-sync`` threads:
+    never on the loop, nor on its default executor (host-name lookups)."""
     seen: list[bool] = []
 
     class Probe(MemoryObjectStorage):
         def get_object(self, prefix: str, key: str) -> bytes:
-            try:
-                asyncio.get_running_loop()
-                seen.append(True)
-            except RuntimeError:
-                seen.append(False)
+            seen.append(on_sync_thread())
             return super().get_object(prefix, key)
 
     storage = Probe()
     storage.put_object(DEFAULT_APP_PREFIX, "index.html", b"<html>root</html>")
     response = TestClient(create_app(_module(storage)), root_path=ROOT).get(f"{ROOT}/")
     assert response.status_code == 200
-    assert seen == [False]
+    assert seen == [True]
 
 
 def test_the_app_folder_is_a_valid_sdk_app_of_browser_assets_only() -> None:

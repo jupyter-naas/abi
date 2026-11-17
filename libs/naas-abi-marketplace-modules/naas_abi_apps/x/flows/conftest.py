@@ -7,7 +7,6 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
-import threading
 from collections.abc import Callable
 from types import SimpleNamespace
 from typing import Any
@@ -19,6 +18,11 @@ from naas_abi_apps.x.configuration import (
     XSearchRecentTweetsFilesConfiguration,
     XTweetSearchWorkflowConfiguration,
 )
+from naas_abi_apps.x.x_proxy.testing import (
+    ON_SYNC_THREAD,
+    ThreadedSync,
+    on_sync_thread,
+)
 from naas_abi_sdk.jobs import is_async_callable
 from naas_abi_sdk.workflows import encode_result
 
@@ -27,8 +31,11 @@ class FakeFlowContext:
     """The SDK ``FlowContext`` as the bodies use it.
 
     ``step`` journals by key (in ``journal``, which outlives one attempt), runs a
-    sync function in a worker thread and keeps its result as JSON within the SDK's
-    cap; ``call`` asks ``children(workflow, input)`` (which may raise
+    sync function as the SDK does (``asyncio.to_thread``, the loop's default
+    executor), awaits an async one, and keeps its result as JSON within the SDK's
+    cap; ``off_loop[key]`` says whether the body ran on the module's ``x-sync``
+    threads (``module.sync.threaded``), never true for a bare sync function;
+    ``call`` asks ``children(workflow, input)`` (which may raise
     ``ChildRunFailed``) and journals what it returns. A key used twice in one
     attempt raises, as in the SDK."""
 
@@ -71,13 +78,23 @@ class FakeFlowContext:
         self._claim(key)
         if key in self.journal:
             return self.journal[key]
-        if is_async_callable(fn):
-            value = await fn(*args, **kwargs)
-        else:
-            loop_thread = threading.get_ident()
 
+        def record() -> None:
+            self.off_loop[key] = on_sync_thread()
+
+        if is_async_callable(fn):
+            # ``module.sync.threaded(body)``: the body runs on the module's
+            # threads, where ``ThreadedSync`` calls ``record``.
+            token = ON_SYNC_THREAD.set(record)
+            try:
+                value = await fn(*args, **kwargs)
+            finally:
+                ON_SYNC_THREAD.reset(token)
+        else:
+            # As the SDK: a sync function goes to the loop's default executor
+            # (``asyncio.to_thread``), which is not the module's pool.
             def call() -> Any:
-                self.off_loop[key] = threading.get_ident() != loop_thread
+                record()
                 return fn(*args, **kwargs)
 
             value = await asyncio.to_thread(call)
@@ -123,14 +140,15 @@ def x_module(
     files: list[XSearchRecentTweetsFilesConfiguration] | None = None,
     **services: Any,
 ) -> Any:
-    """A module with the configuration the flows read and its ``sync`` view,
-    whose ``engine.services`` are the (blocking) ``services`` given."""
+    """A module with the configuration the flows read and its ``sync`` view
+    (``ThreadedSync``: ``call`` / ``threaded`` on ``x-sync`` threads), whose
+    ``engine.services`` are the (blocking) ``services`` given."""
     configuration = XConfiguration(
         search_recent_tweets_workflow=list(filters),
         search_recent_tweets_files=list(files or []),
     )
     engine = SimpleNamespace(services=SimpleNamespace(**services))
-    sync = SimpleNamespace(configuration=configuration, engine=engine, run=None)
+    sync = ThreadedSync(configuration=configuration, engine=engine, run=None)
     module = SimpleNamespace(
         module_id=MODULE_ID,
         configuration=configuration,

@@ -183,6 +183,108 @@ def test_the_search_tool_goes_through_the_agent_ledger(monkeypatch) -> None:
     assert len(requests) == 1
 
 
+def _paging_api(requests: list[httpx.Request]):
+    """Pages of two items, always with a next token."""
+
+    def api(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        n = len(requests)
+        return httpx.Response(
+            200,
+            json={
+                "data": [{"id": str(2 * n)}, {"id": str(2 * n - 1)}],
+                "meta": {"result_count": 2, "next_token": f"t{n}"},
+            },
+        )
+
+    return api
+
+
+def _agent_tools(monkeypatch, module: FakeModule, requests: list) -> None:
+    real = XIntegration.x_integration_for
+    monkeypatch.setattr(
+        XAgent,
+        "x_integration_for",
+        lambda m: real(m, transport=httpx.MockTransport(_paging_api(requests))),
+    )
+
+
+def test_the_user_reads_are_charged_to_the_agent_ledger(monkeypatch) -> None:
+    requests: list[httpx.Request] = []
+    module = FakeModule("token", agent_daily_max_tweets=2)
+    _agent_tools(monkeypatch, module, requests)
+    storage = module.engine.services.object_storage
+
+    async def main() -> tuple[dict, dict]:
+        module.start()
+        tools = {t.name: t for t in XAgent.integration_tools(module)}
+        followers = tools["x_get_user_followers"]
+        first = await followers.ainvoke({"user_id": "42", "max_results": 2})
+        second = await tools["x_get_user_tweets"].ainvoke({"user_id": "42"})
+        return first, second
+
+    first, second = asyncio.run(main())
+
+    assert len(first["data"]) == 2 and first["budget"]["tweets_today"] == 2
+    ledger = json.loads(storage.objects[("x/_budget", "agent.json")])
+    assert list(ledger["daily"].values()) == [2]
+    assert second["budget_blocked"] is True
+    assert len(requests) == 1
+
+
+def test_one_tool_call_fetches_at_most_agent_max_pages(monkeypatch) -> None:
+    from pydantic import ValidationError
+
+    requests: list[httpx.Request] = []
+    module = FakeModule("token", agent_max_pages=2)
+    _agent_tools(monkeypatch, module, requests)
+
+    async def main() -> None:
+        module.start()
+        tools = {t.name: t for t in XAgent.integration_tools(module)}
+        await tools["x_search_recent_tweets"].ainvoke(
+            {"query": "drones", "max_results": 10, "max_pages": 50}
+        )
+        await tools["x_get_user_mentions"].ainvoke({"user_id": "1", "max_pages": 9})
+        with pytest.raises(ValidationError):
+            await tools["x_get_user_mentions"].ainvoke(
+                {"user_id": "1", "max_pages": None}
+            )
+
+    asyncio.run(main())
+
+    assert len(requests) == 4  # two pages per call
+
+
+def test_the_tools_run_on_the_module_threads_not_to_thread(monkeypatch) -> None:
+    requests: list[httpx.Request] = []
+    module = FakeModule("token")
+    _agent_tools(monkeypatch, module, requests)
+
+    def no_default_executor(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("asyncio.to_thread used by an agent tool")
+
+    monkeypatch.setattr(asyncio, "to_thread", no_default_executor)
+    calls: list[Any] = []
+
+    async def main() -> dict:
+        module.start()
+        real_call = module.sync.call
+
+        async def call(fn: Any, *args: Any, **kwargs: Any) -> Any:
+            calls.append(fn)
+            return await real_call(fn, *args, **kwargs)
+
+        module.sync.call = call
+        tools = {t.name: t for t in XAgent.integration_tools(module)}
+        return await tools["x_search_recent_tweets"].ainvoke({"query": "drones"})
+
+    result = asyncio.run(main())
+
+    assert result["budget_blocked"] is False
+    assert len(calls) == 1
+
+
 # ----------------------------------------------------- the graph SPARQL tools
 
 ENVELOPE = {

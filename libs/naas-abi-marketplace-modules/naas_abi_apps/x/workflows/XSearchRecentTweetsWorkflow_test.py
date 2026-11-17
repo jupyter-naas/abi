@@ -3,6 +3,9 @@ batched envelopes, and a whole run over a fake X API and object storage."""
 
 import asyncio
 import json
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 import pytest
@@ -344,6 +347,7 @@ def test_fetch_and_save_batches_first_page_has_no_until_id():
         )
         _as_dict = staticmethod(XSearchRecentTweetsWorkflow._as_dict)
         _batch_max_pages = staticmethod(XSearchRecentTweetsWorkflow._batch_max_pages)
+        _count_billed_page = staticmethod(lambda page: None)
 
         def __init__(self) -> None:
             self.__configuration = type(
@@ -454,6 +458,7 @@ def test_process_query_fetches_recents_before_older_resume():
         )
         _as_dict = staticmethod(XSearchRecentTweetsWorkflow._as_dict)
         _batch_max_pages = staticmethod(XSearchRecentTweetsWorkflow._batch_max_pages)
+        _count_billed_page = staticmethod(lambda page: None)
         _envelope_newest_id = staticmethod(
             XSearchRecentTweetsWorkflow._envelope_newest_id
         )
@@ -728,3 +733,233 @@ def test_search_with_budget_records_then_blocks():
     assert blocked["budget_blocked"] is True
     assert "daily" in blocked["budget_reason"]
     assert len(api.calls) == 1
+
+
+# ------------------------------------------- the agent's search under its caps
+
+
+class _EndlessApi:
+    """Search or timeline pages of ``per_page`` tweets, with a next token;
+    from request ``fail_at`` (1-based) on, a 400. ``delay`` slows every answer
+    (seconds)."""
+
+    def __init__(
+        self, per_page: int = 100, fail_at: int | None = None, delay: float = 0
+    ) -> None:
+        self.per_page = per_page
+        self.fail_at = fail_at
+        self.delay = delay
+        self.calls: list[dict] = []
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        if self.delay:
+            time.sleep(self.delay)
+        self.calls.append(dict(request.url.params))
+        n = len(self.calls)
+        if self.fail_at is not None and n >= self.fail_at:
+            return httpx.Response(400, json={"title": "Invalid Request"})
+        base = 10_000 - n * self.per_page
+        ids = [str(base - i) for i in range(self.per_page)]
+        # The last page after 20: an unbounded walk ends (the test then fails).
+        return httpx.Response(200, json=_page(ids, f"t{n}" if n < 20 else None))
+
+
+def _agent_ledger(storage, **caps) -> _XApiBudget:
+    limits = {
+        "cost_per_tweet_usd": 0.005,
+        "daily_max_tweets": None,
+        "daily_max_usd": None,
+        "monthly_max_tweets": None,
+        "monthly_max_usd": None,
+        **caps,
+    }
+    return budget_ledger(
+        SyncService(storage, asyncio.run), "x", "agent", BudgetLimits(**limits)
+    )
+
+
+def _ledger_today(storage) -> int:
+    return sum(storage.json("x/_budget", "agent.json")["daily"].values())
+
+
+@pytest.mark.parametrize(
+    ("caps", "pages"),
+    [
+        ({"daily_max_tweets": 150}, 2),  # ceil(150 / 100)
+        ({"daily_max_usd": 0.5}, 1),  # $0.50 at $0.005 = 100 tweets
+        ({"daily_max_tweets": 1000, "monthly_max_tweets": 250}, 3),  # tightest
+        ({}, 5),  # no cap: the pages asked for
+    ],
+)
+def test_one_agent_search_fetches_at_most_the_remaining_allowance(caps, pages):
+    api = _EndlessApi()
+    storage = _ListedStorage()
+    ledger = _agent_ledger(storage, **caps)
+
+    envelope = search_with_budget(
+        ledger, asyncio.run, _integration(api, storage), "q", max_pages=5
+    )
+
+    assert len(api.calls) == pages
+    assert envelope["budget"]["tweets_today"] == pages * 100
+
+
+def test_the_allowance_left_by_earlier_searches_bounds_the_next_one():
+    api = _EndlessApi()
+    storage = _ListedStorage()
+    ledger = _agent_ledger(storage, daily_max_tweets=250)
+    ledger.record(120)  # 130 left: two pages
+
+    search_with_budget(
+        ledger, asyncio.run, _integration(api, storage), "q", max_pages=5
+    )
+
+    assert len(api.calls) == 2
+
+
+def test_an_unbounded_agent_search_is_refused():
+    api = _EndlessApi()
+    storage = _ListedStorage()
+    ledger = _agent_ledger(storage)
+
+    with pytest.raises(ValueError, match="max_pages"):
+        search_with_budget(
+            ledger, asyncio.run, _integration(api, storage), "q", max_pages=None
+        )
+    assert api.calls == []
+
+
+def test_a_failed_agent_search_records_the_pages_it_was_billed():
+    api = _EndlessApi(fail_at=2)
+    storage = _ListedStorage()
+    ledger = _agent_ledger(storage)
+
+    with pytest.raises(IntegrationConnectionError):
+        search_with_budget(
+            ledger, asyncio.run, _integration(api, storage), "q", max_pages=3
+        )
+
+    assert _ledger_today(storage) == 100
+
+
+def test_an_envelope_that_cannot_be_saved_is_still_charged():
+    class _RefusingStorage(_ListedStorage):
+        async def put_object(self, prefix: str, key: str, content: bytes) -> None:
+            if prefix.startswith("x/search_recent_tweets"):
+                raise RuntimeError("object path refused")
+            await super().put_object(prefix, key, content)
+
+    api = _EndlessApi(per_page=10)
+    storage = _RefusingStorage()
+    ledger = _agent_ledger(storage)
+
+    with pytest.raises(RuntimeError, match="refused"):
+        search_with_budget(
+            ledger, asyncio.run, _integration(api, storage), "q", max_pages=1
+        )
+
+    assert _ledger_today(storage) == 10
+
+
+def test_parallel_agent_searches_cannot_spend_past_the_cap():
+    api = _EndlessApi(delay=0.2)
+    storage = _ListedStorage()
+    ledger = _agent_ledger(storage, daily_max_tweets=100)
+    integration = _integration(api, storage)
+
+    with ThreadPoolExecutor(4) as pool:
+        results = list(
+            pool.map(
+                lambda _: search_with_budget(
+                    ledger, asyncio.run, integration, "q", max_pages=1
+                ),
+                range(4),
+            )
+        )
+
+    assert len(api.calls) == 1
+    assert sorted(r["budget_blocked"] for r in results) == [False, True, True, True]
+    assert _ledger_today(storage) == 100
+
+
+def test_concurrent_records_are_not_lost():
+    class _SlowStorage(_FakeStorage):
+        def get_json(self, dir_path: str, file_name: str) -> dict:
+            data = super().get_json(dir_path, file_name)
+            time.sleep(0.002)  # widen the load / save window
+            return json.loads(json.dumps(data))
+
+    storage = _SlowStorage()
+    limits = _BudgetLimits(0.005, None, None, None, None)
+    # Two ledgers on the same key, as two tool calls build them.
+    ledgers = [_XApiBudget(storage, "x/_budget", "agent", limits) for _ in range(2)]
+    start = threading.Barrier(16)
+
+    def record(i: int) -> None:
+        start.wait()
+        ledgers[i % 2].record(1)
+
+    with ThreadPoolExecutor(16) as pool:
+        list(pool.map(record, range(16)))
+
+    assert ledgers[0].usage() == (16, 16)
+
+
+def test_agent_reads_are_capped_and_charged_too():
+    from naas_abi_apps.x.workflows.XSearchRecentTweetsWorkflow import read_with_budget
+
+    api = _EndlessApi(per_page=5)
+    storage = _ListedStorage()
+    ledger = _agent_ledger(storage, daily_max_tweets=5)
+    integration = _integration(api, storage)
+
+    first = read_with_budget(
+        ledger,
+        asyncio.run,
+        integration.get_user_tweets,
+        "42",
+        max_results=5,
+        max_pages=3,
+    )
+    second = read_with_budget(
+        ledger,
+        asyncio.run,
+        integration.get_user_tweets,
+        "42",
+        max_results=5,
+        max_pages=1,
+    )
+
+    assert len(first["data"]) == 5 and len(api.calls) == 1  # 5 left: one page
+    assert first["budget"]["tweets_today"] == 5
+    assert second["budget_blocked"] is True and second["data"] == []
+    assert len(api.calls) == 1
+
+
+def test_an_unbounded_agent_read_is_refused():
+    from naas_abi_apps.x.workflows.XSearchRecentTweetsWorkflow import read_with_budget
+
+    storage = _ListedStorage()
+    integration = _integration(_EndlessApi(), storage)
+    with pytest.raises(ValueError, match="max_pages"):
+        read_with_budget(
+            _agent_ledger(storage),
+            asyncio.run,
+            integration.get_user_followers,
+            "42",
+            max_results=100,
+            max_pages=None,
+        )
+
+
+def test_a_filter_run_records_the_billed_pages_of_a_failing_batch():
+    api = _EndlessApi(per_page=2, fail_at=2)
+    storage = _ListedStorage()
+    workflow = _workflow(api, storage, budget_key="drones")
+
+    with pytest.raises(IntegrationConnectionError):
+        # Two pages per batch: the first page is billed, the batch never saved.
+        workflow.run(_parameters(save_every_pages=2))
+
+    assert workflow.saved_file_paths() == []
+    assert list(storage.json("x/_budget", "drones.json")["daily"].values()) == [2]

@@ -22,6 +22,18 @@ from naas_abi_apps.x.x_proxy.dataset.store import (
 
 MEDIA_HOSTS = {"pbs.twimg.com", "video.twimg.com"}
 DEFAULT_MAX_BYTES = 250 * 1024 * 1024
+# ``fetch_public``'s timeout bounds the whole download (and each read). A fixed
+# 30 s cut off any video larger than a few megabytes on a slow link, so the
+# bound grows with the size allowed: the round trips, then the body at no less
+# than ``MEDIA_MIN_RATE`` bytes a second, up to ``MEDIA_MAX_TIMEOUT``.
+MEDIA_BASE_TIMEOUT = 30.0
+MEDIA_MIN_RATE = 1024 * 1024
+MEDIA_MAX_TIMEOUT = 600.0
+
+
+def media_timeout(max_bytes: int) -> float:
+    """Seconds allowed for one download of at most ``max_bytes``."""
+    return min(MEDIA_MAX_TIMEOUT, MEDIA_BASE_TIMEOUT + max_bytes / MEDIA_MIN_RATE)
 
 
 def _extension(content_type: str, source_url: str) -> str:
@@ -49,7 +61,8 @@ def _stream_download(
 
     Runs in a worker thread (the callers are synchronous), on an event loop of
     its own: ``fetch_public`` keeps the request on public addresses and checks
-    every redirect; the final URL must still be an approved X media host.
+    every redirect; the final URL must still be an approved X media host. The
+    download may take ``media_timeout(max_bytes)`` seconds.
     """
     if not _approved(source_url):
         raise ValueError(f"rejected host for {source_url!r}")
@@ -58,7 +71,7 @@ def _stream_download(
             source_url,
             headers={"User-Agent": "ABI-X-Proxy/1.0"},
             max_bytes=max_bytes,
-            timeout=30.0,
+            timeout=media_timeout(max_bytes),
         )
     )
     if not _approved(page.url):

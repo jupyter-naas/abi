@@ -105,18 +105,21 @@ async def run_search_recent_tweets(
     module: Any, ctx: Any, inp: SearchRecentTweetsInput
 ) -> SearchRecentTweetsOutput | None:
     """Handler body: ``module`` is the SDK module, ``ctx`` its ``FlowContext``.
-    The synchronous steps run in worker threads (``ctx.step`` runs a sync
-    function off the loop), on ``module.sync``."""
+    The synchronous steps run on the module's threads: ``ctx.step`` is given
+    ``module.sync.threaded(body)`` (a bare sync function would go to the loop's
+    default executor)."""
     config = find_filter(module, inp.filter)
     sync = module.sync
     module_id = ctx.runtime.module_id
 
-    blocked = await ctx.step("budget", search_budget_blocked, sync, config)
+    blocked = await ctx.step(
+        "budget", sync.threaded(search_budget_blocked), sync, config
+    )
     if blocked:
         ctx.skip(blocked)
         return None
 
-    fetched = await ctx.step("fetch", _fetch, sync, config)
+    fetched = await ctx.step("fetch", sync.threaded(_fetch), sync, config)
     if fetched["budget_blocked"]:  # the cap was reached between the two checks
         ctx.skip(fetched["budget_reason"] or "spend cap reached")
         return None
@@ -166,7 +169,9 @@ async def run_search_recent_tweets(
     dataset = None
     if mapped_paths:
         try:
-            dataset = await ctx.step(f"dataset[{n}]", _sync_dataset, sync, mapped_paths)
+            dataset = await ctx.step(
+                f"dataset[{n}]", sync.threaded(_sync_dataset), sync, mapped_paths
+            )
         except WorkflowCancelled:
             raise
         except Exception as error:  # noqa: BLE001 - the rest still goes on
@@ -174,7 +179,7 @@ async def run_search_recent_tweets(
     app = None
     if config.app_publish:
         try:
-            app = await ctx.step(f"publish[{n}]", _publish, sync)
+            app = await ctx.step(f"publish[{n}]", sync.threaded(_publish), sync)
         except WorkflowCancelled:
             raise
         except Exception as error:  # noqa: BLE001 - never fail the search on publish

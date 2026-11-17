@@ -75,3 +75,16 @@ def test_an_individual_gives_the_triples_it_always_gave() -> None:
         RDF.type,
         URIRef("http://ontology.naas.ai/abi/TemporalInstant"),
     ) in graph
+
+
+def test_the_ontology_points_at_its_file_in_this_package() -> None:
+    graph = Graph().parse(ONTOLOGIES / "modules/XOntology.ttl", format="turtle")
+    files = [
+        str(o) for o in graph.objects(None, RDFS.seeAlso) if str(o).endswith(".ttl")
+    ]
+    expected = (
+        "https://raw.githubusercontent.com/jupyter-naas/abi/refs/heads/main/libs/"
+        "naas-abi-marketplace-modules/naas_abi_apps/x/ontologies/modules/"
+        "XOntology.ttl"
+    )
+    assert files == [expected]

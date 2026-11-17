@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlparse
 
@@ -29,10 +29,39 @@ from naas_abi_apps.x.x_proxy.dataset.store import (
 
 MEDIA_HOSTS = {"pbs.twimg.com", "video.twimg.com"}
 PUBLIC_MEDIA_PREFIX = "dataset/media"
+# A media whose download failed is not fetched again on a view before this long
+# after the failure (the row's ``updated_at``; ``media_v1`` counts no attempts).
+MEDIA_RETRY_AFTER = timedelta(minutes=30)
 
 
 def _escape(value: str) -> str:
     return value.replace("'", "''")
+
+
+def _as_utc(value: Any) -> datetime | None:
+    """A dataset timestamp (``datetime`` or ISO text; naive means UTC)."""
+    if isinstance(value, datetime):
+        moment = value
+    else:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        try:
+            moment = datetime.fromisoformat(text)
+        except ValueError:
+            return None
+    return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
+
+
+def retry_due(row: dict[str, Any], now: datetime | None = None) -> bool:
+    """Whether a download may be tried for ``row``: always unless it failed
+    less than ``MEDIA_RETRY_AFTER`` ago."""
+    if str(row.get("status") or "") != "failed":
+        return True
+    failed_at = _as_utc(row.get("updated_at"))
+    if failed_at is None:
+        return True
+    return (now or datetime.now(UTC)) - failed_at >= MEDIA_RETRY_AFTER
 
 
 def public_media_rel(media_key: str, filename: str) -> str:
@@ -108,7 +137,8 @@ def ensure_media_row(
     *,
     max_bytes: int = DEFAULT_MAX_BYTES,
 ) -> str | None:
-    """Return a public relative path, downloading when still pending."""
+    """Return a public relative path, downloading when still pending (or when
+    an earlier download failed at least ``MEDIA_RETRY_AFTER`` ago)."""
     media_key = str(row.get("media_key") or "").strip()
     if not media_key:
         return None
@@ -121,6 +151,8 @@ def ensure_media_row(
     if not source_url:
         return None
     now = datetime.now(UTC)
+    if not retry_due(row, now):
+        return None
     try:
         storage_key, digest, size = download_and_store_media(
             storage,
@@ -178,15 +210,26 @@ def ensure_tweet_media(
     *,
     max_bytes: int = DEFAULT_MAX_BYTES,
 ) -> dict[str, Any]:
-    """Download pending catalog media for a tweet; return served relative URLs."""
+    """Download pending catalog media for a tweet; return served relative URLs.
+
+    ``ready``: some media can be shown; ``complete``: every media of the post
+    is stored, so the answer will not change (the app caches only that one).
+    """
     if not tweet_id.isdigit():
-        return {"tweet_id": tweet_id, "media_urls": "", "ready": False}
+        return {
+            "tweet_id": tweet_id,
+            "media_urls": "",
+            "ready": False,
+            "complete": False,
+        }
 
     paths: list[str] = []
-    for row in _media_rows_for_tweet(dataset, tweet_id):
+    rows = _media_rows_for_tweet(dataset, tweet_id)
+    for row in rows:
         rel = ensure_media_row(dataset, storage, row, max_bytes=max_bytes)
         if rel:
             paths.append(rel)
+    complete = bool(rows) and len(paths) == len(rows)
 
     if not paths:
         legacy = _fallback_source_urls(dataset, tweet_id)
@@ -194,11 +237,13 @@ def ensure_tweet_media(
             paths = _download_legacy_urls(
                 storage, tweet_id, legacy, max_bytes=max_bytes
             )
+            complete = bool(paths) and len(paths) == len(legacy)
 
     return {
         "tweet_id": tweet_id,
         "media_urls": " ".join(paths),
         "ready": bool(paths),
+        "complete": complete,
     }
 
 

@@ -8,7 +8,6 @@ again (the caller syncs the dataset); only a missing envelope is mapped.
 
 from __future__ import annotations
 
-import asyncio
 import posixpath
 from typing import Any
 
@@ -64,9 +63,9 @@ async def run_map_tweet_envelope(
     module: Any, ctx: Any, inp: MapTweetEnvelopeInput
 ) -> MapTweetEnvelopeOutput | None:
     """Handler body: ``module`` is the SDK module, ``ctx`` its ``FlowContext``.
-    The probes and the pipeline run in worker threads, on ``module.sync``."""
+    The probes and the pipeline run on the module's threads (``module.sync``)."""
     sync = module.sync
-    state = await asyncio.to_thread(_state, sync, inp)
+    state = await sync.call(_state, sync, inp)
     if state == "gone":
         ctx.skip("the envelope no longer exists")
         return None
@@ -75,5 +74,5 @@ async def run_map_tweet_envelope(
         return None
     if state == "graph_only":
         return MapTweetEnvelopeOutput(path=inp.path, status="dataset_only")
-    await ctx.step("pipeline", _map, sync, inp)
+    await ctx.step("pipeline", sync.threaded(_map), sync, inp)
     return MapTweetEnvelopeOutput(path=inp.path, status="mapped")

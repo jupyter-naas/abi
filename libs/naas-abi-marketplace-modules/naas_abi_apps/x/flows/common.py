@@ -1,10 +1,12 @@
 """The synchronous bodies of the X flows: graph, envelopes, counts, app.
 
 Each function takes ``module``, the module's ``SyncModule`` (``module.sync``:
-``configuration``, blocking ``engine.services``, ``run(coro)``), and runs in a
-worker thread: a workflow passes it to ``ctx.step``, which runs a sync function
-off the loop, and a job to ``asyncio.to_thread``. On the loop, the blocking
-services raise.
+``configuration``, blocking ``engine.services``, ``run(coro)``), and runs on the
+module's threads: a workflow passes ``module.sync.threaded(fn)`` to
+``ctx.step``, a job or a probe calls ``await module.sync.call(fn, ...)``. Never
+a bare sync function to ``ctx.step`` nor ``asyncio.to_thread``: both use the
+loop's default executor, where httpx resolves host names, and a body blocks on
+the loop. On the loop, the blocking services raise.
 """
 
 from __future__ import annotations
@@ -486,7 +488,9 @@ def publish_x_app(module: Any, *, enabled: bool | None = None) -> dict:
 
     When *enabled* is set (a filter's or a sweep's ``app_publish``), that value
     wins. When it is ``None`` (the ``build_app`` job), module ``app.publish``
-    applies (default true).
+    applies (default true). Without ``app.dataset.read_enabled`` only the web
+    export is uploaded (when this process has one): the snapshots are read from
+    the dataset.
     """
     allow = bool(enabled) if enabled is not None else x_app_publish_enabled(module)
     if not allow:
@@ -494,15 +498,19 @@ def publish_x_app(module: Any, *, enabled: bool | None = None) -> dict:
         logger.info(f"publish_x_app: skipped ({reason})")
         return {"skipped": True, "reason": reason}
 
+    from naas_abi_apps.x.x_proxy import build
     from naas_abi_apps.x.x_proxy.dataset.store import x_dataset_read_enabled
     from naas_abi_apps.x.x_proxy.hub import XAppHubBuilder
 
     if not x_dataset_read_enabled(module):
+        # The snapshots are read from the dataset; the web export is not, and
+        # must follow the module's version whatever the dataset settings.
+        web = build.publish_web_export(module, required=False)
         logger.info(
-            "publish_x_app: skipped (app.dataset.read_enabled is false: the app "
-            "snapshots are read from the dataset)"
+            "publish_x_app: snapshots skipped (app.dataset.read_enabled is false: "
+            f"they are read from the dataset); web export: {web}"
         )
-        return {"skipped": True, "reason": "dataset_read_disabled"}
+        return {"skipped": True, "reason": "dataset_read_disabled", "web": web}
 
     services = module.engine.services
     hub = XAppHubBuilder(

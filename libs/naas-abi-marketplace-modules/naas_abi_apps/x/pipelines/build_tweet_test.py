@@ -209,3 +209,39 @@ def test_result_set_link_survives_an_already_ingested_tweet(
     assert (subject, X.isContainedInSearchResultSet, URIRef(RESULT_SET)) in graph
     # ...while the individual itself was not re-emitted.
     assert (subject, RDF.type, URIRef(Tweet._class_uri)) not in graph
+
+
+@pytest.mark.parametrize(
+    "label", ['say "hi"', "back\\slash", "two\nlines", "carriage\rreturn"]
+)
+def test_label_exists_finds_any_label(label: str) -> None:
+    """The ASK's literal is built with ``sparql_string``: a label with a
+    newline (a user's bio, a tweet's text) is a valid literal, not an error."""
+    import asyncio
+
+    from naas_abi_apps.common.testing import FakeTripleStore
+    from naas_abi_apps.x.services import SyncService
+    from rdflib import Literal
+    from rdflib.namespace import RDFS
+
+    store = FakeTripleStore()
+    graph = "http://ontology.naas.ai/graph/x"
+    subject = URIRef(f"{X}XUser/1")
+    asyncio.run(
+        store.insert(
+            [
+                (subject, RDF.type, URIRef(f"{X}XUser")),
+                (subject, RDFS.label, Literal(label)),
+            ],
+            graph,
+        )
+    )
+    builder = XTweetGraphBuilder(SyncService(store, asyncio.run), graph)
+
+    assert builder.label_exists(label, f"{X}XUser") is True
+    assert (
+        XTweetGraphBuilder(SyncService(store, asyncio.run), graph).label_exists(
+            label + "x", f"{X}XUser"
+        )
+        is False
+    )

@@ -45,10 +45,10 @@ async def run_count_recent_tweets(
     module: Any, ctx: Any, inp: CountRecentTweetsInput
 ) -> CountRecentTweetsOutput:
     """Handler body: ``module`` is the SDK module, ``ctx`` its ``FlowContext``.
-    Both steps run in worker threads, on ``module.sync``."""
+    Both steps run on the module's threads (``module.sync.threaded``)."""
     sync = module.sync
-    fetched = await ctx.step("fetch", _fetch, sync, inp.query)
-    mapped = await ctx.step("map", _map, sync, inp.query, fetched)
+    fetched = await ctx.step("fetch", sync.threaded(_fetch), sync, inp.query)
+    mapped = await ctx.step("map", sync.threaded(_map), sync, inp.query, fetched)
     return CountRecentTweetsOutput(
         query=inp.query,
         buckets=int(fetched.get("total_buckets") or 0),

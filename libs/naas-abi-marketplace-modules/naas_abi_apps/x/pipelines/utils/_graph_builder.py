@@ -20,6 +20,7 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
+from naas_abi_apps.common.graph import sparql_string
 from naas_abi_apps.x.ontologies.modules.XOntology import (
     ContextAnnotation,
     Media,
@@ -103,11 +104,12 @@ class XTweetGraphBuilder:
         if cached is not None:
             return cached
 
-        escaped = label.replace("\\", "\\\\").replace('"', '\\"')
+        # The label comes from X (names, bios, texts): a literal of
+        # ``sparql_string``, which also escapes newlines.
         sparql = (
             f"ASK {{ GRAPH <{self._graph_name}> {{ "
             f"?s a <{class_uri}> ; "
-            f'<{RDFS.label}> "{escaped}" . }} }}'
+            f"<{RDFS.label}> {sparql_string(label)} . }} }}"
         )
         try:
             exists = bool(self._triple_store.query(sparql).askAnswer)

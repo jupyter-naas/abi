@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 
 import pytest
 from naas_abi_apps.x.flows import count
 from naas_abi_apps.x.flows.conftest import FakeFlowContext, x_module
 from naas_abi_apps.x.flows.models import CountRecentTweetsInput
+from naas_abi_apps.x.services import SyncModule
 
 
 class Calls(list):
@@ -78,3 +80,34 @@ def test_a_retry_after_the_fetch_maps_without_calling_x_again(calls):
     retry = FakeFlowContext(journal=journal)
     run(retry)
     assert calls.count("fetch q") == 1 and retry.ran == ["map"]
+
+
+def test_a_step_body_runs_on_the_module_threads(calls, monkeypatch):
+    """With the real ``SyncModule``: the step bodies run on its ``x-sync`` pool,
+    never on the loop's default executor, where httpx resolves host names."""
+    threads: list[str] = []
+
+    def fetch(module, query):
+        threads.append(threading.current_thread().name)
+        return {"total_buckets": 0, "file_paths": []}
+
+    def map_(module, query, output):
+        threads.append(threading.current_thread().name)
+        return {"mapped": 0, "partial_mapped": 0}
+
+    monkeypatch.setattr(count, "fetch_counts_for_query", fetch)
+    monkeypatch.setattr(count, "map_counts_for_query", map_)
+    module = x_module()
+
+    async def scenario():
+        module.sync = SyncModule(module, asyncio.get_running_loop())
+        try:
+            return await count.run_count_recent_tweets(
+                module, FakeFlowContext(), CountRecentTweetsInput(query="q")
+            )
+        finally:
+            module.sync.close()
+
+    asyncio.run(scenario())
+    assert len(threads) == 2
+    assert all(name.startswith("x-sync_") for name in threads), threads

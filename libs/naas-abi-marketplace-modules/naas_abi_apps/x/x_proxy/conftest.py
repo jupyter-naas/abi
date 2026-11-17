@@ -12,6 +12,7 @@ def _fresh_process_state():
     def reset() -> None:
         matched_tweets._index_ready = None
         matched_tweets._rebuild_started = False
+        matched_tweets._rebuild_failed_at = None
         read_cache.GENERATION.reset()
         read_cache.SEARCH_RESPONSE_CACHE.clear()
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextvars
 import threading
+import time
 from typing import Any
 
 from naas_abi_apps.x.services import logger
@@ -17,6 +18,10 @@ from naas_abi_apps.x.x_proxy.dataset.store import (
 _index_ready: bool | None = None
 _rebuild_lock = threading.Lock()
 _rebuild_started = False
+# When the last backfill failed (``time.monotonic()``), and how long before
+# another one starts.
+_rebuild_failed_at: float | None = None
+REBUILD_RETRY_SECONDS = 300.0
 
 
 def mark_matched_index_ready() -> None:
@@ -104,25 +109,39 @@ def _has_matched_posts(dataset) -> bool:
 
 
 def _rebuild_worker(dataset) -> None:
+    global _rebuild_started, _rebuild_failed_at
     try:
         rebuild_matched_tweet_ids(dataset)
+        _rebuild_failed_at = None
     except Exception as exc:  # noqa: BLE001
         logger.warning(f"rebuild_matched_tweet_ids failed: {exc}")
+        _rebuild_failed_at = time.monotonic()
     finally:
-        global _rebuild_started
         _rebuild_started = False
 
 
-def ensure_matched_tweet_ids_ready(dataset) -> None:
-    """Kick off a background backfill when posts exist but the index is empty."""
+def ensure_matched_tweet_ids_ready(dataset) -> bool:
+    """Kick off a background backfill when posts exist but the index is empty.
+
+    True once settled: the index has rows, or no post is matched yet (a sync
+    fills the index as it writes them). False while a backfill runs, or after
+    one failed: the caller asks again, and a failed backfill starts again
+    ``REBUILD_RETRY_SECONDS`` later. Raises what the dataset raises."""
     global _rebuild_started
     if matched_index_ready(dataset):
-        return
+        return True
     if not _has_matched_posts(dataset):
-        return
+        return True
     with _rebuild_lock:
-        if _rebuild_started or matched_index_ready(dataset):
-            return
+        if _rebuild_started:
+            return False
+        if matched_index_ready(dataset):
+            return True
+        failed_at = _rebuild_failed_at
+        if failed_at is not None and (
+            time.monotonic() - failed_at < REBUILD_RETRY_SECONDS
+        ):
+            return False
         _rebuild_started = True
         # The caller's identity goes with the backfill (a new thread has none).
         thread = threading.Thread(

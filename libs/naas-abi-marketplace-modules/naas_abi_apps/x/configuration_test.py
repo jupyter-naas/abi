@@ -109,6 +109,73 @@ def test_duplicate_entry_names_are_refused():
         )
 
 
-def test_a_bearer_token_in_the_configuration_is_refused():
-    with pytest.raises(ValueError, match="engine secret"):
-        XConfiguration(bearer_token="secret")
+def test_a_bearer_token_in_the_configuration_is_ignored_with_a_warning(caplog):
+    # X_BEARER_TOKEN exported in the shell reaches the module as this field.
+    with caplog.at_level("WARNING"):
+        config = XConfiguration(bearer_token="tok-123")
+    assert config.bearer_token is None
+    assert "applications.x/X_BEARER_TOKEN" in caplog.text
+    assert "tok-123" not in caplog.text
+
+
+def test_agent_max_pages_defaults_to_five_and_reads_a_variable():
+    assert XConfiguration().agent_max_pages == 5
+    assert XConfiguration(agent_max_pages="2").agent_max_pages == 2
+    with pytest.raises(ValueError, match="agent_max_pages"):
+        XConfiguration(agent_max_pages="0")
+
+
+BAD_NAMES = ["ai-llms", "a b", "x/y", "", "é", "a.b"]
+
+
+@pytest.mark.parametrize("name", BAD_NAMES)
+@pytest.mark.parametrize(
+    "setting",
+    [
+        "search_recent_tweets_workflow",
+        "search_recent_tweets_files",
+        "count_recent_tweets_workflow",
+    ],
+)
+def test_entry_names_are_letters_digits_and_underscores(setting, name):
+    with pytest.raises(ValueError, match="letters, digits"):
+        XConfiguration(**{setting: [{"name": name, "query": "q"}]})
+
+
+@pytest.mark.parametrize("name", ["agent", "Agent"])
+def test_agent_is_the_agent_ledger_not_a_search_filter(name):
+    with pytest.raises(ValueError, match="reserved"):
+        XConfiguration(search_recent_tweets_workflow=[{"name": name, "query": "q"}])
+    # Other entries have no ledger.
+    XConfiguration(search_recent_tweets_files=[{"name": name}])
+
+
+def test_names_differing_only_in_case_share_a_ledger_so_are_duplicates():
+    with pytest.raises(ValueError, match="duplicate entry names"):
+        XConfiguration(
+            search_recent_tweets_workflow=[
+                {"name": "News", "query": "a"},
+                {"name": "news", "query": "b"},
+            ]
+        )
+
+
+def test_app_and_lists_given_as_json_strings_are_parsed():
+    # X_APP is a str: common.runtime parses only fields annotated list / dict.
+    config = XConfiguration(
+        app='{"publish": false, "dataset": {"read_enabled": true}}',
+        search_recent_tweets_workflow='[{"name": "news", "query": "q"}]',
+        search_recent_tweets_files="[]",
+    )
+    assert config.app.publish is False and config.app.dataset.read_enabled
+    assert config.search_recent_tweets_workflow[0].name == "news"
+    assert config.search_recent_tweets_files == []
+
+
+@pytest.mark.parametrize(
+    ("setting", "value"),
+    [("app", "{publish: no"), ("search_recent_tweets_workflow", "[{")],
+)
+def test_bad_json_names_the_setting(setting, value):
+    with pytest.raises(ValueError, match=f"{setting} must be JSON"):
+        XConfiguration(**{setting: value})

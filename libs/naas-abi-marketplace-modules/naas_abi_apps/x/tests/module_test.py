@@ -148,17 +148,47 @@ def test_an_in_engine_entry_loads_from_the_config_file(tmp_path) -> None:
     ]
 
 
-def test_a_bearer_token_in_the_config_file_is_refused(tmp_path) -> None:
+def test_a_bearer_token_in_the_config_file_is_ignored(tmp_path, caplog) -> None:
     path = tmp_path / "x.yaml"
     path.write_text(
         IN_ENGINE_ENTRY.replace(
             "config:\n", 'config:\n  bearer_token: "{{ secret.X_BEARER_TOKEN }}"\n'
         )
     )
-    with pytest.raises(ValueError, match="engine secret"):
-        configuration_from(
+    with caplog.at_level("WARNING"):
+        config = configuration_from(
             ABIModule.Configuration, ENV_PREFIX, {"X_CONFIG_FILE": str(path)}
         )
+    assert config.bearer_token is None
+    assert "engine secret applications.x/X_BEARER_TOKEN" in caplog.text
+
+
+def test_an_exported_bearer_token_does_not_stop_the_module() -> None:
+    # `abi dev up` passes the parent environment: X_BEARER_TOKEN maps onto the
+    # bearer_token field.
+    config = configuration_from(
+        ABIModule.Configuration, ENV_PREFIX, {"X_BEARER_TOKEN": "tok-123"}
+    )
+    assert config.bearer_token is None
+
+
+def test_app_and_agent_settings_come_from_variables() -> None:
+    config = configuration_from(
+        ABIModule.Configuration,
+        ENV_PREFIX,
+        {
+            "X_APP": '{"publish": false, "dataset": {"sync_enabled": true}}',
+            "X_AGENT_MAX_PAGES": "3",
+            "X_AGENT_DAILY_MAX_USD": "1.5",
+        },
+    )
+    assert config.app.publish is False and config.app.dataset.sync_enabled
+    assert (config.agent_max_pages, config.agent_daily_max_usd) == (3, 1.5)
+
+
+def test_a_malformed_x_app_names_the_setting() -> None:
+    with pytest.raises(ValueError, match="app must be JSON"):
+        configuration_from(ABIModule.Configuration, ENV_PREFIX, {"X_APP": "{oops"})
 
 
 def test_the_variables_win_over_the_config_file(tmp_path) -> None:

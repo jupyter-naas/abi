@@ -9,14 +9,21 @@
 ## One process, async handlers, synchronous bodies
 
 The module reaches the engine only over NATS (SDK services). Its large bodies (graph mapping, dataset projection,
-app snapshots) stay synchronous, as they were in-engine, and run in **worker threads**:
+app snapshots) stay synchronous, as they were in-engine, and run on the module's **own thread pool**:
 
 - `services.py: SyncModule` (`module.sync`, built in `on_initialized`) is what the synchronous code takes as
   `module`: `configuration`, `engine.services.<svc>` with the SDK's method names, each call blocking until it finished
   on the module's loop, and `run(coro)` for the async `XIntegration`. A blocking call made **on** the loop raises.
-- The workflow and job handlers are async. A workflow hands each synchronous piece to `ctx.step(key, fn, ...)`,
-  which runs a sync `fn` in a thread; the probes that are not steps go through `asyncio.to_thread`. The jobs call
-  `asyncio.to_thread`. Never call a `module.sync` service from a handler directly.
+- **The pool.** `SyncModule` owns a `ThreadPoolExecutor` (`SYNC_THREADS` = 32 threads named `x-sync_<n>`), shut down
+  in `on_unloaded`. `await module.sync.call(fn, *args)` runs a body there (in a copy of the caller's context);
+  `module.sync.threaded(fn)` is `fn` as an async function running there. A body must **never** go to the loop's
+  default executor (`asyncio.to_thread`, or a bare sync function given to `ctx.step`, which the SDK runs with
+  `asyncio.to_thread`): a body blocks waiting on the loop, and the loop resolves host names (httpx) on that same
+  executor, so many bodies at once starve the very calls they wait for.
+- The workflow and job handlers are async. A workflow hands each synchronous piece to
+  `ctx.step(key, module.sync.threaded(fn), ...)`; the probes that are not steps and the jobs call
+  `await module.sync.call(fn, ...)`, and so does each request of the app (`x_proxy/app.py`). Never call a
+  `module.sync` service from a handler directly.
 - The domain classes (`workflows/`, `pipelines/`) are plain synchronous classes built by `flows/common.py` from
   `module.sync`: `x_integration_for(module)` (the bearer token is the engine secret
   `applications.x/X_BEARER_TOKEN`, read in `on_initialized`), the blocking `object_storage` / `triple_store`, and
@@ -56,12 +63,22 @@ and outputs are pydantic models in `flows/models.py` (no module import). Handler
 
 ### Overlap: `skip_if_running`
 
-A tick whose previous run **with the same input** is still `RUNNING` (or `RETRYING`) ends **SKIPPED**, naming that
-run, instead of queueing behind it: the SDK's `skip_if_running` on the four declarations above, checked by the host
-before the handler starts (first attempt only, so a retry never skips itself; of ticks that start together, the
-first triggered goes ahead). The skipping tick takes a slot to start, hence two slots per input that can overlap.
-Different filters have different inputs and run independently. When the host cannot read the run records, the run
-fails (`OverlapCheckBlind`, not retried) rather than guess. A crashed host's run blocks until the upkeep fails it.
+The SDK's `skip_if_running`, on the four declarations above, is an **input claim** (`naas_abi_sdk/job_host.py:
+_claim_input`). Before a run starts (before its `RUNNING` record is saved), the host claims the run's input: a
+document per job and input in a collection of its own, taken as the module (never with a manual trigger's user
+delegation). Then:
+
+- a run whose input **another active run** holds (`RUNNING` with live heartbeats, or `RETRYING`, or claimed just
+  now and not saved yet) ends **SKIPPED**, naming that run, instead of queueing behind it. The first run to claim
+  goes ahead, whatever the order of the triggers;
+- **every attempt** checks, and a run always passes its own claim: a **retry holds its own claim** and never skips
+  itself, and nothing runs unchecked;
+- a claim whose holder **finished**, or whose **heartbeats stopped** (a crashed host, `lost_after_seconds`), is taken
+  over; a finished run also releases its claim (best effort);
+- a store error while claiming defers the delivery (redelivered later) without using an attempt.
+
+The skipping tick takes a slot to start, hence two slots (`max_concurrency`) per input that can overlap. Different
+filters have different inputs and run independently.
 
 ### `search_recent_tweets` — one tick of one filter
 
@@ -120,8 +137,18 @@ workflow once with `force: true` to rebuild them from the envelopes, which stay 
 
 ### `build_app` and `compact_dataset`
 
-`build_app` republishes the app (`publish_x_app`: module `app.publish`, and `app.dataset.read_enabled`, decide) then
-downloads one batch of pending media (`app.dataset.media_batch_size`); a failed publish fails the run. `compact_dataset`
+`build_app` republishes the app (`publish_x_app`, with module `app.publish`: the JSON snapshots only with
+`app.dataset.read_enabled`, the web export whatever it says) then downloads one batch of pending media
+(`app.dataset.media_batch_size`); a failed publish fails the run.
+
+**The web export at start.** `on_initialized` starts a background task (`flows/maintenance.py:
+publish_web_export_at_start`) that uploads the Next export this image carries (`x_proxy/build.py: publish_web_export`,
+`required=False`: no export, nothing uploaded) on the module's threads, unless `app.publish` is false. READY does not
+wait for it, a failure is only logged, unchanged files are not uploaded again (the export's manifest), and
+`on_unloaded` cancels it before it closes the pool. Without it, an upgraded installation would keep serving the
+export an earlier version published: the export is replaced only by a publish. Until then the app also rewrites the
+in-engine export's base path (`/app-html/x/apps/x_proxy`, plain and `\/`-escaped) to the request's root, as it does
+the placeholder of its own build (`x_proxy/app.py: rewrite_root`). `compact_dataset`
 flushes then compacts each X table (`x_proxy/dataset/maintenance.py: compact_x_datasets`), a no-op while
 `app.dataset.sync_enabled` is off. Expiring old snapshots and deleting unread files is the engine's `dataset_cleanup`.
 
@@ -166,9 +193,11 @@ uv run --frozen --all-extras pytest naas_abi_apps/x      # the whole module, off
 ```
 
 - `flows/*_test.py`: the handler bodies with `FakeFlowContext` (async; journals steps by key with the SDK's JSON and
-  size rules, runs a sync step in a thread and records it in `off_loop`, records child calls), the module's sync view
-  from `x_module`, and the domain classes or `x_proxy` calls stubbed. Running a handler twice on one `journal` shows
-  what a retry does not repeat.
+  size rules, runs a bare sync step as the SDK does, with `asyncio.to_thread`, and records in `off_loop[key]` whether
+  the body ran on the module's `x-sync` threads, records child calls), the module's sync view from `x_module`
+  (`x_proxy/testing.py: ThreadedSync`, whose `call` / `threaded` run on an `x-sync` pool), and the domain classes or
+  `x_proxy` calls stubbed. Running a handler twice on one `journal` shows what a retry does not repeat.
+  `count_test.py` runs the bodies on the real `SyncModule` pool.
 - `flows/declare_test.py`: what the real `ABIModule` declares from its configuration (descriptors, triggers, cron
   conversion, shards, `skip_if_running`, `max_concurrency`, handlers), without a broker.
 - `tests/module_test.py`: the module's id, agent, services, ontologies, configuration (`X_CONFIG_FILE` with an
@@ -176,10 +205,13 @@ uv run --frozen --all-extras pytest naas_abi_apps/x      # the whole module, off
 
 ## Adding to the flow
 
-1. A synchronous body goes in `flows/common.py` (or a sibling), takes `module` = the `SyncModule`, and never runs on
-   the loop: hand it to `ctx.step` (a workflow) or `asyncio.to_thread` (a job, a probe that is not a step).
-2. A new step is `await ctx.step("<stable key>", fn, *args)`: its result is JSON, at most 256 KiB, and the key must be
-   the same on every attempt. Keep a large list out of a step result (store it, return a reference).
+1. A synchronous body goes in `flows/common.py` (or a sibling), takes `module` = the `SyncModule`, and runs on the
+   module's threads, never on the loop nor on its default executor: `ctx.step(key, module.sync.threaded(fn), ...)`
+   (a workflow) or `await module.sync.call(fn, ...)` (a job, a probe that is not a step). Never `asyncio.to_thread`,
+   never a bare sync `fn` given to `ctx.step`.
+2. A new step is `await ctx.step("<stable key>", module.sync.threaded(fn), *args)`: its result is JSON, at most
+   256 KiB, and the key must be the same on every attempt. Keep a large list out of a step result (store it, return a
+   reference).
 3. A new workflow is a method on `ABIModule` with `@workflow` (or, when the configuration gives its triggers, a
    `declare_workflow` in `flows/__init__.py`), its models in `flows/models.py`, its body in `flows/`, and a test with
    `FakeFlowContext`. A poller whose ticks must not pile up gets `skip_if_running=True` and two slots per input.

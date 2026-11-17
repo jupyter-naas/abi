@@ -12,11 +12,12 @@ only through NATS. Replaces the in-engine ``naas_abi_marketplace.applications.x`
   ``build_app``, ``compact_dataset``. Overlapping ticks are skipped by the SDK's
   ``skip_if_running``;
 - the Recent Tweets app (``apps/x_proxy``, app id ``remote/applications.x:x_proxy``)
-  served with ``expose_app`` from object storage and the dataset service;
+  served with ``expose_app`` from object storage and the dataset service; the
+  web export the image carries is uploaded at start, in the background;
 - the X ontologies, sent to the schema graph.
 
-The synchronous bodies (mapping, dataset, snapshots) run in worker threads and
-reach the engine through ``self.sync`` (``services.SyncModule``). The bearer token
+The synchronous bodies (mapping, dataset, snapshots) run on the module's own
+threads and reach the engine through ``self.sync`` (``services.SyncModule``). The bearer token
 is the engine secret ``applications.x/X_BEARER_TOKEN``. See ``AGENTS.md``.
 """
 
@@ -84,6 +85,8 @@ class ABIModule(BaseModule[XConfiguration]):
 
     bearer_token: str | None = None
     sync: SyncModule
+    # The start-up upload of the web export (``on_initialized``).
+    _web_export: asyncio.Task[Any]
 
     def on_load(self) -> None:
         # The workflows whose triggers come from the configuration are declared
@@ -107,10 +110,24 @@ class ABIModule(BaseModule[XConfiguration]):
 
         self.expose_app(APP_NAME, create_app(self))
 
+        # The web export this image carries replaces the one in object storage
+        # (an earlier version's), whatever app.dataset.read_enabled says. In the
+        # background: READY does not wait for it, a failure is only logged.
+        from naas_abi_apps.x.flows.maintenance import publish_web_export_at_start
+
+        self._web_export = asyncio.create_task(
+            publish_web_export_at_start(self), name="x-web-export"
+        )
+
     async def run(self) -> None:
         await serve_until_stopped(self)
 
     async def on_unloaded(self) -> None:
+        # The start-up upload first: it runs on the pool closed below.
+        task = self.__dict__.get("_web_export")
+        if task is not None and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
         sync = self.__dict__.get("sync")
         if sync is not None:
             sync.close()

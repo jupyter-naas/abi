@@ -6,9 +6,10 @@ Its tools:
 - the 13 X v2 API tools of ``XIntegration`` (``x_get_user_by_id`` …
   ``x_count_recent_tweets``), only when the bearer token is set
   (``module.bearer_token``, the engine secret ``applications.x/X_BEARER_TOKEN``);
-  in-engine they were commented out. ``x_search_recent_tweets`` spends credits,
-  so it goes through a spend ledger (``workflows.XSearchRecentTweetsWorkflow``),
-  keyed ``agent``, with its own caps (``agent_search_limits``);
+  in-engine they were commented out. ``x_search_recent_tweets`` and the
+  paginated user reads spend credits, so they go through a spend ledger
+  (``workflows.XSearchRecentTweetsWorkflow``), keyed ``agent``, with its own
+  caps (``agent_search_limits``) and at most ``agent_max_pages`` per call;
 - the 14 SPARQL templates of ``ontologies/queries/XSparqlQueries.ttl`` the
   in-engine agent loaded, run on the engine's triple store
   (``common.sparql_templates`` instead of core's ``templatablesparqlquery``).
@@ -16,17 +17,22 @@ Its tools:
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 from typing import Any
 
 from naas_abi_apps.common.agents import build_agent
 from naas_abi_apps.common.sparql_templates import module_queries, query_tools
-from naas_abi_apps.x.integrations.XIntegration import as_tools, x_integration_for
+from naas_abi_apps.x.configuration import AGENT_LEDGER
+from naas_abi_apps.x.integrations.XIntegration import (
+    DEFAULT_AGENT_MAX_PAGES,
+    as_tools,
+    x_integration_for,
+)
 from naas_abi_apps.x.services import logger
 from naas_abi_apps.x.workflows.XSearchRecentTweetsWorkflow import (
     BudgetLimits,
     budget_ledger,
+    read_with_budget,
     search_with_budget,
 )
 from naas_abi_sdk import AgentSuggestion
@@ -175,7 +181,7 @@ SPARQL_TOOLS = (
 )
 
 # The agent's searches share one ledger, beside the filters' ones.
-AGENT_BUDGET_KEY = "agent"
+AGENT_BUDGET_KEY = AGENT_LEDGER  # no search filter may take this name
 PACKAGE_DIR = Path(__file__).resolve().parents[1]
 
 
@@ -200,8 +206,13 @@ def agent_search_limits(configuration: Any) -> BudgetLimits:
 
 
 def integration_tools(module: Any) -> list[Any]:
-    """The X v2 API tools, the search through the agent's ledger; none
-    without a bearer token."""
+    """The X v2 API tools; none without a bearer token.
+
+    The search and the paginated user reads (timeline, mentions, likes,
+    followers, following) go through the agent's ledger: each call fetches 1
+    page unless asked for more, at most ``agent_max_pages`` and what the caps
+    leave, and is charged for what X returned. The single lookups are not
+    charged."""
     if not module.bearer_token:
         logger.warning(
             "applications.x: secret %s not set; the agent has no X API tools",
@@ -217,13 +228,34 @@ def integration_tools(module: Any) -> list[Any]:
         agent_search_limits(module.configuration),
     )
 
+    # The ledger reads and writes object storage blocking: on the module's
+    # threads (``sync.call``), never the loop's default executor, which the
+    # loop needs for httpx's host-name lookups while the body waits on it.
     async def search(query: str, **options: Any) -> dict:
-        # The ledger reads and writes object storage synchronously: off the loop.
-        return await asyncio.to_thread(
+        return await sync.call(
             search_with_budget, ledger, sync.run, integration, query, **options
         )
 
-    return as_tools(integration.configuration, search_recent_tweets=search)
+    async def user_read(
+        method: str, user_id: str, max_results: int, max_pages: int
+    ) -> dict:
+        return await sync.call(
+            read_with_budget,
+            ledger,
+            sync.run,
+            getattr(integration, method),
+            user_id,
+            max_results=max_results,
+            max_pages=max_pages,
+        )
+
+    max_pages = getattr(module.configuration, "agent_max_pages", None)
+    return as_tools(
+        integration.configuration,
+        search_recent_tweets=search,
+        user_read=user_read,
+        max_pages=max_pages or DEFAULT_AGENT_MAX_PAGES,
+    )
 
 
 async def create_agent(module: Any) -> Agent:

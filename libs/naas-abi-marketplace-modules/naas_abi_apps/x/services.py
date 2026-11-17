@@ -2,7 +2,7 @@
 
 The X module keeps its large synchronous bodies (graph mapping, dataset
 projection, app snapshots) as they were in-engine. They are CPU-bound, so they
-run in worker threads (``asyncio.to_thread``), never on the module's event
+run on the module's own threads (``SyncModule.call``), never on its event
 loop. From there they reach the engine through ``SyncModule``: the module's
 configuration, and ``engine.services.<service>`` whose methods are the SDK's,
 blocking until the call finished on the module's loop::
@@ -74,7 +74,7 @@ class Blocking:
                 coro.close()
             raise RuntimeError(
                 "A blocking X service call on the module's event loop would wait "
-                "for itself: run the synchronous body with asyncio.to_thread"
+                "for itself: run the synchronous body with SyncModule.call"
             )
         return asyncio.run_coroutine_threadsafe(coro, self.loop).result(timeout)  # type: ignore[arg-type]
 

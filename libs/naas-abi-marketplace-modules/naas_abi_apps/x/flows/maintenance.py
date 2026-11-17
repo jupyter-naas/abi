@@ -2,8 +2,9 @@
 
 Both jobs are ``skip_if_running``: a tick whose previous run is still going
 ends SKIPPED before these bodies start. The work is synchronous (snapshots,
-media downloads, dataset maintenance) and runs in worker threads, on
-``module.sync``.
+media downloads, dataset maintenance) and runs on the module's threads
+(``module.sync.call``). Also the start-up upload of the web export
+(``publish_web_export_at_start``).
 """
 
 from __future__ import annotations
@@ -11,7 +12,11 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from naas_abi_apps.x.flows.common import jsonable, publish_x_app
+from naas_abi_apps.x.flows.common import (
+    jsonable,
+    publish_x_app,
+    x_app_publish_enabled,
+)
 from naas_abi_apps.x.services import logger
 
 
@@ -46,11 +51,42 @@ async def run_build_app(module: Any, ctx: Any) -> dict[str, Any]:
     """``build_app``: republish the Recent Tweets app (module ``app.publish``
     decides), then download one batch of pending media."""
     sync = module.sync
-    app = await asyncio.to_thread(publish_x_app, sync)
-    media = await asyncio.to_thread(run_media_batch, sync)
+    app = await sync.call(publish_x_app, sync)
+    media = await sync.call(run_media_batch, sync)
     return jsonable({"app": app, "media": media})
 
 
 async def run_compact_dataset(module: Any, ctx: Any) -> dict[str, Any]:
     """``compact_dataset``: flush and compact each X dataset table."""
-    return jsonable(await asyncio.to_thread(run_compaction, module.sync))
+    sync = module.sync
+    return jsonable(await sync.call(run_compaction, sync))
+
+
+def _publish_web_export(sync: Any) -> dict[str, Any]:
+    from naas_abi_apps.x.x_proxy import build
+
+    if not x_app_publish_enabled(sync):
+        return {"skipped": True, "reason": "app.publish=false"}
+    return build.publish_web_export(sync, required=False)
+
+
+async def publish_web_export_at_start(module: Any) -> dict[str, Any] | None:
+    """Upload the web export this process carries (the image's), at module start.
+
+    The export in object storage is the one an earlier version published, and
+    only a publish replaces it, which ``build_app`` does only with
+    ``app.dataset.read_enabled``: after an upgrade the app would serve the old
+    export. Runs in the background (``ABIModule.on_initialized``): READY never
+    waits for it, and a failure is only logged (``None``). Unchanged files are
+    not uploaded again (the export's manifest). ``app.publish`` false skips it.
+    """
+    sync = module.sync
+    try:
+        summary = await sync.call(_publish_web_export, sync)
+    except asyncio.CancelledError:
+        raise
+    except Exception as error:  # noqa: BLE001 - the app keeps the export it has
+        logger.warning(f"X app: web export not published at start ({error})")
+        return None
+    logger.info(f"X app: web export at start: {summary}")
+    return jsonable(summary)

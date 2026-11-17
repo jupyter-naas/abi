@@ -3,7 +3,8 @@
 ``search``, ``mapping``, ``reprocess``, ``count`` and ``maintenance`` hold the
 async bodies of the workflows and jobs ``ABIModule`` declares; each runs its
 synchronous pieces (``common``, ``envelopes``, the domain classes, ``x_proxy``)
-in worker threads, on ``module.sync``. See the module's AGENTS.md.
+on the module's own threads (``module.sync.call`` / ``module.sync.threaded``).
+See the module's AGENTS.md.
 
 ``declare_configured_workflows`` declares the two workflows whose triggers come
 from the configuration; ``ABIModule.on_load`` calls it.

@@ -1,10 +1,10 @@
 """The app and the dataset sync over ``SyncModule``, as the module runs them.
 
 The engine's services are async (the SDK's, over NATS); the X bodies are
-synchronous and reach them through ``SyncModule`` from worker threads. Here the
-services are async wrappers of the fakes, the sync runs in ``to_thread`` and
-the app is called through httpx's ASGI transport on the same loop: a blocking
-call made on the loop itself would raise.
+synchronous and reach them through ``SyncModule`` from its own threads. Here
+the services are async wrappers of the fakes, the sync runs with
+``SyncModule.call`` and the app is called through httpx's ASGI transport on the
+same loop: a blocking call made on the loop itself would raise.
 """
 
 from __future__ import annotations
@@ -82,7 +82,7 @@ def test_sync_then_serve_through_sync_module() -> None:
 
     async def scenario() -> tuple[dict, httpx.Response, httpx.Response]:
         module.sync = SyncModule(module, asyncio.get_running_loop())
-        summary = await asyncio.to_thread(
+        summary = await module.sync.call(
             sync_envelope_paths,
             module.sync,
             [f"{ENVELOPE_PREFIX}/2026-09-01T12_00_00Z_drones.json"],
@@ -116,6 +116,6 @@ def test_a_blocking_call_on_the_loop_raises_instead_of_hanging() -> None:
     try:
         asyncio.run(scenario())
     except RuntimeError as exc:
-        assert "asyncio.to_thread" in str(exc)
+        assert "SyncModule.call" in str(exc)
     else:
         raise AssertionError("a blocking call on the loop must raise")

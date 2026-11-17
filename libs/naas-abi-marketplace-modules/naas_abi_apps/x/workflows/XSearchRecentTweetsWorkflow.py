@@ -23,10 +23,14 @@ of a ``services.SyncModule``), and the async ``XIntegration`` is called through
     )
     output = workflow.run(XSearchRecentTweetsWorkflowParameters(queries=[query]))
 
-``search_with_budget`` puts one search of the agent's tool through a ledger.
+``search_with_budget`` and ``read_with_budget`` put one call of the agent's
+tools through a ledger: the allowance is reserved before X is called, and the
+call fetches no more pages than the caps leave.
 """
 
+import math
 import os
+import threading
 from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -35,6 +39,7 @@ from typing import Annotated, Any, Protocol
 
 from naas_abi_apps.x.integrations.XIntegration import (
     XIntegration,
+    page_resources,
     slugify_query,
 )
 from naas_abi_apps.x.services import StorageUtils, logger
@@ -195,6 +200,47 @@ class _BudgetLimits:
     def monthly_tweet_cap(self) -> int | None:
         return self._tweet_cap(self.monthly_max_tweets, self.monthly_max_usd)
 
+    def remaining_tweets(self, used_day: int, used_month: int) -> int | None:
+        """Tweets left under the most restrictive cap (``None``: uncapped)."""
+        left = [
+            cap - used
+            for cap, used in (
+                (self.daily_tweet_cap, used_day),
+                (self.monthly_tweet_cap, used_month),
+            )
+            if cap is not None
+        ]
+        return max(0, min(left)) if left else None
+
+
+# One lock per ledger file, for the check, the reservation and the record of
+# every ledger on it in this process. A replica hosts the module in a single
+# process, so this serialises all of its writers; two replicas sharing the
+# object storage can still interleave a load / save of the same ledger (a
+# bounded overshoot): no distributed lock is taken.
+_LEDGER_LOCKS: dict[str, threading.Lock] = {}
+_LEDGER_LOCKS_GUARD = threading.Lock()
+
+
+def _ledger_lock(key: str) -> threading.Lock:
+    with _LEDGER_LOCKS_GUARD:
+        lock = _LEDGER_LOCKS.get(key)
+        if lock is None:
+            lock = _LEDGER_LOCKS[key] = threading.Lock()
+        return lock
+
+
+@dataclass(frozen=True)
+class Reservation:
+    """What :meth:`_XApiBudget.reserve` added to the ledger for one call:
+    ``tweets`` (the most the call can bill) in the day and month it was made,
+    and the ``max_pages`` the call may fetch."""
+
+    tweets: int
+    max_pages: int
+    day_key: str
+    month_key: str
+
 
 class _BudgetLedgerStorage(Protocol):
     def get_json(self, dir_path: str, file_name: str) -> dict: ...
@@ -218,10 +264,14 @@ class _XApiBudget:
     message and the caller fetches nothing; otherwise it runs and afterwards
     calls :meth:`record` with the number of tweets actually retrieved.
 
-    Read-modify-write is not atomic across processes, but the XOrchestration
-    runs each filter's job in-process and skips ticks while a run is in flight,
-    so concurrent writers are not expected. A small overshoot (one tick's worth)
-    is acceptable for a soft spend guard.
+    The agent's calls instead :meth:`reserve` the most they can bill before
+    they call X (limited to what the caps leave), then :meth:`settle` the
+    reservation to what X billed: parallel tool calls see each other's spend.
+
+    Every load / add / save holds the ledger's lock (``_ledger_lock``), so
+    writers of one process never lose an update. The lock is per process: a
+    filter's runs are serialised by ``skip_if_running``, but two replicas
+    sharing the object storage could still interleave (see ``_LEDGER_LOCKS``).
     """
 
     # Keep the ledger from growing without bound: retain at most this many of
@@ -241,6 +291,7 @@ class _XApiBudget:
         # One ledger file per filter so each tracks/caps its own spend.
         self._ledger_filename = f"{slugify_query(budget_key) or 'default'}.json"
         self._limits = limits
+        self._lock = _ledger_lock(os.path.join(budget_path, self._ledger_filename))
 
     @staticmethod
     def _period_keys() -> tuple[str, str]:
@@ -283,19 +334,57 @@ class _XApiBudget:
             )
         return None
 
-    def record(self, tweets_retrieved: int) -> None:
-        """Add ``tweets_retrieved`` to today's and this month's counters."""
-        if tweets_retrieved <= 0:
-            return
+    def _add(self, tweets: int, day_key: str, month_key: str) -> None:
+        """Add ``tweets`` (negative: give back, never below zero) to the
+        ``day_key`` and ``month_key`` counters. The caller holds the lock."""
         data = self._load()
-        day_key, month_key = self._period_keys()
-        data["daily"][day_key] = int(data["daily"].get(day_key, 0)) + tweets_retrieved
-        data["monthly"][month_key] = (
-            int(data["monthly"].get(month_key, 0)) + tweets_retrieved
+        data["daily"][day_key] = max(0, int(data["daily"].get(day_key, 0)) + tweets)
+        data["monthly"][month_key] = max(
+            0, int(data["monthly"].get(month_key, 0)) + tweets
         )
         data["daily"] = self._prune(data["daily"], self._MAX_DAILY_BUCKETS)
         data["monthly"] = self._prune(data["monthly"], self._MAX_MONTHLY_BUCKETS)
         self._storage.save_json(data, self._path, self._ledger_filename, copy=False)
+
+    def record(self, tweets_retrieved: int) -> None:
+        """Add ``tweets_retrieved`` to today's and this month's counters."""
+        if tweets_retrieved <= 0:
+            return
+        with self._lock:
+            self._add(tweets_retrieved, *self._period_keys())
+
+    def reserve(self, max_pages: int, max_results: int) -> Reservation | str:
+        """Before a call to X: the reason a cap forbids it, or its reservation.
+
+        Under the ledger's lock: when no cap is reached, ``max_pages`` is
+        limited to the allowance the caps leave (``ceil(remaining /
+        max_results)`` pages, the most restrictive cap winning; the last page
+        may cross the cap by less than one page), and the most the call can
+        bill (``pages * max_results``) is added to the ledger at once, so that
+        a parallel call sees it. :meth:`settle` corrects it afterwards.
+        """
+        per_page = max(1, int(max_results))
+        with self._lock:
+            reason = self.exhausted_reason()
+            if reason is not None:
+                return reason
+            pages = max(1, int(max_pages))
+            remaining = self._limits.remaining_tweets(*self.usage())
+            if remaining is not None:
+                pages = min(pages, max(1, math.ceil(remaining / per_page)))
+            day_key, month_key = self._period_keys()
+            reservation = Reservation(pages * per_page, pages, day_key, month_key)
+            self._add(reservation.tweets, day_key, month_key)
+            return reservation
+
+    def settle(self, reservation: Reservation, billed: int) -> None:
+        """Replace ``reservation`` by the ``billed`` tweets X returned, in the
+        day and month the reservation was made."""
+        delta = int(billed) - reservation.tweets
+        if delta == 0:
+            return
+        with self._lock:
+            self._add(delta, reservation.day_key, reservation.month_key)
 
     @staticmethod
     def _prune(buckets: dict, keep: int) -> dict:
@@ -362,6 +451,10 @@ class XSearchRecentTweetsWorkflow:
         )
         self.__saved_file_paths: list[str] = []
         self.__saved_tweets = 0
+        # Tweets of every page X answered (billed), saved in an envelope or not:
+        # a batch that fails part-way was billed for its earlier pages.
+        self.__billed_tweets = 0
+        self.__billed_lock = threading.Lock()
         # Global spend ledger lives under <datastore_path>/_budget so it sits
         # next to (but never collides with) the per-query search_recent_tweets
         # envelopes this workflow writes.
@@ -386,6 +479,12 @@ class XSearchRecentTweetsWorkflow:
         is how the durable search flow still maps them.
         """
         return list(self.__saved_file_paths)
+
+    def _count_billed_page(self, page: dict) -> None:
+        """``on_page`` of the integration: count a page X answered. Runs on the
+        loop of ``run`` (one per query thread in tests): only counts."""
+        with self.__billed_lock:
+            self.__billed_tweets += page_resources(page)
 
     def _query_prefix(self, query: str) -> str:
         return os.path.join(
@@ -741,6 +840,7 @@ class XSearchRecentTweetsWorkflow:
                 self.__configuration.x_integration.search_recent_tweets(
                     query,
                     persist_envelope=False,
+                    on_page=self._count_billed_page,
                     **call_opts,
                 )
             )
@@ -967,15 +1067,17 @@ class XSearchRecentTweetsWorkflow:
                     )
                 )
         except Exception:
-            # A later batch failed after earlier ones were saved: those tweets
-            # were billed, so charge them before the error goes up.
-            self.__budget.record(self.__saved_tweets)
+            # A batch failed part-way: the pages X answered before it were
+            # billed (saved in an envelope or not), so charge them before the
+            # error goes up. ``max``: an integration that reports no pages
+            # still charges what was saved.
+            self.__budget.record(max(self.__billed_tweets, self.__saved_tweets))
             raise
 
         total_new = sum(item["new_count"] for item in results)
         # Charge the budget for every tweet ('resource') actually retrieved so
         # the next tick sees the updated spend.
-        self.__budget.record(total_new)
+        self.__budget.record(max(self.__billed_tweets, total_new))
         return {
             "total_new_tweets": total_new,
             "results": results,
@@ -1006,6 +1108,46 @@ def budget_ledger(
     )
 
 
+def _pages(tool: str, max_pages: Any) -> int:
+    """A tool's ``max_pages``: a number of pages; "every page" is refused."""
+    if max_pages is None:
+        raise ValueError(
+            f"{tool}: max_pages must be a number of pages; fetching every page "
+            "is refused for the agent"
+        )
+    return int(max_pages)
+
+
+def _within_budget(
+    budget: _XApiBudget,
+    run: Callable[[Awaitable[Any]], Any],
+    call: Callable[[int, Callable[[dict], None]], Awaitable[dict]],
+    *,
+    max_pages: int,
+    max_results: int,
+) -> tuple[dict | None, str | None]:
+    """``call(max_pages, on_page)`` under ``budget``: ``(result, None)``, or
+    ``(None, reason)`` without calling X when a cap is reached.
+
+    The allowance is reserved first (``_XApiBudget.reserve``, which also
+    limits the pages), then settled to the tweets of the pages X answered,
+    also when the call fails part-way or its result cannot be saved.
+    """
+    reservation = budget.reserve(max_pages, max_results)
+    if isinstance(reservation, str):
+        return None, reservation
+    billed = 0
+
+    def count(page: dict) -> None:  # on the loop: only counts
+        nonlocal billed
+        billed += page_resources(page)
+
+    try:
+        return run(call(reservation.max_pages, count)), None
+    finally:
+        budget.settle(reservation, billed)
+
+
 def search_with_budget(
     budget: _XApiBudget,
     run: Callable[[Awaitable[Any]], Any],
@@ -1015,13 +1157,25 @@ def search_with_budget(
 ) -> dict:
     """One ``XIntegration.search_recent_tweets`` call under ``budget``.
 
-    Synchronous (a worker thread): as ``XSearchRecentTweetsWorkflow.run``, a spent
-    daily or monthly cap returns ``{"budget_blocked": True, "budget_reason",
-    "budget"}`` without calling X; otherwise the search runs (through ``run``) and
-    the tweets it returned are recorded. The envelope comes back with the ledger's
-    ``budget`` snapshot and ``budget_blocked: False``.
+    Synchronous (a worker thread). A spent daily or monthly cap returns
+    ``{"budget_blocked": True, "budget_reason", "budget"}`` without calling X.
+    Otherwise the search fetches ``max_pages`` (default 1; ``None`` is refused),
+    at most what the caps leave (``_XApiBudget.reserve``), through ``run``; the
+    tweets X returned are recorded, also when the search fails part-way. The
+    envelope comes back with the ledger's ``budget`` snapshot and
+    ``budget_blocked: False``.
     """
-    blocked_reason = budget.exhausted_reason()
+    max_pages = _pages("x_search_recent_tweets", options.pop("max_pages", 1))
+    max_results = int(options.get("max_results") or 100)
+    envelope, blocked_reason = _within_budget(
+        budget,
+        run,
+        lambda pages, on_page: x_integration.search_recent_tweets(
+            query, max_pages=pages, on_page=on_page, **options
+        ),
+        max_pages=max_pages,
+        max_results=max_results,
+    )
     if blocked_reason is not None:
         logger.warning(f"x_search_recent_tweets: skipping fetch — {blocked_reason}")
         return {
@@ -1031,8 +1185,42 @@ def search_with_budget(
             "budget_reason": blocked_reason,
             "budget": budget.snapshot(),
         }
-    envelope = run(x_integration.search_recent_tweets(query, **options))
-    results = envelope.get("results") if isinstance(envelope, dict) else None
-    tweets = (results or {}).get("data") or []
-    budget.record(len(tweets) if isinstance(tweets, list) else 0)
-    return {**envelope, "budget_blocked": False, "budget": budget.snapshot()}
+    return {**(envelope or {}), "budget_blocked": False, "budget": budget.snapshot()}
+
+
+def read_with_budget(
+    budget: _XApiBudget,
+    run: Callable[[Awaitable[Any]], Any],
+    read: Callable[..., Awaitable[dict]],
+    user_id: str,
+    *,
+    max_results: int,
+    max_pages: int,
+) -> dict:
+    """One paginated user read of the agent (``XIntegration.get_user_tweets``
+    ... ``get_user_following``) under ``budget``, as :func:`search_with_budget`.
+
+    X bills these per resource returned, as a search: each tweet or user
+    counts as one in the ledger. X may price a user read at another unit price
+    than a tweet; the ledger keeps a single count, converted to USD at the
+    ledger's ``cost_per_tweet_usd`` for both. A cached read bills nothing.
+    A spent cap returns ``{"data": [], "budget_blocked": True, ...}``.
+    """
+    name = getattr(read, "__name__", "x_get_user_read")
+    pages = _pages(name, max_pages)
+    result, blocked_reason = _within_budget(
+        budget,
+        run,
+        lambda n, on_page: read(user_id, max_results, n, on_page=on_page),
+        max_pages=pages,
+        max_results=max_results,
+    )
+    if blocked_reason is not None:
+        logger.warning(f"{name}: skipping fetch — {blocked_reason}")
+        return {
+            "data": [],
+            "budget_blocked": True,
+            "budget_reason": blocked_reason,
+            "budget": budget.snapshot(),
+        }
+    return {**(result or {}), "budget_blocked": False, "budget": budget.snapshot()}

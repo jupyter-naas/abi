@@ -224,10 +224,13 @@ def test_the_graph_probe_goes_through_the_blocking_bridge():
 
     async def probe() -> tuple[bool, bool]:
         sync = SyncModule(module, asyncio.get_running_loop())
-        return (
-            await asyncio.to_thread(common.search_envelope_ingested, sync, PATH),
-            await asyncio.to_thread(common.search_envelope_ingested, sync, "x/o.json"),
-        )
+        try:
+            return (
+                await sync.call(common.search_envelope_ingested, sync, PATH),
+                await sync.call(common.search_envelope_ingested, sync, "x/o.json"),
+            )
+        finally:
+            sync.close()
 
     assert asyncio.run(probe()) == (True, False)
 
@@ -302,13 +305,47 @@ def test_the_app_is_published_from_the_dataset_for_every_followed_query(monkeypa
     )
 
 
-def test_the_app_is_not_published_when_disabled_or_without_the_dataset_read():
+def test_the_app_is_not_published_when_disabled_or_without_the_dataset_read(
+    monkeypatch,
+):
+    from naas_abi_apps.x.x_proxy import build
+
+    web: list[Any] = []
+    monkeypatch.setattr(
+        build,
+        "publish_web_export",
+        lambda module, *, required: web.append((module, required)) or {"files": 9},
+    )
     sync = sync_module(dataset="dataset")
     sync.configuration.app.publish = False
     assert common.publish_x_app(sync)["reason"] == "app.publish=false"
     assert common.publish_x_app(sync, enabled=False)["reason"] == "app_publish=false"
-    # a filter's app_publish wins over app.publish; the dataset read is still needed
-    assert common.publish_x_app(sync, enabled=True)["reason"] == "dataset_read_disabled"
+    assert web == []
+    # a filter's app_publish wins over app.publish; the snapshots still need the
+    # dataset read, the web export does not
+    out = common.publish_x_app(sync, enabled=True)
+    assert out == {
+        "skipped": True,
+        "reason": "dataset_read_disabled",
+        "web": {"files": 9},
+    }
+    assert web == [(sync, False)]
+
+
+def test_the_build_uploads_the_web_export_without_the_dataset_read(monkeypatch):
+    """``build_app`` (``app.publish`` true, ``read_enabled`` false: the
+    defaults) refreshes the web export even though it builds no snapshot."""
+    from naas_abi_apps.x.x_proxy import build
+
+    web: list[Any] = []
+    monkeypatch.setattr(
+        build,
+        "publish_web_export",
+        lambda module, *, required: web.append(required) or {"uploaded": 2},
+    )
+    sync = sync_module(dataset="dataset")
+    assert common.publish_x_app(sync)["web"] == {"uploaded": 2}
+    assert web == [False]
 
 
 def test_a_step_result_is_plain_json():

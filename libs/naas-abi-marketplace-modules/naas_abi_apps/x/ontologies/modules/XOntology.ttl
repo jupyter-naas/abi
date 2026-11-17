@@ -17,7 +17,7 @@ x:XOntology a owl:Ontology ;
   owl:imports <http://ontology.naas.ai/abi/Ontology> ;
   owl:imports <http://ontology.naas.ai/abi/PersonOntology> ;
   owl:imports <http://ontology.naas.ai/x/CountRecentTweetsProcess> ;
-  rdfs:seeAlso <https://raw.githubusercontent.com/jupyter-naas/abi/refs/heads/main/libs/naas-abi-marketplace/naas_abi_apps/x/ontologies/modules/XOntology.ttl> ,
+  rdfs:seeAlso <https://raw.githubusercontent.com/jupyter-naas/abi/refs/heads/main/libs/naas-abi-marketplace-modules/naas_abi_apps/x/ontologies/modules/XOntology.ttl> ,
                <http://ontology.naas.ai/x/SearchRecentTweetsProcess> ;
   abi:pythonPackage "naas_abi_apps.x" ;
   abi:ontologyResource "ontologies/modules/XOntology.ttl" ;

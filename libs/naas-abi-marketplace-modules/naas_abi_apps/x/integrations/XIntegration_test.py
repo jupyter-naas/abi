@@ -217,6 +217,83 @@ def test_search_saves_the_envelope_where_in_engine_did() -> None:
     assert params["tweet.fields"] == ",".join(DEFAULT_TWEET_FIELDS)
 
 
+class PathCheckingStorage(MemoryStorage):
+    """As the engine: an object path with an empty, ``.`` or ``..`` segment is
+    refused."""
+
+    async def put_object(self, prefix: str, key: str, content: bytes) -> None:
+        segments = f"{prefix}/{key}".split("/")
+        if any(s in ("", ".", "..") for s in segments):
+            raise ValueError(f"object path refused: {prefix}/{key}")
+        await super().put_object(prefix, key, content)
+
+
+@pytest.mark.parametrize(
+    "query",
+    ['url:"https://openai.com"', "a/../b", "/", ".", "..", "", "x//y"],
+)
+def test_the_query_slug_is_one_safe_path_segment(query: str) -> None:
+    slug = slugify_query(query)
+    assert "/" not in slug
+    assert slug not in ("", ".", "..")
+
+
+def test_slugs_of_queries_without_a_slash_are_unchanged() -> None:
+    assert slugify_query("drones lang:en") == "drones_lang:en"
+    assert slugify_query("openai.com 'x'") == "openai.com_x"
+
+
+def test_a_query_with_a_slash_saves_its_envelope() -> None:
+    api = Api({"/2/tweets/search/recent": [(200, search_page(["9"]))]})
+    storage = PathCheckingStorage()
+
+    envelope = asyncio.run(
+        integration(api, storage).search_recent_tweets('url:"https://openai.com"')
+    )
+
+    assert envelope["file_path"].startswith(
+        "x/search_recent_tweets/url:https:__openai.com/"
+    )
+    assert [envelope] == [
+        v
+        for v in stored(
+            storage, "x/search_recent_tweets/url:https:__openai.com"
+        ).values()
+    ]
+
+
+def test_on_page_sees_every_billed_page_before_a_later_failure() -> None:
+    api = Api(
+        {
+            "/2/tweets/search/recent": [
+                (200, search_page(["9", "8"], "next")),
+                (400, {"title": "Invalid Request"}),
+            ]
+        }
+    )
+    pages: list[dict] = []
+
+    with pytest.raises(IntegrationConnectionError):
+        asyncio.run(
+            integration(api, MemoryStorage()).search_recent_tweets(
+                "q", max_pages=3, on_page=pages.append
+            )
+        )
+
+    assert [[t["id"] for t in p["data"]] for p in pages] == [["9", "8"]]
+
+
+def test_timelines_report_their_pages_but_not_a_cache_hit() -> None:
+    api = Api({f"/2/users/{NASA_USER_ID}/followers": [(200, search_page(["1", "2"]))]})
+    x = integration(api, cache=FakeCache())
+    pages: list[dict] = []
+
+    asyncio.run(x.get_user_followers(NASA_USER_ID, on_page=pages.append))
+    asyncio.run(x.get_user_followers(NASA_USER_ID, on_page=pages.append))
+
+    assert len(pages) == 1 and len(api.requests) == 1
+
+
 def test_search_without_persist_saves_only_the_pages() -> None:
     api = Api({"/2/tweets/search/recent": [(200, search_page(["9"]))]})
     storage = MemoryStorage()
@@ -292,6 +369,34 @@ def test_no_token_fails_without_a_request() -> None:
     with pytest.raises(IntegrationConnectionError, match="X_BEARER_TOKEN"):
         asyncio.run(integration(api, token="").get_tweet_by_id("20"))
     assert api.requests == []
+
+
+def test_the_missing_token_error_names_the_configured_secret() -> None:
+    x = XIntegration(
+        XIntegrationConfiguration(bearer_token="", bearer_token_secret="X_TOKEN_2")
+    )
+    with pytest.raises(IntegrationConnectionError, match="applications.x/X_TOKEN_2"):
+        asyncio.run(x.get_tweet_by_id("20"))
+
+
+def test_the_module_secret_name_reaches_the_integration() -> None:
+    from types import SimpleNamespace
+
+    from naas_abi_apps.common.testing import fake_engine
+    from naas_abi_apps.x.integrations.XIntegration import x_integration_for
+
+    module = SimpleNamespace(
+        engine=fake_engine(),
+        bearer_token=None,
+        configuration=SimpleNamespace(
+            datastore_path="x", bearer_token_secret="X_TOKEN_2"
+        ),
+    )
+    assert x_integration_for(module).configuration.bearer_token_secret == "X_TOKEN_2"
+
+
+def test_the_token_is_not_in_the_repr() -> None:
+    assert "s3cr3t" not in repr(XIntegrationConfiguration(bearer_token="s3cr3t"))
 
 
 # ------------------------------------------------------------------ counts
@@ -383,3 +488,75 @@ def test_the_search_tool_can_be_routed_elsewhere() -> None:
 
     assert result == {"routed": True}
     assert calls[0]["query"] == "q" and calls[0]["max_pages"] == 1
+
+
+PAGINATED_TOOLS = [
+    "x_get_user_tweets",
+    "x_get_user_mentions",
+    "x_get_user_liked_tweets",
+    "x_get_user_followers",
+    "x_get_user_following",
+    "x_search_recent_tweets",
+]
+
+
+def _arguments(name: str, **extra: object) -> dict:
+    first = {"query": "q"} if name == "x_search_recent_tweets" else {"user_id": "1"}
+    return {**first, **extra}
+
+
+@pytest.mark.parametrize("name", PAGINATED_TOOLS)
+def test_paginated_tools_refuse_every_page(name: str) -> None:
+    from pydantic import ValidationError
+
+    tools = {t.name: t for t in as_tools(XIntegrationConfiguration(bearer_token="t"))}
+    with pytest.raises(ValidationError):
+        asyncio.run(tools[name].ainvoke(_arguments(name, max_pages=None)))
+
+
+@pytest.mark.parametrize("name", PAGINATED_TOOLS)
+def test_paginated_tools_fetch_at_most_max_pages(name: str) -> None:
+    seen: list[int] = []
+
+    async def search(query: str, **options: object) -> dict:
+        seen.append(int(options["max_pages"]))  # type: ignore[arg-type]
+        return {}
+
+    async def read(method: str, user_id: str, max_results: int, pages: int) -> dict:
+        seen.append(pages)
+        return {}
+
+    tools = {
+        t.name: t
+        for t in as_tools(
+            XIntegrationConfiguration(bearer_token="t"),
+            search_recent_tweets=search,
+            user_read=read,
+            max_pages=3,
+        )
+    }
+    asyncio.run(tools[name].ainvoke(_arguments(name, max_pages=50)))
+    asyncio.run(tools[name].ainvoke(_arguments(name)))
+
+    assert seen == [3, 1]
+
+
+def test_the_user_reads_reach_the_integration_capped() -> None:
+    api = Api(
+        {f"/2/users/{NASA_USER_ID}/following": [(200, search_page(["1"], "more"))]}
+    )
+    tools = {
+        t.name: t
+        for t in as_tools(
+            XIntegrationConfiguration(
+                bearer_token="t", transport=httpx.MockTransport(api)
+            ),
+            max_pages=2,
+        )
+    }
+
+    asyncio.run(
+        tools["x_get_user_following"].ainvoke({"user_id": NASA_USER_ID, "max_pages": 9})
+    )
+
+    assert len(api.requests) == 2

@@ -34,7 +34,8 @@ workflow = XSearchRecentTweetsWorkflow(
         # caps and save thresholds of the filter
     )
 )
-output = await asyncio.to_thread(
+# on the module's own threads, never asyncio.to_thread (services.SyncModule)
+output = await sync.call(
     workflow.run, XSearchRecentTweetsWorkflowParameters(queries=[query], options=...)
 )
 ```
@@ -44,10 +45,21 @@ output = await asyncio.to_thread(
 `<datastore_path>/_budget/<filter slug>.json` holds the tweets retrieved per UTC day and
 per month (`{"daily": {"2026-06-22": 1234}, "monthly": {"2026-06": 56789}}`). Before a
 run, a reached daily or monthly cap (tweets, or USD at `cost_per_tweet_usd`; the smaller
-wins) returns `budget_blocked` without calling X. After it, the tweets returned are
-recorded, also when a later batch failed (the batches saved before were billed). The X
-agent's `x_search_recent_tweets` goes through the same ledger code, keyed `agent`
-(`search_with_budget`, `../agents/XAgent.py`).
+wins) returns `budget_blocked` without calling X. After it, the tweets of every page X
+answered are recorded, also when a later page or batch failed or was not saved (they
+were billed). A filter run is all or nothing: the run that crosses a cap finishes.
+
+The X agent's `x_search_recent_tweets` and paginated user reads (`x_get_user_tweets`,
+`_mentions`, `_liked_tweets`, `_followers`, `_following`) share one ledger, keyed
+`agent` (`search_with_budget`, `read_with_budget`, `../agents/XAgent.py`). A call
+reserves its allowance first: it fetches at most `ceil(remaining / max_results)` pages
+under the tightest cap (and at most `agent_max_pages`), adds that many tweets to the
+ledger, then settles the reservation to what X returned. A user counts as a tweet, at
+`agent_cost_per_tweet_usd`.
+
+Every load / add / save of a ledger holds a lock per ledger file, in the process. A
+replica runs the module in one process; replicas sharing the object storage are not
+locked against each other.
 
 ## Tests
 

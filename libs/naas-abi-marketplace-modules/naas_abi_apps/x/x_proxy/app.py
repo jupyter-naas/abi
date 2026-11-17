@@ -7,7 +7,8 @@ module, which serves the files of ``apps/x_proxy/`` itself (only its
 in-engine routes served under ``/app-html/x/apps/x_proxy/``:
 
 - the published Next.js export and JSON snapshots, from object storage under
-  ``x/apps/x_proxy/`` (``x/apps/x``, the pre-rename prefix, as a fallback)::
+  ``x/apps/x_proxy/`` (``x/apps/x``, the pre-rename prefix, as a fallback for
+  the JSON snapshots only)::
 
       index.html, <page>/index.html (+ index.txt router payloads), _next/...,
       globals/*.json, count_recent_tweets/*.json, search_recents_tweets/*.json,
@@ -24,15 +25,18 @@ in-engine routes served under ``/app-html/x/apps/x_proxy/``:
 path changes per session. Every text response (HTML, scripts, styles, router
 payloads, JSON) has the placeholder replaced by the request's ``root_path``, so
 ``<Link>`` hrefs, ``_next/`` assets and the app's own ``fetch`` URLs carry the
-grant. The ETag is computed after the rewrite.
+grant. So has the in-engine export's base (``LEGACY_BASE_PATH``), which an
+installation upgraded from it still holds until the module publishes its own
+(at start, ``flows/maintenance.publish_web_export_at_start``). The ETag is
+computed after the rewrite.
 
 Each request's storage and dataset calls are blocking (``SyncModule``): they run
-in a worker thread (``asyncio.to_thread``), never on the module's event loop.
+on the module's threads (``module.sync.call``), never on the module's event loop
+nor on its default executor.
 """
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import mimetypes
@@ -47,14 +51,23 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import Response
 from naas_abi_apps.x.services import ObjectNotFound
 from naas_abi_apps.x.x_proxy.api.common import DEFAULT_APP_PREFIX
+from naas_abi_sdk.services.errors import ServiceError
 
 # Keep equal to ``basePath`` in web/next.config.js and APP_BASE in
 # web/src/lib/base.ts.
 APP_ROOT_PLACEHOLDER = "/__x_proxy_app_root__"
-_PLACEHOLDER = APP_ROOT_PLACEHOLDER.encode()
-_PLACEHOLDER_ESCAPED = APP_ROOT_PLACEHOLDER.replace("/", "\\/").encode()
+# The in-engine export's ``basePath`` (served by the engine's /app-html route).
+LEGACY_BASE_PATH = "/app-html/x/apps/x_proxy"
+# Each build base, plain and JSON-escaped (``\/...``); the escaped spelling
+# first, since rewriting the plain one would not see it.
+_BASES = tuple(
+    spelling
+    for base in (APP_ROOT_PLACEHOLDER, LEGACY_BASE_PATH)
+    for spelling in (base.replace("/", "\\/").encode(), base.encode())
+)
 
-# Pre-rename publish lived here: look here when the current prefix lacks a file.
+# Pre-rename publish lived here. Only its JSON snapshots are still read from it:
+# its HTML and scripts were built for another base and other routes.
 LEGACY_APP_PREFIX = "x/apps/x"
 # Shown at the app's root while nothing is published.
 FALLBACK_INDEX = Path(__file__).resolve().parent / "index.html"
@@ -112,14 +125,26 @@ def browser_root(root_path: str) -> str:
 
 
 def rewrite_root(content: bytes, root: str) -> bytes:
-    """``content`` with the build's placeholder base path replaced by ``root``."""
-    if _PLACEHOLDER not in content and _PLACEHOLDER_ESCAPED not in content:
+    """``content`` with the build's base path (the placeholder, or the in-engine
+    export's ``LEGACY_BASE_PATH``) replaced by ``root``, plain and JSON-escaped."""
+    found = [base for base in _BASES if base in content]
+    if not found:
         return content
-    # The JSON-escaped spelling (``\/...``) first: it contains the plain one.
-    escaped = root.replace("/", "\\/").encode()
-    return content.replace(_PLACEHOLDER_ESCAPED, escaped).replace(
-        _PLACEHOLDER, root.encode()
-    )
+    plain, escaped = root.encode(), root.replace("/", "\\/").encode()
+    for base in found:
+        content = content.replace(base, escaped if b"\\/" in base else plain)
+    return content
+
+
+def _safe_rel(rel: str) -> bool:
+    """Whether every segment of ``rel`` is a name: no ``.``, ``..`` or empty
+    segment (one trailing slash, a page directory, is allowed)."""
+    if not rel:
+        return True
+    segments = rel.split("/")
+    if segments[-1] == "":
+        segments.pop()
+    return all(segment not in ("", ".", "..") for segment in segments)
 
 
 def _media_type(name: str, default: str = "application/octet-stream") -> str:
@@ -141,10 +166,18 @@ def _media_type(name: str, default: str = "application/octet-stream") -> str:
     return default
 
 
-def _storage_prefixes(subdir: str | None = None) -> tuple[str, ...]:
-    if subdir:
-        return (f"{DEFAULT_APP_PREFIX}/{subdir}", f"{LEGACY_APP_PREFIX}/{subdir}")
-    return (DEFAULT_APP_PREFIX, LEGACY_APP_PREFIX)
+def _storage_prefixes(
+    subdir: str | None = None, *, legacy: bool = False
+) -> tuple[str, ...]:
+    """Where the app's object ``subdir/...`` is read: the current prefix, then
+    the pre-rename one with ``legacy`` (JSON snapshots only)."""
+    roots = (DEFAULT_APP_PREFIX, LEGACY_APP_PREFIX) if legacy else (DEFAULT_APP_PREFIX,)
+    return tuple(f"{root}/{subdir}" if subdir else root for root in roots)
+
+
+def _invalid_path(error: BaseException) -> bool:
+    """The object storage refusing a key or prefix (``INVALID_ARGUMENT``)."""
+    return isinstance(error, ServiceError) and error.code == "INVALID_ARGUMENT"
 
 
 def _int_param(request: Request, name: str, default: int) -> int:
@@ -191,6 +224,11 @@ class XProxyApp:
                 return prefix, self.storage.get_object(prefix, name)
             except ObjectNotFound:
                 continue
+            except ServiceError as error:
+                # A path the store refuses is one that cannot be published.
+                if _invalid_path(error):
+                    raise NotPublished(name) from error
+                raise
         raise NotPublished(name)
 
     def serve_object(
@@ -216,11 +254,17 @@ class XProxyApp:
         return Response(content=content, media_type=media_type, headers=headers)
 
     def serve_relative(
-        self, rel: str, request: Request, root: str, media_type: str | None = None
+        self,
+        rel: str,
+        request: Request,
+        root: str,
+        media_type: str | None = None,
+        *,
+        legacy: bool = False,
     ) -> Response:
         if "/" not in rel:
             return self.serve_object(
-                _storage_prefixes(),
+                _storage_prefixes(legacy=legacy),
                 rel,
                 media_type or _media_type(rel, _HTML),
                 request,
@@ -228,7 +272,7 @@ class XProxyApp:
             )
         subdir, name = rel.rsplit("/", 1)
         return self.serve_object(
-            _storage_prefixes(subdir),
+            _storage_prefixes(subdir, legacy=legacy),
             name,
             media_type or _media_type(name),
             request,
@@ -335,7 +379,7 @@ class XProxyApp:
             raise HTTPException(status_code=404, detail="post not found")
         return json.dumps({"post": post}, separators=(",", ":"), default=str).encode()
 
-    def post_media_body(self, tweet_id: str) -> bytes:
+    def post_media(self, tweet_id: str) -> dict[str, Any]:
         from naas_abi_apps.x.x_proxy.dataset.media_resolve import ensure_tweet_media
         from naas_abi_apps.x.x_proxy.dataset.media_worker import DEFAULT_MAX_BYTES
 
@@ -346,10 +390,9 @@ class XProxyApp:
             if dataset_cfg
             else DEFAULT_MAX_BYTES
         )
-        doc = ensure_tweet_media(
+        return ensure_tweet_media(
             self.dataset, self.storage, tweet_id, max_bytes=max_bytes
         )
-        return json.dumps(doc, separators=(",", ":")).encode()
 
     def cached(
         self,
@@ -436,6 +479,10 @@ class XProxyApp:
 
     def handle(self, rel: str, request: Request) -> Response:
         """Answer one GET / HEAD for ``rel``, the path below the app's root."""
+        if not _safe_rel(rel):
+            # ``_next/../..``, ``a//b``: never a published path, and never sent
+            # to the object storage, which refuses it (``INVALID_ARGUMENT``).
+            raise HTTPException(status_code=404, detail="Not found")
         root = browser_root(request.scope.get("root_path") or "")
         try:
             return self._handle(rel, request, root)
@@ -479,10 +526,18 @@ class XProxyApp:
                 tweet_id = suffix[: -len("/media.json")]
                 if not tweet_id.isdigit():
                     raise HTTPException(status_code=400, detail="invalid tweet id")
+                doc = self.post_media(tweet_id)
+                # Final once every media of the post is stored; until then the
+                # next view asks again (a failed download is retried later).
+                cache = (
+                    "private, max-age=31536000, immutable"
+                    if doc.get("complete")
+                    else "no-cache"
+                )
                 return Response(
-                    content=self.post_media_body(tweet_id),
+                    content=json.dumps(doc, separators=(",", ":")).encode(),
                     media_type=_JSON,
-                    headers={"Cache-Control": "private, max-age=31536000, immutable"},
+                    headers={"Cache-Control": cache},
                 )
             tweet_id = suffix.removesuffix(".json")
             if not tweet_id.isdigit():
@@ -529,7 +584,7 @@ class XProxyApp:
             )
 
         if _SNAPSHOT_RE.fullmatch(rel) or _LEGACY_DATA_RE.fullmatch(rel):
-            return self.serve_relative(rel, request, root, _JSON)
+            return self.serve_relative(rel, request, root, _JSON, legacy=True)
 
         if _DIRECT_ARTIFACT_RE.fullmatch(rel) or _ASSET_RE.fullmatch(rel):
             return self.serve_relative(rel, request, root)
@@ -543,8 +598,9 @@ class XProxyApp:
 
 
 def create_app(module: Any) -> FastAPI:
-    """The Recent Tweets ASGI app of ``module`` (the X ``ABIModule``, or anything
-    with ``sync``, or ``configuration`` and blocking ``engine.services``)."""
+    """The Recent Tweets ASGI app of ``module``: the X ``ABIModule`` once
+    initialized, or anything whose ``sync`` has ``configuration``, blocking
+    ``engine.services`` and ``call`` (``services.SyncModule``)."""
     handler = XProxyApp(module)
     app = FastAPI(
         title="X Proxy",
@@ -556,6 +612,8 @@ def create_app(module: Any) -> FastAPI:
 
     @app.api_route("/{rel:path}", methods=["GET", "HEAD"])
     async def serve(rel: str, request: Request) -> Response:
-        return await asyncio.to_thread(handler.handle, rel, request)
+        # The module's threads: not the loop's default executor (host-name
+        # lookups), on which a request waiting for the loop would starve them.
+        return await handler.sync.call(handler.handle, rel, request)
 
     return app
