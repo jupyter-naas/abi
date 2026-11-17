@@ -25,6 +25,7 @@ import {
 import { isDocumentsNestedPath } from './documents-tree';
 import { isSlidesNestedPath } from './slides-tree';
 import { getWorkspacePath } from './utils';
+import { panelFromPathChange } from '../home-route';
 import { clearAppsSkipRestore } from '@/app/workspace/[workspaceId]/apps/lib/apps-route';
 import { dockShowsLabels } from '@/lib/shell-columns';
 import { ColumnResizeHandle, useColumnResize } from '../column-resize-handle';
@@ -218,32 +219,22 @@ export function Sidebar() {
 
   const lastReconciledPathRef = useRef<string | null>(null);
   useEffect(() => {
-    if (lastReconciledPathRef.current === pathname) return;
+    const previousPath = lastReconciledPathRef.current;
+    if (previousPath === pathname) return;
     lastReconciledPathRef.current = pathname;
-    // Home launching an app hands it the full width; later routes resume.
     const ws = useWorkspaceStore.getState();
     if (ws.keepPanelClosedOnNextRoute) {
       ws.setKeepPanelClosedOnNextRoute(false);
-      applyPanelFromRoute(null);
-      return;
     }
-    if (pathname.endsWith('/settings/infrastructure')) {
-      applyPanelFromRoute('infrastructure');
-      return;
-    }
-    if (!urlSection) {
-      // /admin/ is full-bleed.
-      if (pathname.includes('/admin/')) applyPanelFromRoute(null);
-      return;
-    }
-    // Home is a desk, not a column. A mark-opened Workspaces panel may stay open.
-    if (urlSection.id === 'home') {
-      if (useWorkspaceStore.getState().activePanelSection !== 'workspaces') {
-        applyPanelFromRoute(null);
-      }
-      return;
-    }
-    applyPanelFromRoute(urlSection.id);
+    const next = panelFromPathChange({
+      previousPath,
+      pathname,
+      urlSection: urlSection?.id ?? null,
+      keepPanelClosed: ws.keepPanelClosedOnNextRoute,
+      currentPanel: ws.activePanelSection,
+    });
+    if (next === 'keep') return;
+    applyPanelFromRoute(next);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, urlSection]);
 
