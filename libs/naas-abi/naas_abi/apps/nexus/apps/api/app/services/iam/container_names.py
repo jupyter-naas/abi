@@ -73,7 +73,7 @@ from naas_abi_core.services.iam.names import (
     matches,
 )
 from naas_abi_core.services.iam.policy import MAX_PATTERNS, MAX_STATEMENTS
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from starlette.concurrency import run_in_threadpool
 
@@ -184,6 +184,13 @@ class LegacyNames(NameRewriter):
     workspaces: Mapping[str, str | None]
     catalogs: CatalogRegistry
     notes: list[str] = field(default_factory=list)
+    # Each pending grant the rewrite dropped onto the twin it merged into: the
+    # invitations that listed it list the twin (``remap_invitation_grants``).
+    grants_merged: dict[str, str] = field(default_factory=dict)
+
+    def merged(self, kind: str, dropped: str, kept: str) -> None:
+        if kind == "pending_grant":
+            self.grants_merged[dropped] = kept
 
     # -- containers ----------------------------------------------------------------
 
@@ -580,6 +587,8 @@ def _statement(
 class Report:
     counts: dict[str, int]
     notes: list[str]
+    # Pending grants merged into their twin: dropped id -> kept id.
+    grants_merged: dict[str, str] = field(default_factory=dict)
 
 
 async def recorded(db: AsyncSession, name: str) -> bool:
@@ -640,7 +649,32 @@ def rewrite(iam: Any, orgs: Sequence[str], workspaces: Mapping[str, str | None])
     with as_service_account("engine"):
         rewriter = LegacyNames(list(orgs), dict(workspaces), iam.catalogs)
         counts = iam.rewrite_names(rewriter)
-    return Report(counts, list(dict.fromkeys(rewriter.notes)))
+    return Report(counts, list(dict.fromkeys(rewriter.notes)), dict(rewriter.grants_merged))
+
+
+async def remap_invitation_grants(db: AsyncSession, merged: Mapping[str, str]) -> int:
+    """List, on each Nexus invitation, the pending grant each one it listed was
+    merged into (``merged``), so revoking or renewing either invitation of two
+    twins withdraws only what is its own (``InvitationService._held_elsewhere``).
+    How many invitations changed; nothing is committed."""
+    if not merged:
+        return 0
+    connection = await db.connection()
+    if not await connection.run_sync(lambda sync: inspect(sync).has_table("invitations")):
+        return 0
+    changed = 0
+    for invitation_id, raw in (
+        await db.execute(text("SELECT id, grant_ids FROM invitations"))
+    ).all():
+        grants = [str(g) for g in json.loads(raw or "[]")]
+        remapped = list(dict.fromkeys(merged.get(g, g) for g in grants))
+        if remapped != grants:
+            await db.execute(
+                text("UPDATE invitations SET grant_ids = :g WHERE id = :i"),
+                {"g": json.dumps(remapped), "i": invitation_id},
+            )
+            changed += 1
+    return changed
 
 
 # The roles an organization's own role is held below it too (Nexus mirrors them).
@@ -744,12 +778,20 @@ async def migrate_names(db: AsyncSession) -> Report | None:
             "features are refused until a start rewrites them"
         )
         return None
+    # In the commit that records the move: the twins IAM merged.
+    report.counts["invitations_remapped"] = await remap_invitation_grants(db, report.grants_merged)
     await db.execute(
         text("INSERT INTO iam_migrations (name, applied_at, report) VALUES (:n, :at, :r)"),
         {
             "n": MIGRATION_NAME,
             "at": datetime.now(UTC).replace(tzinfo=None),
-            "r": json.dumps({"counts": report.counts, "notes": report.notes}),
+            "r": json.dumps(
+                {
+                    "counts": report.counts,
+                    "notes": report.notes,
+                    "grants_merged": report.grants_merged,
+                }
+            ),
         },
     )
     await db.commit()
