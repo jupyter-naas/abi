@@ -140,9 +140,7 @@ export default function AccountLayout({
         }
       >
         {showNav && (
-          <nav className="account-layout-nav">
-            <h2 className="account-layout-nav-title">Account Settings</h2>
-            <div className="account-layout-nav-divider" />
+          <nav className="account-layout-nav" aria-label="Account Settings">
             <ul className="account-layout-nav-list">
               {accountSettingsNavVisible.map((item) => (
                 <NavItem

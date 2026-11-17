@@ -70,11 +70,7 @@ export default function OrganizationLayout({
 
       <div className="flex flex-1 overflow-hidden">
         {/* Settings sidebar */}
-        <nav className="w-56 flex-shrink-0 border-r bg-card/50 p-4 overflow-y-auto">
-          <h2 className="mb-3 px-3 text-sm font-semibold text-foreground">
-            Organization Settings
-          </h2>
-          <div className="mb-4 border-b border-border/50" />
+        <nav className="w-56 flex-shrink-0 border-r bg-card/50 p-4 overflow-y-auto" aria-label="Organization Settings">
           <ul className="space-y-1">
             {orgSettingsNav.map((item) => (
               <NavItem
