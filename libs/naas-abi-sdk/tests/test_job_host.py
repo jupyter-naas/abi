@@ -2036,3 +2036,141 @@ def test_its_own_schedule_runs_and_a_claimed_schedule_kind_is_manual():
 
     assert docs.run("ingest:1")["trigger"]["kind"] == "schedule"
     assert docs.run("ingest:2")["trigger"]["kind"] == "manual"
+
+
+# --- skip_if_running ---------------------------------------------------------------------
+
+
+def _active(docs, job, sequence, payload, status="RUNNING"):
+    asyncio.run(
+        docs.put(
+            runs_collection(PROJECT),
+            f"{job}:{sequence}",
+            {"job": job, "status": status, "sequence": sequence, "payload": payload},
+        )
+    )
+
+
+def test_skip_if_running_skips_while_an_earlier_run_with_the_same_input_is_active():
+    docs = QueryDocuments()
+    _active(docs, "poll", 3, {"filter": "ai"}, status="RETRYING")
+    ran = []
+
+    async def handler(ctx):
+        ran.append(ctx.run_id)
+        return {"fetched": 1}
+
+    msg = Msg(sequence=7, payload={"filter": "ai"})
+    _run(_host(docs), JobDescriptor("poll", skip_if_running=True), handler, msg)
+
+    run = docs.run("poll:7")
+    assert ran == []
+    assert run["status"] == "SKIPPED"
+    assert run["skip_reason"] == "poll:3 with the same input is still running"
+    assert msg.calls == [("ack",)]
+
+
+@pytest.mark.parametrize(
+    "earlier",
+    [
+        (3, {"filter": "other"}, "RUNNING"),  # another input runs side by side
+        (9, {"filter": "ai"}, "RUNNING"),  # started later: the oldest goes ahead
+        (3, {"filter": "ai"}, "SUCCEEDED"),  # finished
+    ],
+)
+def test_skip_if_running_runs_when_no_earlier_run_with_its_input_is_active(earlier):
+    docs = QueryDocuments()
+    sequence, payload, status = earlier
+    _active(docs, "poll", sequence, payload, status=status)
+
+    async def handler(ctx):
+        return {"fetched": 1}
+
+    msg = Msg(sequence=7, payload={"filter": "ai"})
+    _run(_host(docs), JobDescriptor("poll", skip_if_running=True), handler, msg)
+
+    assert docs.run("poll:7")["status"] == "SUCCEEDED"
+
+
+def test_without_skip_if_running_an_earlier_active_run_does_not_matter():
+    docs = QueryDocuments()
+    _active(docs, "poll", 3, {})
+
+    async def handler(ctx):
+        return {}
+
+    _run(_host(docs), JobDescriptor("poll", max_concurrency=2), handler, Msg())
+
+    assert docs.run("poll:7")["status"] == "SUCCEEDED"
+
+
+def test_skip_if_running_never_skips_a_retry():
+    docs = QueryDocuments()
+    _active(docs, "poll", 3, {})
+    asyncio.run(
+        docs.put(
+            runs_collection(PROJECT),
+            "poll:7",
+            {
+                "job": "poll",
+                "run_id": "poll:7",
+                "status": "RETRYING",
+                "attempt": 1,
+                "sequence": 7,
+                "payload": {},
+                "fired_at": "",
+            },
+        )
+    )
+
+    async def handler(ctx):
+        return {"attempt": ctx.attempt}
+
+    msg = Msg(sequence=7, attempt=2)
+    descriptor = JobDescriptor("poll", skip_if_running=True, max_attempts=3)
+    _run(_host(docs), descriptor, handler, msg)
+
+    run = docs.run("poll:7")
+    assert run["status"] == "SUCCEEDED" and run["result"] == {"attempt": 2}
+
+
+def test_skip_if_running_fails_the_run_when_it_cannot_see_its_own_record():
+    class Blind(QueryDocuments):
+        async def find(self, collection, **kwargs):
+            from naas_abi_sdk.services.models import Page
+
+            return Page([], None)
+
+    docs = Blind()
+    ran = []
+
+    async def handler(ctx):
+        ran.append(1)
+
+    descriptor = JobDescriptor("poll", skip_if_running=True, max_attempts=3)
+    _run(_host(docs), descriptor, handler, Msg())
+
+    run = docs.run("poll:7")
+    assert ran == []
+    # Not retried: a retry would not look again.
+    assert run["status"] == "FAILED" and run["error"].startswith("OverlapCheckBlind")
+
+
+def test_skip_if_running_reaches_the_descriptor_from_every_declaration():
+    from naas_abi_sdk.jobs import JobSettings, job
+    from naas_abi_sdk.workflows import workflow
+
+    @job(skip_if_running=True)
+    async def poll(self, ctx):
+        return None
+
+    @workflow(skip_if_running=True, input_schema={}, output_schema={})
+    async def sweep(self, ctx, inp: dict) -> dict:
+        return {}
+
+    assert poll.__abi_job__.skip_if_running
+    assert sweep.__abi_job__.skip_if_running
+    assert JobSettings(skip_if_running=True).descriptor("x").skip_if_running
+    # A host-side setting: the published descriptor does not carry it.
+    descriptor = JobDescriptor("poll", skip_if_running=True)
+    assert not JobDescriptor.from_pb(descriptor.to_pb()).skip_if_running

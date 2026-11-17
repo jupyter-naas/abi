@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import json
 import logging
 import os
 import signal
@@ -96,21 +97,63 @@ async def run_until_signalled(work: Awaitable[T]) -> T | None:
             loop.remove_signal_handler(sig)
 
 
+def _structured(field: dataclasses.Field) -> bool:
+    """A list or dict field: its variable holds JSON."""
+    if field.type in (list, dict):
+        return True
+    annotation = field.type if isinstance(field.type, str) else repr(field.type)
+    return annotation.replace("typing.", "").lower().startswith(("list", "dict"))
+
+
+def configuration_file(path: str) -> dict[str, Any]:
+    """The fields in a ``.json``, ``.yaml`` or ``.yml`` file: a mapping, or a
+    ``config:`` mapping inside one (a ``modules:`` entry of an engine
+    ``config.yaml`` copied as it is)."""
+    with open(path, encoding="utf-8") as handle:
+        text = handle.read()
+    if path.lower().endswith((".yaml", ".yml")):
+        import yaml
+
+        data = yaml.safe_load(text) or {}
+    else:
+        data = json.loads(text or "{}")
+    if isinstance(data, dict) and isinstance(data.get("config"), dict):
+        data = data["config"]
+    if not isinstance(data, dict):
+        raise SystemExit(f"{path}: the configuration file must hold a mapping")
+    return data
+
+
 def configuration_from(
     configuration_class: type, prefix: str, env: Mapping[str, str]
 ) -> Any:
     """The module configuration: each field from ``<PREFIX>_<FIELD>`` when set,
-    else its default (a ``bool`` field reads ``1/true/yes/on`` as true, any
-    other value as false). Secrets never come from here: modules read them
-    from the engine's ``secret`` service."""
+    else from ``<PREFIX>_CONFIG_FILE`` (JSON or YAML, ``configuration_file``)
+    when it names the field, else its default. A ``bool`` variable reads
+    ``1/true/yes/on`` as true, any other value as false; a list or dict
+    variable is JSON. Secrets never come from here: modules read them from the
+    engine's ``secret`` service."""
+    fields = {field.name: field for field in dataclasses.fields(configuration_class)}
     values: dict[str, Any] = {}
-    for field in dataclasses.fields(configuration_class):
-        variable = f"{prefix}_{field.name}".upper()
+    path = env.get(f"{prefix}_CONFIG_FILE".upper(), "").strip()
+    if path:
+        from_file = configuration_file(path)
+        unknown = sorted(set(from_file) - set(fields))
+        if unknown:
+            raise SystemExit(f"{path}: unknown configuration fields {unknown}")
+        values.update(from_file)
+    for name, field in fields.items():
+        variable = f"{prefix}_{name}".upper()
         if variable in env:
             value: Any = env[variable]
             if field.type in (bool, "bool"):
                 value = value.strip().lower() in ("1", "true", "yes", "on")
-            values[field.name] = value
+            elif _structured(field):
+                try:
+                    value = json.loads(value)
+                except json.JSONDecodeError as exc:
+                    raise SystemExit(f"{variable} must be JSON: {exc}") from None
+            values[name] = value
     return configuration_class(**values)
 
 

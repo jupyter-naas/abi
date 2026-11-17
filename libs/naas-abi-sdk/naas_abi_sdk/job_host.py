@@ -386,6 +386,12 @@ async def remove_schedules(js: Any, subjects: Any, keep: int) -> None:
         )
 
 
+class OverlapCheckBlind(NonRetryable, RuntimeError):
+    """``skip_if_running`` could not see the run's own record among the active
+    runs, so it cannot tell whether an earlier one is active: the run fails
+    (without a retry, which would not look again) instead of guessing."""
+
+
 class EngineUnavailable(RuntimeError):
     """The engine that seals triggers did not answer: try again later."""
 
@@ -1257,6 +1263,54 @@ class JobHost:
         await self._notify(descriptor, run_id, "FAILED")
         return "FAILED"
 
+    async def earlier_active_runs(
+        self, descriptor: JobDescriptor, run_id: str, sequence: int, payload: Any
+    ) -> list[str]:
+        """Ids of the runs of ``descriptor`` that started before ``sequence`` with
+        the same ``payload`` and are still ``RUNNING`` or ``RETRYING``, oldest first.
+
+        ``OverlapCheckBlind`` when ``run_id``'s own record, saved RUNNING before its
+        handler starts, is not among them: a check that quietly found nothing
+        would let overlapping runs do the same work twice."""
+        page = await self.documents.find(
+            self.collection,
+            where=[
+                ("job", "eq", descriptor.name),
+                ("status", "in", ["RUNNING", "RETRYING"]),
+            ],
+            limit=1000,
+        )
+        if not any(doc.id == run_id for doc in page.items):
+            raise OverlapCheckBlind(
+                f"The active runs of job {descriptor.name!r} do not list run "
+                f"{run_id!r} itself: cannot tell whether an earlier run is active"
+            )
+        earlier = [
+            (int(doc.data.get("sequence") or 0), doc.id)
+            for doc in page.items
+            if doc.id != run_id
+            and int(doc.data.get("sequence") or sequence) < sequence
+            and (doc.data.get("payload") or {}) == (payload or {})
+        ]
+        return [run for _, run in sorted(earlier)]
+
+    def _unless_running(
+        self, descriptor: JobDescriptor, handler: Any, sequence: int
+    ) -> Callable[[JobContext], Awaitable[Any]]:
+        """``handler``, unless an earlier run with the same input is active: then
+        the run is SKIPPED, naming that run (``JobDescriptor.skip_if_running``)."""
+
+        async def run(context: JobContext) -> Any:
+            active = await self.earlier_active_runs(
+                descriptor, context.run_id, sequence, context.payload
+            )
+            if active:
+                context.skip(f"{active[0]} with the same input is still running")
+                return None
+            return await handler(context)
+
+        return run
+
     async def _handle_delivery(
         self, descriptor: JobDescriptor, handler: Any, msg: Any
     ) -> str:
@@ -1385,6 +1439,8 @@ class JobHost:
         self._running[run_id] = context
         heartbeat = asyncio.create_task(self._heartbeat(msg))
         progress = asyncio.create_task(self._persist_progress(context))
+        if descriptor.skip_if_running and attempt == 1:
+            handler = self._unless_running(descriptor, handler, sequence)
         if run_as is None:
             work = asyncio.create_task(handler(context))
         else:

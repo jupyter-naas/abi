@@ -305,7 +305,15 @@ class JobDescriptor:
 
     ``input_schema`` and ``output_schema`` are JSON Schema objects as canonical
     strings (``schema_json``): at most 16 KiB each, and the whole descriptor at
-    most 64 KiB, because discovery's registry snapshot holds every module."""
+    most 64 KiB, because discovery's registry snapshot holds every module.
+
+    ``skip_if_running``: a run whose input equals that of an earlier run of the
+    job still ``RUNNING`` or ``RETRYING`` ends ``SKIPPED`` at once instead of
+    running (a poller's tick that would redo the running one's work). Only the
+    first attempt looks; a retry never skips itself. The run still takes a slot to
+    start and skip, so give the job ``max_concurrency`` of at least two per input
+    that can overlap. It is the hosting process's behaviour, not part of the
+    descriptor discovery publishes."""
 
     name: str
     description: str = ""
@@ -317,6 +325,7 @@ class JobDescriptor:
     kind: str = "job"
     input_schema: str = ""
     output_schema: str = ""
+    skip_if_running: bool = False
 
     def __post_init__(self) -> None:
         if not _NAME.fullmatch(self.name):
@@ -425,6 +434,7 @@ class JobSettings:
     timeout: timedelta | None = None
     max_attempts: int = 1
     max_concurrency: int = 1
+    skip_if_running: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "triggers", tuple(self.triggers))
@@ -439,6 +449,7 @@ class JobSettings:
             max_concurrency=self.max_concurrency,
             timeout=self.timeout,
             max_attempts=self.max_attempts,
+            skip_if_running=self.skip_if_running,
         )
 
 
@@ -473,8 +484,12 @@ def job(
     max_concurrency: int = 1,
     timeout: timedelta | None = None,
     max_attempts: int = 1,
+    skip_if_running: bool = False,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Declare and bind a job on a module method (``async def m(self, ctx)``).
+
+    ``skip_if_running`` skips a run while an earlier one with the same input is
+    active (``JobDescriptor``).
 
     SDK modules require async methods; core engine modules also accept sync ones
     (run in a worker thread). The module class checks this when it is defined.
@@ -489,6 +504,7 @@ def job(
             max_concurrency=max_concurrency,
             timeout=timeout,
             max_attempts=max_attempts,
+            skip_if_running=skip_if_running,
         )
         return method
 
@@ -621,6 +637,7 @@ class JobsMixin:
         max_concurrency: int = 1,
         timeout: timedelta | None = None,
         max_attempts: int = 1,
+        skip_if_running: bool = False,
     ) -> JobDescriptor:
         """``declare_job`` for a workflow: ``async handler(ctx, inp)``, with the
         schemas of ``input_type``/``output_type`` (pydantic v2 models, duck-typed)
@@ -640,6 +657,7 @@ class JobsMixin:
             max_concurrency=max_concurrency,
             timeout=timeout,
             max_attempts=max_attempts,
+            skip_if_running=skip_if_running,
         )
 
     def _seal_jobs(self) -> None:

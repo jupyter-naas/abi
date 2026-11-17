@@ -2349,7 +2349,7 @@ requires-dist = [
     { name = "torch", marker = "extra == 'domains-document'", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torchvision", marker = "extra == 'domains-document'", index = "https://download.pytorch.org/whl/cpu" },
 ]
-provides-extras = ["ai-bedrock", "ai-chatgpt", "ai-claude", "ai-deepseek", "ai-gemini", "ai-gemma", "ai-grok", "ai-llama", "ai-mistral", "ai-ollama", "ai-openrouter", "ai-perplexity", "ai-qwen", "applications-bodo", "applications-git", "applications-naas", "applications-x", "domains-support", "domains-ontology-engineer", "domains-document"]
+provides-extras = ["ai-bedrock", "ai-chatgpt", "ai-claude", "ai-deepseek", "ai-gemini", "ai-gemma", "ai-grok", "ai-llama", "ai-mistral", "ai-ollama", "ai-openrouter", "ai-perplexity", "ai-qwen", "applications-bodo", "applications-git", "applications-naas", "domains-support", "domains-ontology-engineer", "domains-document"]
 
 [package.metadata.requires-dev]
 dev = [

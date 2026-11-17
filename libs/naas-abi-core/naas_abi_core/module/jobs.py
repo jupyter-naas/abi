@@ -73,6 +73,7 @@ try:
             max_concurrency: int = 1,
             timeout: timedelta | None = None,
             max_attempts: int = 1,
+            skip_if_running: bool = False,
         ) -> JobDescriptor:
             """``declare_job`` for a workflow: ``async handler(ctx, inp)`` (a
             ``FlowContext``), or a sync ``handler(ctx, inp)`` that the engine runs
@@ -87,6 +88,7 @@ try:
                 "max_concurrency": max_concurrency,
                 "timeout": timeout,
                 "max_attempts": max_attempts,
+                "skip_if_running": skip_if_running,
             }
             from naas_abi_sdk.jobs import is_async_callable
 

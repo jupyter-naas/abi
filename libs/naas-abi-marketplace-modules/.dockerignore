@@ -13,3 +13,6 @@
 dist
 build
 storage/
+**/node_modules
+**/.next
+naas_abi_apps/x/x_proxy/web/out

@@ -24,6 +24,7 @@ reaches the engine only over NATS with `naas-abi-sdk`. None imports
 | Sanax | `naas_abi_apps.sanax` | `applications.sanax` | `Sanax`; pipeline `sanax_linked_in_sales_navigator_extractor_pipeline` | `naas_abi_marketplace.applications.sanax` |
 | SEC EDGAR | `naas_abi_apps.sec_gov` | `applications.sec_gov` | none; workflows `download_company_tickers_workflow`, `get_company_submissions_workflow` | `naas_abi_marketplace.applications.sec_gov` |
 | SendGrid | `naas_abi_apps.sendgrid` | `applications.sendgrid` | `SendGrid` | `naas_abi_marketplace.applications.sendgrid` |
+| X | `naas_abi_apps.x` | `applications.x` | `X`; workflows `search_recent_tweets`, `reprocess_tweet_envelopes`, `map_tweet_envelope`, `count_recent_tweets`; jobs `build_app`, `compact_dataset`; app `x_proxy` | `naas_abi_marketplace.applications.x` |
 | Yahoo Finance | `naas_abi_apps.yahoofinance` | `applications.yahoofinance` | `YahooFinance` | `naas_abi_marketplace.applications.yahoofinance` |
 
 ## Run one
@@ -101,6 +102,40 @@ services:
 
 and remove `naas_abi_marketplace.applications.pennylane` from `modules:` if an
 older configuration still lists it: the in-engine modules were removed.
+
+## X
+
+`applications.x` has more configuration than `X_<FIELD>` variables carry
+comfortably: point `X_CONFIG_FILE` at a YAML (or JSON) file holding the fields,
+for example the `config:` block of the in-engine module's `modules:` entry,
+copied as it is, without `bearer_token`. The bearer token is the engine secret
+`applications.x/X_BEARER_TOKEN`.
+
+```yaml
+# x.yaml
+search_recent_tweets_workflow:
+  - name: ai_llms
+    query: '(openai OR anthropic) lang:en -is:retweet'
+    cron: "0 * * * *"          # or interval_seconds; one per entry
+    max_pages: 1
+    daily_max_usd: 20          # spend caps per filter (tweets or USD, day or month)
+    monthly_max_usd: 250
+search_recent_tweets_files:    # schedules reprocess_tweet_envelopes (optional)
+  - name: reprocess_envelopes
+    cron: "0,15,30,45 * * * *"
+    max_age_hours: 24
+count_recent_tweets_workflow:
+  - name: ai_llms
+    query: '(openai OR anthropic) lang:en -is:retweet'
+    enabled: true
+```
+
+Each `search_recent_tweets_workflow` entry is one trigger of the
+`search_recent_tweets` workflow; a tick of a filter whose previous run is still
+going is SKIPPED. The Recent Tweets app opens in Nexus as
+`remote/applications.x:x_proxy`. Coming from the in-engine module, run
+`reprocess_tweet_envelopes` once with `force: true` to rebuild the dataset in
+the module's namespace (see `naas_abi_marketplace/applications/AGENTS.md`).
 
 ## Develop
 

@@ -756,7 +756,7 @@ class AppConfigModel(Base):
         String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
     )
     # Marketplace app identifier: "<module_path>:<app_name>" (e.g.
-    # "naas_abi_marketplace.applications.x:x_proxy").
+    # "remote/applications.x:x_proxy").
     app_id = Column(String(512), nullable=False, index=True)
     # The old on/off (``enabled``) stays in the table, unread: the move of the
     # toggles into policies reads it once (``services/iam/policy_tree``).

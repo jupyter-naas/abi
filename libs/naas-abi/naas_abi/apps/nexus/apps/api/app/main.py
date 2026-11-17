@@ -349,6 +349,7 @@ async def _prepare_iam() -> None:
         bootstrap,
         container_defaults,
         container_names,
+        module_moves,
         policy_tree,
     )
     from naas_abi.apps.nexus.apps.api.app.services.iam import listers as iam_listers
@@ -388,6 +389,8 @@ async def _prepare_iam() -> None:
                 # IAM's names become container paths, once, organizations and
                 # workspaces registered as containers (after the moves above).
                 await container_names.migrate_names(db)
+                # Module scopes a remote module serves now (the X app), once.
+                await module_moves.migrate(db)
                 report = await bootstrap.migrate_role_data(db)
                 if report.applied:
                     log.info("Role data moved into IAM: %s", report)

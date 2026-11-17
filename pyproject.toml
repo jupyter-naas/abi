@@ -30,7 +30,6 @@ dependencies = [
     "naas-abi-marketplace[ai-qwen]",
     "naas-abi-marketplace[applications-git]",
     "naas-abi-marketplace[applications-naas]",
-    "naas-abi-marketplace[applications-x]",
     "naas-abi-marketplace[domains-ontology-engineer]",
     "naas-abi-marketplace[domains-support]",
     # "requests[socks]>=2.32.3,<3",

@@ -156,11 +156,9 @@ modules:
   # GitHub and SEC EDGAR run as remote modules (applications.github,
   # applications.sec_gov): see libs/naas-abi-marketplace-modules/README.md.
 
-  # X (Twitter) integration — requires X_BEARER_TOKEN in .env
-  # - module: naas_abi_marketplace.applications.x
-  #   enabled: true
-  #   config:
-  #     bearer_token: "{{ secret.X_BEARER_TOKEN }}"
+  # X (Twitter) runs as a remote module (applications.x, naas_abi_apps.x),
+  # its bearer token the engine secret applications.x/X_BEARER_TOKEN: see
+  # libs/naas-abi-marketplace-modules/README.md.
   
   - module: naas_abi_marketplace.domains.operations.modules.document
     enabled: true

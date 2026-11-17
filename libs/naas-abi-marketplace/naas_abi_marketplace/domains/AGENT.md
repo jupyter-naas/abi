@@ -158,7 +158,7 @@ module.
 ## How ontology building works
 
 Every module that reasons over structured knowledge carries an `ontologies/` folder. It has a
-fixed four-folder shape — the same one used by `applications/x/ontologies/`, which is the
+fixed four-folder shape — the same one used by `domains/intelligence/modules/people/ontologies/`, which is the
 reference implementation:
 
 ```
