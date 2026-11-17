@@ -24,6 +24,17 @@
 
 <!-- version list -->
 
+## v4.1.1 (2026-11-17)
+
+### Bug Fixes
+
+- **nexus**: Jobs overview reads each module once, a few at a time
+  ([`3ba403b`](https://github.com/jupyter-naas/abi/commit/3ba403b530b6515083d7827b598357b72549c3ac))
+
+- **nexus**: System polls wait for the previous answer
+  ([`f474cf9`](https://github.com/jupyter-naas/abi/commit/f474cf9f7f70d367f4010dc9181c036396011765))
+
+
 ## v4.1.0 (2026-11-17)
 
 ### Chores
