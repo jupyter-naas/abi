@@ -3,14 +3,25 @@ Audit Logging Service
 Tracks sensitive operations for security and compliance.
 """
 
-import json
+import logging
 from datetime import datetime
 from uuid import uuid4
 
 from fastapi import Request
-from naas_abi.apps.nexus.apps.api.app.core import database
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
-from sqlalchemy import text
+from naas_abi.apps.nexus.apps.api.app.services.audit.adapters.secondary.sql import SqlAuditLog
+from naas_abi.apps.nexus.apps.api.app.services.audit.port import AuditEvent, AuditLogPort
+
+logger = logging.getLogger(__name__)
+
+_log: AuditLogPort = SqlAuditLog()
+
+
+def configure_log(log: AuditLogPort) -> AuditLogPort:
+    """Write every audit event to ``log`` from now on; returns the one it replaces."""
+    global _log
+    previous, _log = _log, log
+    return previous
 
 
 async def log_audit_event(
@@ -23,7 +34,7 @@ async def log_audit_event(
     success: bool = True,
 ) -> None:
     """
-    Log an audit event.
+    Log an audit event. A failure to write it never fails the request.
 
     Args:
         action: Action type ('login', 'logout', 'token_revocation', etc.)
@@ -34,43 +45,29 @@ async def log_audit_event(
         request: FastAPI Request object (for IP/user-agent extraction)
         success: Whether the action succeeded
     """
-    log_id = f"audit-{uuid4().hex[:12]}"
-    now = datetime.now(UTC).replace(tzinfo=None)
-
     ip_address = None
     user_agent = None
     if request:
         ip_address = request.client.host if request.client else None
         user_agent = request.headers.get("user-agent")
 
-    details_json = json.dumps(details) if details else None
-
+    event = AuditEvent(
+        id=f"audit-{uuid4().hex[:12]}",
+        action=action,
+        created_at=datetime.now(UTC).replace(tzinfo=None),
+        user_id=user_id,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        details=details or None,
+        ip_address=ip_address,
+        user_agent=user_agent,
+        success=success,
+    )
     try:
-        # Read when called: the engine of the database in use, not the one at import.
-        async with database.async_engine.begin() as conn:
-            await conn.execute(
-                text("""
-                    INSERT INTO audit_logs
-                    (id, user_id, action, resource_type, resource_id, details, ip_address, user_agent, success, created_at)
-                    VALUES
-                    (:id, :user_id, :action, :resource_type, :resource_id, :details, :ip_address, :user_agent, :success, :created_at)
-                """),
-                {
-                    "id": log_id,
-                    "user_id": user_id,
-                    "action": action,
-                    "resource_type": resource_type,
-                    "resource_id": resource_id,
-                    "details": details_json,
-                    "ip_address": ip_address,
-                    "user_agent": user_agent,
-                    "success": success,
-                    "created_at": now,
-                },
-            )
-    except Exception as e:
+        await _log.append(event)
+    except Exception:
         # Don't fail the request if audit logging fails
-        print(f"Audit log failed: {e}")
+        logger.warning("Audit log failed for %s", action, exc_info=True)
 
 
 async def log_login(

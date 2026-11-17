@@ -11,6 +11,7 @@ Coder.
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import html as html_lib
 import json
@@ -38,11 +39,22 @@ from naas_abi.apps.nexus.apps.api.app.core.config import (
     ABI_SLIDES_TEMPLATE_NAMESPACE,
     settings,
 )
-from naas_abi.apps.nexus.apps.api.app.core.database import get_db
-from naas_abi.apps.nexus.apps.api.app.models import CodingEnvironmentModel
 from naas_abi.apps.nexus.apps.api.app.services.coding_environment import agent_credentials
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment.factory import (
+    CodingEnvironmentStoreSource,
+    coding_environment_store,
+    get_coding_environment_store,
+)
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment.port import (
+    CodingEnvironmentRecord,
+    CodingEnvironmentStorePort,
+)
 from naas_abi.apps.nexus.apps.api.app.services.coding_environment.repo_access import (
     ensure_shared_repo,
+)
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment.runtime_bindings import (
+    bindings_for,
+    sidecar_for,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares
@@ -74,8 +86,6 @@ from naas_abi_core.services.source_control.SourceControlService import (
     SourceControlService,
 )
 from pydantic import BaseModel, Field
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 if TYPE_CHECKING:
     # importlib.abc.Traversable is deprecated from 3.12 and the 3.11 home,
@@ -1420,7 +1430,7 @@ async def create_project(
     body: ProjectCreateRequest,
     request: Request,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort | None = Depends(get_coding_environment_store),
 ) -> ProjectResponse:
     await authz.require(
         "CreateProject",
@@ -1536,7 +1546,7 @@ async def create_project(
             workspace_id=body.workspace_id,
             slug=slug,
             current_user=current_user,
-            db=db,
+            store=store,
         )
         if not runtime.ensured:
             logger.warning("slides runtime not ensured for %s: %s", slug, runtime.detail)
@@ -1681,7 +1691,7 @@ async def get_deck(
     workspace_id: str,
     request: Request,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort | None = Depends(get_coding_environment_store),
 ) -> DeckResponse:
     """Load deck HTML for Preview/Code.
 
@@ -1708,7 +1718,7 @@ async def get_deck(
         raise _source_control_http_error(exc) from exc
 
     sidecar_base, sidecar_secret = await lookup_slides_sidecar(
-        db,
+        store,
         workspace_id=workspace_id,
         user_id=current_user.id,
         slug=slug,
@@ -1799,7 +1809,7 @@ async def put_deck(
     body: DeckUpdateRequest,
     request: Request,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort | None = Depends(get_coding_environment_store),
 ) -> DeckResponse:
     """Save deck: commit Forgejo snapshot and dual-write Coder sidecar when ready."""
     await authz.require(
@@ -1817,7 +1827,7 @@ async def put_deck(
     author_email = str(current_user.email)
 
     sidecar_base, sidecar_secret = await lookup_slides_sidecar(
-        db,
+        store,
         workspace_id=body.workspace_id,
         user_id=current_user.id,
         slug=slug,
@@ -1976,7 +1986,7 @@ async def apply_template(
     body: ApplyTemplateRequest,
     request: Request,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort | None = Depends(get_coding_environment_store),
 ) -> DeckResponse:
     """Rewrite the open deck from a seed template (HTML source of truth)."""
     await authz.require(
@@ -2000,7 +2010,7 @@ async def apply_template(
     author_email = str(current_user.email)
 
     sidecar_base, sidecar_secret = await lookup_slides_sidecar(
-        db,
+        store,
         workspace_id=body.workspace_id,
         user_id=current_user.id,
         slug=slug,
@@ -2243,31 +2253,23 @@ def _adapter_runtime_binding(
 
 
 async def lookup_slides_sidecar(
-    db: AsyncSession,
+    db: CodingEnvironmentStoreSource,
     *,
     workspace_id: str,
     user_id: str,
     slug: str,
 ) -> tuple[str | None, str | None]:
     """Return (sidecar_base, sidecar_secret) for an open Slides deck, if bound."""
-    if db is None or not workspace_id or not user_id or not slug or not _SLUG_RE.match(slug):
+    store = coding_environment_store(db)
+    if store is None or not workspace_id or not user_id or not slug or not _SLUG_RE.match(slug):
         return None, None
-    labels = _runtime_labels(workspace_id, slug)
-    result = await db.execute(
-        select(CodingEnvironmentModel).where(
-            CodingEnvironmentModel.workspace_id == workspace_id,
-            CodingEnvironmentModel.user_id == user_id,
-            CodingEnvironmentModel.label.in_(labels),
-        )
+    # The namespaced label first, then the legacy one.
+    return await sidecar_for(
+        store,
+        workspace_id=workspace_id,
+        user_id=user_id,
+        labels=_runtime_labels(workspace_id, slug),
     )
-    rows = list(result.scalars().all())
-    # Prefer namespaced label over legacy.
-    preferred = _runtime_label(workspace_id, slug)
-    rows.sort(key=lambda row: 0 if row.label == preferred else 1)
-    for row in rows:
-        if row.sidecar_base and row.sidecar_secret:
-            return str(row.sidecar_base), str(row.sidecar_secret)
-    return None, None
 
 
 async def _ensure_runtime_impl(
@@ -2276,7 +2278,7 @@ async def _ensure_runtime_impl(
     workspace_id: str,
     slug: str,
     current_user: User,
-    db: AsyncSession | None,
+    store: CodingEnvironmentStorePort | None,
 ) -> RuntimeResponse:
     # Ownership gate before provisioning compute.
     sc_gate, repo_gate = _slides_sc(request)
@@ -2349,27 +2351,22 @@ async def _ensure_runtime_impl(
     expected_base = _build_sidecar_base(coder_username=coder_username, name=name)
 
     # Reuse the dedicated env for this slides/<slug> when already bound.
-    if db is not None:
-        labels = _runtime_labels(workspace_id, slug)
-        result = await db.execute(
-            select(CodingEnvironmentModel).where(
-                CodingEnvironmentModel.workspace_id == workspace_id,
-                CodingEnvironmentModel.user_id == current_user.id,
-                CodingEnvironmentModel.label.in_(labels),
-            )
+    if store is not None:
+        rows = await bindings_for(
+            store,
+            workspace_id=workspace_id,
+            user_id=current_user.id,
+            labels=_runtime_labels(workspace_id, slug),
         )
-        rows = list(result.scalars().all())
-        rows.sort(key=lambda row: 0 if row.label == label else 1)
         existing = rows[0] if rows else None
         if existing is not None:
             # Without the original sidecar secret we cannot talk to the running
             # sidecar; fall through to reprovision so Abi gets a fresh binding.
             if not existing.sidecar_secret:
                 try:
-                    await db.delete(existing)
-                    await db.commit()
+                    await store.delete(existing.id)
                 except Exception:
-                    await db.rollback()
+                    pass
                 existing = None
         if existing is not None:
             try:
@@ -2387,15 +2384,23 @@ async def _ensure_runtime_impl(
                 # across restarts, so a stored base can be stale (or a Coder
                 # hostname written before the runtime was known).
                 bound = await run_in_threadpool(_adapter_runtime_binding, coding, existing.id)
+                rebound = existing
                 if bound is not None:
-                    existing.sidecar_base, existing.sidecar_secret = bound
+                    rebound = dataclasses.replace(
+                        existing, sidecar_base=bound[0], sidecar_secret=bound[1]
+                    )
                 elif expected_base and not existing.sidecar_base:
-                    existing.sidecar_base = expected_base
-                if db.dirty:
+                    rebound = dataclasses.replace(existing, sidecar_base=expected_base)
+                if rebound != existing:
+                    existing = rebound
                     try:
-                        await db.commit()
+                        await store.update_sidecar(
+                            existing.id,
+                            sidecar_base=existing.sidecar_base,
+                            sidecar_secret=existing.sidecar_secret,
+                        )
                     except Exception:
-                        await db.rollback()
+                        pass
                 has_creds = bool(existing.sidecar_base and existing.sidecar_secret)
                 sidecar_ready = False
                 detail: str | None = "Sidecar credentials incomplete"
@@ -2627,24 +2632,12 @@ async def _ensure_runtime_impl(
     sidecar_ready = False
     if has_creds:
         sidecar_ready = await run_in_threadpool(_wait_for_sidecar, ws_base, ws_secret)
-    if db is not None:
+    if store is not None:
         try:
-            # Replace any stale row for this label, then upsert on the id.
-            # Re-adopting the same environment keeps status.id, so inserting a
-            # fresh row would collide on the primary key and roll the whole
-            # binding back; merge updates it in place instead.
-            prior = await db.execute(
-                select(CodingEnvironmentModel).where(
-                    CodingEnvironmentModel.workspace_id == workspace_id,
-                    CodingEnvironmentModel.user_id == current_user.id,
-                    CodingEnvironmentModel.label == label,
-                )
-            )
-            for old in prior.scalars().all():
-                if old.id != status.id:
-                    await db.delete(old)
-            await db.merge(
-                CodingEnvironmentModel(
+            # The one binding of this label: a re-adopted environment keeps its
+            # id and is updated in place.
+            await store.bind(
+                CodingEnvironmentRecord(
                     id=status.id,
                     workspace_id=workspace_id,
                     user_id=current_user.id,
@@ -2654,9 +2647,7 @@ async def _ensure_runtime_impl(
                     sidecar_secret=ws_secret,
                 )
             )
-            await db.commit()
         except Exception:
-            await db.rollback()
             logger.exception("Failed to persist slides runtime binding for %s", slug)
 
     detail: str | None
@@ -2698,7 +2689,7 @@ async def ensure_runtime(
     workspace_id: str,
     request: Request,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort | None = Depends(get_coding_environment_store),
 ) -> RuntimeResponse:
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
@@ -2707,7 +2698,7 @@ async def ensure_runtime(
         workspace_id=workspace_id,
         slug=slug,
         current_user=current_user,
-        db=db,
+        store=store,
     )
 
 
@@ -2916,7 +2907,7 @@ async def _run_slide_html_mutation(
     workspace_id: str,
     request: Request,
     current_user: User,
-    db: AsyncSession,
+    store: CodingEnvironmentStorePort,
     mutate,
     message: str,
 ) -> SlideMutationResponse:
@@ -2927,7 +2918,7 @@ async def _run_slide_html_mutation(
     author_name = current_user.name or username
     author_email = str(current_user.email)
     sidecar_base, sidecar_secret = await lookup_slides_sidecar(
-        db,
+        store,
         workspace_id=workspace_id,
         user_id=current_user.id,
         slug=slug,
@@ -3006,14 +2997,14 @@ async def list_slides(
     workspace_id: str,
     request: Request,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort | None = Depends(get_coding_environment_store),
 ) -> SlidesListResponse:
     """Outline of ``<section>`` slides. No HTML body."""
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
     sc, repo_id = _slides_sc(request)
     sidecar_base, sidecar_secret = await lookup_slides_sidecar(
-        db,
+        store,
         workspace_id=workspace_id,
         user_id=current_user.id,
         slug=slug,
@@ -3059,7 +3050,7 @@ async def insert_slide(
     body: SlideInsertRequest,
     request: Request,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort | None = Depends(get_coding_environment_store),
 ) -> SlideMutationResponse:
     """Insert a slide after ``after_index`` (-1 appends). Same mutation as the agent tool."""
     from naas_abi.tools.slides_tools import _insert_slide_html
@@ -3076,7 +3067,7 @@ async def insert_slide(
         workspace_id=body.workspace_id,
         request=request,
         current_user=current_user,
-        db=db,
+        store=store,
         mutate=lambda html: _insert_slide_html(
             html,
             after_index=body.after_index,
@@ -3097,7 +3088,7 @@ async def delete_slide(
     body: SlideIndexRequest,
     request: Request,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort | None = Depends(get_coding_environment_store),
 ) -> SlideMutationResponse:
     """Delete the slide at index. Refuses the last slide."""
     from naas_abi.tools.slides_tools import _delete_slide_html
@@ -3114,7 +3105,7 @@ async def delete_slide(
         workspace_id=body.workspace_id,
         request=request,
         current_user=current_user,
-        db=db,
+        store=store,
         mutate=lambda html: _delete_slide_html(html, body.index),
         message=f"refactor(slides): delete slide in {slug}",
     )
@@ -3130,7 +3121,7 @@ async def duplicate_slide(
     body: SlideIndexRequest,
     request: Request,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort | None = Depends(get_coding_environment_store),
 ) -> SlideMutationResponse:
     """Duplicate the slide at index and insert the copy after it."""
     from naas_abi.tools.slides_tools import _duplicate_slide_html
@@ -3147,7 +3138,7 @@ async def duplicate_slide(
         workspace_id=body.workspace_id,
         request=request,
         current_user=current_user,
-        db=db,
+        store=store,
         mutate=lambda html: _duplicate_slide_html(html, body.index),
         message=f"feat(slides): duplicate slide in {slug}",
     )
@@ -3163,7 +3154,7 @@ async def reorder_slides(
     body: SlideReorderRequest,
     request: Request,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort | None = Depends(get_coding_environment_store),
 ) -> SlideMutationResponse:
     """Move one slide (from_index/to_index) or apply a full ``order`` permutation."""
     from naas_abi.tools.slides_tools import _reorder_slides_html
@@ -3180,7 +3171,7 @@ async def reorder_slides(
         workspace_id=body.workspace_id,
         request=request,
         current_user=current_user,
-        db=db,
+        store=store,
         mutate=lambda html: _reorder_slides_html(
             html,
             from_index=body.from_index,

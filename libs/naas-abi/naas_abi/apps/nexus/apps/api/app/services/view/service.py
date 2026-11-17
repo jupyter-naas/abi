@@ -1,21 +1,21 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from collections.abc import Callable
 from typing import Any
 from uuid import uuid4
 
-from naas_abi.apps.nexus.apps.api.app.models import GraphViewModel
 from naas_abi.apps.nexus.apps.api.app.services.graph.access import GraphAccessScope
 from naas_abi.apps.nexus.apps.api.app.services.graph.graph__schema import GraphAccessError
 from naas_abi.apps.nexus.apps.api.app.services.graph.query.sparql_safe import sparql_iri
 from naas_abi.apps.nexus.apps.api.app.services.graph.service import _list_individuals
+from naas_abi.apps.nexus.apps.api.app.services.view.port import (
+    GraphViewRecord,
+    GraphViewStorePort,
+)
 from naas_abi_core.services.triple_store.TripleStoreService import TripleStoreService
 from rdflib import OWL, RDF, RDFS, URIRef
 from rdflib.query import ResultRow
-from sqlalchemy import delete, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 NEXUS_GRAPH_URI = URIRef("http://ontology.naas.ai/graph/nexus")
 GRAPH_BASE_URI = "http://ontology.naas.ai/graph/"
@@ -162,49 +162,51 @@ def _format_typed_label(label: str, type_label: str | None) -> str:
     return label
 
 
-def _model_to_dict(model: GraphViewModel, workspace_id: str) -> dict[str, Any]:
-    state: dict[str, Any] = {}
-    try:
-        parsed = json.loads(model.state)
-        if isinstance(parsed, dict):
-            state = parsed
-    except (json.JSONDecodeError, TypeError):
-        state = {}
-
+def _view_to_dict(view: GraphViewRecord) -> dict[str, Any]:
     return {
-        "workspace_id": workspace_id,
-        "id": model.id,
-        "uri": f"/api/view/{model.id}",
-        "label": model.name,
-        "name": model.name,
-        "description": getattr(model, "description", None),
-        "view_type": model.view_type,
-        "kind": model.kind,
-        "visibility": model.visibility,
-        "creator_id": model.creator_id,
-        "graph_id": model.graph_id,
-        "graph_uri": model.graph_uri,
-        "graph_names": [model.graph_id],
+        "workspace_id": view.workspace_id,
+        "id": view.id,
+        "uri": f"/api/view/{view.id}",
+        "label": view.name,
+        "name": view.name,
+        "description": view.description,
+        "view_type": view.view_type,
+        "kind": view.kind,
+        "visibility": view.visibility,
+        "creator_id": view.creator_id,
+        "graph_id": view.graph_id,
+        "graph_uri": view.graph_uri,
+        "graph_names": [view.graph_id],
         "graph_filters": [],
-        "state": state,
-        "path": getattr(model, "path", "") or "",
-        "scope": model.visibility,
-        "created_at": model.created_at.isoformat() if model.created_at else None,
-        "updated_at": model.updated_at.isoformat() if model.updated_at else None,
+        "state": view.state,
+        "path": view.path or "",
+        "scope": view.visibility,
+        "created_at": view.created_at.isoformat() if view.created_at else None,
+        "updated_at": view.updated_at.isoformat() if view.updated_at else None,
     }
+
+
+def _visible(view: GraphViewRecord, user_id: str | None) -> bool:
+    """Workspace views, and a user's own."""
+    return view.visibility == "workspace" or (user_id is not None and view.creator_id == user_id)
+
+
+def _in_subtree(path: str, folder: str) -> bool:
+    """``path`` is ``folder`` or below it (the root holds every path)."""
+    return not folder or path == folder or path.startswith(folder + "/")
 
 
 class ViewService:
     def __init__(
         self,
         triple_store_getter: Callable[[], TripleStoreService] | None = None,
-        db: AsyncSession | None = None,
+        store: GraphViewStorePort | None = None,
         access_scope: GraphAccessScope | None = None,
         catalog_store_getter: Callable[[], TripleStoreService] | None = None,
     ) -> None:
         self._triple_store_getter = triple_store_getter
         self._catalog_store_getter = catalog_store_getter
-        self._db = db
+        self._store = store
         self._access_scope = access_scope
 
     def _get_triple_store(self) -> TripleStoreService:
@@ -443,12 +445,10 @@ class ViewService:
         patterns = [_filter_conditions(item) for item in filters or [{}]]
         return await asyncio.to_thread(_preview, store, graph_values, patterns, int(limit))
 
-    def _visibility_clause(self, query, user_id: str | None):
-        if user_id:
-            return query.where(
-                (GraphViewModel.visibility == "workspace") | (GraphViewModel.creator_id == user_id)
-            )
-        return query.where(GraphViewModel.visibility == "workspace")
+    def _require_store(self) -> GraphViewStorePort:
+        if self._store is None:
+            raise ViewServiceUnavailableError("Database session is not available")
+        return self._store
 
     async def list_views(
         self,
@@ -458,28 +458,17 @@ class ViewService:
         path: str | None = None,
         recursive: bool = False,
     ) -> list[dict[str, Any]]:
-        if self._db is None:
-            raise ViewServiceUnavailableError("Database session is not available")
-
-        query = select(GraphViewModel).where(GraphViewModel.workspace_id == workspace_id)
-        query = self._visibility_clause(query, user_id)
+        store = self._require_store()
+        views = [view for view in await store.list(workspace_id) if _visible(view, user_id)]
         if path is not None:
             norm = _normalize_path(path)
             if recursive:
-                like = norm.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-                prefix = f"{like}/" if like else ""
-                query = query.where(
-                    (GraphViewModel.path == norm)
-                    | (GraphViewModel.path.like(f"{prefix}%", escape="\\"))
-                )
+                views = [view for view in views if _in_subtree(view.path, norm)]
             else:
-                query = query.where(GraphViewModel.path == norm)
-
-        result = await self._db.execute(query.order_by(GraphViewModel.path, GraphViewModel.name))
-        models = result.scalars().all()
-        views = [_model_to_dict(model, workspace_id) for model in models]
-        views.sort(key=lambda x: (str(x.get("path", "")).lower(), str(x.get("label", "")).lower()))
-        return views
+                views = [view for view in views if view.path == norm]
+        listed = [_view_to_dict(view) for view in views]
+        listed.sort(key=lambda x: (str(x.get("path", "")).lower(), str(x.get("label", "")).lower()))
+        return listed
 
     async def update_view(
         self,
@@ -499,51 +488,43 @@ class ViewService:
         ``description`` is partial too: ``None`` leaves it untouched; pass an empty string to
         clear it (stored as NULL).
         """
-        if self._db is None:
-            raise ViewServiceUnavailableError("Database session is not available")
-        result = await self._db.execute(
-            select(GraphViewModel).where(
-                GraphViewModel.id == view_id, GraphViewModel.workspace_id == workspace_id
-            )
-        )
-        model = result.scalar_one_or_none()
-        if model is None:
+        store = self._require_store()
+        view = await store.get(workspace_id, view_id)
+        if view is None:
             raise ViewNotFoundError("View not found")
 
-        effective_kind = kind if kind is not None else model.kind
+        effective_kind = kind if kind is not None else view.kind
         if name is not None:
             if not name.strip():
                 raise ValueError("View name cannot be empty")
-            model.name = name.strip()
+            view.name = name.strip()
         if description is not None:
-            model.description = description.strip() or None
+            view.description = description.strip() or None
         if path is not None:
-            model.path = _normalize_path(path)
+            view.path = _normalize_path(path)
         if visibility is not None:
             if visibility != "workspace":
                 raise ValueError("Only 'workspace' visibility is supported")
-            model.visibility = visibility
+            view.visibility = visibility
         if view_type is not None:
-            model.view_type = (view_type or "Unknown").strip() or "Unknown"
+            view.view_type = (view_type or "Unknown").strip() or "Unknown"
         if kind is not None:
-            model.kind = kind
+            view.kind = kind
         if state is not None:
             if effective_kind == "query" and not isinstance(state.get("spec"), dict):
                 raise ValueError("A query view requires a compiled spec in state")
-            model.state = json.dumps(state)
-        await self._db.commit()
-        await self._db.refresh(model)
-        return _model_to_dict(model, workspace_id)
+            view.state = state
+        saved = await store.save(view)
+        if saved is None:
+            raise ViewNotFoundError("View not found")
+        return _view_to_dict(saved)
 
     async def list_folders(
         self, workspace_id: str, *, user_id: str | None = None
     ) -> list[dict[str, Any]]:
         """Folder tree derived from distinct ``path`` values (folders are implicit)."""
-        if self._db is None:
-            raise ViewServiceUnavailableError("Database session is not available")
-        query = select(GraphViewModel.path).where(GraphViewModel.workspace_id == workspace_id)
-        query = self._visibility_clause(query, user_id)
-        rows = (await self._db.execute(query)).scalars().all()
+        store = self._require_store()
+        rows = [view.path for view in await store.list(workspace_id) if _visible(view, user_id)]
         direct: dict[str, int] = {}
         for p in rows:
             direct[p or ""] = direct.get(p or "", 0) + 1
@@ -571,8 +552,7 @@ class ViewService:
         self, *, workspace_id: str, from_path: str, to_path: str, merge: bool = False
     ) -> dict[str, Any]:
         """Rename/move a folder = prefix-rewrite ``path`` on every view in the subtree, one txn."""
-        if self._db is None:
-            raise ViewServiceUnavailableError("Database session is not available")
+        store = self._require_store()
         old = _normalize_path(from_path)
         new = _normalize_path(to_path)
         if not old:
@@ -582,71 +562,32 @@ class ViewService:
         if new == old or new.startswith(old + "/"):
             raise ValueError("Cannot move a folder into its own subtree")
 
-        like = old.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        subtree = (GraphViewModel.path == old) | (
-            GraphViewModel.path.like(f"{like}/%", escape="\\")
-        )
-        moved = (
-            (
-                await self._db.execute(
-                    select(GraphViewModel).where(
-                        GraphViewModel.workspace_id == workspace_id, subtree
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        )
+        views = await store.list(workspace_id)
+        moved = [view for view in views if _in_subtree(view.path, old)]
+
+        def destination(current: str) -> str:
+            tail = "" if current == old else current[len(old) + 1 :]
+            return new if current == old else (f"{new}/{tail}" if new else tail)
 
         if not merge:
-            dest_keys = {
-                (
-                    (
-                        new
-                        if m.path == old
-                        else f"{new}/{m.path[len(old) + 1 :]}"
-                        if new
-                        else m.path[len(old) + 1 :]
-                    ),
-                    m.name,
-                )
-                for m in moved
-            }
-            existing = (
-                await self._db.execute(
-                    select(GraphViewModel.path, GraphViewModel.name).where(
-                        GraphViewModel.workspace_id == workspace_id, ~subtree
-                    )
-                )
-            ).all()
-            clash = {(p, n) for p, n in existing} & dest_keys
+            dest_keys = {(destination(view.path), view.name) for view in moved}
+            existing = {(view.path, view.name) for view in views if not _in_subtree(view.path, old)}
+            clash = existing & dest_keys
             if clash:
                 first = sorted(clash)[0]
                 raise ValueError(
                     f"Destination already contains a view named '{first[1]}' at '{first[0]}'. Pass merge=true to combine."
                 )
 
-        # Per-row prefix rewrite (portable across Postgres/SQLite; subtree is small + workspace-scoped).
-        for m in moved:
-            tail = "" if m.path == old else m.path[len(old) + 1 :]
-            m.path = new if m.path == old else (f"{new}/{tail}" if new else tail)
-        await self._db.commit()
+        await store.move(workspace_id, {view.id: destination(view.path) for view in moved})
         return {"status": "renamed", "from_path": old, "to_path": new, "updated_count": len(moved)}
 
     async def get_view(self, view_id: str, workspace_id: str) -> dict[str, Any]:
-        if self._db is None:
-            raise ViewServiceUnavailableError("Database session is not available")
-
-        result = await self._db.execute(
-            select(GraphViewModel).where(
-                GraphViewModel.id == view_id,
-                GraphViewModel.workspace_id == workspace_id,
-            )
-        )
-        model = result.scalar_one_or_none()
-        if model is None:
+        store = self._require_store()
+        view = await store.get(workspace_id, view_id)
+        if view is None:
             raise ViewNotFoundError("View not found")
-        return _model_to_dict(model, workspace_id)
+        return _view_to_dict(view)
 
     async def create_view(
         self,
@@ -666,8 +607,7 @@ class ViewService:
         path: str | None = None,
     ) -> dict[str, Any]:
         _ = graph_names, filters
-        if self._db is None:
-            raise ViewServiceUnavailableError("Database session is not available")
+        store = self._require_store()
         if not name.strip():
             raise ValueError("View name is required")
         if not graph_id.strip():
@@ -679,38 +619,35 @@ class ViewService:
         if kind == "query" and not isinstance(state.get("spec"), dict):
             raise ValueError("A query view requires a compiled spec in state")
 
-        view_id = f"view-{uuid4().hex[:12]}"
         clean_description = description.strip() if description and description.strip() else None
-        model = GraphViewModel(
-            id=view_id,
-            workspace_id=workspace_id,
-            name=name.strip(),
-            description=clean_description,
-            view_type=(view_type or "Unknown").strip() or "Unknown",
-            kind=kind or "network",
-            visibility=visibility or "workspace",
-            creator_id=creator,
-            graph_id=graph_id.strip(),
-            graph_uri=graph_uri.strip(),
-            state=json.dumps(state),
-            path=_normalize_path(path),
+        view = await store.add(
+            GraphViewRecord(
+                id=f"view-{uuid4().hex[:12]}",
+                workspace_id=workspace_id,
+                name=name.strip(),
+                description=clean_description,
+                view_type=(view_type or "Unknown").strip() or "Unknown",
+                kind=kind or "network",
+                visibility=visibility or "workspace",
+                creator_id=creator,
+                graph_id=graph_id.strip(),
+                graph_uri=graph_uri.strip(),
+                state=state,
+                path=_normalize_path(path),
+            )
         )
-        self._db.add(model)
-        await self._db.commit()
-        await self._db.refresh(model)
         return {
             "status": "created",
-            "view_id": model.id,
-            "view_uri": f"/api/view/{model.id}",
-            "view_label": model.name,
-            "view_type": model.view_type,
-            "kind": model.kind,
-            "visibility": model.visibility,
+            "view_id": view.id,
+            "view_uri": f"/api/view/{view.id}",
+            "view_label": view.name,
+            "view_type": view.view_type,
+            "kind": view.kind,
+            "visibility": view.visibility,
         }
 
     async def delete_view(self, view_id_or_uri: str, *, workspace_id: str) -> dict[str, Any]:
-        if self._db is None:
-            raise ViewServiceUnavailableError("Database session is not available")
+        store = self._require_store()
 
         view_id = view_id_or_uri.strip()
         if view_id.startswith("http://") or view_id.startswith("https://"):
@@ -718,14 +655,7 @@ class ViewService:
         if view_id.startswith("/api/view/"):
             view_id = view_id.removeprefix("/api/view/")
 
-        result = await self._db.execute(
-            delete(GraphViewModel).where(
-                GraphViewModel.id == view_id,
-                GraphViewModel.workspace_id == workspace_id,
-            )
-        )
-        await self._db.commit()
-        if result.rowcount == 0:
+        if not await store.delete(workspace_id, view_id):
             raise ViewNotFoundError("View not found")
         return {
             "status": "deleted",

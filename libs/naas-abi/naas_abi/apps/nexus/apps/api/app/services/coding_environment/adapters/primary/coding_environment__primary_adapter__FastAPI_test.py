@@ -9,7 +9,6 @@ workspace the caller holds a role in.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
@@ -18,14 +17,19 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
 )
-from naas_abi.apps.nexus.apps.api.app.core.database import get_db
-from naas_abi.apps.nexus.apps.api.app.models import CodingEnvironmentModel
 from naas_abi.apps.nexus.apps.api.app.services.coding_environment.adapters.primary import (
     coding_environment__primary_adapter__FastAPI as ce_api,
 )
 from naas_abi.apps.nexus.apps.api.app.services.coding_environment.adapters.primary import (
     coding_environment__primary_adapter__guard as guard_api,
 )
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment.adapters.secondary.memory import (
+    MemoryCodingEnvironmentStore,
+)
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment.factory import (
+    get_coding_environment_store,
+)
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment.port import CodingWorkspace
 from naas_abi.apps.nexus.apps.api.app.services.coding_environment.testing import (
     AsUser,
     code_iam,
@@ -38,71 +42,12 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER
 from naas_abi_core.services.iam.tests.iam_harness import IAMHarness, statement
-from sqlalchemy import Delete
 
 pytestmark = pytest.mark.usefixtures("engine_iam")
 
 WS = "ws-1"
 WS_CONTAINER = workspace_container("org-1", WS)
 MONOREPO = "abi/monorepo"
-
-
-class _FakeResult:
-    def __init__(self, obj: object = None, rows: list | None = None) -> None:
-        self._obj = obj
-        self._rows = rows or []
-
-    def scalar_one_or_none(self) -> object:
-        return self._obj
-
-    def all(self) -> list:
-        return self._rows
-
-    def scalars(self) -> SimpleNamespace:
-        return SimpleNamespace(first=lambda: self._obj)
-
-
-class _FakeSession:
-    """Minimal AsyncSession stand-in: one in-memory workspace row plus an
-    in-memory ``coding_environments`` table (the per-repo workspace bindings)."""
-
-    def __init__(self, workspace: object) -> None:
-        self._workspace = workspace
-        self._envs: list[CodingEnvironmentModel] = []
-
-    def add(self, obj: object) -> None:
-        if isinstance(obj, CodingEnvironmentModel):
-            self._envs.append(obj)
-
-    async def get(self, model: object, key: object) -> object:
-        if model is CodingEnvironmentModel:
-            return next((e for e in self._envs if e.id == key), None)
-        return None
-
-    async def execute(self, statement: object, *args: object, **kwargs: object) -> _FakeResult:
-        # Cleanup on workspace deletion.
-        if isinstance(statement, Delete):
-            try:
-                target = statement.whereclause.right.value  # type: ignore[union-attr]
-                self._envs = [e for e in self._envs if e.id != target]
-            except Exception:
-                pass
-            return _FakeResult()
-        # The (env id -> repo) lookup selects CodingEnvironmentModel columns.
-        descs = getattr(statement, "column_descriptions", []) or []
-        entity = descs[0].get("entity") if descs else None
-        if entity is CodingEnvironmentModel and len(descs) > 1:
-            return _FakeResult(rows=[(e.id, e.repo_id) for e in self._envs])
-        if entity is CodingEnvironmentModel:
-            return _FakeResult()
-        # Everything else is a WorkspaceModel lookup.
-        return _FakeResult(obj=self._workspace)
-
-    async def commit(self) -> None:
-        return None
-
-    async def rollback(self) -> None:
-        return None
 
 
 class Client:
@@ -125,16 +70,15 @@ class Client:
         app.dependency_overrides[ce_api._get_coding_environment_service] = lambda: self.environments
         app.dependency_overrides[ce_api._get_source_control_service] = lambda: self.source_control
         app.dependency_overrides[guard_api.get_iam] = lambda: self.iam
-        # One session shared across requests so the in-memory coding_environments
-        # bindings written at provision time survive into the list request.
-        session = _FakeSession(
-            SimpleNamespace(id=WS, coding_default_repo_id=None, organization_id="org-1")
+        # One store shared across requests so the bindings written at provision
+        # time survive into the list request.
+        self.store = MemoryCodingEnvironmentStore(
+            workspaces=[
+                CodingWorkspace(id=WS, organization_id="org-1"),
+                CodingWorkspace(id="ws-2", organization_id="org-1"),
+            ]
         )
-
-        async def _fake_db():
-            yield session
-
-        app.dependency_overrides[get_db] = _fake_db
+        app.dependency_overrides[get_coding_environment_store] = lambda: self.store
         self.http = TestClient(app)
 
     def as_user(self, user_id: str) -> Client:
@@ -741,7 +685,13 @@ def test_the_section_is_refused_to_a_role_whose_feature_is_off() -> None:
 
 # --- names stay inside the repository -----------------------------------------------
 
-_OUTSIDE_PATHS = ["../../other-team/contents/secret.txt", "a/../../x", ".git/config", "a//b", "x?y#z"]
+_OUTSIDE_PATHS = [
+    "../../other-team/contents/secret.txt",
+    "a/../../x",
+    ".git/config",
+    "a//b",
+    "x?y#z",
+]
 _OUTSIDE_REFS = ["../../other-team", "-x", "--output=/tmp/x", "a..b", "x#y", "a/./b", "a b"]
 
 

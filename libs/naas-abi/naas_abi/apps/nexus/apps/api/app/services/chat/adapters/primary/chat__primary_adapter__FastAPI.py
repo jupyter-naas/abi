@@ -55,8 +55,11 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.chat_file_ingestion import (
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat_index_placements import (
     place_conversation_index,
 )
+from naas_abi.apps.nexus.apps.api.app.services.chat.chat_ingestion_job_store import (
+    ingestion_job_store,
+)
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat_ingestion_jobs import (
-    ChatIngestionJobService,
+    ChatIngestionJobStorePort,
 )
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat_ingestion_worker import (
     publish_chat_ingestion_job,
@@ -174,7 +177,7 @@ async def upload_file_for_chat(
     current_user: User = Depends(get_current_user_required),
     chat_service: ChatService = Depends(get_chat_service),
     object_storage: ObjectStorageService = Depends(get_object_storage_service),
-    db: AsyncSession = Depends(get_db),
+    jobs: ChatIngestionJobStorePort = Depends(ingestion_job_store),
 ) -> ChatFileIngestionResponse:
     row = await conversation_for_file(
         chat_service,
@@ -190,7 +193,6 @@ async def upload_file_for_chat(
     object_storage.put_object(upload_prefix, filename, content)
     source_path = f"{upload_prefix}/{filename}"
 
-    jobs = ChatIngestionJobService(db)
     job = await jobs.create_job(
         job_id=f"job-{uuid4().hex}",
         conversation_id=conversation_id,
@@ -201,12 +203,7 @@ async def upload_file_for_chat(
         embedding_model=embedding_model,
         embedding_dimension=embedding_dimension,
     )
-    # Commit the job row BEFORE publishing to RabbitMQ.
-    # The get_db() dependency only commits after the handler returns, so without
-    # this explicit commit the worker can receive the message and try to look up
-    # the job before the row is visible in the database — causing update_status
-    # to return None and the worker to exit silently, leaving the job at "queued".
-    await db.commit()
+    # The store committed the job: the worker can read it once it is published.
     await place_conversation_index(job.workspace_id, job.conversation_id)
 
     await asyncio.to_thread(
@@ -248,7 +245,7 @@ async def ingest_my_drive_file_for_chat(
     payload: ChatIngestMyDriveFileRequest,
     current_user: User = Depends(get_current_user_required),
     chat_service: ChatService = Depends(get_chat_service),
-    db: AsyncSession = Depends(get_db),
+    jobs: ChatIngestionJobStorePort = Depends(ingestion_job_store),
 ) -> ChatFileIngestionResponse:
     row = await conversation_for_file(
         chat_service,
@@ -258,7 +255,6 @@ async def ingest_my_drive_file_for_chat(
         datetime.now(UTC).replace(tzinfo=None),
     )
 
-    jobs = ChatIngestionJobService(db)
     job = await jobs.create_job(
         job_id=f"job-{uuid4().hex}",
         conversation_id=conversation_id,
@@ -269,8 +265,7 @@ async def ingest_my_drive_file_for_chat(
         embedding_model=payload.embedding_model,
         embedding_dimension=payload.embedding_dimension,
     )
-    # Same race-condition guard as upload: commit before publishing.
-    await db.commit()
+    # The store committed the job: the worker can read it once it is published.
     await place_conversation_index(job.workspace_id, job.conversation_id)
 
     await asyncio.to_thread(
@@ -310,11 +305,10 @@ async def ingest_my_drive_file_for_chat(
 async def get_ingestion_job_status(
     job_id: str,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    jobs: ChatIngestionJobStorePort = Depends(ingestion_job_store),
 ) -> ChatIngestionJobStatusResponse:
     if viewing():
         raise HTTPException(status_code=404, detail="Ingestion job not found")
-    jobs = ChatIngestionJobService(db)
     job = await jobs.get_job_for_user(job_id=job_id, user_id=current_user.id)
     if job is None:
         raise HTTPException(status_code=404, detail="Ingestion job not found")

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from fastapi import Depends
+from naas_abi.apps.nexus.apps.api.app.core import database
 from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.core.postgres_session_registry import (
     PostgresSessionRegistry,
@@ -95,3 +98,23 @@ async def get_service_registry(db: AsyncSession = Depends(get_db)):
     finally:
         session_registry.reset_current_session(token)
         session_registry.unbind(session_id)
+
+
+@asynccontextmanager
+async def standalone_registry() -> AsyncIterator[ServiceRegistry]:
+    """The registry outside a request's ``get_service_registry``: on the session
+    already current when there is one, else on a session of its own for the block."""
+    registry = ServiceRegistry.instance()
+    session_registry = PostgresSessionRegistry.instance()
+    if session_registry.current_session() is not None:
+        yield registry
+        return
+    async with database.AsyncSessionLocal() as db:
+        session_id = f"sess-{uuid4().hex}"
+        session_registry.bind(session_id=session_id, db=db)
+        token = session_registry.set_current_session(session_id)
+        try:
+            yield registry
+        finally:
+            session_registry.reset_current_session(token)
+            session_registry.unbind(session_id)

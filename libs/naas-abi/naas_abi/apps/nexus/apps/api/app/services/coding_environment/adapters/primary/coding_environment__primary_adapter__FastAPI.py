@@ -35,11 +35,6 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
 )
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
-from naas_abi.apps.nexus.apps.api.app.core.database import get_db
-from naas_abi.apps.nexus.apps.api.app.models import (
-    CodingEnvironmentModel,
-    WorkspaceModel,
-)
 from naas_abi.apps.nexus.apps.api.app.services.coding_environment import agent_credentials
 from naas_abi.apps.nexus.apps.api.app.services.coding_environment.adapters.primary.coding_environment__primary_adapter__guard import (  # noqa: E501
     KernelRoute,
@@ -49,6 +44,15 @@ from naas_abi.apps.nexus.apps.api.app.services.coding_environment.adapters.prima
     require_path,
     require_ref,
     source_control_error,
+)
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment.factory import (
+    CodingEnvironmentStoreSource,
+    coding_environment_store,
+    require_coding_environment_store,
+)
+from naas_abi.apps.nexus.apps.api.app.services.coding_environment.port import (
+    CodingEnvironmentRecord,
+    CodingEnvironmentStorePort,
 )
 from naas_abi.apps.nexus.apps.api.app.services.coding_environment.repo_access import (
     RepoNameTaken,
@@ -93,8 +97,6 @@ from naas_abi_core.services.source_control.SourceControlService import (
     repo_key,
 )
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(dependencies=[Depends(get_current_user_required)], route_class=KernelRoute)
 
@@ -528,7 +530,7 @@ async def create_repo(
     current_user: User = Depends(get_current_user_required),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
     iam: IIAMService | None = Depends(get_iam),
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort = Depends(require_coding_environment_store),
 ) -> RepoListItem:
     """Create a repository for this workspace, placed in it, and make the
     creator a writer."""
@@ -539,9 +541,7 @@ async def create_repo(
         raise HTTPException(status_code=503, detail="Authorization is unavailable.")
     username = _forge_username(current_user.name or "", str(current_user.email))
     repo_id = f"{_repo_owner()}/{body.name}"
-    row = (
-        await db.execute(select(WorkspaceModel).where(WorkspaceModel.id == body.workspace_id))
-    ).scalar_one_or_none()
+    row = await store.get_workspace(body.workspace_id)
     taken = HTTPException(status_code=409, detail="That repository name is taken.")
     container = await authz.AUTHZ.container_of(body.workspace_id)
 
@@ -723,12 +723,10 @@ async def generate_git_token(
 @router.get("/default-repo", dependencies=[guard("ReadCode")])
 async def get_default_repo(
     workspace_id: str,
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort = Depends(require_coding_environment_store),
 ) -> DefaultRepoResponse:
     """The team-shared default repo for new workspaces in this Nexus workspace."""
-    row = (
-        await db.execute(select(WorkspaceModel).where(WorkspaceModel.id == workspace_id))
-    ).scalar_one_or_none()
+    row = await store.get_workspace(workspace_id)
     repo_id = (row.coding_default_repo_id if row else None) or settings.coding_repo_id
     return DefaultRepoResponse(repo_id=repo_id)
 
@@ -737,7 +735,7 @@ async def get_default_repo(
 async def set_default_repo(
     body: DefaultRepoRequest,
     current_user: User = Depends(get_current_user_required),
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort = Depends(require_coding_environment_store),
     iam: IIAMService | None = Depends(get_iam),
 ) -> DefaultRepoResponse:
     await authz.require(
@@ -747,13 +745,8 @@ async def set_default_repo(
         denied="Only a workspace owner/admin can set the default repo.",
     )
     await authorize_repo(iam, body.repo_id, body.workspace_id, write=False)
-    row = (
-        await db.execute(select(WorkspaceModel).where(WorkspaceModel.id == body.workspace_id))
-    ).scalar_one_or_none()
-    if row is None:
+    if not await store.set_default_repo(body.workspace_id, body.repo_id):
         raise HTTPException(status_code=404, detail="Workspace not found.")
-    row.coding_default_repo_id = body.repo_id
-    await db.commit()
     return DefaultRepoResponse(repo_id=body.repo_id)
 
 
@@ -850,7 +843,7 @@ async def list_environments(
     repo_id: str | None = None,
     current_user: User = Depends(get_current_user_required),
     service: CodingEnvironmentService = Depends(_get_coding_environment_service),
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort = Depends(require_coding_environment_store),
 ) -> list[EnvironmentResponse]:
     if viewing():
         return []  # the person's coding environments are private to them
@@ -863,27 +856,10 @@ async def list_environments(
     # repo filter is given, show only that repo's workspaces. Workspaces with no
     # recorded binding (e.g. provisioned before this was tracked) are excluded
     # from a filtered view rather than leaking into every repo.
-    repo_by_env = await _repo_by_env(db, workspace_id, [e.id for e in envs])
+    repo_by_env = await store.repos_by_environment(workspace_id, [e.id for e in envs])
     if repo_id:
         envs = [e for e in envs if repo_by_env.get(e.id) == repo_id]
     return [_to_env(env, repo_by_env.get(env.id)) for env in envs]
-
-
-async def _repo_by_env(
-    db: AsyncSession, workspace_id: str, env_ids: list[str]
-) -> dict[str, str | None]:
-    """Map Coder workspace id -> its recorded source repo for this workspace."""
-    if not env_ids:
-        return {}
-    rows = (
-        await db.execute(
-            select(CodingEnvironmentModel.id, CodingEnvironmentModel.repo_id).where(
-                CodingEnvironmentModel.workspace_id == workspace_id,
-                CodingEnvironmentModel.id.in_(env_ids),
-            )
-        )
-    ).all()
-    return dict(rows)
 
 
 @router.post(
@@ -899,7 +875,7 @@ async def provision_environment(
     current_user: User = Depends(get_current_user_required),
     service: CodingEnvironmentService = Depends(_get_coding_environment_service),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort = Depends(require_coding_environment_store),
     iam: IIAMService | None = Depends(get_iam),
 ) -> EnvironmentResponse:
     await authz.require("WriteCode", user=current_user, workspace=body.workspace_id)
@@ -995,8 +971,8 @@ async def provision_environment(
     # be scoped per-repo. Best-effort: the workspace already exists in Coder, so a
     # bookkeeping failure must not fail the request.
     try:
-        db.add(
-            CodingEnvironmentModel(
+        await store.add(
+            CodingEnvironmentRecord(
                 id=status.id,
                 workspace_id=body.workspace_id,
                 user_id=current_user.id,
@@ -1005,9 +981,8 @@ async def provision_environment(
                 sidecar_secret=sidecar_secret,
             )
         )
-        await db.commit()
     except Exception:
-        await db.rollback()
+        pass
     return _to_env(status, repo_id or None)
 
 
@@ -1059,7 +1034,7 @@ def _wait_for_harness(base: str, *, timeout_s: float = 15.0) -> bool:
 
 
 async def lookup_code_bindings(
-    db: AsyncSession,
+    db: CodingEnvironmentStoreSource,
     *,
     workspace_id: str,
     user_id: str,
@@ -1067,16 +1042,17 @@ async def lookup_code_bindings(
     branch: str,
     service: CodingEnvironmentService | None = None,
 ) -> tuple[str | None, str | None, str | None, str | None]:
-    """Return sidecar_base, sidecar_secret, harness_base, environment_id."""
+    """Return sidecar_base, sidecar_secret, harness_base, environment_id.
+
+    ``db`` is the store, or a database session to read it from."""
     label = _code_runtime_label(workspace_id=workspace_id, repo_id=repo_id, branch=branch)
-    result = await db.execute(
-        select(CodingEnvironmentModel).where(
-            CodingEnvironmentModel.workspace_id == workspace_id,
-            CodingEnvironmentModel.user_id == user_id,
-            CodingEnvironmentModel.label == label,
-        )
+    store = coding_environment_store(db)
+    rows = (
+        await store.find_by_labels(workspace_id=workspace_id, user_id=user_id, labels=[label])
+        if store is not None
+        else []
     )
-    row = result.scalars().first()
+    row = rows[0] if rows else None
     if not row or not row.sidecar_base or not row.sidecar_secret:
         return None, None, None, None
     harness_base = None
@@ -1091,7 +1067,7 @@ async def lookup_code_bindings(
 
 
 async def lookup_code_sidecar(
-    db: AsyncSession,
+    db: CodingEnvironmentStoreSource,
     *,
     workspace_id: str,
     user_id: str,
@@ -1124,7 +1100,7 @@ async def ensure_sandbox_runtime(
     current_user: User = Depends(get_current_user_required),
     service: CodingEnvironmentService = Depends(_get_coding_environment_service),
     source_control: SourceControlService | None = Depends(_get_source_control_service),
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort = Depends(require_coding_environment_store),
     iam: IIAMService | None = Depends(get_iam),
 ) -> SandboxRuntimeResponse:
     """Ensure a local sandbox + sidecar for the open repo (Slides-parity)."""
@@ -1133,14 +1109,10 @@ async def ensure_sandbox_runtime(
     label = _code_runtime_label(workspace_id=workspace_id, repo_id=repo_id, branch=branch)
     name = _sandbox_workspace_name(workspace_id=workspace_id, repo_id=repo_id, branch=branch)
 
-    existing = await db.execute(
-        select(CodingEnvironmentModel).where(
-            CodingEnvironmentModel.workspace_id == workspace_id,
-            CodingEnvironmentModel.user_id == current_user.id,
-            CodingEnvironmentModel.label == label,
-        )
+    existing = await store.find_by_labels(
+        workspace_id=workspace_id, user_id=current_user.id, labels=[label]
     )
-    row = existing.scalars().first()
+    row = existing[0] if existing else None
     if row and row.sidecar_base and row.sidecar_secret:
         ready = await run_in_threadpool(
             _wait_for_sidecar, str(row.sidecar_base), str(row.sidecar_secret)
@@ -1243,8 +1215,8 @@ async def ensure_sandbox_runtime(
     harness_base = await run_in_threadpool(service.get_harness_binding, workspace_id=status.id)
     harness_ready = bool(harness_base and await run_in_threadpool(_wait_for_harness, harness_base))
     try:
-        db.add(
-            CodingEnvironmentModel(
+        await store.add(
+            CodingEnvironmentRecord(
                 id=status.id,
                 workspace_id=workspace_id,
                 user_id=current_user.id,
@@ -1254,9 +1226,8 @@ async def ensure_sandbox_runtime(
                 sidecar_secret=sidecar_secret,
             )
         )
-        await db.commit()
     except Exception:
-        await db.rollback()
+        pass
 
     detail = None
     if not ready and not harness_ready:
@@ -1375,23 +1346,20 @@ async def delete_environment(
     workspace_id: str,
     current_user: User = Depends(get_current_user_required),
     service: CodingEnvironmentService = Depends(_get_coding_environment_service),
-    db: AsyncSession = Depends(get_db),
+    store: CodingEnvironmentStorePort = Depends(require_coding_environment_store),
     iam: IIAMService | None = Depends(get_iam),
 ) -> dict[str, str]:
     await authorize_environment(iam, environment_id, workspace_id)
-    bound = await db.get(CodingEnvironmentModel, environment_id)
+    bound = await store.get(environment_id)
     try:
         await _orchestrator_user(service, current_user)
         await run_in_threadpool(service.delete, workspace_id=environment_id)
     except CodingEnvironmentError as exc:
         raise _http_error(exc) from exc
     try:
-        await db.execute(
-            delete(CodingEnvironmentModel).where(CodingEnvironmentModel.id == environment_id)
-        )
-        await db.commit()
+        await store.delete(environment_id)
     except Exception:
-        await db.rollback()
+        pass
     if bound is not None:
         # The agent's key goes with its environment.
         await agent_credentials.arevoke_agent_keys(str(bound.user_id), bound.sidecar_base)

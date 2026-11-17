@@ -227,8 +227,6 @@ PLATFORM_TABLES: dict[str, PlatformTableEntry] = {entry.name: entry for entry in
 EXCLUDED_TABLES: dict[str, str] = {
     "oidc_login_requests": "Sign-ins in flight: each row is a PKCE code verifier, a nonce and "
     "hashed state, kept for minutes. Nothing in it is worth reading and all of it is secret.",
-    "abi_servers": "No migration creates it (a model of the legacy ABI server routes): nexus.db "
-    "has no such table.",
 }
 
 # Credentials are masked wherever they appear: password and token hashes, sign-in and

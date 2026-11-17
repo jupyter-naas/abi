@@ -5,13 +5,27 @@ against abuse.
 """
 
 from datetime import datetime, timedelta
-from uuid import uuid4
 
 from fastapi import HTTPException, Request, status
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
-from naas_abi.apps.nexus.apps.api.app.core.database import async_engine
 from naas_abi.apps.nexus.apps.api.app.core.datetime_compat import UTC
-from sqlalchemy import text
+from naas_abi.apps.nexus.apps.api.app.services.rate_limit.adapters.secondary.sql import (
+    SqlRateLimitStore,
+)
+from naas_abi.apps.nexus.apps.api.app.services.rate_limit.port import RateLimitStorePort
+
+_store: RateLimitStorePort = SqlRateLimitStore()
+
+
+def configure_store(store: RateLimitStorePort) -> RateLimitStorePort:
+    """Use ``store`` for every attempt from now on; returns the one it replaces."""
+    global _store
+    previous, _store = _store, store
+    return previous
+
+
+def _now() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 async def ensure_under_limit(
@@ -23,19 +37,7 @@ async def ensure_under_limit(
         return
 
     window = settings.rate_limit_window_seconds if window_seconds is None else window_seconds
-    window_start = datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=window)
-    async with async_engine.begin() as conn:
-        result = await conn.execute(
-            text("""
-                SELECT COUNT(*) as count
-                FROM rate_limit_events
-                WHERE identifier = :identifier
-                  AND endpoint = :endpoint
-                  AND created_at >= :window_start
-            """),
-            {"identifier": identifier, "endpoint": endpoint, "window_start": window_start},
-        )
-        count = result.fetchone().count
+    count = await _store.count_since(identifier, endpoint, _now() - timedelta(seconds=window))
 
     if count >= limit:
         raise HTTPException(
@@ -50,19 +52,7 @@ async def record_attempt(identifier: str, endpoint: str) -> None:
     if not settings.rate_limit_enabled:
         return
 
-    async with async_engine.begin() as conn:
-        await conn.execute(
-            text("""
-                INSERT INTO rate_limit_events (id, identifier, endpoint, created_at)
-                VALUES (:id, :identifier, :endpoint, :created_at)
-            """),
-            {
-                "id": f"rl-{uuid4().hex[:12]}",
-                "identifier": identifier,
-                "endpoint": endpoint,
-                "created_at": datetime.now(UTC).replace(tzinfo=None),
-            },
-        )
+    await _store.record(identifier, endpoint, _now())
 
 
 async def check_rate_limit(
@@ -100,14 +90,7 @@ async def check_invitation_mail_quota(
 
 async def cleanup_old_rate_limit_events() -> None:
     """Clean up rate limit events older than 24 hours (background task)."""
-    cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=24)
-    # cutoff_str removed
-
-    async with async_engine.begin() as conn:
-        await conn.execute(
-            text("DELETE FROM rate_limit_events WHERE created_at < :cutoff"),
-            {"cutoff": cutoff},
-        )
+    await _store.prune(_now() - timedelta(hours=24))
 
 
 def get_rate_limit_identifier(request: Request, user_id: str | None = None) -> str:

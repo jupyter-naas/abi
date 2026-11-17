@@ -4,7 +4,6 @@ Main API router that aggregates all endpoint routers.
 
 from fastapi import APIRouter
 from naas_abi.apps.nexus.apps.api.app.api.endpoints import (
-    abi,
     admin,
     analytics,
     graph,
@@ -143,7 +142,6 @@ api_router.include_router(datasets_router, prefix="/datasets", tags=["datasets"]
 api_router.include_router(secrets.router, prefix="/secrets", tags=["secrets"])
 api_router.include_router(providers_router, prefix="/providers", tags=["providers"])
 api_router.include_router(websocket.router, prefix="/websocket", tags=["websocket"])
-api_router.include_router(abi.router, prefix="/abi", tags=["abi"])
 api_router.include_router(tenant.router, prefix="/tenant", tags=["tenant"])
 api_router.include_router(transcribe.router, prefix="/transcribe", tags=["transcribe"])
 api_router.include_router(speech.router, prefix="/speech", tags=["speech"])
