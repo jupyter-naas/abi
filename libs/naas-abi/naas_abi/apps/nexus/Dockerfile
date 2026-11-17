@@ -1,6 +1,6 @@
 # Development image (`pnpm dev`): never a deployment's. Node 24 LTS, pinned by
 # digest, and the pnpm version package.json names.
-FROM node:24.22.3-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5
+FROM node:26.13.0-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216
 
 WORKDIR /app
 
