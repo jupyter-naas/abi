@@ -4,18 +4,29 @@ One collection per project (``runs_collection(project)``) in each module's
 namespace; read through the platform document root (``document_admin``).
 Filtering by trigger kind happens here (the kind is nested in the record), so
 those queries over-fetch to still fill a page.
+
+Reads run on the store's own few threads, not the default executor: a Jobs page
+asks for many modules at once and must neither crowd out other work there
+(maintenance jobs, triple store calls) nor queue behind it.
 """
 
 from __future__ import annotations
 
 import asyncio
+import contextvars
+import functools
 from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-from typing import Any
+from typing import Any, TypeVar
 
 from naas_abi.apps.nexus.apps.api.app.services.sysadmin.jobs import (
     ACTIVE_STATUSES,
+    LISTED_STATUSES,
+    SKIPPED,
+    JobRecentRuns,
     JobRun,
+    ModuleRuns,
     RunNotFound,
     RunTrigger,
 )
@@ -25,6 +36,10 @@ from naas_abi_core.services.document.DocumentPort import CollectionNotFound, Doc
 ORDER = ("started_at", "desc")
 MAX_FETCH = 1000
 TRIGGER_FILTER_FACTOR = 4
+# Threads reading run records: at most this many queries at once per API process.
+READ_THREADS = 4
+
+T = TypeVar("T")
 
 
 def _text(value: Any) -> str | None:
@@ -63,21 +78,75 @@ def record(module_id: str, run_id: str, data: dict[str, Any]) -> JobRun:
 
 
 class DocumentJobRunStore:
-    def __init__(self, documents: Callable[[], Any], project: str) -> None:
+    def __init__(
+        self, documents: Callable[[], Any], project: str, *, threads: int = READ_THREADS
+    ) -> None:
         from naas_abi_sdk.jobs import runs_collection
 
         self._documents = documents
         self.collection = runs_collection(project)
+        self._executor = ThreadPoolExecutor(max_workers=threads, thread_name_prefix="job-runs")
 
-    def _find(self, module_id: str, where: list[tuple[str, str, Any]], limit: int) -> list[JobRun]:
+    async def _call(self, fn: Callable[..., T], *args: Any) -> T:
+        # Like asyncio.to_thread (context variables included), on the store's threads.
+        context = contextvars.copy_context()
+        return await asyncio.get_running_loop().run_in_executor(
+            self._executor, functools.partial(context.run, fn, *args)
+        )
+
+    def _view(self, module_id: str) -> Any:
         try:
-            view = self._documents().for_namespace(module_id)
+            return self._documents().for_namespace(module_id)
+        except Exception as exc:  # noqa: BLE001 - backend errors make the source unavailable
+            raise SourceUnavailable("runs", f"{type(exc).__name__}: {exc}") from exc
+
+    def _find(
+        self,
+        module_id: str,
+        where: list[tuple[str, str, Any]],
+        limit: int,
+        view: Any | None = None,
+    ) -> list[JobRun]:
+        try:
+            if view is None:
+                view = self._documents().for_namespace(module_id)
             page = view.find(self.collection, where=where, order_by=ORDER, limit=limit)
         except CollectionNotFound:
             return []
         except Exception as exc:  # noqa: BLE001 - backend errors make the source unavailable
             raise SourceUnavailable("runs", f"{type(exc).__name__}: {exc}") from exc
         return [record(module_id, doc.id, doc.data) for doc in page.items]
+
+    def _module_runs(self, module_id: str, jobs: Sequence[str], recent: int) -> ModuleRuns:
+        view = self._view(module_id)
+        try:
+            page = view.find(
+                self.collection,
+                where=[("status", "in", list(ACTIVE_STATUSES))],
+                order_by=ORDER,
+                limit=MAX_FETCH,
+            )
+        except CollectionNotFound:
+            # No run recorded in this module yet: nothing more to ask.
+            return ModuleRuns({job: JobRecentRuns() for job in jobs})
+        except Exception as exc:  # noqa: BLE001
+            raise SourceUnavailable("runs", f"{type(exc).__name__}: {exc}") from exc
+        running = [record(module_id, doc.id, doc.data) for doc in page.items]
+        by_job: dict[str, JobRecentRuns] = {}
+        for job in jobs:
+            # Two reads per job, not one per module: a job that runs every minute
+            # must not push the others' runs, or its own last skip, off a shared page.
+            listed = self._find(
+                module_id,
+                [("job", "eq", job), ("status", "in", list(LISTED_STATUSES))],
+                recent,
+                view,
+            )
+            skipped = self._find(
+                module_id, [("job", "eq", job), ("status", "eq", SKIPPED)], 1, view
+            )
+            by_job[job] = JobRecentRuns(tuple(listed), skipped[0] if skipped else None)
+        return ModuleRuns(by_job, tuple(running))
 
     def _list(
         self,
@@ -123,7 +192,7 @@ class DocumentJobRunStore:
         before: str | None = None,
         limit: int = 50,
     ) -> list[JobRun]:
-        return await asyncio.to_thread(
+        return await self._call(
             self._list, list(module_ids), job, statuses, trigger_kind, before, limit
         )
 
@@ -134,4 +203,9 @@ class DocumentJobRunStore:
         return await self.list_runs([module_id], statuses=list(ACTIVE_STATUSES), limit=MAX_FETCH)
 
     async def get_run(self, module_id: str, run_id: str) -> JobRun:
-        return await asyncio.to_thread(self._get, module_id, run_id)
+        return await self._call(self._get, module_id, run_id)
+
+    async def module_runs(
+        self, module_id: str, jobs: Sequence[str], *, recent: int = 20
+    ) -> ModuleRuns:
+        return await self._call(self._module_runs, module_id, list(jobs), recent)

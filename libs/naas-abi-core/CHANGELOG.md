@@ -24,6 +24,27 @@
 
 <!-- version list -->
 
+## v3.6.1 (2026-11-17)
+
+### Bug Fixes
+
+- **core**: SQLite document adapter reuses its connections
+  ([`1e69294`](https://github.com/jupyter-naas/abi/commit/1e69294dd0dbb7c8a7f54a4a2de85dba155b8e90))
+
+
+## v3.6.0 (2026-11-17)
+
+### Chores
+
+- Maintenance across core, nexus, marketplace and deploy templates
+  ([`232291c`](https://github.com/jupyter-naas/abi/commit/232291c110f3961bfeabc00fbcc3db6c1dc72537))
+
+### Features
+
+- **idp**: Mail the code to login_hint at once, so the address is typed once
+  ([`11a41d2`](https://github.com/jupyter-naas/abi/commit/11a41d2a864cac600a9732f9c1b64c8c9e5d2385))
+
+
 ## v3.5.2 (2026-11-16)
 
 ### Bug Fixes

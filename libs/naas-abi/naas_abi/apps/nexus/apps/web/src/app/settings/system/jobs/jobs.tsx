@@ -36,26 +36,12 @@ import { CancelDialog, TriggerDialog } from './run-dialogs';
 import { RunPanel } from './run-panel';
 import { RunsList, StatusFilter } from './runs-list';
 import { systemTracePath } from '../system-tabs';
+import { usePoll } from '../use-poll';
 
 const OVERVIEW_MS = 5000;
 const RUNS_MS = 5000;
 const LIVE_RUN_MS = 1500;
 const PAGE = 50;
-
-/** Calls ``fn`` now and every ``ms`` while the page is visible and ``enabled``. */
-function usePoll(fn: () => void, ms: number, enabled: boolean, deps: unknown[]) {
-  const saved = useRef(fn);
-  saved.current = fn;
-  useEffect(() => {
-    if (!enabled) return;
-    saved.current();
-    const timer = window.setInterval(() => {
-      if (!document.hidden) saved.current();
-    }, ms);
-    return () => window.clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ms, enabled, ...deps]);
-}
 
 interface TriggerRequest {
   job: string;
@@ -158,14 +144,14 @@ export function JobsTab({
   );
 
   usePoll(
-    () => {
-      void api.overview().then((result) => {
+    (signal) =>
+      api.overview(signal).then((result) => {
+        if (signal.aborted) return;
         if (result.ok) {
           setOverview(result.data);
           setOverviewFailure(null);
         } else setOverviewFailure(result);
-      });
-    },
+      }),
     OVERVIEW_MS,
     true,
     [api, nonce, reloads],
@@ -185,9 +171,9 @@ export function JobsTab({
     loadedMore.current = false;
   }, [runFilter]);
   usePoll(
-    () => {
-      void api.runs({ ...runFilter, limit: PAGE }).then((result) => {
-        if (!result.ok) return;
+    (signal) =>
+      api.runs({ ...runFilter, limit: PAGE }, signal).then((result) => {
+        if (signal.aborted || !result.ok) return;
         if (!loadedMore.current) {
           setRuns(result.data.runs);
           setNext(result.data.next);
@@ -198,8 +184,7 @@ export function JobsTab({
           const fresh = new Set(result.data.runs.map((r) => r.key));
           return [...result.data.runs, ...(prev ?? []).filter((r) => !fresh.has(r.key))];
         });
-      });
-    },
+      }),
     RUNS_MS,
     showRuns,
     [api, runFilter, nonce, reloads],
@@ -226,10 +211,11 @@ export function JobsTab({
     setRunFailure(null);
   }, [runKey]);
   usePoll(
-    () => {
+    (signal) => {
       if (!runKey) return;
       const [module, id] = splitKey(runKey);
-      void api.run(module, id).then((result) => {
+      return api.run(module, id, signal).then((result) => {
+        if (signal.aborted) return;
         if (result.ok) {
           setDetail(result.data);
           setRunFailure(null);

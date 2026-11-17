@@ -68,13 +68,29 @@ def start(client: TestClient, params: dict[str, str]) -> httpx.Response:
     return client.get(f"{ROOT}/authorize?{urlencode(params)}")
 
 
+def follow(client: TestClient, response: httpx.Response) -> httpx.Response:
+    """The page a redirect of the provider's names (an absolute URL)."""
+    assert response.status_code in (302, 303), response.text
+    return client.get(response.headers["location"])
+
+
 def sign_in(client, mailer, email: str, params: dict[str, str]) -> httpx.Response:
-    """Authorize, ask for a code, enter it. Returns the final response."""
+    """Authorize, ask for a code, enter it. Returns the final response.
+
+    With a ``login_hint``, ``/authorize`` mails the code itself and redirects to
+    the code page; without one, the email page asks for the address."""
     page = start(client, params)
-    assert page.status_code == 200, page.text
-    csrf = csrf_of(page.text)
-    sent = client.post(f"{ROOT}/login/email", data={"csrf": csrf, "email": email})
-    assert sent.status_code == 200, sent.text
+    if params.get("login_hint"):
+        assert page.status_code == 303, page.text
+        assert page.headers["location"] == f"{HOST}{ROOT}/login/code"
+        page = follow(client, page)
+        assert page.status_code == 200 and "Check your email" in page.text, page.text
+        csrf = csrf_of(page.text)
+    else:
+        assert page.status_code == 200, page.text
+        csrf = csrf_of(page.text)
+        sent = client.post(f"{ROOT}/login/email", data={"csrf": csrf, "email": email})
+        assert sent.status_code == 200, sent.text
     code = mailer.last_code(email)
     return client.post(
         f"{ROOT}/login/code", data={"csrf": csrf, "email": email, "code": code}
