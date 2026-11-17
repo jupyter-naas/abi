@@ -30,19 +30,34 @@ class Branding:
     """How the login page and the mail look. Every field is optional text; the
     page escapes it, and only ``https`` (or same-origin) images load."""
 
+    # The defaults are those of the Nexus login page (its tenant settings), so
+    # the two look alike when neither is branded.
     app_name: str = "ABI"
     primary_color: str = "#22c55e"
-    background_color: str = "#f5f5f5"
+    # The button on hover; None darkens the primary color.
+    accent_color: str | None = None
+    background_color: str = "#ffffff"
     card_color: str = "#ffffff"
+    input_color: str = "#f4f4f4"
     text_color: str = "#1a1a1a"
-    border_radius: int = 12
+    border_radius: int = 0
     logo_url: str | None = None
     footer_text: str = ""
     tab_title: str | None = None
 
     def __post_init__(self) -> None:
-        for name in ("primary_color", "background_color", "card_color", "text_color"):
-            if not re.fullmatch(r"#[0-9a-fA-F]{3,8}", getattr(self, name)):
+        for name in (
+            "primary_color",
+            "accent_color",
+            "background_color",
+            "card_color",
+            "input_color",
+            "text_color",
+        ):
+            value = getattr(self, name)
+            if value is None and name == "accent_color":
+                continue
+            if not re.fullmatch(r"#[0-9a-fA-F]{3,8}", value):
                 raise ValueError(f"branding.{name} is a hex color such as #22c55e")
         if not 0 <= int(self.border_radius) <= 48:
             raise ValueError("branding.border_radius is 0 to 48")

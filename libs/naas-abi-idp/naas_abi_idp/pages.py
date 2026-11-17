@@ -22,8 +22,16 @@ def _logo(branding: Branding, max_height: int = 48) -> str:
         return ""
     return (
         f'<img src="{_attr(branding.logo_url)}" alt="{_attr(branding.app_name)}" '
-        f'style="max-height:{max_height}px;max-width:200px">'
+        f'style="max-height:{max_height}px;max-width:100%">'
     )
+
+
+def _is_light(color: str) -> bool:
+    hex_ = color.lstrip("#")
+    if len(hex_) in (3, 4):
+        hex_ = "".join(c * 2 for c in hex_)
+    r, g, b = (int(hex_[i : i + 2], 16) for i in (0, 2, 4))
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6
 
 
 def _page(branding: Branding, title: str, body: str, *, status_note: str = "") -> str:
@@ -33,6 +41,15 @@ def _page(branding: Branding, title: str, body: str, *, status_note: str = "") -
         if branding.footer_text
         else ""
     )
+    logo = _logo(branding)
+    radius = f"{int(branding.border_radius)}px"
+    ink = "0,0,0" if _is_light(branding.card_color) else "255,255,255"
+    page_ink = "0,0,0" if _is_light(branding.background_color) else "255,255,255"
+    hover = (
+        f"background:{branding.accent_color}"
+        if branding.accent_color
+        else "filter:brightness(.9)"
+    )
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -40,32 +57,42 @@ def _page(branding: Branding, title: str, body: str, *, status_note: str = "") -
 <title>{escape(title)} - {escape(tab)}</title>
 <style>
 *{{box-sizing:border-box}}
-body{{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
-background:{branding.background_color};color:{branding.text_color};
-font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}}
-main{{width:100%;max-width:420px;margin:24px;padding:36px 40px;background:{branding.card_color};
-border-radius:{int(branding.border_radius)}px;box-shadow:0 1px 3px rgba(0,0,0,.12)}}
-.logo{{text-align:center;margin-bottom:20px}}
-h1{{font-size:22px;margin:0 0 6px;text-align:center}}
-p.sub{{margin:0 0 22px;text-align:center;color:#737373;font-size:14px}}
-label{{display:block;font-size:13px;margin:14px 0 6px}}
-input[type=email],input[type=password],input[type=text]{{width:100%;padding:11px 12px;
-font-size:15px;border:1px solid #c9c9c9;border-radius:{max(int(branding.border_radius) - 4, 2)}px;
-background:#fff;color:#1a1a1a}}
-input.code{{letter-spacing:8px;font-size:24px;text-align:center}}
-button{{width:100%;margin-top:20px;padding:12px;font-size:15px;font-weight:600;color:#fff;
-background:{branding.primary_color};border:0;border-radius:{max(int(branding.border_radius) - 4, 2)}px;cursor:pointer}}
-.err{{margin:0 0 14px;padding:10px 12px;background:#fef2f2;color:#991b1b;border-radius:6px;font-size:14px}}
-.note{{margin:0 0 14px;padding:10px 12px;background:#f0fdf4;color:#166534;border-radius:6px;font-size:14px}}
-a{{color:{branding.primary_color}}}
-.alt{{margin-top:18px;text-align:center;font-size:13px}}
-.foot{{margin:18px 0 0;text-align:center;font-size:12px;color:#737373}}
+body{{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;
+justify-content:center;padding:24px 16px;background:{branding.background_color};
+color:{branding.text_color};
+font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+-webkit-font-smoothing:antialiased}}
+main{{width:100%;max-width:440px;padding:40px 48px 48px;background:{branding.card_color};
+border-radius:{radius}}}
+.logo{{display:flex;justify-content:center;margin-bottom:24px}}
+h1{{font-size:24px;font-weight:700;line-height:1.2;margin:0;text-align:center}}
+p.sub{{margin:8px 0 24px;text-align:center;color:rgba({ink},.55);font-size:14px;line-height:1.5}}
+label{{display:block;font-size:14px;font-weight:500;margin:16px 0 8px}}
+input[type=email],input[type=password],input[type=text]{{display:block;width:100%;height:44px;
+padding:8px 16px;font:inherit;font-size:14px;border:0;border-radius:{radius};
+background:{branding.input_color};color:{branding.text_color}}}
+input:focus{{outline:none;box-shadow:0 0 0 2px {branding.primary_color}33}}
+input.code{{letter-spacing:8px;font-size:22px;text-align:center}}
+button{{display:flex;align-items:center;justify-content:center;width:100%;height:44px;
+margin-top:16px;padding:0 16px;font:inherit;font-size:14px;font-weight:500;color:#fff;
+background:{branding.primary_color};border:0;border-radius:{radius};cursor:pointer;
+transition:background-color .15s,filter .15s}}
+button:hover{{{hover}}}
+button:focus-visible{{outline:2px solid {branding.primary_color};outline-offset:2px}}
+.err,.note{{margin:0 0 16px;padding:12px;border-radius:{radius};font-size:14px;line-height:1.4}}
+.err{{background:rgba(239,68,68,.1);color:#dc2626}}
+.note{{background:rgba(34,197,94,.1);color:#15803d}}
+a{{color:{branding.primary_color};text-decoration:none}}
+a:hover{{text-decoration:underline}}
+.alt{{margin:24px 0 0;text-align:center;font-size:13px}}
+.foot{{margin:32px 0 0;text-align:center;font-size:12px;color:rgba({page_ink},.45)}}
 </style></head>
 <body><main>
-<div class="logo">{_logo(branding)}</div>
+{f'<div class="logo">{logo}</div>' if logo else ""}
 {body}
+</main>
 {footer}
-</main></body></html>
+</body></html>
 """
 
 
