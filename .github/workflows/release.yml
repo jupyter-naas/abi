@@ -108,43 +108,43 @@ jobs:
           path: libs
 
       - name: Publish | Upload naas-abi-proto to PyPI
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
         if: contains(format(' {0} ', needs.release.outputs.released), ' naas-abi-proto ')
         with:
           packages-dir: libs/naas-abi-proto/dist
 
       - name: Publish | Upload naas-abi-sdk to PyPI
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
         if: contains(format(' {0} ', needs.release.outputs.released), ' naas-abi-sdk ')
         with:
           packages-dir: libs/naas-abi-sdk/dist
 
       - name: Publish | Upload naas-abi-idp to PyPI
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
         if: contains(format(' {0} ', needs.release.outputs.released), ' naas-abi-idp ')
         with:
           packages-dir: libs/naas-abi-idp/dist
 
       - name: Publish | Upload naas-abi-core to PyPI
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
         if: contains(format(' {0} ', needs.release.outputs.released), ' naas-abi-core ')
         with:
           packages-dir: libs/naas-abi-core/dist
 
       - name: Publish | Upload naas-abi-marketplace to PyPI
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
         if: contains(format(' {0} ', needs.release.outputs.released), ' naas-abi-marketplace ')
         with:
           packages-dir: libs/naas-abi-marketplace/dist
 
       - name: Publish | Upload naas-abi to PyPI
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
         if: contains(format(' {0} ', needs.release.outputs.released), ' naas-abi ')
         with:
           packages-dir: libs/naas-abi/dist
 
       - name: Publish | Upload naas-abi-cli to PyPI
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
         if: contains(format(' {0} ', needs.release.outputs.released), ' naas-abi-cli ')
         with:
           packages-dir: libs/naas-abi-cli/dist
@@ -172,7 +172,7 @@ jobs:
         run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir dist
 
       - name: Publish | Upload to PyPI
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
         with:
           packages-dir: dist
           skip-existing: true
