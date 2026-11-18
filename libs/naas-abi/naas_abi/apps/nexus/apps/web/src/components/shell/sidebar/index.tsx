@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Files, Database, Code, Presentation, FileText, Table2, SquareKanban, LayoutGrid, Store, Settings, Home, Blocks, MoreHorizontal,
+  Map as MapIcon, Search, MessageSquare, BrainCircuit, Waypoints, Files, Database, Code, Presentation, FileText, Table2, SquareKanban, LayoutGrid, Store, Settings, Home, MoreHorizontal,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -749,7 +749,8 @@ export function Sidebar() {
       </nav>
 
       {/*
-        Pinned below the main list so Settings stays in view.
+        Pinned below the main list so Settings stays in view (Infrastructure is in
+        the avatar menu, above Help).
         Same column of destinations: no divider, no top padding of its own.
       */}
       <nav
@@ -758,37 +759,6 @@ export function Sidebar() {
           labeled ? 'px-2' : 'items-center px-2'
         )}
       >
-        {[
-          { key: 'infrastructure', href: '/settings/infrastructure', label: 'Infrastructure', description: 'Explore ABI layers, components and dependencies', icon: <Blocks size={18} />, section: 'infrastructure' as SidebarSection, visible: canSettingsWorkspace },
-        ].filter((item) => item.visible).map((item) => {
-          const base = getWorkspacePath(currentWorkspaceId, item.href);
-          const active = pathname.startsWith(base);
-          return (
-            <button
-              key={item.key}
-              onClick={() => { showPanel(item.section); router.push(base); }}
-              onPointerEnter={(e) => {
-                prefetchSectionPanel(item.section);
-                router.prefetch(base);
-                showHoverTip({ id: item.key, ...item }, e.currentTarget);
-              }}
-              onPointerLeave={hideHoverTip}
-              onFocus={(e) => showHoverTip({ id: item.key, ...item }, e.currentTarget)}
-              onBlur={hideHoverTip}
-              aria-label={item.label}
-              aria-current={active ? 'page' : undefined}
-              className={cn(
-                'flex flex-shrink-0 items-center rounded-lg transition-all outline-none focus-visible:ring-0',
-                'hover:bg-workspace-accent-10 hover:text-workspace-accent',
-                active ? 'bg-workspace-accent-15 text-workspace-accent' : 'text-muted-foreground',
-                labeled ? 'w-full gap-3 py-2 pl-3 pr-4' : 'h-10 w-10 justify-center'
-              )}
-            >
-              <span className="flex-shrink-0">{item.icon}</span>
-              {labeled && <span className="truncate text-sm font-medium">{item.label}</span>}
-            </button>
-          );
-        })}
         {BOTTOM_SECTIONS.filter((s) => isFeatureEnabled(s.feature)).map((section) => {
           const active = isSectionActive(section) && !pathname.startsWith(getWorkspacePath(currentWorkspaceId, '/settings/infrastructure'));
           return (

@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { Building2, HelpCircle, LogOut, ShieldCheck, User } from 'lucide-react';
+import { Blocks, Building2, HelpCircle, LogOut, ShieldCheck, User } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useAvatarSettingsLinks } from '@/hooks/use-avatar-settings-links';
+import { useOpensWorkspaceSettings } from '@/hooks/use-workspace-settings-access';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { getWorkspacePath } from './sidebar/utils';
 import './account-menu.css';
@@ -60,6 +61,9 @@ export function AccountMenuPanel({
   const links = useAvatarSettingsLinks();
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const helpHref = getWorkspacePath(currentWorkspaceId, '/help');
+  // The workspace's architecture: for those who open its settings, as the sidebar was.
+  const showInfrastructure = useOpensWorkspaceSettings() && !!currentWorkspaceId;
+  const infrastructureHref = getWorkspacePath(currentWorkspaceId, '/settings/infrastructure');
 
   return (
     <div
@@ -115,15 +119,28 @@ export function AccountMenuPanel({
             </Link>
           )}
         </div>
-        <Link
-          href={helpHref}
-          role="menuitem"
-          onClick={onClose}
-          className="account-menu-item"
-        >
-          <HelpCircle size={14} className="shrink-0 text-muted-foreground" />
-          Help
-        </Link>
+        <div className="account-menu-help-group" role="group" aria-label="Help">
+          {showInfrastructure && (
+            <Link
+              href={infrastructureHref}
+              role="menuitem"
+              onClick={onClose}
+              className="account-menu-settings-item"
+            >
+              <Blocks size={14} className="shrink-0 text-muted-foreground" />
+              Infrastructure
+            </Link>
+          )}
+          <Link
+            href={helpHref}
+            role="menuitem"
+            onClick={onClose}
+            className="account-menu-settings-item"
+          >
+            <HelpCircle size={14} className="shrink-0 text-muted-foreground" />
+            Help
+          </Link>
+        </div>
       </div>
 
       <div className="border-t border-border/50 py-2">

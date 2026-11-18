@@ -29,6 +29,13 @@
   padding: 0 0 var(--space-1);
 }
 
+/* Infrastructure and Help: the same rows as the settings above, no rule under them. */
+.account-menu-help-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
 .account-menu-settings-item {
   display: flex;
   align-items: center;

@@ -2,7 +2,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount, type Mounted } from '@/lib/testing/mount';
 
-const state = vi.hoisted(() => ({ user: 'olivia', answers: {} as Record<string, unknown> }));
+const state = vi.hoisted(() => ({
+  user: 'olivia',
+  answers: {} as Record<string, unknown>,
+  opensWorkspaceSettings: false,
+}));
 
 vi.mock('next/link', async () => {
   const { createElement } = await import('react');
@@ -15,6 +19,9 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: () => undefined })
 vi.mock('@/hooks/use-platform-settings-access', () => ({
   usePlatformSettingsAccess: () => ({ status: 'ready', actions: {}, retry: () => undefined }),
 }));
+vi.mock('@/hooks/use-workspace-settings-access', () => ({
+  useOpensWorkspaceSettings: () => state.opensWorkspaceSettings,
+}));
 vi.mock('@/stores/auth', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/stores/auth')>()),
   useAuthStore: (select: (s: unknown) => unknown) =>
@@ -25,6 +32,7 @@ vi.mock('@/stores/auth', async (importOriginal) => ({
       : new Response('{}', { status: 403 }),
 }));
 
+import { useWorkspaceStore } from '@/stores/workspace';
 import { AccountMenuPanel } from './account-menu';
 
 const ACCESS_ACME = `/api/iam/admin/access?scope=${encodeURIComponent('abi:nexus:organization/acme')}`;
@@ -33,6 +41,7 @@ let mounted: Mounted | null = null;
 afterEach(async () => {
   await mounted?.unmount();
   mounted = null;
+  state.opensWorkspaceSettings = false;
 });
 
 async function menuFor(user: string, orgRole: string): Promise<HTMLElement> {
@@ -60,5 +69,28 @@ describe('the account menu', () => {
     const menu = await menuFor('bob', 'member');
     expect(organizationLink(menu)).toBeNull();
     expect(menu.textContent).toContain('Account');
+  });
+});
+
+describe('Infrastructure in the account menu', () => {
+  function items(menu: HTMLElement): string[] {
+    return [...menu.querySelectorAll('[role="menuitem"]')].map((el) => el.textContent?.trim() ?? '');
+  }
+
+  it('sits right above Help for whoever opens the workspace settings', async () => {
+    useWorkspaceStore.setState({ currentWorkspaceId: 'ws-1' });
+    state.opensWorkspaceSettings = true;
+    const menu = await menuFor('olivia', 'member');
+    const link = menu.querySelector<HTMLAnchorElement>('a[href$="/settings/infrastructure"]');
+    expect(link?.getAttribute('href')).toContain('ws-1');
+    const labels = items(menu);
+    expect(labels.indexOf('Infrastructure')).toBe(labels.indexOf('Help') - 1);
+  });
+
+  it('is not there for anyone else', async () => {
+    useWorkspaceStore.setState({ currentWorkspaceId: 'ws-1' });
+    const menu = await menuFor('bob', 'member');
+    expect(items(menu)).not.toContain('Infrastructure');
+    expect(items(menu)).toContain('Help');
   });
 });
