@@ -114,6 +114,12 @@ describe('PLATFORM_SETTINGS_SECTIONS', () => {
     ]);
   });
 
+  it('serves Create user at /settings/users/new, never redirected to a users row', () => {
+    expect(platformSettingsRedirect('/settings/users/new')).toBeNull();
+    expect(isPlatformSettingsPath('/settings/users/new')).toBe(true);
+    expect(platformSettingsRedirect('/settings/users/usr_a')).toBe('/settings/tables/users/usr_a');
+  });
+
   it('serves Users, never redirected to the users table (its rows still are)', () => {
     expect(platformSettingsRedirect('/settings/users')).toBeNull();
     expect(platformSettingsRedirect('/settings/users/')).toBeNull();

@@ -6,6 +6,9 @@
 /** Platform Settings › Users (no React: the middleware reads it too). */
 export const PLATFORM_USERS_PATH = '/settings/users';
 
+/** The page that creates a user. */
+export const NEW_USER_PATH = `${PLATFORM_USERS_PATH}/new`;
+
 export interface AdminUserOrganization {
   id: string;
   name: string;

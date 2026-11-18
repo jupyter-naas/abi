@@ -406,10 +406,9 @@ export function PlatformOrganizations({
                 href={NEW_ORGANIZATION_PATH}
                 className="org-settings-primary-button"
                 data-action="new"
-                title="New organization"
               >
                 <Plus size={16} />
-                New
+                Create organization
               </Link>
             </>
           }

@@ -81,6 +81,7 @@ describe('platformSettingsGroups', () => {
       ['Coding environments', '/settings/resources/coding-environments'],
     ]);
     expect(items('Data')).toEqual([
+      ['Nexus tables', '/settings/tables'],
       ['Knowledge graph', '/settings/data/knowledge-graph'],
       ['Vector store', '/settings/data/vector-store'],
       ['Documents', '/settings/data/documents'],
@@ -88,7 +89,6 @@ describe('platformSettingsGroups', () => {
       ['Object storage', '/settings/data/object-storage'],
       ['Key-value', '/settings/data/key-value'],
       ['Cache', '/settings/data/cache'],
-      ['Nexus tables', '/settings/tables'],
     ]);
   });
 

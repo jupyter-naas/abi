@@ -221,7 +221,7 @@ export const platformSettingsGroups: PlatformSettingsNavGroup[] = [
   { label: 'Resources', items: servicePagesIn('resources').map((page) => serviceItem(page.service)) },
   {
     label: 'Data',
-    items: [...servicePagesIn('data').map((page) => serviceItem(page.service)), NEXUS_TABLES_ITEM],
+    items: [NEXUS_TABLES_ITEM, ...servicePagesIn('data').map((page) => serviceItem(page.service))],
   },
 ];
 

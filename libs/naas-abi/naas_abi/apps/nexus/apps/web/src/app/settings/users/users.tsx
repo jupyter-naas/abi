@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
@@ -37,8 +38,6 @@ import {
   deactivateUser,
   deleteUser,
   deletionOf,
-  inviteUser,
-  listProviders,
   listUsers,
   reactivateUser,
   updateUser,
@@ -53,9 +52,9 @@ import {
   deleteConfirmed,
   EXPORT_HEADERS,
   exportRow,
-  inviteSummary,
   isSelf,
   NO_IAM_ID,
+  NEW_USER_PATH,
   NO_ORGANIZATION,
   personHref,
   searchTexts,
@@ -65,7 +64,6 @@ import {
   type AdminUser,
   type ColumnId,
   type Deletion,
-  type InvitationProvider,
   type SortDir,
 } from './users-model';
 import './users.css';
@@ -448,126 +446,6 @@ function UserRow({
   );
 }
 
-function InviteForm({ fetcher, onInvited }: { fetcher?: Fetcher; onInvited: () => void }) {
-  const [email, setEmail] = useState('');
-  const [name, setName] = useState('');
-  const [providers, setProviders] = useState<InvitationProvider[]>([]);
-  const [provider, setProvider] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [said, setSaid] = useState<string[]>([]);
-
-  useEffect(() => {
-    let live = true;
-    void listProviders(fetcher).then((answer) => {
-      if (!live || !answer.ok) return;
-      setProviders(answer.data.providers ?? []);
-      setProvider(answer.data.default_provider ?? answer.data.providers?.[0]?.name ?? '');
-    });
-    return () => {
-      live = false;
-    };
-  }, [fetcher]);
-
-  const send = async () => {
-    if (!email.trim()) return;
-    setBusy(true);
-    setError(null);
-    setSaid([]);
-    const answer = await inviteUser(
-      {
-        email: email.trim(),
-        ...(name.trim() ? { name: name.trim() } : {}),
-        ...(providers.length > 1 && provider ? { provider } : {}),
-      },
-      fetcher
-    );
-    setBusy(false);
-    if (!answer.ok) {
-      setError(answer.error);
-      return;
-    }
-    setSaid(inviteSummary(answer.data));
-    setEmail('');
-    setName('');
-    onInvited();
-  };
-
-  const managed = providers.find((p) => p.name === provider)?.managed_in_provider;
-  return (
-    <form
-      className="platform-users-invite"
-      data-form="invite"
-      onSubmit={(event) => {
-        event.preventDefault();
-        void send();
-      }}
-    >
-      <label className="platform-users-field">
-        <span>Email</span>
-        <input
-          className="platform-users-input"
-          type="email"
-          data-field="invite-email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-        />
-      </label>
-      <label className="platform-users-field">
-        <span>Name (optional)</span>
-        <input
-          className="platform-users-input"
-          data-field="invite-name"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-        />
-      </label>
-      {providers.length > 1 && (
-        <label className="platform-users-field">
-          <span>Identity provider</span>
-          <select
-            className="platform-users-input"
-            data-field="invite-provider"
-            value={provider}
-            onChange={(event) => setProvider(event.target.value)}
-          >
-            {providers.map((p) => (
-              <option key={p.name} value={p.name}>
-                {p.display_name || p.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-      <button
-        type="submit"
-        className="platform-users-button platform-users-button-primary"
-        data-action="send-invite"
-        disabled={busy || !email.trim()}
-      >
-        Send invitation
-      </button>
-      {managed && (
-        <p className="platform-users-hint">
-          This provider manages its people: the person signs in with the account they have there.
-        </p>
-      )}
-      {error && (
-        <p className="platform-users-error" role="alert">
-          {error}
-        </p>
-      )}
-      {said.length > 0 && (
-        <ul className="platform-users-outcome" role="status" data-field="invite-outcome">
-          {said.map((line) => (
-            <li key={line}>{line}</li>
-          ))}
-        </ul>
-      )}
-    </form>
-  );
-}
-
 /**
  * Every account of the platform, and the people invited who have none yet: search,
  * column filters, sort, export, and the lifecycle (invite, edit the name, superadmin,
@@ -590,7 +468,6 @@ export function PlatformUsers({
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloads, setReloads] = useState(0);
-  const [inviting, setInviting] = useState(false);
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<Partial<Record<ColumnId, ColumnFilterState>>>({});
   const [sortKey, setSortKey] = useState<ColumnId>('user');
@@ -702,24 +579,14 @@ export function PlatformUsers({
                 </DropdownMenu.Portal>
               </DropdownMenu.Root>
               {can(USER_ACTIONS.invite) && (
-                <button
-                  type="button"
-                  className="org-settings-primary-button"
-                  data-action="invite"
-                  aria-expanded={inviting}
-                  onClick={() => setInviting((open) => !open)}
-                >
+                <Link href={NEW_USER_PATH} className="org-settings-primary-button" data-action="invite">
                   <Plus size={16} />
-                  Invite
-                </button>
+                  Create user
+                </Link>
               )}
             </>
           }
         />
-
-        {inviting && can(USER_ACTIONS.invite) && (
-          <InviteForm fetcher={fetcher} onInvited={() => reload()} />
-        )}
 
         {pageNotice && (
           <p className="platform-users-notice" role="status" data-field="page-notice">

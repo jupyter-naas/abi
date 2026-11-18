@@ -79,6 +79,7 @@ describe('PlatformOrganizations', () => {
     mounted = await mount(PlatformOrganizations, { fetcher });
     await mounted.flush();
     expect(mounted.host.querySelector('[data-action="new"]')?.getAttribute('href')).toBe('/settings/organizations/new');
+    expect(mounted.host.querySelector('[data-action="new"]')?.textContent).toBe('Create organization');
     expect(mounted.host.querySelector('[data-action="export"]')).not.toBeNull();
     expect(mounted.host.querySelectorAll('[data-filter-trigger]')).toHaveLength(6);
     expect(mounted.host.querySelector('[data-field="name"]')).toBeNull();

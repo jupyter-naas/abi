@@ -12,7 +12,7 @@ import {
 } from '../system/system-tabs';
 import { PLATFORM_GENERAL_PATH } from '../general/general-model';
 import { PLATFORM_ORGANIZATIONS_PATH } from '../organizations/organizations-model';
-import { PLATFORM_USERS_PATH } from '../users/users-model';
+import { NEW_USER_PATH, PLATFORM_USERS_PATH } from '../users/users-model';
 import { SECTION_PATHS } from './service-pages';
 import {
   LEGACY_WORKSPACE_SETTINGS_SLUGS,
@@ -77,7 +77,8 @@ export function platformSettingsRedirect(pathname: string, search = ''): string 
   if (activity) return `${systemViewPath(activity)}${query}`;
 
   const usersRow = OLD_USERS_ROW.exec(pathname);
-  if (usersRow) return `${PLATFORM_TABLES_PATH}/users/${usersRow[1]}${query}`;
+  // `/settings/users/new` is the Create user page, not a row.
+  if (usersRow && pathname !== NEW_USER_PATH) return `${PLATFORM_TABLES_PATH}/users/${usersRow[1]}${query}`;
 
   const table = OLD_TABLE_PAGE.exec(pathname);
   if (table) {

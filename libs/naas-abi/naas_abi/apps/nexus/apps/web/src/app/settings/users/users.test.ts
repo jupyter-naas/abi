@@ -270,32 +270,13 @@ describe('PlatformUsers', () => {
     expect(panel('usr_bob')!.querySelector('[data-field="confirm"]')).toBeNull();
   });
 
-  it('invites through the provider picked, and says what was done', async () => {
-    const { fetcher, calls } = api({
-      'POST /api/admin/users/invite': () => ({
-        status: 200,
-        body: {
-          user: user({ id: 'invited:carol@example.com', email: 'carol@example.com', status: 'invited' }),
-          user_created: true,
-          sign_in_email_sent: true,
-          provisioning_skipped: false,
-          renewed: false,
-          warning: null,
-        },
-      }),
-    });
+  it('creates users on a page of their own, from the button at the top right', async () => {
+    const { fetcher } = api({});
     await render({ fetcher });
-    await mounted!.click(mounted!.host.querySelector('[data-action="invite"]'));
-    await mounted!.flush();
-    await mounted!.type(mounted!.host.querySelector('[data-field="invite-email"]'), 'carol@example.com');
-    await mounted!.select(mounted!.host.querySelector('[data-field="invite-provider"]'), 'okta');
-    await mounted!.click(mounted!.host.querySelector('[data-action="send-invite"]'));
-    await mounted!.flush();
-    expect(calls.find((c) => c.method === 'POST')?.body).toEqual({ email: 'carol@example.com', provider: 'okta' });
-    const said = mounted!.host.querySelector('[data-field="invite-outcome"]')!.textContent!;
-    expect(said).toContain('carol@example.com invited.');
-    expect(said).toContain('Their account was made at the identity provider.');
-    expect(said).toContain('A sign-in link was emailed to them.');
+    const create = mounted!.host.querySelector('[data-action="invite"]');
+    expect(create?.getAttribute('href')).toBe('/settings/users/new');
+    expect(create?.textContent).toBe('Create user');
+    expect(mounted!.host.querySelector('[data-field="invite-email"]')).toBeNull();
   });
 
   it('says why the list could not be read', async () => {
