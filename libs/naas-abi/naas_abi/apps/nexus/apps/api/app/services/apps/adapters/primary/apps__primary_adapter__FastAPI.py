@@ -25,7 +25,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 from collections.abc import Iterator
 from functools import lru_cache
 from pathlib import Path
@@ -43,9 +42,9 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.app_html_access import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.links import LinkLimitReached
 from naas_abi.apps.nexus.apps.api.app.services.apps.pages_sso import (
+    dev_app_url,
     mint_pages_sso_token,
     pages_sso_audiences,
-    parse_dev_app_urls,
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.port import (
     AppInfo,
@@ -626,12 +625,13 @@ async def create_pages_sso_token(
     """Issue a handshake token so a portal can skip a second login.
 
     The email is always the signed-in user. With ``app_id``, the caller must
-    be allowed to open that app, and the audience must be that app's host.
-    While Nexus is local, ``NEXUS_DEV_APP_URLS`` may add the host of that
-    app's dev origin. Without ``app_id``, the caller needs ``UseApp`` and may
-    name any hostname the portal itself will check.
+    be allowed to open that app, and the audience must be that app's host. On a
+    local Nexus on loopback, ``nexus_dev_app_urls`` may add the host of that
+    app's dev origin (``dev_app_url``). Without ``app_id``, the caller needs
+    ``UseApp`` and may name any hostname the portal itself will check.
     """
     live = _live_settings()
+    audience = body.audience.strip().lower()
     app_id = (body.app_id or "").strip()
     if app_id:
         scope = app_scope(app_id)
@@ -641,12 +641,13 @@ async def create_pages_sso_token(
         app = next((item for item in _scan_apps_catalog() if item.app_id == app_id), None)
         if app is None:
             raise HTTPException(status_code=400, detail="app_id names no app")
-        local = str(getattr(live, "nexus_env", "") or "").lower() == "local"
-        dev_url = (
-            parse_dev_app_urls(os.environ.get("NEXUS_DEV_APP_URLS")).get(app_id) if local else None
+        dev_url = dev_app_url(
+            app_id,
+            dev_app_urls=getattr(live, "nexus_dev_app_urls", ""),
+            nexus_env=getattr(live, "nexus_env", ""),
+            frontend_url=getattr(live, "frontend_url", ""),
         )
-        allowed = pages_sso_audiences(app.url, dev_url)
-        if body.audience.strip().lower() not in allowed:
+        if audience not in pages_sso_audiences(app.url, dev_url):
             raise HTTPException(status_code=400, detail="audience is not this app")
     else:
         await authz.require("UseApp", user=current_user, workspace=body.workspace_id, id="-")
@@ -655,13 +656,13 @@ async def create_pages_sso_token(
     try:
         token, expires_in = mint_pages_sso_token(
             email=str(current_user.email),
-            audience=body.audience,
+            audience=audience,
             secret=live.pages_sso_secret,
             expires_seconds=live.pages_sso_expire_seconds,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return PagesSsoTokenResponse(token=token, expires_in=expires_in, audience=body.audience.lower())
+    return PagesSsoTokenResponse(token=token, expires_in=expires_in, audience=audience)
 
 
 @router.get(

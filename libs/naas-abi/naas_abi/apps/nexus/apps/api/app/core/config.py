@@ -577,6 +577,10 @@ class Settings(BaseSettings):
     # HMAC secret for opening Cloudflare Pages portals from Nexus (empty = off).
     pages_sso_secret: str = ""
     pages_sso_expire_seconds: int = Field(default=300, ge=30, le=15 * 60)
+    # Local development: `id=url` pairs, comma-separated (NEXUS_DEV_APP_URLS). The
+    # SSO route takes the host of an app's entry as an audience only on a local
+    # Nexus on loopback (`services/apps/pages_sso.dev_app_url`); `next dev` frames it.
+    nexus_dev_app_urls: str = ""
     # Apps builder: "Submit" sends an app project to its source repository
     # (GitHub owner/name) as a review branch. Off unless both the repo and
     # APPS_SUBMIT_TOKEN (env only, never in config files) are set.

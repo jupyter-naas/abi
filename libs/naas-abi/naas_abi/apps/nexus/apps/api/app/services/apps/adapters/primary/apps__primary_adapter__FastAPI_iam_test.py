@@ -287,63 +287,6 @@ async def test_an_admin_or_owner_with_no_policy_lists_and_opens_no_app(world) ->
             assert (await http.post("/api/apps/remote-grant", json=remote)).status_code == 403
 
 
-@pytest.mark.asyncio
-async def test_open_app_mints_sso_for_that_person_and_that_app_only(world, monkeypatch) -> None:
-    """OpenApp on one catalog app mints a proof for the signed-in email and that host.
-
-    The body cannot name another person. A grant on this app does not mint a
-    proof for a different app. A dev origin is an audience only while Nexus is
-    local and ``NEXUS_DEV_APP_URLS`` names it. The map has no built-in entry.
-    """
-    portal = adapter._build_app_info(
-        "acme.portal",
-        Path("/modules/site"),
-        {"name": "Site", "url": "https://portal.example.com"},
-    )
-    other = adapter._build_app_info(
-        "acme.portal",
-        Path("/modules/other"),
-        {"name": "Other", "url": "https://other.example.com"},
-    )
-    monkeypatch.setattr(adapter, "_scan_apps_catalog", lambda: (portal, other))
-    live = {"nexus_env": "local"}
-    monkeypatch.setattr(
-        adapter,
-        "_live_settings",
-        lambda: SimpleNamespace(
-            pages_sso_secret="sso-test-secret",
-            pages_sso_expire_seconds=60,
-            nexus_env=live["nexus_env"],
-        ),
-    )
-    monkeypatch.setenv("NEXUS_DEV_APP_URLS", "acme.portal:site=http://localhost:9")
-    world.iam.allow_scope("member", ModuleScope("app", "acme.portal", "site"), world.scope)
-
-    async def post(http, **extra):
-        body = {"workspace_id": "ws-1", "audience": "localhost", "app_id": portal.app_id}
-        body.update(extra)
-        return await http.post("/api/apps/sso-token", json=body)
-
-    async with world.as_("viewer") as http:
-        assert (await post(http)).status_code == 403
-    async with world.as_("member") as http:
-        assert (await post(http, app_id=other.app_id)).status_code == 403
-        assert (await post(http, audience="other.example.com")).status_code == 400
-        minted = await post(http, email="someone-else@example.com")
-        assert minted.status_code == 200, minted.text
-        token = minted.json()["token"]
-        assert (
-            verify_pages_sso_token(token, secret="sso-test-secret", audience="localhost")
-            == "member@example.com"
-        )
-        assert "someone-else@" not in token
-        published = await post(http, audience="portal.example.com")
-        assert published.status_code == 200
-        live["nexus_env"] = "cloudflare"
-        assert (await post(http)).status_code == 400
-        assert (await post(http, audience="portal.example.com")).status_code == 200
-
-
 def _sso_catalog(monkeypatch, **settings):
     """Two apps of one module, each a portal on its own host, and the live
     settings the SSO route reads (overridable per test)."""
@@ -458,3 +401,86 @@ async def test_sso_without_a_secret_is_off_for_those_allowed_only(world, monkeyp
         assert (
             await _sso(http, audience="portal.example.com", app_id=portal.app_id)
         ).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_open_app_mints_sso_for_that_person_and_that_app_only(world, monkeypatch) -> None:
+    """OpenApp on one catalog app mints a proof for the signed-in email and that host.
+
+    The body cannot name another person. A grant on this app does not mint a
+    proof for a different app. The audience is compared and minted as a
+    hostname, whatever its case or spaces.
+    """
+    portal, other, _ = _sso_catalog(monkeypatch)
+    world.iam.allow_scope("member", ModuleScope("app", "acme.portal", "site"), world.scope)
+    async with world.as_("viewer") as http:
+        assert (
+            await _sso(http, audience="portal.example.com", app_id=portal.app_id)
+        ).status_code == 403
+    async with world.as_("member") as http:
+        assert (
+            await _sso(http, audience="other.example.com", app_id=other.app_id)
+        ).status_code == 403
+        assert (
+            await _sso(http, audience="other.example.com", app_id=portal.app_id)
+        ).status_code == 400
+        minted = await _sso(
+            http,
+            audience=" Portal.Example.com ",
+            app_id=portal.app_id,
+            email="someone-else@example.com",
+        )
+        assert minted.status_code == 200, minted.text
+        assert minted.json()["audience"] == "portal.example.com"
+        token = minted.json()["token"]
+        assert (
+            verify_pages_sso_token(token, secret="sso-test-secret", audience="portal.example.com")
+            == "member@example.com"
+        )
+        assert "someone-else@" not in token
+
+
+@pytest.mark.asyncio
+async def test_a_dev_origin_is_an_audience_only_on_a_local_nexus_on_loopback(
+    world, monkeypatch
+) -> None:
+    """``NEXUS_DEV_APP_URLS`` is a setting (``nexus_dev_app_urls``), never read
+    from the process environment by the route. Its host is an audience only while
+    ``nexus_env`` is ``local`` (every install's default) and the Nexus web app is
+    on a loopback host, which no deployed Nexus is."""
+    portal, _, live = _sso_catalog(
+        monkeypatch, nexus_dev_app_urls="acme.portal:site=http://localhost:9"
+    )
+    world.iam.allow_scope("member", ModuleScope("app", "acme.portal", "site"), world.scope)
+
+    async def dev_host(http):
+        return (await _sso(http, audience="localhost", app_id=portal.app_id)).status_code
+
+    async with world.as_("member") as http:
+        assert await dev_host(http) == 200
+        live.frontend_url = "https://nexus.localhost"
+        assert await dev_host(http) == 200
+        live.frontend_url = "https://nexus.example.com"  # deployed, nexus_env left at its default
+        assert await dev_host(http) == 400
+        live.frontend_url = "http://localhost:3042"
+        live.nexus_env = "staging"
+        assert await dev_host(http) == 400
+        live.nexus_env = "local"
+        # The process environment alone adds nothing: the map is a setting.
+        live.nexus_dev_app_urls = ""
+        monkeypatch.setenv("NEXUS_DEV_APP_URLS", "acme.portal:site=http://localhost:9")
+        assert await dev_host(http) == 400
+        # The manifest's host stays an audience everywhere.
+        live.frontend_url = "https://nexus.example.com"
+        assert (
+            await _sso(http, audience="portal.example.com", app_id=portal.app_id)
+        ).status_code == 200
+
+
+def test_the_dev_app_map_is_read_from_nexus_dev_app_urls(monkeypatch) -> None:
+    from naas_abi.apps.nexus.apps.api.app.core.config import Settings
+
+    monkeypatch.delenv("NEXUS_DEV_APP_URLS", raising=False)
+    assert Settings(_env_file=None).nexus_dev_app_urls == ""
+    monkeypatch.setenv("NEXUS_DEV_APP_URLS", "acme.portal:site=http://localhost:9")
+    assert Settings(_env_file=None).nexus_dev_app_urls == "acme.portal:site=http://localhost:9"
