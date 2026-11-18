@@ -26,7 +26,7 @@ on/off state of its own for an app.
   the signed-in user, and its audience must be that app's host (`pages_sso_audiences`), a hostname without its port.
   On a local Nexus on loopback, the setting `nexus_dev_app_urls` (`NEXUS_DEV_APP_URLS`: `id=url`, comma-separated)
   may add the host of that app's dev origin (`pages_sso.dev_app_url`). The map has no built-in entries. An id that
-  is no app's, or an app the catalog of loaded modules lacks, is a 400; a remote app is one (it opens at
+  is no app's, or an app the catalog of loaded modules lacks, is a 400, a remote app's too (it opens at
   `/app-html/remote/`, with no portal host, and the web app never asks for it). Without `app_id` the route still
   asks `UseApp` and takes any hostname. An empty `pages_sso_secret` is a 503 for those allowed. A view refuses it,
   and so does a request made with a key that has a limit (`refuse_a_limited_credential`, as for a link: the portal's
@@ -45,8 +45,8 @@ on/off state of its own for an app.
   host (`localhost`, `*.localhost`, a loopback address); the map is a `Settings` field, read like every other
   setting. Consequences: `nexus_env` defaults to `local` and no deploy template sets it for the API, so it alone
   would honour the map on a deployed Nexus; `frontend_url` is the web app's public origin there, so a forgotten
-  `NEXUS_DEV_APP_URLS` adds nothing. `abi dev up` (`http://localhost:<port>`) and the Docker stack
-  (`https://nexus.localhost`) keep it. A deployment that leaves `frontend_url` at its loopback default would count
+  `NEXUS_DEV_APP_URLS` adds nothing. `abi dev up` (`http://localhost:<port>`) and `abi deploy local`
+  (`https://nexus.localhost` by default) keep it. A deployment that leaves `frontend_url` at its loopback default would count
   as local, but its sign-in already sends people to that origin. The web app gates the iframe separately
   (`next dev` only, `applyDevAppUrl`).
 
