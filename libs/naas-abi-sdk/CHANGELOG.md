@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.5.1 (2026-11-18)
+
+### Bug Fixes
+
+- **sdk**: Reconnects, renewals and job fetches back off with jitter
+  ([`f1752b5`](https://github.com/jupyter-naas/abi/commit/f1752b5632f90177432bedb6989277cb0d81e8d2))
+
+### Chores
+
+- Maintenance across core, nexus, marketplace and deploy templates
+  ([`232291c`](https://github.com/jupyter-naas/abi/commit/232291c110f3961bfeabc00fbcc3db6c1dc72537))
+
+
 ## v0.5.0 (2026-11-16)
 
 ### Features
