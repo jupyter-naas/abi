@@ -321,7 +321,7 @@ wheels = [
 
 [[package]]
 name = "naas-abi-idp"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "authlib" },
@@ -376,7 +376,7 @@ dev = [
 
 [[package]]
 name = "naas-abi-sdk"
-version = "0.5.0"
+version = "0.5.1"
 source = { editable = "../naas-abi-sdk" }
 dependencies = [
     { name = "naas-abi-proto" },
