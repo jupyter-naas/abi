@@ -3,10 +3,10 @@
 import { useMemo } from 'react';
 import Link from 'next/link';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { Check, ChevronDown, ExternalLink, type LucideIcon } from 'lucide-react';
+import { Check, ChevronDown, type LucideIcon } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { visiblePlatformSettingsGroups } from '@/app/settings/lib/nav';
-import { useWorkspaceStore } from '@/stores/workspace';
+import { useAuthStore } from '@/stores/auth';
 import { useOpenableOrganizations } from '@/hooks/use-openable-organizations';
 import { usePlatformSettingsAccess } from '@/hooks/use-platform-settings-access';
 import { settingsScopeFromPathname } from '@/lib/settings-scope-path';
@@ -22,9 +22,7 @@ export function SettingsScopeSwitcher({
 }) {
   const pathname = usePathname();
   const currentScope = useMemo(() => settingsScopeFromPathname(pathname), [pathname]);
-  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
-  const workspaces = useWorkspaceStore((s) => s.workspaces);
-  const currentWorkspace = workspaces.find((w) => w.id === currentWorkspaceId);
+  const accountName = useAuthStore((s) => s.user?.name);
   const platformSettings = usePlatformSettingsAccess();
   const showPlatform =
     platformSettings.status === 'ready' &&
@@ -40,7 +38,7 @@ export function SettingsScopeSwitcher({
     showPlatform,
     platformActions: platformSettings.actions,
     organizations: organizations.map((o) => ({ id: o.id, name: o.name })),
-    workspace: currentWorkspace ? { id: currentWorkspace.id, name: currentWorkspace.name } : null,
+    accountName,
   });
 
   if (entries.length <= 1) {
@@ -86,9 +84,6 @@ export function SettingsScopeSwitcher({
                         {entry.current ? <Check size={16} /> : null}
                       </span>
                       <span className="min-w-0 truncate">{entry.label}</span>
-                      {entry.external ? (
-                        <ExternalLink size={14} className="settings-scope-switcher-external" aria-hidden />
-                      ) : null}
                     </Link>
                   </DropdownMenu.Item>
                 );

@@ -15,17 +15,25 @@
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-sm);
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: color 0.15s ease;
 }
 
 .settings-scope-switcher-trigger:hover,
-.settings-scope-switcher-trigger[data-state='open'] {
-  background-color: var(--muted-bg-hex);
+.settings-scope-switcher-trigger[data-state='open'],
+.settings-scope-switcher-trigger:focus,
+.settings-scope-switcher-trigger:focus-visible {
+  border: none;
+  outline: none;
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-ring-offset-shadow: 0 0 #0000;
+  box-shadow: none;
+  background: transparent;
 }
 
-.settings-scope-switcher-trigger:focus-visible {
-  outline: 2px solid var(--ring-hex, hsl(var(--ring)));
-  outline-offset: 2px;
+/* Keyboard focus shows on the title, not as a box around the trigger. */
+.settings-scope-switcher-trigger:focus-visible .settings-scope-switcher-title {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .settings-scope-switcher-title {
@@ -84,11 +92,6 @@
   color: var(--color-primary, hsl(var(--primary)));
 }
 
-.settings-scope-switcher-external {
-  margin-left: auto;
-  flex-shrink: 0;
-  color: var(--muted-foreground-hex);
-}
 
 .settings-scope-switcher-separator {
   height: 1px;

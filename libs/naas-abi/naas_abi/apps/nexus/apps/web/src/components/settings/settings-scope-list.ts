@@ -7,7 +7,7 @@ import {
 } from '@/lib/settings-scope-path';
 
 export type SettingsScopeMenuEntry =
-  | { type: 'item'; id: string; label: string; href: string; current: boolean; external?: boolean }
+  | { type: 'item'; id: string; label: string; href: string; current: boolean }
   | { type: 'separator'; id: string };
 
 export type OpenableOrganization = { id: string; name: string };
@@ -18,13 +18,14 @@ export function buildSettingsScopeMenuEntries({
   showPlatform,
   platformActions,
   organizations,
-  workspace,
+  accountName,
 }: {
   currentScope: SettingsScopeKey;
   showPlatform: boolean;
   platformActions: PlatformActions | null;
   organizations: OpenableOrganization[];
-  workspace: { id: string; name: string } | null;
+  /** The signed-in user's name, the Account entry's label ("Account" without one). */
+  accountName?: string | null;
 }): SettingsScopeMenuEntry[] {
   const entries: SettingsScopeMenuEntry[] = [];
 
@@ -47,7 +48,7 @@ export function buildSettingsScopeMenuEntries({
   entries.push({
     type: 'item',
     id: 'account',
-    label: 'Account',
+    label: accountName?.trim() || 'Account',
     href: accountHref,
     current: currentScope.kind === 'account',
   });
@@ -60,24 +61,11 @@ export function buildSettingsScopeMenuEntries({
       entries.push({
         type: 'item',
         id: `org:${org.id}`,
-        label: org.name,
+        label: `Organization · ${org.name}`,
         href,
         current: currentScope.kind === 'organization' && scopeKeysEqual(currentScope, scope),
       });
     }
-  }
-
-  if (workspace) {
-    entries.push({ type: 'separator', id: 'workspace-sep' });
-    const scope: SettingsScopeKey = { kind: 'workspace', workspaceId: workspace.id };
-    entries.push({
-      type: 'item',
-      id: 'workspace',
-      label: `Workspace · ${workspace.name}`,
-      href: settingsScopeReturnPath(scope, `/workspace/${workspace.id}/settings`),
-      current: false,
-      external: true,
-    });
   }
 
   return entries;

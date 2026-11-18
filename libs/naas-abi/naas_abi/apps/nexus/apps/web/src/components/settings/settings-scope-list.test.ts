@@ -15,7 +15,6 @@ describe('buildSettingsScopeMenuEntries', () => {
       showPlatform: true,
       platformActions: platformAdmin,
       organizations: [],
-      workspace: null,
     });
     expect(withPlatform.some((e) => e.type === 'item' && e.id === 'platform')).toBe(true);
 
@@ -24,7 +23,6 @@ describe('buildSettingsScopeMenuEntries', () => {
       showPlatform: false,
       platformActions: null,
       organizations: [],
-      workspace: null,
     });
     expect(without.some((e) => e.type === 'item' && e.id === 'platform')).toBe(false);
   });
@@ -38,29 +36,23 @@ describe('buildSettingsScopeMenuEntries', () => {
         { id: 'alpha', name: 'Alpha Co' },
         { id: 'beta', name: 'Beta Co' },
       ],
-      workspace: null,
     });
     expect(entries.some((e) => e.type === 'separator' && e.id === 'orgs-sep')).toBe(true);
     const beta = entries.find((e) => e.type === 'item' && e.id === 'org:beta');
-    expect(beta).toMatchObject({ type: 'item', label: 'Beta Co', current: true });
+    expect(beta).toMatchObject({ type: 'item', label: 'Organization · Beta Co', current: true });
     const alpha = entries.find((e) => e.type === 'item' && e.id === 'org:alpha');
     expect(alpha).toMatchObject({ current: false, href: '/organizations/alpha/settings' });
   });
 
-  it('adds workspace as an external link when given', () => {
+  it('never lists the workspace: settings scopes only', () => {
     const entries = buildSettingsScopeMenuEntries({
       currentScope: { kind: 'platform' },
       showPlatform: true,
       platformActions: platformAdmin,
-      organizations: [],
-      workspace: { id: 'ws-1', name: 'Bob' },
+      organizations: [{ id: 'acme', name: 'Acme' }],
+      accountName: 'Bob',
     });
-    const ws = entries.find((e) => e.type === 'item' && e.id === 'workspace');
-    expect(ws).toMatchObject({
-      label: 'Workspace · Bob',
-      href: '/workspace/ws-1/settings',
-      external: true,
-    });
+    expect(entries.map((e) => e.id)).toEqual(['platform', 'account', 'orgs-sep', 'org:acme']);
   });
 
   it('reuses remembered paths when switching', () => {
@@ -70,9 +62,24 @@ describe('buildSettingsScopeMenuEntries', () => {
       showPlatform: true,
       platformActions: platformAdmin,
       organizations: [],
-      workspace: null,
     });
     const platform = entries.find((e) => e.type === 'item' && e.id === 'platform');
     expect(platform).toMatchObject({ href: '/settings/roles' });
+  });
+
+  it("labels Account with the signed-in user's name", () => {
+    const base = {
+      currentScope: { kind: 'account' } as const,
+      showPlatform: false,
+      platformActions: null,
+      organizations: [],
+    };
+    const named = buildSettingsScopeMenuEntries({ ...base, accountName: 'Olivia Martin' });
+    expect(named.find((e) => e.type === 'item' && e.id === 'account')).toMatchObject({
+      label: 'Olivia Martin',
+      current: true,
+    });
+    const unnamed = buildSettingsScopeMenuEntries({ ...base, accountName: '  ' });
+    expect(unnamed.find((e) => e.type === 'item' && e.id === 'account')).toMatchObject({ label: 'Account' });
   });
 });

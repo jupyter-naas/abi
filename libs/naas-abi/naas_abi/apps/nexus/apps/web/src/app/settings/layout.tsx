@@ -137,7 +137,7 @@ export default function PlatformSettingsLayout({ children }: { children: React.R
   };
 
   const tableLabel = useTablesView((state) => (table ? state.labels[table] : undefined));
-  const detailTitle = table ? (tableLabel ?? table) : (item?.label ?? 'Platform Settings');
+  const detailTitle = table ? (tableLabel ?? table) : (item?.label ?? 'Platform');
 
   const ready = status === 'ready';
   const allowed = ready && (item ? holds(item.needs, actions) : groups.length > 0);
@@ -175,7 +175,7 @@ export default function PlatformSettingsLayout({ children }: { children: React.R
       <SettingsLayoutRoot className="platform-settings-root">
         <div className="org-settings-layout-left">
           <SettingsShellHeader
-            scopeTitle="Platform Settings"
+            scopeTitle="Platform"
             detailTitle={detailTitle}
             showScopeSwitcher={!showMobileDetail}
             icon={ShieldCheck}
