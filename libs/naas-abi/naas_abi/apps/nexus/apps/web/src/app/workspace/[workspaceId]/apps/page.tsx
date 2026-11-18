@@ -10,7 +10,7 @@ import {
   AppWindow, ExternalLink, RefreshCw, AlertTriangle, Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { appIframeSandbox, applyDevAppUrl, isBundledAppHtmlUrl, remoteAppGrantUrl, remoteAppParts, resolveAppEmbedUrl, resolveAppExternalUrl, pagesSsoAudience, withAppHtmlAccessToken, withPagesSsoToken, withRemoteAppWorkspace, remoteGrantRenewDelayMs } from '@/lib/app-html';
+import { appIframeSandbox, applyDevAppUrl, isBundledAppHtmlUrl, remoteAppGrantUrl, remoteAppParts, resolveAppEmbedUrl, resolveAppExternalUrl, portalSsoTokenRequest, withAppHtmlAccessToken, withPagesSsoToken, withRemoteAppWorkspace, remoteGrantRenewDelayMs } from '@/lib/app-html';
 import { getApiUrl, getDevAppUrlOverrides, getEnvironment } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import { useTenant } from '@/contexts/tenant-context';
@@ -81,8 +81,8 @@ function EmbedView({
 
     if (!isBundledAppHtmlUrl(catalogUrl)) {
       // The proof is for the origin actually framed. OpenApp on this app is enough.
-      const audience = pagesSsoAudience(baseEmbedUrl);
-      if (!audience) {
+      const ssoRequest = portalSsoTokenRequest(record.id, baseEmbedUrl, workspaceId);
+      if (!ssoRequest) {
         setEmbedUrl(baseEmbedUrl);
         return () => {
           cancelled = true;
@@ -94,11 +94,7 @@ function EmbedView({
           const res = await authFetch('/api/apps/sso-token', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              workspace_id: workspaceId,
-              audience,
-              app_id: record.id,
-            }),
+            body: JSON.stringify(ssoRequest),
           });
           if (!res.ok) {
             if (!cancelled) setEmbedUrl(baseEmbedUrl);
