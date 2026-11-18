@@ -24,6 +24,14 @@
 
 <!-- version list -->
 
+## v3.6.5 (2026-11-18)
+
+### Performance Improvements
+
+- **iam**: Keep pattern expansions and subjects until the store changes
+  ([`1a263f5`](https://github.com/jupyter-naas/abi/commit/1a263f59d3f78a0aad4b2786ad1189e97955a1e4))
+
+
 ## v3.6.4 (2026-11-18)
 
 ### Bug Fixes
