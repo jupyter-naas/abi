@@ -24,6 +24,15 @@
 
 <!-- version list -->
 
+## v4.3.0 (2026-11-18)
+
+### Features
+
+- **nexus**: A drive per organization, and the workspace list grouped by organization
+  ([#1511](https://github.com/jupyter-naas/abi/pull/1511),
+  [`a2b549a`](https://github.com/jupyter-naas/abi/commit/a2b549a8c490436be1bc5942e349d46c81fab7f1))
+
+
 ## v4.2.1 (2026-11-18)
 
 ### Bug Fixes
