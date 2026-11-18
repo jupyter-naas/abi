@@ -5027,10 +5027,14 @@ def _as_owner(scope: str | None) -> str:
 
 
 def _written_for(owner: str) -> list[str | None]:
-    """The scopes a policy is held at when it is written: its owner's for a
-    container's (it is attached there or below, and checked again there); for
-    the platform's, as written unscoped and at any scope."""
-    return [owner] if owner != PLATFORM_SCOPE else [None, _ANY_SCOPE]
+    """The scopes a policy is held at when it is written: its owner, a
+    container's or the platform's (``abi:``), and unscoped for the platform's,
+    which may be attached there. Never below the owner: wherever it is
+    attached, invited or bound, it is checked there, so it is held where it
+    applies, not in every container it might one day apply in (a Deny of the
+    writer in another organisation's workspace never stops an organisation's
+    access policy, #1519)."""
+    return [owner] if owner != PLATFORM_SCOPE else [None, PLATFORM_SCOPE]
 
 
 def _companion_roles(

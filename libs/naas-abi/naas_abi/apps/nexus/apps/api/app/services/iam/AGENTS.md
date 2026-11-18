@@ -229,7 +229,11 @@ policy tree of issue #1413's journeys:
 | "<X> admins" | X | | its admins and owners | the access policy |
 
 - **"<O> access" is what an organization may use**: the platform admin widens it (agents of chosen modules, apps,
-  features). Its admins and owners hold it in every workspace of the organization and derive from it.
+  features). Its admins and owners hold it in every workspace of the organization and derive from it. A widening is
+  held where it applies (core's "Where a policy is held"): at the platform and below O, where it is attached, never in
+  every container. An agent another organization's workspace turned off (the upgrade's `TurnedOffAgents` Deny, held
+  by whoever holds its access or a policy below it) never stops granting it to O; one turned off in a workspace of O
+  stops whoever holds that Deny.
 - **"<W> access" is what a workspace makes available to its people**, within its organization's. Whoever holds more
   widens it (an org admin, or a workspace owner given more from above); its owners and admins narrow it to hide an
   agent, an app or a feature from everyone below it at once. The policies made in the workspace for its people
@@ -583,7 +587,8 @@ uv run pytest libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/iam -q --n
 
 `container_defaults_test.py`: an organization and a workspace made through the services get their access policies and
 groups; the groups follow the roles (and a role changed in another process); the ceiling narrows a member policy at
-once, and who lost an item cannot show it again; a workspace admin's builder within the organization's; an
+once, and who lost an item cannot show it again; a workspace admin's builder within the organization's; an agent
+another organization's workspace turned off still granted to a new organization, one turned off in its own refused; an
 organization with a workspace is refused, then deleted with its access policy; the delete route by role; the upgrade
 on `policy_tree_test`'s world, every decision the same.
 

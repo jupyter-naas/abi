@@ -1424,7 +1424,7 @@ through the SDK, the CLI and Nexus alike.
 
 | Operation | The grant | Scopes |
 |---|---|---|
-| `create_policy` | the document, within its chain's for a sub-policy | its owner's (a container's); a platform policy as written unscoped and with `${scope}` as any container or the platform (`abi:*`, below the platform) |
+| `create_policy` | the document, within its chain's for a sub-policy | its owner's: a container's, or for a platform policy unscoped and at the platform (`abi:`), never below its owner (see "Where a policy is held") |
 | `update_policy` with a new document or a new parent | the new document within the new chain's; and, when the parent changes or the new document may let through what the old one did not, an Allow added or widened or a Deny lifted or narrowed (`IAMService._widens`), each policy below it within its new chain's | as `create_policy`, plus every scope it is attached or invited at; for each policy below, its own |
 | `attach_policy` (user, group, service account) | the policy | the attachment's (below a container: at it and at every container under it) |
 | `add_group_member` | every attachment of the group, but IAM's companions of its roles, which follow them: the unscoped `builtin.platform.*` its role sync wants for the group's roles (`IAMService._companions`). A platform policy attached to the group by hand is checked like any other | each attachment's |
@@ -1434,6 +1434,16 @@ through the SDK, the CLI and Nexus alike.
 
 Attaching what is attached already, inviting again, binding again or adding a member a
 group holds grants nothing new and is not checked.
+
+**Where a policy is held.** A policy grants nothing until it is attached, invited to or
+bound, and each of those is checked at its own scope; a policy below it grants within it,
+checked at its own scopes. So a policy is held where it applies: at its owner, at every
+scope it is attached or invited at, and each policy below it at its own. Never below its
+owner as such: a platform policy is not held at every container (`abi:*`) it might one day
+be attached in, as a container's policy is not held at every container under its owner.
+"<O> access" (the platform's, attached below O) is held unscoped, at `abi:` and at `<O>/*`:
+a Deny of the writer in a workspace of another organisation never stops it, one in a
+workspace of O does (#1519). It holds for every writer, the platform admin as any other.
 
 **Removing a restriction.** `detach_policy`, `revoke_pending_grant` and
 `unbind_idp_group` of a customer policy holding a Deny are decided like attaching it there
@@ -1510,8 +1520,8 @@ On every resource:
 - **Below a container, and the platform.** What a statement attached below a container C
   holds is, for `${scope}/R`, `C/R` and `C/*/R` (R starting with a step or a `*`; any other R
   only `C/R`), and for `${scope}` alone C itself and, for an action on a container type,
-  `C/*`. The same below the platform (`abi:*`, a platform policy's `${scope}` at create)
-  gives `abi:R` and `abi:*/R`. A statement attached at the platform holds nothing of the
+  `C/*`. The same below the platform (`abi:*`, how `_widens` compares a platform policy's
+  `${scope}`) gives `abi:R` and `abi:*/R`. A statement attached at the platform holds nothing of the
   platform's own policies, groups and unscoped attachments ("Attachments and scope").
 - **No Deny of the caller may overlap it.** A Deny's variables are also taken bound to the
   caller's ids, so a Deny on `…/${principal.id}/*` refuses a grant of the caller's own literal
@@ -2498,6 +2508,25 @@ grant whose containment takes more than `grants.STATE_BUDGET` states, or a chang
 searches take more than `grants.CALL_BUDGET` together, is refused even if it is covered. Revoking a granter's role leaves what they gave: take it back explicitly.
 Invitations and bindings from Nexus now need the inviting person to hold the role's grants.
 `grantable` may under-report a holding whose pattern straddles the scope's fields.
+
+**A policy is held where it applies, not wherever it might.**
+*Decision.* "Grant only what you hold" checks a written policy at its owner (a container,
+or the platform, `abi:`, and unscoped for the platform's), at each scope it is attached or
+invited at, and each policy below it at its own (`_written_for`, `_held_scopes`). A
+platform policy is no longer also checked below the platform (`abi:*`), as if attached in
+every container: that made a Deny the writer holds in any workspace refuse the policy
+wherever it applies. After the upgrade from sets and toggles every workspace's "<W>
+access" denies the agents it had turned off, so the platform admin, holding those Denies
+as an owner of some workspaces, could grant no module's agents to any new organisation
+(#1519). The alternative, the platform admin not bound by a workspace's Denies when
+granting, would have exempted one caller from the rule, where this reads it the same for
+everyone.
+*Consequences.* A policy that applies nowhere yet grants nothing: whoever attaches,
+invites or binds it later is checked there, as before. A Deny of the writer where the
+policy applies still refuses it (in a workspace of the organisation it is attached below).
+A platform policy written by hand and attached nowhere is no longer refused at its
+creation for what its writer lacks in some container; the refusal comes with the
+attachment, at that container. No decision changes: only which writes are refused.
 
 **The catalogs say what the roles leave out; core's roles name no service.**
 *Decision.* What the built-in roles hold is generated from the catalogs by level, and what

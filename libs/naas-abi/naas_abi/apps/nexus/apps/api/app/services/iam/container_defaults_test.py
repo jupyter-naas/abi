@@ -300,6 +300,86 @@ async def test_a_workspace_admin_edits_its_access_within_the_organizations(world
     assert agents == {"${scope}/module:agent/people/a", "${scope}/module:agent/people/b"}
 
 
+async def _org_and_workspace(nexus_db, org_id: str, ws_id: str, owner: str):
+    """``owner`` creates the organization, then a workspace in it, as the routes do;
+    returns their records."""
+    async with nexus_db() as db:
+        orgs = OrganizationService(adapter=OrganizationSecondaryAdapterPostgres(db=db))
+        await orgs.create_organization(
+            name=org_id.title(), slug=org_id, owner_id=owner, now=NOW, org_id=org_id
+        )
+        workspaces = WorkspaceService(adapter=WorkspaceSecondaryAdapterPostgres(db=db))
+        await workspaces.create_workspace(
+            WorkspaceCreateInput(
+                name=ws_id.title(), slug=ws_id, owner_id=owner, organization_id=org_id, id=ws_id
+            )
+        )
+        await db.commit()
+        store = SqlDefaultsStore(db)
+        return (
+            await store.get(org_container(org_id)),
+            await store.get(workspace_container(org_id, ws_id)),
+        )
+
+
+def _turned_off(*names: str) -> dict:
+    """A workspace's access after the upgrade: every agent of ``people`` but
+    ``names``, turned off there (``TurnedOffAgents``)."""
+    document = _agents("*")
+    document["statements"].append(
+        {
+            "sid": "TurnedOffAgents",
+            "effect": "Deny",
+            "actions": [USE],
+            "resources": [f"${{scope}}/module:agent/people/{n}" for n in names],
+        }
+    )
+    return document
+
+
+@pytest.mark.asyncio
+async def test_an_agent_turned_off_in_a_workspace_is_still_granted_to_another_organization(
+    world, nexus_db
+):
+    """#1519: the platform admin owns Alpha (in Acme), which turned Scout off, so
+    holds that Deny there. Granting the agents of ``people`` to Globex, a new
+    organization, is held where "Globex access" applies (below Globex), not in
+    every container: Alpha's Deny does not stop it, and Scout stays off in Alpha.
+    A Deny where it applies (Iota, in Initech) still does."""
+    async with nexus_db() as db:
+        await _users(db, "root", "olivia", "bob")
+    world.platform_admin("root")
+    acme, alpha = await _org_and_workspace(nexus_db, "acme", "alpha", "root")
+    await MEMBERSHIPS.grant("bob", "admin", ALPHA)
+    with use_call_context(NexusIam.context("root")):
+        world.iam.update_policy(acme.access_policy_id, expected_revision=1, document=_agents("*"))
+        world.iam.update_policy(
+            alpha.access_policy_id, expected_revision=1, document=_turned_off("scout")
+        )
+    assert not _uses(world, "root", _agent(ALPHA, "scout"))
+    globex, _gamma = await _org_and_workspace(nexus_db, "globex", "gamma", "olivia")
+    gamma = workspace_container("globex", "gamma")
+    with use_call_context(NexusIam.context("root")):
+        world.iam.update_policy(globex.access_policy_id, expected_revision=1, document=_agents("*"))
+    # Globex's admins use every agent of people in its workspaces, Scout included.
+    assert _uses(world, "olivia", _agent(gamma, "scout"))
+    assert _uses(world, "olivia", _agent(gamma, "recruiter"))
+    # Alpha still turns Scout off for whoever holds its access.
+    assert not _uses(world, "bob", _agent(ALPHA, "scout"))
+    assert _uses(world, "bob", _agent(ALPHA, "recruiter"))
+    assert not _uses(world, "olivia", _agent(ALPHA, "recruiter"))
+    # Where the policy applies, the Deny stops it: root owns Iota, of Initech.
+    initech, iota = await _org_and_workspace(nexus_db, "initech", "iota", "root")
+    with use_call_context(NexusIam.context("root")):
+        world.iam.update_policy(
+            iota.access_policy_id, expected_revision=1, document=_turned_off("scout")
+        )
+        with pytest.raises(PermissionDeniedError, match="nexus:workspace/iota/module:agent"):
+            world.iam.update_policy(
+                initech.access_policy_id, expected_revision=1, document=_agents("*")
+            )
+
+
 # -- forgotten with it ------------------------------------------------------------------
 
 
