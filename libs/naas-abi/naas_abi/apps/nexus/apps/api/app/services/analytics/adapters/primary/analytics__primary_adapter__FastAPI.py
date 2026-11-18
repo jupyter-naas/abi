@@ -131,10 +131,15 @@ def get_analytics_service(
 # ---------------------------------------------------------------------------
 # Write path
 # ---------------------------------------------------------------------------
+# The service is synchronous: ingestion publishes to the event log over NATS
+# (an RPC), and the read path reads prebuilt JSON from object storage. These
+# routes are plain ``def`` so FastAPI runs them in its thread pool: as ``async
+# def`` they ran on the event loop, and a slow broker froze every request of
+# the engine (/health included) for as long as each publish waited.
 
 
 @router.post("/events", response_model=IngestResponse, dependencies=_WRITE)
-async def ingest_event(
+def ingest_event(
     event: AnalyticsEvent,
     service: AnalyticsService = Depends(get_analytics_service),
 ) -> IngestResponse:
@@ -143,7 +148,7 @@ async def ingest_event(
 
 
 @router.post("/rebuild", response_model=RebuildResponse, dependencies=_WRITE)
-async def rebuild_now(
+def rebuild_now(
     service: AnalyticsService = Depends(get_analytics_service),
 ) -> RebuildResponse:
     metadata = service.rebuild()
@@ -151,14 +156,14 @@ async def rebuild_now(
 
 
 @router.get("/metadata", response_model=Metadata | None, dependencies=_READ)
-async def get_metadata(
+def get_metadata(
     service: AnalyticsService = Depends(get_analytics_service),
 ) -> Metadata | None:
     return service.get_metadata()
 
 
 @router.get("/scenarios", response_model=ScenariosResponse, dependencies=_READ)
-async def get_scenarios(
+def get_scenarios(
     service: AnalyticsService = Depends(get_analytics_service),
 ) -> ScenariosResponse:
     return service.get_scenarios()
@@ -170,7 +175,7 @@ async def get_scenarios(
 
 
 @router.get("/overview", response_model=OverviewResponse, dependencies=_READ)
-async def get_overview(
+def get_overview(
     scenario_id: str = Query(DEFAULT_SCENARIO_ID),
     workspace_id: str | None = Query(None),
     user_email: str | None = Query(None),
@@ -182,7 +187,7 @@ async def get_overview(
 
 
 @router.get("/users", response_model=UsersResponse, dependencies=_READ)
-async def get_users(
+def get_users(
     scenario_id: str = Query(DEFAULT_SCENARIO_ID),
     workspace_id: str | None = Query(None),
     service: AnalyticsService = Depends(get_analytics_service),
@@ -191,7 +196,7 @@ async def get_users(
 
 
 @router.get("/users/{email:path}", response_model=UserDetail, dependencies=_READ)
-async def get_user_detail(
+def get_user_detail(
     email: str,
     scenario_id: str = Query(DEFAULT_SCENARIO_ID),
     workspace_id: str | None = Query(None),
@@ -204,7 +209,7 @@ async def get_user_detail(
 
 
 @router.get("/sessions", response_model=SessionsResponse, dependencies=_READ)
-async def get_sessions(
+def get_sessions(
     scenario_id: str = Query(DEFAULT_SCENARIO_ID),
     workspace_id: str | None = Query(None),
     user_email: str | None = Query(None),
@@ -216,7 +221,7 @@ async def get_sessions(
 
 
 @router.get("/pages", response_model=PagesResponse, dependencies=_READ)
-async def get_pages(
+def get_pages(
     scenario_id: str = Query(DEFAULT_SCENARIO_ID),
     workspace_id: str | None = Query(None),
     user_email: str | None = Query(None),
@@ -228,7 +233,7 @@ async def get_pages(
 
 
 @router.get("/workspaces", response_model=WorkspacesResponse, dependencies=_READ)
-async def get_workspaces(
+def get_workspaces(
     scenario_id: str = Query(DEFAULT_SCENARIO_ID),
     workspace_id: str | None = Query(None),
     user_email: str | None = Query(None),
@@ -240,7 +245,7 @@ async def get_workspaces(
 
 
 @router.get("/events", response_model=EventsResponse, dependencies=_READ)
-async def get_events(
+def get_events(
     scenario_id: str = Query(DEFAULT_SCENARIO_ID),
     limit: int = Query(200, ge=1, le=1000),
     workspace_id: str | None = Query(None),
