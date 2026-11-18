@@ -229,6 +229,7 @@ IAM suspension.
 | `ABI_IDP_CLIENT_ID`, `ABI_IDP_CLIENT_SECRET`, `ABI_IDP_REDIRECT_URIS` | the client ABI signs in as; seeded at start, the secret hashed |
 | `ABI_IDP_SIGNUP`, `ABI_IDP_PASSWORD_LOGIN` | `1` to enable |
 | `ABI_IDP_FROM_EMAIL`, `ABI_IDP_FROM_NAME`, `ABI_IDP_APP_NAME` | the sender and the name on the page |
+| `ABI_IDP_MAILBOX_URL` | a local stack's catch-all mailbox (Mailpit: `http://localhost:8025`); the code page links to it. http(s) only. Leave unset in production |
 
 Branding (`branding`, and `domain_branding` by email domain) in the JSON file:
 colors (`primary_color`, `accent_color` on hover, `background_color`,

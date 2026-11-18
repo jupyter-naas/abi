@@ -566,6 +566,13 @@ def sent_to(mailer, email):
     return [m for m in mailer.sent if m.to == email]
 
 
+def test_the_hinted_code_page_links_the_local_mailbox(client, service, mailer, alice):
+    service.configuration.mailbox_url = "http://localhost:8025"
+    _pkce, params = hinted("alice@example.com")
+    page = follow(client, start(client, params))
+    assert 'href="http://localhost:8025" target="_blank"' in page.text
+
+
 def test_a_hint_is_mailed_a_code_at_once_and_signs_in(client, service, mailer, alice):
     pkce, params = hinted("Alice@Example.com ")
     started = start(client, params)

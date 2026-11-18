@@ -278,6 +278,7 @@ class IdPWeb:
                 email=email.strip().lower()[:254],
                 error=error,
                 code_length=self.config.code_length,
+                mailbox_url=self.config.mailbox_url,
             ),
             form_origins=self._form_origins(params),
         )

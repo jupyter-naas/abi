@@ -90,6 +90,7 @@ button:focus-visible{{outline:2px solid {branding.primary_color};outline-offset:
 a{{color:{branding.primary_color};text-decoration:none}}
 a:hover{{text-decoration:underline}}
 .alt{{margin:24px 0 0;text-align:center;font-size:13px}}
+.local{{margin:16px 0 0;text-align:center;font-size:13px;line-height:1.5;color:rgba({ink},.55)}}
 .foot{{margin:32px 0 0;text-align:center;font-size:12px;color:rgba({page_ink},.45)}}
 </style></head>
 <body><main>
@@ -144,7 +145,15 @@ def code_page(
     error: str | None = None,
     note: str | None = None,
     code_length: int = 6,
+    mailbox_url: str | None = None,
 ) -> str:
+    mailbox = (
+        '<p class="local">Local environment: your code was sent to the local '
+        f'mailbox. <a href="{_attr(mailbox_url)}" target="_blank" rel="noopener">'
+        "Open the mailbox</a></p>\n"
+        if mailbox_url
+        else ""
+    )
     body = f"""<h1>Check your email</h1>
 <p class="sub">If {escape(email)} is registered, we sent a {code_length}-digit code to it.</p>
 {_messages(error, note)}
@@ -156,7 +165,7 @@ def code_page(
 pattern="[0-9 ]*" maxlength="{code_length + 2}" autocomplete="one-time-code" required autofocus>
 <button type="submit">Sign in</button>
 </form>
-<p class="alt"><a href="{_attr(again_action)}">Use another address, or send a new code</a></p>"""
+{mailbox}<p class="alt"><a href="{_attr(again_action)}">Use another address, or send a new code</a></p>"""
     return _page(branding, "Enter your code", body)
 
 

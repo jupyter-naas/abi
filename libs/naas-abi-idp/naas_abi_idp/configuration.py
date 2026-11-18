@@ -121,6 +121,10 @@ class IdPConfiguration(ModuleConfiguration):
     domain_branding: dict[str, Branding] = field(default_factory=dict)
     from_email: str = "no-reply@abi.local"
     from_name: str | None = None
+    # A local stack's catch-all mailbox (Mailpit, say): the code page links to it.
+    # http(s) only, http included since a local mailbox has no TLS. Unset in
+    # production: the page then says nothing about it.
+    mailbox_url: str | None = None
 
     # Sign-in codes.
     code_length: int = 8
@@ -189,6 +193,12 @@ class IdPConfiguration(ModuleConfiguration):
                 raise ValueError("issuer is an https URL (http on localhost only)")
             if parts.query or parts.fragment or self.issuer.endswith("/"):
                 raise ValueError("issuer is a bare URL without a trailing slash")
+        if self.mailbox_url is not None:
+            self.mailbox_url = self.mailbox_url.strip() or None
+        if self.mailbox_url is not None:
+            parts = urlsplit(self.mailbox_url)
+            if parts.scheme not in ("http", "https") or not parts.hostname:
+                raise ValueError("mailbox_url is an http(s) URL")
         for name in ("access_token_seconds", "id_token_seconds"):
             if not 60 <= getattr(self, name) <= MAX_TOKEN_SECONDS:
                 raise ValueError(f"{name} is 60 to {MAX_TOKEN_SECONDS}")
@@ -246,6 +256,7 @@ class IdPConfiguration(ModuleConfiguration):
         for key, cast in (
             ("ABI_IDP_FROM_EMAIL", ("from_email", str)),
             ("ABI_IDP_FROM_NAME", ("from_name", str)),
+            ("ABI_IDP_MAILBOX_URL", ("mailbox_url", str)),
             ("ABI_IDP_SIGNUP", ("signup_enabled", _flag)),
             ("ABI_IDP_PASSWORD_LOGIN", ("password_login_enabled", _flag)),
         ):
