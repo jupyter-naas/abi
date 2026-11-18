@@ -24,6 +24,17 @@
 
 <!-- version list -->
 
+## v3.6.2 (2026-11-18)
+
+### Bug Fixes
+
+- **core**: Dataset catalog monitor reads specs from the metadata catalog
+  ([`a479b1a`](https://github.com/jupyter-naas/abi/commit/a479b1a04c4fe49eebf7a9bacd2cbb57267a89d1))
+
+- **core**: Dataset list reads specs from the metadata catalog
+  ([`66a5e10`](https://github.com/jupyter-naas/abi/commit/66a5e10f33d1f5ec7bcdf95aac0beef3c97422ec))
+
+
 ## v3.6.1 (2026-11-17)
 
 ### Bug Fixes

@@ -907,6 +907,102 @@ def test_inlined_row_count_waits_for_a_write_on_a_sqlite_catalog(tmp_path):
     assert not reader.is_alive() and len(counts) == 1  # runs once the write is done
 
 
+def test_inlined_row_count_reads_the_spec_from_the_metadata_catalog(
+    tmp_path, monkeypatch
+):
+    """The hourly catalog monitor counts inlined rows of every dataset:
+    ``duckdb_tables()`` (``_load_spec``) costs seconds per call once the lake
+    holds a few hundred tables, the metadata catalog (``_read_spec``)
+    milliseconds."""
+    adapter = DatasetSecondaryAdapterDuckLake(
+        catalog=f"sqlite:{tmp_path / 'catalog.sqlite'}",
+        data_path=str(tmp_path / "data"),
+    )
+    adapter.create(
+        DatasetSpec(
+            name="t",
+            columns=(ColumnSpec(name="id", type="string"),),
+            primary_key=("id",),
+        )
+    )
+    adapter.write("t", [{"id": str(n)} for n in range(3)])
+    assert adapter.inlined_row_count("t") == 3
+
+    def scan_every_table(*args, **kwargs):
+        raise AssertionError(
+            "inlined_row_count listed every table with duckdb_tables()"
+        )
+
+    monkeypatch.setattr(adapter, "_load_spec", scan_every_table)
+
+    assert adapter.inlined_row_count("t") == 3
+    with pytest.raises(DatasetNotFoundError):
+        adapter.inlined_row_count("missing")
+
+
+class _NoTableScan:
+    """A read cursor that refuses ``duckdb_tables()``."""
+
+    def __init__(self, con):
+        self._con = con
+
+    def execute(self, sql, *args, **kwargs):
+        if "duckdb_tables()" in sql:
+            raise AssertionError("listed every table in the lake with duckdb_tables()")
+        return self._con.execute(sql, *args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._con, name)
+
+
+def test_list_reads_the_specs_from_the_metadata_catalog(tmp_path, monkeypatch):
+    """Every ``list()`` filtered ``duckdb_tables()``: seconds a call once the
+    lake holds a few hundred tables, and the NATS dataset listener called it
+    continuously."""
+    adapter = DatasetSecondaryAdapterDuckLake(
+        catalog=f"sqlite:{tmp_path / 'catalog.sqlite'}",
+        data_path=str(tmp_path / "data"),
+    )
+    for namespace, name in (
+        ("analytics", "b"),
+        ("analytics", "a"),
+        ("other", "c"),
+        ("analytics", "gone"),
+        ("dropped", "d"),
+    ):
+        adapter.create(
+            DatasetSpec(
+                name=name,
+                namespace=namespace,
+                columns=(ColumnSpec(name="id", type="string"),),
+            )
+        )
+    adapter.drop("gone", namespace="analytics")
+    adapter.drop("d", namespace="dropped")
+    adapter.query("CREATE TABLE plain (id VARCHAR)", namespace="analytics")
+    expected = {
+        None: adapter.list(),
+        "analytics": adapter.list(namespace="analytics"),
+        "missing": adapter.list(namespace="missing"),
+    }
+    assert [(i.namespace, i.name) for i in expected[None]] == [
+        ("analytics", "a"),
+        ("analytics", "b"),
+        ("other", "c"),
+    ]
+
+    read = adapter._read
+    monkeypatch.setattr(
+        adapter,
+        "_read",
+        lambda operation: read(lambda con: operation(_NoTableScan(con))),
+    )
+
+    assert adapter.list() == expected[None]
+    assert adapter.list(namespace="analytics") == expected["analytics"]
+    assert adapter.list(namespace="missing") == expected["missing"] == []
+
+
 # --- compaction and snapshot expiry ---------------------------------------------------
 
 
