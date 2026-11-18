@@ -10,7 +10,7 @@ Routes
 * ``POST   /api/apps/access-token``            — scoped link for ``/app-html/``
 * ``POST   /api/apps/remote-grant``            — open a remote module's app
 * ``POST   /api/apps/remote-grant/revoke``     — end the caller's remote app grants
-* ``POST   /api/apps/sso-token``               — HMAC handshake for a Pages portal
+* ``POST   /api/apps/sso-token``               — HMAC handshake for a portal (OpenApp on ``app_id``, else UseApp)
 
 Discovery mirrors the pattern used by the agents adapter
 (``agents__primary_adapter__FastAPI._get_agent_class_registry``): we walk
@@ -25,6 +25,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from collections.abc import Iterator
 from functools import lru_cache
 from pathlib import Path
@@ -43,6 +44,8 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.app_html_access import (
 from naas_abi.apps.nexus.apps.api.app.services.apps.links import LinkLimitReached
 from naas_abi.apps.nexus.apps.api.app.services.apps.pages_sso import (
     mint_pages_sso_token,
+    pages_sso_audiences,
+    parse_dev_app_urls,
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.port import (
     AppInfo,
@@ -587,7 +590,12 @@ async def revoke_remote_app_grants(
 
 
 class PagesSsoTokenRequest(BaseModel):
-    """Mint a short-lived HMAC token for a Cloudflare Pages portal."""
+    """Mint a short-lived HMAC token for a portal the caller may open.
+
+    ``audience`` is the portal hostname. ``app_id`` binds the proof to one app
+    the caller may open (``module:OpenApp``). Without it, the route still asks
+    ``UseApp``. The email is the signed-in user; the body cannot name another.
+    """
 
     workspace_id: str = Field(..., min_length=1, max_length=100)
     audience: str = Field(
@@ -596,6 +604,7 @@ class PagesSsoTokenRequest(BaseModel):
         max_length=255,
         description="Portal hostname, e.g. portal.example.com",
     )
+    app_id: str | None = Field(default=None, max_length=200)
 
 
 class PagesSsoTokenResponse(BaseModel):
@@ -608,15 +617,39 @@ class PagesSsoTokenResponse(BaseModel):
 @router.post(
     "/sso-token",
     response_model=PagesSsoTokenResponse,
-    dependencies=[declares("UseApp")],
+    dependencies=[declares("UseApp"), declares("module:OpenApp")],
 )
 async def create_pages_sso_token(
     body: PagesSsoTokenRequest,
     current_user: User = Depends(get_current_user_required),
 ) -> PagesSsoTokenResponse:
-    """Issue a handshake token so a Pages portal can skip a second login."""
-    await authz.require("UseApp", user=current_user, workspace=body.workspace_id, id="-")
+    """Issue a handshake token so a portal can skip a second login.
+
+    The email is always the signed-in user. With ``app_id``, the caller must
+    be allowed to open that app, and the audience must be that app's host.
+    While Nexus is local, ``NEXUS_DEV_APP_URLS`` may add the host of that
+    app's dev origin. Without ``app_id``, the caller needs ``UseApp`` and may
+    name any hostname the portal itself will check.
+    """
     live = _live_settings()
+    app_id = (body.app_id or "").strip()
+    if app_id:
+        scope = app_scope(app_id)
+        if scope is None:
+            raise HTTPException(status_code=400, detail="app_id names no app")
+        await authz.require_scope(scope, user=current_user, workspace=body.workspace_id)
+        app = next((item for item in _scan_apps_catalog() if item.app_id == app_id), None)
+        if app is None:
+            raise HTTPException(status_code=400, detail="app_id names no app")
+        local = str(getattr(live, "nexus_env", "") or "").lower() == "local"
+        dev_url = (
+            parse_dev_app_urls(os.environ.get("NEXUS_DEV_APP_URLS")).get(app_id) if local else None
+        )
+        allowed = pages_sso_audiences(app.url, dev_url)
+        if body.audience.strip().lower() not in allowed:
+            raise HTTPException(status_code=400, detail="audience is not this app")
+    else:
+        await authz.require("UseApp", user=current_user, workspace=body.workspace_id, id="-")
     if not live.pages_sso_secret:
         raise HTTPException(status_code=503, detail="Pages SSO is not configured")
     try:

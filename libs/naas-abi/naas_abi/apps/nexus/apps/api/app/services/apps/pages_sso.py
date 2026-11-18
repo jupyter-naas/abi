@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import json
 import time
+from urllib.parse import urlparse
 
 PAGES_SSO_SCOPE = "pages-sso"
 
@@ -81,3 +82,36 @@ def verify_pages_sso_token(
     if "@" not in email:
         return None
     return email
+
+
+def pages_sso_audiences(*urls: str | None) -> frozenset[str]:
+    """Hostnames of the portal URLs a proof may name. The port is not part of it."""
+    hosts: set[str] = set()
+    for url in urls:
+        if not url:
+            continue
+        hostname = (urlparse(url).hostname or "").strip().lower()
+        if hostname:
+            hosts.add(hostname)
+    return frozenset(hosts)
+
+
+def parse_dev_app_urls(raw: str | None) -> dict[str, str]:
+    """``id=url`` pairs, comma-separated. The first ``=`` splits id from URL.
+
+    Empty when unset. Callers pass an entry only for the app being opened, and
+    only while Nexus is local. There is no built-in catalog id.
+    """
+    out: dict[str, str] = {}
+    if not raw:
+        return out
+    for part in raw.split(","):
+        trimmed = part.strip()
+        eq = trimmed.find("=")
+        if eq <= 0:
+            continue
+        app_id = trimmed[:eq].strip()
+        target = trimmed[eq + 1 :].strip()
+        if app_id and target:
+            out[app_id] = target
+    return out

@@ -1,3 +1,5 @@
+import { parseDevAppUrls } from '@/lib/app-html';
+
 /**
  * Environment-aware configuration for NEXUS frontend.
  * 
@@ -44,6 +46,8 @@ declare global {
       websocketPath?: string;
       frontendUrl?: string;
       ollamaUrl?: string;
+      /** Catalog id → URL. Set only by `next dev` from `NEXUS_DEV_APP_URLS`. */
+      devAppUrls?: Record<string, string>;
     };
   }
 }
@@ -54,6 +58,15 @@ function getRuntimeConfig() {
   }
 
   return window.__NEXUS_RUNTIME_CONFIG__;
+}
+
+/** Dev catalog URL replacements. Empty in a production build. */
+export function getDevAppUrlOverrides(): Record<string, string> {
+  if (typeof window !== 'undefined') {
+    return getRuntimeConfig()?.devAppUrls ?? {};
+  }
+  if (process.env.NODE_ENV === 'production') return {};
+  return parseDevAppUrls(process.env.NEXUS_DEV_APP_URLS);
 }
 
 /** True when the page is served from a public host (not loopback / *.localhost). */

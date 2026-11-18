@@ -12,6 +12,7 @@ from naas_abi.apps.nexus.apps.api.app.core.config import FeatureFlagsConfig
 from naas_abi.apps.nexus.apps.api.app.services.apps.adapters.primary import (
     apps__primary_adapter__FastAPI as adapter,
 )
+from naas_abi.apps.nexus.apps.api.app.services.apps.pages_sso import verify_pages_sso_token
 from naas_abi.apps.nexus.apps.api.app.services.apps.remote import access
 from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
 from naas_abi.apps.nexus.apps.api.app.services.auth.adapters.primary.auth__primary_adapter__dependencies import (  # noqa: E501
@@ -284,3 +285,60 @@ async def test_an_admin_or_owner_with_no_policy_lists_and_opens_no_app(world) ->
             assert (await http.get("/api/apps/?workspace_id=ws-1")).json()["apps"] == [], role
             assert (await http.post("/api/apps/access-token", json=link)).status_code == 403
             assert (await http.post("/api/apps/remote-grant", json=remote)).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_open_app_mints_sso_for_that_person_and_that_app_only(world, monkeypatch) -> None:
+    """OpenApp on one catalog app mints a proof for the signed-in email and that host.
+
+    The body cannot name another person. A grant on this app does not mint a
+    proof for a different app. A dev origin is an audience only while Nexus is
+    local and ``NEXUS_DEV_APP_URLS`` names it. The map has no built-in entry.
+    """
+    portal = adapter._build_app_info(
+        "acme.portal",
+        Path("/modules/site"),
+        {"name": "Site", "url": "https://portal.example.com"},
+    )
+    other = adapter._build_app_info(
+        "acme.portal",
+        Path("/modules/other"),
+        {"name": "Other", "url": "https://other.example.com"},
+    )
+    monkeypatch.setattr(adapter, "_scan_apps_catalog", lambda: (portal, other))
+    live = {"nexus_env": "local"}
+    monkeypatch.setattr(
+        adapter,
+        "_live_settings",
+        lambda: SimpleNamespace(
+            pages_sso_secret="sso-test-secret",
+            pages_sso_expire_seconds=60,
+            nexus_env=live["nexus_env"],
+        ),
+    )
+    monkeypatch.setenv("NEXUS_DEV_APP_URLS", "acme.portal:site=http://localhost:9")
+    world.iam.allow_scope("member", ModuleScope("app", "acme.portal", "site"), world.scope)
+
+    async def post(http, **extra):
+        body = {"workspace_id": "ws-1", "audience": "localhost", "app_id": portal.app_id}
+        body.update(extra)
+        return await http.post("/api/apps/sso-token", json=body)
+
+    async with world.as_("viewer") as http:
+        assert (await post(http)).status_code == 403
+    async with world.as_("member") as http:
+        assert (await post(http, app_id=other.app_id)).status_code == 403
+        assert (await post(http, audience="other.example.com")).status_code == 400
+        minted = await post(http, email="someone-else@example.com")
+        assert minted.status_code == 200, minted.text
+        token = minted.json()["token"]
+        assert (
+            verify_pages_sso_token(token, secret="sso-test-secret", audience="localhost")
+            == "member@example.com"
+        )
+        assert "someone-else@" not in token
+        published = await post(http, audience="portal.example.com")
+        assert published.status_code == 200
+        live["nexus_env"] = "cloudflare"
+        assert (await post(http)).status_code == 400
+        assert (await post(http, audience="portal.example.com")).status_code == 200
