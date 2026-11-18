@@ -525,6 +525,21 @@ def _uvicorn_log_level(configured: str | None) -> str:
     return "info"
 
 
+def _reload_enabled(configured: bool) -> bool:
+    """``ABI_API_RELOAD`` when set (``abi dev up`` sets it), else ``api.reload``."""
+    value = os.environ.get("ABI_API_RELOAD", "").strip().lower()
+    if value in ("1", "true", "yes", "on"):
+        return True
+    if value in ("0", "false", "no", "off"):
+        return False
+    if value:
+        logger.warning(
+            f"api: ABI_API_RELOAD={value!r} is neither true nor false; "
+            f"using api.reload ({configured})"
+        )
+    return configured
+
+
 def api():
     print(
         f"[abi-boot] api() entered, starting uvicorn (+{time.monotonic() - _BOOT_T0:.2f}s)",
@@ -533,7 +548,7 @@ def api():
     )
     import uvicorn
 
-    reload_enabled = api_runtime_configuration.reload
+    reload_enabled = _reload_enabled(api_runtime_configuration.reload)
     if _nats_mode and not reload_enabled:
         # NATS gone for good stops this process, so its supervisor restarts it,
         # instead of an engine that serves nothing (naas_abi_sdk.lifeline). Not
@@ -555,8 +570,8 @@ def api():
 
     if reload_enabled:
         logger.warning(
-            "api: auto-reload is on (api.reload: true): uvicorn watches src/ and "
-            "restarts the engine on every change. For local development only."
+            "api: auto-reload is on (api.reload or ABI_API_RELOAD): uvicorn watches "
+            "src/ and restarts the engine on every change. For local development only."
         )
         run_kwargs["app"] = "naas_abi_core.apps.api.api:get_app"
         run_kwargs["factory"] = True

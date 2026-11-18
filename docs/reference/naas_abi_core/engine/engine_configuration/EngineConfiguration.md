@@ -24,7 +24,7 @@
 
 - `ApiConfiguration`
   - API server settings: `title`, `description`, `logo_path`, `favicon_path`, `cors_origins`, `reload`, `host`, `port`, `log_level`.
-  - `reload` (default `false`): uvicorn's auto-reload on changes under `src/`, for local development only. The reloader rescans `src/` all the time and restarts the engine on any write there, and in NATS mode it turns off the exit on NATS loss (`naas_abi_sdk.lifeline`). Deployed engines keep it off.
+  - `reload` (default `false`): uvicorn's auto-reload on changes under `src/`, for local development only. The reloader rescans `src/` all the time and restarts the engine on any write there, and in NATS mode it turns off the exit on NATS loss (`naas_abi_sdk.lifeline`). Deployed engines keep it off. `ABI_API_RELOAD` overrides it; `abi dev up` sets it to `true`.
   - `log_level` (default `info`): uvicorn's log level (`critical`, `error`, `warning`, `info`, `debug`, `trace`). Independent of `reload` and of the engine's `LOG_LEVEL`: at `debug`, uvicorn logs WebSocket handshake request headers, session cookies included.
 
 - `DiscoveryConfiguration`

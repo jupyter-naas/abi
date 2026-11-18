@@ -20,6 +20,7 @@ def uvicorn_run(monkeypatch) -> list[dict]:
     monkeypatch.setattr(api_module, "get_app", lambda: "app")
     monkeypatch.setattr(api_module, "_nats_mode", False)
     monkeypatch.delenv("LOG_LEVEL", raising=False)
+    monkeypatch.delenv("ABI_API_RELOAD", raising=False)
     return runs
 
 
@@ -50,6 +51,34 @@ def test_reload_does_not_force_debug(monkeypatch, uvicorn_run):
     assert run["reload"] is True
     assert run["app"] == "naas_abi_core.apps.api.api:get_app"
     assert run["log_level"] == "info"
+
+
+def test_abi_api_reload_turns_reload_on(monkeypatch, uvicorn_run):
+    # What `abi dev up` sets: local development, whatever the config says.
+    monkeypatch.setenv("ABI_API_RELOAD", "true")
+
+    _start(monkeypatch, reload=False)
+
+    (run,) = uvicorn_run
+    assert run["reload"] is True
+    assert run["app"] == "naas_abi_core.apps.api.api:get_app"
+
+
+@pytest.mark.parametrize(
+    ("value", "configured", "expected"),
+    [
+        ("false", True, False),
+        ("0", True, False),
+        ("YES", False, True),
+        ("", True, True),
+        ("maybe", True, True),
+        ("maybe", False, False),
+    ],
+)
+def test_abi_api_reload_values(monkeypatch, value, configured, expected):
+    monkeypatch.setenv("ABI_API_RELOAD", value)
+
+    assert api_module._reload_enabled(configured) is expected
 
 
 def test_the_engine_log_level_does_not_reach_uvicorn(monkeypatch, uvicorn_run):
