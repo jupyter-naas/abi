@@ -131,3 +131,34 @@ export function sortOrganizations(found: PlatformOrganization[]): PlatformOrgani
     (a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)
   );
 }
+
+/** A cell's values for its column filter: one value, or none when blank. */
+export function organizationCellValues(org: PlatformOrganization, column: OrganizationColumnId): string[] {
+  const text = columnText(org, column).trim();
+  return text ? [text] : [];
+}
+
+/** The columns of the CSV / Excel export of the visible rows. */
+export const ORGANIZATION_EXPORT_HEADERS = [
+  'Name',
+  'Slug',
+  'ID',
+  'Legal name',
+  'City',
+  'Country',
+  'Website',
+  'Created',
+] as const;
+
+export function organizationExportRow(org: PlatformOrganization): string[] {
+  return [
+    org.name,
+    org.slug,
+    org.id,
+    org.legal_name ?? '',
+    org.city ?? '',
+    org.country ?? '',
+    org.website ?? '',
+    createdDay(org),
+  ];
+}

@@ -236,7 +236,7 @@ export default function NexusTablesPage() {
               ? undefined
               : `${totals.tables} ${totals.tables === 1 ? 'table' : 'tables'} · ${totals.rows.toLocaleString()} rows`
           }
-          subtitle="Every table in the Nexus database. Search, sort and filter any column; click a table to open it, or its arrow to see its schema."
+          subtitle="Every table of the Nexus database, its rows and its schema"
           actions={
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>
@@ -281,7 +281,7 @@ export default function NexusTablesPage() {
         <SearchBox
           value={search}
           onChange={setSearch}
-          placeholder="Search tables, sections and descriptions..."
+          placeholder="Search tables, sections and descriptions…"
           label="Search tables"
         />
 
@@ -310,7 +310,7 @@ export default function NexusTablesPage() {
 
         <div className="org-settings-users-table-wrap">
           {loading ? (
-            <div className="org-settings-loading">Loading tables...</div>
+            <div className="org-settings-loading">Loading tables…</div>
           ) : (
             <table className="org-settings-users-table">
               <thead>

@@ -109,7 +109,7 @@ export function NewOrganization({
             </Link>
             <button type="submit" className="org-settings-primary-button" data-action="create" disabled={!ready}>
               <Plus size={16} />
-              {creating ? 'Creating...' : 'Create organization'}
+              {creating ? 'Creating…' : 'Create organization'}
             </button>
           </span>
         }

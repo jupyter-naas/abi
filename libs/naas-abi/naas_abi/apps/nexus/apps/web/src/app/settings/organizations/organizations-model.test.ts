@@ -3,7 +3,10 @@ import {
   deleteConfirmed,
   errorText,
   matchesOrganization,
+  ORGANIZATION_EXPORT_HEADERS,
+  organizationCellValues,
   organizationCount,
+  organizationExportRow,
   organizationLocation,
   slugFromName,
   sortOrganizations,
@@ -86,5 +89,39 @@ describe('the organizations table', () => {
   it('counts organizations', () => {
     expect(organizationCount(1)).toBe('1 organization');
     expect(organizationCount(3)).toBe('3 organizations');
+  });
+});
+
+describe('the organizations filters and export', () => {
+  const acme = {
+    id: 'org-a',
+    name: 'Acme',
+    slug: 'acme',
+    legal_name: 'Acme SAS',
+    city: 'Paris',
+    country: 'France',
+    website: 'https://acme.example',
+    created_at: '2026-01-15T09:00:00',
+  };
+
+  it('gives each column one value to filter on, none when blank', () => {
+    expect(organizationCellValues(acme, 'location')).toEqual(['Paris, France']);
+    expect(organizationCellValues(acme, 'website')).toEqual(['acme.example']);
+    expect(organizationCellValues({ id: 'org-b', name: 'Beta', slug: 'beta' }, 'legal_name')).toEqual([]);
+  });
+
+  it('exports a row under each header', () => {
+    const row = organizationExportRow(acme);
+    expect(row).toHaveLength(ORGANIZATION_EXPORT_HEADERS.length);
+    expect(Object.fromEntries(ORGANIZATION_EXPORT_HEADERS.map((h, i) => [h, row[i]]))).toEqual({
+      Name: 'Acme',
+      Slug: 'acme',
+      ID: 'org-a',
+      'Legal name': 'Acme SAS',
+      City: 'Paris',
+      Country: 'France',
+      Website: 'https://acme.example',
+      Created: '2026-01-15',
+    });
   });
 });

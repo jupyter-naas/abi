@@ -737,7 +737,7 @@ export function PlatformUsers({
         <SearchBox
           value={search}
           onChange={setSearch}
-          placeholder="Search name, email, IAM id, status, organization..."
+          placeholder="Search name, email, IAM ID, status, organization…"
           label="Search users"
         />
 
@@ -759,7 +759,7 @@ export function PlatformUsers({
 
         <div className="org-settings-users-table-wrap">
           {users === null && !loadError ? (
-            <div className="org-settings-loading">Loading users...</div>
+            <div className="org-settings-loading">Loading users…</div>
           ) : users !== null && users.length === 0 ? (
             <div className="org-settings-empty">
               <div className="org-settings-empty-icon">

@@ -63,7 +63,6 @@
 
 .platform-general-unset {
   color: var(--muted-foreground-hex);
-  font-style: italic;
 }
 
 .platform-general-text,

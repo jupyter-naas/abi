@@ -6,12 +6,18 @@ import '@/app/organizations/[orgId]/settings/users/users.css';
 import { RefreshCw } from 'lucide-react';
 import { OrgSettingsPageHeader } from '@/app/organizations/[orgId]/settings/components/org-settings-page-header';
 
-/** A page's Refresh: reloads what it shows, beyond its own polling. */
+/** A page's Refresh, the header's icon button: reloads what it shows, beyond its own polling. */
 export function SystemRefresh({ onClick }: { onClick: () => void }) {
   return (
-    <button type="button" className="org-settings-users-secondary-button" onClick={onClick}>
+    <button
+      type="button"
+      className="org-settings-users-secondary-button"
+      data-action="refresh"
+      onClick={onClick}
+      title="Refresh"
+      aria-label="Refresh"
+    >
       <RefreshCw size={16} />
-      Refresh
     </button>
   );
 }

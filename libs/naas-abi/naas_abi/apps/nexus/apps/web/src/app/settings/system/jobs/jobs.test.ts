@@ -88,6 +88,15 @@ async function open(api: JobsApi) {
 }
 
 describe('JobsTab', () => {
+  it('tells the page how many jobs there are, for the count by its title', async () => {
+    const { api } = fakeApi();
+    const onJobCount = vi.fn();
+    mounted = await mount(JobsTab, { api, tracesApi, onJobCount });
+    await mounted.flush();
+    await mounted.flush();
+    expect(onJobCount).toHaveBeenLastCalledWith(2);
+  });
+
   it('does not ask for the overview again until the last one answered, and aborts it on close', async () => {
     vi.useFakeTimers();
     try {

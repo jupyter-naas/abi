@@ -25,7 +25,7 @@ const SECTION_ICONS: Record<SiteSection['id'], typeof Globe> = {
 function Value({ value }: { value: SiteValue }) {
   switch (value.kind) {
     case 'unset':
-      return <span className="platform-general-unset">Not set</span>;
+      return <span className="platform-general-unset">—</span>;
     case 'text':
       return <span className="platform-general-text">{value.text}</span>;
     case 'url':
@@ -119,7 +119,7 @@ export default function PlatformGeneralPage() {
         An organization&apos;s own logo and colors, in its Branding settings, take over inside it.
       </p>
 
-      {loading && !site ? <div className="org-settings-loading">Loading...</div> : null}
+      {loading && !site ? <div className="org-settings-loading">Loading…</div> : null}
       {error ? <p className="org-settings-footnote">{error}</p> : null}
 
       {sections.map((section) => {

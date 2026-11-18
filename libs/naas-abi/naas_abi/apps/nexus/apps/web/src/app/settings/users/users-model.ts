@@ -88,7 +88,7 @@ export type ColumnId = 'user' | 'iam' | 'status' | 'superadmin' | 'organizations
 
 export const COLUMNS: { id: ColumnId; label: string }[] = [
   { id: 'user', label: 'User' },
-  { id: 'iam', label: 'IAM id' },
+  { id: 'iam', label: 'IAM ID' },
   { id: 'status', label: 'Status' },
   { id: 'superadmin', label: 'Superadmin' },
   { id: 'organizations', label: 'Organizations' },
@@ -173,7 +173,7 @@ export function sortUsers(users: AdminUser[], column: ColumnId, dir: SortDir): A
 export const EXPORT_HEADERS = [
   'Name',
   'Email',
-  'IAM id',
+  'IAM ID',
   'Status',
   'Deactivated',
   'Superadmin',

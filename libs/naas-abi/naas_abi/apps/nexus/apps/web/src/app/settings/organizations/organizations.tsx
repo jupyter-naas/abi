@@ -3,11 +3,14 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
   AlertCircle,
   Building2,
   ChevronDown,
   ChevronUp,
+  Download,
+  Filter,
   Pencil,
   Plus,
   RefreshCw,
@@ -17,6 +20,15 @@ import {
 import { getApiUrl } from '@/lib/config';
 import { OrgSettingsPageHeader } from '@/app/organizations/[orgId]/settings/components/org-settings-page-header';
 import { SearchBox } from '@/components/settings/search-box';
+import { ColumnFilterPopover } from '@/components/graph/explore/ColumnFilterPopover';
+import { isBlank, type ColumnFilterState } from '@/lib/graph-query/filters';
+import type { FacetBucket } from '@/lib/graph-query/types';
+import { rowMatchesColumnFilter } from '@/components/settings/users-table/users-table-filter';
+import {
+  downloadTableExport,
+  type UsersExportFormat,
+} from '@/components/settings/users-table/users-table-export';
+import { countFacets } from '../lib/page-helpers';
 import { deleteOrganization, listOrganizations, renameOrganization, type Fetcher } from './organizations-api';
 import {
   createdDay,
@@ -24,7 +36,10 @@ import {
   matchesOrganization,
   NEW_ORGANIZATION_PATH,
   ORGANIZATION_COLUMNS,
+  ORGANIZATION_EXPORT_HEADERS,
+  organizationCellValues,
   organizationCount,
+  organizationExportRow,
   organizationLocation,
   sortOrganizationsBy,
   websiteLabel,
@@ -271,6 +286,10 @@ export function PlatformOrganizations({
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<OrganizationColumnId>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [filters, setFilters] = useState<Partial<Record<OrganizationColumnId, ColumnFilterState>>>({});
+  const [openFilter, setOpenFilter] = useState<{ id: OrganizationColumnId; left: number; top: number } | null>(
+    null
+  );
 
   const reload = useCallback(() => setReloads((n) => n + 1), []);
 
@@ -292,9 +311,44 @@ export function PlatformOrganizations({
 
   const all = useMemo(() => organizations ?? [], [organizations]);
   const visible = useMemo(
-    () => sortOrganizationsBy(all.filter((org) => matchesOrganization(org, search)), sortKey, sortDir),
-    [all, search, sortKey, sortDir]
+    () =>
+      sortOrganizationsBy(
+        all.filter(
+          (org) =>
+            matchesOrganization(org, search) &&
+            ORGANIZATION_COLUMNS.every((column) =>
+              rowMatchesColumnFilter(organizationCellValues(org, column.id), filters[column.id])
+            )
+        ),
+        sortKey,
+        sortDir
+      ),
+    [all, search, filters, sortKey, sortDir]
   );
+
+  const loadFacets = useCallback(
+    async (columnId: string, query: string): Promise<FacetBucket[]> => {
+      const needle = query.trim().toLowerCase();
+      return countFacets(
+        all.flatMap((org) => organizationCellValues(org, columnId as OrganizationColumnId))
+      ).filter((bucket) => bucket.value.toLowerCase().includes(needle));
+    },
+    [all]
+  );
+
+  const exportVisible = (format: UsersExportFormat) => {
+    const date = new Date().toISOString().slice(0, 10);
+    downloadTableExport(
+      ORGANIZATION_EXPORT_HEADERS,
+      visible.map(organizationExportRow),
+      format,
+      `organizations_${date}`,
+      'Organizations'
+    );
+  };
+
+  const filtered =
+    search.trim() !== '' || ORGANIZATION_COLUMNS.some((column) => !isBlank(filters[column.id]));
 
   const toggleSort = (column: OrganizationColumnId) => {
     if (sortKey === column) {
@@ -324,6 +378,30 @@ export function PlatformOrganizations({
               >
                 <RefreshCw size={16} />
               </button>
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger asChild>
+                  <button
+                    type="button"
+                    className="org-settings-users-secondary-button"
+                    data-action="export"
+                    disabled={visible.length === 0}
+                  >
+                    <Download size={16} />
+                    Export
+                    <ChevronDown size={14} />
+                  </button>
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content align="end" sideOffset={4} className="org-settings-users-export-menu">
+                    <DropdownMenu.Item className="org-settings-users-export-item" onSelect={() => exportVisible('csv')}>
+                      CSV
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item className="org-settings-users-export-item" onSelect={() => exportVisible('xlsx')}>
+                      Excel (.xlsx)
+                    </DropdownMenu.Item>
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu.Root>
               <Link
                 href={NEW_ORGANIZATION_PATH}
                 className="org-settings-primary-button"
@@ -347,28 +425,35 @@ export function PlatformOrganizations({
         <SearchBox
           value={search}
           onChange={setSearch}
-          placeholder="Search name, slug, ID, legal name, location, website..."
+          placeholder="Search name, slug, ID, legal name, location, website…"
           label="Search organizations"
         />
 
-        {search.trim() !== '' && (
+        {filtered && (
           <p className="org-settings-users-filter-meta">
             {visible.length} of {organizationCount(all.length)}
-            <button type="button" className="org-settings-users-filter-clear" onClick={() => setSearch('')}>
-              Clear search
+            <button
+              type="button"
+              className="org-settings-users-filter-clear"
+              onClick={() => {
+                setSearch('');
+                setFilters({});
+              }}
+            >
+              Clear search and filters
             </button>
           </p>
         )}
 
         <div className="org-settings-users-table-wrap">
           {organizations === null && !loadError ? (
-            <div className="org-settings-loading">Loading organizations...</div>
+            <div className="org-settings-loading">Loading organizations…</div>
           ) : organizations !== null && organizations.length === 0 ? (
             <div className="org-settings-empty">
               <div className="org-settings-empty-icon">
                 <Building2 size={24} />
               </div>
-              <p className="org-settings-empty-title">No organization yet</p>
+              <p className="org-settings-empty-title">No organizations yet</p>
             </div>
           ) : organizations !== null ? (
             <table className="org-settings-users-table">
@@ -376,6 +461,7 @@ export function PlatformOrganizations({
                 <tr>
                   {ORGANIZATION_COLUMNS.map((column) => {
                     const sorted = sortKey === column.id;
+                    const active = !isBlank(filters[column.id]);
                     return (
                       <th key={column.id}>
                         <div className="org-settings-users-th">
@@ -390,7 +476,44 @@ export function PlatformOrganizations({
                             {sorted && sortDir === 'asc' && <ChevronUp size={12} />}
                             {sorted && sortDir === 'desc' && <ChevronDown size={12} />}
                           </button>
+                          <button
+                            type="button"
+                            className={`org-settings-users-filter${active ? ' is-active' : ''}`}
+                            data-filter-trigger=""
+                            data-filter={column.id}
+                            title="Filter"
+                            onClick={(event) => {
+                              if (openFilter?.id === column.id) {
+                                setOpenFilter(null);
+                                return;
+                              }
+                              const rect = event.currentTarget.getBoundingClientRect();
+                              setOpenFilter({ id: column.id, left: rect.left, top: rect.bottom + 4 });
+                            }}
+                          >
+                            <Filter size={11} />
+                          </button>
                         </div>
+                        {openFilter?.id === column.id && (
+                          <ColumnFilterPopover
+                            columnId={column.id}
+                            label={column.label}
+                            datatype="string"
+                            facetable
+                            anchor={{ left: openFilter.left, top: openFilter.top }}
+                            state={filters[column.id]}
+                            onChange={(next) => setFilters((current) => ({ ...current, [column.id]: next }))}
+                            onClear={() =>
+                              setFilters((current) => {
+                                const next = { ...current };
+                                delete next[column.id];
+                                return next;
+                              })
+                            }
+                            loadFacets={loadFacets}
+                            onClose={() => setOpenFilter(null)}
+                          />
+                        )}
                       </th>
                     );
                   })}
@@ -401,7 +524,7 @@ export function PlatformOrganizations({
                 {visible.length === 0 && (
                   <tr>
                     <td colSpan={ORGANIZATION_COLUMNS.length + 1} className="org-settings-users-no-match">
-                      No organization matches the search
+                      No organizations match the current search and filters
                     </td>
                   </tr>
                 )}

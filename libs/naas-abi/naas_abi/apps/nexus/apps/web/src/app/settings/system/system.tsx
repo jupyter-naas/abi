@@ -18,6 +18,7 @@ import type {
   Overview,
 } from './system-types';
 import { SourceNote } from './system-ui';
+import { plural } from './data/data-model';
 
 const POLL_MS = 10_000;
 
@@ -50,6 +51,7 @@ function View<T>({ state, render }: { state: Loaded<T> | null; render: (data: T)
 
 function SystemViewBody({ view }: { view: SystemView }) {
   const [nonce, setNonce] = useState(0);
+  const [jobCount, setJobCount] = useState<number | null>(null);
   const refresh = useCallback(() => setNonce((n) => n + 1), []);
   const on = (v: SystemView) => ({ enabled: view === v, intervalMs: POLL_MS, nonce });
   const overview = useSystemResource<Overview>('/overview', on('overview'));
@@ -66,11 +68,8 @@ function SystemViewBody({ view }: { view: SystemView }) {
     <SystemFrame
       title={meta.label}
       subtitle={meta.description}
-      badge={
-        view === 'jobs' && failures && failures.count > 0
-          ? `${failures.more ? `${failures.count}+` : failures.count} failed since you last looked`
-          : undefined
-      }
+      // A count, as on Users and Organizations; failed runs are the Jobs page's own banner.
+      badge={view === 'jobs' && jobCount !== null ? plural(jobCount, 'job', 'jobs') : undefined}
       actions={
         // Events and Live traffic stream; Jobs, Agents and Traces have their own refresh.
         OWN_REFRESH.includes(view) ? undefined : <SystemRefresh onClick={refresh} />
@@ -79,7 +78,9 @@ function SystemViewBody({ view }: { view: SystemView }) {
     >
       {view === 'overview' && <View state={overview} render={(data) => <SystemOverview overview={data} />} />}
       {view === 'services' && <View state={services} render={(data) => <SystemServices view={data} />} />}
-      {view === 'jobs' && <JobsTab nonce={nonce} failures={failures} onFailuresSeen={markSeen} />}
+      {view === 'jobs' && (
+        <JobsTab nonce={nonce} failures={failures} onFailuresSeen={markSeen} onJobCount={setJobCount} />
+      )}
       {view === 'agents' && <AgentsTab nonce={nonce} />}
       {view === 'traces' && <TracesTab nonce={nonce} />}
       {view === 'modules' && (
