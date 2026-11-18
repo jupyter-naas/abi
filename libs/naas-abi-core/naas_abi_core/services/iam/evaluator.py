@@ -27,6 +27,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
+from functools import lru_cache
 from typing import Literal
 
 from naas_abi_core.engine.call_context import CallContext
@@ -322,9 +323,14 @@ def _values(
 ) -> dict[str, str | None]:
     return {
         "scope": scope,
-        "principal.id": encode_segment(principal_id),
-        "user.id": encode_segment(user_id) if user_id is not None else None,
+        "principal.id": _encoded(principal_id),
+        "user.id": _encoded(user_id) if user_id is not None else None,
     }
+
+
+# ``encode_segment`` of the same few ids, once per statement and resource of a
+# filter: half of its time. Pure, so kept.
+_encoded = lru_cache(maxsize=65536)(encode_segment)
 
 
 def _scopes(
@@ -360,10 +366,26 @@ def _matches(
     for pattern in statement.resources:
         if shielded and "${scope}" in pattern:
             continue
-        expanded = substitute(pattern, values)
+        expanded = _expanded(
+            pattern, values["scope"], values["principal.id"], values["user.id"]
+        )
         if expanded is not None and matches(expanded, resource):
             return True
     return False
+
+
+@lru_cache(maxsize=65536)
+def _expanded(
+    pattern: str, scope: str | None, principal_id: str | None, user_id: str | None
+) -> str | None:
+    """``substitute`` of ``pattern`` with the values ``_values`` builds. Pure, so
+    kept: one ``filter`` over thousands of resources (a feature flag per
+    workspace) asks the same few patterns, with the same few scopes, again and
+    again; substituting each time was a tenth of a platform admin's
+    ``/api/workspaces``."""
+    return substitute(
+        pattern, {"scope": scope, "principal.id": principal_id, "user.id": user_id}
+    )
 
 
 def _bounding(

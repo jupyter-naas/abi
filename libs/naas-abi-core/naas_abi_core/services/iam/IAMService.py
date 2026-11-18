@@ -4,9 +4,15 @@ Domain services call ``require`` and ``filter``; both read the caller from the
 current ``CallContext`` (never from a request field). IAM authorizes its own
 operations with its own ``iam:*`` catalog, like any other service.
 
-Effective policies are cached per principal for at most ``cache_ttl_seconds``
-(60 by default) and dropped on every change made through this
-service. Change listeners (the NATS primary) hear each new store revision.
+Effective policies are cached per principal and dropped on every change made
+through this service. A change another process made applies within
+``revision_check_seconds`` (2 by default): before it reads a cached subject, the
+service compares the store's revision (every write that changes who may do
+what bumps it), at most that often, and drops its caches when it moved. An
+unchanged subject is kept up to ``subject_ttl_seconds`` (600 by default);
+placements and token floors for ``cache_ttl_seconds`` (60 by default, the bound
+the engine's configuration keeps). Change listeners (the NATS primary) hear each
+new store revision.
 """
 
 from __future__ import annotations
@@ -320,6 +326,12 @@ class _TTLCache:
             self._entries.clear()
 
 
+# How long an unchanged subject (and the policies it holds) is kept, and how often
+# the store's revision is compared before a cached one is read.
+SUBJECT_TTL_SECONDS = 600
+REVISION_CHECK_SECONDS = 2
+
+
 class IAMService(IIAMService, PolicySource):
     def __init__(
         self,
@@ -328,6 +340,8 @@ class IAMService(IIAMService, PolicySource):
         *,
         cache_ttl_seconds: float = 60.0,
         cache_size: int = 4096,
+        subject_ttl_seconds: float = SUBJECT_TTL_SECONDS,
+        revision_check_seconds: float = REVISION_CHECK_SECONDS,
         seals: Sequence[Seal] = SEALS,
         secrets: IAMSecrets | None = None,
         access_ttl_seconds: int = 600,
@@ -337,14 +351,22 @@ class IAMService(IIAMService, PolicySource):
         self.store = store
         self._registry = CatalogRegistry()
         self._seals = tuple(seals)
-        self._subjects = _TTLCache(cache_ttl_seconds, cache_size)
-        self._policies = _TTLCache(cache_ttl_seconds, cache_size)
+        # Kept until the store's revision moves (``_check_revision``): a profile
+        # rebuilt every minute was a quarter of a platform admin's requests.
+        subject_ttl = max(subject_ttl_seconds, cache_ttl_seconds)
+        self._subjects = _TTLCache(subject_ttl, cache_size)
+        self._policies = _TTLCache(subject_ttl, cache_size)
+        # Never staler than cache_ttl_seconds, the bound the configuration keeps.
+        self._revision_check_seconds = min(revision_check_seconds, cache_ttl_seconds)
+        self._revision_checked_at = time.monotonic()
+        self._revision_check_lock = threading.Lock()
         # Every placement, their index, and the registry of containers.
         self._placements = _TTLCache(cache_ttl_seconds, 3)
         self._floors = _TTLCache(cache_ttl_seconds, 1)
         self._pending_index: tuple[int, frozenset[tuple[str, str]]] | None = None
         self._listeners: list[Callable[[int], None]] = []
-        self._seen_revision: int | None = None
+        # Nothing is cached yet: the store as it is now is what this service saw.
+        self._seen_revision: int | None = store.revision()
         self._seal_key: bytes | None = None
         # The account holding each module id (``_module_id_holder``): an older
         # account never appears later, so the holder only changes when it is
@@ -496,6 +518,7 @@ class IAMService(IIAMService, PolicySource):
         if principal is None:
             return None
         key = (principal.kind, principal.id, principal.name, principal.groups)
+        self._check_revision()
         subject = self._subjects.get(key, lambda: self._compute_subject(principal))
         issued_at = ctx.token_issued_at
         if (
@@ -664,6 +687,7 @@ class IAMService(IIAMService, PolicySource):
         return chain, True
 
     def _cached_policy(self, policy_id: str) -> Policy | None:
+        self._check_revision()
         return self._policies.get(policy_id, lambda: self._load_policy(policy_id))
 
     def _load_policy(self, policy_id: str) -> Policy | None:
@@ -4832,6 +4856,28 @@ class IAMService(IIAMService, PolicySource):
         self._policies.clear()
         self._placements.clear()
         self._floors.clear()
+
+    def _check_revision(self) -> None:
+        """Drop the caches when another process changed the store: the store's
+        revision is read at most every ``revision_check_seconds``, by one thread
+        (the others keep what is cached meanwhile). One that cannot be read
+        drops them: nothing cached is trusted then."""
+        now = time.monotonic()
+        if now - self._revision_checked_at < self._revision_check_seconds:
+            return
+        if not self._revision_check_lock.acquire(blocking=False):
+            return
+        try:
+            if now - self._revision_checked_at < self._revision_check_seconds:
+                return
+            try:
+                self.refresh_if_changed()
+            except Exception as exc:  # noqa: BLE001 - fail fresh, never stale
+                logger.warning(f"IAM store revision unreadable: {exc!r}")
+                self.invalidate()
+            self._revision_checked_at = time.monotonic()
+        finally:
+            self._revision_check_lock.release()
 
     def refresh_if_changed(self) -> bool:
         """Drop the caches when the store's revision differs from the last one
