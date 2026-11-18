@@ -18,6 +18,7 @@ from nats.aio.client import Client
 from nats.errors import MaxPayloadError, NoRespondersError
 
 from naas_abi_sdk import no_responders, overflow
+from naas_abi_sdk.backoff import jittered_interval, reconnect_backoff_handler
 from naas_abi_sdk.call_context import Principal, current_call_context
 from naas_abi_sdk.credentials import (
     NATS_AUDIENCE,
@@ -121,6 +122,11 @@ class Transport:
                 if with_login and option in ("user", "password"):
                     continue
                 connection_options.setdefault(option, value)
+        # Reconnects wait a jittered backoff (``backoff``): a host's modules that
+        # lose the broker together must not all come back together.
+        connection_options.setdefault(
+            "reconnect_to_server_handler", reconnect_backoff_handler()
+        )
         self.url, self.token, self.timeout = url, token, timeout
         self.host_token = host_token
         self.delegate = delegate
@@ -176,13 +182,20 @@ class Transport:
         account or a narrowed policy ends here at the latest when the
         permissions the broker gave the connection do."""
         while True:
-            await asyncio.sleep(self.renew_seconds)
+            await asyncio.sleep(self._renew_delay())
             if self._closed or connection is not self.connection:
                 return
             try:
                 await connection.force_reconnect()
             except Exception:  # nats-py retries; the lifeline reports a loss
                 logger.warning("Could not renew the broker connection", exc_info=True)
+
+    def _renew_delay(self) -> float:
+        """The wait before the next renewal: ``renew_seconds``, shortened at
+        random by up to a quarter. Modules started together (a host of many)
+        otherwise renew together, and the auth callout answers all their
+        sign-ins at once, every cycle."""
+        return jittered_interval(self.renew_seconds)
 
     def _on_closed(
         self, connection: Client, watched: Lifeline
