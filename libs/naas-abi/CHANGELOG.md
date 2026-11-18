@@ -24,6 +24,14 @@
 
 <!-- version list -->
 
+## v4.2.1 (2026-11-18)
+
+### Bug Fixes
+
+- **nexus**: Sockets join their workspace and admin-events rooms
+  ([`99df7b2`](https://github.com/jupyter-naas/abi/commit/99df7b289686b945bc2f6bd7b4740a7fd1de642f))
+
+
 ## v4.2.0 (2026-11-18)
 
 ### Bug Fixes
