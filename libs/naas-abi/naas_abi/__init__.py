@@ -145,6 +145,8 @@ class TenantConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    # The site's name (Nexus Platform Settings > General); the tab title stands in.
+    name: str | None = None
     tab_title: str = "ABI Nexus | naas.ai"
     favicon_url: str | None = None
     logo_url: str | None = None

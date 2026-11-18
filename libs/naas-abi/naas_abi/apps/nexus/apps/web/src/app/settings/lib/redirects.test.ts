@@ -102,6 +102,7 @@ describe('old System links', () => {
 describe('PLATFORM_SETTINGS_SECTIONS', () => {
   it('is the first segment of each section path', () => {
     expect(PLATFORM_SETTINGS_SECTIONS).toEqual([
+      'general',
       'tables',
       'system',
       'activity',

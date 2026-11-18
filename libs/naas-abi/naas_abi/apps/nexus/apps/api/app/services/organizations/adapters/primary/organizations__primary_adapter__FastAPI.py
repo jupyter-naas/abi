@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import os
+import re
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import User, get_current_user_required
@@ -76,7 +78,7 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
 from naas_abi.apps.nexus.apps.api.app.utils.public_urls import resolve_stored_asset_url
 from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
@@ -105,6 +107,23 @@ def _get_email_service(request: Request) -> EmailService | None:
         return service
     except Exception:
         return None
+
+
+# The organization's identity: Organization Settings > General edits them, the
+# public branding (``OrganizationBranding``) never carries them.
+ORGANIZATION_IDENTITY_FIELDS = (
+    "legal_name",
+    "registration_number",
+    "vat_number",
+    "website",
+    "contact_email",
+    "address_line1",
+    "address_line2",
+    "postal_code",
+    "city",
+    "country",
+)
+_EMAIL = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
 
 
 class OrganizationBranding(BaseModel):
@@ -160,12 +179,64 @@ class Organization(BaseModel):
     secondary_logo_url: str | None = None
     show_logo_separator: bool = False
     default_theme: str | None = None
+    legal_name: str | None = None
+    registration_number: str | None = None
+    vat_number: str | None = None
+    website: str | None = None
+    contact_email: str | None = None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    postal_code: str | None = None
+    city: str | None = None
+    country: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
     current_user_role: str | None = None
 
 
-class OrganizationCreate(BaseModel):
+class OrganizationIdentityFields(BaseModel):
+    """The organization's identity (Organization Settings > General), on create and
+    update alike. A blank value is no value: on update, it clears the field."""
+
+    legal_name: str | None = Field(default=None, max_length=200)
+    registration_number: str | None = Field(default=None, max_length=100)
+    vat_number: str | None = Field(default=None, max_length=100)
+    website: str | None = Field(default=None, max_length=2000)
+    contact_email: str | None = Field(default=None, max_length=254)
+    address_line1: str | None = Field(default=None, max_length=200)
+    address_line2: str | None = Field(default=None, max_length=200)
+    postal_code: str | None = Field(default=None, max_length=20)
+    city: str | None = Field(default=None, max_length=100)
+    country: str | None = Field(default=None, max_length=100)
+
+    @field_validator(*ORGANIZATION_IDENTITY_FIELDS)
+    @classmethod
+    def _blank_is_none(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip() or None
+
+    @field_validator("website")
+    @classmethod
+    def _website_is_http(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        parts = urlsplit(value)
+        if parts.scheme not in ("http", "https") or not parts.hostname:
+            raise ValueError("website is an http(s) URL, such as https://example.com")
+        return value
+
+    @field_validator("contact_email")
+    @classmethod
+    def _contact_email_is_an_address(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not _EMAIL.fullmatch(value):
+            raise ValueError("contact_email is an email address")
+        return value.lower()
+
+
+class OrganizationCreate(OrganizationIdentityFields):
     name: str = Field(..., min_length=1, max_length=200)
     slug: str = Field(..., min_length=1, max_length=100, pattern=r"^[a-z0-9][a-z0-9\-]*[a-z0-9]$")
     logo_url: str | None = None
@@ -191,7 +262,7 @@ class OrganizationCreate(BaseModel):
     default_theme: str | None = None
 
 
-class OrganizationUpdate(BaseModel):
+class OrganizationUpdate(OrganizationIdentityFields):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     slug: str | None = Field(
         default=None, min_length=1, max_length=100, pattern=r"^[a-z0-9][a-z0-9\-]*[a-z0-9]$"
@@ -495,6 +566,7 @@ async def create_organization(
             secondary_logo_url=org.secondary_logo_url,
             show_logo_separator=org.show_logo_separator,
             default_theme=org.default_theme,
+            identity={field: getattr(org, field) for field in ORGANIZATION_IDENTITY_FIELDS},
             now=datetime.now(UTC).replace(tzinfo=None),
         )
     except OrganizationSlugAlreadyExistsError as exc:

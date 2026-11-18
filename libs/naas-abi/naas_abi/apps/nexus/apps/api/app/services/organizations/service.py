@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -272,9 +273,12 @@ class OrganizationService:
         show_logo_separator: bool = False,
         default_theme: str | None = None,
         org_id: str | None = None,
+        identity: Mapping[str, str | None] | None = None,
     ) -> OrganizationRecord:
         """``org_id``: decided by the caller that checked the create on the new
-        organization's own name (``new_org_id``); made here when None."""
+        organization's own name (``new_org_id``); made here when None. ``identity``:
+        the legal name, website, address... (``OrganizationCreateInput``'s identity
+        fields), as Organization Settings > General edits them."""
         if slug in configured_organization_slugs() or await self.adapter.organization_slug_exists(
             slug=slug
         ):
@@ -310,6 +314,7 @@ class OrganizationService:
                 default_theme=default_theme,
                 created_at=now,
                 updated_at=now,
+                **dict(identity or {}),
             )
         )
         # The row exists before IAM knows it, and memberships live only in IAM:

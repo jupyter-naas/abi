@@ -10,6 +10,7 @@ import {
   Cpu,
   Gauge,
   GitBranch,
+  Globe,
   HardDrive,
   Hash,
   History,
@@ -36,6 +37,7 @@ import {
   systemViewPath,
   type SystemView,
 } from '../system/system-tabs';
+import { PLATFORM_GENERAL_PATH } from '../general/general-model';
 import { PLATFORM_ORGANIZATIONS_PATH } from '../organizations/organizations-model';
 import { PLATFORM_USERS_PATH } from '../users/users-model';
 import { PLATFORM_TABLES_PATH } from './tables';
@@ -49,7 +51,7 @@ import { SERVICE_PAGES, servicePagePath, servicePagesIn } from './service-pages'
  * every call itself: this only decides what is shown.
  *
  * The groups answer one question each, in the order an administrator asks them:
- * who has access (Administration), is it running (System), what happened (Activity),
+ * what the platform is and who has access (Administration), is it running (System), what happened (Activity),
  * what is connected (Resources), what is stored (Data). Each page has one home.
  */
 
@@ -140,6 +142,15 @@ export const NEXUS_TABLES_ITEM: PlatformSettingsNavItem = {
   needs: READ_SYSTEM,
 };
 
+/** The site's identity, which every organization on the platform shares. */
+export const GENERAL_ITEM: PlatformSettingsNavItem = {
+  id: 'general',
+  label: 'General',
+  href: PLATFORM_GENERAL_PATH,
+  icon: Globe,
+  needs: READ_SYSTEM,
+};
+
 export const ORGANIZATIONS_ITEM: PlatformSettingsNavItem = {
   id: 'organizations',
   label: 'Organizations',
@@ -169,7 +180,11 @@ export const ROLES_ITEM: PlatformSettingsNavItem = {
 /** Pages laid out like the organization's settings pages: padded, width capped. The
  * other pages (System, Activity, Resources, Data, Roles & permissions) lay out their
  * own panes edge to edge; Nexus tables have their own layout. */
-const PADDED_ITEM_IDS: ReadonlySet<string> = new Set([ORGANIZATIONS_ITEM.id, USERS_ITEM.id]);
+const PADDED_ITEM_IDS: ReadonlySet<string> = new Set([
+  GENERAL_ITEM.id,
+  ORGANIZATIONS_ITEM.id,
+  USERS_ITEM.id,
+]);
 
 /** Whether a page lays out its own panes edge to edge (no padding, no width cap). */
 export function laysOutOwnPanes(item: Pick<PlatformSettingsNavItem, 'id'>): boolean {
@@ -177,7 +192,7 @@ export function laysOutOwnPanes(item: Pick<PlatformSettingsNavItem, 'id'>): bool
 }
 
 export const platformSettingsGroups: PlatformSettingsNavGroup[] = [
-  { label: 'Administration', items: [ORGANIZATIONS_ITEM, USERS_ITEM, ROLES_ITEM] },
+  { label: 'Administration', items: [GENERAL_ITEM, ORGANIZATIONS_ITEM, USERS_ITEM, ROLES_ITEM] },
   {
     label: 'System',
     items: [

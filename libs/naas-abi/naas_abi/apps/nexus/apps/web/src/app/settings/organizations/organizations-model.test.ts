@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { deleteConfirmed, errorText, slugFromName, sortOrganizations } from './organizations-model';
+import {
+  deleteConfirmed,
+  errorText,
+  matchesOrganization,
+  organizationCount,
+  organizationLocation,
+  slugFromName,
+  sortOrganizations,
+  sortOrganizationsBy,
+  websiteLabel,
+} from './organizations-model';
 
 describe('slugFromName', () => {
   it('suggests lowercase words joined by dashes', () => {
@@ -43,5 +53,38 @@ describe('sortOrganizations', () => {
       { id: 'a1', name: 'Acme', slug: 'a1' },
     ]);
     expect(sorted.map((o) => o.id)).toEqual(['a1', 'a2', 'b']);
+  });
+});
+
+describe('the organizations table', () => {
+  const acme = { id: 'org-a', name: 'Acme', slug: 'acme', city: 'Paris', country: 'France', website: 'https://acme.example/' };
+  const beta = { id: 'org-b', name: 'Beta', slug: 'beta', legal_name: 'Beta SA', city: null, country: 'Belgium' };
+  const gamma = { id: 'org-c', name: 'Gamma', slug: 'gamma' };
+
+  it('reads the location and the website as people say them', () => {
+    expect(organizationLocation(acme)).toBe('Paris, France');
+    expect(organizationLocation(beta)).toBe('Belgium');
+    expect(organizationLocation(gamma)).toBe('');
+    expect(websiteLabel('https://acme.example/')).toBe('acme.example');
+    expect(websiteLabel(null)).toBe('');
+  });
+
+  it('searches every word across name, slug, id, legal name, location and website', () => {
+    expect(matchesOrganization(acme, 'paris acme')).toBe(true);
+    expect(matchesOrganization(beta, 'beta sa')).toBe(true);
+    expect(matchesOrganization(acme, 'acme.example')).toBe(true);
+    expect(matchesOrganization(gamma, 'paris')).toBe(false);
+    expect(matchesOrganization(gamma, '  ')).toBe(true);
+  });
+
+  it('sorts by a column, blanks last both ways', () => {
+    const ids = (dir: 'asc' | 'desc') => sortOrganizationsBy([gamma, beta, acme], 'location', dir).map((o) => o.id);
+    expect(ids('asc')).toEqual(['org-b', 'org-a', 'org-c']);
+    expect(ids('desc')).toEqual(['org-a', 'org-b', 'org-c']);
+  });
+
+  it('counts organizations', () => {
+    expect(organizationCount(1)).toBe('1 organization');
+    expect(organizationCount(3)).toBe('3 organizations');
   });
 });

@@ -79,6 +79,18 @@ class OrganizationModel(Base):
         Boolean, nullable=False, default=False
     )  # Vertical bar between primary and secondary logo
     default_theme = Column(String, nullable=True, default=None)  # "light", "dark", or null (system)
+
+    # Identity (Organization Settings > General), edited in the app: never seeded.
+    legal_name = Column(String(200), nullable=True)
+    registration_number = Column(String(100), nullable=True)
+    vat_number = Column(String(100), nullable=True)
+    website = Column(Text, nullable=True)
+    contact_email = Column(String(254), nullable=True)
+    address_line1 = Column(String(200), nullable=True)
+    address_line2 = Column(String(200), nullable=True)
+    postal_code = Column(String(20), nullable=True)
+    city = Column(String(100), nullable=True)
+    country = Column(String(100), nullable=True)
     # Made by the configuration's seeding (core/org_seed.py): the only rows it updates.
     # False for what people create; NULL for a row older than the flag.
     seeded = Column(Boolean, nullable=True, default=False)

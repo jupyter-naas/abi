@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   firstPlatformSettingsPath,
   holds,
+  GENERAL_ITEM,
   laysOutOwnPanes,
   NEXUS_TABLES_ITEM,
   ORGANIZATIONS_ITEM,
@@ -50,6 +51,7 @@ describe('platformSettingsGroups', () => {
   it('is Administration, then System, Activity, Resources and Data', () => {
     expect(platformSettingsGroups.map((group) => group.label)).toEqual(GROUPS);
     expect(items('Administration')).toEqual([
+      ['General', '/settings/general'],
       ['Organizations', '/settings/organizations'],
       ['Users', '/settings/users'],
       ['Roles & permissions', '/settings/roles'],
@@ -118,11 +120,11 @@ describe('platformSettingsGroups', () => {
 });
 
 describe('what the caller sees', () => {
-  it('shows a platform admin everything, Organizations first', () => {
-    expect(ids(platformAdmin)).toHaveLength(29);
+  it('shows a platform admin everything, General first', () => {
+    expect(ids(platformAdmin)).toHaveLength(30);
     expect(ids(platformAdmin)).toContain('users');
     expect(visiblePlatformSettingsGroups(platformAdmin).map((group) => group.label)).toEqual(GROUPS);
-    expect(firstPlatformSettingsPath(platformAdmin)).toBe('/settings/organizations');
+    expect(firstPlatformSettingsPath(platformAdmin)).toBe('/settings/general');
   });
 
   it('shows a delegated IAM admin without nexus:ReadSystem only Roles & permissions', () => {
@@ -141,7 +143,7 @@ describe('what the caller sees', () => {
     expect(ids(systemReader)).toContain('service-triple_store');
     const groups = visiblePlatformSettingsGroups(systemReader);
     expect(groups.map((group) => group.label)).toEqual(GROUPS);
-    expect(groups[0].items.map((item) => item.label)).toEqual(['Organizations']);
+    expect(groups[0].items.map((item) => item.label)).toEqual(['General', 'Organizations']);
   });
 
   it('shows Users to whoever IAM lets list the users, and nothing else to them', () => {
@@ -222,6 +224,7 @@ describe('parsePlatformSettingsRoute', () => {
 
 describe('laysOutOwnPanes', () => {
   it('keeps the margins of the organization pages on Organizations and Users', () => {
+    expect(laysOutOwnPanes(GENERAL_ITEM)).toBe(false);
     expect(laysOutOwnPanes(ORGANIZATIONS_ITEM)).toBe(false);
     expect(laysOutOwnPanes(USERS_ITEM)).toBe(false);
   });

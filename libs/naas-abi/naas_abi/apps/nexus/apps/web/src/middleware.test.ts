@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server';
 
 import { middleware } from './middleware';
 import { LEGACY_WORKSPACE_SETTINGS_SLUGS } from './app/settings/lib/tables';
+import { PLATFORM_SETTINGS_SECTIONS } from './app/settings/lib/redirects';
 
 function requestFor(pathname: string, cookies: Record<string, string> = {}): NextRequest {
   const url = `https://nexus.example.com${pathname}`;
@@ -121,7 +122,8 @@ describe('middleware auth redirects', () => {
   it('redirects every legacy workspace settings link, even where a table shares the name', () => {
     process.env.NODE_ENV = 'production';
 
-    for (const slug of LEGACY_WORKSPACE_SETTINGS_SLUGS) {
+    // A slug Platform Settings now serves (General) is its page, not a legacy link.
+    for (const slug of LEGACY_WORKSPACE_SETTINGS_SLUGS.filter((s) => !PLATFORM_SETTINGS_SECTIONS.includes(s))) {
       const response = middleware(
         requestFor(`/settings/${slug}`, { 'nexus-auth-flag': 'true' }),
       );
@@ -129,6 +131,13 @@ describe('middleware auth redirects', () => {
         new RegExp(`/workspace/.+/settings/${slug}$`),
       );
     }
+  });
+
+  it('serves Platform Settings › General at /settings/general', () => {
+    process.env.NODE_ENV = 'production';
+
+    const response = middleware(requestFor('/settings/general', { 'nexus-auth-flag': 'true' }));
+    expect(response.headers.get('location')).toBeNull();
   });
 });
 

@@ -12,6 +12,8 @@ interface TenantConfig {
     description?: string | null;
     icon_emoji?: string | null;
   }[];
+  /** The site's name (Platform Settings › General); the tab title stands in without one. */
+  name?: string | null;
   tab_title: string;
   favicon_url: string | null;
   logo_url?: string | null;
@@ -39,6 +41,7 @@ interface TenantConfig {
 
 const DEFAULT_TENANT: TenantConfig = {
   apps: [],
+  name: null,
   tab_title: 'ABI Nexus | naas.ai',
   favicon_url: null,
   logo_url: null,

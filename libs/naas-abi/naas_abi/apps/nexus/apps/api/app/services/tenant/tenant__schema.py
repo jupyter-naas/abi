@@ -8,6 +8,7 @@ class TenantResponse(BaseModel):
         description: str | None = None
         icon_emoji: str | None = None
 
+    name: str | None = None
     tab_title: str
     favicon_url: str | None = None
     logo_url: str | None = None
