@@ -105,7 +105,7 @@ terminal-agent = [
     "rich>=13.9.4,<14",
 ]
 dev = [
-    "pytest>=8.3.4,<9",
+    "pytest>=8.3.4,<10",
     "mypy>=1.15.0",
     "pyrefly>=0.16.1",
     "pytest-xdist>=3.7.0",
