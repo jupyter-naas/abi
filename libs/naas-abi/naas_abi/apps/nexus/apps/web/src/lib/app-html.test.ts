@@ -8,6 +8,7 @@ import {
   remoteAppGrantUrl,
   remoteAppParts,
   pagesSsoAudience,
+  portalSsoTokenRequest,
   resolveDevAppUrl,
   withAppHtmlAccessToken,
   withPagesSsoToken,
@@ -137,6 +138,35 @@ describe('local dev catalog URLs', () => {
     } finally {
       process.env.NODE_ENV = previous;
     }
+  });
+});
+
+describe('the portal SSO request of an opened app', () => {
+  const appId = 'acme.portal:site';
+
+  it('names the app and the host actually framed', () => {
+    expect(portalSsoTokenRequest(appId, 'https://Portal.Example.com/login?x=1', 'ws-1')).toEqual({
+      workspace_id: 'ws-1',
+      audience: 'portal.example.com',
+      app_id: appId,
+    });
+    const framed = resolveDevAppUrl(appId, 'https://portal.example.com', {
+      env: 'local',
+      overrides: { [appId]: 'http://localhost:9/' },
+    });
+    expect(portalSsoTokenRequest(appId, framed, 'ws-1')?.audience).toBe('localhost');
+  });
+
+  it('asks nothing for a bundled or remote app, or a URL that is no web origin', () => {
+    expect(portalSsoTokenRequest('acme.ops:map', '/app-html/acme/ops/map/index.html', 'ws-1')).toBeNull();
+    expect(
+      portalSsoTokenRequest('remote/acme.research:console', '/app-html/remote/acme.research/console/', 'ws-1'),
+    ).toBeNull();
+    expect(
+      portalSsoTokenRequest('remote/acme.research:console', 'https://nexus.example.com/app-html/remote/acme.research/console/', 'ws-1'),
+    ).toBeNull();
+    expect(portalSsoTokenRequest(appId, 'mailto:someone@example.com', 'ws-1')).toBeNull();
+    expect(portalSsoTokenRequest(appId, 'not a url', 'ws-1')).toBeNull();
   });
 });
 
