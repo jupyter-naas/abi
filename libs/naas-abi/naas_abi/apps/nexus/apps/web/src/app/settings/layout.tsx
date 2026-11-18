@@ -2,9 +2,10 @@
 
 import { useMemo } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { ArrowLeft, RefreshCw, ShieldCheck } from 'lucide-react';
+import { RefreshCw, ShieldCheck } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { useDevRouteWarmup } from '@/hooks/use-dev-route-warmup';
+import { useRememberSettingsScope } from '@/hooks/use-remember-settings-scope';
 import { usePlatformSettingsAccess } from '@/hooks/use-platform-settings-access';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { SettingsLayoutNav } from '@/components/settings/settings-layout-nav';
@@ -13,6 +14,7 @@ import {
   SettingsNavItem,
   useWorkspaceReturnPath,
 } from '@/components/settings/settings-shell';
+import { SettingsShellHeader } from '@/components/settings/settings-shell-header';
 import { SettingsLoading } from '@/components/settings/settings-ui';
 import {
   holds,
@@ -90,6 +92,7 @@ function PlatformSettingsForbidden({ onRetry }: { onRetry?: () => void }) {
 export default function PlatformSettingsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? PLATFORM_SETTINGS_INDEX;
   const router = useRouter();
+  useRememberSettingsScope(pathname);
   const { status, actions, retry } = usePlatformSettingsAccess({ fresh: true });
   const isMobile = useIsMobile();
   const currentWorkspaceId = useWorkspaceStore((state) => state.currentWorkspaceId);
@@ -134,9 +137,7 @@ export default function PlatformSettingsLayout({ children }: { children: React.R
   };
 
   const tableLabel = useTablesView((state) => (table ? state.labels[table] : undefined));
-  const headerTitle = showMobileDetail
-    ? (table ? (tableLabel ?? table) : (item?.label ?? 'Platform Settings'))
-    : 'Platform Settings';
+  const detailTitle = table ? (tableLabel ?? table) : (item?.label ?? 'Platform Settings');
 
   const ready = status === 'ready';
   const allowed = ready && (item ? holds(item.needs, actions) : groups.length > 0);
@@ -173,24 +174,14 @@ export default function PlatformSettingsLayout({ children }: { children: React.R
     <JobFailuresContext.Provider value={jobFailures}>
       <SettingsLayoutRoot className="platform-settings-root">
         <div className="org-settings-layout-left">
-          <header className="org-settings-layout-header">
-            <div className="org-settings-layout-header-inner">
-              <button
-                type="button"
-                onClick={handleBack}
-                className="org-settings-back-button"
-                aria-label={showMobileDetail ? 'Back' : 'Back to workspace'}
-              >
-                <ArrowLeft size={20} />
-              </button>
-              <div className="org-settings-layout-header-meta">
-                {!showMobileDetail && (
-                  <ShieldCheck size={16} className="org-settings-layout-header-icon" />
-                )}
-                <h1 className="org-settings-layout-header-title">{headerTitle}</h1>
-              </div>
-            </div>
-          </header>
+          <SettingsShellHeader
+            scopeTitle="Platform Settings"
+            detailTitle={detailTitle}
+            showScopeSwitcher={!showMobileDetail}
+            icon={ShieldCheck}
+            onBack={handleBack}
+            backAriaLabel={showMobileDetail ? 'Back' : 'Back to workspace'}
+          />
 
           <div
             data-org-settings-body=""
