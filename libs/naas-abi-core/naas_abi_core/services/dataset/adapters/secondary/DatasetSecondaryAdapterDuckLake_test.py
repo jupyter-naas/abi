@@ -940,6 +940,69 @@ def test_inlined_row_count_reads_the_spec_from_the_metadata_catalog(
         adapter.inlined_row_count("missing")
 
 
+class _NoTableScan:
+    """A read cursor that refuses ``duckdb_tables()``."""
+
+    def __init__(self, con):
+        self._con = con
+
+    def execute(self, sql, *args, **kwargs):
+        if "duckdb_tables()" in sql:
+            raise AssertionError("listed every table in the lake with duckdb_tables()")
+        return self._con.execute(sql, *args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._con, name)
+
+
+def test_list_reads_the_specs_from_the_metadata_catalog(tmp_path, monkeypatch):
+    """Every ``list()`` filtered ``duckdb_tables()``: seconds a call once the
+    lake holds a few hundred tables, and the NATS dataset listener called it
+    continuously."""
+    adapter = DatasetSecondaryAdapterDuckLake(
+        catalog=f"sqlite:{tmp_path / 'catalog.sqlite'}",
+        data_path=str(tmp_path / "data"),
+    )
+    for namespace, name in (
+        ("analytics", "b"),
+        ("analytics", "a"),
+        ("other", "c"),
+        ("analytics", "gone"),
+        ("dropped", "d"),
+    ):
+        adapter.create(
+            DatasetSpec(
+                name=name,
+                namespace=namespace,
+                columns=(ColumnSpec(name="id", type="string"),),
+            )
+        )
+    adapter.drop("gone", namespace="analytics")
+    adapter.drop("d", namespace="dropped")
+    adapter.query("CREATE TABLE plain (id VARCHAR)", namespace="analytics")
+    expected = {
+        None: adapter.list(),
+        "analytics": adapter.list(namespace="analytics"),
+        "missing": adapter.list(namespace="missing"),
+    }
+    assert [(i.namespace, i.name) for i in expected[None]] == [
+        ("analytics", "a"),
+        ("analytics", "b"),
+        ("other", "c"),
+    ]
+
+    read = adapter._read
+    monkeypatch.setattr(
+        adapter,
+        "_read",
+        lambda operation: read(lambda con: operation(_NoTableScan(con))),
+    )
+
+    assert adapter.list() == expected[None]
+    assert adapter.list(namespace="analytics") == expected["analytics"]
+    assert adapter.list(namespace="missing") == expected["missing"] == []
+
+
 # --- compaction and snapshot expiry ---------------------------------------------------
 
 

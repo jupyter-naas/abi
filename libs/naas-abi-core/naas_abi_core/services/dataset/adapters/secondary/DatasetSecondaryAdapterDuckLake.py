@@ -366,16 +366,25 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
 
     def list(self, *, namespace: str | None = None) -> list[DatasetInfo]:
         def read(con: Any) -> list[DatasetInfo]:
+            # From the metadata catalog, as ``_read_spec``: ``duckdb_tables()``
+            # lists every table in the lake, seconds a call past a few hundred.
+            # A read on its own cursor (``_read``), outside any write transaction.
             snapshot_id = self._current_snapshot(con)
+            metadata = self._ident(f"__ducklake_metadata_{CATALOG_ALIAS}")
             sql = (
-                "SELECT schema_name, table_name, comment FROM duckdb_tables() "
-                "WHERE database_name = ? AND comment LIKE ?"
+                "SELECT s.schema_name, t.table_name, g.value "
+                f"FROM {metadata}.ducklake_table t "  # nosec B608
+                f"JOIN {metadata}.ducklake_schema s ON t.schema_id = s.schema_id "
+                f"JOIN {metadata}.ducklake_tag g ON g.object_id = t.table_id "
+                "AND g.key = 'comment' AND g.end_snapshot IS NULL "
+                "WHERE t.end_snapshot IS NULL AND s.end_snapshot IS NULL "
+                "AND g.value LIKE ?"
             )
-            parameters: list[Any] = [CATALOG_ALIAS, SPEC_COMMENT_PREFIX + "%"]
+            parameters: list[Any] = [SPEC_COMMENT_PREFIX + "%"]
             if namespace is not None:
-                sql += " AND schema_name = ?"
+                sql += " AND s.schema_name = ?"
                 parameters.append(namespace)
-            sql += " ORDER BY schema_name, table_name"
+            sql += " ORDER BY s.schema_name, t.table_name"
             return [
                 self._to_info(self._spec_from_comment(comment), snapshot_id)
                 for _, _, comment in con.execute(sql, parameters).fetchall()
