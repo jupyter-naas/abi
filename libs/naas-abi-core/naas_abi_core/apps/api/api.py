@@ -500,6 +500,46 @@ def get_app() -> FastAPI:
     return app
 
 
+# Uvicorn's levels (uvicorn.config.LOG_LEVELS), and loguru's names for them.
+_UVICORN_LOG_LEVELS = ("critical", "error", "warning", "info", "debug", "trace")
+_LOG_LEVEL_ALIASES = {"warn": "warning", "success": "info", "fatal": "critical"}
+
+
+def _uvicorn_log_level(configured: str | None) -> str:
+    """Uvicorn's log level: ``api.log_level``, else info.
+
+    Neither tied to reload nor to LOG_LEVEL (DEBUG in the local stacks): at
+    debug, uvicorn logs the WebSocket handshake's request headers, session
+    cookies included. Only an explicit ``api.log_level: debug`` does that.
+    """
+    if not configured or not configured.strip():
+        return "info"
+    level = configured.strip().lower()
+    level = _LOG_LEVEL_ALIASES.get(level, level)
+    if level in _UVICORN_LOG_LEVELS:
+        return level
+    logger.warning(
+        f"api: api.log_level={configured!r} is not a uvicorn log level "
+        f"({', '.join(_UVICORN_LOG_LEVELS)}); using info"
+    )
+    return "info"
+
+
+def _reload_enabled(configured: bool) -> bool:
+    """``ABI_API_RELOAD`` when set (``abi dev up`` sets it), else ``api.reload``."""
+    value = os.environ.get("ABI_API_RELOAD", "").strip().lower()
+    if value in ("1", "true", "yes", "on"):
+        return True
+    if value in ("0", "false", "no", "off"):
+        return False
+    if value:
+        logger.warning(
+            f"api: ABI_API_RELOAD={value!r} is neither true nor false; "
+            f"using api.reload ({configured})"
+        )
+    return configured
+
+
 def api():
     print(
         f"[abi-boot] api() entered, starting uvicorn (+{time.monotonic() - _BOOT_T0:.2f}s)",
@@ -508,7 +548,7 @@ def api():
     )
     import uvicorn
 
-    reload_enabled = api_runtime_configuration.reload
+    reload_enabled = _reload_enabled(api_runtime_configuration.reload)
     if _nats_mode and not reload_enabled:
         # NATS gone for good stops this process, so its supervisor restarts it,
         # instead of an engine that serves nothing (naas_abi_sdk.lifeline). Not
@@ -525,10 +565,14 @@ def api():
         "reload": reload_enabled,
         "proxy_headers": True,
         "forwarded_allow_ips": trusted_proxy_ips(),
-        "log_level": "debug" if reload_enabled else "info",
+        "log_level": _uvicorn_log_level(api_runtime_configuration.log_level),
     }
 
     if reload_enabled:
+        logger.warning(
+            "api: auto-reload is on (api.reload or ABI_API_RELOAD): uvicorn watches "
+            "src/ and restarts the engine on every change. For local development only."
+        )
         run_kwargs["app"] = "naas_abi_core.apps.api.api:get_app"
         run_kwargs["factory"] = True
         # Watch application Python under src only. `libs/naas-abi` is a symlink

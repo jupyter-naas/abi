@@ -329,6 +329,11 @@ api:
   description: "API for ABI"
   logo_path: "assets/logo.png"
   favicon_path: "assets/favicon.ico"
+  # Auto-reload on changes under src/: this is the ABI repository's own
+  # development stack. It costs CPU (the reloader rescans src/ all the time)
+  # and keeps a NATS engine running after NATS is gone. Never set it on a
+  # deployed engine.
+  reload: true
   cors_origins:
     - "http://localhost:9879" # ABI core API (backend)
     - "http://localhost:3042" # Nexus web app (frontend)

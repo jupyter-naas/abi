@@ -24,7 +24,8 @@
 ### Server runner
 - `api() -> None`
   - Runs Uvicorn using runtime configuration.
-  - Supports reload mode (uses factory string target `naas_abi_core.apps.api.api:get_app`).
+  - Reload mode only with `api.reload: true` or `ABI_API_RELOAD=true`, which `abi dev up` sets (off by default; uses factory string target `naas_abi_core.apps.api.api:get_app`, watches `src/`, logs a warning at startup). In NATS mode without reload, the process exits when NATS is gone for good (`naas_abi_sdk.lifeline`), so its supervisor restarts it.
+  - Uvicorn's log level is `api.log_level`, `info` when unset; neither reload nor `LOG_LEVEL` changes it.
 
 ### Auth / security
 - `class QueryOrHeaderBearer(HTTPBearer)`
@@ -75,10 +76,12 @@ Loaded via `EngineConfiguration.load_configuration()`:
 - `api_runtime_configuration.logo_path`, `favicon_path`
 - `api_runtime_configuration.cors_origins` (mutated to include `ABI_CORS_EXTRA_ORIGINS`)
 - `api_runtime_configuration.host`, `port`
-- `api_runtime_configuration.reload`
+- `api_runtime_configuration.reload` (default `false`; local development only)
+- `api_runtime_configuration.log_level` (uvicorn's; default `info`)
 
 ### Environment variables
 - `ABI_HOST`, `ABI_PORT`: override configured host/port.
+- `ABI_API_RELOAD`: overrides `api.reload` (`true`/`false`, also `1`/`0`, `yes`/`no`, `on`/`off`); `abi dev up` sets it to `true` unless it is already exported.
 - `ABI_CORS_EXTRA_ORIGINS`: comma-separated extra CORS origins appended at runtime.
 - `FORWARDED_ALLOW_IPS`: forwarded proxy allowlist for Uvicorn; defaults to loopback + private networks.
 - `TEST_INIT=true` or `--test-init`: run `test_init()` instead of starting the server.

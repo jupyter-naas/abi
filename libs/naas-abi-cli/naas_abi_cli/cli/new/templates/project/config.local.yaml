@@ -4,6 +4,12 @@ api:
   description: "API for ABI"
   logo_path: "assets/logo.png"
   favicon_path: "assets/favicon.ico"
+  # Auto-reload on changes under src/ (uvicorn's WatchFiles reloader): off.
+  # `true` while editing src/ in the Docker stack (`abi dev up` turns it on by
+  # itself), never on a deployed engine: it rescans src/ all the time and
+  # keeps a NATS engine running after NATS is gone.
+  # `abi deploy dokploy` copies this file into config.dokploy.yaml.
+  reload: false
   cors_origins:
     - "http://{{ secret.PUBLIC_WEB_HOST }}"
     - "https://{{ secret.PUBLIC_WEB_HOST }}"
