@@ -48,8 +48,8 @@ API=http://localhost:<api port>       # abi dev ports
 time, so it may run again on the same database. It writes every check with its evidence (the
 API's answers) and exits non-zero when one fails. The invitation routes are rate limited (five
 a window per inviting user): the runner waits the window out. Call the venv's Python, not
-`uv run`: the dev API reloads on any change under the worktree, and `uv run` reinstalls the
-editable packages into `.venv`.
+`uv run`: with `api.reload: true`, the dev API reloads on any change under the worktree, and
+`uv run` reinstalls the editable packages into `.venv`.
 
 ### Step 1, the upgrade
 

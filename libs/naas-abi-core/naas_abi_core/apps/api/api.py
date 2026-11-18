@@ -500,6 +500,31 @@ def get_app() -> FastAPI:
     return app
 
 
+# Uvicorn's levels (uvicorn.config.LOG_LEVELS), and loguru's names for them.
+_UVICORN_LOG_LEVELS = ("critical", "error", "warning", "info", "debug", "trace")
+_LOG_LEVEL_ALIASES = {"warn": "warning", "success": "info", "fatal": "critical"}
+
+
+def _uvicorn_log_level(configured: str | None) -> str:
+    """Uvicorn's log level: ``api.log_level``, else info.
+
+    Neither tied to reload nor to LOG_LEVEL (DEBUG in the local stacks): at
+    debug, uvicorn logs the WebSocket handshake's request headers, session
+    cookies included. Only an explicit ``api.log_level: debug`` does that.
+    """
+    if not configured or not configured.strip():
+        return "info"
+    level = configured.strip().lower()
+    level = _LOG_LEVEL_ALIASES.get(level, level)
+    if level in _UVICORN_LOG_LEVELS:
+        return level
+    logger.warning(
+        f"api: api.log_level={configured!r} is not a uvicorn log level "
+        f"({', '.join(_UVICORN_LOG_LEVELS)}); using info"
+    )
+    return "info"
+
+
 def api():
     print(
         f"[abi-boot] api() entered, starting uvicorn (+{time.monotonic() - _BOOT_T0:.2f}s)",
@@ -525,10 +550,14 @@ def api():
         "reload": reload_enabled,
         "proxy_headers": True,
         "forwarded_allow_ips": trusted_proxy_ips(),
-        "log_level": "debug" if reload_enabled else "info",
+        "log_level": _uvicorn_log_level(api_runtime_configuration.log_level),
     }
 
     if reload_enabled:
+        logger.warning(
+            "api: auto-reload is on (api.reload: true): uvicorn watches src/ and "
+            "restarts the engine on every change. For local development only."
+        )
         run_kwargs["app"] = "naas_abi_core.apps.api.api:get_app"
         run_kwargs["factory"] = True
         # Watch application Python under src only. `libs/naas-abi` is a symlink
