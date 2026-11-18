@@ -4,13 +4,22 @@ import { useEffect } from 'react';
 import { ArrowLeft, type LucideIcon } from 'lucide-react';
 import { SettingsScopeSwitcher } from './settings-scope-switcher';
 
-function dialogBlocksEscape(): boolean {
-  if (typeof document === 'undefined') return false;
-  return Boolean(
-    document.querySelector(
-      '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"], dialog[open]'
-    )
-  );
+// Open layers that take Esc for themselves: dialogs, menus, listboxes, popovers.
+const OPEN_LAYER =
+  '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"], dialog[open], ' +
+  '[role="menu"], [role="listbox"], [data-radix-popper-content-wrapper]';
+
+const EDITABLE = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
+
+/**
+ * Whether Esc leaves settings: not when something already handled it, when the
+ * caller is typing in a field, or when a dialog, menu or popover is open.
+ */
+export function escapeLeavesSettings(event: KeyboardEvent, doc: Document = document): boolean {
+  if (event.key !== 'Escape' || event.defaultPrevented) return false;
+  const target = event.target;
+  if (target instanceof Element && target.closest(EDITABLE)) return false;
+  return !doc.querySelector(OPEN_LAYER);
 }
 
 export function SettingsShellHeader({
@@ -34,8 +43,7 @@ export function SettingsShellHeader({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      if (dialogBlocksEscape()) return;
+      if (!escapeLeavesSettings(event)) return;
       event.preventDefault();
       onBack();
     };

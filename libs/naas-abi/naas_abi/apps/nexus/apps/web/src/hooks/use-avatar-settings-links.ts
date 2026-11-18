@@ -55,7 +55,7 @@ export function useAvatarSettingsLinks(): AvatarSettingsLinks {
     let cancelled = false;
     (async () => {
       try {
-        const response = await authFetch('/api/organizations/');
+        const response = await authFetch('/api/organizations');
         if (!response.ok) {
           if (!cancelled) setOrganization(null);
           return;

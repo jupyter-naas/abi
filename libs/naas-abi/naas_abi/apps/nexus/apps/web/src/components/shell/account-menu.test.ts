@@ -35,23 +35,30 @@ afterEach(async () => {
   mounted = null;
 });
 
-async function menuFor(user: string, orgRole: string): Promise<string> {
+async function menuFor(user: string, orgRole: string): Promise<HTMLElement> {
   state.user = user;
   state.answers = {
-    '/api/organizations': [{ id: 'acme', current_user_role: orgRole }],
+    '/api/organizations': [{ id: 'acme', name: 'Acme', current_user_role: orgRole }],
     [ACCESS_ACME]: { actions: { 'iam:ListPolicies': false } },
   };
   mounted = await mount(AccountMenuPanel, { user: { name: user, email: `${user}@example.com` }, onClose: () => undefined });
   await mounted.flush();
   await mounted.flush();
-  return mounted.host.textContent ?? '';
+  return mounted.host;
+}
+
+function organizationLink(menu: HTMLElement): HTMLAnchorElement | null {
+  return menu.querySelector<HTMLAnchorElement>('a[href^="/organizations/acme/settings"]');
 }
 
 describe('the account menu', () => {
-  it('shows Organization Settings to an organization admin', async () => {
-    expect(await menuFor('olivia', 'admin')).toContain('Organization Settings');
+  it('links Organization to an organization admin', async () => {
+    const link = organizationLink(await menuFor('olivia', 'admin'));
+    expect(link?.textContent).toContain('Organization');
   });
   it('hides it from a workspace owner who is a member of the organization', async () => {
-    expect(await menuFor('bob', 'member')).not.toContain('Organization Settings');
+    const menu = await menuFor('bob', 'member');
+    expect(organizationLink(menu)).toBeNull();
+    expect(menu.textContent).toContain('Account');
   });
 });

@@ -41,7 +41,7 @@ export function SettingsScopeSwitcher({
     let cancelled = false;
     (async () => {
       try {
-        const response = await authFetch('/api/organizations/');
+        const response = await authFetch('/api/organizations');
         if (!response.ok) return;
         const orgs = (await response.json()) as ListedOrg[];
         const open = await openableOrganizations(
