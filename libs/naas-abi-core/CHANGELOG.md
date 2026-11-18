@@ -24,6 +24,17 @@
 
 <!-- version list -->
 
+## v3.6.4 (2026-11-18)
+
+### Bug Fixes
+
+- **api**: No auto-reload by default, uvicorn log level of its own
+  ([`27b2f69`](https://github.com/jupyter-naas/abi/commit/27b2f69e5f53fed06a17f92e0f8316229025bb70))
+
+- **dev**: Abi dev up keeps the API's auto-reload
+  ([`d492a69`](https://github.com/jupyter-naas/abi/commit/d492a69b0c81eb3934e67ae4e6bb32cbf218d7d1))
+
+
 ## v3.6.3 (2026-11-18)
 
 ### Performance Improvements
