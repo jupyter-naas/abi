@@ -24,6 +24,17 @@
 
 <!-- version list -->
 
+## v4.1.2 (2026-11-18)
+
+### Bug Fixes
+
+- **nexus**: Mirror only each workspace's default agent into the identity graph
+  ([`9bd4d62`](https://github.com/jupyter-naas/abi/commit/9bd4d62ba0ae94f28b9625b286e4f1dc794df27f))
+
+- **nexus**: Rebuild the identity graph in batches of 2000 triples
+  ([`9f2460c`](https://github.com/jupyter-naas/abi/commit/9f2460cc286fed09431d4bd134d7e790688aebd0))
+
+
 ## v4.1.1 (2026-11-17)
 
 ### Bug Fixes
