@@ -55,7 +55,8 @@ class HealthServer:
             try:
                 await writer.wait_closed()
             except (ConnectionError, RuntimeError):
-                return
+                # The peer is already gone: nothing is left to close.
+                pass
 
 
 async def _read_request(reader: asyncio.StreamReader) -> bytes:
