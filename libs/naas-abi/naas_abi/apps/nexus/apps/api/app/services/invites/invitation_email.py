@@ -65,6 +65,14 @@ def render_invitation(mail: InvitationMail, *, app_name: str) -> tuple[str, str,
             f"Sign in with your {mail.provider.display_name} account using this "
             "address. Your account is managed there, so there is nothing to create."
         )
+    elif not mail.account_made:
+        # No account was made for them at the provider: do not promise a code that
+        # a provider without self-signup never sends.
+        how = (
+            f"Sign in with {mail.provider.display_name} using this address. No account "
+            "was created for you there: if you have none, ask an administrator of "
+            f"{app_name} to create it before you sign in."
+        )
     else:
         how = (
             f"Sign in with {mail.provider.display_name} using this address: "

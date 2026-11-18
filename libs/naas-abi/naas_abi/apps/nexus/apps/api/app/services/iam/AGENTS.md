@@ -493,9 +493,14 @@ chain from an old-grammar world (`testing.LegacyNexusIam`) through their move an
   platform admin. `builtin.platform.viewer`, `builtin.platform.member` and every module's bootstrap policy
   carry an unconditional Deny of `discovery:OpenApp` on `app/*/idp/admin`; only the engine, which serves the
   IdP, opens it.
-- **Who makes accounts in the provider's directory.** Every user may create an organization
-  (`CreateOrganization` is a platform member's; a setting to turn that off does not exist), and its owner may invite, so the gate that holds is `identity:ProvisionUser` on the
-  provider, decided as the inviting user. See `services/invites/AGENTS.md`.
+- **Who makes accounts in the provider's directory.** An invitation IAM authorized: the route's
+  `InviteOrganizationMember` / `InviteWorkspaceMember` at its scope, then its pending grants accepted on the inviting
+  person's behalf. Nexus then makes the account as `api` (`identity:ProvisionUser` is `builtin.api`'s), so an
+  organization admin or a workspace owner needs no right at the provider. Every user may create an organization
+  (`CreateOrganization` is a platform member's; a setting to turn that off does not exist) and invite from it, so what
+  bounds it is the invite routes' rate limits and `invitation_mails_per_day`; the account's email stays unverified
+  until a code mailed to the address proves it. The platform-level invite (no grant) keeps to the inviting user's own
+  `identity:ProvisionUser`. See `services/invites/AGENTS.md`.
 - **Smaller guarantees.** `is_superadmin` is asked of IAM where it is shown (`/auth/me`, `/admin/me`,
   the session and sign-in responses), not on every request; only an absent IAM answers "not an admin",
   any other failure surfaces. A workspace's creation places that workspace's resources alone; the shared

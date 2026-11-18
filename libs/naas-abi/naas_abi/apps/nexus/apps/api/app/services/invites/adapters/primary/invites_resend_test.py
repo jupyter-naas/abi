@@ -5,6 +5,7 @@ rate limiter (SQLite) and IAM."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from types import SimpleNamespace
 from typing import Any
 
@@ -156,3 +157,24 @@ def test_the_invitation_subject_keeps_tenant_text_out() -> None:
     # In the body, what the organization's people wrote is quoted and cut short.
     assert f"“{ORG_NAME}”" in body
     assert "x" * 100 not in body and "x" * 100 not in html
+
+
+def test_the_invitation_promises_a_code_only_for_an_account_the_provider_has() -> None:
+    """The built-in IdP mails a code to an account it holds; with signup off it mails
+    none to an address it does not know. A mail for an account the invitation did not
+    make (the platform's invite by someone who may not make one) promises no code."""
+    made = InvitationMail(
+        to_email="someone@example.com",
+        provider=BUILTIN,
+        inviter_name="Alice",
+        organization_name=None,
+        organization_role=None,
+        workspace_name=None,
+        workspace_role=None,
+        sign_in_url="https://web/login",
+    )
+    _, body, _ = render_invitation(made, app_name="Nexus")
+    assert "sign-in code" in body
+    _, body, html = render_invitation(replace(made, account_made=False), app_name="Nexus")
+    assert "sign-in code" not in body and "sign-in code" not in html
+    assert "no account" in body.lower()

@@ -700,74 +700,63 @@ async def _invite(carol, org_id: str, email: str):
 
 
 @pytest.mark.asyncio
-async def test_an_organization_anyone_made_creates_no_accounts_in_the_providers_directory(
-    nexus, idp, alice
+async def test_an_organization_admins_invitation_makes_an_account_they_sign_in_with(
+    nexus, idp, mail, alice
 ):
-    _, iam, sessions = nexus
-    carol, org_id = await _carol_with_her_own_org(idp, sessions)
-    sent = await _invite(carol, org_id, "victim@corp.example")
-    assert sent.status_code == 200, sent.text
-    result = sent.json()
-    assert result["status"] == "invited" and result["provisioning_skipped"] is True
-    assert result["user_created"] is False
-    assert idp.service.find_user("victim@corp.example") is None
-    # The grant waits for whoever signs in with that address, as for a provider
-    # that manages its own people.
-    with as_service_account("engine"):
-        pending = iam.list_pending_grants(provider="builtin", email="victim@corp.example")
-    assert {(g.policy_id, g.scope) for g in pending} == {
-        (roles.MEMBER, f"abi:nexus:organization/{org_id}")
-    }
-
-
-@pytest.mark.asyncio
-async def test_a_verified_domain_keeps_provisioning_to_the_inviters_own_right(nexus, idp, alice):
-    from naas_abi.apps.nexus.apps.api.app.models import OrganizationDomainModel
-
-    _, _, sessions = nexus
-    carol, org_id = await _carol_with_her_own_org(idp, sessions)
-    async with sessions() as db:
-        db.add(
-            OrganizationDomainModel(
-                id="dom-1",
-                organization_id=org_id,
-                domain="corp.example",
-                provider="builtin",
-                is_verified=True,
-            )
-        )
-        # Another organization's verified domain proves nothing for Carol's.
-        db.add(
-            OrganizationDomainModel(
-                id="dom-2",
-                organization_id=ORG,
-                domain="other.example",
-                provider="builtin",
-                is_verified=True,
-            )
-        )
-        await db.commit()
-    # Carol holds no right at the provider: her organization's verified domain
-    # gives her none, and the grant waits for whoever signs in with the address.
-    mine = await _invite(carol, org_id, "bob@corp.example")
-    assert mine.status_code == 200, mine.text
-    assert mine.json()["user_created"] is False and mine.json()["provisioning_skipped"] is True
-    assert idp.service.find_user("bob@corp.example") is None
-    theirs = await _invite(carol, org_id, "eve@other.example")
-    assert theirs.json()["provisioning_skipped"] is True
-    assert idp.service.find_user("eve@other.example") is None
-
-
-@pytest.mark.asyncio
-async def test_a_user_who_holds_the_right_provisions_at_the_provider(nexus, idp, alice):
-    _, iam, sessions = nexus
-    carol, org_id = await _carol_with_her_own_org(idp, sessions)
-    me = (await carol.get("/api/auth/me")).json()
-    allow_provisioning(iam, me["id"])
+    """Carol owns her organization and holds no ``identity:ProvisionUser``. The
+    invitation IAM authorized makes the account all the same (as Nexus): with the
+    provider's self-signup off, as here, the person could otherwise never get a code
+    (#1520)."""
+    _, iam, _ = nexus
+    carol, org_id = await _carol_with_her_own_org(idp, None)
     sent = await _invite(carol, org_id, "dana@corp.example")
     assert sent.status_code == 200, sent.text
-    assert sent.json()["user_created"] is True and sent.json()["provisioning_skipped"] is False
+    result = sent.json()
+    assert result["status"] == "invited" and result["user_created"] is True
+    assert result["provisioning_skipped"] is False
     assert idp.service.find_user("dana@corp.example") is not None
+    ((_, text),) = mail.kept("dana@corp.example")
+    assert "sign-in code" in text
+    # Dana asks for a code, gets it and signs in, a member of Carol's organization.
+    dana = await sign_in_as(idp, "dana@corp.example")
+    me = (await dana.get("/api/auth/me")).json()
+    assert await MEMBERSHIPS.role_at(me["id"], org_container(org_id)) == "member"
+    with as_service_account("engine"):
+        assert iam.list_pending_grants(email="dana@corp.example") == []
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_owners_invitation_makes_the_account(nexus, idp, alice):
+    owner = await sign_in(idp, idp.create_user("wowner@example.com"))
+    me = (await owner.get("/api/auth/me")).json()
+    await MEMBERSHIPS.grant(me["id"], "owner", workspace_container(ORG, WS))
+    sent = await owner.post(
+        f"/api/workspaces/{WS}/members/invite", json={"email": "erin@example.com", "role": "member"}
+    )
+    assert sent.status_code == 200, sent.text
+    assert sent.json()["user_created"] is True and sent.json()["provisioning_skipped"] is False
+    assert idp.service.find_user("erin@example.com") is not None
+
+
+@pytest.mark.asyncio
+async def test_an_invitation_iam_refuses_makes_no_account(nexus, idp, alice):
+    """The authorized invitation is the warrant, and nothing else: Carol may not
+    invite to an organization she has no role in, nor a viewer to their workspace."""
+    _, iam, _ = nexus
+    carol, _ = await _carol_with_her_own_org(idp, None)
+    refused = await _invite(carol, ORG, "victim@corp.example")
+    assert refused.status_code == 403, refused.text
+    viewer = await sign_in(idp, idp.create_user("viewer@example.com"))
+    me = (await viewer.get("/api/auth/me")).json()
+    await MEMBERSHIPS.grant(me["id"], "viewer", workspace_container(ORG, WS))
+    also = await viewer.post(
+        f"/api/workspaces/{WS}/members/invite",
+        json={"email": "victim@corp.example", "role": "viewer"},
+    )
+    assert also.status_code == 403, also.text
+    assert idp.service.find_user("victim@corp.example") is None
+    with as_service_account("engine"):
+        assert iam.list_pending_grants(email="victim@corp.example") == []
 
 
 # -- invitations that carry an organization role ---------------------------------------
