@@ -101,6 +101,12 @@ jobs:
 
     steps:
 
+      # Each upload runs whatever failed before it, except a failure of one of
+      # its own dependencies (transitively): a package is never on PyPI before
+      # what it requires. A failing upload (e.g. a missing trusted publisher)
+      # still fails the job, and no longer skips the packages that do not
+      # depend on it. Dependencies: proto <- sdk <- {idp, core};
+      # core <- marketplace <- naas-abi <- cli.
       - name: Download | The release job's built files
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
@@ -108,44 +114,58 @@ jobs:
           path: libs
 
       - name: Publish | Upload naas-abi-proto to PyPI
+        id: naas_abi_proto
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
-        if: contains(format(' {0} ', needs.release.outputs.released), ' naas-abi-proto ')
+        if: >-
+          !cancelled() && contains(format(' {0} ', needs.release.outputs.released), ' naas-abi-proto ')
         with:
           packages-dir: libs/naas-abi-proto/dist
 
       - name: Publish | Upload naas-abi-sdk to PyPI
+        id: naas_abi_sdk
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
-        if: contains(format(' {0} ', needs.release.outputs.released), ' naas-abi-sdk ')
+        if: >-
+          !cancelled() && contains(format(' {0} ', needs.release.outputs.released), ' naas-abi-sdk ') && steps.naas_abi_proto.outcome != 'failure'
         with:
           packages-dir: libs/naas-abi-sdk/dist
 
       - name: Publish | Upload naas-abi-idp to PyPI
+        id: naas_abi_idp
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
-        if: contains(format(' {0} ', needs.release.outputs.released), ' naas-abi-idp ')
+        if: >-
+          !cancelled() && contains(format(' {0} ', needs.release.outputs.released), ' naas-abi-idp ') && steps.naas_abi_proto.outcome != 'failure' && steps.naas_abi_sdk.outcome != 'failure'
         with:
           packages-dir: libs/naas-abi-idp/dist
 
       - name: Publish | Upload naas-abi-core to PyPI
+        id: naas_abi_core
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
-        if: contains(format(' {0} ', needs.release.outputs.released), ' naas-abi-core ')
+        if: >-
+          !cancelled() && contains(format(' {0} ', needs.release.outputs.released), ' naas-abi-core ') && steps.naas_abi_proto.outcome != 'failure' && steps.naas_abi_sdk.outcome != 'failure'
         with:
           packages-dir: libs/naas-abi-core/dist
 
       - name: Publish | Upload naas-abi-marketplace to PyPI
+        id: naas_abi_marketplace
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
-        if: contains(format(' {0} ', needs.release.outputs.released), ' naas-abi-marketplace ')
+        if: >-
+          !cancelled() && contains(format(' {0} ', needs.release.outputs.released), ' naas-abi-marketplace ') && steps.naas_abi_proto.outcome != 'failure' && steps.naas_abi_sdk.outcome != 'failure' && steps.naas_abi_core.outcome != 'failure'
         with:
           packages-dir: libs/naas-abi-marketplace/dist
 
       - name: Publish | Upload naas-abi to PyPI
+        id: naas_abi
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
-        if: contains(format(' {0} ', needs.release.outputs.released), ' naas-abi ')
+        if: >-
+          !cancelled() && contains(format(' {0} ', needs.release.outputs.released), ' naas-abi ') && steps.naas_abi_proto.outcome != 'failure' && steps.naas_abi_sdk.outcome != 'failure' && steps.naas_abi_core.outcome != 'failure' && steps.naas_abi_marketplace.outcome != 'failure'
         with:
           packages-dir: libs/naas-abi/dist
 
       - name: Publish | Upload naas-abi-cli to PyPI
+        id: naas_abi_cli
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
-        if: contains(format(' {0} ', needs.release.outputs.released), ' naas-abi-cli ')
+        if: >-
+          !cancelled() && contains(format(' {0} ', needs.release.outputs.released), ' naas-abi-cli ') && steps.naas_abi_proto.outcome != 'failure' && steps.naas_abi_sdk.outcome != 'failure' && steps.naas_abi_core.outcome != 'failure' && steps.naas_abi_marketplace.outcome != 'failure' && steps.naas_abi.outcome != 'failure'
         with:
           packages-dir: libs/naas-abi-cli/dist
 
