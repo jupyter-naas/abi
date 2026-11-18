@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import ipaddress
 import json
 import time
 from urllib.parse import urlparse
@@ -115,3 +116,36 @@ def parse_dev_app_urls(raw: str | None) -> dict[str, str]:
         if app_id and target:
             out[app_id] = target
     return out
+
+
+def is_loopback_host(host: str | None) -> bool:
+    """``localhost``, a ``*.localhost`` name or a loopback address."""
+    name = (host or "").strip().lower().rstrip(".")
+    if name.startswith("[") and name.endswith("]"):
+        name = name[1:-1]
+    if name == "localhost" or name.endswith(".localhost"):
+        return True
+    try:
+        return ipaddress.ip_address(name).is_loopback
+    except ValueError:
+        return False
+
+
+def dev_app_url(
+    app_id: str,
+    *,
+    dev_app_urls: str | None,
+    nexus_env: str | None,
+    frontend_url: str | None,
+) -> str | None:
+    """The dev origin ``NEXUS_DEV_APP_URLS`` names for ``app_id`` on a local Nexus, else None.
+
+    ``nexus_env`` is ``local`` by default on every install, deployed ones
+    included, so it is not enough alone: the Nexus web app (``frontend_url``)
+    must also be on a loopback host, which no deployed Nexus is.
+    """
+    if str(nexus_env or "").strip().lower() != "local":
+        return None
+    if not is_loopback_host(urlparse(frontend_url or "").hostname):
+        return None
+    return parse_dev_app_urls(dev_app_urls).get(app_id)
