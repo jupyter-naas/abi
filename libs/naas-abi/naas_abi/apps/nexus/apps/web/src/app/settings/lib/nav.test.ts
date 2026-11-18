@@ -2,9 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   firstPlatformSettingsPath,
   holds,
+  laysOutOwnPanes,
+  NEXUS_TABLES_ITEM,
+  ORGANIZATIONS_ITEM,
   parsePlatformSettingsRoute,
   platformSettingsGroups,
   platformSettingsItemFor,
+  ROLES_ITEM,
+  USERS_ITEM,
   visiblePlatformSettingsGroups,
   type PlatformActions,
 } from './nav';
@@ -212,5 +217,21 @@ describe('parsePlatformSettingsRoute', () => {
     expect(platformSettingsItemFor('/settings/data/documents?item=ns%2Fa')?.id).toBe('service-document');
     expect(platformSettingsItemFor('/settings/systemic')).toBeNull();
     expect(platformSettingsItemFor('/settings')).toBeNull();
+  });
+});
+
+describe('laysOutOwnPanes', () => {
+  it('keeps the margins of the organization pages on Organizations and Users', () => {
+    expect(laysOutOwnPanes(ORGANIZATIONS_ITEM)).toBe(false);
+    expect(laysOutOwnPanes(USERS_ITEM)).toBe(false);
+  });
+
+  it('lets Roles & permissions and the System pages lay out their own panes', () => {
+    expect(laysOutOwnPanes(ROLES_ITEM)).toBe(true);
+    expect(laysOutOwnPanes({ id: 'overview' })).toBe(true);
+  });
+
+  it('leaves Nexus tables to their own layout', () => {
+    expect(laysOutOwnPanes(NEXUS_TABLES_ITEM)).toBe(false);
   });
 });

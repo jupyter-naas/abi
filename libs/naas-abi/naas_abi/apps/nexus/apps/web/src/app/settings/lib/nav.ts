@@ -166,6 +166,16 @@ export const ROLES_ITEM: PlatformSettingsNavItem = {
 
 // Discovery sits by Modules, Bus by NATS and the Event store by Events: each shows the
 // same things as its neighbour, until the two pages are one.
+/** Pages laid out like the organization's settings pages: padded, width capped. The
+ * other pages (System, Activity, Resources, Data, Roles & permissions) lay out their
+ * own panes edge to edge; Nexus tables have their own layout. */
+const PADDED_ITEM_IDS: ReadonlySet<string> = new Set([ORGANIZATIONS_ITEM.id, USERS_ITEM.id]);
+
+/** Whether a page lays out its own panes edge to edge (no padding, no width cap). */
+export function laysOutOwnPanes(item: Pick<PlatformSettingsNavItem, 'id'>): boolean {
+  return item.id !== NEXUS_TABLES_ITEM.id && !PADDED_ITEM_IDS.has(item.id);
+}
+
 export const platformSettingsGroups: PlatformSettingsNavGroup[] = [
   { label: 'Administration', items: [ORGANIZATIONS_ITEM, USERS_ITEM, ROLES_ITEM] },
   {

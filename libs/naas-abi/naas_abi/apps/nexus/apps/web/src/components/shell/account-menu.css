@@ -1,0 +1,66 @@
+/* Avatar menu: one type size for the whole panel (12px / --font-size-xs) */
+
+.account-menu-panel {
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-xs);
+}
+
+.account-menu-header {
+  padding: var(--space-3) var(--space-4);
+}
+
+.account-menu-header-name,
+.account-menu-header-email,
+.account-menu-settings-item,
+.account-menu-item {
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.account-menu-body {
+  padding: var(--space-2) 0;
+}
+
+.account-menu-settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0 0 var(--space-1);
+  padding: 0 0 var(--space-1);
+}
+
+.account-menu-settings-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-4);
+  color: var(--foreground-hex);
+  text-decoration: none;
+  transition: background-color 0.15s ease;
+}
+
+.account-menu-settings-item:hover {
+  background-color: var(--muted-bg-hex);
+}
+
+.account-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  color: var(--foreground-hex);
+  text-decoration: none;
+  transition: background-color 0.15s ease;
+}
+
+.account-menu-item:hover {
+  background-color: var(--muted-bg-hex);
+}
+
+button.account-menu-item {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
