@@ -1,21 +1,17 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import Link from 'next/link';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { Check, ChevronDown, ExternalLink, type LucideIcon } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { visiblePlatformSettingsGroups } from '@/app/settings/lib/nav';
-import { useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
-import { authFetch } from '@/stores/auth';
-import { openableOrganizations } from '@/hooks/use-organization-settings-access';
+import { useOpenableOrganizations } from '@/hooks/use-openable-organizations';
 import { usePlatformSettingsAccess } from '@/hooks/use-platform-settings-access';
 import { settingsScopeFromPathname } from '@/lib/settings-scope-path';
 import { buildSettingsScopeMenuEntries } from './settings-scope-list';
 import './settings-scope-switcher.css';
-
-type ListedOrg = { id: string; name: string; current_user_role?: string | null };
 
 export function SettingsScopeSwitcher({
   title,
@@ -25,7 +21,6 @@ export function SettingsScopeSwitcher({
   icon?: LucideIcon;
 }) {
   const pathname = usePathname();
-  const user = useAuthStore((s) => s.user);
   const currentScope = useMemo(() => settingsScopeFromPathname(pathname), [pathname]);
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const workspaces = useWorkspaceStore((s) => s.workspaces);
@@ -35,30 +30,8 @@ export function SettingsScopeSwitcher({
     platformSettings.status === 'ready' &&
     visiblePlatformSettingsGroups(platformSettings.actions).length > 0;
 
-  const [organizations, setOrganizations] = useState<ListedOrg[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const response = await authFetch('/api/organizations');
-        if (!response.ok) return;
-        const orgs = (await response.json()) as ListedOrg[];
-        const open = await openableOrganizations(
-          orgs.map((o) => ({ id: o.id, currentUserRole: o.current_user_role ?? null }))
-        );
-        if (!cancelled) {
-          const names = new Map(orgs.map((o) => [o.id, o.name]));
-          setOrganizations(open.map((o) => ({ id: o.id, name: names.get(o.id) ?? o.id })));
-        }
-      } catch {
-        if (!cancelled) setOrganizations([]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id]);
+  // Shared with the avatar menu: one read per user, kept across scope switches.
+  const { orgs: organizations } = useOpenableOrganizations();
 
   if (!currentScope || currentScope.kind === 'workspace') return null;
 

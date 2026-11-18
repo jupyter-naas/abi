@@ -1,96 +1,77 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { orgSettingsIndexPath } from '@/app/organizations/[orgId]/settings/lib/nav';
-import { authFetch, useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
-import {
-  openableOrganizations,
-  useOrganizationSettingsAccess,
-} from '@/hooks/use-organization-settings-access';
+import { useOpenableOrganizations } from '@/hooks/use-openable-organizations';
 import { usePlatformSettingsAccess } from '@/hooks/use-platform-settings-access';
 import { firstPlatformSettingsPath, PLATFORM_SETTINGS_INDEX, visiblePlatformSettingsGroups } from '@/app/settings/lib/nav';
 import { settingsScopeReturnPath } from '@/lib/settings-scope-path';
 
-type ListedOrg = { id: string; name: string; current_user_role?: string | null };
+export type AvatarSettingsLink = { label: string; href: string };
+
+/** A scope whose access is still being read shows as `loading`; refused, it is null. */
+export type AvatarSettingsEntry = AvatarSettingsLink | 'loading' | null;
 
 export type AvatarSettingsLinks = {
-  account: { label: string; href: string };
-  organization: { label: string; href: string } | null;
-  platform: { label: string; href: string } | null;
+  account: AvatarSettingsLink;
+  organization: AvatarSettingsEntry;
+  platform: AvatarSettingsEntry;
 };
 
 /**
- * Avatar menu destinations: Account, Organization, Platform (remembered paths).
- * and the same remembered paths as the settings scope switcher.
+ * Avatar menu destinations: Account, Organization, Platform, at the same remembered
+ * paths as the settings scope switcher. Both access reads are shared stores, so opening
+ * the menu again asks nothing new; mounting the avatar button warms them
+ * (`useWarmAvatarSettingsLinks`).
  */
 export function useAvatarSettingsLinks(): AvatarSettingsLinks {
-  const userId = useAuthStore((s) => s.user?.id);
-  const canOrganization = useOrganizationSettingsAccess();
+  const organizations = useOpenableOrganizations();
   const platformSettings = usePlatformSettingsAccess();
-  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const workspaceOrgId = useWorkspaceStore((s) =>
     s.workspaces.find((w) => w.id === s.currentWorkspaceId)?.organizationId
   );
 
-  const [organization, setOrganization] = useState<AvatarSettingsLinks['organization']>(null);
+  let organization: AvatarSettingsEntry = null;
+  if (organizations.status === 'checking') {
+    organization = 'loading';
+  } else {
+    const open = organizations.orgs;
+    const pick =
+      (workspaceOrgId && open.find((o) => o.id === workspaceOrgId)) ||
+      (open.length === 1 ? open[0] : null);
+    if (pick) {
+      organization = {
+        label: 'Organization',
+        href: settingsScopeReturnPath({ kind: 'organization', orgId: pick.id }, orgSettingsIndexPath(pick.id)),
+      };
+    }
+  }
 
-  const accountHref = settingsScopeReturnPath({ kind: 'account' }, '/account/profile');
-
-  const showPlatform =
+  let platform: AvatarSettingsEntry = null;
+  if (platformSettings.status === 'checking') {
+    platform = 'loading';
+  } else if (
     platformSettings.status === 'ready' &&
-    visiblePlatformSettingsGroups(platformSettings.actions).length > 0;
-  const platformHref = showPlatform
-    ? settingsScopeReturnPath(
+    visiblePlatformSettingsGroups(platformSettings.actions).length > 0
+  ) {
+    platform = {
+      label: 'Platform',
+      href: settingsScopeReturnPath(
         { kind: 'platform' },
         firstPlatformSettingsPath(platformSettings.actions) ?? PLATFORM_SETTINGS_INDEX
-      )
-    : null;
-
-  useEffect(() => {
-    if (!canOrganization) {
-      setOrganization(null);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const response = await authFetch('/api/organizations');
-        if (!response.ok) {
-          if (!cancelled) setOrganization(null);
-          return;
-        }
-        const orgs = (await response.json()) as ListedOrg[];
-        const open = await openableOrganizations(
-          orgs.map((o) => ({ id: o.id, currentUserRole: o.current_user_role ?? null }))
-        );
-        if (cancelled) return;
-        const pick =
-          (workspaceOrgId && open.find((o) => o.id === workspaceOrgId)) ??
-          (open.length === 1 ? open[0] : null);
-        if (!pick) {
-          setOrganization(null);
-          return;
-        }
-        setOrganization({
-          label: 'Organization',
-          href: settingsScopeReturnPath(
-            { kind: 'organization', orgId: pick.id },
-            orgSettingsIndexPath(pick.id)
-          ),
-        });
-      } catch {
-        if (!cancelled) setOrganization(null);
-      }
-    })();
-    return () => {
-      cancelled = true;
+      ),
     };
-  }, [canOrganization, workspaceOrgId, userId]);
+  }
 
   return {
-    account: { label: 'Account', href: accountHref },
+    account: { label: 'Account', href: settingsScopeReturnPath({ kind: 'account' }, '/account/profile') },
     organization,
-    platform: platformHref ? { label: 'Platform', href: platformHref } : null,
+    platform,
   };
+}
+
+/** Start both access reads when the avatar button mounts, before the menu opens. */
+export function useWarmAvatarSettingsLinks(): void {
+  useOpenableOrganizations();
+  usePlatformSettingsAccess();
 }

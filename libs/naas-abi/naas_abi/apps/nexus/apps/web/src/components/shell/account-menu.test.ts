@@ -6,6 +6,8 @@ const state = vi.hoisted(() => ({
   user: 'olivia',
   answers: {} as Record<string, unknown>,
   opensWorkspaceSettings: false,
+  hang: false,
+  platformStatus: 'ready' as 'ready' | 'checking',
 }));
 
 vi.mock('next/link', async () => {
@@ -17,7 +19,11 @@ vi.mock('next/link', async () => {
 });
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: () => undefined }) }));
 vi.mock('@/hooks/use-platform-settings-access', () => ({
-  usePlatformSettingsAccess: () => ({ status: 'ready', actions: {}, retry: () => undefined }),
+  usePlatformSettingsAccess: () => ({
+    status: state.platformStatus,
+    actions: state.platformStatus === 'ready' ? {} : null,
+    retry: () => undefined,
+  }),
 }));
 vi.mock('@/hooks/use-workspace-settings-access', () => ({
   useOpensWorkspaceSettings: () => state.opensWorkspaceSettings,
@@ -27,7 +33,9 @@ vi.mock('@/stores/auth', async (importOriginal) => ({
   useAuthStore: (select: (s: unknown) => unknown) =>
     select({ user: { id: state.user }, logout: () => undefined }),
   authFetch: async (url: string) =>
-    url in state.answers
+    state.hang
+      ? new Promise<Response>(() => undefined)
+      : url in state.answers
       ? new Response(JSON.stringify(state.answers[url]), { status: 200 })
       : new Response('{}', { status: 403 }),
 }));
@@ -42,6 +50,8 @@ afterEach(async () => {
   await mounted?.unmount();
   mounted = null;
   state.opensWorkspaceSettings = false;
+  state.hang = false;
+  state.platformStatus = 'ready';
 });
 
 async function menuFor(user: string, orgRole: string): Promise<HTMLElement> {
@@ -92,5 +102,16 @@ describe('Infrastructure in the account menu', () => {
     const menu = await menuFor('bob', 'member');
     expect(items(menu)).not.toContain('Infrastructure');
     expect(items(menu)).toContain('Help');
+  });
+});
+
+describe('the settings entries while their access is read', () => {
+  it('shows Organization and Platform as busy rows, not links, until they answer', async () => {
+    state.hang = true;
+    state.platformStatus = 'checking';
+    const menu = await menuFor('carol', 'admin');
+    const busy = [...menu.querySelectorAll('[aria-busy="true"]')].map((el) => el.textContent?.trim());
+    expect(busy).toEqual(['Organization', 'Platform']);
+    expect(menu.querySelector('a[href^="/organizations/"]')).toBeNull();
   });
 });

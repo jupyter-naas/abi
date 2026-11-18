@@ -1,11 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { Blocks, Building2, HelpCircle, LogOut, ShieldCheck, User } from 'lucide-react';
+import { Blocks, Building2, HelpCircle, LogOut, ShieldCheck, User, type LucideIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
-import { useAvatarSettingsLinks } from '@/hooks/use-avatar-settings-links';
+import { useAvatarSettingsLinks, type AvatarSettingsEntry } from '@/hooks/use-avatar-settings-links';
 import { useOpensWorkspaceSettings } from '@/hooks/use-workspace-settings-access';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { getWorkspacePath } from './sidebar/utils';
@@ -42,6 +42,40 @@ export function UserAvatar({
         <span className="text-xs font-medium">{name.charAt(0) || 'U'}</span>
       )}
     </span>
+  );
+}
+
+/** One settings scope of the menu: a link, a muted row while its access is read, or nothing. */
+function SettingsScopeItem({
+  entry,
+  label,
+  icon: Icon,
+  onClose,
+}: {
+  entry: AvatarSettingsEntry;
+  label: string;
+  icon: LucideIcon;
+  onClose: () => void;
+}) {
+  if (entry === null) return null;
+  if (entry === 'loading') {
+    return (
+      <span
+        role="menuitem"
+        aria-disabled="true"
+        aria-busy="true"
+        className="account-menu-settings-item account-menu-settings-item-loading"
+      >
+        <Icon size={14} className="shrink-0 text-muted-foreground" />
+        {label}
+      </span>
+    );
+  }
+  return (
+    <Link href={entry.href} role="menuitem" onClick={onClose} className="account-menu-settings-item">
+      <Icon size={14} className="shrink-0 text-muted-foreground" />
+      {entry.label}
+    </Link>
   );
 }
 
@@ -96,28 +130,8 @@ export function AccountMenuPanel({
             <User size={14} className="shrink-0 text-muted-foreground" />
             {links.account.label}
           </Link>
-          {links.organization && (
-            <Link
-              href={links.organization.href}
-              role="menuitem"
-              onClick={onClose}
-              className="account-menu-settings-item"
-            >
-              <Building2 size={14} className="shrink-0 text-muted-foreground" />
-              {links.organization.label}
-            </Link>
-          )}
-          {links.platform && (
-            <Link
-              href={links.platform.href}
-              role="menuitem"
-              onClick={onClose}
-              className="account-menu-settings-item"
-            >
-              <ShieldCheck size={14} className="shrink-0 text-muted-foreground" />
-              {links.platform.label}
-            </Link>
-          )}
+          <SettingsScopeItem entry={links.organization} label="Organization" icon={Building2} onClose={onClose} />
+          <SettingsScopeItem entry={links.platform} label="Platform" icon={ShieldCheck} onClose={onClose} />
         </div>
         <div className="account-menu-help-group" role="group" aria-label="Help">
           {showInfrastructure && (

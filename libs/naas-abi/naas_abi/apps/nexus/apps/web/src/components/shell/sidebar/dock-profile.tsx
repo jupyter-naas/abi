@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
+import { useWarmAvatarSettingsLinks } from '@/hooks/use-avatar-settings-links';
 import { AccountMenuPanel, UserAvatar } from '../account-menu';
 
 const MENU_GAP_PX = 8;
@@ -16,6 +17,8 @@ export function DockProfile({ labeled }: { labeled: boolean }) {
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const user = useAuthStore((s) => s.user);
+  // The menu's Organization and Platform entries are read now, not when it opens.
+  useWarmAvatarSettingsLinks();
   const displayUser = mounted ? user : null;
   const name = displayUser?.name || 'User';
 
