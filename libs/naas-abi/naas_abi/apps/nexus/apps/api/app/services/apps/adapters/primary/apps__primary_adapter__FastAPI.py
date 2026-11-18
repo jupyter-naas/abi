@@ -56,6 +56,7 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.remote.grant import (
     MODULE_ID_PATTERN,
 )
 from naas_abi.apps.nexus.apps.api.app.services.apps.scopes import app_scope
+from naas_abi.apps.nexus.apps.api.app.services.auth import credentials
 from naas_abi.apps.nexus.apps.api.app.services.iam import authz
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import ModuleScope
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import declares, guard
@@ -63,6 +64,7 @@ from naas_abi.apps.nexus.apps.api.app.services.view_as.runtime import audited_op
 from naas_abi.apps.nexus.apps.api.app.utils.public_urls import (
     resolve_public_module_asset_url,
 )
+from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
 from naas_abi_core.services.iam.module_scopes import APP
 from pydantic import BaseModel, Field
 
@@ -630,6 +632,11 @@ async def create_pages_sso_token(
     app's dev origin (``dev_app_url``). Without ``app_id``, the caller needs
     ``UseApp`` and may name any hostname the portal itself will check.
     """
+    try:
+        # The portal's session would be a credential of its own (oidc/AGENTS.md).
+        credentials.refuse_a_limited_credential("sign in to a portal")
+    except PermissionDeniedError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     live = _live_settings()
     audience = body.audience.strip().lower()
     app_id = (body.app_id or "").strip()
