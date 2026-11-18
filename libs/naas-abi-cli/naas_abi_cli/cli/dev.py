@@ -879,6 +879,10 @@ def _launch_api(
     # Engine boot phases (services → modules → ontologies) are DEBUG-level;
     # without this the long silence after "naas_abi_core imported" is opaque.
     env["LOG_LEVEL"] = _resolve_log_level(log_level)
+    # Local development: the API restarts on edits, whatever the config's
+    # api.reload (off by default, for deployed engines). An exported
+    # ABI_API_RELOAD=false keeps it off.
+    env["ABI_API_RELOAD"] = env.get("ABI_API_RELOAD") or "true"
     env["ABI_PORT"] = str(spec.port)
     env["ABI_HOST"] = env.get("ABI_HOST", BIND_HOST)
     # Point the triple-store adapter at the worktree-local oxigraph server.

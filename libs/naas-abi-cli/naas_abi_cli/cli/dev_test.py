@@ -357,6 +357,20 @@ def test_api_and_dagster_default_to_debug(monkeypatch) -> None:
         assert _captured_env(monkeypatch, launch)["LOG_LEVEL"] == "DEBUG"
 
 
+def test_the_dev_api_reloads_on_edits(monkeypatch) -> None:
+    monkeypatch.setenv("ABI_API_KEY", "test-key")  # never touch a real .env
+    monkeypatch.delenv("ABI_API_RELOAD", raising=False)
+
+    assert _captured_env(monkeypatch, dev._launch_api)["ABI_API_RELOAD"] == "true"
+
+
+def test_an_exported_abi_api_reload_wins(monkeypatch) -> None:
+    monkeypatch.setenv("ABI_API_KEY", "test-key")
+    monkeypatch.setenv("ABI_API_RELOAD", "false")
+
+    assert _captured_env(monkeypatch, dev._launch_api)["ABI_API_RELOAD"] == "false"
+
+
 def test_explicit_log_level_wins(monkeypatch) -> None:
     monkeypatch.setenv("LOG_LEVEL", "ERROR")
 

@@ -202,7 +202,7 @@ async def join_workspace(sid, data):
             broadcast.discard(workspace_id)
 
     # Join Socket.IO room
-    sio.enter_room(sid, f"workspace:{workspace_id}")
+    await sio.enter_room(sid, f"workspace:{workspace_id}")
 
     # Track presence
     if workspace_id not in workspace_presence:
@@ -243,7 +243,7 @@ async def leave_workspace(sid, data):
         session.get("broadcast", set()).discard(workspace_id)
 
     # Leave Socket.IO room
-    sio.leave_room(sid, f"workspace:{workspace_id}")
+    await sio.leave_room(sid, f"workspace:{workspace_id}")
 
     # Remove from presence
     if workspace_id in workspace_presence:
@@ -376,7 +376,7 @@ async def join_admin_events(sid, data=None):
         logger.warning("[WS] admin events join denied sid=%s user=%s", sid, user_id)
         return {"error": "superadmin required"}
 
-    sio.enter_room(sid, ADMIN_EVENTS_ROOM)
+    await sio.enter_room(sid, ADMIN_EVENTS_ROOM)
     logger.info("[WS] admin events join sid=%s user=%s room=%s", sid, user_id, ADMIN_EVENTS_ROOM)
     return {"status": "joined", "room": ADMIN_EVENTS_ROOM}
 
@@ -387,7 +387,7 @@ async def leave_admin_events(sid, data=None):
         ADMIN_EVENTS_ROOM,
     )
 
-    sio.leave_room(sid, ADMIN_EVENTS_ROOM)
+    await sio.leave_room(sid, ADMIN_EVENTS_ROOM)
     return {"status": "left", "room": ADMIN_EVENTS_ROOM}
 
 

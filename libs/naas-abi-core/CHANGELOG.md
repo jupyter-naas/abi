@@ -24,6 +24,25 @@
 
 <!-- version list -->
 
+## v3.6.5 (2026-11-18)
+
+### Performance Improvements
+
+- **iam**: Keep pattern expansions and subjects until the store changes
+  ([`1a263f5`](https://github.com/jupyter-naas/abi/commit/1a263f59d3f78a0aad4b2786ad1189e97955a1e4))
+
+
+## v3.6.4 (2026-11-18)
+
+### Bug Fixes
+
+- **api**: No auto-reload by default, uvicorn log level of its own
+  ([`27b2f69`](https://github.com/jupyter-naas/abi/commit/27b2f69e5f53fed06a17f92e0f8316229025bb70))
+
+- **dev**: Abi dev up keeps the API's auto-reload
+  ([`d492a69`](https://github.com/jupyter-naas/abi/commit/d492a69b0c81eb3934e67ae4e6bb32cbf218d7d1))
+
+
 ## v3.6.3 (2026-11-18)
 
 ### Performance Improvements

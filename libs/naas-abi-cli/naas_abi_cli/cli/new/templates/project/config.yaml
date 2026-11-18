@@ -4,6 +4,10 @@ api:
   description: "API for ABI"
   logo_path: "assets/logo.png"
   favicon_path: "assets/favicon.ico"
+  # Auto-reload on changes under src/ (uvicorn's WatchFiles reloader): off.
+  # It rescans src/ all the time, restarts the engine on any write there, and
+  # keeps a NATS engine running after NATS is gone. `abi dev up` turns it on.
+  reload: false
   cors_origins:
     - "http://{{ secret.PUBLIC_WEB_HOST }}"
     - "https://{{ secret.PUBLIC_WEB_HOST }}"
