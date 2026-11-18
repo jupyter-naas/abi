@@ -19,7 +19,7 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
 | `memberships.py` | `MEMBERSHIPS`: roles are `builtin.<role>` attachments at the organization's container and the workspace's; registers and deletes the containers (`register_org`, `register_workspace`, `drop_scope`); reads as `api`, changes as `api` on behalf of the caller |
 | `names.py` | Every name Nexus builds, through core's `names`: `org_container`, `workspace_container`, `org_below`, `nexus_resource(type, container=, id=)`, and their readers `org_of`, `workspace_of` |
 | `legacy_names.py` | The old grammar's `NO_ORG`, `org_scope`, `workspace_scope`: only for the start-up moves that predate container paths |
-| `placements.py` | Which workspace owns the kernel resources Nexus keeps (`placement_source`, `place`, `place_existing`) |
+| `placements.py` | Which workspace (or organization: `Placement.organization`) owns the kernel resources Nexus keeps (`placement_source`, `place`, `place_existing`) |
 | `bootstrap.py` | Startup: register the catalog, move the old membership rows into IAM once (`iam_migrations`) |
 | `listers.py` | What naas_abi lists for the policy builder, registered with IAM at startup (`register`): organizations and workspaces (labels; IAM keeps only what its registry holds), members, the features in `enabled_features`, and every module's agents, apps, workflows and pipelines (`modules/scopes.gather`, named in the container asked). Each query runs on the API's loop (`OnLoop`) |
 | `role_features.py` | Startup, once: what each role brought in each workspace becomes that workspace's policy "Features of <role>" (`migrate_role_features`, `iam_migrations` `role_features_v1`); then warns while a configuration still sets `role_baseline`, `organization_overrides` or `workspace_overrides` |
@@ -145,7 +145,7 @@ module per router family:
 | `workspaces.py` | `workspace` (a container with `platform_companions`: `CreateWorkspace` `creates`, `DeleteWorkspace` `deletes` and `owner_only`), `member`, `server`, `resource_access`; every user's personal `CreateWorkspace` is a `PLATFORM_ACCESS` row (`workspace/*`) |
 | `features.py` | `feature/<key>` (`UseFeature`), `policy_only`: no role holds it |
 | `chat.py`, `agents.py`, `apps.py`, `workflows.py` | `conversation`; `agent`, `skill`; `app`, `app_project`, `module` (`ListModuleScopes`); `workflow` (its settings: listed, deprecated switch) |
-| `files.py`, `datasets.py`, `office.py` | `file` (drive + path), `my_file`, `user_storage`, `root_storage`; `dataset`; `project` (slides, documents, sheets) |
+| `files.py`, `datasets.py`, `office.py` | `file` (drive + path; the organization drive's `ListOrgFiles`, `GetOrgFile`, and admin-level `PutOrgFile`, `DeleteOrgFile` on `<org>/nexus:file/organization/<path>`), `my_file`, `user_storage`, `root_storage`; `dataset`; `project` (slides, documents, sheets) |
 | `knowledge.py`, `search.py` | `view`, `graph_cache`, `ontology`, `icon`, `layout`, `layer`, `feed_layer`, `basemap`, `maps_catalog`, `maps_access`; `search`, `topic`, `search_scope` |
 | `code.py`, `settings.py`, `platform.py`, `realtime.py` | `code`, `code_settings`; `secret`, `provider_model`, `abi_server`; `analytics`, `system`; `presence`, `speech` |
 | `users.py` | `user` (platform: the platform's accounts, Platform Settings › Users, `services/accounts`): `ListUsers`, `InviteUser`, `UpdateUser`, `SuspendUser`, `ResumeUser`, `DeleteUser`; no role reaches it, the platform admin holds it |
@@ -153,7 +153,7 @@ module per router family:
 The kernel services have catalogs of their own (core's `iam_catalog.py` of each service); a route that
 only forwards to the kernel declares the kernel action. Choices that differ from "viewers read, members
 write, admins administer" and are deliberate: the organization's directory, domains and billing are
-`admin` (not `list`/`read`), as are layout edits, ontology cache refreshes, `GetResourceAccess`, topic
+`admin` (not `list`/`read`), as are the organization drive's writes (`PutOrgFile`, `DeleteOrgFile`: members read it, a policy lets them write a folder), layout edits, ontology cache refreshes, `GetResourceAccess`, topic
 edits (`UpdateTopic`, `DeleteTopic`, `PreviewTopic`) and the system-drive files; `SyncAgents` is `write`
 (every client sends it once per session); `GetPresence` and `Transcribe`/`Speak` are `read`. After editing
 a catalog, run the route matrix.
@@ -570,6 +570,15 @@ chain from an old-grammar world (`testing.LegacyNexusIam`) through their move an
   a workspace made after the upgrade use what "<W> access" allows; those of an upgraded one keep what the move gave
   them until an administrator attaches it. #414 had left groups made with a workspace out of scope; the owner brought
   them in.
+- **The organization drive is decided at the organization.** *Decision* (#1511): `naas_abi/organization-drive/<org>`
+  is the organization's: its object storage is placed in the organization's container (`Placement.organization`,
+  `files/placement.py`), and the files API decides on `<org>/nexus:file/organization/<path>` with its own actions,
+  reached through a workspace of the organization (its `files` feature; the organization read from IAM's container
+  of the workspace). Reading is `list`/`read` (the organization's viewers and up), writing `admin` (its admins and
+  owners). No workspace flag. *Consequences:* a role held only in one of the organization's workspaces reaches
+  nothing of it; who writes which folder (members writing `operations/`) or who does not read one is a policy at
+  the organization, not a code change; the kernel's object storage check follows the organization's roles, so a
+  policy widening a write past a viewer's role also grants `object_storage:PutObject` there.
 - **An organization with workspaces is not deleted.** *Decision:* `DELETE /api/organizations/{org}` refuses (409) one
   that still has workspaces, naming them, rather than deleting them with it. The issue left it open (UJ-P1); this is
   the default until the owner says otherwise. *Consequences:* its owners delete its workspaces first (`DeleteWorkspace`,

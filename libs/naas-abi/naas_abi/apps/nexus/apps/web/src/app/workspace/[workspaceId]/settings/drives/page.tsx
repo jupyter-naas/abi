@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Folder, HardDrive, Loader2, Server, type LucideIcon } from 'lucide-react';
+import { Building2, Folder, HardDrive, Loader2, Server, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -18,12 +18,14 @@ import {
 import { useAuthStore } from '@/stores/auth';
 import { useFilesStore } from '@/stores/files';
 import { useWorkspaceStore } from '@/stores/workspace';
+import { organizationDriveLabel } from '@/app/workspace/[workspaceId]/files/lib/drive-label';
 import { buildDriveRows, canToggleDrives, type DriveFlag, type DriveIcon, type DriveRow } from './drive-rows';
 
 const DRIVE_ICONS: Record<DriveIcon, LucideIcon> = {
   drive: HardDrive,
   server: Server,
   folder: Folder,
+  organization: Building2,
 };
 
 const SUPERADMIN_ONLY = 'Only a platform superadmin can turn drives on or off.';
@@ -59,6 +61,10 @@ export default function DrivesSettingsPage() {
     platformOn: Boolean(workspace.platformDriveEnabled),
     systemOn: Boolean(workspace.systemDriveEnabled),
     syncedFolders,
+    organization:
+      workspace.organizationId && workspace.organizationDriveEnabled
+        ? { name: organizationDriveLabel(workspace.organizationName) }
+        : null,
   });
   const enabledCount = drives.filter((drive) => drive.enabled).length;
   const accessOptions = Array.from(new Set(drives.map((drive) => drive.access)));

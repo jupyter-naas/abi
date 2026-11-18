@@ -163,8 +163,13 @@ class Workspace(BaseModel):
     system_drive_enabled: bool = False
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    organization_name: str | None = None
+    organization_slug: str | None = None
     organization_logo_url: str | None = None
     organization_logo_rectangle_url: str | None = None
+    # Whether the caller may open the organization's drive (IAM's ``ListOrgFiles``
+    # there): the Files sidebar shows it only then; the files API decides each call.
+    organization_drive: bool = False
     current_user_role: str | None = None
     feature_flags: dict[str, bool] = Field(default_factory=dict)
 
@@ -291,11 +296,19 @@ async def _feature_flags(
     )
 
 
+async def _organization_drives(user: Any, records: list[WorkspaceRecord]) -> set[str]:
+    """The organizations of ``records`` whose drive the user may open."""
+    return await user_features.organization_drives(
+        user, {r.organization_id for r in records if r.organization_id}
+    )
+
+
 def _to_schema(
     record: WorkspaceRecord,
     current_user_role: str | None,
     *,
     feature_flags: dict[str, bool] | None = None,
+    organization_drives: set[str] | None = None,
 ) -> Workspace:
     return Workspace(
         id=record.id,
@@ -317,8 +330,11 @@ def _to_schema(
         system_drive_enabled=record.system_drive_enabled,
         created_at=record.created_at,
         updated_at=record.updated_at,
+        organization_name=record.organization_name,
+        organization_slug=record.organization_slug,
         organization_logo_url=record.organization_logo_url,
         organization_logo_rectangle_url=record.organization_logo_rectangle_url,
+        organization_drive=record.organization_id in (organization_drives or set()),
         current_user_role=current_user_role,
         # No role brings a feature: without IAM's answer, none is shown.
         feature_flags=feature_flags
@@ -341,11 +357,13 @@ async def list_workspaces(
         rows = [row for row in rows if row.id == view.workspace_id]
     roles = await service.effective_roles(current_user.id, rows)
     flags = await _feature_flags(current_user, list(rows)) or {}
+    drives = await _organization_drives(current_user, list(rows))
     return [
         _to_schema(
             row,
             role,
             feature_flags=flags.get(row.id),
+            organization_drives=drives,
         )
         for row, role in zip(rows, roles, strict=False)
     ]
@@ -367,6 +385,7 @@ async def get_workspace(
         row,
         role,
         feature_flags=flags.get(row.id),
+        organization_drives=await _organization_drives(current_user, [row]),
     )
 
 
@@ -391,6 +410,7 @@ async def get_workspace_by_slug(
         row,
         role,
         feature_flags=flags.get(row.id),
+        organization_drives=await _organization_drives(current_user, [row]),
     )
 
 

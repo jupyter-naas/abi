@@ -12,7 +12,7 @@ message; information about the outside world belongs in `intelligence/`.
 - Data exports, data dictionaries and data-quality notes
 - IT and tooling documentation: architectures, access procedures, runbooks
 - Internal communication material: newsletters, announcements, channel guides
-- Ontologies, vocabularies and naming conventions shared across the workspace
+- Ontologies, vocabularies and naming conventions shared across the team
 
 ## What goes elsewhere
 

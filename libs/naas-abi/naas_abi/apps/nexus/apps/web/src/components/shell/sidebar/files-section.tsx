@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Building2,
   ChevronRight,
   File,
   Files,
@@ -23,7 +24,11 @@ import { useConfirm, usePrompt } from '@/components/ui/dialogs';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
 import { filesBrowsePath } from '@/app/workspace/[workspaceId]/files/lib/files-route';
-import { driveRootForSource } from '@/app/workspace/[workspaceId]/files/lib/drive-label';
+import {
+  driveRootForSource,
+  isRemoteDriveSource,
+  organizationDriveLabel,
+} from '@/app/workspace/[workspaceId]/files/lib/drive-label';
 import { FILES_EXPLORER_REFRESH_EVENT } from '@/app/workspace/[workspaceId]/files/lib/explorer-refresh';
 import { isSystemPath, withoutSystemFiles } from '@/lib/system-files';
 import { shellTokens } from '../tokens';
@@ -87,6 +92,10 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
   const workspaces = useWorkspaceStore((state) => state.workspaces);
   const currentWorkspace = workspaces.find((w) => w.id === currentWorkspaceId) || null;
   const platformDriveEnabled = Boolean(currentWorkspace?.platformDriveEnabled);
+  // The workspace's organization's drive, for who may open it (IAM, at the organization).
+  const organizationId = currentWorkspace?.organizationId;
+  const organizationDriveEnabled = Boolean(organizationId && currentWorkspace?.organizationDriveEnabled);
+  const organizationDriveName = organizationDriveLabel(currentWorkspace?.organizationName);
   const systemDriveEnabled = Boolean(currentWorkspace?.systemDriveEnabled);
   const workspaceRole = currentWorkspace?.currentUserRole;
   const isWorkspaceAdmin = workspaceRole === 'owner' || workspaceRole === 'admin';
@@ -148,13 +157,13 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
     (source: string, path: string) => {
       const normalized = normalizeExplorerPath(path);
       if (!normalized) return '';
-      if (['my-drive', 'workspace', 'platform-drive', 'system-drive'].includes(source)) {
-        const root = driveRootForSource(source, currentWorkspaceId || '', authUserId);
+      if (isRemoteDriveSource(source)) {
+        const root = driveRootForSource(source, currentWorkspaceId || '', authUserId, organizationId);
         if (root && normalized === normalizeExplorerPath(root)) return '';
       }
       return normalized;
     },
-    [authUserId, currentWorkspaceId],
+    [authUserId, currentWorkspaceId, organizationId],
   );
 
   const openFilesBrowser = useCallback(() => {
@@ -460,11 +469,9 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
     openFilesBrowser();
   };
 
-  const isRemoteDrive = ['my-drive', 'workspace', 'platform-drive', 'system-drive'].includes(
-    activeSource,
-  );
+  const isRemoteDrive = isRemoteDriveSource(activeSource);
   const driveRoot = isRemoteDrive
-    ? driveRootForSource(activeSource, currentWorkspaceId || '', authUserId)
+    ? driveRootForSource(activeSource, currentWorkspaceId || '', authUserId, organizationId)
     : '';
 
   // Keep the active drive expanded and open ancestor dirs so the current folder is visible.
@@ -538,8 +545,8 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
       driveExpanded(sourceId)
       || (filtering && !labelMatch);
     const driveActive = activeSource === sourceId;
-    const sourceRoot = ['my-drive', 'workspace', 'platform-drive', 'system-drive'].includes(sourceId)
-      ? driveRootForSource(sourceId, currentWorkspaceId || '', authUserId)
+    const sourceRoot = isRemoteDriveSource(sourceId)
+      ? driveRootForSource(sourceId, currentWorkspaceId || '', authUserId, organizationId)
       : '';
     const normalizedCurrent = normalizeExplorerPath(currentPath);
     const atRoot =
@@ -716,6 +723,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
           <span className="text-[10px]">
             {2
               + (platformDriveEnabled ? 1 : 0)
+              + (organizationDriveEnabled ? 1 : 0)
               + (isWorkspaceAdmin && systemDriveEnabled ? 1 : 0)
               + syncedFolders.length}
           </span>
@@ -743,6 +751,17 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
                     void openRemoteDrive('platform-drive');
                   },
                   'Files shared across every workspace where platform drive is enabled',
+                )
+              : null}
+            {organizationDriveEnabled
+              ? renderDriveRow(
+                  'organization-drive',
+                  organizationDriveName,
+                  <Building2 size={iconSize} className="text-muted-foreground" />,
+                  () => {
+                    void openRemoteDrive('organization-drive');
+                  },
+                  `Files of ${organizationDriveName}, shared across its workspaces`,
                 )
               : null}
             {renderDriveRow(

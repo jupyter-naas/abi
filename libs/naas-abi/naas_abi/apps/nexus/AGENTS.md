@@ -530,7 +530,8 @@ src/app/workspace/[workspaceId]/files/
 ├── lib/
 │   ├── files-route.ts            # parseFilesRoute, filesBrowsePath (mobile list-detail)
 │   ├── files-route.test.ts
-│   └── drive-label.ts            # Drive root, label, breadcrumb helpers
+│   ├── drive-label.ts            # Drive sources, scopes, roots, labels, breadcrumbs
+│   └── drive-label.test.ts
 ├── components/
 │   ├── files-components.css      # Shared mobile chrome styles
 │   ├── files-mobile-toolbar.tsx
@@ -551,6 +552,22 @@ src/app/workspace/[workspaceId]/files/
 | `FilesAddSheet` | Bottom sheet for create/upload actions | `browse.tsx` |
 
 Route parsing lives in `lib/files-route.ts` and is imported by `workspace-layout.tsx` and `files-section.tsx`.
+
+### Drives
+
+Every drive is a tree of the object storage under `naas_abi/`, served by the files API (`/api/files`, `?scope=`) and listed in the Files sidebar (`files-section.tsx`), the browser and Workspace settings › Drives (`settings/drives/drive-rows.ts`). The sources, scopes and roots are in `lib/drive-label.ts` (`REMOTE_DRIVE_SOURCES`); a deep link is `?source=<source>&path=<path>`.
+
+| Drive | Source / scope | Root | Made by | Who reaches it |
+|---|---|---|---|---|
+| My Drive | `my-drive` / `my_drive` | `my-drive/<user>` | `MyDriveWriter`, `backfill_my_drives` | the user (`my_file/<user>`) |
+| Workspace drive | `workspace` / `workspace` | `workspace-drive/<ws>` | `WorkspaceDriveWriter`, `backfill_workspace_drives` | the workspace's roles (`ListFiles`…, `file/workspace/...`) |
+| Organization drive | `organization-drive` / `organization_drive` | `organization-drive/<org>` | `OrganizationDriveWriter`, `backfill_organization_drives` | decided at the organization (`ListOrgFiles`, `GetOrgFile`: viewers and up; `PutOrgFile`, `DeleteOrgFile`: admins and owners; `<org>/nexus:file/organization/...`), then its policies |
+| Platform drive | `platform-drive` / `platform_drive` | `platform-drive` | `backfill_platform_drive` | the workspace's roles, when the workspace flag `platform_drive_enabled` is on |
+| System drive | `system-drive` / `system_drive` | the whole store | none | admins (`*SystemFile`), when `system_drive_enabled` is on |
+
+- **The organization drive** (#1511) holds what belongs to the organization as a whole. A workspace reaches its own organization's drive alone: the API reads the organization from the workspace's IAM container, never from the request, and a workspace in no organization has none (404). It needs the workspace's `files` feature. Its object storage is placed in the organization's container (`files/placement.py`), so a role held only in one of its workspaces does not reach it. Who reads or writes which folder is a policy at the organization: grant `nexus:PutOrgFile` on `${scope}/nexus:file/organization/operations/*` to let members write `operations/`, deny `GetOrgFile` on a folder to hide it. The kernel also checks the object storage action on the caller's organization role, so a viewer given `PutOrgFile` also needs `object_storage:PutObject` there.
+- **Shown to who may open it.** `/api/workspaces` answers `organization_drive` (IAM's `ListOrgFiles` on the drive's root) and `organization_name`; the sidebar row and the Drives settings row use the organization's name, so two organizations' drives differ.
+- **Staff folders.** The workspace, organization and platform drives get the nine staff folders and their README (`assets/staff_folders/`, worded for any drive).
 
 ### Responsive layout
 

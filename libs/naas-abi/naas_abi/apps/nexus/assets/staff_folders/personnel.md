@@ -21,4 +21,4 @@ role and position, under which contract, grade and service line, and how that ch
 - Payroll as a ledger (journals, payments, budgets): `finance/`.
 
 Personnel files are often sensitive. Keep personal data to what the work needs, and check who can
-read this workspace before adding it.
+read this drive before adding it.
