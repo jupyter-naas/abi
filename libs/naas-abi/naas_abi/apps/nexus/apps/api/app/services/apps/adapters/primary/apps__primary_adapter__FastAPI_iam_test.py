@@ -342,3 +342,119 @@ async def test_open_app_mints_sso_for_that_person_and_that_app_only(world, monke
         live["nexus_env"] = "cloudflare"
         assert (await post(http)).status_code == 400
         assert (await post(http, audience="portal.example.com")).status_code == 200
+
+
+def _sso_catalog(monkeypatch, **settings):
+    """Two apps of one module, each a portal on its own host, and the live
+    settings the SSO route reads (overridable per test)."""
+    portal = adapter._build_app_info(
+        "acme.portal", Path("/modules/site"), {"name": "Site", "url": "https://portal.example.com"}
+    )
+    other = adapter._build_app_info(
+        "acme.portal", Path("/modules/other"), {"name": "Other", "url": "https://other.example.com"}
+    )
+    monkeypatch.setattr(adapter, "_scan_apps_catalog", lambda: (portal, other))
+    live = SimpleNamespace(
+        pages_sso_secret="sso-test-secret",
+        pages_sso_expire_seconds=60,
+        nexus_env="local",
+        frontend_url="http://localhost:3042",
+        nexus_dev_app_urls="",
+    )
+    for name, value in settings.items():
+        setattr(live, name, value)
+    monkeypatch.setattr(adapter, "_live_settings", lambda: live)
+    return portal, other, live
+
+
+def _deny(world, role: str, action: str, resource: str) -> None:
+    with as_service_account("engine"):
+        policy = world.iam.iam.create_policy(
+            f"deny-{role}-{action}",
+            {
+                "version": "2026-10-13",
+                "statements": [{"effect": "Deny", "actions": [action], "resources": [resource]}],
+            },
+        )
+        world.iam.iam.attach_policy(policy.id, world.iam.principal(role), world.scope)
+
+
+async def _sso(http, **body):
+    return await http.post("/api/apps/sso-token", json={"workspace_id": "ws-1", **body})
+
+
+@pytest.mark.asyncio
+async def test_sso_without_app_id_asks_use_app_and_names_any_host(world, monkeypatch) -> None:
+    """The route's older form: ``UseApp`` in the workspace, any hostname the
+    portal will check. A Deny of ``UseApp`` refuses it; so does another workspace."""
+    _sso_catalog(monkeypatch)
+    async with world.as_("member") as http:
+        minted = await _sso(http, audience="anything.example.org")
+        assert minted.status_code == 200, minted.text
+        token = minted.json()["token"]
+        assert (
+            verify_pages_sso_token(token, secret="sso-test-secret", audience="anything.example.org")
+            == "member@example.com"
+        )
+        other_ws = await http.post(
+            "/api/apps/sso-token", json={"workspace_id": "ws-2", "audience": "a.example.org"}
+        )
+        assert other_ws.status_code == 403
+    async with world.as_("stranger") as http:
+        assert (await _sso(http, audience="anything.example.org")).status_code == 403
+    _deny(world, "member", "nexus:UseApp", "${scope}/*")
+    async with world.as_("member") as http:
+        assert (await _sso(http, audience="anything.example.org")).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_sso_names_an_app_of_the_catalog_the_caller_may_open(world, monkeypatch) -> None:
+    """An id that is no app's is a 400 before IAM. IAM is asked before the
+    catalog, so a missing app is told apart only for someone granted it. A
+    remote app has no portal host (it opens at ``/app-html/remote/``): the web
+    app never asks for it, and the route refuses it. A Deny wins over a grant."""
+    portal, _, _ = _sso_catalog(monkeypatch)
+    ghost = ModuleScope("app", "acme.portal", "ghost")
+    remote = ModuleScope("app", "acme.research", "console")
+    async with world.as_("member") as http:
+        for bad in ("no-colon", ":site", "acme.portal:", "remote/:x"):
+            answered = await _sso(http, audience="portal.example.com", app_id=bad)
+            assert answered.status_code == 400, bad
+        # Not granted: IAM refuses before the catalog is read.
+        assert (
+            await _sso(http, audience="portal.example.com", app_id="acme.portal:ghost")
+        ).status_code == 403
+    world.iam.allow_scope("member", ghost, world.scope)
+    world.iam.allow_scope("member", remote, world.scope)
+    world.iam.allow_scope("member", ModuleScope("app", "acme.portal", "site"), world.scope)
+    async with world.as_("member") as http:
+        missing = await _sso(http, audience="portal.example.com", app_id="acme.portal:ghost")
+        assert missing.status_code == 400
+        assert missing.json()["detail"] == "app_id names no app"
+        answered = await _sso(
+            http, audience="portal.example.com", app_id="remote/acme.research:console"
+        )
+        assert answered.status_code == 400
+        assert (
+            await _sso(http, audience="portal.example.com", app_id=portal.app_id)
+        ).status_code == 200
+    _deny(world, "member", "module:OpenApp", "${scope}/module:app/acme.portal/site")
+    async with world.as_("member") as http:
+        assert (
+            await _sso(http, audience="portal.example.com", app_id=portal.app_id)
+        ).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_sso_without_a_secret_is_off_for_those_allowed_only(world, monkeypatch) -> None:
+    portal, _, _ = _sso_catalog(monkeypatch, pages_sso_secret="")
+    world.iam.allow_scope("member", ModuleScope("app", "acme.portal", "site"), world.scope)
+    async with world.as_("member") as http:
+        assert (
+            await _sso(http, audience="portal.example.com", app_id=portal.app_id)
+        ).status_code == 503
+        assert (await _sso(http, audience="anything.example.org")).status_code == 503
+    async with world.as_("viewer") as http:
+        assert (
+            await _sso(http, audience="portal.example.com", app_id=portal.app_id)
+        ).status_code == 403

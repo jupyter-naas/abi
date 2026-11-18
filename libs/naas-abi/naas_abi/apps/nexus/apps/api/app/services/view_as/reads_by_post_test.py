@@ -167,6 +167,17 @@ def test_a_refused_read_is_read_only(app, entry) -> None:
     assert refusal.status == 403 and refusal.detail == "Read-only: you are viewing as Dave"
 
 
+def test_a_portal_sign_in_for_an_app_is_refused_in_a_view(app) -> None:
+    """``sso-token`` naming an app the person may open is still refused: the view
+    never signs in to a portal as the person, whatever the body names."""
+    body = json.dumps(
+        {"workspace_id": "alpha", "audience": "portal.example.com", "app_id": "acme.portal:site"}
+    ).encode()
+    refusal = _judge(app, "/api/apps/sso-token", body)
+    assert refusal is not None
+    assert refusal.status == 403 and refusal.detail == "Read-only: you are viewing as Dave"
+
+
 def test_only_post_is_a_read_sent_by_post(app) -> None:
     for method in ("PUT", "PATCH", "DELETE"):
         scope = _scope(app, "/api/graph/query", method=method)
