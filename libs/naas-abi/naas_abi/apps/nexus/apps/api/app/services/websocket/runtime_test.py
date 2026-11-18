@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import pytest
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
@@ -23,9 +23,12 @@ def socket(monkeypatch):
     """A connected client per user: sessions by sid, rooms and emits recorded."""
     sessions: dict[str, dict] = {}
     monkeypatch.setattr(runtime.sio, "session", lambda sid: _SessionContext(sessions[sid]))
-    enter_room = Mock()
+    # The server's room calls are coroutines: a call left unawaited never joins.
+    enter_room = AsyncMock()
+    leave_room = AsyncMock()
     emit = AsyncMock()
     monkeypatch.setattr(runtime.sio, "enter_room", enter_room)
+    monkeypatch.setattr(runtime.sio, "leave_room", leave_room)
     monkeypatch.setattr(runtime.sio, "emit", emit)
     runtime.workspace_presence.clear()
     runtime.user_workspaces.clear()
@@ -41,6 +44,7 @@ def socket(monkeypatch):
         {
             "sessions": sessions,
             "enter_room": enter_room,
+            "leave_room": leave_room,
             "emit": emit,
             "connect": staticmethod(connect),
         },
@@ -72,7 +76,7 @@ async def test_join_workspace_allows_every_role(team: NexusIam, socket, user: st
     assert socket.sessions[sid]["workspaces"] == {"ws-1"}
     assert runtime.workspace_presence["ws-1"] == {user}
     assert runtime.user_workspaces[user] == {"ws-1"}
-    socket.enter_room.assert_called_once_with(sid, "workspace:ws-1")
+    socket.enter_room.assert_awaited_once_with(sid, "workspace:ws-1")
     socket.emit.assert_awaited_once()
 
 
@@ -132,6 +136,7 @@ async def test_leaving_a_workspace_drops_the_right_to_send_there(team: NexusIam,
     await runtime.leave_workspace(sid, {"workspace_id": "ws-1"})
 
     assert socket.sessions[sid]["broadcast"] == set()
+    socket.leave_room.assert_awaited_once_with(sid, "workspace:ws-1")
 
 
 @pytest.mark.asyncio
@@ -151,7 +156,7 @@ async def test_the_admin_events_room_is_the_platform_administrators(team: NexusI
     joined = await runtime.join_admin_events(sid)
 
     assert joined == {"status": "joined", "room": ADMIN_EVENTS_ROOM}
-    socket.enter_room.assert_called_once_with(sid, ADMIN_EVENTS_ROOM)
+    socket.enter_room.assert_awaited_once_with(sid, ADMIN_EVENTS_ROOM)
 
 
 @pytest.mark.asyncio
@@ -182,3 +187,49 @@ async def test_connect_refuses_a_link_and_a_scoped_token(monkeypatch) -> None:
     token, _ = mint_app_html_access_token(user_id="user-1")
 
     assert await runtime.connect("sid-1", {}, {"token": token}) is False
+
+
+async def _real_server(monkeypatch, user_id: str):
+    """A real Socket.IO server with one connected socket, as runtime's ``sio``:
+    its rooms are the manager's, not a mock's."""
+    import socketio
+
+    server = socketio.AsyncServer(async_mode="asgi")
+    sid = await server.manager.connect(f"eio-{user_id}", "/")
+    sessions = {sid: {"user_id": user_id, "workspaces": set(), "broadcast": set()}}
+    monkeypatch.setattr(server, "session", lambda s: _SessionContext(sessions[s]))
+    monkeypatch.setattr(runtime, "sio", server)
+    runtime.workspace_presence.clear()
+    runtime.user_workspaces.clear()
+    return server, sid
+
+
+@pytest.mark.asyncio
+async def test_a_joined_socket_is_in_its_workspace_room(team: NexusIam, monkeypatch) -> None:
+    """Joining puts the socket in ``workspace:<id>``, so what is broadcast there
+    reaches it; leaving takes it out."""
+    server, sid = await _real_server(monkeypatch, "member")
+
+    await runtime.join_workspace(sid, {"workspace_id": "ws-1"})
+    assert "workspace:ws-1" in server.rooms(sid)
+
+    await runtime.leave_workspace(sid, {"workspace_id": "ws-1"})
+    assert "workspace:ws-1" not in server.rooms(sid)
+
+
+@pytest.mark.asyncio
+async def test_a_platform_administrator_is_in_the_admin_events_room(
+    team: NexusIam, monkeypatch
+) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.websocket.admin_events import (
+        ADMIN_EVENTS_ROOM,
+    )
+
+    team.platform_admin("root")
+    server, sid = await _real_server(monkeypatch, "root")
+
+    await runtime.join_admin_events(sid)
+    assert ADMIN_EVENTS_ROOM in server.rooms(sid)
+
+    await runtime.leave_admin_events(sid)
+    assert ADMIN_EVENTS_ROOM not in server.rooms(sid)
