@@ -239,9 +239,12 @@ export function inviteSummary(outcome: InviteOutcome): string[] {
   const said: string[] = [];
   said.push(outcome.renewed ? `Invitation to ${outcome.user.email} renewed.` : `${outcome.user.email} invited.`);
   if (outcome.user_created) said.push('Their account was made at the identity provider.');
+  // Only this page's invite can skip it: an organization's or a workspace's invitation
+  // makes the account once IAM authorized it.
   if (outcome.provisioning_skipped) {
     said.push(
-      'No account was made at the identity provider (you may not create one there): they sign in with an account they have.'
+      'No account was made at the identity provider (you may not create one there). ' +
+        'The email tells them to sign in with an account they have there, or to ask an administrator to create one.'
     );
   }
   said.push(outcome.sign_in_email_sent ? 'A sign-in link was emailed to them.' : 'No email could be sent: send them the sign-in link yourself.');

@@ -1111,8 +1111,9 @@ attachment per scope.
   engine holds IAM's administration and the kernel services; `api` holds `nexus:*`, the
   kernel services it calls for its users (each user bounds the call), the sign-in identity
   actions and those of a person at their provider (`identity:ProvisionUser`,
-  `FindProvisionedUser`, `UpdateProvisionedUser`, `DeleteProvisionedUser`: invitations and the
-  platform's Users page, called on behalf of the administrator, whose rights bound them),
+  `FindProvisionedUser`, `UpdateProvisionedUser`, `DeleteProvisionedUser`: an organization's or a
+  workspace's invitation IAM authorized makes the account as `api` itself; the platform's Users page
+  calls on behalf of the administrator, whose rights bound them),
   `iam:ExchangeToken`, `iam:ViewAs` (Nexus asks it for the viewer: the viewer's own rights decide too), the IAM actions that keep memberships, scopes and
   placements, those of the policies it keeps (shared graphs, each container's access
   policy) and of the groups it keeps (`ContainerAccessAndGroups`: each organisation's and
