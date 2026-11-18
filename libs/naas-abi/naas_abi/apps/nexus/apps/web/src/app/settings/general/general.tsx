@@ -102,12 +102,14 @@ export default function PlatformGeneralPage() {
         actions={
           <button
             type="button"
-            className="org-settings-primary-button"
+            className="org-settings-users-secondary-button"
+            data-action="refresh"
             onClick={() => void load()}
             disabled={loading}
+            title="Refresh"
+            aria-label="Refresh"
           >
             <RefreshCw size={16} />
-            Refresh
           </button>
         }
       />
