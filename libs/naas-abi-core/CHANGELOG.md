@@ -24,6 +24,14 @@
 
 <!-- version list -->
 
+## v3.6.3 (2026-11-18)
+
+### Performance Improvements
+
+- **iam**: Evaluate only the statements that name the action
+  ([`6abca5e`](https://github.com/jupyter-naas/abi/commit/6abca5ebd0e572e8d018c07df9ba1293340b22de))
+
+
 ## v3.6.2 (2026-11-18)
 
 ### Bug Fixes
