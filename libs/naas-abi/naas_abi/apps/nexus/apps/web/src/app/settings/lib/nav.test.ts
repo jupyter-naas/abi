@@ -223,14 +223,14 @@ describe('parsePlatformSettingsRoute', () => {
 });
 
 describe('laysOutOwnPanes', () => {
-  it('keeps the margins of the organization pages on Organizations and Users', () => {
+  it('keeps the margins of the organization pages on every Administration page', () => {
     expect(laysOutOwnPanes(GENERAL_ITEM)).toBe(false);
     expect(laysOutOwnPanes(ORGANIZATIONS_ITEM)).toBe(false);
     expect(laysOutOwnPanes(USERS_ITEM)).toBe(false);
+    expect(laysOutOwnPanes(ROLES_ITEM)).toBe(false);
   });
 
-  it('lets Roles & permissions and the System pages lay out their own panes', () => {
-    expect(laysOutOwnPanes(ROLES_ITEM)).toBe(true);
+  it('lets the System pages lay out their own panes', () => {
     expect(laysOutOwnPanes({ id: 'overview' })).toBe(true);
   });
 

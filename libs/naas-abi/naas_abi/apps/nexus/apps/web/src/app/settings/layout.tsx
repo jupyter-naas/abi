@@ -112,8 +112,8 @@ export default function PlatformSettingsLayout({ children }: { children: React.R
 
   const { isDetail, item, table, rowId } = parsePlatformSettingsRoute(pathname);
   const isTables = item?.id === 'tables';
-  // System, Activity, Resources, Data and Roles & permissions lay out their own panes,
-  // edge to edge; Organizations and Users keep the organization pages' margins.
+  // System, Activity, Resources and Data lay out their own panes, edge to edge; the
+  // Administration pages keep the organization pages' margins.
   const isFramed = !!item && laysOutOwnPanes(item);
   // A table page fills the height: the table scrolls, not the page (headers stay visible).
   const fillsHeight = isTables && !!table && !rowId;
