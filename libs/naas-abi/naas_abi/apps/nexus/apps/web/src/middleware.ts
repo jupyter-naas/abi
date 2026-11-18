@@ -10,8 +10,9 @@ import { WEB_PASS_COOKIE } from './lib/web-pass';
  *
  * Routing hierarchy:
  *   /account/*                        -> authed
- *   /settings, /settings/{tables,system,roles}/... -> authed, Platform Settings
- *   /settings/<table>, /settings/modules, /workspace/[id]/admin/{system,events} -> redirected there (old links)
+ *   /settings, /settings/{organizations,users,roles,system,activity,resources,data,tables}/... -> authed, Platform Settings
+ *   /settings/<table>, /settings/modules, /settings/system/{data,traffic,traces,events},
+ *   /workspace/[id]/admin/{system,events} -> redirected there (old links)
  *   /organizations/[orgId]/settings   -> authed (/settings/{access,modules} -> /settings/roles)
  *   /org/[orgSlug]/login              -> public, org-branded login
  *   /org/[orgSlug]/workspace/[id]/... -> authed, rewritten to /workspace/[id]/...
@@ -49,8 +50,8 @@ function rememberWorkspace(request: NextRequest, workspaceId: string): NextRespo
 
 const legacyRoutes = ['/home', '/maps', '/chat', '/search', '/lab', '/ontology', '/graph', '/apps', '/marketplace', '/help', '/files', '/settings'];
 
-// Platform Settings owns /settings and its sections (Nexus tables, System, Roles &
-// permissions, isPlatformSettingsPath); old table pages and System links redirect
+// Platform Settings owns /settings and its sections (isPlatformSettingsPath); old
+// table pages and System links redirect
 // into them, and the legacy workspace settings links (/settings/members, ...) keep
 // redirecting to the workspace.
 

@@ -1,14 +1,10 @@
 'use client';
 
-import './system.css';
-import '@/app/organizations/[orgId]/settings/users/users.css';
-
 import { Suspense, useCallback, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { RefreshCw } from 'lucide-react';
-import { OrgSettingsPageHeader } from '@/app/organizations/[orgId]/settings/components/org-settings-page-header';
 import type { Loaded } from './system-api';
 import { useSharedJobFailures } from './jobs/failures';
+import { SystemFrame, SystemRefresh } from './system-frame';
 import { SystemOverview } from './system-overview';
 import { useSystemResource } from './system-resource';
 import { SystemServices } from './system-services';
@@ -22,6 +18,7 @@ import type {
   Overview,
 } from './system-types';
 import { SourceNote } from './system-ui';
+import { plural } from './data/data-model';
 
 const POLL_MS = 10_000;
 
@@ -31,7 +28,6 @@ function Loading() {
 
 // The heavier views load on first open: importing them all up front made the
 // route thousands of modules, slow to compile in dev and to load and leave.
-const DataExplorer = dynamic(() => import('./data/explorer').then((m) => m.DataExplorer), { ssr: false, loading: Loading });
 const JobsTab = dynamic(() => import('./jobs/jobs').then((m) => m.JobsTab), { ssr: false, loading: Loading });
 const AgentsTab = dynamic(() => import('./agents/agents').then((m) => m.AgentsTab), { ssr: false, loading: Loading });
 const TracesTab = dynamic(() => import('./traces/traces').then((m) => m.TracesTab), { ssr: false, loading: Loading });
@@ -42,7 +38,7 @@ const EventsView = dynamic(() => import('./events/events-view').then((m) => m.Ev
 
 // Views that lay out their own panes edge to edge (no padding, no page scroll).
 const OWN_REFRESH: SystemView[] = ['events', 'traffic', 'jobs', 'agents', 'traces'];
-const FLUSH: readonly SystemView[] = ['data', 'jobs', 'agents', 'traces', 'events'];
+const FLUSH: readonly SystemView[] = ['jobs', 'agents', 'traces', 'events'];
 
 function Failed({ state }: { state: Extract<Loaded<unknown>, { ok: false }> }) {
   return <SourceNote label={state.status === 403 ? 'Access' : 'This view'} reason={state.reason} />;
@@ -53,47 +49,9 @@ function View<T>({ state, render }: { state: Loaded<T> | null; render: (data: T)
   return state.ok ? <>{render(state.data)}</> : <Failed state={state} />;
 }
 
-/** A page's Refresh: reloads what it shows, beyond its own polling. */
-export function SystemRefresh({ onClick }: { onClick: () => void }) {
-  return (
-    <button type="button" className="org-settings-users-secondary-button" onClick={onClick}>
-      <RefreshCw size={16} />
-      Refresh
-    </button>
-  );
-}
-
-/**
- * A page of the Platform Settings shell that fills its height: the title, its
- * actions, then a body that scrolls (or lays out its own panes when `flush`).
- */
-export function SystemFrame({
-  title,
-  subtitle,
-  badge,
-  actions,
-  flush = false,
-  children,
-}: {
-  title: string;
-  subtitle: string;
-  badge?: React.ReactNode;
-  actions?: React.ReactNode;
-  flush?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="system-page">
-      <div className="system-page-header">
-        <OrgSettingsPageHeader title={title} subtitle={subtitle} badge={badge} actions={actions} />
-      </div>
-      <div className={flush ? 'system-body system-body-flush' : 'system-body'}>{children}</div>
-    </div>
-  );
-}
-
 function SystemViewBody({ view }: { view: SystemView }) {
   const [nonce, setNonce] = useState(0);
+  const [jobCount, setJobCount] = useState<number | null>(null);
   const refresh = useCallback(() => setNonce((n) => n + 1), []);
   const on = (v: SystemView) => ({ enabled: view === v, intervalMs: POLL_MS, nonce });
   const overview = useSystemResource<Overview>('/overview', on('overview'));
@@ -110,11 +68,8 @@ function SystemViewBody({ view }: { view: SystemView }) {
     <SystemFrame
       title={meta.label}
       subtitle={meta.description}
-      badge={
-        view === 'jobs' && failures && failures.count > 0
-          ? `${failures.more ? `${failures.count}+` : failures.count} failed since you last looked`
-          : undefined
-      }
+      // A count, as on Users and Organizations; failed runs are the Jobs page's own banner.
+      badge={view === 'jobs' && jobCount !== null ? plural(jobCount, 'job', 'jobs') : undefined}
       actions={
         // Events and Live traffic stream; Jobs, Agents and Traces have their own refresh.
         OWN_REFRESH.includes(view) ? undefined : <SystemRefresh onClick={refresh} />
@@ -123,8 +78,9 @@ function SystemViewBody({ view }: { view: SystemView }) {
     >
       {view === 'overview' && <View state={overview} render={(data) => <SystemOverview overview={data} />} />}
       {view === 'services' && <View state={services} render={(data) => <SystemServices view={data} />} />}
-      {view === 'data' && <DataExplorer nonce={nonce} />}
-      {view === 'jobs' && <JobsTab nonce={nonce} failures={failures} onFailuresSeen={markSeen} />}
+      {view === 'jobs' && (
+        <JobsTab nonce={nonce} failures={failures} onFailuresSeen={markSeen} onJobCount={setJobCount} />
+      )}
       {view === 'agents' && <AgentsTab nonce={nonce} />}
       {view === 'traces' && <TracesTab nonce={nonce} />}
       {view === 'modules' && (
@@ -137,8 +93,8 @@ function SystemViewBody({ view }: { view: SystemView }) {
   );
 }
 
-/** One System page: kernel services, their data, modules and the NATS network of this
- *  deployment. The Platform Settings shell shows it to whoever holds nexus:ReadSystem. */
+/** One System or Activity page: kernel services, modules, jobs, the NATS network and
+ *  what happens on them. The Platform Settings shell shows it to whoever holds nexus:ReadSystem. */
 export function SystemPage({ view }: { view: SystemView }) {
   return (
     <Suspense fallback={<Loading />}>

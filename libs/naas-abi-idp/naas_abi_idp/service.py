@@ -585,7 +585,9 @@ class IdPService:
         not."""
         config = self.configuration
         window = config.failure_window_seconds
-        left = self.limits.consume(f"failures:{email}:{client}", config.max_failures, window)
+        left = self.limits.consume(
+            f"failures:{email}:{client}", config.max_failures, window
+        )
         if left == 0:
             log.warning(
                 "Sign-in refused for address %s from one client: %d attempts "
@@ -596,9 +598,12 @@ class IdPService:
             )
         tries = config.max_attempts
         try:
-            if self.limits.consume(
-                f"failures:{email}", config.max_failures_per_address, window
-            ) == 0:
+            if (
+                self.limits.consume(
+                    f"failures:{email}", config.max_failures_per_address, window
+                )
+                == 0
+            ):
                 log.warning(
                     "Sign-in slowed for address %s: %d attempts without a sign-in "
                     "within %d s; each code now takes one guess",
@@ -628,8 +633,19 @@ class IdPService:
             live = [c for c in (doc.data["codes"] if doc else []) if c["exp"] > now]
             mine = [c for c in live if c.get("by", "") == by]
             others = [c for c in live if c.get("by", "") != by]
-            mine = mine[-(config.max_active_codes - 1) :] if config.max_active_codes > 1 else []
-            mine.append({"h": digest, "exp": now + config.code_ttl_seconds, "by": by, "tries": 0})
+            mine = (
+                mine[-(config.max_active_codes - 1) :]
+                if config.max_active_codes > 1
+                else []
+            )
+            mine.append(
+                {
+                    "h": digest,
+                    "exp": now + config.code_ttl_seconds,
+                    "by": by,
+                    "tries": 0,
+                }
+            )
             # The address's sends per window bound how many are live at once.
             codes = (others + mine)[-_MAX_LIVE_CODES:]
             data = {"email": email, "codes": codes}
@@ -674,10 +690,11 @@ class IdPService:
                 if self.store.delete(CHALLENGES, id, version=doc.version):
                     return True
                 continue
-            keep = [
-                c for c in live if c.get("by", "") != by or c["tries"] < tries
-            ]
-            if self.store.replace(doc, CHALLENGES, {**doc.data, "codes": keep}) is not None:
+            keep = [c for c in live if c.get("by", "") != by or c["tries"] < tries]
+            if (
+                self.store.replace(doc, CHALLENGES, {**doc.data, "codes": keep})
+                is not None
+            ):
                 return False
         return False
 

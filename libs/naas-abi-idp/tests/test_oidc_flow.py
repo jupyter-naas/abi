@@ -534,6 +534,7 @@ def test_the_branding_of_a_domain_shows_once_the_address_is_known(service, maile
             "app_name": "Acme",
             "primary_color": "#ff0000",
             "logo_url": "https://acme.test/logo.png",
+            "favicon_url": "https://acme.test/favicon.ico",
         },
         service.configuration.branding,
     )
@@ -546,6 +547,8 @@ def test_the_branding_of_a_domain_shows_once_the_address_is_known(service, maile
         data={"csrf": csrf_of(default.text), "email": "sam@acme.test"},
     )
     assert "#ff0000" in out.text and "https://acme.test/logo.png" in out.text
+    assert '<link rel="icon" href="https://acme.test/favicon.ico">' in out.text
+    assert 'rel="icon"' not in default.text
     assert "Acme" in mailer.sent[-1].subject
 
 
@@ -561,6 +564,13 @@ def hinted(email, **overrides):
 
 def sent_to(mailer, email):
     return [m for m in mailer.sent if m.to == email]
+
+
+def test_the_hinted_code_page_links_the_local_mailbox(client, service, mailer, alice):
+    service.configuration.mailbox_url = "http://localhost:8025"
+    _pkce, params = hinted("alice@example.com")
+    page = follow(client, start(client, params))
+    assert 'href="http://localhost:8025" target="_blank"' in page.text
 
 
 def test_a_hint_is_mailed_a_code_at_once_and_signs_in(client, service, mailer, alice):

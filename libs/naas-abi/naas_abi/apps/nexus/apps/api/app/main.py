@@ -400,6 +400,12 @@ async def _prepare_iam() -> None:
                 # Each organization and workspace has its access policy and its
                 # members and admins groups (made once for those that predate them).
                 await container_defaults.migrate(db)
+                # The agents a workspace had turned off, of modules loaded since.
+                try:
+                    await policy_tree.deny_deferred_agents(db)
+                except Exception:  # noqa: BLE001 - they stay set aside for the next start
+                    await db.rollback()
+                    log.exception("The turned-off agents of modules loaded since were not denied")
     except Exception:
         log.exception("Nexus could not set up its authorization in IAM: every request is refused")
 
@@ -692,6 +698,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 # FastAPI's own interactive docs (development only) are HTML with scripts.
 _DOCS_PATHS = frozenset({"/docs", "/redoc", "/docs/oauth2-redirect"})
+# The engine's landing page (``naas_abi_core.apps.api``): a fixed template with
+# its configured title and logo escaped in, no user bytes.
+_LANDING_PATH = "/"
 
 
 def _with_own_policy(own: str | None, global_policy: str) -> str:
@@ -723,6 +732,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             not trusted
             and not is_embeddable(path)
             and path not in _DOCS_PATHS
+            and path != _LANDING_PATH
         ):
             harden_active_content(response.headers)
 

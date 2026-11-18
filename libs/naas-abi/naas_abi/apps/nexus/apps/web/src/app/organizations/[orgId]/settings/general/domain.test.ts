@@ -1,28 +1,34 @@
 import { describe, expect, it } from 'vitest';
 
-import { displayOrgDomain } from './domain';
+import { pendingDomainCount, verifiedDomains } from './domain';
 
-describe('displayOrgDomain', () => {
-  it('prefers a verified domain over unverified ones', () => {
+describe('verifiedDomains', () => {
+  it('lists the verified domains only, sorted, once each', () => {
     expect(
-      displayOrgDomain(
-        [
-          { domain: 'draft.example', is_verified: false },
-          { domain: 'nexus.localhost', is_verified: true },
-        ],
-        'fallback.host'
-      )
-    ).toBe('nexus.localhost');
+      verifiedDomains([
+        { domain: 'draft.example', is_verified: false },
+        { domain: 'Acme.example ', is_verified: true },
+        { domain: 'acme.fr', is_verified: true },
+        { domain: 'acme.example', is_verified: true },
+      ])
+    ).toEqual(['acme.example', 'acme.fr']);
   });
 
-  it('falls back to the first stored domain when none are verified', () => {
-    expect(
-      displayOrgDomain([{ domain: 'acme.example', is_verified: false }], 'fallback.host')
-    ).toBe('acme.example');
+  it('is empty without domains, and never falls back to the current host', () => {
+    expect(verifiedDomains([])).toEqual([]);
+    expect(verifiedDomains(undefined)).toEqual([]);
+    expect(verifiedDomains([{ domain: 'draft.example' }])).toEqual([]);
   });
+});
 
-  it('falls back to the current host when no domain is stored', () => {
-    expect(displayOrgDomain([], 'nexus.localhost')).toBe('nexus.localhost');
-    expect(displayOrgDomain(undefined, 'nexus.localhost')).toBe('nexus.localhost');
+describe('pendingDomainCount', () => {
+  it('counts the domains not verified yet', () => {
+    expect(
+      pendingDomainCount([
+        { domain: 'draft.example', is_verified: false },
+        { domain: 'acme.example', is_verified: true },
+        { domain: '  ' },
+      ])
+    ).toBe(1);
   });
 });

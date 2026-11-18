@@ -78,7 +78,7 @@ describe('traffic model', () => {
 
 describe('traceLink', () => {
   it('opens the trace in the Traces tab when tracing is on', () => {
-    expect(traceLink(true, 'abc')).toBe('/settings/system/traces?trace=abc');
+    expect(traceLink(true, 'abc')).toBe('/settings/activity/traces?trace=abc');
     expect(traceLink(false, 'abc')).toBeNull();
     expect(traceLink(true, '')).toBeNull();
   });

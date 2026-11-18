@@ -307,7 +307,11 @@ sub-policy's parent is detached, so its retirement is not waited for; recorded i
   the apps it had turned on one by one (an app was off until turned on or seeded), and a Deny of the agents,
   workflows and pipelines it had turned off (use only: a workflow's runs stay readable). A set of nothing is an
   Allow no name matches (`Nothing`), never a Deny. A turned-off engine agent whose class the engine did not load
-  stops the move (its scope would be guessed): load the module or delete the row.
+  is set aside, never guessed (a Deny under a wrong name refuses nothing once its module loads): the report keeps
+  it in `deferred_agents`, and `policy_tree.deny_deferred_agents`, at every start after `container_defaults`,
+  denies it in W's access policy (sid `TurnedOffAgentsLoadedLater`, under the roster's scope) once the engine
+  loads its class, then takes it off the list. Until then nobody uses it: the engine serves no agent it did not
+  load. A workspace with no access policy yet waits for the next start; a deleted one is forgotten.
 - **Agents a workspace built** (no module) and had turned off: "Agents turned off in <W>", W-owned, a Deny of
   `nexus:UseAgent` on each, attached at W to whoever held a role there (directly, through a group, org-wide,
   invited). The roster lists a built agent only to who may use it (`agents/.../_visible_to_caller`).

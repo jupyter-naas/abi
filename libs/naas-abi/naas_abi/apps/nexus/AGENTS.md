@@ -265,7 +265,7 @@ Rules for page CSS:
 
 ### Org branding
 
-Org-specific border radius comes from the org `loginBorderRadius` field and is exposed as `--org-border-radius`. Layouts set `data-org-branded="true"` on the branded subtree. Avatars always use `9999px` border radius and are excluded from org radius overrides.
+Org-specific border radius comes from the org `loginBorderRadius` field and is exposed as `--org-border-radius`. The tenant's `login_border_radius` is applied first on `document.documentElement` (`data-org-branded` and `--org-border-radius`) so pages outside the workspace shell follow it; a workspace then overwrites `--org-border-radius` with its organization's value. Layouts also set `data-org-branded="true"` on the branded subtree. Avatars always use `9999px` border radius and are excluded from org radius overrides.
 
 In semantic CSS, prefer:
 

@@ -12,6 +12,7 @@ const SEARCH_DELAY_MS = 300;
 export interface Explorer {
   services: ResourceServiceInfo[] | null;
   servicesFailure: Failure | null;
+  /** The service browsed, once the API listed it; null when this deployment has none of that name. */
   service: ResourceServiceInfo | null;
   path: Crumb[];
   parent: string;
@@ -31,9 +32,8 @@ export interface Explorer {
   revealedUntil: number | null;
   revealing: boolean;
 
-  selectService: (name: string) => void;
-  /** Another service's entry (or its root when ``item`` is null). */
-  goTo: (name: string, item: string | null) => void;
+  /** An entry from the root (or the root itself when ``item`` is null). */
+  goTo: (item: string | null) => void;
   open: (crumb: Crumb) => void;
   up: () => void;
   openItem: (id: string) => Promise<void>;
@@ -50,10 +50,10 @@ export interface Explorer {
   history: (id: string) => Promise<Result<{ entries: AuditEntry[] }>>;
 }
 
-export function useExplorer(api: DataApi, initial: Location, nonce = 0): Explorer {
+/** One service's data: ``serviceName`` is fixed for the life of the explorer. */
+export function useExplorer(api: DataApi, serviceName: string, initial: Location, nonce = 0): Explorer {
   const [services, setServices] = useState<ResourceServiceInfo[] | null>(null);
   const [servicesFailure, setServicesFailure] = useState<Failure | null>(null);
-  const [serviceName, setServiceName] = useState<string | null>(initial.service);
   const [path, setPath] = useState<Crumb[]>(initial.path);
   const [loaded, setLoaded] = useState<ResourceEntry[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -88,10 +88,6 @@ export function useExplorer(api: DataApi, initial: Location, nonce = 0): Explore
       }
       setServicesFailure(null);
       setServices(result.data.services);
-      setServiceName((current) => {
-        if (current && result.data.services.some((s) => s.name === current)) return current;
-        return result.data.services.find((s) => s.available)?.name ?? null;
-      });
     });
     return () => {
       cancelled = true;
@@ -194,23 +190,11 @@ export function useExplorer(api: DataApi, initial: Location, nonce = 0): Explore
     setServerQuery('');
   };
 
-  const selectService = (name: string) => {
-    if (name === serviceName) return;
+  const goTo = (item: string | null) => {
     resetListing();
     setPath([ROOT_CRUMB]);
-    setServiceName(name);
-  };
-
-  const goTo = (name: string, item: string | null) => {
-    resetListing();
-    setPath([ROOT_CRUMB]);
-    if (name === serviceName) {
-      if (item) void openItem(item);
-      else setReloads((n) => n + 1);
-      return;
-    }
-    pendingItem.current = item;
-    setServiceName(name);
+    if (item) void openItem(item);
+    else setReloads((n) => n + 1);
   };
 
   const open = (crumb: Crumb) => {
@@ -296,7 +280,6 @@ export function useExplorer(api: DataApi, initial: Location, nonce = 0): Explore
     detailLoading,
     revealedUntil,
     revealing,
-    selectService,
     goTo,
     open,
     up,

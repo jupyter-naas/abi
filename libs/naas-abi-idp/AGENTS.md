@@ -229,10 +229,16 @@ IAM suspension.
 | `ABI_IDP_CLIENT_ID`, `ABI_IDP_CLIENT_SECRET`, `ABI_IDP_REDIRECT_URIS` | the client ABI signs in as; seeded at start, the secret hashed |
 | `ABI_IDP_SIGNUP`, `ABI_IDP_PASSWORD_LOGIN` | `1` to enable |
 | `ABI_IDP_FROM_EMAIL`, `ABI_IDP_FROM_NAME`, `ABI_IDP_APP_NAME` | the sender and the name on the page |
+| `ABI_IDP_MAILBOX_URL` | a local stack's catch-all mailbox (Mailpit: `http://localhost:8025`); the code page links to it. http(s) only. Leave unset in production |
 
 Branding (`branding`, and `domain_branding` by email domain) in the JSON file:
-colors, radius, logo URL, footer, tab title; the page loads no script and no
-font, only the logo.
+colors (`primary_color`, `accent_color` on hover, `background_color`,
+`card_color`, `input_color`, `text_color`), `border_radius`, logo URL,
+`favicon_url` (the tab icon: an https URL or a path), footer, tab title; the page
+loads no script and no font, only the logo and the tab icon. The defaults
+and the layout are those of the Nexus login page (square corners, borderless
+fields): give the provider the same values as the Nexus `tenant` block so the
+two pages look alike.
 
 ## Running it
 

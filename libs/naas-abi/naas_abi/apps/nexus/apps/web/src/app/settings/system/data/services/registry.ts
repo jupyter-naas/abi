@@ -50,7 +50,6 @@ export function genericView(name: string): ServiceView {
     label,
     description: `Data held by the ${label.toLowerCase()} service.`,
     icon: Database,
-    group: 'Platform',
     noun: { one: 'entry', many: 'entries' },
     editor: { language: () => 'plaintext' },
   };

@@ -1,6 +1,6 @@
 'use client';
 
-import { KeyRound } from 'lucide-react';
+import { KeyRound, LockKeyhole } from 'lucide-react';
 import type { ServiceView } from './types';
 
 const NAME = /^[A-Za-z_][A-Za-z0-9_.-]*$/;
@@ -9,8 +9,7 @@ export const secretView: ServiceView = {
   name: 'secret',
   label: 'Secrets',
   description: 'Credentials the engine reads from its secret adapters (.env, Naas).',
-  icon: KeyRound,
-  group: 'Platform',
+  icon: LockKeyhole,
   noun: { one: 'secret', many: 'secrets' },
   entryIcon: () => KeyRound,
   level: () => ({

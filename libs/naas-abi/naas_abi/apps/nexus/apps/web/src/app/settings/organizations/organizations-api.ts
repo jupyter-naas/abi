@@ -35,8 +35,14 @@ export function listOrganizations(fetcher: Fetcher = authFetch) {
   return call<PlatformOrganization[]>(fetcher, ORGANIZATIONS_API);
 }
 
-export function createOrganization(name: string, slug: string, fetcher: Fetcher = authFetch) {
-  return call<PlatformOrganization>(fetcher, ORGANIZATIONS_API, json('POST', { name, slug }));
+/** The name and slug, and what is known of its identity (legal name, address...). */
+export function createOrganization(
+  name: string,
+  slug: string,
+  fetcher: Fetcher = authFetch,
+  identity: Record<string, string> = {}
+) {
+  return call<PlatformOrganization>(fetcher, ORGANIZATIONS_API, json('POST', { ...identity, name, slug }));
 }
 
 export function renameOrganization(id: string, name: string, fetcher: Fetcher = authFetch) {

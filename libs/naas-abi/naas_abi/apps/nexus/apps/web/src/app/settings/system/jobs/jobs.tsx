@@ -99,6 +99,7 @@ export function JobsTab({
   nonce = 0,
   failures = null,
   onFailuresSeen,
+  onJobCount,
 }: {
   api?: JobsApi;
   tracesApi?: TracesApi;
@@ -106,6 +107,8 @@ export function JobsTab({
   /** Runs that failed since the admin last looked (the System app polls them). */
   failures?: JobFailures | null;
   onFailuresSeen?: () => void;
+  /** How many jobs there are, for the count by the page title. */
+  onJobCount?: (count: number) => void;
 }) {
   const api = useMemo(() => injected ?? createJobsApi(), [injected]);
   const tracesApi = useMemo(() => injectedTraces ?? createTracesApi(), [injectedTraces]);
@@ -149,6 +152,7 @@ export function JobsTab({
         if (signal.aborted) return;
         if (result.ok) {
           setOverview(result.data);
+          onJobCount?.(result.data.jobs.length);
           setOverviewFailure(null);
         } else setOverviewFailure(result);
       }),

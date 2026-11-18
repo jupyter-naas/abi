@@ -73,7 +73,9 @@
   height: 36px;
   padding: 0 var(--space-4);
   border: none;
-  border-radius: 0;
+  /* The organization's radius, as every button has (globals.css); a link styled
+     as a button would miss that rule. */
+  border-radius: var(--org-border-radius, 0px);
   background-color: hsl(var(--primary));
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);

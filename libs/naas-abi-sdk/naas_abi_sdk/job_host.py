@@ -26,6 +26,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from naas_abi_sdk.backoff import backoff_delay
 from naas_abi_sdk.call_context import current_call_context, use_call_context
 from naas_abi_sdk.jobs import (
     INPUT_HASH_HEADER,
@@ -631,12 +632,14 @@ class JobHost:
         from nats.errors import TimeoutError as NATSTimeoutError
 
         slots = asyncio.Semaphore(descriptor.max_concurrency)
+        failures = 0
         while not self._closing and not self._draining:
             await slots.acquire()
             try:
                 messages = await sub.fetch(1, timeout=self.fetch_timeout_seconds)
             except (NATSTimeoutError, asyncio.TimeoutError):
                 slots.release()
+                failures = 0
                 continue
             except Exception:  # broker hiccup: retry, never kill the loop
                 slots.release()
@@ -645,8 +648,12 @@ class JobHost:
                 logger.warning(
                     "Job fetch failed for %s; retrying", descriptor.name, exc_info=True
                 )
-                await asyncio.sleep(1)
+                # Disconnected, each fetch fails at once (OutboundBufferLimitError):
+                # back off, with jitter, rather than retry every second.
+                await asyncio.sleep(backoff_delay(failures))
+                failures += 1
                 continue
+            failures = 0
             for message in messages:
                 self._spawn(
                     self._handle_and_release(descriptor, handler, message, slots)

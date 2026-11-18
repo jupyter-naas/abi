@@ -32,6 +32,16 @@ class OrganizationRecord:
     secondary_logo_url: str | None = None
     show_logo_separator: bool = False
     default_theme: str | None = None
+    legal_name: str | None = None
+    registration_number: str | None = None
+    vat_number: str | None = None
+    website: str | None = None
+    contact_email: str | None = None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    postal_code: str | None = None
+    city: str | None = None
+    country: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -63,6 +73,16 @@ class OrganizationCreateInput:
     secondary_logo_url: str | None = None
     show_logo_separator: bool = False
     default_theme: str | None = None
+    legal_name: str | None = None
+    registration_number: str | None = None
+    vat_number: str | None = None
+    website: str | None = None
+    contact_email: str | None = None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    postal_code: str | None = None
+    city: str | None = None
+    country: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -92,6 +112,16 @@ class OrganizationUpdateInput:
     secondary_logo_url: str | None = None
     show_logo_separator: bool | None = None
     default_theme: str | None = None
+    legal_name: str | None = None
+    registration_number: str | None = None
+    vat_number: str | None = None
+    website: str | None = None
+    contact_email: str | None = None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    postal_code: str | None = None
+    city: str | None = None
+    country: str | None = None
     updated_at: datetime | None = None
     set_fields: set[str] | None = None
 

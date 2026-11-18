@@ -88,6 +88,15 @@ async function open(api: JobsApi) {
 }
 
 describe('JobsTab', () => {
+  it('tells the page how many jobs there are, for the count by its title', async () => {
+    const { api } = fakeApi();
+    const onJobCount = vi.fn();
+    mounted = await mount(JobsTab, { api, tracesApi, onJobCount });
+    await mounted.flush();
+    await mounted.flush();
+    expect(onJobCount).toHaveBeenLastCalledWith(2);
+  });
+
   it('does not ask for the overview again until the last one answered, and aborts it on close', async () => {
     vi.useFakeTimers();
     try {
@@ -160,7 +169,7 @@ describe('JobsTab', () => {
     expect(panel()?.querySelectorAll('[role="treeitem"]')).toHaveLength(4);
     expect(panel()?.querySelector('.trace-header a')?.getAttribute('href')).toBe(`http://jaeger/trace/${TRACE_ID}`);
     await mounted!.click(button('Open in Traces', panel() ?? document));
-    expect(push).toHaveBeenCalledWith(`/settings/system/traces?trace=${TRACE_ID}`);
+    expect(push).toHaveBeenCalledWith(`/settings/activity/traces?trace=${TRACE_ID}`);
   });
 
   it('runs a job now and follows the run from queued to started', async () => {
