@@ -42,6 +42,8 @@ class Branding:
     text_color: str = "#1a1a1a"
     border_radius: int = 0
     logo_url: str | None = None
+    # The tab icon (``<link rel="icon">``): an https URL or a path on this origin.
+    favicon_url: str | None = None
     footer_text: str = ""
     tab_title: str | None = None
 
@@ -65,6 +67,10 @@ class Branding:
             scheme = urlsplit(self.logo_url).scheme
             if scheme not in ("https", "http", ""):
                 raise ValueError("branding.logo_url is an http(s) URL or a path")
+        if self.favicon_url is not None:
+            scheme = urlsplit(self.favicon_url).scheme
+            if scheme not in ("https", ""):
+                raise ValueError("branding.favicon_url is an https URL or a path")
 
     @classmethod
     def of(

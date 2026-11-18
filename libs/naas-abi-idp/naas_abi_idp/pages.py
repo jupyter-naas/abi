@@ -1,7 +1,7 @@
 """The login pages and the sign-in mail, with the organization's branding.
 
 Plain HTML with inline styles: no script, no external stylesheet, no font. The
-only thing that loads from elsewhere is the logo, and the page's
+only things that load from elsewhere are the logo and the tab icon, and the page's
 Content-Security-Policy (``web.py``) allows images from https and this origin only.
 Everything dynamic goes through ``escape``.
 """
@@ -42,6 +42,11 @@ def _page(branding: Branding, title: str, body: str, *, status_note: str = "") -
         else ""
     )
     logo = _logo(branding)
+    icon = (
+        f'<link rel="icon" href="{_attr(branding.favicon_url)}">\n'
+        if branding.favicon_url
+        else ""
+    )
     radius = f"{int(branding.border_radius)}px"
     ink = "0,0,0" if _is_light(branding.card_color) else "255,255,255"
     page_ink = "0,0,0" if _is_light(branding.background_color) else "255,255,255"
@@ -55,7 +60,7 @@ def _page(branding: Branding, title: str, body: str, *, status_note: str = "") -
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <title>{escape(title)} - {escape(tab)}</title>
-<style>
+{icon}<style>
 *{{box-sizing:border-box}}
 body{{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;
 justify-content:center;padding:24px 16px;background:{branding.background_color};

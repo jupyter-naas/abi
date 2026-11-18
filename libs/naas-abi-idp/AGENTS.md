@@ -232,8 +232,9 @@ IAM suspension.
 
 Branding (`branding`, and `domain_branding` by email domain) in the JSON file:
 colors (`primary_color`, `accent_color` on hover, `background_color`,
-`card_color`, `input_color`, `text_color`), `border_radius`, logo URL, footer,
-tab title; the page loads no script and no font, only the logo. The defaults
+`card_color`, `input_color`, `text_color`), `border_radius`, logo URL,
+`favicon_url` (the tab icon: an https URL or a path), footer, tab title; the page
+loads no script and no font, only the logo and the tab icon. The defaults
 and the layout are those of the Nexus login page (square corners, borderless
 fields): give the provider the same values as the Nexus `tenant` block so the
 two pages look alike.
