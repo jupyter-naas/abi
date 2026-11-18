@@ -484,3 +484,33 @@ def test_the_dev_app_map_is_read_from_nexus_dev_app_urls(monkeypatch) -> None:
     assert Settings(_env_file=None).nexus_dev_app_urls == ""
     monkeypatch.setenv("NEXUS_DEV_APP_URLS", "acme.portal:site=http://localhost:9")
     assert Settings(_env_file=None).nexus_dev_app_urls == "acme.portal:site=http://localhost:9"
+
+
+@pytest.mark.asyncio
+async def test_a_key_with_a_limit_mints_no_portal_sign_in(world, monkeypatch) -> None:
+    """A portal sign-in is a credential of its own (the portal's session), so a
+    request made with a narrowed key (``abi_scope``) may not mint one, even with a
+    limit that allows everything (``oidc/AGENTS.md``,
+    ``refuse_a_limited_credential``). The same person in a session mints it."""
+    from dataclasses import replace
+
+    from naas_abi_core.engine.call_context import use_call_context
+
+    portal, _, _ = _sso_catalog(monkeypatch)
+    site = ModuleScope("app", "acme.portal", "site")
+    world.iam.allow_scope("member", site, world.scope)
+    # Even a limit that leaves everything allowed is a limit.
+    everything = ({"effect": "Allow", "actions": ["*"], "resources": ["*"]},)
+    narrowed = replace(world.iam.context("member"), scope=everything)
+    async with world.as_("member") as http:
+        with use_call_context(narrowed):
+            for body in (
+                {"audience": "portal.example.com", "app_id": portal.app_id},
+                {"audience": "anything.example.org"},
+            ):
+                refused = await _sso(http, **body)
+                assert refused.status_code == 403, body
+                assert "limit" in refused.json()["detail"]
+        assert (
+            await _sso(http, audience="portal.example.com", app_id=portal.app_id)
+        ).status_code == 200

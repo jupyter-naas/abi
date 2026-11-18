@@ -28,7 +28,9 @@ on/off state of its own for an app.
   may add the host of that app's dev origin (`pages_sso.dev_app_url`). The map has no built-in entries. An id that
   is no app's, or an app the catalog of loaded modules lacks, is a 400; a remote app is one (it opens at
   `/app-html/remote/`, with no portal host, and the web app never asks for it). Without `app_id` the route still
-  asks `UseApp` and takes any hostname. An empty `pages_sso_secret` is a 503 for those allowed. A view refuses it.
+  asks `UseApp` and takes any hostname. An empty `pages_sso_secret` is a 503 for those allowed. A view refuses it,
+  and so does a request made with a key that has a limit (`refuse_a_limited_credential`, as for a link: the portal's
+  session would be a credential of its own).
 - **A remote app is installed while a READY module serves it** (`_remote_app_info`): the Apps pages and the
   workspace settings list only installed apps, as for a loaded module's.
 - **No per-workspace switch.** The app-config routes (`GET|POST /api/apps/{ws}`, `GET|PATCH|DELETE
