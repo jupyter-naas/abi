@@ -24,6 +24,79 @@
 
 <!-- version list -->
 
+## v4.2.0 (2026-11-18)
+
+### Bug Fixes
+
+- **nexus**: Analytics routes run off the event loop
+  ([`1002ac2`](https://github.com/jupyter-naas/abi/commit/1002ac242f3be023b63eae69d8b5f9e8e080c657))
+
+- **nexus**: Avatar menu reads organizations once, shows pending entries
+  ([`f92bd66`](https://github.com/jupyter-naas/abi/commit/f92bd66e5e8466b0c5dc3a3de46b0db51b47b418))
+
+- **nexus**: Esc leaves settings only when nothing else takes it
+  ([#1493](https://github.com/jupyter-naas/abi/pull/1493),
+  [`9826c88`](https://github.com/jupyter-naas/abi/commit/9826c887dcdaad18a1bf8a1369cec8f1ff967691))
+
+- **nexus**: Platform General's refresh is the icon button of Organizations
+  ([`fc95897`](https://github.com/jupyter-naas/abi/commit/fc958975bc17bb59cfc3afb75a87cf4414cfdde8))
+
+- **nexus**: Platform Roles & permissions laid out like the organization's
+  ([`ca79048`](https://github.com/jupyter-naas/abi/commit/ca7904818a5732fb8c4f8109173d303a13dcfca0))
+
+- **nexus**: Platform Settings speak one design
+  ([`6895085`](https://github.com/jupyter-naas/abi/commit/689508593e42c816734da08036e8efb7aa2a6fc1))
+
+- **nexus**: Scope switcher reads Platform, the user's name, Organization · <name>
+  ([`fc28bae`](https://github.com/jupyter-naas/abi/commit/fc28bae1c74ac8604db2d6a6bec143b08ab3bbde))
+
+### Chores
+
+- **deps**: Bump @embedpdf/snippet
+  ([`b096bc3`](https://github.com/jupyter-naas/abi/commit/b096bc342ff222260d1140914446dbc21a15ded9))
+
+- **deps**: Bump @radix-ui/react-dropdown-menu
+  ([`13c1836`](https://github.com/jupyter-naas/abi/commit/13c1836fa4e17a56dca0f4b40c08a847b90bcf14))
+
+- **deps**: Bump @radix-ui/react-separator
+  ([`c7a3dc2`](https://github.com/jupyter-naas/abi/commit/c7a3dc2419454327731e3096fd77210f7073b6ed))
+
+- **deps**: Bump @radix-ui/react-slot
+  ([`c2032e9`](https://github.com/jupyter-naas/abi/commit/c2032e9f832b8743d46adef08287b73e78fd8e6a))
+
+- **deps**: Bump @radix-ui/react-tabs
+  ([`38ac04b`](https://github.com/jupyter-naas/abi/commit/38ac04b3e0b3f5972d4b2df9e7db5941d34d7a22))
+
+- **deps**: Bump three and @types/three
+  ([`10625a6`](https://github.com/jupyter-naas/abi/commit/10625a62a926af9f5c14f51eea49934f4b450de6))
+
+- **deps**: Bump vis-network in /libs/naas-abi/naas_abi/apps/nexus
+  ([`72777ee`](https://github.com/jupyter-naas/abi/commit/72777ee778ef40f1cd67f44904479ef0c5a0fbf0))
+
+- **deps-dev**: Bump autoprefixer in /libs/naas-abi/naas_abi/apps/nexus
+  ([`b473fc6`](https://github.com/jupyter-naas/abi/commit/b473fc6a3ab3a7a170c0b0332857dc154fbaa4d8))
+
+- **deps-dev**: Bump pytest
+  ([`a429045`](https://github.com/jupyter-naas/abi/commit/a42904591e384fa7cb6d3cd02a11d854d80b38c0))
+
+- **deps-dev**: Bump pytest-asyncio
+  ([`752e30d`](https://github.com/jupyter-naas/abi/commit/752e30d3c79f8e60448f0c6c27410dda87031314))
+
+- **deps-dev**: Bump ruff
+  ([`a20aefe`](https://github.com/jupyter-naas/abi/commit/a20aefeec97a90087a98a50ade866ce5c5838908))
+
+### Features
+
+- **nexus**: Infrastructure moves from the sidebar to the avatar menu
+  ([`b33fa28`](https://github.com/jupyter-naas/abi/commit/b33fa28abb1ee8d1ee8a588e4a3d62ee8d2d8b98))
+
+- **nexus**: Platform Create user and Create organization buttons, Nexus tables first
+  ([`cfffec7`](https://github.com/jupyter-naas/abi/commit/cfffec7fdf7373ffd32d19d8d6bdee16075770e3))
+
+- **nexus**: Platform General, organization identity, Organizations table
+  ([`da6e79f`](https://github.com/jupyter-naas/abi/commit/da6e79f225b31b4299817948d14b8b026db37191))
+
+
 ## v4.1.2 (2026-11-18)
 
 ### Bug Fixes
