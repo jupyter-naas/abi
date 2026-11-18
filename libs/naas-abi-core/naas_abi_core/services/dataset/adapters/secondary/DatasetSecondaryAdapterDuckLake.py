@@ -762,7 +762,9 @@ class DatasetSecondaryAdapterDuckLake(IDatasetPort):
         con = self._connect()
         try:
             con.execute("BEGIN")
-            self._load_spec(con, namespace, name)
+            # A read: the metadata catalog, not ``duckdb_tables()`` (seconds a call
+            # across a few hundred tables, once per dataset for the hourly monitor).
+            self._read_spec(con, namespace, name)
             metadata = self._ident(f"__ducklake_metadata_{CATALOG_ALIAS}")
             tables = con.execute(
                 f"SELECT i.table_name FROM {metadata}.ducklake_inlined_data_tables i "  # nosec B608

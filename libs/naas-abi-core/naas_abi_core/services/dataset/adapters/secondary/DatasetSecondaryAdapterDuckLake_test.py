@@ -907,6 +907,39 @@ def test_inlined_row_count_waits_for_a_write_on_a_sqlite_catalog(tmp_path):
     assert not reader.is_alive() and len(counts) == 1  # runs once the write is done
 
 
+def test_inlined_row_count_reads_the_spec_from_the_metadata_catalog(
+    tmp_path, monkeypatch
+):
+    """The hourly catalog monitor counts inlined rows of every dataset:
+    ``duckdb_tables()`` (``_load_spec``) costs seconds per call once the lake
+    holds a few hundred tables, the metadata catalog (``_read_spec``)
+    milliseconds."""
+    adapter = DatasetSecondaryAdapterDuckLake(
+        catalog=f"sqlite:{tmp_path / 'catalog.sqlite'}",
+        data_path=str(tmp_path / "data"),
+    )
+    adapter.create(
+        DatasetSpec(
+            name="t",
+            columns=(ColumnSpec(name="id", type="string"),),
+            primary_key=("id",),
+        )
+    )
+    adapter.write("t", [{"id": str(n)} for n in range(3)])
+    assert adapter.inlined_row_count("t") == 3
+
+    def scan_every_table(*args, **kwargs):
+        raise AssertionError(
+            "inlined_row_count listed every table with duckdb_tables()"
+        )
+
+    monkeypatch.setattr(adapter, "_load_spec", scan_every_table)
+
+    assert adapter.inlined_row_count("t") == 3
+    with pytest.raises(DatasetNotFoundError):
+        adapter.inlined_row_count("missing")
+
+
 # --- compaction and snapshot expiry ---------------------------------------------------
 
 
