@@ -161,6 +161,13 @@ export interface Workspace {
   group?: string;
   /** Organization the workspace belongs to (Organization Settings links). */
   organizationId?: string;
+  /** Its organization's name and slug: the Workspaces list groups by them. */
+  organizationName?: string;
+  organizationSlug?: string;
+  /** The organization's own square logo (the Workspaces list's headings). */
+  organizationLogoUrl?: string;
+  /** Whether the user may open the organization's drive (Files sidebar). */
+  organizationDriveEnabled?: boolean;
   ownerId?: string;
   icon?: string;
   color?: string;
@@ -1438,6 +1445,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         description: ws.description,
         group: ws.workspace_group || undefined,
         organizationId: ws.organization_id || undefined,
+        organizationName: ws.organization_name || undefined,
+        organizationSlug: ws.organization_slug || undefined,
+        organizationLogoUrl: normalize(ws.organization_logo_url),
+        organizationDriveEnabled: Boolean(ws.organization_drive),
         ownerId: ws.owner_id || undefined,
         icon: ws.icon || ws.logo_emoji,
         color: ws.color,

@@ -1,7 +1,9 @@
-"""Which workspace owns the kernel resources Nexus keeps for it.
+"""Which workspace (or organization) owns the kernel resources Nexus keeps for it.
 
 A kernel service names a resource inside the container IAM *placed* it in (a
-workspace's, ``abi:nexus:organization/<org>/nexus:workspace/<ws>``). Nexus places what it creates for a workspace (its files' prefix, its
+workspace's, ``abi:nexus:organization/<org>/nexus:workspace/<ws>``, or an
+organization's own, ``abi:nexus:organization/<org>``, for what belongs to the
+organization as a whole: its drive). Nexus places what it creates for a workspace (its files' prefix, its
 graphs, its datasets, its repositories) the moment it creates it, and a domain
 registers a ``placement_source`` for what already exists, which ``place_existing``
 applies at every startup (it only writes what differs).
@@ -22,7 +24,13 @@ from typing import Any
 
 from naas_abi.apps.nexus.apps.api.app.services.iam import runtime
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container, workspace_of
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
+    ORGANIZATION,
+    SERVICE,
+    WORKSPACE,
+    workspace_container,
+    workspace_of,
+)
 from naas_abi_core import logger
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.names import IdKind, encode_id
@@ -33,13 +41,15 @@ from starlette.concurrency import run_in_threadpool
 @dataclass(frozen=True)
 class Placement:
     """``parts`` of ``service``'s resource (or of every resource below it, with
-    ``prefix``) belong to ``workspace``."""
+    ``prefix``) belong to ``workspace``, or to ``organization`` when it names one
+    (``workspace`` is then empty)."""
 
     service: str
     parts: tuple[str, ...] | str
     workspace: str
     prefix: bool = False
     kind: IdKind = "path"
+    organization: str | None = None
 
     def id_key(self) -> str:
         key = encode_id(self.parts, self.kind)
@@ -85,23 +95,34 @@ async def place(placement: Placement, *, org: str | None = None) -> None:
     await place_many([placement], org=org)
 
 
+async def organization_container_of(organization: str) -> str | None:
+    """An organization's container, as IAM registered it; None for one IAM does
+    not know (yet)."""
+    return await run_in_threadpool(runtime.iam().container, SERVICE, ORGANIZATION, organization)
+
+
 async def place_many(placements: Sequence[Placement], *, org: str | None = None) -> int:
-    """Place resources in their workspaces' containers; returns how many were
-    written. ``org``: the organization of every workspace named (skips the
-    lookup). A placement that already says the same is left alone, and one of a
-    workspace IAM does not know is skipped (logged)."""
-    containers: dict[str, str | None] = {}
+    """Place resources in their workspaces' (or organizations') containers; returns
+    how many were written. ``org``: the organization of every workspace named
+    (skips the lookup). A placement that already says the same is left alone, and
+    one of a workspace or organization IAM does not know is skipped (logged)."""
+    containers: dict[tuple[str, str], str | None] = {}
     entries = []
     for placement in placements:
-        if placement.workspace not in containers:
-            containers[placement.workspace] = (
-                workspace_container(org, placement.workspace)
-                if org is not None
-                else await AUTHZ.container_of(placement.workspace)
-            )
-        container = containers[placement.workspace]
+        if placement.organization is not None:
+            key = (ORGANIZATION, placement.organization)
+        else:
+            key = (WORKSPACE, placement.workspace)
+        if key not in containers:
+            if placement.organization is not None:
+                containers[key] = await organization_container_of(placement.organization)
+            elif org is not None:
+                containers[key] = workspace_container(org, placement.workspace)
+            else:
+                containers[key] = await AUTHZ.container_of(placement.workspace)
+        container = containers[key]
         if container is None:
-            logger.warning(f"Not placed: workspace {placement.workspace} is unknown to IAM")
+            logger.warning(f"Not placed: {key[0]} {key[1]} is unknown to IAM")
             continue
         entries.append((placement, container))
 

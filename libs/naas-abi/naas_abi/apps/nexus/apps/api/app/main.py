@@ -187,11 +187,15 @@ def _schedule_identity_graph_sync(_published: int = 0, delay_seconds: float = 2.
 
 
 def _install_drive_writers() -> None:
-    """Keep .manifest.json and the default folders in every workspace drive and My Drive."""
+    """Keep .manifest.json and the default folders in every workspace drive,
+    organization drive and My Drive."""
     _log = logging.getLogger(__name__)
     try:
         from naas_abi import ABIModule
         from naas_abi.apps.nexus.apps.api.app.services.files.drives.my_drive import MyDriveWriter
+        from naas_abi.apps.nexus.apps.api.app.services.files.drives.organization_drive import (
+            OrganizationDriveWriter,
+        )
         from naas_abi.apps.nexus.apps.api.app.services.files.drives.workspace_drive import (
             WorkspaceDriveWriter,
         )
@@ -200,6 +204,7 @@ def _install_drive_writers() -> None:
             return ABIModule.get_instance().engine.services.object_storage
 
         WorkspaceDriveWriter(get_storage=get_storage).install()
+        OrganizationDriveWriter(get_storage=get_storage).install()
         MyDriveWriter(get_storage=get_storage).install()
         _log.info("✓ Drive writers installed")
     except Exception:
@@ -207,13 +212,17 @@ def _install_drive_writers() -> None:
 
 
 async def _backfill_drives() -> None:
-    """Write missing workspace and My Drive defaults, and the platform drive's staff folders."""
+    """Write missing workspace, organization and My Drive defaults, and the platform
+    drive's staff folders."""
     _log = logging.getLogger(__name__)
     try:
         from naas_abi import ABIModule
         from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
         from naas_abi.apps.nexus.apps.api.app.services.files.drives.my_drive import (
             backfill_my_drives,
+        )
+        from naas_abi.apps.nexus.apps.api.app.services.files.drives.organization_drive import (
+            backfill_organization_drives,
         )
         from naas_abi.apps.nexus.apps.api.app.services.files.drives.platform_drive import (
             backfill_platform_drive,
@@ -225,12 +234,14 @@ async def _backfill_drives() -> None:
         storage = ABIModule.get_instance().engine.services.object_storage
         async with AsyncSessionLocal() as session:
             workspaces = await backfill_workspace_drives(session, storage)
+            organizations = await backfill_organization_drives(session, storage)
             users = await backfill_my_drives(session, storage)
         platform = await backfill_platform_drive(storage)
-        if any(workspaces.values()) or any(users.values()) or any(platform.values()):
+        if any(any(counts.values()) for counts in (workspaces, organizations, users, platform)):
             _log.info(
-                "✓ Drives backfilled: workspaces %s, my drives %s, platform %s",
+                "✓ Drives backfilled: workspaces %s, organizations %s, my drives %s, platform %s",
                 workspaces,
+                organizations,
                 users,
                 platform,
             )
