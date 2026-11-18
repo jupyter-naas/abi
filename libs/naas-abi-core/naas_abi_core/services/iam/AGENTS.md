@@ -707,9 +707,14 @@ itself (`triple_store:ListGraphs` on each `graph/…`).
 
 **Freshness.** Policy (a parent's included), attachment, group, placement and status changes take effect
 at the next check after IAM's change event reaches the checking process: at once
-in process, within the event's delivery over NATS. Cached state also expires after
-60 seconds, so a missed event cannot keep stale grants for long. Group membership
-carried in a token's `grp` lasts until the token expires (ten minutes at most).
+in process, within the event's delivery over NATS. A missed event cannot keep
+stale grants for long either: before it reads a cached subject or policy, the
+service compares the store's revision (every such write bumps it) at most every
+2 seconds (`revision_check_seconds`, never more than `cache_ttl_seconds`) and drops
+its caches when it moved, or when it cannot be read. An unchanged subject is kept
+up to ten minutes (`subject_ttl_seconds`); placements and token floors expire after
+`cache_ttl_seconds` (60). Group membership carried in a token's `grp` lasts until
+the token expires (ten minutes at most).
 
 ## Action catalogs
 
