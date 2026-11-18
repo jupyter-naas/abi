@@ -24,6 +24,17 @@
 
 <!-- version list -->
 
+## v3.6.6 (2026-11-18)
+
+### Bug Fixes
+
+- **iam**: A policy is held where it applies, not in every container
+  ([`1ab4725`](https://github.com/jupyter-naas/abi/commit/1ab4725dc3cd0a018928b6783396f376405f0dc3))
+
+- **invites**: An authorized invitation makes the account at the provider
+  ([`dc1943b`](https://github.com/jupyter-naas/abi/commit/dc1943bb482d77c2b887c75916fd1032f6ca93f2))
+
+
 ## v3.6.5 (2026-11-18)
 
 ### Performance Improvements
