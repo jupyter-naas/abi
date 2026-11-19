@@ -1,11 +1,15 @@
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
+    catalog_module_name,
     filter_ontology_catalog,
     ontology_matches_seed,
     parse_agent_ref,
+    project_ontology_refs,
     resolve_agent_ref,
     resolve_agent_refs,
+    seeded_ontology_refs,
 )
 
 
@@ -92,7 +96,70 @@ def test_workspace_seed_config_accepts_ontologies() -> None:
         ontologies=["example:ExampleOntology.ttl", "bfo:bfo-core.ttl"],
     )
     assert seed.ontologies == ["example:ExampleOntology.ttl", "bfo:bfo-core.ttl"]
-    assert WorkspaceSeedConfig(name="Example", slug="example").ontologies == []
+    # Not set: the workspace starts with the project's own ontologies.
+    assert WorkspaceSeedConfig(name="Example", slug="example").ontologies is None
+    assert WorkspaceSeedConfig(name="Example", slug="example", ontologies=[]).ontologies == []
+
+
+_JOE = "/projects/joe/src/joe/ontologies"
+_PROJECT_MODULES = {
+    "naas_abi": SimpleNamespace(
+        ontologies=["/abi/libs/naas-abi/naas_abi/ontologies/modules/ABIOntology.ttl"]
+    ),
+    "naas_abi_marketplace.ai.openrouter": SimpleNamespace(
+        ontologies=["/abi/naas_abi_marketplace/ai/openrouter/ontologies/modules/O.ttl"]
+    ),
+    "joe": SimpleNamespace(
+        ontologies=[
+            f"{_JOE}/modules/JoeOntology.ttl",
+            f"{_JOE}/processes/JoeProcess.ttl",
+            f"{_JOE}/sandbox/Draft.ttl",
+        ]
+    ),
+    "acme.billing": SimpleNamespace(
+        ontologies=["/projects/joe/src/acme/billing/ontologies/modules/Billing.ttl"]
+    ),
+}
+
+
+def test_catalog_module_name_is_the_folder_above_ontologies() -> None:
+    assert catalog_module_name(f"{_JOE}/modules/JoeOntology.ttl") == "joe"
+    assert catalog_module_name(f"{_JOE}/processes/JoeProcess.ttl") is None
+    assert catalog_module_name(f"{_JOE}/sandbox/Draft.ttl") is None
+    assert catalog_module_name("/projects/joe/src/joe/schema/Joe.ttl") is None
+
+
+def test_project_ontology_refs_are_the_modules_outside_the_framework() -> None:
+    assert project_ontology_refs(_PROJECT_MODULES) == [
+        "billing:Billing.ttl",
+        "joe:JoeOntology.ttl",
+    ]
+
+
+def test_a_project_ref_matches_its_catalog_file() -> None:
+    path = f"{_JOE}/modules/JoeOntology.ttl"
+    assert ontology_matches_seed(path, "joe", project_ontology_refs(_PROJECT_MODULES))
+
+
+def test_seeded_ontology_refs() -> None:
+    with patch(
+        "naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed._engine_modules",
+        return_value=_PROJECT_MODULES,
+    ):
+        assert seeded_ontology_refs(SimpleNamespace(ontologies=None)) == [
+            "billing:Billing.ttl",
+            "joe:JoeOntology.ttl",
+        ]
+        assert seeded_ontology_refs(SimpleNamespace(ontologies=[])) == []
+        assert seeded_ontology_refs(SimpleNamespace(ontologies=["bfo:bfo-core.ttl"])) == [
+            "bfo:bfo-core.ttl"
+        ]
+        assert seeded_ontology_refs(None) == []
+
+
+def test_seeded_ontology_refs_without_an_engine_is_empty() -> None:
+    with patch("naas_abi.ABIModule.get_instance", side_effect=ValueError("not initialized")):
+        assert seeded_ontology_refs(SimpleNamespace(ontologies=None)) == []
 
 
 def test_ontology_refs_do_not_match_partial_names_or_paths() -> None:

@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import json
 
-from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import live_settings
+from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
+    live_settings,
+    seeded_ontology_refs,
+)
 from naas_abi.apps.nexus.apps.api.app.models import (
     OrganizationModel,
     WorkspaceModel,
@@ -135,7 +138,7 @@ async def load_resource_policy(
     data = (
         getattr(seed, "graphs", WorkspaceGraphPolicyConfig()).model_dump()
         if kind == "graphs"
-        else {"enabled": list(getattr(seed, "ontologies", None) or [])}
+        else {"enabled": seeded_ontology_refs(seed)}
     )
     if viewing():
         # The first read of a workspace stores its configured policy; a page load in a view

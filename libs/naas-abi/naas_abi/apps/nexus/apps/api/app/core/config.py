@@ -418,9 +418,10 @@ class WorkspaceSeedConfig(BaseModel):
     apps: list[str] | None = None
     # Initial assignments only; saved workspace resource policies take precedence.
     # Ontology catalog ids (``module:filename.ttl``). Exclusive when a list
-    # is set: listed on, others off. Missing, null and empty lists show none.
+    # is set: listed on, others off; an empty list shows none. Missing or null:
+    # the project's own module ontologies (src/<module>/ontologies/).
     # owl:imports are not implied; explicitly list shared dependency files too.
-    ontologies: list[str] | None = Field(default_factory=list)
+    ontologies: list[str] | None = None
     # Exact data graph grants. Missing policy exposes owned graphs only.
     graphs: WorkspaceGraphPolicyConfig = Field(default_factory=WorkspaceGraphPolicyConfig)
     # Initial Maps feeds and custom basemaps (see WorkspaceMapsSeedConfig).

@@ -106,6 +106,69 @@ def _remote_module_id(path: str) -> str | None:
     return module_id if module_id and rest else None
 
 
+def catalog_module_name(path: str) -> str | None:
+    """The module an in-engine ontology file is listed under in the catalog (the
+    folder above ``ontologies/``), or None when the catalog leaves it out: outside
+    ``ontologies/``, a sandbox, or a process slice (slices are consolidated into
+    ``ontologies/modules/<Module>Ontology.ttl``)."""
+    catalog_folders = {part.lower() for part in Path(path).parts}
+    if (
+        "sandbox" in path.lower()
+        or "ontologies" not in catalog_folders
+        or "processes" in catalog_folders
+    ):
+        return None
+    parts = path.split("/")
+    try:
+        idx = parts.index("ontologies")
+    except ValueError:
+        return parts[0] if parts else ""
+    return parts[idx - 1] if idx > 0 else ""
+
+
+# The ABI framework's packages (naas_abi, naas_abi_core, naas_abi_marketplace...):
+# their ontologies are the platform's, enabled in a workspace by name.
+_FRAMEWORK_PACKAGE_PREFIX = "naas_abi"
+
+
+def project_ontology_refs(modules: Mapping[str, Any]) -> list[str]:
+    """``module:filename.ttl`` of every catalog file the project's own modules
+    ship (``src/<module>/ontologies/``): the engine modules outside the framework."""
+    refs: list[str] = []
+    for module_name, module in modules.items():
+        if module_name.split(".")[0].startswith(_FRAMEWORK_PACKAGE_PREFIX):
+            continue
+        for path in getattr(module, "ontologies", None) or []:
+            if _remote_module_id(path) is not None:
+                continue
+            catalog_module = catalog_module_name(_posix(path))
+            if catalog_module:
+                refs.append(f"{_module_key(catalog_module)}:{Path(path).name}")
+    return sorted(set(refs), key=str.lower)
+
+
+def _engine_modules() -> Mapping[str, Any]:
+    from naas_abi import ABIModule
+
+    try:
+        return ABIModule.get_instance().engine.modules
+    except ValueError:
+        # No engine (a test, a script): no module ships an ontology.
+        return {}
+
+
+def seeded_ontology_refs(seed: Any | None) -> list[str]:
+    """The ontologies a configured workspace starts with. A seed's ``ontologies``
+    list is exclusive (empty enables none); a seed without one enables the
+    project's own (``project_ontology_refs``). No seed enables none."""
+    if seed is None:
+        return []
+    configured = getattr(seed, "ontologies", None)
+    if configured is not None:
+        return list(configured)
+    return project_ontology_refs(_engine_modules())
+
+
 def ontology_catalog_aliases(path: str, module_name: str) -> set[str]:
     """Ids that may appear in ``WorkspaceSeedConfig.ontologies`` for this file.
 

@@ -120,6 +120,23 @@ class ResourceAccessTests(unittest.IsolatedAsyncioTestCase):
                 {"enabled": []},
             )
 
+    async def test_a_seed_without_ontologies_starts_with_the_projects_own(self):
+        self.seed.ontologies = None
+        modules = {
+            "naas_abi": SimpleNamespace(ontologies=["/abi/naas_abi/ontologies/modules/A.ttl"]),
+            "joe": SimpleNamespace(ontologies=["/p/src/joe/ontologies/modules/JoeOntology.ttl"]),
+        }
+        with patch(
+            "naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed._engine_modules",
+            return_value=modules,
+        ):
+            async with self.sessions() as db:
+                first = await repo.load_resource_policy(db, "a", "ontologies")
+                # An unconfigured workspace still starts with none.
+                other = await repo.load_resource_policy(db, "b", "ontologies")
+        self.assertEqual(first.data, {"enabled": ["joe:JoeOntology.ttl"]})
+        self.assertEqual(other.data, {"enabled": []})
+
     async def test_initial_seed_is_not_reapplied_even_before_first_admin_edit(self):
         async with self.sessions() as db:
             first = await repo.load_resource_policy(db, "a", "graphs")

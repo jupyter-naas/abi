@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from naas_abi.apps.nexus.apps.api.app.core.workspace_catalog_seed import (
+    catalog_module_name,
     filter_ontology_catalog,
     ontology_matches_seed,
 )
@@ -1233,20 +1234,9 @@ class OntologyService:
                 # owl:Ontology (checked below), except process slices. Slices are
                 # consolidated into ontologies/modules/<Module>Ontology.ttl, which
                 # carries their classes and process-ledger declarations.
-                catalog_folders = {part.lower() for part in Path(ontology).parts}
-                if (
-                    "sandbox" in ontology.lower()
-                    or "ontologies" not in catalog_folders
-                    or "processes" in catalog_folders
-                ):
+                module_name = catalog_module_name(ontology)
+                if module_name is None:
                     continue
-
-                parts = ontology.split("/")
-                try:
-                    idx = parts.index("ontologies")
-                    module_name = parts[idx - 1] if idx > 0 else ""
-                except ValueError:
-                    module_name = parts[0] if parts else ""
                 if catalog_refs is not None and not ontology_matches_seed(
                     ontology, module_name, catalog_refs
                 ):
