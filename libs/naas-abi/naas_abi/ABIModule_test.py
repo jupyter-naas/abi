@@ -285,6 +285,22 @@ def test_the_shared_pages_sso_secret_loads_and_is_ignored() -> None:
     assert not any("old-shared" in line for line in said)
 
 
+def test_an_empty_pages_sso_secret_left_by_an_old_template_loads_silently() -> None:
+    from naas_abi_core import logger
+
+    from naas_abi import nexus_settings_kwargs
+
+    said: list[str] = []
+    sink = logger.add(lambda message: said.append(str(message)), level="WARNING")
+    try:
+        for empty in ("", "  ", None):
+            config = NexusConfig.model_validate({"pages_sso_secret": empty})
+            assert "pages_sso_secret" not in nexus_settings_kwargs(config)
+    finally:
+        logger.remove(sink)
+    assert not any("pages_sso_secret" in line for line in said), said
+
+
 def test_portal_sso_secrets_come_from_the_environment_as_json(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -33,9 +33,13 @@ on/off state of its own for an app.
   someone who may not open the app.
   - **One secret per app, opt-in.** `pages_sso_secrets` (`PAGES_SSO_SECRETS` as JSON) maps an app id
     (`<module_path>:<app_dir>`, as `_scan_apps_catalog` sets it) to the secret that app's portal alone shares. An
-    app that is not listed, or listed with an empty secret, gets no token. The old single `pages_sso_secret`
-    signs nothing: `NexusConfig` still accepts the key (a project that sets it loads) and logs how to move it, and
-    the API logs the same at start while `PAGES_SSO_SECRET` is set in its environment.
+    app that is not listed, or listed with an empty secret, gets no token. A value that is not a JSON object of
+    strings (`PAGES_SSO_SECRETS=<bare secret>`, the likeliest slip while migrating) is read as no secrets with an
+    error naming the shape, never the value (`read_portal_secrets`): it turns portal sign-in off, it never stops
+    Nexus from starting. The old single `pages_sso_secret` signs nothing: `NexusConfig` still accepts the key (a
+    project that sets it loads) and, when it is not empty, logs how to move it; the API logs the same at start while
+    `PAGES_SSO_SECRET` is set where `Settings` reads (`config.settings_environment`: the process environment over
+    `.env`).
   - **The token names its app.** Its claims are `app` (the app id), `aud` (the bare hostname), `email` (the
     signed-in user; the body cannot name another), `exp` and `scope`. `verify_pages_sso_token(..., app_id=)`
     checks `app` too; without `app_id` it checks what it always did, so a portal that ignores the claim still
@@ -100,5 +104,6 @@ what IAM allows (a Deny removes an app), an admin or owner with no policy listin
 The portal SSO route there too (`test_*sso*`, `test_a_dev_origin_*`, `test_an_app_without_a_secret_*`,
 `test_two_apps_on_one_host_*`): who mints, for which email, app and audience, the 422 without `app_id`, the 404
 without a secret, the dev origin's gate; `pages_sso_test.py`: the token and its `app` claim, the audiences, the
-dev map, the loopback check, the secrets map and the start-up warning. The settings (`pages_sso_secrets`, the old
-`pages_sso_secret`): `libs/naas-abi/naas_abi/ABIModule_test.py`.
+dev map, the loopback check, the secrets map (a malformed one included) and the start-up warning. The settings:
+`../../core/config_test.py` (`PAGES_SSO_SECRETS` malformed or in `.env`, the old secret kept only in `.env`) and
+`libs/naas-abi/naas_abi/ABIModule_test.py` (`pages_sso_secrets` from the YAML, the old `pages_sso_secret`).
