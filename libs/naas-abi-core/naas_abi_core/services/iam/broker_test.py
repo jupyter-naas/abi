@@ -554,22 +554,20 @@ def test_subject_matching_is_natss():
     assert not broker.subject_matches("a.b", "a.c")
 
 
-def test_a_connection_is_renewed_well_before_the_broker_expires_it():
-    from naas_abi_sdk import credentials
+def test_no_connection_reconnects_on_a_timer_by_default():
+    """Passes last until the key expires and the engine ends a connection on
+    a change: a timer would only make modules unreachable while it reconnects
+    (ADR 20261119_kick_connections_on_iam_change)."""
+    import inspect
 
-    from naas_abi_core.engine import nats_auth_callout as callout
+    from naas_abi_sdk.transport import Transport
+
     from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
         NATSAuthCalloutConfiguration,
     )
 
-    assert credentials.CONNECTION_TTL_SECONDS == callout.MAX_USER_TTL_SECONDS
-    # The configuration's shortest lifetime still leaves a renewal's margin.
-    shortest = NATSAuthCalloutConfiguration.model_fields["user_ttl_seconds"]
-    minimum = next(m.ge for m in shortest.metadata if hasattr(m, "ge"))
-    assert credentials.RENEW_CONNECTION_SECONDS * 2 <= minimum
-    # ... and no longer than an access token lives.
-    maximum = next(m.le for m in shortest.metadata if hasattr(m, "le"))
-    assert maximum <= 600
+    assert "renew_seconds" not in inspect.signature(Transport).parameters
+    assert "user_ttl_seconds" not in NATSAuthCalloutConfiguration.model_fields
 
 
 def test_no_account_is_offered_an_iam_mutation_without_its_action():

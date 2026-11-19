@@ -1996,9 +1996,8 @@ iam.broker_permissions(principal, key)  # records from authenticate_key; never c
   bits of entropy), compared in constant time; the key is shown once. The value reaches
   a module as `ABI_SERVICE_KEY`. At most five active per account; `ci/*` keys expire in 90
   days by default, module keys never, personal keys within a year. Revocation takes effect at the next
-  exchange and the next broker connection, which is within five minutes: the
-  callout's user JWT lasts that long (ten at most) and the SDK reconnects every
-  two minutes. `rotate_key` gives the new key a fresh default life and, at the
+  exchange and at the broker within seconds: the engine's connection warden ends
+  the key's connections, and the callout refuses them when they reconnect. `rotate_key` gives the new key a fresh default life and, at the
   limit of five, revokes the old key first. `last_used_at` is written at most
   once a minute. SDK and core clients renew a token at half its life.
 - **Exchange.** A service account exchanges its key over NATS at `abi.iam.v1.token`

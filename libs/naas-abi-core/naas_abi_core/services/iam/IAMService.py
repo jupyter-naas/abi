@@ -4626,6 +4626,30 @@ class IAMService(IIAMService, PolicySource):
         """
         return self._derive(principal, key.key_id)
 
+    def connection_permissions(
+        self, principal_id: str, key_id: str
+    ) -> broker.BrokerPermissions:
+        """What a connection the broker admitted with key ``key_id`` of
+        ``principal_id`` may use now, for the engine to check it after a
+        change without the key itself. ``KeyRefusedError`` when the key is
+        unknown, revoked, expired or not that account's, or the account is no
+        longer an active service account: the connection must end. From the
+        store, never from the cache."""
+        try:
+            key = self.store.get_key(key_id)
+            principal = self.store.get_principal(principal_id)
+        except IAMNotFoundError:
+            raise KeyRefusedError() from None
+        if (
+            key.principal_id != principal.id
+            or key.kind != "service"
+            or not key.usable(datetime.now(UTC))
+            or principal.kind != "service_account"
+            or not principal.active
+        ):
+            raise KeyRefusedError()
+        return self._derive(principal, key.key_id)
+
     def broker_grants(self, principal_id: str) -> broker.BrokerPermissions:
         """What ``principal_id``'s connections are granted, for the engine's
         broker control to check a request against (no inbox: no key). In

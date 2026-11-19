@@ -140,9 +140,9 @@ abi iam service-account create module/default/acme.research --key
 The SDK logs in to the broker with the key (user `sa`, the key as password) and
 exchanges it at `abi.iam.v1.token` for an engine-signed token of at most ten
 minutes, renewed at half its life. The broker gives the connection only the
-subjects its approved policy allows, for a few minutes: the transport reconnects
-itself every two minutes, so a revoked key or a narrowed manifest reaches the
-broker within minutes. A call to another module's agent, model or app carries a
+subjects its approved policy allows, until the engine ends the connection on an
+IAM change: a revoked key or a narrowed manifest reaches the broker within
+seconds, and the transport never reconnects on a timer. A call to another module's agent, model or app carries a
 token addressed to that host (`abi:host:<sa>`, from its subject), exchanged
 with the same key: the host reads it, no kernel service accepts it, and
 discovery accepts it from that host only.

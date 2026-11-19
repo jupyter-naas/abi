@@ -553,14 +553,15 @@ services:
       # `abi deploy local` generates them in .env.
       - NATS_ENGINE_PASSWORD=${NATS_ENGINE_PASSWORD:-}
       - NATS_AUTH_PASSWORD=${NATS_AUTH_PASSWORD:-}
+      - NATS_SYSTEM_PASSWORD=${NATS_SYSTEM_PASSWORD:-}
       - NATS_AUTH_CALLOUT_ISSUER=${NATS_AUTH_CALLOUT_ISSUER:-}
     # nats-server takes an empty password as is, which would let anyone log in
-    # as that user: refuse to start without all three.
+    # as that user: refuse to start without all four.
     command:
       - sh
       - -c
       - |
-        for key in NATS_ENGINE_PASSWORD NATS_AUTH_PASSWORD NATS_AUTH_CALLOUT_ISSUER; do
+        for key in NATS_ENGINE_PASSWORD NATS_AUTH_PASSWORD NATS_SYSTEM_PASSWORD NATS_AUTH_CALLOUT_ISSUER; do
           [ -n "$$(printenv $$key)" ] || { echo "$$key is empty: run abi deploy local" >&2; exit 1; }
         done
         exec nats-server -c /etc/nats/nats.conf -js -sd /data

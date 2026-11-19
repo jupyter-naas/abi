@@ -56,6 +56,7 @@ nats:
   nats_url: "nats://engine:{{ secret.NATS_ENGINE_PASSWORD }}@127.0.0.1:4222"
   auth_callout:
     nats_url: "nats://auth:{{ secret.NATS_AUTH_PASSWORD }}@127.0.0.1:4222"
+    system_url: "nats://sys:{{ secret.NATS_SYSTEM_PASSWORD }}@127.0.0.1:4222"
     issuer_seed: "{{ secret.NATS_AUTH_CALLOUT_SEED }}"
   discovery:
     project: "my_project"
@@ -580,6 +581,7 @@ nats:
   nats_url: "nats://engine:{{ secret.NATS_ENGINE_PASSWORD }}@127.0.0.1:4222"
   auth_callout:
     nats_url: "nats://auth:{{ secret.NATS_AUTH_PASSWORD }}@127.0.0.1:4222"
+    system_url: "nats://sys:{{ secret.NATS_SYSTEM_PASSWORD }}@127.0.0.1:4222"
     issuer_seed: "{{ secret.NATS_AUTH_CALLOUT_SEED }}"
 
 services:

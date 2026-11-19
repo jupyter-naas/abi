@@ -119,8 +119,12 @@ def test_ensure_nats_passwords_generates_each_broker_user_once(tmp_path):
     second = ensure_nats_passwords(env)
 
     assert first == second
-    assert set(first) == {"NATS_ENGINE_PASSWORD", "NATS_AUTH_PASSWORD"}
-    assert first["NATS_ENGINE_PASSWORD"] != first["NATS_AUTH_PASSWORD"]
+    assert set(first) == {
+        "NATS_ENGINE_PASSWORD",
+        "NATS_AUTH_PASSWORD",
+        "NATS_SYSTEM_PASSWORD",
+    }
+    assert len(set(first.values())) == 3
     for key, password in first.items():
         assert f"{key}={password}" in env.read_text()
         # nats.conf reads it as a config value ($VAR): it must start with a
