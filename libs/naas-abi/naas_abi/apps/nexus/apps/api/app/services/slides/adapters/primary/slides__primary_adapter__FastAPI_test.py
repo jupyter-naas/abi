@@ -541,7 +541,9 @@ def test_slides_template_names_match_local_directory_adapter(tmp_path) -> None:
         LocalDirectoryAdapter,
     )
 
-    adapter = LocalDirectoryAdapter(workspaces_root=str(tmp_path / "ws"))
+    adapter = LocalDirectoryAdapter(
+        workspaces_root=str(tmp_path / "ws"), single_user_development=True
+    )
     advertised = {t.name for t in adapter.list_templates()}
     assert advertised & set(slides_api._SLIDES_TEMPLATE_NAMES), (
         f"none of {slides_api._SLIDES_TEMPLATE_NAMES} match {advertised}"

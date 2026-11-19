@@ -41,9 +41,17 @@ class CodingEnvironmentAdapterInMemoryConfiguration(BaseModel):
 
 
 class CodingEnvironmentAdapterLocalDirectoryConfiguration(BaseModel):
+    """Workspaces on the engine host, as the engine's OS user: single-user
+    development only, turned on explicitly with ``single_user_development``.
+    Repositories are cloned from the local git root (``repos_root``, the
+    ``local_git`` source control root) or from ``forge_url`` only."""
+
     model_config = ConfigDict(extra="forbid")
 
     workspaces_root: str
+    single_user_development: bool = False
+    repos_root: str | None = None
+    forge_url: str | None = None
     sidecar_port_start: int = 18000
     sidecar_port_end: int = 18100
     harness: Literal["none", "opencode"] = "none"
@@ -115,6 +123,12 @@ class CodingEnvironmentAdapterConfiguration(GenericLoader):
                 "Invalid configuration for services.coding_environment."
                 "coding_environment_adapter 'local_directory' adapter",
             )
+            if (self.config or {}).get("single_user_development") is not True:
+                from naas_abi_core.services.coding_environment.adapters.secondary.LocalDirectoryAdapter import (
+                    SINGLE_USER_ONLY,
+                )
+
+                raise ValueError(SINGLE_USER_ONLY)
         elif self.adapter == "nats_rpc":
             pydantic_model_validator(
                 CodingEnvironmentAdapterNATSConfiguration,

@@ -126,7 +126,6 @@ export const vectorStoreView: ServiceView = {
   label: 'Vector store',
   description: 'Embeddings and their payloads, by collection.',
   icon: Boxes,
-  group: 'Storage',
   noun: { one: 'vector', many: 'vectors' },
   entryIcon: (e) => (e.kind === 'container' ? Boxes : ScatterChart),
   nounFor: (e) => (e.kind === 'container' ? { one: 'collection', many: 'collections' } : { one: 'vector', many: 'vectors' }),

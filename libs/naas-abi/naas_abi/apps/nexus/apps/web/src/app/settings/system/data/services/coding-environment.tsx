@@ -84,7 +84,6 @@ export const codingEnvironmentView: ServiceView = {
   label: 'Coding environments',
   description: 'Developer workspaces provisioned on the orchestrator, across every user, and the templates they start from.',
   icon: TerminalSquare,
-  group: 'Platform',
   noun: { one: 'environment', many: 'environments' },
   entryIcon: (entry) => {
     if (entry.kind === 'container') return entry.id === ENVIRONMENTS ? Monitor : LayoutTemplate;

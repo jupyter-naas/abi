@@ -1,5 +1,6 @@
 import importlib
 import os
+from typing import Any
 
 from naas_abi_core.module.ModuleUtils import (
     find_class_module_root_path,
@@ -10,8 +11,20 @@ from naas_abi_core.utils.Logger import logger
 
 
 class ModuleAgentLoader:
+    @staticmethod
+    def enabled(agent: type, configuration: Any | None) -> bool:
+        """An agent class that names a module configuration flag
+        (``enabled_by = "<flag>"``) is loaded only when the module's
+        configuration sets that flag; every other agent always is."""
+        flag = getattr(agent, "enabled_by", None)
+        if not isinstance(flag, str) or not flag:
+            return True
+        return bool(getattr(configuration, flag, False))
+
     @classmethod
-    def load_agents(cls, class_: type) -> list[type[Expose]]:
+    def load_agents(
+        cls, class_: type, configuration: Any | None = None
+    ) -> list[type[Expose]]:
         agents: list[type[Expose]] = []
         module_root_path = find_class_module_root_path(class_)
 
@@ -36,6 +49,11 @@ class ModuleAgentLoader:
                                 0
                             ]  # This makes sure we only load agents from the same module.
                         ):
+                            if not cls.enabled(value, configuration):
+                                logger.debug(
+                                    f"Agent {key} is off: its module flag is not set"
+                                )
+                                continue
                             if not hasattr(key, "New") and hasattr(
                                 agent_module, "create_agent"
                             ):

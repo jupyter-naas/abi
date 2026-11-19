@@ -7,6 +7,13 @@ This provisions:
 - workspaces (upsert by slug) and their owner membership
 - workspace app enable rows from ``WorkspaceSeedConfig.apps``
 
+Seeding updates only the rows it made (``seeded``). A configured slug that a
+person's organization or workspace holds is refused and logged, never taken
+over, and configured slugs are reserved at create and rename
+(``core.configured_slugs``). A row older than the flag is recognised once, where
+seeding left it: an organization the configured owner owns, a workspace inside
+its configured organization.
+
 People are managed in the platform (Org > Users, workspace Members, Admin >
 Users). Config ``members`` lists are deprecated and ignored: existing rows are
 kept, and ``core.users_import`` replays a snapshot without overwriting roles.
@@ -38,8 +45,9 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     UserModel,
     WorkspaceModel,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam import legacy_names
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container, workspace_container
-from sqlalchemy import select
+from sqlalchemy import inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
@@ -114,8 +122,11 @@ async def _get_user_by_id(session: AsyncSession, user_id: str) -> UserModel | No
 
 
 # What this seeding run declares, applied to IAM once the rows are committed:
-# role attachments are the only record of memberships.
-_declared_roles: ContextVar[list[tuple[str, str, str]] | None] = ContextVar(
+# role attachments are the only record of memberships. A role is declared at an
+# organization or a workspace (``(user, role, org, workspace)``, the workspace
+# ``None`` for the organization's own), named when it is applied, in the grammar
+# IAM's names are in then (``_apply_declared_roles``).
+_declared_roles: ContextVar[list[tuple[str, str, str | None, str | None]] | None] = ContextVar(
     "nexus_seed_roles", default=None
 )
 _declared_scopes: ContextVar[list[tuple[str | None, str | None]] | None] = ContextVar(
@@ -123,10 +134,10 @@ _declared_scopes: ContextVar[list[tuple[str | None, str | None]] | None] = Conte
 )
 
 
-def _declare_role(user_id: str, role: str, scope: str) -> None:
+def _declare_role(user_id: str, role: str, org_id: str | None, workspace_id: str | None) -> None:
     declared = _declared_roles.get()
     if declared is not None:
-        declared.append((user_id, role, scope))
+        declared.append((user_id, role, org_id, workspace_id))
 
 
 def _declare_scope(org_id: str | None, workspace_id: str | None) -> None:
@@ -142,7 +153,7 @@ async def _ensure_org_member(
     role: str,
 ) -> None:
     _declare_scope(organization_id, None)
-    _declare_role(user_id, role, org_container(organization_id))
+    _declare_role(user_id, role, organization_id, None)
 
 
 async def _ensure_workspace_member(
@@ -153,12 +164,46 @@ async def _ensure_workspace_member(
     organization_id: str | None = None,
 ) -> None:
     _declare_scope(organization_id, workspace_id)
-    _declare_role(user_id, role, workspace_container(organization_id, workspace_id))
+    _declare_role(user_id, role, organization_id, workspace_id)
+
+
+# Domains that receive no mail (RFC 2606, RFC 6761, mDNS).
+_PLACEHOLDER_DOMAINS = frozenset({"example.com", "example.net", "example.org", "localhost"})
+_PLACEHOLDER_SUFFIXES = (".example", ".invalid", ".test", ".localhost", ".local")
+
+
+def is_placeholder_address(email: str) -> bool:
+    """Whether ``email``'s domain receives no mail: the identity provider's
+    sign-in codes for it reach nobody."""
+    domain = email.rsplit("@", 1)[-1].strip().lower().rstrip(".")
+    # The reserved domains and every name under them (mail.example.com).
+    return domain.endswith(_PLACEHOLDER_SUFFIXES) or any(
+        domain == reserved or domain.endswith("." + reserved) for reserved in _PLACEHOLDER_DOMAINS
+    )
+
+
+def warn_on_placeholder_superadmins(users: list[Any]) -> list[str]:
+    """Log a warning for each configured superadmin whose address receives no
+    mail, and return them."""
+    found = [
+        str(user.email)
+        for user in users
+        if user.is_superadmin and is_placeholder_address(str(user.email))
+    ]
+    for email in found:
+        logger.warning(
+            "users: makes %s a platform administrator, an address that receives "
+            "no mail: nobody gets its sign-in codes. Put the administrator's own "
+            "address in the configuration.",
+            email,
+        )
+    return found
 
 
 async def _upsert_users(session: AsyncSession) -> dict[str, UserModel]:
     users_by_email: dict[str, UserModel] = {}
     now = datetime.now(UTC).replace(tzinfo=None)
+    warn_on_placeholder_superadmins(list(settings.users))
 
     for user_cfg in settings.users:
         normalized_email = _normalize_email(str(user_cfg.email))
@@ -253,12 +298,24 @@ async def _upsert_workspace(
     workspace = result.scalar_one_or_none()
     now = datetime.now(UTC).replace(tzinfo=None)
 
+    if workspace is not None and not _workspace_is_managed(workspace, organization):
+        logger.error(
+            "Configured workspace slug=%s is held by workspace %s, which the configuration "
+            "did not make (organization %s): left as it is, and not configured. Rename the "
+            "workspace in the configuration, or remove that workspace.",
+            workspace_cfg.slug,
+            workspace.id,
+            workspace.organization_id or "none",
+        )
+        return
+
     if workspace is None:
         workspace = WorkspaceModel(
             id=f"ws-{uuid4().hex[:12]}",
             slug=workspace_cfg.slug,
             owner_id=owner.id,
             organization_id=organization.id,
+            seeded=True,
             created_at=now,
             updated_at=now,
             workspace_group=workspace_cfg.group,
@@ -273,12 +330,12 @@ async def _upsert_workspace(
             organization.slug,
         )
     else:
-        # Bootstrap only, like the branding below: an owner or organization
-        # changed in the app is kept, the config only fills a missing one.
+        # Bootstrap only, like the branding below: an owner changed in the app is
+        # kept, the config only fills a missing one. The organization is never set
+        # here: the workspace stays where it is.
+        workspace.seeded = True
         if not workspace.owner_id:
             workspace.owner_id = owner.id
-        if not workspace.organization_id:
-            workspace.organization_id = organization.id
         _apply_workspace_seed_fields(workspace, workspace_cfg)
         if workspace_cfg.group and not getattr(workspace, "workspace_group", None):
             workspace.workspace_group = workspace_cfg.group
@@ -295,6 +352,26 @@ async def _upsert_workspace(
     _warn_ignored_members("workspace", workspace_cfg.slug, len(workspace_cfg.members))
 
     await _seed_workspace_apps(session, workspace.id, workspace_cfg.apps)
+
+
+def _workspace_is_managed(workspace: WorkspaceModel, organization: OrganizationModel) -> bool:
+    """Whether seeding may update ``workspace`` as the configured one of
+    ``organization``: one it made (wherever an administrator moved it since), or one
+    older than the flag that is in that organization, where seeding put it."""
+    flag = getattr(workspace, "seeded", None)
+    if flag is True:
+        return True
+    return flag is None and workspace.organization_id == organization.id
+
+
+def _organization_is_managed(organization: OrganizationModel, owner: UserModel | None) -> bool:
+    """Whether seeding may update ``organization``: one it made, or one older than
+    the flag that the configured owner owns (seeding wrote that owner at every
+    start). A person's organization of the same slug is neither."""
+    flag = getattr(organization, "seeded", None)
+    if flag is True:
+        return True
+    return flag is None and owner is not None and organization.owner_id == owner.id
 
 
 async def _seed_workspace_apps(
@@ -352,6 +429,17 @@ async def _upsert_organization(
     organization = result.scalar_one_or_none()
     now = datetime.now(UTC).replace(tzinfo=None)
 
+    if organization is not None and not _organization_is_managed(organization, owner):
+        logger.error(
+            "Configured organization slug=%s is held by organization %s, which the "
+            "configuration did not make: left as it is, and none of its configured "
+            "workspaces is seeded. Rename the organization in the configuration, or "
+            "remove that organization.",
+            org_cfg.slug,
+            organization.id,
+        )
+        return
+
     if organization is None:
         if owner is None:
             logger.warning(
@@ -363,6 +451,7 @@ async def _upsert_organization(
             id=f"org-{uuid4().hex[:12]}",
             slug=org_cfg.slug,
             owner_id=owner.id,
+            seeded=True,
             created_at=now,
             updated_at=now,
             **{field: getattr(org_cfg, field) for field in _ORG_BRANDING_FIELDS},
@@ -370,6 +459,7 @@ async def _upsert_organization(
         session.add(organization)
         logger.info("Created organization slug=%s", org_cfg.slug)
     else:
+        organization.seeded = True
         if owner is not None:
             organization.owner_id = owner.id
         for field in _ORG_BRANDING_FIELDS:
@@ -418,19 +508,132 @@ def sync_platform_admins(iam: Any, users_by_email: dict[str, UserModel]) -> None
 
 async def _apply_declared_roles(
     scopes: list[tuple[str | None, str | None]],
-    roles: list[tuple[str, str, str]],
+    roles: list[tuple[str, str, str | None, str | None]],
 ) -> None:
     """The configuration's scopes and roles, as the system: the configuration is
-    declarative, so the role it names is the role held."""
-    from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+    declarative, so the role it names is the role held. One scope that fails (IAM
+    refuses to register it, or a role there) is logged and skipped: the others
+    are still applied.
 
+    Named in the grammar IAM's names are in: while the move of the names
+    (``container_names_v1``) is not recorded (a start whose moves stopped), the
+    one before container paths (``abi:<org>:<ws>``, an owner's or admin's
+    organization role org-wide too, ``abi:<org>:*``), which the move rewrites;
+    a role of the new grammar next to its old twin would stop that move. Until it
+    is recorded, under the moves' lock (read again under it), so another API
+    process does not rewrite the names between the reading and the writing; once
+    it is, without: the record never goes. An install with no ``iam_migrations``
+    table has nothing to move (container paths); when the record cannot be read,
+    that is logged and the roles are named as container paths too (IAM merges
+    twins at the move)."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import container_names
+
+    async def names_rewritten() -> bool:
+        try:
+            async with AsyncSession(async_engine) as db:
+                connection = await db.connection()
+                if not await connection.run_sync(
+                    lambda sync: inspect(sync).has_table("iam_migrations")
+                ):
+                    return True
+                return await container_names.recorded(db, container_names.MIGRATION_NAME)
+        except Exception:
+            logger.exception(
+                "Whether IAM's names are container paths could not be read: the configured "
+                "roles are named as container paths"
+            )
+            return True
+
+    if await names_rewritten():
+        await _attach_declared(scopes, roles, rewritten=True)
+        return
+    async with container_names.moves_lock(async_engine):
+        await _attach_declared(scopes, roles, rewritten=await names_rewritten())
+
+
+async def _attach_declared(
+    scopes: list[tuple[str | None, str | None]],
+    roles: list[tuple[str, str, str | None, str | None]],
+    *,
+    rewritten: bool,
+) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.iam import container_names, runtime
+    from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+    from starlette.concurrency import run_in_threadpool
+
+    failed: set[str] = set()
     for org_id, workspace_id in dict.fromkeys(scopes):
-        if workspace_id is None and org_id is not None:
-            await MEMBERSHIPS.register_org(org_id)
-        elif workspace_id is not None:
-            await MEMBERSHIPS.register_workspace(org_id, workspace_id)
-    granted, kept = await MEMBERSHIPS.seed(list(dict.fromkeys(roles)), replace=True)
+        try:
+            if workspace_id is None and org_id is not None:
+                await MEMBERSHIPS.register_org(org_id)
+            elif workspace_id is not None:
+                await MEMBERSHIPS.register_workspace(org_id, workspace_id)
+        except Exception:
+            logger.exception(
+                "Configured scope org=%s workspace=%s not registered in IAM: its roles "
+                "are not applied",
+                org_id,
+                workspace_id,
+            )
+            failed_scope = _role_scope(org_id, workspace_id, rewritten=rewritten)
+            if failed_scope is not None:
+                failed.add(failed_scope)
+    by_scope: dict[str, list[tuple[str, str, str]]] = {}
+    for user_id, role, org_id, workspace_id in dict.fromkeys(roles):
+        scope = _role_scope(org_id, workspace_id, rewritten=rewritten)
+        if scope is None:
+            # One declaration that names no place never keeps the others out.
+            logger.warning(
+                "Configured role %s of %s names no organization or workspace: skipped",
+                role,
+                user_id,
+            )
+            continue
+        by_scope.setdefault(scope, []).append((user_id, role, scope))
+    granted = kept = 0
+    applied: set[str] = set()
+    for scope, entries in by_scope.items():
+        if scope in failed:
+            continue
+        try:
+            changed, held = await MEMBERSHIPS.seed(list(dict.fromkeys(entries)), replace=True)
+        except Exception:
+            logger.exception("Configured roles at %s not applied in IAM", scope)
+            continue
+        applied.add(scope)
+        granted += changed
+        kept += held
+    if not rewritten:
+        # What ``seed`` mirrors below an organization, in the old grammar: the
+        # organizations' roles applied here hold the org-wide role they carry, and
+        # no other (a configured demotion takes the former one away).
+        try:
+            declared: dict[tuple[str, str], str | None] = {}
+            for user_id, role, org_id, workspace_id in dict.fromkeys(roles):
+                if workspace_id is not None or org_id is None:
+                    continue
+                if _role_scope(org_id, None, rewritten=False) in applied:
+                    declared[(await MEMBERSHIPS.principal_id(user_id), org_id)] = role
+            await run_in_threadpool(container_names.mirror_old_org_wide, runtime.iam(), declared)
+        except Exception:
+            logger.exception(
+                "The configured roles were applied, but their org-wide roles of the "
+                "grammar before container paths (abi:<org>:*) were not"
+            )
     logger.info("Configured memberships in IAM: %d changed, %d already held", granted, kept)
+
+
+def _role_scope(org_id: str | None, workspace_id: str | None, *, rewritten: bool) -> str | None:
+    """Where a declared role is attached: the workspace's container, else the
+    organization's (None without either); their scopes of the old grammar until
+    the names are rewritten."""
+    if workspace_id is not None:
+        if rewritten:
+            return workspace_container(org_id, workspace_id)
+        return legacy_names.workspace_scope(org_id, workspace_id)
+    if org_id is None:
+        return None
+    return org_container(org_id) if rewritten else legacy_names.org_scope(org_id)
 
 
 def _engine_iam() -> Any | None:

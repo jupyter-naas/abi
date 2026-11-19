@@ -208,7 +208,8 @@ def test_udf_registration_failure_closes_connection(tmp_path):
 
 
 def test_close_during_connect_prevents_the_new_connection_from_being_used(tmp_path):
-    adapter = DocumentSecondaryAdapterSQLite(str(tmp_path / "race.sqlite"))
+    # No pool: the next transaction has to open a connection.
+    adapter = DocumentSecondaryAdapterSQLite(str(tmp_path / "race.sqlite"), pool_size=0)
     started = Event()
     proceed = Event()
     real_connect = adapter._connect
@@ -247,3 +248,102 @@ def test_memory_adapter_persists_until_closed():
     adapter.close()
     with pytest.raises(RuntimeError, match="closed"):
         adapter.collections("module")
+
+
+class TestConnectionPool:
+    @pytest.fixture
+    def adapter(self, tmp_path):
+        adapter = DocumentSecondaryAdapterSQLite(
+            str(tmp_path / "pool.sqlite"), pool_size=2
+        )
+        yield adapter
+        adapter.close()
+
+    def test_sequential_transactions_reuse_one_connection(self, adapter):
+        with adapter.transaction() as first:
+            pass
+        with adapter.transaction(write=True) as second:
+            pass
+        assert first is second
+        with patch.object(adapter, "_connect", side_effect=AssertionError("opened")):
+            adapter.ensure_collection("module", CollectionSpec(name="records"))
+            adapter.put("module", "records", "id", {}, None)
+            assert adapter.count("module", "records", ()) == 1
+
+    def test_nested_transactions_get_their_own_connections(self, adapter):
+        with adapter.transaction() as outer, adapter.transaction() as inner:
+            assert outer is not inner
+        assert len(adapter._idle) == 2
+
+    def test_idle_connections_are_capped(self, adapter):
+        with (
+            adapter.transaction() as a,
+            adapter.transaction() as b,
+            adapter.transaction() as c,
+        ):
+            pass
+        # Released innermost first: c and b fill the pool, a is closed.
+        assert adapter._idle == [c, b]
+        with pytest.raises(sqlite3.ProgrammingError):
+            a.execute("SELECT 1")
+
+    def test_a_connection_left_in_a_transaction_is_not_reused(self, adapter):
+        with adapter._connection() as connection:
+            connection.execute("BEGIN")
+        assert connection not in adapter._idle
+        with pytest.raises(sqlite3.ProgrammingError):
+            connection.execute("SELECT 1")
+
+    def test_failed_transaction_rolls_back_and_keeps_the_connection(self, adapter):
+        with pytest.raises(RuntimeError), adapter.transaction(write=True) as connection:
+            raise RuntimeError("boom")
+        assert connection in adapter._idle
+        assert not connection.in_transaction
+
+    def test_close_closes_idle_and_returning_connections(self, adapter):
+        with adapter.transaction():
+            pass
+        idle = list(adapter._idle)
+        with adapter.transaction() as borrowed:
+            adapter.close()
+            borrowed.execute("SELECT 1")
+        for connection in [*idle, borrowed]:
+            with pytest.raises(sqlite3.ProgrammingError):
+                connection.execute("SELECT 1")
+        assert adapter._idle == []
+
+    def test_pooled_connections_see_schema_changes_from_other_adapters(
+        self, adapter, tmp_path
+    ):
+        adapter.collections("module")
+        other = DocumentSecondaryAdapterSQLite(str(tmp_path / "pool.sqlite"))
+        try:
+            other.ensure_collection(
+                "module",
+                CollectionSpec(
+                    name="records",
+                    fields=(FieldSpec(name="x", type="string", unique=True),),
+                ),
+            )
+        finally:
+            other.close()
+        adapter.put("module", "records", "one", {"x": "value"}, None)
+        with pytest.raises(UniqueViolation):
+            adapter.put("module", "records", "two", {"x": "value"}, None)
+
+    def test_concurrent_threads_share_the_pool(self, adapter):
+        adapter.ensure_collection("module", CollectionSpec(name="records"))
+        with ThreadPoolExecutor(max_workers=6) as executor:
+            list(
+                executor.map(
+                    lambda i: adapter.put("module", "records", str(i), {"i": i}, None),
+                    range(60),
+                )
+            )
+        assert adapter.count("module", "records", ()) == 60
+        assert len(adapter._idle) <= 2
+
+
+def test_negative_pool_size_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="pool_size"):
+        DocumentSecondaryAdapterSQLite(str(tmp_path / "x.sqlite"), pool_size=-1)

@@ -29,14 +29,12 @@ from naas_abi_sdk.call_context import (
     use_call_context,
 )
 from naas_abi_sdk.concurrency import DEFAULT_LIMIT, ConcurrentCalls
-from naas_abi_sdk.messages import reply
+from naas_abi_sdk.messages import is_stream_inbox, reply
 from naas_abi_sdk.services.errors import DocumentNotFound, VersionConflict
 from naas_abi_sdk.services.models import CollectionSpec
 from naas_abi_sdk.telemetry import current_trace_id, internal_span, server_span
 from naas_abi_sdk.transport import RPCError
 
-# Where a submitter may ask for RunUpdates: its own inbox, never a service subject.
-UPDATES_INBOX = re.compile(r"_INBOX\.[A-Za-z0-9_.-]{1,240}")
 # Live executions in this process, shared by every agent it hosts.
 MAX_ACTIVE_RUNS = 200
 # Event data pushed inline up to this (and a quarter of the broker limit);
@@ -569,8 +567,10 @@ class AgentHost:
             or not 0 <= req.deadline_seconds <= 3600
         ):
             raise _error("INVALID_ARGUMENT", "Invalid thread, prompt, mode or deadline")
-        if req.updates_inbox and not UPDATES_INBOX.fullmatch(req.updates_inbox):
-            raise _error("INVALID_ARGUMENT", "Updates go to an _INBOX subject only")
+        # Where a submitter asks for RunUpdates: a stream inbox of its own,
+        # never a service subject nor an inbox anyone else could name.
+        if req.updates_inbox and not is_stream_inbox(req.updates_inbox):
+            raise _error("INVALID_ARGUMENT", "Updates go to a stream inbox only")
         fingerprint = _hash(
             caller, req.thread_id, req.prompt, req.mode, str(req.deadline_seconds)
         )

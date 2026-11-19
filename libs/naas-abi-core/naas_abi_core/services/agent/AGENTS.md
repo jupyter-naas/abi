@@ -81,6 +81,18 @@ work off to a queue or thread yourself.
 Distinct from the `on_tool_usage` / `on_tool_response` / `on_ai_message`
 *callback registration* methods, which take a callable and are set per-instance.
 
+## Tool calls the agent runs
+
+The agent runs the tool calls the model made: the native `tool_calls` of its
+answer. Some models (`text_tool_call_models`, matched in the chat model's name:
+Qwen, Hermes) write a handoff as text instead (`<tool_call>{...}</tool_call>`,
+`[tool_call: transfer_to_X]{...}[/tool_call]`). For those models only, such
+markup becomes a call when the whole answer is the markup and every call in it
+is a handoff (`transfer_to_*`). Markup inside prose, as a summary of a page or a
+quoted tool result repeats it, stays text. The SDK runtime
+(`naas_abi_sdk.agents._messages`) keeps the same rule; `tests/agent_parity`
+holds both to it.
+
 ## Subdirectories
 
 | Path | Contents |
@@ -149,6 +161,13 @@ in order: the engine's agent checkpointer when an engine is loaded, else a share
   across steps keeps its name and resolves it from the secret service when it
   uses it. Documents written before this keep their values until pruned or
   deleted.
+- Stored values decode as data: both savers default to
+  `langgraph_documents.CheckpointSerializer`, which rebuilds only value classes
+  (messages, standard date, number and collection types, and the pydantic models,
+  dataclasses, enums and named tuples of `langchain_core`, `langgraph` and
+  `naas_abi*` modules already imported, and `langgraph.types.Send`). A stored value naming anything else
+  reads as its fields or `None`, and is never imported or called. A graph whose
+  state holds its own classes passes `serde=CheckpointSerializer(packages=(...))`.
 - Migration into schema 2: `abi agent migrate-memory` (dry run; `--apply` to
   write; `--thread` to select; `--from postgres` with `$POSTGRES_URL` or
   `--source-url`, or `--from documents-v1`; `--namespace`/`--agent-id` for

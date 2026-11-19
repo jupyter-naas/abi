@@ -132,3 +132,9 @@ export function isOfficeCreateNewPath(pathname: string | null | undefined): bool
 export function isOfficeCreateProjectPath(pathname: string | null | undefined): boolean {
   return /\/(documents|slides)\/[^/]+\/?$/.test(pathname || '');
 }
+
+/** Where Dismiss goes from a failed `/new`: `/workspace/<id>/slides/new` → `/workspace/<id>/slides`. */
+export function officeCreateDismissHref(pathname: string | null | undefined): string | null {
+  if (!isOfficeCreateNewPath(pathname)) return null;
+  return (pathname || '').replace(/\/new\/?$/, '');
+}

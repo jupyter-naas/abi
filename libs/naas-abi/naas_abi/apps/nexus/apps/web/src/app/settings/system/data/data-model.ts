@@ -236,9 +236,11 @@ export function initials(name: string): string {
   return (parts[0][0] + (parts[1]?.[0] ?? '')).toUpperCase();
 }
 
-/** Where the explorer is, as query parameters (deep links survive a refresh). */
+/**
+ * Where the explorer is in its service, as query parameters (deep links survive a
+ * refresh). The service is the page's; a ``service`` parameter left by an old link goes.
+ */
 export interface Location {
-  service: string | null;
   path: Crumb[];
   item: string | null;
 }
@@ -246,7 +248,6 @@ export interface Location {
 export function encodeLocation(location: Location, params: URLSearchParams): URLSearchParams {
   const next = new URLSearchParams(params.toString());
   for (const key of ['service', 'in', 'item']) next.delete(key);
-  if (location.service) next.set('service', location.service);
   const inner = location.path.slice(1);
   if (inner.length) next.set('in', JSON.stringify(inner.map((c) => [c.id, c.label])));
   if (location.item) next.set('item', location.item);
@@ -271,7 +272,7 @@ export function decodeLocation(params: URLSearchParams): Location {
       path = [ROOT_CRUMB];
     }
   }
-  return { service: params.get('service'), path, item: params.get('item') };
+  return { path, item: params.get('item') };
 }
 
 /** "Today", "Yesterday", or a short date: day separators in log lists. */

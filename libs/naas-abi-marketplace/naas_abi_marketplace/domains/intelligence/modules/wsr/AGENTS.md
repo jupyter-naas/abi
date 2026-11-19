@@ -228,6 +228,11 @@ Nothing else changes.
 | 5 min | `TTLCache(ttl_seconds=300)` |
 | Snapshot proxy | `TTLCache(ttl_seconds=4, max_size=500)` |
 
+`GET /api/cctv/snapshot?id=<camera id>&kind=image|video` serves the image or
+stream of a camera of the API's own list (`GET /api/cctv`), never a URL from the
+request. An HLS segment stays on its playlist's origin, and a body that is not
+`image/*` or `video/*` goes out as `application/octet-stream` with `nosniff`.
+
 ### Settings
 
 All env vars in `settings.py` with safe defaults:

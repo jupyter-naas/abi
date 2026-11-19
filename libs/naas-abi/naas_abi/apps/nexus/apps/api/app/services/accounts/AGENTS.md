@@ -74,7 +74,11 @@ at the provider).
   made as the caller: IAM's own `iam:SuspendPrincipal`, `iam:ResumePrincipal`, `iam:RevokeTokens`,
   `iam:DeletePrincipal`, the attachment of `builtin.platform_admin`, and the provider's `identity:ProvisionUser`,
   `identity:FindProvisionedUser`, `identity:UpdateProvisionedUser`, `identity:DeleteProvisionedUser` (as `api` on
-  behalf of the caller: `builtin.api` holds them, the caller must too). A refusal is a 403 and changes nothing.
+  behalf of the caller: `builtin.api` holds them, the caller must too). A refusal is a 403 and changes nothing,
+  but for the invite's `identity:ProvisionUser`: refused, the invitation stands, nothing is made at the provider,
+  the answer says `provisioning_skipped` and the mail promises no sign-in code. This page's invite carries no
+  grant, so it keeps to the caller's own right; an organization's or a workspace's invitation IAM authorized makes
+  the account as `api` instead (`services/invites/AGENTS.md`).
 - **The page's buttons assume a grant on every account.** `access` answers the page's actions once, on
   `abi:nexus:user/-` (`iam_admin.service._account_actions`), while each route decides on the account's own
   name (`abi:nexus:user/<id>`). They agree for the platform admin and for a policy on `abi:nexus:user/*`; a

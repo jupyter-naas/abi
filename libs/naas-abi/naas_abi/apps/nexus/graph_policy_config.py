@@ -6,6 +6,18 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 NEXUS_GRAPH = "http://ontology.naas.ai/graph/nexus"
 SCHEMA_GRAPH = "http://ontology.naas.ai/graph/schema"
+# Nexus's own graph of every organization's people, workspaces and memberships.
+NEXUS_IDENTITY_GRAPH = "http://ontology.naas.ai/graph/nexus-identity"
+
+
+def is_nexus_system_graph(iri: str) -> bool:
+    """Nexus's own graphs (``graph/nexus``, ``graph/nexus-<name>``): the platform's
+    records, never a workspace's to read, share or be given."""
+    return iri == NEXUS_GRAPH or iri.startswith(f"{NEXUS_GRAPH}-")
+
+
+def without_system_graphs(iris: set[str]) -> set[str]:
+    return {iri for iri in iris if not is_nexus_system_graph(iri)}
 
 
 class WorkspaceGraphPolicyConfig(BaseModel):

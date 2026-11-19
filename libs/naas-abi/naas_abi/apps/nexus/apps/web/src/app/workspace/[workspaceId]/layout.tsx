@@ -6,6 +6,7 @@ import { getWorkspaceSwitchPath, isWorkspacePathAllowed, pathNeedsAgentCatalog, 
 import { GraphExportToastHost } from '@/components/graph/graph-export-toast-host';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { selectSession, useAuthStore } from '@/stores/auth';
+import { useWebPassReady } from '@/lib/use-web-pass-ready';
 
 export default function WorkspaceIdLayout({
   children,
@@ -23,6 +24,8 @@ export default function WorkspaceIdLayout({
   const syncWorkspaceConversations = useWorkspaceStore((s) => s.syncWorkspaceConversations);
   const contextPanelOpen = useWorkspaceStore((s) => s.contextPanelOpen);
   const token = useAuthStore(selectSession);
+  // Maps, previews and logos load from this host's own routes, which need the web pass.
+  const webPassReady = useWebPassReady();
   const currentWorkspace = workspaces.find((w) => w.id === workspaceId);
 
   // Before paint, so section pages fetch the target workspace instead of
@@ -110,7 +113,7 @@ export default function WorkspaceIdLayout({
   return (
     <>
       {pathNeedsGraphExport(pathname) && <GraphExportToastHost workspaceId={workspaceId} />}
-      {children}
+      {webPassReady ? children : null}
     </>
   );
 }

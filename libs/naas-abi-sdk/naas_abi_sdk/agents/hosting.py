@@ -7,7 +7,7 @@ with ``document_memory`` that thread is checkpointed through the Document Servic
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterable
 from typing import TYPE_CHECKING, Any
 
 from naas_abi_sdk.agents.agent import AgentSharedState
@@ -22,11 +22,20 @@ def agent_memory_id(module_id: str, agent_name: str, version: int = 1) -> str:
     return f"{module_id}.{agent_name}.v{version}"
 
 
-async def document_memory(documents: Any, agent_id: str) -> Any:
-    """``DocumentCheckpointSaver`` over the module's document service, set up."""
-    from naas_abi_sdk.langgraph import DocumentCheckpointSaver
+async def document_memory(
+    documents: Any, agent_id: str, *, packages: Iterable[str] = ()
+) -> Any:
+    """``DocumentCheckpointSaver`` over the module's document service, set up.
 
-    saver = DocumentCheckpointSaver(documents, agent_id=agent_id)
+    ``packages``: the module's own top-level package(s), when its graph state
+    holds its own value classes (pydantic models, dataclasses, enums): stored
+    values of those are rebuilt, any other class reads as its fields."""
+    from naas_abi_sdk.langgraph import DocumentCheckpointSaver
+    from naas_abi_sdk.langgraph_documents import checkpoint_serde
+
+    saver = DocumentCheckpointSaver(
+        documents, agent_id=agent_id, serde=checkpoint_serde(packages)
+    )
     await saver.setup()
     return saver
 

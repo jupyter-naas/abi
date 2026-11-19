@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { mapsUpstreamGet } from '../_lib';
 import { compactCountryCenters, type CountryCenterRow } from './centers';
+import { mapsRoute } from '../_guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -16,7 +17,7 @@ let cached: CountryCenterRow[] | null = null;
  * Country label points, names and continents for group-by-country / continent.
  * The 3 MB source is reduced to a few KB once per server process.
  */
-export async function GET() {
+async function handle() {
   try {
     if (!cached) {
       const res = await mapsUpstreamGet(NATURAL_EARTH_50M, { timeoutMs: 30000 });
@@ -34,3 +35,5 @@ export async function GET() {
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }
+
+export const GET = mapsRoute('country-centers', handle, { perMinute: 120 });

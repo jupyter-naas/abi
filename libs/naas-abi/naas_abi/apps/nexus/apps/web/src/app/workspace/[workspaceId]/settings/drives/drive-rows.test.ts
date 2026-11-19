@@ -78,3 +78,26 @@ describe('drive rows toggling', () => {
     expect(row(superadmin, 'system-drive')?.flag).toBe('system_drive_enabled');
   });
 });
+
+describe('organization drive row', () => {
+  it('lists the organization drive, named after the organization, after the workspace drive', () => {
+    const rows = buildDriveRows({
+      viewer: member,
+      ...off,
+      syncedFolders: [],
+      organization: { name: 'Acme' },
+    });
+    expect(rows.map((r) => r.id)).toEqual(['my-drive', 'workspace', 'organization-drive']);
+    expect(rows[2]).toMatchObject({ name: 'Acme', icon: 'organization', enabled: true, toggleable: false });
+    expect(rows[2].description).toContain('Files of Acme');
+  });
+
+  it('lists no organization drive for a workspace in none, or one the viewer may not open', () => {
+    expect(rowIds(member)).not.toContain('organization-drive');
+  });
+
+  it('is never a superadmin toggle', () => {
+    const rows = buildDriveRows({ viewer: superadmin, ...off, syncedFolders: [], organization: { name: 'Acme' } });
+    expect(rows.find((r) => r.id === 'organization-drive')?.flag).toBeUndefined();
+  });
+});

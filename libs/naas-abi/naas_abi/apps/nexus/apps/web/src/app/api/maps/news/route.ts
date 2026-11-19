@@ -1,4 +1,5 @@
 import { mapsPinResponse, mapsUpstreamGet } from '../_lib';
+import { mapsRoute } from '../_guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -103,7 +104,7 @@ async function parseFeed(
 }
 
 /** RSS proxy → region-geocoded news pins for the Maps canvas. */
-export async function GET() {
+async function handle() {
   try {
     const batches = await Promise.all(
       FEEDS.map((f) => parseFeed(f.url, f.source)),
@@ -144,3 +145,5 @@ export async function GET() {
     );
   }
 }
+
+export const GET = mapsRoute('news', handle, { perMinute: 120 });

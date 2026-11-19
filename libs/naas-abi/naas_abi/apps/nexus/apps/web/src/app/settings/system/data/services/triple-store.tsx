@@ -168,7 +168,6 @@ export const tripleStoreView: ServiceView = {
   label: 'Knowledge graph',
   description: 'Named RDF graphs: ontologies, schema and instance data.',
   icon: Network,
-  group: 'Storage',
   noun: { one: 'graph', many: 'graphs' },
   nounFor: () => ({ one: 'graph', many: 'graphs' }),
   entryIcon: (entry) => (entry.attributes.role === SCHEMA_ROLE ? BookOpen : Network),

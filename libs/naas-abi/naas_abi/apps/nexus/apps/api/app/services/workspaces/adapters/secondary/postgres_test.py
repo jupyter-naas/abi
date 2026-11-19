@@ -178,3 +178,26 @@ async def test_a_workspace_is_deleted_where_no_migration_made_abi_servers(nexus_
         assert (
             await session.execute(select(WorkspaceModel).where(WorkspaceModel.id == "ws-x"))
         ).first() is None
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_carries_its_organizations_name_and_slug(db) -> None:
+    db.add(
+        WorkspaceModel(
+            id="ws-solo",
+            name="Solo",
+            slug="solo",
+            owner_id="ws-member",
+            created_at=NOW,
+            updated_at=NOW,
+        )
+    )
+    await db.commit()
+    adapter = WorkspaceSecondaryAdapterPostgres(db)
+
+    rows = {row.id: row for row in await adapter.list_all_workspaces()}
+    assert (rows["ws-1"].organization_name, rows["ws-1"].organization_slug) == ("Org", "org")
+    # A personal workspace belongs to no organization.
+    assert (rows["ws-solo"].organization_name, rows["ws-solo"].organization_slug) == (None, None)
+    one = await adapter.get_workspace_by_id("ws-1")
+    assert one is not None and one.organization_name == "Org"

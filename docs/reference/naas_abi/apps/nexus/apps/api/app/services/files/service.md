@@ -56,7 +56,12 @@ A service layer for basic file/folder operations backed by an `ObjectStorageServ
     - `NotFoundError` if object not found.
     - `PreviewUnavailableError` if LibreOffice binary not present.
     - `PreviewConversionError` on conversion failure (non-zero exit or missing output).
-  - Uses a temporary directory and a 60s subprocess timeout.
+  - Runs the converter through `office_conversion.convert_to_pdf`: a child process with an
+    environment of its own (no API variables), a per-job LibreOffice profile with link updates,
+    untrusted references and macros off, resource limits and a 60s deadline that kills its whole
+    session. `NEXUS_OFFICE_CONVERTER_WRAPPER` names a command line to run it under (for example
+    one that takes its network away). The route runs it off the event loop, two at a time per
+    process and 20 a minute per caller.
 
 - `read_file_raw(path: str) -> RawFileData`
   - Read bytes and return `RawFileData(content, media_type, filename)`.
@@ -119,4 +124,10 @@ svc.delete_path("docs/README.md")
 - Text reads/writes:
   - `read_file()` assumes UTF-8; non-UTF8 content raises `NotTextError`.
 - PPT/PPTX preview:
-  - Requires LibreOffice and runs an external subprocess (60s timeout).
+  - Requires LibreOffice and runs an isolated external subprocess (60s deadline).
+- Archive extraction:
+  - Every member (files, folders) counts against `max_extract_files`; links and special members
+    (FIFOs, devices) are refused; past `max_extract_ratio_floor` the content is at most
+    `max_extract_ratio` times the archive's size. Members are read one at a time and counted as
+    they are read. The route runs it off the event loop, two at a time per process and 10 a minute
+    per caller.

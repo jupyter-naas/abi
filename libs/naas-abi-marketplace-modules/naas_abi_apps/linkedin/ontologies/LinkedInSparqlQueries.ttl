@@ -1,0 +1,134 @@
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix intentMapping: <http://ontology.naas.ai/intentMapping/> .
+
+########################################################
+# LinkedIn connections, as the people module's
+# ActOfConnectionsOnLinkedInExportPipeline writes them:
+#   ?connection a linkedin:ActOfConnection ;
+#       linkedin:hasConnectionOwner ?owner ;
+#       linkedin:hasConnectedPerson ?person ;
+#       abi:occupiesTemporalRegion/abi:hasFirstInstant/abi:instant_date ?date .
+#   ?person a abi:Person ; rdfs:label ; abi:linkedin_url ; abi:email_address ;
+#       abi:worksFor ?organization ; abi:hasOccupationRole/abi:job_title .
+# The in-engine templates queried linkedin:involvesAgent and
+# linkedin:CurrentJobPosition, which nothing writes.
+# No GRAPH clause: they read the union of the named graphs (Fuseki's
+# tdb:unionDefaultGraph).
+########################################################
+
+intentMapping:LinkedInCountConnectionsByPerson a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "linkedin_count_connections_by_person"@en ;
+    intentMapping:intentDescription "Count the LinkedIn connections of a person, using their URI." ;
+    intentMapping:sparqlTemplate """
+        PREFIX linkedin: <http://ontology.naas.ai/abi/linkedin/>
+
+        SELECT (COUNT(DISTINCT ?other) AS ?connectionCount)
+        WHERE {
+          ?connection a linkedin:ActOfConnection ;
+                      linkedin:hasConnectionOwner|linkedin:hasConnectedPerson <{{ person_uri }}> ;
+                      linkedin:hasConnectionOwner|linkedin:hasConnectedPerson ?other .
+          FILTER(?other != <{{ person_uri }}>)
+        }
+    """ ;
+    intentMapping:hasArgument intentMapping:personUriArg .
+
+intentMapping:LinkedInSearchConnectionsByPerson a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "linkedin_search_connections_by_person"@en ;
+    intentMapping:intentDescription "List the LinkedIn connections of a person (using their URI), newest first: name, date connected, job titles, organizations, LinkedIn URL and email address." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi: <http://ontology.naas.ai/abi/>
+        PREFIX linkedin: <http://ontology.naas.ai/abi/linkedin/>
+
+        SELECT ?connection ?connectedPerson ?connectedPersonName ?connectedOn
+               (GROUP_CONCAT(DISTINCT ?jobTitle; separator=" | ") AS ?jobTitles)
+               (GROUP_CONCAT(DISTINCT ?organizationName; separator=" | ") AS ?organizations)
+               (SAMPLE(?url) AS ?linkedinUrl)
+               (SAMPLE(?email) AS ?emailAddress)
+        WHERE {
+          ?connection a linkedin:ActOfConnection ;
+                      linkedin:hasConnectionOwner|linkedin:hasConnectedPerson <{{ person_uri }}> ;
+                      linkedin:hasConnectionOwner|linkedin:hasConnectedPerson ?connectedPerson .
+          FILTER(?connectedPerson != <{{ person_uri }}>)
+          ?connectedPerson rdfs:label ?connectedPersonName .
+          OPTIONAL {
+            ?connection abi:occupiesTemporalRegion/abi:hasFirstInstant/abi:instant_date ?connectedOn .
+          }
+          OPTIONAL { ?connectedPerson abi:hasOccupationRole/abi:job_title ?jobTitle . }
+          OPTIONAL { ?connectedPerson abi:worksFor/rdfs:label ?organizationName . }
+          OPTIONAL { ?connectedPerson abi:linkedin_url ?url . }
+          OPTIONAL { ?connectedPerson abi:email_address ?email . }
+        }
+        GROUP BY ?connection ?connectedPerson ?connectedPersonName ?connectedOn
+        ORDER BY DESC(?connectedOn)
+        LIMIT 50
+    """ ;
+    intentMapping:hasArgument intentMapping:personUriArg .
+
+intentMapping:LinkedInSearchConnectionsByOrganization a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "linkedin_search_connections_by_organization"@en ;
+    intentMapping:intentDescription "List the LinkedIn connections with people who work at an organization (using its URI): who is connected to whom, and since when." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi: <http://ontology.naas.ai/abi/>
+        PREFIX linkedin: <http://ontology.naas.ai/abi/linkedin/>
+
+        SELECT DISTINCT ?connection ?person ?personName ?owner ?ownerName ?connectedOn
+        WHERE {
+          ?person abi:worksFor <{{ organization_uri }}> ;
+                  rdfs:label ?personName .
+          ?connection a linkedin:ActOfConnection ;
+                      linkedin:hasConnectedPerson ?person ;
+                      linkedin:hasConnectionOwner ?owner .
+          ?owner rdfs:label ?ownerName .
+          OPTIONAL {
+            ?connection abi:occupiesTemporalRegion/abi:hasFirstInstant/abi:instant_date ?connectedOn .
+          }
+        }
+        ORDER BY ?personName ?ownerName
+        LIMIT 100
+    """ ;
+    intentMapping:hasArgument intentMapping:organizationUriArg .
+
+intentMapping:LinkedInSearchPersonInfo a intentMapping:TemplatableSparqlQuery ;
+    rdfs:label "linkedin_search_person_info"@en ;
+    intentMapping:intentDescription "Get what the knowledge graph knows about a person (using their URI): name, headline, job titles, organizations, LinkedIn URL and email address." ;
+    intentMapping:sparqlTemplate """
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        PREFIX abi: <http://ontology.naas.ai/abi/>
+
+        SELECT ?name
+               (SAMPLE(?headlineText) AS ?headline)
+               (GROUP_CONCAT(DISTINCT ?jobTitle; separator=" | ") AS ?jobTitles)
+               (GROUP_CONCAT(DISTINCT ?organizationName; separator=" | ") AS ?organizations)
+               (SAMPLE(?url) AS ?linkedinUrl)
+               (SAMPLE(?email) AS ?emailAddress)
+        WHERE {
+          <{{ person_uri }}> rdfs:label ?name .
+          OPTIONAL { <{{ person_uri }}> abi:hasProfileSummary/abi:headline_text ?headlineText . }
+          OPTIONAL { <{{ person_uri }}> abi:hasOccupationRole/abi:job_title ?jobTitle . }
+          OPTIONAL { <{{ person_uri }}> abi:worksFor/rdfs:label ?organizationName . }
+          OPTIONAL { <{{ person_uri }}> abi:linkedin_url ?url . }
+          OPTIONAL { <{{ person_uri }}> abi:email_address ?email . }
+        }
+        GROUP BY ?name
+    """ ;
+    intentMapping:hasArgument intentMapping:personUriArg .
+
+########################################################
+# Arguments: an ontology.naas.ai IRI, with nothing that could close the
+# <...> it is rendered in (the in-engine pattern required a UUID, which the
+# people graphs' IRIs, e.g. abi/Person/linkedin-jane-doe, do not end with).
+########################################################
+
+intentMapping:personUriArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "person_uri" ;
+    intentMapping:argumentDescription "URI of the person (see linkedin_search_person_uri)" ;
+    intentMapping:validationPattern """^http://ontology\\.naas\\.ai/[^\\s<>"{}|\\\\^`]+$""" ;
+    intentMapping:validationFormat "http://ontology.naas.ai/abi/Person/linkedin-jane-doe" .
+
+intentMapping:organizationUriArg a intentMapping:QueryArgument ;
+    intentMapping:argumentName "organization_uri" ;
+    intentMapping:argumentDescription "URI of the organization (see linkedin_search_company_uri)" ;
+    intentMapping:validationPattern """^http://ontology\\.naas\\.ai/[^\\s<>"{}|\\\\^`]+$""" ;
+    intentMapping:validationFormat "http://ontology.naas.ai/abi/Organization/axa" .

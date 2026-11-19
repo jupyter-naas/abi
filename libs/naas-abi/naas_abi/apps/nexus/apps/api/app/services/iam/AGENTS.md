@@ -19,7 +19,7 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
 | `memberships.py` | `MEMBERSHIPS`: roles are `builtin.<role>` attachments at the organization's container and the workspace's; registers and deletes the containers (`register_org`, `register_workspace`, `drop_scope`); reads as `api`, changes as `api` on behalf of the caller |
 | `names.py` | Every name Nexus builds, through core's `names`: `org_container`, `workspace_container`, `org_below`, `nexus_resource(type, container=, id=)`, and their readers `org_of`, `workspace_of` |
 | `legacy_names.py` | The old grammar's `NO_ORG`, `org_scope`, `workspace_scope`: only for the start-up moves that predate container paths |
-| `placements.py` | Which workspace owns the kernel resources Nexus keeps (`placement_source`, `place`, `place_existing`) |
+| `placements.py` | Which workspace (or organization: `Placement.organization`) owns the kernel resources Nexus keeps (`placement_source`, `place`, `place_existing`) |
 | `bootstrap.py` | Startup: register the catalog, move the old membership rows into IAM once (`iam_migrations`) |
 | `listers.py` | What naas_abi lists for the policy builder, registered with IAM at startup (`register`): organizations and workspaces (labels; IAM keeps only what its registry holds), members, the features in `enabled_features`, and every module's agents, apps, workflows and pipelines (`modules/scopes.gather`, named in the container asked). Each query runs on the API's loop (`OnLoop`) |
 | `role_features.py` | Startup, once: what each role brought in each workspace becomes that workspace's policy "Features of <role>" (`migrate_role_features`, `iam_migrations` `role_features_v1`); then warns while a configuration still sets `role_baseline`, `organization_overrides` or `workspace_overrides` |
@@ -28,6 +28,7 @@ memberships. Sign-in and credentials are in [`../oidc/AGENTS.md`](../oidc/AGENTS
 | `policy_tree.py` | Startup, once: the sets and the workspace toggles become access policies and their sub-policies (`migrate_sets`, `iam_migrations` `policy_tree_v1`); `pending()` until it is recorded |
 | `container_names.py` | Startup, once, after `policy_tree_v1`: organizations and workspaces registered as IAM containers, and every name IAM stored in the old grammar rewritten to container paths (`LegacyNames`, `migrate_names`, `iam_migrations` `container_names_v1`); `pending()` until it is recorded |
 | `container_defaults.py` | Each organization's and workspace's access policy and its members and admins groups ("Access policies and default groups"): made with it (`ContainerDefaults.org_created`, `workspace_created`, in the creating request's transaction through the adapters' `container_defaults()`), kept in step with the roles (`sync_scope`, from `MEMBERSHIPS`), forgotten with it (`dropped`); recorded in the table `container_defaults`; `migrate` gives those that predate them theirs, at every start, once recorded as `container_defaults_v1` |
+| `module_moves.py` | Startup, once, after `container_names_v1`: a module scope a remote module serves now (`MOVES`: the X app, `app/naas_abi_marketplace.applications.x/x_proxy` to `app/applications.x/x_proxy`) renamed in policy documents and keys' narrowing (`iam.rewrite_names(MovedScopes)`, `iam_migrations` `module_moves_v1`): a pattern naming the old item names the new one, a wildcard over the old module gets the new item beside it, one already reaching it is left. Nexus's rows of the app id: migration `0072_remote_x_app.sql` |
 | `runtime.py` | Where Nexus gets IAM (the engine's); tests install their own with `configure` |
 | `testing.py`, `../../conftest.py` | `NexusIam` (a real IAM on the memory store) and the `nexus_iam` / `team` / `nexus_db` fixtures |
 | `route_matrix_test.py` | Every route declares its action; write methods never authorize only a read (the reads sent by POST are `view_as/reads_by_post.py`'s `READS_BY_POST`, one list the read-only guard of a view reads too); every `guard` is decided by level for viewer, member, admin, owner, stranger |
@@ -145,7 +146,7 @@ module per router family:
 | `workspaces.py` | `workspace` (a container with `platform_companions`: `CreateWorkspace` `creates`, `DeleteWorkspace` `deletes` and `owner_only`), `member`, `server`, `resource_access`; every user's personal `CreateWorkspace` is a `PLATFORM_ACCESS` row (`workspace/*`) |
 | `features.py` | `feature/<key>` (`UseFeature`), `policy_only`: no role holds it |
 | `chat.py`, `agents.py`, `apps.py`, `workflows.py` | `conversation`; `agent`, `skill`; `app`, `app_project`, `module` (`ListModuleScopes`); `workflow` (its settings: listed, deprecated switch) |
-| `files.py`, `datasets.py`, `office.py` | `file` (drive + path), `my_file`, `user_storage`, `root_storage`; `dataset`; `project` (slides, documents, sheets) |
+| `files.py`, `datasets.py`, `office.py` | `file` (drive + path; the organization drive's `ListOrgFiles`, `GetOrgFile`, and admin-level `PutOrgFile`, `DeleteOrgFile` on `<org>/nexus:file/organization/<path>`), `my_file`, `user_storage`, `root_storage`; `dataset`; `project` (slides, documents, sheets) |
 | `knowledge.py`, `search.py` | `view`, `graph_cache`, `ontology`, `icon`, `layout`, `layer`, `feed_layer`, `basemap`, `maps_catalog`, `maps_access`; `search`, `topic`, `search_scope` |
 | `code.py`, `settings.py`, `platform.py`, `realtime.py` | `code`, `code_settings`; `secret`, `provider_model`, `abi_server`; `analytics`, `system`; `presence`, `speech` |
 | `users.py` | `user` (platform: the platform's accounts, Platform Settings › Users, `services/accounts`): `ListUsers`, `InviteUser`, `UpdateUser`, `SuspendUser`, `ResumeUser`, `DeleteUser`; no role reaches it, the platform admin holds it |
@@ -153,7 +154,7 @@ module per router family:
 The kernel services have catalogs of their own (core's `iam_catalog.py` of each service); a route that
 only forwards to the kernel declares the kernel action. Choices that differ from "viewers read, members
 write, admins administer" and are deliberate: the organization's directory, domains and billing are
-`admin` (not `list`/`read`), as are layout edits, ontology cache refreshes, `GetResourceAccess`, topic
+`admin` (not `list`/`read`), as are the organization drive's writes (`PutOrgFile`, `DeleteOrgFile`: members read it, a policy lets them write a folder), layout edits, ontology cache refreshes, `GetResourceAccess`, topic
 edits (`UpdateTopic`, `DeleteTopic`, `PreviewTopic`) and the system-drive files; `SyncAgents` is `write`
 (every client sends it once per session); `GetPresence` and `Transcribe`/`Speak` are `read`. After editing
 a catalog, run the route matrix.
@@ -229,7 +230,11 @@ policy tree of issue #1413's journeys:
 | "<X> admins" | X | | its admins and owners | the access policy |
 
 - **"<O> access" is what an organization may use**: the platform admin widens it (agents of chosen modules, apps,
-  features). Its admins and owners hold it in every workspace of the organization and derive from it.
+  features). Its admins and owners hold it in every workspace of the organization and derive from it. A widening is
+  held where it applies (core's "Where a policy is held"): at the platform and below O, where it is attached, never in
+  every container. An agent another organization's workspace turned off (the upgrade's `TurnedOffAgents` Deny, held
+  by whoever holds its access or a policy below it) never stops granting it to O; one turned off in a workspace of O
+  stops whoever holds that Deny.
 - **"<W> access" is what a workspace makes available to its people**, within its organization's. Whoever holds more
   widens it (an org admin, or a workspace owner given more from above); its owners and admins narrow it to hide an
   agent, an app or a feature from everyone below it at once. The policies made in the workspace for its people
@@ -277,7 +282,9 @@ gaining or losing access (`container_defaults_test.py`: every decision of `polic
 and the names' moves, is the same before and after, and again changes nothing):
 
 - **Kept.** The "<O> access" and "<W> access" the sets' move made (`policy_tree`, found by their description) are
-  kept. Each "<W> access" moves from its organization to the workspace with what is below it that its organization
+  kept. A description only names a candidate: an "<O> access" is the platform's, and a "<W> access" is owned by the
+  workspace's own organization (the platform for one in none, or the workspace once moved); of two, the older is
+  kept. The IAM admin routes refuse a description ending as the move's do (`policy_tree.MADE`). Each "<W> access" moves from its organization to the workspace with what is below it that its organization
   owned ("<W> modules (admins and owners)", the splits of customer policies), through core's `move_policies`; a tree
   that cannot move (an attachment beyond the workspace) stays its organization's and is named in the report.
 - **Not attached.** Neither the kept "<O> access" nor "<W> access" is attached to the admins group: it holds the
@@ -305,7 +312,11 @@ sub-policy's parent is detached, so its retirement is not waited for; recorded i
   the apps it had turned on one by one (an app was off until turned on or seeded), and a Deny of the agents,
   workflows and pipelines it had turned off (use only: a workflow's runs stay readable). A set of nothing is an
   Allow no name matches (`Nothing`), never a Deny. A turned-off engine agent whose class the engine did not load
-  stops the move (its scope would be guessed): load the module or delete the row.
+  is set aside, never guessed (a Deny under a wrong name refuses nothing once its module loads): the report keeps
+  it in `deferred_agents`, and `policy_tree.deny_deferred_agents`, at every start after `container_defaults`,
+  denies it in W's access policy (sid `TurnedOffAgentsLoadedLater`, under the roster's scope) once the engine
+  loads its class, then takes it off the list. Until then nobody uses it: the engine serves no agent it did not
+  load. A workspace with no access policy yet waits for the next start; a deleted one is forgotten.
 - **Agents a workspace built** (no module) and had turned off: "Agents turned off in <W>", W-owned, a Deny of
   `nexus:UseAgent` on each, attached at W to whoever held a role there (directly, through a group, org-wide,
   invited). The roster lists a built agent only to who may use it (`agents/.../_visible_to_caller`).
@@ -371,6 +382,23 @@ register them as containers and rewrite every stored name in one transaction (`i
   organizations, workspaces or services of today is named in the report's notes.
 - Placements, keys' narrowing, manifests, invitations and bindings likewise. What is already a path is kept,
   so the move may run again; a statement whose rewrite names nothing is kept as written (it named nothing).
+  An attachment or a pending grant held in both grammars (the new one written while the move waited) is merged
+  into the twin made first, which keeps its id, date and author (`attachments_merged`, `pending_grants_merged`
+  in the report): the store's unique keys never stop the move. Each invitation that listed a dropped grant lists
+  the one kept (`remap_invitation_grants`, in the commit that records the move, `invitations_remapped`), so
+  revoking either invitation keeps the other's grant. The merge map lives only in the start that rewrote the
+  names: when that commit fails (logged, not recorded) or the process stops before it, the next start's rewrite
+  merges nothing, so a pending invitation listing a grant IAM no longer holds is given the grant IAM holds for
+  its person and one of its own roles or policies. An invitation whose `grant_ids` cannot be read is logged and
+  left as it is.
+- While the move waits (a move before it stopped), the configuration's seeds, which run after the moves at
+  every start, attach the roles they declare in the old grammar (`org_seed._apply_declared_roles`, under the
+  moves' lock, read again under it); the move rewrites them. Each organization role they apply holds the
+  org-wide role it carries (`abi:<org>:*`, an owner's or admin's) and no other, as `Memberships.mirror_org_wide`
+  does in the grammar of today, so a configured demotion takes the former one away (`mirror_old_org_wide`, its
+  failure logged apart from the roles). Once it is recorded they take no lock. No `iam_migrations` table (a
+  fresh install) or a record that cannot be read (logged) means the grammar of today. A declaration naming no
+  organization or workspace is logged and skipped.
 - Until it is recorded, module scopes and features are refused (`authz.upgrading`); IAM itself narrows, never
   widens (old names match nothing new). Start-up order (`main._prepare_iam`): the catalog, the moves that write
   the old grammar (feature overrides, role features, sets), this move, then `migrate_role_data` and
@@ -456,11 +484,23 @@ chain from an old-grammar world (`testing.LegacyNexusIam`) through their move an
   actions of memberships, scopes, placements, keys and shared-graph policies. Each engine module's jobs
   run as their own account `job/<module_id>` holding `builtin.job`. Acting on behalf of a user never opens
   a sealed resource.
+- **Datasets are platform-wide, not a workspace's.** The engine's dataset service is global and nothing ties a
+  namespace to a workspace, so the Nexus `dataset` type is platform-level (`abi:nexus:dataset/<ns>/<name>`, reached through the catalog's `PLATFORM_ACCESS`).
+  The workspace a dataset request names carries the `datasets` feature and the caller's membership only (a
+  stranger to it, or a View-as session of another workspace, is refused); it never scopes what is read. List,
+  query, describe and preview agree on a namespace: `GET /datasets/` keeps what `ListDatasets` allows on
+  `dataset/<ns>/<name>` and on `dataset/<ns>` (two batched `filter` calls, whatever the number of datasets);
+  `QueryDataset` is checked on `dataset/<ns>` and on every dataset, and its namespace, that the SQL reads
+  (`<other_ns>.<name>` included: `services/datasets/access.py`); describe and preview are guarded on
+  `dataset/<ns>/<name>` and also require their action on `dataset/<ns>`. A Deny on `dataset/<ns>` therefore hides
+  the namespace from all four. The Datasets agent's tools and the Sheets agent's dataset import make the same checks
+  in the turn's workspace, and every query runs in the caller's call context, so the kernel decides it too.
 - **Kernel resources need placements.** Nexus places what it creates and registers `placement_source`s for
   what exists, applied at every boot and when a workspace is created (`on_workspace_created`). Two
-  platform-level exceptions are deployment grants (`iam.set_platform_grants`): the shared repository that
-  slides, documents, sheets and code use (viewers read, members write) and the platform's datasets (read for
-  every role). The shared repository separates workspaces by Nexus's branch naming only; a per-workspace
+  platform-level exceptions are deployment grants (`iam.set_platform_grants`, stored in the platform policies so any process's regeneration keeps them): the shared repository that
+  slides, documents, sheets and code use (viewers read, members write) and the kernel dataset namespaces the
+  deployment shares (`shared_dataset_namespaces`, read for every role; none by default, names only, so the
+  engine's own namespaces such as the event archive are never reached by a workspace role). Nexus's own `dataset` type is `PLATFORM_ACCESS` of its catalog, not a grant. The shared repository separates workspaces by Nexus's branch naming only; a per-workspace
   repository is the way to make IAM enforce it.
 - **Roles are for users, and only users Nexus knows become IAM users.** An id from a request path never
   creates an IAM principal; a `usr_` id must name a user record, never a service account or a group. A
@@ -471,9 +511,14 @@ chain from an old-grammar world (`testing.LegacyNexusIam`) through their move an
   platform admin. `builtin.platform.viewer`, `builtin.platform.member` and every module's bootstrap policy
   carry an unconditional Deny of `discovery:OpenApp` on `app/*/idp/admin`; only the engine, which serves the
   IdP, opens it.
-- **Who makes accounts in the provider's directory.** Every user may create an organization
-  (`CreateOrganization` is a platform member's; a setting to turn that off does not exist), and its owner may invite, so the gate that holds is `identity:ProvisionUser` on the
-  provider, decided as the inviting user. See `services/invites/AGENTS.md`.
+- **Who makes accounts in the provider's directory.** An invitation IAM authorized: the route's
+  `InviteOrganizationMember` / `InviteWorkspaceMember` at its scope, then its pending grants accepted on the inviting
+  person's behalf. Nexus then makes the account as `api` (`identity:ProvisionUser` is `builtin.api`'s), so an
+  organization admin or a workspace owner needs no right at the provider. Every user may create an organization
+  (`CreateOrganization` is a platform member's; a setting to turn that off does not exist) and invite from it, so what
+  bounds it is the invite routes' rate limits and `invitation_mails_per_day`; the account's email stays unverified
+  until a code mailed to the address proves it. The platform-level invite (no grant) keeps to the inviting user's own
+  `identity:ProvisionUser`. See `services/invites/AGENTS.md`.
 - **Smaller guarantees.** `is_superadmin` is asked of IAM where it is shown (`/auth/me`, `/admin/me`,
   the session and sign-in responses), not on every request; only an absent IAM answers "not an admin",
   any other failure surfaces. A workspace's creation places that workspace's resources alone; the shared
@@ -552,6 +597,15 @@ chain from an old-grammar world (`testing.LegacyNexusIam`) through their move an
   a workspace made after the upgrade use what "<W> access" allows; those of an upgraded one keep what the move gave
   them until an administrator attaches it. #414 had left groups made with a workspace out of scope; the owner brought
   them in.
+- **The organization drive is decided at the organization.** *Decision* (#1511): `naas_abi/organization-drive/<org>`
+  is the organization's: its object storage is placed in the organization's container (`Placement.organization`,
+  `files/placement.py`), and the files API decides on `<org>/nexus:file/organization/<path>` with its own actions,
+  reached through a workspace of the organization (its `files` feature; the organization read from IAM's container
+  of the workspace). Reading is `list`/`read` (the organization's viewers and up), writing `admin` (its admins and
+  owners). No workspace flag. *Consequences:* a role held only in one of the organization's workspaces reaches
+  nothing of it; who writes which folder (members writing `operations/`) or who does not read one is a policy at
+  the organization, not a code change; the kernel's object storage check follows the organization's roles, so a
+  policy widening a write past a viewer's role also grants `object_storage:PutObject` there.
 - **An organization with workspaces is not deleted.** *Decision:* `DELETE /api/organizations/{org}` refuses (409) one
   that still has workspaces, naming them, rather than deleting them with it. The issue left it open (UJ-P1); this is
   the default until the owner says otherwise. *Consequences:* its owners delete its workspaces first (`DeleteWorkspace`,
@@ -565,7 +619,8 @@ uv run pytest libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/iam -q --n
 
 `container_defaults_test.py`: an organization and a workspace made through the services get their access policies and
 groups; the groups follow the roles (and a role changed in another process); the ceiling narrows a member policy at
-once, and who lost an item cannot show it again; a workspace admin's builder within the organization's; an
+once, and who lost an item cannot show it again; a workspace admin's builder within the organization's; an agent
+another organization's workspace turned off still granted to a new organization, one turned off in its own refused; an
 organization with a workspace is refused, then deleted with its access policy; the delete route by role; the upgrade
 on `policy_tree_test`'s world, every decision the same.
 

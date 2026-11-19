@@ -224,7 +224,6 @@ export const modelRegistryView: ServiceView = {
   label: 'Models',
   description: 'Chat and embedding models registered in this engine, by canonical id, with their providers and limits.',
   icon: Cpu,
-  group: 'Platform',
   readOnly: true,
   noun: { one: 'model', many: 'models' },
   entryIcon: (entry) => ((entry.attributes.kind ?? '').includes('embedding') ? Layers : Sparkles),

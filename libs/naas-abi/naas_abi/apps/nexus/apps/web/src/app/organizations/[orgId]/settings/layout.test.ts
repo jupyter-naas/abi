@@ -22,6 +22,13 @@ vi.mock('next/link', async () => {
 });
 vi.mock('@/hooks/use-is-mobile', () => ({ useIsMobile: () => false }));
 vi.mock('@/hooks/use-dev-route-warmup', () => ({ useDevRouteWarmup: () => undefined }));
+vi.mock('@/hooks/use-remember-settings-scope', () => ({ useRememberSettingsScope: () => undefined }));
+vi.mock('@/hooks/use-platform-settings-access', () => ({
+  usePlatformSettingsAccess: () => ({ status: 'ready', actions: {}, retry: () => undefined }),
+}));
+vi.mock('@/components/settings/settings-scope-switcher', () => ({
+  SettingsScopeSwitcher: ({ title }: { title: string }) => title,
+}));
 vi.mock('@/lib/iam-admin/use-access', () => ({
   useIamAccess: () => ({ access: state.access, loading: false, error: null, can: () => false }),
 }));

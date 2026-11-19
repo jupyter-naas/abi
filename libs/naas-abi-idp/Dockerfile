@@ -13,8 +13,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 COPY --from=abi_proto . /build/naas-abi-proto
 COPY --from=abi_sdk . /build/naas-abi-sdk
 COPY . /build/naas-abi-idp
-# naas-abi-sdk and naas-abi-proto are the local copies above, not PyPI's.
-RUN pip install /build/naas-abi-proto /build/naas-abi-sdk /build/naas-abi-idp \
+# Every third-party package comes from this package's uv.lock, with its hashes
+# (requirements.txt, `uv export` of it), and the build backend from
+# build-requirements.txt. naas-abi-sdk and naas-abi-proto are the local copies
+# above, not PyPI's, installed without dependencies or a build environment of
+# their own, so nothing is resolved at build time.
+RUN pip install --require-hashes --no-deps \
+        -r /build/naas-abi-idp/requirements.txt \
+        -r /build/naas-abi-idp/build-requirements.txt \
+    && pip install --no-deps --no-build-isolation \
+        /build/naas-abi-proto /build/naas-abi-sdk /build/naas-abi-idp \
+    && pip check \
     && rm -rf /build
 
 # The point of the image: fail the build if core sneaks in, or if the provider

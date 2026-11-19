@@ -15,6 +15,11 @@ from naas_abi_sdk.transport import RPCError
 WORKSPACE = "abi:nexus:organization/o-1/nexus:workspace/ws-1"
 
 
+# Stream inboxes, as a submitter names them (``messages.stream_inbox``).
+INBOX_A = "_INBOX.a.m.1.stream." + "a" * 32
+INBOX_B = "_INBOX.b.m.2.stream." + "b" * 32
+
+
 class Documents:
     def __init__(self):
         self.values = {}
@@ -510,7 +515,7 @@ def _rpc(owner, operation, message):
         subject=f"abi.agent.default.owner.x.v1.{operation}",
         data=message.SerializeToString(),
         headers={"Nats-Auth-Token": "token"},
-        reply="_INBOX.1",
+        reply="_INBOX.r.1",
         _client=SimpleNamespace(max_payload=1 << 20, publish=publish),
     )
     owner.session.client.transport = SimpleNamespace(
@@ -743,17 +748,17 @@ def test_owner_pushes_committed_events_then_the_terminal_status():
     async def scenario():
         docs, wire, handler = Documents(), Wire(), Streaming()
         owner = watched(docs, handler, wire)
-        await owner._submit("agent", "key", "caller", streaming_request("_INBOX.a.1"))
+        await owner._submit("agent", "key", "caller", streaming_request(INBOX_A))
         # A second submit of the same invocation watches it too.
-        await owner._submit("agent", "key", "caller", streaming_request("_INBOX.b.2"))
+        await owner._submit("agent", "key", "caller", streaming_request(INBOX_B))
         handler.go.set()
         await asyncio.gather(*(r.task for r in owner.runs.values()))
 
         assert {subject for subject, _ in wire.published} == {
-            "_INBOX.a.1",
-            "_INBOX.b.2",
+            INBOX_A,
+            INBOX_B,
         }
-        updates = [u for subject, u in wire.published if subject == "_INBOX.a.1"]
+        updates = [u for subject, u in wire.published if subject == INBOX_A]
         events = [u.event for u in updates if u.HasField("event")]
         assert [(e.sequence, e.event) for e in events] == [
             (1, "message"),
@@ -788,7 +793,7 @@ def test_a_failed_push_never_fails_the_run():
         docs, handler = Documents(), Streaming()
         handler.go.set()
         owner = watched(docs, handler, Wire(fail=True))
-        await owner._submit("agent", "key", "caller", streaming_request("_INBOX.a.1"))
+        await owner._submit("agent", "key", "caller", streaming_request(INBOX_A))
         await asyncio.gather(*(r.task for r in owner.runs.values()))
         doc = await docs.get(owner.runs_collection, "key")
         assert doc.data["status"] == "SUCCEEDED"
@@ -1088,3 +1093,19 @@ def test_a_delegation_names_this_hosts_own_account_or_is_dropped():
     asyncio.run(scenario(f"sa_{ULID}", True))
     asyncio.run(scenario("sa_01J8Z3K5M7N9P2Q4R6S8T0V2WY", False))
     asyncio.run(scenario("engine", False))
+
+
+@pytest.mark.parametrize(
+    "inbox", ["_INBOX.a.m.1", "_INBOX.a.m.1.2", "_INBOX.>", "abi.svc.event.v1.append"]
+)
+def test_agent_host_keeps_run_updates_to_stream_inboxes(inbox):
+    """Updates are pushed to a stream inbox only: never an inbox another
+    connection could predict, a wildcard or a service subject."""
+
+    async def scenario():
+        owner = watched(Documents(), Streaming(), Wire())
+        with pytest.raises(RPCError) as raised:
+            await owner._submit("agent", "key", "caller", streaming_request(inbox))
+        assert raised.value.code == "INVALID_ARGUMENT"
+
+    asyncio.run(scenario())

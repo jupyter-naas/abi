@@ -25,6 +25,7 @@ from ..IVectorStorePort import (
     SearchResult,
     VectorDocument,
     VectorPage,
+    check_collection_name,
 )
 
 logger = logging.getLogger(__name__)
@@ -107,6 +108,7 @@ class QdrantInMemoryAdapter(IVectorStorePort):
         distance_metric: str = "cosine",
         **kwargs,
     ) -> None:
+        check_collection_name(collection_name)
         with self._lock:
             client = self._require_initialized()
             client.create_collection(
@@ -118,6 +120,7 @@ class QdrantInMemoryAdapter(IVectorStorePort):
             )
 
     def delete_collection(self, collection_name: str) -> None:
+        check_collection_name(collection_name)
         with self._lock:
             client = self._require_initialized()
             client.delete_collection(collection_name=collection_name)
@@ -131,6 +134,7 @@ class QdrantInMemoryAdapter(IVectorStorePort):
     def store_vectors(
         self, collection_name: str, documents: list[VectorDocument]
     ) -> None:
+        check_collection_name(collection_name)
         with self._lock:
             client = self._require_initialized()
             points = []
@@ -166,6 +170,7 @@ class QdrantInMemoryAdapter(IVectorStorePort):
         include_vectors: bool = False,
         include_metadata: bool = True,
     ) -> list[SearchResult]:
+        check_collection_name(collection_name)
         with self._lock:
             client = self._require_initialized()
 
@@ -221,6 +226,7 @@ class QdrantInMemoryAdapter(IVectorStorePort):
     def get_vector(
         self, collection_name: str, vector_id: str, include_vector: bool = True
     ) -> VectorDocument | None:
+        check_collection_name(collection_name)
         with self._lock:
             client = self._require_initialized()
             points = client.retrieve(
@@ -263,6 +269,7 @@ class QdrantInMemoryAdapter(IVectorStorePort):
         metadata: dict[str, Any] | None = None,
         payload: dict[str, Any] | None = None,
     ) -> None:
+        check_collection_name(collection_name)
         with self._lock:
             client = self._require_initialized()
 
@@ -294,6 +301,7 @@ class QdrantInMemoryAdapter(IVectorStorePort):
                 )
 
     def delete_vectors(self, collection_name: str, vector_ids: list[str]) -> None:
+        check_collection_name(collection_name)
         with self._lock:
             client = self._require_initialized()
             point_ids = cast(
@@ -306,6 +314,7 @@ class QdrantInMemoryAdapter(IVectorStorePort):
             )
 
     def count_vectors(self, collection_name: str) -> int:
+        check_collection_name(collection_name)
         with self._lock:
             client = self._require_initialized()
             collection_info = client.get_collection(collection_name=collection_name)
@@ -319,6 +328,7 @@ class QdrantInMemoryAdapter(IVectorStorePort):
         include_vectors: bool = False,
     ) -> VectorPage:
         """Documents in point-id order (Qdrant scroll); the cursor is a point id."""
+        check_collection_name(collection_name)
         if limit <= 0:
             raise ValueError("limit must be a positive integer")
         with self._lock:
@@ -353,6 +363,7 @@ class QdrantInMemoryAdapter(IVectorStorePort):
             )
 
     def get_collection_info(self, collection_name: str) -> CollectionInfo:
+        check_collection_name(collection_name)
         with self._lock:
             client = self._require_initialized()
             return _describe(

@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { inspectorTerm, inspectorConnections, inspectorSources } from './ontology-node-inspector';
 import type { DictionaryTerm } from './ontology-dictionary-tree';

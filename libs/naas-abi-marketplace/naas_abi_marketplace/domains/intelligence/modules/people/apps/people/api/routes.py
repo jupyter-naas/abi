@@ -13,7 +13,6 @@ config shipped beside this package.
 from __future__ import annotations
 
 import asyncio
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -73,8 +72,9 @@ def _bearer(request: Request) -> str:
 
 
 def _authenticated_by_api_key(request: Request) -> object:
-    expected = os.environ.get("ABI_API_KEY")
-    if not expected or _bearer(request) != expected:
+    from naas_abi_core.apps.api.abi_api_key_auth import is_abi_api_token_valid
+
+    if not is_abi_api_token_valid(_bearer(request)):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",

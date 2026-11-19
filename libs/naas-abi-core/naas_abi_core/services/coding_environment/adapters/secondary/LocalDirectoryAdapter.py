@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import json
-import os
-import shlex
+import re
 import shutil
 import socket
 import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from datetime import UTC, datetime
@@ -22,14 +22,19 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
     PHASE_ERROR,
     PHASE_RUNNING,
     PHASE_STOPPED,
+    AccessDeniedError,
     ICodingEnvironmentAdapter,
+    InvalidRequestError,
     ProvisionFailedError,
     WorkspaceAccess,
     WorkspaceNameConflictError,
     WorkspaceNotFoundError,
     WorkspaceStatus,
     WorkspaceTemplate,
+    environment_name_ok,
 )
+from naas_abi_core.services.source_control.names import ref_ok, segment_ok
+from naas_abi_core.utils.process_environment import allowed_environment
 
 _SIDECAR_SCRIPT = Path(__file__).with_name("abi_sidecar.py")
 _DEFAULT_PORT_START = 18000
@@ -38,14 +43,32 @@ _DEFAULT_HARNESS_PORT_START = 18200
 _DEFAULT_HARNESS_PORT_END = 18300
 _HEALTH_TIMEOUT_S = 15.0
 HarnessKind = Literal["none", "opencode"]
+# A principal id as a directory name.
+_USER_DIR = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,199}")
+# Every git call: the cloned repository's hooks and fsmonitor never run.
+_SAFE_GIT = ("git", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false")
+
+SINGLE_USER_ONLY = (
+    "The local_directory coding environment runs workspaces on the engine host, "
+    "as the engine's own OS user: it is for single-user development only. Set "
+    "single_user_development: true to use it, or use the coder adapter."
+)
 
 
 class LocalDirectoryAdapter(ICodingEnvironmentAdapter):
     """Local git checkout + abi_sidecar process (Slides-parity, no Coder).
 
-    Each workspace is a directory under ``workspaces_root/{user_id}/{name}`` with
-    a sidecar listening on localhost. ``get_runtime_binding`` returns the base
-    URL and bearer secret for agent tools.
+    Single-user development only. Each workspace is a directory under
+    ``workspaces_root/{user_id}/{name}`` with a sidecar listening on localhost,
+    run as the engine's own OS user: it is no sandbox, so the adapter must be
+    turned on explicitly (``single_user_development``) and serves one user,
+    whose workspaces it keeps (another user's provision is refused). The
+    sidecar and the OpenCode harness start with an allow-listed environment and
+    a home of their own, never the engine's environment; the harness gets its
+    own provider credentials file. Repositories are cloned only from the
+    platform's forge: the local git root (``repos_root``) or ``forge_url``.
+    ``get_runtime_binding`` returns the base URL and bearer secret for agent
+    tools.
     """
 
     TEMPLATE_ID = "local-directory"
@@ -63,7 +86,16 @@ class LocalDirectoryAdapter(ICodingEnvironmentAdapter):
         opencode_bin: str = "opencode",
         opencode_model: str | None = None,
         opencode_startup_timeout: int = 15,
+        single_user_development: bool = False,
+        repos_root: str | None = None,
+        forge_url: str | None = None,
     ) -> None:
+        if not single_user_development:
+            raise ValueError(SINGLE_USER_ONLY)
+        self._repos_root = (
+            Path(repos_root).expanduser().resolve() if repos_root else None
+        )
+        self._forge = urllib.parse.urlsplit(forge_url) if forge_url else None
         self._root = Path(workspaces_root).expanduser().resolve()
         self._root.mkdir(parents=True, exist_ok=True)
         self._port_start = sidecar_port_start
@@ -153,13 +185,22 @@ class LocalDirectoryAdapter(ICodingEnvironmentAdapter):
                 time.sleep(0.25)
         return False
 
+    def _home(self, checkout: Path) -> Path:
+        """The workspace runtime's own home, beside its checkout (never the
+        engine's): ``workspaces_root/{user}/.home/{name}``."""
+        home = self._home_path(checkout)
+        home.mkdir(parents=True, exist_ok=True)
+        return home
+
     def _start_sidecar(self, checkout: Path, port: int, secret: str) -> subprocess.Popen[str]:
-        env = {
-            **os.environ,
-            "ABI_SIDECAR_ROOT": str(checkout),
-            "ABI_SIDECAR_SECRET": secret,
-            "ABI_SIDECAR_PORT": str(port),
-        }
+        env = allowed_environment(
+            home=str(self._home(checkout)),
+            extra={
+                "ABI_SIDECAR_ROOT": str(checkout),
+                "ABI_SIDECAR_SECRET": secret,
+                "ABI_SIDECAR_PORT": str(port),
+            },
+        )
         return subprocess.Popen(
             [sys.executable, str(_SIDECAR_SCRIPT)],
             cwd=str(checkout),
@@ -185,30 +226,29 @@ class LocalDirectoryAdapter(ICodingEnvironmentAdapter):
     def _stop_harness(self, record: dict) -> None:
         self._stop_process(record, "_harness_proc")
 
-    @staticmethod
-    def _ensure_opencode_auth() -> None:
-        from naas_abi_core.services.agent.OpencodeAgent import OpencodeAgent
-
-        OpencodeAgent._ensure_opencode_auth_file_once()
-
     def _resolve_opencode_bin(self) -> str:
-        if shutil.which(self._opencode_bin):
-            return self._opencode_bin
-        home_bin = Path.home() / ".opencode" / "bin" / "opencode"
-        if home_bin.is_file():
-            return str(home_bin)
-        return self._opencode_bin
+        from naas_abi_core.services.agent.OpencodeAgent import resolve_opencode_bin
+
+        return resolve_opencode_bin(self._opencode_bin)
 
     def _start_opencode(self, checkout: Path, port: int) -> subprocess.Popen[str]:
-        self._ensure_opencode_auth()
-        opencode_bin = self._resolve_opencode_bin()
-        launch_command = (
-            f"source ~/.bashrc >/dev/null 2>&1; "
-            f"{shlex.quote(opencode_bin)} serve --port {port}"
+        from naas_abi_core.services.agent.OpencodeAgent import (
+            OpencodeAgent,
+            warn_no_opencode_credentials,
         )
+
+        home = self._home(checkout)
+        env = allowed_environment(home=str(home))
+        # Its own credentials: the configured OpenCode providers, in its own
+        # data directory, never the engine's files or environment.
+        if not OpencodeAgent.write_opencode_auth_file(
+            Path(env["XDG_DATA_HOME"]) / "opencode" / "auth.json"
+        ):
+            warn_no_opencode_credentials()
         return subprocess.Popen(
-            ["bash", "-lc", launch_command],
+            [self._resolve_opencode_bin(), "serve", "--port", str(port)],
             cwd=str(checkout),
+            env=env,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             text=True,
@@ -299,6 +339,7 @@ class LocalDirectoryAdapter(ICodingEnvironmentAdapter):
         params: dict[str, str] | None = None,
     ) -> WorkspaceStatus:
         del template_id
+        self._require_single_user(user_id)
         for existing in self._workspaces.values():
             if existing["user_id"] == user_id and existing["name"] == name:
                 raise WorkspaceNameConflictError(
@@ -307,71 +348,171 @@ class LocalDirectoryAdapter(ICodingEnvironmentAdapter):
 
         params = dict(params or {})
         branch = params.get("branch", "main")
+        if not ref_ok(branch):
+            raise InvalidRequestError(f"Invalid branch: {branch!r}")
         repo_url = params.get("repo_url", "").strip()
+        if repo_url:
+            self._require_forge_url(repo_url)
         sidecar_secret = params.get("sidecar_secret") or uuid.uuid4().hex
 
-        checkout = self._root / user_id / name
-        if checkout.exists():
-            shutil.rmtree(checkout)
+        checkout = self._checkout(user_id, name)
+        if checkout.exists() or checkout.is_symlink():
+            # Never replaced: whatever is there is not this new workspace's.
+            raise ProvisionFailedError(
+                f"workspace directory '{name}' already exists for user {user_id}"
+            )
         checkout.parent.mkdir(parents=True, exist_ok=True)
+        # A home with no checkout belongs to no workspace: never handed on.
+        self._remove_home(checkout)
 
+        # From here the checkout and the home are this provision's own: a
+        # failure, whatever it is, removes both (and stops what it started),
+        # so the name stays free and no credentials stay on disk.
+        record: dict = {}
+        try:
+            self._fill_checkout(checkout, branch=branch, repo_url=repo_url)
+            port = self._allocate_sidecar_port()
+            record["_proc"] = self._start_sidecar(checkout, port, sidecar_secret)
+            sidecar_base = f"http://127.0.0.1:{port}"
+            if not self._wait_for_sidecar(sidecar_base, sidecar_secret):
+                raise ProvisionFailedError("sidecar did not become healthy")
+
+            workspace_id = uuid.uuid4().hex
+            record.update(
+                {
+                    "id": workspace_id,
+                    "name": name,
+                    "user_id": user_id,
+                    "created_at": datetime.now(UTC).isoformat(),
+                    "checkout": str(checkout),
+                    "port": port,
+                    "sidecar_base": sidecar_base,
+                    "sidecar_secret": sidecar_secret,
+                    "branch": branch,
+                    "repo_url": repo_url,
+                    "harness": self._harness,
+                    "phase": PHASE_RUNNING,
+                    "agent_ready": True,
+                    "harness_ready": False,
+                }
+            )
+            self._workspaces[workspace_id] = record
+            if self._harness == "opencode":
+                if not self._ensure_harness(record):
+                    raise ProvisionFailedError(
+                        "OpenCode harness did not become healthy "
+                        f"(is `{self._resolve_opencode_bin()}` installed?)"
+                    )
+                record["agent_ready"] = True
+            self._persist(record)
+        except BaseException:
+            self._discard(record, checkout)
+            raise
+        return self._status(workspace_id)
+
+    def _fill_checkout(self, checkout: Path, *, branch: str, repo_url: str) -> None:
+        """Clone the repository into the new checkout, or start an empty one."""
         if repo_url:
             clone = subprocess.run(
-                ["git", "clone", "--branch", branch, repo_url, str(checkout)],
+                [*_SAFE_GIT, "clone", "--branch", branch, "--", repo_url, str(checkout)],
                 capture_output=True,
                 text=True,
                 check=False,
             )
             if clone.returncode != 0:
+                # Not git's own words: they may carry the clone URL's credentials.
                 raise ProvisionFailedError(
-                    (clone.stderr or clone.stdout or "git clone failed").strip()
+                    f"git clone of branch {branch} failed (exit {clone.returncode})"
                 )
+            return
+        checkout.mkdir()
+        subprocess.run([*_SAFE_GIT, "init", "-b", branch], cwd=checkout, check=True)
+
+    def _discard(self, record: dict, checkout: Path) -> None:
+        """Undo a provision that failed: its processes, record, checkout and
+        home (with the harness credentials in it)."""
+        self._stop_sidecar(record)
+        self._stop_harness(record)
+        workspace_id = record.get("id")
+        if workspace_id:
+            self._workspaces.pop(workspace_id, None)
+        shutil.rmtree(checkout, ignore_errors=True)
+        self._remove_home(checkout)
+
+    @staticmethod
+    def _home_path(checkout: Path) -> Path:
+        return checkout.parent / ".home" / checkout.name
+
+    def _remove_home(self, checkout: Path) -> None:
+        home = self._home_path(checkout)
+        if home.is_symlink():
+            home.unlink()
         else:
-            checkout.mkdir(parents=True)
-            subprocess.run(["git", "init", "-b", branch], cwd=checkout, check=True)
+            shutil.rmtree(home, ignore_errors=True)
 
-        port = self._allocate_sidecar_port()
-        proc = self._start_sidecar(checkout, port, sidecar_secret)
-        sidecar_base = f"http://127.0.0.1:{port}"
-        ready = self._wait_for_sidecar(sidecar_base, sidecar_secret)
-        if not ready:
-            proc.kill()
-            shutil.rmtree(checkout, ignore_errors=True)
-            raise ProvisionFailedError("sidecar did not become healthy")
+    def _require_single_user(self, user_id: str) -> None:
+        """One user's workspaces only: the runtime is the engine's own OS user,
+        so a second user would share it with the first (and with the engine)."""
+        others = {
+            str(record.get("user_id") or "")
+            for record in self._workspaces.values()
+        } - {user_id}
+        if others:
+            raise AccessDeniedError(
+                "local_directory serves a single user, whose workspaces exist here"
+            )
 
-        workspace_id = uuid.uuid4().hex
-        record = {
-            "id": workspace_id,
-            "name": name,
-            "user_id": user_id,
-            "created_at": datetime.now(UTC).isoformat(),
-            "checkout": str(checkout),
-            "port": port,
-            "sidecar_base": sidecar_base,
-            "sidecar_secret": sidecar_secret,
-            "branch": branch,
-            "repo_url": repo_url,
-            "harness": self._harness,
-            "phase": PHASE_RUNNING,
-            "agent_ready": True,
-            "harness_ready": False,
-        }
-        self._workspaces[workspace_id] = record
-        record["_proc"] = proc
-        if self._harness == "opencode":
-            harness_ready = self._ensure_harness(record)
-            if not harness_ready:
-                self._stop_sidecar(record)
-                self._stop_harness(record)
-                shutil.rmtree(checkout, ignore_errors=True)
-                self._workspaces.pop(workspace_id, None)
-                raise ProvisionFailedError(
-                    "OpenCode harness did not become healthy "
-                    f"(is `{self._resolve_opencode_bin()}` installed?)"
-                )
-            record["agent_ready"] = True
-        self._persist(record)
-        return self._status(workspace_id)
+    def _checkout(self, user_id: str, name: str) -> Path:
+        """``workspaces_root/{user_id}/{name}``, and nowhere else."""
+        if not environment_name_ok(name):
+            raise InvalidRequestError(f"Invalid environment name: {name!r}")
+        if not _USER_DIR.fullmatch(user_id or "") or user_id in (".", ".."):
+            raise InvalidRequestError(f"Invalid user: {user_id!r}")
+        user_root = self._root / user_id
+        checkout = user_root / name
+        resolved = checkout.parent.resolve() / checkout.name
+        if resolved.parent != user_root.resolve() or self._root not in resolved.parents:
+            raise InvalidRequestError(f"Invalid environment name: {name!r}")
+        return checkout
+
+    def _require_forge_url(self, repo_url: str) -> None:
+        """A repository of the platform's forge only: one ``<owner>/<name>`` of
+        the local git root, or of ``forge_url``. Never another path on this
+        host, another host, or another scheme."""
+        if repo_url.startswith("-") or any(ord(c) < 32 for c in repo_url):
+            raise InvalidRequestError("Repositories are cloned from the platform's forge")
+        parts = urllib.parse.urlsplit(repo_url)
+        if parts.scheme == "file" and self._repos_root is not None:
+            path = Path(urllib.parse.unquote(parts.path))
+            if (
+                not parts.netloc
+                and path.is_absolute()
+                and path.parent.parent == self._repos_root
+                and segment_ok(path.parent.name)
+                and segment_ok(path.name)
+                and (path / ".git").is_dir()
+                and not path.is_symlink()
+            ):
+                return
+        forge = self._forge
+        if (
+            forge is not None
+            and parts.scheme in ("http", "https")
+            and parts.scheme == forge.scheme
+            and parts.hostname == forge.hostname
+            and parts.port == forge.port
+            and not parts.query
+            and not parts.fragment
+        ):
+            segments = parts.path.strip("/").removesuffix(".git").split("/")
+            prefix = [s for s in forge.path.strip("/").split("/") if s]
+            if (
+                segments[: len(prefix)] == prefix
+                and len(segments) == len(prefix) + 2
+                and all(segment_ok(s) for s in segments[len(prefix) :])
+            ):
+                return
+        raise InvalidRequestError("Repositories are cloned from the platform's forge")
 
     def _record(self, workspace_id: str) -> dict:
         if workspace_id not in self._workspaces:
@@ -454,6 +595,7 @@ class LocalDirectoryAdapter(ICodingEnvironmentAdapter):
         self._stop_harness(record)
         checkout = Path(record["checkout"])
         shutil.rmtree(checkout, ignore_errors=True)
+        self._remove_home(checkout)
         self._workspaces.pop(workspace_id, None)
 
     def get_access(

@@ -168,7 +168,20 @@ def test_a_path_answers_its_methods_only(monkeypatch):
     assert client.get("/idp/token").status_code == 405
     assert client.get("/idp/login/email").status_code == 405
     assert client.delete("/idp/token").status_code == 405
+    assert client.put("/idp/login/code").status_code == 405
+    assert client.delete("/idp/login/code").status_code == 405
     assert seen.requests == []
+
+
+def test_the_code_page_is_served_on_get_and_post(monkeypatch):
+    # GET: where /authorize sends the browser once it mailed the hinted address.
+    client, seen = serve(monkeypatch)
+    assert client.get("/idp/login/code").status_code == 200
+    assert client.post("/idp/login/code", data={"code": "1"}).status_code == 200
+    assert [(r.method, r.path) for r in seen.requests] == [
+        ("GET", "/login/code"),
+        ("POST", "/login/code"),
+    ]
 
 
 # -- request headers, cookies and the client address -----------------------------
@@ -530,6 +543,7 @@ def test_the_trusted_path_is_the_idp_prefix_only():
 # -- through the real module -----------------------------------------------------
 
 import re  # noqa: E402
+from urllib.parse import urlsplit  # noqa: E402
 
 import httpx  # noqa: E402
 
@@ -637,6 +651,35 @@ def test_signing_in_through_the_route_sets_the_session_and_clears_the_login_cook
     cleared = next(c for c in cookies if c.startswith("abi_idp_login="))
     assert cleared.startswith("abi_idp_login=;") and "Max-Age=0" in cleared
     assert "abi_idp_login" not in client.cookies  # the browser dropped it
+    assert "abi_idp_session" in client.cookies
+
+
+def test_a_hinted_sign_in_mails_the_code_and_redirects_to_the_code_page(idp_stack):
+    client, mailer, _ = idp_stack
+    started = _authorize(client, login_hint="alice@example.com")
+    assert started.status_code == 303
+    # The provider's absolute URL under the issuer, passed on as it is.
+    assert started.headers["location"] == f"{TARGET.issuer}/login/code"
+    login = next(
+        c for c in started.headers.get_list("set-cookie") if c.startswith("abi_idp_login=")
+    )
+    assert "Path=/idp" in login and "HttpOnly" in login and "SameSite=Lax" in login
+    assert "Secure" in login
+    assert [m.to for m in mailer.sent] == ["alice@example.com"]
+    page = client.get(urlsplit(started.headers["location"]).path)
+    assert page.status_code == 200 and "Check your email" in page.text
+    assert "script-src" not in page.headers["content-security-policy"]
+    assert len(mailer.sent) == 1  # showing the page sends nothing
+    csrf = re.search(r'name="csrf" value="([^"]+)"', page.text).group(1)
+    done = client.post(
+        "/idp/login/code",
+        data={
+            "csrf": csrf,
+            "email": "alice@example.com",
+            "code": mailer.last_code("alice@example.com"),
+        },
+    )
+    assert done.status_code == 302 and "code=" in done.headers["location"]
     assert "abi_idp_session" in client.cookies
 
 

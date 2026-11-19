@@ -115,7 +115,7 @@ asgi_app = create_app(base)  # returns a wrapped ASGI app
 
 ## Caveats
 - `create_app(...)` returns the WebSocket-wrapped ASGI callable from `init_websocket(app)`, not necessarily the original `FastAPI` instance.
-- When patching an existing app (passing `app` to `create_app`), startup/shutdown handlers are attached via `add_event_handler`; when `create_app()` constructs the app itself, it uses the `lifespan` context manager instead.
+- When patching an existing app (passing `app` to `create_app`), startup/shutdown handlers are appended to `app.router.on_startup` / `on_shutdown`; when `create_app()` constructs the app itself, it uses the `lifespan` context manager instead.
 - Startup fails (and prevents serving) if `init_db()` raises `ConnectionError`.
 - OpenAPI docs (`/docs`, `/redoc`) are disabled unless `settings.debug` is true or `settings.environment == "development"`.
 - Security headers middleware intentionally skips WebSocket upgrade requests.

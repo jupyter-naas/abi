@@ -175,3 +175,13 @@ def test_docker_compose_reads_the_legacy_profile(tmp_path: Path) -> None:
     assert "nats" in default
     assert not LEGACY_SERVICES & default
     assert legacy - default == LEGACY_SERVICES
+
+
+def test_the_repository_mcp_server_keeps_off_by_default_and_holds_no_key() -> None:
+    compose = yaml.safe_load((REPO_ROOT / "docker-compose.yml").read_text())
+    service = compose["services"]["mcp-server"]
+
+    assert service["profiles"] == ["mcp"]
+    names = [str(item).split("=", 1)[0] for item in service["environment"]]
+    assert "ABI_API_KEY" not in names
+    assert "MCP_ALLOWED_HOSTS" in names

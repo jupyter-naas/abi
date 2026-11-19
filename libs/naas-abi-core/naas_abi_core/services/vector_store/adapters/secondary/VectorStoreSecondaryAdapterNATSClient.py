@@ -92,6 +92,8 @@ def _raise_for_error(error: common_pb2.CallError) -> None:
     raise_authorization_error(error.code, error.message)
     if error.code == "COLLECTION_NOT_FOUND":
         raise CollectionNotFoundError("", message=error.message)
+    if error.code == "INVALID_ARGUMENT":
+        raise ValueError(error.message)
     raise RuntimeError(f"vector_store NATS RPC failed ({error.code}): {error.message}")
 
 

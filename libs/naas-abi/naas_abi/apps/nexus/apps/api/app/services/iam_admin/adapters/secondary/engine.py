@@ -30,6 +30,13 @@ from naas_abi_core.services.iam.IAMPorts import (
     Policy,
     PrincipalRecord,
 )
+from naas_abi_core.services.iam.names import (
+    PLATFORM,
+    as_container,
+    container_of_scope,
+    top_container,
+    within,
+)
 
 
 class _BoundIam:
@@ -92,3 +99,18 @@ class EngineIamGateway(IamGateway):
                 return iam.get_policy(policy_id)
             except (IAMNotFoundError, PermissionDeniedError):
                 return None
+
+    def belongs(self, principal_id: str, scope: str) -> bool:
+        record = self.principal(principal_id)
+        if record is None or record.kind != "user":
+            return True
+        top = top_container(as_container(container_of_scope(scope)))
+        if top == PLATFORM:
+            return True
+        iam = self._iam()
+        with as_service_account("api"):
+            attachments = iam.list_attachments(principal_id=principal_id)
+        return any(
+            a.scope is not None and within(as_container(container_of_scope(a.scope)), top)
+            for a in attachments
+        )

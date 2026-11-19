@@ -123,6 +123,14 @@ Never expose that client as a primary or route registration through inference RP
 Each provider call runs in a `model <operation> <canonical id>` span (identity,
 input counts and reported token usage only: never messages, texts or options).
 
+A chat's options reach the provider only when listed (`GENERATION_OPTIONS`:
+`temperature`, `top_p`, `max_tokens` up to `MAX_TOKENS_LIMIT`, `seed`,
+`response_format`; `TOOL_OPTIONS` for `bind_tools`: `tool_choice`,
+`parallel_tool_calls`, `strict`), each value checked. Anything else (the
+provider's model, endpoint, headers, extra bodies, `n`, `stop` outside the
+request's own field) is refused with `INVALID_ARGUMENT`: IAM authorizes the
+registered model, and the call goes to that model only.
+
 Contracts: `naas-abi-proto/naas_abi_proto/model_registry/v1/model_registry.proto`.
 SDK optional model codec/proxies stay core-free; core's NATS extra installs them.
 Tests: `uv run pytest examples/standalone_module/model_integration_test.py -q`

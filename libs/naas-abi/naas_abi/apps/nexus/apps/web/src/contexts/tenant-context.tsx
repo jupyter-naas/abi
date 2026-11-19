@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation';
 import { createContext, useContext, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { getApiUrl } from '@/lib/config';
+import { applyTenantShellBranding } from '@/lib/tenant-shell';
 
 interface TenantConfig {
   apps: {
@@ -11,6 +12,8 @@ interface TenantConfig {
     description?: string | null;
     icon_emoji?: string | null;
   }[];
+  /** The site's name (Platform Settings › General); the tab title stands in without one. */
+  name?: string | null;
   tab_title: string;
   favicon_url: string | null;
   logo_url?: string | null;
@@ -38,6 +41,7 @@ interface TenantConfig {
 
 const DEFAULT_TENANT: TenantConfig = {
   apps: [],
+  name: null,
   tab_title: 'ABI Nexus | naas.ai',
   favicon_url: null,
   logo_url: null,
@@ -182,6 +186,10 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         // Tenant endpoint unavailable — keep defaults
       });
   }, []);
+
+  useEffect(() => {
+    applyTenantShellBranding(document.documentElement, tenant.login_border_radius);
+  }, [tenant.login_border_radius]);
 
   const applyTitleAndFavicon = () => {
     const title = getPageTitle(pathname, tenant.tab_title, detail);

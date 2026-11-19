@@ -1088,7 +1088,7 @@ def test_the_upgrade_waits_for_the_role_features_move_only():
     assert "role_features_v1" in policy_tree.AFTER
 
 
-def test_a_turned_off_agent_of_a_module_not_loaded_stops_the_move(monkeypatch):
+def test_a_turned_off_agent_of_a_module_not_loaded_is_not_guessed(monkeypatch):
     from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary import (
         agents__primary_adapter__FastAPI as agents_api,
     )
@@ -1098,7 +1098,7 @@ def test_a_turned_off_agent_of_a_module_not_loaded_stops_the_move(monkeypatch):
     resolve = REAL_RESOLVER()
     # Turned on: guessed as before, it denies nothing.
     assert resolve("acme.people.agents/Scout", None) is not None
-    with pytest.raises(policy_tree.UpgradeStop, match="did not load"):
+    with pytest.raises(policy_tree.AgentNotLoaded, match="did not load"):
         resolve("acme.people.agents/Scout", None, strict=True)
     # A remote agent's name is its own: never guessed.
     assert resolve("acme.people/Scout", "remote", strict=True) is not None

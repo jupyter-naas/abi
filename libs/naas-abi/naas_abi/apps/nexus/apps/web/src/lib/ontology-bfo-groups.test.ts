@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { groupClassesByBfoBucket, referencedClasses } from './ontology-bfo-groups';
 import type { DictionaryNode, DictionaryTerm } from './ontology-dictionary-tree';

@@ -26,6 +26,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from naas_abi.apps.nexus.graph_policy_config import WorkspaceGraphPolicyConfig
 from naas_abi.apps.nexus.maps_seed_config import WorkspaceMapsSeedConfig
+from naas_abi.apps.nexus.user_seed_config import UserSeedConfig
 
 
 def _initialize_nexus_service_registry() -> None:
@@ -145,6 +146,8 @@ class TenantConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    # The site's name (Nexus Platform Settings > General); the tab title stands in.
+    name: str | None = None
     tab_title: str = "ABI Nexus | naas.ai"
     favicon_url: str | None = None
     logo_url: str | None = None
@@ -284,29 +287,6 @@ class SheetsTemplateSourceConfig(BaseModel):
     path: str = Field(min_length=1)
 
 
-class UserSeedConfig(BaseModel):
-    """User definition applied on startup (create by email if missing)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    email: EmailStr
-    name: str
-    avatar: str | None = None
-    company: str | None = None
-    role: str | None = None
-    bio: str | None = None
-    is_superadmin: bool = False
-
-    @model_validator(mode="before")
-    @classmethod
-    def _ignore_the_stored_password_setting(cls, data: Any) -> Any:
-        """No password is made for a configured user any more (they sign in at the
-        built-in identity provider): the old setting is accepted and ignored."""
-        if isinstance(data, dict) and "store_credentials_in_secrets" in data:
-            data = {k: v for k, v in data.items() if k != "store_credentials_in_secrets"}
-        return data
-
-
 class OrganizationMemberSeedConfig(BaseModel):
     """Organization member assignment."""
 
@@ -363,7 +343,9 @@ class WorkspaceSeedConfig(BaseModel):
     # owl:imports are not implied; explicitly list shared dependency files too.
     ontologies: list[str] | None = Field(default_factory=list)
     # Exact data graph grants. Missing policy exposes owned graphs only.
-    graphs: WorkspaceGraphPolicyConfig = Field(default_factory=WorkspaceGraphPolicyConfig)
+    graphs: WorkspaceGraphPolicyConfig = Field(
+        default_factory=WorkspaceGraphPolicyConfig
+    )
     # Initial Maps feeds and custom basemaps (see WorkspaceMapsSeedConfig).
     maps: WorkspaceMapsSeedConfig | None = None
 
@@ -498,7 +480,9 @@ class NexusConfig(BaseModel):
     rate_limit_window_seconds: int = 300
 
     # Sign-in through the engine's identity providers (identity.providers).
-    oidc_session_cookie: str = Field(default="nexus_session", pattern=r"^[A-Za-z0-9_-]{1,64}$")
+    oidc_session_cookie: str = Field(
+        default="nexus_session", pattern=r"^[A-Za-z0-9_-]{1,64}$"
+    )
     oidc_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
     oidc_session_max_age_hours: int = Field(default=7 * 24, ge=1, le=90 * 24)
     oidc_redirect_uri: str | None = None
@@ -512,6 +496,11 @@ class NexusConfig(BaseModel):
 
     abi_api_url: str = "http://localhost:9879"
     abi_api_key: str | None = None
+    # Origins (``host:port`` or a URL) of model servers on the deployment's own
+    # network: a workspace's ABI server, a model gateway. Chat providers reach
+    # public addresses only, plus these origins and, for Ollama calls, the
+    # platform Ollama's origin.
+    provider_allowed_origins: list[str] = Field(default_factory=list)
     openai_api_key: str | None = None
     anthropic_api_key: str | None = None
     cloudflare_api_token: str | None = None
@@ -566,6 +555,10 @@ def nexus_settings_kwargs(nexus_config: NexusConfig) -> dict[str, Any]:
 
 
 class ABIModule(BaseModule):
+    # ``api(app)`` mounts the Nexus API, which checks every caller itself
+    # (sessions, personal keys, its public sign-in and branding pages).
+    api_checks_its_callers = True
+
     dependencies: ModuleDependencies = ModuleDependencies(
         modules=[
             "naas_abi_core.modules.templatablesparqlquery",
@@ -579,52 +572,9 @@ class ABIModule(BaseModule):
             "naas_abi_marketplace.ai.mistral#soft",
             "naas_abi_marketplace.ai.perplexity#soft",
             "naas_abi_marketplace.ai.qwen#soft",
-            "naas_abi_marketplace.applications.agicap#soft",
-            "naas_abi_marketplace.applications.airtable#soft",
-            "naas_abi_marketplace.applications.algolia#soft",
-            "naas_abi_marketplace.applications.arxiv#soft",
-            "naas_abi_marketplace.applications.aws#soft",
             "naas_abi_marketplace.applications.bodo#soft",
-            "naas_abi_marketplace.applications.datagouv#soft",
-            "naas_abi_marketplace.applications.exchangeratesapi#soft",
             "naas_abi_marketplace.applications.git#soft",
-            "naas_abi_marketplace.applications.github#soft",
-            "naas_abi_marketplace.applications.gmail#soft",
-            "naas_abi_marketplace.applications.google_analytics#soft",
-            "naas_abi_marketplace.applications.google_calendar#soft",
-            "naas_abi_marketplace.applications.google_drive#soft",
-            "naas_abi_marketplace.applications.google_maps#soft",
-            "naas_abi_marketplace.applications.google_search#soft",
-            "naas_abi_marketplace.applications.google_sheets#soft",
-            "naas_abi_marketplace.applications.hubspot#soft",
-            "naas_abi_marketplace.applications.instagram#soft",
-            "naas_abi_marketplace.applications.linkedin#soft",
-            "naas_abi_marketplace.applications.mercury#soft",
             "naas_abi_marketplace.applications.naas#soft",
-            "naas_abi_marketplace.applications.nebari#soft",
-            "naas_abi_marketplace.applications.newsapi#soft",
-            "naas_abi_marketplace.applications.notion#soft",
-            "naas_abi_marketplace.applications.openalex#soft",
-            "naas_abi_marketplace.applications.openrouter#soft",
-            "naas_abi_marketplace.applications.openweathermap#soft",
-            "naas_abi_marketplace.applications.pennylane#soft",
-            "naas_abi_marketplace.applications.postgres#soft",
-            "naas_abi_marketplace.applications.powerpoint#soft",
-            "naas_abi_marketplace.applications.pubmed#soft",
-            "naas_abi_marketplace.applications.qonto#soft",
-            "naas_abi_marketplace.applications.salesforce#soft",
-            "naas_abi_marketplace.applications.sanax#soft",
-            "naas_abi_marketplace.applications.sendgrid#soft",
-            "naas_abi_marketplace.applications.sharepoint#soft",
-            "naas_abi_marketplace.applications.slack#soft",
-            "naas_abi_marketplace.applications.spotify#soft",
-            "naas_abi_marketplace.applications.stripe#soft",
-            "naas_abi_marketplace.applications.twilio#soft",
-            "naas_abi_marketplace.applications.whatsapp_business#soft",
-            "naas_abi_marketplace.applications.worldbank#soft",
-            "naas_abi_marketplace.applications.yahoofinance#soft",
-            "naas_abi_marketplace.applications.youtube#soft",
-            "naas_abi_marketplace.applications.zoho#soft",
             "naas_abi_marketplace.domains.external#soft",
             "naas_abi_marketplace.domains.finance#soft",
             "naas_abi_marketplace.domains.intelligence#soft",
@@ -767,6 +717,11 @@ class ABIModule(BaseModule):
         # When False, skip NexusPlatformPipeline on API boot and DROP the
         # leftover named graph so a reload does not keep stale catalog triples.
         run_nexus_platform_pipeline: bool = True
+
+        # The OpenCode Coding agent (agents/CodingAgent.py) is a module agent
+        # only when this is set. It runs in the caller's own coding sandbox,
+        # never on the API host.
+        opencode_coding_agent: bool = False
 
         # Canonical nexus runtime settings (passed to app.core.config.Settings).
         nexus_config: NexusConfig = Field(default_factory=NexusConfig)

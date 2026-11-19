@@ -154,3 +154,79 @@ def test_a_link_to_one_app_opens_no_app_of_a_module_nested_below_it(iam, monkeyp
         user_id="user-1", expires_minutes=10, path_prefix="/app-html/a/b/c/d/"
     )
     assert app_html_access.validate_app_html_jwt(nested, _request("/app-html/a/b/c/d/index.html"))
+
+
+def test_a_link_keeps_to_the_routed_path_whatever_the_host(iam, monkeypatch) -> None:
+    """A link for one app is checked against the path the router serves, not
+    against ``request.url``, which is rebuilt from the ``Host`` header."""
+    from starlette.datastructures import URL
+
+    token, _ = app_html_access.mint_app_html_access_token(
+        user_id="user-1", expires_minutes=10, path_prefix="/app-html/appa/"
+    )
+    other_host = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/app-html/appb/secret.html",
+            "headers": [(b"host", b"x/app-html/appa/x?")],
+            "query_string": b"",
+        }
+    )
+    assert app_html_access.validate_app_html_jwt(token, other_host) is False
+    monkeypatch.setattr(
+        Request, "url", property(lambda self: URL("http://x/app-html/appa/x"))
+    )
+    assert app_html_access.validate_app_html_jwt(token, other_host) is False
+    assert app_html_access.validate_app_html_jwt(token, _request("/app-html/appa/index.html"))
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        "testserver",
+        "testserver/app-html/axi/devops/x?",
+        "testserver/app-html/axi/devops/x#",
+    ],
+)
+def test_an_app_link_keeps_off_module_routes(
+    iam, monkeypatch: pytest.MonkeyPatch, host: str
+) -> None:
+    """A link opens its app's pages only: a module route behind the engine's
+    guard refuses it, whatever ``Host`` the request names."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from naas_abi_core.apps.api import abi_api_key_auth
+    from naas_abi_core.apps.api.module_routes import mount_module_apis
+
+    monkeypatch.setenv("ABI_API_KEY", "deployment-key")
+    monkeypatch.setattr(
+        abi_api_key_auth,
+        "_EXTRA_APP_HTML_TOKEN_VALIDATORS",
+        [app_html_access.validate_app_html_jwt],
+    )
+
+    class Reports:
+        unguarded_api_paths: tuple[str, ...] = ()
+
+        def api(self, app: FastAPI) -> None:
+            app.add_api_route("/api/reports/secret", lambda: {"secret": True})
+
+    app = FastAPI()
+    mount_module_apis(app, [Reports()])
+    client = TestClient(app)
+    token, _ = app_html_access.mint_app_html_access_token(
+        user_id="user-1", expires_minutes=10, path_prefix="/app-html/axi/devops/"
+    )
+
+    for response in (
+        client.get(
+            "/api/reports/secret",
+            headers={"Authorization": f"Bearer {token}", "Host": host},
+        ),
+        client.get(
+            "/api/reports/secret", params={"token": token}, headers={"Host": host}
+        ),
+    ):
+        assert response.status_code == 401, response.text
+        assert "secret" not in response.text

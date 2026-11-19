@@ -21,7 +21,7 @@ def test_authentication_precedes_domain_mutations_and_binds_caller():
         msg = SimpleNamespace(
             data=pb.RegisterRequest().SerializeToString(),
             headers={},
-            reply="_INBOX.reply",
+            reply="_INBOX.reply.1",
             respond=AsyncMock(),
             _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
         )
@@ -68,7 +68,7 @@ def test_evict_is_an_authenticated_mutation_decided_by_iam():
             msg = SimpleNamespace(
                 data=pb.EvictRequest(instance_id="r-1").SerializeToString(),
                 headers={"Nats-Auth-Token": TEST_TOKENS.token(identity)},
-                reply="_INBOX.reply",
+                reply="_INBOX.reply.1",
                 respond=AsyncMock(),
                 _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
             )
@@ -97,7 +97,7 @@ def test_an_overflow_uploaded_request_is_refused_as_too_large():
                 "Nats-Auth-Token": TEST_TOKENS.token("caller"),
                 "Abi-Overflow-Request": f"{'a' * 32}:upload",
             },
-            reply="_INBOX.reply",
+            reply="_INBOX.reply.1",
             _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
         )
         await primary._handle("register", msg)
@@ -120,7 +120,7 @@ def _authorize_agent_as_host(primary):
                 instance_id="r-1", agent_name="Researcher", caller_token=token
             ).SerializeToString(),
             headers={"Nats-Auth-Token": TEST_TOKENS.token("research")},
-            reply="_INBOX.reply",
+            reply="_INBOX.reply.1",
             _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
         )
         await primary._handle("authorize_agent", msg)
@@ -327,7 +327,7 @@ def _lookup_message():
     return SimpleNamespace(
         data=pb.GetModuleRequest(module_id="research").SerializeToString(),
         headers={"Nats-Auth-Token": TEST_TOKENS.token("caller")},
-        reply="_INBOX.reply",
+        reply="_INBOX.reply.1",
         subject="abi.discovery.test.v1.get_module",
         _client=SimpleNamespace(max_payload=1024 * 1024, publish=AsyncMock()),
     )

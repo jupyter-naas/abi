@@ -34,6 +34,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
 )
+from naas_abi.apps.nexus.apps.api.app.core.bounded_work import BoundedWork
 from naas_abi.apps.nexus.apps.api.app.core.config import (
     ABI_SHEETS_TEMPLATE_NAMESPACE,
     settings,
@@ -61,6 +62,7 @@ from naas_abi_core.services.coding_environment.CodingEnvironmentPorts import (
 from naas_abi_core.services.coding_environment.CodingEnvironmentService import (
     CodingEnvironmentService,
 )
+from naas_abi_core.services.source_control.names import commit_ok
 from naas_abi_core.services.source_control.SourceControlPorts import (
     BranchNameConflictError,
     Commit,
@@ -1844,6 +1846,11 @@ async def export_workbook_xlsx(
     )
 
 
+# A draft calculation is CPU in the API process: a few at once, and a caller
+# starts a bounded number a minute.
+_SHEET_CALCULATION = BoundedWork("sheet calculations", concurrent=4, per_user=60)
+
+
 class WorkbookEvaluateRequest(BaseModel):
     workspace_id: str = Field(..., min_length=1, max_length=100)
     html: str = Field(..., min_length=1, max_length=2_000_000)
@@ -1886,7 +1893,7 @@ async def evaluate_workbook_preview(
         calculated, errors = calculate_workbook(workbook)
         return {"workbook": calculated.model_dump(), "errors": errors}
 
-    return await run_in_threadpool(calculate)
+    return await _SHEET_CALCULATION.run(current_user.id, calculate)
 
 
 @router.put(
@@ -2222,6 +2229,9 @@ async def get_history_diff(
     """
     if not _SLUG_RE.match(slug):
         raise HTTPException(status_code=422, detail="Invalid slug")
+    # Commits by id only: base and head go into the forge's compare URL.
+    if not commit_ok(base) or (head and not commit_ok(head)):
+        raise HTTPException(status_code=422, detail="base and head are commit ids")
     sc, repo_id = _sheets_sc(request)
 
     def _diff() -> WorkbookDiffResponse:
