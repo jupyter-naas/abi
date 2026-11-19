@@ -21,10 +21,11 @@
   padding: var(--space-2) 0;
 }
 
+/* Rows 2px apart, as in the Settings sidebar (General, Features). */
 .account-menu-settings-group {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 2px;
   margin: 0 0 var(--space-1);
   padding: 0 0 var(--space-1);
 }
@@ -33,15 +34,16 @@
 .account-menu-help-group {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 2px;
 }
 
 .account-menu-settings-item {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  /* 26px rows, the height of the sidebar explorer's rows (12px text). */
-  padding: 5px var(--space-4);
+  /* 30px rows, the height of the Settings sidebar rows (.settings-sidebar-list-row). */
+  padding: 6px var(--space-4);
+  line-height: 18px;
   color: var(--foreground-hex);
   text-decoration: none;
   transition: background-color 0.15s ease;
@@ -73,7 +75,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: 5px var(--space-4);
+  padding: 6px var(--space-4);
+  line-height: 18px;
   color: var(--foreground-hex);
   text-decoration: none;
   transition: background-color 0.15s ease;
@@ -89,4 +92,5 @@ button.account-menu-item {
   cursor: pointer;
   text-align: left;
   font: inherit;
+  line-height: 18px;
 }
