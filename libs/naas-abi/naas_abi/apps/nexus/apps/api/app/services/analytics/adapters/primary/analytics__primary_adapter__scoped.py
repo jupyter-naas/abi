@@ -20,6 +20,7 @@ not found (404). A conversation's messages and its export also need
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -107,22 +108,34 @@ def get_scoped_analytics(
 # Who holds a role where, read from IAM in one pass over the roles' attachments: a
 # settings page asks for several figures at once, so a scope's members are kept
 # this long (a change of roles shows in the figures after at most that).
+# A cold cache asked by the page's parallel requests at once runs one IAM pass:
+# the others await the one in flight (``_members_loading``).
 _MEMBERS_SECONDS = 15.0
 _members_cache: dict[tuple[str, ...], tuple[dict[str, set[str]], float]] = {}
+_members_loading: dict[tuple[str, ...], asyncio.Future[dict[str, set[str]]]] = {}
 
 
-async def _members_of(scopes: list[str]) -> dict[str, set[str]]:
-    key = tuple(sorted(set(scopes)))
-    now = time.monotonic()
-    cached = _members_cache.get(key)
-    if cached is not None and cached[1] > now:
-        return cached[0]
+async def _load_members(key: tuple[str, ...]) -> dict[str, set[str]]:
     found = await MEMBERSHIPS.members_of(list(key))
     members = {scope: {m.user_id for m in found.get(scope, [])} for scope in key}
     if len(_members_cache) > 1000:
         _members_cache.clear()
-    _members_cache[key] = (members, now + _MEMBERS_SECONDS)
+    _members_cache[key] = (members, time.monotonic() + _MEMBERS_SECONDS)
     return members
+
+
+async def _members_of(scopes: list[str]) -> dict[str, set[str]]:
+    key = tuple(sorted(set(scopes)))
+    cached = _members_cache.get(key)
+    if cached is not None and cached[1] > time.monotonic():
+        return cached[0]
+    loading = _members_loading.get(key)
+    if loading is None:
+        loading = asyncio.ensure_future(_load_members(key))
+        _members_loading[key] = loading
+        loading.add_done_callback(lambda _done, k=key: _members_loading.pop(k, None))
+    # Shielded: one waiter cancelled (its client gone) leaves the pass to the others.
+    return await asyncio.shield(loading)
 
 
 def _not_found(what: str) -> HTTPException:
@@ -195,7 +208,7 @@ def _narrow(
     try:
         return scope.narrowed(workspace_id=workspace_id, user_id=user_id)
     except OutOfScope as exc:
-        raise _not_found("Workspace" if "workspace" in str(exc) else "User") from exc
+        raise _not_found(exc.what) from exc
 
 
 async def organization_scope_filtered(

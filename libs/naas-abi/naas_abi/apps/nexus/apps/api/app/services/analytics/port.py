@@ -333,7 +333,12 @@ class AnalyticsDomainError(Exception):
 
 
 class OutOfScope(AnalyticsDomainError):
-    """A workspace, user or conversation the scope does not hold: answered 404."""
+    """A workspace, user or conversation the scope does not hold: answered 404.
+    ``what`` names which (``"Workspace"``, ``"User"``)."""
+
+    def __init__(self, what: str, identifier: str) -> None:
+        super().__init__(f"{what} {identifier} is not in the scope")
+        self.what = what
 
 
 # ---------------------------------------------------------------------------
@@ -372,11 +377,11 @@ class AnalyticsScope:
         members = self.member_ids
         if workspace_id is not None:
             if workspace_id not in workspaces:
-                raise OutOfScope(f"workspace {workspace_id}")
+                raise OutOfScope("Workspace", workspace_id)
             workspaces = (workspace_id,)
         if user_id is not None:
             if user_id not in members:
-                raise OutOfScope(f"user {user_id}")
+                raise OutOfScope("User", user_id)
             members = (user_id,)
         return AnalyticsScope(
             self.kind,

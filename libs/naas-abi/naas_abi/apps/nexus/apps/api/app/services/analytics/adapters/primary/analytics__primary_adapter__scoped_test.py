@@ -279,6 +279,57 @@ def test_filters_outside_the_scope_are_not_found(world, nexus_db) -> None:
     assert {w["id"] for w in member["workspaces_used"]} == {"ws-1", "ws-2"}
 
 
+def test_the_not_found_detail_names_what_is_out_of_scope(world, nexus_db) -> None:
+    client = _client(nexus_db, "admin")
+    response = client.get(f"{ORG}/overview", params={"user_id": "user-of-workspace-9"})
+    assert (response.status_code, response.json()["detail"]) == (404, "User not found")
+    response = client.get(f"{ORG}/overview", params={"workspace_id": "ws-9"})
+    assert (response.status_code, response.json()["detail"]) == (404, "Workspace not found")
+
+
+@pytest.mark.asyncio
+async def test_concurrent_cold_requests_resolve_the_members_once(monkeypatch) -> None:
+    """A settings page asks for several figures at once: one IAM pass serves them."""
+    import asyncio
+
+    passes: list[list[str]] = []
+
+    async def members_of(scopes: list[str]) -> dict:
+        passes.append(scopes)
+        await asyncio.sleep(0.05)
+        return {scope: [SimpleNamespace(user_id="u-1")] for scope in scopes}
+
+    monkeypatch.setattr(scoped.MEMBERSHIPS, "members_of", members_of)
+    found = await asyncio.gather(*(scoped._members_of(["b", "a"]) for _ in range(8)))
+    assert len(passes) == 1
+    assert all(f == {"a": {"u-1"}, "b": {"u-1"}} for f in found)
+    assert scoped._members_loading == {}
+    await scoped._members_of(["a", "b"])  # cached
+    assert len(passes) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_failed_members_pass_is_not_kept(monkeypatch) -> None:
+    import asyncio
+
+    calls = {"n": 0}
+
+    async def members_of(scopes: list[str]) -> dict:
+        calls["n"] += 1
+        await asyncio.sleep(0.01)
+        if calls["n"] == 1:
+            raise RuntimeError("IAM unavailable")
+        return {}
+
+    monkeypatch.setattr(scoped.MEMBERSHIPS, "members_of", members_of)
+    results = await asyncio.gather(
+        *(scoped._members_of(["a"]) for _ in range(3)), return_exceptions=True
+    )
+    assert all(isinstance(r, RuntimeError) for r in results)
+    assert await scoped._members_of(["a"]) == {"a": set()}
+    assert calls["n"] == 2
+
+
 def test_an_unknown_scope_is_refused(world, nexus_db) -> None:
     client = _client(nexus_db, "admin")
     assert client.get("/api/organizations/org-2/analytics/overview").status_code == 403
