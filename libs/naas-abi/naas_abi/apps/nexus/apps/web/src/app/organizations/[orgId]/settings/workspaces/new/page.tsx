@@ -44,7 +44,7 @@ async function readApiError(response: Response, fallback: string): Promise<strin
  * colors. Save (top right) creates it; the cross closes without saving. The
  * slug follows the name until edited. The group is picked from the
  * organization's groups, or typed as a new one. The logo is uploaded right
- * after the workspace exists, into the workspace drive
+ * after the workspace exists, into Workspace Files
  * (``.settings/logos/logo.<ext>``); the desk wallpaper is set in General
  * once the workspace exists. No feature is picked here: what people may use
  * in it is what their policies grant (`nexus:UseFeature`), like agents.

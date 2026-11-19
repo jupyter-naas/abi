@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   Activity,
+  Archive,
   Blocks,
   Bot,
   Boxes,
@@ -37,6 +38,7 @@ import {
   systemViewPath,
   type SystemView,
 } from '../system/system-tabs';
+import { PLATFORM_DRIVES_PATH } from '../drives/drives-model';
 import { PLATFORM_GENERAL_PATH } from '../general/general-model';
 import { PLATFORM_ORGANIZATIONS_PATH } from '../organizations/organizations-model';
 import { PLATFORM_USERS_PATH } from '../users/users-model';
@@ -167,6 +169,15 @@ export const USERS_ITEM: PlatformSettingsNavItem = {
   needs: { action: 'nexus:ListUsers' },
 };
 
+/** The storage backends: where the platform stores files (read-only). */
+export const DRIVES_ITEM: PlatformSettingsNavItem = {
+  id: 'drives',
+  label: 'Drives',
+  href: PLATFORM_DRIVES_PATH,
+  icon: Archive,
+  needs: { action: 'nexus:ListDrives' },
+};
+
 export const ROLES_ITEM: PlatformSettingsNavItem = {
   id: 'roles',
   label: 'Roles & permissions',
@@ -178,7 +189,7 @@ export const ROLES_ITEM: PlatformSettingsNavItem = {
 // Discovery sits by Modules, Bus by NATS and the Event store by Events: each shows the
 // same things as its neighbour, until the two pages are one.
 /** Pages laid out like the organization's settings pages: padded, width capped
- * (Administration: General, Organizations, Users, Roles & permissions). The other
+ * (Administration: General, Organizations, Users, Roles & permissions, Drives). The other
  * pages (System, Activity, Resources, Data) lay out their own panes edge to edge;
  * Nexus tables have their own layout. */
 const PADDED_ITEM_IDS: ReadonlySet<string> = new Set([
@@ -186,6 +197,7 @@ const PADDED_ITEM_IDS: ReadonlySet<string> = new Set([
   ORGANIZATIONS_ITEM.id,
   USERS_ITEM.id,
   ROLES_ITEM.id,
+  DRIVES_ITEM.id,
 ]);
 
 /** Whether a page lays out its own panes edge to edge (no padding, no width cap). */
@@ -194,7 +206,10 @@ export function laysOutOwnPanes(item: Pick<PlatformSettingsNavItem, 'id'>): bool
 }
 
 export const platformSettingsGroups: PlatformSettingsNavGroup[] = [
-  { label: 'Administration', items: [GENERAL_ITEM, ORGANIZATIONS_ITEM, USERS_ITEM, ROLES_ITEM] },
+  {
+    label: 'Administration',
+    items: [GENERAL_ITEM, ORGANIZATIONS_ITEM, USERS_ITEM, ROLES_ITEM, DRIVES_ITEM],
+  },
   {
     label: 'System',
     items: [

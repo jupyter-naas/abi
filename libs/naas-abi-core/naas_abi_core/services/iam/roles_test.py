@@ -178,6 +178,27 @@ def test_a_catalogs_platform_access_joins_the_platform_policies():
     assert "nexus:ListProviderModels" not in actions_of(self_policy)
 
 
+def test_the_platform_companions_reach_no_shared_object_storage_folder():
+    """A role's platform companions reach the person's own objects (``my-drive``,
+    ``users``), never ``naas_abi/platform-drive``: Platform Files is granted by a
+    policy only, the object storage's ``*Object`` with it."""
+    from naas_abi_core.services.object_storage.iam_catalog import CATALOG as OBJECTS
+
+    found = registry()
+    found.register(OBJECTS)
+    for policy_id in (roles.PLATFORM_VIEWER, roles.PLATFORM_MEMBER):
+        resources = resources_of(_platform(policy_id, found))
+        assert (
+            "abi:object_storage:object/naas_abi/my-drive/${principal.id}/*" in resources
+        )
+        assert "abi:object_storage:object/users/${principal.id}/*" in resources
+        assert not any("platform-drive" in resource for resource in resources), (
+            policy_id
+        )
+    for row in roles.PLATFORM_TYPES:
+        assert not any("platform-drive" in resource for resource in row.resources)
+
+
 def test_a_modules_catalog_declares_no_platform_access():
     with pytest.raises(CatalogError, match="platform access"):
         ActionCatalog(

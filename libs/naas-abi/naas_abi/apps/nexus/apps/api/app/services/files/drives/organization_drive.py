@@ -1,15 +1,15 @@
-"""Set up every organization's drive: ``.manifest.json`` and the staff system folders.
+"""Set up every organization's Organization Files: ``.manifest.json`` and the staff system folders.
 
 ``naas_abi/organization-drive/<organization_id>/`` is where files that belong to
 the organization as a whole live (policies, contracts, brand assets, onboarding
 packs), seen from every workspace of the organization. It gets:
 
 - ``.manifest.json``, describing the organization the folder belongs to, so the
-  drive can be identified from object storage alone. It is rewritten whenever
+  folder can be identified from object storage alone. It is rewritten whenever
   the organization is updated.
 - the nine staff system folders (``personnel/``, ``intelligence/``, ...
-  ``external/``), each with its ``README.md``, as the workspace and platform
-  drives have. They are created once per organization; a marker under
+  ``external/``), each with its ``README.md``, as Workspace Files and
+  Platform Files have. They are created once per organization; a marker under
   ``naas_abi/.scaffolded/organization-drive/`` records it, so a folder someone
   deletes is not brought back.
 
@@ -128,8 +128,8 @@ async def backfill_organization_drives(
 
 
 def _place(organization_id: str) -> None:
-    """Place a new organization's drive. Without IAM, or before IAM knows the
-    organization, the first request that reaches the drive places it."""
+    """Place a new organization's Organization Files. Without IAM, or before IAM knows
+    the organization, the first request that reaches them places them."""
     try:
         place_organization_drive_sync(organization_id)
     except Exception as exc:  # noqa: BLE001

@@ -1,4 +1,5 @@
-"""The nine staff-system folders, shared by the workspace drive and the platform drive."""
+"""The nine staff-system folders, shared by Workspace Files, Organization Files and
+Platform Files."""
 
 from __future__ import annotations
 

@@ -34,7 +34,7 @@ TYPES = (
 )
 
 ACTIONS = (
-    # Deprecated (catalog 13): the platform analytics app is removed. Kept declared
+    # Deprecated (catalog 15): the platform analytics app is removed. Kept declared
     # for the policies that may name them; no route asks for them.
     action("ReadAnalytics", "read", "analytics", description=_DEPRECATED),
     action("WriteAnalytics", "admin", "analytics", description=_DEPRECATED),

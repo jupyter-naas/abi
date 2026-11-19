@@ -113,7 +113,7 @@ def coding_tools() -> list[BaseTool]:
         run_in_coding_sandbox,
     ]
     # Like the default workspace tools, these need the sidecar: the model only
-    # sees them when one is bound, else Abi lists "the workspace drive" with
+    # sees them when one is bound, else Abi lists "Workspace Files" with
     # list_coding_dir instead of handing off to Files.
     for sidecar_tool in sidecar_tools:
         sidecar_tool.metadata = {

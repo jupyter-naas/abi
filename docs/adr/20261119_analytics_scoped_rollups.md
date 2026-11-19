@@ -22,7 +22,7 @@ the removal of the app and its object-storage files #1536.
 
 ## Decision
 
-1. **Two scopes, decided by IAM** (`nexus` catalog version 12, `catalog/platform.py`):
+1. **Two scopes, decided by IAM** (`nexus` catalog version 14, `catalog/platform.py`):
 
    | Action | Decided on | Default |
    |---|---|---|
@@ -159,7 +159,7 @@ the removal of the app and its object-storage files #1536.
   and dislike moved to `PATCH /api/chat/conversations/{id}/messages/{id}/feedback`
   (`UpdateConversation` on the owner's conversation; it was the platform admin's
   `WriteAnalytics`, so other users' feedback was refused). `ReadAnalytics` and
-  `WriteAnalytics` stay declared, deprecated and asked by no route (catalog 13), since
+  `WriteAnalytics` stay declared, deprecated and asked by no route (catalog 15), since
   IAM refuses a catalog dropping an action a policy may still name. Thirty minutes after
   the backfill (so that a rolling deploy's old processes have stopped rewriting the
   aggregates), one process (claimed, `legacy_storage_cleanup_v1`) deletes the app's files

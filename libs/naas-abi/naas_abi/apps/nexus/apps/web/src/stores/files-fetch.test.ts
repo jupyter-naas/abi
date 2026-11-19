@@ -58,7 +58,7 @@ beforeEach(() => {
     currentPath: '',
     loading: false,
     error: null,
-    activeSource: 'workspace',
+    activeSource: 'workspace-files',
     filesTotal: 0,
     filesLimit: null,
     filesOffset: 0,
@@ -119,9 +119,9 @@ describe('fetchFiles stale responses', () => {
     expect(state.filesTotal).toBe(4);
   });
 
-  it('switching drive invalidates the pending listing', async () => {
+  it('switching view invalidates the pending listing', async () => {
     const a = useFilesStore.getState().fetchFiles('A', { workspaceId: 'ws-1' });
-    useFilesStore.getState().setActiveSource('my-drive');
+    useFilesStore.getState().setActiveSource('my-files');
     expect(pending[0].signal?.aborted).toBe(true);
     pending[0].resolve(['workspace.txt']);
     await a;

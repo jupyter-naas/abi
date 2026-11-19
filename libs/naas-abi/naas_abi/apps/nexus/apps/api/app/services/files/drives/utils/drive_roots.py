@@ -10,11 +10,12 @@ side by side in the datastore:
         organization-drive/<organization_id>/...
         platform-drive/...
 
-The organization drive belongs to its organization: IAM decides who reaches it
-at the organization's container (``nexus:ListOrgFiles`` and the others), and a
-workspace reaches only its own organization's. The platform drive is a single
-tree shared across every workspace; access is gated per-workspace via the
-``platform_drive_enabled`` flag on the workspace row.
+Each is the root of a view of the file system, opened by IAM alone (``GET
+/api/files/views``): Organization Files belongs to its organization (IAM decides
+at the organization's container, ``nexus:ListOrgFiles`` and the others, and a
+workspace reaches only its own organization's). Platform Files is one tree
+shared by the platform: nobody's until a policy at the platform grants
+``nexus:*PlatformFile*``. System Files is the whole store, the platform admin's.
 """
 
 from __future__ import annotations
@@ -27,11 +28,11 @@ MY_DRIVE_ROOT = f"{MODULE_ROOT}/my-drive"
 WORKSPACE_DRIVE_ROOT = f"{MODULE_ROOT}/workspace-drive"
 ORGANIZATION_DRIVE_ROOT = f"{MODULE_ROOT}/organization-drive"
 PLATFORM_DRIVE_ROOT = f"{MODULE_ROOT}/platform-drive"
-# The system drive exposes the full object-storage tree — not just the
-# ``naas_abi`` module root, but everything stored alongside it. Reserved for
-# workspace admins/owners to inspect and manage object storage across all
-# users and workspaces. An empty root means "no prefix": paths are resolved
-# directly against the underlying object storage.
+# System Files exposes the full object-storage tree — not just
+# the ``naas_abi`` module root, but everything stored alongside it. The platform
+# admin's, to inspect and manage object storage across all users and workspaces.
+# An empty root means "no prefix": paths are resolved directly against the
+# underlying object storage.
 SYSTEM_DRIVE_ROOT = ""
 
 SCOPE_WORKSPACE = "workspace"

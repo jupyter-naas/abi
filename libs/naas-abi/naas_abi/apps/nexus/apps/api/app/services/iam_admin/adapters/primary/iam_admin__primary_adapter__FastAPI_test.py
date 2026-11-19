@@ -212,6 +212,16 @@ def test_access_says_who_manages_the_platforms_accounts(world):
     assert not any(scoped[action] for action in ACCOUNT_ACTIONS)
 
 
+def test_access_says_who_lists_the_platforms_drives(world):
+    """Platform Settings > Drives shows for ``nexus:ListDrives``: the platform admin holds
+    it; an organization's owner or admin, a delegated IAM lister and a stranger do not."""
+    assert get(world, "/access").json()["actions"]["nexus:ListDrives"] is True
+    for user in ("admin", "owner", "lister", "stranger"):
+        assert get(world, "/access", user).json()["actions"]["nexus:ListDrives"] is False, user
+    scoped = get(world, f"/access?scope={org_container('org-1')}").json()["actions"]
+    assert scoped["nexus:ListDrives"] is False
+
+
 PLATFORM_ONLY = (
     "iam:ListPrincipals",
     "iam:CreateServiceAccount",

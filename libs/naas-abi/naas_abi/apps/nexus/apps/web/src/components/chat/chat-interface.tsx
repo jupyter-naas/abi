@@ -614,7 +614,7 @@ export function ChatInterface({
   // Web search — UI/API disabled until the feature is ready
   // const [searchEnabled, setSearchEnabled] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // My Drive picker state
+  // My Files picker state
   const [showMyDrivePicker, setShowMyDrivePicker] = useState(false);
   const [myDriveFiles, setMyDriveFiles] = useState<Array<{name: string; path: string; type: string}>>([]);
   const [myDriveLoading, setMyDriveLoading] = useState(false);
@@ -1184,7 +1184,7 @@ export function ChatInterface({
     };
   }, []);
 
-  // Close My Drive picker when clicking outside
+  // Close My Files picker when clicking outside
   useEffect(() => {
     if (!showMyDrivePicker) return;
     const handler = (e: MouseEvent) => {
@@ -3353,7 +3353,7 @@ export function ChatInterface({
 
                     <ContextUsageMeter snapshot={contextUsage} />
 
-                    {/* My Drive picker */}
+                    {/* My Files picker */}
                     <div className="relative shrink-0" ref={myDrivePickerRef}>
                       <button
                         type="button"
@@ -3367,7 +3367,7 @@ export function ChatInterface({
                           'chat-composer-action',
                           showMyDrivePicker && 'is-active',
                         )}
-                        title="Select file from My Drive"
+                        title="Select file from My Files"
                       >
                         <HardDrive size={16} />
                       </button>
@@ -3375,7 +3375,7 @@ export function ChatInterface({
                       {showMyDrivePicker && (
                         <div className="absolute bottom-10 left-0 z-50 w-72 rounded-xl border border-border bg-popover shadow-lg">
                           <div className="flex items-center justify-between border-b border-border px-3 py-2">
-                            <span className="text-xs font-medium">My Drive</span>
+                            <span className="text-xs font-medium">My Files</span>
                             {myDrivePath && (
                               <button
                                 type="button"
@@ -3407,7 +3407,7 @@ export function ChatInterface({
                             )}
                             {!myDriveLoading && myDriveFiles.length === 0 && (
                               <p className="px-3 py-3 text-center text-xs text-muted-foreground">
-                                No files in My Drive
+                                No files in My Files
                               </p>
                             )}
                             {!myDriveLoading &&

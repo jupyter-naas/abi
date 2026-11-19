@@ -7,9 +7,10 @@ import pytest
 from naas_abi.apps.nexus.apps.api.app.services.files import placement
 from naas_abi.apps.nexus.apps.api.app.services.iam import names, placements
 from naas_abi.apps.nexus.apps.api.app.services.iam.testing import NexusIam
-from naas_abi_core.engine.call_context import use_call_context
+from naas_abi_core.engine.call_context import as_service_account, use_call_context
 from naas_abi_core.engine.IEngine import IEngine
 from naas_abi_core.services.iam.IAMPorts import PermissionDeniedError
+from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER
 from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import (  # noqa: E501
     ObjectStorageSecondaryAdapterFS,
 )
@@ -127,7 +128,7 @@ async def test_the_kernel_reaches_a_workspaces_roles_to_its_drive_only(kernel, n
         kernel.put_object(f"{drive}/ws-1/docs", "b.txt", b"two")
         assert kernel.get_object(f"{drive}/ws-1", "a.txt") == b"one"
         assert "naas_abi/workspace-drive/ws-1/a.txt" in kernel.list_objects(f"{drive}/ws-1")
-        # The other workspace's drive is not its owner's, nor is a path that
+        # The other workspace's Workspace Files is not its owner's, nor is a path that
         # climbs out of this one.
         with pytest.raises(Exceptions.ObjectNotFound):
             kernel.get_object(f"{drive}/ws-2", "a.txt")
@@ -151,7 +152,7 @@ async def test_the_kernel_reaches_a_workspaces_roles_to_its_drive_only(kernel, n
         kernel.put_object(f"{drive}/ws-2", "own.txt", b"mine")
 
 
-# -- the organization drive ----------------------------------------------------
+# -- Organization Files --------------------------------------------------------
 
 
 def test_an_organization_places_its_drive_folder_and_everything_below() -> None:
@@ -212,3 +213,53 @@ async def test_the_kernel_reaches_an_organizations_roles_to_its_drive_only(
         with acting(outsider):
             with pytest.raises(Exceptions.ObjectNotFound):
                 kernel.get_object(f"{drive}/operations", "plan.md")
+
+
+# -- Platform Files ----------------------------------------------------------------
+
+
+def _platform_policy(nexus_iam: NexusIam, user_id: str, actions: list[str]) -> None:
+    """A policy at the platform granting ``actions`` on ``naas_abi/platform-drive``'s
+    objects: the kernel's half of a Platform Files grant."""
+    with as_service_account("engine"):
+        principal = nexus_iam.iam.ensure_user(LEGACY_NEXUS_ISSUER, user_id, provider="nexus")
+        policy = nexus_iam.iam.create_policy(
+            f"platform-files-objects-{user_id}",
+            {
+                "version": "2026-10-13",
+                "statements": [
+                    {
+                        "effect": "Allow",
+                        "actions": actions,
+                        "resources": [
+                            "abi:object_storage:object/naas_abi/platform-drive",
+                            "abi:object_storage:object/naas_abi/platform-drive/*",
+                        ],
+                    }
+                ],
+            },
+        )
+        nexus_iam.iam.attach_policy(policy.id, principal.id)
+
+
+def test_the_kernel_refuses_platform_files_to_every_role_until_a_policy_grants_them(
+    kernel, nexus_iam: NexusIam
+) -> None:
+    drive = "naas_abi/platform-drive"
+    with as_service_account("engine"):
+        kernel.put_object(f"{drive}/shared", "readme.md", b"# shared")
+    for user in ("owner", "viewer", "other"):
+        with acting(user):
+            with pytest.raises((Exceptions.ObjectNotFound, PermissionDeniedError)):
+                kernel.get_object(f"{drive}/shared", "readme.md")
+            with pytest.raises((Exceptions.ObjectNotFound, PermissionDeniedError)):
+                kernel.put_object(f"{drive}/shared", "x.md", b"x")
+
+    _platform_policy(nexus_iam, "viewer", ["object_storage:GetObject"])
+    with acting("viewer"):
+        assert kernel.get_object(f"{drive}/shared", "readme.md") == b"# shared"
+        with pytest.raises(PermissionDeniedError):
+            kernel.put_object(f"{drive}/shared", "x.md", b"x")
+    with acting("owner"):
+        with pytest.raises((Exceptions.ObjectNotFound, PermissionDeniedError)):
+            kernel.get_object(f"{drive}/shared", "readme.md")

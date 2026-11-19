@@ -1,12 +1,12 @@
-"""Set up every workspace's drive: ``manifest.json`` and the staff system folders.
+"""Set up every workspace's Workspace Files: ``manifest.json`` and the staff system folders.
 
-The platform drive's copy of these folders is ``platform_drive``.
+Platform Files' copy of these folders is ``platform_drive``.
 
 ``naas_abi/workspace-drive/<workspace_id>/`` gets:
 
 - ``.manifest.json``, describing the workspace the folder belongs to, so the
-  drive can be identified from object storage alone (a backup, the system
-  drive, another tool reading the bucket). It is rewritten whenever the
+  folder can be identified from object storage alone (a backup, System Files,
+  another tool reading the bucket). It is rewritten whenever the
   workspace is updated. ``graph_base`` is the IRI prefix applications use for
   named graphs under this workspace; which graphs exist is the application's
   choice and is preserved if already recorded under ``graphs``.
@@ -180,8 +180,8 @@ async def backfill_workspace_drives(
 
 
 def _place(workspace_id: str) -> None:
-    """Place a new workspace's drive. Without IAM, or before IAM knows the
-    workspace, the first request that reaches the drive places it."""
+    """Place a new workspace's Workspace Files. Without IAM, or before IAM knows the
+    workspace, the first request that reaches them places them."""
     try:
         place_workspace_drive_sync(workspace_id)
     except Exception as exc:  # noqa: BLE001

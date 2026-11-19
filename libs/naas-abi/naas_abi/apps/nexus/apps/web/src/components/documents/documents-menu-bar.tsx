@@ -332,7 +332,7 @@ export interface DocumentsMenuBarProps {
   /** File → Save (git commit under the hood). Omit on index/new pages. */
   onCommit?: () => void;
   commitDisabled?: boolean;
-  /** File → Save to My Drive (MinIO copy). Omit when not on an open document. */
+  /** File → Save to My Files (MinIO copy). Omit when not on an open document. */
   onSaveToMyDrive?: () => void;
   saveToMyDriveDisabled?: boolean;
   /** File → Export to PDF. Omit when not on an open document. */
@@ -442,7 +442,7 @@ export function DocumentsMenuBar({
   if (onSaveToMyDrive) {
     saveItems.push({
       id: 'save-to-my-drive',
-      label: 'Save to My Drive',
+      label: 'Save to My Files',
       disabled: saveToMyDriveDisabled,
       onSelect: onSaveToMyDrive,
     });

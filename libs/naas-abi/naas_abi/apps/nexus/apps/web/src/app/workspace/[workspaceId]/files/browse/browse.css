@@ -641,6 +641,8 @@
   position: absolute;
   inset: 0;
   z-index: 50;
+  /* Never the drop target: drag events reach the content below and its handlers. */
+  pointer-events: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -817,15 +819,16 @@
   cursor: pointer;
 }
 
+/* The workspace's (or brand's) accent, as the other accent buttons (bg-workspace-accent). */
 .files-browse-empty-btn-primary {
   border: none;
-  background: var(--color-primary);
+  background: var(--workspace-accent, var(--color-primary));
   font-weight: var(--font-weight-medium, 500);
-  color: var(--color-primary-foreground);
+  color: #fff;
 }
 
 .files-browse-empty-btn-primary:hover {
-  background: var(--color-primary-hover);
+  opacity: 0.9;
 }
 
 .files-browse-empty-btn-outline {
@@ -835,7 +838,13 @@
 }
 
 .files-browse-empty-btn-outline:hover {
-  background: var(--muted-bg-hex);
+  border-color: color-mix(in srgb, var(--workspace-accent, var(--color-primary)) 40%, var(--border-hex));
+  background: color-mix(in srgb, var(--workspace-accent, var(--color-primary)) 10%, transparent);
+}
+
+.files-browse-empty-btn:focus-visible {
+  outline: 2px solid var(--workspace-accent, var(--color-primary));
+  outline-offset: 2px;
 }
 
 /* Desktop table — density via View → Spacing (same labels as Ontology).

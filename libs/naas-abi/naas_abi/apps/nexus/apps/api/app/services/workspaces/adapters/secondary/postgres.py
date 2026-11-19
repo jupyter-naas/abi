@@ -91,8 +91,6 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             description=model.description,
             workspace_group=model.workspace_group,
             catalog_seed=parse_catalog_seed(getattr(model, "catalog_seed", None)),
-            platform_drive_enabled=bool(model.platform_drive_enabled),
-            system_drive_enabled=bool(model.system_drive_enabled),
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -226,8 +224,6 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             "font_family": updates.font_family,
             "description": updates.description,
             "workspace_group": updates.workspace_group,
-            "platform_drive_enabled": updates.platform_drive_enabled,
-            "system_drive_enabled": updates.system_drive_enabled,
         }
         for field, value in update_data.items():
             if value is not None:

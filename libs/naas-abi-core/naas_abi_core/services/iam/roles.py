@@ -161,8 +161,8 @@ PLATFORM_TYPES: tuple[_PlatformRow, ...] = (
             "object/naas_abi/my-drive/${principal.id}/*",
             "object/users/${principal.id}",
             "object/users/${principal.id}/*",
-            "object/naas_abi/platform-drive",
-            "object/naas_abi/platform-drive/*",
+            # ``naas_abi/platform-drive`` (Nexus's Platform Files) is no role's: a
+            # policy at the platform grants it, ``*Object`` there with Nexus's own.
         ),
         viewer=(
             "ListObjects",

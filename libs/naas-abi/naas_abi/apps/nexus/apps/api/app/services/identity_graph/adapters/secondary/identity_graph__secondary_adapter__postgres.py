@@ -59,8 +59,6 @@ WORKSPACE_SETTING_COLUMNS = (
     "background_image_url",
     "sidebar_color",
     "font_family",
-    "platform_drive_enabled",
-    "system_drive_enabled",
     "coding_default_repo_id",
 )
 
