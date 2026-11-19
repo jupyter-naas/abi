@@ -5,6 +5,7 @@ import {
   explorerAncestorPaths,
   explorerDirKey,
   explorerDirNeedsLoad,
+  explorerWorkspaceChange,
   explorerDirsToOpen,
   explorerDriveMatchesQuery,
   explorerEntries,
@@ -250,5 +251,24 @@ describe('explorerDirNeedsLoad', () => {
 
   it('always loads when forced', () => {
     expect(explorerDirNeedsLoad({ force: true, cached: true, inFlightGeneration: 1, generation: 1 })).toBe(true);
+  });
+});
+
+describe('explorerWorkspaceChange', () => {
+  // The cache reset ran on mount and again under StrictMode, so each pending
+  // root listing became stale and was asked for again (3 requests in dev, 2 in prod).
+  it('is "mount" the first time: nothing cached yet, nothing to drop', () => {
+    expect(explorerWorkspaceChange(undefined, 'ws-1')).toBe('mount');
+    expect(explorerWorkspaceChange(undefined, null)).toBe('mount');
+  });
+
+  it('is "none" when the workspace did not change (effects re-run)', () => {
+    expect(explorerWorkspaceChange('ws-1', 'ws-1')).toBe('none');
+    expect(explorerWorkspaceChange(null, null)).toBe('none');
+  });
+
+  it('is "switch" when the workspace changed: the cache is dropped', () => {
+    expect(explorerWorkspaceChange('ws-1', 'ws-2')).toBe('switch');
+    expect(explorerWorkspaceChange(null, 'ws-1')).toBe('switch');
   });
 });
