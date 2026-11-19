@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v0.6.0 (2026-11-19)
+
+### Bug Fixes
+
+- **sdk**: Skip_if_running claims the run's input; x bodies get their own threads
+  ([`bbaffa6`](https://github.com/jupyter-naas/abi/commit/bbaffa63ff91c9ddc3e8f840b86341bed2835fab))
+
+### Features
+
+- **marketplace**: X as a remote module, in-engine x removed (#1423, #1425-#1428)
+  ([`113b1e9`](https://github.com/jupyter-naas/abi/commit/113b1e9d232e4fd35960e15c69e91278cef8ac25))
+
+### Breaking Changes
+
+- **marketplace**: Naas_abi_marketplace.applications.x is removed. Run the remote module with
+  X_CONFIG_FILE (the old config: block, without bearer_token), and run reprocess_tweet_envelopes
+  once with force: true to rebuild the dataset in the module's namespace.
+
+
 ## v0.5.1 (2026-11-18)
 
 ### Bug Fixes
