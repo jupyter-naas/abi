@@ -398,6 +398,41 @@ async def test_a_row_made_meanwhile_is_linked(world):
     assert result.user.id == "raced" and not result.created
     assert world.access.roles["raced"] == {WS_SCOPE: "member"}
     assert world.idp.deleted == []  # the provider's account is that person's
+    # ABI made it, whoever's row it is bound to: recorded as ABI's.
+    assert world.store.provisioned == {("builtin", "sub-bob")}
+
+
+@pytest.mark.asyncio
+async def test_someone_who_signed_in_under_another_email_is_linked_not_duplicated(world):
+    """The provider has their account, its IAM user has a row (an unverified email at
+    their first sign-in, or one changed since): that row is the person."""
+    world.idp.accounts["bob@example.com"] = "sub-bob"
+    world.store.rows["usr_sub-bob"] = PlatformUser(
+        "usr_sub-bob", "usr_sub-bob@unverified.internal", "Bob", UserStatus.ACTIVE, "builtin"
+    )
+
+    result = await _create(world, organization_id="org-1", profile={"job_title": "CFO"})
+
+    assert result.user.id == "usr_sub-bob" and not result.created
+    assert list(world.store.rows) == ["usr_sub-bob"]
+    assert world.access.roles["usr_sub-bob"] == {WS_SCOPE: "member"}
+    assert world.access.pending == {} and world.idp.deleted == []
+    assert world.store.profiles == {("org-1", "usr_sub-bob"): {"job_title": "CFO"}}
+
+
+@pytest.mark.asyncio
+async def test_linking_with_no_grant_writes_no_profile(world):
+    world.store.rows["carl"] = PlatformUser(
+        "carl", "carl@example.com", "Carl", UserStatus.ACTIVE, "x"
+    )
+    await _create(
+        world,
+        email="carl@example.com",
+        grants=(),
+        organization_id="org-1",
+        profile={"job_title": "Spy"},
+    )
+    assert world.store.profiles == {}
 
 
 # -- provisioning: none, and a platform invitation without the right -----------------------

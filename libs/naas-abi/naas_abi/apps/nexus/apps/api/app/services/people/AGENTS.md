@@ -33,13 +33,19 @@ interface the organization and workspace routes code against).
   this call made it), the principal (best effort: `api` holds no `iam:DeletePrincipal`, so the principal of a
   deleted account stays, holding nothing), and the row.
 - **No duplicate.** An email that has a row is linked: the grants are attached to it, an active person gets the
-  "added" notice, an invited one the invitation again. `created` is internal: routes answer both the same way.
-  A role already held at a grant's scope is `AlreadyMemberError` (409).
+  "added" notice, an invited one the invitation again. So is a row made meanwhile (`EmailTakenError` on insert)
+  and the row of the provider's identity found under another email (signed in before with an unverified or
+  changed one). `created` is internal: routes answer both the same way. A role already held at a grant's scope
+  is `AlreadyMemberError` (409). The profile is written only with a grant (never about someone the call gave
+  nothing).
+- **The routes keep the limits**: the per-inviter and per-address rate limits and the organization's
+  `invitation_mails_per_day` are checked by the routes before they call; `resend` and `add_existing` check no
+  scope, the route does (the target is in its directory).
 - **A provider that makes no account** (`provisioning: none`, or a refused platform invitation): the row is
   `invited` and unbound (id `user-<hex>`, no principal, `idp_provider` the provider). Its roles are attached to
   IAM's user of that id (made on first sight, as for the old login's rows), so the person is listed as invited
   everywhere. Their first sign-in through that provider, email verified, binds the row (`iam.link_user`, which
-  keeps the roles): the trust IAM's pending grants have.
+  keeps the roles): the trust IAM's pending grants have. ADR: `docs/adr/20261119_people_rows_from_invitation.md`.
 - **Search** needs 2 characters, matches name or email (any case), stays among the ids the caller passes (the
   route's directory), and returns at most 20.
 

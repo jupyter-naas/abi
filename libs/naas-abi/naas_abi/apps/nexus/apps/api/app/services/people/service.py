@@ -82,6 +82,14 @@ Clock = Callable[[], datetime]
 UNBOUND_PREFIX = "user-"
 
 
+class _Existing(Exception):  # noqa: N818 - a signal, not an error
+    """The person a creation was for has a row already: link it instead."""
+
+    def __init__(self, user: PlatformUser) -> None:
+        super().__init__(user.id)
+        self.user = user
+
+
 @dataclass(frozen=True)
 class _Step:
     """One attachment a grant asks for: a role, or a customer policy, at a scope."""
@@ -189,16 +197,20 @@ class PeopleService:
                 profile=kept_profile,
                 organization_id=organization_id,
             )
-        except EmailTakenError:
-            # Someone else made the row meanwhile (a sign-in, another invitation):
-            # that is the person, linked as any existing one. What this call made
-            # at the provider is the same account, theirs now.
+        except _Existing as taken:
+            # The person has a row already: made meanwhile (a sign-in, another
+            # invitation), or theirs from before under another email (the
+            # provider's identity was known: its principal has a row). Linked as
+            # any existing one; an account this call made at the provider is
+            # ABI's, whoever's row it is bound to.
             await self._withdraw(warrant.made)
-            found = await self.store.by_email(email)
-            if found is None:
-                raise
+            if provisioned is not None and provisioned.created and provisioned.subject:
+                await self.store.record_provisioned(
+                    choice.name, provisioned.subject, email, now=self._clock()
+                )
+                await self.store.commit()
             return await self._link(
-                found, steps, by, profile=kept_profile, organization_id=organization_id
+                taken.user, steps, by, profile=kept_profile, organization_id=organization_id
             )
         except Exception:
             await self._withdraw(warrant.made)
@@ -245,6 +257,10 @@ class PeopleService:
                 principal_id = await self.access.ensure_principal(
                     choice.issuer, subject, provider=choice.name, email=email, name=name
                 )
+                known = await self.store.get(principal_id)
+                if known is not None:
+                    # They signed in before with another (or no verified) email.
+                    raise _Existing(known)
             user_id = principal_id or f"{UNBOUND_PREFIX}{uuid4().hex}"
             now = self._clock()
             if made_account and subject:
@@ -268,9 +284,16 @@ class PeopleService:
             # Committed before IAM attaches: a row IAM vouches for by asking Nexus.
             await self.store.commit()
             await self._apply(user.id, steps, by, added=added)
-        except EmailTakenError:
-            await self.store.rollback()
+        except _Existing:
             raise
+        except EmailTakenError as exc:
+            await self.store.rollback()
+            found = await self.store.by_email(email)
+            if found is None and principal_id is not None:
+                found = await self.store.get(principal_id)
+            if found is None:
+                raise
+            raise _Existing(found) from exc
         except Exception:
             await self._undo(
                 user,
@@ -348,7 +371,9 @@ class PeopleService:
         organization_id: str | None,
     ) -> CreateOrLinkResult:
         await self._apply(user.id, steps, by)
-        if organization_id and profile:
+        # The profile is the inviting organization's: written only with a grant
+        # IAM accepted there, never about someone the call gave nothing.
+        if organization_id and profile and steps:
             await self.store.write_profile(organization_id, user.id, profile)
             await self.store.commit()
         sent = await self._notify(user, by, steps, organization_id=organization_id)

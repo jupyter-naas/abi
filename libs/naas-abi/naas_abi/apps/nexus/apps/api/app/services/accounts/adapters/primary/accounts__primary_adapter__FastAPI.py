@@ -44,6 +44,7 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.views import (
     provider_failure,
 )
 from naas_abi.apps.nexus.apps.api.app.services.people.port import (
+    EmailTakenError,
     ProvisioningFailedError,
     RetiredIdentityError,
 )
@@ -202,7 +203,7 @@ async def _answer(call: Any) -> Any:
         raise HTTPException(status_code=404, detail="User not found") from exc
     except (DeletionBlocked, IdentityRetired) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except (AccountExistsError, RetiredIdentityError) as exc:
+    except (AccountExistsError, EmailTakenError, RetiredIdentityError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (AccountChangeRefused, NoProviderError, InvalidPolicyError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

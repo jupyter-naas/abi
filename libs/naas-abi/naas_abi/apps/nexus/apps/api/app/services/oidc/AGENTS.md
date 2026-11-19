@@ -221,9 +221,15 @@ first sign-in**:
    its id, its email and every row that points at it: nothing is re-keyed. A suspended account is
    not opened by linking it.
 
-**Only the built-in provider links**: it proves an address by mailing a code
-(`provisioning: builtin`); an external provider's verified email is never enough ("email already
-belongs to another account" stays its answer), and accounts are never linked across providers. An
+**Only the built-in provider links an account of the old login**: it proves an address by mailing a
+code (`provisioning: builtin`); an external provider's verified email is never enough ("email already
+belongs to another account" stays its answer), and accounts are never linked across providers.
+The one other row a sign-in binds is an **invited, unbound** row (`services/people`: someone invited
+through a provider that made no account, `provisioning: none`): only through the provider the row
+names (`idp_provider`), with the email verified, the trust IAM's pending grants have; the same
+`_link_legacy_user` keeps the roles the invitation attached. **Activation:** a row is `invited` from
+its invitation until the first sign-in makes it `active` (`users.status`, `activated_at`, migration
+`0074`). An
 organization whose domain routes to an external provider therefore cannot link its old accounts:
 its people sign in as new accounts, or an administrator links them with `iam.link_user`.
 `iam.link_user` and `iam.identity_at` run in the engine that holds IAM: Nexus calls them in

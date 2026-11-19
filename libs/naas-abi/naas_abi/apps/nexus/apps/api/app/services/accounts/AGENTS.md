@@ -121,8 +121,8 @@ at the provider).
   The plan's `warning` and the deletion's answer say so; inviting that address again is refused (409) where the
   provider tells its account (`AccountStorePort.retired_identity`). Under `provisioning: none` it cannot tell:
   the plan's warning is the only notice.
-- **One invitation path.** A platform invitation is `InvitationService.invite` with no organization, no workspace
-  and no role (no grant, no policy: `InvalidPolicyError` for one); the address must have no account (409).
+- **One invitation path.** A platform invitation is `PeopleService.create_or_link` (`services/people`) with no
+  grant: the account is made at once (`invited`); the address must have no account (409).
 
 ## Decisions
 
