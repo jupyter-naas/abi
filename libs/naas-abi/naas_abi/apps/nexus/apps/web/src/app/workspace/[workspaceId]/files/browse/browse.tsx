@@ -62,7 +62,6 @@ import {
   viewLabel,
 } from '../lib/drive-label';
 import { DRIVE_SETTINGS_PATH, driveSettingsShown } from '../lib/drive-settings';
-import { FilesViewPicker } from '../components/files-view-picker';
 import { FilesViewsRoot } from '../components/files-views-root';
 import { useFileViewsStore, useOfferedFileViews } from '@/hooks/use-file-views';
 import { usePlatformSettingsAccess } from '@/hooks/use-platform-settings-access';
@@ -168,9 +167,6 @@ function FilesBrowser() {
     activeSource,
     setActiveSource,
     viewChoice,
-    chooseView,
-    activeDrive,
-    chooseDrive,
     setError,
     uploadProgress,
     starredItems,
@@ -407,7 +403,6 @@ function FilesBrowser() {
   const fileQueryParams = `workspace_id=${encodeURIComponent(workspaceId)}&scope=${filesScope ?? ''}`;
   const {
     status: viewsStatus,
-    views: fileViews,
     folders: allowedViewFolders,
   } = useOfferedFileViews(workspaceId);
   // "Drive settings…" opens Platform settings › Drives: shown to who may open it.
@@ -1695,13 +1690,6 @@ function FilesBrowser() {
             </div>
           ) : (
             <>
-          <FilesViewPicker
-            views={fileViews}
-            drive={activeDrive}
-            view={viewChoice}
-            onDriveChange={chooseDrive}
-            onViewChange={chooseView}
-          />
           {(!isMobile || relativePath) && (
             <div className="files-browse-breadcrumb" aria-label="Current folder">
               {showAllViewsCrumb && (

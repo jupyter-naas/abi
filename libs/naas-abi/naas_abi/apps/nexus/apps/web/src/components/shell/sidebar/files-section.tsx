@@ -614,7 +614,6 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
         view={viewChoice}
         onDriveChange={chooseDrive}
         onViewChange={chooseView}
-        compact
       />
       <label className="relative mb-1.5 block px-0.5">
         <Search size={13} className="absolute left-2.5 top-2.5 text-muted-foreground" />

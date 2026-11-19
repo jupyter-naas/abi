@@ -8,8 +8,12 @@ import './ontology-picker.css';
 
 export type OntologyPickerOption = { value: string; label: string; detail?: string; title?: string };
 
-/** Shared keyboard-accessible, cumulative picker for ontology files, systems and types. */
-export function OntologyMultiPicker({ items, value, onToggle, onClear, loading, error, label, allLabel, noun, arrowOnly = false, popupAnchorRef, action }: {
+/**
+ * Shared keyboard-accessible, cumulative picker for ontology files, systems and types.
+ * ``single``: one choice (the Files Drive and View pickers): picking closes it and the
+ * choice is checked, not ticked.
+ */
+export function OntologyMultiPicker({ items, value, onToggle, onClear, loading, error, label, allLabel, noun, arrowOnly = false, popupAnchorRef, action, single = false, ariaLabel }: {
   items: OntologyPickerOption[];
   value: string[];
   onToggle: (value: string) => void;
@@ -22,6 +26,9 @@ export function OntologyMultiPicker({ items, value, onToggle, onClear, loading, 
   arrowOnly?: boolean;
   popupAnchorRef?: RefObject<HTMLElement>;
   action?: { label: string; onClick: () => void };
+  single?: boolean;
+  /** The trigger's name before its label (default ``Filter <noun>``). */
+  ariaLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -91,12 +98,14 @@ export function OntologyMultiPicker({ items, value, onToggle, onClear, loading, 
   function pick(index: number) {
     if (index === 0) onClear();
     else if (available && options[index - 1]) onToggle(options[index - 1].value);
+    else return;
+    if (single) close(true);
   }
 
   return <div ref={wrapRef} className={cn('ontology-picker', arrowOnly && 'ontology-picker--arrow')}>
     <button ref={triggerRef} type="button" onClick={() => { if (open) close(); else { setQuery(''); setActiveIndex(0); setOpen(true); } }}
       className={cn('ontology-picker-trigger', value.length > 0 && 'is-filtered')}
-      aria-label={`Filter ${noun}: ${label}`} aria-expanded={open} aria-haspopup="listbox" aria-controls={open ? listId : undefined}
+      aria-label={`${ariaLabel ?? `Filter ${noun}`}: ${label}`} aria-expanded={open} aria-haspopup="listbox" aria-controls={open ? listId : undefined}
       title={label}>
       {!arrowOnly && <span className="ontology-picker-label">{label}</span>}<ChevronDown size={14} className="shrink-0 opacity-70" />
     </button>
@@ -118,21 +127,22 @@ export function OntologyMultiPicker({ items, value, onToggle, onClear, loading, 
           role="combobox" aria-label={`Search ${noun}`} aria-autocomplete="list" aria-expanded={open} aria-controls={listId} aria-activedescendant={`${listId}-${active}`} />
       </div>
       <div className="min-h-0 overflow-y-auto">
-        <div id={listId} role="listbox" aria-label={noun} aria-multiselectable="true">
+        <div id={listId} role="listbox" aria-label={noun} aria-multiselectable={!single}>
           <button type="button" role="option" aria-selected={!value.length} id={`${listId}-0`} data-option-index={0} tabIndex={-1}
-            onMouseEnter={() => setActiveIndex(0)} onMouseDown={event => event.preventDefault()} onClick={onClear}
+            onMouseEnter={() => setActiveIndex(0)} onMouseDown={event => event.preventDefault()} onClick={() => pick(0)}
             className={cn('flex w-full items-center gap-2 border-b border-border px-3 py-1.5 text-left text-xs', active === 0 ? 'bg-muted' : 'hover:bg-muted/70')}>
             <span className="flex-1">{allLabel}</span>{!value.length && <Check size={14} className="text-workspace-accent" />}
           </button>
           {available && options.map((item, index) => {
             const checked = value.includes(item.value);
             return <button key={item.value} type="button" role="option" aria-selected={checked} id={`${listId}-${index + 1}`} data-option-index={index + 1} tabIndex={-1}
-              title={item.title || item.label} onMouseEnter={() => setActiveIndex(index + 1)} onMouseDown={event => event.preventDefault()} onClick={() => onToggle(item.value)}
+              title={item.title || item.label} onMouseEnter={() => setActiveIndex(index + 1)} onMouseDown={event => event.preventDefault()} onClick={() => pick(index + 1)}
               className={cn('flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs', active === index + 1 ? 'bg-muted' : 'hover:bg-muted/70')}>
               <span className="min-w-0 flex-1"><span className="block truncate">{item.label}</span>{item.detail && <span className="block truncate text-[11px] text-muted-foreground">{item.detail}</span>}</span>
-              <span aria-hidden="true" className={cn('flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border', checked ? 'border-workspace-accent text-workspace-accent' : 'border-muted-foreground/50')}>
-                {checked && <Check size={12} />}
-              </span>
+              {single ? checked && <Check size={14} className="text-workspace-accent" />
+                : <span aria-hidden="true" className={cn('flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border', checked ? 'border-workspace-accent text-workspace-accent' : 'border-muted-foreground/50')}>
+                  {checked && <Check size={12} />}
+                </span>}
             </button>;
           })}
         </div>

@@ -1,5 +1,6 @@
 'use client';
 
+import { OntologyMultiPicker } from '@/components/shell/sidebar/ontology-multi-picker';
 import type { FileView } from '@/lib/file-views';
 import {
   FILES_DRIVES,
@@ -9,64 +10,58 @@ import {
   type FilesDrive,
   type FilesSource,
 } from '../lib/drive-label';
-import './files-components.css';
 
 export type FilesViewPickerProps = {
   /** The views the caller may open (`GET /api/files/views`). */
   views: readonly FileView[];
   drive: FilesDrive;
-  /** The View dropdown's choice: All Views or one view. */
+  /** The View picker's choice: All Views or one view. */
   view: FilesSource;
   onDriveChange: (drive: FilesDrive) => void;
   onViewChange: (view: FilesSource) => void;
-  /** The sidebar's denser layout. */
-  compact?: boolean;
 };
 
+const ALL_DRIVES = FILES_DRIVES[0];
+const DRIVE_ITEMS = FILES_DRIVES.slice(1).map((option) => ({ value: option.value, label: option.label }));
+
 /**
- * The Drive and View dropdowns of the Files page and sidebar:
- * `[All Drives ▾] [All Views ▾]`. The View dropdown lists All Views, then only the
- * views the caller may open.
+ * The Files sidebar's Drive and View pickers, the ontology sidebar's picker in its
+ * single-choice mode, stacked: Drive above View. The View picker lists All Views,
+ * then only the views the caller may open.
  */
-export function FilesViewPicker({
-  views,
-  drive,
-  view,
-  onDriveChange,
-  onViewChange,
-  compact = false,
-}: FilesViewPickerProps) {
-  const choices = viewChoices(views, drive);
+export function FilesViewPicker({ views, drive, view, onDriveChange, onViewChange }: FilesViewPickerProps) {
+  const [allViews, ...viewItems] = viewChoices(views, drive);
   // A view not (or no longer) listed reads as All Views until the caller picks one.
-  const value = choices.some((choice) => choice.value === view) ? view : 'all';
+  const chosenView = viewItems.find((choice) => choice.value === view);
+  const chosenDrive = DRIVE_ITEMS.find((option) => option.value === drive);
   return (
-    <div className={compact ? 'files-view-picker is-compact' : 'files-view-picker'} data-testid="files-view-picker">
-      <select
-        className="files-view-picker-select"
-        aria-label="Drive"
-        value={drive}
-        onChange={(event) => onDriveChange(filesDriveFrom(event.target.value))}
-        data-testid="files-drive-select"
-      >
-        {FILES_DRIVES.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-      <select
-        className="files-view-picker-select"
-        aria-label="View"
-        value={value}
-        onChange={(event) => onViewChange(filesSourceFrom(event.target.value) ?? 'all')}
-        data-testid="files-view-select"
-      >
-        {choices.map((choice) => (
-          <option key={choice.value} value={choice.value}>
-            {choice.label}
-          </option>
-        ))}
-      </select>
+    <div className="ontology-sidebar-filters mb-1.5" data-testid="files-view-picker">
+      <OntologyMultiPicker
+        single
+        ariaLabel="Choose drive"
+        items={DRIVE_ITEMS}
+        value={chosenDrive ? [chosenDrive.value] : []}
+        onToggle={(value) => onDriveChange(filesDriveFrom(value))}
+        onClear={() => onDriveChange(filesDriveFrom(ALL_DRIVES.value))}
+        loading={false}
+        error={null}
+        label={chosenDrive?.label ?? ALL_DRIVES.label}
+        allLabel={ALL_DRIVES.label}
+        noun="drives"
+      />
+      <OntologyMultiPicker
+        single
+        ariaLabel="Choose view"
+        items={viewItems.map((choice) => ({ value: choice.value, label: choice.label }))}
+        value={chosenView ? [chosenView.value] : []}
+        onToggle={(value) => onViewChange(filesSourceFrom(value) ?? allViews.value)}
+        onClear={() => onViewChange(allViews.value)}
+        loading={false}
+        error={null}
+        label={chosenView?.label ?? allViews.label}
+        allLabel={allViews.label}
+        noun="views"
+      />
     </div>
   );
 }
