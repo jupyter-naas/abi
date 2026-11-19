@@ -713,6 +713,9 @@ async def _startup(app: FastAPI) -> None:
 
 async def _shutdown(app: FastAPI) -> None:
     """Application shutdown handler."""
+    from naas_abi.apps.nexus.apps.api.app.services.analytics.jobs import stop_analytics_jobs
+
+    stop_analytics_jobs()
 
 
 @asynccontextmanager

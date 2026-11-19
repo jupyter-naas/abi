@@ -196,3 +196,31 @@ async def test_without_a_log_the_jobs_only_backfill_and_purge(sessions) -> None:
     assert await jobs.drain() == 0
     assert await jobs.backfill() == 1
     assert CONSUMER_ID == "nexus.analytics.rollups"
+
+
+@pytest.mark.asyncio
+async def test_batches_two_processes_lost_are_healed(sessions, events, monkeypatch) -> None:
+    """Two processes each read a batch and fail to write it. The first cannot move the
+    cursor back (the second read past it), the second can: the heal replays the
+    log's recent events, so the first batch is counted too."""
+    monkeypatch.setattr(jobs_module, "BATCH", 2)
+    first = AnalyticsJobs(sessions, events=events)
+    second = AnalyticsJobs(sessions, events=events)
+    for index in range(4):
+        publish(events, payload(f"e-{index}"))
+    batch_a = first._claim()
+    batch_b = second._claim()
+    first._rewind(batch_a)  # another process read past a: left where it is
+    second._rewind(batch_b)  # cursor still at the end of b: moved back to a's end
+    assert await first.drain() == 2  # b again
+    assert await _hourly_total(sessions) == 2
+    assert await first.heal() == 2  # a, from the log's last hours
+    assert await second.heal() is None  # one process per period
+    assert await _hourly_total(sessions) == 4
+
+
+@pytest.mark.asyncio
+async def test_messages_are_indexed_once_by_one_process(sessions) -> None:
+    jobs = AnalyticsJobs(sessions)
+    assert await jobs.index_messages() == 0
+    assert await jobs.index_messages() is None

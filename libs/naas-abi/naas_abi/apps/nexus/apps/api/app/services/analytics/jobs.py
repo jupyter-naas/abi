@@ -9,6 +9,8 @@
   object-storage events hold of the last 45 days, the organization stamped from the
   workspace. Then the messages of the last 45 days get their facts
   (``MESSAGE_FACTS_JOB``).
+* **Heal** (every 10 minutes across processes): the log's last two hours are applied
+  again, so a batch a killed process read but never wrote is counted after all.
 * **Purge** (daily across processes): the raw events past 45 days; the rollups stay.
 
 Housekeeping for no user: the work runs as Nexus's ``api`` service account.
@@ -18,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import AsyncIterator, Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from functools import partial
@@ -44,6 +47,10 @@ logger = logging.getLogger(__name__)
 DRAIN_SECONDS = 5.0
 BATCH = 500
 MESSAGE_FACTS_JOB = "message_facts_v1"
+HEAL_JOB = "heal_recent"
+HEAL_SECONDS = 600.0
+HEAL_WINDOW = timedelta(hours=2)
+UPKEEP_SECONDS = 300.0
 
 SessionFactory = Callable[[], Any]
 
@@ -85,13 +92,16 @@ class AnalyticsJobs:
         )
 
     def _rewind(self, records: list[Any]) -> None:
-        """Hand a batch out again: the cursor back before its first event."""
+        """Hand a batch out again: the cursor back before its first event, unless
+        another process read past the batch since (moving it back would skip what
+        that one read; ``heal`` replays both)."""
         assert self._events is not None
         seqs = [s for s in (getattr(r, "_seq", None) for r in records) if isinstance(s, int)]
-        if seqs:
-            self._events.set_cursor(
-                CONSUMER_ID, str(AnalyticsEventRecorded._class_uri), min(seqs) - 1
-            )
+        if not seqs:
+            return
+        event_type = str(AnalyticsEventRecorded._class_uri)
+        if self._events.get_cursor(CONSUMER_ID, event_type) == max(seqs):
+            self._events.set_cursor(CONSUMER_ID, event_type, min(seqs) - 1)
 
     async def drain(self) -> int:
         """Apply what the log holds past the cursor; returns how many events were read."""
@@ -107,8 +117,12 @@ class AnalyticsJobs:
                 async with self._sessions() as db:
                     await self._rollups(db).apply(payloads)
                     await db.commit()
-            except Exception:
-                await asyncio.to_thread(_as_api, partial(self._rewind, records))
+            except BaseException:
+                # Cancelled (shutdown) as well as failed: in this thread, no await.
+                try:
+                    _as_api(partial(self._rewind, records))
+                except Exception:  # noqa: BLE001 - ``heal`` replays the batch
+                    logger.warning("[analytics] the cursor was not moved back", exc_info=True)
                 raise
             read += len(records)
             if len(records) < BATCH:
@@ -116,13 +130,20 @@ class AnalyticsJobs:
 
     # -- backfill ----------------------------------------------------------------
 
+    def _naive_now(self) -> datetime:
+        return self._now().astimezone(UTC).replace(tzinfo=None)
+
     def _cutoff(self) -> datetime:
         return self._now().astimezone(UTC).replace(tzinfo=None) - timedelta(days=RETENTION_DAYS)
 
-    async def _log_batches(self) -> AsyncIterator[list[dict[str, Any]]]:
+    async def _log_batches(
+        self, since_moment: datetime | None = None
+    ) -> AsyncIterator[list[dict[str, Any]]]:
+        """The log's tracker payloads stored since ``since_moment`` (naive UTC; the
+        retention cutoff by default)."""
         if self._events is None:
             return
-        since = self._cutoff().replace(tzinfo=UTC).isoformat()
+        since = (since_moment or self._cutoff()).replace(tzinfo=UTC).isoformat()
         stream: Iterator[Any] | None = None
 
         events = self._events
@@ -191,10 +212,41 @@ class AnalyticsJobs:
             port = AnalyticsSecondaryAdapterPostgresEvents(db)
             if await port.job_last_run(MESSAGE_FACTS_JOB) is not None:
                 return None
+            # One process at a time (another takes over an hour after one that died).
+            claimed = await port.claim_job(
+                f"{MESSAGE_FACTS_JOB}.running", now=self._naive_now(), every=3600.0
+            )
+            await db.commit()
+            if not claimed:
+                return None
             done = await index_message_facts(db, self._cutoff())
-            await port.record_job_run(MESSAGE_FACTS_JOB, self._cutoff())
+            await port.record_job_run(MESSAGE_FACTS_JOB, self._naive_now())
             await db.commit()
         return done
+
+    # -- heal --------------------------------------------------------------------
+
+    async def heal(self) -> int | None:
+        """Every ``HEAL_SECONDS`` across processes: replay the log's last
+        ``HEAL_WINDOW`` (idempotent), so a batch a process read but never wrote
+        (killed between the two) is counted after all. None when not this
+        process's turn."""
+        if self._events is None:
+            return None
+        async with self._sessions() as db:
+            port = AnalyticsSecondaryAdapterPostgresEvents(db)
+            claimed = await port.claim_job(HEAL_JOB, now=self._naive_now(), every=HEAL_SECONDS)
+            await db.commit()
+            if not claimed:
+                return None
+            rollups = self._rollups(db)
+            applied = 0
+            async for batch in self._log_batches(self._naive_now() - HEAL_WINDOW):
+                applied += await rollups.apply(batch)
+                await db.commit()
+        if applied:
+            logger.info("[analytics] heal applied %d events the consumer had missed", applied)
+        return applied
 
     # -- purge -------------------------------------------------------------------
 
@@ -228,9 +280,15 @@ class AnalyticsJobs:
     async def run(self, *, every: float = DRAIN_SECONDS) -> None:
         await self._step("backfill", self.backfill)
         await self._step("message facts", self.index_messages)
+        next_upkeep = 0.0
         while True:
             await self._step("rollups", self.drain)
-            await self._step("purge", self.purge)
+            if time.monotonic() >= next_upkeep:
+                # The purge and the heal are claimed across processes; each process
+                # asks every few minutes, not every tick.
+                await self._step("heal", self.heal)
+                await self._step("purge", self.purge)
+                next_upkeep = time.monotonic() + UPKEEP_SECONDS
             await asyncio.sleep(every)
 
 
@@ -264,3 +322,11 @@ def start_analytics_jobs(sessions: SessionFactory) -> asyncio.Task[None] | None:
     with as_service_account("api"):
         _task = asyncio.get_running_loop().create_task(jobs.run())
     return _task
+
+
+def stop_analytics_jobs() -> None:
+    """Cancel this process's jobs (shutdown): a batch being written is handed out again."""
+    global _task
+    if _task is not None and not _task.done():
+        _task.cancel()
+    _task = None

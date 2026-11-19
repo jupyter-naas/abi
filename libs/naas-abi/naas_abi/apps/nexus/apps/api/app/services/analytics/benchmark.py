@@ -4,7 +4,8 @@ p95 under 300 ms on 1M events across 100 workspaces).
     python -m naas_abi.apps.nexus.apps.api.app.services.analytics.benchmark \\
         postgresql+asyncpg://user:pass@host:5432/db [events] [runs]
 
-The database is emptied and seeded (``events`` 0 measures what is there): 10 organizations of 10 workspaces, 20 members
+The database (its name must contain ``bench``: every Nexus table is dropped)
+is emptied and seeded (``events`` 0 measures what is there): 10 organizations of 10 workspaces, 20 members
 per workspace, ``events`` (1,000,000 by default) over the current month, in sessions
 of about 20 events. Each figure of the organization and the workspace scope is then
 read ``runs`` times per period; p50 and p95 are printed per figure.
@@ -19,6 +20,7 @@ import sys
 import time
 from datetime import UTC, datetime, timedelta
 from functools import partial
+from typing import Any
 
 from naas_abi.apps.nexus.apps.api.app.core.database import Base
 from naas_abi.apps.nexus.apps.api.app.models import (
@@ -159,7 +161,7 @@ async def measure(engine, runs: int, now: datetime) -> None:
                         AnalyticsSecondaryAdapterPostgresQueries(db), now=lambda: now
                     )
                     window = service.window(scope, period)
-                    figures = {
+                    figures: dict[str, Any] = {
                         "overview": service.overview,
                         "users": service.users,
                         "sessions": service.sessions,
@@ -182,6 +184,9 @@ async def measure(engine, runs: int, now: datetime) -> None:
 
 async def main(dsn: str, events: int, runs: int) -> None:
     engine = create_async_engine(dsn)
+    if events and "bench" not in (engine.url.database or ""):
+        # Seeding drops every Nexus table of the database.
+        raise SystemExit("Seeding empties the database: give one whose name contains 'bench'.")
     now = datetime.now(UTC)
     if events:
         await seed(engine, events, now)

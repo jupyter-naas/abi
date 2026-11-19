@@ -256,18 +256,18 @@ async def test_the_overview_counts_members_in_the_scope_only(db) -> None:
     await _seed(db)
     queries = AnalyticsSecondaryAdapterPostgresQueries(db)
     found = await queries.overview(ORG_A, TODAY)
-    assert found.active_users == 2
-    assert found.total_page_views == 4  # a1, a2, a3, b1
-    assert found.workspaces_used == 2
+    users = await queries.users(ORG_A, TODAY)
+    assert len(users) == 2
+    assert sum(u.page_views for u in users) == 4  # a1, a2, a3, b1
+    assert len(await queries.workspaces(ORG_A, TODAY)) == 2
     assert found.total_sessions == 3  # s-0, s-1 (two workspaces, one session), s-2
     assert found.returning_users == 1  # alice: s-0 and s-1
     assert found.avg_session_duration_seconds == (40 * 60) // 3
     assert sum(found.sessions_per_slot) == 3
     assert found.users_per_slot[9] == 2 and found.users_per_slot[7] == 1
 
-    workspace = await queries.overview(WS_1, TODAY)
-    assert workspace.workspaces_used == 1
-    assert workspace.total_page_views == 3
+    assert len(await queries.workspaces(WS_1, TODAY)) == 1
+    assert sum(u.page_views for u in await queries.users(WS_1, TODAY)) == 3
 
 
 @pytest.mark.asyncio
@@ -316,8 +316,8 @@ async def test_an_event_stamped_with_another_organization_stays_there(db) -> Non
     # Recorded while ws-1 belonged to org-b.
     await port.apply_events([event("moved", organization="org-b")], not_before=LONG_AGO)
     queries = AnalyticsSecondaryAdapterPostgresQueries(db)
-    assert (await queries.overview(ORG_A, TODAY)).active_users == 0
-    assert (await queries.overview(WS_1, TODAY)).active_users == 1
+    assert await queries.users(ORG_A, TODAY) == []
+    assert len(await queries.users(WS_1, TODAY)) == 1
 
 
 @pytest.mark.asyncio
@@ -325,7 +325,7 @@ async def test_an_empty_scope_reads_nothing(db) -> None:
     await _seed(db)
     queries = AnalyticsSecondaryAdapterPostgresQueries(db)
     nobody = AnalyticsScope("organization", "org-a", ("ws-1",), ())
-    assert (await queries.overview(nobody, TODAY)).active_users == 0
+    assert (await queries.overview(nobody, TODAY)).total_sessions == 0
     assert await queries.users(nobody, TODAY) == []
 
 
@@ -340,8 +340,8 @@ async def test_periods_follow_the_time_zone(db) -> None:
     in_paris = await queries.overview(paris, resolve_period("today", "Europe/Paris", NOW))
     in_utc = await queries.overview(utc, resolve_period("today", "UTC", NOW))
     assert in_paris.users_per_slot[0] == 1
-    assert in_utc.active_users == 0
-    assert (await queries.overview(utc, resolve_period("yesterday", "UTC", NOW))).active_users == 1
+    assert sum(in_utc.users_per_slot) == 0
+    assert await queries.users(utc, resolve_period("yesterday", "UTC", NOW))
 
 
 # -- chats -------------------------------------------------------------------------

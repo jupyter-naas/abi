@@ -474,21 +474,13 @@ class AnalyticsSecondaryAdapterPostgresQueries(AnalyticsQueryPort):
     async def overview(self, scope: AnalyticsScope, window: PeriodWindow) -> OverviewAggregate:
         zeros = tuple(0 for _ in window.slots)
         if self._empty(scope):
-            return OverviewAggregate(0, 0, 0, 0, 0, 0, zeros, zeros)
+            return OverviewAggregate(0, 0, 0, zeros, zeros)
         u = AnalyticsUserHourlyModel
-        where = self._user_hourly(scope, window)
-        totals = (
-            await self.db.execute(
-                select(
-                    func.count(distinct(u.user_id)),
-                    func.coalesce(func.sum(u.page_views), 0),
-                    func.count(distinct(u.workspace_id)),
-                ).where(*where)
-            )
-        ).one()
         slot = _slot(u.bucket_hour, window).label("slot")
         users_per_slot = await self.db.execute(
-            select(slot, func.count(distinct(u.user_id))).where(*where).group_by(slot)
+            select(slot, func.count(distinct(u.user_id)))
+            .where(*self._user_hourly(scope, window))
+            .group_by(slot)
         )
 
         dialect = _Dialect(self.db)
@@ -504,17 +496,24 @@ class AnalyticsSecondaryAdapterPostgresQueries(AnalyticsQueryPort):
             .group_by(s.session_id)
             .subquery()
         )
-        sessions = (
+        # Sessions and their total duration per bucket: the totals are their sums.
+        session_slot = _slot(per_session.c.started_at, window).label("slot")
+        by_slot = (
             await self.db.execute(
                 select(
+                    session_slot,
                     func.count(),
                     func.coalesce(
-                        func.avg(dialect.seconds(per_session.c.started_at, per_session.c.ended_at)),
+                        func.sum(dialect.seconds(per_session.c.started_at, per_session.c.ended_at)),
                         0,
                     ),
-                ).select_from(per_session)
+                )
+                .select_from(per_session)
+                .group_by(session_slot)
             )
-        ).one()
+        ).all()
+        total = sum(int(n) for _index, n, _seconds in by_slot)
+        seconds = sum(float(d or 0) for _index, _n, d in by_slot)
         returning = (
             await self.db.execute(
                 select(func.count()).select_from(
@@ -525,18 +524,11 @@ class AnalyticsSecondaryAdapterPostgresQueries(AnalyticsQueryPort):
                 )
             )
         ).scalar_one()
-        session_slot = _slot(per_session.c.started_at, window).label("slot")
-        sessions_per_slot = await self.db.execute(
-            select(session_slot, func.count()).select_from(per_session).group_by(session_slot)
-        )
         return OverviewAggregate(
-            active_users=int(totals[0] or 0),
-            total_sessions=int(sessions[0] or 0),
-            total_page_views=int(totals[1] or 0),
-            workspaces_used=int(totals[2] or 0),
-            avg_session_duration_seconds=int(float(sessions[1] or 0)),
+            total_sessions=total,
+            avg_session_duration_seconds=int(seconds / total) if total else 0,
             returning_users=int(returning or 0),
-            sessions_per_slot=_per_slot(sessions_per_slot.all(), window),
+            sessions_per_slot=_per_slot(((i, n) for i, n, _d in by_slot), window),
             users_per_slot=_per_slot(users_per_slot.all(), window),
         )
 

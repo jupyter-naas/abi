@@ -158,6 +158,9 @@ def get_analytics_service(
 # the engine (/health included) for as long as each publish waited.
 
 
+# A tracker event is a few hundred bytes; its ``properties`` stay small.
+MAX_EVENT_BYTES = 16 * 1024
+
 # (user, workspace) -> (member, organization, until): the tracker sends an event per
 # page view, the membership is asked of IAM once a minute per workspace.
 _MEMBERSHIP_SECONDS = 60.0
@@ -220,6 +223,10 @@ async def ingest_event(
     service: AnalyticsService = Depends(get_analytics_service),
     rollups: AnalyticsRollups | None = Depends(get_direct_rollups),
 ) -> IngestResponse:
+    if len(event.model_dump_json()) > MAX_EVENT_BYTES:
+        # Any signed-in user may post: what one event may hold is bounded (it is kept
+        # in the log, in the raw table and served back to admins).
+        raise HTTPException(status_code=413, detail="Analytics event too large")
     stamped = await stamp_event(event, user)
 
     def record() -> str:

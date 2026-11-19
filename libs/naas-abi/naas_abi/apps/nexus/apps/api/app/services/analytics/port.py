@@ -563,10 +563,10 @@ class WorkspaceAggregate:
 
 @dataclass(frozen=True)
 class OverviewAggregate:
-    active_users: int
+    """The session figures of the overview and its series; active users, page views
+    and workspaces are the sums of ``users`` and ``workspaces``, which it reads too."""
+
     total_sessions: int
-    total_page_views: int
-    workspaces_used: int
     avg_session_duration_seconds: int
     returning_users: int
     sessions_per_slot: tuple[int, ...]

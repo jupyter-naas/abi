@@ -12,5 +12,3 @@ CREATE TABLE IF NOT EXISTS message_tools (
     uses INTEGER NOT NULL DEFAULT 1,
     PRIMARY KEY (message_id, tool_name)
 );
-CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON messages (conversation_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_conversations_workspace_updated ON conversations (workspace_id, updated_at);

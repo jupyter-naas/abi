@@ -291,3 +291,10 @@ async def test_with_no_event_log_the_ingest_feeds_the_rollups_at_once(
     ]
     assert "member@example.com" not in rows[0].payload
     assert [h.count for h in hourly] == [1]
+
+
+def test_an_oversized_event_is_refused(team) -> None:
+    client, recording = _ingest_as("member")
+    big = {**TRACKED, "properties": {"blob": "x" * (1024 * 1024)}}
+    assert client.post("/api/analytics/events", json=big).status_code == 413
+    assert recording.events == []

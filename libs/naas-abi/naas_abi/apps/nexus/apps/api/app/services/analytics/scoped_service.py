@@ -176,17 +176,16 @@ class ScopedAnalyticsService:
         )
         names = await self._names([w.workspace_id for w in workspaces])
         busiest = max(workspaces, key=lambda w: w.events, default=None)
+        active_users = sum(1 for u in users if u.total_events)
         return OverviewResponse(
             kpi=OverviewKpi(
-                active_users=aggregate.active_users,
+                active_users=active_users,
                 total_sessions=aggregate.total_sessions,
                 avg_sessions_per_user=(
-                    round(aggregate.total_sessions / aggregate.active_users, 1)
-                    if aggregate.active_users
-                    else 0.0
+                    round(aggregate.total_sessions / active_users, 1) if active_users else 0.0
                 ),
-                total_page_views=aggregate.total_page_views,
-                workspaces_used=aggregate.workspaces_used,
+                total_page_views=sum(u.page_views for u in users),
+                workspaces_used=len(workspaces),
                 avg_session_duration_seconds=aggregate.avg_session_duration_seconds,
                 returning_users=aggregate.returning_users,
                 most_active_workspace=(
