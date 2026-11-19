@@ -9,7 +9,7 @@
   object-storage events hold of the last 45 days, the organization stamped from the
   workspace. Then the messages of the last 45 days get their facts
   (``MESSAGE_FACTS_JOB``).
-* **Heal** (every 10 minutes across processes): the log's last two hours are applied
+* **Heal** (every 10 minutes across processes): the log's last six hours are applied
   again, so a batch a killed process read but never wrote is counted after all.
 * **Purge** (daily across processes): the raw events past 45 days; the rollups stay.
 
@@ -49,7 +49,7 @@ BATCH = 500
 MESSAGE_FACTS_JOB = "message_facts_v1"
 HEAL_JOB = "heal_recent"
 HEAL_SECONDS = 600.0
-HEAL_WINDOW = timedelta(hours=2)
+HEAL_WINDOW = timedelta(hours=6)
 UPKEEP_SECONDS = 300.0
 
 SessionFactory = Callable[[], Any]
@@ -103,6 +103,12 @@ class AnalyticsJobs:
         if self._events.get_cursor(CONSUMER_ID, event_type) == max(seqs):
             self._events.set_cursor(CONSUMER_ID, event_type, min(seqs) - 1)
 
+    def _rewind_quietly(self, records: list[Any]) -> None:
+        try:
+            _as_api(partial(self._rewind, records))
+        except Exception:  # noqa: BLE001 - ``heal`` replays the batch
+            logger.warning("[analytics] the cursor was not moved back", exc_info=True)
+
     async def drain(self) -> int:
         """Apply what the log holds past the cursor; returns how many events were read."""
         if self._events is None:
@@ -117,12 +123,13 @@ class AnalyticsJobs:
                 async with self._sessions() as db:
                     await self._rollups(db).apply(payloads)
                     await db.commit()
-            except BaseException:
-                # Cancelled (shutdown) as well as failed: in this thread, no await.
-                try:
-                    _as_api(partial(self._rewind, records))
-                except Exception:  # noqa: BLE001 - ``heal`` replays the batch
-                    logger.warning("[analytics] the cursor was not moved back", exc_info=True)
+            except asyncio.CancelledError:
+                # Shutdown: no await left, so in this thread.
+                self._rewind_quietly(records)
+                raise
+            except Exception:
+                # Off the event loop: the log may be slow too (an RPC per call).
+                await asyncio.to_thread(self._rewind_quietly, records)
                 raise
             read += len(records)
             if len(records) < BATCH:

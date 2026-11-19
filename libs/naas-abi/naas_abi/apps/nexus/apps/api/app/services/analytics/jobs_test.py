@@ -224,3 +224,36 @@ async def test_messages_are_indexed_once_by_one_process(sessions) -> None:
     jobs = AnalyticsJobs(sessions)
     assert await jobs.index_messages() == 0
     assert await jobs.index_messages() is None
+
+
+@pytest.mark.asyncio
+async def test_a_failed_batch_is_handed_back_off_the_event_loop(
+    sessions, events, monkeypatch
+) -> None:
+    """A failing write with a slow log must not freeze the API's loop meanwhile."""
+    import asyncio
+    import time as clock
+
+    jobs = AnalyticsJobs(sessions, events=events)
+    publish(events, payload("e-1"))
+
+    async def broken(self, payloads):
+        raise RuntimeError("database down")
+
+    def slow_rewind(records) -> None:
+        clock.sleep(0.5)
+
+    monkeypatch.setattr(jobs_module.AnalyticsRollups, "apply", broken)
+    monkeypatch.setattr(jobs, "_rewind", slow_rewind)
+    ticked = []
+
+    async def tick() -> None:
+        await asyncio.sleep(0.05)
+        ticked.append(clock.monotonic())
+
+    ticker = asyncio.create_task(tick())
+    with pytest.raises(RuntimeError):
+        await jobs.drain()
+    done = clock.monotonic()
+    await ticker
+    assert ticked and ticked[0] < done - 0.2

@@ -87,9 +87,11 @@ the removal of the app and its object-storage files #1536.
    process (`analytics/jobs.py`, every 5 s): the cursor hands each batch to one process,
    and a batch whose write fails is handed out again (cursor moved back unless another
    process read past it), which the idempotence makes harmless. Every 10 minutes one
-   process replays the log's last two hours (`heal`), so a batch read by a process
-   killed before writing it is counted after all. A deploy with no event log applies
-   each ingest directly. An ingested event is at most 16 KB (413 beyond).
+   process replays the log's last six hours (`heal`), so a batch read by a process
+   killed before writing it is counted after all (unless no heal succeeds for six
+   hours, e.g. the Nexus database down that long). A deploy with no event log applies
+   each ingest directly. An ingested event is at most 16 KB (413 beyond; checked once
+   parsed, the API's 64 MiB body limit bounds the parsing).
 
 7. **Reads** are one `GROUP BY` per figure over the rollups with
    `workspace_id IN (:scope) AND user_id IN (:members) AND bucket_hour/started_at in the period`
