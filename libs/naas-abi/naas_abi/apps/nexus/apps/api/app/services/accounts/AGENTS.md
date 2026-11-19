@@ -5,14 +5,15 @@
 Every account of the platform, and its lifecycle, for the platform admin: the directory behind Platform
 Settings › Users (web: `apps/web/src/app/settings/users/`, Nexus `AGENTS.md`, "Platform Settings").
 
-- **The directory**: every Nexus account (a `users` row) and everyone invited who has none yet (their pending
-  invitations, by email; id `invited:<email>`), each with their IAM id, whether they signed in at least once
-  ("invited, not yet": a row of the old login or one the configuration seeds, never linked to a provider; an
-  invitee), whether they are deactivated (IAM suspended the user; for an invitee, their provider disabled the
+- **The directory**: every Nexus account (a `users` row, `invited` from the invitation that made it until the
+  first sign-in: `services/people`) and everyone with a pending invitation of before that and no row (by email; id
+  `invited:<email>`, until #1570 moves them), each with their IAM id, whether they signed in at least once
+  ("invited, not yet": an `invited` row, a row of the old login or one the configuration seeds, never linked to a
+  provider; an invitee), whether they are deactivated (IAM suspended the user; for an invitee, their provider disabled the
   account), whether they are a platform admin (IAM's `builtin.platform_admin`) and their organizations.
-- **Invite** through Nexus's invitations (`services/invites`), the one way someone is invited: an invitation to
-  the platform alone (no organization, no role, no grant). The provider makes the person exist; their access is
-  attached once they have an account (Roles & permissions).
+- **Invite** through the platform's people (`services/people`), the one way someone is invited: an invitation to
+  the platform alone (no organization, no role, no grant). The person's account exists at once (`status:
+  invited`, a real id), the provider makes theirs; their access is attached in Roles & permissions.
 - **Rename** (Nexus's row and the provider's account ABI made: a sign-in refreshes the name from the provider), and
   **superadmin** on or off.
 - **Deactivate / reactivate**: IAM suspends the user (no sign-in through `identity.authenticate`, no API call: a
@@ -32,13 +33,14 @@ Access is not shown or changed here: a row opens the person's page in Roles & pe
 
 | File | Role |
 |---|---|
-| `port.py` | Records (`Account`, `NexusUser`, `DeletionPlan`, ...), errors, `AccountStorePort` (Nexus rows), `AccessGateway` (IAM), `IdentityGateway` (the providers), `InvitationsGateway` |
+| `port.py` | Records (`Account`, `NexusUser`, `DeletionPlan`, ...), errors, `AccountStorePort` (Nexus rows), `AccessGateway` (IAM), `IdentityGateway` (the providers), `InvitationsGateway` (pending invitations of before), `PeopleGateway` (inviting) |
 | `service.py` | `AccountService`: `list`, `invite`, `rename`, `set_superadmin`, `deactivate` / `reactivate`, `deletion` (the plan), `delete`; the rules; the audit |
 | `runtime.py` | `RUNTIME`: the service of a request from the engine's IAM and identity, Nexus's database, invitations and the IAM admin's audit log; tests `configure` another |
 | `adapters/primary/accounts__primary_adapter__FastAPI.py` | `/api/admin/users`, each route `guard`ed by its `nexus` action |
 | `adapters/secondary/postgres.py` | `users`, `auth_sessions`, `organization_members` (profiles), `workspace_members` (`migrations/0067_users_deleted.sql`: `deleted_at`) |
 | `adapters/secondary/engine.py` | `EngineAccessGateway` (IAM: reads as `api`, changes as the caller through `EngineIamGateway.bind`, the platform admin's role through `MEMBERSHIPS`), `EngineIdentityGateway` (identity as `api` on behalf of the caller) |
-| `adapters/secondary/invitations.py` | `InvitationsAdapter`: `services/invites`' `InvitationService`, every pending invitation, a platform invitation |
+| `adapters/secondary/invitations.py` | `InvitationsAdapter`: `services/invites`' `InvitationService`, every pending invitation (listed, withdrawn) |
+| `adapters/secondary/people.py` | `PeopleAdapter`: `services/people`' `PeopleService.create_or_link` with no grant, the platform invitation |
 
 ## Routes
 
@@ -47,10 +49,10 @@ Access is not shown or changed here: a row opens the person's page in Roles & pe
 - `GET ""` → `[{id, kind: account|invitation, email, name, avatar, principal_id, status: signed_in|invited,
   deactivated, is_superadmin, created_at, organizations: [{id, name, role}], provider, warning}]` (`ListUsers`)
 - `POST /invite` `{email, name?, provider?}` → `{user, user_created, sign_in_email_sent, provisioning_skipped,
-  renewed, warning}` (`InviteUser`); 409 when an account holds the address, or when a deleted account is still
-  bound to the address's account at its provider; 400 no provider, or an address the provider will not take;
-  502 a provider that could not make the person (`invites.views.PROVIDER_FAILURES`, as the organization's and
-  the workspace's invitations answer it)
+  renewed, warning}` (`InviteUser`): `user` is the new account (`kind: account`, its real id, `status: invited`),
+  `renewed` is always false; 409 when an account holds the address, or when a deleted account is still bound to
+  the address's account at its provider; 400 no provider, or an address the provider will not take; 502 a
+  provider that could not make the person (`ProvisioningFailedError`)
 - `PATCH /{id}` `{name?, is_superadmin?}` → the row (`UpdateUser`): every rule of both is checked before
   either is made, and the superadmin change (IAM's) goes first, so a refusal leaves the name as it was
 - `POST /{id}/deactivate`, `POST /{id}/reactivate` → the row (`SuspendUser`, `ResumeUser`)

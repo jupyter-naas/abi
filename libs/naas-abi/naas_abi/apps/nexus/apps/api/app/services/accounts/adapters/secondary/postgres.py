@@ -46,6 +46,7 @@ def _user(row: UserModel) -> NexusUser:
         principal_id=row.principal_id,
         idp_provider=row.idp_provider,
         idp_subject=row.idp_subject,
+        status=row.status or "active",
     )
 
 
