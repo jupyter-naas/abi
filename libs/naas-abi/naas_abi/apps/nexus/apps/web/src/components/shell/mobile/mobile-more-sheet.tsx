@@ -2,7 +2,7 @@
 
 import { createPortal } from 'react-dom';
 import {
-  Search, BrainCircuit, Waypoints, Database, Map, Presentation, Store, Settings, X, Home, Blocks,
+  Search, BrainCircuit, Waypoints, Database, Map, Presentation, Store, Settings, X, Home,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -32,7 +32,6 @@ const MORE_ITEMS: MoreItem[] = [
   { id: 'slides', label: 'Slides', icon: <Presentation size={18} />, href: '/slides', section: 'slides', feature: 'slides' },
   { id: 'marketplace', label: 'Marketplace', icon: <Store size={18} />, href: '/marketplace', section: 'marketplace', feature: 'marketplace' },
   { id: 'settings', label: 'Settings', icon: <Settings size={18} />, href: '/settings', section: 'settings', feature: 'settings.workspace' },
-  { id: 'infrastructure', label: 'Infrastructure', icon: <Blocks size={18} />, href: '/settings/infrastructure', section: 'infrastructure', feature: 'settings.workspace' },
 ];
 
 interface MobileMoreSheetProps {

@@ -2,12 +2,11 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, type KeyboardEvent } from 'react';
-import { Blocks, Building2, HelpCircle, LogOut, ShieldCheck, User, type LucideIcon } from 'lucide-react';
+import { Building2, HelpCircle, LogOut, ShieldCheck, User, type LucideIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useAvatarSettingsLinks, type AvatarSettingsEntry } from '@/hooks/use-avatar-settings-links';
-import { useOpensWorkspaceSettings } from '@/hooks/use-workspace-settings-access';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { getWorkspacePath } from './sidebar/utils';
 import './account-menu.css';
@@ -112,9 +111,6 @@ export function AccountMenuPanel({
   const links = useAvatarSettingsLinks();
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const helpHref = getWorkspacePath(currentWorkspaceId, '/help');
-  // The workspace's architecture: for those who open its settings, as the sidebar was.
-  const showInfrastructure = useOpensWorkspaceSettings() && !!currentWorkspaceId;
-  const infrastructureHref = getWorkspacePath(currentWorkspaceId, '/settings/infrastructure');
 
   // WAI-ARIA menu: focus is inside on open, the arrows move it.
   useEffect(() => {
@@ -161,19 +157,13 @@ export function AccountMenuPanel({
         </div>
       </div>
 
-      {/* Settings from the narrowest scope to the widest: you, this workspace, its
-          organization, the platform. */}
+      {/* Settings from the narrowest scope to the widest: you, the organization, the
+          platform. The workspace's own settings are the sidebar's Settings. */}
       <div className="account-menu-group" role="group" aria-label="Settings">
         <Link href={links.account.href} role="menuitem" onClick={onClose} className="account-menu-settings-item">
           <User size={14} className="shrink-0 text-muted-foreground" />
           <ItemLabel label={links.account.label} />
         </Link>
-        {showInfrastructure && (
-          <Link href={infrastructureHref} role="menuitem" onClick={onClose} className="account-menu-settings-item">
-            <Blocks size={14} className="shrink-0 text-muted-foreground" />
-            <ItemLabel label="Infrastructure" />
-          </Link>
-        )}
         <SettingsScopeItem entry={links.organization} label="Organization" icon={Building2} onClose={onClose} />
         <SettingsScopeItem entry={links.platform} label="Platform" icon={ShieldCheck} onClose={onClose} />
       </div>

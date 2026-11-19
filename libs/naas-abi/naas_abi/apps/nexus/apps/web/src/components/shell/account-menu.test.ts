@@ -92,21 +92,13 @@ function items(menu: HTMLElement): string[] {
   );
 }
 
-describe('Infrastructure in the account menu', () => {
-  it('sits between Account and Organization for whoever opens the workspace settings', async () => {
+describe('the account menu and the workspace settings', () => {
+  it('leaves Infrastructure to Settings, even for whoever opens them', async () => {
     useWorkspaceStore.setState({ currentWorkspaceId: 'ws-1' });
     state.opensWorkspaceSettings = true;
     const menu = await menuFor('olivia', 'admin');
-    const link = menu.querySelector<HTMLAnchorElement>('a[href$="/settings/infrastructure"]');
-    expect(link?.getAttribute('href')).toContain('ws-1');
-    expect(items(menu)).toEqual(['Account', 'Infrastructure', 'Organization', 'Help', 'Log out']);
-  });
-
-  it('is not there for anyone else', async () => {
-    useWorkspaceStore.setState({ currentWorkspaceId: 'ws-1' });
-    const menu = await menuFor('bob', 'member');
-    expect(items(menu)).not.toContain('Infrastructure');
-    expect(items(menu)).toContain('Help');
+    expect(items(menu)).toEqual(['Account', 'Organization', 'Help', 'Log out']);
+    expect(menu.querySelector('a[href*="/settings/infrastructure"]')).toBeNull();
   });
 });
 

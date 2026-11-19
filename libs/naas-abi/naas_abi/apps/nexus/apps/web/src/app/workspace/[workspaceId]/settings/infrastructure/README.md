@@ -1,13 +1,16 @@
 # ABI infrastructure
 
-Workspace Settings → Infrastructure provides a 3D map of the shared ABI Python
-codebase. It inherits the existing workspace authentication and
+Workspace Settings → Infrastructure maps the shared ABI Python codebase, one page
+per view: **Layers** (`/settings/infrastructure/layers`, the 3D map) and
+**Diagrams** (`/settings/infrastructure/diagrams`). `/settings/infrastructure`
+redirects to Layers. It inherits the existing workspace authentication and
 `settings.workspace` feature guard. It does not query workspace secrets, send
 source to a model, or represent a workspace's actual deployment.
 
-- Architecture and Inspector live in the shared Nexus feature column.
+- The settings list stays in the feature column; Architecture and Inspector are
+  the page's right-hand column (a disclosure on mobile).
 - File exports the snapshot; View contains fit, zoom, decomposition and dependency controls.
-- Click a layer (in the map or sidebar) to isolate it and animate to a fitted,
+- Click a layer (in the map or the Architecture list) to isolate it and animate to a fitted,
   face-on view. Clicking it again restores framing after orbiting.
 - Drag to orbit, scroll or use +/− to zoom; Fit view restores the current framing.
 - Decompose separates the component tiles from their plate.
@@ -62,15 +65,16 @@ Camera tests check that both plane dimensions fit across portrait/landscape
 viewports, including decomposition. Generator tests cover adapter separation,
 metrics, and exclusion of inferred, unresolved and self dependencies.
 
-## Layers and diagram views
+## Layers and Diagrams
 
-Use the visible Layers / Diagram switch or the View menu. The diagram always shows
+Open either from Settings → Infrastructure. The selection (layer, component) is
+kept when moving between them. The diagram always shows
 all components and directed dependencies; selecting a component highlights its
 neighborhood without hiding cross-layer connections. Drag to pan and scroll to
-zoom. The same sidebar inspector works in both views.
+zoom. The same inspector works on both pages.
 
-Hover close to a visible dependency in Layers view, or hover/focus a link in Diagram
-view, for source → destination, relationship types and extracted counts. Enable
-View → Dependencies to show links in Layers view. Diagram layout uses five labeled architectural columns with fixed card spacing.
+Hover close to a visible dependency on Layers, or hover/focus a link on Diagrams,
+for source → destination, relationship types and extracted counts. Enable
+View → Dependencies to show links on Layers. Diagram layout uses five labeled architectural columns with fixed card spacing.
 Orthogonal links use row gaps and column gutters; layer/component selection hides
 unrelated links. Layout is deterministic and derived from the existing snapshot; it does not add inferred relationships.

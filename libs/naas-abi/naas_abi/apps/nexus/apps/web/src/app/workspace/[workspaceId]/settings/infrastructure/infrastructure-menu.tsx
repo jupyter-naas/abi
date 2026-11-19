@@ -2,10 +2,12 @@
 import { useEffect, useRef } from 'react';
 import { architecture } from './architecture-model';
 import { useInfrastructure } from './infrastructure-store';
+import type { InfrastructureView } from './infrastructure';
 import './infrastructure.css';
 
-export function InfrastructureMenu() {
-  const { viewMode, setViewMode, expanded, dependencies, reset, move, toggleExpanded, toggleDependencies } = useInfrastructure();
+export function InfrastructureMenu({ view }: { view: InfrastructureView }) {
+  const { expanded, dependencies, reset, move, toggleExpanded, toggleDependencies } = useInfrastructure();
+  const diagrams = view === 'diagrams';
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const close = (e: Event) => {
@@ -23,8 +25,8 @@ export function InfrastructureMenu() {
     <span className="infrastructure-menu-title">Infrastructure</span>
     <details onToggle={e => { if (e.currentTarget.open) root.current?.querySelectorAll('details').forEach(d => { if (d !== e.currentTarget) d.open = false; }); }}><summary>File</summary><div className="infrastructure-menu-popup"><button onClick={() => run(download)}>Export architecture…</button></div></details>
     <details onToggle={e => { if (e.currentTarget.open) root.current?.querySelectorAll('details').forEach(d => { if (d !== e.currentTarget) d.open = false; }); }}><summary>View</summary><div className="infrastructure-menu-popup">
-      <button aria-pressed={viewMode === 'layers'} onClick={() => run(() => setViewMode('layers'))}>Layers view</button><button aria-pressed={viewMode === 'graph'} onClick={() => run(() => setViewMode('graph'))}>Diagram view</button><hr /><button onClick={() => run(reset)}>Entire system</button><button onClick={() => run(() => move())}>Fit view</button><button onClick={() => run(() => move('in'))}>Zoom in</button><button onClick={() => run(() => move('out'))}>Zoom out</button><hr />
-      <button disabled={viewMode === 'graph'} aria-pressed={expanded} onClick={() => run(toggleExpanded)}>Decompose <span>{expanded ? '✓' : ''}</span></button><button disabled={viewMode === 'graph'} aria-pressed={dependencies || viewMode === 'graph'} onClick={() => run(toggleDependencies)}>Dependencies <span>{dependencies ? '✓' : ''}</span></button>
+      <button onClick={() => run(reset)}>Entire system</button><button onClick={() => run(() => move())}>Fit view</button><button onClick={() => run(() => move('in'))}>Zoom in</button><button onClick={() => run(() => move('out'))}>Zoom out</button><hr />
+      <button disabled={diagrams} aria-pressed={expanded} onClick={() => run(toggleExpanded)}>Decompose <span>{expanded ? '✓' : ''}</span></button><button disabled={diagrams} aria-pressed={dependencies || diagrams} onClick={() => run(toggleDependencies)}>Dependencies <span>{dependencies ? '✓' : ''}</span></button>
     </div></details>
   </div>;
 }

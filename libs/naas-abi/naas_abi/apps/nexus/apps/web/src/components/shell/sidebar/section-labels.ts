@@ -23,7 +23,6 @@ export const SECTION_LABELS: Record<SidebarSection, string> = {
   apps: 'Apps',
   marketplace: 'Marketplace',
   settings: 'Settings',
-  infrastructure: 'Infrastructure',
 };
 
 /** Panel titles that open the section home. Slides goes to the cover gallery. */

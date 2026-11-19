@@ -5,6 +5,7 @@ import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { Header } from '@/components/shell/header';
 import {
+  INFRASTRUCTURE_PAGE_PATTERN,
   SETTINGS_GROUPS,
   settingsItemFor,
   settingsItemShown,
@@ -18,9 +19,9 @@ import { reloadWorkspaceResources, useWorkspaceResources } from '@/hooks/use-wor
 import { SettingsReloadProvider } from '@/components/settings/settings-reload';
 import { NotInWorkspace } from './not-in-workspace';
 
-// Service embeds and architecture visualization use the full content area instead of
+// Service embeds and the architecture views use the full content area instead of
 // the centered card layout every other settings page uses.
-const FULL_PAGE_PATTERN = /\/settings\/(?:services\/[^/]+|infrastructure)$/;
+const SERVICE_PAGE_PATTERN = /\/settings\/services\/[^/]+$/;
 
 export default function SettingsLayout({
   children,
@@ -32,7 +33,8 @@ export default function SettingsLayout({
   const currentWorkspace = workspaces.find((w) => w.id === currentWorkspaceId);
   const pathname = usePathname();
   const fetchWorkspaces = useWorkspaceStore((state) => state.fetchWorkspaces);
-  const isFullPage = FULL_PAGE_PATTERN.test(pathname ?? '');
+  const isInfrastructure = INFRASTRUCTURE_PAGE_PATTERN.test(pathname ?? '');
+  const isFullPage = isInfrastructure || SERVICE_PAGE_PATTERN.test(pathname ?? '');
   const workspaceId = useParams()?.workspaceId as string | undefined;
   const settingsHrefs = useMemo(
     () =>
@@ -73,7 +75,7 @@ export default function SettingsLayout({
 
   return (
     <div className="flex h-full flex-col">
-      {!pathname?.endsWith('/settings/infrastructure') && <Header
+      {!isInfrastructure && <Header
         title="Settings"
         subtitle={currentWorkspace?.name || 'Configure your workspace'}
       />}

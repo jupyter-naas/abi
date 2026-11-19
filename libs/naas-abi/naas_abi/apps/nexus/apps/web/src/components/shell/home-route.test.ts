@@ -50,6 +50,18 @@ describe('panelFromPathChange', () => {
     ).toBe('keep');
   });
 
+  it('turns an open column to the page on first load, not to the section stored before', () => {
+    expect(
+      panelFromPathChange({
+        previousPath: null,
+        pathname: '/workspace/ws-1/settings/infrastructure/layers',
+        urlSection: 'settings',
+        keepPanelClosed: false,
+        currentPanel: 'chat',
+      }),
+    ).toBe('settings');
+  });
+
   it('opens the new section when navigating after the first paint', () => {
     expect(
       panelFromPathChange({

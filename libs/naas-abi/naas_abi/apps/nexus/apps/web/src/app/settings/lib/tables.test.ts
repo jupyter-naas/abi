@@ -62,8 +62,9 @@ describe('table paths', () => {
   });
 
   it('knows every legacy workspace settings path', () => {
-    const workspaceSlugs = SETTINGS_GROUPS.flatMap((group) => group.items).map((item) =>
-      item.href.replace(/^\/settings\//, '')
+    // A slug covers the pages under it: `infrastructure` is `infrastructure/layers` too.
+    const workspaceSlugs = SETTINGS_GROUPS.flatMap((group) => group.items).map(
+      (item) => item.href.replace(/^\/settings\//, '').split('/')[0]
     );
     for (const slug of workspaceSlugs) expect(LEGACY_WORKSPACE_SETTINGS_SLUGS).toContain(slug);
   });
