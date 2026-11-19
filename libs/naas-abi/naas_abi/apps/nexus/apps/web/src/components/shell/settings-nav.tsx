@@ -6,7 +6,6 @@ import {
   SlidersHorizontal,
   Cpu,
   Download,
-  HardDrive,
   KeyRound,
   Shield,
   Users,
@@ -64,7 +63,6 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
       // Agents the workspace builds itself (a model and a prompt) need no module.
       { href: '/settings/agents', label: 'Agents', icon: Bot, feature: 'agents' },
       { href: '/settings/apps', label: 'Apps', icon: AppWindow, feature: 'apps', kinds: ['apps'] },
-      { href: '/settings/drives', label: 'Drives', icon: HardDrive, feature: 'files' },
       { href: '/settings/graphs', label: 'Graphs', icon: Network, feature: 'graph' },
       { href: '/settings/maps', label: 'Maps', icon: Map, feature: 'maps' },
       { href: '/settings/models', label: 'Models', icon: Cpu },
