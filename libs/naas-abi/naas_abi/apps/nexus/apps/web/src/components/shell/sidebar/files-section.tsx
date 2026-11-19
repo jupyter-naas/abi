@@ -29,6 +29,7 @@ import {
   canDropOntoExplorerFolder,
   explorerDirKey,
   explorerDirNeedsLoad,
+  explorerWorkspaceChange,
   explorerDirsToOpen,
   explorerDriveMatchesQuery,
   explorerListQuery,
@@ -450,12 +451,20 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
   }, [activeView, currentPath, driveRoot, ensureExpanded, loadDir]);
 
   // Drop explorer cache when the workspace changes; the default views start expanded.
+  // Not on mount or when effects re-run for the same workspace (StrictMode): that made
+  // the listings already asked for stale, so each was asked for again.
+  const treeWorkspaceRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
-    loadGeneration.current += 1;
-    folderCacheRef.current = {};
-    setFolderCache({});
-    setLoadingDirs({});
-    setDirErrors({});
+    const change = explorerWorkspaceChange(treeWorkspaceRef.current, currentWorkspaceId);
+    treeWorkspaceRef.current = currentWorkspaceId;
+    if (change === 'none') return;
+    if (change === 'switch') {
+      loadGeneration.current += 1;
+      folderCacheRef.current = {};
+      setFolderCache({});
+      setLoadingDirs({});
+      setDirErrors({});
+    }
     setExpandedDirs(DEFAULT_EXPANDED_VIEWS.map((source) => explorerDirKey(source, '')));
     setExplorerQuery('');
   }, [currentWorkspaceId]);

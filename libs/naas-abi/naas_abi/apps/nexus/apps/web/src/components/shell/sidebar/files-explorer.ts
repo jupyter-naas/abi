@@ -31,6 +31,19 @@ export function explorerDirNeedsLoad({
   return inFlightGeneration !== generation;
 }
 
+/**
+ * What a run of the tree's workspace effect means: `mount` (first run, nothing cached),
+ * `none` (effects re-ran for the same workspace, e.g. StrictMode), `switch` (another
+ * workspace: drop the cache). Only `switch` may invalidate listings already asked for.
+ */
+export function explorerWorkspaceChange(
+  previous: string | null | undefined,
+  current: string | null,
+): 'mount' | 'none' | 'switch' {
+  if (previous === undefined) return 'mount';
+  return previous === current ? 'none' : 'switch';
+}
+
 export function normalizeExplorerPath(path: string): string {
   return (path || '').replace(/^\/+|\/+$/g, '');
 }
