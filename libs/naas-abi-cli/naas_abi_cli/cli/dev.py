@@ -641,6 +641,9 @@ def _write_dev_overlay(
                 "nats_url": nats_login(
                     _nats_url(ports), "auth", nats_passwords["NATS_AUTH_PASSWORD"]
                 ),
+                "system_url": nats_login(
+                    _nats_url(ports), "sys", nats_passwords["NATS_SYSTEM_PASSWORD"]
+                ),
                 "issuer_seed": callout_seed,
             },
             "discovery": {"project": _discovery_project()},
@@ -746,12 +749,15 @@ def _nats_server_config(passwords: dict[str, str], issuer: str) -> str:
 
     * `engine` (the engine's processes) may use everything but `$SYS`;
     * `auth` answers the auth callout and nothing else;
+    * `sys`, in the system account, is the engine's connection warden: it ends
+      the module connections an IAM change affects;
     * every other connection is asked of the engine (`auth_callout`, trusted
       account key `issuer`): a module logs in as `sa` with its service key and
       gets the subjects its approved policy allows.
     """
     engine = json.dumps(passwords["NATS_ENGINE_PASSWORD"])
     auth = json.dumps(passwords["NATS_AUTH_PASSWORD"])
+    system = json.dumps(passwords["NATS_SYSTEM_PASSWORD"])
     return (
         f"max_payload: {NATS_MAX_PAYLOAD}\n\n"
         "authorization {\n"
@@ -761,8 +767,10 @@ def _nats_server_config(passwords: dict[str, str], issuer: str) -> str:
         f"    {{ user: auth, password: {auth}, permissions: "
         '{ subscribe: "$SYS.REQ.USER.AUTH", allow_responses: true } }\n'
         "  ]\n"
-        f"  auth_callout {{ issuer: {issuer}, auth_users: [engine, auth] }}\n"
+        f"  auth_callout {{ issuer: {issuer}, auth_users: [engine, auth, sys] }}\n"
         "}\n"
+        f"accounts {{ SYS: {{ users = [ {{ user: sys, password: {system} }} ] }} }}\n"
+        "system_account: SYS\n"
     )
 
 

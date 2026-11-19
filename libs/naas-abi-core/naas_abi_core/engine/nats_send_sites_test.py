@@ -34,6 +34,10 @@ REVIEWED = {
         1,
         "auth callout answer: one signed JWT naming one policy's subjects",
     ),
+    "naas-abi-core/naas_abi_core/engine/nats_connection_warden.py": (
+        3,
+        "system account requests: a kick names one client id, a CONNZ query a page",
+    ),
     "naas-abi-core/naas_abi_core/engine/nats_credentials.py": (
         1,
         "key exchange and JWKS requests: a key, or nothing",
