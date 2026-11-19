@@ -25,6 +25,7 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
     OrganizationWorkspaceRecord,
     UserRecord,
 )
+from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import status_of_row
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -61,7 +62,13 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             return {}
         result = await self.db.execute(select(UserModel).where(UserModel.id.in_(user_ids)))
         return {
-            user.id: UserRecord(id=user.id, email=user.email, name=user.name, bio=user.bio)
+            user.id: UserRecord(
+                id=user.id,
+                email=user.email,
+                name=user.name,
+                bio=user.bio,
+                status=status_of_row(user),
+            )
             for user in result.scalars().all()
         }
 
@@ -227,7 +234,13 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
         user = result.scalar_one_or_none()
         if user is None:
             return None
-        return UserRecord(id=user.id, email=user.email, name=user.name, bio=user.bio)
+        return UserRecord(
+            id=user.id,
+            email=user.email,
+            name=user.name,
+            bio=user.bio,
+            status=status_of_row(user),
+        )
 
     async def get_member_account(self, user_id: str) -> OrganizationMemberAccountRecord | None:
         user = (

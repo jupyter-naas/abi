@@ -332,6 +332,10 @@ class _Builder:
         )
 
     def organization_membership(self, membership: Any) -> None:
+        if membership.role is None:
+            # Workspace access only: a user of the organization (``has_user``),
+            # holding no role in it, so no membership record.
+            return
         person = iris.person_iri(membership.user_id)
         record = iris.organization_membership_iri(membership.organization_id, membership.user_id)
         who = self.names.get(membership.user_id, membership.user_id)

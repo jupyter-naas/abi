@@ -54,7 +54,8 @@ LIST = "-"
 class AdminUserOrganization(BaseModel):
     id: str
     name: str
-    role: str
+    # Null: linked through one of the organization's workspaces only.
+    role: str | None = None
 
 
 class AdminUser(BaseModel):

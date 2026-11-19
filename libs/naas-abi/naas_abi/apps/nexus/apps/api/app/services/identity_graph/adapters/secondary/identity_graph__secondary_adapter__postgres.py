@@ -11,7 +11,7 @@ from naas_abi.apps.nexus.apps.api.app.models import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.authz import AUTHZ
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
-from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container, workspace_container
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
 from naas_abi.apps.nexus.apps.api.app.services.identity_graph.port import (
     IdentityAgentConfig,
     IdentityAppConfig,
@@ -101,10 +101,11 @@ class IdentitySourceSecondaryAdapterPostgres(IdentitySourcePort):
         )
 
         # Roles are IAM's: the graph mirrors its attachments, never the old rows.
+        # The organization's directory: its members, and whoever holds a role only
+        # in one of its workspaces (linked to it, with no org role).
+        directories = await MEMBERSHIPS.org_directories()
         organization_members = [
-            (org, member)
-            for org in organizations
-            for member in await MEMBERSHIPS.members(org_container(org.id))
+            (org, member) for org in organizations for member in directories.get(org.id, [])
         ]
         members = [
             (workspace, member)

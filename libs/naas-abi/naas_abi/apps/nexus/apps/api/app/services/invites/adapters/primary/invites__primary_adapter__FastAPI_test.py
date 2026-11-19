@@ -44,11 +44,18 @@ from naas_abi.apps.nexus.apps.api.app.services.invites.service_test import (
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary import (
     workspaces__primary_adapter__FastAPI as workspaces_module,
 )
+from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import (
+    NEEDS_PEOPLE_SERVICE,
+    people_service_wired,
+)
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.iam.IAMService import LEGACY_NEXUS_ISSUER
 
 WS1 = workspace_container("org-1", "ws-1")
 REFUSAL = "You cannot grant what you do not hold"
+needs_people_service = pytest.mark.skipif(
+    not people_service_wired(), reason=NEEDS_PEOPLE_SERVICE
+)
 
 
 def _inviter(team) -> None:
@@ -138,7 +145,6 @@ async def api(team, nexus_db, monkeypatch):
 
     app.dependency_overrides[get_db] = session
     app.dependency_overrides[invites_runtime.get_invitation_service] = lambda: invites
-    app.dependency_overrides[workspaces_module._get_email_service] = lambda: None
     app.dependency_overrides[get_current_user_required] = lambda: SimpleNamespace(
         id=current["id"], email=f"{current['id']}@example.com", name=current["id"].title()
     )
@@ -168,6 +174,7 @@ def _refused(response, policy_id: str) -> None:
 
 
 @pytest.mark.asyncio
+@needs_people_service
 async def test_an_invitation_to_a_role_the_inviter_lacks_is_a_403_naming_it(api, team):
     async with api.as_("inviter") as client:
         response = await client.post(
@@ -212,6 +219,7 @@ def _held(team, user: str) -> set[tuple[str, str | None]]:
 
 
 @pytest.mark.asyncio
+@needs_people_service
 async def test_adding_an_account_checks_its_policies_before_the_membership(api, team, monkeypatch):
     """Someone who has an account is added directly: the policies the invite
     carries are checked first, so a refused one leaves no membership behind."""

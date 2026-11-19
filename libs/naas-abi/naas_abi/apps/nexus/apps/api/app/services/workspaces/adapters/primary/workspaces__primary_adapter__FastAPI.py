@@ -5,7 +5,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
@@ -42,23 +52,10 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
     MembershipDenied,
     UnknownUserError,
 )
-from naas_abi.apps.nexus.apps.api.app.services.invites import runtime as invites_runtime
-from naas_abi.apps.nexus.apps.api.app.services.invites.mail import send_added_notice
-from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
-    NoProviderError,
-    OrgInvitationExistsError,
-)
-from naas_abi.apps.nexus.apps.api.app.services.invites.service import InvitationService
-from naas_abi.apps.nexus.apps.api.app.services.invites.views import (
-    PROVIDER_FAILURES,
-    invite_result,
-    provider_failure,
-)
 from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.postgres import (
     OrganizationSecondaryAdapterPostgres,
 )
 from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
-    OrganizationMemberAlreadyExistsError,
     OrganizationService,
 )
 from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
@@ -86,6 +83,15 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.background_image impor
     background_image_url,
     fetch_image_url,
 )
+from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import (
+    Grant,
+    PeopleServicePort,
+    UserStatus,
+    added_result,
+    get_people_service,
+    people_errors,
+    people_status,
+)
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
     WorkspaceCreateInput,
     WorkspaceMemberRecord,
@@ -95,7 +101,6 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.service import (
     LastOwnerError,
-    WorkspaceMemberAlreadyExistsError,
     WorkspaceService,
     WorkspaceSlugAlreadyExistsError,
 )
@@ -103,7 +108,6 @@ from naas_abi.apps.nexus.apps.api.app.utils.public_urls import (
     resolve_stored_asset_url,
 )
 from naas_abi_core import logger
-from naas_abi_core.services.email.EmailService import EmailService
 from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -127,20 +131,6 @@ def get_workspace_service(db: AsyncSession = Depends(get_db)) -> WorkspaceServic
 
 def get_organization_service(db: AsyncSession = Depends(get_db)) -> OrganizationService:
     return OrganizationService(adapter=OrganizationSecondaryAdapterPostgres(db=db))
-
-
-def _get_email_service(request: Request) -> EmailService | None:
-    service = getattr(request.app.state, "email_service", None)
-    if service is not None:
-        return service
-    try:
-        from naas_abi import ABIModule
-
-        service = ABIModule.get_instance().engine.services.email
-        request.app.state.email_service = service
-        return service
-    except Exception:
-        return None
 
 
 class Workspace(BaseModel):
@@ -229,6 +219,19 @@ class WorkspaceMember(BaseModel):
     # Their IAM principal, which the access pages link to (an account linked from
     # the old login has another id there).
     principal_id: str | None = None
+    # "invited" until their first sign-in, then "active".
+    status: str = "active"
+
+
+class MemberProfileInput(BaseModel):
+    """What the invite sets about the person in the workspace's organization."""
+
+    organization: str | None = Field(default=None, max_length=200)
+    job_title: str | None = Field(default=None, max_length=100)
+    bio: str | None = Field(default=None, max_length=2000)
+    service_line: str | None = Field(default=None, max_length=200)
+    country: str | None = Field(default=None, max_length=100)
+    interest: str | None = Field(default=None, max_length=1000)
 
 
 class WorkspaceMemberInvite(BaseModel):
@@ -241,6 +244,28 @@ class WorkspaceMemberInvite(BaseModel):
     # Customer policies the new member gets at this workspace beside the role
     # (no role brings a feature: "Features of member", say).
     policy_ids: list[str] = Field(default_factory=list, max_length=20)
+    profile: MemberProfileInput | None = None
+
+
+class WorkspaceMemberAdd(BaseModel):
+    """Someone of the organization's directory, added to the workspace."""
+
+    user_id: str = Field(..., min_length=1, max_length=255)
+    role: str = Field(default="member", pattern=r"^(owner|admin|member|viewer)$")
+    policy_ids: list[str] = Field(default_factory=list, max_length=20)
+
+
+class WorkspaceMemberCandidate(BaseModel):
+    user_id: str
+    name: str | None = None
+    email: str
+    avatar: str | None = None
+    status: str
+    org_role: str | None = None
+
+
+class WorkspaceMemberCandidates(BaseModel):
+    items: list[WorkspaceMemberCandidate]
 
 
 class InferenceServer(BaseModel):
@@ -703,28 +728,120 @@ async def list_workspace_members(
     service: WorkspaceService = Depends(get_workspace_service),
 ) -> list[WorkspaceMember]:
     rows = await service.list_workspace_members(workspace_id=workspace_id)
-    return [
-        WorkspaceMember(
-            id=row.id,
-            workspace_id=row.workspace_id,
-            user_id=row.user_id,
-            role=row.role,
-            email=row.email,
-            name=row.name,
-            created_at=row.created_at,
-            source=row.source,
-            principal_id=row.principal_id,
-        )
-        for row in rows
-    ]
+    return [_member_view(row) for row in rows]
+
+
+def _member_view(row: WorkspaceMemberRecord) -> WorkspaceMember:
+    return WorkspaceMember(
+        id=row.id,
+        workspace_id=row.workspace_id,
+        user_id=row.user_id,
+        role=row.role,
+        email=row.email,
+        name=row.name,
+        created_at=row.created_at,
+        source=row.source,
+        principal_id=row.principal_id,
+        status=row.status,
+    )
 
 
 async def _find_workspace_member(
     service: WorkspaceService, *, workspace_id: str, user_id: str
 ) -> WorkspaceMemberRecord | None:
-    """Existing membership row, for resending an invite to a current member."""
     members = await service.list_workspace_members(workspace_id=workspace_id)
-    return next((m for m in members if m.user_id == user_id), None)
+    return next((m for m in members if m.user_id == user_id and m.source == "workspace"), None)
+
+
+async def _added_member(
+    service: WorkspaceService, *, workspace_id: str, user: Any, role: str
+) -> WorkspaceMember:
+    """The member just added, as the members list shows them."""
+    row = await _find_workspace_member(service, workspace_id=workspace_id, user_id=user.id)
+    if row is not None:
+        return _member_view(row)
+    return WorkspaceMember(
+        id=f"member-{workspace_id}-{user.id}",
+        workspace_id=workspace_id,
+        user_id=user.id,
+        role=role,
+        email=user.email,
+        name=user.name,
+        status=people_status(user.status),
+    )
+
+
+async def _may_grant_owner(service: WorkspaceService, user: User, workspace_id: str) -> bool:
+    """Only an owner makes an owner: of the workspace, or of its organization."""
+    return await service.get_workspace_role(user.id, workspace_id) == "owner"
+
+
+@router.get(
+    "/{workspace_id}/members/candidates",
+    dependencies=[
+        guard("InviteWorkspaceMember", literal="-", denied="Only admins can add members")
+    ],
+)
+async def list_workspace_member_candidates(
+    workspace_id: str,
+    q: str = Query(default="", max_length=200),
+    limit: int = Query(default=10, ge=1),
+    current_user: User = Depends(get_current_user_required),
+    service: WorkspaceService = Depends(get_workspace_service),
+    people: PeopleServicePort = Depends(get_people_service),
+) -> WorkspaceMemberCandidates:
+    """People of the workspace's organization to add, by name or email: at least
+    two characters, at most twenty answers, never anyone outside the organization's
+    directory nor already in the workspace (nothing for a workspace in none)."""
+    found = await service.member_candidates(workspace_id, q, people=people, limit=limit)
+    return WorkspaceMemberCandidates(
+        items=[WorkspaceMemberCandidate(**candidate.__dict__) for candidate in found]
+    )
+
+
+@router.post(
+    "/{workspace_id}/members",
+    status_code=201,
+    dependencies=[
+        guard("InviteWorkspaceMember", literal="-", denied="Only admins can add members")
+    ],
+)
+async def add_workspace_member(
+    workspace_id: str,
+    body: WorkspaceMemberAdd,
+    request: Request,
+    current_user: User = Depends(get_current_user_required),
+    service: WorkspaceService = Depends(get_workspace_service),
+    people: PeopleServicePort = Depends(get_people_service),
+) -> dict[str, object]:
+    """Add someone of the organization's directory with the role (and policies)
+    chosen, now, and notify them. Nobody outside the directory is found (404, as
+    for an unknown id); someone already in the workspace is a 409. No org role is
+    granted."""
+    await check_rate_limit(
+        get_rate_limit_identifier(request, current_user.id), "/api/workspaces/members/invite"
+    )
+    entry = await service.directory_entry(workspace_id, body.user_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    if workspace_id in entry.workspace_ids or entry.org_wide:
+        raise HTTPException(status_code=409, detail="Already a member of this workspace")
+    with people_errors(_member_denied):
+        user = await people.add_existing(
+            user_id=body.user_id,
+            grants=[Grant("workspace", workspace_id, body.role, tuple(body.policy_ids))],  # type: ignore[arg-type]
+            by=current_user,
+            may_grant_owner=await _may_grant_owner(service, current_user, workspace_id),
+        )
+    member = await _added_member(service, workspace_id=workspace_id, user=user, role=body.role)
+    # The service sends the "added" notice (``add_existing``) and raises when it cannot.
+    return {"member": member.model_dump(mode="json"), "sign_in_email_sent": True}
+
+
+def _profile_of(profile: Any) -> dict[str, str]:
+    if profile is None:
+        return {}
+    return {key: value for key, value in profile.model_dump().items() if value is not None}
 
 
 @router.post(
@@ -739,145 +856,70 @@ async def invite_workspace_member(
     request: Request,
     current_user: User = Depends(get_current_user_required),
     service: WorkspaceService = Depends(get_workspace_service),
-    org_service: OrganizationService = Depends(get_organization_service),
-    email_service: EmailService | None = Depends(_get_email_service),
-    invites: InvitationService = Depends(invites_runtime.get_invitation_service),
-    db: AsyncSession = Depends(get_db),
+    people: PeopleServicePort = Depends(get_people_service),
 ) -> dict[str, object]:
+    """Create the person's platform account, or link the one their email has, and
+    give them the role (and policies) in this workspace only: no org role. The
+    answer is the same either way."""
     email = invite.email.lower().strip()
     await check_rate_limit(
         get_rate_limit_identifier(request, current_user.id),
         "/api/workspaces/members/invite",
     )
     await check_rate_limit(f"email:{email}", "/api/workspaces/members/invite")
-
-    # Someone with no account yet is invited through an identity provider (see
-    # the organization invite); someone who has one is added directly.
-    existing_user = await invites.persistence.user_id_by_email(email)
-    if existing_user is None:
-        workspace = await service.get_workspace(workspace_id)
-        await check_invitation_mail_quota(
-            workspace.organization_id if workspace else None, workspace_id
-        )
-        organization = (
-            await get_organization_service(db).get_organization(workspace.organization_id)
-            if workspace is not None and workspace.organization_id
-            else None
-        )
-        try:
-            outcome = await invites.invite(
-                email=email,
-                name=invite.name,
-                provider=invite.provider,
-                organization_id=workspace.organization_id if workspace else None,
-                org_role=None,
-                workspace_id=workspace_id,
-                workspace_role=invite.role,
-                invited_by=current_user.id,
-                inviter_name=current_user.name,
-                organization_name=organization.name if organization else None,
-                workspace_name=workspace.name if workspace else None,
-                policy_ids=invite.policy_ids,
-                may_renew_org_invitation=bool(
-                    workspace is not None
-                    and workspace.organization_id
-                    and await authz.allowed(
-                        "InviteOrganizationMember",
-                        user=current_user,
-                        org=workspace.organization_id,
-                        id="-",
-                    )
-                ),
-            )
-        except OrgInvitationExistsError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-        except NoProviderError as exc:
-            # Nobody is signed up here: without an identity provider there is
-            # nowhere for the person to sign in.
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        except PROVIDER_FAILURES as exc:
-            raise provider_failure(exc) from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return invite_result(outcome)
-
     workspace = await service.get_workspace(workspace_id)
-    # The policies the invitation carries, checked and attached as the inviting
-    # person before anything is made (IAM refuses one they may not attach or do
-    # not hold): a refusal leaves no membership behind.
-    carried: tuple[str, ...] = ()
-    if invite.policy_ids:
-        try:
-            carried = await invites.attach_policies(
-                user_id=existing_user,
-                organization_id=workspace.organization_id if workspace else None,
-                workspace_id=workspace_id,
-                policy_ids=invite.policy_ids,
-                by=current_user.id,
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    already_member = False
-    try:
-        member = await service.invite_workspace_member(
-            workspace_id=workspace_id,
+    if workspace is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    await check_invitation_mail_quota(workspace.organization_id, workspace_id)
+    with people_errors(_member_denied):
+        result = await people.create_or_link(
             email=email,
-            role=invite.role,
+            name=invite.name,
+            provider=invite.provider,
+            grants=[Grant("workspace", workspace_id, invite.role, tuple(invite.policy_ids))],  # type: ignore[arg-type]
             by=current_user,
+            may_grant_owner=await _may_grant_owner(service, current_user, workspace_id),
+            profile=_profile_of(invite.profile),
+            organization_id=workspace.organization_id,
         )
-    except MembershipDenied as exc:
-        if carried:
-            await invites.detach_policies(
-                user_id=existing_user,
-                organization_id=workspace.organization_id if workspace else None,
-                workspace_id=workspace_id,
-                policy_ids=carried,
-            )
-        raise _member_denied(str(exc)) from exc
-    except WorkspaceMemberAlreadyExistsError as exc:
-        # Re-inviting is how an admin resends the notice that never arrived, so
-        # keep the membership as-is and send it again rather than rejecting the
-        # only retry path they have.
-        member = await _find_workspace_member(
-            service, workspace_id=workspace_id, user_id=exc.user_id
-        )
-        if member is None:
-            raise HTTPException(status_code=400, detail="User is already a member") from exc
-        already_member = True
-
-    if member is None:
-        raise HTTPException(status_code=500, detail="Failed to create or find user for invite")
-
-    # The organization is the people directory (Org > Users): someone added
-    # straight into a workspace shows up there too, as a member. Done as ``api``
-    # for no user, after the workspace-level check above.
-    if workspace is not None and workspace.organization_id:
-        try:
-            await org_service.invite_member(
-                org_id=workspace.organization_id,
-                email=email,
-                role="member",
-                now=datetime.now(UTC).replace(tzinfo=None),
-                by=None,
-            )
-        except OrganizationMemberAlreadyExistsError:
-            pass
-
-    sign_in_email_sent = await send_added_notice(
-        email,
-        inviter_name=current_user.name,
-        workspace_name=workspace.name if workspace else None,
-        workspace_role=invite.role,
-        email_service=email_service or _get_email_service(request),
+    member = await _added_member(
+        service, workspace_id=workspace_id, user=result.user, role=invite.role
     )
+    return added_result(result, member)
 
-    return {
-        "status": "already_member" if already_member else "invited",
-        "member_id": member.id,
-        "user_created": False,
-        "sign_in_email_sent": sign_in_email_sent,
-    }
+
+@router.post(
+    "/{workspace_id}/members/{user_id}/resend",
+    dependencies=[
+        guard("InviteWorkspaceMember", literal="-", denied="Only admins can invite members")
+    ],
+)
+async def resend_workspace_member_invite(
+    workspace_id: str,
+    user_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user_required),
+    service: WorkspaceService = Depends(get_workspace_service),
+    people: PeopleServicePort = Depends(get_people_service),
+) -> dict[str, bool]:
+    """Send an invited member their sign-in mail again; 409 once they signed in."""
+    await check_rate_limit(
+        get_rate_limit_identifier(request, current_user.id), "/api/workspaces/members/invite"
+    )
+    if await _find_workspace_member(service, workspace_id=workspace_id, user_id=user_id) is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    workspace = await service.get_workspace(workspace_id)
+    user = await people.get(user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    if people_status(user.status) != UserStatus.INVITED:
+        raise HTTPException(status_code=409, detail="This member has already signed in")
+    await check_invitation_mail_quota(
+        workspace.organization_id if workspace else None, workspace_id
+    )
+    with people_errors(_member_denied):
+        sent = await people.resend(user_id=user_id, by=current_user)
+    return {"sign_in_email_sent": sent}
 
 
 @router.delete(

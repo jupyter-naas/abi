@@ -19,6 +19,7 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     WorkspaceModel,
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import SqlDefaultsStore
+from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import status_of_row
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
     InferenceServerCreateInput,
     InferenceServerRecord,
@@ -68,7 +69,13 @@ class WorkspaceSecondaryAdapterPostgres(WorkspacePermissionPort):
             return {}
         result = await self.db.execute(select(UserModel).where(UserModel.id.in_(user_ids)))
         return {
-            user.id: UserRecord(id=user.id, email=user.email, name=user.name)
+            user.id: UserRecord(
+                id=user.id,
+                email=user.email,
+                name=user.name,
+                avatar=user.avatar,
+                status=status_of_row(user),
+            )
             for user in result.scalars().all()
         }
 
