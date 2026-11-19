@@ -10,7 +10,8 @@ ACTIONS = (
     action("CreateConversation", "write", "conversation", feature="chat"),
     # Complete or stream a turn: it stores both messages.
     action("SendMessage", "write", "conversation", feature="chat"),
-    # Rename, pin, archive, and the metadata a client attaches to a message.
+    # Rename, pin, archive, the metadata a client attaches to a message and the
+    # owner's like or dislike of an answer.
     action("UpdateConversation", "write", "conversation", feature="chat"),
     action("DeleteConversation", "write", "conversation", feature="chat"),
     # Upload or pick a file into the conversation's index.

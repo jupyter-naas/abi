@@ -4961,7 +4961,7 @@ function AssistantMessageActions({
     try {
       const { authFetch } = await import('@/stores/auth');
       const res = await authFetch(
-        `${getApiBase()}/api/analytics/chats/${encodeURIComponent(activeConversationId)}/messages/${encodeURIComponent(message.id)}/feedback`,
+        `${getApiBase()}/api/chat/conversations/${encodeURIComponent(activeConversationId)}/messages/${encodeURIComponent(message.id)}/feedback`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },

@@ -48,7 +48,9 @@ SERVICE = "nexus"
 # 11: the organization drive (``ListOrgFiles``, ``GetOrgFile``, ``PutOrgFile``, ``DeleteOrgFile``).
 # 12: scoped analytics (``ReadOrganizationAnalytics``, ``ReadWorkspaceAnalytics``,
 #     ``ReadAnalyticsConversation`` on ``analytics_conversation``).
-VERSION = 12
+# 13: the platform analytics app removed: ``ReadAnalytics``, ``WriteAnalytics`` (and
+#     the ``analytics`` singleton) deprecated, authorizing nothing.
+VERSION = 13
 
 _MODULES = (
     organizations,

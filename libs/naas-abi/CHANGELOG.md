@@ -1,5 +1,26 @@
 # CHANGELOG
 
+## Upgrade notes (next release): Nexus Analytics in settings
+
+- **The Analytics app is removed.** Analytics are read in Organization settings ›
+  Analytics (its owners and admins, `ReadOrganizationAnalytics`) and Workspace settings ›
+  Analytics (its admins, `ReadWorkspaceAnalytics`), each limited to its own members and
+  workspaces, for Today, Yesterday, This week or This month in the organization's time
+  zone (Organization settings › General › Timezone, `UTC` by default). The app leaves
+  the Apps catalog, and `/analytics` leads to the current organization's section.
+- The platform-wide `GET /api/analytics/*` routes (and `POST /api/analytics/rebuild`)
+  are gone. `POST /api/analytics/events` stays, open to every signed-in user.
+- A conversation's messages in the analytics need `ReadAnalyticsConversation`, which no
+  role holds: grant it with a policy.
+- `ReadAnalytics` and `WriteAnalytics` are deprecated and authorize nothing; policies
+  that name them can drop them.
+- The chat's like and dislike are saved through
+  `PATCH /api/chat/conversations/{id}/messages/{id}/feedback`, by the conversation's
+  owner (members and up), instead of the platform admin's analytics route.
+- On first start, the existing history of the last 45 days is replayed into the new
+  SQL rollups, then the old files under `naas_abi/nexus/analytics/` in object storage
+  are deleted. See `docs/adr/20261119_analytics_scoped_rollups.md`.
+
 ## Upgrade notes (next release): module scopes
 
 - **Workspace members and viewers need a grant to use what modules expose.** Every

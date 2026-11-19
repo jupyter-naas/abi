@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils';
 import { useOntologyStore } from '@/stores/ontology';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { getWorkspacePath } from '@/components/shell/sidebar/utils';
-import { KpiCard } from '@/app/analytics/components/kpi-card';
+import { KpiCard } from '@/components/ui/kpi-card';
 import { ToastStack, type ToastItem } from '@/components/graph/toast-notification';
 
 const ACCEPTED_EXTENSIONS = ['.ttl', '.owl', '.rdf', '.n3', '.nt'];

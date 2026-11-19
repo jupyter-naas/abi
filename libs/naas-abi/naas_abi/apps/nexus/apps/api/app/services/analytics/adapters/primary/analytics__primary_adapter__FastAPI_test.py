@@ -1,6 +1,6 @@
-"""Unauthenticated analytics routes must 401 before any storage work; the
-platform-wide reads are a platform admin's, the tracker's ingest every signed-in
-user's (identity from the token)."""
+"""The tracker's ingest: every signed-in user's (identity from the token), 401 before
+any storage work otherwise. The platform-wide reads of the removed analytics app are
+gone (#1536); the analytics are read in Organization and Workspace settings."""
 
 from __future__ import annotations
 
@@ -32,31 +32,11 @@ def _client() -> TestClient:
     return TestClient(app)
 
 
-def test_unauthenticated_get_users_returns_401() -> None:
-    response = _client().get("/api/analytics/users")
-    assert response.status_code == 401
-    assert "Authorization" not in response.request.headers
-
-
-def test_unauthenticated_get_events_sessions_overview_return_401() -> None:
-    client = _client()
-    for path in (
-        "/api/analytics/events",
-        "/api/analytics/sessions",
-        "/api/analytics/overview",
-    ):
-        assert client.get(path).status_code == 401
-
-
-def test_unauthenticated_post_rebuild_returns_401() -> None:
-    assert _client().post("/api/analytics/rebuild").status_code == 401
-
-
 def test_unauthenticated_post_events_returns_401() -> None:
     assert _client().post("/api/analytics/events", json={}).status_code == 401
 
 
-READS = (
+OLD_READS = (
     "/api/analytics/metadata",
     "/api/analytics/scenarios",
     "/api/analytics/overview",
@@ -65,65 +45,43 @@ READS = (
     "/api/analytics/sessions",
     "/api/analytics/pages",
     "/api/analytics/workspaces",
-    "/api/analytics/events",
     "/api/analytics/chats",
     "/api/analytics/chat-analytics",
     "/api/analytics/chats/c-1",
     "/api/analytics/chats/c-1/export",
 )
-WRITES = (
-    ("POST", "/api/analytics/rebuild", {}),
-    (
-        "PATCH",
-        "/api/analytics/chats/c-1/messages/m-1/feedback",
-        {"json": {"feedback": "like"}},
-    ),
-)
 
 
-def _as(user: str, tmp_path) -> TestClient:
-    from naas_abi_core.services.object_storage.adapters.secondary.ObjectStorageSecondaryAdapterFS import (  # noqa: E501
-        ObjectStorageSecondaryAdapterFS,
-    )
-    from naas_abi_core.services.object_storage.ObjectStorageService import ObjectStorageService
-
+def test_the_platform_wide_reads_are_gone(team) -> None:
+    team.platform_admin("root")
     app = FastAPI()
     app.include_router(analytics.router, prefix="/api/analytics")
     app.dependency_overrides[get_db] = _no_db
-    app.dependency_overrides[get_current_user_required] = lambda: SimpleNamespace(id=user)
-    storage = ObjectStorageService(ObjectStorageSecondaryAdapterFS(str(tmp_path)))
-    app.dependency_overrides[analytics._get_object_storage] = lambda: storage
-    return TestClient(app)
-
-
-@pytest.mark.parametrize("user", ["owner", "admin", "member", "viewer", "stranger"])
-def test_no_workspace_role_reads_or_writes_the_analytics(team, tmp_path, user: str) -> None:
-    client = _as(user, tmp_path)
-    for path in READS:
-        assert client.get(path).status_code == 403, path
-    for method, path, kwargs in WRITES:
-        assert client.request(method, path, **kwargs).status_code == 403, (method, path)
-
-
-def test_a_platform_admin_reads_and_rebuilds_the_analytics(team, tmp_path) -> None:
-    team.platform_admin("root")
-    client = _as("root", tmp_path)
-
-    assert client.get("/api/analytics/metadata").status_code == 200
-    assert client.get("/api/analytics/scenarios").status_code == 200
-    assert client.post("/api/analytics/rebuild").status_code == 200
+    app.dependency_overrides[get_current_user_required] = lambda: SimpleNamespace(id="root")
+    client = TestClient(app)
+    for path in OLD_READS:
+        assert client.get(path).status_code == 404, path
+    # ``/events`` is the ingest's: a GET is not allowed.
+    assert client.get("/api/analytics/events").status_code == 405
+    assert client.post("/api/analytics/rebuild").status_code == 404
+    assert (
+        client.patch(
+            "/api/analytics/chats/c-1/messages/m-1/feedback", json={"feedback": "like"}
+        ).status_code
+        == 404
+    )
 
 
 class _BlockingIngest:
-    """An analytics service whose ingestion blocks its thread until released, as
-    a publish over NATS does while the broker is slow."""
+    """An event log whose publish blocks its thread until released, as a publish
+    over NATS does while the broker is slow."""
 
     def __init__(self) -> None:
         self.entered = threading.Event()
         self.release = threading.Event()
         self.released_while_waiting: bool | None = None
 
-    def ingest_event(self, event) -> str:  # noqa: ANN001 - the service's signature
+    def save_event(self, event: dict) -> str:
         self.entered.set()
         self.released_while_waiting = self.release.wait(timeout=3)
         return "event-log#seq=1"
@@ -140,7 +98,7 @@ async def test_a_slow_ingestion_does_not_hold_the_event_loop(team) -> None:
     app.dependency_overrides[get_db] = _no_db
     app.dependency_overrides[get_current_user_required] = lambda: SimpleNamespace(id="member")
     slow = _BlockingIngest()
-    app.dependency_overrides[analytics.get_analytics_service] = lambda: slow
+    app.dependency_overrides[analytics.get_event_log] = lambda: slow
 
     event = {
         "event_id": "e-1",
@@ -168,15 +126,16 @@ async def test_a_slow_ingestion_does_not_hold_the_event_loop(team) -> None:
 
 
 class _Recording:
-    """The platform app's service, keeping what the route hands it."""
+    """The event log, keeping what the route hands it (as a stamped event)."""
 
     def __init__(self) -> None:
         self.events: list = []
 
-    def ingest_event(self, event) -> str:  # noqa: ANN001 - the service's signature
+    def save_event(self, event: dict) -> str:
+        from naas_abi.apps.nexus.apps.api.app.services.analytics.port import AnalyticsEvent
         from naas_abi_core.engine.call_context import current_call_context
 
-        self.events.append((event, current_call_context()))
+        self.events.append((AnalyticsEvent.model_validate(event), current_call_context()))
         return "event-log#seq=7"
 
 
@@ -188,7 +147,7 @@ def _ingest_as(user: str) -> tuple[TestClient, _Recording]:
         id=user, email=f"{user}@example.com"
     )
     recording = _Recording()
-    app.dependency_overrides[analytics.get_analytics_service] = lambda: recording
+    app.dependency_overrides[analytics.get_event_log] = lambda: recording
     analytics._memberships.clear()
     return TestClient(app), recording
 
@@ -218,7 +177,8 @@ def test_a_regular_member_s_event_is_recorded_as_the_token_says(team, user: str)
     assert response.status_code == 200
     assert response.json()["stored_at"] == "event-log#seq=7"
     (event, context) = recording.events[0]
-    assert (event.user_id, event.user_email) == (user, f"{user}@example.com")
+    # No email is kept: it is read from the users table when the analytics are read.
+    assert (event.user_id, event.user_email) == (user, None)
     assert (event.workspace_id, event.organization_id) == ("ws-1", "org-1")
     # Written as ``api``: a member's own rights never reach the log.
     assert context.principal.id.endswith("api") and context.on_behalf_of is None
@@ -267,8 +227,6 @@ async def test_with_no_event_log_the_ingest_feeds_the_rollups_at_once(
     app.dependency_overrides[get_current_user_required] = lambda: SimpleNamespace(
         id="member", email="member@example.com"
     )
-    recording = _Recording()
-    app.dependency_overrides[analytics.get_analytics_service] = lambda: recording
     analytics._memberships.clear()
     from datetime import UTC, datetime
 
@@ -298,3 +256,12 @@ def test_an_oversized_event_is_refused(team) -> None:
     big = {**TRACKED, "properties": {"blob": "x" * (1024 * 1024)}}
     assert client.post("/api/analytics/events", json=big).status_code == 413
     assert recording.events == []
+
+
+def test_with_neither_log_nor_database_the_ingest_is_unavailable(team, monkeypatch) -> None:
+    monkeypatch.setattr(analytics, "_get_event_service", lambda: None)
+    app = FastAPI()
+    app.include_router(analytics.router, prefix="/api/analytics")
+    app.dependency_overrides[get_db] = _no_db
+    app.dependency_overrides[get_current_user_required] = lambda: SimpleNamespace(id="member")
+    assert TestClient(app).post("/api/analytics/events", json=TRACKED).status_code == 503

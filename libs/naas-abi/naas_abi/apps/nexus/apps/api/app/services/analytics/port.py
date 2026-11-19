@@ -1,10 +1,9 @@
-"""Analytics service port + HTTP/domain schemas.
+"""Analytics ports + HTTP/domain schemas.
 
-Mirrors the TypeScript contract in
-``apps/web/src/app/analytics/lib/types.ts`` — the frontend reads the JSON
-returned by the primary FastAPI adapter, so these Pydantic models are the
-shape contract for both the prebuilt JSON aggregates persisted to object
-storage and the responses served by the read endpoints.
+The Pydantic models mirror the TypeScript contract in
+``apps/web/src/components/analytics/types.ts``: they are the shape of the
+scoped reads (``analytics__primary_adapter__scoped``) and of the tracker's
+ingest (``POST /api/analytics/events``).
 """
 
 from __future__ import annotations
@@ -267,36 +266,6 @@ class ChatDetail(BaseModel):
     messages: list[ChatMessage] = Field(default_factory=list)
 
 
-class Scenario(BaseModel):
-    """A pre-computed analytics time window.
-
-    ``date_start`` / ``date_end`` are anchored at rebuild time so the prebuilt
-    aggregates always reflect a deterministic period.
-    """
-
-    scenario: str
-    scenario_id: str
-    date_start: str
-    date_end: str
-
-
-class ScenariosResponse(BaseModel):
-    scenarios: list[Scenario]
-
-
-class FileStats(BaseModel):
-    file: str
-    count: int
-    duration_ms: int
-
-
-class Metadata(BaseModel):
-    updated_at: str
-    duration_ms: int
-    events: FileStats
-    aggregates: list[FileStats]
-
-
 class ChatTopRow(BaseModel):
     conversation_id: str
     title: str | None = None
@@ -354,11 +323,6 @@ class IngestResponse(BaseModel):
     stored_at: str
 
 
-class RebuildResponse(BaseModel):
-    ok: bool = True
-    metadata: Metadata
-
-
 # ---------------------------------------------------------------------------
 # Domain exceptions
 # ---------------------------------------------------------------------------
@@ -368,51 +332,8 @@ class AnalyticsDomainError(Exception):
     pass
 
 
-class UserDetailNotFound(AnalyticsDomainError):
-    pass
-
-
-class ChatNotFound(AnalyticsDomainError):
-    pass
-
-
 class OutOfScope(AnalyticsDomainError):
     """A workspace, user or conversation the scope does not hold: answered 404."""
-
-
-# ---------------------------------------------------------------------------
-# Secondary adapter port
-# ---------------------------------------------------------------------------
-
-
-class AnalyticsStoragePort(ABC):
-    """Persistence contract for analytics events and prebuilt aggregates.
-
-    The domain owns the file naming convention (which keys mean what) — the
-    adapter only knows how to read/write opaque blobs by ``(dir, name)``.
-    """
-
-    # --- per-event store ---------------------------------------------------
-
-    @abstractmethod
-    def save_event(self, event: dict[str, Any]) -> str:
-        """Persist one analytics event. Returns the storage key it landed at."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def list_events(self) -> list[dict[str, Any]]:
-        """Return every persisted per-event payload, unordered."""
-        raise NotImplementedError
-
-    # --- JSON aggregates (overview.json, users.json, ...) -------------------
-
-    @abstractmethod
-    def save_json(self, file_name: str, data: Any) -> None:
-        raise NotImplementedError
-
-    @abstractmethod
-    def load_json(self, file_name: str, fallback: Any = None) -> Any:
-        raise NotImplementedError
 
 
 # ---------------------------------------------------------------------------
@@ -613,6 +534,17 @@ class ChatAggregate:
     tools: tuple[tuple[str, int], ...]
     feedback_types: tuple[tuple[str, int], ...]
     top_chats: tuple[ChatTopAggregate, ...]
+
+
+class AnalyticsEventLogPort(ABC):
+    """Where an ingested event is recorded first: the EventService log
+    (``AnalyticsEventRecorded``), which the rollups' consumer reads."""
+
+    @abstractmethod
+    def save_event(self, event: dict[str, Any]) -> str:
+        """Append one stamped tracker event to the log (never its email). Returns
+        where it landed."""
+        raise NotImplementedError
 
 
 class AnalyticsEventPort(ABC):

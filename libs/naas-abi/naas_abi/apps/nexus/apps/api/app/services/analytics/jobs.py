@@ -9,6 +9,10 @@
   object-storage events hold of the last 45 days, the organization stamped from the
   workspace. Then the messages of the last 45 days get their facts
   (``MESSAGE_FACTS_JOB``).
+* **Legacy cleanup** (once, ``LEGACY_CLEANUP_JOB``, ``LEGACY_CLEANUP_DELAY`` after the
+  backfill, asked at each upkeep): the removed analytics app's files under
+  ``naas_abi/nexus/analytics/`` are deleted (``legacy_storage``). The delay outlasts a
+  rolling deploy, whose old processes may still rewrite the app's aggregates.
 * **Heal** (every 10 minutes across processes): the log's last six hours are applied
   again, so a batch a killed process read but never wrote is counted after all.
 * **Purge** (daily across processes): the raw events past 45 days; the rollups stay.
@@ -25,15 +29,19 @@ from collections.abc import AsyncIterator, Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from functools import partial
 from itertools import islice
-from typing import Any
+from typing import Any, Protocol
 
 from naas_abi.apps.nexus.apps.api.app.services.analytics.adapters.secondary.analytics__secondary_adapter__postgres import (  # noqa: E501
     AnalyticsSecondaryAdapterPostgresEvents,
+)
+from naas_abi.apps.nexus.apps.api.app.services.analytics.legacy_storage import (
+    LegacyAnalyticsStorage,
 )
 from naas_abi.apps.nexus.apps.api.app.services.analytics.ontologies.AnalyticsEventOntology import (
     AnalyticsEventRecorded,
 )
 from naas_abi.apps.nexus.apps.api.app.services.analytics.rollups import (
+    BACKFILL_JOB,
     CONSUMER_ID,
     RETENTION_DAYS,
     AnalyticsRollups,
@@ -47,12 +55,22 @@ logger = logging.getLogger(__name__)
 DRAIN_SECONDS = 5.0
 BATCH = 500
 MESSAGE_FACTS_JOB = "message_facts_v1"
+LEGACY_CLEANUP_JOB = "legacy_storage_cleanup_v1"
+LEGACY_CLEANUP_DELAY = timedelta(minutes=30)
 HEAL_JOB = "heal_recent"
 HEAL_SECONDS = 600.0
 HEAL_WINDOW = timedelta(hours=6)
 UPKEEP_SECONDS = 300.0
 
 SessionFactory = Callable[[], Any]
+
+
+class LegacyFiles(Protocol):
+    """The removed app's object-storage files (``legacy_storage.LegacyAnalyticsStorage``)."""
+
+    def list_events(self) -> list[dict[str, Any]]: ...
+
+    def delete_all(self) -> int: ...
 
 
 def _as_api(work: Callable[[], Any]) -> Any:
@@ -65,16 +83,16 @@ class AnalyticsJobs:
         self,
         sessions: SessionFactory,
         events: Any | None = None,
-        legacy_events: Callable[[], list[dict[str, Any]]] | None = None,
+        legacy: LegacyFiles | None = None,
         now: Callable[[], datetime] | None = None,
     ) -> None:
         """``sessions``: an async session factory (``AsyncSessionLocal``); ``events``:
         the engine's EventService, None on a deploy with no log (the ingest then
-        applies its events itself); ``legacy_events``: the object-storage events of
-        the platform app (read once, by the backfill)."""
+        applies its events itself); ``legacy``: the removed app's object-storage
+        files (their events read once by the backfill, then all deleted)."""
         self._sessions = sessions
         self._events = events
-        self._legacy_events = legacy_events
+        self._legacy = legacy
         self._now = now or (lambda: datetime.now(UTC))
         self._failing: dict[str, int] = {}
 
@@ -170,13 +188,11 @@ class AnalyticsJobs:
             yield [p for p in map(payload_of_log_event, records) if p is not None]
 
     async def _legacy_batches(self) -> AsyncIterator[list[dict[str, Any]]]:
-        if self._legacy_events is None:
+        if self._legacy is None:
             return
-        try:
-            found = await asyncio.to_thread(_as_api, self._legacy_events)
-        except Exception:  # noqa: BLE001 - history is a nice-to-have
-            logger.warning("[analytics] legacy events unreadable; not backfilled", exc_info=True)
-            return
+        # Unreadable storage raises: the backfill is then not recorded as done, so
+        # the cleanup, which waits for it, never deletes events nobody replayed.
+        found = await asyncio.to_thread(_as_api, self._legacy.list_events)
         cutoff = self._cutoff()
         recent = [
             e
@@ -189,9 +205,11 @@ class AnalyticsJobs:
             yield recent[index : index + BATCH]
 
     async def _batches(self) -> AsyncIterator[list[dict[str, Any]]]:
-        async for batch in self._log_batches():
-            yield batch
+        # The legacy files first: if the storage cannot be read, the backfill stops
+        # before replaying the log.
         async for batch in self._legacy_batches():
+            yield batch
+        async for batch in self._log_batches():
             yield batch
 
     async def backfill(self) -> int | None:
@@ -230,6 +248,37 @@ class AnalyticsJobs:
             await port.record_job_run(MESSAGE_FACTS_JOB, self._naive_now())
             await db.commit()
         return done
+
+    # -- legacy cleanup ----------------------------------------------------------
+
+    async def clean_legacy_storage(self) -> int | None:
+        """Once, ``LEGACY_CLEANUP_DELAY`` after the backfill: delete the removed app's
+        object-storage files (its aggregates and raw events). The delay lets a rolling
+        deploy finish: its old processes rebuild the app's aggregates until they stop.
+        How many objects went; None when there is no object storage, the backfill is
+        not done or too recent, the cleanup is done already or another process is
+        doing it."""
+        if self._legacy is None:
+            return None
+        async with self._sessions() as db:
+            port = AnalyticsSecondaryAdapterPostgresEvents(db)
+            if await port.job_last_run(LEGACY_CLEANUP_JOB) is not None:
+                return None
+            backfilled = await port.job_last_run(BACKFILL_JOB)
+            if backfilled is None or backfilled > self._naive_now() - LEGACY_CLEANUP_DELAY:
+                return None
+            # One process at a time (another takes over an hour after one that died).
+            claimed = await port.claim_job(
+                f"{LEGACY_CLEANUP_JOB}.running", now=self._naive_now(), every=3600.0
+            )
+            await db.commit()
+            if not claimed:
+                return None
+            deleted = await asyncio.to_thread(_as_api, self._legacy.delete_all)
+            await port.record_job_run(LEGACY_CLEANUP_JOB, self._naive_now())
+            await db.commit()
+        logger.info("[analytics] deleted %d legacy analytics files from object storage", deleted)
+        return deleted
 
     # -- heal --------------------------------------------------------------------
 
@@ -295,6 +344,7 @@ class AnalyticsJobs:
                 # asks every few minutes, not every tick.
                 await self._step("heal", self.heal)
                 await self._step("purge", self.purge)
+                await self._step("legacy cleanup", self.clean_legacy_storage)
                 next_upkeep = time.monotonic() + UPKEEP_SECONDS
             await asyncio.sleep(every)
 
@@ -312,20 +362,14 @@ def start_analytics_jobs(sessions: SessionFactory) -> asyncio.Task[None] | None:
     legacy = None
     try:
         from naas_abi import ABIModule
-        from naas_abi.apps.nexus.apps.api.app.services.analytics.adapters.secondary.analytics__secondary_adapter__object_storage import (  # noqa: E501
-            AnalyticsSecondaryAdapterObjectStorage,
-        )
 
         engine = ABIModule.get_instance().engine
         if engine.services.events_available():
             events = engine.services.events
-        storage = AnalyticsSecondaryAdapterObjectStorage(
-            object_storage=engine.services.object_storage
-        )
-        legacy = storage.list_events
+        legacy = LegacyAnalyticsStorage(engine.services.object_storage)
     except Exception:  # noqa: BLE001 - standalone Nexus: rollups from direct ingest only
         logger.info("[analytics] no engine: the rollups follow direct ingests only")
-    jobs = AnalyticsJobs(sessions, events=events, legacy_events=legacy)
+    jobs = AnalyticsJobs(sessions, events=events, legacy=legacy)
     with as_service_account("api"):
         _task = asyncio.get_running_loop().create_task(jobs.run())
     return _task

@@ -19,7 +19,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { KpiCard } from '@/app/analytics/components/kpi-card';
+import { KpiCard } from '@/components/ui/kpi-card';
 import { cn } from '@/lib/utils';
 import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';

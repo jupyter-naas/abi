@@ -35,6 +35,16 @@ class MessageMetadataUpdate(BaseModel):
     llm_model: str | None = None
 
 
+class MessageFeedbackUpdate(BaseModel):
+    """The owner's like or dislike of an answer; ``feedback=None`` clears it. The
+    details are kept with a dislike only."""
+
+    feedback: Literal["like", "dislike"] | None = None
+    feedback_type: str | None = None
+    feedback_detail: str | None = None
+    feedback_severity: int | None = None
+
+
 class ExportMessageMetadata(BaseModel):
     message_id: str
     execution_time: float | None = None

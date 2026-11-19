@@ -42,6 +42,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__prima
     ConversationCreate,
     ExportRequest,
     Message,
+    MessageFeedbackUpdate,
     MessageMetadataUpdate,
     to_conversation,
     to_message,
@@ -448,6 +449,33 @@ async def update_message_metadata(
     if not updated:
         raise HTTPException(status_code=404, detail="Message not found")
     return {"status": "updated"}
+
+
+@router.patch(
+    "/conversations/{conversation_id}/messages/{message_id}/feedback",
+    dependencies=[declares("UpdateConversation")],
+)
+async def update_message_feedback(
+    conversation_id: str,
+    message_id: str,
+    payload: MessageFeedbackUpdate,
+    current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """The owner's like or dislike of an answer (the chat's thumbs), or ``null`` to
+    clear it. Read back by the analytics' conversation figures."""
+    with bind_registry(db) as registry:
+        await own_conversation(registry.chat, current_user, conversation_id, "UpdateConversation")
+        stored = await registry.chat.set_message_feedback(
+            user_id=current_user.id,
+            conversation_id=conversation_id,
+            message_id=message_id,
+            feedback=payload.feedback,
+            details=payload.model_dump(exclude={"feedback"}),
+        )
+    if stored is None:
+        raise HTTPException(status_code=404, detail="Message not found")
+    return {"status": "updated", **stored}
 
 
 @router.post(
