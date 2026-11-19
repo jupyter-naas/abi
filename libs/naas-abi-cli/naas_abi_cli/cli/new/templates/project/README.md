@@ -48,7 +48,9 @@ registry (discovery), and their agents show up in Nexus next to the engine's.
   their own containers, declared in `docker-compose.override.yml`.
 - The broker admits two static users, generated in `.env`: the engine logs in
   as `engine` (`NATS_ENGINE_PASSWORD`) and answers the broker's auth callout as
-  `auth` (`NATS_AUTH_PASSWORD`, `NATS_AUTH_CALLOUT_SEED`).
+  `auth` (`NATS_AUTH_PASSWORD`, `NATS_AUTH_CALLOUT_SEED`); as `sys`
+  (`NATS_SYSTEM_PASSWORD`, the broker's system account) it ends the module
+  connections an IAM change affects.
 - Every module runs as its own service account, `module/<project>/<module_id>`,
   with its own key (`ABI_SERVICE_KEY`): it logs in to the broker with it and
   gets only the subjects its approved permission manifest allows. No module

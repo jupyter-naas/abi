@@ -36,6 +36,7 @@ engine = Engine(
                 "nats_url": url,
                 "auth_callout": {
                     "nats_url": os.environ["DEMO_AUTH_URL"],
+                    "system_url": os.environ["DEMO_SYSTEM_URL"],
                     "issuer_seed": os.environ["DEMO_CALLOUT_SEED"],
                 },
                 "discovery": {"lease_seconds": 2},

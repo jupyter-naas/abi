@@ -9,6 +9,7 @@ the literal. These two must not drift back together.
 
 import importlib
 import os
+import secrets
 import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -29,6 +30,9 @@ if TYPE_CHECKING:
 
 
 PORTS = {"oxigraph": 7878, "api": 9879, "dagster": 11000, "nexus-web": 12000}
+
+# Generated: the broker's system password in these tests.
+SYSTEM_PASSWORD = f"nats-{secrets.token_urlsafe(16)}"
 
 
 def _spec(name: str, port: int) -> "ServiceSpec":
@@ -672,12 +676,18 @@ def test_the_dev_broker_has_the_engine_and_auth_users_and_a_callout(
     for user, key in (
         ("engine", "NATS_ENGINE_PASSWORD"),
         ("auth", "NATS_AUTH_PASSWORD"),
+        ("sys", "NATS_SYSTEM_PASSWORD"),
     ):
         password = _env_value(tmp_path / ".env", key)
         assert len(password) >= 32
         assert f'{{ user: {user}, password: "{password}"' in config
     issuer = _env_value(tmp_path / ".env", "NATS_AUTH_CALLOUT_ISSUER")
-    assert f"auth_callout {{ issuer: {issuer}, auth_users: [engine, auth] }}" in config
+    assert (
+        f"auth_callout {{ issuer: {issuer}, auth_users: [engine, auth, sys] }}"
+        in config
+    )
+    # The connection warden's user is in the system account.
+    assert "system_account: SYS" in config
     assert "module" not in config
     assert config_path.stat().st_mode & 0o777 == 0o600
 
@@ -698,6 +708,7 @@ def test_the_dev_broker_refuses_a_client_the_engine_does_not_admit(tmp_path) -> 
     passwords = {
         "NATS_ENGINE_PASSWORD": "nats-engine-pw",
         "NATS_AUTH_PASSWORD": "nats-auth-pw",
+        "NATS_SYSTEM_PASSWORD": SYSTEM_PASSWORD,
     }
     config = tmp_path / "nats.conf"
     config.write_text(dev._nats_server_config(passwords, KeyPair.create().public_key))
@@ -797,16 +808,19 @@ def test_the_nats_overlay_points_the_engine_at_the_dev_broker(
         nats_passwords={
             "NATS_ENGINE_PASSWORD": "nats-engine-pw",
             "NATS_AUTH_PASSWORD": "nats-auth-pw",
+            "NATS_SYSTEM_PASSWORD": SYSTEM_PASSWORD,
         },
         callout_seed="SA-seed",
     )
 
     overlay = yaml.safe_load(path.read_text())
     nats = overlay["nats"]
-    # The engine logs in as `engine` and answers the auth callout as `auth`.
+    # The engine logs in as `engine`, answers the auth callout as `auth` and
+    # ends the connections an IAM change affects as `sys`.
     assert nats["nats_url"] == "nats://engine:nats-engine-pw@127.0.0.1:13042"
     assert nats["auth_callout"] == {
         "nats_url": "nats://auth:nats-auth-pw@127.0.0.1:13042",
+        "system_url": f"nats://sys:{SYSTEM_PASSWORD}@127.0.0.1:13042",
         "issuer_seed": "SA-seed",
     }
     assert "jwt_secret" not in nats
@@ -1011,7 +1025,11 @@ def test_the_overlay_turns_tracing_on_when_asked(monkeypatch, tmp_path) -> None:
 
     path = dev._write_dev_overlay(
         {"nats": 13042, "jaeger": 15042},
-        nats_passwords={"NATS_ENGINE_PASSWORD": "pw", "NATS_AUTH_PASSWORD": "apw"},
+        nats_passwords={
+            "NATS_ENGINE_PASSWORD": "pw",
+            "NATS_AUTH_PASSWORD": "apw",
+            "NATS_SYSTEM_PASSWORD": SYSTEM_PASSWORD,
+        },
         callout_seed="SA-seed",
         tracing=True,
     )
@@ -1317,7 +1335,11 @@ def test_selecting_services_leaves_the_modules_alone(stack) -> None:
 def test_a_module_can_be_started_on_its_own(stack, tmp_path) -> None:
     dev._write_dev_overlay(
         {"nats": 13042},
-        nats_passwords={"NATS_ENGINE_PASSWORD": "pw", "NATS_AUTH_PASSWORD": "apw"},
+        nats_passwords={
+            "NATS_ENGINE_PASSWORD": "pw",
+            "NATS_AUTH_PASSWORD": "apw",
+            "NATS_SYSTEM_PASSWORD": SYSTEM_PASSWORD,
+        },
         callout_seed="SA-seed",
     )
 
@@ -1478,7 +1500,11 @@ def test_the_overlay_adds_the_builtin_idp_as_the_identity_provider(
     block = dev.builtin_identity(f"{dev._api_origin(ports)}/idp", "secret-" * 5)
     path = dev._write_dev_overlay(
         ports,
-        nats_passwords={"NATS_ENGINE_PASSWORD": "e", "NATS_AUTH_PASSWORD": "a"},
+        nats_passwords={
+            "NATS_ENGINE_PASSWORD": "e",
+            "NATS_AUTH_PASSWORD": "a",
+            "NATS_SYSTEM_PASSWORD": SYSTEM_PASSWORD,
+        },
         callout_seed="SAA-seed",
         identity=block,
     )
@@ -1490,7 +1516,11 @@ def test_the_overlay_adds_the_builtin_idp_as_the_identity_provider(
     )
     without = dev._write_dev_overlay(
         ports,
-        nats_passwords={"NATS_ENGINE_PASSWORD": "e", "NATS_AUTH_PASSWORD": "a"},
+        nats_passwords={
+            "NATS_ENGINE_PASSWORD": "e",
+            "NATS_AUTH_PASSWORD": "a",
+            "NATS_SYSTEM_PASSWORD": SYSTEM_PASSWORD,
+        },
         callout_seed="SAA-seed",
     )
     assert "identity" not in dev.read_overlay(without)

@@ -24,6 +24,14 @@
 
 <!-- version list -->
 
+## v5.0.1 (2026-11-19)
+
+### Bug Fixes
+
+- **settings**: A scope switch from Platform settings no longer looks like a no-op
+  ([`c042d18`](https://github.com/jupyter-naas/abi/commit/c042d18fda179d4899a3bf25b5a0425b599950aa))
+
+
 ## v5.0.0 (2026-11-19)
 
 ### Features

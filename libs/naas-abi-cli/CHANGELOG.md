@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v5.0.0 (2026-11-19)
+
+### Features
+
+- **core, sdk, cli**: Module connections end on IAM changes, not every two minutes
+  ([`2f55f6b`](https://github.com/jupyter-naas/abi/commit/2f55f6b01e56bdc9c74a9c4963d9aab70e5bfca0))
+
+### Testing
+
+- Generate the broker's system password in tests; the dokploy reference is no secret
+  ([`f6186e7`](https://github.com/jupyter-naas/abi/commit/f6186e7b7142643855fdcd564982c8204be40454))
+
+
 ## v4.0.0 (2026-11-19)
 
 ### Features

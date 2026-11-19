@@ -38,11 +38,16 @@ API_KEY = "ABI_API_KEY"
 # module, which hashes it. Generated once per project.
 IDP_CLIENT_SECRET = "ABI_IDP_CLIENT_SECRET"
 # The broker's static users and the .env keys of their passwords: the engine's
-# processes (engine), and the engine's auth callout responder (auth). Every
-# other connection (modules, scripts) logs in with a service key and is
-# admitted by the callout. Docker reads them in .deploy/docker/nats/nats.conf,
-# `abi dev` writes them into its own nats.conf.
-NATS_USERS = {"engine": "NATS_ENGINE_PASSWORD", "auth": "NATS_AUTH_PASSWORD"}
+# processes (engine), the engine's auth callout responder (auth), and its
+# connection warden in the system account (sys), which ends the module
+# connections an IAM change affects. Every other connection (modules, scripts)
+# logs in with a service key and is admitted by the callout. Docker reads them
+# in .deploy/docker/nats/nats.conf, `abi dev` writes them into its own nats.conf.
+NATS_USERS = {
+    "engine": "NATS_ENGINE_PASSWORD",
+    "auth": "NATS_AUTH_PASSWORD",
+    "sys": "NATS_SYSTEM_PASSWORD",
+}
 NATS_PASSWORDS = tuple(NATS_USERS.values())
 # The seed of the account key the callout signs admitted users with, and its
 # public half, which nats.conf names (auth_callout.issuer, $NATS_AUTH_CALLOUT_ISSUER).
