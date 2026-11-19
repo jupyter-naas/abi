@@ -151,21 +151,6 @@ export function policyIdsToSend(ids: readonly string[] | undefined): { policy_id
   return ids && ids.length ? { policy_ids: [...ids] } : {};
 }
 
-/** `POST /api/workspaces/{ws}/members/invite`'s body; the policies attach at that workspace. */
-export function workspaceInviteBody(invite: {
-  email: string;
-  role: string;
-  provider?: string;
-  policyIds?: readonly string[];
-}): Record<string, unknown> {
-  return {
-    email: invite.email,
-    role: invite.role,
-    provider: invite.provider,
-    ...policyIdsToSend(invite.policyIds),
-  };
-}
-
 // -- API ----------------------------------------------------------------------------
 
 async function api(url: string, options: RequestInit = {}): Promise<Response> {

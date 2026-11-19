@@ -16,7 +16,7 @@ export interface AdminUserOrganization {
 }
 
 export interface AdminUser {
-  /** The Nexus user id; someone invited who has no account yet: `invited:<email>`. */
+  /** The Nexus user id; an invitation from before people were created at once: `invited:<email>`. */
   id: string;
   kind: 'account' | 'invitation';
   email: string;
@@ -24,8 +24,8 @@ export interface AdminUser {
   avatar: string | null;
   /** Their IAM id, which the person's page opens on (null: IAM has none yet). */
   principal_id: string | null;
-  /** Signed in at least once, or invited and not yet. */
-  status: 'signed_in' | 'invited';
+  /** Invited: created, has not signed in yet. Active (older API: `signed_in`): signed in once. */
+  status: 'active' | 'signed_in' | 'invited';
   deactivated: boolean;
   is_superadmin: boolean;
   /** Null for an invitation the API knows no date of. */
@@ -109,8 +109,9 @@ export const NO_ORGANIZATION = 'No organization';
 export const NO_DATE = 'No date';
 export const NO_IAM_ID = 'None yet';
 
+/** Anything but invited has signed in: `active`, or the older `signed_in`. */
 export function statusLabel(user: AdminUser): string {
-  return user.status === 'signed_in' ? SIGNED_IN : INVITED;
+  return user.status === 'invited' ? INVITED : SIGNED_IN;
 }
 
 /** `YYYY-MM-DD`, or the text as it came when it is not a date. */

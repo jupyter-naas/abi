@@ -18,10 +18,14 @@ import {
   Search,
   Download,
   Pencil,
+  Mail,
 } from 'lucide-react';
 import { getApiUrl } from '@/lib/config';
 import { useAuthStore } from '@/stores/auth';
-import { useOrganizationStore } from '@/stores/organization';
+import { useOrganizationStore, type OrganizationMember } from '@/stores/organization';
+import { InvitedBadge, ResendButton } from '@/components/people/member-status';
+import { createPeopleApi } from '@/lib/people';
+import { orgUserRoleLabel, orgUserRoleRank, WORKSPACE_ACCESS_ONLY } from './users-model';
 import { OrgSettingsPageHeader } from '../components/org-settings-page-header';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useConfirm } from '@/components/ui/dialogs';
@@ -63,13 +67,7 @@ type WorkspaceMembership = {
   role: string;
 };
 
-const ROLE_LABEL: Record<'owner' | 'admin' | 'member', string> = {
-  owner: 'Owner',
-  admin: 'Admin',
-  member: 'Member',
-};
-
-const ROLE_RANK: Record<string, number> = { owner: 0, admin: 1, member: 2 };
+const peopleApi = createPeopleApi();
 
 function summarizeWorkspaces(names: string[], visible = 2) {
   if (names.length === 0) {
@@ -82,7 +80,22 @@ function summarizeWorkspaces(names: string[], visible = 2) {
   };
 }
 
-function roleBadge(role: 'owner' | 'admin' | 'member') {
+function roleBadge(user: Pick<OrganizationMember, 'role' | 'source'>) {
+  const role = user.role;
+  if (!role) {
+    // Linked through a workspace role only: no org role, no org permission.
+    return (
+      <span className="org-settings-users-role-none" data-role="none">
+        <span aria-hidden>—</span>
+        <span
+          className="org-settings-users-badge org-settings-users-badge-member"
+          title="No organization role: they only reach the workspaces they were added to."
+        >
+          {WORKSPACE_ACCESS_ONLY}
+        </span>
+      </span>
+    );
+  }
   if (role === 'owner') {
     return (
       <span className="org-settings-users-badge org-settings-users-badge-owner">
@@ -140,6 +153,7 @@ export default function OrgUsersPage() {
     myMembership?.role === 'owner' || myMembership?.role === 'admin';
 
   const [actionError, setActionError] = useState('');
+  const [actionNotice, setActionNotice] = useState('');
   const { confirm: confirmAction, dialog: confirmDialog } = useConfirm();
   const [workspaces, setWorkspaces] = useState<OrgWorkspace[]>([]);
   const [memberships, setMemberships] = useState<WorkspaceMembership[]>([]);
@@ -393,7 +407,7 @@ export default function OrgUsersPage() {
           (value, index, all) => all.indexOf(value) === index
         );
       }
-      if (columnId === 'role') return [ROLE_LABEL[user.role]];
+      if (columnId === 'role') return [orgUserRoleLabel(user)];
       const names = assignedNamesByUser[user.userId] || [];
       return names.length > 0 ? names : ['No workspaces'];
     },
@@ -430,7 +444,7 @@ export default function OrgUsersPage() {
       if (sortKey === 'user') {
         cmp = (a.name || a.email || '').localeCompare(b.name || b.email || '');
       } else if (sortKey === 'role') {
-        cmp = (ROLE_RANK[a.role] ?? 9) - (ROLE_RANK[b.role] ?? 9);
+        cmp = orgUserRoleRank(a) - orgUserRoleRank(b);
       } else {
         cmp =
           (assignedNamesByUser[a.userId]?.length || 0) -
@@ -485,7 +499,7 @@ export default function OrgUsersPage() {
     const rows = visibleMembers.map((user) => ({
       name: user.name || 'Unknown',
       email: user.email || user.userId,
-      role: ROLE_LABEL[user.role],
+      role: orgUserRoleLabel(user),
       groups: (assignedNamesByUser[user.userId] || []).join('; '),
     }));
     const date = new Date().toISOString().slice(0, 10);
@@ -562,6 +576,13 @@ export default function OrgUsersPage() {
           <div className="org-settings-users-alert" role="alert">
             <AlertCircle size={16} />
             <span>{actionError}</span>
+          </div>
+        )}
+
+        {actionNotice && (
+          <div className="org-settings-users-alert" role="status">
+            <Mail size={16} />
+            <span>{actionNotice}</span>
           </div>
         )}
 
@@ -676,8 +697,10 @@ export default function OrgUsersPage() {
                   const assignedNames = assignedNamesByUser[user.userId] || [];
                   const summary = summarizeWorkspaces(assignedNames);
                   const isPickerOpen = openPickerUserId === user.userId;
+                  // Someone with workspace access only leaves through their workspaces.
                   const canRemove =
                     canManage &&
+                    user.role !== null &&
                     user.role !== 'owner' &&
                     user.userId !== authUser?.id;
                   const summaryLabel =
@@ -687,6 +710,7 @@ export default function OrgUsersPage() {
                   return (
                     <tr
                       key={user.id}
+                      data-user={user.userId}
                       className={canManage ? 'org-settings-users-row-link' : undefined}
                       onClick={(event) => {
                         // Buttons and inputs in the row (workspaces, remove) keep their own action.
@@ -714,9 +738,25 @@ export default function OrgUsersPage() {
                           <div className="org-settings-users-identity">
                             <p className="org-settings-users-name">
                               {user.name || 'Unknown'}
+                              <InvitedBadge status={user.status} className="ml-2" />
                             </p>
                             <p className="org-settings-users-email">
                               {user.email || user.userId}
+                              {canManage && user.status === 'invited' && user.email && (
+                                <ResendButton
+                                  className="ml-2"
+                                  email={user.email}
+                                  resend={() => peopleApi.resendOrganization(orgId, user.userId)}
+                                  onDone={(message) => {
+                                    setActionError('');
+                                    setActionNotice(message);
+                                  }}
+                                  onError={(message) => {
+                                    setActionNotice('');
+                                    setActionError(message);
+                                  }}
+                                />
+                              )}
                             </p>
                           </div>
                         </div>
@@ -759,7 +799,7 @@ export default function OrgUsersPage() {
                       </td>
                       <td>
                         <div className="org-settings-users-row-end">
-                          {roleBadge(user.role)}
+                          {roleBadge(user)}
                           {canManage ? (
                             <span className="org-settings-users-row-actions">
                               <button
@@ -800,11 +840,13 @@ export default function OrgUsersPage() {
         </div>
 
         <p className="org-settings-footnote">
-          Click a user to open their organization profile. Create user invites
-          the person through the identity provider: the account is made there
-          if it does not exist yet, and they sign in with the code it emails.
+          Click a user to open their organization profile. Create user adds the
+          person at once, invited until they first sign in; their account is made
+          at the identity provider if it does not exist yet. People added to a
+          workspace show as {WORKSPACE_ACCESS_ONLY}: they hold no organization role.
         </p>
 
+        {/* Invitations made before people were created at once: listed until they are migrated. */}
         <PendingInvitations
           scope="organizations"
           id={orgId}

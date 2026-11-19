@@ -1,26 +1,28 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { Suspense, useState, useEffect, useMemo } from 'react';
 import { Plus, Shield, User, Crown, Trash2, AlertCircle, Mail } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { useConfirm } from '@/components/ui/dialogs';
-import { Input, Select } from '@/components/ui/input';
+import { Select } from '@/components/ui/input';
 import { IdpGroupBindings } from '@/components/invitations/idp-group-bindings';
 import { PendingInvitations } from '@/components/invitations/pending-invitations';
-import { InvitePolicyPicker } from '@/components/invitations/invite-policy-picker';
-import { useInviteProviders } from '@/components/invitations/use-invite-providers';
 import { workspaceAccessScope } from '@/components/access/access-scope';
 import { workspaceOrganization } from '@/components/shell/settings-nav';
+import { AddPeople } from '@/components/people/add-people';
+import { InvitedBadge, ResendButton } from '@/components/people/member-status';
 import {
-  classifyInviteAnswer,
-  inviteSuccessMessage,
-  providerHint,
-  workspaceInviteBody,
-} from '@/lib/invitations';
+  addedNotice,
+  candidateLabel,
+  createPeopleApi,
+  createUserHref,
+  memberStatus,
+  type MemberStatus,
+} from '@/lib/people';
 import { ROLE_LABELS, assignableRoles, changeMemberRole, roleChangeable } from '@/components/access/roles/role-change';
 import {
   SettingsEmpty,
@@ -44,6 +46,8 @@ interface Member {
   joinedAt: Date | null;
   /** 'organization': no membership row; access comes from the org owner/admin role. */
   source: 'workspace' | 'organization';
+  /** Invited: created, has not signed in yet. */
+  status: MemberStatus;
 }
 
 const roleConfig = {
@@ -66,25 +70,35 @@ async function readApiError(response: Response, fallback: string): Promise<strin
   return fallback;
 }
 
+const peopleApi = createPeopleApi();
+
 export default function MembersPage() {
+  return (
+    <Suspense fallback={<SettingsLoading label="Loading members…" />}>
+      <Members />
+    </Suspense>
+  );
+}
+
+function Members() {
   const params = useParams();
+  const router = useRouter();
+  const search = useSearchParams();
   const workspaceId = params.workspaceId as string;
   const authUser = useAuthStore((s) => s.user);
   const workspaces = useWorkspaceStore((s) => s.workspaces);
   const workspace = workspaces.find((w) => w.id === workspaceId);
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<'admin' | 'member' | 'viewer'>('member');
-  // Policies attached at this workspace with the role (features come from policies).
-  const [invitePolicyIds, setInvitePolicyIds] = useState<string[]>([]);
-  const [showInvite, setShowInvite] = useState(false);
-  const [inviteLoading, setInviteLoading] = useState(false);
-  const [inviteError, setInviteError] = useState('');
-  const [inviteNotice, setInviteNotice] = useState('');
-  const [invitationsKey, setInvitationsKey] = useState(0);
-  const providers = useInviteProviders(showInvite);
+  // Back from the create page: who was added (worded here, never taken from the URL as is).
+  const [inviteNotice, setInviteNotice] = useState(() => addedNotice(search) ?? '');
   const [actionError, setActionError] = useState('');
+  // Said once: a reload does not say it again.
+  useEffect(() => {
+    if (search.get('added')) router.replace(`/workspace/${workspaceId}/settings/members`);
+    // Read on arrival only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const { confirm: confirmRemove, dialog: confirmDialog } = useConfirm();
@@ -115,6 +129,7 @@ export default function MembersPage() {
         email: (m.email as string) || '',
         joinedAt: m.created_at ? new Date(m.created_at as string) : null,
         source: m.source === 'organization' ? 'organization' : 'workspace',
+        status: memberStatus(m.status),
       }))
     );
   };
@@ -140,53 +155,7 @@ export default function MembersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId]);
 
-  const handleInvite = async () => {
-    if (!inviteEmail.trim() || !canManage) return;
-
-    setInviteError('');
-    setInviteLoading(true);
-
-    try {
-      const { authFetch } = await import('@/stores/auth');
-      const response = await authFetch(
-        `/api/workspaces/${workspaceId}/members/invite`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(
-            workspaceInviteBody({
-              email: inviteEmail.trim(),
-              role: inviteRole,
-              provider: providers.providerToSend(),
-              policyIds: invitePolicyIds,
-            })
-          ),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(await readApiError(response, 'Failed to send invite'));
-      }
-
-      // Someone with no account yet is invited, not added: they show in the
-      // pending invitations until they sign in.
-      const answer = classifyInviteAnswer(await response.json().catch(() => null));
-      setInviteNotice(answer.kind === 'invited' ? inviteSuccessMessage(answer) : '');
-      setInvitationsKey((key) => key + 1);
-      await refreshMembers();
-      setInviteEmail('');
-      setInviteRole('member');
-      setInvitePolicyIds([]);
-      setShowInvite(false);
-    } catch (error: unknown) {
-      console.error('Failed to invite member:', error);
-      setInviteError(
-        error instanceof Error ? error.message : 'Failed to send invite'
-      );
-    } finally {
-      setInviteLoading(false);
-    }
-  };
+  const memberIds = useMemo(() => new Set(members.map((m) => m.user_id)), [members]);
 
   const handleRemoveMember = async (userId: string) => {
     if (!canManage) return;
@@ -240,25 +209,26 @@ export default function MembersPage() {
     return !query || member.name.toLowerCase().includes(query) || member.email.toLowerCase().includes(query);
   });
   const adminCount = members.filter((m) => m.role === 'owner' || m.role === 'admin').length;
+  const invitedCount = members.filter((m) => m.status === 'invited').length;
 
   return (
     <div className="space-y-6">
       <SettingsPageHeader
         title="Members"
-        badge={`${members.length} active`}
+        badge={
+          invitedCount > 0
+            ? `${members.length - invitedCount} active · ${invitedCount} invited`
+            : `${members.length} active`
+        }
         description="Manage who has access to this workspace"
         actions={
           <Button
-            onClick={() => {
-              setInviteError('');
-              setInviteNotice('');
-              setShowInvite(true);
-            }}
+            onClick={() => router.push(createUserHref(workspaceId, ''))}
             disabled={!canManage}
-            title={canManage ? undefined : 'Only workspace owners and admins can invite members'}
+            title={canManage ? undefined : 'Only workspace owners and admins can add members'}
           >
             <Plus size={16} />
-            Invite Member
+            Create user
           </Button>
         }
       />
@@ -275,84 +245,28 @@ export default function MembersPage() {
         </SettingsNotice>
       )}
 
-      {showInvite && canManage && (
+      {canManage && (
         <SettingsSection
-          title="Invite New Member"
-          description={
-            providers.known.enabled ? (
-              <>
-                The person is created at the identity provider if needed, and their role applies
-                when they first sign in with this email. Same API as{' '}
-                <code>abi workspace members add</code> / <code>POST /api/workspaces/{'{id}'}/members/invite</code>.
-              </>
-            ) : (
-              <>
-                Creates the account if needed and emails a sign-in code. Same API as{' '}
-                <code>abi workspace members add</code> / <code>POST /api/workspaces/{'{id}'}/members/invite</code>.
-              </>
-            )
-          }
+          title="Add people"
+          description="Search this workspace's organization by name or email. Picking someone adds them at once with the role you choose; with no match, create them."
         >
-          {inviteError && (
-            <SettingsNotice tone="error" icon={<AlertCircle size={14} />} className="mb-4">
-              {inviteError}
-            </SettingsNotice>
-          )}
-
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <Input
-              type="email"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="email@example.com"
-              className="flex-1"
-            />
-            {providers.choosable && (
-              <Select
-                value={providers.picked ?? ''}
-                onChange={(e) => providers.setPicked(e.target.value)}
-                className="sm:w-48"
-                aria-label="Identity provider"
-              >
-                {providers.known.providers.map((p) => (
-                  <option key={p.name} value={p.name}>
-                    {p.display_name}
-                  </option>
-                ))}
-              </Select>
-            )}
-            <Select
-              value={inviteRole}
-              onChange={(e) => setInviteRole(e.target.value as typeof inviteRole)}
-              className="sm:w-40"
-            >
-              <option value="member">Member</option>
-              <option value="viewer">Viewer</option>
-              <option value="admin">Admin</option>
-            </Select>
-            <Button onClick={() => void handleInvite()} disabled={!inviteEmail.trim() || inviteLoading}>
-              {inviteLoading ? 'Sending...' : 'Send Invite'}
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setShowInvite(false);
-                setInviteError('');
-                setInvitePolicyIds([]);
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
-          {providers.known.enabled && providerHint(providers.chosen) && (
-            <p className="mt-3 text-xs text-muted-foreground">{providerHint(providers.chosen)}</p>
-          )}
-          <InvitePolicyPicker
-            className="mt-4 max-w-xl"
-            scope={showInvite ? inviteScope : null}
-            value={invitePolicyIds}
-            onChange={setInvitePolicyIds}
-            disabled={inviteLoading}
+          <AddPeople
+            workspaceId={workspaceId}
+            callerRole={membershipRole}
+            policyScope={inviteScope}
+            memberIds={memberIds}
+            navigate={(href) => router.push(href)}
+            onAdded={async (candidate, emailSent) => {
+              setActionError('');
+              setInviteNotice(
+                `${candidateLabel(candidate)} was added to this workspace.${
+                  emailSent ? ' They were emailed that they have access.' : ''
+                }`
+              );
+              await refreshMembers().catch((error: unknown) =>
+                setActionError(error instanceof Error ? error.message : 'Failed to load members')
+              );
+            }}
           />
         </SettingsSection>
       )}
@@ -419,6 +333,7 @@ export default function MembersPage() {
                         <div>
                           <p className="flex items-center gap-2 font-medium">
                             {member.name}
+                            <InvitedBadge status={member.status} />
                             {inherited && (
                               <span
                                 className="border border-border px-1.5 py-0.5 text-[10px] font-normal uppercase tracking-wide text-muted-foreground"
@@ -428,7 +343,20 @@ export default function MembersPage() {
                               </span>
                             )}
                           </p>
-                          <p className="text-xs text-muted-foreground">{member.email}</p>
+                          <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                            {member.email}
+                            {canManage && member.status === 'invited' && member.email && (
+                              <ResendButton
+                                email={member.email}
+                                resend={() => peopleApi.resendWorkspace(workspaceId, member.user_id)}
+                                onDone={(message) => {
+                                  setActionError('');
+                                  setInviteNotice(message);
+                                }}
+                                onError={setActionError}
+                              />
+                            )}
+                          </p>
                         </div>
                       </div>
                     </td>
@@ -478,12 +406,8 @@ export default function MembersPage() {
         </div>
       )}
 
-      <PendingInvitations
-        scope="workspaces"
-        id={workspaceId}
-        canManage={canManage}
-        refreshKey={invitationsKey}
-      />
+      {/* Invitations made before people were created at once: listed until they are migrated. */}
+      <PendingInvitations scope="workspaces" id={workspaceId} canManage={canManage} />
 
       <IdpGroupBindings scope="workspaces" id={workspaceId} canManage={canManage} />
 
@@ -504,9 +428,10 @@ export default function MembersPage() {
         </div>
         <p className="mt-3 text-xs text-muted-foreground">
           Organization owners and admins have owner or admin access to every workspace of the
-          organization without being invited here. People invited here are also added to the
-          organization as members. Features (chat, files, graph, …) come from policies granting
-          them, not from the role: pick them when inviting, or attach them in Roles &amp; permissions.
+          organization without being added here. People added here are listed in the
+          organization&apos;s users as having workspace access only: they get no organization role.
+          Features (chat, files, graph, …) come from policies granting them, not from the role:
+          pick them when adding someone, or attach them in Roles &amp; permissions.
         </p>
       </SettingsSection>
       {confirmDialog}
