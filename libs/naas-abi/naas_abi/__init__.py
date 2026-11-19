@@ -343,7 +343,9 @@ class WorkspaceSeedConfig(BaseModel):
     # owl:imports are not implied; explicitly list shared dependency files too.
     ontologies: list[str] | None = Field(default_factory=list)
     # Exact data graph grants. Missing policy exposes owned graphs only.
-    graphs: WorkspaceGraphPolicyConfig = Field(default_factory=WorkspaceGraphPolicyConfig)
+    graphs: WorkspaceGraphPolicyConfig = Field(
+        default_factory=WorkspaceGraphPolicyConfig
+    )
     # Initial Maps feeds and custom basemaps (see WorkspaceMapsSeedConfig).
     maps: WorkspaceMapsSeedConfig | None = None
 
@@ -478,7 +480,9 @@ class NexusConfig(BaseModel):
     rate_limit_window_seconds: int = 300
 
     # Sign-in through the engine's identity providers (identity.providers).
-    oidc_session_cookie: str = Field(default="nexus_session", pattern=r"^[A-Za-z0-9_-]{1,64}$")
+    oidc_session_cookie: str = Field(
+        default="nexus_session", pattern=r"^[A-Za-z0-9_-]{1,64}$"
+    )
     oidc_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
     oidc_session_max_age_hours: int = Field(default=7 * 24, ge=1, le=90 * 24)
     oidc_redirect_uri: str | None = None
