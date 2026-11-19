@@ -113,10 +113,16 @@ export default function OrganizationGeneralPage() {
 
   const changes = { ...identityChanges(initial, values), ...timezoneChange(initialTimezone, timezone) };
   const dirty = Object.keys(changes).length > 0;
-  const timezones = useMemo(() => {
+  // The browser's list with offsets, built once; the saved timezone is added if it lacks it.
+  const timezoneLabels = useMemo(() => {
     const now = new Date();
-    return timezoneOptions(timezone).map((name) => ({ name, label: timezoneLabel(name, now) }));
-  }, [timezone]);
+    return new Map(timezoneOptions().map((name) => [name, timezoneLabel(name, now)]));
+  }, []);
+  const timezones = useMemo(
+    () =>
+      timezoneOptions(timezone).map((name) => ({ name, label: timezoneLabels.get(name) ?? timezoneLabel(name) })),
+    [timezone, timezoneLabels]
+  );
 
   const handleSave = async () => {
     if (!dirty) return;

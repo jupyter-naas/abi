@@ -29,8 +29,9 @@ export interface AnalyticsRead<T> {
 /**
  * One read of a scope's analytics: `path` under the scope's base, with the period and
  * filters; `filters` null reads without a query. `skip` asks nothing (the tab is hidden,
- * the user is unknown). A new URL drops the previous answer's error, not its data, so
- * a period change does not blank the page.
+ * the user is unknown). A new query (period, filters) drops the previous answer's error,
+ * not its data, so a period change does not blank the page; another resource (another
+ * user's detail, another scope) never shows the previous one's data.
  */
 export function useAnalytics<T>(
   scope: AnalyticsScope,
@@ -39,9 +40,11 @@ export function useAnalytics<T>(
   { extra, skip = false }: { extra?: Record<string, string>; skip?: boolean } = {}
 ): AnalyticsRead<T> {
   const url = analyticsUrl(scope, path, filters ?? undefined, extra);
+  // What is read, whatever the query: data is kept across queries of one resource only.
+  const resource = analyticsUrl(scope, path);
   const authReady = useAuthHydrated();
-  const [state, setState] = useState<AnalyticsRead<T> & { url: string | null }>({
-    url: null,
+  const [state, setState] = useState<AnalyticsRead<T> & { resource: string | null }>({
+    resource: null,
     data: null,
     loading: true,
     error: null,
@@ -51,22 +54,29 @@ export function useAnalytics<T>(
   useEffect(() => {
     if (!authReady || skip) return;
     let cancelled = false;
-    setState((s) => ({ ...s, url, loading: true, error: null, status: null }));
+    setState((s) => ({
+      resource,
+      data: s.resource === resource ? s.data : null,
+      loading: true,
+      error: null,
+      status: null,
+    }));
     authFetch(url)
       .then((r) => readAnalyticsJson<T>(r))
       .then((data) => {
-        if (!cancelled) setState({ url, data, loading: false, error: null, status: null });
+        if (!cancelled) setState({ resource, data, loading: false, error: null, status: null });
       })
       .catch((e: unknown) => {
         if (cancelled) return;
         const status = e instanceof AnalyticsHttpError ? e.status : null;
         const message = e instanceof Error ? e.message : String(e);
-        setState({ url, data: null, loading: false, error: message, status });
+        setState({ resource, data: null, loading: false, error: message, status });
       });
     return () => {
       cancelled = true;
     };
-  }, [authReady, skip, url]);
+  }, [authReady, skip, url, resource]);
 
+  if (state.resource !== resource) return { data: null, loading: true, error: null, status: null };
   return { data: state.data, loading: state.loading, error: state.error, status: state.status };
 }
