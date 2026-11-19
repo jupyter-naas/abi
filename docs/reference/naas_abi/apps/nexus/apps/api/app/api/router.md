@@ -38,7 +38,8 @@ Included sub-routers (mounted on `api_router`):
 - `/tenant` (`tags=["tenant"]`) from `tenant.router`
 - `/transcribe` (`tags=["transcribe"]`) from `transcribe.router`
 - `/speech` (`tags=["speech"]`) from `speech.router`
-- `/analytics` (`tags=["analytics"]`) from `analytics.router`
+- `/analytics` (`tags=["analytics"]`) from `analytics.router`: the tracker's ingest, `POST /analytics/events`
+- `/organizations/{org_id}/analytics` and `/workspaces/{workspace_id}/analytics` (`tags=["analytics"]`) from `analytics.organization_router` and `analytics.workspace_router`: the analytics read in Organization and Workspace settings
 - `/admin` (`tags=["admin"]`) from `admin.router`
 - `/admin/system` (`tags=["sysadmin"]`) from `sysadmin_router`
 

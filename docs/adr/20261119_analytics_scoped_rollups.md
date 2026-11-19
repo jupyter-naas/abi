@@ -111,17 +111,32 @@ the removal of the app and its object-storage files #1536.
    last 45 days are applied, the organization stamped from the workspace; then the
    messages of the last 45 days get their facts (`message_facts_v1`, also claimed). Daily, across
    processes (`claim_job`): raw `analytics_events` older than 45 days are deleted; the
-   rollups stay.
+   rollups stay. After the backfill, once (`legacy_storage_cleanup_v1`, claimed), the
+   removed app's object-storage files are deleted (#1536, see Consequences).
 
 ## Consequences
 
 - Analytics follow the organization: an admin sees their organization's members in
   their organization's workspaces and nothing else; a member of another organization
   never appears. Regular members' events are now recorded.
-- `ReadAnalytics`/`WriteAnalytics`, the platform-wide `/api/analytics/*` reads,
-  `AnalyticsStoragePort` with its JSON adapters, the rebuild and `_upsert_refs` stay
-  until #1536 removes them with the app, so that app keeps working on the epic branch
-  meanwhile (the ingest still feeds it).
+- **Removed (#1536):** the Analytics app (`naas_abi/apps/analytics/`, so it leaves the
+  Apps catalog), its web page and the `/api/analytics/*` Next proxies (`/analytics` now
+  leads to the current organization's Analytics section, or is a 404), the platform-wide
+  reads (`overview`, `users`, `sessions`, `pages`, `workspaces`, `events`, `chats`,
+  `chat-analytics`, `scenarios`, `metadata`, `rebuild`), the object-storage storage port
+  with its JSON adapters, the rebuild and its scheduler, `_upsert_refs` and the
+  scenarios. What stays of `/api/analytics` is the tracker's ingest; with an event log it
+  only appends to it, without one it applies the event to the rollups. The chat's like
+  and dislike moved to `PATCH /api/chat/conversations/{id}/messages/{id}/feedback`
+  (`UpdateConversation` on the owner's conversation; it was the platform admin's
+  `WriteAnalytics`, so other users' feedback was refused). `ReadAnalytics` and
+  `WriteAnalytics` stay declared, deprecated and asked by no route (catalog 13), since
+  IAM refuses a catalog dropping an action a policy may still name. Once the backfill
+  is done, one process (claimed, `legacy_storage_cleanup_v1`) deletes the app's files
+  under `naas_abi/nexus/analytics/` (`analytics/legacy_storage.py`): the aggregates,
+  the `ref-*.json` directories, `metadata.json` and the raw `events/*`. The backfill
+  reads those events first and is not recorded as done if the storage cannot be read,
+  so nothing is deleted that was not replayed.
 - The EventService log stays the source of truth and keeps its own retention (the
   PostgreSQL adapter archives after 7 days); the 45-day window is the Nexus raw table's.
   The backfill cannot replay what the log already archived.
