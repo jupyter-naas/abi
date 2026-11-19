@@ -41,6 +41,8 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary impor
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary.workspaces__primary_adapter__FastAPI import (  # noqa: E501
     router as workspaces_router,
 )
+from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import get_people_service
+from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_testing import team_people
 from naas_abi_core.engine.call_context import (
     CallContext,
     Principal,
@@ -82,12 +84,10 @@ async def api(team, nexus_db, monkeypatch):
         )
         await db.commit()
 
-    # Rate limits and the notice mail live elsewhere: out of scope here.
+    # Rate limits live elsewhere: out of scope here. The people service (accounts,
+    # mail) is the in-memory one, which grants through IAM as the caller.
     async def no_limit(*_args, **_kwargs) -> None:
         return None
-
-    async def no_mail(*_args, **_kwargs) -> bool:
-        return False
 
     async def no_seeding(**_kwargs) -> None:
         return None
@@ -95,7 +95,7 @@ async def api(team, nexus_db, monkeypatch):
     monkeypatch.setattr(workspaces_module, "seed_workspace_agents", no_seeding)
     for module in (workspaces_module, organizations_module):
         monkeypatch.setattr(module, "check_rate_limit", no_limit)
-        monkeypatch.setattr(module, "send_added_notice", no_mail)
+        monkeypatch.setattr(module, "check_invitation_mail_quota", no_limit)
 
     app = FastAPI()
     register_service_exception_handlers(app)  # as main.py does
@@ -122,6 +122,8 @@ async def api(team, nexus_db, monkeypatch):
             await db.commit()
 
     app.dependency_overrides[get_db] = session
+    people = team_people(USERS)
+    app.dependency_overrides[get_people_service] = lambda: people
     app.dependency_overrides[workspaces_module.get_service_registry] = lambda: SimpleNamespace(
         agents=None
     )
@@ -596,3 +598,19 @@ async def test_the_member_lists_name_each_members_iam_principal(api, team) -> No
     assert members and org_members
     for row in [*members, *org_members]:
         assert row["principal_id"] == team.principal(row["user_id"]) != row["user_id"]
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_admin_searches_people_but_never_lists_the_org(api, team) -> None:
+    """The org's directory stays its admins' (``ListOrganizationMembers``); a
+    workspace admin only finds people of it to add (``InviteWorkspaceMember``)."""
+    team.grant("bob", "admin", WS)
+    async with api("bob") as http:
+        assert (await http.get("/api/organizations/org-1/members")).status_code == 403
+        found = await http.get("/api/workspaces/ws-1/members/candidates", params={"q": "st"})
+        assert found.status_code == 200, found.text
+    for user in ("member", "viewer", "stranger"):
+        async with api(user) as http:
+            refused = await http.get("/api/workspaces/ws-1/members/candidates", params={"q": "st"})
+            assert refused.status_code in (403, 404), user
+            assert (await http.get("/api/organizations/org-1/members")).status_code == 403, user

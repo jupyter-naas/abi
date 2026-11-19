@@ -62,7 +62,8 @@ class NexusUser:
 class OrganizationRole:
     id: str
     name: str
-    role: str
+    # None: linked through one of the organization's workspaces only.
+    role: str | None
 
 
 @dataclass(frozen=True)

@@ -60,6 +60,10 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.primary.or
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary.workspaces__primary_adapter__FastAPI import (  # noqa: E501
     router as workspaces_router,
 )
+from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import (
+    NEEDS_PEOPLE_SERVICE,
+    people_service_wired,
+)
 from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.email.adapters.secondary.FilesystemAdapter import (
     FilesystemAdapter,
@@ -83,6 +87,9 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 pytest.importorskip("naas_abi_idp")
 
+needs_people_service = pytest.mark.skipif(
+    not people_service_wired(), reason=NEEDS_PEOPLE_SERVICE
+)
 API = "https://testserver"
 WEB = "https://web.test"
 CALLBACK = f"{API}/api/auth/oidc/callback"
@@ -289,6 +296,7 @@ async def alice(nexus, idp):
 
 
 @pytest.mark.asyncio
+@needs_people_service
 async def test_the_rfc_demo_invite_bob_and_he_signs_in_a_member_of_w(nexus, idp, mail, alice):
     _, iam, sessions = nexus
 
@@ -389,6 +397,7 @@ async def sign_in_as(idp, email: str):
     return await sign_in(idp, TestUser(subject=found.id, email=email, login=email))
 
 
+@needs_people_service
 class TestProviderManagedInTheProvider:
     """``provisioning: none``: the invitation is a pending grant only."""
 
@@ -435,6 +444,7 @@ class TestProviderManagedInTheProvider:
 
 
 @pytest.mark.asyncio
+@needs_people_service
 async def test_only_admins_invite_list_and_revoke(nexus, idp, alice):
     _, _, sessions = nexus
     invited = (await invite_bob(alice)).json()["invitation"]
@@ -468,6 +478,7 @@ async def test_only_admins_invite_list_and_revoke(nexus, idp, alice):
 
 
 @pytest.mark.asyncio
+@needs_people_service
 async def test_a_revoked_invitation_grants_nothing(nexus, idp, mail, alice):
     _, iam, sessions = nexus
     invited = (await invite_bob(alice)).json()["invitation"]
@@ -488,6 +499,7 @@ async def test_a_revoked_invitation_grants_nothing(nexus, idp, mail, alice):
 
 
 @pytest.mark.asyncio
+@needs_people_service
 async def test_inviting_to_a_workspace_alone(nexus, idp, alice):
     _, iam, sessions = nexus
     result = await alice.post(
@@ -504,12 +516,14 @@ async def test_inviting_to_a_workspace_alone(nexus, idp, alice):
 
 
 @pytest.mark.asyncio
+@needs_people_service
 async def test_a_workspace_of_another_organization_is_refused(nexus, alice):
     refused = await invite_bob(alice, workspace_id="ws-elsewhere")
     assert refused.status_code == 400
 
 
 @pytest.mark.asyncio
+@needs_people_service
 async def test_an_unknown_provider_is_refused_and_nothing_is_made(nexus, idp, alice):
     _, iam, _ = nexus
     refused = await invite_bob(alice, provider="nope")
@@ -520,6 +534,7 @@ async def test_an_unknown_provider_is_refused_and_nothing_is_made(nexus, idp, al
 
 
 @pytest.mark.asyncio
+@needs_people_service
 async def test_someone_who_already_has_an_account_is_added_as_before(nexus, idp, alice):
     _, _, sessions = nexus
     async with sessions() as db:
@@ -585,6 +600,7 @@ async def test_an_idp_group_is_bound_to_a_role_and_its_members_arrive_with_it(ne
 
 
 @pytest.mark.asyncio
+@needs_people_service
 async def test_a_provider_that_cannot_make_the_person_leaves_nothing_behind(nexus, idp, alice):
     _, iam, sessions = nexus
     from naas_abi_core.services.identity.IdentityPorts import ProviderUnavailableError
@@ -606,6 +622,7 @@ async def test_a_provider_that_cannot_make_the_person_leaves_nothing_behind(nexu
 
 
 @pytest.mark.asyncio
+@needs_people_service
 async def test_an_admin_cannot_invite_an_owner_but_an_owner_can(nexus, idp, alice):
     _, iam, sessions = nexus
     carol_user = idp.create_user("carol@example.com")
@@ -638,6 +655,7 @@ async def test_an_admin_cannot_invite_an_owner_but_an_owner_can(nexus, idp, alic
 
 
 @pytest.mark.asyncio
+@needs_people_service
 async def test_two_workspace_invitations_of_one_person_survive_one_revoke(nexus, idp, alice):
     _, iam, sessions = nexus
     async with sessions() as db:
@@ -700,6 +718,7 @@ async def _invite(carol, org_id: str, email: str):
 
 
 @pytest.mark.asyncio
+@needs_people_service
 async def test_an_organization_admins_invitation_makes_an_account_they_sign_in_with(
     nexus, idp, mail, alice
 ):
@@ -726,6 +745,7 @@ async def test_an_organization_admins_invitation_makes_an_account_they_sign_in_w
 
 
 @pytest.mark.asyncio
+@needs_people_service
 async def test_a_workspace_owners_invitation_makes_the_account(nexus, idp, alice):
     owner = await sign_in(idp, idp.create_user("wowner@example.com"))
     me = (await owner.get("/api/auth/me")).json()
@@ -770,6 +790,7 @@ async def _workspace_admin(idp, email="wadmin@example.com"):
 
 
 @pytest.mark.asyncio
+@needs_people_service
 async def test_a_workspace_admin_cannot_resend_or_withdraw_an_org_invitation(nexus, idp, alice):
     _, iam, _ = nexus
     invited = (await invite_bob(alice)).json()["invitation"]  # org role + workspace role
@@ -787,6 +808,7 @@ async def test_a_workspace_admin_cannot_resend_or_withdraw_an_org_invitation(nex
 
 
 @pytest.mark.asyncio
+@needs_people_service
 async def test_a_workspace_admin_re_inviting_leaves_the_org_invitation_alone(nexus, idp, alice):
     _, iam, _ = nexus
     invited = (await invite_bob(alice)).json()["invitation"]

@@ -15,6 +15,7 @@ from .nexus_client import (
     print_json,
     print_table,
 )
+from .org import invite_body
 
 _NEXUS_OIDC = "naas_abi.apps.nexus.apps.api.app.services.oidc"
 
@@ -51,6 +52,12 @@ def user() -> None:
     type=click.Choice(["admin", "member", "viewer"], case_sensitive=False),
     help="Workspace role when inviting via --org --workspace together.",
 )
+@click.option(
+    "--no-org-role",
+    is_flag=True,
+    default=False,
+    help="With --org --workspace: workspace access only, no role in the organization.",
+)
 @common_api_options
 def user_invite(
     member_email: str,
@@ -59,15 +66,17 @@ def user_invite(
     organization_id: str | None,
     role: str,
     workspace_role: str,
+    no_org_role: bool,
     api_url: str,
     token: str | None,
     dry_run: bool,
 ) -> None:
-    """Invite a user to an org and/or workspace.
+    """Add a user to an org and/or workspace.
 
-    The identity provider makes the person exist and Nexus emails them a link to
-    sign in (the provider mails the code). Prefer --org (optionally with
-    --workspace). Workspace-only invite remains supported.
+    Their platform account is created (the identity provider makes the person
+    exist and Nexus emails them a link to sign in), or the account their email
+    already has is linked: never a second one. Prefer --org (optionally with
+    --workspace). A workspace-only invite grants no organization role.
     """
     if not organization_id and not workspace_id:
         raise click.ClickException("Provide --org and/or --workspace.")
@@ -81,12 +90,13 @@ def user_invite(
             raise click.ClickException(
                 "--role for --org must be owner, admin, or member."
             )
-        body: dict[str, Any] = {"email": member_email, "role": org_role}
-        if member_name:
-            body["name"] = member_name
-        if workspace_id:
-            body["workspace_id"] = workspace_id
-            body["workspace_role"] = workspace_role.lower()
+        body: dict[str, Any] = invite_body(
+            member_email,
+            member_name,
+            role=None if no_org_role else org_role,
+            workspace_id=workspace_id,
+            workspace_role=workspace_role,
+        )
         if dry_run:
             results.append({"method": "POST", "path": path, "body": body})
         else:
@@ -156,7 +166,7 @@ def user_list(
         return
     print_table(
         rows,
-        ["user_id", "email", "name", "role"],
+        ["user_id", "email", "name", "role", "source", "status"],
         title="Users",
     )
 

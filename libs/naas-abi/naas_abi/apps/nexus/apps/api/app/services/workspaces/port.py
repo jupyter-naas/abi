@@ -104,6 +104,8 @@ class WorkspaceMemberRecord:
     # Their IAM principal (``Member.principal_id``): an account linked from the old
     # login has another id in IAM than in Nexus. What the access pages link to.
     principal_id: str | None = None
+    # "invited" until their first sign-in, then "active" (the users row).
+    status: str = "active"
 
 
 @dataclass
@@ -111,6 +113,21 @@ class UserRecord:
     id: str
     email: str
     name: str | None = None
+    avatar: str | None = None
+    status: str = "active"
+
+
+@dataclass(frozen=True)
+class WorkspaceCandidateRecord:
+    """Someone of the workspace's organization who may be added to it."""
+
+    user_id: str
+    email: str
+    name: str | None
+    avatar: str | None
+    status: str
+    # Their organization role; None: workspace access only (elsewhere in the org).
+    org_role: str | None
 
 
 @dataclass

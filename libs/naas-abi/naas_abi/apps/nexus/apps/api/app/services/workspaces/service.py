@@ -14,6 +14,7 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
 from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
     MEMBERSHIPS,
     ROLE_NAMES,
+    DirectoryEntry,
     Memberships,
     best,
 )
@@ -23,10 +24,17 @@ from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
     org_of,
     workspace_container,
 )
+from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import (
+    MAX_CANDIDATES,
+    MIN_QUERY,
+    PeopleServicePort,
+    people_status,
+)
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
     InferenceServerCreateInput,
     InferenceServerRecord,
     InferenceServerUpdateInput,
+    WorkspaceCandidateRecord,
     WorkspaceCreateInput,
     WorkspaceMemberRecord,
     WorkspacePermissionPort,
@@ -259,6 +267,7 @@ class WorkspaceService:
                 name=users[member.user_id].name,
                 created_at=member.since,
                 principal_id=member.principal_id,
+                status=users[member.user_id].status,
             )
             for member in members
             if member.user_id in users
@@ -275,6 +284,7 @@ class WorkspaceService:
                     created_at=None,
                     source="organization",
                     principal_id=member.principal_id,
+                    status=users[member.user_id].status,
                 )
                 for member in inherited
                 if member.user_id in users
@@ -283,31 +293,55 @@ class WorkspaceService:
         )
         return records
 
-    async def invite_workspace_member(
-        self, workspace_id: str, email: str, role: str, *, by: Any
-    ) -> WorkspaceMemberRecord | None:
-        """Give an existing user by email a role. Someone with no account is
-        invited through an identity provider instead (``services/invites``).
-        ``MembershipDenied`` when IAM
-        refuses ``by`` this role (granting ``owner`` is the owner's)."""
-        normalized_email = email.lower().strip()
-        user = await self.adapter.get_user_by_email(email=normalized_email)
-        if user is None:
-            return None
+    async def directory_entry(self, workspace_id: str, user_id: str) -> DirectoryEntry | None:
+        """The user's place in the directory of the workspace's organization; None
+        when they are not in it, or the workspace belongs to no organization."""
         scope = await self._scope(workspace_id)
-        if scope is None:
+        org = org_of(scope) if scope is not None else None
+        if org is None:
             return None
-        if await self.memberships.role_at(user.id, scope) is not None:
-            raise WorkspaceMemberAlreadyExistsError(workspace_id=workspace_id, user_id=user.id)
-        await self.memberships.grant(user.id, role, scope, by=by)
-        return WorkspaceMemberRecord(
-            id=_member_id(workspace_id, user.id),
-            workspace_id=workspace_id,
-            user_id=user.id,
-            role=role,
-            email=user.email,
-            name=user.name,
-        )
+        directory = await self.memberships.org_directory(org)
+        return next((e for e in directory if e.user_id == user_id), None)
+
+    async def member_candidates(
+        self, workspace_id: str, q: str, *, people: PeopleServicePort, limit: int = 10
+    ) -> list[WorkspaceCandidateRecord]:
+        """Who of the workspace's organization may be added to it, matching ``q``
+        by name or email: the org directory, minus whoever holds a role in the
+        workspace or reaches it through their org role (owners, admins). Nothing
+        for fewer than ``MIN_QUERY`` characters or a workspace in no organization;
+        at most ``MAX_CANDIDATES``."""
+        q = q.strip()
+        if len(q) < MIN_QUERY:
+            return []
+        scope = await self._scope(workspace_id)
+        org = org_of(scope) if scope is not None else None
+        if org is None:
+            return []
+        among = {
+            entry.user_id: entry
+            for entry in await self.memberships.org_directory(org)
+            if workspace_id not in entry.workspace_ids and not entry.org_wide
+        }
+        if not among:
+            return []
+        limit = min(max(limit, 1), MAX_CANDIDATES)
+        # Only the directory is ever shown, whatever the search answers.
+        found = [
+            u for u in await people.search(q=q, among=set(among), limit=limit) if u.id in among
+        ][:limit]
+        users = await self.adapter.get_users_by_ids([u.id for u in found])
+        return [
+            WorkspaceCandidateRecord(
+                user_id=u.id,
+                email=u.email,
+                name=u.name,
+                avatar=users[u.id].avatar if u.id in users else None,
+                status=people_status(u.status),
+                org_role=among[u.id].role,
+            )
+            for u in found
+        ]
 
     async def remove_workspace_member(self, workspace_id: str, user_id: str, *, by: Any) -> bool:
         scope = await self._scope(workspace_id)

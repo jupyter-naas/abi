@@ -78,6 +78,26 @@ class Member:
     since: datetime | None = None
 
 
+@dataclass(frozen=True)
+class DirectoryEntry:
+    """One person of an organization's directory: who holds a role at the
+    organization's container, below it, or at one of its workspaces' containers.
+
+    ``role``: their organization role (None: workspace access only, which grants
+    nothing in the organization). ``source``: ``"organization"`` when they hold a
+    role at (or below) the organization, else ``"workspace"``. ``workspace_ids``:
+    the workspaces of the organization they hold a role in directly. ``org_wide``:
+    they reach every workspace through their org role (an owner or admin)."""
+
+    user_id: str
+    principal_id: str
+    role: str | None
+    source: str
+    workspace_ids: tuple[str, ...] = ()
+    org_wide: bool = False
+    since: datetime | None = None
+
+
 def wide_scope(scope: str) -> str | None:
     """The scope below an organization (``<org container>/*``) of the
     organization's own container; None for any other scope."""
@@ -103,6 +123,63 @@ class UnknownUserError(ValueError):
     def __init__(self, user_id: str) -> None:
         super().__init__(f"{user_id} is not a known user")
         self.user_id = user_id
+
+
+def directories_of(by_scope: dict[str, list[Member]]) -> dict[str, list[DirectoryEntry]]:
+    """Each organization's directory, from who holds what at each container
+    (``Memberships.members_by_scope``): the holders at the organization's container
+    or below it, and at each of its workspaces' containers. A workspace in no
+    organization belongs to no directory."""
+    org_roles: dict[tuple[str, str], Member] = {}
+    wide: dict[tuple[str, str], Member] = {}
+    workspaces: dict[tuple[str, str], set[str]] = {}
+    seen: dict[tuple[str, str], Member] = {}
+    for scope, members in by_scope.items():
+        org = org_of(scope)
+        if org is None:
+            continue
+        workspace = workspace_of(scope) if is_workspace_container(scope) else None
+        if is_org_container(scope):
+            target = org_roles
+        elif scope == org_below(org):
+            target = wide
+        elif workspace is None:
+            continue  # a module's container in the organization: not a membership
+        else:
+            target = {}
+        for member in members:
+            key = (org, member.user_id)
+            if workspace is not None:
+                workspaces.setdefault(key, set()).add(workspace)
+            else:
+                target[key] = member
+            first = seen.get(key)
+            if first is None or (
+                member.since is not None and (first.since is None or member.since < first.since)
+            ):
+                seen[key] = member
+    found: dict[str, list[DirectoryEntry]] = {}
+    for key, earliest in seen.items():
+        org, user_id = key
+        held = org_roles.get(key) or wide.get(key)
+        found.setdefault(org, []).append(
+            DirectoryEntry(
+                user_id=user_id,
+                principal_id=earliest.principal_id,
+                role=held.role if held is not None else None,
+                source="organization" if held is not None else "workspace",
+                workspace_ids=tuple(sorted(workspaces.get(key, ()))),
+                org_wide=key in wide,
+                since=earliest.since,
+            )
+        )
+    return {
+        org: sorted(
+            entries,
+            key=lambda e: (e.role is None, -_RANK[e.role] if e.role else 0, e.user_id),
+        )
+        for org, entries in found.items()
+    }
 
 
 class Memberships:
@@ -208,18 +285,23 @@ class Memberships:
         """Who holds a role at ``scope``, each with the highest they hold."""
         return await self._run(lambda iam: self.members_by_scope(iam, scope).get(scope, []))
 
-    def members_by_scope(self, iam: Any, scope: str | None = None) -> dict[str, list[Member]]:
-        """Who holds a role at each container (at ``scope`` alone when given), each
-        with the highest they hold there, in one pass over the roles' attachments: the
-        one reading of who holds what, for ``members`` and the default groups
-        (``container_defaults``). A principal Nexus cannot name is left out. In IAM's
-        thread (``iam`` is the service)."""
+    def members_by_scope(
+        self, iam: Any, scope: str | None = None, *, org: str | None = None
+    ) -> dict[str, list[Member]]:
+        """Who holds a role at each container (at ``scope`` alone when given, at the
+        containers of ``org`` alone when given), each with the highest they hold
+        there, in one pass over the roles' attachments: the one reading of who holds
+        what, for ``members`` and the default groups (``container_defaults``). A
+        principal Nexus cannot name is left out. In IAM's thread (``iam`` is the
+        service)."""
         held: dict[tuple[str, str], list[str]] = {}
         since: dict[tuple[str, str], datetime] = {}
         for role, policy in _POLICY_OF.items():
             for attachment in iam.list_attachments(policy_id=policy):
                 if attachment.scope is None or (scope is not None and attachment.scope != scope):
                     continue
+                if org is not None and org_of(attachment.scope) != org:
+                    continue  # named only for the org asked for: each name is a read
                 key = (attachment.scope, attachment.principal_id)
                 held.setdefault(key, []).append(role)
                 if attachment.created_at is not None:
@@ -244,6 +326,19 @@ class Memberships:
             where: sorted(members, key=lambda m: (-_RANK[m.role], m.user_id))
             for where, members in found.items()
         }
+
+    async def org_directory(self, org_id: str) -> list[DirectoryEntry]:
+        """The organization's directory (``DirectoryEntry``): its members, then the
+        people who hold a role only in one of its workspaces. Derived from the
+        attachments of the organization's containers, in one pass."""
+        return await self._run(
+            lambda iam: directories_of(self.members_by_scope(iam, org=org_id)).get(org_id, [])
+        )
+
+    async def org_directories(self) -> dict[str, list[DirectoryEntry]]:
+        """Every organization's directory, by org id, in one pass over the roles'
+        attachments (``members_by_scope``)."""
+        return await self._run(lambda iam: directories_of(self.members_by_scope(iam)))
 
     async def platform_admins(self) -> set[str]:
         """The users who hold ``builtin.platform_admin``, by the id Nexus names them."""
@@ -565,6 +660,7 @@ MEMBERSHIPS = Memberships()
 __all__ = [
     "MEMBERSHIPS",
     "ROLE_NAMES",
+    "DirectoryEntry",
     "Member",
     "MembershipDenied",
     "Memberships",

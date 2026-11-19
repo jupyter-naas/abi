@@ -10,7 +10,6 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.organizations.service import (
     OrganizationDomainAlreadyExistsError,
-    OrganizationMemberAlreadyExistsError,
     OrganizationPermissionError,
     OrganizationService,
     OrganizationSlugAlreadyExistsError,
@@ -45,25 +44,6 @@ async def test_create_organization_raises_when_slug_exists() -> None:
             slug="my-org",
             owner_id="user-1",
             now=datetime.utcnow(),
-        )
-
-
-@pytest.mark.asyncio
-async def test_invite_member_raises_when_member_exists(team) -> None:
-    adapter = SimpleNamespace(
-        get_user_by_email=AsyncMock(
-            return_value=SimpleNamespace(id="viewer", email="v@x.io", name="V")
-        ),
-    )
-    service = OrganizationService(adapter=adapter)
-
-    with pytest.raises(OrganizationMemberAlreadyExistsError):
-        await service.invite_member(
-            org_id="org-1",
-            email="user@example.com",
-            role="member",
-            now=datetime.utcnow(),
-            by="admin",
         )
 
 
@@ -221,3 +201,81 @@ async def test_every_membership_of_the_platform_is_read_from_iam(team) -> None:
         ("owner", "Acme", "owner"),
         ("viewer", "Acme", "viewer"),
     ]
+
+
+def _directory_adapter(**extra):
+    from naas_abi.apps.nexus.apps.api.app.services.organizations.port import UserRecord
+
+    return SimpleNamespace(
+        get_users_by_ids=AsyncMock(
+            side_effect=lambda ids: {
+                i: UserRecord(id=i, email=f"{i}@x.io", name=i.title(), status="active")
+                for i in ids
+            }
+        ),
+        list_organization_member_profiles=AsyncMock(return_value={}),
+        **extra,
+    )
+
+
+@pytest.mark.asyncio
+async def test_the_member_list_is_the_derived_org_directory(team) -> None:
+    """Someone given a role only in one of the org's workspaces is listed, with no
+    org role: linked to the organization, granted nothing there."""
+    team.grant("wsonly", "viewer", team.workspace("org-1", "ws-1"))
+    team.grant("elsewhere", "member", team.workspace("org-2", "ws-9"))
+    service = OrganizationService(adapter=_directory_adapter())
+
+    members = {m.user_id: m for m in await service.list_members("org-1")}
+
+    assert set(members) == {"owner", "admin", "member", "viewer", "wsonly"}
+    assert (members["wsonly"].role, members["wsonly"].source) == (None, "workspace")
+    assert (members["admin"].role, members["admin"].source) == ("admin", "organization")
+    assert members["wsonly"].status == "active"
+
+
+@pytest.mark.asyncio
+async def test_a_member_is_invited_until_their_first_sign_in(team) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.organizations.port import UserRecord
+
+    adapter = _directory_adapter()
+    adapter.get_users_by_ids = AsyncMock(
+        side_effect=lambda ids: {
+            i: UserRecord(id=i, email=f"{i}@x.io", status="invited" if i == "viewer" else "active")
+            for i in ids
+        }
+    )
+    service = OrganizationService(adapter=adapter)
+
+    statuses = {m.user_id: m.status for m in await service.list_members("org-1")}
+
+    assert statuses["viewer"] == "invited" and statuses["owner"] == "active"
+
+
+@pytest.mark.asyncio
+async def test_platform_memberships_include_workspace_only_links(team) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.organizations.port import OrganizationRecord
+
+    team.grant("wsonly", "member", team.workspace("org-1", "ws-2"))
+    adapter = SimpleNamespace(
+        list_all_organizations=AsyncMock(
+            return_value=[OrganizationRecord(id="org-1", name="Acme", slug="acme", owner_id="o")]
+        )
+    )
+    service = OrganizationService(adapter=adapter)
+
+    memberships = {m.user_id: m.role for m in await service.list_all_memberships()}
+
+    assert memberships["wsonly"] is None
+    assert memberships["admin"] == "admin"
+
+
+@pytest.mark.asyncio
+async def test_an_org_role_is_given_to_someone_with_workspace_access_only(team) -> None:
+    team.grant("wsonly", "viewer", team.workspace("org-1", "ws-1"))
+    service = OrganizationService(adapter=_directory_adapter())
+
+    member = await service.update_member_role("org-1", "wsonly", "member", by="admin")
+
+    assert member is not None and (member.role, member.source) == ("member", "organization")
+    assert await service.update_member_role("org-1", "stranger", "member", by="admin") is None

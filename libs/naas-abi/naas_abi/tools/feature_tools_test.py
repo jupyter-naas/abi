@@ -223,8 +223,10 @@ def test_membership_tools_pass_the_asking_user_and_report_iams_refusals(
     from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import (
         MembershipDenied,
     )
-    from naas_abi.apps.nexus.apps.api.app.services.workspaces.port import (
-        WorkspaceMemberRecord,
+    from naas_abi.apps.nexus.apps.api.app.services.workspaces.people_port import (
+        CreateOrLinkResult,
+        PlatformUser,
+        UserStatus,
     )
     from naas_abi.tools import nexus_admin_tools
 
@@ -248,29 +250,34 @@ def test_membership_tools_pass_the_asking_user_and_report_iams_refusals(
             _record("update", by)
             return True
 
-        async def invite_workspace_member(self, workspace_id, email, role, *, by):
-            _record("invite", by)
-            return WorkspaceMemberRecord("m1", workspace_id, "user-9", role)
+        async def get_workspace(self, workspace_id):
+            return SimpleNamespace(id=workspace_id, organization_id="org-1")
+
+    class _People:
+        async def create_or_link(self, *, by, grants, **_kwargs):
+            _record("invite", by.id)
+            assert [(g.scope, g.role) for g in grants] == [("workspace", "member")]
+            return CreateOrLinkResult(
+                user=PlatformUser("user-9", "a@b.co", None, UserStatus.INVITED, "builtin"),
+                created=True,
+                provisioned=True,
+                sign_in_email_sent=True,
+                warning=None,
+            )
 
     class _Auth:
-        async def ensure_user_for_invite(self, email, name=None):
-            return (None, False)
+        async def get_user(self, user_id):
+            return SimpleNamespace(id=user_id, email="me@b.co", name="Me")
 
     async def _with_db(fn):
         return await fn(object())
 
-    async def _no_mail(*_args, **_kwargs):
-        return False
-
     monkeypatch.setattr(
         nexus_admin_tools, "_workspace_service", lambda db: _Workspaces()
     )
+    monkeypatch.setattr(nexus_admin_tools, "_people_service", lambda db: _People())
     monkeypatch.setattr(nexus_admin_tools, "_auth_service", lambda db: _Auth())
     monkeypatch.setattr(nexus_admin_tools, "_with_db", _with_db)
-    monkeypatch.setattr(
-        "naas_abi.apps.nexus.apps.api.app.services.invites.sign_in_email.issue_and_send_invite_sign_in",
-        _no_mail,
-    )
     tools = {t.name: t for t in nexus_admin_tools.nexus_admin_tools()}
 
     assert (
@@ -285,7 +292,7 @@ def test_membership_tools_pass_the_asking_user_and_report_iams_refusals(
     )
     assert (
         tools["invite_workspace_member"].invoke({"email": "a@b.co"})["status"]
-        == "invited"
+        == "added"
     )
     assert seen == [("remove", "user-1"), ("update", "user-1"), ("invite", "user-1")]
 

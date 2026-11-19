@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import urllib.parse
 from typing import Any
 
 import click
@@ -199,14 +200,62 @@ def workspace_members_list(
         return
     print_table(
         rows,
-        ["user_id", "email", "name", "role"],
+        ["user_id", "email", "name", "role", "source", "status"],
         title=f"Members of {workspace_id}",
+    )
+
+
+@workspace_members.command("search")
+@click.option("--workspace", "workspace_id", required=True, help="Workspace id (ws-...).")
+@click.option("--q", "query", required=True, help="Name or email (at least 2 characters).")
+@click.option("--limit", default=10, show_default=True, type=click.IntRange(1, 20))
+@common_api_options
+def workspace_members_search(
+    workspace_id: str,
+    query: str,
+    limit: int,
+    api_url: str,
+    token: str | None,
+    dry_run: bool,
+) -> None:
+    """Find people of the workspace's organization to add (not already in it)."""
+    path = (
+        f"/api/workspaces/{workspace_id}/members/candidates?"
+        f"{urllib.parse.urlencode({'q': query, 'limit': limit})}"
+    )
+    if dry_run:
+        print_json({"method": "GET", "path": path})
+        return
+    client = build_client(api_url=api_url, token=token)
+    try:
+        found = client.get(path)
+    except NexusApiError as exc:
+        raise click.ClickException(str(exc)) from exc
+    rows = found.get("items") if isinstance(found, dict) else None
+    if not isinstance(rows, list):
+        print_json(found)
+        return
+    print_table(
+        rows,
+        ["user_id", "email", "name", "org_role", "status"],
+        title=f"People to add to {workspace_id}",
     )
 
 
 @workspace_members.command("add")
 @click.option("--workspace", "workspace_id", required=True, help="Workspace id (ws-...).")
-@click.option("--email", "member_email", required=True, help="Invitee email (created if missing).")
+@click.option(
+    "--user-id",
+    "member_user_id",
+    default=None,
+    help="Someone of the organization (see `members search`): added now and notified.",
+)
+@click.option(
+    "--email",
+    "member_email",
+    default=None,
+    help="Anyone else: their account is created, or the one of this email linked.",
+)
 @click.option("--name", "member_name", default=None, help="Display name when creating the user.")
 @click.option(
     "--role",
@@ -217,24 +266,55 @@ def workspace_members_list(
 @common_api_options
 def workspace_members_add(
     workspace_id: str,
-    member_email: str,
+    member_user_id: str | None,
+    member_email: str | None,
     member_name: str | None,
     role: str,
     api_url: str,
     token: str | None,
     dry_run: bool,
 ) -> None:
-    """Invite a user into a workspace (create-on-invite + sign-in email)."""
-    path = f"/api/workspaces/{workspace_id}/members/invite"
-    body: dict[str, Any] = {"email": member_email, "role": role.lower()}
-    if member_name:
-        body["name"] = member_name
+    """Add a user to a workspace, with the workspace role only (no org role)."""
+    if bool(member_user_id) == bool(member_email):
+        raise click.ClickException("Provide exactly one of --user-id or --email.")
+    body: dict[str, Any] = {"role": role.lower()}
+    if member_user_id:
+        path = f"/api/workspaces/{workspace_id}/members"
+        body["user_id"] = member_user_id
+    else:
+        path = f"/api/workspaces/{workspace_id}/members/invite"
+        body["email"] = member_email
+        if member_name:
+            body["name"] = member_name
     if dry_run:
         print_json({"method": "POST", "path": path, "body": body})
         return
     client = build_client(api_url=api_url, token=token)
     try:
         print_json(client.post(path, body))
+    except NexusApiError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
+@workspace_members.command("resend")
+@click.option("--workspace", "workspace_id", required=True, help="Workspace id (ws-...).")
+@click.option("--user-id", required=True, help="An invited member's user id.")
+@common_api_options
+def workspace_members_resend(
+    workspace_id: str,
+    user_id: str,
+    api_url: str,
+    token: str | None,
+    dry_run: bool,
+) -> None:
+    """Send an invited member their sign-in mail again."""
+    path = f"/api/workspaces/{workspace_id}/members/{user_id}/resend"
+    if dry_run:
+        print_json({"method": "POST", "path": path})
+        return
+    client = build_client(api_url=api_url, token=token)
+    try:
+        print_json(client.post(path))
     except NexusApiError as exc:
         raise click.ClickException(str(exc)) from exc
 

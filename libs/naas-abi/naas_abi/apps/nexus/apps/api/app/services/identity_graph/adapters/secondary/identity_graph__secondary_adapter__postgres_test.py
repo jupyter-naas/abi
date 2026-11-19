@@ -32,6 +32,8 @@ async def test_load_snapshot_reads_every_identity_table(tmp_path, nexus_iam) -> 
     # Roles are IAM's: the snapshot mirrors its attachments, not the old rows.
     nexus_iam.grant("usr-2", "admin", nexus_iam.org("org-1"))
     nexus_iam.grant("usr-2", "admin", nexus_iam.workspace("org-1", "ws-1"))
+    # A role in one of the org's workspaces only: linked to the org, no org role.
+    nexus_iam.grant("usr-3", "viewer", nexus_iam.workspace("org-1", "ws-1"))
     nexus_iam.platform_admin("usr-1")
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'nexus.db'}")
     async with engine.begin() as conn:
@@ -111,14 +113,16 @@ async def test_load_snapshot_reads_every_identity_table(tmp_path, nexus_iam) -> 
         "#0057B8",
     )
     assert [(m.organization_id, m.user_id, m.role) for m in snapshot.organization_memberships] == [
-        ("org-1", "usr-2", "admin")
+        ("org-1", "usr-2", "admin"),
+        ("org-1", "usr-3", None),
     ]
 
     [ws] = snapshot.workspaces
     assert (ws.id, ws.slug, ws.organization_id, ws.owner_id) == ("ws-1", "acme", "org-1", "usr-1")
     assert ws.settings["background_image_url"] == "bg.webp"
     assert [(m.workspace_id, m.user_id, m.role) for m in snapshot.memberships] == [
-        ("ws-1", "usr-2", "admin")
+        ("ws-1", "usr-2", "admin"),
+        ("ws-1", "usr-3", "viewer"),
     ]
     assert [(a.workspace_id, a.app_id) for a in snapshot.app_configs] == [
         ("ws-1", "external.acme:web")

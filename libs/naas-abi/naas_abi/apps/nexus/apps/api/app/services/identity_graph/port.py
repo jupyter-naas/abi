@@ -38,7 +38,8 @@ class IdentityOrganizationMembership:
     id: str
     organization_id: str
     user_id: str
-    role: str
+    # None: linked through one of the organization's workspaces, no org role.
+    role: str | None
     created_at: datetime.datetime
 
 

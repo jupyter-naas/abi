@@ -346,3 +346,74 @@ def test_migrate_refuses_a_provider_that_does_not_prove_addresses(
     assert result.exit_code != 0
     assert "built-in identity provider" in result.output
     assert identity.provisioned == []
+
+
+def _dry(runner: CliRunner, *args: str) -> dict[str, Any]:
+    result = runner.invoke(_main, [*args, "--dry-run"])
+    assert result.exit_code == 0, result.output
+    return json.loads(result.output)
+
+
+def test_workspace_members_search_asks_the_candidates(runner: CliRunner) -> None:
+    payload = _dry(
+        runner, "workspace", "members", "search", "--workspace", "ws-1", "--q", "Flo G"
+    )
+    assert payload == {
+        "method": "GET",
+        "path": "/api/workspaces/ws-1/members/candidates?q=Flo+G&limit=10",
+    }
+
+
+def test_workspace_members_add_by_user_id_adds_from_the_directory(runner: CliRunner) -> None:
+    payload = _dry(
+        runner, "workspace", "members", "add", "--workspace", "ws-1", "--user-id", "usr-9"
+    )
+    assert payload["path"] == "/api/workspaces/ws-1/members"
+    assert payload["body"] == {"role": "member", "user_id": "usr-9"}
+
+
+def test_workspace_members_add_needs_one_of_user_id_or_email(runner: CliRunner) -> None:
+    result = runner.invoke(
+        _main, ["workspace", "members", "add", "--workspace", "ws-1", "--dry-run"]
+    )
+    assert result.exit_code != 0
+    assert "exactly one of --user-id or --email" in result.output
+
+
+def test_members_resend(runner: CliRunner) -> None:
+    ws = _dry(runner, "workspace", "members", "resend", "--workspace", "ws-1", "--user-id", "u1")
+    org = _dry(runner, "org", "members", "resend", "--org", "org-1", "--user-id", "u1")
+    assert ws["path"] == "/api/workspaces/ws-1/members/u1/resend"
+    assert org["path"] == "/api/organizations/org-1/members/u1/resend"
+
+
+def test_org_invite_names_its_workspaces(runner: CliRunner) -> None:
+    payload = _dry(
+        runner,
+        "org",
+        "members",
+        "invite",
+        "--org",
+        "org-1",
+        "--email",
+        "a@b.co",
+        "--workspace",
+        "ws-1",
+        "--workspace-role",
+        "viewer",
+        "--no-org-role",
+    )
+    assert payload["body"] == {
+        "email": "a@b.co",
+        "role": None,
+        "workspaces": [{"id": "ws-1", "role": "viewer"}],
+    }
+
+
+def test_user_invite_without_an_org_role_needs_a_workspace(runner: CliRunner) -> None:
+    result = runner.invoke(
+        _main,
+        ["user", "invite", "--email", "a@b.co", "--org", "org-1", "--no-org-role", "--dry-run"],
+    )
+    assert result.exit_code != 0
+    assert "--no-org-role needs --workspace" in result.output
