@@ -78,7 +78,14 @@ modules:
       ontology_engineer_model: "gemma-4-26b-a4b-it"
       nexus_config:
         database_url: "postgresql+asyncpg://{{ secret.POSTGRES_USER }}:{{ secret.POSTGRES_PASSWORD }}@{{ secret.POSTGRES_HOST }}:{{ secret.POSTGRES_PORT }}/nexus"
-        # Nexus has no login of its own: people sign in at an identity provider
+{% endraw %}        feature_flags:
+          # The features this project has (`abi new project --features`), the
+          # same in every config. A policy grants each in a workspace, and an
+          # office agent (Slides, Sheets, ...) follows its feature.
+          enabled_features:
+{% for feature in features %}            - {{ feature }}
+{% endfor %}{% if include_coding %}            - code
+{% endif %}{% raw %}        # Nexus has no login of its own: people sign in at an identity provider
         # (`identity.providers`; the built-in one emails a sign-in code).
 
   # OpenRouter — the only AI provider enabled by default. One gateway key

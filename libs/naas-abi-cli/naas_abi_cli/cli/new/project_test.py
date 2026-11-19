@@ -12,6 +12,8 @@ from __future__ import annotations
 import importlib
 import subprocess
 
+import pytest
+
 from naas_abi_cli.cli.admin_credentials import configured_superadmins
 
 project = importlib.import_module("naas_abi_cli.cli.new.project")
@@ -501,6 +503,39 @@ def test_new_project_keeps_the_administrator_it_is_given(tmp_path, monkeypatch) 
         assert "admin@example.com" not in config, name
         assert config.count("ops@acme.dev") == 3, name
     assert "Admin: ops@acme.dev" in result.output
+
+
+def test_new_project_turns_on_the_features_it_is_given(tmp_path, monkeypatch) -> None:
+    import yaml
+
+    result = _invoke_new_project(
+        tmp_path, monkeypatch, "--features", " Chat,ontology,chat,graph "
+    )
+    assert result.exit_code == 0, result.output
+    for name in ("config.yaml", "config.local.yaml", "config.remote.yaml"):
+        text = (tmp_path / "demo" / name).read_text(encoding="utf-8")
+        # The secret references are YAML strings: the document parses as is.
+        abi = next(
+            m for m in yaml.safe_load(text)["modules"] if m["module"] == "naas_abi"
+        )
+        flags = abi["config"]["nexus_config"]["feature_flags"]
+        assert flags == {"enabled_features": ["chat", "ontology", "graph"]}, name
+
+
+@pytest.mark.parametrize(
+    ("features", "message"),
+    [
+        ("chat,slidez", "unknown feature 'slidez'"),
+        ("chat,code", "--with-coding"),
+        (" , ", "at least one feature"),
+    ],
+)
+def test_new_project_refuses_features_it_does_not_know(
+    tmp_path, monkeypatch, features: str, message: str
+) -> None:
+    result = _invoke_new_project(tmp_path, monkeypatch, "--features", features)
+    assert result.exit_code == 2
+    assert message in result.output
 
 
 def test_new_project_keeps_asking_for_an_email_address(tmp_path, monkeypatch) -> None:

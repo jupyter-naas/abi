@@ -29,6 +29,38 @@ from .utils import to_kebab_case, to_pascal_case, to_snake_case
 ABI_SUBMODULE_URL = "https://github.com/jupyter-naas/abi.git"
 ABI_SUBMODULE_PATH = ".abi"
 
+# The Nexus features a project can turn on (naas_abi ``FeatureKey``), less
+# "code", which comes with the coding stack (``--with-coding``).
+PROJECT_FEATURES = (
+    "chat",
+    "files",
+    "agents",
+    "skills",
+    "apps",
+    "marketplace",
+    "search",
+    "ontology",
+    "graph",
+    "datasets",
+    "maps",
+    "settings",
+    "slides",
+    "documents",
+    "sheets",
+    "tasks",
+)
+DEFAULT_PROJECT_FEATURES = (
+    "chat",
+    "files",
+    "agents",
+    "apps",
+    "marketplace",
+    "search",
+    "ontology",
+    "graph",
+    "settings",
+)
+
 # naas-abi-proto and naas-abi-sdk, which NATS mode needs, must be the revision
 # of the framework the project runs: a NATS project resolves all of them from
 # the `.abi` submodule or not at all. Falling back to PyPI could install a
@@ -146,6 +178,26 @@ def _admin_email(ctx: click.Context, param: click.Parameter, value: str) -> str:
     return value
 
 
+def _features(ctx: click.Context, param: click.Parameter, value: str) -> list[str]:
+    features: list[str] = []
+    for raw in (value or "").split(","):
+        feature = raw.strip().lower()
+        if not feature or feature in features:
+            continue
+        if feature == "code":
+            raise click.BadParameter(
+                '"code" comes with the coding stack: pass --with-coding instead'
+            )
+        if feature not in PROJECT_FEATURES:
+            raise click.BadParameter(
+                f"unknown feature {feature!r} (one of: {', '.join(PROJECT_FEATURES)})"
+            )
+        features.append(feature)
+    if not features:
+        raise click.BadParameter("name at least one feature")
+    return features
+
+
 def _print_next_steps(project_path: str, nats: bool, admin_email: str) -> None:
     """Report where the project landed and how to start it."""
     click.echo()
@@ -190,6 +242,17 @@ def _print_next_steps(project_path: str, nats: bool, admin_email: str) -> None:
     help=(
         "Include coding workspaces (Coder + Forgejo + Actions CI) in local "
         "deploy scaffolding (default: disabled)."
+    ),
+)
+@click.option(
+    "--features",
+    default=",".join(DEFAULT_PROJECT_FEATURES),
+    show_default=True,
+    callback=_features,
+    help=(
+        "Comma-separated Nexus features the project turns on, written to "
+        f"every config's enabled_features. One of: {', '.join(PROJECT_FEATURES)}. "
+        "An office agent (Slides, Sheets, ...) follows its feature."
     ),
 )
 @click.option(
@@ -252,6 +315,7 @@ def new_project(
     with_local_deploy: bool,
     with_headscale: bool,
     with_coding: bool,
+    features: list[str],
     with_abi_submodule: bool,
     abi_source: str,
     with_nats: bool,
@@ -312,6 +376,7 @@ def new_project(
             # When the coding stack is provisioned (`--with-coding`), the config
             # enables the "code" feature flag for workspace admins by default.
             "include_coding": with_coding,
+            "features": features,
             "use_local_abi_sources": abi_submodule_added,
             "nats": with_nats,
             "admin_email": admin_email,

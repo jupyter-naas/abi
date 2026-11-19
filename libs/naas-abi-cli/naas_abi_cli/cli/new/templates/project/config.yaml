@@ -81,7 +81,14 @@ modules:
       ontology_engineer_model: "gemma-4-26b-a4b-it"
       nexus_config:
         database_url: "sqlite+aiosqlite:///./storage/nexus.db"
-        # Nexus has no login of its own: people sign in at an identity provider
+{% endraw %}        feature_flags:
+          # The features this project has (`abi new project --features`), the
+          # same in every config. A policy grants each in a workspace, and an
+          # office agent (Slides, Sheets, ...) follows its feature.
+          enabled_features:
+{% for feature in features %}            - {{ feature }}
+{% endfor %}{% if include_coding %}            - code
+{% endif %}{% raw %}        # Nexus has no login of its own: people sign in at an identity provider
         # (`abi dev up` runs the built-in one, which emails a code; `abi dev code`
         # prints it). The admin below is made there when the API starts, and keeps
         # the roles configured here.

@@ -20,6 +20,7 @@ import pytest
 import yaml
 
 import naas_abi_cli
+from naas_abi_cli.cli.new.project import DEFAULT_PROJECT_FEATURES, PROJECT_FEATURES
 
 _TEMPLATES_DIR = os.path.join(
     os.path.dirname(naas_abi_cli.__file__), "cli/new/templates/project"
@@ -41,20 +42,57 @@ _BASE_VALUES = {
     "base_domain": "localhost",
     "public_web_host": "localhost",
     "public_api_host": "api.localhost",
+    "features": list(DEFAULT_PROJECT_FEATURES),
 }
 
 
-def _render(filename: str, *, include_coding: bool = False, nats: bool = True) -> dict:
+def _render(
+    filename: str,
+    *,
+    include_coding: bool = False,
+    nats: bool = True,
+    features: list[str] | None = None,
+) -> dict:
     src = open(os.path.join(_TEMPLATES_DIR, filename), encoding="utf-8").read()
-    rendered = jinja2.Template(src).render(
-        {**_BASE_VALUES, "include_coding": include_coding, "nats": nats}
-    )
+    values = {**_BASE_VALUES, "include_coding": include_coding, "nats": nats}
+    if features is not None:
+        values["features"] = features
+    rendered = jinja2.Template(src).render(values)
     return yaml.safe_load(rendered)  # also asserts the render is valid YAML
 
 
-def _render_feature_flags(*, include_coding: bool) -> dict:
-    doc = _render("config.local.yaml", include_coding=include_coding)
+def _render_feature_flags(
+    *,
+    include_coding: bool,
+    filename: str = "config.local.yaml",
+    features: list[str] | None = None,
+) -> dict:
+    doc = _render(filename, include_coding=include_coding, features=features)
     return doc["modules"][0]["config"]["nexus_config"]["feature_flags"]
+
+
+@pytest.mark.parametrize("filename", _ALL_CONFIGS)
+def test_every_config_turns_on_the_features_the_project_was_made_with(
+    filename: str,
+) -> None:
+    ff = _render_feature_flags(
+        include_coding=False, filename=filename, features=["chat", "ontology"]
+    )
+    assert ff == {"enabled_features": ["chat", "ontology"]}
+
+
+@pytest.mark.parametrize("filename", _ALL_CONFIGS)
+def test_every_config_has_the_default_features(filename: str) -> None:
+    ff = _render_feature_flags(include_coding=True, filename=filename)
+    assert ff["enabled_features"] == [*DEFAULT_PROJECT_FEATURES, "code"]
+
+
+def test_project_features_are_the_nexus_features_but_code() -> None:
+    from typing import get_args
+
+    naas_abi = pytest.importorskip("naas_abi")
+    assert set(PROJECT_FEATURES) == set(get_args(naas_abi.FeatureKey)) - {"code"}
+    assert set(DEFAULT_PROJECT_FEATURES) <= set(PROJECT_FEATURES)
 
 
 def _enabled_modules(doc: dict) -> set[str]:
