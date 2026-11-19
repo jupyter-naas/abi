@@ -17,7 +17,11 @@ from fastapi.staticfiles import StaticFiles
 from naas_abi.apps.nexus.apps.api.app.api.router import api_router
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.database import init_db
-from naas_abi.apps.nexus.apps.api.app.core.frame_headers import embed_csp, is_embeddable
+from naas_abi.apps.nexus.apps.api.app.core.frame_headers import (
+    embed_csp,
+    frame_ancestors,
+    is_embeddable,
+)
 from naas_abi.apps.nexus.apps.api.app.core.logging import configure_logging
 from naas_abi.apps.nexus.apps.api.app.core.user_content import harden_active_content
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat_ingestion_worker import (
@@ -774,35 +778,14 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             # to be embedded in iframes.
             embeddable = is_embeddable(path)
             if embeddable:
-                ancestors = ["'self'"]
-                frontend = str(getattr(settings, "frontend_url", "") or "").rstrip("/")
-                if frontend:
-                    ancestors.append(frontend)
-                for origin in getattr(request.app.state, "abi_cors_origins", ()):
-                    origin = str(origin).rstrip("/")
-                    if origin and origin not in ancestors:
-                        ancestors.append(origin)
-                # Allow the embedding page even when it is not listed in config
-                # (e.g. http://localhost:3042 during local dev). Never for a
-                # remote module's app: only Nexus may frame it.
-                presented = (
-                    ()
-                    if path.startswith("/app-remote/")
-                    else (request.headers.get("origin"), request.headers.get("referer"))
+                # Only configured origins may frame these paths, never the
+                # request's own Origin or Referer. Local dev origins arrive
+                # through the CORS origins (`abi dev up` sets
+                # ABI_CORS_EXTRA_ORIGINS).
+                ancestors = frame_ancestors(
+                    getattr(settings, "frontend_url", ""),
+                    getattr(request.app.state, "abi_cors_origins", ()),
                 )
-                for header in presented:
-                    if not header:
-                        continue
-                    try:
-                        from urllib.parse import urlparse
-
-                        parsed = urlparse(header)
-                        # "Origin: null" (a sandboxed page) names no origin.
-                        ref_origin = f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
-                        if parsed.netloc and ref_origin not in ancestors:
-                            ancestors.append(ref_origin)
-                    except Exception:
-                        pass
                 response.headers["Content-Security-Policy"] = embed_csp(
                     response.headers.get("Content-Security-Policy"), ancestors
                 )

@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import threading
 import uuid
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
+from typing import TypeVar
 
 from naas_abi_core.services.iam.catalog import ActionCatalog
 from naas_abi_core.services.iam.IAMPorts import (
@@ -29,7 +30,9 @@ from naas_abi_core.services.iam.IAMPorts import (
     PrincipalKind,
     PrincipalRecord,
     RevisionConflictError,
+    ScopedRow,
     SigningKeyRecord,
+    plan_scope_rewrite,
 )
 from naas_abi_core.services.iam.names import UNRESOLVED, as_container, within
 from naas_abi_core.services.iam.policy import PolicyDocument
@@ -596,7 +599,9 @@ class IAMStoreMemory(IAMStore):
                 "policies",
                 "groups",
                 "attachments",
+                "attachments_merged",
                 "pending_grants",
+                "pending_grants_merged",
                 "placements",
                 "keys",
                 "manifests",
@@ -636,16 +641,22 @@ class IAMStoreMemory(IAMStore):
                         principal, owner_scope=owner
                     )
                     counts["groups"] += 1
-            for attachment_id, attachment in list(self._attachments.items()):
-                scope = rewriter.scope(attachment.scope)
-                if scope != attachment.scope:
-                    self._attachments[attachment_id] = replace(attachment, scope=scope)
-                    counts["attachments"] += 1
-            for grant_id, grant in list(self._pending.items()):
-                scope = rewriter.scope(grant.scope)
-                if scope != grant.scope:
-                    self._pending[grant_id] = replace(grant, scope=scope)
-                    counts["pending_grants"] += 1
+            moved, merged = _rewrite_scopes(
+                self._attachments,
+                rewriter,
+                "attachment",
+                lambda a: (a.policy_id, a.principal_id),
+            )
+            counts["attachments"] += moved
+            counts["attachments_merged"] += merged
+            moved, merged = _rewrite_scopes(
+                self._pending,
+                rewriter,
+                "pending_grant",
+                lambda g: (g.provider, g.email, g.policy_id),
+            )
+            counts["pending_grants"] += moved
+            counts["pending_grants_merged"] += merged
             for key, placement in list(self._placements.items()):
                 if placement.container != UNRESOLVED:
                     continue
@@ -874,3 +885,26 @@ def _page(items: list, limit: int) -> Page:
     if len(items) > limit:
         return Page(items[:limit], items[limit - 1].id)
     return Page(items, None)
+
+
+_Scoped = TypeVar("_Scoped", Attachment, PendingGrant)
+
+
+def _rewrite_scopes(
+    rows: dict[str, _Scoped],
+    rewriter: NameRewriter,
+    kind: str,
+    key: Callable[[_Scoped], tuple[str, ...]],
+) -> tuple[int, int]:
+    """Rewrite the scope of each row, unique with ``key``, merging twins
+    (``plan_scope_rewrite``). How many were rewritten, and how many merged."""
+    plan = plan_scope_rewrite(
+        (ScopedRow(r.id, key(r), r.scope, r.created_at) for r in rows.values()),
+        rewriter.scope,
+    )
+    for dropped, kept in plan.merged.items():
+        del rows[dropped]
+        rewriter.merged(kind, dropped, kept)
+    for row_id, scope in plan.scopes.items():
+        rows[row_id] = replace(rows[row_id], scope=scope)
+    return len(plan.scopes), len(plan.merged)

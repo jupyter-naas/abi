@@ -898,7 +898,9 @@ def test_inlined_row_count_waits_for_a_write_on_a_sqlite_catalog(tmp_path):
     counts: list[int] = []
 
     with adapter._catalog_lock.exclusive():
-        reader = threading.Thread(target=lambda: counts.append(adapter.inlined_row_count("t")))
+        reader = threading.Thread(
+            target=lambda: counts.append(adapter.inlined_row_count("t"))
+        )
         reader.start()
         reader.join(timeout=0.3)
         assert reader.is_alive(), "inlined_row_count read the catalog during a write"
@@ -1052,7 +1054,10 @@ def _upserted_table(tmp_path, **options) -> DatasetSecondaryAdapterDuckLake:
     for day in range(6):
         adapter.write(
             "messages",
-            [{"id": n, "subject": f"day{day}-{n}"} for n in range(day * 10, day * 10 + 5)]
+            [
+                {"id": n, "subject": f"day{day}-{n}"}
+                for n in range(day * 10, day * 10 + 5)
+            ]
             + [{"id": 5000 + day, "subject": "new"}],
             mode="upsert",
         )
@@ -1099,12 +1104,18 @@ def test_clean_up_deletes_replaced_files_and_keeps_every_snapshot(
     adapter = _upserted_table(tmp_path)
     query = "SELECT count(*) AS n, max(subject) AS last FROM messages"
     history = {
-        snapshot.snapshot_id: adapter.query(query, snapshot_id=snapshot.snapshot_id).rows
+        snapshot.snapshot_id: adapter.query(
+            query, snapshot_id=snapshot.snapshot_id
+        ).rows
         for snapshot in adapter.list_snapshots()[2:]
     }
     adapter.compact("messages")
     compacted = _files(adapter, tmp_path / "datasets")
 
+    # A SQLite catalog keeps the schedule time as text and compares it as
+    # text: a grace reaching back to the day before (00:00-01:00 UTC) leaves
+    # every file of today, so the test runs without one.
+    monkeypatch.setattr(ducklake_module, "CLEANUP_GRACE", timedelta(0))
     dry = adapter.clean_up(dry_run=True)
     assert dry == {
         "dry_run": True,
@@ -1114,8 +1125,6 @@ def test_clean_up_deletes_replaced_files_and_keeps_every_snapshot(
     }
     assert _files(adapter, tmp_path / "datasets") == compacted
 
-    # A SQLite catalog does not honour the grace (local catalogs only).
-    monkeypatch.setattr(ducklake_module, "CLEANUP_GRACE", timedelta(0))
     report = adapter.clean_up()
 
     cleaned = _files(adapter, tmp_path / "datasets")
@@ -1150,7 +1159,10 @@ def test_clean_up_expires_snapshots_past_the_retention(tmp_path, monkeypatch):
 
 
 def test_maintenance_options_are_checked(tmp_path):
-    for options in ({"snapshot_retention_days": -1}, {"compaction_delete_threshold": 2}):
+    for options in (
+        {"snapshot_retention_days": -1},
+        {"compaction_delete_threshold": 2},
+    ):
         with pytest.raises(ValueError):
             DatasetSecondaryAdapterDuckLake(
                 catalog=f"sqlite:{tmp_path / 'datasets.sqlite'}",

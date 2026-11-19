@@ -73,7 +73,7 @@ from naas_abi_core.services.iam.names import (
     matches,
 )
 from naas_abi_core.services.iam.policy import MAX_PATTERNS, MAX_STATEMENTS
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from starlette.concurrency import run_in_threadpool
 
@@ -184,6 +184,13 @@ class LegacyNames(NameRewriter):
     workspaces: Mapping[str, str | None]
     catalogs: CatalogRegistry
     notes: list[str] = field(default_factory=list)
+    # Each pending grant the rewrite dropped onto the twin it merged into: the
+    # invitations that listed it list the twin (``remap_invitation_grants``).
+    grants_merged: dict[str, str] = field(default_factory=dict)
+
+    def merged(self, kind: str, dropped: str, kept: str) -> None:
+        if kind == "pending_grant":
+            self.grants_merged[dropped] = kept
 
     # -- containers ----------------------------------------------------------------
 
@@ -580,6 +587,8 @@ def _statement(
 class Report:
     counts: dict[str, int]
     notes: list[str]
+    # Pending grants merged into their twin: dropped id -> kept id.
+    grants_merged: dict[str, str] = field(default_factory=dict)
 
 
 async def recorded(db: AsyncSession, name: str) -> bool:
@@ -640,7 +649,109 @@ def rewrite(iam: Any, orgs: Sequence[str], workspaces: Mapping[str, str | None])
     with as_service_account("engine"):
         rewriter = LegacyNames(list(orgs), dict(workspaces), iam.catalogs)
         counts = iam.rewrite_names(rewriter)
-    return Report(counts, list(dict.fromkeys(rewriter.notes)))
+    return Report(counts, list(dict.fromkeys(rewriter.notes)), dict(rewriter.grants_merged))
+
+
+def pending_grants(iam: Any) -> list[Any]:
+    """Every pending grant IAM holds, as the engine."""
+    with as_service_account("engine"):
+        return list(iam.list_pending_grants())
+
+
+async def remap_invitation_grants(
+    db: AsyncSession, merged: Mapping[str, str], *, held: Sequence[Any]
+) -> int:
+    """List, on each Nexus invitation, the pending grant each one it listed was
+    merged into (``merged``), so revoking or renewing either invitation of two
+    twins withdraws only what is its own (``InvitationService._held_elsewhere``).
+
+    ``merged`` lives only in the start that rewrote the names: when that start
+    stopped before this commit, the next one finds nothing left to merge. So a
+    pending invitation that lists a grant IAM no longer holds (``held``: every
+    pending grant IAM holds) is also given the grant IAM holds for its person and
+    for one of its own roles or policies that none of its grants still covers. An
+    invitation whose ``grant_ids`` cannot be read is logged and left as it is.
+    How many invitations changed; nothing is committed."""
+    connection = await db.connection()
+    if not await connection.run_sync(lambda sync: inspect(sync).has_table("invitations")):
+        return 0
+    by_id = {str(g.id): g for g in held}
+    by_key = {
+        (str(g.provider), str(g.email).lower(), str(g.policy_id), g.scope): str(g.id) for g in held
+    }
+    changed = 0
+    rows = await db.execute(
+        text(
+            "SELECT id, grant_ids, status, email, provider, organization_id, org_role, "
+            "workspace_id, workspace_role, policy_ids FROM invitations"
+        )
+    )
+    for row in rows.mappings().all():
+        try:
+            grants = [str(g) for g in json.loads(row["grant_ids"] or "[]")]
+        except (TypeError, ValueError):
+            _log.warning("Invitation %s lists grants that cannot be read: left as it is", row["id"])
+            continue
+        remapped = list(dict.fromkeys(merged.get(g, g) for g in grants))
+        if row["status"] == "pending":
+            remapped = _relinked(row, remapped, by_id, by_key)
+        if remapped != grants:
+            await db.execute(
+                text("UPDATE invitations SET grant_ids = :g WHERE id = :i"),
+                {"g": json.dumps(remapped), "i": row["id"]},
+            )
+            changed += 1
+    return changed
+
+
+def _relinked(
+    row: Mapping[str, Any],
+    grants: list[str],
+    by_id: Mapping[str, Any],
+    by_key: Mapping[tuple[str, str, str, str | None], str],
+) -> list[str]:
+    """``grants`` of a pending invitation (``row``), where some are no longer held:
+    the held ones, and the grant IAM holds for each of the invitation's roles and
+    policies they do not cover. Unchanged when IAM holds none for them."""
+    kept = [g for g in grants if g in by_id]
+    if len(kept) == len(grants):
+        return grants
+    covered = {(str(by_id[g].policy_id), by_id[g].scope) for g in kept}
+    person = (str(row["provider"]), str(row["email"]).lower())
+    found: list[str] = []
+    for key in _invitation_keys(row):
+        if key in covered:
+            continue
+        grant = by_key.get((*person, *key))
+        if grant is not None and grant not in kept and grant not in found:
+            found.append(grant)
+    return kept + found if found else grants
+
+
+def _invitation_keys(row: Mapping[str, Any]) -> list[tuple[str, str]]:
+    """``(policy, scope)`` of what an invitation grants, as the invitations
+    service names it (``services/invites``): its roles at the organization and
+    the workspace, its policies at the workspace, else the organization."""
+    from naas_abi.apps.nexus.apps.api.app.services.invites.names import (
+        org_scope,
+        role_policy,
+        workspace_scope,
+    )
+
+    org, workspace = row["organization_id"], row["workspace_id"]
+    keys: list[tuple[str, str]] = []
+    if row["org_role"] and org:
+        keys.append((role_policy(row["org_role"]), org_scope(org)))
+    if row["workspace_role"] and workspace:
+        keys.append((role_policy(row["workspace_role"]), workspace_scope(org, workspace)))
+    scope = workspace_scope(org, workspace) if workspace else (org_scope(org) if org else None)
+    try:
+        policies = json.loads(row["policy_ids"] or "[]")
+    except (TypeError, ValueError):
+        policies = []
+    if scope is not None and isinstance(policies, list):
+        keys += [(str(policy), scope) for policy in policies]
+    return keys
 
 
 # The roles an organization's own role is held below it too (Nexus mirrors them).
@@ -667,14 +778,25 @@ async def role_data_pending(db: AsyncSession) -> bool:
     return False
 
 
-def mirror_old_org_wide(iam: Any) -> int:
+def mirror_old_org_wide(
+    iam: Any, declared: Mapping[tuple[str, str], str | None] | None = None
+) -> int:
     """Hold, in the grammar before container paths, the org-wide role
     (``abi:<org>:*``) each organization owner's and admin's own one
     (``abi:<org>:-``) brings: what the moves below read as reaching the
     organization's workspaces, as Nexus kept it before. Made as ``api`` for no
-    user, which IAM takes the old grammar from. How many were missing."""
+    user, which IAM takes the old grammar from. How many were missing.
+
+    ``declared`` (``{(principal, org): role}``, the configuration's roles at
+    organizations) is held as ``Memberships.mirror_org_wide`` holds it: the
+    org-wide role is the declared one, an owner's or an admin's, and no other,
+    so a configured demotion takes the former one away."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import Memberships
+
     made = 0
     with as_service_account("api"):
+        for (principal_id, org), role in (declared or {}).items():
+            Memberships.hold_wide(iam, principal_id, f"abi:{org}:*", role)
         held = {(a.policy_id, a.principal_id, a.scope) for a in iam.list_attachments()}
         for policy_id, principal_id, scope in sorted(held, key=lambda h: (h[0], h[1], h[2] or "")):
             if policy_id not in _MIRRORED or not is_old_scope(scope):
@@ -744,15 +866,37 @@ async def migrate_names(db: AsyncSession) -> Report | None:
             "features are refused until a start rewrites them"
         )
         return None
-    await db.execute(
-        text("INSERT INTO iam_migrations (name, applied_at, report) VALUES (:n, :at, :r)"),
-        {
-            "n": MIGRATION_NAME,
-            "at": datetime.now(UTC).replace(tzinfo=None),
-            "r": json.dumps({"counts": report.counts, "notes": report.notes}),
-        },
-    )
-    await db.commit()
+    # In the commit that records the move: the twins IAM merged. When it fails,
+    # nothing is recorded, and the next start finds the invitations' lost grants
+    # again from what IAM holds (``remap_invitation_grants``).
+    try:
+        held = await run_in_threadpool(pending_grants, runtime.iam())
+        report.counts["invitations_remapped"] = await remap_invitation_grants(
+            db, report.grants_merged, held=held
+        )
+        await db.execute(
+            text("INSERT INTO iam_migrations (name, applied_at, report) VALUES (:n, :at, :r)"),
+            {
+                "n": MIGRATION_NAME,
+                "at": datetime.now(UTC).replace(tzinfo=None),
+                "r": json.dumps(
+                    {
+                        "counts": report.counts,
+                        "notes": report.notes,
+                        "grants_merged": report.grants_merged,
+                    }
+                ),
+            },
+        )
+        await db.commit()
+    except Exception:  # noqa: BLE001 - nothing recorded: the next start finishes it
+        await db.rollback()
+        _log.exception(
+            "IAM's names were rewritten to container paths, but the invitations were not "
+            "moved to the grants IAM merged, and the move is not recorded: module scopes "
+            "and features are refused until a start finishes it"
+        )
+        return None
     set_pending(False)
     for note in report.notes:
         _log.warning("Container paths: %s", note)

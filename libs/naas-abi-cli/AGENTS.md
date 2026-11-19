@@ -102,8 +102,10 @@ only.
   pending version; the previous approved one stays in force. `abi new module` prints these
   steps for a remote module.
 - The built-in identity provider is such a module (`module/<project>/idp`): `abi dev up`
-  runs it by default (when the config names no `identity.providers`, or names one with
-  `provisioning: builtin`), `abi new project` and `abi deploy local` set it up, and a
+  runs it by default in NATS mode (when the config names no `identity.providers`, or names
+  one with `provisioning: builtin`), whether the mode comes from the config's `nats:` block
+  or from `--with-nats`; `abi dev down`/`status`/`logs` follow the mode of the last run.
+  `abi new project` and `abi deploy local` set it up, and a
   deployment outside them creates its account and key by hand as above.
 
 ### Signing in during development

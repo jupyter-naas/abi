@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v5.0.1 (2026-11-19)
+
+### Bug Fixes
+
+- **cli**: Abi dev up --with-nats runs the built-in IdP without a nats: block
+  ([`f130377`](https://github.com/jupyter-naas/abi/commit/f1303778f1bd298383822cffc40a03adb523caa1))
+
+
 ## v5.0.0 (2026-11-19)
 
 ### Features

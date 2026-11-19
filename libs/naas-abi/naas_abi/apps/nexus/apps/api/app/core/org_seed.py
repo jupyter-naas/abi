@@ -45,8 +45,9 @@ from naas_abi.apps.nexus.apps.api.app.models import (
     UserModel,
     WorkspaceModel,
 )
+from naas_abi.apps.nexus.apps.api.app.services.iam import legacy_names
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container, workspace_container
-from sqlalchemy import select
+from sqlalchemy import inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
@@ -121,8 +122,11 @@ async def _get_user_by_id(session: AsyncSession, user_id: str) -> UserModel | No
 
 
 # What this seeding run declares, applied to IAM once the rows are committed:
-# role attachments are the only record of memberships.
-_declared_roles: ContextVar[list[tuple[str, str, str]] | None] = ContextVar(
+# role attachments are the only record of memberships. A role is declared at an
+# organization or a workspace (``(user, role, org, workspace)``, the workspace
+# ``None`` for the organization's own), named when it is applied, in the grammar
+# IAM's names are in then (``_apply_declared_roles``).
+_declared_roles: ContextVar[list[tuple[str, str, str | None, str | None]] | None] = ContextVar(
     "nexus_seed_roles", default=None
 )
 _declared_scopes: ContextVar[list[tuple[str | None, str | None]] | None] = ContextVar(
@@ -130,10 +134,10 @@ _declared_scopes: ContextVar[list[tuple[str | None, str | None]] | None] = Conte
 )
 
 
-def _declare_role(user_id: str, role: str, scope: str) -> None:
+def _declare_role(user_id: str, role: str, org_id: str | None, workspace_id: str | None) -> None:
     declared = _declared_roles.get()
     if declared is not None:
-        declared.append((user_id, role, scope))
+        declared.append((user_id, role, org_id, workspace_id))
 
 
 def _declare_scope(org_id: str | None, workspace_id: str | None) -> None:
@@ -149,7 +153,7 @@ async def _ensure_org_member(
     role: str,
 ) -> None:
     _declare_scope(organization_id, None)
-    _declare_role(user_id, role, org_container(organization_id))
+    _declare_role(user_id, role, organization_id, None)
 
 
 async def _ensure_workspace_member(
@@ -160,7 +164,7 @@ async def _ensure_workspace_member(
     organization_id: str | None = None,
 ) -> None:
     _declare_scope(organization_id, workspace_id)
-    _declare_role(user_id, role, workspace_container(organization_id, workspace_id))
+    _declare_role(user_id, role, organization_id, workspace_id)
 
 
 # Domains that receive no mail (RFC 2606, RFC 6761, mDNS).
@@ -174,8 +178,7 @@ def is_placeholder_address(email: str) -> bool:
     domain = email.rsplit("@", 1)[-1].strip().lower().rstrip(".")
     # The reserved domains and every name under them (mail.example.com).
     return domain.endswith(_PLACEHOLDER_SUFFIXES) or any(
-        domain == reserved or domain.endswith("." + reserved)
-        for reserved in _PLACEHOLDER_DOMAINS
+        domain == reserved or domain.endswith("." + reserved) for reserved in _PLACEHOLDER_DOMAINS
     )
 
 
@@ -505,17 +508,58 @@ def sync_platform_admins(iam: Any, users_by_email: dict[str, UserModel]) -> None
 
 async def _apply_declared_roles(
     scopes: list[tuple[str | None, str | None]],
-    roles: list[tuple[str, str, str]],
+    roles: list[tuple[str, str, str | None, str | None]],
 ) -> None:
     """The configuration's scopes and roles, as the system: the configuration is
     declarative, so the role it names is the role held. One scope that fails (IAM
     refuses to register it, or a role there) is logged and skipped: the others
-    are still applied."""
+    are still applied.
+
+    Named in the grammar IAM's names are in: while the move of the names
+    (``container_names_v1``) is not recorded (a start whose moves stopped), the
+    one before container paths (``abi:<org>:<ws>``, an owner's or admin's
+    organization role org-wide too, ``abi:<org>:*``), which the move rewrites;
+    a role of the new grammar next to its old twin would stop that move. Until it
+    is recorded, under the moves' lock (read again under it), so another API
+    process does not rewrite the names between the reading and the writing; once
+    it is, without: the record never goes. An install with no ``iam_migrations``
+    table has nothing to move (container paths); when the record cannot be read,
+    that is logged and the roles are named as container paths too (IAM merges
+    twins at the move)."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam import container_names
+
+    async def names_rewritten() -> bool:
+        try:
+            async with AsyncSession(async_engine) as db:
+                connection = await db.connection()
+                if not await connection.run_sync(
+                    lambda sync: inspect(sync).has_table("iam_migrations")
+                ):
+                    return True
+                return await container_names.recorded(db, container_names.MIGRATION_NAME)
+        except Exception:
+            logger.exception(
+                "Whether IAM's names are container paths could not be read: the configured "
+                "roles are named as container paths"
+            )
+            return True
+
+    if await names_rewritten():
+        await _attach_declared(scopes, roles, rewritten=True)
+        return
+    async with container_names.moves_lock(async_engine):
+        await _attach_declared(scopes, roles, rewritten=await names_rewritten())
+
+
+async def _attach_declared(
+    scopes: list[tuple[str | None, str | None]],
+    roles: list[tuple[str, str, str | None, str | None]],
+    *,
+    rewritten: bool,
+) -> None:
+    from naas_abi.apps.nexus.apps.api.app.services.iam import container_names, runtime
     from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
-    from naas_abi.apps.nexus.apps.api.app.services.iam.names import (
-        org_container,
-        workspace_container,
-    )
+    from starlette.concurrency import run_in_threadpool
 
     failed: set[str] = set()
     for org_id, workspace_id in dict.fromkeys(scopes):
@@ -531,25 +575,65 @@ async def _apply_declared_roles(
                 org_id,
                 workspace_id,
             )
-            if workspace_id is not None:
-                failed.add(workspace_container(org_id, workspace_id))
-            elif org_id is not None:
-                failed.add(org_container(org_id))
+            failed_scope = _role_scope(org_id, workspace_id, rewritten=rewritten)
+            if failed_scope is not None:
+                failed.add(failed_scope)
     by_scope: dict[str, list[tuple[str, str, str]]] = {}
-    for entry in dict.fromkeys(roles):
-        by_scope.setdefault(entry[2], []).append(entry)
+    for user_id, role, org_id, workspace_id in dict.fromkeys(roles):
+        scope = _role_scope(org_id, workspace_id, rewritten=rewritten)
+        if scope is None:
+            # One declaration that names no place never keeps the others out.
+            logger.warning(
+                "Configured role %s of %s names no organization or workspace: skipped",
+                role,
+                user_id,
+            )
+            continue
+        by_scope.setdefault(scope, []).append((user_id, role, scope))
     granted = kept = 0
+    applied: set[str] = set()
     for scope, entries in by_scope.items():
         if scope in failed:
             continue
         try:
-            changed, held = await MEMBERSHIPS.seed(entries, replace=True)
+            changed, held = await MEMBERSHIPS.seed(list(dict.fromkeys(entries)), replace=True)
         except Exception:
             logger.exception("Configured roles at %s not applied in IAM", scope)
             continue
+        applied.add(scope)
         granted += changed
         kept += held
+    if not rewritten:
+        # What ``seed`` mirrors below an organization, in the old grammar: the
+        # organizations' roles applied here hold the org-wide role they carry, and
+        # no other (a configured demotion takes the former one away).
+        try:
+            declared: dict[tuple[str, str], str | None] = {}
+            for user_id, role, org_id, workspace_id in dict.fromkeys(roles):
+                if workspace_id is not None or org_id is None:
+                    continue
+                if _role_scope(org_id, None, rewritten=False) in applied:
+                    declared[(await MEMBERSHIPS.principal_id(user_id), org_id)] = role
+            await run_in_threadpool(container_names.mirror_old_org_wide, runtime.iam(), declared)
+        except Exception:
+            logger.exception(
+                "The configured roles were applied, but their org-wide roles of the "
+                "grammar before container paths (abi:<org>:*) were not"
+            )
     logger.info("Configured memberships in IAM: %d changed, %d already held", granted, kept)
+
+
+def _role_scope(org_id: str | None, workspace_id: str | None, *, rewritten: bool) -> str | None:
+    """Where a declared role is attached: the workspace's container, else the
+    organization's (None without either); their scopes of the old grammar until
+    the names are rewritten."""
+    if workspace_id is not None:
+        if rewritten:
+            return workspace_container(org_id, workspace_id)
+        return legacy_names.workspace_scope(org_id, workspace_id)
+    if org_id is None:
+        return None
+    return org_container(org_id) if rewritten else legacy_names.org_scope(org_id)
 
 
 def _engine_iam() -> Any | None:

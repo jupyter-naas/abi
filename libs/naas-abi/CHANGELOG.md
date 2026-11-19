@@ -45,6 +45,33 @@
 
 <!-- version list -->
 
+## v5.0.2 (2026-11-19)
+
+### Bug Fixes
+
+- **nexus**: A seeded user can set a company and a job title
+  ([`6ac4301`](https://github.com/jupyter-naas/abi/commit/6ac4301e661275948a268e2c87015c1759b4cd34))
+
+- **nexus**: Remove the placeholder two-factor card from Account > Security
+  ([`172022a`](https://github.com/jupyter-naas/abi/commit/172022a67b5936f16d76927c856dbba38301a381))
+
+- **nexus**: The move of the names finds a lost merge again, and seeds demote org-wide
+  ([`153dc09`](https://github.com/jupyter-naas/abi/commit/153dc09211a68c460a50df44b9fa55ddd1afa225))
+
+- **nexus**: The move of the names survives roles written while it waited
+  ([`0c0ca6c`](https://github.com/jupyter-naas/abi/commit/0c0ca6c5955dd7cfe75f8461cd66a9d78efb43f9))
+
+### Chores
+
+- **deps**: Bump zustand in /libs/naas-abi/naas_abi/apps/nexus
+  ([`3c1d56d`](https://github.com/jupyter-naas/abi/commit/3c1d56d31f8209178949bab11154bc26218ba114))
+
+### Code Style
+
+- Ruff format the naas_abi files this change touches
+  ([`1c638de`](https://github.com/jupyter-naas/abi/commit/1c638ded4f4afe60a433683127c3986d23cd83ca))
+
+
 ## v5.0.1 (2026-11-19)
 
 ### Bug Fixes

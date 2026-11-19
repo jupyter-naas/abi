@@ -26,6 +26,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from naas_abi.apps.nexus.graph_policy_config import WorkspaceGraphPolicyConfig
 from naas_abi.apps.nexus.maps_seed_config import WorkspaceMapsSeedConfig
+from naas_abi.apps.nexus.user_seed_config import UserSeedConfig
 
 
 def _initialize_nexus_service_registry() -> None:
@@ -286,29 +287,6 @@ class SheetsTemplateSourceConfig(BaseModel):
     path: str = Field(min_length=1)
 
 
-class UserSeedConfig(BaseModel):
-    """User definition applied on startup (create by email if missing)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    email: EmailStr
-    name: str
-    avatar: str | None = None
-    company: str | None = None
-    role: str | None = None
-    bio: str | None = None
-    is_superadmin: bool = False
-
-    @model_validator(mode="before")
-    @classmethod
-    def _ignore_the_stored_password_setting(cls, data: Any) -> Any:
-        """No password is made for a configured user any more (they sign in at the
-        built-in identity provider): the old setting is accepted and ignored."""
-        if isinstance(data, dict) and "store_credentials_in_secrets" in data:
-            data = {k: v for k, v in data.items() if k != "store_credentials_in_secrets"}
-        return data
-
-
 class OrganizationMemberSeedConfig(BaseModel):
     """Organization member assignment."""
 
@@ -365,7 +343,9 @@ class WorkspaceSeedConfig(BaseModel):
     # owl:imports are not implied; explicitly list shared dependency files too.
     ontologies: list[str] | None = Field(default_factory=list)
     # Exact data graph grants. Missing policy exposes owned graphs only.
-    graphs: WorkspaceGraphPolicyConfig = Field(default_factory=WorkspaceGraphPolicyConfig)
+    graphs: WorkspaceGraphPolicyConfig = Field(
+        default_factory=WorkspaceGraphPolicyConfig
+    )
     # Initial Maps feeds and custom basemaps (see WorkspaceMapsSeedConfig).
     maps: WorkspaceMapsSeedConfig | None = None
 
@@ -500,7 +480,9 @@ class NexusConfig(BaseModel):
     rate_limit_window_seconds: int = 300
 
     # Sign-in through the engine's identity providers (identity.providers).
-    oidc_session_cookie: str = Field(default="nexus_session", pattern=r"^[A-Za-z0-9_-]{1,64}$")
+    oidc_session_cookie: str = Field(
+        default="nexus_session", pattern=r"^[A-Za-z0-9_-]{1,64}$"
+    )
     oidc_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
     oidc_session_max_age_hours: int = Field(default=7 * 24, ge=1, le=90 * 24)
     oidc_redirect_uri: str | None = None

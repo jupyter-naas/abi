@@ -270,7 +270,7 @@ def check_upgrade_from_5(
     store.attach(
         Attachment(new_id("att"), platform_policy.id, platform_group.id, "abi:-:-")
     )
-    store.attach(
+    in_ws = store.attach(
         Attachment(
             new_id("att"), platform_policy.id, platform_group.id, "abi:org-1:ws-1"
         )
@@ -311,10 +311,24 @@ def check_upgrade_from_5(
         } == {PLATFORM, "abi:org-1:ws-1"}
         grant = upgraded.get_pending_grant(invited.id)
         assert grant is not None and grant.scope == PLATFORM
-        # The rewrite of the names, once Nexus registers its containers.
-        counts = upgraded.rewrite_names(_Rewriter())
+        # Written in the new grammar while the rewrite waits (a start whose moves
+        # stopped): the twin of an attachment of the old grammar.
+        twin = upgraded.attach(
+            Attachment(new_id("att"), platform_policy.id, platform_group.id, WS)
+        )
+        # The rewrite of the names, once Nexus registers its containers: the twin
+        # merges into the attachment made first, rewritten.
+        rewriter = _Rewriter()
+        counts = upgraded.rewrite_names(rewriter)
         assert (counts["containers"], counts["placements"]) == (2, 2)
-        assert counts["policies"] == 1 and counts["attachments"] == 1
+        assert counts["policies"] == 1
+        assert (counts["attachments"], counts["attachments_merged"]) == (1, 1)
+        assert {
+            a.id: a.scope
+            for a in upgraded.list_attachments(principal_id=platform_group.id)
+            if a.scope != PLATFORM
+        } == {in_ws.id: WS}
+        assert rewriter.merges == [("attachment", twin.id, in_ws.id)]
         assert upgraded.list_placements() == [
             Placement("document", "module", PLATFORM),
             Placement("document", "nexus-ws-1", WS),

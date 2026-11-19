@@ -87,6 +87,9 @@ def people(nexus_db, nexus_iam: NexusIam, monkeypatch: pytest.MonkeyPatch):
     for uid in ("pat", "ops"):
         nexus_iam.user(uid)
     monkeypatch.setattr(nexus_config.settings, "organizations", [])
+    # The seeds read where IAM's names are from this database: it has no
+    # ``iam_migrations`` table, so nothing is to move (container paths).
+    monkeypatch.setattr(org_seed, "async_engine", nexus_db.kw["bind"])
     return add
 
 

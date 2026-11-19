@@ -24,6 +24,27 @@
 
 <!-- version list -->
 
+## v5.1.0 (2026-11-19)
+
+### Bug Fixes
+
+- **core**: The DuckLake cleanup test passes between midnight and 1am UTC
+  ([`7dedcb0`](https://github.com/jupyter-naas/abi/commit/7dedcb00c0adffe19d24621533a7347e421f741c))
+
+- **iam**: The rewrite of the names merges a row held in both grammars
+  ([`33d00b5`](https://github.com/jupyter-naas/abi/commit/33d00b57f8b4cb138a243e52a9f66b08ebe7f5d7))
+
+### Code Style
+
+- **core**: Ruff format the DuckLake adapter test
+  ([`35d5bcc`](https://github.com/jupyter-naas/abi/commit/35d5bcc9e6669df43f03f0116a3598e831910f80))
+
+### Features
+
+- **api**: Make /docs, /redoc and /openapi.json a configuration choice
+  ([`9a32daf`](https://github.com/jupyter-naas/abi/commit/9a32dafd8ee1e17ef3bc8047d808d5ec642eb73b))
+
+
 ## v5.0.0 (2026-11-19)
 
 ### Features

@@ -388,6 +388,23 @@ register them as containers and rewrite every stored name in one transaction (`i
   organizations, workspaces or services of today is named in the report's notes.
 - Placements, keys' narrowing, manifests, invitations and bindings likewise. What is already a path is kept,
   so the move may run again; a statement whose rewrite names nothing is kept as written (it named nothing).
+  An attachment or a pending grant held in both grammars (the new one written while the move waited) is merged
+  into the twin made first, which keeps its id, date and author (`attachments_merged`, `pending_grants_merged`
+  in the report): the store's unique keys never stop the move. Each invitation that listed a dropped grant lists
+  the one kept (`remap_invitation_grants`, in the commit that records the move, `invitations_remapped`), so
+  revoking either invitation keeps the other's grant. The merge map lives only in the start that rewrote the
+  names: when that commit fails (logged, not recorded) or the process stops before it, the next start's rewrite
+  merges nothing, so a pending invitation listing a grant IAM no longer holds is given the grant IAM holds for
+  its person and one of its own roles or policies. An invitation whose `grant_ids` cannot be read is logged and
+  left as it is.
+- While the move waits (a move before it stopped), the configuration's seeds, which run after the moves at
+  every start, attach the roles they declare in the old grammar (`org_seed._apply_declared_roles`, under the
+  moves' lock, read again under it); the move rewrites them. Each organization role they apply holds the
+  org-wide role it carries (`abi:<org>:*`, an owner's or admin's) and no other, as `Memberships.mirror_org_wide`
+  does in the grammar of today, so a configured demotion takes the former one away (`mirror_old_org_wide`, its
+  failure logged apart from the roles). Once it is recorded they take no lock. No `iam_migrations` table (a
+  fresh install) or a record that cannot be read (logged) means the grammar of today. A declaration naming no
+  organization or workspace is logged and skipped.
 - Until it is recorded, module scopes and features are refused (`authz.upgrading`); IAM itself narrows, never
   widens (old names match nothing new). Start-up order (`main._prepare_iam`): the catalog, the moves that write
   the old grammar (feature overrides, role features, sets), this move, then `migrate_role_data` and
