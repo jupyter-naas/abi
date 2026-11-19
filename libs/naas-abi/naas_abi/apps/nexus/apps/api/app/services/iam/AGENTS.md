@@ -107,8 +107,9 @@ of one at a workspace is `${scope}/module:<type>/<module>/<name>`. One source of
 - **Agents a workspace builds itself** (a model and a prompt, no module class) have no module scope: `nexus:UseAgent`
   and the roles decide (`agent_scope` answers None, and `filter_scopes` keeps what has none).
 - **The `apps` and `agents` features** no longer gate using a module's apps and agents: they are the settings
-  sections (`InstallApp`, `UpdateApp`, `UninstallApp`, agent edits) and the app projects. `nexus:UseApp` is left for a
-  link that is no module's app (a Pages portal's sign-in).
+  sections (`InstallApp`, `UpdateApp`, `UninstallApp`, agent edits) and the app projects. `nexus:UseApp` is deprecated: still
+  declared (a policy may name it), asked by no route. A portal's sign-in is for one module app, `module:OpenApp` on it
+  (`../apps/AGENTS.md`, "Portal SSO").
 - **Listed as IAM decides.** What a workspace lists of a module (`GET /apps`, the agents roster, the workflows and
   workspace settings › Agents, Apps, Workflows) is what the caller may use there, IAM's `filter` alone
   (`filter_scopes`): no set, no switch. A workspace that should not offer a module denies it in a policy (its

@@ -2381,8 +2381,8 @@ with `module_scope` types, placed in the container of the call; the module is na
 its stable identifier (an engine module's configured key, a remote module's id). The
 built-in viewer and member roles leave every module scope type out, admin and owner
 hold them all, with no migration grant. Nexus decides a module's agents and apps with
-it (`nexus:UseAgent` stays for agents a workspace builds itself, `nexus:UseApp` for
-links that are no module's app): one source of truth. Discovery keeps its platform
+it (`nexus:UseAgent` stays for agents a workspace builds itself; `nexus:UseApp` is
+deprecated, still declared and asked by no route): one source of truth. Discovery keeps its platform
 grants as the broker-side check. Members hold `TriggerJob` on module workflows only
 (`workflow/<project>/<module>/<name>`, a second name discovery checks for a job of
 kind `workflow`), as they hold `InvokeAgent` on agents: a workflow started from a

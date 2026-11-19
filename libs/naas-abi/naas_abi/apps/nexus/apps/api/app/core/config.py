@@ -574,8 +574,11 @@ class Settings(BaseSettings):
     # Lifetime of a link for opening /app-html apps (Bearer or ?token=): an IAM
     # grant: a longer setting is accepted and clamped to eight hours.
     app_html_access_token_expire_minutes: int = Field(default=60, ge=1, le=24 * 60)
-    # HMAC secret for opening Cloudflare Pages portals from Nexus (empty = off).
-    pages_sso_secret: str = ""
+    # Portal sign-in (``services/apps/AGENTS.md``, "Portal SSO"): an app id
+    # (``<module_path>:<app_dir>``) to the HMAC secret its portal alone shares
+    # (env PAGES_SSO_SECRETS, as JSON). An app that is not listed gets no token.
+    # The old single ``pages_sso_secret`` / PAGES_SSO_SECRET signs nothing.
+    pages_sso_secrets: dict[str, str] = Field(default_factory=dict)
     pages_sso_expire_seconds: int = Field(default=300, ge=30, le=15 * 60)
     # Local development: `id=url` pairs, comma-separated (NEXUS_DEV_APP_URLS). The
     # SSO route takes the host of an app's entry as an audience only on a local
@@ -619,6 +622,13 @@ class Settings(BaseSettings):
     # Origins of other relying parties of the built-in IdP (/idp); Nexus's own
     # (the redirect URI's and the web app's) are implied.
     idp_client_origins: list[str] = Field(default_factory=list)
+
+    @field_validator("pages_sso_secrets", mode="after")
+    @classmethod
+    def _drop_empty_portal_secrets(cls, value: dict[str, str]) -> dict[str, str]:
+        from naas_abi.apps.nexus.apps.api.app.services.apps.pages_sso import portal_secrets
+
+        return portal_secrets(value)
 
     def model_post_init(self, __context: Any) -> None:
         """Adjust settings based on environment after initialization (pydantic v2 hook)."""
