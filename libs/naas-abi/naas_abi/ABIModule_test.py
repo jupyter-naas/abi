@@ -56,7 +56,9 @@ def test_documents_picker_overrides_survive_the_trip_into_nexus_settings() -> No
     from naas_abi.apps.nexus.apps.api.app.core.config import Settings
 
     dumped = NexusConfig(
-        documents_template_sources=[{"namespace": "acme", "path": "src/acme/templates"}],
+        documents_template_sources=[
+            {"namespace": "acme", "path": "src/acme/templates"}
+        ],
         documents_default_template_id="acme/house-v1",
         documents_hidden_template_ids=["abi/article-light-v1"],
     ).model_dump(exclude_none=True)
