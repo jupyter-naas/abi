@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import {
   filterWorkspaces,
+  groupByOrganization,
   groupWorkspaces,
   listWorkspaces,
   OTHERS_GROUP,
+  PERSONAL_ORGANIZATION,
   pushRecentWorkspaceId,
+  spansOrganizations,
 } from './workspace-picker';
 
 const ws = (id: string, name: string) => ({ id, name });
@@ -85,5 +88,56 @@ describe('filterWorkspaces with groups', () => {
       { id: '2', name: 'ABI', group: null },
     ];
     expect(listWorkspaces(list, 'key acc').map((w) => w.name)).toEqual(['Orange']);
+  });
+});
+
+describe('organizations', () => {
+  const ws = (
+    name: string,
+    organizationId: string | null,
+    organizationName: string | null,
+    group?: string,
+  ) => ({ id: name, name, group, organizationId, organizationName });
+  const acme = (name: string, group?: string) => ws(name, 'org-a', 'Acme', group);
+  const globex = (name: string, group?: string) => ws(name, 'org-g', 'Globex', group);
+  const personal = (name: string) => ws(name, null, null);
+
+  it('needs headings only when the workspaces span more than one organization', () => {
+    expect(spansOrganizations([acme('One'), acme('Two')])).toBe(false);
+    expect(spansOrganizations([personal('Mine')])).toBe(false);
+    expect(spansOrganizations([acme('One'), globex('Two')])).toBe(true);
+    expect(spansOrganizations([acme('One'), personal('Mine')])).toBe(true);
+  });
+
+  it('keeps two organizations\' groups of the same name apart', () => {
+    const sections = groupByOrganization([
+      acme('Paris', 'Operations'),
+      globex('Berlin', 'Operations'),
+      acme('Lyon', 'Operations'),
+    ]);
+    expect(
+      sections.map((s) => [s.name, s.groups.map((g) => [g.group, g.workspaces.map((w) => w.name)])]),
+    ).toEqual([
+      ['Acme', [['Operations', ['Paris', 'Lyon']]]],
+      ['Globex', [['Operations', ['Berlin']]]],
+    ]);
+  });
+
+  it('puts the current organization first, the others alphabetically, Personal last', () => {
+    const sections = groupByOrganization(
+      [personal('Mine'), acme('One'), globex('Two'), ws('Three', 'org-b', 'Beta')],
+      'org-g',
+    );
+    expect(sections.map((s) => s.name)).toEqual(['Globex', 'Acme', 'Beta', PERSONAL_ORGANIZATION]);
+    expect(sections.at(-1)?.organizationId).toBeNull();
+  });
+
+  it('names an organization by its id when its name is unknown', () => {
+    expect(groupByOrganization([ws('One', 'org-x', null)])[0].name).toBe('org-x');
+  });
+
+  it('finds workspaces by their organization\'s name', () => {
+    const list = [acme('One'), globex('Two')];
+    expect(filterWorkspaces(list, 'glob').map((w) => w.name)).toEqual(['Two']);
   });
 });

@@ -1,8 +1,10 @@
-FROM node:20-alpine
+# Development image (`pnpm dev`): never a deployment's. Node 24 LTS, pinned by
+# digest, and the pnpm version package.json names.
+FROM node:24.22.3-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5
 
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
 RUN apk add --no-cache inotify-tools
 
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json ./

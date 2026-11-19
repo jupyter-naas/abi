@@ -1,10 +1,12 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useWorkspaceStore, type SidebarSection } from '@/stores/workspace';
 import { useFeature } from '@/hooks/use-feature';
 import { ColumnResizeHandle, useColumnResize } from '../column-resize-handle';
+import { panelSectionOnPage } from '../home-route';
 
 const sectionLoading = () => (
   <div className="px-2 py-3 text-xs text-muted-foreground">Loading…</div>
@@ -143,7 +145,11 @@ function SectionContent({ section }: { section: SidebarSection }) {
  * workspace mark instead of duplicating a header per column. See topnav.tsx.
  */
 export function SectionPanel() {
-  const activePanelSection = useWorkspaceStore((s) => s.activePanelSection);
+  const storedPanelSection = useWorkspaceStore((s) => s.activePanelSection);
+  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const pathname = usePathname();
+  // Home is a desk: no column there, whatever the store still holds.
+  const activePanelSection = panelSectionOnPage(storedPanelSection, pathname, currentWorkspaceId);
   const sectionPanelWidth = useWorkspaceStore((s) => s.sectionPanelWidth);
   const setSectionPanelWidth = useWorkspaceStore((s) => s.setSectionPanelWidth);
   const isOpen = activePanelSection !== null;

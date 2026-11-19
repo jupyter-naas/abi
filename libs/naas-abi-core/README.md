@@ -56,6 +56,7 @@ nats:
   nats_url: "nats://engine:{{ secret.NATS_ENGINE_PASSWORD }}@127.0.0.1:4222"
   auth_callout:
     nats_url: "nats://auth:{{ secret.NATS_AUTH_PASSWORD }}@127.0.0.1:4222"
+    system_url: "nats://sys:{{ secret.NATS_SYSTEM_PASSWORD }}@127.0.0.1:4222"
     issuer_seed: "{{ secret.NATS_AUTH_CALLOUT_SEED }}"
   discovery:
     project: "my_project"
@@ -535,15 +536,14 @@ run_agent(agent)
 Model Context Protocol (MCP) server for integration with Claude Desktop and VS Code.
 
 **Features:**
-- Dynamic agent discovery from OpenAPI spec
-- HTTP and stdio transport modes
-- Automatic tool registration
+- The agents you may use, as MCP tools: each call goes through Nexus with your own personal API key (`abi_pk_...`); the server holds no credential
+- HTTP and stdio transport modes; HTTP requests need `Authorization: Bearer <key>` and a Host and Origin the server is configured for (`MCP_ALLOWED_HOSTS`, `MCP_ALLOWED_ORIGINS`, loopback by default)
 
 **Usage:**
 
 ```bash
-# Start MCP server
-python -m naas_abi_core.apps.mcp.mcp_server
+# Start MCP server (stdio), with your own key
+NEXUS_ACCESS_TOKEN=abi_pk_... python -m naas_abi_core.apps.mcp.mcp_server
 
 # Or with HTTP transport
 MCP_TRANSPORT=http python -m naas_abi_core.apps.mcp.mcp_server
@@ -573,6 +573,9 @@ api:
   description: "API for my AI system"
   cors_origins:
     - "http://localhost:9879"
+  # /openapi.json, /docs and /redoc. Unset: on for local development
+  # (ENV unset, local or dev), off for deployed stacks.
+  docs_enabled: true
 
 global_config:
   ai_mode: "cloud"  # or "local" or "airgap"
@@ -581,6 +584,7 @@ nats:
   nats_url: "nats://engine:{{ secret.NATS_ENGINE_PASSWORD }}@127.0.0.1:4222"
   auth_callout:
     nats_url: "nats://auth:{{ secret.NATS_AUTH_PASSWORD }}@127.0.0.1:4222"
+    system_url: "nats://sys:{{ secret.NATS_SYSTEM_PASSWORD }}@127.0.0.1:4222"
     issuer_seed: "{{ secret.NATS_AUTH_CALLOUT_SEED }}"
 
 services:

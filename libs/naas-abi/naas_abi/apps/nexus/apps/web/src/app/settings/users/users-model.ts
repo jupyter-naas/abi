@@ -6,6 +6,9 @@
 /** Platform Settings › Users (no React: the middleware reads it too). */
 export const PLATFORM_USERS_PATH = '/settings/users';
 
+/** The page that creates a user. */
+export const NEW_USER_PATH = `${PLATFORM_USERS_PATH}/new`;
+
 export interface AdminUserOrganization {
   id: string;
   name: string;
@@ -88,7 +91,7 @@ export type ColumnId = 'user' | 'iam' | 'status' | 'superadmin' | 'organizations
 
 export const COLUMNS: { id: ColumnId; label: string }[] = [
   { id: 'user', label: 'User' },
-  { id: 'iam', label: 'IAM id' },
+  { id: 'iam', label: 'IAM ID' },
   { id: 'status', label: 'Status' },
   { id: 'superadmin', label: 'Superadmin' },
   { id: 'organizations', label: 'Organizations' },
@@ -173,7 +176,7 @@ export function sortUsers(users: AdminUser[], column: ColumnId, dir: SortDir): A
 export const EXPORT_HEADERS = [
   'Name',
   'Email',
-  'IAM id',
+  'IAM ID',
   'Status',
   'Deactivated',
   'Superadmin',
@@ -236,9 +239,12 @@ export function inviteSummary(outcome: InviteOutcome): string[] {
   const said: string[] = [];
   said.push(outcome.renewed ? `Invitation to ${outcome.user.email} renewed.` : `${outcome.user.email} invited.`);
   if (outcome.user_created) said.push('Their account was made at the identity provider.');
+  // Only this page's invite can skip it: an organization's or a workspace's invitation
+  // makes the account once IAM authorized it.
   if (outcome.provisioning_skipped) {
     said.push(
-      'No account was made at the identity provider (you may not create one there): they sign in with an account they have.'
+      'No account was made at the identity provider (you may not create one there). ' +
+        'The email tells them to sign in with an account they have there, or to ask an administrator to create one.'
     );
   }
   said.push(outcome.sign_in_email_sent ? 'A sign-in link was emailed to them.' : 'No email could be sent: send them the sign-in link yourself.');

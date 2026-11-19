@@ -16,6 +16,15 @@ def secrets_key(monkeypatch):
     monkeypatch.setattr(config.settings, "secrets_encryption_key", "a-secrets-key-for-tests")
 
 
+@pytest.fixture(autouse=True)
+def no_dns(monkeypatch):
+    """Domain proofs read DNS (``organizations/domain_proof.py``): no test does. A
+    test publishes records by setting ``domain_proof.txt_records`` itself."""
+    from naas_abi.apps.nexus.apps.api.app.services.organizations import domain_proof
+
+    monkeypatch.setattr(domain_proof, "txt_records", lambda name: [])
+
+
 @pytest.fixture
 def nexus_iam():
     """A real IAM installed as Nexus's: orgs, workspaces and role attachments are

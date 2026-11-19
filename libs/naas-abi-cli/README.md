@@ -36,15 +36,17 @@ Creates a new ABI project with all necessary starter files and dependencies.
 
 **NATS by default.** The project runs the engine on NATS: every config has a
 `nats:` block with discovery on (project = the project name), the bus is
-JetStream, and `.env` holds the broker passwords of the engine and of its auth
-callout (`NATS_ENGINE_PASSWORD`, `NATS_AUTH_PASSWORD`) and the callout's signing
+JetStream, and `.env` holds the broker passwords of the engine, of its auth
+callout and of its connection warden (`NATS_ENGINE_PASSWORD`,
+`NATS_AUTH_PASSWORD`, `NATS_SYSTEM_PASSWORD`) and the callout's signing
 seed (`NATS_AUTH_CALLOUT_SEED`, `NATS_AUTH_CALLOUT_ISSUER`). Modules log in with
 their own service keys, and the engine gives each connection the subjects its
 approved policy allows. The Docker stack starts the
 `nats` service, keeps RabbitMQ behind the `rabbitmq` profile and runs no
 Dagster: one engine hosts discovery, and module jobs replace Dagster's
-schedules. Check the broker with `curl -s localhost:8222/healthz` and
-`curl -s localhost:8222/connz`.
+schedules. The broker's monitoring port answers on the stack's `nats-monitor`
+network only: `docker compose exec nats wget -qO- http://nats-monitor:8222/healthz`
+(or `/connz`).
 
 NATS mode installs `naas-abi-proto` and `naas-abi-sdk` from the `.abi`
 submodule, at the framework's revision, so it refuses `--without-abi-submodule`.
@@ -258,9 +260,10 @@ Writes the project's Docker Compose stack (`docker-compose.yml`, `.deploy/`).
   with a `nats` service behind the `nats` profile, and `uv add`s the
   `naas-abi-core[dagster,rabbitmq]` extras it needs (commit `pyproject.toml`
   and `uv.lock`).
-- It writes `.deploy/docker/nats/nats.conf` (the broker users `engine` and
-  `auth`, and the auth callout that admits every module with its approved
-  permissions) and generates `NATS_ENGINE_PASSWORD`, `NATS_AUTH_PASSWORD`,
+- It writes `.deploy/docker/nats/nats.conf` (the broker users `engine`,
+  `auth` and `sys`, the system account, and the auth callout that admits every
+  module with its approved permissions) and generates `NATS_ENGINE_PASSWORD`, `NATS_AUTH_PASSWORD`,
+  `NATS_SYSTEM_PASSWORD` (the `sys` user, which ends module connections on IAM changes),
   `NATS_AUTH_CALLOUT_SEED` and `NATS_AUTH_CALLOUT_ISSUER` in `.env`. Regenerate
   after each CLI upgrade.
 - It stops before writing anything when `.env` is not writable, and prints the

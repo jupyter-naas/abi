@@ -6,6 +6,8 @@ import json
 
 import pytest
 from naas_abi_core.services.triple_store.resolve import (
+    abi_dev_oxigraph_token,
+    abi_dev_oxigraph_token_for,
     abi_dev_service_port,
     load_abi_dev_instance,
     resolve_local_http_url,
@@ -95,3 +97,29 @@ def test_resolve_local_http_url_falls_back_to_default(tmp_path):
         )
         == "http://localhost:7878"
     )
+
+
+def test_abi_dev_oxigraph_token_is_the_nearest_projects(tmp_path):
+    _write_instance(tmp_path, ports={"oxigraph": 8639})
+    module_dir = tmp_path / "src" / "module"
+    module_dir.mkdir(parents=True)
+
+    assert abi_dev_oxigraph_token(start=module_dir) is None
+    (tmp_path / ".abi" / "dev" / "oxigraph.token").write_text("t0k3n\n")
+    assert abi_dev_oxigraph_token(start=module_dir) == "t0k3n"
+    assert abi_dev_oxigraph_token(start=tmp_path.parent) is None
+
+
+def test_the_dev_sparql_token_keeps_to_the_dev_server(tmp_path, monkeypatch):
+    monkeypatch.delenv("ABI_DEV_BIND_HOST", raising=False)
+    _write_instance(tmp_path, ports={"oxigraph": 8639})
+    (tmp_path / ".abi" / "dev" / "oxigraph.token").write_text("t0k3n")
+
+    for url in ("http://127.0.0.1:8639", "http://localhost:8639/"):
+        assert abi_dev_oxigraph_token_for(url, start=tmp_path) == "t0k3n"
+    for url in (
+        "http://127.0.0.1:7878",
+        "http://oxigraph.example:8639",
+        "https://10.0.0.5:8639",
+    ):
+        assert abi_dev_oxigraph_token_for(url, start=tmp_path) is None

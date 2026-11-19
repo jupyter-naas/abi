@@ -126,7 +126,7 @@ class MemoryMailer(Mailer):
             raise RuntimeError("mail is down")
         self.sent.append(mail)
 
-    def last_code(self, to: str, length: int = 6) -> str:
+    def last_code(self, to: str, length: int = 8) -> str:
         """The digits of the newest mail to ``to`` (a test helper)."""
         import re
 

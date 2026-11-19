@@ -357,7 +357,8 @@ export default function SectionsEditorPage() {
         }
         setLoading(false);
         setRefreshing(false);
-        clearOfficeCreate();
+        // A quiet refresh of the page File → New left must not end that create.
+        if (!quiet) clearOfficeCreate();
         if (ensureRuntime) {
           // Sidecar can take >15s. Overlay and editor wait only on HTML.
           void ensureDocumentsRuntime(workspaceId, slug, quiet ? 2 : 6)
@@ -372,7 +373,8 @@ export default function SectionsEditorPage() {
         }
       } catch (e) {
         if (gen !== loadGenRef.current) return;
-        clearOfficeCreate();
+        // A quiet refresh of the page File → New left must not end that create.
+        if (!quiet) clearOfficeCreate();
         const message = (e as Error).message;
         // Document load Forgejo races are not a Coder outage; keep banners separate.
         setError(

@@ -83,6 +83,7 @@ def workflow(
     max_attempts: int = 1,
     input_schema: dict[str, Any] | str | None = None,
     output_schema: dict[str, Any] | str | None = None,
+    skip_if_running: bool = False,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     def decorate(method: Callable[..., Any]) -> Callable[..., Any]:
         doc = inspect.getdoc(method) or ""

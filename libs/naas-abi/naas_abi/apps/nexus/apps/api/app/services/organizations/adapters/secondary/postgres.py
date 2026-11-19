@@ -25,7 +25,7 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.port import (
     OrganizationWorkspaceRecord,
     UserRecord,
 )
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 AsyncSessionGetter = Callable[[], AsyncSession | None]
@@ -93,6 +93,16 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             secondary_logo_url=row.secondary_logo_url,
             show_logo_separator=row.show_logo_separator,
             default_theme=row.default_theme,
+            legal_name=row.legal_name,
+            registration_number=row.registration_number,
+            vat_number=row.vat_number,
+            website=row.website,
+            contact_email=row.contact_email,
+            address_line1=row.address_line1,
+            address_line2=row.address_line2,
+            postal_code=row.postal_code,
+            city=row.city,
+            country=row.country,
             created_at=row.created_at,
             updated_at=row.updated_at,
         )
@@ -150,6 +160,16 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             secondary_logo_url=organization.secondary_logo_url,
             show_logo_separator=organization.show_logo_separator,
             default_theme=organization.default_theme,
+            legal_name=organization.legal_name,
+            registration_number=organization.registration_number,
+            vat_number=organization.vat_number,
+            website=organization.website,
+            contact_email=organization.contact_email,
+            address_line1=organization.address_line1,
+            address_line2=organization.address_line2,
+            postal_code=organization.postal_code,
+            city=organization.city,
+            country=organization.country,
             created_at=organization.created_at,
             updated_at=organization.updated_at,
         )
@@ -339,6 +359,52 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             select(OrganizationDomainModel.id).where(OrganizationDomainModel.domain == domain)
         )
         return result.scalar_one_or_none() is not None
+
+    @staticmethod
+    def _domain_record(row: OrganizationDomainModel) -> OrganizationDomainRecord:
+        return OrganizationDomainRecord(
+            id=row.id,
+            organization_id=row.organization_id,
+            domain=row.domain,
+            is_verified=row.is_verified,
+            verification_token=row.verification_token,
+            created_at=row.created_at,
+            verified_at=row.verified_at,
+            provider=row.provider,
+        )
+
+    async def get_domain_by_name(self, domain: str) -> OrganizationDomainRecord | None:
+        """Without case, as sign-ins route: of rows that differ only in case, a
+        verified one first."""
+        result = await self.db.execute(
+            select(OrganizationDomainModel)
+            .where(func.lower(OrganizationDomainModel.domain) == domain.lower())
+            .order_by(OrganizationDomainModel.is_verified.desc(), OrganizationDomainModel.id)
+            .limit(1)
+        )
+        row = result.scalar_one_or_none()
+        return self._domain_record(row) if row is not None else None
+
+    async def claim_unverified_domain(
+        self, domain_id: str, org_id: str, verification_token: str, created_at: datetime
+    ) -> OrganizationDomainRecord | None:
+        result = await self.db.execute(
+            select(OrganizationDomainModel)
+            .where(
+                (OrganizationDomainModel.id == domain_id)
+                & (OrganizationDomainModel.is_verified.is_(False))
+            )
+            .with_for_update()
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            return None
+        row.organization_id = org_id
+        row.verification_token = verification_token
+        row.provider = None
+        row.created_at = created_at
+        await self.db.flush()
+        return self._domain_record(row)
 
     async def create_organization_domain(
         self, domain: OrganizationDomainCreateInput

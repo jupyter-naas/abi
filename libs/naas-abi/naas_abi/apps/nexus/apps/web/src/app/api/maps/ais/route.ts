@@ -6,6 +6,7 @@ import {
   vesselsInView,
 } from './store';
 import { aisStreamApiKey, aisStreamSnapshot, ensureAisStream } from './stream';
+import { mapsRoute } from '../_guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -15,7 +16,7 @@ export const dynamic = 'force-dynamic';
  * The cache is process-local (next start / Docker nexus-web). Cloudflare Pages
  * isolates cannot hold the stream and will report that honestly.
  */
-export async function GET(req: Request) {
+async function handle(req: Request) {
   const key = aisStreamApiKey();
   if (!key) {
     return mapsPinResponse(
@@ -83,3 +84,5 @@ export async function GET(req: Request) {
     { cacheSeconds: 0 },
   );
 }
+
+export const GET = mapsRoute('ais', handle, { perMinute: 240 });

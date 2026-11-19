@@ -20,11 +20,22 @@ from naas_abi_core.services.document.DocumentPort import (
     UniqueViolation,
 )
 
+# Idle file connections kept for reuse. Opening one parses the whole schema
+# (every collection's indexes) before its first statement: tens of
+# milliseconds on a large store, against about one for a reused connection.
+POOL_SIZE = 8
+
 
 class DocumentSecondaryAdapterSQLite(DocumentSQL):
-    """File transactions use independent connections; :memory: retains one."""
+    """Each file transaction borrows its own connection from a small pool, so
+    concurrent and nested transactions stay independent; :memory: retains one."""
 
-    def __init__(self, path: str = "storage/documents.sqlite", timeout: float = 5.0):
+    def __init__(
+        self,
+        path: str = "storage/documents.sqlite",
+        timeout: float = 5.0,
+        pool_size: int = POOL_SIZE,
+    ):
         super().__init__(
             postgres=False,
             documents="abi_documents",
@@ -32,6 +43,8 @@ class DocumentSecondaryAdapterSQLite(DocumentSQL):
         )
         if not path or timeout <= 0 or not math.isfinite(timeout):
             raise ValueError("path must be nonempty and timeout must be positive")
+        if pool_size < 0:
+            raise ValueError("pool_size must not be negative")
         if sqlite3.sqlite_version_info < (3, 38, 0):
             raise RuntimeError(
                 "Document storage requires SQLite >= 3.38 with JSON support"
@@ -43,6 +56,8 @@ class DocumentSecondaryAdapterSQLite(DocumentSQL):
         self._timeout = timeout
         self._closed = False
         self._memory_connection: sqlite3.Connection | None = None
+        self._pool_size = pool_size
+        self._idle: list[sqlite3.Connection] = []
         try:
             if path == ":memory:":
                 self._memory_connection = self._connect()
@@ -101,18 +116,33 @@ class DocumentSecondaryAdapterSQLite(DocumentSQL):
             if self._memory_connection is not None:
                 yield self._memory_connection
                 return
-        connection = self._connect()
-        with self._lock:
-            # close() may have run while _connect() was opening this file
-            # connection; re-check so a closed adapter never hands out a
-            # freshly opened connection to the caller.
-            if self._closed:
-                connection.close()
-                raise DocumentStorageError("Document adapter is closed")
+            connection = self._idle.pop() if self._idle else None
+        if connection is None:
+            connection = self._connect()
+            with self._lock:
+                # close() may have run while _connect() was opening this file
+                # connection; re-check so a closed adapter never hands out a
+                # freshly opened connection to the caller.
+                if self._closed:
+                    connection.close()
+                    raise DocumentStorageError("Document adapter is closed")
         try:
             yield connection
         finally:
-            connection.close()
+            self._release(connection)
+
+    def _release(self, connection: sqlite3.Connection) -> None:
+        """Back to the pool, unless the adapter is closed, the pool is full, or
+        the connection is still inside a transaction (its rollback failed)."""
+        with self._lock:
+            if (
+                not self._closed
+                and len(self._idle) < self._pool_size
+                and not connection.in_transaction
+            ):
+                self._idle.append(connection)
+                return
+        connection.close()
 
     def ensure_index(
         self, connection: sqlite3.Connection, name: str, statement: str
@@ -174,6 +204,10 @@ class DocumentSecondaryAdapterSQLite(DocumentSQL):
     def close(self) -> None:
         with self._translate_errors(), self._lock:
             self._closed = True
+            # Borrowed connections are closed when they come back (_release).
+            idle, self._idle = self._idle, []
+            for connection in idle:
+                connection.close()
             if self._memory_connection is not None:
                 self._memory_connection.close()
                 self._memory_connection = None

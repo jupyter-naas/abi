@@ -17,7 +17,10 @@ from unittest.mock import patch
 import pytest
 from naas_abi import ABIModule
 from naas_abi.apps.nexus.apps.api.app.services.graph.access import GraphAccessError
-from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary import graph_iam
+from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary import (
+    graph_grants,
+    graph_iam,
+)
 from naas_abi.apps.nexus.apps.api.app.services.graph.adapters.secondary.graph_grants import (
     GRANTS,
     policy_name,
@@ -36,6 +39,7 @@ from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary imp
 )
 from naas_abi.apps.nexus.graph_policy_config import (
     NEXUS_GRAPH,
+    NEXUS_IDENTITY_GRAPH,
     SCHEMA_GRAPH,
     WorkspaceGraphPolicyConfig,
 )
@@ -356,21 +360,38 @@ async def test_a_workspace_that_excludes_its_own_graphs_does_not_see_them(world)
 
 
 @pytest.mark.asyncio
-async def test_reading_the_whole_catalog_reads_every_graph_but_the_application_graph(
+async def test_reading_the_whole_catalog_reads_the_organizations_graphs_and_no_nexus_graph(
     world,
 ) -> None:
     own = await world.create("member", "ws-1")
     world.put(own.uri)
     world.put(PLATFORM)
+    world.put(NEXUS_IDENTITY_GRAPH)
     await world.share("ws-2", WorkspaceGraphPolicyConfig(read_all=True))
     view = await world.view("viewer2", "ws-2")
-    # The store's own schema graph is part of the catalog.
-    assert view.readable == {own.uri, PLATFORM, SCHEMA_GRAPH}
+    # The store's own schema graph is part of the catalog; a platform graph is shared
+    # by naming it, never swept in.
+    assert view.readable == {own.uri, SCHEMA_GRAPH}
     assert view.writable == frozenset()
-    assert NEXUS_GRAPH not in view.readable
+    with pytest.raises((PermissionDeniedError, Exceptions.GraphNotFoundError)):
+        world.select("viewer2", PLATFORM)
+    for system in (NEXUS_GRAPH, NEXUS_IDENTITY_GRAPH):
+        assert system not in view.readable
+        with world.acting("viewer2"), pytest.raises(Exceptions.GraphNotFoundError):
+            list(world.store.query(f"SELECT ?s WHERE {{ GRAPH <{system}> {{ ?s ?p ?o }} }}"))
+    await world.share("ws-2", WorkspaceGraphPolicyConfig(read_all=True, read=[PLATFORM]))
     assert world.select("viewer2", PLATFORM)
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_is_never_given_a_nexus_graph_even_by_name(world) -> None:
+    world.put(NEXUS_IDENTITY_GRAPH)
+    config = WorkspaceGraphPolicyConfig(read=[NEXUS_IDENTITY_GRAPH], write=[NEXUS_IDENTITY_GRAPH])
+    await world.share("ws-2", config)
+    view = await world.view("viewer2", "ws-2")
+    assert NEXUS_IDENTITY_GRAPH not in view.readable | view.writable
     with world.acting("viewer2"), pytest.raises(Exceptions.GraphNotFoundError):
-        list(world.store.query(f"SELECT ?s WHERE {{ GRAPH <{NEXUS_GRAPH}> {{ ?s ?p ?o }} }}"))
+        world.select("viewer2", NEXUS_IDENTITY_GRAPH)
 
 
 # -- the assignments editor -------------------------------------------------------
@@ -408,9 +429,8 @@ async def test_the_editor_offers_only_graphs_the_administrator_administers(world
 
 @pytest.mark.asyncio
 async def test_reading_the_whole_catalog_never_reaches_another_tenants_graphs(world, team) -> None:
-    """``read_all`` shares what exists in the workspace's own organization (and the
-    platform's), not what other organizations, or other people's personal
-    workspaces, keep."""
+    """``read_all`` shares what exists in the workspace's own organization, not what
+    the platform, other organizations, or other people's personal workspaces, keep."""
     team.workspace("org-2", "ws-9")
     team.grant("other", "owner", workspace_container("org-2", "ws-9"))
     team.workspace(None, "solo-1")
@@ -426,8 +446,8 @@ async def test_reading_the_whole_catalog_never_reaches_another_tenants_graphs(wo
 
     await world.share("ws-2", WorkspaceGraphPolicyConfig(read_all=True))
     readable = (await world.view("viewer2", "ws-2")).readable
-    assert {mine.uri, PLATFORM} <= readable
-    assert foreign.uri not in readable and private.uri not in readable
+    assert mine.uri in readable
+    assert not {foreign.uri, private.uri, PLATFORM} & readable
     with pytest.raises((PermissionDeniedError, Exceptions.GraphNotFoundError)):
         world.select("viewer2", foreign.uri)
 
@@ -590,3 +610,36 @@ async def test_a_role_label_cannot_probe_other_tenants_graphs(world, team) -> No
         assert again._uri == present._uri
         # A line break in a label is part of it, not a syntax error.
         assert _get_or_create_knowledge_graph_role(store, "sales\nlead").label == "sales\nlead"
+
+
+@pytest.mark.asyncio
+async def test_the_shared_grant_keeps_to_its_own_policy_whatever_another_policy_is_named(
+    world, team
+) -> None:
+    shared = await world.create("member", "ws-1")
+    world.put(shared.uri)
+    await world.share("ws-2", WorkspaceGraphPolicyConfig(read=[shared.uri]))
+    assert world.select("viewer2", shared.uri)
+    # An administrator of another organization names a policy of theirs after it.
+    other = team.org("org-2")
+    team.workspace("org-2", "ws-9")
+    team.grant("other-admin", "admin", other)
+    statements = [
+        {
+            "effect": "Allow",
+            "actions": ["triple_store:Query"],
+            "resources": ["${scope}/triple_store:graph/*"],
+        }
+    ]
+    with use_call_context(team.context("other-admin")):
+        team.iam.create_policy(
+            policy_name("ws-2", "read"),
+            {"version": "2026-10-13", "statements": statements},
+            scope=other,
+        )
+    # Past the name index's lifetime, a removed member still loses the share.
+    real = graph_grants.time.monotonic
+    with patch.object(graph_grants.time, "monotonic", lambda: real() + 3600):
+        await MEMBERSHIPS.revoke("viewer2", workspace_container("org-1", "ws-2"))
+    with pytest.raises(Exceptions.GraphNotFoundError):
+        world.select("viewer2", shared.uri)

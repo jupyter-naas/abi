@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     User,
     get_current_user_required,
@@ -57,6 +57,11 @@ from naas_abi.apps.nexus.apps.api.app.services.organizations.adapters.secondary.
     OrganizationSecondaryAdapterPostgres,
 )
 from naas_abi.apps.nexus.apps.api.app.services.organizations.service import OrganizationService
+from naas_abi.apps.nexus.apps.api.app.services.rate_limit import (
+    check_invitation_mail_quota,
+    check_rate_limit,
+    get_rate_limit_identifier,
+)
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.secondary.postgres import (
     WorkspaceSecondaryAdapterPostgres,
 )
@@ -205,12 +210,25 @@ async def list_workspace_invitations(
 )
 async def resend_invitation(
     invitation_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user_required),
     invites: InvitationService = Depends(get_invitations),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     invitation = await _pending(invites, invitation_id)
     await require_invitation_admin(current_user, invitation, db)
+    # The invite routes' own counters (per inviting user, per address), once per
+    # window for one invitation, and the organization's day of invitation mail.
+    endpoint = (
+        "/api/organizations/members/invite"
+        if invitation.organization_id
+        else "/api/workspaces/members/invite"
+    )
+    # The invitation's own limit first: a refused resend spends nothing else.
+    await check_rate_limit(f"invitation:{invitation.id}", "/api/invitations/resend", limit=1)
+    await check_rate_limit(get_rate_limit_identifier(request, current_user.id), endpoint)
+    await check_rate_limit(f"email:{invitation.email}", endpoint)
+    await check_invitation_mail_quota(invitation.organization_id, invitation.workspace_id)
     org_name, ws_name = await names_of(invitation, db)
     try:
         sent = await invites.resend(

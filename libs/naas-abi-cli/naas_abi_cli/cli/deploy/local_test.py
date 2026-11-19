@@ -98,6 +98,23 @@ def test_a_generated_nats_stack_runs_the_idp_in_its_own_container(
     assert "IDP_SERVICE_KEY" not in env  # an operator creates it (a module's key)
 
 
+def test_deploy_local_moves_the_engine_keys_out_of_env(tmp_path: Path) -> None:
+    # An engine before the sidecar wrote IAM's keys into .env, and docker
+    # compose refused it ("unexpected character "/" in variable name").
+    from dotenv import dotenv_values, set_key
+
+    env = tmp_path / ".env"
+    env.write_text("MY_OWN_KEY=kept\n")
+    pem = "-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n"
+    set_key(str(env), "iam/signing-keys/k1", pem)
+
+    setup_local_deploy(str(tmp_path), base_domain="localhost", nats=True)
+
+    assert not any("/" in key for key in dotenv_values(env))
+    assert dotenv_values(env)["MY_OWN_KEY"] == "kept"
+    assert dotenv_values(tmp_path / ".env.sidecar") == {"iam/signing-keys/k1": pem}
+
+
 def test_a_classic_stack_has_no_idp(tmp_path: Path) -> None:
     setup_local_deploy(str(tmp_path), base_domain="localhost", nats=False)
     assert "idp" not in _services(tmp_path / "docker-compose.yml")
@@ -375,7 +392,7 @@ def test_setup_local_deploy_can_include_coding(tmp_path: Path) -> None:
     assert runner_cfg.exists()
     runner_content = runner_cfg.read_text(encoding="utf-8")
     assert "{{" not in runner_content
-    assert "_abi-network" in runner_content
+    assert "_ci" in runner_content
     # one-shot bootstrap wiring: coding-init service + script, abi/act-runner wait
     assert "\n  coding-init:" in compose_content
     assert compose_content.count("condition: service_completed_successfully") >= 2
@@ -387,7 +404,7 @@ def test_setup_local_deploy_can_include_coding(tmp_path: Path) -> None:
     # .env scaffolding
     assert "CODER_ACCESS_URL=" in env_content
     assert "CODING_WORKSPACE_DOCKER_NETWORK=" in env_content
-    assert "_abi-network" in env_content
+    assert "_coding" in env_content
     # admin passwords generated (complexity-safe); runner secret is 40-hex;
     # the two admin *tokens* start blank (minted by coding-init on first up)
     assert re.search(r"^CODER_ADMIN_PASSWORD=Abi1!\S+", env_content, re.MULTILINE)
@@ -489,11 +506,10 @@ def test_setup_local_deploy_hardens_fuseki_for_reliability(tmp_path: Path) -> No
     fuseki = _service_block(compose_text, "fuseki", "fuseki-compact")
     lines = [line.strip() for line in fuseki.splitlines()]
 
-    # Image intentionally unchanged for now (staying on the community image;
-    # migrating off it is a separate backup + dump-and-reload job).
-    assert [line for line in lines if line.startswith("image:")] == [
-        "image: stain/jena-fuseki:latest"
-    ]
+    # Built from .deploy/docker/fuseki, never pulled: stain/jena-fuseki is
+    # Fuseki 5.1.0, which fails every request after 65535 queries.
+    assert not any(line.startswith("image:") for line in lines)
+    assert "context: ./.deploy/docker/fuseki" in lines
 
     # Heap + memory caps so an OOM can't Docker-kill the JVM mid-write (the
     # unclean kill that corrupts TDB2).
@@ -513,6 +529,37 @@ def test_setup_local_deploy_hardens_fuseki_for_reliability(tmp_path: Path) -> No
     backup_script = tmp_path / ".deploy" / "docker" / "fuseki" / "backup.sh"
     assert backup_script.exists()
     assert "--compact" in backup_script.read_text(encoding="utf-8")
+
+
+def test_setup_local_deploy_builds_a_fuseki_without_the_read_lock_leak(
+    tmp_path: Path,
+) -> None:
+    # Fuseki 5.1.0 leaks one TDB2 read lock per query (apache/jena#2755, fixed
+    # in 5.2.0); the deployment builds 5.6.0 from a checked download.
+    setup_local_deploy(str(tmp_path), base_domain="localhost")
+    fuseki_dir = tmp_path / ".deploy" / "docker" / "fuseki"
+
+    dockerfile = (fuseki_dir / "Dockerfile").read_text(encoding="utf-8")
+    version = re.search(
+        r"^ARG FUSEKI_VERSION=(\d+)\.(\d+)\.(\d+)$", dockerfile, re.MULTILINE
+    )
+    assert version is not None
+    assert tuple(int(part) for part in version.groups()) >= (5, 2, 0)
+    assert re.search(r"^ARG FUSEKI_SHA512=[0-9a-f]{128}$", dockerfile, re.MULTILINE)
+    assert "sha512sum -c -" in dockerfile
+    assert "COPY --chmod=755 fuseki-server-launcher.sh /jena-fuseki/fuseki-server" in (
+        dockerfile
+    )
+
+    # The launcher turns off Shiro session storage, which a 5.1-era shiro.ini
+    # enables and Fuseki 5.6 (no session manager) answers with HTTP 500.
+    launcher = (fuseki_dir / "fuseki-server-launcher.sh").read_text(encoding="utf-8")
+    assert launcher.startswith("#!/bin/bash\n")
+    assert (
+        "securityManager.subjectDAO.sessionStorageEvaluator.sessionStorageEnabled = false"
+        in launcher
+    )
+    assert 'exec /jena-fuseki/fuseki-server.dist "$@"' in launcher
 
 
 def test_setup_local_deploy_ships_a_nats_config_raising_max_payload_to_8mb(
@@ -547,7 +594,8 @@ def test_setup_local_deploy_makes_no_admin_password(tmp_path: Path) -> None:
     setup_local_deploy(str(tmp_path), base_domain="localhost")
 
     values = _env_values(tmp_path / ".env")
-    assert values["NEXUS_USER_ADMIN_EMAIL"] == "admin@example.com"
+    # No config.local.yaml here to read the administrator from.
+    assert values["NEXUS_USER_ADMIN_EMAIL"] == ""
     # The admin signs in at the identity provider with a mailed code.
     assert not [
         key for key in values if key.startswith("NEXUS_USER_") and "PASSWORD" in key
@@ -572,15 +620,21 @@ def test_regenerating_does_not_bring_a_password_back(tmp_path: Path) -> None:
     )
 
     values = _env_values(tmp_path / ".env")
-    assert values["NEXUS_USER_ADMIN_EMAIL"] == "admin@example.com"
+    # No config.local.yaml here to read the administrator from.
+    assert values["NEXUS_USER_ADMIN_EMAIL"] == ""
     assert "NEXUS_USER_ADMIN_PASSWORD" not in values
     assert "NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD" not in values
 
 
-NATS_USERS = {"engine": "NATS_ENGINE_PASSWORD", "auth": "NATS_AUTH_PASSWORD"}
-# What the broker container needs from .env: both passwords and the callout's
+NATS_USERS = {
+    "engine": "NATS_ENGINE_PASSWORD",
+    "auth": "NATS_AUTH_PASSWORD",
+    "sys": "NATS_SYSTEM_PASSWORD",
+}
+# What the broker container needs from .env: the passwords and the callout's
 # trusted key.
 BROKER_ENV = (*NATS_USERS.values(), "NATS_AUTH_CALLOUT_ISSUER")
+MONITORING_LINE = 'http: "nats-monitor:8222"\n'
 
 
 def _nats_service(compose: Path) -> dict:
@@ -614,16 +668,18 @@ def test_the_broker_requires_a_password_and_listens_on_localhost(
         service = _nats_service(root / "docker-compose.yml")
         conf = (root / ".deploy/docker/nats/nats.conf").read_text(encoding="utf-8")
         for user, key in NATS_USERS.items():
-            assert f"{{ user: {user}, password: ${key}," in conf
+            assert f"{{ user: {user}, password: ${key}" in conf
         assert "issuer: $NATS_AUTH_CALLOUT_ISSUER" in conf
-        assert "auth_users: [ engine, auth ]" in conf
+        # The warden's user is in the system account, exempt from the callout.
+        assert "auth_users: [ engine, auth, sys ]" in conf
+        assert "system_account: SYS" in conf
         for key in BROKER_ENV:
             assert f"{key}=${{{key}:-}}" in service["environment"]
         assert all(port.startswith("127.0.0.1:") for port in service["ports"])
         assert (
             _nats_guard(service)
             .rstrip()
-            .endswith("exec nats-server -c /etc/nats/nats.conf -js -sd /data -m 8222")
+            .endswith("exec nats-server -c /etc/nats/nats.conf -js -sd /data")
         )
 
 
@@ -655,6 +711,15 @@ def test_the_generated_broker_admits_only_its_users(tmp_path: Path) -> None:
 
     setup_local_deploy(str(tmp_path), base_domain="localhost")
     env = _env_values(tmp_path / ".env")
+    # The monitoring address is a compose network alias, which this host does
+    # not resolve: the rest of the file runs as generated.
+    conf = tmp_path / "nats.conf"
+    conf.write_text(
+        (tmp_path / ".deploy/docker/nats/nats.conf")
+        .read_text(encoding="utf-8")
+        .replace(MONITORING_LINE, ""),
+        encoding="utf-8",
+    )
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
@@ -662,7 +727,7 @@ def test_the_generated_broker_admits_only_its_users(tmp_path: Path) -> None:
         [
             str(shutil.which("nats-server")),
             "-c",
-            str(tmp_path / ".deploy/docker/nats/nats.conf"),
+            str(conf),
             "-a",
             "127.0.0.1",
             "-p",
@@ -728,3 +793,19 @@ def test_a_root_owned_env_stops_the_deploy_before_it_writes(tmp_path: Path) -> N
         setup_local_deploy(str(tmp_path), base_domain="localhost", nats=False)
 
     assert not (tmp_path / "docker-compose.yml").exists()
+
+
+def _assert_mcp_server_is_opt_in_and_keyless(service: dict) -> None:
+    """Started only with the ``mcp`` profile; each caller brings their own key."""
+    assert service["profiles"] == ["mcp"]
+    names = [str(item).split("=", 1)[0] for item in service["environment"]]
+    assert "ABI_API_KEY" not in names
+    assert "MCP_HOST" in names
+
+
+def test_the_mcp_server_keeps_off_by_default_and_holds_no_key(tmp_path: Path) -> None:
+    setup_local_deploy(str(tmp_path), base_domain="localhost", nats=True)
+    service = _services(tmp_path / "docker-compose.yml")["mcp-server"]
+
+    _assert_mcp_server_is_opt_in_and_keyless(service)
+    assert "MCP_ALLOWED_HOSTS=127.0.0.1:*,localhost:*" in service["environment"]

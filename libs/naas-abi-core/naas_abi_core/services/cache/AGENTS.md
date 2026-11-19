@@ -36,6 +36,9 @@ class ICacheAdapter:
 ```
 
 DTOs: `CachedData(key, data, data_type: DataType, created_at)`. `DataType` ∈ `TEXT | JSON | BINARY | PICKLE`.
+Entries are stored as `TEXT`, `JSON` or `BINARY` only (`STORED_TYPES`, `check_stored_type`).
+`PICKLE` names entries written by older releases: they are listed and deleted like any
+other, but never decoded, written or sent over NATS, and reading one is a miss.
 `CacheKeyPage(keys, next_after)`: pass `next_after` back as `after`; `limit` is 1..`MAX_KEYS_PER_PAGE` (1000).
 `CacheEntry(tier, cached)`: a stored entry as is.
 
@@ -50,19 +53,19 @@ Exceptions: `CacheNotFoundError`, `CacheExpiredError`.
 ## Service API (`CacheService.py`)
 
 ```python
-get(key, ttl=None)              → Any            # hot → cold; logs tier failures as warnings
+get(key, ttl=None, data_type=None) → Any         # hot → cold; logs tier failures as warnings;
+                                                 # with data_type, an entry of another type is a miss
 exists(key)                     → bool           # hot first
 delete(key)                     → None           # all tiers
 set_text(key, value)            → None           # cold
 set_json(key, value)            → None           # cold
 set_binary(key, value)          → None           # cold
-set_pickle(key, value)          → None           # cold
 set_json_if_absent(key, value)  → bool           # cold
 set_binary_if_absent(key, value)→ bool           # cold
 
 # administration
 list_keys(prefix="", limit=100, after=None) → CacheKeyPage   # merged across tiers, deduplicated
-get_entry(key)                  → CacheEntry     # hot first; never deserialized (pickle stays opaque), no TTL check
+get_entry(key)                  → CacheEntry     # hot first; never deserialized (a legacy pickle stays opaque), no TTL check
 
 # tier views
 cache.hot                       → CacheService   # raises if no hot tier

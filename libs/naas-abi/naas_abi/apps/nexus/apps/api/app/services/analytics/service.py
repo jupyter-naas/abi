@@ -2,9 +2,9 @@
 
 Write path:
 
-1. ``ingest_event`` persists one event as a pickle via the storage port and
+1. ``ingest_event`` persists one event as JSON via the storage port and
    updates the ref-users / ref-workspaces directories.
-2. A debounced background rebuild reads every per-event pickle, then for
+2. A debounced background rebuild reads every per-event record, then for
    **each scenario** (Last 7/30/90 days) it computes the full set of
    aggregates against that scenario's time window. Every aggregate JSON is
    written as a ``{scenario_id: <payload>}`` map so the read endpoints can

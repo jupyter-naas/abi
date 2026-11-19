@@ -2,13 +2,13 @@ from fastapi import APIRouter
 from naas_abi import config, load_modules
 from naas_abi.__modules__ import get_modules
 from naas_abi_core import logger
-from naas_abi_marketplace.applications.github.integrations.GitHubIntegration import (
-    GitHubIntegration,
-    GitHubIntegrationConfiguration,
-)
 from naas_abi_marketplace.applications.naas.integrations.NaasIntegration import (
     NaasIntegration,
     NaasIntegrationConfiguration,
+)
+from naas_abi_marketplace.domains.operations.modules.support.integrations.GitHubIntegration import (
+    GitHubIntegration,
+    GitHubIntegrationConfiguration,
 )
 
 

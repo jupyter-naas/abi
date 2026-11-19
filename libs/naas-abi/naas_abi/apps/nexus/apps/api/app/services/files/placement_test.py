@@ -1,4 +1,5 @@
-"""A workspace owns exactly its drive, and the kernel holds everyone to it."""
+"""A workspace owns exactly its drive, an organization its own, and the kernel holds
+everyone to them."""
 
 from __future__ import annotations
 
@@ -20,8 +21,10 @@ from naas_abi_core.services.object_storage.ObjectStorageService import ObjectSto
 def _forget_placed_workspaces():
     """Each test has its own IAM: nothing is placed in it yet."""
     placement._PLACED.clear()
+    placement._PLACED_ORGS.clear()
     yield
     placement._PLACED.clear()
+    placement._PLACED_ORGS.clear()
 
 
 def keys(workspace_id: str) -> list[str]:
@@ -146,3 +149,66 @@ async def test_the_kernel_reaches_a_workspaces_roles_to_its_drive_only(kernel, n
         with pytest.raises(Exceptions.ObjectNotFound):
             kernel.get_object(f"{drive}/ws-1", "a.txt")
         kernel.put_object(f"{drive}/ws-2", "own.txt", b"mine")
+
+
+# -- the organization drive ----------------------------------------------------
+
+
+def test_an_organization_places_its_drive_folder_and_everything_below() -> None:
+    found = placement.organization_drive_placements("org-1")
+    assert [p.id_key() for p in found] == [
+        "naas_abi/organization-drive/org-1",
+        "naas_abi/organization-drive/org-1/*",
+    ]
+    assert {p.organization for p in found} == {"org-1"}
+
+
+@pytest.mark.parametrize("org_id", ["", ".", "..", "a/b"])
+def test_an_organization_id_that_is_not_one_plain_segment_places_nothing(org_id: str) -> None:
+    with pytest.raises(ValueError):
+        placement.organization_drive_placements(org_id)
+
+
+@pytest.mark.asyncio
+async def test_existing_organizations_come_from_the_organizations_table() -> None:
+    assert placement.organization_drives in placements.SOURCES
+    found = list(await placement.organization_drives(FakeDb(["org-1", "a/b"])))
+    assert [p.organization for p in found] == ["org-1", "org-1"]
+
+
+def test_placing_an_organization_drive_waits_for_iam_to_know_it(nexus_iam) -> None:
+    assert placement.place_organization_drive_sync("org-new") is False
+    nexus_iam.org("org-new")
+    assert placement.place_organization_drive_sync("org-new") is True
+    found = nexus_iam.iam.placement_of("object_storage", "naas_abi/organization-drive/org-new/a")
+    assert found.container == names.org_container("org-new")
+
+
+@pytest.mark.asyncio
+async def test_the_kernel_reaches_an_organizations_roles_to_its_drive_only(
+    tmp_path, nexus_iam: NexusIam
+) -> None:
+    org = nexus_iam.org("org-1")
+    workspace = nexus_iam.workspace("org-1", "ws-1")
+    nexus_iam.grant("admin", "admin", org)
+    nexus_iam.grant("viewer", "viewer", org)
+    # A member of one of the organization's workspaces, holding no role at the
+    # organization itself.
+    nexus_iam.grant("ws-only", "member", workspace)
+    nexus_iam.grant("other", "admin", nexus_iam.org("org-2"))
+    kernel = ObjectStorageService(ObjectStorageSecondaryAdapterFS(str(tmp_path)))
+    kernel.set_services(IEngine.Services(iam=nexus_iam.iam))
+    drive = "naas_abi/organization-drive/org-1"
+
+    await placement.ensure_organization_drive_placed("org-1")
+
+    with acting("admin"):
+        kernel.put_object(f"{drive}/operations", "plan.md", b"# plan")
+    with acting("viewer"):
+        assert kernel.get_object(f"{drive}/operations", "plan.md") == b"# plan"
+        with pytest.raises(PermissionDeniedError):
+            kernel.put_object(drive, "x.md", b"x")
+    for outsider in ("ws-only", "other"):
+        with acting(outsider):
+            with pytest.raises(Exceptions.ObjectNotFound):
+                kernel.get_object(f"{drive}/operations", "plan.md")

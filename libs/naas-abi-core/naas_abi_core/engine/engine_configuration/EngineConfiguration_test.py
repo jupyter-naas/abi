@@ -4,6 +4,14 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _fresh_configuration():
+    # load_configuration caches the parsed file per process: each test reads its own.
+    EngineConfiguration.reset_configuration_cache()
+    yield
+    EngineConfiguration.reset_configuration_cache()
+
+
 def _configuration_yaml(
     title: str,
     dotenv_path: str,
@@ -80,13 +88,14 @@ def test_load_configuration_uses_dotenv_configured_in_secret_service(
     configuration = EngineConfiguration.load_configuration()
 
     assert configuration.api.title == "DEV"
-    assert configuration.api.reload is True
+    # No auto-reload unless the configuration asks for it.
+    assert configuration.api.reload is False
 
 
-def test_load_configuration_allows_disabling_api_reload(tmp_path, monkeypatch):
+def test_load_configuration_allows_enabling_api_reload(tmp_path, monkeypatch):
     (tmp_path / ".env.bootstrap").write_text("ENV=local\n", encoding="utf-8")
     (tmp_path / "config.yaml").write_text(
-        _configuration_yaml(title="BASE", dotenv_path=".env.bootstrap", reload=False),
+        _configuration_yaml(title="BASE", dotenv_path=".env.bootstrap", reload=True),
         encoding="utf-8",
     )
 
@@ -95,7 +104,7 @@ def test_load_configuration_allows_disabling_api_reload(tmp_path, monkeypatch):
 
     configuration = EngineConfiguration.load_configuration()
 
-    assert configuration.api.reload is False
+    assert configuration.api.reload is True
 
 
 def test_load_configuration_fails_if_configured_dotenv_file_is_missing(

@@ -206,7 +206,12 @@ async def test_adapter_maps_row_to_record() -> None:
     db = AsyncMock()
     scalars = SimpleNamespace(all=lambda: [row], first=lambda: row)
     db.execute = AsyncMock(
-        return_value=SimpleNamespace(scalar_one_or_none=lambda: row, scalars=lambda: scalars)
+        return_value=SimpleNamespace(
+            scalar_one_or_none=lambda: row,
+            scalars=lambda: scalars,
+            # The skill, and whether the listing workspace turned it off (no row: on).
+            all=lambda: [(row, None)],
+        )
     )
 
     adapter = SkillSecondaryAdapterPostgres(db=db)
@@ -216,3 +221,4 @@ async def test_adapter_maps_row_to_record() -> None:
     assert skills[0].slug == "summarize"
     assert skills[0].scope == "organization"
     assert skills[0].organization_id == "org-1"
+    assert skills[0].enabled_here is True

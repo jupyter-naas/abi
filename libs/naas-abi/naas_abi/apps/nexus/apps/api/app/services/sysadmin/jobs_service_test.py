@@ -524,3 +524,113 @@ def test_following_a_run_of_an_unregistered_module_lists_the_catalogs_once():
         assert run(service.run("acme.flows", "ingest:5")).workflow is not None
 
     assert Counting.listed == 2  # once per (module, job), not once per poll
+
+
+# --- overview cost (issue #1456) ---------------------------------------------------
+
+
+class _CountingRunStore(InMemoryJobRunStore):
+    """Counts the reads the overview makes, and how many run at once."""
+
+    def __init__(self, *args, delay: float = 0.0, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.delay = delay
+        self.module_reads: list[str] = []
+        self.in_flight = 0
+        self.max_in_flight = 0
+
+    async def module_runs(self, module_id, jobs, *, recent=20):
+        self.module_reads.append(module_id)
+        self.in_flight += 1
+        self.max_in_flight = max(self.max_in_flight, self.in_flight)
+        try:
+            await asyncio.sleep(self.delay)
+            return await super().module_runs(module_id, jobs, recent=recent)
+        finally:
+            self.in_flight -= 1
+
+
+def test_the_overview_reads_each_module_once_not_each_job():
+    store = _CountingRunStore(fixtures.job_runs())
+
+    run(_service(runs=store, overview_ttl=0).overview())
+
+    assert sorted(store.module_reads) == ["acme.jobs", "acme.other"]
+
+
+def test_overview_reads_are_bounded(monkeypatch):
+    from naas_abi.apps.nexus.apps.api.app.services.sysadmin import jobs_service
+    from naas_abi.apps.nexus.apps.api.app.services.sysadmin.jobs import JobDefinition
+
+    monkeypatch.setattr(jobs_service, "OVERVIEW_CONCURRENCY", 3)
+    many = [JobDefinition(f"m{i:02d}", "job", "", "engine") for i in range(12)]
+    store = _CountingRunStore(delay=0.01)
+
+    overview = run(
+        _service(catalogs=[InMemoryJobCatalog(many)], runs=store, overview_ttl=0).overview()
+    )
+
+    assert len(overview.jobs) == 12 and len(store.module_reads) == 12
+    assert store.max_in_flight == 3
+
+
+def test_concurrent_overviews_share_one_computation():
+    store = _CountingRunStore(fixtures.job_runs(), delay=0.05)
+    service = _service(runs=store, overview_ttl=0)
+
+    async def three():
+        return await asyncio.gather(service.overview(), service.overview(), service.overview())
+
+    first, second, third = run(three())
+
+    assert first is second is third
+    assert sorted(store.module_reads) == ["acme.jobs", "acme.other"]
+
+
+def test_the_overview_answers_again_until_it_expires_or_a_run_is_triggered():
+    store = _CountingRunStore(fixtures.job_runs())
+    service = _service(runs=store, overview_ttl=60)
+
+    first = run(service.overview())
+    assert run(service.overview()) is first
+    assert len(store.module_reads) == 2
+
+    run(service.trigger("admin-1", "acme.jobs", "nightly", {}))
+    assert run(service.overview()) is not first
+    assert len(store.module_reads) == 4
+
+
+def test_a_caller_that_goes_away_does_not_cancel_the_shared_overview():
+    store = _CountingRunStore(fixtures.job_runs(), delay=0.05)
+    service = _service(runs=store, overview_ttl=0)
+
+    async def scenario():
+        leaving = asyncio.ensure_future(service.overview())
+        staying = asyncio.ensure_future(service.overview())
+        await asyncio.sleep(0.01)
+        leaving.cancel()
+        result = await staying
+        return leaving.cancelled(), result
+
+    cancelled, result = run(scenario())
+
+    assert cancelled and len(result.jobs) == 3
+    assert sorted(store.module_reads) == ["acme.jobs", "acme.other"]
+
+
+def test_an_overview_started_before_a_trigger_is_not_kept_or_joined():
+    store = _CountingRunStore(fixtures.job_runs(), delay=0.05)
+    service = _service(runs=store, overview_ttl=60)
+
+    async def scenario():
+        before = asyncio.ensure_future(service.overview())
+        await asyncio.sleep(0.01)
+        await service.trigger("admin-1", "acme.jobs", "nightly", {})
+        after = await service.overview()
+        first = await before
+        return first, after, await service.overview()
+
+    first, after, cached = run(scenario())
+
+    assert after is not first and cached is after
+    assert len(store.module_reads) == 4

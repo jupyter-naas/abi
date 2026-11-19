@@ -80,6 +80,21 @@ class OrganizationModel(Base):
     )  # Vertical bar between primary and secondary logo
     default_theme = Column(String, nullable=True, default=None)  # "light", "dark", or null (system)
 
+    # Identity (Organization Settings > General), edited in the app: never seeded.
+    legal_name = Column(String(200), nullable=True)
+    registration_number = Column(String(100), nullable=True)
+    vat_number = Column(String(100), nullable=True)
+    website = Column(Text, nullable=True)
+    contact_email = Column(String(254), nullable=True)
+    address_line1 = Column(String(200), nullable=True)
+    address_line2 = Column(String(200), nullable=True)
+    postal_code = Column(String(20), nullable=True)
+    city = Column(String(100), nullable=True)
+    country = Column(String(100), nullable=True)
+    # Made by the configuration's seeding (core/org_seed.py): the only rows it updates.
+    # False for what people create; NULL for a row older than the flag.
+    seeded = Column(Boolean, nullable=True, default=False)
+
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 
@@ -291,6 +306,9 @@ class WorkspaceModel(Base):
 
     # Default git repo (owner/name) cloned for new coding workspaces here.
     coding_default_repo_id = Column(String, nullable=True)
+    # Made by the configuration's seeding (core/org_seed.py): the only rows it updates,
+    # and the only ones its graph assignments reach. NULL for a row older than the flag.
+    seeded = Column(Boolean, nullable=True, default=False)
 
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
@@ -724,6 +742,19 @@ class SkillModel(Base):
     updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
 
 
+class SkillWorkspaceSwitchModel(Base):
+    """An organization skill turned on or off in one workspace of its organization,
+    by that workspace's admins."""
+
+    __tablename__ = "skill_workspace_switches"
+
+    skill_id = Column(String, ForeignKey("skills.id", ondelete="CASCADE"), primary_key=True)
+    workspace_id = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
+    enabled = Column(Boolean, nullable=False)
+    updated_by = Column(String, nullable=True)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+
 # ============================================
 # App Configurations (per-workspace enable state)
 # ============================================
@@ -737,7 +768,7 @@ class AppConfigModel(Base):
         String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
     )
     # Marketplace app identifier: "<module_path>:<app_name>" (e.g.
-    # "naas_abi_marketplace.applications.openrouter:dashboard").
+    # "remote/applications.x:x_proxy").
     app_id = Column(String(512), nullable=False, index=True)
     # The old on/off (``enabled``) stays in the table, unread: the move of the
     # toggles into policies reads it once (``services/iam/policy_tree``).

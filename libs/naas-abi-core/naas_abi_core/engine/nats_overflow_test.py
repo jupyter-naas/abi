@@ -74,7 +74,11 @@ def test_a_parked_reply_is_read_by_its_caller_only_then_released():
 def test_parking_respects_the_value_cap_the_memory_budget_and_capacity():
     async def scenario():
         host = OverflowHost(
-            SECRET, max_value_bytes=10, max_parked_bytes=15, max_sessions=2
+            SECRET,
+            max_value_bytes=10,
+            max_parked_bytes=15,
+            max_sessions=2,
+            max_caller_sessions=2,
         )
 
         with pytest.raises(TransferError) as too_large:
@@ -82,12 +86,29 @@ def test_parking_respects_the_value_cap_the_memory_budget_and_capacity():
         await host.park(headers(), b"x" * 10)
         with pytest.raises(TransferError) as over_budget:
             await host.park(headers(), b"x" * 6)
-        await host.park(headers(), b"x" * 5)
+        await host.park(headers("other"), b"x" * 5)
         with pytest.raises(TransferError) as at_capacity:
             await host.park(headers(), b"x")
 
         assert too_large.value.code == "PAYLOAD_TOO_LARGE"
         assert over_budget.value.code == at_capacity.value.code == "RESOURCE_EXHAUSTED"
+        await host.stop()
+        assert host.parked_bytes == 0
+
+    asyncio.run(scenario())
+
+
+def test_one_caller_cannot_take_every_parked_reply_byte():
+    async def scenario():
+        host = OverflowHost(SECRET, max_value_bytes=10, max_parked_bytes=40)
+        await host.park(headers("busy"), b"x" * 10)
+        with pytest.raises(TransferError, match="this caller") as refused:
+            await host.park(headers("busy"), b"x")
+        # The budget the busy caller could not take is still everyone else's.
+        for identity in ("api", "engine", "other"):
+            await host.park(headers(identity), b"x" * 10)
+        assert refused.value.code == "RESOURCE_EXHAUSTED"
+        assert host.parked_bytes == 40
         await host.stop()
         assert host.parked_bytes == 0
 

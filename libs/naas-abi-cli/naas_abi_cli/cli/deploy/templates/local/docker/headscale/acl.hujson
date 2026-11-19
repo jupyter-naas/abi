@@ -1,0 +1,22 @@
+// Headscale ACL policy (rendered by `abi deploy local --with-headscale`).
+// Default deny: with no rule below, no node reaches any other. Add one rule
+// per connection the tailnet needs, for example a group of admins reaching
+// one tagged server on SSH and HTTPS:
+//
+//   "groups":    { "group:admins": ["alice@"] },
+//   "tagOwners": { "tag:server": ["group:admins"] },
+//   "acls": [
+//     { "action": "accept", "src": ["group:admins"], "dst": ["tag:server:22,443"] }
+//   ]
+//
+// Reference: https://headscale.net/stable/ref/acls/
+{
+  // Headscale refuses an empty policy: the one rule below matches no node
+  // (192.0.2.0/24 is reserved for documentation), so nothing is allowed.
+  "hosts": {
+    "nowhere": "192.0.2.1/32"
+  },
+  "acls": [
+    { "action": "accept", "src": ["nowhere"], "dst": ["nowhere:*"] }
+  ]
+}

@@ -17,7 +17,11 @@ from fastapi.staticfiles import StaticFiles
 from naas_abi.apps.nexus.apps.api.app.api.router import api_router
 from naas_abi.apps.nexus.apps.api.app.core.config import settings
 from naas_abi.apps.nexus.apps.api.app.core.database import init_db
-from naas_abi.apps.nexus.apps.api.app.core.frame_headers import embed_csp, is_embeddable
+from naas_abi.apps.nexus.apps.api.app.core.frame_headers import (
+    embed_csp,
+    frame_ancestors,
+    is_embeddable,
+)
 from naas_abi.apps.nexus.apps.api.app.core.logging import configure_logging
 from naas_abi.apps.nexus.apps.api.app.core.user_content import harden_active_content
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat_ingestion_worker import (
@@ -33,6 +37,7 @@ from naas_abi.apps.nexus.apps.api.app.services.ollama import (
     get_ollama_status,
 )
 from naas_abi.apps.nexus.apps.api.app.services.websocket import init_websocket
+from naas_abi_core.apps.api.abi_api_key_auth import routed_path
 from starlette.middleware.base import BaseHTTPMiddleware
 
 
@@ -186,11 +191,15 @@ def _schedule_identity_graph_sync(_published: int = 0, delay_seconds: float = 2.
 
 
 def _install_drive_writers() -> None:
-    """Keep .manifest.json and the default folders in every workspace drive and My Drive."""
+    """Keep .manifest.json and the default folders in every workspace drive,
+    organization drive and My Drive."""
     _log = logging.getLogger(__name__)
     try:
         from naas_abi import ABIModule
         from naas_abi.apps.nexus.apps.api.app.services.files.drives.my_drive import MyDriveWriter
+        from naas_abi.apps.nexus.apps.api.app.services.files.drives.organization_drive import (
+            OrganizationDriveWriter,
+        )
         from naas_abi.apps.nexus.apps.api.app.services.files.drives.workspace_drive import (
             WorkspaceDriveWriter,
         )
@@ -199,6 +208,7 @@ def _install_drive_writers() -> None:
             return ABIModule.get_instance().engine.services.object_storage
 
         WorkspaceDriveWriter(get_storage=get_storage).install()
+        OrganizationDriveWriter(get_storage=get_storage).install()
         MyDriveWriter(get_storage=get_storage).install()
         _log.info("✓ Drive writers installed")
     except Exception:
@@ -206,13 +216,17 @@ def _install_drive_writers() -> None:
 
 
 async def _backfill_drives() -> None:
-    """Write missing workspace and My Drive defaults, and the platform drive's staff folders."""
+    """Write missing workspace, organization and My Drive defaults, and the platform
+    drive's staff folders."""
     _log = logging.getLogger(__name__)
     try:
         from naas_abi import ABIModule
         from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
         from naas_abi.apps.nexus.apps.api.app.services.files.drives.my_drive import (
             backfill_my_drives,
+        )
+        from naas_abi.apps.nexus.apps.api.app.services.files.drives.organization_drive import (
+            backfill_organization_drives,
         )
         from naas_abi.apps.nexus.apps.api.app.services.files.drives.platform_drive import (
             backfill_platform_drive,
@@ -224,12 +238,14 @@ async def _backfill_drives() -> None:
         storage = ABIModule.get_instance().engine.services.object_storage
         async with AsyncSessionLocal() as session:
             workspaces = await backfill_workspace_drives(session, storage)
+            organizations = await backfill_organization_drives(session, storage)
             users = await backfill_my_drives(session, storage)
         platform = await backfill_platform_drive(storage)
-        if any(workspaces.values()) or any(users.values()) or any(platform.values()):
+        if any(any(counts.values()) for counts in (workspaces, organizations, users, platform)):
             _log.info(
-                "✓ Drives backfilled: workspaces %s, my drives %s, platform %s",
+                "✓ Drives backfilled: workspaces %s, organizations %s, my drives %s, platform %s",
                 workspaces,
+                organizations,
                 users,
                 platform,
             )
@@ -348,6 +364,7 @@ async def _prepare_iam() -> None:
         bootstrap,
         container_defaults,
         container_names,
+        module_moves,
         policy_tree,
     )
     from naas_abi.apps.nexus.apps.api.app.services.iam import listers as iam_listers
@@ -387,6 +404,8 @@ async def _prepare_iam() -> None:
                 # IAM's names become container paths, once, organizations and
                 # workspaces registered as containers (after the moves above).
                 await container_names.migrate_names(db)
+                # Module scopes a remote module serves now (the X app), once.
+                await module_moves.migrate(db)
                 report = await bootstrap.migrate_role_data(db)
                 if report.applied:
                     log.info("Role data moved into IAM: %s", report)
@@ -399,6 +418,12 @@ async def _prepare_iam() -> None:
                 # Each organization and workspace has its access policy and its
                 # members and admins groups (made once for those that predate them).
                 await container_defaults.migrate(db)
+                # The agents a workspace had turned off, of modules loaded since.
+                try:
+                    await policy_tree.deny_deferred_agents(db)
+                except Exception:  # noqa: BLE001 - they stay set aside for the next start
+                    await db.rollback()
+                    log.exception("The turned-off agents of modules loaded since were not denied")
     except Exception:
         log.exception("Nexus could not set up its authorization in IAM: every request is refused")
 
@@ -703,6 +728,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 # FastAPI's own interactive docs (development only) are HTML with scripts.
 _DOCS_PATHS = frozenset({"/docs", "/redoc", "/docs/oauth2-redirect"})
+# The engine's landing page (``naas_abi_core.apps.api``): a fixed template with
+# its configured title and logo escaped in, no user bytes.
+_LANDING_PATH = "/"
 
 
 def _with_own_policy(own: str | None, global_policy: str) -> str:
@@ -716,7 +744,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         # Skip security headers for WebSocket upgrade requests
-        if request.url.path.startswith("/ws/") or request.headers.get("upgrade") == "websocket":
+        # The routed path, not ``request.url``: the URL is rebuilt from ``Host``.
+        path = routed_path(request)
+        if path.startswith("/ws/") or request.headers.get("upgrade") == "websocket":
             return await call_next(request)
 
         response: Response = await call_next(request)
@@ -727,11 +757,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # The built-in IdP's login pages are the one active content this origin
         # serves as itself: they are sandboxed by their own policy (no script),
         # which the net would turn into a download.
-        trusted = is_idp_path(request.url.path)
+        trusted = is_idp_path(path)
         if (
             not trusted
-            and not is_embeddable(request.url.path)
-            and request.url.path not in _DOCS_PATHS
+            and not is_embeddable(path)
+            and path not in _DOCS_PATHS
+            and path != _LANDING_PATH
         ):
             harden_active_content(response.headers)
 
@@ -741,37 +772,16 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
             # Prevent clickjacking — allow /app-html/ and /app-preview/ assets
             # to be embedded in iframes.
-            embeddable = is_embeddable(request.url.path)
+            embeddable = is_embeddable(path)
             if embeddable:
-                ancestors = ["'self'"]
-                frontend = str(getattr(settings, "frontend_url", "") or "").rstrip("/")
-                if frontend:
-                    ancestors.append(frontend)
-                for origin in getattr(request.app.state, "abi_cors_origins", ()):
-                    origin = str(origin).rstrip("/")
-                    if origin and origin not in ancestors:
-                        ancestors.append(origin)
-                # Allow the embedding page even when it is not listed in config
-                # (e.g. http://localhost:3042 during local dev). Never for a
-                # remote module's app: only Nexus may frame it.
-                presented = (
-                    ()
-                    if request.url.path.startswith("/app-remote/")
-                    else (request.headers.get("origin"), request.headers.get("referer"))
+                # Only configured origins may frame these paths, never the
+                # request's own Origin or Referer. Local dev origins arrive
+                # through the CORS origins (`abi dev up` sets
+                # ABI_CORS_EXTRA_ORIGINS).
+                ancestors = frame_ancestors(
+                    getattr(settings, "frontend_url", ""),
+                    getattr(request.app.state, "abi_cors_origins", ()),
                 )
-                for header in presented:
-                    if not header:
-                        continue
-                    try:
-                        from urllib.parse import urlparse
-
-                        parsed = urlparse(header)
-                        # "Origin: null" (a sandboxed page) names no origin.
-                        ref_origin = f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
-                        if parsed.netloc and ref_origin not in ancestors:
-                            ancestors.append(ref_origin)
-                    except Exception:
-                        pass
                 response.headers["Content-Security-Policy"] = embed_csp(
                     response.headers.get("Content-Security-Policy"), ancestors
                 )
@@ -868,8 +878,10 @@ def _register_startup_handlers(app: FastAPI) -> None:
     async def on_shutdown() -> None:
         await _shutdown(app)
 
-    app.add_event_handler("startup", on_startup)
-    app.add_event_handler("shutdown", on_shutdown)
+    # The router holds the hooks (FastAPI dropped them from the app with
+    # Starlette 1.0); the app's lifespan runs them.
+    app.router.on_startup.append(on_startup)
+    app.router.on_shutdown.append(on_shutdown)
 
 
 def _configure_middleware(app: FastAPI) -> None:
@@ -913,6 +925,11 @@ def _configure_middleware(app: FastAPI) -> None:
     )
 
     app.add_middleware(ViewGuardMiddleware)
+    # Request bodies of /api/ stay under one limit (413 past it), read before any
+    # route or form parser spools them. Inside CORS, so the web app reads the 413.
+    from naas_abi.apps.nexus.apps.api.app.core.request_body import RequestBodyLimitMiddleware
+
+    app.add_middleware(RequestBodyLimitMiddleware, max_bytes=settings.max_request_body_bytes)
     app.add_middleware(CORSMiddleware, **cors_kwargs)
     app.add_middleware(SecurityHeadersMiddleware)
 

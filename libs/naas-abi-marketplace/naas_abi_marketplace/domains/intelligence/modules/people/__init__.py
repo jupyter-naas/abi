@@ -31,6 +31,9 @@ class ABIModule(BaseModule):
         ],
     )
 
+    # Portraits are images pages embed: served to anyone.
+    unguarded_api_paths = ("/api/people/portraits",)
+
     class Configuration(ModuleConfiguration):
         """
         module: naas_abi_marketplace.domains.intelligence.modules.people

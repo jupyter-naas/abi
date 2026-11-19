@@ -8,6 +8,8 @@ the literal. These two must not drift back together.
 """
 
 import importlib
+import os
+import secrets
 import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -28,6 +30,9 @@ if TYPE_CHECKING:
 
 
 PORTS = {"oxigraph": 7878, "api": 9879, "dagster": 11000, "nexus-web": 12000}
+
+# Generated: the broker's system password in these tests.
+SYSTEM_PASSWORD = f"nats-{secrets.token_urlsafe(16)}"
 
 
 def _spec(name: str, port: int) -> "ServiceSpec":
@@ -221,6 +226,59 @@ def test_oxigraph_binds_the_ipv4_literal(monkeypatch) -> None:
     assert f"127.0.0.1:{PORTS['oxigraph']}" in cmd
 
 
+def test_dev_sparql_server_keeps_one_token_per_run(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
+    monkeypatch.delenv(dev.OXIGRAPH_TOKEN_ENV, raising=False)
+    spawned: dict[str, dict] = {}
+    monkeypatch.setattr(
+        dev,
+        "_spawn",
+        lambda spec, cmd, cwd, env: spawned.update({spec.name: env}) or 1234,
+    )
+
+    dev._launch_oxigraph(_spec("oxigraph", PORTS["oxigraph"]))
+    first = spawned["oxigraph"][dev.OXIGRAPH_TOKEN_ENV]
+    dev._launch_api(_spec("api", PORTS["api"]), PORTS)
+    dev._launch_dagster(_spec("dagster", PORTS["dagster"]), PORTS)
+
+    assert len(first) >= 32
+    assert spawned["api"][dev.OXIGRAPH_TOKEN_ENV] == first
+    assert spawned["dagster"][dev.OXIGRAPH_TOKEN_ENV] == first
+    token_file = dev._oxigraph_token_path()
+    assert token_file.stat().st_mode & 0o777 == 0o600
+    dev._launch_oxigraph(_spec("oxigraph", PORTS["oxigraph"]))
+    assert spawned["oxigraph"][dev.OXIGRAPH_TOKEN_ENV] != first  # a new run
+
+
+def test_dev_sparql_server_keeps_its_token_while_its_clients_run(
+    monkeypatch, tmp_path
+) -> None:
+    import os
+
+    monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
+    monkeypatch.delenv(dev.OXIGRAPH_TOKEN_ENV, raising=False)
+    spawned: dict[str, dict] = {}
+    monkeypatch.setattr(
+        dev,
+        "_spawn",
+        lambda spec, cmd, cwd, env: spawned.update({spec.name: env}) or 1234,
+    )
+    dev._launch_oxigraph(_spec("oxigraph", PORTS["oxigraph"]))
+    first = spawned["oxigraph"][dev.OXIGRAPH_TOKEN_ENV]
+    # The api read it at its start and still runs: restarting the server alone
+    # keeps it, so the api's calls go on being accepted.
+    api_pid = dev._pid_path(_spec("api", PORTS["api"]))
+    api_pid.parent.mkdir(parents=True, exist_ok=True)
+    api_pid.write_text(str(os.getpid()))
+
+    dev._launch_oxigraph(_spec("oxigraph", PORTS["oxigraph"]))
+    assert spawned["oxigraph"][dev.OXIGRAPH_TOKEN_ENV] == first
+
+    api_pid.unlink()  # nothing holds it any more: the next run gets its own
+    dev._launch_oxigraph(_spec("oxigraph", PORTS["oxigraph"]))
+    assert spawned["oxigraph"][dev.OXIGRAPH_TOKEN_ENV] != first
+
+
 def test_oxigraph_url_is_not_browser_facing() -> None:
     assert dev._oxigraph_url(PORTS) == f"http://127.0.0.1:{PORTS['oxigraph']}"
 
@@ -301,6 +359,20 @@ def test_api_and_dagster_default_to_debug(monkeypatch) -> None:
 
     for launch in (dev._launch_api, dev._launch_dagster):
         assert _captured_env(monkeypatch, launch)["LOG_LEVEL"] == "DEBUG"
+
+
+def test_the_dev_api_reloads_on_edits(monkeypatch) -> None:
+    monkeypatch.setenv("ABI_API_KEY", "test-key")  # never touch a real .env
+    monkeypatch.delenv("ABI_API_RELOAD", raising=False)
+
+    assert _captured_env(monkeypatch, dev._launch_api)["ABI_API_RELOAD"] == "true"
+
+
+def test_an_exported_abi_api_reload_wins(monkeypatch) -> None:
+    monkeypatch.setenv("ABI_API_KEY", "test-key")
+    monkeypatch.setenv("ABI_API_RELOAD", "false")
+
+    assert _captured_env(monkeypatch, dev._launch_api)["ABI_API_RELOAD"] == "false"
 
 
 def test_explicit_log_level_wins(monkeypatch) -> None:
@@ -604,12 +676,18 @@ def test_the_dev_broker_has_the_engine_and_auth_users_and_a_callout(
     for user, key in (
         ("engine", "NATS_ENGINE_PASSWORD"),
         ("auth", "NATS_AUTH_PASSWORD"),
+        ("sys", "NATS_SYSTEM_PASSWORD"),
     ):
         password = _env_value(tmp_path / ".env", key)
         assert len(password) >= 32
         assert f'{{ user: {user}, password: "{password}"' in config
     issuer = _env_value(tmp_path / ".env", "NATS_AUTH_CALLOUT_ISSUER")
-    assert f"auth_callout {{ issuer: {issuer}, auth_users: [engine, auth] }}" in config
+    assert (
+        f"auth_callout {{ issuer: {issuer}, auth_users: [engine, auth, sys] }}"
+        in config
+    )
+    # The connection warden's user is in the system account.
+    assert "system_account: SYS" in config
     assert "module" not in config
     assert config_path.stat().st_mode & 0o777 == 0o600
 
@@ -630,6 +708,7 @@ def test_the_dev_broker_refuses_a_client_the_engine_does_not_admit(tmp_path) -> 
     passwords = {
         "NATS_ENGINE_PASSWORD": "nats-engine-pw",
         "NATS_AUTH_PASSWORD": "nats-auth-pw",
+        "NATS_SYSTEM_PASSWORD": SYSTEM_PASSWORD,
     }
     config = tmp_path / "nats.conf"
     config.write_text(dev._nats_server_config(passwords, KeyPair.create().public_key))
@@ -729,16 +808,19 @@ def test_the_nats_overlay_points_the_engine_at_the_dev_broker(
         nats_passwords={
             "NATS_ENGINE_PASSWORD": "nats-engine-pw",
             "NATS_AUTH_PASSWORD": "nats-auth-pw",
+            "NATS_SYSTEM_PASSWORD": SYSTEM_PASSWORD,
         },
         callout_seed="SA-seed",
     )
 
     overlay = yaml.safe_load(path.read_text())
     nats = overlay["nats"]
-    # The engine logs in as `engine` and answers the auth callout as `auth`.
+    # The engine logs in as `engine`, answers the auth callout as `auth` and
+    # ends the connections an IAM change affects as `sys`.
     assert nats["nats_url"] == "nats://engine:nats-engine-pw@127.0.0.1:13042"
     assert nats["auth_callout"] == {
         "nats_url": "nats://auth:nats-auth-pw@127.0.0.1:13042",
+        "system_url": f"nats://sys:{SYSTEM_PASSWORD}@127.0.0.1:13042",
         "issuer_seed": "SA-seed",
     }
     assert "jwt_secret" not in nats
@@ -943,7 +1025,11 @@ def test_the_overlay_turns_tracing_on_when_asked(monkeypatch, tmp_path) -> None:
 
     path = dev._write_dev_overlay(
         {"nats": 13042, "jaeger": 15042},
-        nats_passwords={"NATS_ENGINE_PASSWORD": "pw", "NATS_AUTH_PASSWORD": "apw"},
+        nats_passwords={
+            "NATS_ENGINE_PASSWORD": "pw",
+            "NATS_AUTH_PASSWORD": "apw",
+            "NATS_SYSTEM_PASSWORD": SYSTEM_PASSWORD,
+        },
         callout_seed="SA-seed",
         tracing=True,
     )
@@ -978,6 +1064,9 @@ def test_tracing_without_nats_has_no_nats_block(monkeypatch, tmp_path) -> None:
 # =============================================================================
 
 
+_DEV_MODULES = dev._dev_modules  # the real one; the `stack` fixture fakes it
+
+
 def _modules(*names: str) -> dict:
     from naas_abi_core.engine.engine_configuration.EngineConfiguration_Dev import (
         DevModuleConfiguration,
@@ -998,7 +1087,9 @@ def stack(monkeypatch, tmp_path):
     ports = dict(dev.SERVICE_PORT_BASES)
     (tmp_path / "instance.json").write_text("{}")
     monkeypatch.setattr(
-        dev, "_dev_modules", lambda strict=True: _modules("researcher", "orchestrator")
+        dev,
+        "_dev_modules",
+        lambda strict=True, **_: _modules("researcher", "orchestrator"),
     )
     monkeypatch.setattr(dev, "_load_or_create_instance", lambda: {"ports": ports})
     monkeypatch.setattr(dev, "_instance_path", lambda: tmp_path / "instance.json")
@@ -1039,6 +1130,30 @@ def _abi(*args: str):
     from click.testing import CliRunner
 
     return CliRunner().invoke(dev.dev, list(args))
+
+
+def test_with_nats_runs_the_built_in_idp_on_a_project_without_a_nats_block(
+    stack, monkeypatch, tmp_path
+) -> None:
+    """`--with-nats` names the built-in IdP as the engine's provider in the
+    overlay when the project names none: the IdP has to run too, `nats:`
+    block or not, or nothing serves its issuer."""
+    monkeypatch.setattr(dev, "_dev_modules", _DEV_MODULES)
+    monkeypatch.setattr(dev, "load_dev_modules", dict)
+    monkeypatch.setattr(dev, "_project_identity", lambda: None)
+
+    result = _abi("up", "--with-nats", "-d")
+
+    assert result.exit_code == 0, result.output
+    assert [name for _, name in stack][-1] == "idp"
+    overlay = dev.read_overlay(tmp_path / dev.DEV_OVERLAY_FILENAME)
+    (provider,) = overlay["identity"]["providers"]
+    assert provider["issuer"].endswith("/idp")
+
+    # And `abi dev down` (which has no --with-nats) stops it again.
+    stack.clear()
+    assert _abi("down", "--service", "idp").exit_code == 0
+    assert stack == [("stop", "idp")]
 
 
 def test_with_nats_starts_the_dev_modules_after_the_stack(stack) -> None:
@@ -1162,7 +1277,7 @@ def test_up_seeds_the_secrets_of_the_project_nats_block(
     monkeypatch.setattr(
         dev, "ensure_nats_callout_seed", admin_credentials.ensure_nats_callout_seed
     )
-    monkeypatch.setattr(dev, "_dev_modules", lambda strict=True: {})
+    monkeypatch.setattr(dev, "_dev_modules", lambda strict=True, **_: {})
 
     result = _abi("up", mode, "-d")
 
@@ -1249,7 +1364,11 @@ def test_selecting_services_leaves_the_modules_alone(stack) -> None:
 def test_a_module_can_be_started_on_its_own(stack, tmp_path) -> None:
     dev._write_dev_overlay(
         {"nats": 13042},
-        nats_passwords={"NATS_ENGINE_PASSWORD": "pw", "NATS_AUTH_PASSWORD": "apw"},
+        nats_passwords={
+            "NATS_ENGINE_PASSWORD": "pw",
+            "NATS_AUTH_PASSWORD": "apw",
+            "NATS_SYSTEM_PASSWORD": SYSTEM_PASSWORD,
+        },
         callout_seed="SA-seed",
     )
 
@@ -1410,7 +1529,11 @@ def test_the_overlay_adds_the_builtin_idp_as_the_identity_provider(
     block = dev.builtin_identity(f"{dev._api_origin(ports)}/idp", "secret-" * 5)
     path = dev._write_dev_overlay(
         ports,
-        nats_passwords={"NATS_ENGINE_PASSWORD": "e", "NATS_AUTH_PASSWORD": "a"},
+        nats_passwords={
+            "NATS_ENGINE_PASSWORD": "e",
+            "NATS_AUTH_PASSWORD": "a",
+            "NATS_SYSTEM_PASSWORD": SYSTEM_PASSWORD,
+        },
         callout_seed="SAA-seed",
         identity=block,
     )
@@ -1422,7 +1545,11 @@ def test_the_overlay_adds_the_builtin_idp_as_the_identity_provider(
     )
     without = dev._write_dev_overlay(
         ports,
-        nats_passwords={"NATS_ENGINE_PASSWORD": "e", "NATS_AUTH_PASSWORD": "a"},
+        nats_passwords={
+            "NATS_ENGINE_PASSWORD": "e",
+            "NATS_AUTH_PASSWORD": "a",
+            "NATS_SYSTEM_PASSWORD": SYSTEM_PASSWORD,
+        },
         callout_seed="SAA-seed",
     )
     assert "identity" not in dev.read_overlay(without)
@@ -1556,13 +1683,72 @@ def test_outside_a_dev_project_nothing_changes(monkeypatch) -> None:
     assert not dev.os.environ.get("ABI_CONFIG_OVERLAY")
 
 
-def test_a_project_without_nats_has_no_built_in_identity_provider(monkeypatch) -> None:
-    # The IdP is a module over NATS: the legacy project neither runs nor lists it.
+def test_a_run_without_nats_has_no_built_in_identity_provider(
+    monkeypatch, tmp_path
+) -> None:
+    # The IdP is a module over NATS: an in-process run neither runs nor lists it.
     monkeypatch.setattr(dev, "load_dev_modules", dict)
     monkeypatch.setattr(dev, "_project_identity", lambda: None)
+    monkeypatch.setattr(dev, "_dev_dir", lambda: tmp_path)
 
     monkeypatch.setattr(dev, "_project_declares_nats", lambda: True)
     assert "idp" in dev._dev_modules()
+    assert dev._dev_modules(with_nats=False) == {}
 
     monkeypatch.setattr(dev, "_project_declares_nats", lambda: False)
     assert dev._dev_modules() == {}
+    assert "idp" in dev._dev_modules(with_nats=True)
+
+
+def test_down_and_status_list_the_idp_of_a_with_nats_run(monkeypatch, tmp_path) -> None:
+    """Without the flag, the mode is the one the last `abi dev up` ran in."""
+    monkeypatch.setattr(dev, "load_dev_modules", dict)
+    monkeypatch.setattr(dev, "_project_identity", lambda: None)
+    monkeypatch.setattr(dev, "_project_declares_nats", lambda: False)
+    monkeypatch.setattr(dev, "_dev_dir", lambda: tmp_path)
+    overlay = tmp_path / dev.DEV_OVERLAY_FILENAME
+
+    overlay.write_text('# generated\n{"nats": {"nats_url": "nats://x"}}\n')
+    assert "idp" in dev._dev_modules(strict=False)
+
+    overlay.write_text('# generated\n{"nats": null}\n')
+    assert dev._dev_modules(strict=False) == {}
+
+    overlay.write_text("not json")
+    assert dev._dev_modules(strict=False) == {}
+
+
+def test_nexus_web_keeps_to_the_bind_host(monkeypatch, tmp_path) -> None:
+    captured: dict = {}
+    web = tmp_path / "libs/naas-abi/naas_abi/apps/nexus/apps/web"
+    (web / "node_modules").mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        dev, "_spawn", lambda spec, cmd, cwd, env: captured.update(cmd=cmd) or 1234
+    )
+    monkeypatch.setattr(
+        dev.shutil, "which", lambda name: "/usr/bin/pnpm" if name == "pnpm" else None
+    )
+
+    dev._launch_nexus_web(_spec("nexus-web", PORTS["nexus-web"]), PORTS)
+
+    cmd = captured["cmd"]
+    assert cmd[cmd.index("--hostname") + 1] == dev.BIND_HOST == "127.0.0.1"
+
+
+def test_dev_logs_and_storage_keep_owner_only(monkeypatch, tmp_path) -> None:
+    import stat
+
+    monkeypatch.setattr(dev, "_project_root", lambda: tmp_path)
+    monkeypatch.setattr(dev, "_dev_dir", lambda: tmp_path / ".abi" / "dev")
+    previous = os.umask(0o022)
+    try:
+        dev._ensure_storage_layout()
+    finally:
+        os.umask(previous)
+    for folder in (
+        tmp_path / "storage",
+        tmp_path / ".abi/dev",
+        tmp_path / ".abi/dev/logs",
+    ):
+        assert stat.S_IMODE(folder.stat().st_mode) == 0o700

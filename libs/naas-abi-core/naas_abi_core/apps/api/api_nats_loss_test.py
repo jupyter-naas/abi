@@ -25,6 +25,7 @@ def opted_in(monkeypatch) -> list[bool]:
     )
     monkeypatch.setattr(api_module, "get_app", lambda: "app")
     monkeypatch.setattr(lifeline, "exit_on_connection_loss", exit_on_connection_loss)
+    monkeypatch.delenv("ABI_API_RELOAD", raising=False)
     return calls
 
 

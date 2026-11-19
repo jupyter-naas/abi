@@ -642,25 +642,55 @@ _WORKSPACE_MADE = re.compile(r"^What workspace (\S+) uses, within its organizati
 
 
 def made_by_move(
-    iam: Any, policies: Sequence[Policy] | None = None
+    iam: Any,
+    policies: Sequence[Policy] | None = None,
+    *,
+    workspaces: Mapping[str, tuple[str | None, str]] | None = None,
 ) -> tuple[dict[str, Policy], dict[str, Policy]]:
-    """The access policies the sets' move made, by organization and by workspace id
-    (found by their description), among ``policies`` (every one, listed, by default)."""
+    """The access policies the sets' move made, by organization and by workspace id,
+    among ``policies`` (every one, listed, by default).
+
+    A description is free text anyone who may write a policy chooses, so it only
+    names a candidate: the move made an organization's at the platform, and a
+    workspace's (``workspaces``: ``{id: (org, name)}``) owned by that workspace's
+    own organization, or by the platform for one in none (or by the workspace, once
+    adopted). Any other owner's is not that workspace's, whatever it says. Of two
+    candidates, the older is kept."""
     from naas_abi.apps.nexus.apps.api.app.services.iam.policy_tree import (
         made_by_move as by_move,
     )
 
     orgs: dict[str, Policy] = {}
-    workspaces: dict[str, Policy] = {}
+    found_workspaces: dict[str, Policy] = {}
+
+    def keep(into: dict[str, Policy], key: str, policy: Policy) -> None:
+        held = into.get(key)
+        if held is None or _made_at(policy) < _made_at(held):
+            into[key] = policy
+
     for policy in policies if policies is not None else _pages(iam.list_policies):
         if not by_move(policy):
             continue
         description = str(policy.description)
         if (found := _ORG_MADE.match(description)) and policy.owner_scope == PLATFORM:
-            orgs.setdefault(found.group(1), policy)
-        elif found := _WORKSPACE_MADE.match(description):
-            workspaces.setdefault(found.group(1), policy)
-    return orgs, workspaces
+            keep(orgs, found.group(1), policy)
+        elif (found := _WORKSPACE_MADE.match(description)) and workspaces is not None:
+            workspace_id = found.group(1)
+            if workspace_id not in workspaces:
+                continue
+            org_id = workspaces[workspace_id][0]
+            owners = {
+                org_container(org_id) if org_id else PLATFORM,
+                workspace_container(org_id, workspace_id),
+            }
+            if policy.owner_scope in owners:
+                keep(found_workspaces, workspace_id, policy)
+    return orgs, found_workspaces
+
+
+def _made_at(policy: Policy) -> tuple[int, str]:
+    created = getattr(policy, "created_at", None)
+    return (0, created.isoformat()) if created is not None else (1, str(policy.id))
 
 
 def _below_owned_by(iam: Any, policy: Policy) -> list[str]:
@@ -715,7 +745,7 @@ def plan_and_apply(
         return [], report
     # Every policy, listed once: what the move made, and what an attempt made before.
     policies = _pages(iam.list_policies)
-    org_made, workspace_made = made_by_move(iam, policies)
+    org_made, workspace_made = made_by_move(iam, policies, workspaces=workspaces)
     made_before = index_made_before(policies)
     records: dict[str, DefaultsRecord] = dict(known)
     made: list[DefaultsRecord] = []

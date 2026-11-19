@@ -1,10 +1,11 @@
 import { mapsPinResponse, mapsUpstreamGet } from '../_lib';
+import { mapsRoute } from '../_guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /** ISS current position via open-notify (CORS-safe proxy). */
-export async function GET() {
+async function handle() {
   try {
     const res = await mapsUpstreamGet(
       'http://api.open-notify.org/iss-now.json',
@@ -47,3 +48,5 @@ export async function GET() {
     );
   }
 }
+
+export const GET = mapsRoute('iss', handle, { perMinute: 120 });

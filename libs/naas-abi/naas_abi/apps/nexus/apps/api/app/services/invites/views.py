@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from naas_abi.apps.nexus.apps.api.app.services.invites.port import (
     Invitation,
     InviteOutcome,
+    ProvisioningRefused,
 )
 from naas_abi_core.services.identity.IdentityPorts import (
     ProviderUnavailableError,
@@ -105,15 +106,18 @@ def invite_result(outcome: InviteOutcome) -> dict[str, Any]:
         "sign_in_email_sent": outcome.sign_in_email_sent,
         "renewed": outcome.renewed,
         "provisioning_warning": outcome.warning,
-        # The inviting user may not create accounts at the provider: the invitation
-        # waits for the person's sign-in.
+        # Kept for compatibility, False here: an invitation IAM authorized at an
+        # organization or a workspace makes the account as Nexus. Only the platform's
+        # own invite (Platform Settings > Users) keeps to the inviter's right.
         "provisioning_skipped": outcome.provisioning_skipped,
     }
 
 
 # What an invitation raises when the provider could not make the person: nothing
 # was granted (the service took its grants back), and the admin may try again.
-PROVIDER_FAILURES = (ProviderUnavailableError, ProvisioningError)
+# ``ProvisioningRefused`` here is Nexus's own call refused (``api`` without
+# ``identity:ProvisionUser``): the deployment's fault, not the inviting person's.
+PROVIDER_FAILURES = (ProviderUnavailableError, ProvisioningError, ProvisioningRefused)
 
 
 def provider_failure(exc: Exception) -> HTTPException:

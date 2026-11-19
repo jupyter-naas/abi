@@ -8,7 +8,9 @@ The kernel decides on repositories and environments with the user's role
 * ``KernelRoute``: a kernel refusal (``PermissionDeniedError`` when the caller
   sees the resource, ``ResourceNotFoundError`` when not) that a handler lets
   through is a 403 or a 404, never a 500;
-* ``source_control_error``: a forge error as its status.
+* ``source_control_error``: a forge error as its status;
+* ``require_path`` / ``require_ref``: a file path or a ref from the request
+  names something inside the repository, or the request is a 422.
 """
 
 from __future__ import annotations
@@ -36,12 +38,28 @@ from naas_abi_core.services.iam.IAMPorts import (
     PermissionDeniedError,
     ResourceNotFoundError,
 )
+from naas_abi_core.services.source_control.names import file_path_ok, ref_ok
 from naas_abi_core.services.source_control.SourceControlPorts import (
     AccessDeniedError,
     BranchNotFoundError,
     RepoNotFoundError,
     SourceControlError,
+    ValidationError,
 )
+
+
+def require_path(path: str, *, root_ok: bool = False) -> None:
+    """A file path inside the repository's tree (no dot, empty or ``.git``
+    segment, no query, fragment or control character), or 422."""
+    if not file_path_ok(path, root_ok=root_ok):
+        raise HTTPException(status_code=422, detail="Invalid path.")
+
+
+def require_ref(ref: str | None, what: str = "ref") -> None:
+    """A branch, tag or commit name by git's rules (never an option), or 422.
+    ``None`` is the default branch."""
+    if ref is not None and not ref_ok(ref):
+        raise HTTPException(status_code=422, detail=f"Invalid {what}.")
 
 
 def get_iam(request: Request) -> IIAMService | None:
@@ -95,6 +113,8 @@ def source_control_error(exc: SourceControlError) -> HTTPException:
         status_code = 404
     elif isinstance(exc, AccessDeniedError):
         status_code = 403
+    elif isinstance(exc, ValidationError):
+        status_code = 422
     else:
         status_code = 502
     return HTTPException(status_code=status_code, detail=str(exc) or type(exc).__name__)

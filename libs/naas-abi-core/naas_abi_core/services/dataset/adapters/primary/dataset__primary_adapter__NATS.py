@@ -187,6 +187,9 @@ def _dataset_snapshot_info_to_pb(
 # refusals and the validation of a spec (pydantic's). Any other ``ValueError``
 # comes from a backend (DuckDB, pyarrow) and may name paths or connections.
 REFUSALS = (DatasetRequestRefused, ValidationError)
+# What one streamed write may spool (rows as JSON lines), and all of them at once.
+MAX_WRITE_UPLOAD_BYTES = 1024 * 1024 * 1024
+MAX_BUFFERED_WRITE_BYTES = 4 * 1024 * 1024 * 1024
 
 # The port's exceptions, sent to callers as typed ``DatasetError``s.
 DOMAIN_ERRORS = (
@@ -238,7 +241,11 @@ class DatasetPrimaryAdapterNATS(ServiceWithTransfers):
             verifier,
             self._transfer_frames,
             operations=("query", "write"),
+            uploads=("write",),
+            authorize=self._authorize_transfer,
             chunk_bytes=1024 * 1024,
+            max_upload_bytes=MAX_WRITE_UPLOAD_BYTES,
+            max_buffered_upload_bytes=MAX_BUFFERED_WRITE_BYTES,
             error_mapper=self._transfer_error,
         )
 
@@ -320,6 +327,14 @@ class DatasetPrimaryAdapterNATS(ServiceWithTransfers):
     # Streamed reads: one transfer session per query, produced on its own
     # thread one frame at a time (dataset_stream_codec.py).
     # ------------------------------------------------------------------
+
+    def _authorize_transfer(self, operation: str, metadata: bytes) -> None:
+        """At ``open``: the caller may stream rows into this dataset."""
+        write = dataset_pb2.WriteRequest.FromString(metadata)
+        # A bare adapter (tests) checks nothing, here as on every call.
+        check = getattr(self._adapter, "authorize_write_stream", None)
+        if check is not None:
+            check(write.name, namespace=write.namespace)
 
     def _transfer_frames(
         self, operation: str, metadata: bytes, source: Any

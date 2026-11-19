@@ -140,6 +140,11 @@ _ENTRIES: list[PlatformTableEntry] = [
             "Agents installed in each workspace, with their model and prompt.",
         ),
         ("skills", "Skills", "Skills (reusable prompts) per workspace, organization or user."),
+        (
+            "skill_workspace_switches",
+            "Skill switches",
+            "Organization skills turned on or off in one workspace.",
+        ),
         ("model_catalog", "Model catalog", "Models known to the platform, with overrides."),
         ("provider_configs", "Providers", "Model provider settings per workspace."),
         (

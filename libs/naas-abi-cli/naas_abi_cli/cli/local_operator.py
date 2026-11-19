@@ -1,8 +1,9 @@
 """Who in-process work started from a terminal runs as.
 
 A terminal has no session: the local operator runs the engine. Its work is the
-engine's own (``engine``), acting for the terminal's git author when one is
-known, as ``bind_local_identity`` names it, so events still say who chatted.
+engine's own (``engine``), for no user. The terminal's git author, when known,
+only labels events (``bind_local_identity``), so they still say who chatted; it
+is never ``on_behalf_of``, which IAM would bound the engine by.
 Without a context, every engine call would be anonymous, which IAM denies.
 """
 

@@ -24,10 +24,31 @@ class RemoteAgentUnavailable(Exception):
 
 
 @dataclass(frozen=True)
+class RemoteAgentSuggestion:
+    """A starter prompt: ``label`` is shown, ``value`` sent as the message."""
+
+    label: str
+    value: str
+    description: str = ""
+
+    def as_dict(self) -> dict[str, str]:
+        entry = {"label": self.label, "value": self.value}
+        if self.description:
+            entry["description"] = self.description
+        return entry
+
+
+@dataclass(frozen=True)
 class RemoteAgent:
     module_id: str
     name: str
     description: str = ""
+    # Presentation, as the module declares it (naas_abi_sdk.AgentDescriptor):
+    # shown instead of the name; an https:// URL or a /modules/<path> asset;
+    # starter prompts.
+    display_name: str = ""
+    avatar_url: str = ""
+    suggestions: tuple[RemoteAgentSuggestion, ...] = ()
 
     @property
     def key(self) -> str:

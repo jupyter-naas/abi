@@ -16,8 +16,8 @@ jobs:
       matrix:
         python: ['3.10', '3.11', '3.12']
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6
         with:
           python-version: ${{ matrix.python }}
       - name: Test isolated packages
@@ -28,6 +28,8 @@ jobs:
       - name: Test optional LangGraph integration imports
         run: uv run --project libs/naas-abi-sdk --extra langgraph --python '${{ matrix.python }}' pytest libs/naas-abi-sdk/tests -q
       # The Workflow/Pipeline class, process workflow and ontology tests skip without these extras.
+      - name: Test agents with LangGraph
+        run: uv run --project libs/naas-abi-sdk --extra agent --python '${{ matrix.python }}' pytest libs/naas-abi-sdk/tests -q
       - name: Test workflows, pipelines and ontologies
         run: uv run --project libs/naas-abi-sdk --extra workflows --extra rdf --extra agents --python '${{ matrix.python }}' pytest libs/naas-abi-sdk/tests -q
       - name: Test optional model proxies
@@ -48,8 +50,8 @@ jobs:
       # A broker test skipped for want of nats-server fails instead (conftest hooks).
       ABI_REQUIRE_NATS_SERVER: '1'
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6
         with:
           python-version: '3.12'
       - name: Install pinned native NATS server

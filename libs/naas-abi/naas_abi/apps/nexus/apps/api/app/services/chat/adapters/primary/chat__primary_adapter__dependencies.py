@@ -15,6 +15,7 @@ from naas_abi.apps.nexus.apps.api.app.services.chat import ChatService
 from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__primary_adapter__schemas import (
     ChatRequest,
     ProviderConfigRequest,
+    ProviderSelectionRequest,
 )
 from naas_abi.apps.nexus.apps.api.app.services.chat.chat__schema import (
     ChatInputMessage,
@@ -288,9 +289,6 @@ def to_complete_chat_input(request: ChatRequest) -> CompleteChatInput:
             name=request.provider.name,
             type=request.provider.type,
             enabled=request.provider.enabled,
-            endpoint=request.provider.endpoint,
-            api_key=request.provider.api_key,
-            account_id=request.provider.account_id,
             model=request.provider.model,
             llm_model=request.provider.llm_model,
         )
@@ -319,7 +317,7 @@ def to_complete_chat_input(request: ChatRequest) -> CompleteChatInput:
 
 
 async def resolve_provider(
-    provider: ProviderConfigRequest | None,
+    provider: ProviderSelectionRequest | None,
     has_images: bool,
     agent_id: str | None = None,
     workspace_id: str | None = None,

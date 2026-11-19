@@ -124,7 +124,7 @@ describe('agents tab', () => {
     await m.click(button('Failed'));
     await m.flush();
 
-    expect(api.runs).toHaveBeenLastCalledWith(expect.objectContaining({ statuses: ['FAILED', 'TIMED_OUT'] }));
+    expect(api.runs).toHaveBeenLastCalledWith(expect.objectContaining({ statuses: ['FAILED', 'TIMED_OUT'] }), expect.any(AbortSignal));
     expect(document.querySelectorAll('[data-run]')).toHaveLength(1);
   });
 
@@ -140,7 +140,7 @@ describe('agents tab', () => {
     expect(panel?.textContent).toContain('[DONE]');
     expect(button('Cancel')).toBeNull();
     await m.click(button('Open trace'));
-    expect(push).toHaveBeenCalledWith(`/settings/system/traces?trace=${'c'.repeat(32)}`);
+    expect(push).toHaveBeenCalledWith(`/settings/activity/traces?trace=${'c'.repeat(32)}`);
 
     await m.click(row('acme.other/r3'));
     await m.flush();

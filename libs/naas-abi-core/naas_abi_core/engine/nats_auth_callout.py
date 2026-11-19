@@ -8,13 +8,12 @@ broker asks ``$SYS.REQ.USER.AUTH`` and this responder, logged in as ``auth``:
 1. checks the key and its principal (``IAMService.authenticate_key``: revoked,
    expired or suspended is refused at once);
 2. derives the subjects the account's policy allows (``broker_permissions``);
-3. answers with a user JWT signed by the account seed, valid five minutes by
-   default (ten at most, the life of an access token) and never past the key's
-   expiry, without response permissions (a module answers on ``_INBOX.>``).
-   A reconnect recomputes it: the SDK reconnects every two minutes, so a
-   revoked key, a suspended account or a narrowed policy takes effect at the
-   broker within the JWT's life, and the connection ends there (nats-py does
-   not reconnect a connection the broker expired).
+3. answers with a user JWT signed by the account seed, valid until the key
+   expires, without response permissions (a module answers on ``_INBOX.>``);
+4. records the admission (``Admissions``): the engine's connection warden ends
+   the connections a revoked key, a suspended account or a changed policy
+   affects, and they log in again here (``nats_connection_warden.py``, ADR
+   20261119_kick_connections_on_iam_change).
 
 The streams and consumers a module uses are created by the engine on demand
 (``nats_broker_control.py``). Each request is answered on its own task: one
@@ -32,6 +31,11 @@ from typing import Any
 
 import nats
 from naas_abi_core import logger
+from naas_abi_core.engine.nats_connection_warden import (
+    Admissions,
+    Admitted,
+    Connection,
+)
 from naas_abi_core.engine.nats_naming import connection_name
 from naas_abi_core.engine.nats_nkeys import (
     PREFIX_SERVER,
@@ -49,11 +53,6 @@ AUTH_SUBJECT = "$SYS.REQ.USER.AUTH"
 KEY_USER = "sa"
 # NATS's global account: the one a broker without accounts puts every user in.
 ACCOUNT = "$G"
-# How long a connection's permissions last: never longer than an access token.
-# naas_abi_sdk.credentials.CONNECTION_TTL_SECONDS names the same bounds (a
-# test keeps them equal).
-DEFAULT_USER_TTL_SECONDS = 300
-MAX_USER_TTL_SECONDS = 600
 
 
 class AuthCallout:
@@ -63,12 +62,12 @@ class AuthCallout:
         issuer_seed: str,
         nats_url: str,
         *,
-        user_ttl_seconds: int = DEFAULT_USER_TTL_SECONDS,
+        admissions: Admissions | None = None,
     ) -> None:
         self.iam = iam
         self.issuer = KeyPair.from_seed(issuer_seed)
         self.nats_url = nats_url
-        self.user_ttl_seconds = min(user_ttl_seconds, MAX_USER_TTL_SECONDS)
+        self.admissions = admissions
         self._nc: Any = None
         self._tasks: set[asyncio.Task] = set()
 
@@ -117,14 +116,17 @@ class AuthCallout:
         user_nkey = str(claims.get("user_nkey", ""))
         server = str((claims.get("server_id") or {}).get("id", ""))
         options = claims.get("connect_opts") or {}
+        client = claims.get("client_info") or {}
         permissions: BrokerPermissions | None = None
         try:
-            user_jwt, permissions = self._admit(user_nkey, options)
+            user_jwt, permissions, admitted = self._admit(user_nkey, options)
             body: dict[str, Any] = {"jwt": user_jwt}
+            if self.admissions is not None and client.get("id") is not None:
+                self.admissions.admit(Connection(server, int(client["id"])), admitted)
         except KeyRefusedError:
             logger.info(
                 f"Auth callout: refused a connection as {options.get('user')!r} "
-                f"from {(claims.get('client_info') or {}).get('host', '?')}"
+                f"from {client.get('host', '?')}"
             )
             body = {"error": "invalid service key"}
         except IAMError as exc:
@@ -151,26 +153,34 @@ class AuthCallout:
 
     def _admit(
         self, user_nkey: str, options: dict[str, Any]
-    ) -> tuple[str, BrokerPermissions]:
+    ) -> tuple[str, BrokerPermissions, Admitted]:
         if options.get("user") != KEY_USER or not options.get("pass"):
             raise KeyRefusedError()
         principal, key = self.iam.authenticate_key(str(options["pass"]))
         permissions = self.iam.broker_permissions(principal, key)
-        expires = time.time() + self.user_ttl_seconds
-        if key.expires_at is not None:
-            expires = min(expires, key.expires_at.timestamp())
-        if expires <= time.time():
+        # Until the key expires: the warden ends the connection on a change.
+        expires = key.expires_at.timestamp() if key.expires_at is not None else None
+        if expires is not None and expires <= time.time():
             raise KeyRefusedError()
+        until = (
+            f"until {datetime.fromtimestamp(expires, UTC):%Y-%m-%d %H:%M:%S}"
+            if expires is not None
+            else "until a change ends it"
+        )
         logger.debug(
             f"Auth callout: {principal.name} ({principal.id}) connected with key "
-            f"{key.key_id} until {datetime.fromtimestamp(expires, UTC):%H:%M:%S}"
+            f"{key.key_id} {until}"
         )
+        claims: dict[str, Any] = {
+            "sub": user_nkey,
+            "aud": ACCOUNT,
+            "name": principal.name or principal.id,
+        }
+        if expires is not None:
+            claims["exp"] = int(expires)
         user = encode_jwt(
             {
-                "sub": user_nkey,
-                "aud": ACCOUNT,
-                "name": principal.name or principal.id,
-                "exp": int(expires),
+                **claims,
                 "nats": {
                     "pub": {"allow": list(permissions.publish)},
                     "sub": {"allow": list(permissions.subscribe)},
@@ -186,4 +196,4 @@ class AuthCallout:
             },
             self.issuer,
         )
-        return user, permissions
+        return user, permissions, Admitted(principal.id, key.key_id, permissions)

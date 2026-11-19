@@ -20,6 +20,7 @@ from typing import (
     TYPE_CHECKING,
     Annotated,
     Any,
+    ClassVar,
     Literal,
     Union,
     cast,
@@ -133,6 +134,35 @@ def _reset_shared_checkpointer_for_tests() -> None:
 atexit.register(_close_shared_checkpointer)
 
 
+_REFUSAL_MESSAGE = (
+    "The model declined this request (safety refusal). "
+    "Rephrase it or switch to another model."
+)
+
+
+def _surface_refusal(response: AIMessage) -> AIMessage:
+    """Turn an empty ``stop_reason: "refusal"`` answer into a visible message.
+
+    Anthropic safety classifiers can stop a response with HTTP 200 and
+    ``stop_reason: "refusal"``; without this the chat shows an empty bubble.
+    Partial text, if any, is kept as-is.
+    """
+    metadata = getattr(response, "response_metadata", None) or {}
+    if metadata.get("stop_reason") != "refusal":
+        return response
+    logger.warning(
+        "Model refused the request (stop_reason=refusal, stop_details=%s)",
+        metadata.get("stop_details"),
+    )
+    if response.text().strip() or response.tool_calls:
+        return response
+    return AIMessage(
+        content=_REFUSAL_MESSAGE,
+        id=response.id,
+        response_metadata=dict(metadata),
+    )
+
+
 def _friendly_model_invoke_error(exc: BaseException) -> str:
     """One-line human error. Never dump raw provider JSON into the chat bubble."""
     text = str(exc or "").strip()
@@ -152,9 +182,7 @@ def _friendly_model_invoke_error(exc: BaseException) -> str:
         or "rate limited" in lowered
         or "temporarily rate-limited" in lowered
     ):
-        return (
-            "This model is rate limited. Pick another model in the agent menu and try again."
-        )
+        return "This model is rate limited. Pick another model in the agent menu and try again."
     if (
         "contextwindowexceeded" in lowered.replace(" ", "")
         or "context window" in lowered
@@ -290,6 +318,41 @@ def _copy_tool_message(message: ToolMessage, content: Any) -> ToolMessage:
     return ToolMessage(**kwargs)
 
 
+_THINKING_BLOCK_TYPES = ("thinking", "redacted_thinking")
+
+
+def _has_thinking_blocks(messages: list[AnyMessage]) -> bool:
+    for message in messages:
+        if not isinstance(message, AIMessage) or not isinstance(message.content, list):
+            continue
+        for block in message.content:
+            if isinstance(block, dict) and block.get("type") in _THINKING_BLOCK_TYPES:
+                return True
+    return False
+
+
+def _cap_tool_messages(messages: list[AnyMessage]) -> list[AnyMessage]:
+    """Cap each ToolMessage on its own content only, so its view never changes."""
+    changed = False
+    out: list[AnyMessage] = []
+    for message in messages:
+        if (
+            isinstance(message, ToolMessage)
+            and not _tool_message_name(message).startswith("transfer_to_")
+            and _tool_content_chars(message.content) > _MAX_TOOL_RESULT_CHARS
+        ):
+            out.append(
+                _copy_tool_message(
+                    message,
+                    _truncate_tool_content(message.content, _MAX_TOOL_RESULT_CHARS),
+                )
+            )
+            changed = True
+            continue
+        out.append(message)
+    return out if changed else messages
+
+
 def compact_old_tool_messages(messages: list[AnyMessage]) -> list[AnyMessage]:
     """Stub prior-turn ToolMessages; keep last list + last write; cap current-turn size.
 
@@ -297,9 +360,18 @@ def compact_old_tool_messages(messages: list[AnyMessage]) -> list[AnyMessage]:
     and last ``write_*`` / ``replace_in_*`` stay so the model still sees the
     current outline and the last successful write. Those two, and any current-
     turn result, are truncated if they exceed ``_MAX_TOOL_RESULT_CHARS``.
+
+    Preserved thinking: once the history carries thinking blocks (Claude Opus
+    5.5, Sonnet 5.5, Haiku 5.5, Fable 5.1), a block is valid only if every
+    message before it is byte-identical to when it was produced; an edited
+    prefix is a 400 on enforced accounts. Stubbing prior-turn results would
+    rewrite that prefix on every new user turn, so in that case each result is
+    only capped on its own content, which yields the same view on every request.
     """
     if not messages:
         return messages
+    if _has_thinking_blocks(messages):
+        return _cap_tool_messages(messages)
 
     last_human = -1
     last_list = -1
@@ -446,7 +518,9 @@ def create_checkpointer() -> BaseCheckpointSaver:
                         "Hint: If running outside Docker, use 'localhost' instead of 'postgres' in POSTGRES_URL"
                     )
                 else:
-                    logger.error(f"Failed to initialize PostgreSQL checkpointer: {error_msg}")
+                    logger.error(
+                        f"Failed to initialize PostgreSQL checkpointer: {error_msg}"
+                    )
                 logger.error("Falling back to in-memory checkpointer")
 
         # Fallback to in-memory checkpointer
@@ -1490,6 +1564,21 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             return container, False
         return {**container, key: coerced}, True
 
+    # Chat models that write their tool calls as text (``<tool_call>{...}``,
+    # ``[tool_call: name]{...}``) instead of native calls, matched in the
+    # model's name. Only for these is such markup read, and only as a handoff.
+    text_tool_call_models: ClassVar[tuple[str, ...]] = ("qwen", "hermes")
+
+    @classmethod
+    def _writes_tool_calls_as_text(cls, chat_model: object) -> bool:
+        """Whether ``chat_model`` is one of ``text_tool_call_models``."""
+        for attribute in ("model_name", "model", "model_id"):
+            value = getattr(chat_model, attribute, None)
+            if isinstance(value, str) and value:
+                name = value.lower()
+                return any(marker in name for marker in cls.text_tool_call_models)
+        return False
+
     _TEXT_TOOL_NAME_ALIASES = {
         "documents_agent": "transfer_to_Documents",
         "documentsagent": "transfer_to_Documents",
@@ -1668,10 +1757,20 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
 
     @classmethod
     def _promote_text_tool_calls(cls, message: AIMessage) -> AIMessage:
-        """Turn Qwen/Hermes tool markup in content into ``tool_calls``."""
+        """Turn Qwen/Hermes handoff markup in content into ``tool_calls``.
+
+        Only when the answer is nothing but the markup, and only for handoffs
+        (``transfer_to_*``): markup quoted inside prose, as a summary of a page
+        or a tool result repeats it, stays text and is never run.
+        """
         text = cls._content_to_text(message.content)
         extracted, cleaned = cls._extract_text_tool_calls(text)
-        if not extracted and cleaned == text:
+        if not extracted or cleaned.strip():
+            return message
+        if not all(
+            str(call.get("name") or "").startswith("transfer_to_")
+            for call in extracted
+        ):
             return message
 
         existing = list(getattr(message, "tool_calls", None) or [])
@@ -1718,9 +1817,16 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         )
 
     @classmethod
-    def _normalize_ai_message_tool_inputs(cls, message: AIMessage) -> AIMessage:
-        """Rewrite an AIMessage so every tool input is a dict object."""
-        message = cls._promote_text_tool_calls(message)
+    def _normalize_ai_message_tool_inputs(
+        cls, message: AIMessage, promote_text_handoffs: bool = False
+    ) -> AIMessage:
+        """Rewrite an AIMessage so every tool input is a dict object.
+
+        ``promote_text_handoffs``: also read a handoff written as text markup
+        (``_promote_text_tool_calls``), for models that write their calls so.
+        """
+        if promote_text_handoffs:
+            message = cls._promote_text_tool_calls(message)
         tool_calls = list(getattr(message, "tool_calls", None) or [])
         normalized_calls: list[ToolCall] = []
         calls_changed = False
@@ -1847,14 +1953,16 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
 
     @classmethod
     def _normalize_tool_inputs_in_messages(
-        cls, messages: list[AnyMessage]
+        cls, messages: list[AnyMessage], promote_text_handoffs: bool = False
     ) -> list[AnyMessage]:
         """Normalize tool inputs across a message history before model invoke."""
         normalized: list[AnyMessage] = []
         changed = False
         for message in messages:
             if isinstance(message, AIMessage):
-                new_message = cls._normalize_ai_message_tool_inputs(message)
+                new_message = cls._normalize_ai_message_tool_inputs(
+                    message, promote_text_handoffs
+                )
                 if new_message is not message:
                     changed = True
                 normalized.append(new_message)
@@ -2018,7 +2126,10 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
             ] + messages
         # Bedrock (and some other providers) require toolUse.input to be a JSON
         # object. Normalize any prior assistant tool calls before re-sending.
-        messages = self._normalize_tool_inputs_in_messages(messages)
+        promote_text_handoffs = self._writes_tool_calls_as_text(self._chat_model)
+        messages = self._normalize_tool_inputs_in_messages(
+            messages, promote_text_handoffs
+        )
         messages = compact_old_tool_messages(messages)
         logger.debug(f"Messages before calling model: {messages}")
 
@@ -2041,11 +2152,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                 goto="__end__",
                 update={
                     **routing_update,
-                    "messages": [
-                        AIMessage(
-                            content=_friendly_model_invoke_error(e)
-                        )
-                    ],
+                    "messages": [AIMessage(content=_friendly_model_invoke_error(e))],
                 },
             )
         logger.debug(f"Model response: {response}")
@@ -2053,7 +2160,10 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         # Normalize freshly returned tool inputs so the next turn (and Bedrock
         # re-serialization) always sees a JSON object for toolUse.input.
         if isinstance(response, AIMessage):
-            response = self._normalize_ai_message_tool_inputs(response)
+            response = self._normalize_ai_message_tool_inputs(
+                response, promote_text_handoffs
+            )
+            response = _surface_refusal(response)
 
         # Handle tool calls if present
         if (
@@ -2261,9 +2371,7 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
                             update={
                                 "messages": [
                                     ToolMessage(
-                                        content=(
-                                            f"__handoff_duplicate__:{tool_name}"
-                                        ),
+                                        content=(f"__handoff_duplicate__:{tool_name}"),
                                         name=tool_name,
                                         tool_call_id=tool_call["id"],
                                         additional_kwargs={"internal": True},
@@ -3011,7 +3119,9 @@ Reformat the input into clean, readable Markdown. Preserve all meaning and detai
         clone._chat_model_without_workspace_tools = (
             self._chat_model_without_workspace_tools
         )
-        clone._chat_model_output_version = getattr(self, "_chat_model_output_version", None)
+        clone._chat_model_output_version = getattr(
+            self, "_chat_model_output_version", None
+        )
 
         clone._on_tool_usage = self._configuration.on_tool_usage
         clone._on_tool_response = self._configuration.on_tool_response

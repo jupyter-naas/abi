@@ -2,7 +2,7 @@
 
 import './keyvalue.css';
 
-import { Binary, Braces, Fingerprint, KeyRound, ListOrdered, Lock, Timer, type LucideIcon } from 'lucide-react';
+import { Binary, Braces, Fingerprint, Hash, KeyRound, ListOrdered, Lock, Timer, type LucideIcon } from 'lucide-react';
 import { absoluteTime, detectLanguage, formatBytes } from '../data-model';
 import type { ResourceDetail, ResourceEntry } from '../data-types';
 import { Notice } from '../data-ui';
@@ -63,8 +63,7 @@ export const keyValueView: ServiceView = {
   name: 'keyvalue',
   label: 'Key-value',
   description: 'Small values, sessions and locks modules keep by key, with optional expiry.',
-  icon: KeyRound,
-  group: 'Storage',
+  icon: Hash,
   noun: { one: 'key', many: 'keys' },
   entryIcon: keyIcon,
   badges: (entry) => <PrefixBadge id={entry.id} />,

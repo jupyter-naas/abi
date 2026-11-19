@@ -4,6 +4,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { loadConfig } from '@/lib/config/loadConfig';
 import type { SessionPayload } from '@/lib/types';
 import { isOwnerRole } from '@/lib/types';
+import { configuredSecret } from '@/lib/auth/templateSecrets';
 
 /**
  * Password sign-in — the template's single shared login. The root password is
@@ -26,7 +27,8 @@ function safeEqual(a: string, b: string): boolean {
 
 /** Resolve the full-access owner session from the shared root password, or null. */
 export function verifyPassword(password: string): SessionPayload | null {
-  const root = process.env.ROOT_PASSWORD;
+  // Unset disables sign-in; in production, so does the template's value.
+  const root = configuredSecret(process.env.ROOT_PASSWORD);
   if (!root || !safeEqual(password, root)) {
     return null;
   }

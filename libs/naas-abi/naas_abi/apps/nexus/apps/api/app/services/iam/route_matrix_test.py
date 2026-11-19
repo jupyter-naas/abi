@@ -91,8 +91,16 @@ LEVELS = {
     "admin": (False, False, True, True),
 }
 # Platform-level types are reached by the platform admin alone, bar the model
-# list the platform companions carry (the catalog's PLATFORM_ACCESS).
-PLATFORM_VIEWER_ACTIONS = {"ListProviderModels", "GetProviderModel"}
+# list the platform companions carry (the catalog's PLATFORM_ACCESS): the model list
+# and the datasets of the platform, which every workspace role reads.
+PLATFORM_VIEWER_ACTIONS = {
+    "ListProviderModels",
+    "GetProviderModel",
+    "ListDatasets",
+    "GetDataset",
+    "PreviewDataset",
+    "QueryDataset",
+}
 
 
 def level_of(action: str) -> str:

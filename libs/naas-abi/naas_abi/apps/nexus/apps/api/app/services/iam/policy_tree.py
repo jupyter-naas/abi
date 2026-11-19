@@ -77,6 +77,10 @@ from starlette.concurrency import run_in_threadpool
 _log = logging.getLogger(__name__)
 
 MIGRATION_NAME = "policy_tree_v1"
+# The report's turned-off agents of modules the engine did not load at the move:
+# ``{"workspace", "class_name"}``, each gone once denied (``deny_deferred_agents``).
+DEFERRED_KEY = "deferred_agents"
+DEFERRED_SID = "TurnedOffAgentsLoadedLater"
 # The platform in the grammar before container paths, which this move reads and
 # writes (``container_names`` rewrites what it made afterwards).
 PLATFORM_SCOPE = "abi:-:-"
@@ -103,6 +107,9 @@ NOTES = (
     "agent, or deny it to them.",
     "A module installed after the upgrade is in no access policy: whoever "
     "administers the policies adds it.",
+    "An agent a workspace had turned off, of a module the engine did not load at "
+    "the upgrade, is denied in the workspace's access policy at the first start "
+    "that loads its module (``deferred_agents`` of the report until then).",
 )
 
 # Set while a start has an upgrade to finish: Nexus refuses every module scope
@@ -123,6 +130,11 @@ def set_pending(value: bool) -> None:
 
 class UpgradeStop(RuntimeError):
     """Something the move cannot keep exactly: nothing is recorded."""
+
+
+class AgentNotLoaded(UpgradeStop):
+    """A turned-off engine agent whose class the engine did not load: its scope
+    cannot be named yet (``deny_deferred_agents``)."""
 
 
 # -- what the legacy sets said -------------------------------------------------------
@@ -1289,11 +1301,13 @@ async def read_nexus(db: AsyncSession) -> dict[str, Any]:
         for ws, features in (json.loads(raw or "{}").get("feature_sets") or {}).items()
         if str(ws) in workspaces
     }
+    turned_off, deferred = await _turned_off_rows(db, workspaces, slugs, seeds)
     return {
         "orgs": orgs,
         "workspaces": workspaces,
         "names": names,
-        "turned_off": await _turned_off_rows(db, workspaces, slugs, seeds),
+        "turned_off": turned_off,
+        "deferred_agents": deferred,
         "overrides": overrides,
     }
 
@@ -1303,8 +1317,11 @@ async def _turned_off_rows(
     workspaces: Mapping[str, str],
     slugs: Mapping[str, str | None],
     seeds: Mapping[str, Any],
-) -> dict[str, TurnedOff]:
-    """Each workspace's toggles, as the old visibility read them."""
+) -> tuple[dict[str, TurnedOff], list[tuple[str, str]]]:
+    """Each workspace's toggles, as the old visibility read them, and the
+    ``(workspace, class)`` of the turned-off engine agents whose class the engine
+    did not load: denied once it does (``deny_deferred_agents``). Until then
+    nobody uses them: the engine serves no agent it did not load."""
     from naas_abi.apps.nexus.apps.api.app.core.workspace_seed_catalog import (
         effective_seed_apps,
         parse_catalog_seed,
@@ -1346,6 +1363,7 @@ async def _turned_off_rows(
                 )
     resolve = _agent_resolver() if agent_rows else None
     found: dict[str, TurnedOff] = {}
+    deferred: list[tuple[str, str]] = []
     for workspace_id in workspaces:
         raw = seeds.get(workspace_id)
         seed = raw if isinstance(raw, dict) or raw is None else parse_catalog_seed(raw)
@@ -1359,9 +1377,15 @@ async def _turned_off_rows(
         }
         shown: dict[tuple[str, str], bool] = {}
         for class_name, provider, enabled in agent_rows.get(workspace_id, []):
-            scope = (
-                resolve(class_name, provider, strict=not enabled) if resolve is not None else None
-            )
+            try:
+                scope = (
+                    resolve(class_name, provider, strict=not enabled)
+                    if resolve is not None
+                    else None
+                )
+            except AgentNotLoaded:
+                deferred.append((workspace_id, class_name))
+                continue
             if scope is not None:
                 key = (scope.module, scope.name)
                 shown[key] = shown.get(key, False) or enabled
@@ -1371,16 +1395,16 @@ async def _turned_off_rows(
             frozenset(processes.get(workspace_id, set())),
             frozenset(custom_off.get(workspace_id, set())),
         )
-    return found
+    return found, deferred
 
 
 def _agent_resolver() -> Any:
     """``(class_name, provider)`` to the agent's module scope, as the roster
     resolved it; raises when the engine's agents cannot be read (the move waits:
     an agent turned off must stay off). A turned-off engine agent whose class the
-    engine did not load (``strict``) stops the move: its scope would be guessed
-    from its Python path, and a Deny under a wrong name refuses nothing once its
-    module loads again."""
+    engine did not load (``strict``) raises ``AgentNotLoaded``: its scope would be
+    guessed from its Python path, and a Deny under a wrong name refuses nothing
+    once its module loads again."""
     from types import SimpleNamespace
 
     from naas_abi.apps.nexus.apps.api.app.services.agents.adapters.primary import (
@@ -1394,10 +1418,9 @@ def _agent_resolver() -> Any:
 
     def resolve(class_name: str, provider: str | None, *, strict: bool = False) -> Any:
         if strict and provider != REMOTE_PROVIDER and class_name not in classes:
-            raise UpgradeStop(
+            raise AgentNotLoaded(
                 f"The agent {class_name}, turned off in a workspace, is of a module the "
-                "engine did not load: load the module, or delete the agent's row, and "
-                "start again"
+                "engine did not load"
             )
         return agent_scope(
             SimpleNamespace(class_name=class_name, provider=provider), classes, module_of
@@ -1510,7 +1533,8 @@ async def migrate_sets(db: AsyncSession) -> Report | None:
             return apply(iam, world, plan(world))
 
     try:
-        report = await run_in_threadpool(work, await read_nexus(db))
+        nexus = await read_nexus(db)
+        report = await run_in_threadpool(work, nexus)
     except UpgradeStop as stop:
         _log.error(
             "The sets were not moved into policies: %s. Module scopes and features are "
@@ -1539,6 +1563,10 @@ async def migrate_sets(db: AsyncSession) -> Report | None:
                     "removed": report.removed,
                     "invitations": invitations,
                     "notes": list(report.notes),
+                    DEFERRED_KEY: [
+                        {"workspace": ws, "class_name": class_name}
+                        for ws, class_name in nexus["deferred_agents"]
+                    ],
                 }
             ),
         },
@@ -1554,7 +1582,116 @@ async def migrate_sets(db: AsyncSession) -> Report | None:
         report.granted,
         " ".join(report.notes),
     )
+    if nexus["deferred_agents"]:
+        _log.warning(
+            "%d turned-off agent(s) of modules the engine did not load are denied at the "
+            "first start that loads them",
+            len(nexus["deferred_agents"]),
+        )
     return report
+
+
+async def deny_deferred_agents(db: AsyncSession) -> int:
+    """Deny, in its workspace's access policy, each turned-off agent the move set
+    aside (``DEFERRED_KEY``) whose class the engine now loads, under the scope the
+    roster names it by, and take it off the report. Runs at every start once the
+    workspaces have their access policy (``container_defaults.migrate``), before
+    any request: an agent whose module just loaded is never served in between.
+    An agent whose workspace is gone is forgotten; one whose workspace has no
+    access policy yet waits for the next start. Returns how many were denied."""
+    from naas_abi.apps.nexus.apps.api.app.services.iam.container_defaults import (
+        SqlDefaultsStore,
+    )
+    from naas_abi.apps.nexus.apps.api.app.services.iam.names import workspace_container
+
+    raw = (
+        await db.execute(
+            text("SELECT report FROM iam_migrations WHERE name = :n"), {"n": MIGRATION_NAME}
+        )
+    ).scalar()
+    if raw is None:
+        return 0
+    report = json.loads(raw or "{}")
+    deferred = [dict(entry) for entry in report.get(DEFERRED_KEY) or []]
+    if not deferred:
+        return 0
+    resolve = _agent_resolver()
+    kept: list[dict[str, str]] = []
+    denied: dict[str, list[tuple[dict[str, str], str]]] = {}
+    store = SqlDefaultsStore(db)
+    for entry in deferred:
+        workspace_id, class_name = str(entry["workspace"]), str(entry["class_name"])
+        found = (
+            await db.execute(
+                text("SELECT organization_id FROM workspaces WHERE id = :w"), {"w": workspace_id}
+            )
+        ).first()
+        if found is None:
+            continue
+        try:
+            scope = resolve(class_name, None, strict=True)
+        except AgentNotLoaded:
+            kept.append(entry)
+            continue
+        if scope is None:
+            continue
+        org_id = str(found[0]) if found[0] else None
+        record = await store.get(workspace_container(org_id, workspace_id))
+        if record is None or not record.access_policy_id:
+            kept.append(entry)
+            continue
+        pattern = (
+            f"${{scope}}/module:{module_scopes.AGENT}/"
+            f"{encode_segment(scope.module)}/{encode_segment(scope.name)}"
+        )
+        denied.setdefault(record.access_policy_id, []).append((entry, pattern))
+
+    def deny(policy_id: str, patterns: Sequence[str]) -> None:
+        iam = runtime.iam()
+        with as_service_account("engine"):
+            policy = iam.get_policy(policy_id)
+            statements = list(policy.document.statements)
+            already = {r for s in statements if s.effect == "Deny" for r in s.resources}
+            new = sorted({p for p in patterns if p not in already})
+            if not new:
+                return
+            ours = [s for s in statements if (s.sid or "").startswith(DEFERRED_SID)]
+            others = [s for s in statements if s not in ours]
+            every = sorted({r for s in ours for r in s.resources} | set(new))
+            for i, chunk in enumerate(_chunks(every)):
+                others.append(
+                    Statement(
+                        "Deny",
+                        (f"module:{module_scopes.USE_ACTION[module_scopes.AGENT]}",),
+                        chunk,
+                        sid=DEFERRED_SID if i == 0 else f"{DEFERRED_SID}{i + 1}",
+                    )
+                )
+            iam.update_policy(
+                policy_id,
+                expected_revision=policy.revision,
+                document=PolicyDocument(tuple(others), version=policy.document.version),
+            )
+
+    made = 0
+    for policy_id, rows in denied.items():
+        try:
+            await run_in_threadpool(deny, policy_id, [pattern for _entry, pattern in rows])
+        except Exception:  # noqa: BLE001 - kept for the next start
+            _log.exception("The turned-off agents of policy %s were not denied", policy_id)
+            kept += [entry for entry, _pattern in rows]
+            continue
+        made += len(rows)
+    if kept != deferred:
+        report[DEFERRED_KEY] = kept
+        await db.execute(
+            text("UPDATE iam_migrations SET report = :r WHERE name = :n"),
+            {"r": json.dumps(report), "n": MIGRATION_NAME},
+        )
+        await db.commit()
+    if made:
+        _log.info("%d turned-off agent(s) of modules loaded since the upgrade denied", made)
+    return made
 
 
 async def _drop_what_was_read(db: AsyncSession) -> None:
@@ -1611,7 +1748,9 @@ async def _carry_into_invitations(db: AsyncSession, carried: Mapping[str, Sequen
 
 __all__ = [
     "AFTER",
+    "DEFERRED_KEY",
     "MIGRATION_NAME",
+    "AgentNotLoaded",
     "NOTES",
     "Legacy",
     "Plan",
@@ -1622,6 +1761,7 @@ __all__ = [
     "access_statements",
     "apply",
     "build_world",
+    "deny_deferred_agents",
     "migrate_sets",
     "pending",
     "plan",

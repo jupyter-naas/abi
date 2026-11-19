@@ -1,0 +1,108 @@
+/* Platform Settings › General — the site's identity, read-only rows */
+
+.platform-general-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.platform-general-source {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-sm);
+  color: var(--muted-foreground-hex);
+}
+
+.platform-general-source code,
+.platform-general-key,
+.platform-general-color code {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--font-size-xs);
+}
+
+.platform-general-rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.platform-general-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) 1fr;
+  gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border-hex);
+}
+
+.platform-general-row:first-child {
+  border-top: none;
+}
+
+.platform-general-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground-hex);
+}
+
+.platform-general-key {
+  font-weight: var(--font-weight-normal, 400);
+  color: var(--muted-foreground-hex);
+}
+
+.platform-general-value {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--foreground-hex);
+}
+
+.platform-general-unset {
+  color: var(--muted-foreground-hex);
+}
+
+.platform-general-text,
+.platform-general-link {
+  overflow-wrap: anywhere;
+}
+
+.platform-general-link {
+  color: var(--foreground-hex);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.platform-general-image,
+.platform-general-color {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.platform-general-image-preview {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  object-fit: contain;
+  border: 1px solid var(--border-hex);
+  background-color: var(--muted-bg-hex);
+}
+
+.platform-general-swatch {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border: 1px solid var(--border-hex);
+}
+
+@media (max-width: 640px) {
+  .platform-general-row {
+    grid-template-columns: 1fr;
+    gap: var(--space-1);
+  }
+}

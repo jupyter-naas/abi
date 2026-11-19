@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { buildProcessGraph, PROCESS_BUCKET_DEFS, processPresentationRoute } from './ontology-process-graph';
 import { buildTermGraph } from './ontology-term-graph';

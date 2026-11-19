@@ -16,6 +16,7 @@ from naas_abi_core.services.iam.names import anywhere
 from naas_abi_core.services.iam.tests import grant_contract as contract
 from naas_abi_core.services.iam.tests.iam_harness import (
     IAMHarness,
+    below,
     graph,
     statement,
     workspace,
@@ -170,3 +171,99 @@ def test_grantable_needs_no_permission(h):
         assert contract._actions(h.iam.grantable(WS1)) == {}
         with pytest.raises(ValueError):
             h.iam.grantable("not a scope")
+
+
+# -- where a policy is held (#1519) ------------------------------------------------
+
+READ_ALL = statement("Allow", ["triple_store:Query"], ["${scope}/triple_store:graph/*"])
+OFF = statement(
+    "Deny", ["triple_store:Query"], ["${scope}/triple_store:graph/secret"], sid="Off"
+)
+
+
+def _turned_off(h: IAMHarness, where: str, who) -> None:
+    """``who`` holds, at the workspace ``where``, its access: every graph but
+    ``secret`` (a workspace's turned-off item, as the upgrade writes it)."""
+    with as_service_account("engine"):
+        access = h.iam.create_policy(
+            "access", contract.document(READ_ALL, OFF), scope=where
+        )
+        h.iam.attach_policy(access.id, who.id, where)
+
+
+def test_a_deny_in_another_organisation_does_not_stop_a_platform_policy(h):
+    """The platform admin, denied ``secret`` in ws-1 of org-1, writes and widens
+    org-2's access (a platform policy attached below org-2): it is held where it
+    applies, the platform itself and below org-2, never in every container."""
+    t = contract.team(h.iam)
+    h.register("ws-3", "org-2")
+    _turned_off(h, WS1, t.root)
+    olivia = h.user("olivia")
+    with h.as_(t.root):
+        access = h.iam.create_policy("org-2 access", contract.document(READ_ALL))
+        h.iam.attach_policy(access.id, olivia.id, below("org-2"))
+        h.iam.update_policy(
+            access.id,
+            expected_revision=1,
+            document=contract.document(
+                statement(
+                    "Allow",
+                    ["triple_store:Query", "triple_store:Insert"],
+                    ["${scope}/triple_store:graph/*"],
+                )
+            ),
+        )
+    assert h.allowed("triple_store:Query", graph("secret", "org-2", "ws-3"), olivia)
+    assert h.allowed("triple_store:Insert", graph("secret", "org-2", "ws-3"), olivia)
+    # ws-1 still denies it to whoever holds its access, the platform admin included.
+    assert not h.allowed("triple_store:Query", graph("secret"), t.root)
+    assert h.allowed("triple_store:Query", graph("open"), t.root)
+    assert not h.allowed("triple_store:Query", graph("secret"), olivia)
+
+
+def test_a_deny_where_the_policy_applies_still_stops_it(h):
+    """Denied ``secret`` in ws-3 of org-2, the platform admin may not give it
+    below org-2, where the policy is attached."""
+    t = contract.team(h.iam)
+    ws3 = h.register("ws-3", "org-2")
+    _turned_off(h, ws3, t.root)
+    olivia = h.user("olivia")
+    with h.as_(t.root):
+        access = h.iam.create_policy(
+            "org-2 access",
+            contract.document(
+                statement(
+                    "Allow", ["triple_store:Query"], ["${scope}/triple_store:graph/x"]
+                )
+            ),
+        )
+        h.iam.attach_policy(access.id, olivia.id, below("org-2"))
+        contract.refused(
+            lambda: h.iam.update_policy(
+                access.id, expected_revision=1, document=contract.document(READ_ALL)
+            ),
+            graph("secret", "org-2", "ws-3"),
+            f"at {below('org-2')}",
+        )
+        contract.refused(
+            lambda: h.iam.attach_policy(
+                h.iam.create_policy("wide", contract.document(READ_ALL)).id,
+                olivia.id,
+                below("org-2"),
+            ),
+            graph("secret", "org-2", "ws-3"),
+        )
+    assert not h.allowed("triple_store:Query", graph("y", "org-2", "ws-3"), olivia)
+
+
+def test_an_organisation_admin_still_gives_only_what_it_holds_where_it_applies(h):
+    """Denied ``secret`` in ws-1, the org's admin writes an org policy of every
+    graph (held at the org itself), and may not attach it below the org."""
+    t = contract.team(h.iam)
+    _turned_off(h, WS1, t.org_admin)
+    with h.as_(t.org_admin):
+        wide = h.iam.create_policy("wide", contract.document(READ_ALL), scope=ORG_SCOPE)
+        contract.refused(
+            lambda: h.iam.attach_policy(wide.id, t.colleague.id, ORG_WIDE),
+            graph("secret"),
+        )

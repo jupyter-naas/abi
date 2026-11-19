@@ -9,8 +9,8 @@ the key the engine stores it under. The engine accepts a module's files only und
 Loading is additive, as for in-engine modules: a file removed later stays in the schema graph.
 A failed load never changes readiness: it is logged as an error. A transient failure (the
 engine unreachable or busy) is retried in the background; a refusal that cannot change
-(``INVALID_ARGUMENT``: not Turtle, a forged ``internal:`` vocabulary, a malformed source;
-``PERMISSION_DENIED``) is logged once, and that file is not sent again by this process.
+(``INVALID_ARGUMENT``: not Turtle, the ``internal:`` or ``intentMapping:`` vocabulary, a
+malformed source; ``PERMISSION_DENIED``) is logged once, and that file is not sent again by this process.
 """
 
 from __future__ import annotations

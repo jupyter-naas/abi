@@ -4,19 +4,20 @@ export type OrgDomain = {
 };
 
 /**
- * Organization login is keyed by custom domain, not the unused URL slug.
- * Prefer a verified domain, then any stored domain, then the current host.
+ * The organization's verified domains, in order and once each: the email domains it
+ * proved it owns (Domains), whose people it recognizes. Never the address the site is
+ * reached at, which is the platform's (Platform Settings › General).
  */
-export function displayOrgDomain(
-  domains: OrgDomain[] | null | undefined,
-  fallbackHost = ''
-): string {
-  const rows = (domains ?? [])
-    .map((row) => ({
-      domain: row.domain.trim(),
-      is_verified: Boolean(row.is_verified),
-    }))
-    .filter((row) => row.domain);
-  const verified = rows.find((row) => row.is_verified);
-  return verified?.domain || rows[0]?.domain || fallbackHost;
+export function verifiedDomains(domains: OrgDomain[] | null | undefined): string[] {
+  const seen = new Set<string>();
+  for (const row of domains ?? []) {
+    const domain = row.domain.trim().toLowerCase();
+    if (row.is_verified && domain) seen.add(domain);
+  }
+  return [...seen].sort();
+}
+
+/** How many domains wait for their DNS record to be verified. */
+export function pendingDomainCount(domains: OrgDomain[] | null | undefined): number {
+  return (domains ?? []).filter((row) => row.domain.trim() && !row.is_verified).length;
 }

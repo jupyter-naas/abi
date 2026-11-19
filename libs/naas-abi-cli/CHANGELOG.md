@@ -2,6 +2,89 @@
 
 <!-- version list -->
 
+## v5.0.1 (2026-11-19)
+
+### Bug Fixes
+
+- **cli**: Abi dev up --with-nats runs the built-in IdP without a nats: block
+  ([`f130377`](https://github.com/jupyter-naas/abi/commit/f1303778f1bd298383822cffc40a03adb523caa1))
+
+
+## v5.0.0 (2026-11-19)
+
+### Features
+
+- **core, sdk, cli**: Module connections end on IAM changes, not every two minutes
+  ([`2f55f6b`](https://github.com/jupyter-naas/abi/commit/2f55f6b01e56bdc9c74a9c4963d9aab70e5bfca0))
+
+### Testing
+
+- Generate the broker's system password in tests; the dokploy reference is no secret
+  ([`f6186e7`](https://github.com/jupyter-naas/abi/commit/f6186e7b7142643855fdcd564982c8204be40454))
+
+
+## v4.0.0 (2026-11-19)
+
+### Features
+
+- **marketplace**: X as a remote module, in-engine x removed (#1423, #1425-#1428)
+  ([`113b1e9`](https://github.com/jupyter-naas/abi/commit/113b1e9d232e4fd35960e15c69e91278cef8ac25))
+
+### Breaking Changes
+
+- **marketplace**: Naas_abi_marketplace.applications.x is removed. Run the remote module with
+  X_CONFIG_FILE (the old config: block, without bearer_token), and run reprocess_tweet_envelopes
+  once with force: true to rebuild the dataset in the module's namespace.
+
+
+## v3.3.4 (2026-11-18)
+
+### Bug Fixes
+
+- **api**: No auto-reload by default, uvicorn log level of its own
+  ([`27b2f69`](https://github.com/jupyter-naas/abi/commit/27b2f69e5f53fed06a17f92e0f8316229025bb70))
+
+- **dev**: Abi dev up keeps the API's auto-reload
+  ([`d492a69`](https://github.com/jupyter-naas/abi/commit/d492a69b0c81eb3934e67ae4e6bb32cbf218d7d1))
+
+### Chores
+
+- Maintenance across core, nexus, marketplace and deploy templates
+  ([`232291c`](https://github.com/jupyter-naas/abi/commit/232291c110f3961bfeabc00fbcc3db6c1dc72537))
+
+
+## v3.3.3 (2026-11-16)
+
+### Bug Fixes
+
+- **core, cli**: Keep the engine's own secrets out of the compose .env
+  ([`a62d8f7`](https://github.com/jupyter-naas/abi/commit/a62d8f7dea8189c67640650d86ec599b50b2d4bf))
+
+- **core, cli**: Repair .env only where the adapter's config is known
+  ([`467b301`](https://github.com/jupyter-naas/abi/commit/467b3014f4224d8dd0e024723930e4ef1057a221))
+
+
+## v3.3.2 (2026-11-16)
+
+### Bug Fixes
+
+- **cli**: Abi deploy local builds Fuseki 5.6.0 instead of pulling 5.1.0
+  ([`b8956be`](https://github.com/jupyter-naas/abi/commit/b8956be1d79a64e886e4174966c67de22acdc085))
+
+
+## v3.3.1 (2026-11-10)
+
+### Bug Fixes
+
+- **cli**: The git author labels terminal events and never bounds the engine's access
+  ([`18eacf4`](https://github.com/jupyter-naas/abi/commit/18eacf479193ef2be464e39bd71e6aecf4e7b6bf))
+
+### Testing
+
+- **cli**: Local operator tests no longer depend on the machine's git identity
+  ([`31bb132`](https://github.com/jupyter-naas/abi/commit/31bb1325fb32a09227997984214b795731588dd5))
+
+
 ## v3.3.0 (2026-11-07)
 
 ### Bug Fixes

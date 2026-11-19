@@ -1,4 +1,4 @@
-/* settings/system/data — the Data tab explorer (semantic styles on workspace tokens) */
+/* settings/system/data — a kernel service's data browser (semantic styles on workspace tokens) */
 
 .data-explorer {
   --data-gutter: 24px;
@@ -291,7 +291,6 @@
 
 .data-button:focus-visible,
 .data-icon-button:focus-visible,
-.data-rail-item:focus-visible,
 .data-segment:focus-visible {
   outline: none;
   box-shadow: var(--shadow-focus);
@@ -655,126 +654,7 @@
   word-break: break-all;
 }
 
-/* ----------------------------------------------------------------- rail */
-
-.data-rail {
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  width: 228px;
-  border-right: 1px solid var(--border-hex);
-  background-color: var(--surface-subtle-hex, var(--background-hex));
-}
-
-.data-rail-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--space-3) 0;
-}
-
-.data-rail-group + .data-rail-group {
-  margin-top: var(--space-3);
-}
-
-.data-rail-group-label {
-  margin: 0;
-  padding: 6px 18px;
-  font-size: 10px;
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted-foreground-hex);
-}
-
-.data-rail-item {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  height: 32px;
-  padding: 0 18px;
-  border: none;
-  font-size: var(--font-size-sm);
-  text-align: left;
-  color: var(--muted-foreground-hex);
-  background: none;
-  cursor: pointer;
-}
-
-.data-rail-item:hover {
-  color: var(--foreground-hex);
-  background-color: var(--muted-bg-hex);
-}
-
-.data-rail-item-active {
-  color: var(--foreground-hex);
-  background-color: var(--muted-bg-hex);
-}
-
-.data-rail-item-active::before {
-  content: '';
-  position: absolute;
-  top: 6px;
-  bottom: 6px;
-  left: 0;
-  width: 2px;
-  background-color: var(--color-primary);
-}
-
-.data-rail-item-active svg {
-  color: var(--color-primary);
-}
-
-.data-rail-item-off {
-  cursor: default;
-  opacity: 0.45;
-}
-
-.data-rail-item-off:hover {
-  color: var(--muted-foreground-hex);
-  background: none;
-}
-
-.data-rail-label {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.data-rail-off {
-  font-size: 10px;
-  text-transform: uppercase;
-}
-
-.data-rail-footer {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  height: 44px;
-  padding: 0 10px 0 18px;
-  border-top: 1px solid var(--border-hex);
-}
-
-.data-rail-footer-button {
-  display: flex;
-  flex: 1;
-  text-align: left;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  padding: 0;
-  border: none;
-  font-size: var(--font-size-xs);
-  color: var(--muted-foreground-hex);
-  background: none;
-  cursor: pointer;
-}
-
-.data-rail-footer-button:hover {
-  color: var(--foreground-hex);
-}
+/* ------------------------------------------------------------ shortcuts */
 
 .data-shortcuts {
   display: flex;
@@ -837,36 +717,15 @@
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 20px var(--data-gutter) 14px;
+  padding: 14px var(--data-gutter) 10px;
 }
 
 .data-service-heading {
-  flex: 1;
-  min-width: 0;
-}
-
-.data-service-title-row {
   display: flex;
+  flex: 1;
   align-items: center;
   gap: 8px;
-}
-
-.data-service-title {
-  margin: 0;
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  line-height: 1.3;
-}
-
-.data-service-description {
-  display: -webkit-box;
-  margin: 2px 0 0;
-  overflow: hidden;
-  font-size: var(--font-size-sm);
-  line-height: 1.45;
-  color: var(--muted-foreground-hex);
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  min-width: 0;
 }
 
 .data-service-actions {
@@ -2572,23 +2431,6 @@
 }
 
 @media (max-width: 900px) {
-  .data-rail {
-    width: 64px;
-  }
-
-  .data-rail-label,
-  .data-rail-off,
-  .data-rail-group-label {
-    display: none;
-  }
-
-  .data-rail-item,
-  .data-rail-footer,
-  .data-rail-footer-button {
-    justify-content: center;
-    padding: 0;
-  }
-
   .data-search {
     width: 200px;
   }
@@ -2600,38 +2442,8 @@
     flex-direction: column;
   }
 
-  .data-rail {
-    width: auto;
-    border-right: none;
-    border-bottom: 1px solid var(--border-hex);
-  }
-
-  .data-rail-scroll {
-    display: flex;
-    overflow-x: auto;
-    padding: 6px 8px;
-  }
-
-  .data-rail-group {
-    display: flex;
-    margin: 0 !important;
-  }
-
-  .data-rail-item {
-    width: 40px;
-    flex: none;
-  }
-
-  .data-rail-footer {
-    display: none;
-  }
-
   .data-service-header {
     flex-wrap: wrap;
-  }
-
-  .data-service-description {
-    white-space: normal;
   }
 
   .data-toolbar {

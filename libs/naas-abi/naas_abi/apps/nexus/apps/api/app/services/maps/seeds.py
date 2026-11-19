@@ -60,6 +60,11 @@ class MapsSeedRegistry:
     # re-applies the seed to the workspaces' system copy: a data migration.
     revisions: dict[str, int] = field(default_factory=dict)
 
+    def seed_ids(self) -> frozenset[str]:
+        """Every id the deployment seeds (feeds, layers, basemaps): no workspace record takes
+        one, so a workspace never adopts a seed's layers or data under a record of its own."""
+        return frozenset(self.layouts) | frozenset(self.feed_layers) | frozenset(self.basemaps)
+
     def layout_revisions(self) -> dict[str, int]:
         return {i: self.revisions.get(f"layout:{i}", 1) for i in self.layouts}
 

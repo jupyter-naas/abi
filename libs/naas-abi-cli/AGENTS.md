@@ -102,20 +102,24 @@ only.
   pending version; the previous approved one stays in force. `abi new module` prints these
   steps for a remote module.
 - The built-in identity provider is such a module (`module/<project>/idp`): `abi dev up`
-  runs it by default (when the config names no `identity.providers`, or names one with
-  `provisioning: builtin`), `abi new project` and `abi deploy local` set it up, and a
+  runs it by default in NATS mode (when the config names no `identity.providers`, or names
+  one with `provisioning: builtin`), whether the mode comes from the config's `nats:` block
+  or from `--with-nats`; `abi dev down`/`status`/`logs` follow the mode of the last run.
+  `abi new project` and `abi deploy local` set it up, and a
   deployment outside them creates its account and key by hand as above.
 
 ### Signing in during development
 
 Nexus signs people in at an identity provider, so a fresh project has no password.
-`abi dev up` prints how to sign in as `admin@example.com` (`ADMIN_EMAIL`, the account
-`users:` of the Nexus configuration seeds: the API makes it exist at the built-in
-provider when it starts, and its first sign-in links it). In dev the email adapter writes
-messages to `storage/email`, so the 6-digit code is one command away:
+`abi dev up` prints how to sign in as the platform administrator: the superadmin
+`users:` of the Nexus configuration seeds, the address `abi new project --admin-email`
+asked for (this repository's configs read it from `NEXUS_USER_ADMIN_EMAIL` in `.env`, which
+`abi dev up` and `abi stack start` ask for once). The API makes it exist at the built-in
+provider when it starts, and its first sign-in links it. In dev the email adapter writes
+messages to `storage/email`, so the 8-digit code is one command away:
 
 ```bash
-abi dev code                          # the newest code mailed to admin@example.com
+abi dev code                          # the newest code mailed to the administrator
 abi dev code --email bob@example.com  # an address; --email "" for anyone's
 ```
 
@@ -184,7 +188,8 @@ workflow (with job settings), a pipeline, an integration and a second ontology, 
 their scaffolded tests, starts the project with `abi dev up -d` and waits for the API's
 `/docs`, the remote module READY in discovery with the workflow's job, the agents and
 apps in Nexus, the remote ontologies in the engine's schema graph (a SPARQL query on the
-dev Oxigraph), and Nexus web. `scripts/cli_smoke_processes.py` (run with the project's
+dev Oxigraph, with the per-run token `abi dev` keeps in `.abi/dev/oxigraph.token`), and
+Nexus web. `scripts/cli_smoke_processes.py` (run with the project's
 Python, since it needs `naas_abi_sdk`) then calls the workflow and the pipeline over NATS
 with a token for the module's own id, checks an undeclared process is refused, and runs
 the workflow as a job, then `abi dev down`. The `without-nats` variant does the same
@@ -230,3 +235,91 @@ ABI_SMOKE_DIR=~/abi-smoke ABI_SMOKE_KEEP=1 scripts/cli_smoke.sh nats   # keep it
   `click.ClickException` with what to do, never a traceback.
 - Generated projects need Python 3.12+. A NATS project resolves the framework from
   its `.abi` submodule (`use_local_abi_sources`) until proto and the SDK are on PyPI.
+
+## Decision: what the Compose stacks publish, and their data services' credentials
+
+Decision:
+
+- Only the edge faces the network: Caddy's 80 and 443 in `abi deploy local` and the
+  repository's `docker-compose.yml`, Traefik in `abi deploy dokploy`, which publishes no
+  port. Every other published port is bound to `127.0.0.1`, for tools on the same
+  machine (`abi user` on `localhost:9879`, `psql`, the Fuseki backup script). Workspaces
+  reach coderd as `http://coder:7080` on the stack network.
+- Fuseki, Redis and Qdrant take a credential and refuse to start without one:
+  `FUSEKI_ADMIN_PASSWORD` and `FUSEKI_ENGINE_PASSWORD`, `REDIS_PASSWORD`,
+  `QDRANT_API_KEY`, generated into `.env` (`ensure_data_service_secrets`) by
+  `abi deploy local`, `abi stack start` and `abi deploy dokploy`. The engine's config
+  carries them: `http://abi:...@fuseki:3030/ds`, `redis://:...@redis:6379`, the Qdrant
+  adapter's `api_key`.
+- Fuseki's start script writes its access rules (`shiro.ini`) and its dataset on every
+  start, over what the image wrote: nothing but `/$/ping` is anonymous, the admin API
+  and web UI need the `admin` role, the dataset the `engine` role, which the `abi` user
+  holds. The dataset has `query`, `sparql` and `update`, no graph store endpoints, and
+  SPARQL `SERVICE` is off.
+- The broker's monitoring port has no login: nats.conf binds it to the `nats-monitor`
+  alias, on an internal network that only `nats` and `abi` join
+  (`nats.monitoring_url: http://nats-monitor:8222`). It is not published.
+- No service in the stacks proxies requests to a URL its caller names, and no web
+  console reads a data service without the service's own credential (Redis Commander
+  and graph-explorer are gone).
+
+Consequences:
+
+- A project made before this keeps its `docker-compose.yml` until
+  `abi deploy local --regenerate`. That run adds the credentials to `.env` and rewrites,
+  in `config.local.yaml`, the Redis URLs, the Qdrant block and the monitoring URL the
+  older templates wrote (`upgrade_data_service_config`); `abi deploy dokploy` applies the
+  same rewrite to `config.dokploy.yaml`. A config whose lines differ is left as it is.
+- Tests: `deploy/stack_access_test.py` renders every Compose file and runs the Fuseki,
+  Redis and Qdrant start scripts.
+
+## Decision: the coding stack's networks and Coder's owner
+
+Decision:
+
+- Coding workspaces join the `coding` network (`CODING_WORKSPACE_DOCKER_NETWORK`,
+  `<project>_coding`, `${ABI_STACK_NAME}-coding` on Dokploy): coderd, Forgejo and the
+  API, which calls each workspace's exec sidecar by container name. No data service is
+  on it. CI job containers run on the `ci` network (Forgejo only) with
+  `docker_host: "-"`, so no job gets the Docker socket.
+- The workspace template (`.deploy/docker/coder_prototype/*/main.tf`) starts
+  code-server on `127.0.0.1` (the Coder agent proxies it behind Coder's sign-in), keeps
+  the system's trust store as the image ships it, maps no host address, and fixes
+  `docker_network` at creation (`mutable = false`). Nexus sets it from its
+  configuration: `POST /api/coding-environments` takes only the template parameters
+  in `CLIENT_TEMPLATE_PARAMS` (`dev_port`) from the client and refuses any other.
+- Coder's owner exists before coderd serves anyone: the `coder-owner` one-shot runs
+  coderd on its own loopback, creates the owner from `CODER_ADMIN_*`, and exits;
+  `coder` starts once it succeeded. coderd runs as its own user and provisions
+  through `coder-docker`, a Docker API proxy limited to containers, images, networks
+  and volumes (no exec start, no swarm, no secrets) on an internal network.
+
+Consequences:
+
+- `abi deploy local` moves an older project's `CODING_WORKSPACE_DOCKER_NETWORK` off
+  `<project>_abi-network`; workspaces made before keep their network until rebuilt.
+- coderd can still create containers through `coder-docker`: that is its job. The proxy
+  keeps the rest of the Docker API from it.
+- Tests: `deploy/coding_stack_test.py`; the route's in
+  `coding_environment__primary_adapter__FastAPI_test.py`.
+
+## Decision: the platform administrator and the tailnet
+
+Decision:
+
+- `abi new project` asks for the platform administrator's address (`--admin-email`) and
+  writes it into `config.yaml` and `config.local.yaml` (`users:`, `owner_email`). An
+  address whose domain receives no mail (`example.com`, `.test`, `.invalid`, ...,
+  `is_placeholder_address`) is accepted with a warning: it works with `abi dev`, where
+  codes are files. `abi deploy local` and `abi deploy dokploy` refuse a config that makes
+  one a superadmin (`refuse_placeholder_admins`), and the Nexus API logs a warning at
+  start for each (`org_seed.warn_on_placeholder_superadmins`).
+- The headscale `abi deploy local --with-headscale` renders applies `acl.hujson`, which
+  allows no connection until rules are added; its metrics listen on the container's
+  loopback, its gRPC admin API on loopback without plaintext (the CLI uses the unix
+  socket), and only its HTTP port is published, on 127.0.0.1, behind Caddy.
+
+Consequences:
+
+- Scripts that run `abi new project` pass `--admin-email` (`scripts/cli_smoke.sh`).
+- Tests: `new/project_test.py`, `deploy/local_test.py`, `deploy/stack_access_test.py`.

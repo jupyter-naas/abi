@@ -14,7 +14,7 @@ let search = '';
 const replace = vi.fn();
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace }),
-  usePathname: () => '/settings/system/traces',
+  usePathname: () => '/settings/activity/traces',
   useSearchParams: () => new URLSearchParams(search),
 }));
 
@@ -97,7 +97,7 @@ describe('TracesTab search', () => {
       expect.objectContaining({ service: 'ops.reports', operation: 'job digest', lookback: '24h', errors: true }),
     );
     expect(replace).toHaveBeenLastCalledWith(
-      '/settings/system/traces?service=ops.reports&operation=job+digest&lookback=24h&errors=true',
+      '/settings/activity/traces?service=ops.reports&operation=job+digest&lookback=24h&errors=true',
       { scroll: false },
     );
   });
@@ -147,14 +147,14 @@ describe('TracesTab trace', () => {
     expect(q('.trace-stats')?.textContent).toContain('Spans4');
     expect(q('.trace-stats')?.textContent).toContain('Errors1');
     expect(q('.trace-header a')?.getAttribute('href')).toBe(`http://jaeger/trace/${TRACE_ID}`);
-    expect(replace).toHaveBeenLastCalledWith(`/settings/system/traces?trace=${TRACE_ID}`, { scroll: false });
+    expect(replace).toHaveBeenLastCalledWith(`/settings/activity/traces?trace=${TRACE_ID}`, { scroll: false });
 
     await mounted!.click(q('[data-span="d"]'));
     const detail = () => q('[aria-label="Selected span"]');
     expect(detail()?.textContent).toContain('vector.search');
     expect(detail()?.textContent).toContain('collection missing');
     expect(detail()?.textContent).toContain('Links · 1');
-    expect(replace).toHaveBeenLastCalledWith(`/settings/system/traces?trace=${TRACE_ID}&span=d`, { scroll: false });
+    expect(replace).toHaveBeenLastCalledWith(`/settings/activity/traces?trace=${TRACE_ID}&span=d`, { scroll: false });
 
     await mounted!.click(button('job digest', detail() ?? document));
     expect(detail()?.textContent).toContain('ABI');

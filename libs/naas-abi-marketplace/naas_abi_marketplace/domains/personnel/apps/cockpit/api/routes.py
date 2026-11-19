@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from naas_abi_marketplace.domains.personnel.apps.cockpit.api.access import (
+    cockpit_access,
+)
 from naas_abi_marketplace.domains.personnel.apps.cockpit.api.storage import (
     MissingDatasetError,
     read_json,
@@ -14,7 +17,9 @@ from naas_abi_marketplace.domains.personnel.apps.cockpit.config_loader import (
     public_config,
 )
 
-router = APIRouter(tags=["personnel-cockpit"])
+# Every dataset route needs a member of the workspace the cockpit is opened in.
+ACCESS = cockpit_access()
+router = APIRouter(tags=["personnel-cockpit"], dependencies=[Depends(ACCESS)])
 
 
 @router.get("/config")

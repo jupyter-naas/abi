@@ -1,6 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
 import {
-  Building2,
   Paintbrush,
   Users,
   Globe,
@@ -23,7 +22,7 @@ export type OrgSettingsNavItem = {
 };
 
 export const orgSettingsNav: OrgSettingsNavItem[] = [
-  { slug: 'general', label: 'General', icon: Building2 },
+  { slug: 'general', label: 'General', icon: Globe }, // Platform › General's icon
   { slug: 'branding', label: 'Branding', icon: Paintbrush, adminOnly: true },
   { slug: 'workspaces', label: 'Workspaces', icon: FolderKanban },
   { slug: 'users', label: 'Users', icon: Users, adminOnly: true },

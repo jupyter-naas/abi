@@ -375,6 +375,8 @@ class PlatformGrant:
 
 # The type of a pattern's last literal step, ``.../<service>:<type>/...``.
 _LAST_TYPE = re.compile(r"(?:^abi:|/)[a-z][a-z0-9_]*:([a-z][a-z0-9_]*)/")
+# The service of the same step: ``.../<service>:<type>/...``.
+_LAST_SERVICE = re.compile(r"(?:^abi:|/)([a-z][a-z0-9_]*):[a-z][a-z0-9_]*/")
 
 
 def _grant_statements(
@@ -407,6 +409,49 @@ def _grant_statements(
                     )
                 )
     return statements
+
+
+def stored_platform_grants(
+    viewer: Policy | None, member: Policy | None
+) -> list[PlatformGrant]:
+    """The ``PlatformGrant`` list the stored platform policies were generated from.
+
+    ``_grant_statements`` writes one statement per resource, with a ``sid`` of
+    ``GrantViewer…`` in the viewer policy and ``GrantMember…`` in the member one.
+    Reading them back lets any IAM instance regenerate the policies (a catalog
+    registered by another process, the engine's boot) without forgetting the
+    grants a different instance set: the stored policies are where every
+    instance reads them. A resource whose member actions equal the viewer's is a
+    grant with ``member_writes=False``."""
+    viewer_prefix, member_prefix = _sid("grantViewer"), _sid("grantMember")
+
+    def actions_by_resource(policy: Policy | None, prefix: str) -> dict[str, set[str]]:
+        found: dict[str, set[str]] = {}
+        if policy is None:
+            return found
+        for statement in policy.document.statements:
+            if statement.effect != "Allow" or not (statement.sid or "").startswith(
+                prefix
+            ):
+                continue
+            for resource in statement.resources:
+                found.setdefault(resource, set()).update(statement.actions)
+        return found
+
+    viewers = actions_by_resource(viewer, viewer_prefix)
+    members = actions_by_resource(member, member_prefix)
+    grouped: dict[tuple[str, bool], list[str]] = {}
+    for resource in dict.fromkeys([*viewers, *members]):
+        named = _LAST_SERVICE.findall(resource)
+        if not named:
+            continue
+        service = named[-1]
+        member_writes = members.get(resource, set()) != viewers.get(resource, set())
+        grouped.setdefault((service, member_writes), []).append(resource)
+    return [
+        PlatformGrant(service, tuple(resources), member_writes=member_writes)
+        for (service, member_writes), resources in grouped.items()
+    ]
 
 
 # The built-in identity provider's admin app edits who a ``sub`` is (a user's
@@ -669,20 +714,36 @@ def job_account_name(module_id: str) -> str:
 
 def job_policy(registry: CatalogRegistry | None = None) -> Policy:
     """Held by the account of each engine module's jobs (``job/<module_id>``): the
-    kernel services a job works with, read access to secrets (sealed ones stay
-    the engine's), and the module scopes a run for a user checks (the user
-    bounds them)."""
+    kernel services a job works with, on what the platform holds, never on what
+    an organisation or a workspace holds. That holds for a run made for a user
+    too: the account and the user must both allow a call, so such a run reaches
+    the platform's data the user may reach, and none of the user's containers.
+    Never unchecked dataset SQL; the module's own secrets (``<module id>/...``,
+    ``${module.id}`` being the module of the account); and the module scopes a
+    run for a user checks (the user bounds them)."""
     statements = [
         *(
-            _everything_of(f"Job{name}", service)
+            Statement(
+                effect="Allow",
+                actions=(f"{service}:*",),
+                resources=(f"abi:{service}:*",),
+                sid=f"Job{name}",
+            )
             for name, service in _ENGINE_SERVICES
             if service in _JOB_SERVICES
         ),
         Statement(
             effect="Allow",
             actions=("secret:Get", "secret:List"),
+            resources=("abi:secret:secret/${module.id}%2F*",),
+            sid="JobReadsOwnSecrets",
+        ),
+        # Unchecked dataset SQL reads files on the engine host: the engine's own.
+        Statement(
+            effect="Deny",
+            actions=("dataset:QueryUnchecked",),
             resources=("*",),
-            sid="JobReadsSecrets",
+            sid="NoUncheckedSql",
         ),
         *_module_scope_statements(registry, "JobModuleScopes"),
     ]

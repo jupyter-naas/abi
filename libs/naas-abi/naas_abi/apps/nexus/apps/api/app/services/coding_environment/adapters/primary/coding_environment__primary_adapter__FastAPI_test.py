@@ -311,6 +311,58 @@ def test_create_repo_is_empty_with_clone_url(client: Client) -> None:
     assert branches == []
 
 
+def _recorded_params(client: Client) -> list[dict]:
+    seen: list[dict] = []
+    real = client.environments.provision
+
+    def recording(**kwargs):
+        seen.append(dict(kwargs.get("params") or {}))
+        return real(**kwargs)
+
+    client.environments.provision = recording  # type: ignore[method-assign]
+    return seen
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"docker_network": "abi_default"},
+        {"repo_url": "file:///srv/abi"},
+        {"abi_api_base": "http://elsewhere:9879"},
+        {"sidecar_secret": "chosen"},
+        {"dev_port": "0"},
+        {"dev_port": "70000"},
+        {"dev_port": "3000; id"},
+    ],
+)
+def test_provisioning_keeps_template_parameters_to_the_server(
+    client: Client, params: dict[str, str]
+) -> None:
+    seen = _recorded_params(client)
+    resp = client.post(
+        "",
+        json={"workspace_id": WS, "name": "dev", "template_id": "tmpl-default", "params": params},
+    )
+    assert resp.status_code == 422, resp.text
+    assert seen == []
+
+
+def test_provisioning_keeps_the_network_and_repository_of_the_server(
+    client: Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from naas_abi.apps.nexus.apps.api.app.core.config import settings
+
+    monkeypatch.setattr(settings, "coding_workspace_docker_network", "acme_coding")
+    seen = _recorded_params(client)
+    client.provision(params={"dev_port": "5173"})
+
+    (params,) = seen
+    assert params["dev_port"] == "5173"
+    assert params["docker_network"] == "acme_coding"
+    assert params["repo_url"].endswith(f"/{MONOREPO}.git")
+    assert params["abi_api_base"] == settings.coding_agent_api_base
+
+
 def test_the_agent_holds_a_key_of_the_user_bound_to_its_sidecar_never_a_session(
     engine_iam,
 ) -> None:
@@ -685,3 +737,75 @@ def test_the_section_is_refused_to_a_role_whose_feature_is_off() -> None:
             assert resp.status_code == 403, user
         client.as_user("admin")
         assert client.get("/repos", params=_query()).status_code == 200
+
+
+# --- names stay inside the repository -----------------------------------------------
+
+_OUTSIDE_PATHS = ["../../other-team/contents/secret.txt", "a/../../x", ".git/config", "a//b", "x?y#z"]
+_OUTSIDE_REFS = ["../../other-team", "-x", "--output=/tmp/x", "a..b", "x#y", "a/./b", "a b"]
+
+
+def _spy(client: Client, monkeypatch) -> list[str]:
+    """Records every call that reaches the source control adapter."""
+    calls: list[str] = []
+    adapter = client.source_control.adapter
+    for name in ("get_file", "list_contents", "list_commits", "create_branch", "delete_branch"):
+        original = getattr(adapter, name)
+
+        def record(*args, _name=name, _original=original, **kwargs):
+            calls.append(_name)
+            return _original(*args, **kwargs)
+
+        monkeypatch.setattr(adapter, name, record)
+    return calls
+
+
+@pytest.mark.parametrize("path", _OUTSIDE_PATHS)
+def test_the_code_routes_keep_file_paths_inside_the_repository(
+    client: Client, monkeypatch, path: str
+) -> None:
+    calls = _spy(client, monkeypatch)
+    assert client.get("/repo-file", params=_query(path=path)).status_code == 422
+    assert client.get("/repo-contents", params=_query(path=path)).status_code == 422
+    assert calls == []
+
+
+@pytest.mark.parametrize("ref", _OUTSIDE_REFS)
+def test_the_code_routes_keep_branches_and_refs_inside_the_repository(
+    client: Client, monkeypatch, ref: str
+) -> None:
+    calls = _spy(client, monkeypatch)
+    responses = [
+        client.get("/repo-file", params=_query(path="README.md", ref=ref)),
+        client.get("/repo-contents", params=_query(ref=ref)),
+        client.get("/repo-commits", params=_query(ref=ref)),
+        client.delete("/branches", params=_query(name=ref)),
+        client.post("/branches", json={"workspace_id": WS, "name": ref, "source_branch": "main"}),
+        client.post("/branches", json={"workspace_id": WS, "name": "b", "source_branch": ref}),
+        client.post(
+            "",
+            json={"workspace_id": WS, "name": "dev", "template_id": "tmpl-default", "branch": ref},
+        ),
+    ]
+    assert [r.status_code for r in responses] == [422] * len(responses)
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"repo_url": "/srv/other-user/checkout"},
+        {"repo_url": "http://169.254.169.254/latest"},
+        {"sidecar_secret": "chosen"},
+        {"branch": "main"},
+    ],
+)
+def test_provisioning_keeps_the_repository_to_one_chosen_by_id(
+    client: Client, params: dict
+) -> None:
+    resp = client.post(
+        "",
+        json={"workspace_id": WS, "name": "dev", "template_id": "tmpl-default", "params": params},
+    )
+    assert resp.status_code == 422, resp.text
+    assert client.environments.adapter.list_all_environments() == []

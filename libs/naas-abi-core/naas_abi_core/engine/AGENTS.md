@@ -104,6 +104,14 @@ class CallContext:
   actor acting for that user (the same actor for another user is refused); model registry
   chat streams follow the rule (`same_caller`). Overflow chunks carry their call's token,
   user, trace and container; a client stream captures its user once, when it opens.
+- **Transfer budgets** (`TransferHost`): a host declares the operations that read an
+  upload (`uploads`); `write` on any other session is refused before a byte is spooled.
+  Upload budgets are finite (`max_upload_bytes` per session, `max_buffered_upload_bytes`
+  per host; `None` is refused), and a caller (actor and user) gets a quarter of a host's
+  sessions and spooled bytes (`max_caller_sessions`). A parked overflow reply counts, in
+  sessions and in bytes (`max_caller_parked_bytes`), for the caller it is parked for. An upload operation with an `authorize(operation, metadata)`
+  hook (object PUT, dataset write) is checked as the caller at `open`. A refused request
+  does not refresh its session's idle clock.
   `nats_runtime.run_coro` schedules through `run_coroutine_threadsafe`, which copies the
   calling thread's context, so a sync caller keeps its identity.
 - **Never from request-body fields.** `CallContext.principal_id` and `tenant_id` in the
@@ -183,26 +191,31 @@ login, and `auth`, the callout responder's. There is no shared `abi` or `module`
 - **Engine login.** `engine` may use every subject but `$SYS.>`: the API, Nexus and jobs run
   on it and use many subjects. It is not narrowed to the kernel subjects yet.
 - **The callout** (`nats_auth_callout.py`, `nats.auth_callout` in the configuration:
-  `nats_url` as user `auth`, `issuer_seed`, `user_ttl_seconds`). Every other connection logs in
+  `nats_url` as user `auth`, `system_url` as user `sys`, `issuer_seed`, `sweep_seconds`). Every other connection logs in
   as user `sa` with a service key as its password; the broker asks `$SYS.REQ.USER.AUTH` and the
   responder checks the key and its principal (`IAMService.authenticate_key`: a revoked,
   expired or suspended one is refused at once), derives the subjects the account's policy allows
   (`broker_permissions`, see "Broker permissions" in `services/iam/AGENTS.md`) and answers with a
-  user JWT signed by the account seed (`NATS_AUTH_CALLOUT_SEED`), valid five minutes by default
-  (240 to 600 seconds), never past the key's expiry, **without response permissions**. Each
-  request is answered on its own task.
-- **Expiry and renewal.** nats-py closes a connection the broker expired instead of reconnecting
-  it, so a transport logged in with a service key reconnects itself every two minutes
-  (`renew_seconds`); the callout answers again with the subjects of the policy as it is then.
-  Calls that start during the few milliseconds of a renewal wait for it; one in flight when it
-  begins is lost, as in any reconnect. A revoked key, a suspended account or a narrowed manifest
-  therefore reaches the broker within the user's life; services enforce every change at once, so
-  the broker only narrows further. IAM changes reach other engines on `abi.iam.v1.changed`
-  (`abi iam` publishes it after each write); a connected module keeps its broker permissions
-  until it reconnects, and the SDK reconnects once its manifest is approved.
-- **Inboxes.** A client's inbox prefix is `_INBOX.<key id>` (a subject token), so it reads no
-  other's replies. Modules may also publish to `_INBOX.>` (app request bodies and run updates
-  go to inboxes the module is handed).
+  user JWT signed by the account seed (`NATS_AUTH_CALLOUT_SEED`), valid until the key expires
+  (no expiry for a key without one), **without response permissions**. Each request is
+  answered on its own task, and each admission is recorded for the connection warden.
+- **Connections end on IAM changes** (`nats_connection_warden.py`, ADR
+  `20261119_kick_connections_on_iam_change`). The engine logs in to the broker's system account
+  as `sys`. After an IAM change (made in this process, or the store's revision moving, checked
+  every 2 s) it recomputes each recorded connection's permissions
+  (`IAMService.connection_permissions`) and ends (`$SYS.REQ.SERVER.<id>.KICK`) those whose key
+  was revoked or expired, whose account was suspended, or whose permissions changed; nats-py
+  reconnects them and the callout grants the new subjects or refuses. At start and every
+  `sweep_seconds` (300) it lists the broker's connections (`CONNZ`): a callout connection it did
+  not admit (an earlier engine's) is ended so that it logs in again here. Kicks are paced (20 a
+  second). Modules no longer reconnect on a timer, so they are never unreachable between two
+  renewals. Services enforce every change at once; the broker only narrows further. The SDK
+  also reconnects once its manifest is approved.
+- **Inboxes.** A module client's inbox prefix is `_INBOX.<key id>.m`, so it reads no
+  other's replies. A module publishes to the reply subjects of the requests it answers and to
+  the stream inboxes it is handed (`naas_abi_sdk.messages.stream_inbox`: app request bodies,
+  run updates; each ends with a secret), never to another connection's own inboxes
+  (`services/iam/broker.py`, `REPLY_INBOXES`, `STREAM_INBOXES`).
 - **Broker control** (`nats_broker_control.py`, `abi.broker.v1.<operation>`,
   `naas_abi_sdk.broker_control`). Behind the callout a module creates no stream or consumer
   (their subjects travel in the request body, which the broker never reads), gets no stream
@@ -233,7 +246,10 @@ login, and `auth`, the callout responder's. There is no shared `abi` or `module`
   process (its calls over NATS carry the engine's delegation for the user, so there they are
   bounded by the engine and the user). A
   module's own trigger, a schedule or an event runs as the module alone: a module never hands a user
-  to another, as with agents. A schedule's input is the schedule's body, validated (a JSON object of
+  to another, as with agents. An engine module's job is triggered by the engine, or by `api` (for
+  a user or for none): another caller's trigger (a module's) is refused (`job_authorizer`), since
+  the run would act with the job account's rights rather than the caller's. The kernel's own
+  maintenance jobs (owners `naas_abi_core.*`) run as the engine. A schedule's input is the schedule's body, validated (a JSON object of
   4 KiB at most) and sealed by the engine.
 - **Sealed triggers.** Every trigger, schedule and cancel the engine writes carries a seal
   (`Abi-Job-Seal`, an HMAC over where it is delivered, its kind, its body, its claim-check headers
@@ -278,8 +294,9 @@ nats:
   # service_key: abi_sk_...   # a client-role engine's key; unset: the serving engine's, from the secret service
   auth_callout:
     nats_url: "nats://auth:{{ secret.NATS_AUTH_PASSWORD }}@127.0.0.1:4222"
+    system_url: "nats://sys:{{ secret.NATS_SYSTEM_PASSWORD }}@127.0.0.1:4222"
     issuer_seed: "{{ secret.NATS_AUTH_CALLOUT_SEED }}"
-    user_ttl_seconds: 300           # 240 to 600
+    sweep_seconds: 300              # the warden's listing of the broker's connections
   client_timeout_seconds: 10
 services:
   iam: {...}                         # services/iam/AGENTS.md

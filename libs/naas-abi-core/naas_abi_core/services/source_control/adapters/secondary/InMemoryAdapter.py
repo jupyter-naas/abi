@@ -61,6 +61,11 @@ class InMemoryAdapter(ISourceControlAdapter):
         self._counter += 1
         return f"{prefix}-{self._counter}"
 
+    def _next_sha(self) -> str:
+        """A commit id shaped like git's (40 hexadecimal digits)."""
+        self._counter += 1
+        return f"{self._counter:040x}"
+
     def _repo(self, repo_id: str) -> dict:
         if repo_id not in self._repos:
             raise RepoNotFoundError(repo_id)
@@ -103,7 +108,7 @@ class InMemoryAdapter(ISourceControlAdapter):
         repo_id = f"{owner}/{name}"
         if repo_id not in self._repos:
             branches = (
-                {"main": {"name": "main", "commit_sha": self._next_id("sha")}}
+                {"main": {"name": "main", "commit_sha": self._next_sha()}}
                 if auto_init
                 else {}
             )
@@ -186,7 +191,7 @@ class InMemoryAdapter(ISourceControlAdapter):
             raise BranchNotFoundError(f"{repo_id}@{branch}")
         repo.setdefault("files", {})[path] = content
         repo["empty"] = False
-        sha = self._next_id("sha")
+        sha = self._next_sha()
         if branch in repo["branches"]:
             repo["branches"][branch]["commit_sha"] = sha
         commits = repo.setdefault("commits", [])
@@ -222,7 +227,7 @@ class InMemoryAdapter(ISourceControlAdapter):
             else:
                 store[item.path] = item.content
         repo["empty"] = False
-        sha = self._next_id("sha")
+        sha = self._next_sha()
         if branch in repo["branches"]:
             repo["branches"][branch]["commit_sha"] = sha
         commits = repo.setdefault("commits", [])
@@ -292,7 +297,7 @@ class InMemoryAdapter(ISourceControlAdapter):
         repo = self._repo(repo_id)
         if name in repo["branches"]:
             raise BranchNameConflictError(f"branch '{name}' already exists")
-        sha = self._next_id("sha")
+        sha = self._next_sha()
         repo["branches"][name] = {"name": name, "commit_sha": sha}
         return Branch(name=name, commit_sha=sha, protected=name in repo["protection"])
 
@@ -486,7 +491,7 @@ class InMemoryAdapter(ISourceControlAdapter):
                 raise MergeBlockedError(
                     f"merge blocked: {approvals}/{required} required approvals"
                 )
-        sha = self._next_id("sha")
+        sha = self._next_sha()
         record["state"] = PROPOSAL_MERGED
         record["merge_sha"] = sha
         return MergeResult(merged=True, sha=sha, message="merged")

@@ -18,9 +18,11 @@ function sourceAttribution(camera: CCTVCamera): string {
 
 const _API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? '';
 
-function proxyUrl(url: string) {
-  if (!url) return '';
-  return `${_API_BASE}/api/cctv/snapshot?url=${encodeURIComponent(url)}`;
+// The API serves a listed camera's own image or stream, by the camera's id.
+function snapshotUrl(camera: CCTVCamera, kind: 'image' | 'video') {
+  const source = kind === 'image' ? camera.imageUrl : camera.videoUrl;
+  if (!source) return '';
+  return `${_API_BASE}/api/cctv/snapshot?id=${encodeURIComponent(camera.id)}&kind=${kind}`;
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -73,29 +75,29 @@ export default function CCTVPanel({ camera, onClose }: CCTVPanelProps) {
     if (isMP4 && streamUrl) return; // handled by <video>
 
     if (isHLS && streamUrl) {
-      const refresh = () => setImgSrc(proxyUrl(streamUrl) + `&t=${Date.now()}`);
+      const refresh = () => setImgSrc(snapshotUrl(camera, 'video') + `&t=${Date.now()}`);
       refresh();
       imgTimerRef.current = setInterval(refresh, 3000);
     } else if (camera.imageUrl) {
-      const refresh = () => setImgSrc(proxyUrl(camera.imageUrl) + `&t=${Date.now()}`);
+      const refresh = () => setImgSrc(snapshotUrl(camera, 'image') + `&t=${Date.now()}`);
       refresh();
       imgTimerRef.current = setInterval(refresh, 5000);
     }
 
     return () => { if (imgTimerRef.current) clearInterval(imgTimerRef.current); };
-  }, [isHLS, isMP4, isYouTube, streamUrl, camera.imageUrl, status]);
+  }, [isHLS, isMP4, isYouTube, streamUrl, camera, status]);
 
   // MP4 video playback
   useEffect(() => {
     const vid = videoRef.current;
     if (!vid || !isMP4 || !streamUrl) return;
-    vid.src = proxyUrl(streamUrl);
+    vid.src = snapshotUrl(camera, 'video');
     vid.load();
     const onPlaying = () => setStatus('live');
     const onError = () => {
       // Set fallback imgSrc but do NOT mark as 'live' yet — let the <img>
       // onLoad handler do that once the image has actually loaded.
-      if (camera.imageUrl) { setImgSrc(proxyUrl(camera.imageUrl)); }
+      if (camera.imageUrl) { setImgSrc(snapshotUrl(camera, 'image')); }
       else setStatus('error');
     };
     vid.addEventListener('playing', onPlaying);
@@ -106,7 +108,7 @@ export default function CCTVPanel({ camera, onClose }: CCTVPanelProps) {
       vid.removeEventListener('error', onError);
       vid.pause(); vid.src = '';
     };
-  }, [isMP4, streamUrl, camera.imageUrl]);
+  }, [isMP4, streamUrl, camera]);
 
   const now = new Date().toLocaleTimeString('en-GB', {
     hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
@@ -195,7 +197,7 @@ export default function CCTVPanel({ camera, onClose }: CCTVPanelProps) {
         {/* Thumbnail for OpenWebcamDB (shown while YouTube is loading or as fallback) */}
         {isYouTube && camera.imageUrl && status !== 'live' && (
           <img
-            src={proxyUrl(camera.imageUrl)}
+            src={snapshotUrl(camera, 'image')}
             alt={camera.name}
             className="absolute inset-0 w-full h-full object-cover z-1"
             onLoad={() => { /* keep loading state until iframe ready */ }}

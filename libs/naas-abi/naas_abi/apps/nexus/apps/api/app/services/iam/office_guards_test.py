@@ -301,6 +301,32 @@ def test_the_diff_reports_only_the_projects_own_files(
     assert [f["path"] for f in response.json()["files"]] == [own, f"{own}.moved"]
 
 
+@pytest.mark.parametrize(
+    ("base", "head"),
+    [
+        ("x/../../../../../admin/users#", "b" * 40),
+        ("x/../../branches/slides/ws-2/other#", "b" * 40),
+        ("main", None),
+        ("-x", None),
+        ("a" * 40, "../../contents/x"),
+        ("a" * 40, "main"),
+    ],
+)
+def test_the_history_diff_keeps_base_and_head_to_commit_ids(
+    client: Client, kind: Kind, monkeypatch: pytest.MonkeyPatch, base: str, head: str | None
+) -> None:
+    """The diff names two commits by id: nothing else reaches the forge's
+    compare URL."""
+    client.create(kind)
+    asked: list[dict] = []
+    source_control = client.http.app.state.source_control
+    monkeypatch.setattr(source_control, "get_diff", lambda **kw: asked.append(kw) or Diff(files=()))
+    query = {"base": base} if head is None else {"base": base, "head": head}
+    response = client.call("member", kind, "GET", f"{PROJECT}/history/diff", **query)
+    assert response.status_code == 422, response.text
+    assert asked == []
+
+
 @pytest.mark.parametrize("disabled", EVERY_FEATURE)
 def test_a_kind_whose_feature_is_off_is_refused_for_the_role(monkeypatch, disabled: str) -> None:
     everything = ["maps", "chat", "files", *EVERY_FEATURE]
