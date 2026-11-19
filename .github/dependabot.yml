@@ -8,11 +8,18 @@
 #   compromised release has time to be pulled before it reaches us (the same
 #   cooldown as `exclude-newer` in the root pyproject.toml);
 # - open-pull-requests-limit caps how many version-update pull requests stay
-#   open at once per ecosystem; once one is merged or closed, the next opens at
-#   the following weekly run. It does not cap security-update pull requests.
+#   open at once per entry below, and per directory for an entry with
+#   `directories`; once one is merged or closed, the next opens at the following
+#   weekly run. It does not cap security-update pull requests.
 #
 # Python is updated through `uv` (each directory holds a pyproject.toml and its
 # uv.lock): the `pip` ecosystem would bump pyproject.toml and leave uv.lock behind.
+# The IdP (`/libs/naas-abi-idp`) is left out: its image installs
+# requirements.txt, a hashed `uv export` of its uv.lock that Dependabot does not
+# regenerate, so each of its pull requests would fail `tests/test_image.py` and
+# ship the old versions. Its lock is upgraded by hand, with the export
+# (libs/naas-abi-idp/AGENTS.md); a security-update pull request on it needs the
+# same export before it can pass.
 #
 # Dependabot reads this file from the default branch only. Security updates
 # (known CVEs) also need "Dependabot security updates" on in the repository
@@ -23,7 +30,6 @@ updates:
   - package-ecosystem: uv
     directories:
       - /
-      - /libs/naas-abi-idp
       - /libs/naas-abi/naas_abi/apps/nexus/apps/api
     schedule:
       interval: weekly
@@ -71,6 +77,25 @@ updates:
       docker-minor-and-patch:
         update-types: [minor, patch]
         # Some tags read as minor bumps but are not small changes, so each comes
-        # in a pull request of its own: `python` 3.12 -> 3.13 changes the
-        # interpreter, `ubuntu` 24.04 -> 24.10 leaves the LTS release.
+        # in a pull request of its own: `python` 3.11 -> 3.12 changes the
+        # interpreter, `ubuntu` 24.04 -> 24.10 leaves the LTS release (and
+        # interim releases are ignored below).
         exclude-patterns: [python, ubuntu]
+    ignore:
+      # Ubuntu interim releases (YY.10, and YY.04 of an odd year) are not LTS:
+      # only YY.04 of an even year is offered.
+      - dependency-name: ubuntu
+        versions:
+          - ">= 24.10, < 26.04"
+          - ">= 26.10, < 28.04"
+          - ">= 28.10, < 30.04"
+          - ">= 30.10, < 32.04"
+      # Odd Node majors are not LTS releases; the Nexus images keep an even one
+      # (libs/naas-abi/naas_abi/apps/nexus/docker_images_test.py).
+      - dependency-name: node
+        versions:
+          - ">= 25, < 26"
+          - ">= 27, < 28"
+          - ">= 29, < 30"
+          - ">= 31, < 32"
+          - ">= 33, < 34"

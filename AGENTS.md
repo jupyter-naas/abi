@@ -465,6 +465,14 @@ Decision:
 
 - Every action in `.github/workflows/` is pinned by commit, with its tag in a comment;
   Dependabot (`.github/dependabot.yml`) proposes updates once a release is a week old.
+- Dependabot checks weekly: uv (root, Nexus API), npm (Nexus), GitHub Actions and Docker
+  (the ABI images, Nexus, IdP). Minor and patch bumps come grouped, one pull request per
+  ecosystem and directory; a major bump comes alone. At most 5 version-update pull
+  requests stay open per entry and directory. `python` and `ubuntu` image bumps stay out
+  of the Docker group; non-LTS `ubuntu` releases and odd `node` majors are ignored.
+  The IdP's uv lock is not on Dependabot: its image installs a hashed `uv export` of it
+  (`libs/naas-abi-idp/requirements.txt`) that Dependabot would leave stale, so it is
+  upgraded by hand with the export.
 - Tooling the workflows install comes from hashed files in `.github/requirements/`
   (`*.in` and the `uv pip compile` command in each `.txt` header). Docker logins to
   ghcr.io use the job's `GITHUB_TOKEN`.
@@ -487,4 +495,7 @@ Consequences:
 - A lock refresh that moves past an allow-listed advisory leaves a stale line: remove it.
   An advisory with no fixed release is listed `until-fixed`, and fails the check once a
   fix exists.
+- A Dependabot security-update pull request on the IdP's `uv.lock` fails
+  `libs/naas-abi-idp/tests/test_image.py` until `requirements.txt` is exported again on
+  its branch.
 - Tests: `tests/unit/test_release_pipeline.py`.
