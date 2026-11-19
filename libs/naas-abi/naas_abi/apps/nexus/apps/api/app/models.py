@@ -91,6 +91,9 @@ class OrganizationModel(Base):
     postal_code = Column(String(20), nullable=True)
     city = Column(String(100), nullable=True)
     country = Column(String(100), nullable=True)
+    # IANA time zone (``Europe/Paris``) the organization's analytics periods follow
+    # (migration 0073); its workspaces use it too.
+    timezone = Column(String(64), nullable=False, default="UTC", server_default="UTC")
     # Made by the configuration's seeding (core/org_seed.py): the only rows it updates.
     # False for what people create; NULL for a row older than the flag.
     seeded = Column(Boolean, nullable=True, default=False)
