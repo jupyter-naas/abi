@@ -234,6 +234,8 @@ export function Sidebar() {
       currentPanel: ws.activePanelSection,
     });
     if (next === 'keep') return;
+    // On first load the column held is the stored one: no click to defer to.
+    if (previousPath === null) intendedPanelRef.current = null;
     applyPanelFromRoute(next);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, urlSection]);
@@ -314,7 +316,6 @@ export function Sidebar() {
       case 'tasks':     return getWorkspacePath(currentWorkspaceId, '/tasks');
       case 'apps':         return getWorkspacePath(currentWorkspaceId, '/apps');
       case 'marketplace':  return getWorkspacePath(currentWorkspaceId, '/marketplace');
-      case 'infrastructure': return getWorkspacePath(currentWorkspaceId, '/settings/infrastructure');
       case 'settings':     return getWorkspacePath(currentWorkspaceId, '/settings');
       case 'workspaces':   return getWorkspacePath(currentWorkspaceId, '/home');
     }
@@ -749,8 +750,7 @@ export function Sidebar() {
       </nav>
 
       {/*
-        Pinned below the main list so Settings stays in view (Infrastructure is in
-        the avatar menu, above Help).
+        Pinned below the main list so Settings stays in view.
         Same column of destinations: no divider, no top padding of its own.
       */}
       <nav
@@ -760,7 +760,7 @@ export function Sidebar() {
         )}
       >
         {BOTTOM_SECTIONS.filter((s) => isFeatureEnabled(s.feature)).map((section) => {
-          const active = isSectionActive(section) && !pathname.startsWith(getWorkspacePath(currentWorkspaceId, '/settings/infrastructure'));
+          const active = isSectionActive(section);
           return (
             <button
               key={section.id}

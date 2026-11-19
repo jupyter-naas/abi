@@ -1,5 +1,9 @@
 .infrastructure-page { height:100%; display:flex; flex-direction:column; min-height:0; color:var(--foreground-hex); }
-.infrastructure-viewport { position:relative; flex:1; display:flex; flex-direction:column; min-height:250px; background:var(--background-hex); color:var(--foreground-hex); }
+/* The view, then Architecture & Inspector on its right: the left column is the settings list. */
+.infrastructure-body { flex:1; display:flex; min-height:0; }
+.infrastructure-viewport { position:relative; flex:1; min-width:0; display:flex; flex-direction:column; min-height:250px; background:var(--background-hex); color:var(--foreground-hex); }
+.infrastructure-aside { width:280px; flex-shrink:0; overflow-y:auto; padding:12px; border-left:1px solid var(--border-hex); background:var(--background-hex); }
+@media(max-width:767px) { .infrastructure-aside { display:none; } }
 .infrastructure-view-heading { display:flex; align-items:center; gap:12px; padding:16px 20px; font-size:12px; color:var(--muted-foreground-hex); }
 .infrastructure-view-heading button { color:var(--foreground-hex); }
 .infrastructure-exit { margin-left:auto; font-size:11px; }
@@ -59,9 +63,6 @@
 .infrastructure-page button:focus-visible,.infrastructure-sidebar button:focus-visible,.infrastructure-sidebar input:focus-visible { outline:2px solid var(--workspace-accent,var(--color-primary)); outline-offset:2px; }
 .infrastructure-mobile-nav { display:none; }
 @media(max-width:767px) { .infrastructure-mobile-nav { display:block; padding:8px 12px; background:var(--background-hex); border-bottom:1px solid var(--border-hex); } .infrastructure-mobile-nav>details { margin-top:8px; font-size:12px; } .infrastructure-mobile-nav>details>.infrastructure-sidebar { max-height:45vh; overflow:auto; padding-top:12px; } .infrastructure-view-heading { padding:12px; } .infrastructure-view-footer { padding:10px 12px; } }
-.infrastructure-view-selector { display:flex; border:1px solid var(--border-hex); padding:2px; border-radius:0; gap:2px; }
-.infrastructure-view-selector button { padding:5px 9px; color:var(--muted-foreground-hex); }
-.infrastructure-view-selector button[aria-pressed=true] { color:var(--foreground-hex); background:var(--muted-bg-hex); }
 .infrastructure-link-tooltip { position:absolute; z-index:5; width:280px; max-width:calc(100% - 16px); padding:10px 12px; pointer-events:none; border:1px solid var(--border-hex); border-radius:0; background:var(--card-hex); color:var(--foreground-hex); box-shadow:0 4px 16px #00000020; font-size:11px; line-height:1.6; overflow-wrap:anywhere; }
 .infrastructure-link-tooltip strong,.infrastructure-link-tooltip span,.infrastructure-link-tooltip small { display:block; }
 .infrastructure-link-tooltip span,.infrastructure-link-tooltip small { color:var(--muted-foreground-hex); }

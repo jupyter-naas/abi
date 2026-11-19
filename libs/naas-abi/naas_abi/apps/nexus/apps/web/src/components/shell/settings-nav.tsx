@@ -8,7 +8,9 @@ import {
   Cpu,
   Download,
   KeyRound,
+  Layers,
   Shield,
+  Spline,
   Users,
   Workflow,
   Zap,
@@ -37,12 +39,18 @@ export type SettingsNavGroup = {
   items: SettingsNavItem[];
 };
 
+/** Where Infrastructure opens (``/settings/infrastructure`` lands here too). */
+export const INFRASTRUCTURE_LAYERS_PATH = '/settings/infrastructure/layers';
+
+/** The Infrastructure pages: they take the whole content area, with their own header. */
+export const INFRASTRUCTURE_PAGE_PATTERN = /\/settings\/infrastructure(?:\/[^/]+)?$/;
+
 /**
  * Workspace settings categories, shown both in the Settings sub-panel and
  * driving the default redirect for /workspace/[id]/settings.
  *
  * Account and Organization live in standalone routes (linked from the
- * top-right user menu), and are not duplicated here.
+ * avatar menu), and are not duplicated here.
  *
  * The Features group is what the caller may use here: an entry whose feature
  * they do not hold, or whose module resources they may use none of, is hidden
@@ -78,6 +86,14 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
         icon: Workflow,
         kinds: ['workflows', 'pipelines'],
       },
+    ],
+  },
+  {
+    // The ABI codebase's architecture, one page per view.
+    label: 'Infrastructure',
+    items: [
+      { href: INFRASTRUCTURE_LAYERS_PATH, label: 'Layers', icon: Layers },
+      { href: '/settings/infrastructure/diagrams', label: 'Diagrams', icon: Spline },
     ],
   },
 ];
