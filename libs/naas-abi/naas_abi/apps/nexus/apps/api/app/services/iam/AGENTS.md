@@ -148,7 +148,7 @@ module per router family:
 | `chat.py`, `agents.py`, `apps.py`, `workflows.py` | `conversation`; `agent`, `skill`; `app`, `app_project`, `module` (`ListModuleScopes`); `workflow` (its settings: listed, deprecated switch) |
 | `files.py`, `datasets.py`, `office.py` | `file` (drive + path; the organization drive's `ListOrgFiles`, `GetOrgFile`, and admin-level `PutOrgFile`, `DeleteOrgFile` on `<org>/nexus:file/organization/<path>`), `my_file`, `user_storage`, `root_storage`; `dataset`; `project` (slides, documents, sheets) |
 | `knowledge.py`, `search.py` | `view`, `graph_cache`, `ontology`, `icon`, `layout`, `layer`, `feed_layer`, `basemap`, `maps_catalog`, `maps_access`; `search`, `topic`, `search_scope` |
-| `code.py`, `settings.py`, `platform.py`, `realtime.py` | `code`, `code_settings`; `secret`, `provider_model`, `abi_server`; `analytics`, `system`; `presence`, `speech` |
+| `code.py`, `settings.py`, `platform.py`, `realtime.py` | `code`, `code_settings`; `secret`, `provider_model`, `abi_server`; `analytics`, `analytics_conversation` (`policy_only`), `system`; `presence`, `speech`. Analytics are read in a scope: `ReadOrganizationAnalytics` on the organization, `ReadWorkspaceAnalytics` on the workspace (both `admin`), a conversation's messages `ReadAnalyticsConversation` in its workspace, which no role holds (`docs/adr/20261119_analytics_scoped_rollups.md`) |
 | `users.py` | `user` (platform: the platform's accounts, Platform Settings › Users, `services/accounts`): `ListUsers`, `InviteUser`, `UpdateUser`, `SuspendUser`, `ResumeUser`, `DeleteUser`; no role reaches it, the platform admin holds it |
 
 The kernel services have catalogs of their own (core's `iam_catalog.py` of each service); a route that

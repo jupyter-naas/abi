@@ -103,6 +103,7 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             postal_code=row.postal_code,
             city=row.city,
             country=row.country,
+            timezone=row.timezone or "UTC",
             created_at=row.created_at,
             updated_at=row.updated_at,
         )
@@ -170,6 +171,7 @@ class OrganizationSecondaryAdapterPostgres(OrganizationPermissionPort):
             postal_code=organization.postal_code,
             city=organization.city,
             country=organization.country,
+            timezone=organization.timezone or "UTC",
             created_at=organization.created_at,
             updated_at=organization.updated_at,
         )

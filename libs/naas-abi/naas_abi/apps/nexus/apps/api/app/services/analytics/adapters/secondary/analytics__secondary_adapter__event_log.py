@@ -83,6 +83,7 @@ class AnalyticsSecondaryAdapterEventLog(AnalyticsStoragePort):
             event_name=event.get("event_name"),
             user_id=event.get("user_id"),
             workspace_id=event.get("workspace_id"),
+            organization_id=event.get("organization_id"),
             session_id=event.get("session_id"),
             page_path=event.get("page_path"),
             payload_json=json.dumps(event, sort_keys=True, default=str),

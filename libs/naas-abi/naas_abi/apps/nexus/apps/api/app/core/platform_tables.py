@@ -130,6 +130,11 @@ _ENTRIES: list[PlatformTableEntry] = [
         ("conversations", "Conversations", "Chat conversations per workspace and user."),
         ("messages", "Messages", "Chat messages in each conversation."),
         (
+            "message_tools",
+            "Message tools",
+            "The tools each assistant message called, with their number of calls.",
+        ),
+        (
             "chat_ingestion_jobs",
             "Chat ingestion jobs",
             "Files indexed for chat (embedding jobs and their status).",
@@ -211,6 +216,31 @@ _ENTRIES: list[PlatformTableEntry] = [
             "ontology_icons",
             "Ontology icons",
             "Icons chosen for ontology classes and resources.",
+        ),
+    ),
+    *_section(
+        "Analytics",
+        (
+            "analytics_events",
+            "Analytics events",
+            "Usage events of the last 45 days (purged daily), keyed by user and tracker id.",
+        ),
+        (
+            "analytics_hourly",
+            "Analytics hourly counts",
+            "Events per hour, organization, workspace, user, event and page.",
+        ),
+        (
+            "analytics_user_hourly",
+            "Analytics hourly users",
+            "Events and page views per hour, organization, workspace and user.",
+        ),
+        ("analytics_session", "Analytics sessions", "Usage sessions per workspace."),
+        ("analytics_pages", "Analytics page titles", "The latest title seen for each page."),
+        (
+            "analytics_jobs",
+            "Analytics jobs",
+            "When the analytics backfill, message indexing and purge last ran.",
         ),
     ),
     *_section(

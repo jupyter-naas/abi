@@ -46,7 +46,9 @@ SERVICE = "nexus"
 # 9: published by naas_abi (``publisher``).
 # 10: the platform's accounts (``user``: Platform Settings > Users).
 # 11: the organization drive (``ListOrgFiles``, ``GetOrgFile``, ``PutOrgFile``, ``DeleteOrgFile``).
-VERSION = 11
+# 12: scoped analytics (``ReadOrganizationAnalytics``, ``ReadWorkspaceAnalytics``,
+#     ``ReadAnalyticsConversation`` on ``analytics_conversation``).
+VERSION = 12
 
 _MODULES = (
     organizations,

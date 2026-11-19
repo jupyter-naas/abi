@@ -90,3 +90,15 @@ async def test_a_field_set_to_none_is_cleared(db: AsyncSession) -> None:
     )
     assert cleared is not None
     assert (cleared.city, cleared.country) == (None, "France")
+
+
+@pytest.mark.asyncio
+async def test_the_time_zone_is_utc_until_set_then_kept(db: AsyncSession) -> None:
+    adapter = OrganizationSecondaryAdapterPostgres(db=db)
+    assert (await adapter.get_organization_by_id("org-a")).timezone == "UTC"
+    updated = await adapter.update_organization(
+        "org-a",
+        OrganizationUpdateInput(timezone="Europe/Paris", set_fields={"timezone"}),
+    )
+    assert updated is not None and updated.timezone == "Europe/Paris"
+    assert (await adapter.get_organization_by_id("org-a")).timezone == "Europe/Paris"

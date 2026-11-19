@@ -73,8 +73,11 @@ async def test_roles_are_cumulative_by_the_level_of_the_action(world) -> None:
             "UpdateBilling",
             "GetRoleFeatures",
             "UpdateRoleFeatures",
+            "ReadOrganizationAnalytics",
         }:
             continue  # org- and platform-level: checked below
+        if kind.policy_only:
+            continue  # no role holds it: checked below
         # A container type's actions are decided on the container itself.
         resource_id = (
             ()
@@ -291,6 +294,7 @@ async def test_member_directory_and_billing_are_for_owners_and_admins(world) -> 
         ("ListOrganizationMembers", "-"),
         ("ListOrganizationDomains", "-"),
         ("GetBilling", ()),
+        ("ReadOrganizationAnalytics", ()),
     ):
         seen = {
             user: await AUTHZ.allowed(action, user=user, org="org-1", id=id_)
@@ -345,3 +349,12 @@ async def test_listing_members_reads_the_attachments(world) -> None:
         ("viewer", "viewer"),
     ]
     assert await m.MEMBERSHIPS.scopes_of("member", level="workspace") == {"ws-1": "member"}
+
+
+@pytest.mark.asyncio
+async def test_no_role_reads_a_conversation_from_the_analytics(world) -> None:
+    """``ReadAnalyticsConversation`` is policy only: owners included, a role brings none."""
+    for user in ("viewer", "member", "admin", "owner"):
+        assert not await may("ReadAnalyticsConversation", user, id="c-1"), user
+    assert await may("ReadWorkspaceAnalytics", "admin")
+    assert not await may("ReadWorkspaceAnalytics", "member")

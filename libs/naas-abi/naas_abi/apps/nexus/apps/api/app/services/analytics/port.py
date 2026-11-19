@@ -10,6 +10,8 @@ storage and the responses served by the read endpoints.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -47,6 +49,9 @@ class AnalyticsEvent(BaseModel):
     user_email: str | None = None
     workspace_id: str | None = None
     workspace_name: str | None = None
+    # Stamped by the server from the workspace (``POST /events``); a value sent
+    # by the tracker is replaced.
+    organization_id: str | None = None
     session_id: str
     event_name: str
     page_path: str | None = None
@@ -107,6 +112,7 @@ class WorkspaceRow(BaseModel):
 
 class SessionRow(BaseModel):
     session_id: str
+    user_id: str | None = None
     user_email: str
     workspace_name: str | None = None
     started_at: str
@@ -143,6 +149,24 @@ class UserDetail(BaseModel):
     events: list[AnalyticsEvent]
 
 
+class PeriodInfo(BaseModel):
+    """The calendar period a scoped response covers, in the organization's time zone."""
+
+    period: str
+    date_start: str  # ISO-8601 with the zone's offset
+    date_end: str
+    timezone: str
+    granularity: Literal["hour", "day"]
+
+
+class AnalyticsAccess(BaseModel):
+    """What the caller may read of a scope's analytics (``GET .../analytics/access``)."""
+
+    can_read: bool
+    can_read_conversations: bool
+    timezone: str
+
+
 class OverviewResponse(BaseModel):
     kpi: OverviewKpi
     sessions_over_time: list[TimeseriesPoint]
@@ -151,6 +175,7 @@ class OverviewResponse(BaseModel):
     top_pages: list[PageRow]
     workspace_activity: list[WorkspaceRow]
     recent_activity: list[AnalyticsEvent]
+    period: PeriodInfo | None = None
 
 
 class UsersDirectoryEntry(BaseModel):
@@ -199,6 +224,7 @@ class ChatRow(BaseModel):
     chat_title: str | None = None
     workspace_id: str | None = None
     workspace_name: str | None = None
+    user_id: str | None = None
     user_email: str | None = None
     first_viewed_at: str
     last_viewed_at: str
@@ -208,6 +234,8 @@ class ChatRow(BaseModel):
 
 class ChatsResponse(BaseModel):
     chats: list[ChatRow]
+    # Whether the caller may open a conversation's messages (``ReadAnalyticsConversation``).
+    can_read_messages: bool = False
 
 
 class ChatMessage(BaseModel):
@@ -348,6 +376,10 @@ class ChatNotFound(AnalyticsDomainError):
     pass
 
 
+class OutOfScope(AnalyticsDomainError):
+    """A workspace, user or conversation the scope does not hold: answered 404."""
+
+
 # ---------------------------------------------------------------------------
 # Secondary adapter port
 # ---------------------------------------------------------------------------
@@ -380,4 +412,331 @@ class AnalyticsStoragePort(ABC):
 
     @abstractmethod
     def load_json(self, file_name: str, fallback: Any = None) -> Any:
+        raise NotImplementedError
+
+
+# ---------------------------------------------------------------------------
+# Scoped analytics (epic #1533): domain values and ports
+# ---------------------------------------------------------------------------
+
+Period = Literal["today", "yesterday", "this_week", "this_month"]
+
+
+@dataclass(frozen=True)
+class AnalyticsScope:
+    """What a scoped read may count: resolved on the server (primary adapter), never
+    from a request value. Only events of ``member_ids`` in ``workspace_ids`` count.
+
+    ``organization_id`` is the organization of the scope (the workspace's for a
+    workspace scope, None for a workspace in no organization); ``timezone`` is that
+    organization's.
+    """
+
+    kind: Literal["organization", "workspace"]
+    organization_id: str | None
+    workspace_ids: tuple[str, ...]
+    member_ids: tuple[str, ...]
+    timezone: str = "UTC"
+    # The scope's workspaces each member holds a role in (the users directory).
+    member_workspaces: dict[str, tuple[str, ...]] = field(
+        default_factory=dict, compare=False, hash=False
+    )
+
+    def narrowed(
+        self, *, workspace_id: str | None = None, user_id: str | None = None
+    ) -> AnalyticsScope:
+        """The scope cut to one workspace and/or one user, both of which it must
+        hold (``OutOfScope`` otherwise)."""
+        workspaces = self.workspace_ids
+        members = self.member_ids
+        if workspace_id is not None:
+            if workspace_id not in workspaces:
+                raise OutOfScope(f"workspace {workspace_id}")
+            workspaces = (workspace_id,)
+        if user_id is not None:
+            if user_id not in members:
+                raise OutOfScope(f"user {user_id}")
+            members = (user_id,)
+        return AnalyticsScope(
+            self.kind,
+            self.organization_id,
+            workspaces,
+            members,
+            self.timezone,
+            {m: self.member_workspaces.get(m, ()) for m in members},
+        )
+
+
+@dataclass(frozen=True)
+class Slot:
+    """One bucket of a period's time series: ``label`` in the organization's time
+    zone (``YYYY-MM-DDTHH`` or ``YYYY-MM-DD``), ``[start, end)`` in naive UTC."""
+
+    label: str
+    start: datetime
+    end: datetime
+
+
+@dataclass(frozen=True)
+class PeriodWindow:
+    """A calendar period resolved in a time zone: ``[start, end)`` in naive UTC (what
+    the tables hold), the local bounds for display, and its buckets."""
+
+    period: str
+    timezone: str
+    start: datetime
+    end: datetime
+    local_start: datetime
+    local_end: datetime
+    granularity: Literal["hour", "day"]
+    slots: tuple[Slot, ...]
+
+    def info(self) -> PeriodInfo:
+        return PeriodInfo(
+            period=self.period,
+            date_start=self.local_start.isoformat(),
+            date_end=self.local_end.isoformat(),
+            timezone=self.timezone,
+            granularity=self.granularity,
+        )
+
+
+@dataclass(frozen=True)
+class RecordedEvent:
+    """A tracker event as the rollups apply it: identity already set by the server
+    (``user_id`` from the token, ``workspace_id`` kept only for a member,
+    ``organization_id`` from the workspace). ``timestamp`` is naive UTC; ``payload``
+    is the tracker payload without any email."""
+
+    event_id: str
+    timestamp: datetime
+    session_id: str
+    event_name: str
+    user_id: str | None = None
+    workspace_id: str | None = None
+    organization_id: str | None = None
+    page_path: str | None = None
+    page_title: str | None = None
+    device: str | None = None
+    browser: str | None = None
+    payload: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class SessionAggregate:
+    session_id: str
+    user_id: str
+    workspace_id: str
+    started_at: datetime
+    ended_at: datetime
+    page_views: int
+    events: int
+    device: str | None
+    browser: str | None
+
+
+@dataclass(frozen=True)
+class UserAggregate:
+    user_id: str
+    sessions: int
+    page_views: int
+    workspaces: int
+    total_events: int
+    last_seen: datetime | None
+
+
+@dataclass(frozen=True)
+class PageAggregate:
+    page_path: str
+    page_title: str
+    views: int
+    unique_users: int
+
+
+@dataclass(frozen=True)
+class WorkspaceAggregate:
+    workspace_id: str
+    active_users: int
+    sessions: int
+    events: int
+
+
+@dataclass(frozen=True)
+class OverviewAggregate:
+    """The session figures of the overview and its series; active users, page views
+    and workspaces are the sums of ``users`` and ``workspaces``, which it reads too."""
+
+    total_sessions: int
+    avg_session_duration_seconds: int
+    returning_users: int
+    sessions_per_slot: tuple[int, ...]
+    users_per_slot: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class ConversationAggregate:
+    conversation_id: str
+    workspace_id: str
+    user_id: str
+    title: str
+    agent: str
+    created_at: datetime | None
+    updated_at: datetime | None
+    message_count: int
+
+
+@dataclass(frozen=True)
+class ChatTopAggregate:
+    conversation_id: str
+    workspace_id: str
+    user_id: str
+    title: str
+    message_count: int
+    likes: int
+    dislikes: int
+    agents: tuple[str, ...]
+    tools: tuple[str, ...]
+    last_message_at: datetime | None
+
+
+@dataclass(frozen=True)
+class ChatAggregate:
+    num_chats: int
+    num_messages: int
+    likes: int
+    dislikes: int
+    last_message_at: datetime | None
+    messages_per_slot: tuple[int, ...]
+    chats_per_slot: tuple[int, ...]
+    # (agent id, messages, chats), (tool, uses), (feedback type, count)
+    agents: tuple[tuple[str, int, int], ...]
+    tools: tuple[tuple[str, int], ...]
+    feedback_types: tuple[tuple[str, int], ...]
+    top_chats: tuple[ChatTopAggregate, ...]
+
+
+class AnalyticsEventPort(ABC):
+    """Ingest side: where the tracker's events become rollups.
+
+    ``apply_events`` is idempotent (an event already applied is skipped), so the
+    consumer, a direct ingest and the backfill may all hand it the same event.
+    """
+
+    @abstractmethod
+    async def apply_events(self, events: list[RecordedEvent], *, not_before: datetime) -> int:
+        """Store and count the events not seen yet, newer than ``not_before``
+        (naive UTC). Events with no organization get their workspace's. Returns how
+        many were new."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def purge_events(self, before: datetime) -> int:
+        """Delete the raw events older than ``before`` (naive UTC); the rollups stay."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def job_last_run(self, name: str) -> datetime | None:
+        """When the job ``name`` last ran (naive UTC); None if never."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def record_job_run(self, name: str, at: datetime) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def claim_job(self, name: str, *, now: datetime, every: float) -> bool:
+        """Claim the run of a periodic job at ``now``: True for the one process that
+        finds it never ran or last ran at least ``every`` seconds ago."""
+        raise NotImplementedError
+
+
+class AnalyticsQueryPort(ABC):
+    """Read side: one bounded SQL query per figure, over the rollups of a scope and
+    a period. Nothing reads the whole history."""
+
+    # -- the scope's directory -------------------------------------------------
+
+    @abstractmethod
+    async def organization_timezone(self, organization_id: str) -> str | None:
+        """The organization's time zone; None for an unknown organization."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def organization_workspaces(self, organization_id: str) -> list[str]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def workspace_organization(self, workspace_id: str) -> tuple[bool, str | None]:
+        """(whether the workspace exists, its organization)."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def user_emails(self, user_ids: list[str]) -> dict[str, str]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def workspace_names(self, workspace_ids: list[str]) -> dict[str, str]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def agent_names(self, agent_ids: list[str]) -> dict[str, str]:
+        raise NotImplementedError
+
+    # -- rollups ---------------------------------------------------------------
+
+    @abstractmethod
+    async def overview(self, scope: AnalyticsScope, window: PeriodWindow) -> OverviewAggregate:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def users(self, scope: AnalyticsScope, window: PeriodWindow) -> list[UserAggregate]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def sessions(
+        self, scope: AnalyticsScope, window: PeriodWindow, *, limit: int
+    ) -> list[SessionAggregate]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def pages(self, scope: AnalyticsScope, window: PeriodWindow) -> list[PageAggregate]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def workspaces(
+        self, scope: AnalyticsScope, window: PeriodWindow
+    ) -> list[WorkspaceAggregate]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def events(
+        self, scope: AnalyticsScope, window: PeriodWindow, *, limit: int
+    ) -> list[dict[str, Any]]:
+        """The raw events (tracker payloads, newest first) of the scope and period."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def chat_page_views(self, scope: AnalyticsScope, window: PeriodWindow) -> dict[str, int]:
+        """Page views of each conversation's page (``/chat/<conversation id>``)."""
+        raise NotImplementedError
+
+    # -- chats (the chat tables, read only) ------------------------------------
+
+    @abstractmethod
+    async def conversations(
+        self, scope: AnalyticsScope, window: PeriodWindow, *, limit: int
+    ) -> list[ConversationAggregate]:
+        """Conversations of the scope updated in the period, most recent first."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def conversation_in_scope(
+        self, scope: AnalyticsScope, conversation_id: str
+    ) -> ConversationAggregate | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def chat_analytics(
+        self, scope: AnalyticsScope, window: PeriodWindow, *, top: int
+    ) -> ChatAggregate:
         raise NotImplementedError

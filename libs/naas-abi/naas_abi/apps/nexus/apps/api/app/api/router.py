@@ -148,6 +148,11 @@ api_router.include_router(tenant.router, prefix="/tenant", tags=["tenant"])
 api_router.include_router(transcribe.router, prefix="/transcribe", tags=["transcribe"])
 api_router.include_router(speech.router, prefix="/speech", tags=["speech"])
 api_router.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
+# Analytics of an organization and of a workspace (their settings' Analytics section).
+api_router.include_router(
+    analytics.organization_router, prefix="/organizations", tags=["analytics"]
+)
+api_router.include_router(analytics.workspace_router, prefix="/workspaces", tags=["analytics"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 # Platform Settings > Users: every account and its lifecycle.
 api_router.include_router(accounts_router, prefix="/admin/users", tags=["admin"])
