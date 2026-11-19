@@ -95,7 +95,7 @@ def _apply_workspace_seed_fields(workspace: Any, workspace_cfg: WorkspaceSeedCon
 
     A field is written only when the workspace has no value for it yet, so a
     name, logo, colour or wallpaper changed in the app survives restarts (logos
-    and wallpapers chosen in the app live in the workspace drive and only their
+    and wallpapers chosen in the app live in Workspace Files and only their
     URL is kept here). To force a config value, clear the field in the app.
     """
     for field in _WORKSPACE_FIELDS:
@@ -174,8 +174,7 @@ def is_placeholder_address(email: str) -> bool:
     domain = email.rsplit("@", 1)[-1].strip().lower().rstrip(".")
     # The reserved domains and every name under them (mail.example.com).
     return domain.endswith(_PLACEHOLDER_SUFFIXES) or any(
-        domain == reserved or domain.endswith("." + reserved)
-        for reserved in _PLACEHOLDER_DOMAINS
+        domain == reserved or domain.endswith("." + reserved) for reserved in _PLACEHOLDER_DOMAINS
     )
 
 

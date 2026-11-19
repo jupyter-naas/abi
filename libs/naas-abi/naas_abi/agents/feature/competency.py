@@ -224,13 +224,13 @@ COMPETENCY_QUESTIONS: dict[str, tuple[CompetencyQuestion, ...]] = {
     "Files": (
         _q("What can I do in Nexus Files?", "capabilities", terms=("drive", "folder")),
         _q(
-            "How are Nexus storage paths laid out for My drive and the workspace drive? Read the code and cite the files.",
+            "How are Nexus storage paths laid out for My Files and Workspace Files? Read the code and cite the files.",
             "implementation",
             SOURCE_TOOLS,
             ("workspace-drive", "my-drive"),
         ),
         _q(
-            "List the files and folders at the root of this Nexus workspace drive.",
+            "List the files and folders at the root of this Nexus workspace's Workspace Files.",
             "operate",
             ("list_files",),
             ("folder", "file", "empty"),
@@ -244,7 +244,7 @@ COMPETENCY_QUESTIONS: dict[str, tuple[CompetencyQuestion, ...]] = {
         _q(
             "Comment partager un fichier avec tout l'espace de travail dans Nexus ?",
             "operate",
-            terms=("drive",),
+            terms=("drive", "workspace files"),
         ),
     ),
     "Datasets": (

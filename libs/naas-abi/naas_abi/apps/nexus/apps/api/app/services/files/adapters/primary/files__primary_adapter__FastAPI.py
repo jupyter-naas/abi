@@ -268,8 +268,8 @@ def _resolve_my_drive_scoped_path(path: str, user_id: str) -> str:
 
 
 def _resolve_organization_drive_scoped_path(path: str, organization_id: str) -> str:
-    """The storage key of ``path`` in the organization's drive. A storage path of
-    another organization's drive lands inside this one (re-anchored), never there."""
+    """The storage key of ``path`` in the organization's Organization Files. A storage
+    path of another organization's lands inside this one (re-anchored), never there."""
     return _scope_to_path(organization_drive_root(organization_id), path)
 
 
@@ -324,7 +324,7 @@ async def _authorize_my_drive_path(
     files_service: FilesService | None = None,
 ) -> str:
     if viewing():
-        # My Drive is the person's alone: it is not shown, and nothing in it is found.
+        # My Files is the person's alone: it is not shown, and nothing in it is found.
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     resolved = _resolve_my_drive_scoped_path(path=path, user_id=current_user.id)
     await authz.require(
@@ -343,19 +343,19 @@ async def _authorize_organization_drive_path(
     workspace_id: str | None,
     op: str,
 ) -> str:
-    """The organization drive of the workspace the request comes from.
+    """Organization Files of the workspace the request comes from.
 
     The organization is the one IAM registered the workspace in, never a request
-    field: a workspace reaches its own organization's drive alone, and one in no
-    organization has none. The workspace's ``files`` feature is checked there; who
-    may list, read or change the drive is decided at the organization's container
+    field: a workspace reaches its own organization's Organization Files alone, and
+    one in no organization has none. The workspace's ``files`` feature is checked
+    there; who may list, read or change them is decided at the organization's container
     (``ListOrgFiles``, ``GetOrgFile``, ``PutOrgFile``, ``DeleteOrgFile``): its roles
     by level, then the policies attached there.
     """
     if not workspace_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="workspace_id is required for organization drive access",
+            detail="workspace_id is required for Organization Files access",
         )
     normalized_workspace = _normalize_workspace_id(workspace_id)
     container = await authz.AUTHZ.container_of(normalized_workspace)
@@ -369,7 +369,7 @@ async def _authorize_organization_drive_path(
     if organization_id is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="This workspace belongs to no organization: it has no organization drive",
+            detail="This workspace belongs to no organization: it has no Organization Files",
         )
     scoped = _resolve_organization_drive_scoped_path(path, organization_id)
     await authz.require(
@@ -400,8 +400,8 @@ async def _authorize_system_drive_path(current_user: User, path: str, op: str) -
     """System Files, the whole object storage, decided at the platform
     (``system_file/system/<path>``): the platform admin's."""
     if viewing():
-        # The system drive is the whole storage tree: it holds the person's My Drive
-        # (``naas_abi/my-drive/<id>``), their ``users/<id>`` data and other workspaces' drives,
+        # System Files is the whole storage tree: it holds the person's My Files
+        # (``naas_abi/my-drive/<id>``), their ``users/<id>`` data and other workspaces' files,
         # all of which the person's own rights reach. None of it is shown in a view.
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     scoped = _resolve_system_drive_scoped_path(path)
@@ -611,7 +611,7 @@ async def list_files(
     files_service: FilesService = Depends(get_files_service),
 ):
     if viewing() and scope in (SCOPE_MY_DRIVE, SCOPE_SYSTEM_DRIVE):
-        # The person's My Drive is private to them, and the system drive holds it: an empty
+        # The person's My Files is private to them, and System Files holds it: an empty
         # listing, the page still opens.
         return FileListResponse(files=[], path=path, total=0)
     scoped_path = await _authorize_path(

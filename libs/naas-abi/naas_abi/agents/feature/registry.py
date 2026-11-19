@@ -63,7 +63,7 @@ FEATURE_AGENTS: tuple[FeatureAgentSpec, ...] = (
         "Files",
         "FilesAgent",
         ("files",),
-        "workspace drive and My drive: folders, reading and writing files",
+        "Workspace Files and My Files: folders, reading and writing files",
     ),
     FeatureAgentSpec(
         "Datasets",
