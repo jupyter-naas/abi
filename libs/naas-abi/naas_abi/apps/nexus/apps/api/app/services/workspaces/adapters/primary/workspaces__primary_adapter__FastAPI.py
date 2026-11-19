@@ -165,9 +165,6 @@ class Workspace(BaseModel):
     organization_slug: str | None = None
     organization_logo_url: str | None = None
     organization_logo_rectangle_url: str | None = None
-    # Whether the caller may open the organization's drive (IAM's ``ListOrgFiles``
-    # there): the Files sidebar shows it only then; the files API decides each call.
-    organization_drive: bool = False
     current_user_role: str | None = None
     feature_flags: dict[str, bool] = Field(default_factory=dict)
 
@@ -292,19 +289,11 @@ async def _feature_flags(
     )
 
 
-async def _organization_drives(user: Any, records: list[WorkspaceRecord]) -> set[str]:
-    """The organizations of ``records`` whose drive the user may open."""
-    return await user_features.organization_drives(
-        user, {r.organization_id for r in records if r.organization_id}
-    )
-
-
 def _to_schema(
     record: WorkspaceRecord,
     current_user_role: str | None,
     *,
     feature_flags: dict[str, bool] | None = None,
-    organization_drives: set[str] | None = None,
 ) -> Workspace:
     return Workspace(
         id=record.id,
@@ -328,7 +317,6 @@ def _to_schema(
         organization_slug=record.organization_slug,
         organization_logo_url=record.organization_logo_url,
         organization_logo_rectangle_url=record.organization_logo_rectangle_url,
-        organization_drive=record.organization_id in (organization_drives or set()),
         current_user_role=current_user_role,
         # No role brings a feature: without IAM's answer, none is shown.
         feature_flags=feature_flags
@@ -351,14 +339,8 @@ async def list_workspaces(
         rows = [row for row in rows if row.id == view.workspace_id]
     roles = await service.effective_roles(current_user.id, rows)
     flags = await _feature_flags(current_user, list(rows)) or {}
-    drives = await _organization_drives(current_user, list(rows))
     return [
-        _to_schema(
-            row,
-            role,
-            feature_flags=flags.get(row.id),
-            organization_drives=drives,
-        )
+        _to_schema(row, role, feature_flags=flags.get(row.id))
         for row, role in zip(rows, roles, strict=False)
     ]
 
@@ -375,12 +357,7 @@ async def get_workspace(
     if row is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
     flags = await _feature_flags(current_user, [row]) or {}
-    return _to_schema(
-        row,
-        role,
-        feature_flags=flags.get(row.id),
-        organization_drives=await _organization_drives(current_user, [row]),
-    )
+    return _to_schema(row, role, feature_flags=flags.get(row.id))
 
 
 @router.get("/slug/{slug}", dependencies=[declares("GetWorkspace")])
@@ -400,12 +377,7 @@ async def get_workspace_by_slug(
     await authz.require("GetWorkspace", user=current_user, workspace=row.id)
     role = await service.get_workspace_role(current_user.id, row.id)
     flags = await _feature_flags(current_user, [row]) or {}
-    return _to_schema(
-        row,
-        role,
-        feature_flags=flags.get(row.id),
-        organization_drives=await _organization_drives(current_user, [row]),
-    )
+    return _to_schema(row, role, feature_flags=flags.get(row.id))
 
 
 async def _undo_create(service: WorkspaceService, record: WorkspaceRecord) -> None:
@@ -1032,7 +1004,7 @@ async def upload_workspace_logo(
     service: WorkspaceService = Depends(get_workspace_service),
     object_storage: ObjectStorageService = Depends(_get_object_storage),
 ) -> dict:
-    """Store the logo in the workspace drive (``logo_store``); the previous one is archived."""
+    """Store the logo in Workspace Files (``logo_store``); the previous one is archived."""
     workspace = await service.get_workspace(workspace_id=workspace_id)
     if workspace is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
@@ -1099,7 +1071,7 @@ async def remove_workspace_logo(
     service: WorkspaceService = Depends(get_workspace_service),
     object_storage: ObjectStorageService = Depends(_get_object_storage),
 ) -> dict:
-    """Archive the logo in the workspace drive and clear it."""
+    """Archive the logo in Workspace Files and clear it."""
     workspace = await service.get_workspace(workspace_id=workspace_id)
     if workspace is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
@@ -1116,7 +1088,7 @@ def _delete_legacy_logo(previous: str | None) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Home desk wallpaper (workspace drive .home/): stage → preview → commit.
+# Home desk wallpaper (Workspace Files .home/): stage → preview → commit.
 # ---------------------------------------------------------------------------
 
 

@@ -3,7 +3,9 @@ System Files (the files API, ``GET /api/files/views``).
 
 ``platform_drive_enabled`` and ``system_drive_enabled`` are gone from the
 workspace API: a PATCH still sending them (an older client) is ignored, never
-stored, and the workspace says nothing about drives.
+stored, and the workspace says nothing about drives. Nor does it say whether the
+caller may open Organization Files (``organization_drive``): the Files page and
+sidebar read ``GET /api/files/views``.
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ from naas_abi.apps.nexus.apps.api.app.api.endpoints.auth import (
     get_current_user_required,
 )
 from naas_abi.apps.nexus.apps.api.app.models import WorkspaceModel
+from naas_abi.apps.nexus.apps.api.app.services.iam import user_features
 from naas_abi.apps.nexus.apps.api.app.services.workspaces.adapters.primary import (
     workspaces__primary_adapter__FastAPI as ws_api,
 )
@@ -77,6 +80,7 @@ def test_a_drive_flag_sent_in_a_patch_is_ignored(user, superadmin, flag) -> None
     assert updates.name == "Renamed"
     assert not hasattr(updates, flag)
     assert flag not in response.json()
+    assert "organization_drive" not in response.json()
 
 
 def test_the_workspace_api_and_its_records_name_no_drive_flag() -> None:
@@ -87,6 +91,13 @@ def test_the_workspace_api_and_its_records_name_no_drive_flag() -> None:
         assert flag not in {f.name for f in fields(WorkspaceUpdateInput)}
         assert flag not in WorkspaceModel.__table__.columns
     assert not hasattr(ws_api, "_DRIVE_FLAGS")
+
+
+def test_the_workspace_api_says_nothing_of_organization_files() -> None:
+    # The views the caller may open are GET /api/files/views' answer, not the workspace's.
+    assert "organization_drive" not in ws_api.Workspace.model_fields
+    assert not hasattr(ws_api, "_organization_drives")
+    assert not hasattr(user_features, "organization_drives")
 
 
 def test_other_settings_still_need_a_workspace_admin() -> None:
