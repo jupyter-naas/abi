@@ -235,7 +235,7 @@ interface FilesState {
   chooseView: (source: FilesSource) => void;
   /** The Drive dropdown. */
   chooseDrive: (drive: FilesDrive) => void;
-  /** The dock and Home open Files on Workspace Files (All Views if the caller may not open it). */
+  /** The dock and Home open Files on All Views. */
   openFilesEntry: () => void;
   
   // API actions

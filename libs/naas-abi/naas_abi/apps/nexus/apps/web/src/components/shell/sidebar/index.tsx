@@ -370,7 +370,7 @@ export function Sidebar() {
       showPanel(null);
       return;
     }
-    if (section.id === 'files') openFilesEntry(); // Workspace Files, else All Views
+    if (section.id === 'files') openFilesEntry(); // All Views
     prefetchSectionPanel(section.id);
     if (navigates) {
       navigate();

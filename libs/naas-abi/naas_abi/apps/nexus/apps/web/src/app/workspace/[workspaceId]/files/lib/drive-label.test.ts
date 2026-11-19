@@ -153,14 +153,15 @@ describe('All Views', () => {
 });
 
 describe('the dock and Home open Files', () => {
-  it('on Workspace Files, the current workspace view', () => {
-    expect(FILES_ENTRY_VIEW).toBe('workspace-files');
+  it('on All Views, every view the caller may open', () => {
+    expect(FILES_ENTRY_VIEW).toBe('all');
   });
 
   it('keep a view the caller may open, and fall back to All Views for one they may not', () => {
     const folders = viewFolders(VIEWS, 'all');
-    expect(offeredSource(FILES_ENTRY_VIEW, folders)).toBe('workspace-files');
-    expect(offeredSource(FILES_ENTRY_VIEW, viewFolders([VIEWS[0]], 'all'))).toBe('all');
+    expect(offeredSource(FILES_ENTRY_VIEW, folders)).toBe('all');
+    expect(offeredSource('workspace-files', folders)).toBe('workspace-files');
+    expect(offeredSource('workspace-files', viewFolders([VIEWS[0]], 'all'))).toBe('all');
     expect(offeredSource('system-files', folders)).toBe('all');
     expect(offeredSource('all', [])).toBe('all');
   });

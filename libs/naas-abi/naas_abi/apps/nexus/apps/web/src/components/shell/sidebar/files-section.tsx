@@ -685,19 +685,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
           toggle.click();
         }}
       >
-        {isFileViewSource(viewChoice) ? (
-          renderTree(viewChoice, 0)
-        ) : viewFolderList.length === 0 ? (
-          <p className={cn('px-2 py-1 text-muted-foreground', EXPLORER_ROW_TYPO)} role="status">
-            {viewsStatus === 'loading' ? 'Loading…' : 'No view of the files is open to you here.'}
-          </p>
-        ) : (
-          <div className="space-y-0.5">
-            {viewFolderList.map((folder) => renderViewRow(folder.source, folder.label))}
-          </div>
-        )}
-
-        <div className="mt-2 space-y-0.5 border-t border-border/50 pt-2">
+        <div className="mb-2 space-y-0.5 border-b border-border/50 pb-2">
           <button
             type="button"
             onClick={() => setStarredExpanded((v) => !v)}
@@ -788,6 +776,18 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
             </div>
           )}
         </div>
+
+        {isFileViewSource(viewChoice) ? (
+          renderTree(viewChoice, 0)
+        ) : viewFolderList.length === 0 ? (
+          <p className={cn('px-2 py-1 text-muted-foreground', EXPLORER_ROW_TYPO)} role="status">
+            {viewsStatus === 'loading' ? 'Loading…' : 'No view of the files is open to you here.'}
+          </p>
+        ) : (
+          <div className="space-y-0.5">
+            {viewFolderList.map((folder) => renderViewRow(folder.source, folder.label))}
+          </div>
+        )}
       </nav>
     </CollapsibleSection>
     </>

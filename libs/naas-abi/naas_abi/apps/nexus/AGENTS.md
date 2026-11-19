@@ -536,7 +536,7 @@ src/app/workspace/[workspaceId]/files/
 │   └── drive-settings.test.ts
 ├── components/
 │   ├── files-components.css      # Shared chrome styles (mobile, Drive/View dropdowns, All Views)
-│   ├── files-view-picker.tsx     # Drive and View dropdowns (page and sidebar)
+│   ├── files-view-picker.tsx     # Drive and View pickers (sidebar; ontology picker, single choice)
 │   ├── files-views-root.tsx      # All Views: one folder per view; view icons
 │   ├── files-mobile-toolbar.tsx
 │   ├── files-mobile-row.tsx
@@ -551,7 +551,7 @@ src/app/workspace/[workspaceId]/files/
 
 | Component | Purpose | Used by |
 |---|---|---|
-| `FilesViewPicker` | Drive and View dropdowns (`[All Drives ▾] [All Views ▾]`) | `browse.tsx`, `files-section.tsx` |
+| `FilesViewPicker` | Drive and View pickers, stacked (Drive above View): `OntologyMultiPicker` in its `single` mode | `files-section.tsx` |
 | `FilesViewsRoot` | All Views: one folder per view the caller may open | `browse.tsx` |
 | `FilesMobileToolbar` | Add, refresh, view mode, search (mobile) | `browse.tsx` |
 | `FilesMobileRow` | OneDrive-style list row | `browse.tsx` |
@@ -576,9 +576,9 @@ A **view** is a starting folder of a drive, under `naas_abi/`, served by the fil
 The storage paths (`my-drive/`, `workspace-drive/`…) and the API scopes keep their old names: only the views were renamed (#1530).
 
 - **The Files page and sidebar** show the same two dropdowns, then the search (`FilesViewPicker`): **Drive** (All Drives, File System) and **View** (All Views, then the views the caller may open, in the API's order). With one drive, both Drive choices list the same views. The choices live in the files store (`activeDrive`, `chooseDrive`; `viewChoice`, `chooseView` for the View dropdown), so the page and the sidebar agree; `activeSource` is what is open: `all` or a view.
-- **The dock and Home open Files on Workspace Files** (`openFilesEntry`, `FILES_ENTRY_VIEW`), or All Views when the caller may not open it there; a `?source=` link, a starred item or the View dropdown still choose their own view.
+- **The dock and Home open Files on All Views** (`openFilesEntry`, `FILES_ENTRY_VIEW`); a `?source=` link, a starred item or the View picker still choose their own view.
 - **All Views** (the store's default) is one folder per view the caller may open (`viewFolders`), each opening into its view: on the page `FilesViewsRoot`, then the breadcrumb `All Views / <view> / …`; in the sidebar one row per view with its tree. Nothing is asked of the files API for it (`filesScopeForSource('all')` is null: the store lists nothing and refuses to create anything there). With one view chosen, the page opens on its root and the sidebar shows its tree.
-- **Which views**: `GET /api/files/views?workspace_id=` (`lib/file-views.ts`; `hooks/use-file-views.ts` shares one request per workspace between the page and the sidebar, and File › Refresh asks again). Workspace Files and Organization Files are the current workspace's and its organization's. Organization Files is labelled so, not with the organization's name, and is not listed for a workspace in no organization. A view that is open but not listed (another workspace's, a link's, a starred item's, the dock's Workspace Files) goes back to All Views once the views are known (`useOfferedFileViews`, `offeredSource`).
+- **Which views**: `GET /api/files/views?workspace_id=` (`lib/file-views.ts`; `hooks/use-file-views.ts` shares one request per workspace between the page and the sidebar, and File › Refresh asks again). Workspace Files and Organization Files are the current workspace's and its organization's. Organization Files is labelled so, not with the organization's name, and is not listed for a workspace in no organization. A view that is open but not listed (another workspace's, a link's, a starred item's) goes back to All Views once the views are known (`useOfferedFileViews`, `offeredSource`).
 - **My Files** opens on the user's folder (`documents/`, `downloads/`, `uploads/` and what they added); system files (`.manifest.json`, `.nexus_folder`) stay hidden unless View › Show system files is on. In a View-as session it is private (`PrivateToPerson`, and the store asks for nothing).
 - **Old links and starred items**: `?source=my-drive|workspace|organization-drive|platform-drive|system-drive` and starred items kept in `localStorage` with those sources open the view they became (`filesSourceFrom`, used by `parseFilesDeepLink`, `starredItemsFrom` and `setActiveSource`); a starred item of a synced local folder is dropped.
 - **Synced local folders are gone** (the store's `syncedFolders`, `syncLocalFolder`, `fetchLocalFiles`… and `storageSources`): nothing in the UI added one. `/api/workspaces` no longer answers `organization_drive` (and IAM's `user_features.organization_drives` is gone): the views are the only answer.
@@ -822,7 +822,7 @@ Several NEXUS surfaces use the same mobile UX: a **list screen first**, then a *
 | Maps | `/workspace/{id}/maps` | `/workspace/{id}/maps/{datasetId}` | `MapsSection` (Public / Private; Custom when populated) | Dataset canvas (Public SA layers, presence) |
 | Chat | `/workspace/{id}/chat` | `/workspace/{id}/chat/{id\|new}` | `ChatSection` (conversations) | Chat thread page |
 | Account | `/account` | `/account/{section}` | Settings nav (`lib/nav.ts`) | Section page |
-| Files | `/workspace/{id}/files` | `/workspace/{id}/files/browse` | `FilesSection` (Drive and View dropdowns, views, starred) | File browser page |
+| Files | `/workspace/{id}/files` | `/workspace/{id}/files/browse` | `FilesSection` (Drive and View pickers, search, Starred, then the views' tree) | File browser page |
 | Org settings | `/organizations/{orgId}/settings` | `/organizations/{orgId}/settings/{section}` | Settings nav (`lib/nav.ts`) | Section page |
 | Platform settings | `/settings` | `/settings/{tables,system,organizations,users,roles}/...` | Settings nav (`settings/lib/nav.ts`), the items the caller holds | Item page; a table closes to Nexus tables |
 

@@ -81,7 +81,7 @@ export default function HomePage() {
     (section: DeskSurfaceId) => {
       if (!currentWorkspaceId) return;
       setActivePanelSection(section);
-      if (section === 'files') openFilesEntry(); // Workspace Files, else All Views
+      if (section === 'files') openFilesEntry(); // All Views
       router.push(getWorkspacePath(currentWorkspaceId, `/${section}`));
     },
     [currentWorkspaceId, router, setActivePanelSection, openFilesEntry],
