@@ -1004,6 +1004,125 @@ def test_a_token_made_right_after_a_revocation_is_not_cut_off_with_the_old_ones(
     assert _verify(iam, _by_key(iam, key.value).token, API_KEY_AUDIENCE)
 
 
+class _Clock:
+    """The issuer's clock, a tenth into the real current second (verifiers read
+    ``exp`` from ``time.time``), and a sleep that moves it on and records what
+    it was asked."""
+
+    def __init__(self, iam) -> None:
+        self.at = datetime.fromtimestamp(int(time.time()), UTC) + timedelta(seconds=0.1)
+        self.slept: list[float] = []
+        iam.tokens._clock = lambda: self.at
+        iam._sleep = self.sleep
+
+    def sleep(self, seconds: float) -> None:
+        self.slept.append(seconds)
+        self.at += timedelta(seconds=seconds)
+
+    def tick(self, seconds: float) -> None:
+        self.at += timedelta(seconds=seconds)
+
+
+def _revoke(h, iam, user) -> None:
+    with h.as_(actor="api", on_behalf_of=user):
+        iam.revoke_tokens(user.id)
+
+
+@pytest.mark.parametrize("audience", [SESSION_AUDIENCE, AGENT_AUDIENCE])
+def test_a_token_issued_between_two_revocations_in_one_second_is_cut_off(
+    h, iam, bob, audience
+):
+    """The first revocation pushes the token's ``iat`` into the next second;
+    the second, in the same second, waits for it to begin so its floor covers
+    that ``iat``."""
+    clock = _Clock(iam)
+    _revoke(h, iam, bob)
+    clock.tick(0.2)
+    token = _vouched(iam, bob.id, audience).token
+    claims = _verify(iam, token, audience)
+    context = token_context(claims)
+    clock.tick(0.3)
+    _revoke(h, iam, bob)
+    assert clock.slept == [pytest.approx(0.4)]
+    with pytest.raises(InvalidServiceTokenError, match="revoked"):
+        iam.verifier((audience,)).verify(token)
+    assert iam.token_revoked(claims)
+    decision = iam.authorizer.check(context, QUERY, graph("g"))
+    assert not decision.allowed and decision.reason == "suspended"
+    # What is issued after the second revocation works.
+    assert _verify(iam, _vouched(iam, bob.id, audience).token, audience)
+
+
+def test_a_revocation_in_a_later_second_does_not_wait(h, iam, bob):
+    clock = _Clock(iam)
+    _revoke(h, iam, bob)
+    clock.tick(1.0)
+    claims = _verify(iam, _delegated_for(iam, bob))
+    _revoke(h, iam, bob)
+    assert clock.slept == []
+    assert iam.token_revoked(claims)
+
+
+def test_quick_revocations_never_push_a_floor_ahead_of_the_clock(h, iam, bob):
+    """Many revocations of one user, a fraction of a second apart, each followed
+    by a fresh token: every earlier token is cut off, no floor is ever ahead of
+    the clock, and the user's next token still works."""
+    clock = _Clock(iam)
+    earlier = []
+    for _ in range(10):
+        _revoke(h, iam, bob)
+        assert max(iam.store.token_floors().values()) <= clock.at
+        assert all(iam.token_revoked(claims) for claims in earlier)
+        clock.tick(0.2)
+        earlier.append(_verify(iam, _delegated_for(iam, bob)))
+        clock.tick(0.1)
+    _revoke(h, iam, bob)
+    assert max(iam.store.token_floors().values()) <= clock.at
+    assert all(iam.token_revoked(claims) for claims in earlier)
+    assert all(seconds <= 1 for seconds in clock.slept)
+    fresh = _verify(iam, _delegated_for(iam, bob))
+    assert fresh.issued_at <= clock.at.timestamp() + 1
+
+
+def test_revoking_another_principal_in_the_same_second_does_not_wait(h, iam, bob):
+    clock = _Clock(iam)
+    alice = h.user("alice")
+    _revoke(h, iam, bob)
+    clock.tick(0.2)
+    _delegated_for(iam, bob)
+    clock.tick(0.2)
+    _revoke(h, iam, alice)
+    assert clock.slept == []
+
+
+def test_a_host_token_made_right_after_a_revocation_is_past_the_floor(
+    h, iam, bob, people
+):
+    """Of the user it acts for, and of the caller it is issued to."""
+    from naas_abi_core.engine.call_context import user
+    from naas_abi_core.engine.call_context_types import Principal
+    from naas_abi_core.engine.nats_auth import HOST_AUDIENCE_PREFIX
+    from naas_abi_core.services.iam.modules import subject_token
+
+    clock = _Clock(iam)
+    recipient = subject_token(people.id)
+    hosts = iam.verifier().for_audiences((), prefixes=(HOST_AUDIENCE_PREFIX,))
+    caller = Principal(id=people.id, kind="service_account", name=people.name)
+
+    _revoke(h, iam, bob)
+    clock.tick(0.2)
+    for_bob = hosts.verify(iam.issue_host_token(caller, recipient, user(bob.id)).token)
+    assert for_bob.subject == bob.id
+    assert for_bob.issued_at > iam.store.token_floors()[bob.id].timestamp()
+
+    clock.tick(1.0)
+    h.admin("revoke_tokens", people.id)
+    clock.tick(0.2)
+    own = hosts.verify(iam.issue_host_token(caller, recipient).token)
+    assert own.subject == people.id
+    assert own.issued_at > iam.store.token_floors()[people.id].timestamp()
+
+
 def test_a_request_cannot_rebind_what_a_key_is_bound_to(h, iam, bob):
     key = _key(h, bob, audience=CODING_AUDIENCE, resource="env-1")
     token = _exchange(

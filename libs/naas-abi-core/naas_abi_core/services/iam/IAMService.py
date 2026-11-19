@@ -325,8 +325,10 @@ class IAMService(IIAMService, PolicySource):
         access_ttl_seconds: int = 600,
         key_rotation_days: int = 30,
         auto_approve: bool = False,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self.store = store
+        self._sleep = sleep
         self._registry = CatalogRegistry()
         self._seals = tuple(seals)
         self._subjects = _TTLCache(cache_ttl_seconds, cache_size)
@@ -3503,7 +3505,11 @@ class IAMService(IIAMService, PolicySource):
         """The earliest ``iat`` a token for these principals may carry: one
         second past their latest revocation, so a token made right after
         ``revoke_tokens`` is not cut off with the ones it revoked. None when no
-        revocation applies."""
+        revocation applies.
+
+        That second may not have begun yet. The next ``revoke_tokens`` of the
+        same principal waits for it to begin, so its floor covers the tokens
+        pushed into it."""
         floors = self._token_floors()
         latest = max(
             (floors[p].timestamp() for p in principal_ids if p and p in floors),
@@ -3598,6 +3604,7 @@ class IAMService(IIAMService, PolicySource):
                 kind=caller.kind,
                 audience=host_audience(recipient),
                 name=caller.name if caller.kind == "service_account" else None,
+                min_issued_at=self.issue_after_floor(caller.id),
             )
         return self.tokens.issue(
             on_behalf_of.id,
@@ -3607,6 +3614,7 @@ class IAMService(IIAMService, PolicySource):
             actor_name=caller.name if caller.kind == "service_account" else None,
             groups=self.active_groups(on_behalf_of.groups),
             scope=scope,
+            min_issued_at=self.issue_after_floor(on_behalf_of.id, caller.id),
         )
 
     def authenticate_key(self, value: str) -> tuple[PrincipalRecord, KeyRecord]:
@@ -3663,14 +3671,19 @@ class IAMService(IIAMService, PolicySource):
         keys, which would otherwise mint new ones. Personal API keys are kept
         unless ``include_keys``: changing a password is no reason to break a
         script. Needs ``iam:RevokeTokens``, which every user holds on
-        themselves."""
+        themselves.
+
+        The floor is the instant of the revocation, never later. When this
+        principal's previous floor pushed fresh tokens' ``iat`` into a second
+        that has not begun (``issue_after_floor``), this waits for it to begin
+        (at most a second), or those tokens would outlive the revocation."""
         self.require(
             "iam:RevokeTokens",
             principal_resource(principal_id),
             not_found=lambda: IAMNotFoundError(f"Principal {principal_id} not found"),
         )
         record = self._user_or_account(principal_id, create=True)
-        now = self.tokens.now()
+        now = self._after_pushed_second(record.id)
         self.store.set_token_floor(record.id, now)
         for key in self.store.list_keys(record.id):
             ends = (
@@ -3681,6 +3694,22 @@ class IAMService(IIAMService, PolicySource):
             if ends and key.revoked_at is None:
                 self.store.revoke_key(key.key_id, now)
         self._changed()
+
+    def _after_pushed_second(self, principal_id: str) -> datetime:
+        """The issuer's clock, once the second that ``principal_id``'s floor
+        pushed fresh tokens into has begun. The floor is read from the store,
+        not the cache: another process may have revoked since."""
+        now = self.tokens.now()
+        previous = self.store.token_floors().get(principal_id)
+        if previous is None:
+            return now
+        pushed = datetime.fromtimestamp(int(previous.timestamp()) + 1, UTC)
+        # Never more than a second, even past a floor another clock wrote.
+        pushed = min(pushed, now + timedelta(seconds=1))
+        while now < pushed:
+            self._sleep((pushed - now).total_seconds())
+            now = self.tokens.now()
+        return now
 
     def resolve_user(self, user_id: str) -> PrincipalRecord | None:
         """The stored user a call names by ``user_id``: its principal id, or for

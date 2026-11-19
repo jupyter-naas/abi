@@ -1820,7 +1820,10 @@ signing key. HS256 and `NATS_JWT_SECRET` are gone, with no dual mode.
   (`iam.verifier()`, `token_revoked`) and by the authorizer (a context whose
   `token_issued_at` is at or before it is `suspended`), and the principal's grants
   and coding keys are revoked (their personal API keys too with `include_keys`).
-  A token made after it carries `iat` past the floor (`issue_after_floor`). Suspension
+  A token made after it carries `iat` past the floor (`issue_after_floor`: the
+  exchange, key exchanges, service tokens and `issue_host_token`); that second may
+  not have begun yet, so the principal's next revocation waits for it (at most a
+  second) and its floor stays the instant it happened. Suspension
   and deletion deny a principal's tokens at once. `iam:RevokeTokens` is in `builtin.self`.
 
 ## Token exchange, personal keys and links
@@ -2582,6 +2585,25 @@ organisation's admin views as people of its workspaces; the platform admin as an
 platform admin. Nexus keeps the view and adds no role check of its own. `builtin.api` holds
 `iam:ViewAs` so that Nexus may ask for the viewer. IAM's catalog is version 9; the roles are
 regenerated and keep every other statement as it was.
+
+**A revocation waits out the second its predecessor pushed tokens into; floors never move ahead.**
+*Decision.* `iat` is whole seconds and a floor is the sub-second instant of a revocation, so
+a token made after one carries `iat = int(floor) + 1`, a second that may not have begun. A
+second revocation of the same principal in that second would set a floor below that `iat`,
+and the token would outlive it for its ten minutes. `revoke_tokens` reads the principal's
+floor from the store (not the cache: another process may have revoked), and while
+`int(floor) + 1` is ahead of the issuer's clock it sleeps the difference (`IAMService(sleep=...)`,
+`time.sleep` by default, never more than a second), then takes the clock as the floor and as
+the keys' `revoked_at`. Rejected: setting the floor to `max(now, int(previous) + 1)`. Floors
+then drift one second ahead per quick revocation, and about thirty of them pushed fresh
+tokens' `iat` past the verifiers' 30 s skew, refusing the user's new sessions until the clock
+caught up.
+*Consequences.* No stored floor is ahead of the issuer's clock. Only the principal's own floor
+counts: a bulk revocation of many principals never waits. The wait never blocks an event loop:
+Nexus calls `revoke_tokens` in a worker thread (`asyncio.to_thread`, `run_in_threadpool`), the IAM NATS adapter on its
+`DomainRPCDispatcher` thread pool, within the 10 s RPC timeout. Left open: the same hole across
+two principals (a delegation's `iat` pushed by its module's floor, then its user revoked in
+that same second), which needs a sub-second issue-time claim (#872).
 
 ## Known limits and open questions
 
