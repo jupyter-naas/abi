@@ -2,6 +2,30 @@
 
 <!-- version list -->
 
+## v5.0.0 (2026-11-19)
+
+### Bug Fixes
+
+- **x**: Spend caps, ledger, app upgrade path and threads (audit of #1423)
+  ([`ea62f98`](https://github.com/jupyter-naas/abi/commit/ea62f986e0a6dab35fe7179e1377bc2dfbf5898f))
+
+### Chores
+
+- Maintenance across core, nexus, marketplace and deploy templates
+  ([`232291c`](https://github.com/jupyter-naas/abi/commit/232291c110f3961bfeabc00fbcc3db6c1dc72537))
+
+### Features
+
+- **marketplace**: X as a remote module, in-engine x removed (#1423, #1425-#1428)
+  ([`113b1e9`](https://github.com/jupyter-naas/abi/commit/113b1e9d232e4fd35960e15c69e91278cef8ac25))
+
+### Breaking Changes
+
+- **marketplace**: Naas_abi_marketplace.applications.x is removed. Run the remote module with
+  X_CONFIG_FILE (the old config: block, without bearer_token), and run reprocess_tweet_envelopes
+  once with force: true to rebuild the dataset in the module's namespace.
+
+
 ## v4.0.0 (2026-11-16)
 
 ### Bug Fixes
