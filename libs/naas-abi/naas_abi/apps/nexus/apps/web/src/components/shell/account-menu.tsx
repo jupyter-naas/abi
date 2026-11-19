@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useRef, type KeyboardEvent } from 'react';
 import { Blocks, Building2, HelpCircle, LogOut, ShieldCheck, User, type LucideIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -45,6 +46,26 @@ export function UserAvatar({
   );
 }
 
+const ENABLED_ITEMS = '[role="menuitem"]:not([aria-disabled="true"])';
+
+function enabledItems(panel: HTMLElement | null): HTMLElement[] {
+  return panel ? [...panel.querySelectorAll<HTMLElement>(ENABLED_ITEMS)] : [];
+}
+
+/** Label, then what the row opens (a workspace, an organization), muted on the right. */
+function ItemText({ label, detail }: { label: string; detail?: string | null }) {
+  return (
+    <>
+      <span className="account-menu-item-label">{label}</span>
+      {detail ? (
+        <span className="account-menu-item-detail" title={detail}>
+          {detail}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
 /** One settings scope of the menu: a link, a muted row while its access is read, or nothing. */
 function SettingsScopeItem({
   entry,
@@ -67,14 +88,14 @@ function SettingsScopeItem({
         className="account-menu-settings-item account-menu-settings-item-loading"
       >
         <Icon size={14} className="shrink-0 text-muted-foreground" />
-        {label}
+        <ItemText label={label} />
       </span>
     );
   }
   return (
     <Link href={entry.href} role="menuitem" onClick={onClose} className="account-menu-settings-item">
       <Icon size={14} className="shrink-0 text-muted-foreground" />
-      {entry.label}
+      <ItemText label={entry.label} detail={entry.detail} />
     </Link>
   );
 }
@@ -82,82 +103,99 @@ function SettingsScopeItem({
 export function AccountMenuPanel({
   user,
   onClose,
+  focusFirstItem = false,
   className,
   style,
 }: {
   user: AccountMenuUser | null;
   onClose: () => void;
+  /** Opened from the keyboard: the first item takes focus. From a pointer the panel
+   *  does, so no link's URL pops up in the browser's corner. */
+  focusFirstItem?: boolean;
+  /** Position it (``fixed``) and set the corner it grows from (``origin-bottom-left``). */
   className?: string;
   style?: React.CSSProperties;
 }) {
   const router = useRouter();
+  const panelRef = useRef<HTMLDivElement>(null);
   const logout = useAuthStore((s) => s.logout);
   const links = useAvatarSettingsLinks();
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const workspaceName = useWorkspaceStore(
+    (s) => s.workspaces.find((w) => w.id === s.currentWorkspaceId)?.name,
+  );
   const helpHref = getWorkspacePath(currentWorkspaceId, '/help');
   // The workspace's architecture: for those who open its settings, as the sidebar was.
   const showInfrastructure = useOpensWorkspaceSettings() && !!currentWorkspaceId;
   const infrastructureHref = getWorkspacePath(currentWorkspaceId, '/settings/infrastructure');
 
+  // WAI-ARIA menu: focus is inside on open, the arrows move it.
+  useEffect(() => {
+    const target = focusFirstItem ? enabledItems(panelRef.current)[0] : panelRef.current;
+    target?.focus({ preventScroll: true });
+    // On open only: an entry that finishes loading later must not steal focus.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const items = enabledItems(panelRef.current);
+    if (items.length === 0) return;
+    const at = items.indexOf(document.activeElement as HTMLElement);
+    const moveTo = (index: number) => {
+      event.preventDefault();
+      items[(index + items.length) % items.length].focus();
+    };
+    if (event.key === 'ArrowDown') moveTo(at + 1);
+    else if (event.key === 'ArrowUp') moveTo(at < 0 ? items.length - 1 : at - 1);
+    else if (event.key === 'Home') moveTo(0);
+    else if (event.key === 'End') moveTo(items.length - 1);
+  };
+
   return (
     <div
+      ref={panelRef}
       role="menu"
+      aria-label="Account"
+      tabIndex={-1}
       data-org-branded="true"
+      onKeyDown={onKeyDown}
       className={cn('account-menu-panel z-[10000] min-w-56 w-64 rounded-none border bg-card p-2 shadow-lg', className)}
       style={style}
     >
-      <div className="account-menu-header border-b border-border/50">
-        <p className="account-menu-header-name truncate font-medium" title={user?.name || 'User'}>
-          {user?.name || 'User'}
-        </p>
-        <p className="account-menu-header-email min-w-0 truncate text-muted-foreground" title={user?.email || ''}>
-          {user?.email || ''}
-        </p>
-      </div>
-
-      <div className="account-menu-body">
-        <div
-          className="account-menu-settings-group border-b border-border/50"
-          role="group"
-          aria-label="Settings"
-        >
-          <Link
-            href={links.account.href}
-            role="menuitem"
-            onClick={onClose}
-            className="account-menu-settings-item"
-          >
-            <User size={14} className="shrink-0 text-muted-foreground" />
-            {links.account.label}
-          </Link>
-          <SettingsScopeItem entry={links.organization} label="Organization" icon={Building2} onClose={onClose} />
-          <SettingsScopeItem entry={links.platform} label="Platform" icon={ShieldCheck} onClose={onClose} />
-        </div>
-        <div className="account-menu-help-group" role="group" aria-label="Help">
-          {showInfrastructure && (
-            <Link
-              href={infrastructureHref}
-              role="menuitem"
-              onClick={onClose}
-              className="account-menu-settings-item"
-            >
-              <Blocks size={14} className="shrink-0 text-muted-foreground" />
-              Infrastructure
-            </Link>
-          )}
-          <Link
-            href={helpHref}
-            role="menuitem"
-            onClick={onClose}
-            className="account-menu-settings-item"
-          >
-            <HelpCircle size={14} className="shrink-0 text-muted-foreground" />
-            Help
-          </Link>
+      <div className="account-menu-header">
+        <UserAvatar user={user} className="h-8 w-8 shrink-0" alt="" />
+        <div className="min-w-0">
+          <p className="account-menu-header-name truncate font-medium" title={user?.name || 'User'}>
+            {user?.name || 'User'}
+          </p>
+          <p className="account-menu-header-email truncate text-muted-foreground" title={user?.email || ''}>
+            {user?.email || ''}
+          </p>
         </div>
       </div>
 
-      <div className="border-t border-border/50 py-2">
+      {/* Settings from the narrowest scope to the widest: you, this workspace, its
+          organization, the platform. */}
+      <div className="account-menu-group" role="group" aria-label="Settings">
+        <Link href={links.account.href} role="menuitem" onClick={onClose} className="account-menu-settings-item">
+          <User size={14} className="shrink-0 text-muted-foreground" />
+          <ItemText label={links.account.label} />
+        </Link>
+        {showInfrastructure && (
+          <Link href={infrastructureHref} role="menuitem" onClick={onClose} className="account-menu-settings-item">
+            <Blocks size={14} className="shrink-0 text-muted-foreground" />
+            <ItemText label="Infrastructure" detail={workspaceName} />
+          </Link>
+        )}
+        <SettingsScopeItem entry={links.organization} label="Organization" icon={Building2} onClose={onClose} />
+        <SettingsScopeItem entry={links.platform} label="Platform" icon={ShieldCheck} onClose={onClose} />
+      </div>
+
+      <div className="account-menu-group" role="group" aria-label="Session">
+        <Link href={helpHref} role="menuitem" onClick={onClose} className="account-menu-settings-item">
+          <HelpCircle size={14} className="shrink-0 text-muted-foreground" />
+          <ItemText label="Help" />
+        </Link>
         <button
           type="button"
           role="menuitem"
@@ -166,10 +204,10 @@ export function AccountMenuPanel({
             logout();
             router.push('/auth/login');
           }}
-          className="account-menu-item w-full text-destructive hover:bg-destructive/10"
+          className="account-menu-item account-menu-logout w-full"
         >
           <LogOut size={14} className="shrink-0" />
-          Log Out
+          <ItemText label="Log out" />
         </button>
       </div>
     </div>

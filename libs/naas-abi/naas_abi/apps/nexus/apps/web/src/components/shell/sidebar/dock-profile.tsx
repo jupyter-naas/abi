@@ -13,6 +13,7 @@ const MENU_WIDTH_PX = 256;
 export function DockProfile({ labeled }: { labeled: boolean }) {
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
+  const [openedFromKeyboard, setOpenedFromKeyboard] = useState(false);
   const [pos, setPos] = useState<{ left: number; bottom: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -36,20 +37,26 @@ export function DockProfile({ labeled }: { labeled: boolean }) {
     });
   };
 
-  const toggle = () => {
+  const toggle = (event: React.MouseEvent) => {
     if (open) {
       setOpen(false);
       return;
     }
     placeMenu();
+    // Enter and Space click with no pointer: detail is 0.
+    setOpenedFromKeyboard(event.detail === 0);
     setOpen(true);
   };
 
   useEffect(() => {
     if (!open) return;
 
+    // Escape and Tab close the menu and hand focus back to the avatar.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key !== 'Escape' && e.key !== 'Tab') return;
+      e.preventDefault();
+      setOpen(false);
+      btnRef.current?.focus();
     };
     const onPointerDown = (e: PointerEvent) => {
       const target = e.target as Node;
@@ -101,7 +108,8 @@ export function DockProfile({ labeled }: { labeled: boolean }) {
           <AccountMenuPanel
             user={displayUser}
             onClose={() => setOpen(false)}
-            className="fixed"
+            focusFirstItem={openedFromKeyboard}
+            className="fixed origin-bottom-left"
             style={{ left: pos.left, bottom: pos.bottom }}
           />
         </div>,

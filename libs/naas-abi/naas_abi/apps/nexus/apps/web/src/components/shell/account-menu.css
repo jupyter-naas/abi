@@ -3,10 +3,31 @@
 .account-menu-panel {
   font-size: var(--font-size-xs);
   line-height: var(--line-height-xs);
+  /* A short window scrolls the menu rather than cutting Log out off. */
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  animation: account-menu-in 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+/* Holds focus when a pointer opened it; the rows show the keyboard's place. */
+.account-menu-panel:focus {
+  outline: none;
+}
+
+/* Grows from the corner the caller names (origin-bottom-left by the dock avatar). */
+@keyframes account-menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+/* The avatar's left edge lines up with the row icons below it. */
 .account-menu-header {
-  padding: var(--space-3) var(--space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4) var(--space-3);
 }
 
 .account-menu-header-name,
@@ -17,27 +38,18 @@
   line-height: inherit;
 }
 
-.account-menu-body {
-  padding: var(--space-2) 0;
-}
-
 /* Rows 2px apart, as in the Settings sidebar (General, Features). */
-.account-menu-settings-group {
+.account-menu-group {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin: 0 0 var(--space-1);
-  padding: 0 0 var(--space-1);
+  margin-top: var(--space-1);
+  padding-top: var(--space-1);
+  border-top: 1px solid color-mix(in srgb, var(--border-hex) 50%, transparent);
 }
 
-/* Infrastructure and Help: the same rows as the settings above, no rule under them. */
-.account-menu-help-group {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.account-menu-settings-item {
+.account-menu-settings-item,
+.account-menu-item {
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -46,7 +58,23 @@
   line-height: 18px;
   color: var(--foreground-hex);
   text-decoration: none;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.account-menu-item-label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-menu-item-detail {
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-foreground-hex);
 }
 
 .account-menu-settings-item-loading {
@@ -62,28 +90,23 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .account-menu-panel,
   .account-menu-settings-item-loading {
     animation: none;
   }
 }
 
-.account-menu-settings-item:not(.account-menu-settings-item-loading):hover {
-  background-color: var(--muted-bg-hex);
-}
-
-.account-menu-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: 6px var(--space-4);
-  line-height: 18px;
-  color: var(--foreground-hex);
-  text-decoration: none;
-  transition: background-color 0.15s ease;
-}
-
+.account-menu-settings-item:not(.account-menu-settings-item-loading):hover,
 .account-menu-item:hover {
   background-color: var(--muted-bg-hex);
+}
+
+/* The keyboard sees where it is: the hover fill, and the workspace accent on the left. */
+.account-menu-settings-item:focus-visible,
+.account-menu-item:focus-visible {
+  outline: none;
+  background-color: var(--muted-bg-hex);
+  box-shadow: inset 2px 0 0 var(--workspace-accent, #22c55e);
 }
 
 button.account-menu-item {
@@ -93,4 +116,18 @@ button.account-menu-item {
   text-align: left;
   font: inherit;
   line-height: 18px;
+}
+
+/* Logging out loses nothing: a plain row, red only under the pointer. */
+.account-menu-logout svg {
+  color: var(--muted-foreground-hex);
+}
+
+button.account-menu-logout:hover {
+  color: var(--destructive-hex);
+  background-color: color-mix(in srgb, var(--destructive-hex) 8%, transparent);
+}
+
+button.account-menu-logout:hover svg {
+  color: inherit;
 }

@@ -221,7 +221,7 @@ export function MobileTopBar({
           <AccountMenuPanel
             user={user}
             onClose={() => setProfileOpen(false)}
-            className="fixed"
+            className="fixed origin-top-right"
             style={{ top: profilePos.top, right: profilePos.right }}
           />
         </div>,
