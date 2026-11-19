@@ -1,4 +1,10 @@
-"""HMAC tokens that let a Nexus session open an allowlisted Pages portal."""
+"""HMAC tokens that let a Nexus session sign in to one module app's portal.
+
+A token is for one app: it names it (``app``, the ``<module_path>:<app_dir>``
+id), its ``aud`` is that app's hostname, and it is signed with that app's own
+secret (``pages_sso_secrets``), which the operator shares with that portal
+alone. An app without a secret gets no token.
+"""
 
 from __future__ import annotations
 
@@ -8,9 +14,36 @@ import hmac
 import ipaddress
 import json
 import time
+from collections.abc import Mapping
 from urllib.parse import urlparse
 
 PAGES_SSO_SCOPE = "pages-sso"
+
+# The single secret every portal once shared, which both signed and verified.
+LEGACY_PAGES_SSO_SECRET_ENV = "PAGES_SSO_SECRET"
+MOVE_THE_SHARED_SECRET = (
+    "No portal gets a token from it any more: move the secret under the portal's "
+    'app id in pages_sso_secrets ({"<module_path>:<app_dir>": "<secret>"}, or the '
+    "PAGES_SSO_SECRETS JSON), and give each portal its own secret."
+)
+
+
+def portal_secrets(raw: Mapping[str, str] | None) -> dict[str, str]:
+    """``pages_sso_secrets`` without blank app ids or empty secrets."""
+    out: dict[str, str] = {}
+    for app_id, secret in (raw or {}).items():
+        key = str(app_id or "").strip()
+        value = str(secret or "").strip()
+        if key and value:
+            out[key] = value
+    return out
+
+
+def shared_secret_warning(environ: Mapping[str, str]) -> str | None:
+    """What to say at start while the old ``PAGES_SSO_SECRET`` is still set, else None."""
+    if not str(environ.get(LEGACY_PAGES_SSO_SECRET_ENV) or "").strip():
+        return None
+    return f"{LEGACY_PAGES_SSO_SECRET_ENV} is set and signs nothing. {MOVE_THE_SHARED_SECRET}"
 
 
 def _b64url(raw: bytes) -> str:
@@ -21,12 +54,20 @@ def mint_pages_sso_token(
     *,
     email: str,
     audience: str,
+    app_id: str,
     secret: str,
     expires_seconds: int = 300,
 ) -> tuple[str, int]:
-    """Return ``(token, expires_in_seconds)``. ``audience`` is the portal hostname."""
+    """Return ``(token, expires_in_seconds)``.
+
+    ``audience`` is the portal hostname, ``app_id`` the app the token is for and
+    ``secret`` that app's own secret.
+    """
     if not secret:
-        raise ValueError("pages_sso_secret is not configured")
+        raise ValueError("this app has no portal sign-in secret")
+    app = (app_id or "").strip()
+    if not app:
+        raise ValueError("a portal sign-in token names its app")
     host = audience.strip().lower()
     if not host or "/" in host or ":" in host:
         raise ValueError("audience must be a hostname")
@@ -34,6 +75,7 @@ def mint_pages_sso_token(
     exp = int(time.time()) + lifetime
     payload = json.dumps(
         {
+            "app": app,
             "aud": host,
             "email": email.strip().lower(),
             "exp": exp,
@@ -52,8 +94,14 @@ def verify_pages_sso_token(
     *,
     secret: str,
     audience: str,
+    app_id: str | None = None,
 ) -> str | None:
-    """Return the email when the token is valid for ``audience``, else None."""
+    """Return the email when the token is valid for ``audience``, else None.
+
+    With ``app_id``, the token's ``app`` claim must also be that app. Without it,
+    the claim is not read, so a portal that checks only ``aud``, ``scope``,
+    ``exp`` and ``email`` still accepts the token.
+    """
     if not token or not secret or not audience:
         return None
     parts = token.split(".")
@@ -72,9 +120,13 @@ def verify_pages_sso_token(
         payload = json.loads(base64.urlsafe_b64decode(body + pad))
     except (ValueError, json.JSONDecodeError):
         return None
+    if not isinstance(payload, dict):
+        return None
     if payload.get("scope") != PAGES_SSO_SCOPE:
         return None
     if str(payload.get("aud") or "").lower() != audience.strip().lower():
+        return None
+    if app_id is not None and payload.get("app") != app_id.strip():
         return None
     exp = payload.get("exp")
     if not isinstance(exp, int) or exp < int(time.time()):

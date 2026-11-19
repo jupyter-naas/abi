@@ -511,6 +511,17 @@ async def _hint_unlinked_users() -> None:
         )
 
 
+def _warn_of_the_shared_pages_sso_secret() -> None:
+    """``PAGES_SSO_SECRET`` signed every portal's token; each app has its own now."""
+    import os
+
+    from naas_abi.apps.nexus.apps.api.app.services.apps.pages_sso import shared_secret_warning
+
+    message = shared_secret_warning(os.environ)
+    if message:
+        logging.getLogger(__name__).warning(message)
+
+
 async def _place_workspace_resources() -> None:
     from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
     from naas_abi.apps.nexus.apps.api.app.services.iam import placements
@@ -550,6 +561,7 @@ async def _startup(app: FastAPI) -> None:
     await _prepare_iam()
     _watch_upgrade()
     await _hint_unlinked_users()
+    _warn_of_the_shared_pages_sso_secret()
 
     # Apply config-driven user/org/workspace seeds from config.yaml.
     from naas_abi.apps.nexus.apps.api.app.core.org_seed import apply_configuration_seeds

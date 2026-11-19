@@ -22,15 +22,30 @@ on/off state of its own for an app.
   READY remote modules the caller may open there (`authz.filter_scopes`), the platform admin included; no role holds
   an app by itself. `access-token`, `remote-grant` and the workspace a remote app opens in (`remote/access.py`) ask
   the same scope (`authz.require_scope`). A workspace that should not offer an app denies it in a policy.
-- **Portal SSO.** `POST /api/apps/sso-token` with `app_id` asks `module:OpenApp` on that app. The proof's email is
-  the signed-in user, and its audience must be that app's host (`pages_sso_audiences`), a hostname without its port.
-  On a local Nexus on loopback, the setting `nexus_dev_app_urls` (`NEXUS_DEV_APP_URLS`: `id=url`, comma-separated)
-  may add the host of that app's dev origin (`pages_sso.dev_app_url`). The map has no built-in entries. An id that
-  is no app's, or an app the catalog of loaded modules lacks, is a 400, a remote app's too (it opens at
-  `/app-html/remote/`, with no portal host, and the web app never asks for it). Without `app_id` the route still
-  asks `UseApp` and takes any hostname. An empty `pages_sso_secret` is a 503 for those allowed. A view refuses it,
-  and so does a request made with a key that has a limit (`refuse_a_limited_credential`, as for a link: the portal's
-  session would be a credential of its own).
+- **Portal SSO.** `POST /api/apps/sso-token` mints a short-lived HMAC token (`pages_sso.py`) for the portal of
+  one module app. `app_id` is required (without it, 422) and `module:OpenApp` on that app alone decides: the route
+  asks nothing else. In order: a request made with a key that has a limit is a 403
+  (`refuse_a_limited_credential`, as for a link: the portal's session would be a credential of its own); an id that
+  is no app's is a 400; no OpenApp on it is a 403; an app the catalog of loaded modules lacks is a 400, a remote
+  app's too (it opens at `/app-html/remote/`, with no portal host, and the web app never asks for it); an audience
+  that is not that app's host (`pages_sso_audiences`, a hostname without its port) is a 400; an app with no secret
+  is a 404 "This app has no portal sign-in". The secret is looked up after OpenApp, so the 404 tells nothing to
+  someone who may not open the app.
+  - **One secret per app, opt-in.** `pages_sso_secrets` (`PAGES_SSO_SECRETS` as JSON) maps an app id
+    (`<module_path>:<app_dir>`, as `_scan_apps_catalog` sets it) to the secret that app's portal alone shares. An
+    app that is not listed, or listed with an empty secret, gets no token. The old single `pages_sso_secret`
+    signs nothing: `NexusConfig` still accepts the key (a project that sets it loads) and logs how to move it, and
+    the API logs the same at start while `PAGES_SSO_SECRET` is set in its environment.
+  - **The token names its app.** Its claims are `app` (the app id), `aud` (the bare hostname), `email` (the
+    signed-in user; the body cannot name another), `exp` and `scope`. `verify_pages_sso_token(..., app_id=)`
+    checks `app` too; without `app_id` it checks what it always did, so a portal that ignores the claim still
+    accepts the token.
+  - **The dev origin.** On a local Nexus on loopback, the setting `nexus_dev_app_urls` (`NEXUS_DEV_APP_URLS`:
+    `id=url`, comma-separated) may add the host of that app's dev origin (`pages_sso.dev_app_url`). The map has no
+    built-in entries.
+  - **The web app needs nothing.** The Apps page always sends `app_id` (`portalSsoTokenRequest`), and on any error
+    (an app without a secret included) it frames the app without `?sso=`.
+  - A view refuses the route.
 - **A remote app is installed while a READY module serves it** (`_remote_app_info`): the Apps pages and the
   workspace settings list only installed apps, as for a loaded module's.
 - **No per-workspace switch.** The app-config routes (`GET|POST /api/apps/{ws}`, `GET|PATCH|DELETE
@@ -49,6 +64,18 @@ on/off state of its own for an app.
   (`https://nexus.localhost` by default) keep it. A deployment that leaves `frontend_url` at its loopback default would count
   as local, but its sign-in already sends people to that origin. The web app gates the iframe separately
   (`next dev` only, `applyDevAppUrl`).
+
+- **A portal token is for one app.** Decision: each portal app has its own secret, opt-in (`pages_sso_secrets`,
+  app id to secret); a token names its app (`app`) and is signed with that app's secret; there is no form without
+  `app_id` (it asked only `nexus:UseApp`, which every member holds, and took any hostname), removed without a
+  deprecation period since no known caller used it. `aud` stays the bare hostname, so a portal's existing check
+  still passes. Nexus signing with a key the portals can only verify (JWT + JWKS) was left out: with a secret per
+  app, a portal's secret mints only its own sign-ins. Consequences: operators move `PAGES_SSO_SECRET` under the
+  portal's app id (`pages_sso_secrets: {"<module_path>:<app_dir>": "{{ secret.X }}"}`, or the `PAGES_SSO_SECRETS`
+  JSON) and give each portal its own secret; external apps that are not portals get no token and no email in
+  their URL; a leaked portal secret mints only that portal's own sign-ins; two apps on one host, or every local
+  portal, no longer accept each other's tokens once each has its own secret. `nexus:UseApp` stays declared,
+  deprecated (`../iam/catalog/apps.py`), asked by no route.
 
 ## In a view
 
@@ -70,5 +97,8 @@ uv run --frozen pytest libs/naas-abi/naas_abi/apps/nexus/apps/api/app/services/a
 
 `adapters/primary/apps__primary_adapter__FastAPI_iam_test.py`: who lists, opens and links apps, the listing exactly
 what IAM allows (a Deny removes an app), an admin or owner with no policy listing and opening none.
-The portal SSO route there too (`test_*sso*`, `test_a_dev_origin_*`): who mints, for which email and audience,
-the dev origin's gate; `pages_sso_test.py`: the token, the audiences, the dev map and the loopback check.
+The portal SSO route there too (`test_*sso*`, `test_a_dev_origin_*`, `test_an_app_without_a_secret_*`,
+`test_two_apps_on_one_host_*`): who mints, for which email, app and audience, the 422 without `app_id`, the 404
+without a secret, the dev origin's gate; `pages_sso_test.py`: the token and its `app` claim, the audiences, the
+dev map, the loopback check, the secrets map and the start-up warning. The settings (`pages_sso_secrets`, the old
+`pages_sso_secret`): `libs/naas-abi/naas_abi/ABIModule_test.py`.
