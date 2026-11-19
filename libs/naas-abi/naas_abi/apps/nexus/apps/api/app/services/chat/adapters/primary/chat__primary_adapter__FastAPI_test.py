@@ -49,6 +49,7 @@ class FakeChat:
         self.agents: dict[str, ChatAgentRecord] = {}
         self.completed: list[Any] = []
         self.deleted: list[str] = []
+        self.feedback: list[tuple] = []
 
     def add(self, owner: str, conversation_id: str, workspace_id: str = "ws-1") -> None:
         self.conversations[conversation_id] = ChatConversationRecord(
@@ -103,6 +104,14 @@ class FakeChat:
 
     async def update_message_metadata(self, user_id, conversation_id, message_id, metadata):
         return True
+
+    async def set_message_feedback(
+        self, user_id, conversation_id, message_id, feedback, details=None
+    ):
+        if message_id != "m-1":
+            return None
+        self.feedback.append((user_id, conversation_id, message_id, feedback, details))
+        return {"feedback": feedback, "feedback_type": None}
 
     async def get_agent(self, agent_id):
         return self.agents.get(agent_id)
@@ -314,6 +323,50 @@ def test_members_and_up_manage_their_conversations(world, user: str) -> None:
     )
     assert call(world, user, "DELETE", f"/api/chat/conversations/{conv}").status_code == 200
     assert world.chat.deleted == [conv]
+
+
+# -- feedback: the owner's like or dislike of an answer ------------------------
+
+
+@pytest.mark.parametrize("user", ["member", "admin", "owner"])
+def test_members_and_up_like_or_dislike_their_own_answers(world, user: str) -> None:
+    world.chat.add(user, "conv-own")
+    path = "/api/chat/conversations/conv-own/messages/m-1/feedback"
+
+    liked = call(world, user, "PATCH", path, json={"feedback": "like"})
+    disliked = call(
+        world,
+        user,
+        "PATCH",
+        path,
+        json={"feedback": "dislike", "feedback_type": "wrong", "feedback_severity": 3},
+    )
+    cleared = call(world, user, "PATCH", path, json={"feedback": None})
+    missing = call(
+        world,
+        user,
+        "PATCH",
+        "/api/chat/conversations/conv-own/messages/m-9/feedback",
+        json={"feedback": "like"},
+    )
+
+    assert [r.status_code for r in (liked, disliked, cleared, missing)] == [200, 200, 200, 404]
+    assert liked.json()["status"] == "updated"
+    assert [f[3] for f in world.chat.feedback] == ["like", "dislike", None]
+    assert world.chat.feedback[1][4]["feedback_type"] == "wrong"
+
+
+def test_feedback_is_refused_on_another_s_conversation_and_to_a_viewer(world) -> None:
+    world.chat.add("member", "conv-m")
+    world.chat.add("viewer", "conv-v")
+    body = {"json": {"feedback": "like"}}
+    other = "/api/chat/conversations/conv-m/messages/m-1/feedback"
+    for user, status in (("owner", 404), ("admin", 404), ("stranger", 403)):
+        assert call(world, user, "PATCH", other, **body).status_code == status
+    own = "/api/chat/conversations/conv-v/messages/m-1/feedback"
+    assert call(world, "viewer", "PATCH", own, **body).status_code == 403
+    assert call(world, "member", "PATCH", other, json={"feedback": "meh"}).status_code == 422
+    assert world.chat.feedback == []
 
 
 def test_a_stranger_cannot_create_in_the_workspace(world) -> None:
