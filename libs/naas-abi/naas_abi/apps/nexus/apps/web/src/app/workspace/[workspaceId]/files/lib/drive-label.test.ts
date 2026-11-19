@@ -4,7 +4,7 @@ import type { FileView } from '@/lib/file-views';
 import {
   ALL_VIEWS,
   FILES_DRIVES,
-  FILES_ENTRY_VIEW,
+  FILES_ENTRY,
   offeredSource,
   driveRootForSource,
   filesScopeForSource,
@@ -153,15 +153,14 @@ describe('All Views', () => {
 });
 
 describe('the dock and Home open Files', () => {
-  it('on All Views, every view the caller may open', () => {
-    expect(FILES_ENTRY_VIEW).toBe('all');
+  it('on Workspace Files inside All Views ("All Views / Workspace Files")', () => {
+    expect(FILES_ENTRY).toEqual({ view: 'all', source: 'workspace-files' });
   });
 
   it('keep a view the caller may open, and fall back to All Views for one they may not', () => {
     const folders = viewFolders(VIEWS, 'all');
-    expect(offeredSource(FILES_ENTRY_VIEW, folders)).toBe('all');
-    expect(offeredSource('workspace-files', folders)).toBe('workspace-files');
-    expect(offeredSource('workspace-files', viewFolders([VIEWS[0]], 'all'))).toBe('all');
+    expect(offeredSource(FILES_ENTRY.source, folders)).toBe('workspace-files');
+    expect(offeredSource(FILES_ENTRY.source, viewFolders([VIEWS[0]], 'all'))).toBe('all');
     expect(offeredSource('system-files', folders)).toBe('all');
     expect(offeredSource('all', [])).toBe('all');
   });

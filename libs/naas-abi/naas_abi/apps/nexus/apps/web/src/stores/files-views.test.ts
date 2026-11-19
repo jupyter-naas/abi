@@ -81,11 +81,11 @@ describe('the active view', () => {
     expect(useFilesStore.getState()).toMatchObject({ activeSource: 'all', viewChoice: 'all' });
   });
 
-  it('the dock and Home open All Views, whatever was open before', () => {
+  it('the dock and Home open Workspace Files inside All Views, whatever was open before', () => {
     useFilesStore.getState().chooseView('my-files');
     useFilesStore.getState().openFilesEntry();
     expect(useFilesStore.getState()).toMatchObject({
-      activeSource: 'all',
+      activeSource: 'workspace-files',
       viewChoice: 'all',
     });
   });

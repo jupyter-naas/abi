@@ -50,6 +50,7 @@ import { FilesAddSheet } from '../components/files-add-sheet';
 import { FilesMenuBar } from '../components/files-menu-bar';
 import { requestFilesExplorerRefresh } from '../lib/explorer-refresh';
 import { carriesExternalFiles, leavesDropZone } from '../lib/drop-zone';
+import { listOnSourceChange, startNavigation, type PendingNavigation } from '../lib/files-navigation';
 import { isSystemPath, withoutSystemFiles } from '@/lib/system-files';
 import { FilesMobileRow } from '../components/files-mobile-row';
 import { FilesMobileToolbar } from '../components/files-mobile-toolbar';
@@ -242,7 +243,8 @@ function FilesBrowser() {
   const [textViewerError, setTextViewerError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // When a starred navigation is pending, skip the regular fetch triggered by activeSource change
-  const skipRegularFetchRef = useRef(false);
+  // A folder a navigation (tree, starred item, deep link) still has to list, in its view.
+  const pendingNavRef = useRef<PendingNavigation | null>(null);
   // Local path of the file to auto-preview once files finish loading
   const [localPendingPreview, setLocalPendingPreview] = useState<string | null>(null);
   const deepLinkConsumedRef = useRef(false);
@@ -330,26 +332,30 @@ function FilesBrowser() {
     };
   }, [imageViewerUrl]);
 
-  // Handle navigation triggered by clicking a starred item in the sidebar.
-  // Setting skipRegularFetchRef prevents the activeSource-change effect from
-  // overriding the path we set here.
+  // Handle navigation triggered by a sidebar tree folder or a starred item. Its folder is
+  // listed now (same view) or by the source-change effect once its view is rendered
+  // (`startNavigation`), never left to a flag a later view change would consume.
   useEffect(() => {
     if (!starredNavigation) return;
-    skipRegularFetchRef.current = true;
     clearPdfViewerState();
     clearImageViewerState();
     clearTextViewerState();
+    const before = useFilesStore.getState().activeSource;
     setActiveSource(starredNavigation.source);
+    const nav = startNavigation(before, useFilesStore.getState().activeSource, starredNavigation.path);
+    pendingNavRef.current = nav.pending;
     setSearchQuery('');
     setDebouncedSearch('');
     lastSearchRef.current = '';
     setCurrentPage(1);
-    fetchFiles(starredNavigation.path, {
-      limit: pageSizeRef.current,
-      offset: 0,
-      search: '',
-      workspaceId,
-    });
+    if (nav.listNow !== null) {
+      fetchFiles(nav.listNow, {
+        limit: pageSizeRef.current,
+        offset: 0,
+        search: '',
+        workspaceId,
+      });
+    }
     if (starredNavigation.previewPath) {
       setLocalPendingPreview(starredNavigation.previewPath);
     }
@@ -365,22 +371,26 @@ function FilesBrowser() {
     const deepLink = parseFilesDeepLink(searchParams?.toString() ?? '');
     if (!deepLink.source && !deepLink.path) return;
     deepLinkConsumedRef.current = true;
-    skipRegularFetchRef.current = true;
     clearPdfViewerState();
     clearImageViewerState();
     clearTextViewerState();
+    const { folderPath, previewPath } = filesDeepLinkFolderAndPreview(deepLink.path || '');
+    const before = useFilesStore.getState().activeSource;
     if (deepLink.source) setActiveSource(deepLink.source);
+    const nav = startNavigation(before, useFilesStore.getState().activeSource, folderPath);
+    pendingNavRef.current = nav.pending;
     setSearchQuery('');
     setDebouncedSearch('');
     lastSearchRef.current = '';
     setCurrentPage(1);
-    const { folderPath, previewPath } = filesDeepLinkFolderAndPreview(deepLink.path || '');
-    fetchFiles(folderPath, {
-      limit: pageSizeRef.current,
-      offset: 0,
-      search: '',
-      workspaceId,
-    });
+    if (nav.listNow !== null) {
+      fetchFiles(nav.listNow, {
+        limit: pageSizeRef.current,
+        offset: 0,
+        search: '',
+        workspaceId,
+      });
+    }
     if (previewPath) setLocalPendingPreview(previewPath);
   }, [searchParams, starredNavigation, setActiveSource, fetchFiles, workspaceId]);
 
@@ -430,13 +440,16 @@ function FilesBrowser() {
   const relativePath = relativeDrivePath(currentPath, driveRoot, activeSource, workspaceId);
 
   useEffect(() => {
-    // Skip if a starred nav or deep link just set the path; it already called fetchFiles.
-    if (skipRegularFetchRef.current) {
-      skipRegularFetchRef.current = false;
-      return;
-    }
-
     if (!workspaceId) return;
+    // A pending navigation lists its folder once its view is the rendered one; a
+    // render behind the store waits; otherwise the open view's root is listed.
+    const next = listOnSourceChange(
+      pendingNavRef.current,
+      activeSource,
+      useFilesStore.getState().activeSource,
+    );
+    pendingNavRef.current = next.pending;
+    if (next.list === null) return;
 
     // Clear any previous errors
     setError(null);
@@ -446,7 +459,7 @@ function FilesBrowser() {
     setDebouncedSearch('');
     lastSearchRef.current = '';
     setCurrentPage(1);
-    fetchFiles('', {
+    fetchFiles(next.list, {
       limit: pageSizeRef.current,
       offset: 0,
       search: '',

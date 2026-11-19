@@ -29,10 +29,14 @@ export const ALL_VIEWS = 'all';
 export type FilesSource = FileViewSource | typeof ALL_VIEWS;
 
 /**
- * Where the dock and Home open Files: All Views, one folder per view the caller may
- * open. A link, a starred item or the View picker still choose their own.
+ * Where the dock and Home open Files: Workspace Files inside All Views ("All Views /
+ * Workspace Files"); All Views itself when the caller may not open Workspace Files.
+ * A link, a starred item or the View picker still choose their own.
  */
-export const FILES_ENTRY_VIEW: FilesSource = ALL_VIEWS;
+export const FILES_ENTRY: { view: FilesSource; source: FileViewSource } = {
+  view: ALL_VIEWS,
+  source: 'workspace-files',
+};
 
 const VIEW_SCOPES: Record<FileViewSource, FilesScope> = {
   'my-files': 'my_drive',

@@ -235,7 +235,7 @@ interface FilesState {
   chooseView: (source: FilesSource) => void;
   /** The Drive dropdown. */
   chooseDrive: (drive: FilesDrive) => void;
-  /** The dock and Home open Files on All Views. */
+  /** The dock and Home open Files on Workspace Files inside All Views. */
   openFilesEntry: () => void;
   
   // API actions
@@ -260,7 +260,7 @@ interface FilesState {
 import { getApiUrl } from '@/lib/config';
 import {
   ALL_VIEWS,
-  FILES_ENTRY_VIEW,
+  FILES_ENTRY,
   filesScopeForSource,
   filesSourceFrom,
   isFileViewSource,
@@ -383,7 +383,10 @@ export const useFilesStore = create<FilesState>((set, get) => ({
 
   chooseDrive: (drive) => set({ activeDrive: drive }),
 
-  openFilesEntry: () => get().chooseView(FILES_ENTRY_VIEW),
+  openFilesEntry: () => {
+    if (get().activeSource !== FILES_ENTRY.source) invalidateFilesRequests();
+    set({ viewChoice: FILES_ENTRY.view, activeSource: FILES_ENTRY.source });
+  },
 
   openFile: (path) => {
     const { openFiles } = get();
@@ -607,11 +610,8 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     const scope = filesScopeForSource(get().activeSource);
 
     if (!scope) {
-
       set({ error: NO_VIEW_OPEN, loading: false });
-
       return null;
-
     }
 
     if (scope !== 'my_drive' && !workspaceId) {
@@ -655,11 +655,8 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     const scope = filesScopeForSource(get().activeSource);
 
     if (!scope) {
-
       set({ error: NO_VIEW_OPEN, loading: false });
-
       return null;
-
     }
 
     if (scope !== 'my_drive' && !workspaceId) {
@@ -800,11 +797,8 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     const scope = filesScopeForSource(get().activeSource);
 
     if (!scope) {
-
       set({ error: NO_VIEW_OPEN, loading: false });
-
       return null;
-
     }
 
     if (scope !== 'my_drive' && !workspaceId) {
@@ -973,11 +967,8 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     }
 
     if (!scope) {
-
       set({ error: NO_VIEW_OPEN });
-
       return false;
-
     }
 
     if (scope !== 'my_drive' && !workspaceId) {
