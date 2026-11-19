@@ -28,13 +28,6 @@ from naas_abi_sdk.messages import module_inbox_prefix
 if TYPE_CHECKING:
     from naas_abi_sdk.transport import Transport
 
-# The broker gives a connection its subjects for at most this long (the engine's
-# auth callout: nats_auth_callout.MAX_USER_TTL_SECONDS, five minutes by
-# default, never under four). nats-py does not reconnect a connection the
-# broker expired, so a transport reconnects itself well before: the callout
-# then computes its subjects again.
-CONNECTION_TTL_SECONDS = 600
-RENEW_CONNECTION_SECONDS = 120.0
 TOKEN_SUBJECT = "abi.iam.v1.token"
 EXCHANGE_SUBJECT = "abi.iam.v1.exchange_token"
 KEY_USER = "sa"

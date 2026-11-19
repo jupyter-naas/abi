@@ -626,8 +626,12 @@ def test_regenerating_does_not_bring_a_password_back(tmp_path: Path) -> None:
     assert "NEXUS_USER_ADMIN_EXAMPLE_COM_PASSWORD" not in values
 
 
-NATS_USERS = {"engine": "NATS_ENGINE_PASSWORD", "auth": "NATS_AUTH_PASSWORD"}
-# What the broker container needs from .env: both passwords and the callout's
+NATS_USERS = {
+    "engine": "NATS_ENGINE_PASSWORD",
+    "auth": "NATS_AUTH_PASSWORD",
+    "sys": "NATS_SYSTEM_PASSWORD",
+}
+# What the broker container needs from .env: the passwords and the callout's
 # trusted key.
 BROKER_ENV = (*NATS_USERS.values(), "NATS_AUTH_CALLOUT_ISSUER")
 MONITORING_LINE = 'http: "nats-monitor:8222"\n'
@@ -664,9 +668,11 @@ def test_the_broker_requires_a_password_and_listens_on_localhost(
         service = _nats_service(root / "docker-compose.yml")
         conf = (root / ".deploy/docker/nats/nats.conf").read_text(encoding="utf-8")
         for user, key in NATS_USERS.items():
-            assert f"{{ user: {user}, password: ${key}," in conf
+            assert f"{{ user: {user}, password: ${key}" in conf
         assert "issuer: $NATS_AUTH_CALLOUT_ISSUER" in conf
-        assert "auth_users: [ engine, auth ]" in conf
+        # The warden's user is in the system account, exempt from the callout.
+        assert "auth_users: [ engine, auth, sys ]" in conf
+        assert "system_account: SYS" in conf
         for key in BROKER_ENV:
             assert f"{key}=${{{key}:-}}" in service["environment"]
         assert all(port.startswith("127.0.0.1:") for port in service["ports"])

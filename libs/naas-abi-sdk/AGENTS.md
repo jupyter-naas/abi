@@ -285,14 +285,15 @@ seal is checked by asking the engine, `broker_control.py`).
   refuse and discovery accepts only from that host. A transport given bare tokens
   takes a `host_token` (a token, or a function of `<sa>`) and raises
   `NoHostTokenError` rather than call a host without one.
-- **Renewing the connection.** The broker expires a callout user in five minutes
-  (ten at most) and nats-py closes an expired connection instead of reconnecting
-  it, so a transport logged in with a key reconnects itself every 120 seconds
-  (`renew_seconds`): the callout then computes the subjects again from the policy as
-  it is. A call in flight during the few milliseconds of a renewal is lost, as in any
-  reconnect; a call starting then waits for it. `Transport.reconnect()` is the
-  same on demand (after an approval). Revoking a key ends the next exchange and
-  the next connection; tokens already issued expire within ten minutes.
+- **The connection's permissions.** The broker keeps a callout user's subjects
+  until its key expires; the engine ends the connection when an IAM change affects
+  it (a revoked key, a suspended account, a changed policy), and nats-py reconnects
+  through the callout, which computes the subjects again or refuses. A transport
+  does not reconnect on a timer. A call in flight when the connection ends is lost,
+  as in any reconnect; a call starting during the reconnect waits for it.
+  `Transport.reconnect()` reconnects on demand (after an approval). Revoking a key
+  ends the next exchange and the connection; tokens already issued expire within
+  ten minutes.
 - **No broker permission to create anything.** Behind the callout a module cannot
   create a stream or a consumer nor write the jobs stream, and replies only on
   `_INBOX.` subjects; see `broker_control.py` for the operations the engine does for it

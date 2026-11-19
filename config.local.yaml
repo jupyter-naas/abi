@@ -41,6 +41,7 @@ nats:
   nats_url: "nats://engine:{{ secret.NATS_ENGINE_PASSWORD }}@nats:4222"
   auth_callout:
     nats_url: "nats://auth:{{ secret.NATS_AUTH_PASSWORD }}@nats:4222"
+    system_url: "nats://sys:{{ secret.NATS_SYSTEM_PASSWORD }}@nats:4222"
     issuer_seed: "{{ secret.NATS_AUTH_CALLOUT_SEED }}"
   # One engine per project hosts the module registry: the `abi` service. The
   # default stack runs no second engine (Dagster is behind the `legacy` profile,

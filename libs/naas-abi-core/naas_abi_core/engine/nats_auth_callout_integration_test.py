@@ -68,6 +68,7 @@ DOCUMENT = {
 def stack(tmp_path):
     """A broker asking the engine about every connection but its own."""
     engine_pw, auth_pw = secrets.token_urlsafe(16), secrets.token_urlsafe(16)
+    sys_pw = secrets.token_urlsafe(16)
     issuer = KeyPair.create()
     config = (
         "authorization {\n  users = [\n"
@@ -76,8 +77,10 @@ def stack(tmp_path):
         f'    {{ user: auth, password: "{auth_pw}", permissions: '
         '{ subscribe: "$SYS.REQ.USER.AUTH", allow_responses: true } }\n'
         "  ]\n"
-        f"  auth_callout {{ issuer: {issuer.public_key}, auth_users: [engine, auth] }}\n"
+        f"  auth_callout {{ issuer: {issuer.public_key}, auth_users: [engine, auth, sys] }}\n"
         "}\n"
+        f'accounts {{ SYS: {{ users: [ {{ user: sys, password: "{sys_pw}" }} ] }} }}\n'
+        "system_account: SYS\n"
     )
     with native_nats_server(
         tmp_path, config=config, jetstream=True, max_payload=MAX_PAYLOAD
@@ -89,9 +92,16 @@ def stack(tmp_path):
             "url": url,
             "engine": f"nats://engine:{engine_pw}@{host}",
             "auth": f"nats://auth:{auth_pw}@{host}",
+            "sys": f"nats://sys:{sys_pw}@{host}",
             "issuer": issuer,
             "iam": iam,
         }
+
+
+class _Served(list):
+    """The subjects the kernel served; ``warden``, the scenario's warden."""
+
+    warden = None
 
 
 def module(iam: IAMService, name: str) -> tuple[str, str]:
@@ -111,16 +121,32 @@ def approve(iam: IAMService, account_id: str, name: str, document=DOCUMENT) -> N
         iam.approve_manifest(account_id)
 
 
-def run(stack, scenario, *, discovery=False, **callout_options):
+def run(stack, scenario, *, discovery=False, warden=None, **callout_options):
+    """``warden``: the connection warden's options, to start one (it is then
+    passed to ``scenario`` as ``served.warden``)."""
+
     async def main():
         from naas_abi_core.engine import nats_overflow
+        from naas_abi_core.engine.nats_connection_warden import (
+            Admissions,
+            ConnectionWarden,
+        )
         from naas_abi_core.engine.nats_rpc import request_payload
 
         engine = await nats.connect(stack["engine"])
+        admissions = Admissions()
         callout = AuthCallout(
-            stack["iam"], stack["issuer"].seed, stack["auth"], **callout_options
+            stack["iam"],
+            stack["issuer"].seed,
+            stack["auth"],
+            admissions=admissions,
+            **callout_options,
         )
         await callout.start()
+        guard = None
+        if warden is not None:
+            guard = ConnectionWarden(stack["iam"], admissions, stack["sys"], **warden)
+            await guard.start()
         control = BrokerControl(stack["iam"], stack["iam"].verifier(), stack["engine"])
         await control.start()
         primary = IAMPrimaryAdapterNATS(stack["iam"], stack["iam"].verifier())
@@ -128,7 +154,8 @@ def run(stack, scenario, *, discovery=False, **callout_options):
         overflow = nats_overflow.OverflowHost(stack["iam"].verifier())
         await overflow.start(engine)
         nats_overflow.install(overflow)
-        served: list[str] = []
+        served: _Served = _Served()
+        served.warden = guard
 
         async def kernel(msg):  # a kernel service the engine serves
             served.append(msg.subject)
@@ -157,6 +184,8 @@ def run(stack, scenario, *, discovery=False, **callout_options):
             await overflow.stop()
             await primary.stop()
             await control.stop()
+            if guard is not None:
+                await guard.stop()
             await callout.stop()
             await engine.close()
 
@@ -1102,99 +1131,145 @@ def test_a_module_reads_the_claim_checks_of_what_it_is_granted_only(stack):
     run(stack, scenario)
 
 
-def test_a_connection_renews_itself_before_its_permissions_expire(stack):
+# -- connections end on IAM changes (ADR 20261119_kick_connections_on_iam_change)
+
+# Quick to react, so that a scenario lasts seconds; no periodic sweep unless asked.
+WARDEN = {
+    "revision_check_seconds": 0.2,
+    "settle_seconds": 0.05,
+    "first_sweep_seconds": 3600,
+    "sweep_seconds": 3600,
+    "kicks_per_second": 0,
+}
+NARROWED = {
+    "version": "2026-10-13",
+    "statements": [
+        {
+            "effect": "Allow",
+            "actions": ["document:*"],
+            "resources": ["abi:document:namespace/people"],
+        }
+    ],
+}
+
+
+async def _until(check, seconds: float = 5.0) -> bool:
+    for _ in range(int(seconds / 0.1)):
+        if await check():
+            return True
+        await asyncio.sleep(0.1)
+    return False
+
+
+def test_a_revoked_key_loses_its_connection_at_once_without_a_timer(stack):
     iam = stack["iam"]
     account, key = module(iam, "module/default/people")
     approve(iam, account, "module/default/people")
 
     async def scenario(served):
-        # The broker gives a connection 3 s; the transport reconnects every 1 s,
-        # and the callout answers each time. Without it nats-py would close the
-        # connection at expiry and never reconnect it.
-        transport = Transport(
-            stack["url"], key, timeout=2, renew_seconds=1, reconnect_time_wait=0.1
-        )
-        try:
-            nc = await transport.connect()
-            for _ in range(20):  # seven seconds: two lives of the broker's JWT
-                await asyncio.sleep(0.37)
-                for attempt in range(3):
-                    try:
-                        # A call that starts during a renewal waits for it; one
-                        # in flight when it begins is lost, as in any reconnect.
-                        nc = await transport.connect()
-                        await nc.request(KV_GET, b"", timeout=1)
-                        break
-                    except Exception:
-                        if attempt == 2:
-                            raise
-            assert not nc.is_closed
-        finally:
-            await transport.close()
-
-    run(stack, scenario, user_ttl_seconds=3)
-
-
-def test_a_revoked_key_loses_its_connection_within_the_ttl(stack):
-    iam = stack["iam"]
-    account, key = module(iam, "module/default/people")
-    approve(iam, account, "module/default/people")
-
-    async def scenario(served):
-        transport = Transport(
-            stack["url"], key, timeout=2, renew_seconds=1, reconnect_time_wait=0.1
-        )
+        transport = Transport(stack["url"], key, timeout=2, reconnect_time_wait=0.1)
         try:
             nc = await transport.connect()
             await nc.request(KV_GET, b"", timeout=2)
             with as_service_account("engine"):
                 iam.revoke_key(account, key.split("_")[2])
-            await asyncio.sleep(5)  # the renewal is refused; no expiry gets past
-            with pytest.raises(Exception):
-                await nc.request(KV_GET, b"", timeout=1)
+
+            async def refused():
+                try:
+                    await (await transport.connect()).request(KV_GET, b"", timeout=0.5)
+                    return False
+                except (nats.errors.Error, TimeoutError, RPCError):
+                    return True
+
+            assert await _until(refused), "the revoked key kept its connection"
         finally:
             await transport.close()
 
-    run(stack, scenario, user_ttl_seconds=3)
+    run(stack, scenario, warden=WARDEN)
 
 
-def test_a_narrowed_manifest_reaches_the_broker_at_the_next_renewal(stack):
+def test_a_narrowed_manifest_reaches_the_broker_within_seconds(stack):
     iam = stack["iam"]
     account, key = module(iam, "module/default/people")
     approve(iam, account, "module/default/people")
 
     async def scenario(served):
-        transport = Transport(
-            stack["url"], key, timeout=2, renew_seconds=1, reconnect_time_wait=0.1
-        )
+        transport = Transport(stack["url"], key, timeout=2, reconnect_time_wait=0.1)
         try:
             nc = await transport.connect()
             await nc.request(KV_GET, b"", timeout=2)
-            approve(
-                iam,
-                account,
-                "module/default/people",
-                {
-                    "version": "2026-10-13",
-                    "statements": [
-                        {
-                            "effect": "Allow",
-                            "actions": ["document:*"],
-                            "resources": ["abi:document:namespace/people"],
-                        }
-                    ],
-                },
-            )
-            for _ in range(10):  # the next renewal, within a second or two
-                await asyncio.sleep(1)
-                if await denied(transport, KV_GET):
-                    break
-            else:
-                raise AssertionError("the narrowed manifest never reached the broker")
+            approve(iam, account, "module/default/people", NARROWED)
+
+            async def narrowed():
+                return await denied(transport, KV_GET)
+
+            assert await _until(narrowed), "the narrowed manifest never reached it"
         finally:
             await transport.close()
 
-    run(stack, scenario, user_ttl_seconds=30)
+    run(stack, scenario, warden=WARDEN)
+
+
+def test_a_change_to_another_module_ends_no_other_connection(stack):
+    iam = stack["iam"]
+    people, people_key = module(iam, "module/default/people")
+    approve(iam, people, "module/default/people")
+    other, _ = module(iam, "module/default/other")
+    approve(iam, other, "module/default/other")
+
+    async def scenario(served):
+        drops: list[str] = []
+        transport = Transport(stack["url"], people_key, timeout=2)
+        try:
+            nc = await transport.connect()
+
+            async def dropped():
+                drops.append("dropped")
+
+            nc._disconnected_cb = dropped
+            await nc.request(KV_GET, b"", timeout=2)
+            approve(iam, other, "module/default/other", NARROWED)
+            assert await served.warden.check() == []
+            await asyncio.sleep(1)  # the warden's own reaction to the change
+            assert drops == []
+            await nc.request(KV_GET, b"", timeout=2)
+        finally:
+            await transport.close()
+
+    run(stack, scenario, warden=WARDEN)
+
+
+def test_a_connection_admitted_before_the_engine_logs_in_again_at_the_sweep(stack):
+    """An engine that restarted knows none of the module connections: the sweep
+    ends them, and they log in again through this engine's callout."""
+    iam = stack["iam"]
+    account, key = module(iam, "module/default/people")
+    approve(iam, account, "module/default/people")
+
+    async def scenario(served):
+        warden = served.warden
+        transport = Transport(stack["url"], key, timeout=2, reconnect_time_wait=0.1)
+        try:
+            nc = await transport.connect()
+            await nc.request(KV_GET, b"", timeout=2)
+            for connection in list(warden.admissions.snapshot()):
+                warden.admissions.forget(connection)  # as a fresh engine
+            ended = await warden.sweep()
+            assert len(ended) == 1
+
+            async def back():
+                try:
+                    await (await transport.connect()).request(KV_GET, b"", timeout=0.5)
+                except (nats.errors.Error, TimeoutError, RPCError):
+                    return False
+                return len(warden.admissions) == 1
+
+            assert await _until(back), "the module never logged in again"
+            assert await warden.sweep() == []  # known now: left alone
+        finally:
+            await transport.close()
+
+    run(stack, scenario, warden=WARDEN)
 
 
 def test_a_module_with_secret_grants_reads_no_signing_key_or_broker_password(stack):
@@ -1212,6 +1287,7 @@ def test_a_module_with_secret_grants_reads_no_signing_key_or_broker_password(sta
                 "idp/signing-key": "idp",
                 "NATS_ENGINE_PASSWORD": "engine-pw",
                 "NATS_AUTH_PASSWORD": "auth-pw",
+                "NATS_SYSTEM_PASSWORD": "sys-pw",
                 "NATS_AUTH_CALLOUT_SEED": "SAAseed",
                 "people/api-key": "mine",
             }
@@ -1260,6 +1336,7 @@ def test_a_module_with_secret_grants_reads_no_signing_key_or_broker_password(sta
                 # What the broker's own logins are made of, in the dotenv.
                 "NATS_ENGINE_PASSWORD",
                 "NATS_AUTH_PASSWORD",
+                "NATS_SYSTEM_PASSWORD",
                 "NATS_AUTH_CALLOUT_SEED",
             ):
                 with pytest.raises(RPCError) as refused:

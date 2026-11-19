@@ -18,11 +18,10 @@ from nats.aio.client import Client
 from nats.errors import MaxPayloadError, NoRespondersError
 
 from naas_abi_sdk import no_responders, overflow
-from naas_abi_sdk.backoff import jittered_interval, reconnect_backoff_handler
+from naas_abi_sdk.backoff import reconnect_backoff_handler
 from naas_abi_sdk.call_context import Principal, current_call_context
 from naas_abi_sdk.credentials import (
     NATS_AUDIENCE,
-    RENEW_CONNECTION_SECONDS,
     SERVICE_KEY_PREFIX,
     ServiceKey,
     host_audience,
@@ -88,7 +87,6 @@ class Transport:
         *,
         delegate: Callable[[Principal, str | None, Any], str | Awaitable[str]]
         | None = None,
-        renew_seconds: float = RENEW_CONNECTION_SECONDS,
         host_token: str | Callable[[], str] | None = None,
         **connection_options: Any,
     ) -> None:
@@ -108,9 +106,10 @@ class Transport:
         itself). Without one such a transport makes no call to a host: its own
         token must never reach one.
 
-        ``renew_seconds``: a connection logged in with a service key
-        reconnects this often, so the broker computes its subjects again
-        before its own expire (they last minutes, ``credentials``)."""
+        A connection logged in with a service key keeps the subjects the
+        broker gave it until the engine ends it on an IAM change; nats-py then
+        reconnects, and the broker's auth callout answers with the subjects the
+        policy allows now (ADR 20261119_kick_connections_on_iam_change)."""
         if not math.isfinite(timeout) or timeout <= 0:
             raise ValueError("timeout must be finite and positive")
         if isinstance(token, str) and token.startswith(SERVICE_KEY_PREFIX):
@@ -139,8 +138,6 @@ class Transport:
         self._connected = False
         self._closed = False
         self._lifeline: Lifeline | None = None
-        self.renew_seconds = renew_seconds
-        self._renewal: asyncio.Task | None = None
 
     async def connect(self) -> Client:
         async with self._lock:
@@ -163,39 +160,15 @@ class Transport:
                     raise
                 self._lifeline = watched
                 self._connected = True
-                if self.credentials is not None and self.renew_seconds > 0:
-                    self._renewal = asyncio.create_task(self._renew(connection))
             connection = self.connection
-        # A renewal in progress (a few milliseconds): wait for it rather than
-        # fail the call that happens to start then.
+        # A reconnect in progress (the engine ended the connection after an
+        # IAM change): wait for it rather than fail the call that starts then.
         deadline = asyncio.get_running_loop().time() + self.timeout
         while connection.is_reconnecting and (
             asyncio.get_running_loop().time() < deadline
         ):
             await asyncio.sleep(0.01)
         return connection
-
-    async def _renew(self, connection: Client) -> None:
-        """Reconnect ``connection`` every ``renew_seconds``: nats-py keeps its
-        subscriptions, and the broker's auth callout answers again, with the
-        subjects the account's policy allows now. A revoked key, a suspended
-        account or a narrowed policy ends here at the latest when the
-        permissions the broker gave the connection do."""
-        while True:
-            await asyncio.sleep(self._renew_delay())
-            if self._closed or connection is not self.connection:
-                return
-            try:
-                await connection.force_reconnect()
-            except Exception:  # nats-py retries; the lifeline reports a loss
-                logger.warning("Could not renew the broker connection", exc_info=True)
-
-    def _renew_delay(self) -> float:
-        """The wait before the next renewal: ``renew_seconds``, shortened at
-        random by up to a quarter. Modules started together (a host of many)
-        otherwise renew together, and the auth callout answers all their
-        sign-ins at once, every cycle."""
-        return jittered_interval(self.renew_seconds)
 
     def _on_closed(
         self, connection: Client, watched: Lifeline
@@ -237,7 +210,6 @@ class Transport:
         async with self._lock:
             if self._closed:
                 raise RuntimeError("Client is closed")
-            self._stop_renewal()
             old, watched = self.connection, self._lifeline
             connected = self._connected
             self.connection, self._connected, self._lifeline = Client(), False, None
@@ -248,15 +220,9 @@ class Transport:
                 await old.close()
         await self.connect()
 
-    def _stop_renewal(self) -> None:
-        renewal, self._renewal = self._renewal, None
-        if renewal is not None and renewal is not asyncio.current_task():
-            renewal.cancel()
-
     async def close(self) -> None:
         async with self._lock:
             self._closed = True
-            self._stop_renewal()
             if self._connected:
                 if self._lifeline is not None:
                     await self._lifeline.close(self.connection)

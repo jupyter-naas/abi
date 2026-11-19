@@ -476,18 +476,38 @@ class NATSAuthCalloutConfiguration(BaseModel):
     """The broker's auth callout, answered by the serving engine.
 
     ``nats.conf`` declares ``auth_callout { issuer: <account public key>,
-    auth_users: [engine, auth] }``; the responder logs in as ``auth``
+    auth_users: [engine, auth, sys] }`` and a ``SYS`` account holding the
+    ``sys`` user (``system_account: SYS``). The responder logs in as ``auth``
     (``nats_url``) and signs each connection's user JWT with the account seed
-    whose public key is that issuer. Users it issues expire within
-    ``user_ttl_seconds`` (five minutes by default, ten at most: an access token's
-    life): a reconnect recomputes them, and modules reconnect every two minutes.
+    whose public key is that issuer; the JWT lasts until the module's key
+    expires.
+
+    The connection warden logs in as ``sys`` (``system_url``) and ends the
+    module connections an IAM change affects (``$SYS.REQ.SERVER.<id>.KICK``):
+    they log in again and get the new subjects, or a refusal. It also lists the
+    broker's connections at start and every ``sweep_seconds`` (ADR
+    20261119_kick_connections_on_iam_change).
     """
 
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     nats_url: str
     issuer_seed: str = Field(min_length=1, repr=False)
-    user_ttl_seconds: int = Field(default=300, ge=240, le=600)
+    system_url: str = Field(min_length=1, repr=False)
+    sweep_seconds: float = Field(default=300.0, ge=10, allow_inf_nan=False)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _retired_ttl(cls, data: Any) -> Any:
+        """``user_ttl_seconds`` capped a connection's life when modules
+        reconnected every two minutes: passes now last until the key expires."""
+        if isinstance(data, dict) and "user_ttl_seconds" in data:
+            data = {k: v for k, v in data.items() if k != "user_ttl_seconds"}
+            logger.warning(
+                "nats.auth_callout.user_ttl_seconds is retired and ignored: module "
+                "connections end on IAM changes (remove it from the configuration)"
+            )
+        return data
 
 
 class NATSConfiguration(BaseModel):
@@ -524,6 +544,7 @@ class NATSConfiguration(BaseModel):
       nats_url: "nats://engine:{{ secret.NATS_ENGINE_PASSWORD }}@127.0.0.1:4222"
       auth_callout:
         nats_url: "nats://auth:{{ secret.NATS_AUTH_PASSWORD }}@127.0.0.1:4222"
+        system_url: "nats://sys:{{ secret.NATS_SYSTEM_PASSWORD }}@127.0.0.1:4222"
         issuer_seed: "{{ secret.NATS_AUTH_CALLOUT_SEED }}"
       client_timeout_seconds: 10
     """

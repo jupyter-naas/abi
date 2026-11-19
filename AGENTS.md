@@ -261,7 +261,7 @@ The repo runs on NATS by default, like a project from `abi new project`: its
 `config.yaml` (`abi dev up`) and `config.local.yaml` (`abi stack start`) have a
 `nats:` block. Kernel services, the bus (JetStream), module jobs and remote
 module discovery go through the broker. The broker's passwords
-(`NATS_ENGINE_PASSWORD`, `NATS_AUTH_PASSWORD`) and the seed of its auth callout
+(`NATS_ENGINE_PASSWORD`, `NATS_AUTH_PASSWORD`, `NATS_SYSTEM_PASSWORD`) and the seed of its auth callout
 (`NATS_AUTH_CALLOUT_SEED`) are generated into `.env` on first run (see
 `.env.example`); modules log in with their own service key, not a shared password.
 
@@ -452,7 +452,7 @@ Run all four services with `uv run abi dev up -d`, then `abi dev status` / `abi 
 
 Non-obvious gotchas discovered during setup:
 
-- **`.env` is required and gitignored.** It is auto-created on first `abi dev up`, seeding `ABI_API_KEY`, the broker's secrets (`NATS_ENGINE_PASSWORD`, `NATS_AUTH_PASSWORD`, `NATS_AUTH_CALLOUT_SEED`) and the identity provider's client secret (there is no admin password). The engine renders `config.yaml` through Jinja and **hard-fails non-interactively (no TTY) on missing `{{ secret.X }}` in active (non-comment) YAML**. Full-line YAML comments are left unrendered, so commented-out modules can keep example `{{ secret.X }}` placeholders. Deploy placeholders are in `.env.example` (`NAAS_API_KEY`, `ABI_API_KEY`, `NEXUS_API_URL`): copy those if missing. The root config also names `OPENAI_API_KEY`, `OPENROUTER_API_KEY` and `GITHUB_ACCESS_TOKEN` in active YAML, so set them (a placeholder lets the API boot) through environment secrets or `.env`.
+- **`.env` is required and gitignored.** It is auto-created on first `abi dev up`, seeding `ABI_API_KEY`, the broker's secrets (`NATS_ENGINE_PASSWORD`, `NATS_AUTH_PASSWORD`, `NATS_SYSTEM_PASSWORD`, `NATS_AUTH_CALLOUT_SEED`) and the identity provider's client secret (there is no admin password). The engine renders `config.yaml` through Jinja and **hard-fails non-interactively (no TTY) on missing `{{ secret.X }}` in active (non-comment) YAML**. Full-line YAML comments are left unrendered, so commented-out modules can keep example `{{ secret.X }}` placeholders. Deploy placeholders are in `.env.example` (`NAAS_API_KEY`, `ABI_API_KEY`, `NEXUS_API_URL`): copy those if missing. The root config also names `OPENAI_API_KEY`, `OPENROUTER_API_KEY` and `GITHUB_ACCESS_TOKEN` in active YAML, so set them (a placeholder lets the API boot) through environment secrets or `.env`.
 - **NATS ports are offset too.** `abi dev up` starts its own `nats-server` on an offset client port and hands the api its URL through `.abi/dev/dev.overlay.yaml`; the `127.0.0.1:4222` in `config.yaml` is the Docker stack's broker. `abi dev ports` lists the live ones; the broker's monitoring endpoint is the client port + 1000 (`/healthz`, `/connz`).
 - **For capable cloud models:** set `global_config.ai_mode: "cloud"`, uncomment a cloud provider module in `config.yaml`, replace `SECRET_REF` with a real Jinja secret, and add its key via environment secrets or `.env`.
 - **First API boot is slow (~2-3 min):** the worker loads every module/ontology and runs Nexus SQLite migrations before serving. Watch `abi dev logs api`; it is ready when `/docs` returns 200 (`GET http://localhost:<api-port>/docs`).

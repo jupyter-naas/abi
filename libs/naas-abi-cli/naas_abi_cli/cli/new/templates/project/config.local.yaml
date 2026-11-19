@@ -33,6 +33,7 @@ nats:
   nats_url: "nats://engine:{% raw %}{{ secret.NATS_ENGINE_PASSWORD }}{% endraw %}@nats:4222"
   auth_callout:
     nats_url: "nats://auth:{% raw %}{{ secret.NATS_AUTH_PASSWORD }}{% endraw %}@nats:4222"
+    system_url: "nats://sys:{% raw %}{{ secret.NATS_SYSTEM_PASSWORD }}{% endraw %}@nats:4222"
     issuer_seed: "{% raw %}{{ secret.NATS_AUTH_CALLOUT_SEED }}{% endraw %}"
   # One engine per project hosts the module registry: the `abi` service. The
   # stack runs no second engine (no Dagster: module jobs replace it).

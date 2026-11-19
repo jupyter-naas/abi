@@ -1413,6 +1413,40 @@ def test_broker_permissions_never_read_a_cached_policy(h, iam):
     assert "abi.svc.keyvalue.v1.>" in after.publish
 
 
+def test_a_connections_permissions_are_recomputed_from_its_key_id(h, iam):
+    """The engine re-checks a connection it admitted without the key itself:
+    the same subjects as at login, until the policy changes."""
+    account = _module(h)
+    key = h.admin("create_key", account.id).record
+    admitted = iam.broker_permissions(account, key)
+    assert iam.connection_permissions(account.id, key.key_id) == admitted
+
+    _submit(h, account, document(statement("Allow", ["document:*"], ["*"])))
+    h.admin("approve_manifest", account.id)
+    assert iam.connection_permissions(account.id, key.key_id) != admitted
+
+
+@pytest.mark.parametrize("change", ["revoke_key", "suspend_principal", "other_key"])
+def test_a_connection_whose_key_or_account_stopped_is_refused(h, iam, change):
+    account = _module(h)
+    key = h.admin("create_key", account.id).record
+    other = _module(h, "module/acme/other")
+    if change == "revoke_key":
+        h.admin("revoke_key", account.id, key.key_id)
+    elif change == "suspend_principal":
+        h.admin("suspend_principal", account.id)
+    else:  # a key of another account, named as this one's
+        account = other
+    with pytest.raises(KeyRefusedError):
+        iam.connection_permissions(account.id, key.key_id)
+
+
+def test_a_connection_with_an_unknown_key_is_refused(h, iam):
+    account = _module(h)
+    with pytest.raises(KeyRefusedError):
+        iam.connection_permissions(account.id, "nokey")
+
+
 def test_a_manifest_naming_a_platform_topic_is_refused(h):
     account = _module(h)
     wide = document(statement("Allow", ["bus:*"], ["abi:bus:topic/abi.iam.v1"]))

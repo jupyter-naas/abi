@@ -56,7 +56,9 @@ def _connect_options(monkeypatch, **transport_options):
     return captured
 
 
-def test_reconnects_wait_a_jittered_backoff_that_grows_with_failed_attempts(monkeypatch):
+def test_reconnects_wait_a_jittered_backoff_that_grows_with_failed_attempts(
+    monkeypatch,
+):
     handler = _connect_options(monkeypatch)["reconnect_to_server_handler"]
     monkeypatch.setattr(random, "random", lambda: 1.0)
     server = SimpleNamespace(uri=None, reconnects=0)
@@ -70,9 +72,9 @@ def test_reconnects_wait_a_jittered_backoff_that_grows_with_failed_attempts(monk
     assert waits[0] <= 1.0 and waits[-1] == 30.0
 
     monkeypatch.setattr(random, "random", lambda: 0.25)
-    assert handler([SimpleNamespace(uri=None, reconnects=3)], {})[1] == 0.25 * backoff_delay(
-        3, rng=lambda: 1.0
-    )
+    assert handler([SimpleNamespace(uri=None, reconnects=3)], {})[
+        1
+    ] == 0.25 * backoff_delay(3, rng=lambda: 1.0)
 
 
 def test_a_callers_own_reconnect_handler_is_kept(monkeypatch):
@@ -81,14 +83,6 @@ def test_a_callers_own_reconnect_handler_is_kept(monkeypatch):
 
     options = _connect_options(monkeypatch, reconnect_to_server_handler=mine)
     assert options["reconnect_to_server_handler"] is mine
-
-
-def test_renewals_are_spread_below_their_interval(monkeypatch):
-    transport = Transport("nats://unused", "issued", renew_seconds=120.0)
-    monkeypatch.setattr(random, "random", lambda: 0.0)
-    assert transport._renew_delay() == 120.0
-    monkeypatch.setattr(random, "random", lambda: 1.0)
-    assert 60.0 <= transport._renew_delay() < 120.0
 
 
 # --- the job host's fetch loop ---------------------------------------------------
