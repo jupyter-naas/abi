@@ -8,6 +8,7 @@ import { fileViewsPath, parseFileViews, type FileView } from '@/lib/file-views';
 import {
   ALL_VIEWS,
   isFileViewSource,
+  offeredSource,
   viewFolders,
   type FileViewSource,
 } from '@/app/workspace/[workspaceId]/files/lib/drive-label';
@@ -104,8 +105,7 @@ export function useOfferedFileViews(workspaceId: string | null | undefined): {
 
   useEffect(() => {
     if (status !== 'ready' || !isFileViewSource(activeSource)) return;
-    if (folders.some((folder) => folder.source === activeSource)) return;
-    chooseView(ALL_VIEWS);
+    if (offeredSource(activeSource, folders) === ALL_VIEWS) chooseView(ALL_VIEWS);
   }, [activeSource, chooseView, folders, status]);
 
   return { status, views, folders };

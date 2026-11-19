@@ -67,7 +67,7 @@ export default function HomePage() {
   const apps = useAppsStore((s) => s.apps);
   const starredItems = useFilesStore((s) => s.starredItems);
   const setStarredNavigation = useFilesStore((s) => s.setStarredNavigation);
-  const chooseView = useFilesStore((s) => s.chooseView);
+  const openFilesEntry = useFilesStore((s) => s.openFilesEntry);
 
   useEffect(() => {
     if (currentWorkspaceId) void fetchApps(currentWorkspaceId);
@@ -81,10 +81,10 @@ export default function HomePage() {
     (section: DeskSurfaceId) => {
       if (!currentWorkspaceId) return;
       setActivePanelSection(section);
-      if (section === 'files') chooseView('all'); // Files opens on All Views
+      if (section === 'files') openFilesEntry(); // Workspace Files, else All Views
       router.push(getWorkspacePath(currentWorkspaceId, `/${section}`));
     },
-    [currentWorkspaceId, router, setActivePanelSection, chooseView],
+    [currentWorkspaceId, router, setActivePanelSection, openFilesEntry],
   );
 
   const openApp = useCallback(

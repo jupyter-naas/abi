@@ -81,6 +81,15 @@ describe('the active view', () => {
     expect(useFilesStore.getState()).toMatchObject({ activeSource: 'all', viewChoice: 'all' });
   });
 
+  it('the dock and Home open Workspace Files, whatever was open before', () => {
+    useFilesStore.getState().chooseView('my-files');
+    useFilesStore.getState().openFilesEntry();
+    expect(useFilesStore.getState()).toMatchObject({
+      activeSource: 'workspace-files',
+      viewChoice: 'workspace-files',
+    });
+  });
+
   it('ignores a source that names no view', () => {
     useFilesStore.getState().setActiveSource('workspace-files');
     useFilesStore.getState().setActiveSource('synced-1');

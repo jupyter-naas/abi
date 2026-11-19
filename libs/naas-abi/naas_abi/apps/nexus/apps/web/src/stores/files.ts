@@ -235,6 +235,8 @@ interface FilesState {
   chooseView: (source: FilesSource) => void;
   /** The Drive dropdown. */
   chooseDrive: (drive: FilesDrive) => void;
+  /** The dock and Home open Files on Workspace Files (All Views if the caller may not open it). */
+  openFilesEntry: () => void;
   
   // API actions
   fetchFiles: (
@@ -258,6 +260,7 @@ interface FilesState {
 import { getApiUrl } from '@/lib/config';
 import {
   ALL_VIEWS,
+  FILES_ENTRY_VIEW,
   filesScopeForSource,
   filesSourceFrom,
   isFileViewSource,
@@ -379,6 +382,8 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   },
 
   chooseDrive: (drive) => set({ activeDrive: drive }),
+
+  openFilesEntry: () => get().chooseView(FILES_ENTRY_VIEW),
 
   openFile: (path) => {
     const { openFiles } = get();

@@ -28,6 +28,12 @@ export const ALL_VIEWS = 'all';
 /** What the Files page and sidebar show: All Views, or one view. */
 export type FilesSource = FileViewSource | typeof ALL_VIEWS;
 
+/**
+ * Where the dock and Home open Files: the current workspace's view. A link, a
+ * starred item or the View dropdown still choose their own.
+ */
+export const FILES_ENTRY_VIEW: FileViewSource = 'workspace-files';
+
 const VIEW_SCOPES: Record<FileViewSource, FilesScope> = {
   'my-files': 'my_drive',
   'workspace-files': 'workspace',
@@ -154,6 +160,18 @@ export function viewFolders(
   return viewsOfDrive(views, drive)
     .filter((view) => view.id in VIEW_IDS)
     .map((view) => ({ source: VIEW_IDS[view.id], label: VIEW_LABELS[VIEW_IDS[view.id]] }));
+}
+
+/**
+ * What a source opens among the views offered: itself when the caller may open it
+ * (or All Views), else All Views.
+ */
+export function offeredSource(
+  source: FilesSource,
+  folders: readonly { source: FileViewSource }[],
+): FilesSource {
+  if (source === ALL_VIEWS) return ALL_VIEWS;
+  return folders.some((folder) => folder.source === source) ? source : ALL_VIEWS;
 }
 
 function stripRoot(path: string, root: string): string | null {
