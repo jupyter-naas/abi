@@ -15,8 +15,10 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     LargeBinary,
+    PrimaryKeyConstraint,
     String,
     Text,
     UniqueConstraint,
@@ -492,9 +494,25 @@ class MessageModel(Base):
     agent = Column(String, nullable=True)
     metadata_ = Column("metadata", Text, nullable=True)  # JSON string
     created_at = Column(DateTime(timezone=False), nullable=False, default=_utcnow)
+    # Read off ``metadata`` whenever the chat adapter writes it (migration 0073), so
+    # analytics count likes, dislikes and tools in SQL instead of parsing the JSON.
+    feedback = Column(String(16), nullable=True)  # "like" | "dislike"
+    feedback_type = Column(String(100), nullable=True)
 
     # Relationships
     conversation = relationship("ConversationModel", back_populates="messages")
+
+
+class MessageToolModel(Base):
+    """The tools an assistant message called (its ``metadata.steps``), one row per
+    tool with its number of calls: written with the message's metadata."""
+
+    __tablename__ = "message_tools"
+    __table_args__ = (PrimaryKeyConstraint("message_id", "tool_name"),)
+
+    message_id = Column(String, ForeignKey("messages.id", ondelete="CASCADE"), nullable=False)
+    tool_name = Column(String(200), nullable=False)
+    uses = Column(Integer, nullable=False, default=1)
 
 
 class ChatIngestionJobModel(Base):
