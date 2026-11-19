@@ -90,6 +90,10 @@ async def index_message_facts(db: AsyncSession, since: datetime, *, batch: int =
                     )
                     .order_by(MessageModel.id)
                     .limit(batch)
+                    # A chat write on one of them (feedback, metadata) waits for the
+                    # batch, or the batch for it: its facts are never rewritten from
+                    # stale metadata, nor its tools inserted twice.
+                    .with_for_update()
                 )
             )
             .scalars()

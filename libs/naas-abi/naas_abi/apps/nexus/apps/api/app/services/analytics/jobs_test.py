@@ -269,9 +269,9 @@ async def test_without_a_log_the_jobs_only_backfill_and_purge(sessions) -> None:
 
 @pytest.mark.asyncio
 async def test_batches_two_processes_lost_are_healed(sessions, events, monkeypatch) -> None:
-    """Two processes each read a batch and fail to write it. The first cannot move the
-    cursor back (the second read past it), the second can: the heal replays the
-    log's recent events, so the first batch is counted too."""
+    """Two processes each read a batch and fail to write it: the cursor goes back
+    before the first batch whatever the order, so both are handed out again (applying
+    twice is harmless)."""
     monkeypatch.setattr(jobs_module, "BATCH", 2)
     first = AnalyticsJobs(sessions, events=events)
     second = AnalyticsJobs(sessions, events=events)
@@ -279,11 +279,11 @@ async def test_batches_two_processes_lost_are_healed(sessions, events, monkeypat
         publish(events, payload(f"e-{index}"))
     batch_a = first._claim()
     batch_b = second._claim()
-    first._rewind(batch_a)  # another process read past a: left where it is
-    second._rewind(batch_b)  # cursor still at the end of b: moved back to a's end
-    assert await first.drain() == 2  # b again
-    assert await _hourly_total(sessions) == 2
-    assert await first.heal() == 2  # a, from the log's last hours
+    first._rewind(batch_a)  # back before a, though another process read past it
+    second._rewind(batch_b)  # never forward: left before a
+    assert await first.drain() == 4  # a and b again, no heal needed
+    assert await _hourly_total(sessions) == 4
+    assert await first.heal() == 0
     assert await second.heal() is None  # one process per period
     assert await _hourly_total(sessions) == 4
 
@@ -711,3 +711,120 @@ async def test_a_page_title_is_kept_per_organization_and_workspace(sessions) -> 
         ("org-a", "ws-1", "Home"),
         ("org-b", "ws-other", "Session expired, sign in at evil.example"),
     ]
+
+
+@pytest.mark.asyncio
+async def test_a_write_outage_skips_nothing(sessions, events, monkeypatch) -> None:
+    """The database answers SELECT 1 but refuses writes (a read-only standby after a
+    failover, a full disk): nothing is skipped, the batch waits for the database."""
+    jobs = AnalyticsJobs(sessions, events=events)
+    for i in range(3):
+        publish(events, payload(f"e-{i}"))
+    original = jobs_module.AnalyticsSecondaryAdapterPostgresEvents.apply_events
+    outage = {"on": True}
+
+    async def read_only(self, recorded, *, not_before):
+        from sqlalchemy import text
+
+        if self.db.get_bind().dialect.name == "postgresql":
+            if outage["on"]:
+                await self.db.execute(text("SET TRANSACTION READ ONLY"))
+        else:
+            await self.db.execute(text(f"PRAGMA query_only = {'ON' if outage['on'] else 'OFF'}"))
+        return await original(self, recorded, not_before=not_before)
+
+    monkeypatch.setattr(
+        jobs_module.AnalyticsSecondaryAdapterPostgresEvents, "apply_events", read_only
+    )
+    for _ in range(2):  # every tick while it lasts
+        with pytest.raises(jobs_module.Unavailable):
+            await jobs.drain()
+    assert jobs.skipped_events == 0
+    outage["on"] = False
+    assert await jobs.drain() == 3
+    assert await _event_ids(sessions) == ["e-0", "e-1", "e-2"]
+
+
+def test_what_is_an_event_s_fault_and_what_the_database_s() -> None:
+    from sqlalchemy.exc import DBAPIError, IntegrityError, OperationalError
+    from sqlalchemy.exc import TimeoutError as PoolTimeout
+
+    class Driver(Exception):
+        def __init__(self, sqlstate: str) -> None:
+            self.sqlstate = sqlstate
+
+    def db_error(sqlstate: str) -> DBAPIError:
+        return DBAPIError("INSERT", {}, Driver(sqlstate))
+
+    refused = jobs_module.refused_by_data
+    assert refused(db_error("22021"))  # a NUL in text
+    assert refused(db_error("23505"))
+    for state in ("25006", "08006", "53100", "57P01", "42P01", "42501", "40P01", "40001"):
+        assert not refused(db_error(state)), state
+    assert refused(IntegrityError("INSERT", {}, Exception("UNIQUE constraint failed")))
+    assert not refused(OperationalError("INSERT", {}, Exception("database is locked")))
+    assert not refused(PoolTimeout("pool exhausted"))
+    assert not refused(ConnectionResetError())
+    assert refused(ValueError("bad event")) and refused(OverflowError())
+
+
+@pytest.mark.asyncio
+async def test_indexing_message_facts_waits_for_a_chat_write(sessions) -> None:
+    """A feedback written on a message while the facts pass reads it: the pass waits
+    for it and keeps its facts, instead of failing on the tools' key or rewriting
+    them from stale metadata (PostgreSQL row locks)."""
+    async with sessions() as db:
+        if db.get_bind().dialect.name != "postgresql":
+            pytest.skip("row locks: PostgreSQL only")
+    from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.secondary.message_facts import (  # noqa: E501
+        index_message_facts,
+        write_message_facts,
+    )
+
+    at = NOW.replace(tzinfo=None)
+    async with sessions() as db:
+        db.add(
+            ConversationModel(
+                id="conv-1",
+                workspace_id="ws-1",
+                user_id="alice",
+                title="T",
+                agent="aia",
+                created_at=at,
+                updated_at=at,
+            )
+        )
+        await db.flush()
+        db.add(
+            MessageModel(
+                id="m-1",
+                conversation_id="conv-1",
+                role="assistant",
+                content="hi",
+                created_at=at,
+                metadata_=json.dumps({"steps": [{"tool_name": "search"}]}),
+            )
+        )
+        await db.commit()
+
+    fresh = json.dumps({"steps": [{"tool_name": "search"}], "feedback": "like"})
+    async with sessions() as chat:
+        message = (
+            await chat.execute(select(MessageModel).where(MessageModel.id == "m-1"))
+        ).scalar_one()
+        message.metadata_ = fresh
+        await write_message_facts(chat, message, fresh, replace=True)
+        await chat.flush()  # the chat's transaction is open, holding the row
+
+        async def index() -> int:
+            async with sessions() as db:
+                return await index_message_facts(db, at - timedelta(hours=1))
+
+        indexing = asyncio.create_task(index())
+        await asyncio.sleep(0.5)
+        assert not indexing.done()  # waits for the chat's write
+        await chat.commit()
+    assert await asyncio.wait_for(indexing, timeout=10) == 1
+    async with sessions() as db:
+        assert (await db.execute(select(MessageModel.feedback))).scalars().all() == ["like"]
+        assert (await db.execute(select(MessageToolModel.tool_name))).scalars().all() == ["search"]

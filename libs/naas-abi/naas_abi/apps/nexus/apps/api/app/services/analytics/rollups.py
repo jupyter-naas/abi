@@ -140,7 +140,7 @@ def payload_of_log_event(record: Any) -> dict[str, Any] | None:
         return None
     try:
         payload = json.loads(raw)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, RecursionError):
         return None
     if not isinstance(payload, dict):
         return None

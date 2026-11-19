@@ -6,10 +6,12 @@
   batch to one process; applying is idempotent, so a batch whose write fails because
   the database does is handed out again (the cursor is moved back before it) without
   double counting.
-* **Poison events.** A batch that fails while the database answers is applied again
+* **Poison events.** A batch that fails because of an event (a data error, or Python's
+  while reading it: ``refused_by_data``) while the database answers is applied again
   event by event (``_apply_isolated``): the events that fail alone are skipped and
   logged, the others are applied, and the cursor moves on. No event a client sends can
-  stall the consumer, the heal or the backfill.
+  stall the consumer, the heal or the backfill. A failure of the database itself
+  (down, read-only, full, a deadlock) skips nothing: the batch is handed out again.
 * **Backfill** (once, ``rollups.BACKFILL_JOB``): every event the legacy object storage
   holds, whatever its age (rollups only past 45 days), then what the log holds of the
   last 45 days, the organization stamped from the workspace. Then the messages of the
@@ -67,6 +69,7 @@ from naas_abi.apps.nexus.apps.api.app.services.analytics.rollups import (
 )
 from naas_abi_core.engine.call_context import as_service_account
 from sqlalchemy import text
+from sqlalchemy.exc import DataError, DBAPIError, IntegrityError, SQLAlchemyError
 
 logger = logging.getLogger(__name__)
 
@@ -102,8 +105,39 @@ Apply = Callable[[AnalyticsRollups, list[dict[str, Any]]], Awaitable[int]]
 
 
 class Unavailable(RuntimeError):
-    """The database failed and does not answer: a batch is handed out again, never
+    """The database cannot apply events now: a batch is handed out again, never
     skipped."""
+
+
+# SQLSTATE classes of an error in the data written (22: data exception, e.g. a NUL in
+# text; 23: integrity constraint): the event's fault. Any other database error
+# (connection 08, resources 53, operator 57, system 58, read-only 25006, a missing
+# table 42P01, privileges 42501, deadlock 40P01...) is the database's.
+_DATA_SQLSTATES = ("22", "23")
+
+
+def _sqlstate(error: DBAPIError) -> str | None:
+    original = error.orig
+    for source in (original, getattr(original, "__cause__", None)):
+        state = getattr(source, "sqlstate", None) or getattr(source, "pgcode", None)
+        if isinstance(state, str) and state:
+            return state
+    return None
+
+
+def refused_by_data(exc: BaseException) -> bool:
+    """Whether applying failed because of what an event holds (skip it) rather than
+    because of the database (hand the batch out again)."""
+    if isinstance(exc, DBAPIError):
+        state = _sqlstate(exc)
+        if state is not None:
+            return state[:2] in _DATA_SQLSTATES
+        # SQLite names no SQLSTATE: its locked, read-only, full or missing-table
+        # errors are OperationalError.
+        return isinstance(exc, IntegrityError | DataError)
+    # The pool, the connection, a timeout: the database's. Python's own errors while
+    # reading an event (ValueError, TypeError, OverflowError...): the event's.
+    return not isinstance(exc, SQLAlchemyError | OSError)
 
 
 def _as_api(work: Callable[[], Any]) -> Any:
@@ -146,16 +180,17 @@ class AnalyticsJobs:
         )
 
     def _rewind(self, records: list[Any]) -> None:
-        """Hand a batch out again: the cursor back before its first event, unless
-        another process read past the batch since (moving it back would skip what
-        that one read; ``heal`` replays both)."""
+        """Hand a batch out again: the cursor back before its first event, never
+        forward. Another process may have read past the batch since: what it read is
+        handed out again too, which applying (idempotent) makes harmless."""
         assert self._events is not None
         seqs = [s for s in (getattr(r, "_seq", None) for r in records) if isinstance(s, int)]
         if not seqs:
             return
         event_type = str(AnalyticsEventRecorded._class_uri)
-        if self._events.get_cursor(CONSUMER_ID, event_type) == max(seqs):
-            self._events.set_cursor(CONSUMER_ID, event_type, min(seqs) - 1)
+        target = min(seqs) - 1
+        if self._events.get_cursor(CONSUMER_ID, event_type) > target:
+            self._events.set_cursor(CONSUMER_ID, event_type, target)
 
     def _rewind_quietly(self, records: list[Any]) -> None:
         try:
@@ -184,10 +219,11 @@ class AnalyticsJobs:
     async def _apply_isolated(
         self, payloads: list[dict[str, Any]], *, apply: Apply | None = None, what: str = "event"
     ) -> tuple[int, list[int]]:
-        """Apply a batch of tracker payloads in one transaction; when it fails while the
-        database answers, apply them one by one and skip the ones that fail alone.
-        Returns how many were new and the indexes of the skipped ones; raises
-        ``Unavailable`` when the database does not answer (nothing is skipped then)."""
+        """Apply a batch of tracker payloads in one transaction; when it fails because
+        of an event (``refused_by_data``) while the database answers, apply them one by
+        one and skip the ones that fail alone. Returns how many were new and the
+        indexes of the skipped ones; raises ``Unavailable`` when the database is at
+        fault (down, read-only, full, a deadlock...): nothing is skipped then."""
         apply = apply or AnalyticsRollups.apply
         if not payloads:
             return 0, []
@@ -196,25 +232,20 @@ class AnalyticsJobs:
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 - told apart below
-            if not await self._database_answers():
-                raise Unavailable("the analytics database does not answer") from exc
+            await self._raise_unless_refused(exc)
             if len(payloads) > 1:
                 logger.info("[analytics] a batch of %d failed; applied one by one", len(payloads))
         applied, skipped = 0, []
         first_error: Exception | None = None
         for index, payload in enumerate(payloads):
-            for attempt in range(2):  # once more: a deadlock between processes passes
-                try:
-                    applied += await self._apply_in_session(apply, [payload])
-                    break
-                except asyncio.CancelledError:
-                    raise
-                except Exception as exc:  # noqa: BLE001 - told apart below
-                    if not await self._database_answers():
-                        raise Unavailable("the analytics database does not answer") from exc
-                    if attempt == 1:
-                        skipped.append(index)
-                        first_error = first_error or exc
+            try:
+                applied += await self._apply_in_session(apply, [payload])
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - told apart below
+                await self._raise_unless_refused(exc)
+                skipped.append(index)
+                first_error = first_error or exc
         if skipped:
             # One line per batch, however many: a flood of bad events is one warning.
             self.skipped_events += len(skipped)
@@ -234,6 +265,11 @@ class AnalyticsJobs:
                 self.skipped_events,
             )
         return applied, skipped
+
+    async def _raise_unless_refused(self, exc: Exception) -> None:
+        """``Unavailable`` unless ``exc`` is an event's fault and the database answers."""
+        if not refused_by_data(exc) or not await self._database_answers():
+            raise Unavailable("the analytics database cannot apply events now") from exc
 
     async def drain(self) -> int:
         """Apply what the log holds past the cursor; returns how many events were read."""

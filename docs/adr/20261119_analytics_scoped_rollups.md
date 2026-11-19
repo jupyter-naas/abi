@@ -94,8 +94,9 @@ the removal of the app and its object-storage files #1536.
    RETURNING`), so applying is idempotent. One consumer cursor of the EventService log
    (`nexus.analytics.rollups`, `iter_query_for_consumer`) feeds it from every API
    process (`analytics/jobs.py`, every 5 s): the cursor hands each batch to one process,
-   and a batch whose write fails is handed out again (cursor moved back unless another
-   process read past it), which the idempotence makes harmless. Every 10 minutes one
+   and a batch whose write fails is handed out again (cursor moved back before it, never
+   forward, even past what another process read since: re-reading is what the
+   idempotence makes harmless). Every 10 minutes one
    process replays the log's last six hours (`heal`), so a batch read by a process
    killed before writing it is counted after all (unless no heal succeeds for six
    hours, e.g. the Nexus database down that long). A deploy with no event log applies
@@ -105,10 +106,12 @@ the removal of the app and its object-storage files #1536.
    **No event can stall the consumer.** Reading is defensive (an unparseable or
    overflowing timestamp makes the event unreadable, skipped; control characters are
    removed from what is stored; nothing more than a day ahead is applied). And a batch
-   that fails while the database answers (`SELECT 1`) is applied again event by event,
-   each alone retried once: the events that still fail are skipped and logged, the
-   others applied, and the cursor moves on. Only when the database does not answer is
-   the batch handed out again. The heal and the backfill apply the same way. A step
+   that fails because of an event (a data error, SQLSTATE class 22 or 23, or Python's
+   own error reading it) while the database answers is applied again event by event:
+   the events that fail alone are skipped and logged, the others applied, and the
+   cursor moves on. A failure of the database itself (connection, read-only standby,
+   full disk, missing table or privilege, deadlock) skips nothing: the batch is handed
+   out again until it can be written. The heal and the backfill apply the same way. A step
    that keeps failing is logged when it starts, then every ten minutes with the count.
 
 7. **Reads** are one `GROUP BY` per figure over the rollups with
