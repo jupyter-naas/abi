@@ -280,15 +280,23 @@ async def test_a_failed_batch_is_handed_back_off_the_event_loop(
 
 @pytest.mark.asyncio
 async def test_the_legacy_files_are_deleted_once_after_the_backfill(sessions, events) -> None:
+    clock = {"now": NOW}
     legacy = FakeLegacy([payload("legacy")])
-    jobs = AnalyticsJobs(sessions, events=events, legacy=legacy)
+    jobs = AnalyticsJobs(sessions, events=events, legacy=legacy, now=lambda: clock["now"])
     assert await jobs.clean_legacy_storage() is None  # the backfill has not run
     assert legacy.deleted == 0
 
     assert await jobs.backfill() == 1
+    # A rolling deploy's old processes may still rewrite the aggregates for a while.
+    clock["now"] = NOW + jobs_module.LEGACY_CLEANUP_DELAY - timedelta(minutes=1)
+    assert await jobs.clean_legacy_storage() is None
+    assert legacy.deleted == 0
+    clock["now"] = NOW + jobs_module.LEGACY_CLEANUP_DELAY
     assert await jobs.clean_legacy_storage() == 1
     assert await jobs.clean_legacy_storage() is None  # recorded as done
-    other = AnalyticsJobs(sessions, events=events, legacy=FakeLegacy([payload("x")]))
+    other = AnalyticsJobs(
+        sessions, events=events, legacy=FakeLegacy([payload("x")]), now=lambda: clock["now"]
+    )
     assert await other.clean_legacy_storage() is None  # in every process
     assert legacy.deleted == 1
 
@@ -308,14 +316,16 @@ async def test_unreadable_legacy_files_are_neither_backfilled_nor_deleted(sessio
 
 @pytest.mark.asyncio
 async def test_a_cleanup_another_process_started_is_left_to_it(sessions, events) -> None:
+    later = NOW + jobs_module.LEGACY_CLEANUP_DELAY
     legacy = FakeLegacy([])
     jobs = AnalyticsJobs(sessions, events=events, legacy=legacy)
     assert await jobs.backfill() == 0
+    jobs = AnalyticsJobs(sessions, events=events, legacy=legacy, now=lambda: later)
     async with sessions() as db:
         port = jobs_module.AnalyticsSecondaryAdapterPostgresEvents(db)
         assert await port.claim_job(
             f"{jobs_module.LEGACY_CLEANUP_JOB}.running",
-            now=NOW.replace(tzinfo=None),
+            now=later.replace(tzinfo=None),
             every=3600,
         )
         await db.commit()

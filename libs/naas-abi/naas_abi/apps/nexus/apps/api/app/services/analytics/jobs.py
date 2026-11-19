@@ -9,9 +9,10 @@
   object-storage events hold of the last 45 days, the organization stamped from the
   workspace. Then the messages of the last 45 days get their facts
   (``MESSAGE_FACTS_JOB``).
-* **Legacy cleanup** (once, ``LEGACY_CLEANUP_JOB``, only after the backfill): the
-  removed analytics app's files under ``naas_abi/nexus/analytics/`` are deleted
-  (``legacy_storage``).
+* **Legacy cleanup** (once, ``LEGACY_CLEANUP_JOB``, ``LEGACY_CLEANUP_DELAY`` after the
+  backfill, asked at each upkeep): the removed analytics app's files under
+  ``naas_abi/nexus/analytics/`` are deleted (``legacy_storage``). The delay outlasts a
+  rolling deploy, whose old processes may still rewrite the app's aggregates.
 * **Heal** (every 10 minutes across processes): the log's last six hours are applied
   again, so a batch a killed process read but never wrote is counted after all.
 * **Purge** (daily across processes): the raw events past 45 days; the rollups stay.
@@ -55,6 +56,7 @@ DRAIN_SECONDS = 5.0
 BATCH = 500
 MESSAGE_FACTS_JOB = "message_facts_v1"
 LEGACY_CLEANUP_JOB = "legacy_storage_cleanup_v1"
+LEGACY_CLEANUP_DELAY = timedelta(minutes=30)
 HEAL_JOB = "heal_recent"
 HEAL_SECONDS = 600.0
 HEAL_WINDOW = timedelta(hours=6)
@@ -250,17 +252,20 @@ class AnalyticsJobs:
     # -- legacy cleanup ----------------------------------------------------------
 
     async def clean_legacy_storage(self) -> int | None:
-        """Once, after the backfill: delete the removed app's object-storage files
-        (its aggregates and raw events). How many objects went; None when there is
-        no object storage, the backfill is not done yet, the cleanup is done already
-        or another process is doing it."""
+        """Once, ``LEGACY_CLEANUP_DELAY`` after the backfill: delete the removed app's
+        object-storage files (its aggregates and raw events). The delay lets a rolling
+        deploy finish: its old processes rebuild the app's aggregates until they stop.
+        How many objects went; None when there is no object storage, the backfill is
+        not done or too recent, the cleanup is done already or another process is
+        doing it."""
         if self._legacy is None:
             return None
         async with self._sessions() as db:
             port = AnalyticsSecondaryAdapterPostgresEvents(db)
-            if await port.job_last_run(BACKFILL_JOB) is None:
-                return None
             if await port.job_last_run(LEGACY_CLEANUP_JOB) is not None:
+                return None
+            backfilled = await port.job_last_run(BACKFILL_JOB)
+            if backfilled is None or backfilled > self._naive_now() - LEGACY_CLEANUP_DELAY:
                 return None
             # One process at a time (another takes over an hour after one that died).
             claimed = await port.claim_job(
@@ -331,7 +336,6 @@ class AnalyticsJobs:
     async def run(self, *, every: float = DRAIN_SECONDS) -> None:
         await self._step("backfill", self.backfill)
         await self._step("message facts", self.index_messages)
-        await self._step("legacy cleanup", self.clean_legacy_storage)
         next_upkeep = 0.0
         while True:
             await self._step("rollups", self.drain)
@@ -340,6 +344,7 @@ class AnalyticsJobs:
                 # asks every few minutes, not every tick.
                 await self._step("heal", self.heal)
                 await self._step("purge", self.purge)
+                await self._step("legacy cleanup", self.clean_legacy_storage)
                 next_upkeep = time.monotonic() + UPKEEP_SECONDS
             await asyncio.sleep(every)
 
