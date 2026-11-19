@@ -47,7 +47,7 @@ from naas_abi.apps.nexus.apps.api.app.models import (
 )
 from naas_abi.apps.nexus.apps.api.app.services.iam import legacy_names
 from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_container, workspace_container
-from sqlalchemy import select
+from sqlalchemy import inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
@@ -522,12 +522,27 @@ async def _apply_declared_roles(
     a role of the new grammar next to its old twin would stop that move. Until it
     is recorded, under the moves' lock (read again under it), so another API
     process does not rewrite the names between the reading and the writing; once
-    it is, without: the record never goes."""
+    it is, without: the record never goes. An install with no ``iam_migrations``
+    table has nothing to move (container paths); when the record cannot be read,
+    that is logged and the roles are named as container paths too (IAM merges
+    twins at the move)."""
     from naas_abi.apps.nexus.apps.api.app.services.iam import container_names
 
     async def names_rewritten() -> bool:
-        async with AsyncSession(async_engine) as db:
-            return await container_names.recorded(db, container_names.MIGRATION_NAME)
+        try:
+            async with AsyncSession(async_engine) as db:
+                connection = await db.connection()
+                if not await connection.run_sync(
+                    lambda sync: inspect(sync).has_table("iam_migrations")
+                ):
+                    return True
+                return await container_names.recorded(db, container_names.MIGRATION_NAME)
+        except Exception:
+            logger.exception(
+                "Whether IAM's names are container paths could not be read: the configured "
+                "roles are named as container paths"
+            )
+            return True
 
     if await names_rewritten():
         await _attach_declared(scopes, roles, rewritten=True)
@@ -576,6 +591,7 @@ async def _attach_declared(
             continue
         by_scope.setdefault(scope, []).append((user_id, role, scope))
     granted = kept = 0
+    applied: set[str] = set()
     for scope, entries in by_scope.items():
         if scope in failed:
             continue
@@ -584,11 +600,26 @@ async def _attach_declared(
         except Exception:
             logger.exception("Configured roles at %s not applied in IAM", scope)
             continue
+        applied.add(scope)
         granted += changed
         kept += held
     if not rewritten:
-        # What ``seed`` mirrors below an organization, in the old grammar.
-        await run_in_threadpool(container_names.mirror_old_org_wide, runtime.iam())
+        # What ``seed`` mirrors below an organization, in the old grammar: the
+        # organizations' roles applied here hold the org-wide role they carry, and
+        # no other (a configured demotion takes the former one away).
+        try:
+            declared: dict[tuple[str, str], str | None] = {}
+            for user_id, role, org_id, workspace_id in dict.fromkeys(roles):
+                if workspace_id is not None or org_id is None:
+                    continue
+                if _role_scope(org_id, None, rewritten=False) in applied:
+                    declared[(await MEMBERSHIPS.principal_id(user_id), org_id)] = role
+            await run_in_threadpool(container_names.mirror_old_org_wide, runtime.iam(), declared)
+        except Exception:
+            logger.exception(
+                "The configured roles were applied, but their org-wide roles of the "
+                "grammar before container paths (abi:<org>:*) were not"
+            )
     logger.info("Configured memberships in IAM: %d changed, %d already held", granted, kept)
 
 

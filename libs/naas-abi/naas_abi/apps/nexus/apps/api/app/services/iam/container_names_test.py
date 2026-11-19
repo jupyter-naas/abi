@@ -584,6 +584,84 @@ async def test_twin_invitations_keep_their_grant_after_the_move(nexus_db, tmp_pa
 
 
 @pytest.mark.asyncio
+async def test_a_lost_merge_is_found_again_at_the_next_start(nexus_db, tmp_path, monkeypatch):
+    """The start that merged twin invitations' grants stops before its commit (the
+    invitations not moved, the move not recorded): IAM's merge is done and its map
+    is gone. The next start finds, from what IAM holds, the grant the invitation
+    lost, and records the move. An invitation whose grants cannot be read stops
+    nothing."""
+    from naas_abi.apps.nexus.apps.api.app.models import InvitationModel
+    from naas_abi.apps.nexus.apps.api.app.services.iam.memberships import MEMBERSHIPS
+    from naas_abi.apps.nexus.apps.api.app.services.invites.runtime import InvitationRuntime
+
+    world = LegacyNexusIam(store=IAMStoreSQLite(str(tmp_path / "iam.sqlite")))
+    email, provider = "ann@example.com", "builtin"
+
+    def pending_grant(scope: str) -> str:
+        with as_service_account("api"):
+            return str(world.iam.create_pending_grant(provider, email, "builtin.admin", scope).id)
+
+    def pending() -> set[str]:
+        with as_service_account("api"):
+            return {str(g.id) for g in world.iam.list_pending_grants(email=email)}
+
+    async with nexus_db() as db:
+        await _moves_stopped(db, world)
+        old = pending_grant("abi:org-1:-")
+        with world.installed():
+            await MEMBERSHIPS.register_org("org-1")
+        new = pending_grant(_ORG_1)
+        for invitation_id, grants in (
+            ("inv-before", json.dumps([old])),
+            ("inv-during", json.dumps([new])),
+            ("inv-broken", "not json"),
+        ):
+            db.add(
+                InvitationModel(
+                    id=invitation_id,
+                    email=email,
+                    provider=provider,
+                    organization_id="org-1",
+                    org_role="admin",
+                    grant_ids=grants,
+                )
+            )
+        await db.commit()
+        await _sets_moved(db)
+
+        async def stopped(*_args, **_kwargs):
+            raise RuntimeError("the start stopped")
+
+        monkeypatch.setattr(container_names, "remap_invitation_grants", stopped)
+        with world.installed():
+            assert await container_names.migrate_names(db) is None
+        assert pending() == {old}  # IAM merged the twins
+        assert not await container_names.recorded(db, container_names.MIGRATION_NAME)
+        assert container_names.pending()
+        monkeypatch.undo()
+
+        with world.installed():
+            report = await container_names.migrate_names(db)
+        assert report is not None
+        assert report.grants_merged == {}
+        assert report.counts["invitations_remapped"] == 1
+        assert await container_names.recorded(db, container_names.MIGRATION_NAME)
+        rows = (await db.execute(text("SELECT id, grant_ids FROM invitations ORDER BY id"))).all()
+        assert [(i, g) for i, g in rows] == [
+            ("inv-before", json.dumps([old])),
+            ("inv-broken", "not json"),
+            ("inv-during", json.dumps([old])),
+        ]
+
+        await db.execute(text("DELETE FROM invitations WHERE id = 'inv-broken'"))
+        await db.commit()
+        with world.installed():
+            service = InvitationRuntime(identity=lambda: None, iam=lambda: world.iam).service(db)
+            await service.revoke("inv-before")
+        assert pending() == {old}
+
+
+@pytest.mark.asyncio
 async def test_the_configured_roles_wait_in_the_old_grammar(nexus_db, monkeypatch):
     """The configuration's seeds run after the moves, stopped or not: while the
     names wait, the roles they declare are attached in the old grammar (an owner
@@ -615,6 +693,82 @@ async def test_the_configured_roles_wait_in_the_old_grammar(nexus_db, monkeypatc
             await org_seed._apply_declared_roles(declared_scopes, declared)
     root_new = {("u-root", policy, scope) for _u, policy, scope in _OWNER_NEW}
     assert {h for h in _held(world) if h[0] == "u-root" and h[2]} == root_new
+
+
+@pytest.mark.asyncio
+async def test_a_configured_demotion_takes_the_org_wide_role_away_while_the_names_wait(
+    nexus_db, monkeypatch
+):
+    """While the names wait, the configuration that made u-root org-1's owner
+    makes them a member: their owner role org-wide (``abi:org-1:*``), which the
+    moves read as reaching every workspace of org-1, goes with the owner role."""
+    from naas_abi.apps.nexus.apps.api.app.core import org_seed
+
+    world = LegacyNexusIam()
+    scopes = [("org-1", None)]
+    async with nexus_db() as db:
+        monkeypatch.setattr(org_seed, "async_engine", db.bind)
+        await _moves_stopped(db, world)
+        with world.installed():
+            await org_seed._apply_declared_roles(scopes, [("u-root", "owner", "org-1", None)])
+        assert {h for h in _held(world) if h[0] == "u-root" and h[2]} == {
+            ("u-root", "builtin.owner", "abi:org-1:-"),
+            ("u-root", "builtin.owner", "abi:org-1:*"),
+        }
+
+        with world.installed():
+            await org_seed._apply_declared_roles(scopes, [("u-root", "member", "org-1", None)])
+        assert {h for h in _held(world) if h[0] == "u-root" and h[2]} == {
+            ("u-root", "builtin.member", "abi:org-1:-"),
+        }
+        # Another owner of org-1 keeps theirs.
+        assert ("u-owner", "builtin.owner", "abi:org-1:*") in _held(world)
+
+
+@pytest.mark.asyncio
+async def test_the_configured_roles_are_applied_when_the_record_cannot_be_read(
+    nexus_db, tmp_path, monkeypatch, caplog
+):
+    """Where IAM's names are cannot be read: logged, and the configured roles are
+    named as container paths (IAM merges twins at the move), not dropped."""
+    from naas_abi.apps.nexus.apps.api.app.core import org_seed
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    world = LegacyNexusIam()
+    unreadable = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'no' / 'such.sqlite'}")
+    monkeypatch.setattr(org_seed, "async_engine", unreadable)
+    try:
+        with world.installed():
+            await org_seed._apply_declared_roles(
+                [("org-1", None)], [("u-root", "owner", "org-1", None)]
+            )
+    finally:
+        await unreadable.dispose()
+    assert "could not be read" in caplog.text
+    assert ("u-root", "builtin.owner", _ORG_1) in _held(world)
+
+
+@pytest.mark.asyncio
+async def test_a_failing_org_wide_mirror_keeps_the_configured_roles(nexus_db, monkeypatch, caplog):
+    """The old grammar's org-wide mirror fails after the roles were applied: that
+    is what is logged, and the summary still is."""
+    from naas_abi.apps.nexus.apps.api.app.core import org_seed
+
+    def broken(*_args, **_kwargs):
+        raise RuntimeError("IAM refused")
+
+    world = LegacyNexusIam()
+    async with nexus_db() as db:
+        monkeypatch.setattr(org_seed, "async_engine", db.bind)
+        await _moves_stopped(db, world)
+        monkeypatch.setattr(container_names, "mirror_old_org_wide", broken)
+        with caplog.at_level("INFO"), world.installed():
+            await org_seed._apply_declared_roles(
+                [("org-1", None)], [("u-root", "owner", "org-1", None)]
+            )
+    assert "org-wide roles of the grammar before container paths" in caplog.text
+    assert "Configured memberships in IAM: 1 changed" in caplog.text
+    assert ("u-root", "builtin.owner", "abi:org-1:-") in _held(world)
 
 
 def test_an_org_wide_mirror_missing_is_made_before_the_moves():
