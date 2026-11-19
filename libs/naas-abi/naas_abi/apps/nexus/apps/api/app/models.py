@@ -200,6 +200,11 @@ class UserModel(Base):
     # A deleted account (Platform Settings > Users): the row stays as the author of
     # what the person wrote, its email released (migration 0067, services/accounts).
     deleted_at = Column(DateTime(timezone=False), nullable=True)
+    # ``invited`` from the invitation that made the row (``services/people``) to the
+    # first sign-in, then ``active`` (migration 0074; older rows are ``active``).
+    status = Column(String(16), nullable=False, default="active", server_default="active")
+    # When the first sign-in activated an invited row.
+    activated_at = Column(DateTime(timezone=False), nullable=True)
 
     __table_args__ = (UniqueConstraint("idp_issuer", "idp_subject", name="uq_users_idp_identity"),)
 

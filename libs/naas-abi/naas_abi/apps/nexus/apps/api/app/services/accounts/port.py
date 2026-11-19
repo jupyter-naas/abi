@@ -9,7 +9,7 @@ the rows, the sessions and the invitations.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
@@ -52,9 +52,19 @@ class NexusUser:
     principal_id: str | None = None
     idp_provider: str | None = None
     idp_subject: str | None = None
+    # ``invited`` from the invitation that made the row to the first sign-in.
+    status: str = "active"
 
     @property
     def signed_in(self) -> bool:
+        """Active, with an identity: an invited row (bound or not) and a row of the
+        old login no provider signs in yet have not signed in."""
+        return self.status == "active" and self.idp_subject is not None
+
+    @property
+    def bound(self) -> bool:
+        """Bound to an identity at a provider (signed in, or invited with the account
+        the invitation made): a deleted account keeps that identity."""
         return self.idp_subject is not None
 
 
@@ -336,13 +346,33 @@ class IdentityGateway(ABC):
 
 
 class InvitationsGateway(ABC):
-    """Nexus's invitations (``services/invites``): the one way someone is invited."""
+    """Nexus's pending invitations (``services/invites``) of people who have no
+    account yet, from before an invitation made the account (``services/people``)."""
 
     @abstractmethod
     async def pending(self) -> list[PendingInvitation]: ...
 
     @abstractmethod
-    async def invite(
+    async def revoke(self, invitation_id: str) -> None: ...
+
+
+@dataclass(frozen=True)
+class Created:
+    """What inviting someone to the platform made: their account (``invited``)."""
+
+    user_id: str
+    # Whether the invitation made the account at the provider.
+    user_created: bool
+    sign_in_email_sent: bool
+    provisioning_skipped: bool
+    warning: str | None
+
+
+class PeopleGateway(ABC):
+    """The platform's people (``services/people``): the one way someone is invited."""
+
+    @abstractmethod
+    async def create(
         self,
         *,
         email: str,
@@ -350,9 +380,5 @@ class InvitationsGateway(ABC):
         provider: str | None,
         by: str,
         inviter_name: str | None,
-    ) -> Mapping[str, object]:
-        """The outcome: ``provider``, ``user_created``, ``sign_in_email_sent``,
-        ``provisioning_skipped``, ``renewed``, ``warning``."""
-
-    @abstractmethod
-    async def revoke(self, invitation_id: str) -> None: ...
+    ) -> Created:
+        """Make the person's account (``invited``), with no role."""

@@ -6,11 +6,13 @@
   the provider's client secret, which Nexus never holds.
 * **A user** is one Nexus row per ``(issuer, sub)``, whose id is its IAM
   principal id. Nothing is linked across providers: a verified email another
-  account holds refuses the sign-in. The one exception is the move of the old
-  built-in login's users: at the *built-in* provider, which proves an
-  address by mailing it a code, the verified email of a row no provider signs in
-  yet links the identity to that row and to its IAM user, which keeps its roles,
-  groups and data (``_link_legacy_user``).
+  account holds refuses the sign-in. Two exceptions bind a row no provider signs
+  in yet to the identity and to its IAM user, which keeps its roles, groups and
+  data (``_link_legacy_user``): the old built-in login's users, at the *built-in*
+  provider, which proves an address by mailing it a code; and someone invited
+  through a provider that made no account (``services/people``), at that provider.
+* **Activation**: a row an invitation made is ``invited`` until this first
+  sign-in makes it ``active``.
 * **The session** is a random secret in an httpOnly cookie; Nexus stores its
   SHA-256, the user, and the provider's refresh token, encrypted. The provider
   vouches for the user again at least every ten minutes (``refresh_at``); a
@@ -334,11 +336,20 @@ class OidcSignInService:
                     email = verified_email
             if email or name != existing.name:
                 await self.adapter.update_user(existing.id, email=email, name=name, now=now)
+            if existing.status == "invited":
+                # Invited with their identity known (the invitation made the
+                # account): this first sign-in makes them active.
+                await self.adapter.activate_user(existing.id, now=now)
+                existing = replace(existing, status="active")
             return existing, signed_in.principal_id
         if verified_email:
             legacy = await self.adapter.legacy_user_by_email(verified_email)
-            if legacy is not None and await self._is_builtin(provider):
-                return await self._link_legacy_user(legacy, signed_in, provider)
+            if legacy is not None and await self._may_bind(legacy, provider):
+                linked, principal_id = await self._link_legacy_user(legacy, signed_in, provider)
+                if linked.status == "invited":
+                    await self.adapter.activate_user(linked.id, now=now)
+                    linked = replace(linked, status="active")
+                return linked, principal_id
         if verified_email and await self.adapter.email_taken(verified_email):
             # Never linked automatically: an admin links accounts (iam:LinkUser).
             raise OidcLoginError(
@@ -363,6 +374,16 @@ class OidcSignInService:
                 "email_in_use", f"{verified_email} already belongs to another account"
             ) from exc
         return created, signed_in.principal_id
+
+    async def _may_bind(self, unbound: OidcUser, provider: str) -> bool:
+        """Whether this sign-in, with the row's email verified, takes a row no
+        provider signs in yet. Someone invited through a provider that made no
+        account (``provisioning: none``) is bound through that provider alone, the
+        trust IAM's pending grants have; a row of the old built-in login through
+        the built-in provider, which proves the address with a mailed code."""
+        if unbound.status == "invited":
+            return unbound.idp_provider == provider
+        return await self._is_builtin(provider)
 
     async def _is_builtin(self, provider: str) -> bool:
         """The built-in provider (``provisioning: builtin``) mails every sign-in
