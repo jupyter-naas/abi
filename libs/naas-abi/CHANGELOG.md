@@ -24,6 +24,80 @@
 
 <!-- version list -->
 
+## v6.0.0 (2026-11-19)
+
+### Bug Fixes
+
+- **files**: A navigation into the open view keeps its folder when the page mounts
+  ([`e54d26e`](https://github.com/jupyter-naas/abi/commit/e54d26ec0587ed03856ec281d62f170992a21fa4))
+
+- **files**: Back keeps the folder; URL follows Back/Forward, View-as and dotted folders
+  ([`65117ad`](https://github.com/jupyter-naas/abi/commit/65117ad82c05b1e40aaa7cd18e97f2312ddcd279))
+
+- **files**: Dropping a file uploads it instead of opening it; empty-state buttons follow the accent
+  ([`f80dc5c`](https://github.com/jupyter-naas/abi/commit/f80dc5c59a246664d5e20bd4866eb62d693d1be3))
+
+- **files**: Switching view after a tree, starred or link navigation lists the new view
+  ([`d3b0c1f`](https://github.com/jupyter-naas/abi/commit/d3b0c1fbe38c6b0d3f8debadc08d97603f512f3c))
+
+- **files**: The sidebar tree asks for a folder once, not once per effect
+  ([`0da2518`](https://github.com/jupyter-naas/abi/commit/0da2518d96dd19c891a248f8ecfa440d7d3fe511))
+
+- **files**: The sidebar tree drops its cache on a workspace switch only
+  ([`95d915a`](https://github.com/jupyter-naas/abi/commit/95d915ac4e7ab8f6baa552f4fbe89b2627176cac))
+
+### Chores
+
+- **web**: Restore runtime-config.js, committed by mistake in f80dc5c59
+  ([`c1c9d3b`](https://github.com/jupyter-naas/abi/commit/c1c9d3b32b1ec94d27b4685b80e5f6b702b1da83))
+
+### Documentation
+
+- **files**: Name the views My Files, Workspace Files... in agent text and docstrings
+  ([#1530](https://github.com/jupyter-naas/abi/pull/1530),
+  [`3354156`](https://github.com/jupyter-naas/abi/commit/3354156156cc0d5677dfd91d391a129c00ead965))
+
+### Features
+
+- **files**: Drive and View dropdowns, views renamed, synced folders removed
+  ([#1530](https://github.com/jupyter-naas/abi/pull/1530),
+  [`8c89e5b`](https://github.com/jupyter-naas/abi/commit/8c89e5b6e9537d5f82a2fca7779afd6adb13e0f7))
+
+- **files**: Drive and View pickers are the ontology picker, in the sidebar only
+  ([`8b6a06c`](https://github.com/jupyter-naas/abi/commit/8b6a06c6a8326df4124fc5fa134d50773866f3d5))
+
+- **files**: Starred above the tree; Files opens on All Views
+  ([`3d3ea47`](https://github.com/jupyter-naas/abi/commit/3d3ea471af484b2d66bf11d91ea9d855883e842e))
+
+- **files**: The dock and Home open Files on Workspace Files
+  ([#1530](https://github.com/jupyter-naas/abi/pull/1530),
+  [`8627979`](https://github.com/jupyter-naas/abi/commit/86279799c45eb8e199fafc6b6188db470525acf0))
+
+- **files**: The Files page keeps its state in the URL
+  ([`6502ca8`](https://github.com/jupyter-naas/abi/commit/6502ca838763f0a1dd00932909794866fd683076))
+
+- **files**: Views opened by IAM alone, workspace drive flags removed
+  ([#1529](https://github.com/jupyter-naas/abi/pull/1529),
+  [`fc44726`](https://github.com/jupyter-naas/abi/commit/fc44726a1f693c577a965d67b3c1377f10b4c672))
+
+- **settings**: Drives sits in Platform Settings › Administration
+  ([#1531](https://github.com/jupyter-naas/abi/pull/1531),
+  [`d65d546`](https://github.com/jupyter-naas/abi/commit/d65d546e5dfc1aa7010ca9c03c1321f5b7f3a1c3))
+
+- **settings**: Platform settings › Drives lists the storage backends
+  ([#1531](https://github.com/jupyter-naas/abi/pull/1531),
+  [`04fc0e2`](https://github.com/jupyter-naas/abi/commit/04fc0e266d6cf4dc1fa23b6df3e64a0b4b261670))
+
+- **workspaces**: /api/workspaces no longer answers organization_drive
+  ([#1530](https://github.com/jupyter-naas/abi/pull/1530),
+  [`47298ba`](https://github.com/jupyter-naas/abi/commit/47298ba3c01c260771834fe21befc3e06f80981a))
+
+### Testing
+
+- **files**: Generated canaries for the drives tests; views hook test mocks hasSession
+  ([`a01076e`](https://github.com/jupyter-naas/abi/commit/a01076e18c503d704c14d159e9fd8c9f5427f680))
+
+
 ## v5.0.2 (2026-11-19)
 
 ### Bug Fixes
