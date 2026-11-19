@@ -67,6 +67,25 @@ def publish(events: EventService, data: dict, *, organization: str | None = None
     )
 
 
+class FakeLegacy:
+    """The removed app's object-storage files: its raw events, and whether they went."""
+
+    def __init__(self, found: list[dict], *, readable: bool = True) -> None:
+        self.found = found
+        self.readable = readable
+        self.deleted = 0
+
+    def list_events(self) -> list[dict]:
+        if not self.readable:
+            raise ConnectionError("object storage unreachable")
+        return [dict(e) for e in self.found]
+
+    def delete_all(self) -> int:
+        self.deleted += 1
+        gone, self.found = len(self.found), []
+        return gone
+
+
 @pytest_asyncio.fixture
 async def sessions(tmp_path):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'nexus.sqlite'}")
@@ -142,7 +161,7 @@ async def test_the_backfill_replays_45_days_of_the_log_and_the_legacy_events_onc
         {**payload("logged")},  # also in the log: counted once
         {"not": "an event"},
     ]
-    jobs = AnalyticsJobs(sessions, events=events, legacy_events=lambda: legacy)
+    jobs = AnalyticsJobs(sessions, events=events, legacy=FakeLegacy(legacy))
     assert await jobs.backfill() == 2
     assert await jobs.backfill() is None  # recorded as done
 
@@ -157,7 +176,7 @@ async def test_the_backfill_replays_45_days_of_the_log_and_the_legacy_events_onc
 
 @pytest.mark.asyncio
 async def test_a_backfill_another_process_started_is_left_to_it(sessions, events) -> None:
-    first = AnalyticsJobs(sessions, events=events, legacy_events=lambda: [])
+    first = AnalyticsJobs(sessions, events=events, legacy=FakeLegacy([]))
     async with sessions() as db:
         from naas_abi.apps.nexus.apps.api.app.services.analytics.adapters.secondary.analytics__secondary_adapter__postgres import (  # noqa: E501
             AnalyticsSecondaryAdapterPostgresEvents,
@@ -192,7 +211,7 @@ async def test_the_purge_runs_daily_and_keeps_the_rollups(sessions) -> None:
 
 @pytest.mark.asyncio
 async def test_without_a_log_the_jobs_only_backfill_and_purge(sessions) -> None:
-    jobs = AnalyticsJobs(sessions, legacy_events=lambda: [payload("legacy")])
+    jobs = AnalyticsJobs(sessions, legacy=FakeLegacy([payload("legacy")]))
     assert await jobs.drain() == 0
     assert await jobs.backfill() == 1
     assert CONSUMER_ID == "nexus.analytics.rollups"
@@ -257,3 +276,55 @@ async def test_a_failed_batch_is_handed_back_off_the_event_loop(
     done = clock.monotonic()
     await ticker
     assert ticked and ticked[0] < done - 0.2
+
+
+@pytest.mark.asyncio
+async def test_the_legacy_files_are_deleted_once_after_the_backfill(sessions, events) -> None:
+    legacy = FakeLegacy([payload("legacy")])
+    jobs = AnalyticsJobs(sessions, events=events, legacy=legacy)
+    assert await jobs.clean_legacy_storage() is None  # the backfill has not run
+    assert legacy.deleted == 0
+
+    assert await jobs.backfill() == 1
+    assert await jobs.clean_legacy_storage() == 1
+    assert await jobs.clean_legacy_storage() is None  # recorded as done
+    other = AnalyticsJobs(sessions, events=events, legacy=FakeLegacy([payload("x")]))
+    assert await other.clean_legacy_storage() is None  # in every process
+    assert legacy.deleted == 1
+
+
+@pytest.mark.asyncio
+async def test_unreadable_legacy_files_are_neither_backfilled_nor_deleted(sessions, events) -> None:
+    legacy = FakeLegacy([payload("legacy")], readable=False)
+    jobs = AnalyticsJobs(sessions, events=events, legacy=legacy)
+    with pytest.raises(ConnectionError):
+        await jobs.backfill()
+    assert await jobs.clean_legacy_storage() is None
+    assert legacy.deleted == 0
+    async with sessions() as db:
+        port = jobs_module.AnalyticsSecondaryAdapterPostgresEvents(db)
+        assert await port.job_last_run(BACKFILL_JOB) is None
+
+
+@pytest.mark.asyncio
+async def test_a_cleanup_another_process_started_is_left_to_it(sessions, events) -> None:
+    legacy = FakeLegacy([])
+    jobs = AnalyticsJobs(sessions, events=events, legacy=legacy)
+    assert await jobs.backfill() == 0
+    async with sessions() as db:
+        port = jobs_module.AnalyticsSecondaryAdapterPostgresEvents(db)
+        assert await port.claim_job(
+            f"{jobs_module.LEGACY_CLEANUP_JOB}.running",
+            now=NOW.replace(tzinfo=None),
+            every=3600,
+        )
+        await db.commit()
+    assert await jobs.clean_legacy_storage() is None
+    assert legacy.deleted == 0
+
+
+@pytest.mark.asyncio
+async def test_without_object_storage_there_is_nothing_to_clean(sessions, events) -> None:
+    jobs = AnalyticsJobs(sessions, events=events)
+    assert await jobs.backfill() == 0
+    assert await jobs.clean_legacy_storage() is None
