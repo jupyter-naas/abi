@@ -81,7 +81,7 @@ describe('isValidExplorerEntryName', () => {
 describe('explorerDirKey', () => {
   it('joins source and normalized path', () => {
     expect(explorerDirKey('workspace', '/docs/')).toBe('workspace::docs');
-    expect(explorerDirKey('my-drive', '')).toBe('my-drive::');
+    expect(explorerDirKey('my-files', '')).toBe('my-files::');
   });
 });
 
@@ -136,7 +136,7 @@ describe('explorerEntries', () => {
 describe('isExplorerPathSelected', () => {
   it('requires matching source and path', () => {
     expect(isExplorerPathSelected('docs', 'docs', 'workspace', 'workspace')).toBe(true);
-    expect(isExplorerPathSelected('docs', 'docs', 'workspace', 'my-drive')).toBe(false);
+    expect(isExplorerPathSelected('docs', 'docs', 'workspace-files', 'my-files')).toBe(false);
     expect(isExplorerPathSelected('', '', 'workspace', 'workspace')).toBe(true);
     expect(
       isExplorerPathSelected('docs', 'naas_abi/workspace-drive/w/docs', 'workspace', 'workspace'),
@@ -149,7 +149,7 @@ describe('explorerListQuery', () => {
     expect(explorerListQuery('docs', 'workspace', 'ws-1')).toBe(
       'path=docs&scope=workspace&workspace_id=ws-1',
     );
-    expect(explorerListQuery('', 'my-drive', 'ws-1')).toBe('path=&scope=my_drive');
+    expect(explorerListQuery('', 'my-files', 'ws-1')).toBe('path=&scope=my_drive');
   });
 });
 
@@ -170,7 +170,7 @@ describe('filterExplorerEntriesByQuery', () => {
   ];
 
   it('returns folders then files when query is empty', () => {
-    expect(filterExplorerEntriesByQuery(root, '', 'my-drive', {}).map((f) => f.name)).toEqual([
+    expect(filterExplorerEntriesByQuery(root, '', 'my-files', {}).map((f) => f.name)).toEqual([
       'icon-check',
       'images',
       'notes.txt',
@@ -179,55 +179,55 @@ describe('filterExplorerEntriesByQuery', () => {
 
   it('filters by folder or file name without fetching', () => {
     expect(
-      filterExplorerEntriesByQuery(root, 'icon', 'my-drive', {}).map((f) => f.name),
+      filterExplorerEntriesByQuery(root, 'icon', 'my-files', {}).map((f) => f.name),
     ).toEqual(['icon-check']);
     expect(
-      filterExplorerEntriesByQuery(root, 'notes', 'my-drive', {}).map((f) => f.name),
+      filterExplorerEntriesByQuery(root, 'notes', 'my-files', {}).map((f) => f.name),
     ).toEqual(['notes.txt']);
   });
 
   it('keeps ancestors when a loaded descendant folder or file matches', () => {
     const cache = {
-      [explorerDirKey('my-drive', 'images')]: [
+      [explorerDirKey('my-files', 'images')]: [
         { name: 'icon-check', path: 'images/icon-check', type: 'folder' as const },
         { name: 'recent_events.json', path: 'images/recent_events.json', type: 'file' as const },
       ],
     };
     expect(
-      filterExplorerEntriesByQuery(root, 'icon-check', 'my-drive', cache).map((f) => f.name),
+      filterExplorerEntriesByQuery(root, 'icon-check', 'my-files', cache).map((f) => f.name),
     ).toEqual(['icon-check', 'images']);
     expect(
-      filterExplorerEntriesByQuery(root, 'recent_events', 'my-drive', cache).map((f) => f.name),
+      filterExplorerEntriesByQuery(root, 'recent_events', 'my-files', cache).map((f) => f.name),
     ).toEqual(['images']);
   });
 });
 
 describe('explorerLoadedSubtreeMatches', () => {
   it('only inspects cached listings and matches files', () => {
-    expect(explorerLoadedSubtreeMatches('my-drive', '', 'x', {})).toBe(false);
+    expect(explorerLoadedSubtreeMatches('my-files', '', 'x', {})).toBe(false);
     const cache = {
-      [explorerDirKey('my-drive', '')]: [
+      [explorerDirKey('my-files', '')]: [
         { name: 'images', path: 'images', type: 'folder' as const },
         { name: 'readme.md', path: 'readme.md', type: 'file' as const },
       ],
     };
-    expect(explorerLoadedSubtreeMatches('my-drive', '', 'images', cache)).toBe(true);
-    expect(explorerLoadedSubtreeMatches('my-drive', '', 'readme', cache)).toBe(true);
-    expect(explorerLoadedSubtreeMatches('my-drive', '', 'missing', cache)).toBe(false);
+    expect(explorerLoadedSubtreeMatches('my-files', '', 'images', cache)).toBe(true);
+    expect(explorerLoadedSubtreeMatches('my-files', '', 'readme', cache)).toBe(true);
+    expect(explorerLoadedSubtreeMatches('my-files', '', 'missing', cache)).toBe(false);
   });
 });
 
 describe('explorerDriveMatchesQuery', () => {
   it('matches drive label or loaded entry names', () => {
-    expect(explorerDriveMatchesQuery('My Drive', 'my-drive', 'my', {})).toBe(true);
-    expect(explorerDriveMatchesQuery('My Drive', 'my-drive', 'zzz', {})).toBe(false);
+    expect(explorerDriveMatchesQuery('My Files', 'my-files', 'my', {})).toBe(true);
+    expect(explorerDriveMatchesQuery('My Files', 'my-files', 'zzz', {})).toBe(false);
     const cache = {
-      [explorerDirKey('my-drive', '')]: [
+      [explorerDirKey('my-files', '')]: [
         { name: 'icon-check', path: 'icon-check', type: 'folder' as const },
         { name: 'notes.txt', path: 'notes.txt', type: 'file' as const },
       ],
     };
-    expect(explorerDriveMatchesQuery('My Drive', 'my-drive', 'icon', cache)).toBe(true);
-    expect(explorerDriveMatchesQuery('My Drive', 'my-drive', 'notes', cache)).toBe(true);
+    expect(explorerDriveMatchesQuery('My Files', 'my-files', 'icon', cache)).toBe(true);
+    expect(explorerDriveMatchesQuery('My Files', 'my-files', 'notes', cache)).toBe(true);
   });
 });

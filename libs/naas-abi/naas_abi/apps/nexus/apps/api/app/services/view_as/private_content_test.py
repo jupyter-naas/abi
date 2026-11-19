@@ -1,4 +1,4 @@
-"""What is private to the person stays private in a view: their conversations, My Drive,
+"""What is private to the person stays private in a view: their conversations, My Files,
 coding environments, workflow runs, the workspace's secrets and their personal API keys
 answer empty (or "not found" for one item) in a view, and answer as usual outside one.
 
@@ -152,7 +152,7 @@ async def test_a_persons_my_drive_is_private_to_them(full) -> None:
     for suffix in ("diary.md", "raw/diary.md", "preview/pdf/diary.md", "archive/diary.md"):
         route = f"/api/files/{suffix}?workspace_id={ALPHA}&scope=my_drive"
         assert (await root.get(route)).status_code == 404, suffix
-    # The workspace's own drive, shared with the person, is shown.
+    # The workspace's Workspace Files, shared with the person, is shown.
     shared = await root.get(f"/api/files/?workspace_id={ALPHA}")
     assert shared.status_code == 200
     assert "shared.md" in [f["name"] for f in shared.json()["files"]]
@@ -227,7 +227,7 @@ async def test_a_persons_personal_api_keys_are_private_to_them(full) -> None:
 
 @pytest.mark.asyncio
 async def test_the_system_drive_does_not_show_the_persons_my_drive_either(full) -> None:
-    """The system drive is the whole storage tree, My Drive and ``users/<id>`` included:
+    """System Files is the whole storage tree, My Files and ``users/<id>`` included:
     someone a policy gave System Files, viewed by a platform admin, must not have it
     read there."""
     with as_service_account("engine"):

@@ -128,7 +128,7 @@ async def test_the_kernel_reaches_a_workspaces_roles_to_its_drive_only(kernel, n
         kernel.put_object(f"{drive}/ws-1/docs", "b.txt", b"two")
         assert kernel.get_object(f"{drive}/ws-1", "a.txt") == b"one"
         assert "naas_abi/workspace-drive/ws-1/a.txt" in kernel.list_objects(f"{drive}/ws-1")
-        # The other workspace's drive is not its owner's, nor is a path that
+        # The other workspace's Workspace Files is not its owner's, nor is a path that
         # climbs out of this one.
         with pytest.raises(Exceptions.ObjectNotFound):
             kernel.get_object(f"{drive}/ws-2", "a.txt")
@@ -152,7 +152,7 @@ async def test_the_kernel_reaches_a_workspaces_roles_to_its_drive_only(kernel, n
         kernel.put_object(f"{drive}/ws-2", "own.txt", b"mine")
 
 
-# -- the organization drive ----------------------------------------------------
+# -- Organization Files --------------------------------------------------------
 
 
 def test_an_organization_places_its_drive_folder_and_everything_below() -> None:

@@ -159,7 +159,8 @@ export function explorerListQuery(
   const target = normalizeExplorerPath(path);
   const params = new URLSearchParams();
   params.set('path', target);
-  params.set('scope', scope);
+  // Only a view is listed: All Views is the views themselves.
+  if (scope) params.set('scope', scope);
   if (scope !== 'my_drive' && workspaceId) {
     params.set('workspace_id', workspaceId);
   }

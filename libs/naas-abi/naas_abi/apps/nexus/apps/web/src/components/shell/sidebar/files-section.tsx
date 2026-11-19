@@ -1,35 +1,27 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Building2,
-  ChevronRight,
-  File,
-  Files,
-  Folder,
-  HardDrive,
-  Search,
-  Server,
-  Star,
-  X,
-} from 'lucide-react';
+import { ChevronRight, File, Files, Folder, Search, Star, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-is-mobile';
-import { useFilesStore, type FileInfo, type SyncedFolder } from '@/stores/files';
+import { useFilesStore, type FileInfo } from '@/stores/files';
 import { authFetch, useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
 import { getApiUrl } from '@/lib/config';
-import { fileViewsPath, hasFileView, parseFileViews, type FileView } from '@/lib/file-views';
+import { useFileViewsStore, useOfferedFileViews } from '@/hooks/use-file-views';
 import { useConfirm, usePrompt } from '@/components/ui/dialogs';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
 import { filesBrowsePath } from '@/app/workspace/[workspaceId]/files/lib/files-route';
 import {
+  ALL_VIEWS,
   driveRootForSource,
-  isRemoteDriveSource,
-  organizationDriveLabel,
+  isFileViewSource,
+  type FileViewSource,
 } from '@/app/workspace/[workspaceId]/files/lib/drive-label';
+import { FilesViewPicker } from '@/app/workspace/[workspaceId]/files/components/files-view-picker';
+import { FileViewIcon } from '@/app/workspace/[workspaceId]/files/components/files-views-root';
 import { FILES_EXPLORER_REFRESH_EVENT } from '@/app/workspace/[workspaceId]/files/lib/explorer-refresh';
 import { isSystemPath, withoutSystemFiles } from '@/lib/system-files';
 import { shellTokens } from '../tokens';
@@ -51,36 +43,8 @@ import { useOntologyTreeKeyboard } from '@/hooks/use-ontology-tree-keyboard';
 
 const EXPLORER_ROW_TYPO = 'files-explorer-list-row';
 
-async function listLocalSyncedFolders(
-  folder: SyncedFolder,
-  subPath: string,
-): Promise<FileInfo[]> {
-  if (!folder.handle) {
-    throw new Error('Folder handle not available. Re-sync the folder.');
-  }
-  let targetHandle: FileSystemDirectoryHandle = folder.handle;
-  const parts = normalizeExplorerPath(subPath).split('/').filter(Boolean);
-  for (const part of parts) {
-    targetHandle = await targetHandle.getDirectoryHandle(part);
-  }
-  const files: FileInfo[] = [];
-  for await (const entry of (targetHandle as unknown as { values: () => AsyncIterableIterator<{ name: string; kind: string }> }).values()) {
-    files.push({
-      name: entry.name,
-      path: subPath ? `${normalizeExplorerPath(subPath)}/${entry.name}` : entry.name,
-      type: entry.kind === 'directory' ? 'folder' : 'file',
-      source: folder.id,
-    });
-  }
-  files.sort((a, b) => {
-    if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
-    return a.name.localeCompare(b.name);
-  });
-  return files;
-}
-
-/** Drives shown expanded when the sidebar opens or the workspace changes. */
-const DEFAULT_EXPANDED_DRIVES = ['workspace', 'my-drive'] as const;
+/** Under All Views, the views shown expanded when the sidebar opens or the workspace changes. */
+const DEFAULT_EXPANDED_VIEWS: readonly FileViewSource[] = ['workspace-files', 'my-files'];
 
 export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; detailOnly?: boolean }) {
   const router = useRouter();
@@ -92,29 +56,14 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const workspaces = useWorkspaceStore((state) => state.workspaces);
   const currentWorkspace = workspaces.find((w) => w.id === currentWorkspaceId) || null;
-  // Platform Files and System Files are listed to who IAM lets open them (GET /api/files/views).
-  const [fileViews, setFileViews] = useState<FileView[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    setFileViews([]);
-    authFetch(fileViewsPath(currentWorkspaceId))
-      .then((response) => (response.ok ? response.json() : null))
-      .then((body) => {
-        if (!cancelled) setFileViews(parseFileViews(body));
-      })
-      .catch(() => {
-        if (!cancelled) setFileViews([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [currentWorkspaceId]);
-  const platformDriveEnabled = hasFileView(fileViews, 'platform_files');
-  // The workspace's organization's drive, for who may open it (IAM, at the organization).
+  // The views the caller may open from this workspace (GET /api/files/views), under the chosen drive.
+  const {
+    status: viewsStatus,
+    views: fileViews,
+    folders: viewFolderList,
+  } = useOfferedFileViews(currentWorkspaceId);
+  // Organization Files is the current workspace's organization's.
   const organizationId = currentWorkspace?.organizationId;
-  const organizationDriveEnabled = Boolean(organizationId && currentWorkspace?.organizationDriveEnabled);
-  const organizationDriveName = organizationDriveLabel(currentWorkspace?.organizationName);
-  const systemDriveEnabled = hasFileView(fileViews, 'system_files');
   const [starredExpanded, setStarredExpanded] = useState(true);
   const [expandedDirs, setExpandedDirs] = useState<string[]>([]);
   const [rawFolderCache, setFolderCache] = useState<Record<string, FileInfo[]>>({});
@@ -137,13 +86,13 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
     [rawFolderCache, showSystemFiles],
   );
   const {
-    expandedCategories: fileExpandedCategories,
-    toggleCategory: toggleFileCategory,
     activeSource,
     setActiveSource,
-    syncedFolders,
+    viewChoice,
+    chooseView,
+    activeDrive,
+    chooseDrive,
     fetchFiles,
-    fetchLocalFiles,
     currentPath,
     starredItems,
     unstarItem,
@@ -167,13 +116,13 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
 
   /**
    * Map a storage path to the explorer cache key path.
-   * Drive roots are listed under `''`, not the absolute root prefix.
+   * View roots are listed under `''`, not the absolute root prefix.
    */
   const explorerLoadPath = useCallback(
     (source: string, path: string) => {
       const normalized = normalizeExplorerPath(path);
       if (!normalized) return '';
-      if (isRemoteDriveSource(source)) {
+      if (isFileViewSource(source)) {
         const root = driveRootForSource(source, currentWorkspaceId || '', authUserId, organizationId);
         if (root && normalized === normalizeExplorerPath(root)) return '';
       }
@@ -197,12 +146,9 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
       setLoadingDirs((prev) => ({ ...prev, [key]: true }));
       setDirErrors((prev) => ({ ...prev, [key]: null }));
       try {
-        const synced = syncedFolders.find((folder) => folder.id === source);
         let files: FileInfo[];
-        if (synced) {
-          files = await listLocalSyncedFolders(synced, path);
-        } else if (source === 'my-drive' && useAuthStore.getState().view) {
-          // The person's own drive: private in a view, nothing is asked for.
+        if (source === 'my-files' && useAuthStore.getState().view) {
+          // The person's own files: private in a view, nothing is asked for.
           files = [];
         } else {
           const query = explorerListQuery(path, source, currentWorkspaceId);
@@ -227,7 +173,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
         }
       }
     },
-    [currentWorkspaceId, syncedFolders],
+    [currentWorkspaceId],
   );
 
   const ensureExpanded = useCallback((source: string, path: string) => {
@@ -330,7 +276,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
   const handleRenameFolder = useCallback(
     async (source: string, folder: FileInfo) => {
       const folderPath = normalizeExplorerPath(folder.path);
-      // Drive roots are not rendered as tree rows; still guard empty paths.
+      // View roots are not rendered as tree rows; still guard empty paths.
       // System files are read-only.
       if (!folderPath || isSystemPath(folderPath)) return;
 
@@ -423,12 +369,10 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
     ],
   );
 
-  /** Move a canvas or explorer item onto a folder row (same drive only). */
+  /** Move a canvas or explorer item onto a folder row (same view only). */
   const handleMoveOntoFolder = useCallback(
     async (source: string, targetPath: string, draggedPath: string) => {
-      // Local synced folders have no rename API path here.
-      if (syncedFolders.some((folder) => folder.id === source)) return;
-      // renameFile uses activeSource scope; reject cross-drive drops.
+      // renameFile uses activeSource scope; reject cross-view drops.
       if (source !== activeSource) return;
 
       const from = normalizeExplorerPath(draggedPath);
@@ -460,14 +404,14 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
       purgeExplorerSubtree,
       renameFile,
       setStarredNavigation,
-      syncedFolders,
     ],
   );
 
-  const openRemoteDrive = async (sourceId: string) => {
-    setActiveSource(sourceId);
-    ensureExpanded(sourceId, '');
-    void loadDir(sourceId, '', { force: true });
+  /** Open a view's root in the browser (a view row of All Views). */
+  const openView = async (source: FileViewSource) => {
+    setActiveSource(source);
+    ensureExpanded(source, '');
+    void loadDir(source, '', { force: true });
     await fetchFiles('', {
       limit: 50,
       offset: 0,
@@ -477,53 +421,49 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
     openFilesBrowser();
   };
 
-  const openSyncedDrive = async (folderId: string) => {
-    setActiveSource(folderId);
-    ensureExpanded(folderId, '');
-    void loadDir(folderId, '', { force: true });
-    await fetchLocalFiles(folderId);
-    openFilesBrowser();
-  };
-
-  const isRemoteDrive = isRemoteDriveSource(activeSource);
-  const driveRoot = isRemoteDrive
-    ? driveRootForSource(activeSource, currentWorkspaceId || '', authUserId, organizationId)
+  const activeView = isFileViewSource(activeSource) ? activeSource : null;
+  const driveRoot = activeView
+    ? driveRootForSource(activeView, currentWorkspaceId || '', authUserId, organizationId)
     : '';
 
-  // Keep the active drive expanded and open ancestor dirs so the current folder is visible.
+  // Keep the open view expanded and open ancestor dirs so the current folder is visible.
   useEffect(() => {
-    if (!activeSource) return;
-    const dirsToOpen = isRemoteDrive
-      ? explorerDirsToOpen(currentPath, driveRoot)
-      : explorerDirsToOpen(currentPath, '');
-    for (const dir of dirsToOpen) {
-      ensureExpanded(activeSource, dir);
-      void loadDir(activeSource, dir);
+    if (!activeView) return;
+    for (const dir of explorerDirsToOpen(currentPath, driveRoot)) {
+      ensureExpanded(activeView, dir);
+      void loadDir(activeView, dir);
     }
-  }, [activeSource, currentPath, driveRoot, ensureExpanded, isRemoteDrive, loadDir]);
+  }, [activeView, currentPath, driveRoot, ensureExpanded, loadDir]);
 
-  // Drop explorer cache when the workspace changes; the default drives start expanded.
+  // Drop explorer cache when the workspace changes; the default views start expanded.
   useEffect(() => {
     loadGeneration.current += 1;
     folderCacheRef.current = {};
     setFolderCache({});
     setLoadingDirs({});
     setDirErrors({});
-    setExpandedDirs(DEFAULT_EXPANDED_DRIVES.map((sourceId) => explorerDirKey(sourceId, '')));
+    setExpandedDirs(DEFAULT_EXPANDED_VIEWS.map((source) => explorerDirKey(source, '')));
     setExplorerQuery('');
   }, [currentWorkspaceId]);
 
-  // List the default expanded drives, so they open with their content (cached loads are skipped).
+  // List what opens expanded (cached loads are skipped): under All Views the default
+  // views the caller may open, else the chosen view's root.
   useEffect(() => {
     if (!currentWorkspaceId) return;
-    for (const sourceId of DEFAULT_EXPANDED_DRIVES) {
-      void loadDir(sourceId, '');
+    if (isFileViewSource(viewChoice)) {
+      void loadDir(viewChoice, '');
+      return;
     }
-  }, [currentWorkspaceId, loadDir]);
+    for (const source of DEFAULT_EXPANDED_VIEWS) {
+      if (viewFolderList.some((folder) => folder.source === source)) void loadDir(source, '');
+    }
+  }, [currentWorkspaceId, loadDir, viewChoice, viewFolderList]);
 
   // File → Refresh (TopNav) refreshes the page listing; the tree reloads here.
   const reloadTreeRef = useRef<() => void>(() => {});
   reloadTreeRef.current = () => {
+    // Which views are open is asked again too (a policy may have changed).
+    void useFileViewsStore.getState().load(currentWorkspaceId ?? '', { force: true });
     loadGeneration.current += 1;
     folderCacheRef.current = {};
     setFolderCache({});
@@ -543,34 +483,49 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
     return () => window.removeEventListener(FILES_EXPLORER_REFRESH_EVENT, onRefresh);
   }, []);
 
-  const driveExpanded = (sourceId: string) =>
-    expandedDirs.includes(explorerDirKey(sourceId, ''));
+  const viewExpanded = (source: string) =>
+    expandedDirs.includes(explorerDirKey(source, ''));
 
-  const renderDriveRow = (
-    sourceId: string,
-    label: string,
-    icon: React.ReactNode,
-    onOpen: () => void,
-    title?: string,
-  ) => {
+  const renderTree = (source: FileViewSource, depth: number) => (
+    <FilesExplorerTree
+      source={source}
+      parentPath=""
+      depth={depth}
+      folderCache={folderCache}
+      loadingDirs={loadingDirs}
+      dirErrors={dirErrors}
+      expandedDirs={expandedDirs}
+      activeSource={activeSource}
+      currentPath={currentPath}
+      query={explorerQuery}
+      canDragFolders
+      onToggleDir={toggleDir}
+      onOpenFolder={openFolder}
+      onOpenFile={openFile}
+      onRenameFolder={handleRenameFolder}
+      onDeleteFolder={handleDeleteFolder}
+      onMoveOntoFolder={handleMoveOntoFolder}
+      rowPadClass={rowPadClass}
+      iconSize={iconSize}
+    />
+  );
+
+  /** One folder of All Views: the view's name, its tree below. */
+  const renderViewRow = (sourceId: FileViewSource, label: string) => {
     if (!explorerDriveMatchesQuery(label, sourceId, explorerQuery, folderCache)) {
       return null;
     }
     const labelMatch = matchesExplorerQuery(label, explorerQuery);
     const expanded =
-      driveExpanded(sourceId)
+      viewExpanded(sourceId)
       || (filtering && !labelMatch);
-    const driveActive = activeSource === sourceId;
-    const sourceRoot = isRemoteDriveSource(sourceId)
-      ? driveRootForSource(sourceId, currentWorkspaceId || '', authUserId, organizationId)
-      : '';
+    const viewActive = activeSource === sourceId;
+    const sourceRoot = driveRootForSource(sourceId, currentWorkspaceId || '', authUserId, organizationId);
     const normalizedCurrent = normalizeExplorerPath(currentPath);
     const atRoot =
-      driveActive
+      viewActive
       && (normalizedCurrent === ''
         || (sourceRoot !== '' && normalizedCurrent === sourceRoot));
-    // Drive-root rows are not real folders; only nested tree rows accept drops.
-    const canDragFolders = !syncedFolders.some((folder) => folder.id === sourceId);
     return (
       <div key={sourceId} data-ontology-tree-row className="space-y-0.5">
         <div className="flex items-center">
@@ -589,50 +544,30 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
           </button>
           <button
             type="button"
-            title={title || label}
+            title={label}
             aria-current={atRoot ? 'page' : undefined}
-            data-ontology-tree-item={`drive:${sourceId}`}
+            data-ontology-tree-item={`view:${sourceId}`}
             data-ontology-tree-select
-            data-testid="files-explorer-drive"
-            onClick={onOpen}
+            data-testid="files-explorer-view"
+            onClick={() => {
+              void openView(sourceId);
+            }}
             className={cn(
               'flex min-w-0 flex-1 items-center gap-1 rounded-md transition-colors',
               rowPadClass,
               EXPLORER_ROW_TYPO,
               'hover:bg-workspace-accent-10',
-              driveActive && 'bg-workspace-accent-15 text-workspace-accent',
+              viewActive && 'bg-workspace-accent-15 text-workspace-accent',
             )}
           >
-            {icon}
+            <FileViewIcon source={sourceId} size={iconSize} className="flex-shrink-0 text-muted-foreground" />
             <span className="flex-1 truncate text-left">{label}</span>
             {isMobilePanel && (
               <ChevronRight size={18} className="flex-shrink-0 text-muted-foreground" />
             )}
           </button>
         </div>
-        {expanded ? (
-          <FilesExplorerTree
-            source={sourceId}
-            parentPath=""
-            depth={1}
-            folderCache={folderCache}
-            loadingDirs={loadingDirs}
-            dirErrors={dirErrors}
-            expandedDirs={expandedDirs}
-            activeSource={activeSource}
-            currentPath={currentPath}
-            query={explorerQuery}
-            canDragFolders={canDragFolders}
-            onToggleDir={toggleDir}
-            onOpenFolder={openFolder}
-            onOpenFile={openFile}
-            onRenameFolder={handleRenameFolder}
-            onDeleteFolder={handleDeleteFolder}
-            onMoveOntoFolder={handleMoveOntoFolder}
-            rowPadClass={rowPadClass}
-            iconSize={iconSize}
-          />
-        ) : null}
+        {expanded ? renderTree(sourceId, 1) : null}
       </div>
     );
   };
@@ -650,6 +585,14 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
       collapsed={collapsed}
       detailOnly={detailOnly}
     >
+      <FilesViewPicker
+        views={fileViews}
+        drive={activeDrive}
+        view={viewChoice}
+        onDriveChange={chooseDrive}
+        onViewChange={chooseView}
+        compact
+      />
       <label className="relative mb-1.5 block px-0.5">
         <Search size={13} className="absolute left-2.5 top-2.5 text-muted-foreground" />
         <input
@@ -720,93 +663,15 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
           toggle.click();
         }}
       >
-        <button
-          type="button"
-          onClick={() => toggleFileCategory('local')}
-          className={cn(
-            'flex w-full items-center gap-1 rounded-md px-1 py-1 hover:text-foreground',
-            shellTokens.sidebar.sectionLabel,
-          )}
-        >
-          <ChevronRight
-            size={12}
-            className={cn(
-              'transition-transform',
-              fileExpandedCategories.includes('local') && 'rotate-90',
-            )}
-          />
-          <span className="flex-1 truncate text-left">Drives</span>
-          <span className="text-[10px]">
-            {2
-              + (platformDriveEnabled ? 1 : 0)
-              + (organizationDriveEnabled ? 1 : 0)
-              + (systemDriveEnabled ? 1 : 0)
-              + syncedFolders.length}
-          </span>
-        </button>
-
-        {fileExpandedCategories.includes('local') && (
-          <div className="ml-1 space-y-0.5">
-            {systemDriveEnabled
-              ? renderDriveRow(
-                  'system-drive',
-                  'System Drive',
-                  <Server size={iconSize} className="text-muted-foreground" />,
-                  () => {
-                    void openRemoteDrive('system-drive');
-                  },
-                  'Full object storage tree, for platform admins',
-                )
-              : null}
-            {platformDriveEnabled
-              ? renderDriveRow(
-                  'platform-drive',
-                  'Platform Drive',
-                  <HardDrive size={iconSize} className="text-muted-foreground" />,
-                  () => {
-                    void openRemoteDrive('platform-drive');
-                  },
-                  'Files shared across the platform, opened by an access policy',
-                )
-              : null}
-            {organizationDriveEnabled
-              ? renderDriveRow(
-                  'organization-drive',
-                  organizationDriveName,
-                  <Building2 size={iconSize} className="text-muted-foreground" />,
-                  () => {
-                    void openRemoteDrive('organization-drive');
-                  },
-                  `Files of ${organizationDriveName}, shared across its workspaces`,
-                )
-              : null}
-            {renderDriveRow(
-              'workspace',
-              'Workspace Drive',
-              <HardDrive size={iconSize} className="text-muted-foreground" />,
-              () => {
-                void openRemoteDrive('workspace');
-              },
-            )}
-            {renderDriveRow(
-              'my-drive',
-              'My Drive',
-              <HardDrive size={iconSize} className="text-muted-foreground" />,
-              () => {
-                void openRemoteDrive('my-drive');
-              },
-            )}
-            {syncedFolders.map((folder) =>
-              renderDriveRow(
-                folder.id,
-                folder.name,
-                <Folder size={iconSize} className="text-muted-foreground" />,
-                () => {
-                  void openSyncedDrive(folder.id);
-                },
-                folder.name,
-              ),
-            )}
+        {isFileViewSource(viewChoice) ? (
+          renderTree(viewChoice, 0)
+        ) : viewFolderList.length === 0 ? (
+          <p className={cn('px-2 py-1 text-muted-foreground', EXPLORER_ROW_TYPO)} role="status">
+            {viewsStatus === 'loading' ? 'Loading…' : 'No view of the files is open to you here.'}
+          </p>
+        ) : (
+          <div className="space-y-0.5">
+            {viewFolderList.map((folder) => renderViewRow(folder.source, folder.label))}
           </div>
         )}
 

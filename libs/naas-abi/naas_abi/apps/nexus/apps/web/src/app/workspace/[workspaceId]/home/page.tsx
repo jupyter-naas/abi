@@ -34,7 +34,7 @@ export default function HomePage() {
   const canEditBackground = workspace?.currentUserRole === 'owner' || workspace?.currentUserRole === 'admin';
   const [backgroundDialogOpen, setBackgroundDialogOpen] = useState(false);
   const themeBackgroundUrl = resolveDeskImageUrl(theme?.backgroundImageUrl);
-  // The file lives in the workspace drive (.home). The theme URL is only the
+  // The file lives in Workspace Files (.home). The theme URL is only the
   // pointer, and a restart used to clear it. When it is missing, ask the API
   // for the committed file and put the pointer back.
   const [driveBackgroundUrl, setDriveBackgroundUrl] = useState<string | undefined>();
@@ -67,7 +67,7 @@ export default function HomePage() {
   const apps = useAppsStore((s) => s.apps);
   const starredItems = useFilesStore((s) => s.starredItems);
   const setStarredNavigation = useFilesStore((s) => s.setStarredNavigation);
-  const setActiveSource = useFilesStore((s) => s.setActiveSource);
+  const openFilesEntry = useFilesStore((s) => s.openFilesEntry);
 
   useEffect(() => {
     if (currentWorkspaceId) void fetchApps(currentWorkspaceId);
@@ -81,10 +81,10 @@ export default function HomePage() {
     (section: DeskSurfaceId) => {
       if (!currentWorkspaceId) return;
       setActivePanelSection(section);
-      if (section === 'files') setActiveSource('my-drive');
+      if (section === 'files') openFilesEntry(); // Workspace Files, else All Views
       router.push(getWorkspacePath(currentWorkspaceId, `/${section}`));
     },
-    [currentWorkspaceId, router, setActivePanelSection, setActiveSource],
+    [currentWorkspaceId, router, setActivePanelSection, openFilesEntry],
   );
 
   const openApp = useCallback(

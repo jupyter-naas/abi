@@ -66,7 +66,7 @@ ACTIONS = (
     action("GetSystemFile", "admin", "file", feature="files", description=_DEPRECATED),
     action("PutSystemFile", "admin", "file", feature="files", description=_DEPRECATED),
     action("DeleteSystemFile", "admin", "file", feature="files", description=_DEPRECATED),
-    # The organization drive, decided at the organization: read by its viewers and
+    # Organization Files, decided at the organization: read by its viewers and
     # up, written by its admins and owners (more through a policy there). The
     # ``files`` feature is the workspace's it is reached through (the route's).
     action("ListOrgFiles", "list", "file", feature="files"),
@@ -122,7 +122,7 @@ ACTIONS = (
     action("WriteRootStorage", "admin", "root_storage"),
 )
 
-# A user's own drive and storage: read by viewers, written by members.
+# A user's My Files and storage: read by viewers, written by members.
 PLATFORM_ACCESS = (
     PlatformAccess(
         ("my_file/${principal.id}", "my_file/${principal.id}/*"),

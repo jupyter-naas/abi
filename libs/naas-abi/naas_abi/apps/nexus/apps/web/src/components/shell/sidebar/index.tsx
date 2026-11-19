@@ -129,7 +129,7 @@ export function Sidebar() {
   const setDockWidth = useWorkspaceStore((s) => s.setDockWidth);
 
   const fetchFiles = useFilesStore((s) => s.fetchFiles);
-  const setActiveSource = useFilesStore((s) => s.setActiveSource);
+  const openFilesEntry = useFilesStore((s) => s.openFilesEntry);
   const fetchOntology = useOntologyStore((s) => s.fetchItems);
 
   const canMaps = useFeature('maps');
@@ -370,7 +370,7 @@ export function Sidebar() {
       showPanel(null);
       return;
     }
-    if (section.id === 'files') setActiveSource('my-drive');
+    if (section.id === 'files') openFilesEntry(); // Workspace Files, else All Views
     prefetchSectionPanel(section.id);
     if (navigates) {
       navigate();

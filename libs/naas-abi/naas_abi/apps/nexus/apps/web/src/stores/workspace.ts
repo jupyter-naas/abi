@@ -166,8 +166,6 @@ export interface Workspace {
   organizationSlug?: string;
   /** The organization's own square logo (the Workspaces list's headings). */
   organizationLogoUrl?: string;
-  /** Whether the user may open the organization's drive (Files sidebar). */
-  organizationDriveEnabled?: boolean;
   ownerId?: string;
   icon?: string;
   color?: string;
@@ -1446,7 +1444,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         organizationName: ws.organization_name || undefined,
         organizationSlug: ws.organization_slug || undefined,
         organizationLogoUrl: normalize(ws.organization_logo_url),
-        organizationDriveEnabled: Boolean(ws.organization_drive),
         ownerId: ws.owner_id || undefined,
         icon: ws.icon || ws.logo_emoji,
         color: ws.color,

@@ -49,7 +49,9 @@ class TestWorkspaceMembers:
 
 
 class TestWorkspaceInferenceServers:
-    @pytest.mark.skip(reason="clearing an inference server's api_key with \"\" never worked: the update treats it as no change (unrelated to authorization)")
+    @pytest.mark.skip(
+        reason='clearing an inference server\'s api_key with "" never worked: the update treats it as no change (unrelated to authorization)'
+    )
     async def test_inference_server_crud(self, client, test_user, test_workspace):
         create_response = await client.post(
             f"/api/workspaces/{test_workspace['id']}/servers",
@@ -112,7 +114,7 @@ class TestWorkspaceLogoUpload:
     async def test_upload_logo_updates_workspace(
         self, client, test_user, test_workspace, monkeypatch
     ):
-        # The logo is kept in the workspace drive (logo_store): an in-memory store
+        # The logo is kept in Workspace Files (logo_store): an in-memory store
         # stands in for the engine's object storage.
         monkeypatch.setattr(app.state, "object_storage", MemoryStorage(), raising=False)
         upload_response = await client.post(

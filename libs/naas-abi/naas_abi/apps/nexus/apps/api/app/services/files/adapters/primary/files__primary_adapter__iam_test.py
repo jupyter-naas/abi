@@ -1,5 +1,5 @@
 """The files router decides with IAM alone: viewers read, members write, nobody leaves
-their workspace's drive, Platform Files is nobody's until a policy grants it and
+their workspace's Workspace Files, Platform Files is nobody's until a policy grants it and
 System Files is the platform admin's.
 
 The real router over a real IAM (``team``: ``ws-1`` of ``org-1`` with an owner, an
@@ -276,7 +276,7 @@ async def test_my_drive_is_the_callers_own(client, storage) -> None:
         assert (await http.get("/api/files/mine.md", params=mine)).json()["content"] == "# viewer's"
         body = {"path": "x.md", "content": "x", "scope": "my_drive"}
         assert (await http.post("/api/files/", json=body)).status_code == 403
-        # Another user's drive is never reachable by path: it lands inside the caller's own.
+        # Another user's My Files is never reachable by path: it lands inside the caller's own.
         other = "naas_abi/my-drive/member/mine.md"
         assert (await http.get(f"/api/files/{other}", params=mine)).status_code == 404
     async with client("member") as http:
@@ -314,7 +314,7 @@ async def test_a_role_without_the_files_feature_is_refused(storage) -> None:
             assert (await http.get("/api/files/readme.md", params=ws())).status_code == 200
 
 
-# -- The organization drive ------------------------------------------------------
+# -- Organization Files ----------------------------------------------------------
 
 ORG1 = "naas_abi/organization-drive/org-1"
 ORG2 = "naas_abi/organization-drive/org-2"
@@ -388,7 +388,7 @@ async def test_a_workspace_reaches_its_own_organizations_drive_alone(
     team.grant("other", "member", other)
     team.grant("other", "member", team.org("org-2"))
     async with client("other") as http:
-        # Its own organization's drive.
+        # Its own organization's Organization Files.
         own = await http.get("/api/files/secret.md", params=org(workspace_id="ws-2"))
         assert own.json()["content"] == "# org-2"
         # Not org-1's, through org-1's workspace...

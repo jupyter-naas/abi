@@ -7,8 +7,15 @@
  * Query params stay inside the authenticated Files UI. Storage keys are not
  * HTTP routes:
  *
- *   ?source=platform-drive&path=shared/docs/deck.pptx
+ *   ?source=platform-files&path=shared/docs/deck.pptx
+ *
+ * `source` is a view (`my-files`, `workspace-files`, `organization-files`,
+ * `platform-files`, `system-files`) or `all`; the old drive sources (`my-drive`,
+ * `workspace`, `organization-drive`, `platform-drive`, `system-drive`) still open
+ * the view they became.
  */
+
+import { filesSourceFrom, type FilesSource } from './drive-label';
 
 export const FILES_BROWSE_SLUG = 'browse';
 
@@ -54,7 +61,7 @@ export function filesBrowseHref(
 
 const STORAGE_ROOT_PREFIXES = ['naas_abi/platform-drive/', 'platform-drive/'];
 
-/** Strip storage-root prefixes so Files can fetch a drive-relative path. */
+/** Strip storage-root prefixes so Files can fetch a view-relative path. */
 export function stripPlatformDrivePrefix(path: string): string {
   let normalized = path.replace(/^\/+|\/+$/g, '');
   for (const prefix of STORAGE_ROOT_PREFIXES) {
@@ -67,15 +74,15 @@ export function stripPlatformDrivePrefix(path: string): string {
 }
 
 export interface FilesDeepLink {
-  source: string | null;
+  source: FilesSource | null;
   path: string | null;
 }
 
-/** Read `?source=&path=` from a Files URL (drive + path inside that drive). */
+/** Read `?source=&path=` from a Files URL (view + path inside that view). */
 export function parseFilesDeepLink(search: string | null | undefined): FilesDeepLink {
   if (!search) return { source: null, path: null };
   const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
-  const source = (params.get('source') ?? '').trim() || null;
+  const source = filesSourceFrom(params.get('source'));
   const rawPath = (params.get('path') ?? '').trim();
   const path = rawPath ? stripPlatformDrivePrefix(rawPath) : null;
   return { source, path };
@@ -88,7 +95,7 @@ export function hasFilesDeepLink(search: string | null | undefined): boolean {
 
 /**
  * Split a deep-link path into the folder to list and an optional file to preview.
- * `previewPath` stays drive-relative; the browse page matches listed FileInfo paths.
+ * `previewPath` stays view-relative; the browse page matches listed FileInfo paths.
  */
 export function filesDeepLinkFolderAndPreview(path: string): {
   folderPath: string;
@@ -106,7 +113,7 @@ export function filesDeepLinkFolderAndPreview(path: string): {
   };
 }
 
-/** Find a listed row for a drive-relative or storage-root preview path. */
+/** Find a listed row for a view-relative or storage-root preview path. */
 export function matchListedFile<T extends { path: string; name: string }>(
   files: T[],
   previewPath: string,

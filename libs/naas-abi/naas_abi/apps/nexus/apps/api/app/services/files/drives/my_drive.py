@@ -1,8 +1,8 @@
-"""Set up every user's My Drive: ``.manifest.json`` and the default folders.
+"""Set up every user's My Files folder: ``.manifest.json`` and the default folders.
 
 ``naas_abi/my-drive/<user_id>/`` gets:
 
-- ``.manifest.json``, describing the user the drive belongs to, so it can be
+- ``.manifest.json``, describing the user the folder belongs to, so it can be
   identified from object storage alone. It is rewritten when a field it holds
   (name, email) changes.
 - ``downloads/``, ``documents/`` and ``uploads/`` (where chat attachments land).

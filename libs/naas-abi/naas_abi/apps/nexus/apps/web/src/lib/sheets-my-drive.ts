@@ -1,7 +1,7 @@
 import { parseFastApiDetail } from '@/lib/create-sheets-project';
 import { authFetch } from '@/stores/auth';
 
-/** User-relative folder in My Drive. The files API prefixes `naas_abi/my-drive/<user_id>/`. */
+/** User-relative folder in My Files. The files API prefixes `naas_abi/my-drive/<user_id>/`. */
 export function myDriveSheetsDir(slug: string): string {
   return `sheets/${slug}`;
 }
@@ -20,14 +20,14 @@ const INFRA_RE =
 /** Short File/status error. Never surface storage internals. */
 export function myDriveCopyErrorMessage(detail: unknown, status: number): string {
   if (status === 401 || status === 403 || status >= 500 || status === 0) {
-    return 'My Drive is unavailable.';
+    return 'My Files is unavailable.';
   }
   if (status === 413) {
-    return 'Workbook is too large for My Drive.';
+    return 'Workbook is too large for My Files.';
   }
   const raw = parseFastApiDetail(detail);
   if (!raw || INFRA_RE.test(raw) || raw.length > 80) {
-    return 'Could not copy to My Drive.';
+    return 'Could not copy to My Files.';
   }
   return raw;
 }
@@ -59,7 +59,7 @@ export async function copyWorkbookToMyDrive(opts: {
   workspaceId?: string;
 }): Promise<{ relativePath: string }> {
   if (!opts.slug || !opts.html) {
-    throw new Error('Could not copy to My Drive.');
+    throw new Error('Could not copy to My Files.');
   }
 
   const dir = myDriveSheetsDir(opts.slug);

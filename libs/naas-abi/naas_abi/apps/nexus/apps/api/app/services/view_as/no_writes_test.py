@@ -3,7 +3,7 @@
 Every GET route that names the viewed workspace is called in a view of Dave in Alpha, against
 the test database and the test IAM, with a page's parameters. Beside it, the same routes
 called outside a view show that the writes are real (the maps' seed rows, the Coder user,
-the My Drive placement): a view skips them. The view's own record and the viewer's session
+the My Files placement): a view skips them. The view's own record and the viewer's session
 ``last_seen_at`` are the only rows that may change.
 """
 

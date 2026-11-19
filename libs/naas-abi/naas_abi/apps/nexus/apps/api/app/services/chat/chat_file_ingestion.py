@@ -127,7 +127,7 @@ class ChatFileIngestionService:
             normalized_source == expected_prefix
             or normalized_source.startswith(f"{expected_prefix}/")
         ):
-            raise ChatFileIngestionError("Source path must belong to user's My Drive")
+            raise ChatFileIngestionError("Source path must belong to user's My Files")
 
         prefix, key = self._split_source(normalized_source)
         try:
@@ -498,9 +498,7 @@ class ChatFileIngestionService:
                         text = re.sub(r"[ \t]+", " ", "".join(parts)).strip()
                         if text:
                             extracted += len(text)
-                            _within_text_limit(
-                                extracted, ChatFileIngestionService.max_text_chars
-                            )
+                            _within_text_limit(extracted, ChatFileIngestionService.max_text_chars)
                             lines.append(text)
 
                     if lines:
