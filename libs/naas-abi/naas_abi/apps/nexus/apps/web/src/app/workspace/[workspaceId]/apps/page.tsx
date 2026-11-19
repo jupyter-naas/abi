@@ -10,8 +10,8 @@ import {
   AppWindow, ExternalLink, RefreshCw, AlertTriangle, Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { appIframeSandbox, isBundledAppHtmlUrl, remoteAppGrantUrl, remoteAppParts, resolveAppEmbedUrl, resolveAppExternalUrl, pagesSsoAudience, withAppHtmlAccessToken, withPagesSsoToken, withRemoteAppWorkspace, remoteGrantRenewDelayMs } from '@/lib/app-html';
-import { getApiUrl } from '@/lib/config';
+import { appIframeSandbox, applyDevAppUrl, isBundledAppHtmlUrl, remoteAppGrantUrl, remoteAppParts, resolveAppEmbedUrl, resolveAppExternalUrl, pagesSsoAudience, withAppHtmlAccessToken, withPagesSsoToken, withRemoteAppWorkspace, remoteGrantRenewDelayMs } from '@/lib/app-html';
+import { getApiUrl, getDevAppUrlOverrides, getEnvironment } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import { useTenant } from '@/contexts/tenant-context';
 import { useWorkspaceStore } from '@/stores/workspace';
@@ -59,9 +59,14 @@ function EmbedView({
 }) {
   const url = record.url;
   const workspaceId = (useParams().workspaceId as string | undefined) ?? '';
-  const baseEmbedUrl = useMemo(() => resolveAppEmbedUrl(url), [url]);
+  // Local `next dev` can frame a Vite origin while the manifest keeps the public URL.
+  const catalogUrl = applyDevAppUrl(record.id, url, {
+    env: getEnvironment(),
+    overrides: getDevAppUrlOverrides(),
+  });
+  const baseEmbedUrl = useMemo(() => resolveAppEmbedUrl(catalogUrl), [catalogUrl]);
   const [embedUrl, setEmbedUrl] = useState<string | null>(
-    isBundledAppHtmlUrl(url) ? null : baseEmbedUrl,
+    isBundledAppHtmlUrl(catalogUrl) ? null : baseEmbedUrl,
   );
   const [embedError, setEmbedError] = useState<string | null>(null);
   const [blocked, setBlocked] = useState(false);
@@ -74,7 +79,8 @@ function EmbedView({
     let cancelled = false;
     setEmbedError(null);
 
-    if (!isBundledAppHtmlUrl(url)) {
+    if (!isBundledAppHtmlUrl(catalogUrl)) {
+      // The proof is for the origin actually framed. OpenApp on this app is enough.
       const audience = pagesSsoAudience(baseEmbedUrl);
       if (!audience) {
         setEmbedUrl(baseEmbedUrl);
@@ -88,7 +94,11 @@ function EmbedView({
           const res = await authFetch('/api/apps/sso-token', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ workspace_id: workspaceId, audience }),
+            body: JSON.stringify({
+              workspace_id: workspaceId,
+              audience,
+              app_id: record.id,
+            }),
           });
           if (!res.ok) {
             if (!cancelled) setEmbedUrl(baseEmbedUrl);
@@ -182,11 +192,11 @@ function EmbedView({
     return () => {
       cancelled = true;
     };
-  }, [url, baseEmbedUrl, reloadKey, workspaceId, record.id]);
+  }, [url, catalogUrl, baseEmbedUrl, reloadKey, workspaceId, record.id]);
 
   const handleLoad = useCallback(() => {
     // Same-origin bundled apps are proxied via /app-html/ — never flag them blocked.
-    if (isBundledAppHtmlUrl(url)) {
+    if (isBundledAppHtmlUrl(catalogUrl)) {
       setBlocked(false);
       return;
     }
@@ -200,7 +210,7 @@ function EmbedView({
       // SecurityError = cross-origin page loaded successfully.
     }
     setBlocked(false);
-  }, [url]);
+  }, [catalogUrl]);
 
   const handleReload = () => {
     setBlocked(false);
@@ -218,7 +228,7 @@ function EmbedView({
     setActivePanelSection('apps');
   };
 
-  const externalHref = embedUrl || withRemoteAppWorkspace(resolveAppExternalUrl(url), workspaceId);
+  const externalHref = embedUrl || withRemoteAppWorkspace(resolveAppExternalUrl(catalogUrl), workspaceId);
 
   useDocumentTitleDetail(record.name);
 

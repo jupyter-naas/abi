@@ -22,6 +22,10 @@ on/off state of its own for an app.
   READY remote modules the caller may open there (`authz.filter_scopes`), the platform admin included; no role holds
   an app by itself. `access-token`, `remote-grant` and the workspace a remote app opens in (`remote/access.py`) ask
   the same scope (`authz.require_scope`). A workspace that should not offer an app denies it in a policy.
+- **Portal SSO.** `POST /api/apps/sso-token` with `app_id` asks `module:OpenApp` on that app. The proof's email is
+  the signed-in user, and its audience must be that app's host (`pages_sso_audiences`). While Nexus is local,
+  `NEXUS_DEV_APP_URLS` (`id=url`, comma-separated) may add the host of that app's dev origin. The map has no
+  built-in entries. Without `app_id` the route still asks `UseApp`. A view refuses it.
 - **A remote app is installed while a READY module serves it** (`_remote_app_info`): the Apps pages and the
   workspace settings list only installed apps, as for a loaded module's.
 - **No per-workspace switch.** The app-config routes (`GET|POST /api/apps/{ws}`, `GET|PATCH|DELETE
