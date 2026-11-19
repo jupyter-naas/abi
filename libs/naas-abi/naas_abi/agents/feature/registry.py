@@ -155,4 +155,7 @@ def spec_for_class_name(class_name: str | None) -> FeatureAgentSpec | None:
     module, separator, agent_class = (class_name or "").strip().partition("/")
     if not separator or not module.startswith("naas_abi."):
         return None
-    return next((s for s in FEATURE_AGENTS if s.class_name == agent_class), None)
+    return next(
+        (s for s in feature_office_agent_specs() if s.class_name == agent_class),
+        None,
+    )
