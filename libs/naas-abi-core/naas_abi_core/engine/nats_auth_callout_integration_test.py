@@ -50,6 +50,8 @@ pytestmark = pytest.mark.skipif(
 
 KV_GET = "abi.svc.keyvalue.v1.get"
 KV_SET = "abi.svc.keyvalue.v1.set"
+# Generated: the broker's system password where a test holds one.
+SYSTEM_PASSWORD = secrets.token_hex(8)
 # Small, so payloads above it are cheap to make: claim checks and overflow.
 MAX_PAYLOAD = 64 * 1024
 DOCUMENT = {
@@ -1287,7 +1289,7 @@ def test_a_module_with_secret_grants_reads_no_signing_key_or_broker_password(sta
                 "idp/signing-key": "idp",
                 "NATS_ENGINE_PASSWORD": "engine-pw",
                 "NATS_AUTH_PASSWORD": "auth-pw",
-                "NATS_SYSTEM_PASSWORD": "sys-pw",
+                "NATS_SYSTEM_PASSWORD": SYSTEM_PASSWORD,
                 "NATS_AUTH_CALLOUT_SEED": "SAAseed",
                 "people/api-key": "mine",
             }

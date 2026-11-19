@@ -6,6 +6,7 @@ against a minimal fake ``Request`` that records whatever gets passed to
 """
 
 import asyncio
+import secrets
 import threading
 
 from naas_abi_core.engine.nats_test_tokens import OTHER_TOKENS, TEST_TOKENS
@@ -316,7 +317,7 @@ def _stub_with_reserved() -> _StubAdapter:
             "idp/signing-key": "idp-pem",
             "NATS_ENGINE_PASSWORD": "engine-pw",
             "NATS_AUTH_PASSWORD": "auth-pw",
-            "NATS_SYSTEM_PASSWORD": "sys-pw",
+            "NATS_SYSTEM_PASSWORD": secrets.token_hex(8),
             "NATS_AUTH_CALLOUT_SEED": "SAAseed",
             "NAAS_API_KEY": "naas",
             "PLAIN": "value",

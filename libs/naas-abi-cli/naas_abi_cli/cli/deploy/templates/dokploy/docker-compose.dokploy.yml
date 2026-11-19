@@ -418,7 +418,7 @@ services:
       # The broker's static users and its auth callout's trusted key (nats.conf).
       - NATS_ENGINE_PASSWORD=${NATS_ENGINE_PASSWORD:?run abi deploy dokploy}
       - NATS_AUTH_PASSWORD=${NATS_AUTH_PASSWORD:?run abi deploy dokploy}
-      - NATS_SYSTEM_PASSWORD=${NATS_SYSTEM_PASSWORD:?run abi deploy dokploy}
+      - NATS_SYSTEM_PASSWORD=${NATS_SYSTEM_PASSWORD:?run abi deploy dokploy} # ggignore: a reference to .env, not a value
       - NATS_AUTH_CALLOUT_ISSUER=${NATS_AUTH_CALLOUT_ISSUER:?run abi deploy dokploy}
     # The monitoring port (8222, no login) listens on the nats-monitor network
     # only (nats.conf), which the engine joins and nothing else.
