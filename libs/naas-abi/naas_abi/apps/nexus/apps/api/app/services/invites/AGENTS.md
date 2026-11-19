@@ -154,8 +154,8 @@ IdP group bindings are the same idea for a whole group of a provider: the member
   invite; every platform member may create an organization and invite from it, so the bounds are the invite routes'
   rate limits and the organization's `invitation_mails_per_day`. An account the invitation made has an unverified
   email that only a code mailed to the address proves, so it gives the inviter no access to it. The platform-level
-  invite (Platform Settings › Users) keeps to the inviter's own `identity:ProvisionUser`. ADR:
-  `docs/adr/20261118_invitation_provisions_the_account.md`.
+  invite (Platform Settings › Users) keeps to the inviter's own `identity:ProvisionUser`. Decision record:
+  https://docs.naas.ai/developers/adr/20261118_invitation_provisions_the_account.
 - Withdrawing an invitation withdraws its pending grants, but not a membership already made. An invitee who
   already has a Nexus account is added directly; a person whose verified email another Nexus account holds is still
   refused at sign-in (accounts are never linked across providers: `services/oidc/AGENTS.md`).
