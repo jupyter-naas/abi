@@ -4,6 +4,8 @@ of the configuration is ever in the answer."""
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -25,9 +27,11 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_ObjectStorage
     ObjectStorageAdapterConfiguration,
 )
 
-KEY_ID = "AKIA-KEY-ID"
-SECRET = "s3cr3t-access-key"
-TOKEN = "session-t0ken"
+# Generated per run: the answer must carry none of them, and no credential-shaped
+# literal sits in the repository (secret scanners flag those).
+KEY_ID = f"canary-key-id-{uuid.uuid4().hex}"
+SECRET = f"canary-secret-{uuid.uuid4().hex}"
+TOKEN = f"canary-token-{uuid.uuid4().hex}"
 
 CONFIGURATION = ObjectStorageAdapterConfiguration(
     adapter="s3",
