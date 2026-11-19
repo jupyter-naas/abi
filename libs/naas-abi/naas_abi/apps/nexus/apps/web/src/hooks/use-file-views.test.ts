@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/stores/auth', () => ({ authFetch: vi.fn() }));
+// The workspace store (imported through the views hook) checks the session on a timer.
+vi.mock('@/stores/auth', () => ({ authFetch: vi.fn(), hasSession: vi.fn(() => false) }));
 
 import { createFileViewsStore } from './use-file-views';
 

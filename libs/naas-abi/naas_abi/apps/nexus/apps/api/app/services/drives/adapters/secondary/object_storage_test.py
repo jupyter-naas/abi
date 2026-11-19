@@ -4,6 +4,7 @@ type, provider and location, never a credential; probed with one small read."""
 from __future__ import annotations
 
 import dataclasses
+import uuid
 
 import pytest
 from naas_abi.apps.nexus.apps.api.app.services.drives.adapters.secondary.object_storage import (
@@ -16,7 +17,14 @@ from naas_abi_core.engine.engine_configuration.EngineConfiguration_ObjectStorage
 )
 from naas_abi_core.services.object_storage.ObjectStoragePort import Exceptions
 
-SECRETS = ("AKIA-KEY-ID", "s3cr3t-access-key", "session-t0ken", "naas-api-k3y", "nats-k3y")
+# Generated per run: no credential-shaped literal in the repository (secret scanners
+# flag those); the answers must carry none of them.
+KEY_ID = f"canary-key-id-{uuid.uuid4().hex}"
+SECRET = f"canary-secret-{uuid.uuid4().hex}"
+TOKEN = f"canary-token-{uuid.uuid4().hex}"
+NAAS_KEY = f"canary-naas-key-{uuid.uuid4().hex}"
+NATS_KEY = f"canary-nats-key-{uuid.uuid4().hex}"
+SECRETS = (KEY_ID, SECRET, TOKEN, NAAS_KEY, NATS_KEY)
 
 
 def configuration(adapter: str, **config) -> ObjectStorageAdapterConfiguration:
@@ -27,9 +35,9 @@ def s3(**overrides) -> ObjectStorageAdapterConfiguration:
     config = {
         "bucket_name": "abi",
         "base_prefix": "abi/datastore",
-        "access_key_id": "AKIA-KEY-ID",
-        "secret_access_key": "s3cr3t-access-key",
-        "session_token": "session-t0ken",
+        "access_key_id": KEY_ID,
+        "secret_access_key": SECRET,
+        "session_token": TOKEN,
         "endpoint_url": "http://minio:9000",
     }
     config.update(overrides)
@@ -89,8 +97,8 @@ def test_cloudflare_r2_and_naas_keep_their_keys_to_themselves():
             account_id="acct",
             bucket_name="files",
             base_prefix="abi",
-            access_key_id="AKIA-KEY-ID",
-            secret_access_key="s3cr3t-access-key",
+            access_key_id=KEY_ID,
+            secret_access_key=SECRET,
         )
     )
     assert r2.provider == "Cloudflare R2 (S3-compatible)"
@@ -99,7 +107,7 @@ def test_cloudflare_r2_and_naas_keep_their_keys_to_themselves():
     naas = describe_object_storage(
         configuration(
             "naas",
-            naas_api_key="naas-api-k3y",
+            naas_api_key=NAAS_KEY,
             workspace_id="ws",
             storage_name="store",
             base_prefix="",
@@ -112,7 +120,7 @@ def test_cloudflare_r2_and_naas_keep_their_keys_to_themselves():
 
 def test_another_engines_storage_names_no_credential():
     description = describe_object_storage(
-        configuration("nats_rpc", nats_url="nats://user:pass@nats:4222", service_key="nats-k3y")
+        configuration("nats_rpc", nats_url="nats://user:pass@nats:4222", service_key=NATS_KEY)
     )
     assert description.provider == "Another engine (over NATS)"
     assert description.location == ()
