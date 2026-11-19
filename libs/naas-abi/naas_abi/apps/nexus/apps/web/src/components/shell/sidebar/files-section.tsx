@@ -28,6 +28,7 @@ import { shellTokens } from '../tokens';
 import {
   canDropOntoExplorerFolder,
   explorerDirKey,
+  explorerDirNeedsLoad,
   explorerDirsToOpen,
   explorerDriveMatchesQuery,
   explorerListQuery,
@@ -73,6 +74,8 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
   const loadGeneration = useRef(0);
   const folderCacheRef = useRef(rawFolderCache);
   folderCacheRef.current = rawFolderCache;
+  // Folder key → load generation of its pending fetch (see ``explorerDirNeedsLoad``).
+  const dirsInFlight = useRef(new Map<string, number>());
   // The tree caches whole listings and filters on render, so View → Show
   // system files flips without refetching every open folder.
   const showSystemFiles = useFilesStore((s) => s.showSystemFiles);
@@ -141,8 +144,18 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
   const loadDir = useCallback(
     async (source: string, path: string, options?: { force?: boolean }) => {
       const key = explorerDirKey(source, path);
-      if (!options?.force && folderCacheRef.current[key] !== undefined) return;
       const generation = loadGeneration.current;
+      if (
+        !explorerDirNeedsLoad({
+          force: options?.force,
+          cached: folderCacheRef.current[key] !== undefined,
+          inFlightGeneration: dirsInFlight.current.get(key),
+          generation,
+        })
+      ) {
+        return;
+      }
+      dirsInFlight.current.set(key, generation);
       setLoadingDirs((prev) => ({ ...prev, [key]: true }));
       setDirErrors((prev) => ({ ...prev, [key]: null }));
       try {
@@ -168,6 +181,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
           [key]: error instanceof Error ? error.message : 'Could not load directory',
         }));
       } finally {
+        if (dirsInFlight.current.get(key) === generation) dirsInFlight.current.delete(key);
         if (generation === loadGeneration.current) {
           setLoadingDirs((prev) => ({ ...prev, [key]: false }));
         }

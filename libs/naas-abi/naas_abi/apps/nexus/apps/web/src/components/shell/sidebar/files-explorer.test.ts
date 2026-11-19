@@ -4,6 +4,7 @@ import {
   canDropOntoExplorerFolder,
   explorerAncestorPaths,
   explorerDirKey,
+  explorerDirNeedsLoad,
   explorerDirsToOpen,
   explorerDriveMatchesQuery,
   explorerEntries,
@@ -229,5 +230,25 @@ describe('explorerDriveMatchesQuery', () => {
     };
     expect(explorerDriveMatchesQuery('My Files', 'my-files', 'icon', cache)).toBe(true);
     expect(explorerDriveMatchesQuery('My Files', 'my-files', 'notes', cache)).toBe(true);
+  });
+});
+
+describe('explorerDirNeedsLoad', () => {
+  // Opening Files asked for the same root three times at once (~3 s each).
+  it('skips a folder already listed or already being fetched in this generation', () => {
+    expect(explorerDirNeedsLoad({ cached: true, inFlightGeneration: undefined, generation: 1 })).toBe(false);
+    expect(explorerDirNeedsLoad({ cached: false, inFlightGeneration: 1, generation: 1 })).toBe(false);
+  });
+
+  it('loads a folder not listed and not being fetched', () => {
+    expect(explorerDirNeedsLoad({ cached: false, inFlightGeneration: undefined, generation: 1 })).toBe(true);
+  });
+
+  it('loads again when the pending fetch belongs to an older generation (workspace switch, refresh)', () => {
+    expect(explorerDirNeedsLoad({ cached: false, inFlightGeneration: 1, generation: 2 })).toBe(true);
+  });
+
+  it('always loads when forced', () => {
+    expect(explorerDirNeedsLoad({ force: true, cached: true, inFlightGeneration: 1, generation: 1 })).toBe(true);
   });
 });
