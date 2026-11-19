@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.7.0 (2026-11-19)
+
+### Features
+
+- **core, sdk, cli**: Module connections end on IAM changes, not every two minutes
+  ([`2f55f6b`](https://github.com/jupyter-naas/abi/commit/2f55f6b01e56bdc9c74a9c4963d9aab70e5bfca0))
+
+
 ## v0.6.0 (2026-11-19)
 
 ### Bug Fixes
