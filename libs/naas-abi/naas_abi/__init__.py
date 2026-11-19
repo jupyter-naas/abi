@@ -459,8 +459,11 @@ class NexusConfig(BaseModel):
         for old, new in NEXUS_RENAMED_SETTINGS.items():
             if old in data:
                 data.setdefault(new, data.pop(old))
-        if "pages_sso_secret" in data:
-            data.pop("pages_sso_secret")
+        if (
+            "pages_sso_secret" in data
+            and str(data.pop("pages_sso_secret") or "").strip()
+        ):
+            # An empty key (old templates) is dropped without a word: no portal used it.
             logger.warning(
                 "nexus_config: pages_sso_secret is ignored. No portal gets a token from it "
                 "any more: move the secret under the portal's app id in pages_sso_secrets "
@@ -578,13 +581,11 @@ def nexus_settings_kwargs(nexus_config: NexusConfig) -> dict[str, Any]:
             settings_kwargs.pop(field, None)
     # An empty yaml map (``pages_sso_secrets: {}``, or only empty secrets) would
     # override ``PAGES_SSO_SECRETS``.
-    portal_secrets = {
-        str(app_id).strip(): str(secret).strip()
-        for app_id, secret in (settings_kwargs.get("pages_sso_secrets") or {}).items()
-        if str(app_id or "").strip() and str(secret or "").strip()
-    }
-    if portal_secrets:
-        settings_kwargs["pages_sso_secrets"] = portal_secrets
+    from naas_abi.apps.nexus.apps.api.app.services.apps.pages_sso import portal_secrets
+
+    secrets = portal_secrets(settings_kwargs.get("pages_sso_secrets"))
+    if secrets:
+        settings_kwargs["pages_sso_secrets"] = secrets
     else:
         settings_kwargs.pop("pages_sso_secrets", None)
     return settings_kwargs

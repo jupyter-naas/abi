@@ -13,11 +13,15 @@ import hashlib
 import hmac
 import ipaddress
 import json
+import logging
 import time
 from collections.abc import Mapping
 from urllib.parse import urlparse
 
 PAGES_SSO_SCOPE = "pages-sso"
+
+_log = logging.getLogger(__name__)
+PORTAL_SECRETS_SHAPE = '{"<module_path>:<app_dir>": "<secret>"}'
 
 # The single secret every portal once shared, which both signed and verified.
 LEGACY_PAGES_SSO_SECRET_ENV = "PAGES_SSO_SECRET"
@@ -31,7 +35,9 @@ MOVE_THE_SHARED_SECRET = (
 def portal_secrets(raw: Mapping[str, str] | None) -> dict[str, str]:
     """``pages_sso_secrets`` without blank app ids or empty secrets."""
     out: dict[str, str] = {}
-    for app_id, secret in (raw or {}).items():
+    if not isinstance(raw, Mapping):
+        return out
+    for app_id, secret in raw.items():
         key = str(app_id or "").strip()
         value = str(secret or "").strip()
         if key and value:
@@ -39,9 +45,45 @@ def portal_secrets(raw: Mapping[str, str] | None) -> dict[str, str]:
     return out
 
 
+def read_portal_secrets(raw: object) -> dict[str, str]:
+    """``pages_sso_secrets`` as configured: a map, or its JSON (``PAGES_SSO_SECRETS``).
+
+    A value that is not a JSON object of strings is logged, without the value,
+    and read as no secrets: a malformed setting turns portal sign-in off, it
+    never stops Nexus from starting.
+    """
+    if raw is None:
+        return {}
+    value = raw
+    if isinstance(raw, (str, bytes)):
+        text = raw.decode("utf-8", "replace") if isinstance(raw, bytes) else raw
+        if not text.strip():
+            return {}
+        try:
+            value = json.loads(text)
+        except ValueError:
+            value = None
+    if not isinstance(value, Mapping) or not all(
+        isinstance(k, str) and isinstance(v, str) for k, v in value.items()
+    ):
+        _log.error(
+            "pages_sso_secrets (PAGES_SSO_SECRETS) is ignored: it must be a JSON object "
+            "of an app id to its portal's secret, %s. No portal gets a token until it is.",
+            PORTAL_SECRETS_SHAPE,
+        )
+        return {}
+    return portal_secrets(value)
+
+
 def shared_secret_warning(environ: Mapping[str, str]) -> str | None:
-    """What to say at start while the old ``PAGES_SSO_SECRET`` is still set, else None."""
-    if not str(environ.get(LEGACY_PAGES_SSO_SECRET_ENV) or "").strip():
+    """What to say at start while the old ``PAGES_SSO_SECRET`` is still set, else None.
+
+    Names are matched without case, as ``Settings`` read them.
+    """
+    if not any(
+        name.upper() == LEGACY_PAGES_SSO_SECRET_ENV and str(value or "").strip()
+        for name, value in environ.items()
+    ):
         return None
     return f"{LEGACY_PAGES_SSO_SECRET_ENV} is set and signs nothing. {MOVE_THE_SHARED_SECRET}"
 

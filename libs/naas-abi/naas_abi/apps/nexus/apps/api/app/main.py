@@ -512,12 +512,12 @@ async def _hint_unlinked_users() -> None:
 
 
 def _warn_of_the_shared_pages_sso_secret() -> None:
-    """``PAGES_SSO_SECRET`` signed every portal's token; each app has its own now."""
-    import os
-
+    """``PAGES_SSO_SECRET`` signed every portal's token; each app has its own now.
+    Read where ``Settings`` read it: the process environment and ``.env``."""
+    from naas_abi.apps.nexus.apps.api.app.core.config import settings_environment
     from naas_abi.apps.nexus.apps.api.app.services.apps.pages_sso import shared_secret_warning
 
-    message = shared_secret_warning(os.environ)
+    message = shared_secret_warning(settings_environment())
     if message:
         logging.getLogger(__name__).warning(message)
 

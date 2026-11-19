@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 
 import pytest
 from naas_abi.apps.nexus.apps.api.app.services.apps.pages_sso import (
@@ -13,6 +14,7 @@ from naas_abi.apps.nexus.apps.api.app.services.apps.pages_sso import (
     pages_sso_audiences,
     parse_dev_app_urls,
     portal_secrets,
+    read_portal_secrets,
     shared_secret_warning,
     verify_pages_sso_token,
 )
@@ -231,3 +233,30 @@ def test_the_shared_secret_left_in_the_environment_is_said_at_start() -> None:
     assert "signs nothing" in message
     assert "pages_sso_secrets" in message and "PAGES_SSO_SECRETS" in message
     assert "zq-old-shared-value" not in message
+
+
+def test_the_shared_secret_is_found_whatever_the_case_of_its_name() -> None:
+    """``Settings`` read names without case, so a lowercase ``.env`` entry counted."""
+    assert shared_secret_warning({"pages_sso_secret": "old"}) is not None
+
+
+def test_portal_secrets_are_read_from_a_map_or_its_json() -> None:
+    assert read_portal_secrets(None) == {}
+    assert read_portal_secrets("") == {}
+    assert read_portal_secrets("  ") == {}
+    assert read_portal_secrets({APP: "s", OTHER: ""}) == {APP: "s"}
+    assert read_portal_secrets(f'{{"{APP}": " s "}}') == {APP: "s"}
+    assert read_portal_secrets(f'{{"{APP}": "s"}}'.encode()) == {APP: "s"}
+
+
+@pytest.mark.parametrize(
+    "raw", ["zq-secret", "[1]", '"zq-secret"', '{"a:b": 1}', {"a:b": 1}, 42, "{not json"]
+)
+def test_a_malformed_portal_secrets_value_is_none_and_logged_without_it(
+    raw: object, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.ERROR):
+        assert read_portal_secrets(raw) == {}
+    said = " ".join(r.getMessage() for r in caplog.records)
+    assert '{"<module_path>:<app_dir>": "<secret>"}' in said
+    assert "zq-secret" not in said
