@@ -58,6 +58,10 @@ ACCOUNT_ROUTES: dict[tuple[str, str], str] = {
         "/api/invitations/providers",
     ): "the identity providers an invitation can go through: no tenant data",
     ("GET", "/api/platform/cli"): "the abi-platform CLI script, the same text for everyone",
+    ("POST", "/api/analytics/events"): (
+        "the caller's own usage events: identity from the token, a workspace kept only "
+        "for one of its members"
+    ),
     (
         "DELETE",
         "/api/iam/view-as",

@@ -5,18 +5,29 @@ Routes are intentionally thin: each one resolves a per-request
 method. Read endpoints take a ``scenario_id`` query param and return the
 matching slice of the prebuilt JSON — no aggregation or filtering happens
 here.
+
+``POST /events`` is the tracker's ingest, open to every signed-in user: the
+identity comes from the token, a ``workspace_id`` stays only for a member of the
+workspace, and the server stamps its ``organization_id``. The platform-wide reads
+below are replaced by the scoped ones (``analytics__primary_adapter__scoped``) and
+removed with the analytics app (#1536).
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from naas_abi.apps.nexus.apps.api.app.core.database import get_db
 from naas_abi.apps.nexus.apps.api.app.services.analytics.adapters.secondary import (
     AnalyticsSecondaryAdapterEventLog,
     AnalyticsSecondaryAdapterObjectStorage,
+)
+from naas_abi.apps.nexus.apps.api.app.services.analytics.adapters.secondary.analytics__secondary_adapter__postgres import (  # noqa: E501
+    AnalyticsSecondaryAdapterPostgresEvents,
 )
 from naas_abi.apps.nexus.apps.api.app.services.analytics.port import (
     AnalyticsEvent,
@@ -43,6 +54,10 @@ from naas_abi.apps.nexus.apps.api.app.services.analytics.port import (
     UsersResponse,
     WorkspacesResponse,
 )
+from naas_abi.apps.nexus.apps.api.app.services.analytics.rollups import (
+    AnalyticsRollups,
+    recorded_from_event,
+)
 from naas_abi.apps.nexus.apps.api.app.services.analytics.service import (
     DEFAULT_SCENARIO_ID,
     AnalyticsService,
@@ -54,12 +69,17 @@ from naas_abi.apps.nexus.apps.api.app.services.chat.adapters.primary.chat__prima
     export_conversation_as_response,
 )
 from naas_abi.apps.nexus.apps.api.app.services.chat.service import ChatService
+from naas_abi.apps.nexus.apps.api.app.services.iam import authz as authz_module
 from naas_abi.apps.nexus.apps.api.app.services.iam.guards import guard
+from naas_abi.apps.nexus.apps.api.app.services.iam.names import org_of
 from naas_abi.apps.nexus.apps.api.app.services.registry import get_service_registry
+from naas_abi_core.engine.call_context import as_service_account
 from naas_abi_core.services.object_storage.ObjectStorageService import (
     ObjectStorageService,
 )
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(get_current_user_required)])
@@ -138,12 +158,82 @@ def get_analytics_service(
 # the engine (/health included) for as long as each publish waited.
 
 
-@router.post("/events", response_model=IngestResponse, dependencies=_WRITE)
-def ingest_event(
+# (user, workspace) -> (member, organization, until): the tracker sends an event per
+# page view, the membership is asked of IAM once a minute per workspace.
+_MEMBERSHIP_SECONDS = 60.0
+_memberships: dict[tuple[str, str], tuple[bool, str | None, float]] = {}
+
+
+async def _membership(user: Any, workspace_id: str) -> tuple[bool, str | None]:
+    """Whether the user is a member of the workspace (any role there, or an org-wide
+    one), and the workspace's organization."""
+    user_id = authz_module.Authz.user_id(user) or ""
+    key = (user_id, workspace_id)
+    now = time.monotonic()
+    found = _memberships.get(key)
+    if found is not None and found[2] > now:
+        return found[0], found[1]
+    member = await authz_module.AUTHZ.allowed("GetWorkspace", user=user, workspace=workspace_id)
+    container = await authz_module.AUTHZ.container_of(workspace_id) if member else None
+    organization = org_of(container) if container else None
+    if len(_memberships) > 10_000:
+        _memberships.clear()
+    _memberships[key] = (member, organization, now + _MEMBERSHIP_SECONDS)
+    return member, organization
+
+
+async def stamp_event(event: AnalyticsEvent, user: Any) -> AnalyticsEvent:
+    """The event as the server records it: the token's user (the payload's
+    ``user_id``/``user_email`` are ignored), the workspace only for one of its
+    members, and that workspace's organization."""
+    workspace_id = event.workspace_id or None
+    organization_id: str | None = None
+    if workspace_id is not None:
+        member, organization_id = await _membership(user, workspace_id)
+        if not member:
+            workspace_id, organization_id = None, None
+    data = event.model_dump()
+    data.update(
+        user_id=authz_module.Authz.user_id(user),
+        # Kept for the platform app's user directory (``ref-users.json``) until #1536;
+        # the event log never stores it.
+        user_email=getattr(user, "email", None),
+        workspace_id=workspace_id,
+        workspace_name=event.workspace_name if workspace_id else None,
+        organization_id=organization_id,
+    )
+    return AnalyticsEvent.model_validate(data)
+
+
+def get_direct_rollups(db: AsyncSession | None = Depends(get_db)) -> AnalyticsRollups | None:
+    """Where an ingest is applied to the rollups at once: only on a deploy with no
+    event log (otherwise the log's consumer applies it, ``analytics/jobs.py``)."""
+    if _get_event_service() is not None or db is None:
+        return None
+    return AnalyticsRollups(AnalyticsSecondaryAdapterPostgresEvents(db))
+
+
+@router.post("/events", response_model=IngestResponse)
+async def ingest_event(
     event: AnalyticsEvent,
+    user=Depends(get_current_user_required),
     service: AnalyticsService = Depends(get_analytics_service),
+    rollups: AnalyticsRollups | None = Depends(get_direct_rollups),
 ) -> IngestResponse:
-    stored_at = service.ingest_event(event)
+    stamped = await stamp_event(event, user)
+
+    def record() -> str:
+        # The caller is authorized above (signed in, workspace checked): the log and
+        # the platform app's files are written as ``api``, which a member's own
+        # rights never reach.
+        with as_service_account("api"):
+            return service.ingest_event(stamped)
+
+    stored_at = await run_in_threadpool(record)
+    if rollups is not None:
+        recorded = recorded_from_event(stamped)
+        if recorded is not None:
+            await rollups.apply_recorded([recorded])
     return IngestResponse(stored_at=stored_at)
 
 

@@ -638,6 +638,19 @@ async def _startup(app: FastAPI) -> None:
     except Exception:
         logging.getLogger(__name__).exception("Unable to start chat ingestion consumer")
 
+    # The analytics rollups: the log's consumer, the one-time backfill and the daily
+    # purge of raw events (services/analytics/jobs.py), after seeds so the
+    # backfill stamps seeded workspaces' organizations.
+    try:
+        from naas_abi.apps.nexus.apps.api.app.core.database import AsyncSessionLocal
+        from naas_abi.apps.nexus.apps.api.app.services.analytics.jobs import (
+            start_analytics_jobs,
+        )
+
+        start_analytics_jobs(AsyncSessionLocal)
+    except Exception:
+        logging.getLogger(__name__).exception("Unable to start the analytics rollups")
+
     # Relay platform LogProcess events to the Socket.IO admin_events room
     # for the superadmin live event stream UI.
     try:
