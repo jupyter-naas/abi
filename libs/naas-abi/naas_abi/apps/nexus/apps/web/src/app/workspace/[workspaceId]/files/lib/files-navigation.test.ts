@@ -42,6 +42,19 @@ describe('listOnSourceChange', () => {
     expect(listOnSourceChange(pending, 'workspace-files', 'workspace-files')).toEqual({ list: null, pending: null });
   });
 
+  // Was (Back from Home to Workspace Files/finance, StrictMode): the mount run listed the root.
+  it('lists the fallback (the folder the page already shows) when nothing is pending', () => {
+    expect(listOnSourceChange(null, 'workspace-files', 'workspace-files', 'finance')).toEqual({
+      list: 'finance',
+      pending: null,
+    });
+  });
+
+  it('lists the root, not the fallback, for a navigation another change overrode', () => {
+    const pending = { source: 'system-files' as const, path: 'x', listed: false };
+    expect(listOnSourceChange(pending, 'all', 'all', 'finance')).toEqual({ list: '', pending: null });
+  });
+
   // Was: a deep link in a fresh tab opened the view root (the mount run used the flag).
   it('waits while the render is behind the store (fresh tab deep link)', () => {
     const pending = { source: 'my-files' as const, path: 'documents', listed: false };

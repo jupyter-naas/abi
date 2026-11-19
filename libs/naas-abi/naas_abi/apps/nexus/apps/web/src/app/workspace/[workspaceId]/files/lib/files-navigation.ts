@@ -25,16 +25,18 @@ export function startNavigation(
  * What the page lists when its source-change effect runs (`rendered` is this render's
  * view, `current` the store's): for the navigation's view, its folder, or nothing if the
  * navigation listed it; nothing while the render is behind the store (the navigation's
- * view is coming); else the view's root, dropping a navigation another change overrode.
+ * view is coming); with nothing pending, `fallback` (the view's root, or on the page's
+ * mount the folder the store already shows for that view); the root when another change
+ * overrode the navigation.
  */
 export function listOnSourceChange(
   pending: PendingNavigation | null,
   rendered: FilesSource,
   current: FilesSource,
+  fallback = '',
 ): { list: string | null; pending: PendingNavigation | null } {
-  if (pending) {
-    if (pending.source === rendered) return { list: pending.listed ? null : pending.path, pending: null };
-    if (pending.source === current) return { list: null, pending };
-  }
+  if (!pending) return { list: fallback, pending: null };
+  if (pending.source === rendered) return { list: pending.listed ? null : pending.path, pending: null };
+  if (pending.source === current) return { list: null, pending };
   return { list: '', pending: null };
 }

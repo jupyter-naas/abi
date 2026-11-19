@@ -100,6 +100,12 @@ describe('the active view', () => {
     });
   });
 
+  it('records which view the shown listing belongs to', async () => {
+    useFilesStore.getState().chooseView('all');
+    await useFilesStore.getState().fetchFiles('');
+    expect(useFilesStore.getState()).toMatchObject({ listedSource: 'all', currentPath: '' });
+  });
+
   it('ignores a source that names no view', () => {
     useFilesStore.getState().setActiveSource('workspace-files');
     useFilesStore.getState().setActiveSource('synced-1');

@@ -191,3 +191,24 @@ export function filesUrlSearch(search: string, state: FilesUrlState): string {
   const query = params.toString();
   return query ? `?${query}` : '';
 }
+
+/**
+ * Where a Files URL leads: its state, the folder to list and the file to preview. A URL
+ * the page wrote (with `view` or `drive`) names folders in `path` (a dot in a folder name
+ * is no file extension) and a file to preview in `preview`; an old `?source=&path=` link
+ * whose path looks like a file still opens its folder and previews it.
+ */
+export function filesNavigationFromUrl(search: string | null | undefined): {
+  state: FilesUrlState;
+  folderPath: string;
+  previewPath: string | null;
+} {
+  const params = new URLSearchParams((search ?? '').replace(/^\?/, ''));
+  const state = filesStateFromUrl(search);
+  if (params.has('view') || params.has('drive')) {
+    const preview = (params.get('preview') ?? '').trim();
+    return { state, folderPath: state.path, previewPath: preview ? stripPlatformDrivePrefix(preview) : null };
+  }
+  const { folderPath, previewPath } = filesDeepLinkFolderAndPreview(state.path);
+  return { state, folderPath, previewPath: previewPath ?? null };
+}

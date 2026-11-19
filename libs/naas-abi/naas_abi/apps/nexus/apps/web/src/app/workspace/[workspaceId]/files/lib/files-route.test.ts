@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   filesBrowseHref,
+  filesNavigationFromUrl,
   filesStateFromUrl,
   filesUrlQuery,
   filesUrlSearch,
@@ -305,5 +306,29 @@ describe('filesUrlSearch', () => {
         path: '',
       }),
     ).toBe('?spacing=compact&drive=all&view=all&source=workspace-files');
+  });
+});
+
+describe('filesNavigationFromUrl', () => {
+  it('opens a folder whose name has a dot as a folder (written URLs)', () => {
+    expect(filesNavigationFromUrl('?drive=all&view=all&source=workspace-files&path=finance/2024.01')).toEqual({
+      state: { drive: 'all', view: 'all', source: 'workspace-files', path: 'finance/2024.01' },
+      folderPath: 'finance/2024.01',
+      previewPath: null,
+    });
+  });
+
+  it('previews the file a link names with `preview`', () => {
+    expect(
+      filesNavigationFromUrl('?drive=all&view=all&source=workspace-files&path=finance&preview=finance/q3.pdf'),
+    ).toMatchObject({ folderPath: 'finance', previewPath: 'finance/q3.pdf' });
+  });
+
+  it('still reads an old ?source=&path= link to a file as its folder plus a preview', () => {
+    expect(filesNavigationFromUrl('?source=workspace&path=finance/q3.pdf')).toMatchObject({
+      state: { view: 'all', source: 'workspace-files' },
+      folderPath: 'finance',
+      previewPath: 'finance/q3.pdf',
+    });
   });
 });

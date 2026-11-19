@@ -157,6 +157,8 @@ interface FilesState {
   // Files page state (Finder-like navigation)
   files: FileInfo[];
   currentPath: string;
+  /** The view the shown listing (`currentPath`, `files`) belongs to; null before any. */
+  listedSource: FilesSource | null;
   loading: boolean;
   error: string | null;
 
@@ -300,6 +302,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   // Files page state (Finder-like)
   files: [],
   currentPath: '',
+  listedSource: null,
   loading: false,
   error: null,
 
@@ -460,6 +463,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       set({
         files: [],
         currentPath: scope ? relativePath : '',
+        listedSource: get().activeSource,
         filesTotal: 0,
         filesLimit: limit,
         filesOffset: offset,
@@ -476,6 +480,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       set({
         files: [],
         currentPath: '',
+        listedSource: get().activeSource,
         filesTotal: 0,
         filesLimit: limit,
         filesOffset: offset,
@@ -534,6 +539,7 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       set({
         files: resolvedFiles,
         currentPath: resolvedPath,
+        listedSource: get().activeSource,
         filesTotal: resolvedTotal,
         filesLimit: limit,
         filesOffset: offset,
