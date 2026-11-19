@@ -9,7 +9,7 @@ import { getApiUrl } from '@/lib/config';
 import { authFetch } from '@/stores/auth';
 import { useKnowledgeGraphStore } from '@/stores/knowledge-graph';
 import { useGraphExportStore } from '@/stores/graph-export';
-import { KpiCard } from '@/app/analytics/components/kpi-card';
+import { KpiCard } from '@/components/ui/kpi-card';
 import {
   exportKpisFromRecord,
   EXPORT_FORMAT_LABELS,
