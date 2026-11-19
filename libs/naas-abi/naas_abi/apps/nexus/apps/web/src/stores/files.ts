@@ -237,6 +237,8 @@ interface FilesState {
   chooseDrive: (drive: FilesDrive) => void;
   /** The dock and Home open Files on Workspace Files inside All Views. */
   openFilesEntry: () => void;
+  /** A Files URL's state (`filesStateFromUrl`): the drive, the View picker and the open view. */
+  restoreFilesState: (state: { drive: FilesDrive; view: FilesSource; source: FilesSource }) => void;
   
   // API actions
   fetchFiles: (
@@ -386,6 +388,11 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   openFilesEntry: () => {
     if (get().activeSource !== FILES_ENTRY.source) invalidateFilesRequests();
     set({ viewChoice: FILES_ENTRY.view, activeSource: FILES_ENTRY.source });
+  },
+
+  restoreFilesState: ({ drive, view, source }) => {
+    if (get().activeSource !== source) invalidateFilesRequests();
+    set({ activeDrive: drive, viewChoice: view, activeSource: source });
   },
 
   openFile: (path) => {

@@ -70,7 +70,8 @@ import { usePlatformSettingsAccess } from '@/hooks/use-platform-settings-access'
 import {
   filesDeepLinkFolderAndPreview,
   matchListedFile,
-  parseFilesDeepLink,
+  filesStateFromUrl,
+  filesUrlSearch,
 } from '../lib/files-route';
 import {
   ontologySpacing,
@@ -168,7 +169,9 @@ function FilesBrowser() {
     openFile,
     activeSource,
     setActiveSource,
+    restoreFilesState,
     viewChoice,
+    activeDrive,
     setError,
     uploadProgress,
     starredItems,
@@ -337,6 +340,8 @@ function FilesBrowser() {
   // (`startNavigation`), never left to a flag a later view change would consume.
   useEffect(() => {
     if (!starredNavigation) return;
+    // The navigation, not the URL (a bare /files from another page), decides what opens.
+    deepLinkConsumedRef.current = true;
     clearPdfViewerState();
     clearImageViewerState();
     clearTextViewerState();
@@ -368,15 +373,15 @@ function FilesBrowser() {
   // Storage keys are not HTTP routes; stay inside the Files UI.
   useEffect(() => {
     if (deepLinkConsumedRef.current || starredNavigation) return;
-    const deepLink = parseFilesDeepLink(searchParams?.toString() ?? '');
-    if (!deepLink.source && !deepLink.path) return;
+    // The URL's state (`filesStateFromUrl`): a bare /files opens "All Views / Workspace Files".
+    const urlState = filesStateFromUrl(searchParams?.toString() ?? '');
     deepLinkConsumedRef.current = true;
     clearPdfViewerState();
     clearImageViewerState();
     clearTextViewerState();
-    const { folderPath, previewPath } = filesDeepLinkFolderAndPreview(deepLink.path || '');
+    const { folderPath, previewPath } = filesDeepLinkFolderAndPreview(urlState.path);
     const before = useFilesStore.getState().activeSource;
-    if (deepLink.source) setActiveSource(deepLink.source);
+    restoreFilesState(urlState);
     const nav = startNavigation(before, useFilesStore.getState().activeSource, folderPath);
     pendingNavRef.current = nav.pending;
     setSearchQuery('');
@@ -392,7 +397,26 @@ function FilesBrowser() {
       });
     }
     if (previewPath) setLocalPendingPreview(previewPath);
-  }, [searchParams, starredNavigation, setActiveSource, fetchFiles, workspaceId]);
+  }, [searchParams, starredNavigation, restoreFilesState, fetchFiles, workspaceId]);
+
+  // The URL keeps the page's state (drive, View picker, open view, folder), so a reload or
+  // a shared link opens the same place. Write-only: the URL is read once (above) and never
+  // read back into the store, so this cannot bounce. It runs again when the URL changes
+  // (a sidebar link to a bare /files) to put the state back. Never a passing state: not
+  // while a navigation waits for its view or a listing loads. Other parameters are kept.
+  useEffect(() => {
+    if (!deepLinkConsumedRef.current || pendingNavRef.current) return;
+    const state = useFilesStore.getState();
+    if (state.loading) return;
+    const search = filesUrlSearch(window.location.search, {
+      drive: state.activeDrive,
+      view: state.viewChoice,
+      source: state.activeSource,
+      path: state.currentPath,
+    });
+    if (search === window.location.search) return;
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${search}`);
+  }, [activeDrive, viewChoice, activeSource, currentPath, loading, searchParams]);
 
   // Once the files list loads, open the pending preview (if any).
   useEffect(() => {

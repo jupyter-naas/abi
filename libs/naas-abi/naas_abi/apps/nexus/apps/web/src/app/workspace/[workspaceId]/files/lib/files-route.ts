@@ -9,13 +9,27 @@
  *
  *   ?source=platform-files&path=shared/docs/deck.pptx
  *
+ * The page keeps its state in the URL (`filesStateFromUrl`, `filesUrlQuery`):
+ *
+ *   ?drive=all&view=all&source=workspace-files&path=finance/q3
+ *
+ * `drive` is the Drive picker, `view` the View picker, `source` the open view and
+ * `path` its folder. A bare /files opens the default (All Views / Workspace Files).
+ *
  * `source` is a view (`my-files`, `workspace-files`, `organization-files`,
  * `platform-files`, `system-files`) or `all`; the old drive sources (`my-drive`,
  * `workspace`, `organization-drive`, `platform-drive`, `system-drive`) still open
  * the view they became.
  */
 
-import { filesSourceFrom, type FilesSource } from './drive-label';
+import {
+  ALL_VIEWS,
+  FILES_ENTRY,
+  filesDriveFrom,
+  filesSourceFrom,
+  type FilesDrive,
+  type FilesSource,
+} from './drive-label';
 
 export const FILES_BROWSE_SLUG = 'browse';
 
@@ -127,4 +141,53 @@ export function matchListedFile<T extends { path: string; name: string }>(
     if (file.path.endsWith(`/${normalized}`)) return true;
     return Boolean(name && file.name === name);
   });
+}
+
+/** The Files page's state, as its URL holds it. */
+export interface FilesUrlState {
+  drive: FilesDrive;
+  /** The View picker: All Views or one view. */
+  view: FilesSource;
+  /** The open view (All Views' root: `all`). */
+  source: FilesSource;
+  /** The open folder ('' for the view's root). */
+  path: string;
+}
+
+const FILES_URL_KEYS = ['drive', 'view', 'source', 'path'] as const;
+
+/**
+ * The state a Files URL opens. A URL naming none of `drive`, `view`, `source`, `path`
+ * opens the default (All Drives, "All Views / Workspace Files"); an old `?source=&path=`
+ * link opens its view inside All Views; unknown values read as the defaults.
+ */
+export function filesStateFromUrl(search: string | null | undefined): FilesUrlState {
+  const params = new URLSearchParams((search ?? '').replace(/^\?/, ''));
+  if (!FILES_URL_KEYS.some((key) => params.has(key))) {
+    return { drive: 'all', view: FILES_ENTRY.view, source: FILES_ENTRY.source, path: '' };
+  }
+  const drive = filesDriveFrom(params.get('drive') ?? 'all');
+  const view = filesSourceFrom(params.get('view')) ?? ALL_VIEWS;
+  const source = filesSourceFrom(params.get('source')) ?? (view !== ALL_VIEWS ? view : ALL_VIEWS);
+  const rawPath = (params.get('path') ?? '').trim();
+  return { drive, view, source, path: rawPath ? stripPlatformDrivePrefix(rawPath) : '' };
+}
+
+/** The query string of a Files page state (`source` left out at All Views' root, `path` at a view's root). */
+export function filesUrlQuery(state: FilesUrlState): string {
+  const params = new URLSearchParams();
+  params.set('drive', state.drive);
+  params.set('view', state.view);
+  if (state.source !== ALL_VIEWS) params.set('source', state.source);
+  if (state.path) params.set('path', state.path);
+  return params.toString();
+}
+
+/** `search` with the Files keys set to `state` (and dropped where `filesUrlQuery` drops them), other parameters kept. */
+export function filesUrlSearch(search: string, state: FilesUrlState): string {
+  const params = new URLSearchParams(search.replace(/^\?/, ''));
+  for (const key of FILES_URL_KEYS) params.delete(key);
+  for (const [key, value] of new URLSearchParams(filesUrlQuery(state))) params.set(key, value);
+  const query = params.toString();
+  return query ? `?${query}` : '';
 }

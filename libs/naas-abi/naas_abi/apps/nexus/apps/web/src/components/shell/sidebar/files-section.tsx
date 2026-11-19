@@ -13,10 +13,11 @@ import { useFileViewsStore, useOfferedFileViews } from '@/hooks/use-file-views';
 import { useConfirm, usePrompt } from '@/components/ui/dialogs';
 import { CollapsibleSection } from './collapsible-section';
 import { getWorkspacePath } from './utils';
-import { filesBrowsePath } from '@/app/workspace/[workspaceId]/files/lib/files-route';
+import { filesBrowsePath, filesUrlSearch } from '@/app/workspace/[workspaceId]/files/lib/files-route';
 import {
   ALL_VIEWS,
   driveRootForSource,
+  filesSourceFrom,
   isFileViewSource,
   type FileViewSource,
 } from '@/app/workspace/[workspaceId]/files/lib/drive-label';
@@ -135,12 +136,20 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
     [authUserId, currentWorkspaceId, organizationId],
   );
 
-  const openFilesBrowser = useCallback(() => {
-    const target = isMobilePanel
-      ? filesBrowsePath(currentWorkspaceId)
-      : getWorkspacePath(currentWorkspaceId, '/files');
-    router.push(target);
-  }, [currentWorkspaceId, isMobilePanel, router]);
+  // Opens the Files page on `to` with its full URL state (drive, View picker, view, folder):
+  // a bare /files would reach the page after it wrote its state and wipe it.
+  const openFilesBrowser = useCallback(
+    (to: { source: string; path: string }) => {
+      const base = isMobilePanel
+        ? filesBrowsePath(currentWorkspaceId)
+        : getWorkspacePath(currentWorkspaceId, '/files');
+      const source = filesSourceFrom(to.source) ?? ALL_VIEWS;
+      // As `setActiveSource`: under All Views a view opens inside it, else it becomes the choice.
+      const view = viewChoice === ALL_VIEWS || source === ALL_VIEWS ? ALL_VIEWS : source;
+      router.push(`${base}${filesUrlSearch('', { drive: activeDrive, view, source, path: normalizeExplorerPath(to.path) })}`);
+    },
+    [activeDrive, currentWorkspaceId, isMobilePanel, router, viewChoice],
+  );
 
   const loadDir = useCallback(
     async (source: string, path: string, options?: { force?: boolean }) => {
@@ -213,7 +222,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
   const openFolder = useCallback(
     (source: string, path: string) => {
       setStarredNavigation({ source, path: normalizeExplorerPath(path) });
-      openFilesBrowser();
+      openFilesBrowser({ source, path });
     },
     [openFilesBrowser, setStarredNavigation],
   );
@@ -229,7 +238,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
         path: parentPath,
         previewPath: filePath,
       });
-      openFilesBrowser();
+      openFilesBrowser({ source, path: parentPath });
     },
     [openFilesBrowser, setStarredNavigation],
   );
@@ -433,7 +442,7 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
       search: '',
       workspaceId: currentWorkspaceId ?? undefined,
     });
-    openFilesBrowser();
+    openFilesBrowser({ source, path: '' });
   };
 
   const activeView = isFileViewSource(activeSource) ? activeSource : null;
@@ -725,23 +734,18 @@ export function FilesSection({ collapsed, detailOnly }: { collapsed: boolean; de
                       data-ontology-tree-select
                       data-testid="files-explorer-starred"
                       onClick={() => {
-                        if (item.type === 'folder') {
-                          setStarredNavigation({ source: item.source, path: item.path });
-                        } else {
-                          const parentPath = item.path.includes('/')
-                            ? item.path.substring(0, item.path.lastIndexOf('/'))
-                            : '';
-                          setStarredNavigation({
-                            source: item.source,
-                            path: parentPath,
-                            previewPath: item.path,
-                          });
-                        }
-                        router.push(
-                          isMobilePanel
-                            ? filesBrowsePath(currentWorkspaceId)
-                            : getWorkspacePath(currentWorkspaceId, '/files'),
-                        );
+                        const folderPath =
+                          item.type === 'folder'
+                            ? item.path
+                            : item.path.includes('/')
+                              ? item.path.substring(0, item.path.lastIndexOf('/'))
+                              : '';
+                        setStarredNavigation({
+                          source: item.source,
+                          path: folderPath,
+                          ...(item.type === 'folder' ? {} : { previewPath: item.path }),
+                        });
+                        openFilesBrowser({ source: item.source, path: folderPath });
                       }}
                       className={cn(
                         'flex flex-1 items-center gap-1 rounded-md transition-colors',

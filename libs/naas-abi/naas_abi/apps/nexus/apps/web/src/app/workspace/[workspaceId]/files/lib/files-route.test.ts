@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   filesBrowseHref,
+  filesStateFromUrl,
+  filesUrlQuery,
+  filesUrlSearch,
   filesBrowsePath,
   filesDeepLinkFolderAndPreview,
   hasFilesDeepLink,
@@ -235,5 +238,72 @@ describe('matchListedFile', () => {
 
   it('returns undefined when nothing matches', () => {
     expect(matchListedFile(listed, 'missing/report.pdf')).toBeUndefined();
+  });
+});
+
+describe('filesStateFromUrl', () => {
+  it('opens the default on a bare /files: All Drives, All Views, Workspace Files open', () => {
+    expect(filesStateFromUrl('')).toEqual({ drive: 'all', view: 'all', source: 'workspace-files', path: '' });
+    expect(filesStateFromUrl('?unrelated=1')).toEqual({ drive: 'all', view: 'all', source: 'workspace-files', path: '' });
+  });
+
+  it('reads drive, view, source and path', () => {
+    expect(
+      filesStateFromUrl('?drive=file_system&view=all&source=my-files&path=naas_abi/my-drive/u/documents'),
+    ).toEqual({ drive: 'file_system', view: 'all', source: 'my-files', path: 'naas_abi/my-drive/u/documents' });
+  });
+
+  it('keeps the All Views root when the URL names no open view', () => {
+    expect(filesStateFromUrl('?drive=all&view=all')).toEqual({ drive: 'all', view: 'all', source: 'all', path: '' });
+  });
+
+  it('opens a chosen view on itself when no source is given', () => {
+    expect(filesStateFromUrl('?view=my-files')).toEqual({ drive: 'all', view: 'my-files', source: 'my-files', path: '' });
+  });
+
+  it('opens an old ?source=&path= link inside All Views', () => {
+    expect(filesStateFromUrl('?source=my-drive&path=docs')).toEqual({ drive: 'all', view: 'all', source: 'my-files', path: 'docs' });
+  });
+
+  it('reads unknown values as the defaults', () => {
+    expect(filesStateFromUrl('?drive=gdrive&view=nope&source=synced-1')).toEqual({
+      drive: 'all',
+      view: 'all',
+      source: 'all',
+      path: '',
+    });
+  });
+});
+
+describe('filesUrlQuery', () => {
+  it('writes drive, view, the open view and its folder', () => {
+    expect(filesUrlQuery({ drive: 'all', view: 'all', source: 'workspace-files', path: '' })).toBe(
+      'drive=all&view=all&source=workspace-files',
+    );
+    expect(filesUrlQuery({ drive: 'all', view: 'all', source: 'my-files', path: 'naas_abi/my-drive/u/documents' })).toBe(
+      'drive=all&view=all&source=my-files&path=naas_abi%2Fmy-drive%2Fu%2Fdocuments',
+    );
+  });
+
+  it('leaves out the open view at the All Views root', () => {
+    expect(filesUrlQuery({ drive: 'all', view: 'all', source: 'all', path: '' })).toBe('drive=all&view=all');
+  });
+
+  it('round-trips through filesStateFromUrl', () => {
+    const state = { drive: 'file_system', view: 'workspace-files', source: 'workspace-files', path: 'finance/q3' } as const;
+    expect(filesStateFromUrl(`?${filesUrlQuery(state)}`)).toEqual(state);
+  });
+});
+
+describe('filesUrlSearch', () => {
+  it('sets the Files keys and keeps the other parameters (density)', () => {
+    expect(
+      filesUrlSearch('?spacing=compact&path=old&source=my-files', {
+        drive: 'all',
+        view: 'all',
+        source: 'workspace-files',
+        path: '',
+      }),
+    ).toBe('?spacing=compact&drive=all&view=all&source=workspace-files');
   });
 });

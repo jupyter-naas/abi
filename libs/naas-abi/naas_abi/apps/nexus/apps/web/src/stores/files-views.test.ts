@@ -90,6 +90,16 @@ describe('the active view', () => {
     });
   });
 
+  it('restores a Files URL state (drive, View picker, open view) at once', () => {
+    useFilesStore.getState().chooseView('my-files');
+    useFilesStore.getState().restoreFilesState({ drive: 'file_system', view: 'all', source: 'organization-files' });
+    expect(useFilesStore.getState()).toMatchObject({
+      activeDrive: 'file_system',
+      viewChoice: 'all',
+      activeSource: 'organization-files',
+    });
+  });
+
   it('ignores a source that names no view', () => {
     useFilesStore.getState().setActiveSource('workspace-files');
     useFilesStore.getState().setActiveSource('synced-1');
